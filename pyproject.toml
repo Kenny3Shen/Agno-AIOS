@@ -1,5 +1,5 @@
 [project]
-name = "cve"
+name = "cve-acl"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
