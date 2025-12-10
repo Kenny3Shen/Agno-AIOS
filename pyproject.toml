@@ -1,0 +1,20 @@
+[project]
+name = "cve"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiomysql>=0.3.2",
+    "loguru>=0.7.3",
+    "httpx>=0.24.0",
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "polars>=1.36.0",
+]
+
+[dependency-groups]
+dev = [
+    "jupyter>=1.1.1",
+    "notebook>=7.5.0",
+]
