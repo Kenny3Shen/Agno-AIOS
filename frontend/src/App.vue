@@ -59,9 +59,9 @@
       <!-- 内容区域 -->
       <div class="flex-1 p-8 bg-gray-50">
         <div class="max-w-7xl mx-auto bg-white rounded-lg shadow-lg p-6">
-          <CveSearch v-if="activeTab === 'cve'" />
-          <AssetSearch v-else-if="activeTab === 'asset'" />
-          <LlmChat v-else-if="activeTab === 'chat'" />
+          <keep-alive>
+            <component :is="activeComponent" />
+          </keep-alive>
         </div>
       </div>
     </main>
@@ -69,12 +69,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
+import { ref, computed } from "vue"
 import CveSearch from "./components/CveSearch.vue"
 import AssetSearch from "./components/AssetSearch.vue"
 import LlmChat from "./components/LlmChat.vue"
 
 const activeTab = ref("cve")
+
+// 将 activeTab 映射到组件，配合 keep-alive 使用，以便切换时保留组件状态（例如搜索查询）
+const activeComponent = computed(() => {
+  switch (activeTab.value) {
+    case "asset":
+      return AssetSearch
+    case "chat":
+      return LlmChat
+    case "cve":
+    default:
+      return CveSearch
+  }
+})
 
 // Sidebar state
 const collapsed = ref(false)

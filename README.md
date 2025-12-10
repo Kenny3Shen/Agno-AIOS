@@ -79,7 +79,7 @@ cd frontend
 npm run dev  # 或 bun run dev
 ```
 
-访问 http://localhost:5173 使用应用
+访问 <http://localhost:5173> 使用应用
 
 ### 数据更新
 
@@ -96,14 +96,20 @@ uv run update_cve.py --source github
 ```
 
 **数据源说明：**
+
 - `github`: 从 [ycdxsb/PocOrExp_in_Github](https://github.com/ycdxsb/PocOrExp_in_Github) 获取
-- 未来可扩展更多数据源 (NVD, CVEDetails 等)
+- `exploit-db`: 从 Exploit Database 获取
 
 **更新逻辑：**
+
 1. 从远程获取最新数据
 2. 与本地缓存对比，计算增量和删除
 3. 批量更新数据库
 4. 更新本地缓存文件
+
+**去重说明（重要）**
+
+- 在写入数据库前，更新脚本会对来源数据进行去重（基于 `cve_id` 和 `github_url` 两字段的组合），避免插入重复记录从而触发数据库唯一性约束（`UNIQUE KEY unique_cve_url (cve_id, github_url)`）。
 
 #### 更新 IP 资产数据
 
@@ -114,12 +120,14 @@ uv run update_ip_asset.py
 ```
 
 **更新流程：**
+
 1. 登录 ACL API 获取 token
 2. 拉取所有 IP 实体数据
 3. 保存原始数据到 `api/data/raw_ip_entities.json`
 4. 聚合处理数据并缓存到 `api/data/aggregated_ip_entities.json`
 
 **注意事项：**
+
 - 需要配置 `ACL_USERNAME` 和 `ACL_PASSWORD` 环境变量
 - 数据量较大时可能需要几分钟完成
 
@@ -129,11 +137,15 @@ uv run update_ip_asset.py
 
 ```bash
 # 示例 crontab 配置
-# 每天凌晨 2 点更新 CVE 数据
-0 2 * * * cd /path/to/fastapi && /usr/bin/env bash -c 'source .env && uv run update_cve.py' >> logs/cron_cve.log 2>&1
+# 使用脚本 `run_update_cve.sh`（推荐）
+# 每天 08:00 更新 CVE 数据（请根据实际路径修改）
+0 8 * * * /home/shenss/python/fastapi/run_update_cve.sh >> /home/shenss/python/fastapi/logs/cron_cve.log 2>&1
 
-# 每天凌晨 3 点更新 IP 资产数据
-0 3 * * * cd /path/to/fastapi && /usr/bin/env bash -c 'source .env && uv run update_ip_asset.py' >> logs/cron_asset.log 2>&1
+# 或者直接使用 uv（不使用 wrapper 脚本）
+0 8 * * * cd /home/shenss/python/fastapi && /usr/bin/env bash -lc 'set -a; [ -f /home/shenss/python/fastapi/.env ] && source /home/shenss/python/fastapi/.env; set +a; /home/shenss/python/fastapi/.venv/bin/uv run update_cve.py' >> /home/shenss/python/fastapi/logs/cron_cve.log 2>&1
+
+# 每天 03:00 更新 IP 资产数据
+0 3 * * * cd /home/shenss/python/fastapi && /usr/bin/env bash -lc 'set -a; [ -f /home/shenss/python/fastapi/.env ] && source /home/shenss/python/fastapi/.env; set +a; /home/shenss/python/fastapi/.venv/bin/uv run update_ip_asset.py' >> /home/shenss/python/fastapi/logs/cron_asset.log 2>&1
 ```
 
 ## API 接口
@@ -141,6 +153,7 @@ uv run update_ip_asset.py
 ### CVE 相关
 
 - `POST /api/cve/search` - 搜索 CVE
+
   ```json
   {
     "cve_id": "CVE-2024-1234",
@@ -152,6 +165,7 @@ uv run update_ip_asset.py
 ### 资产相关
 
 - `POST /api/asset/search` - 搜索资产
+
   ```json
   {
     "fingerprint": "Vue.js"
@@ -161,6 +175,7 @@ uv run update_ip_asset.py
 ### LLM 聊天
 
 - `POST /api/chat` - 发送聊天消息
+
   ```json
   {
     "message": "查询 CVE-2024-1234"
@@ -194,12 +209,14 @@ uv run ruff check .
 ## 架构说明
 
 ### 前端架构
+
 - **框架**: Vue 3 + TypeScript
 - **UI 库**: Element Plus
 - **样式**: Tailwind CSS
 - **构建**: Vite
 
 ### 后端架构
+
 - **框架**: FastAPI
 - **数据库**: MySQL (使用 aiomysql 异步驱动)
 - **日志**: loguru
@@ -222,17 +239,20 @@ API Routes
 ## 故障排除
 
 ### 数据库连接失败
+
 - 检查 MySQL 服务是否运行
 - 验证环境变量配置是否正确
 - 确认数据库和表已创建
 
 ### ACL API 连接超时
+
 - 检查网络连接
 - 验证 ACL_USERNAME 和 ACL_PASSWORD
 - 确认 API 地址可访问
 
 ### 前端无法连接后端
-- 确认后端服务已启动 (默认 http://localhost:8000)
+
+- 确认后端服务已启动 (默认 <http://localhost:8000>)
 - 检查前端 vite.config.ts 中的代理配置
 - 查看浏览器控制台错误信息
 

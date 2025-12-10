@@ -17,9 +17,6 @@ import os
 import sys
 import asyncio
 from datetime import datetime
-
-# moved helper classes and HTTP utilities to update_utils
-# moved helper classes and HTTP utilities to update_utils
 from loguru import logger
 import polars as pl
 from update_utils import DATA_SOURCES
@@ -72,7 +69,8 @@ async def update_cve_database(
                         id INT AUTO_INCREMENT PRIMARY KEY,
                         cve_id VARCHAR(255) NOT NULL,
                         description TEXT,
-                        github_url VARCHAR(255),
+                        github_url VARCHAR(255) NOT NULL,
+                        source VARCHAR(50) NOT NULL,
                         create_time DATETIME,
                         UNIQUE KEY unique_cve_url (cve_id, github_url)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

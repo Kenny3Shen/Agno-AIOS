@@ -55,7 +55,26 @@ async def search_cves_by_id_paginated(
 
             # Get paginated results
             offset = (page - 1) * size
-            sql = "SELECT id, cve_id, github_url, create_time FROM cves WHERE cve_id LIKE %s ORDER BY id DESC LIMIT %s OFFSET %s"
+            sql = "SELECT id, cve_id, github_url, description, create_time FROM cves WHERE cve_id LIKE %s ORDER BY id DESC LIMIT %s OFFSET %s"
             await cursor.execute(sql, (f"%{cve_id_query}%", size, offset))
+            result = await cursor.fetchall()
+            return result, total
+
+async def search_cves_by_description_paginated(
+    keyword_query: str, page: int = 1, size: int = 10
+) -> tuple[list[dict], int]:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cursor:
+            # Get total count
+            count_sql = "SELECT COUNT(*) as count FROM cves WHERE description LIKE %s"
+            await cursor.execute(count_sql, (f"%{keyword_query}%",))
+            count_result = await cursor.fetchone()
+            total = count_result["count"] if count_result else 0
+
+            # Get paginated results
+            offset = (page - 1) * size
+            sql = "SELECT id, cve_id, github_url, description, create_time FROM cves WHERE description LIKE %s ORDER BY id DESC LIMIT %s OFFSET %s"
+            await cursor.execute(sql, (f"%{keyword_query}%", size, offset))
             result = await cursor.fetchall()
             return result, total
