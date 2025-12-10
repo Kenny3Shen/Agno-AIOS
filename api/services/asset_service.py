@@ -1,10 +1,9 @@
 import httpx
 import os
 import time
-import json
 from datetime import datetime, timedelta
 from loguru import logger
-from ..utils.asset_utils import process_asset_data, aggregate_ip_entities
+from ..utils.asset_utils import process_asset_data
 
 # Global cache for ACL session
 _acl_session_cache = {
@@ -88,50 +87,4 @@ async def search_asset_by_fingerprint(fingerprint: str) -> list[dict]:
         raise Exception(f"Network error: {str(e)}")
     except Exception as e:
         logger.error("Error searching assets: {}", e)
-        raise
-
-
-async def update_ip_entities():
-    """Update IP entities from external ACL API and aggregate data"""
-    try:
-        async with httpx.AsyncClient(
-            verify=False, timeout=60.0, follow_redirects=True
-        ) as client:
-            # Get cached or new token
-            token = await _get_acl_token(client)
-            client.headers.update({"Token": token, "Content-Type": "application/json"})
-
-            # Fetch IP entities
-            ip_api = "https://10.192.56.37:8088/api/ip"
-            params = {
-                "page": 1,
-                "size": 1_000_000,
-                "tabIndex": 2,
-                "ts": int(time.time() * 1000),
-            }
-            resp = await client.get(ip_api, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-
-            if data.get("code") != 200:
-                logger.error("Failed to fetch IP data: {}", data.get("message"))
-                raise Exception(f"Failed to fetch IP data: {data.get('message')}")
-
-            items = data.get("items", [])
-            logger.info("Fetched {} IP entities from ACL API", len(items))
-
-            # Save raw data
-            os.makedirs(".data", exist_ok=True)
-            with open(".data/raw_ip_entities.json", "w") as f:
-                json.dump(data, f, indent=4)
-            logger.info("Saved raw IP entities to .data/raw_ip_entities.json")
-
-            # Aggregate and process
-            aggregate_ip_entities(items)
-            logger.info("Successfully aggregated IP entities")
-    except httpx.HTTPError as e:
-        logger.error("HTTP error during IP update: {}", e)
-        raise Exception(f"Network error: {str(e)}")
-    except Exception as e:
-        logger.error("Error updating IP entities: {}", e)
         raise

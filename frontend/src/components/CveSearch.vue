@@ -13,7 +13,6 @@
         </template>
       </el-input>
       <el-button type="primary" @click="handleSearch" :loading="loading" :disabled="isSearchDisabled || loading">搜索</el-button>
-      <el-button type="success" @click="handleRefresh" :loading="refreshing">刷新数据库</el-button>
     </div>
 
     <el-table v-if="results.length > 0" :data="results" style="width: 100%" border stripe>
@@ -48,7 +47,6 @@
 <script setup lang="ts">
 import { ref, computed } from "vue"
 import axios from "axios"
-import { ElMessage } from "element-plus"
 
 interface CveResult {
   id: number
@@ -57,17 +55,9 @@ interface CveResult {
   create_time: string
 }
 
-interface CveRefreshResponse {
-  status: number
-  message: string
-  new_count: number
-  del_count: number
-}
-
 const searchQuery = ref("")
 const results = ref<CveResult[]>([])
 const loading = ref(false)
-const refreshing = ref(false)
 const searched = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -90,27 +80,6 @@ const handleSizeChange = (size: number) => {
   pageSize.value = size
   currentPage.value = 1
   handleSearch()
-}
-
-const handleRefresh = async () => {
-  refreshing.value = true
-  try {
-    const { data } = await axios.post<CveRefreshResponse>("/api/cve/refresh")
-    if (data.status === 200) {
-      ElMessage.success("数据库刷新成功: 新增 " + data.new_count + " 条，删除 " + data.del_count + " 条")
-      // Optionally re-search if there is a query
-      if (searchQuery.value) {
-        handleSearch()
-      }
-    } else {
-      ElMessage.error("数据库刷新失败: " + data.message)
-    }
-  } catch (e: any) {
-    console.error(e)
-    ElMessage.error("数据库刷新失败: " + (e?.message || e))
-  } finally {
-    refreshing.value = false
-  }
 }
 
 const handleSearch = async () => {

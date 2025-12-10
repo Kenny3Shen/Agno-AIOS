@@ -13,7 +13,6 @@
         </template>
       </el-input>
       <el-button type="primary" @click="handleSearch" :loading="loading" :disabled="isSearchDisabled || loading">搜索</el-button>
-      <el-button type="success" @click="handleUpdate" :loading="updating">更新数据库</el-button>
     </div>
 
     <el-table v-if="allResults.length > 0" :data="paginatedResults" style="width: 100%" border stripe>
@@ -124,16 +123,10 @@ interface AssetResult {
   domain: string[]
 }
 
-interface AssetUpdateResponse {
-  status: number
-  message: string
-}
-
 const assetQuery = ref("")
 // results is unused; use allResults for client-side pagination
 const allResults = ref<AssetResult[]>([]) // Cache all results for client-side pagination
 const loading = ref(false)
-const updating = ref(false)
 const searched = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -179,27 +172,6 @@ const getTopFingers = (row: AssetResult) => {
     out.push({ name: f, matched: false })
   }
   return out
-}
-
-const handleUpdate = async () => {
-  updating.value = true
-  try {
-    const { data } = await axios.post<AssetUpdateResponse>("/api/asset/update")
-    if (data.status === 200) {
-      ElMessage.success("数据库更新成功")
-      // Re-search to get updated data
-      if (assetQuery.value) {
-        await handleSearch()
-      }
-    } else {
-      ElMessage.error("数据库更新失败: " + data.message)
-    }
-  } catch (e: any) {
-    console.error(e)
-    ElMessage.error("数据库更新失败: " + (e?.message || e))
-  } finally {
-    updating.value = false
-  }
 }
 
 const handleSearch = async () => {
