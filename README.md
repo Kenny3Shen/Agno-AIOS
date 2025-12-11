@@ -13,23 +13,31 @@
 ```
 .
 ├── api/                    # 后端 API
+│   ├── main.py            # FastAPI 应用入口
 │   ├── routes/            # API 路由
 │   ├── services/          # 业务逻辑
 │   ├── database/          # 数据库操作
 │   ├── models/            # 数据模型
 │   ├── utils/             # 工具函数
-│   └── data/              # 数据文件
+│   └── data/              # 数据文件和缓存
 ├── frontend/              # 前端 Vue.js 应用
+│   ├── src/               # 源代码
+│   ├── public/            # 静态资源
+│   └── dist/              # 构建输出
+├── config.toml            # 配置文件
 ├── update_cve.py          # CVE 数据更新脚本
 ├── update_ip_asset.py     # IP 资产数据更新脚本
-└── main.py                # FastAPI 应用入口
-
+├── update_utils.py        # 数据更新工具
+├── run_update_cve.sh      # CVE 更新脚本包装器
+├── pyproject.toml         # Python 项目配置
+├── main.py                # 占位符文件
+└── README.md              # 项目说明
 ```
 
 ## 环境要求
 
 - Python 3.10+
-- Node.js 18+ (前端开发)
+- Node.js 18+ 或 Bun (前端开发)
 - MySQL 5.7+
 - uv (Python 包管理工具)
 
@@ -43,7 +51,7 @@ uv sync
 
 # 安装前端依赖
 cd frontend
-npm install  # 或 bun install
+bun install  # 或 npm install
 ```
 
 ### 2. 配置环境变量
@@ -52,18 +60,39 @@ npm install  # 或 bun install
 
 ```bash
 # 数据库配置
-export MYSQL_TEST_HOST="localhost"
-export MYSQL_TEST_USER="root"
-export MYSQL_TEST_PASSWORD="your_password"
-export MYSQL_TEST_DATABASE="cve_db"
+MYSQL_TEST_HOST=localhost
+MYSQL_TEST_USER=root
+MYSQL_TEST_PASSWORD=your_password
+MYSQL_TEST_DATABASE=cve_db
+MYSQL_TEST_PORT=3306
 
 # ACL API 配置（用于 IP 资产更新）
-export ACL_USERNAME="your_username"
-export ACL_PASSWORD="your_password"
+ACL_USERNAME=your_username
+ACL_PASSWORD=your_password
 
 # 日志配置
-export LOG_LEVEL="INFO"
-export LOG_DIR="logs"
+LOG_LEVEL=INFO
+LOG_DIR=logs
+```
+
+### 3. 数据库初始化
+
+确保 MySQL 数据库已创建，并运行以下 SQL 创建表：
+
+```sql
+CREATE DATABASE cve_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+USE cve_db;
+
+CREATE TABLE cves (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    cve_id VARCHAR(50) NOT NULL,
+    description TEXT,
+    github_url VARCHAR(500),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_cve_url (cve_id, github_url)
+);
 ```
 
 ## 使用说明
@@ -76,7 +105,7 @@ uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
 # 启动前端开发服务器
 cd frontend
-npm run dev  # 或 bun run dev
+bun run dev  # 或 npm run dev
 ```
 
 访问 <http://localhost:5173> 使用应用
@@ -102,10 +131,12 @@ uv run update_cve.py --source github
 
 **更新逻辑：**
 
-1. 从远程获取最新数据
-2. 与本地缓存对比，计算增量和删除
-3. 批量更新数据库
-4. 更新本地缓存文件
+1. 获取远程仓库最新 commit
+2. 与本地 commit 对比，如果相同则跳过更新
+3. 从远程获取最新数据
+4. 与本地缓存对比，计算增量和删除
+5. 批量更新数据库
+6. 更新本地缓存文件和 commit 记录
 
 **去重说明（重要）**
 
@@ -121,7 +152,7 @@ uv run update_ip_asset.py
 
 **更新流程：**
 
-1. 登录 ACL API 获取 token
+1. 登录 ACL API 获取 token（支持自动重试）
 2. 拉取所有 IP 实体数据
 3. 保存原始数据到 `api/data/raw_ip_entities.json`
 4. 聚合处理数据并缓存到 `api/data/aggregated_ip_entities.json`
@@ -184,13 +215,21 @@ uv run update_ip_asset.py
 
 ## 开发说明
 
+### 代码质量
+
+项目已完成全面的代码审计和优化：
+
+- **中文化**: 所有日志记录、注释和文档字符串已转换为中文
+- **错误处理**: 移除了无效的 try-except 包装，简化了错误处理逻辑
+- **代码清理**: 删除了冗余代码，提高了代码可读性和维护性
+
 ### 前端开发
 
 ```bash
 cd frontend
-npm run dev     # 开发服务器
-npm run build   # 生产构建
-npm run preview # 预览构建结果
+bun run dev     # 开发服务器
+bun run build   # 生产构建
+bun run preview # 预览构建结果
 ```
 
 ### 后端开发
@@ -213,48 +252,77 @@ uv run ruff check .
 - **框架**: Vue 3 + TypeScript
 - **UI 库**: Element Plus
 - **样式**: Tailwind CSS
-- **构建**: Vite
+- **构建工具**: Vite + Bun
+- **HTTP 客户端**: Axios
 
 ### 后端架构
 
-- **框架**: FastAPI
-- **数据库**: MySQL (使用 aiomysql 异步驱动)
-- **日志**: loguru
-- **HTTP 客户端**: httpx
+- **框架**: FastAPI (异步)
+- **数据库**: MySQL (aiomysql 异步驱动)
+- **配置**: TOML 配置文件 + python-dotenv
+- **日志**: loguru (支持轮转和保留)
+- **HTTP 客户端**: httpx (异步)
+- **数据处理**: Polars (高效 DataFrame 操作)
 
 ### 数据流
 
 ```
+配置 (config.toml)
+    ↓
 更新脚本 (update_*.py)
     ↓
-数据库 / 本地缓存
+数据库 (MySQL) + 本地缓存 (api/data/)
     ↓
-API Services
+API Services (业务逻辑)
     ↓
-API Routes
+API Routes (路由处理)
     ↓
-前端组件
+前端组件 (Vue.js)
 ```
+
+### 配置管理
+
+项目使用 `config.toml` 进行数据源配置，支持：
+
+- GitHub 数据源配置 (远程 URL、本地缓存路径、API 端点等)
+- Exploit-DB 数据源配置
+- 灵活的配置管理，便于部署和维护
 
 ## 故障排除
 
 ### 数据库连接失败
 
-- 检查 MySQL 服务是否运行
+- 检查 MySQL 服务是否运行：`sudo systemctl status mysql`
 - 验证环境变量配置是否正确
 - 确认数据库和表已创建
+- 检查用户权限：`GRANT ALL PRIVILEGES ON cve_db.* TO 'user'@'localhost';`
 
-### ACL API 连接超时
+### ACL API 连接问题
 
-- 检查网络连接
-- 验证 ACL_USERNAME 和 ACL_PASSWORD
-- 确认 API 地址可访问
+- 检查网络连接和 ACL API 地址可访问性
+- 验证 `ACL_USERNAME` 和 `ACL_PASSWORD` 环境变量
+- 查看日志中的 token 获取和 API 调用错误
+- 确认 ACL API 支持当前使用的端点和参数
 
 ### 前端无法连接后端
 
-- 确认后端服务已启动 (默认 <http://localhost:8000>)
-- 检查前端 vite.config.ts 中的代理配置
-- 查看浏览器控制台错误信息
+- 确认后端服务已启动：`uv run uvicorn api.main:app --host 0.0.0.0 --port 8000`
+- 检查前端 `vite.config.ts` 中的代理配置
+- 查看浏览器控制台和后端日志的 CORS 错误
+- 确认防火墙设置允许相应端口
+
+### 数据更新失败
+
+- 检查网络连接和数据源可访问性
+- 验证配置文件 `config.toml` 中的 URL 和路径
+- 查看日志中的 commit 比较和数据获取错误
+- 确认本地缓存目录权限：`chmod 755 api/data/`
+
+### 性能问题
+
+- CVE 数据量大时，首次更新可能较慢
+- 考虑调整数据库索引和查询优化
+- 定期清理日志文件：`find logs/ -name "*.log" -mtime +30 -delete`
 
 ## 许可证
 
@@ -263,3 +331,7 @@ MIT License
 ## 贡献
 
 欢迎提交 Issue 和 Pull Request！
+
+---
+
+**最后更新**: 2025年12月11日

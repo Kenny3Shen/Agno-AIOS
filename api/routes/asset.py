@@ -8,15 +8,14 @@ router = APIRouter(prefix="/api/asset", tags=["Asset"])
 
 @router.post("/search")
 async def search_asset(request: AssetSearchRequest):
-    """Search for IP information based on asset info"""
+    """根据资产信息搜索 IP 信息"""
     try:
         items = await search_asset_by_fingerprint(request.fingerprint)
-        # Return all items for client-side pagination
         return {
             "status": 200,
             "items": items,
             "total": len(items),
         }
     except Exception as e:
-        logger.error(f"Error searching assets: {e}")
-        return {"status": 400, "message": f"error:{e}"}
+        logger.error(f"搜索资产错误: {e}")
+        return {"status": 400, "message": f"错误:{e}"}

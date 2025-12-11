@@ -1,0 +1,15 @@
+[github]
+source = "github"
+remote_url = "https://raw.githubusercontent.com/ycdxsb/PocOrExp_in_Github/refs/heads/main/PocOrExp.md"
+local_cache = "./api/data/github_cve_cache.csv"
+commit_cache = "./api/data/github_commit.txt"
+repo_api = "https://api.github.com/repos/ycdxsb/PocOrExp_in_Github/commits"
+default_branch = "main"
+
+[exploit_db]
+source = "exploit-db"
+remote_url = "https://gitlab.com/exploit-database/exploitdb/-/raw/main/files_exploits.csv?ref_type=heads"
+local_cache = "./api/data/exploit_db.csv"
+commit_cache = "./api/data/exploitdb_commit.txt"
+repo_api = "https://gitlab.com/api/v4/projects/exploit-database%2Fexploitdb/repository/commits"
+default_branch = "main"

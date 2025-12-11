@@ -4,7 +4,7 @@ CVE数据库更新脚本
 支持从多个数据源获取CVE信息并更新到数据库
 
 使用方法:
-    uv run update_cve.py [--source SOURCE]
+    uv run update_cve.py
 
 数据源:
     - github
@@ -12,7 +12,6 @@ CVE数据库更新脚本
 """
 
 import aiomysql
-
 import os
 import sys
 import asyncio
@@ -21,9 +20,7 @@ from loguru import logger
 import polars as pl
 from update_utils import DATA_SOURCES
 
-# 添加api目录到路径以便导入
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 
 # 配置日志
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -43,7 +40,7 @@ DB_CONFIG = {
     "user": os.getenv("MYSQL_TEST_USER", "root"),
     "password": os.getenv("MYSQL_TEST_PASSWORD", ""),
     "db": os.getenv("MYSQL_TEST_DATABASE", "cve_db"),
-    "port": 3306,
+    "port": int(os.getenv("MYSQL_TEST_PORT", 3306)),
     "charset": "utf8mb4",
     "autocommit": True,
 }
@@ -85,8 +82,8 @@ async def update_cve_database(
                 try:
                     # 2. 插入新增数据（批量执行）
                     insert_sql = """
-                                INSERT IGNORE INTO cves (cve_id, description, github_url, create_time)
-                                VALUES (%s, %s, %s, %s)
+                                INSERT IGNORE INTO cves (cve_id, description, github_url, source, create_time)
+                                VALUES (%s, %s, %s, %s, %s)
                                 """
                     batch_size = 500
                     for i in range(0, len(increment_data), batch_size):
@@ -97,6 +94,7 @@ async def update_cve_database(
                                 item.get("cve_id"),
                                 item.get("description", ""),
                                 item.get("github_url", ""),
+                                item.get("source", ""),
                                 create_time,
                             )
                             for item in batch
@@ -150,91 +148,118 @@ async def update_cve_database(
                 return new_count, del_count
 
 
-async def update_cve_from_source(source_name: str) -> tuple[int, int]:
-    """从指定数据源更新CVE数据库
+async def get_add_del_data(
+    source_name: str,
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """从指定数据源获取新增和删除的CVE数据
 
     Args:
         source_name: 数据源名称
 
     Returns:
-        (新增数量, 删除数量)
+        (新增数据列表, 删除数据列表)
     """
     # 获取数据源
     source_class = DATA_SOURCES[source_name]
     source = source_class()
 
-    logger.info(f"Starting CVE update from source: {source_name}")
+    logger.info(f"开始从数据源更新CVE: {source_name}")
 
-    # 1. 获取远程数据
+    # 1. 获取远程 commit 并比较本地commit，如果相同则跳过
+    remote_commit = None
+    try:
+        remote_commit = await source.get_remote_commit()
+        logger.info(f"数据源 {source_name} 远程 commit: {remote_commit}")
+    except Exception as e:
+        logger.warning(f"无法获取数据源 {source_name} 的远程 commit: {e}，继续拉取数据")
+
+    local_commit_path = getattr(source, "commit_cache", None)
+    if not local_commit_path:
+        local_cache_path = source.get_local_cache_path()
+        local_commit_path = local_cache_path + ".commit"
+
+    local_commit = None
+    if remote_commit and os.path.exists(local_commit_path):
+        with open(local_commit_path, "r") as f:
+            local_commit = f.read().strip()
+
+    if remote_commit and local_commit == remote_commit:
+        logger.info(f"数据源 {source_name} 无变化，跳过拉取")
+        return [], []
+
+    # 2. 获取远程数据
     new_raw_data = await source.fetch_data()
     new_parsed_data = source.parse_data(new_raw_data)
+
+    # 为每条数据添加source字段
+    for item in new_parsed_data:
+        item["source"] = source_name
 
     # 2. 读取本地缓存
     local_cache_path = source.get_local_cache_path()
     old_parsed_data = []
 
     if os.path.exists(local_cache_path):
-        logger.info(f"Loading local cache from {local_cache_path}")
+        logger.info(f"从本地缓存加载数据: {local_cache_path}")
         try:
-            # 统一使用处理后的CSV格式缓存
             df_cache = pl.read_csv(local_cache_path)
             old_parsed_data = df_cache.to_dicts()
-            logger.info(f"Loaded {len(old_parsed_data)} entries from local cache")
+            logger.info(f"从本地缓存加载了 {len(old_parsed_data)} 条记录")
         except Exception as e:
-            logger.warning(f"Failed to load local cache: {e}, treating as full update")
+            logger.warning(f"加载本地缓存失败: {e}，按全量更新处理")
     else:
-        logger.info(
-            f"Local cache not found at {local_cache_path}, treating as full update"
-        )
+        logger.info(f"本地缓存文件不存在: {local_cache_path}，按全量更新处理")
 
     # 3. 使用 polars 进行数据对比，找出新增和删除的CVE
     increment_data, deleted_data = source.compare_with_local(
         new_parsed_data, old_parsed_data
     )
 
-    # 4. 更新数据库
+    # 4. 更新本地缓存
     if increment_data or deleted_data:
-        try:
-            new_count, del_count = await update_cve_database(
-                increment_data, deleted_data
-            )
+        os.makedirs(os.path.dirname(local_cache_path), exist_ok=True)
+        df_to_cache = pl.DataFrame(new_parsed_data)
+        df_to_cache.write_csv(local_cache_path)
+        logger.info(f"已更新本地缓存: {local_cache_path}")
 
-            # 5. 更新本地缓存（统一使用CSV格式保存处理后的数据）
-            os.makedirs(os.path.dirname(local_cache_path), exist_ok=True)
-
-            # 将处理后的数据保存为CSV格式
-            df_to_cache = pl.DataFrame(new_parsed_data)
-            df_to_cache.write_csv(local_cache_path)
-            logger.info(f"Updated local cache at {local_cache_path}")
-
-            return new_count, del_count
-        except Exception as e:
-            logger.exception(f"Failed to update database: {e}")
-            raise
+        if remote_commit:
+            os.makedirs(os.path.dirname(local_commit_path), exist_ok=True)
+            with open(local_commit_path, "w") as f:
+                f.write(remote_commit)
+        return increment_data, deleted_data
     else:
-        logger.info("No changes detected, database update skipped")
-        return 0, 0
+        if remote_commit:
+            os.makedirs(os.path.dirname(local_commit_path), exist_ok=True)
+            with open(local_commit_path, "w") as f:
+                f.write(remote_commit)
+        logger.info("未检测到数据变化，跳过数据库更新")
+        return [], []
 
 
 async def main():
     """主函数"""
     try:
         start_time = datetime.now()
-        logger.info(f"CVE update started at {start_time}")
+        logger.info(f"CVE 更新开始: {start_time}")
 
+        need_add_data, need_del_data = [], []
         for source_name in DATA_SOURCES.keys():
-            new_count, del_count = await update_cve_from_source(source_name)
+            increment_data, deleted_data = await get_add_del_data(source_name)
+            need_add_data.extend(increment_data)
+            need_del_data.extend(deleted_data)
+
+        new_count, del_count = await update_cve_database(need_add_data, need_del_data)
 
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
 
         logger.info(
-            f"CVE update completed: added={new_count}, deleted={del_count}, "
-            f"duration={duration:.2f}s"
+            f"CVE 更新完成: 新增={new_count}, 删除={del_count}, "
+            f"耗时={duration:.2f}秒"
         )
 
     except Exception as e:
-        logger.exception(f"CVE update failed: {e}")
+        logger.exception(f"CVE 更新失败: {e}")
 
 
 if __name__ == "__main__":

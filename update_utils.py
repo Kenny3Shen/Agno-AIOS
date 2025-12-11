@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Utilities and data source classes for CVE updating.
+CVE更新工具和数据源类
 
-Move helpers and data source classes here so `update_cve.py` keeps the core workflow.
+将辅助函数和数据源类放在这里，保持 update_cve.py 的核心流程简洁
 """
 
 import os
@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Tuple
 
 import httpx
+import tomllib
 import polars as pl
 from loguru import logger
 
@@ -42,6 +43,11 @@ class CVEDataSource(ABC):
     @abstractmethod
     def get_local_cache_path(self) -> str:
         """获取本地缓存文件路径"""
+        pass
+
+    @abstractmethod
+    async def get_remote_commit(self) -> str:
+        """获取远程数据的最新commit sha"""
         pass
 
     def compare_with_local(
@@ -87,36 +93,47 @@ class CVEDataSource(ABC):
         deleted_data = df_deleted.to_dicts()
 
         logger.info(
-            f"Data comparison: local={len(old_data)}, remote={len(new_data)}, "
-            f"increment={len(increment_data)}, to_delete={len(deleted_data)}"
+            f"数据对比: 本地={len(old_data)}, 远程={len(new_data)}, "
+            f"增量={len(increment_data)}, 待删除={len(deleted_data)}"
         )
 
         return increment_data, deleted_data
+
+
+CONFIG_PATH = os.getenv("CONFIG_PATH", "config.toml")
+try:
+    with open(CONFIG_PATH, "rb") as f:
+        CONFIG = tomllib.load(f)
+except Exception:
+    CONFIG = {}
 
 
 class GitHubPocExpSource(CVEDataSource):
     """从GitHub PocOrExp仓库获取CVE数据"""
 
     def __init__(self):
-        self.remote_url = "https://raw.githubusercontent.com/ycdxsb/PocOrExp_in_Github/refs/heads/main/PocOrExp.md"
-        self.local_path = os.path.join("./api/data", "github_cve_cache.csv")
+        cfg = CONFIG.get("github", {})
+        self.remote_url = cfg.get(
+            "remote_url",
+            "https://raw.githubusercontent.com/ycdxsb/PocOrExp_in_Github/refs/heads/main/PocOrExp.md",
+        )
+        self.local_path = cfg.get("local_cache", os.path.join("./api/data", "github_cve_cache.csv"))
+        self.commit_cache = cfg.get("commit_cache", os.path.join("./api/data", "github_commit.txt"))
+        self.repo_api = cfg.get("repo_api", "https://api.github.com/repos/ycdxsb/PocOrExp_in_Github/commits")
+        self.default_branch = cfg.get("default_branch", "main")
 
     async def fetch_data(self) -> str:
-        """从GitHub获取数据"""
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.get(self.remote_url)
-                resp.raise_for_status()
-                logger.info(f"Successfully fetched data from {self.remote_url}")
-                return resp.text
-        except Exception as e:
-            logger.exception(f"Failed to fetch data from {self.remote_url}: {e}")
-            raise
+        """从 GitHub 获取数据"""
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(self.remote_url)
+            resp.raise_for_status()
+            logger.info(f"成功从 {self.remote_url} 获取数据")
+            return resp.text
 
     def parse_data(self, raw_data: str) -> List[Dict[str, str]]:
-        """解析Markdown格式的CVE数据"""
+        """解析 Markdown 格式的 CVE 数据"""
         if not raw_data:
-            logger.warning("parse_data called with empty text")
+            logger.warning("调用 parse_data 但数据为空")
             return []
 
         lines = raw_data.strip().split("\n")
@@ -124,7 +141,6 @@ class GitHubPocExpSource(CVEDataSource):
         current_cve = None
         current_desc = []
 
-        # 正则表达式
         cve_pattern = re.compile(r"^##\s*(CVE-\d{4}-\d+)")
         url_pattern = re.compile(r"-\s*\[(https://github\.com/[^\]]+)\]")
 
@@ -180,19 +196,29 @@ class GitHubPocExpSource(CVEDataSource):
                 }
             )
 
-        # 使用Polars进行去重，基于(cve_id, github_url)
+        # 使用 Polars 进行去重，基于 (cve_id, github_url)
         if cve_data:
             df = pl.DataFrame(cve_data)
             df_unique = df.unique(subset=["cve_id", "github_url"], keep="first")
             cve_data = df_unique.to_dicts()
-            logger.info(f"After deduplication: {len(cve_data)} unique CVE entries")
-        
-        logger.info(f"Parsed {len(cve_data)} CVE entries from data")
+            logger.info(f"去重后: {len(cve_data)} 条唯一 CVE 记录")
+
+        logger.info(f"从数据中解析了 {len(cve_data)} 条 CVE 记录")
         return cve_data
 
     def get_local_cache_path(self) -> str:
         """获取本地缓存文件路径"""
         return self.local_path
+
+    async def get_remote_commit(self) -> str:
+        """获取远程数据的最新 commit sha"""
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                self.repo_api,
+                params={"sha": self.default_branch, "per_page": 1},
+            )
+            resp.raise_for_status()
+            return resp.json()[0]["sha"]
 
 
 # Helper functions for ExploitDBSource
@@ -225,70 +251,87 @@ class ExploitDBSource(CVEDataSource):
     """从Exploit-DB获取CVE数据"""
 
     def __init__(self):
-        self.remote_url = "https://gitlab.com/exploit-database/exploitdb/-/raw/main/files_exploits.csv?ref_type=heads"
-        self.local_path = os.path.join("./api/data", "exploit_db.csv")
+        cfg = CONFIG.get("exploit_db", {})
+        self.remote_url = cfg.get(
+            "remote_url",
+            "https://gitlab.com/exploit-database/exploitdb/-/raw/main/files_exploits.csv?ref_type=heads",
+        )
+        self.local_path = cfg.get("local_cache", os.path.join("./api/data", "exploit_db.csv"))
+        self.commit_cache = cfg.get("commit_cache", os.path.join("./api/data", "exploitdb_commit.txt"))
+        self.repo_api = cfg.get(
+            "repo_api",
+            "https://gitlab.com/api/v4/projects/exploit-database%2Fexploitdb/repository/commits",
+        )
+        self.default_branch = cfg.get("default_branch", "main")
 
     async def fetch_data(self) -> pl.DataFrame:
-        """从Exploit-DB获取数据"""
-        try:
-            df = pl.read_csv(self.remote_url)
-            logger.info(f"Successfully fetched data from {self.remote_url}")
-            return df
-        except Exception as e:
-            logger.exception(f"Failed to fetch data from {self.remote_url}: {e}")
-            raise
+        """从 Exploit-DB 获取数据"""
+        df = pl.read_csv(self.remote_url)
+        logger.info(f"成功从 {self.remote_url} 获取数据")
+        return df
 
     def parse_data(self, raw_data) -> List[Dict[str, str]]:
-        """解析Exploit-DB数据
+        """解析 Exploit-DB 数据
 
         Args:
-            raw_data: 可以是pl.DataFrame（从远程获取）或list[dict]（从缓存加载）
+            raw_data: 可以是 pl.DataFrame（从远程获取）或 list[dict]（从缓存加载）
 
         Returns:
-            处理后的CVE数据列表
+            处理后的 CVE 数据列表
         """
-        # 如果是空列表，直接返回
         if isinstance(raw_data, list):
             if not raw_data:
                 return []
-            # 如果是dict列表且已经有正确的字段，直接返回（从缓存加载）
             if "cve_id" in raw_data[0]:
-                logger.info(f"Loaded {len(raw_data)} CVE entries from cache")
+                logger.info(f"从缓存加载了 {len(raw_data)} 条 CVE 记录")
                 return raw_data
 
-        # 如果不是DataFrame，返回空列表
         if not isinstance(raw_data, pl.DataFrame):
-            logger.warning(
-                f"Unexpected raw_data type: {type(raw_data)}, returning empty list"
-            )
+            logger.warning(f"意外的 raw_data 类型: {type(raw_data)}，返回空列表")
             return []
 
-        # 检查DataFrame是否为空
         if raw_data.is_empty():
             return []
 
         df_processed = raw_data.select(
             [
-                pl.struct(["codes", "file"]) 
-                .map_elements(lambda x: _process_codes(x["codes"], x["file"]), return_dtype=pl.Utf8)
+                pl.struct(["codes", "file"])
+                .map_elements(
+                    lambda x: _process_codes(x["codes"], x["file"]),
+                    return_dtype=pl.Utf8,
+                )
                 .alias("cve_id"),
                 pl.col("description").alias("description"),
-                pl.col("file").map_elements(_process_file, return_dtype=pl.Utf8).alias("github_url"),
+                pl.col("file")
+                .map_elements(_process_file, return_dtype=pl.Utf8)
+                .alias("github_url"),
             ]
         )
 
-        # 基于(cve_id, github_url)去重
+        # 基于 (cve_id, github_url) 去重
         df_unique = df_processed.unique(subset=["cve_id", "github_url"], keep="first")
         cve_list = df_unique.to_dicts()
-        logger.info(f"After deduplication: {len(cve_list)} unique CVE entries (from {len(df_processed)} total)")
+        logger.info(
+            f"去重后: {len(cve_list)} 条唯一 CVE 记录（总共 {len(df_processed)} 条）"
+        )
         return cve_list
 
     def get_local_cache_path(self) -> str:
         """获取本地缓存文件路径"""
         return self.local_path
 
+    async def get_remote_commit(self) -> str:
+        """获取远程数据的最新 commit sha"""
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                self.repo_api,
+                params={"ref_name": self.default_branch, "per_page": 1},
+            )
+            resp.raise_for_status()
+            return resp.json()[0]["id"]
 
-# 注册表
+
+# 数据源注册表
 DATA_SOURCES = {
     "github": GitHubPocExpSource,
     "exploit-db": ExploitDBSource,

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-IP资产数据更新脚本
-从ACL API获取IP实体数据并进行聚合处理
+IP 资产数据更新脚本
+从 ACL API 获取 IP 实体数据并进行聚合处理
 
 使用方法:
     uv run update_ip_asset.py
 
 环境变量:
-    ACL_USERNAME: ACL API用户名
-    ACL_PASSWORD: ACL API密码
+    ACL_USERNAME: ACL API 用户名
+    ACL_PASSWORD: ACL API 密码
 """
 
 import os
@@ -16,11 +16,16 @@ import sys
 import asyncio
 import json
 import time
+import warnings
 from datetime import datetime
 import httpx
 from loguru import logger
+from dotenv import load_dotenv, set_key
 
-# 添加api目录到路径以便导入
+warnings.filterwarnings("ignore", message="Unverified HTTPS request")
+
+load_dotenv()
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from api.utils.asset_utils import aggregate_ip_entities
@@ -38,143 +43,75 @@ logger.add(
     retention="10 days",
 )
 
-# ACL API配置
-ACL_API_BASE = "https://10.192.56.37:8088/api"
-ACL_USERNAME = os.getenv("ACL_USERNAME")
-ACL_PASSWORD = os.getenv("ACL_PASSWORD")
 
+async def update_ip_entities():
+    """更新 IP 资产数据"""
+    raw_path = "./api/data/raw_ip_entities.json"
+    if os.path.exists(raw_path):
+        logger.info("使用缓存的 raw_ip_entities.json")
+        with open(raw_path, "r") as f:
+            data = json.load(f)
+        aggregate_ip_entities(data["items"])
+        return
 
-async def login_to_acl(client: httpx.AsyncClient) -> str:
-    """登录ACL API获取token
-    
-    Args:
-        client: httpx客户端
-        
-    Returns:
-        API token
-    """
-    login_url = f"{ACL_API_BASE}/user/login"
-    login_data = {
-        "username": ACL_USERNAME,
-        "password": ACL_PASSWORD,
-    }
+    async with httpx.AsyncClient(verify=False, timeout=60.0, follow_redirects=True) as client:
+        token = os.getenv("TOKEN")
+        if not token:
+            login_url = "https://10.192.56.37:8088/api/user/login"
+            login_data = {
+                "username": os.getenv("ACL_USERNAME"),
+                "password": os.getenv("ACL_PASSWORD"),
+            }
+            logger.info("正在登录 ACL API...")
+            login_resp = await client.post(login_url, json=login_data)
+            login_resp.raise_for_status()
+            login_result = login_resp.json()
+            if login_result.get("code") != 200:
+                raise Exception("登录失败")
+            token = login_result["data"]["token"]
+            set_key(".env", "TOKEN", token)
 
-    try:
-        logger.info("Logging in to ACL API...")
-        resp = await client.post(login_url, json=login_data)
-        resp.raise_for_status()
-        result = resp.json()
-
-        if result.get("code") != 200:
-            error_msg = result.get("message", "Unknown error")
-            logger.error(f"ACL login failed: {error_msg}")
-            raise Exception(f"Login failed: {error_msg}")
-
-        token = result["data"]["token"]
-        logger.info("Successfully logged in to ACL API")
-        return token
-    except httpx.HTTPError as e:
-        logger.exception(f"HTTP error during login: {e}")
-        raise
-    except Exception as e:
-        logger.exception(f"Login failed: {e}")
-        raise
-
-
-async def fetch_ip_entities(client: httpx.AsyncClient, token: str) -> list[dict]:
-    """从ACL API获取IP实体数据
-    
-    Args:
-        client: httpx客户端
-        token: API token
-        
-    Returns:
-        IP实体列表
-    """
-    ip_api = f"{ACL_API_BASE}/ip"
-    params = {
-        "page": 1,
-        "size": 1_000_000,
-        "tabIndex": 2,
-        "ts": int(time.time() * 1000),
-    }
-
-    try:
-        logger.info("Fetching IP entities from ACL API...")
         client.headers.update({"Token": token, "Content-Type": "application/json"})
 
-        resp = await client.get(ip_api, params=params)
+        site_api = "https://10.192.56.37:8088/api/ip"
+        params = {
+            "page": 1,
+            "size": 1_000_000,
+            "tabIndex": 2,
+            "ts": int(time.time() * 1000),
+        }
+        logger.info("正在从 ACL API 获取 IP 实体...")
+        resp = await client.get(site_api, params=params)
+
+        if resp.status_code == 401:
+            logger.info("Token 已过期，重新登录")
+            login_url = "https://10.192.56.37:8088/api/user/login"
+            login_data = {
+                "username": os.getenv("ACL_USERNAME"),
+                "password": os.getenv("ACL_PASSWORD"),
+            }
+            login_resp = await client.post(login_url, json=login_data)
+            login_resp.raise_for_status()
+            login_result = login_resp.json()
+            if login_result.get("code") != 200:
+                raise Exception("登录失败")
+            token = login_result["data"]["token"]
+            set_key(".env", "TOKEN", token)
+            client.headers.update({"Token": token, "Content-Type": "application/json"})
+            resp = await client.get(site_api, params=params)
+
         resp.raise_for_status()
         data = resp.json()
-
         if data.get("code") != 200:
-            error_msg = data.get("message", "Unknown error")
-            logger.error(f"Failed to fetch IP data: {error_msg}")
-            raise Exception(f"Failed to fetch IP data: {error_msg}")
+            raise Exception("获取 IP 数据失败")
 
-        items = data.get("items", [])
-        logger.info(f"Successfully fetched {len(items)} IP entities")
-        return items
-    except httpx.HTTPError as e:
-        logger.exception(f"HTTP error during IP fetch: {e}")
-        raise
-    except Exception as e:
-        logger.exception(f"Failed to fetch IP entities: {e}")
-        raise
+        logger.info(f"成功获取 {len(data.get('items', []))} 条 IP 实体")
+        
+        os.makedirs(os.path.dirname(raw_path), exist_ok=True)
+        with open(raw_path, "w") as f:
+            json.dump(data, f, indent=4)
 
-
-async def save_raw_data(data: dict, filepath: str):
-    """保存原始数据到文件
-    
-    Args:
-        data: 要保存的数据
-        filepath: 文件路径
-    """
-    try:
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
-        logger.info(f"Saved raw data to {filepath}")
-    except Exception as e:
-        logger.exception(f"Failed to save raw data: {e}")
-        raise
-
-
-async def update_ip_assets() -> int:
-    """更新IP资产数据
-    
-    Returns:
-        处理的IP实体数量
-    """
-    # 检查环境变量
-    if not ACL_USERNAME or not ACL_PASSWORD:
-        raise ValueError(
-            "ACL_USERNAME and ACL_PASSWORD environment variables must be set"
-        )
-
-    try:
-        async with httpx.AsyncClient(
-            verify=False, timeout=60.0, follow_redirects=True
-        ) as client:
-            # 1. 登录获取token
-            token = await login_to_acl(client)
-
-            # 2. 获取IP实体数据
-            items = await fetch_ip_entities(client, token)
-
-            # 3. 保存原始数据
-            raw_data_path = os.path.join("api", "data", "raw_ip_entities.json")
-            await save_raw_data({"items": items}, raw_data_path)
-
-            # 4. 聚合处理数据
-            logger.info("Aggregating IP entities...")
-            aggregate_ip_entities(items)
-            logger.info("IP entities aggregation completed")
-
-            return len(items)
-    except Exception as e:
-        logger.exception(f"IP asset update failed: {e}")
-        raise
+    aggregate_ip_entities(data["items"])
 
 
 async def main():
@@ -183,14 +120,13 @@ async def main():
         start_time = datetime.now()
         logger.info(f"IP asset update started at {start_time}")
 
-        count = await update_ip_assets()
+        await update_ip_entities()
 
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
 
         logger.info(
-            f"IP asset update completed: processed={count} entities, "
-            f"duration={duration:.2f}s"
+            f"IP asset update completed, duration={duration:.2f}s"
         )
 
         return 0

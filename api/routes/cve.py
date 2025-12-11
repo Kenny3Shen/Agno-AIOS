@@ -32,6 +32,6 @@ async def search_cve(request: CveSearchRequest) -> dict:
             "size": request.size,
         }
     except Exception as e:
-        logger.error(f"Error searching CVEs: {e}")
-        return {"status": 400, "message": f"error:{e}"}
+        logger.error(f"搜索 CVE 错误: {e}")
+        return {"status": 400, "message": f"错误:{e}"}
 

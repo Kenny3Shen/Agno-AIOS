@@ -8,10 +8,10 @@ router = APIRouter(prefix="/api", tags=["Chat"])
 
 @router.post("/chat")
 async def chat_llm(request: ChatRequest):
-    """Process chat message with LLM"""
+    """使用 LLM 处理聊天消息"""
     try:
         response, sources = await chat_with_llm(request.message)
         return ChatResponse(response=response, sources=sources)
     except Exception as e:
-        logger.error(f"Error processing chat: {e}")
+        logger.error(f"处理聊天错误: {e}")
         raise HTTPException(status_code=500, detail=str(e))

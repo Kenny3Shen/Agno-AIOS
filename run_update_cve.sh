@@ -29,27 +29,34 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
   set +a
 fi
 
-# Make sure we use the uv binary inside the virtualenv if available
+# Try runtime options in this order:
+# 1) .venv/bin/uv
+# 2) .venv/bin/python
+# 3) system uv
+# 4) system python
 VENV_UV="$SCRIPT_DIR/.venv/bin/uv"
+VENV_PY="$SCRIPT_DIR/.venv/bin/python"
+RUN_CMD=()
 if [ -x "$VENV_UV" ]; then
-  UV_CMD="$VENV_UV"
+  RUN_CMD=("$VENV_UV" "run" "update_cve.py")
+elif [ -x "$VENV_PY" ]; then
+  RUN_CMD=("$VENV_PY" "update_cve.py")
+elif command -v uv >/dev/null 2>&1; then
+  RUN_CMD=("uv" "run" "update_cve.py")
+elif command -v python >/dev/null 2>&1; then
+  RUN_CMD=("python" "update_cve.py")
 else
-  # fallback to global uv if present
-  if command -v uv >/dev/null 2>&1; then
-    UV_CMD="uv"
-  else
-    echo "$(date -Iseconds) - ERROR: 'uv' not found. Please install uv or create a venv with uv present." >> "$LOG_FILE"
-    exit 1
-  fi
+  echo "$(date -Iseconds) - ERROR: Neither 'uv' nor 'python' found. Please install one or ensure .venv is set up." >> "$LOG_FILE"
+  exit 1
 fi
 
 # Log start
 echo "$(date -Iseconds) - Starting update_cve.py ($*)" >> "$LOG_FILE"
 
 # Run the update script. We pass any provided args through.
-# Redirect output to LOG_FILE. Use bash -lc to ensure environment variables and `uv` are interpreted properly.
-# When executed by cron there's no interactive shell, so we avoid relying on shell defaults.
-$UV_CMD run update_cve.py "$@" >> "$LOG_FILE" 2>&1 || {
+# Redirect output to LOG_FILE. When executed by cron there's no interactive shell so avoid relying on shell defaults.
+echo "$(date -Iseconds) - Will run: ${RUN_CMD[*]} $*" >> "$LOG_FILE"
+"${RUN_CMD[@]}" "$@" >> "$LOG_FILE" 2>&1 || {
   echo "$(date -Iseconds) - update_cve.py exited with non-zero status" >> "$LOG_FILE"
   exit 1
 }

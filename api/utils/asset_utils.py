@@ -2,7 +2,7 @@ import polars as pl
 from pathlib import Path
 from loguru import logger
 
-# Global cache for IP aggregated data
+# IP 聚合数据的全局缓存
 _ip_data_cache = {
     "dataframe": None,
     "last_loaded": None,
@@ -12,24 +12,22 @@ IP_DATA_PATH = "./api/data/aggregated_ip_entities.json"
 
 
 def get_ip_data_cache() -> pl.DataFrame:
-    """Get cached IP data or load from file if not cached"""
+    """获取缓存的 IP 数据，如果缓存不存在则从文件加载"""
     global _ip_data_cache
     
     if _ip_data_cache["dataframe"] is not None:
-        logger.debug("Using cached IP data")
+        logger.debug("使用缓存的 IP 数据")
         return _ip_data_cache["dataframe"]
     
-    # Load from file
     ip_data_file = Path(IP_DATA_PATH)
     if ip_data_file.exists():
-        logger.info("Loading IP data from {}", IP_DATA_PATH)
+        logger.info("从 {} 加载 IP 数据", IP_DATA_PATH)
         ip_df = pl.read_json(IP_DATA_PATH)
         _ip_data_cache["dataframe"] = ip_df
         _ip_data_cache["last_loaded"] = ip_data_file.stat().st_mtime
         return ip_df
     else:
-        logger.warning("IP data file not found: {}", IP_DATA_PATH)
-        # Return empty dataframe with expected schema
+        logger.warning("未找到 IP 数据文件: {}", IP_DATA_PATH)
         return pl.DataFrame({
             "ip": [],
             "port_info": [],
@@ -40,14 +38,26 @@ def get_ip_data_cache() -> pl.DataFrame:
 
 
 def invalidate_ip_cache():
-    """Invalidate the IP data cache (call after update)"""
+    """使 IP 数据缓存失效（更新后调用）"""
     global _ip_data_cache
     _ip_data_cache["dataframe"] = None
     _ip_data_cache["last_loaded"] = None
-    logger.info("IP data cache invalidated")
+    logger.info("IP 数据缓存已失效")
 
 
 def process_asset_data(asset_data: list[dict]) -> list[dict]:
+    """处理资产数据并与 IP 信息连接
+    
+    Args:
+        asset_data: 来自 ACL API 的资产字典列表
+        
+    Returns:
+        处理后的资产字典列表，包含连接的 IP 信息
+    """
+    if not asset_data:
+        logger.info("没有资产数据需要处理")
+        return []
+    
     asset_df = pl.DataFrame(asset_data, infer_schema_length=None)
     asset_df = (
         asset_df.unique(subset=["site"])
@@ -65,13 +75,13 @@ def process_asset_data(asset_data: list[dict]) -> list[dict]:
             finger=pl.col("finger").list.eval(pl.element().struct.field("name"))
         )
     )
-    # Use cached IP data
     ip_df_agg = get_ip_data_cache()
     asset_df = asset_df.join(ip_df_agg, on="ip", how="left")
-    return asset_df.to_dicts()  # Convert Polars DataFrame back to list of dicts
+    return asset_df.to_dicts()
 
 
 def aggregate_ip_entities(ip_items: list[dict]):
+    """聚合 IP 实体数据并写入文件"""
     ip_df = pl.DataFrame(ip_items, infer_schema_length=None)
     ip_df_agg = (
         ip_df.select(
@@ -102,5 +112,4 @@ def aggregate_ip_entities(ip_items: list[dict]):
     )
 
     ip_df_agg.write_json("./api/data/aggregated_ip_entities.json")
-    # Invalidate cache after update so next query loads fresh data
     invalidate_ip_cache()
