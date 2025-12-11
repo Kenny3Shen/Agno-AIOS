@@ -4,6 +4,7 @@ from pydantic import BaseModel
 class CveSearchRequest(BaseModel):
     cve_id: str | None = None
     keyword: str | None = None
+    source: str | None = None
     page: int = 1
     size: int = 10
 

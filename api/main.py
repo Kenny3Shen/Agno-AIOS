@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from api.database.cve_db import init_pool, close_pool
+from api.services.cve_service import init_pool, close_pool
 from api.routes import cve, asset, chat
 import os
 import sys

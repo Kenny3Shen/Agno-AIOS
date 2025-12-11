@@ -23,7 +23,7 @@
           <el-icon><Document /></el-icon>
         </template>
       </el-input>
-      <el-select v-model="sourceFilter" placeholder="数据来源" clearable class="w-[150px]">
+      <el-select v-model="sourceFilter" placeholder="数据来源" clearable class="w-[150px]" @change="handleSourceChange">
         <el-option label="全部" value="" />
         <el-option label="GitHub" value="github" />
         <el-option label="Exploit-DB" value="exploit-db" />
@@ -33,9 +33,9 @@
 
 
     <el-table v-if="filteredResults.length > 0" :data="filteredResults" style="width: 100%" border stripe>
-      <el-table-column prop="id" label="ID" width="80" sortable />
+      <el-table-column prop="id" label="ID" width="70" sortable />
       <el-table-column prop="cve_id" label="CVE 编号" width="150" sortable />
-      <el-table-column prop="source" label="来源" width="100" sortable>
+      <el-table-column prop="source" label="来源" width="120" sortable>
         <template #default="scope">
           <el-tag v-if="scope.row.source === 'github'" type="success">GitHub</el-tag>
           <el-tag v-else-if="scope.row.source === 'exploit-db'" type="warning">Exploit-DB</el-tag>
@@ -167,6 +167,12 @@ const handleSizeChange = (size: number) => {
   handleSearch()
 }
 
+const handleSourceChange = (value: string) => {
+  sourceFilter.value = value
+  currentPage.value = 1
+  handleSearch()
+}
+
 const handleSearch = async () => {
   const hasCve = cveQuery.value && cveQuery.value.trim()
   const hasKeyword = keywordQuery.value && keywordQuery.value.trim()
@@ -180,6 +186,7 @@ const handleSearch = async () => {
   const response = await axios.post("/api/cve/search", {
     cve_id: hasCve ? cveQuery.value.trim() : null,
     keyword: hasKeyword ? keywordQuery.value.trim() : null,
+    source: sourceFilter.value || null,
     page: currentPage.value,
     size: pageSize.value
   })
