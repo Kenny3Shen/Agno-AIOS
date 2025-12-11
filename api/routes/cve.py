@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from api.models.schemas import CveSearchRequest
 from api.services.cve_service import search_cves_by_description, search_cves_by_id
+from update_cve import main as update_cve_main
 from loguru import logger
 
 router = APIRouter(prefix="/api/cve", tags=["CVE"])
@@ -40,3 +41,22 @@ async def search_cve(request: CveSearchRequest) -> dict:
     except Exception as e:
         logger.error(f"搜索 CVE 错误: {e}")
         return {"status": 400, "message": f"错误:{e}"}
+
+
+@router.post("/update")
+async def update_cve_database():
+    """更新 CVE 数据库"""
+    try:
+        logger.info("开始更新 CVE 数据库")
+        # 异步运行更新任务
+        add_count, del_count = await update_cve_main()
+        logger.info("CVE 数据库更新完成")
+        return {
+            "status": 200,
+            "message": "CVE 数据库更新完成",
+            "add_count": add_count,
+            "del_count": del_count,
+        }
+    except Exception as e:
+        logger.error(f"更新 CVE 数据库错误: {e}")
+        return {"status": 500, "message": f"更新失败: {e}"}

@@ -3,8 +3,8 @@
     <div class="flex gap-4 flex-wrap">
       <el-input
         v-model="cveQuery"
-        placeholder="CVE 编号 (例如: CVE-2024-1234)"
-        class="flex-1 min-w-[200px]"
+        placeholder="CVE-2024-1234"
+        class="flex-1 min-w-[150px]"
         @keyup.enter="handleSearch"
         clearable
       >
@@ -29,6 +29,19 @@
         <el-option label="Exploit-DB" value="exploit-db" />
       </el-select>
       <el-button type="primary" @click="handleSearch" :loading="loading" :disabled="isSearchDisabled || loading">搜索</el-button>
+      <el-button type="success" @click="handleUpdateDatabase" :loading="updating" :disabled="updating">更新</el-button>
+    </div>
+
+    <!-- 更新状态提示 -->
+    <div v-if="updateMessage" class="mb-4">
+      <el-alert 
+        :type="updateMessage.type" 
+        :title="updateMessage.title" 
+        :description="updateMessage.description" 
+        show-icon 
+        closable
+        @close="updateMessage = null"
+      />
     </div>
 
 
@@ -99,7 +112,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from "vue"
 import axios from "axios"
-import { Document } from "@element-plus/icons-vue"
+import { Document, Search } from "@element-plus/icons-vue"
 
 interface CveResult {
   id: number
@@ -120,6 +133,12 @@ const currentPage = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
 const expandedRows = reactive(new Set<number>())
+const updating = ref(false)
+const updateMessage = ref<{
+  type: 'success' | 'warning' | 'info' | 'error'
+  title: string
+  description: string
+} | null>(null)
 
 // 两个查询框均为空时禁用搜索按钮
 const isSearchDisabled = computed(() => {
@@ -195,5 +214,36 @@ const handleSearch = async () => {
   total.value = response.data.total
   searched.value = true
   loading.value = false
+}
+
+const handleUpdateDatabase = async () => {
+  updating.value = true
+  updateMessage.value = null
+
+  try {
+    const response = await axios.post("/api/cve/update")
+    
+    if (response.data.status === 200) {
+      updateMessage.value = {
+        type: 'success',
+        title: '更新成功',
+        description: `CVE 数据库已成功更新。新增: ${response.data.add_count} 条，删除: ${response.data.del_count} 条。`
+      }
+    } else {
+      updateMessage.value = {
+        type: 'error',
+        title: '更新失败',
+        description: response.data.message || '未知错误'
+      }
+    }
+  } catch (error: any) {
+    updateMessage.value = {
+      type: 'error',
+      title: '更新失败',
+      description: error.response?.data?.message || error.message || '网络错误'
+    }
+  } finally {
+    updating.value = false
+  }
 }
 </script>

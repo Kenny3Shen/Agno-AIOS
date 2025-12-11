@@ -8,6 +8,7 @@ import os
 import sys
 from loguru import logger
 
+# Configure logger
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 logger.remove()
 logger.add(sys.stderr, level=LOG_LEVEL)
@@ -30,25 +31,29 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CVE Intelligence Platform API", lifespan=lifespan)
 
+# CORS Configuration
 app.add_middleware(
     CORSMiddleware,  # type: ignore
-    allow_origins=["*"],  # 生产环境中请替换为具体的源
+    allow_origins=["*"],  # In production, replace with specific origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
+# Health check
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok"}
 
 
+# Include routers
 app.include_router(cve.router)
 app.include_router(asset.router)
 app.include_router(chat.router)
 
-app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend")
+# Serve frontend static files
+app.mount("/", StaticFiles(directory="source", html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn

@@ -14,6 +14,9 @@ import httpx
 import tomllib
 import polars as pl
 from loguru import logger
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class CVEDataSource(ABC):
@@ -117,9 +120,15 @@ class GitHubPocExpSource(CVEDataSource):
             "remote_url",
             "https://raw.githubusercontent.com/ycdxsb/PocOrExp_in_Github/refs/heads/main/PocOrExp.md",
         )
-        self.local_path = cfg.get("local_cache", os.path.join("./api/data", "github_cve_cache.csv"))
-        self.commit_cache = cfg.get("commit_cache", os.path.join("./api/data", "github_commit.txt"))
-        self.repo_api = cfg.get("repo_api", "https://api.github.com/repos/ycdxsb/PocOrExp_in_Github/commits")
+        self.local_path = cfg.get(
+            "local_cache", os.path.join("./api/data", "github_cve_cache.csv")
+        )
+        self.commit_cache = cfg.get(
+            "commit_cache", os.path.join("./api/data", "github_commit.txt")
+        )
+        self.repo_api = cfg.get(
+            "repo_api", "https://api.github.com/repos/ycdxsb/PocOrExp_in_Github/commits"
+        )
         self.default_branch = cfg.get("default_branch", "main")
 
     async def fetch_data(self) -> str:
@@ -212,10 +221,13 @@ class GitHubPocExpSource(CVEDataSource):
 
     async def get_remote_commit(self) -> str:
         """获取远程数据的最新 commit sha"""
+        github_token = os.getenv("GITHUB_TOKEN", None)
+        headers = {"Authorization": f"token {github_token}"} if github_token else {}
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(
                 self.repo_api,
                 params={"sha": self.default_branch, "per_page": 1},
+                headers=headers,
             )
             resp.raise_for_status()
             return resp.json()[0]["sha"]
@@ -256,8 +268,12 @@ class ExploitDBSource(CVEDataSource):
             "remote_url",
             "https://gitlab.com/exploit-database/exploitdb/-/raw/main/files_exploits.csv?ref_type=heads",
         )
-        self.local_path = cfg.get("local_cache", os.path.join("./api/data", "exploit_db.csv"))
-        self.commit_cache = cfg.get("commit_cache", os.path.join("./api/data", "exploitdb_commit.txt"))
+        self.local_path = cfg.get(
+            "local_cache", os.path.join("./api/data", "exploit_db.csv")
+        )
+        self.commit_cache = cfg.get(
+            "commit_cache", os.path.join("./api/data", "exploitdb_commit.txt")
+        )
         self.repo_api = cfg.get(
             "repo_api",
             "https://gitlab.com/api/v4/projects/exploit-database%2Fexploitdb/repository/commits",

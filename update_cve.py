@@ -236,30 +236,33 @@ async def get_add_del_data(
         return [], []
 
 
-async def main():
+async def main() -> tuple[int, int]:
     """主函数"""
     try:
         start_time = datetime.now()
         logger.info(f"CVE 更新开始: {start_time}")
 
         need_add_data, need_del_data = [], []
-        for source_name in DATA_SOURCES.keys():
-            increment_data, deleted_data = await get_add_del_data(source_name)
-            need_add_data.extend(increment_data)
-            need_del_data.extend(deleted_data)
+        task = [get_add_del_data(source_name) for source_name in DATA_SOURCES.keys()]
+        results = await asyncio.gather(*task)
 
-        new_count, del_count = await update_cve_database(need_add_data, need_del_data)
+        for add_data, del_data in results:
+            need_add_data.extend(add_data)
+            need_del_data.extend(del_data)
+
+        add_count, del_count = await update_cve_database(need_add_data, need_del_data)
 
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
 
         logger.info(
-            f"CVE 更新完成: 新增={new_count}, 删除={del_count}, "
-            f"耗时={duration:.2f}秒"
+            f"CVE 更新完成: 新增={add_count}, 删除={del_count}, 耗时={duration:.2f}秒"
         )
+        return (add_count, del_count)
 
     except Exception as e:
         logger.exception(f"CVE 更新失败: {e}")
+        return (0, 0)
 
 
 if __name__ == "__main__":
