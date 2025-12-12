@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from api.services.cve_service import init_pool, close_pool
-from api.routes import cve, asset, chat
+from api.routes import cve, asset, chat, url2md
 import os
 import sys
 from loguru import logger
@@ -51,6 +51,7 @@ async def health_check():
 app.include_router(cve.router)
 app.include_router(asset.router)
 app.include_router(chat.router)
+app.include_router(url2md.router)
 
 # Serve frontend static files
 app.mount("/", StaticFiles(directory="source", html=True), name="frontend")

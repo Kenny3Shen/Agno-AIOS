@@ -29,6 +29,10 @@
             <el-icon><Monitor /></el-icon>
             <span>资产搜索</span>
           </el-menu-item>
+          <el-menu-item index="url2md">
+            <el-icon><WarningFilled /></el-icon>
+            <span>网页解析</span>
+          </el-menu-item>
           <el-menu-item index="chat">
             <el-icon><ChatDotRound /></el-icon>
             <span>LLM 聊天</span>
@@ -73,6 +77,7 @@ import { ref, computed } from "vue"
 import CveSearch from "./components/CveSearch.vue"
 import AssetSearch from "./components/AssetSearch.vue"
 import LlmChat from "./components/LlmChat.vue"
+import Url2Md from "./components/Url2Md.vue"
 
 const activeTab = ref("cve")
 
@@ -83,6 +88,8 @@ const activeComponent = computed(() => {
       return AssetSearch
     case "chat":
       return LlmChat
+    case "url2md":
+      return Url2Md
     case "cve":
     default:
       return CveSearch

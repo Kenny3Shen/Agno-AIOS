@@ -8,6 +8,8 @@ class CveSearchRequest(BaseModel):
     page: int = 1
     size: int = 10
 
+class Url2MdRequest(BaseModel):
+    url: str
 
 class AssetSearchRequest(BaseModel):
     fingerprint: str
