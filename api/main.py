@@ -2,11 +2,14 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from api.services.cve_service import init_pool, close_pool
 from api.routes import cve, asset, chat, url2md
 import os
 import sys
 from loguru import logger
+from dotenv import load_dotenv
+import aiomysql
+
+load_dotenv()
 
 # Configure logger
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -22,11 +25,29 @@ logger.add(
 )
 
 
+DB_CONFIG = {
+    "host": os.getenv("MYSQL_TEST_HOST"),
+    "port": int(os.getenv("MYSQL_TEST_PORT", 3306)),
+    "user": os.getenv("MYSQL_TEST_USER"),
+    "password": os.getenv("MYSQL_TEST_PASSWORD"),
+    "db": os.getenv("MYSQL_TEST_DATABASE"),
+    "charset": "utf8mb4",
+    "autocommit": True,
+}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_pool()
-    yield
-    await close_pool()
+    # initialize resources
+    pool: aiomysql.Pool = await aiomysql.create_pool(**DB_CONFIG)
+    app.state.db_pool = pool
+
+    try:
+        yield
+    finally:
+        # cleanup resources
+        pool.close()
+        await pool.wait_closed()
 
 
 app = FastAPI(title="CVE Intelligence Platform API", lifespan=lifespan)
