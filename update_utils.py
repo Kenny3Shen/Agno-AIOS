@@ -8,7 +8,7 @@ CVE更新工具和数据源类
 import os
 import re
 from abc import ABC, abstractmethod
-from typing import List, Dict, Tuple
+from typing import Any
 
 import httpx
 import tomllib
@@ -28,7 +28,7 @@ class CVEDataSource(ABC):
         pass
 
     @abstractmethod
-    def parse_data(self, raw_data) -> List[Dict[str, str]]:
+    def parse_data(self, raw_data: Any) -> list[dict[str, str]]:
         """解析数据为标准格式
 
         返回格式:
@@ -54,8 +54,8 @@ class CVEDataSource(ABC):
         pass
 
     def compare_with_local(
-        self, new_data: List[Dict[str, str]], old_data: List[Dict[str, str]]
-    ) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
+        self, new_data: list[dict[str, str]], old_data: list[dict[str, str]]
+    ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
         """使用Polars高效对比新旧数据
 
         Args:
@@ -139,80 +139,66 @@ class GitHubPocExpSource(CVEDataSource):
             logger.info(f"成功从 {self.remote_url} 获取数据")
             return resp.text
 
-    def parse_data(self, raw_data: str) -> List[Dict[str, str]]:
+    def parse_data(self, raw_data: Any) -> list[dict[str, str]]:
         """解析 Markdown 格式的 CVE 数据"""
-        if not raw_data:
-            logger.warning("调用 parse_data 但数据为空")
+        if not isinstance(raw_data, str) or not raw_data:
             return []
 
-        lines = raw_data.strip().split("\n")
-        cve_data = []
-        current_cve = None
-        current_desc = []
+        # 1. 使用正则匹配 CVE 块：从 ## CVE-xxx 开始到下一个 ## 或文件末尾
+        # re.DOTALL 允许 . 匹配换行符
+        cve_blocks = re.finditer(
+            r"##\s*(CVE-\d{4}-\d+)(.*?)(?=\n##|\Z)", raw_data, re.DOTALL
+        )
 
-        cve_pattern = re.compile(r"^##\s*(CVE-\d{4}-\d+)")
         url_pattern = re.compile(r"-\s*\[(https://github\.com/[^\]]+)\]")
+        cve_data = []
 
-        for line in lines:
-            line = line.strip()
+        for block in cve_blocks:
+            cve_id = block.group(1)
+            content = block.group(2)
 
-            # 匹配CVE标题
-            cve_match = cve_pattern.match(line)
-            if cve_match:
-                if current_cve and not any(
-                    d["cve_id"] == current_cve for d in cve_data
-                ):
-                    cve_data.append(
-                        {
-                            "cve_id": current_cve,
-                            "description": "\n".join(current_desc).strip(),
-                            "github_url": "",
-                        }
-                    )
-
-                current_cve = cve_match.group(1)
-                current_desc = []
+            # 2. 提取该块内所有的 GitHub URL
+            urls = url_pattern.findall(content)
+            if not urls:
+                # 如果没有 URL，则跳过该 CVE（确保 github_url 不为空）
                 continue
 
-            # 匹配GitHub URL
-            url_match = url_pattern.match(line)
-            if url_match:
-                if current_cve:
-                    url = url_match.group(1)
-                    cve_data.append(
-                        {
-                            "cve_id": current_cve,
-                            "description": "\n".join(current_desc).strip(),
-                            "github_url": url,
-                        }
-                    )
-                continue
-
-            if (
-                current_cve
-                and not line.startswith("##")
-                and not line.startswith("![")
-                and line
-            ):
-                current_desc.append(line)
-
-        if current_cve and not any(d["cve_id"] == current_cve for d in cve_data):
-            cve_data.append(
-                {
-                    "cve_id": current_cve,
-                    "description": "\n".join(current_desc).strip(),
-                    "github_url": "",
-                }
+            # 3. 提取描述：取第一个 URL 之前的内容并清理
+            first_url_match = url_pattern.search(content)
+            desc_part = (
+                content[: first_url_match.start()].strip()
+                if first_url_match
+                else content
             )
 
-        # 使用 Polars 进行去重，基于 (cve_id, github_url)
-        if cve_data:
-            df = pl.DataFrame(cve_data)
-            df_unique = df.unique(subset=["cve_id", "github_url"], keep="first")
-            cve_data = df_unique.to_dicts()
-            logger.info(f"去重后: {len(cve_data)} 条唯一 CVE 记录")
+            # 过滤掉图片标签 (![...]) 和多余空行
+            description = "\n".join(
+                [
+                    line.strip()
+                    for line in desc_part.split("\n")
+                    if line.strip() and not line.strip().startswith("![")
+                ]
+            )
 
-        logger.info(f"从数据中解析了 {len(cve_data)} 条 CVE 记录")
+            # 4. 为每个 URL 生成一条记录
+            for url in urls:
+                cve_data.append(
+                    {
+                        "cve_id": cve_id,
+                        "description": description,
+                        "github_url": url,
+                    }
+                )
+
+        # 5. 使用 Polars 高效去重
+        if cve_data:
+            cve_data = (
+                pl.DataFrame(cve_data)
+                .unique(subset=["cve_id", "github_url"])
+                .to_dicts()
+            )
+
+        logger.info(f"从数据中解析了 {len(cve_data)} 条有效的 CVE 记录")
         return cve_data
 
     def get_local_cache_path(self) -> str:
@@ -280,37 +266,30 @@ class ExploitDBSource(CVEDataSource):
         )
         self.default_branch = cfg.get("default_branch", "main")
 
-    async def fetch_data(self) -> pl.DataFrame:
+    async def fetch_data(self) -> pl.LazyFrame:
         """从 Exploit-DB 获取数据"""
-        df = pl.read_csv(self.remote_url)
+        # df = pl.read_csv(self.remote_url)
+        df = pl.scan_csv(self.remote_url)
         logger.info(f"成功从 {self.remote_url} 获取数据")
         return df
 
-    def parse_data(self, raw_data) -> List[Dict[str, str]]:
+    def parse_data(self, raw_data: Any) -> list[dict[str, str]]:
         """解析 Exploit-DB 数据
 
         Args:
-            raw_data: 可以是 pl.DataFrame（从远程获取）或 list[dict]（从缓存加载）
+            raw_data: pl.LazyFrame（从远程获取）
 
         Returns:
             处理后的 CVE 数据列表
         """
-        if isinstance(raw_data, list):
-            if not raw_data:
-                return []
-            if "cve_id" in raw_data[0]:
-                logger.info(f"从缓存加载了 {len(raw_data)} 条 CVE 记录")
-                return raw_data
-
-        if not isinstance(raw_data, pl.DataFrame):
+        if not isinstance(raw_data, pl.LazyFrame):
             logger.warning(f"意外的 raw_data 类型: {type(raw_data)}，返回空列表")
             return []
 
-        if raw_data.is_empty():
-            return []
-
-        df_processed = raw_data.select(
-            [
+        # 使用 Polars 处理数据
+        # 基于 (cve_id, github_url) 去重
+        df_processed = (
+            raw_data.select(
                 pl.struct(["codes", "file"])
                 .map_elements(
                     lambda x: _process_codes(x["codes"], x["file"]),
@@ -321,14 +300,14 @@ class ExploitDBSource(CVEDataSource):
                 pl.col("file")
                 .map_elements(_process_file, return_dtype=pl.Utf8)
                 .alias("github_url"),
-            ]
+            )
+            .unique(subset=["cve_id", "github_url"], keep="first")
+            .collect()
         )
 
-        # 基于 (cve_id, github_url) 去重
-        df_unique = df_processed.unique(subset=["cve_id", "github_url"], keep="first")
-        cve_list = df_unique.to_dicts()
+        cve_list = df_processed.to_dicts()
         logger.info(
-            f"去重后: {len(cve_list)} 条唯一 CVE 记录（总共 {len(df_processed)} 条）"
+            f"去重后: {len(cve_list)} 条唯一 CVE 记录（总共 {len(cve_list)} 条）"
         )
         return cve_list
 

@@ -188,7 +188,7 @@ async def get_add_del_data(
         return [], []
 
     # 2. 获取远程数据
-    new_raw_data = await source.fetch_data()
+    new_raw_data= await source.fetch_data()
     new_parsed_data = source.parse_data(new_raw_data)
 
     # 为每条数据添加source字段
