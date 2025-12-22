@@ -272,18 +272,24 @@ class ExploitDBSource(CVEDataSource):
 
         # 使用 Polars 处理数据
         # 基于 (cve_id, github_url) 去重
+        # coalesce 从左到右折叠列，保留第一个非空值。
         df_remote_cve = (
             raw_data.select(
-                pl.struct(["codes", "file"])
-                .map_elements(
-                    lambda x: _process_codes(x["codes"], x["file"]),
-                    return_dtype=pl.Utf8,
+                pl.when(pl.col("codes").is_null() | (pl.col("codes") == ""))
+                .then(pl.col("file"))
+                .otherwise(
+                    pl.coalesce(
+                        pl.col("codes").str.extract(r"(CVE-\d{4}-\d+)", 1),
+                        pl.col("codes").str.extract(r"(OSVDB-\d+)", 1),
+                        pl.col("codes"),
+                    )
                 )
                 .alias("cve_id"),
-                pl.col("description"),
-                pl.col("file")
-                .map_elements(_process_file, return_dtype=pl.Utf8)
-                .alias("github_url"),
+                pl.col("description").alias("description"),
+                pl.format(
+                    "https://www.exploit-db.com/exploits/{}",
+                    pl.col("file").str.extract(r"/(\d+)\.", 1),
+                ).alias("github_url"),
             )
             .unique(subset=["cve_id", "github_url"], keep="first")
             .collect()
