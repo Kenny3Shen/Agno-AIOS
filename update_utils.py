@@ -28,18 +28,11 @@ class CVEDataSource(ABC):
         pass
 
     @abstractmethod
-    def parse_data(self, raw_data: Any) -> list[dict[str, str]]:
-        """解析数据为标准格式
+    def parse_data(self, raw_data: Any) -> pl.DataFrame:
+        """解析数据为标准格式，返回 DataFrame
 
         返回格式:
-        [
-            {
-                'cve_id': str,
-                'description': str,
-                'github_url': str
-            },
-            ...
-        ]
+        DataFrame with columns: cve_id, description, github_url
         """
         pass
 
@@ -54,28 +47,22 @@ class CVEDataSource(ABC):
         pass
 
     def compare_with_local(
-        self, new_data: list[dict[str, str]], old_data: list[dict[str, str]]
-    ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+        self, df_new: pl.DataFrame, df_old: pl.DataFrame
+    ) -> tuple[pl.DataFrame, pl.DataFrame]:
         """使用Polars高效对比新旧数据
 
         Args:
-            new_data: 新数据列表
-            old_data: 旧数据列表
+            df_new: 新数据DataFrame
+            df_old: 旧数据DataFrame
 
         Returns:
-            (increment_data, deleted_data) 元组
+            (increment_df, deleted_df) DataFrame 元组
         """
-        if not new_data:
-            # 如果新数据为空，所有旧数据都应该删除
-            return [], old_data
+        if df_new.is_empty():
+            return pl.DataFrame(), df_old
 
-        if not old_data:
-            # 如果旧数据为空，所有新数据都是增量
-            return new_data, []
-
-        # 使用Polars DataFrame进行高效对比
-        df_new = pl.DataFrame(new_data)
-        df_old = pl.DataFrame(old_data)
+        if df_old.is_empty():
+            return df_new, pl.DataFrame()
 
         # 使用anti_join找出增量数据（在new中但不在old中）
         df_increment = df_new.join(
@@ -91,16 +78,12 @@ class CVEDataSource(ABC):
             how="anti",
         )
 
-        # 转换回列表字典格式
-        increment_data = df_increment.to_dicts()
-        deleted_data = df_deleted.to_dicts()
-
         logger.info(
-            f"数据对比: 本地={len(old_data)}, 远程={len(new_data)}, "
-            f"增量={len(increment_data)}, 待删除={len(deleted_data)}"
+            f"数据对比: 本地={df_old.height}, 远程={df_new.height}, "
+            f"增量={df_increment.height}, 待删除={df_deleted.height}"
         )
 
-        return increment_data, deleted_data
+        return df_increment, df_deleted
 
 
 CONFIG_PATH = os.getenv("CONFIG_PATH", "config.toml")
@@ -139,10 +122,10 @@ class GitHubPocExpSource(CVEDataSource):
             logger.info(f"成功从 {self.remote_url} 获取数据")
             return resp.text
 
-    def parse_data(self, raw_data: Any) -> list[dict[str, str]]:
+    def parse_data(self, raw_data: Any) -> pl.DataFrame:
         """解析 Markdown 格式的 CVE 数据"""
         if not isinstance(raw_data, str) or not raw_data:
-            return []
+            return pl.DataFrame()
 
         # 1. 使用正则匹配 CVE 块：从 ## CVE-xxx 开始到下一个 ## 或文件末尾
         # re.DOTALL 允许 . 匹配换行符
@@ -191,15 +174,14 @@ class GitHubPocExpSource(CVEDataSource):
                 )
 
         # 5. 使用 Polars 高效去重
-        if cve_data:
-            cve_data = (
-                pl.DataFrame(cve_data)
-                .unique(subset=["cve_id", "github_url"])
-                .to_dicts()
-            )
+        df_remote_cve = (
+            pl.DataFrame(cve_data).unique(subset=["cve_id", "github_url"])
+            if cve_data
+            else pl.DataFrame()
+        )
 
-        logger.info(f"从数据中解析了 {len(cve_data)} 条有效的 CVE 记录")
-        return cve_data
+        logger.info(f"从数据中解析了 {df_remote_cve.height} 条有效的 CVE 记录")
+        return df_remote_cve
 
     def get_local_cache_path(self) -> str:
         """获取本地缓存文件路径"""
@@ -273,7 +255,7 @@ class ExploitDBSource(CVEDataSource):
         logger.info(f"成功从 {self.remote_url} 获取数据")
         return df
 
-    def parse_data(self, raw_data: Any) -> list[dict[str, str]]:
+    def parse_data(self, raw_data: Any) -> pl.DataFrame:
         """解析 Exploit-DB 数据
 
         Args:
@@ -283,12 +265,14 @@ class ExploitDBSource(CVEDataSource):
             处理后的 CVE 数据列表
         """
         if not isinstance(raw_data, pl.LazyFrame):
-            logger.warning(f"意外的 raw_data 类型: {type(raw_data)}，返回空列表")
-            return []
+            logger.warning(
+                f"意外的 raw_data 类型: 预期 pl.LazyFrame，实际 {type(raw_data)}"
+            )
+            return pl.DataFrame()
 
         # 使用 Polars 处理数据
         # 基于 (cve_id, github_url) 去重
-        df_processed = (
+        df_remote_cve = (
             raw_data.select(
                 pl.struct(["codes", "file"])
                 .map_elements(
@@ -296,7 +280,7 @@ class ExploitDBSource(CVEDataSource):
                     return_dtype=pl.Utf8,
                 )
                 .alias("cve_id"),
-                pl.col("description").alias("description"),
+                pl.col("description"),
                 pl.col("file")
                 .map_elements(_process_file, return_dtype=pl.Utf8)
                 .alias("github_url"),
@@ -305,11 +289,8 @@ class ExploitDBSource(CVEDataSource):
             .collect()
         )
 
-        cve_list = df_processed.to_dicts()
-        logger.info(
-            f"去重后: {len(cve_list)} 条唯一 CVE 记录（总共 {len(cve_list)} 条）"
-        )
-        return cve_list
+        logger.info(f"去重后: {df_remote_cve.height} 条唯一 CVE 记录）")
+        return df_remote_cve
 
     def get_local_cache_path(self) -> str:
         """获取本地缓存文件路径"""

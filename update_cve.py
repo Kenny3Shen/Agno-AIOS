@@ -187,46 +187,43 @@ async def get_add_del_data(
         logger.info(f"数据源 {source_name} 无变化，跳过拉取")
         return [], []
 
-    # 2. 获取远程数据
-    new_raw_data= await source.fetch_data()
-    new_parsed_data = source.parse_data(new_raw_data)
+    # 2. 获取远程数据（现在直接得到 DataFrame）
+    new_raw_data = await source.fetch_data()
+    df_remote = source.parse_data(new_raw_data)
 
-    # 为每条数据添加source字段
-    for item in new_parsed_data:
-        item["source"] = source_name
+    # 添加 source 列（Polars 原生操作，非常快）
+    if not df_remote.is_empty():
+        df_remote = df_remote.with_columns(pl.lit(source_name).alias("source"))
 
-    # 2. 读取本地缓存
+    # 3. 读取本地缓存（直接得到 DataFrame）
     local_cache_path = source.get_local_cache_path()
-    old_parsed_data = []
-
+    df_local = pl.DataFrame()
     if os.path.exists(local_cache_path):
         logger.info(f"从本地缓存加载数据: {local_cache_path}")
         try:
-            df_cache = pl.read_csv(local_cache_path)
-            old_parsed_data = df_cache.to_dicts()
-            logger.info(f"从本地缓存加载了 {len(old_parsed_data)} 条记录")
+            df_local = pl.read_csv(local_cache_path)
+            logger.info(f"从本地缓存加载了 {df_local.height} 条记录")
         except Exception as e:
             logger.warning(f"加载本地缓存失败: {e}，按全量更新处理")
     else:
         logger.info(f"本地缓存文件不存在: {local_cache_path}，按全量更新处理")
 
-    # 3. 使用 polars 进行数据对比，找出新增和删除的CVE
-    increment_data, deleted_data = source.compare_with_local(
-        new_parsed_data, old_parsed_data
-    )
+    # 4. 对比（DataFrame in -> DataFrame out）
+    df_inc, df_del = source.compare_with_local(df_remote, df_local)
 
-    # 4. 更新本地缓存
-    if increment_data or deleted_data:
+    # 5. 更新本地缓存（直接写入 DataFrame）
+    if not df_inc.is_empty() or not df_del.is_empty():
         os.makedirs(os.path.dirname(local_cache_path), exist_ok=True)
-        df_to_cache = pl.DataFrame(new_parsed_data)
-        df_to_cache.write_csv(local_cache_path)
+        df_remote.write_csv(local_cache_path)
         logger.info(f"已更新本地缓存: {local_cache_path}")
 
         if remote_commit:
             os.makedirs(os.path.dirname(local_commit_path), exist_ok=True)
             with open(local_commit_path, "w") as f:
                 f.write(remote_commit)
-        return increment_data, deleted_data
+        
+        # 仅在返回给数据库更新函数时转换为 list[dict]
+        return df_inc.to_dicts(), df_del.to_dicts()
     else:
         if remote_commit:
             os.makedirs(os.path.dirname(local_commit_path), exist_ok=True)
