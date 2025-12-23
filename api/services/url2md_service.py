@@ -105,6 +105,8 @@ def parse_to_markdown(elements, truncate_marker: str = "", skip_title: str = "")
                 text = f"\n```\n{text}\n```\n\n"
             else:
                 text = f"`{text}`"
+        elif tag.name == "div":
+            text = f"{text}\n\n"
 
         markdown_lines.append(text)
         prev_tag_name = tag.name
@@ -143,11 +145,13 @@ def get_markdown_text(soup: BeautifulSoup, url: str) -> str:
         for exclude_class in exclude_classes:
             for elem in container.find_all(class_=exclude_class):
                 elem.decompose()
+        if domain == "www.anquanke.com" and soup.find("div", class_="auto-hide-last-sibling-br paragraph-pP9ZLC paragraph-element br-paragraph-space"):
+            tags_to_extract.append("div")
         elements = container.find_all(tags_to_extract)
-    # 未设置规则时，提取整个页面内容
+    # 未设置规则时，仅提取 <p> 标签
     else:
         print(f"Rules not found for domain: {domain}")
-        elements = soup.find_all(tags_to_extract)
+        elements = soup.find_all(["p"])
 
     # 使用提取函数转换为 Markdown，跳过与标题相同的标签
     main_paragraphs = parse_to_markdown(elements, truncate_marker, title)
