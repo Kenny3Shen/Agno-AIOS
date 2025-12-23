@@ -13,28 +13,17 @@ router = APIRouter(prefix="/api/cve", tags=["CVE"])
 async def search_cve(
     request: CveSearchRequest, pool: aiomysql.Pool = Depends(get_pool)
 ) -> dict:
-    """Search CVEs by ID or keyword with pagination
-
-    - 如果提供 cve_id，则按 CVE 编号搜索
-    - 如果提供 keyword，则按描述关键字搜索
-    - 如果提供 source，则添加来源过滤
-    - 两者都为空时返回错误
-    """
+    """Search CVEs by ID or keyword with pagination"""
 
     try:
-        source = request.source.strip() if request.source else None
-        if request.cve_id and request.cve_id.strip():
-            # 按 CVE 编号搜索
+        if request.cve_id:
             items, total = await search_cves_by_id(
-                pool, request.cve_id.strip(), request.page, request.size, source
+                pool, request.cve_id, request.page, request.size, request.source
             )
-        elif request.keyword and request.keyword.strip():
-            # 按关键字搜索
+        elif request.keyword:
             items, total = await search_cves_by_description(
-                pool, request.keyword.strip(), request.page, request.size, source
+                pool, request.keyword, request.page, request.size, request.source
             )
-        else:
-            return {"status": 400, "message": "请提供 CVE 编号或关键字"}
 
         return {
             "status": 200,

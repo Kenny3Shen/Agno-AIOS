@@ -9,15 +9,11 @@ router = APIRouter(prefix="/api/url2md", tags=["URL2MD"])
 async def parse_url_to_markdown(request: Url2MdRequest) -> dict:
     """Parse the content of a given URL and convert it to Markdown format."""
     try:
-        url = request.url.strip()
-        if not url:
-            return {"status": 400, "message": "URL不能为空"}
-
-        markdown_content = fetch_and_parse_url([url])
+        markdown_content = fetch_and_parse_url([request.url])
 
         return {
             "status": 200,
-            "url": url,
+            "url": request.url,
             "markdown": markdown_content,
         }
     except Exception as e:
