@@ -1,10 +1,7 @@
-import os
-import json
 import re
 import requests
 from bs4 import BeautifulSoup
-import asyncio
-from api.utils.url2md_urils import domain_rules, title_suffixes, system_prompt
+from api.utils.url2md_utils import domain_rules, title_suffixes
 
 USE_PLAYWRIGHT = False  # 是否使用 Playwright 绕过 WAF
 
@@ -145,7 +142,7 @@ def get_markdown_text(soup: BeautifulSoup, url: str) -> str:
         for exclude_class in exclude_classes:
             for elem in container.find_all(class_=exclude_class):
                 elem.decompose()
-        if domain == "www.anquanke.com" and soup.find("div", class_="auto-hide-last-sibling-br paragraph-pP9ZLC paragraph-element br-paragraph-space"):
+        if domain == "www.anquanke.com":
             tags_to_extract.append("div")
         elements = container.find_all(tags_to_extract)
     # 未设置规则时，仅提取 <p> 标签
@@ -197,6 +194,9 @@ def fetch_and_parse_url(urls: list[str]) -> list[str]:
     for url in urls:
         try:
             resp = session.get(url, timeout=30, allow_redirects=True)
+            # 自动检测编码，避免中文乱码（requests 默认 text/html 为 ISO-8859-1）
+            if resp.encoding == "ISO-8859-1" or resp.encoding is None:
+                resp.encoding = resp.apparent_encoding
             body = resp.text
             waf_features = [
                 "aliyun_waf",

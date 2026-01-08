@@ -120,6 +120,8 @@ domain_rules: dict[str, tuple[str, list[str], str]] = {
     "www.seqrite.com": ("single-post-content", [], ""),
     "mp.weixin.qq.com": ("rich_media_wrp", [], ""),
     "thecyberexpress.com": ("entry-content no-share", [], "Share this:"),
+    "thehackernews.com": ("articlebody clear cf", [], ""),
+    "xlab.tencent.com": ("post-content", [], ""),
 }
 
 # 需要从标题中移除的后缀
