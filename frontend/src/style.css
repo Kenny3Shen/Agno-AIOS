@@ -1,3 +1,18 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+	html {
+		font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+			"Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+	}
+
+	body {
+		@apply bg-[#F6F8FA] text-slate-900 antialiased;
+	}
+
+	html.dark body {
+    @apply bg-[#212830] text-[#C9D1D9];
+	}
+}

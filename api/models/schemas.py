@@ -24,9 +24,16 @@ class Url2MdRequest(BaseModel):
 
 class AssetSearchRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
-    fingerprint: str = Field(..., min_length=1)
+    fingerprint: str | None = Field(default=None, min_length=1)
+    ip: str | None = Field(default=None, min_length=1)
     page: int = Field(1, ge=1)
     size: int = Field(10, ge=1, le=100)
+
+    @model_validator(mode="after")
+    def check_fingerprint_or_ip(self) -> "AssetSearchRequest":
+        if not self.fingerprint and not self.ip:
+            raise ValueError("请提供指纹或 IP")
+        return self
 
 
 class ChatRequest(BaseModel):

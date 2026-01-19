@@ -38,7 +38,8 @@ export interface AssetResult {
 }
 
 export interface AssetSearchParams {
-  fingerprint: string
+  fingerprint?: string
+  ip?: string
   page: number
   size: number
 }

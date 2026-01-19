@@ -1,28 +1,93 @@
 <template>
   <div class="space-y-4 sm:space-y-6">
-    <!-- 搜索区域 -->
-    <div class="flex flex-col sm:flex-row gap-3">
-      <el-input
-        v-model="assetQuery"
-        placeholder="输入指纹信息 (例如: Vue、React)"
-        class="flex-1"
-        @keyup.enter="handleSearch"
-        clearable
-      >
-        <template #prefix>
-          <el-icon><Monitor /></el-icon>
-        </template>
-      </el-input>
-      <el-button
-        type="primary"
-        @click="handleSearch"
-        :loading="loading"
-        :disabled="isSearchDisabled || loading"
-        class="w-full sm:w-auto"
-      >
-        <el-icon class="mr-1"><Search /></el-icon>
-        搜索
-      </el-button>
+    <!-- 搜索 & 筛选区域 -->
+    <div class="rounded-xl border border-slate-200/70 bg-white/80 p-3 sm:p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
+      <div class="flex flex-col sm:flex-row gap-3">
+        <el-radio-group v-model="searchMode" class="shrink-0" size="default">
+          <el-radio-button label="fingerprint">指纹</el-radio-button>
+          <el-radio-button label="ip">IP</el-radio-button>
+        </el-radio-group>
+
+        <el-input
+          v-model="assetQuery"
+          :placeholder="searchMode === 'ip' ? '输入 IP 地址 (例如: 192.168.1.1)' : '输入指纹信息 (例如: Vue、React)'"
+          class="flex-1"
+          @keyup.enter="handleSearch"
+          clearable
+        >
+          <template #prefix>
+            <el-icon><Monitor /></el-icon>
+          </template>
+        </el-input>
+
+        <el-button
+          type="primary"
+          @click="handleSearch"
+          :loading="loading"
+          :disabled="isSearchDisabled || loading"
+          class="w-full sm:w-auto"
+        >
+          <el-icon class="mr-1"><Search /></el-icon>
+          搜索
+        </el-button>
+      </div>
+
+      <!-- 筛选（基于结果的本地筛选） -->
+      <transition name="el-fade-in">
+        <div v-if="allResults.length > 0" class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
+          <el-select
+            v-model="selectedIpType"
+            clearable
+            filterable
+            placeholder="IP 类型"
+            class="w-full"
+          >
+            <el-option
+              v-for="t in ipTypeOptions"
+              :key="t"
+              :label="t"
+              :value="t"
+            />
+          </el-select>
+
+          <el-select
+            v-model="selectedStatus"
+            clearable
+            filterable
+            placeholder="状态码"
+            class="w-full"
+          >
+            <el-option
+              v-for="s in statusOptions"
+              :key="s"
+              :label="String(s)"
+              :value="s"
+            />
+          </el-select>
+
+          <el-select
+            v-model="selectedTags"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            clearable
+            filterable
+            placeholder="标签（可多选）"
+            class="w-full"
+          >
+            <el-option
+              v-for="t in tagOptions"
+              :key="t"
+              :label="t"
+              :value="t"
+            />
+          </el-select>
+
+          <el-button class="w-full" @click="clearFilters" :disabled="!hasActiveFilters">
+            清空筛选
+          </el-button>
+        </div>
+      </transition>
     </div>
 
     <!-- 结果表格 -->
@@ -172,7 +237,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue"
+import { ref, computed, onMounted, onUnmounted, watch } from "vue"
 import { useAssetApi } from "../composables/useApi"
 import { usePagination } from "../composables/usePagination"
 import { Monitor, Search } from "@element-plus/icons-vue"
@@ -195,8 +260,14 @@ onUnmounted(() => {
 
 // 查询状态
 const assetQuery = ref("")
+const searchMode = ref<"fingerprint" | "ip">("fingerprint")
 const allResults = ref<AssetResult[]>([])
 const searched = ref(false)
+
+// 筛选状态
+const selectedIpType = ref<string | null>(null)
+const selectedStatus = ref<number | null>(null)
+const selectedTags = ref<string[]>([])
 
 // API hooks
 const { loading, searchAsset } = useAssetApi()
@@ -205,12 +276,83 @@ const { loading, searchAsset } = useAssetApi()
 const { currentPage, pageSize, total, setPage, setPageSize, setTotal } = usePagination()
 
 // 计算属性
-const isSearchDisabled = computed(() => !assetQuery.value || !assetQuery.value.trim())
+const isValidIpv4 = (value: string) => {
+  const s = value.trim()
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(s)) return false
+  return s.split('.').every((p) => {
+    const n = Number(p)
+    return Number.isInteger(n) && n >= 0 && n <= 255
+  })
+}
+
+const isSearchDisabled = computed(() => {
+  const q = assetQuery.value?.trim()
+  if (!q) return true
+  if (searchMode.value === 'ip') return !isValidIpv4(q)
+  return false
+})
+
+const ipTypeOptions = computed(() => {
+  const set = new Set<string>()
+  for (const r of allResults.value) {
+    if (r?.ip_type) set.add(r.ip_type)
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b))
+})
+
+const statusOptions = computed(() => {
+  const set = new Set<number>()
+  for (const r of allResults.value) {
+    if (typeof r?.status === 'number') set.add(r.status)
+  }
+  return Array.from(set).sort((a, b) => a - b)
+})
+
+const tagOptions = computed(() => {
+  const set = new Set<string>()
+  for (const r of allResults.value) {
+    if (Array.isArray(r?.tag)) {
+      for (const t of r.tag) {
+        if (t) set.add(t)
+      }
+    }
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b))
+})
+
+const hasActiveFilters = computed(() => {
+  return Boolean(selectedIpType.value || selectedStatus.value || (selectedTags.value && selectedTags.value.length > 0))
+})
+
+const filteredResults = computed(() => {
+  let results = allResults.value
+
+  if (selectedIpType.value) {
+    results = results.filter((r) => r.ip_type === selectedIpType.value)
+  }
+
+  if (selectedStatus.value !== null) {
+    results = results.filter((r) => r.status === selectedStatus.value)
+  }
+
+  if (selectedTags.value && selectedTags.value.length > 0) {
+    const required = new Set(selectedTags.value)
+    results = results.filter((r) => {
+      const tags = Array.isArray(r.tag) ? r.tag : []
+      for (const t of required) {
+        if (!tags.includes(t)) return false
+      }
+      return true
+    })
+  }
+
+  return results
+})
 
 const paginatedResults = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   const end = start + pageSize.value
-  return allResults.value.slice(start, end)
+  return filteredResults.value.slice(start, end)
 })
 
 // 工具函数
@@ -225,7 +367,7 @@ const getStatusType = (status: number) => {
 // Returns top 5 fingerprint display items. The searched fingerprint (assetQuery)
 // is prioritized and shown as the first tag if found (exact match or contains).
 const getTopFingers = (row: AssetResult) => {
-  const q = assetQuery.value?.trim().toLowerCase()
+  const q = searchMode.value === 'fingerprint' ? assetQuery.value?.trim().toLowerCase() : ''
   const fingers = Array.isArray(row.finger) ? [...new Set(row.finger)] : []
   let matchedName: string | null = null
   if (q) {
@@ -245,6 +387,29 @@ const getTopFingers = (row: AssetResult) => {
   return out
 }
 
+const clearFilters = () => {
+  selectedIpType.value = null
+  selectedStatus.value = null
+  selectedTags.value = []
+  setPage(1)
+}
+
+watch([filteredResults, pageSize], () => {
+  setTotal(filteredResults.value.length)
+})
+
+watch([selectedIpType, selectedStatus, selectedTags], () => {
+  setPage(1)
+})
+
+watch(searchMode, () => {
+  assetQuery.value = ''
+  allResults.value = []
+  searched.value = false
+  clearFilters()
+  setTotal(0)
+})
+
 // 事件处理
 const handlePageChange = (page: number) => {
   setPage(page)
@@ -258,16 +423,18 @@ const handleSearch = async () => {
   if (!assetQuery.value || !assetQuery.value.trim()) return
 
   try {
-    const data = await searchAsset({
-      fingerprint: assetQuery.value,
-      page: 1,
-      size: 10,
-    })
+    const q = assetQuery.value.trim()
+    const data = await searchAsset(
+      searchMode.value === 'ip'
+        ? { ip: q, page: 1, size: 10 }
+        : { fingerprint: q, page: 1, size: 10 }
+    )
 
     if (data.status === 200) {
       allResults.value = data.items
-      setTotal(data.total)
       searched.value = true
+      clearFilters()
+      setTotal(data.total)
     }
   } catch (error: any) {
     console.error('Search failed:', error)

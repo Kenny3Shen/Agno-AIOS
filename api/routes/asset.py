@@ -3,7 +3,7 @@ from api.dependencies import get_asset_client, get_asset_lock
 import asyncio
 import httpx
 from api.models.schemas import AssetSearchRequest
-from api.services.asset_service import search_asset_by_fingerprint
+from api.services.asset_service import search_asset_by_fingerprint, search_asset_by_ip
 from loguru import logger
 
 router = APIRouter(prefix="/api/asset", tags=["Asset"])
@@ -15,9 +15,14 @@ async def search_asset(
     client: httpx.AsyncClient = Depends(get_asset_client),
     asset_lock: asyncio.Lock = Depends(get_asset_lock),
 ) -> dict:
-    """根据资产信息搜索 IP 信息"""
+    """根据指纹或 IP 搜索资产"""
     try:
-        items = await search_asset_by_fingerprint(client, request.fingerprint, asset_lock)
+        if request.ip:
+            items = await search_asset_by_ip(client, request.ip, asset_lock)
+        else:
+            items = await search_asset_by_fingerprint(
+                client, request.fingerprint or "", asset_lock
+            )
         return {
             "status": 200,
             "items": items,

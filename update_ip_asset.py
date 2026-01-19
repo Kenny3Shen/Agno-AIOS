@@ -21,6 +21,7 @@ from datetime import datetime
 import httpx
 from loguru import logger
 from dotenv import load_dotenv, set_key
+from api.utils.asset_utils import aggregate_ip_entities
 
 warnings.filterwarnings("ignore", message="Unverified HTTPS request")
 
@@ -28,7 +29,6 @@ load_dotenv()
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from api.utils.asset_utils import aggregate_ip_entities
 
 # 配置日志
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -54,7 +54,9 @@ async def update_ip_entities():
         aggregate_ip_entities(data["items"])
         return
 
-    async with httpx.AsyncClient(verify=False, timeout=60.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(
+        verify=False, timeout=60.0, follow_redirects=True
+    ) as client:
         token = os.getenv("TOKEN")
         if not token:
             login_url = "https://10.192.56.37:8088/api/user/login"
@@ -106,7 +108,7 @@ async def update_ip_entities():
             raise Exception("获取 IP 数据失败")
 
         logger.info(f"成功获取 {len(data.get('items', []))} 条 IP 实体")
-        
+
         os.makedirs(os.path.dirname(raw_path), exist_ok=True)
         with open(raw_path, "w") as f:
             json.dump(data, f, indent=4)
@@ -125,9 +127,7 @@ async def main():
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
 
-        logger.info(
-            f"IP asset update completed, duration={duration:.2f}s"
-        )
+        logger.info(f"IP asset update completed, duration={duration:.2f}s")
 
         return 0
     except Exception as e:

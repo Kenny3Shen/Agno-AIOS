@@ -52,38 +52,52 @@
     <!-- 结果展示区域 -->
     <transition name="el-fade-in">
       <div v-if="markdownText || renderedHtml" class="flex flex-col gap-4">
-        <!-- Markdown 输入区 -->
-        <div>
-          <div class="mb-2 flex items-center justify-between">
-            <span class="text-sm text-gray-600 font-medium">Markdown 文本</span>
-            <el-button
-              v-if="markdownText"
-              type="primary"
-              link
-              size="small"
-              @click="copyMarkdown"
-            >
-              <el-icon class="mr-1"><DocumentCopy /></el-icon>
-              复制
-            </el-button>
-          </div>
-          <el-input
-            type="textarea"
-            :rows="isMobile ? 12 : 18"
-            v-model="markdownText"
-            placeholder="解析后会在这里显示 Markdown 文本，可以手动编辑或复制"
-            class="w-full font-mono text-sm"
-          />
-        </div>
+        <!-- Tab 切换 -->
+        <el-tabs v-model="activeTab" class="w-full">
+          <!-- Markdown 文本 Tab -->
+          <el-tab-pane label="Markdown 文本" name="markdown">
+            <template #label>
+              <div class="flex items-center gap-1.5">
+                <el-icon><Document /></el-icon>
+                <span>Markdown 文本</span>
+              </div>
+            </template>
+            <div class="relative">
+              <el-input
+                type="textarea"
+                :rows="isMobile ? 15 : 20"
+                v-model="markdownText"
+                placeholder="解析后会在这里显示 Markdown 文本，可以手动编辑或复制"
+                class="w-full font-mono text-sm"
+              />
+              <!-- 复制按钮 - 浮动在右上角 -->
+              <el-button
+                v-if="markdownText"
+                type="primary"
+                circle
+                size="small"
+                @click="copyMarkdown"
+                class="!absolute top-2 right-2 z-10"
+              >
+                <el-icon><DocumentCopy /></el-icon>
+              </el-button>
+            </div>
+          </el-tab-pane>
 
-        <!-- 渲染预览区 -->
-        <div>
-          <div class="mb-2 text-sm text-gray-600 font-medium">渲染预览</div>
-          <div
-            class="prose prose-sm sm:prose max-w-none p-4 bg-white border rounded min-h-[200px] sm:min-h-[300px] overflow-auto"
-            v-html="renderedHtml"
-          />
-        </div>
+          <!-- 渲染预览 Tab -->
+          <el-tab-pane label="渲染预览" name="preview">
+            <template #label>
+              <div class="flex items-center gap-1.5">
+                <el-icon><View /></el-icon>
+                <span>渲染预览</span>
+              </div>
+            </template>
+            <div
+              class="prose prose-sm sm:prose max-w-none p-4 bg-white dark:bg-[#212830] border border-[#D0D7DE] dark:border-[#30363D] rounded min-h-[200px] sm:min-h-[300px] overflow-auto"
+              v-html="renderedHtml"
+            />
+          </el-tab-pane>
+        </el-tabs>
       </div>
     </transition>
 
@@ -107,7 +121,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useUrl2MdApi } from '../composables/useApi'
 import { ElMessage } from 'element-plus'
-import { Link, Connection, Delete, DocumentCopy } from '@element-plus/icons-vue'
+import { Link, Connection, Delete, DocumentCopy, Document, View } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 
 const md = new MarkdownIt({ html: true, linkify: true })
@@ -126,6 +140,9 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
 })
+
+// Tab 切换状态
+const activeTab = ref<'markdown' | 'preview'>('markdown')
 
 // 查询状态
 const url = ref('')
@@ -267,12 +284,20 @@ const clear = () => {
   font-size: 0.875em;
 }
 
+html.dark .prose :deep(code) {
+  background-color: rgba(148, 163, 184, 0.25);
+}
+
 .prose :deep(pre) {
   background-color: #1f2937;
   color: #f9fafb;
   padding: 1em;
   border-radius: 0.5em;
   overflow-x: auto;
+}
+
+html.dark .prose :deep(pre) {
+  background-color: rgba(0, 0, 0, 0.35);
 }
 
 .prose :deep(pre code) {
@@ -293,6 +318,11 @@ const clear = () => {
   color: #6b7280;
 }
 
+html.dark .prose :deep(blockquote) {
+  border-left-color: #30363d;
+  color: #8b949e;
+}
+
 .prose :deep(table) {
   width: 100%;
   border-collapse: collapse;
@@ -305,9 +335,18 @@ const clear = () => {
   padding: 0.5em;
 }
 
+html.dark .prose :deep(th),
+html.dark .prose :deep(td) {
+  border-color: #30363d;
+}
+
 .prose :deep(th) {
   background-color: #f9fafb;
   font-weight: 600;
+}
+
+html.dark .prose :deep(th) {
+  background-color: rgba(148, 163, 184, 0.12);
 }
 
 /* 响应式优化 */
