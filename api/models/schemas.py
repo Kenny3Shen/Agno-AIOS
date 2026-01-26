@@ -2,17 +2,17 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 
 class CveSearchRequest(BaseModel):
+    """CVE 搜索请求，单一查询词，匹配 cve_id 或 description"""
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    cve_id: str | None = None
-    keyword: str | None = None
+    query: str = Field(..., min_length=1)
     source: str | None = None
     page: int = Field(1, ge=1)
     size: int = Field(10, ge=1, le=100)
 
     @model_validator(mode="after")
-    def check_id_or_keyword(self) -> "CveSearchRequest":
-        if not self.cve_id and not self.keyword:
+    def check_query(self) -> "CveSearchRequest":
+        if not self.query:
             raise ValueError("请提供 CVE 编号或关键字")
         return self
 

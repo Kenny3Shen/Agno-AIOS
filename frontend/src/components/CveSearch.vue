@@ -3,25 +3,14 @@
     <!-- 搜索区域 -->
     <div class="flex flex-col sm:flex-row gap-3">
       <el-input
-        v-model="cveQuery"
-        placeholder="CVE-2024-1234"
-        class="flex-1 min-w-[150px]"
-        @keyup.enter="handleSearch"
-        clearable
-      >
-        <template #prefix>
-          <el-icon><Search /></el-icon>
-        </template>
-      </el-input>
-      <el-input
-        v-model="keywordQuery"
-        placeholder="关键字搜索描述"
+        v-model="query"
+        placeholder="输入 CVE 编号或关键字"
         class="flex-1 min-w-[200px]"
         @keyup.enter="handleSearch"
         clearable
       >
         <template #prefix>
-          <el-icon><Document /></el-icon>
+          <el-icon><Search /></el-icon>
         </template>
       </el-input>
       <el-select
@@ -197,7 +186,7 @@
 import { ref, computed, reactive, onMounted, onUnmounted } from "vue"
 import { useCveApi } from "../composables/useApi"
 import { usePagination } from "../composables/usePagination"
-import { Document, Search, Refresh } from "@element-plus/icons-vue"
+import { Search, Refresh } from "@element-plus/icons-vue"
 import type { CveResult } from "../types"
 
 // 响应式检测
@@ -216,8 +205,7 @@ onUnmounted(() => {
 })
 
 // 查询状态
-const cveQuery = ref("")
-const keywordQuery = ref("")
+const query = ref("")
 const sourceFilter = ref("")
 const results = ref<CveResult[]>([])
 const searched = ref(false)
@@ -237,9 +225,7 @@ const { currentPage, pageSize, total, setPage, setPageSize, setTotal } = usePagi
 
 // 计算属性
 const isSearchDisabled = computed(() => {
-  const hasCve = cveQuery.value && cveQuery.value.trim()
-  const hasKeyword = keywordQuery.value && keywordQuery.value.trim()
-  return !hasCve && !hasKeyword
+  return !query.value || !query.value.trim()
 })
 
 const filteredResults = computed(() => {
@@ -294,14 +280,12 @@ const handleSourceChange = () => {
 }
 
 const handleSearch = async () => {
-  const hasCve = cveQuery.value && cveQuery.value.trim()
-  const hasKeyword = keywordQuery.value && keywordQuery.value.trim()
-  if (!hasCve && !hasKeyword) return
+  const hasQuery = query.value && query.value.trim()
+  if (!hasQuery) return
 
   try {
     const data = await searchCve({
-      cve_id: hasCve ? cveQuery.value.trim() : null,
-      keyword: hasKeyword ? keywordQuery.value.trim() : null,
+      query: query.value.trim(),
       source: sourceFilter.value || null,
       page: currentPage.value,
       size: pageSize.value

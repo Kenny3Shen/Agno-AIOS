@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 import aiomysql
 from api.dependencies import get_pool
 from api.models.schemas import CveSearchRequest
-from api.services.cve_service import search_cves_by_description, search_cves_by_id
+from api.services.cve_service import search_cves
 from update_cve import main as update_cve_main
 from loguru import logger
 
@@ -13,18 +13,15 @@ router = APIRouter(prefix="/api/cve", tags=["CVE"])
 async def search_cve(
     request: CveSearchRequest, pool: aiomysql.Pool = Depends(get_pool)
 ) -> dict:
-    """Search CVEs by ID or keyword with pagination"""
-
+    """Search CVEs by ID and/or keyword with pagination"""
     try:
-        if request.cve_id:
-            items, total = await search_cves_by_id(
-                pool, request.cve_id, request.page, request.size, request.source
-            )
-        elif request.keyword:
-            items, total = await search_cves_by_description(
-                pool, request.keyword, request.page, request.size, request.source
-            )
-
+        items, total = await search_cves(
+            pool,
+            query=request.query,
+            source=request.source,
+            page=request.page,
+            size=request.size,
+        )
         return {
             "status": 200,
             "items": items,

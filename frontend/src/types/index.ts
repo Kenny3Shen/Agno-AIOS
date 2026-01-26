@@ -9,8 +9,7 @@ export interface CveResult {
 }
 
 export interface CveSearchParams {
-  cve_id?: string | null
-  keyword?: string | null
+  query: string
   source?: string | null
   page: number
   size: number

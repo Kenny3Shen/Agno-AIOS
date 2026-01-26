@@ -122,6 +122,7 @@ domain_rules: dict[str, tuple[str, list[str], str]] = {
     "thecyberexpress.com": ("entry-content no-share", [], "Share this:"),
     "thehackernews.com": ("articlebody clear cf", [], ""),
     "xlab.tencent.com": ("post-content", [], ""),
+    "www.securitylab.ru": ("articl-text", [], ""),
 }
 
 # 需要从标题中移除的后缀
