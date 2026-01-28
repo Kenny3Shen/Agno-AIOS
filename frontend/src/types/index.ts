@@ -1,3 +1,5 @@
+import type { ParsedNode } from "markstream-vue"
+
 // CVE 相关类型
 export interface CveResult {
   id: number
@@ -54,12 +56,8 @@ export interface AssetSearchResponse {
 export interface Message {
   role: "user" | "assistant"
   content: string
-  sources?: string[]
-}
-
-export interface ChatResponse {
-  response: string
-  sources?: string[]
+  nodes?: ParsedNode[]
+  final?: boolean
 }
 
 // URL2MD 相关类型

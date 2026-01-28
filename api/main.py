@@ -3,6 +3,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from api.routes import cve, asset, chat, url2md
+from fastmcp.utilities.lifespan import combine_lifespans
+from mcp_server import mcp
+from api.utils.db import get_db_pool, close_db_pool
 import os
 import sys
 from loguru import logger
@@ -11,7 +14,7 @@ import asyncio
 import aiomysql
 import httpx
 
-load_dotenv()
+load_dotenv(override=True)
 
 # Configure logger
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -25,17 +28,6 @@ logger.add(
     rotation="10 MB",
     retention="10 days",
 )
-
-
-DB_CONFIG = {
-    "host": os.getenv("MYSQL_TEST_HOST"),
-    "port": int(os.getenv("MYSQL_TEST_PORT", 3306)),
-    "user": os.getenv("MYSQL_TEST_USER"),
-    "password": os.getenv("MYSQL_TEST_PASSWORD"),
-    "db": os.getenv("MYSQL_TEST_DATABASE"),
-    "charset": "utf8mb4",
-    "autocommit": True,
-}
 
 
 async def create_asset_client() -> httpx.AsyncClient:
@@ -66,7 +58,7 @@ async def create_asset_client() -> httpx.AsyncClient:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # initialize resources
-    pool: aiomysql.Pool = await aiomysql.create_pool(**DB_CONFIG)
+    pool: aiomysql.Pool = await get_db_pool()
     asset_client = await create_asset_client()
     app.state.db_pool = pool
     app.state.asset_client = asset_client
@@ -77,12 +69,16 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         # cleanup resources
-        pool.close()
-        await pool.wait_closed()
+        await close_db_pool()
         await asset_client.aclose()
 
 
-app = FastAPI(title="CVE Intelligence Platform API", lifespan=lifespan)
+mcp_app = mcp.http_app(path="/", transport="sse")
+
+app = FastAPI(
+    title="CVE Intelligence Platform API",
+    lifespan=combine_lifespans(lifespan, mcp_app.lifespan),  # type: ignore[arg-type]
+)
 
 # CORS Configuration
 app.add_middleware(
@@ -105,6 +101,9 @@ app.include_router(cve.router)
 app.include_router(asset.router)
 app.include_router(chat.router)
 app.include_router(url2md.router)
+
+# Mount MCP server
+app.mount("/mcp", mcp_app, name="mcp")
 
 # Serve frontend static files
 app.mount("/", StaticFiles(directory="source", html=True), name="frontend")

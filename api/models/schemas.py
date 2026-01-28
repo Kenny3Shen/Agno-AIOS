@@ -39,9 +39,3 @@ class AssetSearchRequest(BaseModel):
 class ChatRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
     message: str = Field(..., min_length=1)
-
-
-class ChatResponse(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
-    response: str
-    sources: list[str] | None = None

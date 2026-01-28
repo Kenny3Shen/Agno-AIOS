@@ -14,6 +14,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "agno>=2.4.3",
     "openai>=2.15.0",
+    "fastmcp>=3.0.0b1",
 ]
 
 [dependency-groups]
