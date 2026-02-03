@@ -1,1 +1,0 @@
-var e={};throw Error(`Could not resolve "@antv/infographic" imported by "markstream-vue". Is it installed?`);export{e as default};

@@ -1,4 +1,9 @@
-import type { ParsedNode } from "markstream-vue"
+// LLM 聊天相关类型
+export interface Message {
+  role: "user" | "assistant"
+  content: string
+  final?: boolean
+}
 
 // CVE 相关类型
 export interface CveResult {
@@ -50,14 +55,6 @@ export interface AssetSearchResponse {
   items: AssetResult[]
   total: number
   message?: string
-}
-
-// LLM 聊天相关类型
-export interface Message {
-  role: "user" | "assistant"
-  content: string
-  nodes?: ParsedNode[]
-  final?: boolean
 }
 
 // URL2MD 相关类型

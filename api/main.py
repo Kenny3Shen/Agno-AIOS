@@ -3,8 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from api.routes import cve, asset, chat, url2md
-from fastmcp.utilities.lifespan import combine_lifespans
-from mcp_server import mcp
+# from fastmcp.utilities.lifespan import combine_lifespans
 from api.utils.db import get_db_pool, close_db_pool
 import os
 import sys
@@ -73,11 +72,12 @@ async def lifespan(app: FastAPI):
         await asset_client.aclose()
 
 
-mcp_app = mcp.http_app(path="/", transport="sse")
+# mcp_app = mcp.http_app(path="/", transport="sse")
 
 app = FastAPI(
     title="CVE Intelligence Platform API",
-    lifespan=combine_lifespans(lifespan, mcp_app.lifespan),  # type: ignore[arg-type]
+    # lifespan=combine_lifespans(lifespan, mcp_app.lifespan), 
+    lifespan=lifespan,
 )
 
 # CORS Configuration
@@ -103,7 +103,7 @@ app.include_router(chat.router)
 app.include_router(url2md.router)
 
 # Mount MCP server
-app.mount("/mcp", mcp_app, name="mcp")
+# app.mount("/mcp", mcp_app, name="mcp")
 
 # Serve frontend static files
 app.mount("/", StaticFiles(directory="source", html=True), name="frontend")

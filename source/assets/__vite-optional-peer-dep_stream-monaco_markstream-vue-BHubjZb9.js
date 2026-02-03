@@ -1,1 +1,0 @@
-var e={};throw Error(`Could not resolve "stream-monaco" imported by "markstream-vue". Is it installed?`);export{e as default};

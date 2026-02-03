@@ -1,1 +1,0 @@
-function e(e){try{if(typeof globalThis<`u`&&typeof globalThis.requestAnimationFrame==`function`)return globalThis.requestAnimationFrame(e)}catch{}return globalThis.setTimeout(e,0)}export{e as t};
