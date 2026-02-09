@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import type { CveSearchParams, CveSearchResponse, AssetSearchParams, AssetSearchResponse, Url2MdParseResponse, UpdateResponse } from '../types'
+import type { CveSearchParams, CveSearchResponse, AssetSearchParams, AssetSearchResponse, Url2MdParseResponse, UpdateResponse, SettingsResponse, ChatSession, Message } from '../types'
 
 const API_BASE = '/api'
 
@@ -110,7 +110,11 @@ export function useChatApi() {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  const sendMessageStream = async (message: string, onChunk: (chunk: string) => void): Promise<void> => {
+  const sendMessageStream = async (
+    message: string,
+    sessionId: string | null,
+    onChunk: (chunk: string) => void
+  ): Promise<void> => {
     loading.value = true
     error.value = null
 
@@ -121,7 +125,7 @@ export function useChatApi() {
           'Content-Type': 'application/json',
           'Accept': 'text/event-stream'
         },
-        body: JSON.stringify({ message })
+        body: JSON.stringify({ message, session_id: sessionId })
       })
 
       if (!response.ok || !response.body) {
@@ -174,6 +178,46 @@ export function useChatApi() {
 }
 
 /**
+ * 聊天会话历史 API
+ */
+export function useChatHistory() {
+  const loadingSessions = ref(false)
+
+  const listSessions = async (): Promise<ChatSession[]> => {
+    loadingSessions.value = true
+    try {
+      const response = await fetch(`${API_BASE}/chat/sessions`)
+      if (!response.ok) throw new Error('获取会话列表失败')
+      return await response.json()
+    } finally {
+      loadingSessions.value = false
+    }
+  }
+
+  const getSessionHistory = async (sessionId: string): Promise<Message[]> => {
+    const response = await fetch(`${API_BASE}/chat/sessions/${sessionId}`)
+    if (!response.ok) throw new Error('获取会话记录失败')
+    return await response.json()
+  }
+
+
+  const deleteSession = async (sessionId: string): Promise<void> => {
+    const response = await fetch(`${API_BASE}/chat/sessions/${sessionId}`, {
+      method: 'DELETE'
+    })
+    if (!response.ok) throw new Error('删除会话失败')
+  }
+
+  return {
+    loadingSessions,
+    listSessions,
+    getSessionHistory,
+    deleteSession
+  }
+}
+
+
+/**
  * URL2MD API
  */
 export function useUrl2MdApi() {
@@ -209,5 +253,48 @@ export function useUrl2MdApi() {
     loading,
     error,
     parseUrl
+  }
+}
+
+/**
+ * Settings API
+ */
+export function useSettingsApi() {
+  const loadingSettings = ref(false)
+  const saving = ref(false)
+
+  const fetchSettings = async (): Promise<Record<string, string>> => {
+    loadingSettings.value = true
+    try {
+      const response = await fetch(`${API_BASE}/settings`)
+      if (!response.ok) throw new Error('获取配置失败')
+      const data: SettingsResponse = await response.json()
+      return data.settings
+    } finally {
+      loadingSettings.value = false
+    }
+  }
+
+  const updateSettings = async (settings: Record<string, string>): Promise<Record<string, string>> => {
+    saving.value = true
+    try {
+      const response = await fetch(`${API_BASE}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings })
+      })
+      if (!response.ok) throw new Error('更新配置失败')
+      const data: SettingsResponse = await response.json()
+      return data.settings
+    } finally {
+      saving.value = false
+    }
+  }
+
+  return {
+    loadingSettings,
+    saving,
+    fetchSettings,
+    updateSettings
   }
 }

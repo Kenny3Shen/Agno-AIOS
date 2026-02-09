@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen flex bg-[#F6F8FA] text-slate-900 dark:bg-[#212830] dark:text-[#C9D1D9]">
+  <div class="h-screen flex bg-[#F6F8FA] text-slate-900 dark:bg-[#212830] dark:text-[#C9D1D9] overflow-hidden">
     <!-- 移动端遮罩层 -->
     <transition name="el-fade-in">
       <div
@@ -144,7 +144,7 @@
     <main class="flex-1 flex flex-col min-w-0 overflow-hidden p-3 sm:p-4">
       <!-- 状态栏 -->
       <div
-        class="bg-white dark:bg-[#212830] shadow-sm border border-[#D0D7DE] dark:border-[#30363D] px-4 sm:px-5 py-3 rounded-2xl flex items-center justify-between"
+        class="flex-shrink-0 bg-white dark:bg-[#212830] shadow-sm border border-[#D0D7DE] dark:border-[#30363D] px-4 sm:px-5 py-3 rounded-2xl flex items-center justify-between"
       >
         <div class="flex items-center space-x-2 sm:space-x-4">
           <!-- 移动端菜单按钮 -->
@@ -183,11 +183,14 @@
       </div>
 
       <!-- 内容区域 -->
-      <div class="flex-1 mt-3 sm:mt-4 overflow-auto">
-        <div class="max-w-7xl mx-auto bg-white dark:bg-[#212830] rounded-2xl border border-[#D0D7DE] dark:border-[#30363D] shadow-sm p-4 sm:p-6">
+      <div class="flex-1 mt-3 sm:mt-4 overflow-hidden flex flex-col min-h-0">
+        <div :class="[
+          'mx-auto bg-white dark:bg-[#212830] rounded-2xl border border-[#D0D7DE] dark:border-[#30363D] shadow-sm',
+          activeTab === 'chat' ? 'w-full h-full flex flex-col min-h-0 overflow-hidden' : 'max-w-7xl w-full overflow-auto p-4 sm:p-6'
+        ]">
           <transition name="el-fade-in" mode="out-in">
             <keep-alive>
-              <component :is="activeComponent" :key="activeTab" />
+              <component :is="activeComponent" :key="activeTab" class="h-full min-h-0" />
             </keep-alive>
           </transition>
         </div>
@@ -202,6 +205,7 @@ import CveSearch from "./components/CveSearch.vue"
 import AssetSearch from "./components/AssetSearch.vue"
 import LlmChat from "./components/LlmChat.vue"
 import Url2Md from "./components/Url2Md.vue"
+import Settings from "./components/Settings.vue"
 
 const activeTab = ref("cve")
 
@@ -214,6 +218,8 @@ const activeComponent = computed(() => {
       return LlmChat
     case "url2md":
       return Url2Md
+    case "settings":
+      return Settings
     case "cve":
     default:
       return CveSearch
@@ -229,6 +235,8 @@ const currentTitle = computed(() => {
       return "LLM 聊天"
     case "url2md":
       return "网页解析"
+    case "settings":
+      return "系统配置"
     case "cve":
     default:
       return "CVE 搜索"
@@ -285,7 +293,8 @@ const navItems = computed<NavItem[]>(() => [
   { id: "cve", label: "CVE 搜索", icon: "Search", group: "搜索" },
   { id: "asset", label: "资产搜索", icon: "Monitor", group: "搜索" },
   { id: "url2md", label: "网页解析", icon: "WarningFilled", group: "工具" },
-  { id: "chat", label: "LLM 聊天", icon: "ChatDotRound", group: "工具", badge: "Beta" }
+  { id: "chat", label: "LLM 聊天", icon: "ChatDotRound", group: "工具", badge: "Beta" },
+  { id: "settings", label: "系统配置", icon: "Setting", group: "工具" }
 ])
 
 const navSections = computed(() => {

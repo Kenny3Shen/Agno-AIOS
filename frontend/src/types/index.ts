@@ -5,6 +5,13 @@ export interface Message {
   final?: boolean
 }
 
+export interface ChatSession {
+  session_id: string
+  preview: string
+  created_at: number
+  updated_at: number
+}
+
 // CVE 相关类型
 export interface CveResult {
   id: number
@@ -74,4 +81,13 @@ export interface UpdateResponse {
   add_count?: number
   del_count?: number
   message?: string
+}
+
+// Settings 相关类型
+export interface SettingsResponse {
+  settings: Record<string, string>
+}
+
+export interface SettingsUpdate {
+  settings: Record<string, string>
 }

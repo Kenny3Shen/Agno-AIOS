@@ -11,12 +11,12 @@ import aiomysql
 from base import _get_pool
 
 
-async def recall_threat_info(keywords: str, limit: int = 10) -> list[dict[str, Any]]:
+async def recall_threat_info(keywords: str, days: int = 90) -> list[dict[str, Any]]:
     """通过关键词查询威胁情报信息的 id 和 title。
 
     Args:
         keywords: 查询关键词
-        limit: 返回条数
+        days: 查询最近多少天的数据，默认90天
 
     Returns:
         list[dict[str, Any]]: 查询结果
@@ -27,11 +27,11 @@ async def recall_threat_info(keywords: str, limit: int = 10) -> list[dict[str, A
             sql = (
                 "SELECT id, title "
                 "FROM dynamic_monitor "
-                "WHERE title LIKE %s OR description LIKE %s "
-                "ORDER BY public_time DESC "
-                "LIMIT %s"
+                "WHERE (title LIKE %s OR description LIKE %s) "
+                "AND public_time >= DATE_SUB(NOW(), INTERVAL %s DAY) "
+                "ORDER BY public_time DESC"
             )
-            await cursor.execute(sql, (f"%{keywords}%", f"%{keywords}%", limit))
+            await cursor.execute(sql, (f"%{keywords}%", f"%{keywords}%", days))
             result = await cursor.fetchall()
             return result
 
@@ -39,7 +39,7 @@ async def recall_threat_info(keywords: str, limit: int = 10) -> list[dict[str, A
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="召回威胁情报概要")
     parser.add_argument("--keywords", required=True, help="检索关键词")
-    parser.add_argument("--limit", type=int, default=10, help="返回条数")
+    parser.add_argument("--days", type=int, default=90, help="查询最近多少天的数据，默认90天")
     return parser
 
 
@@ -47,7 +47,7 @@ async def _main_async() -> int:
     parser = _build_parser()
     args = parser.parse_args()
     try:
-        result = await recall_threat_info(args.keywords, args.limit)
+        result = await recall_threat_info(args.keywords, args.days)
         print(json.dumps(result, ensure_ascii=False))
         return 0
     except Exception as e:

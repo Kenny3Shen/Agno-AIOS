@@ -9,7 +9,6 @@ description: 使用安全自动化剧本完成处置、排查与验证任务。
   2. `playbook_get_method_params(method_id)` 获取参数定义
   3. `playbook_invoke_method(method_id, params)` 发起执行
   4. `playbook_get_exec_result(exec_id)` 获取结果
-  5. 其余 `playbook_` 的方法为 hi-agent MCP 标准方法，可直接调用
   
 ## 任务解析
 
