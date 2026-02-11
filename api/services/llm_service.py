@@ -182,6 +182,7 @@ async def stream_chat_with_agent(
             dependencies=dependencies,
             add_dependencies_to_context=True,
             add_history_to_context=True,
+            update_memory_on_run=True,
             num_history_runs=5,
             markdown=True,
         )

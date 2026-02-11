@@ -13,4 +13,4 @@ logs/
 # Virtual environments
 .venv
 node_modules/
-env/
+.env

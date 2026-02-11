@@ -1,23 +1,19 @@
 ---
 name: threat-trace-skill
-description: 威胁情报检索与分析技能，专注于处理网络威胁情报数据库查询和分析报告任务。
+description: 威胁情报检索与分析技能，专注于威胁情报数据库查询与研判。
 ---
 
 # 基本能力
 
-从 dynamic_monitor 数据库检索威胁情报
-
-- `recall_threat_info(keywords, days)` 通过关键词检索近期情报概要
-- `finegrain_threat_info(ids)` 获取指定情报的详细信息
+1. 从 dynamic_monitor 数据库检索威胁情报
 
 ## 可执行脚本
-
-当需要本地查询数据库时，优先使用脚本（通过 `get_skill_script` 执行）：
 
 - `recall.py --keywords "关键词" --days 90`
   - 参数：`--days` 查询最近多少天的数据，默认90天
   - 输出：包含 `id` 与 `title` 的 JSON 列表
 - `finegrain.py --ids "1,2,3"`
+  - 参数：`--ids` 逗号分隔的情报 ID 列表
   - 输出：包含 `id`、`description`、`url`、`public_time` 的 JSON 列表
 - `close_pool.py`
   - 说明：释放数据库连接池资源
@@ -26,6 +22,7 @@ description: 威胁情报检索与分析技能，专注于处理网络威胁情�
 
 你拥有访问以下情报字段的权限：
 
+### dynamic_monitor
 - `id`: 唯一标识符
 - `title`: 威胁情报标题
 - `description`: 威胁情报描述

@@ -1,8 +1,10 @@
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from api.routes import cve, asset, chat, url2md, settings
+
 # from fastmcp.utilities.lifespan import combine_lifespans
 from api.utils.db import get_db_pool, close_db_pool
 import os
@@ -76,7 +78,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="CVE Intelligence Platform API",
-    # lifespan=combine_lifespans(lifespan, mcp_app.lifespan), 
+    # lifespan=combine_lifespans(lifespan, mcp_app.lifespan),
     lifespan=lifespan,
 )
 
@@ -94,6 +96,11 @@ app.add_middleware(
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok"}
+
+
+@app.get("/report", include_in_schema=False)
+async def report_redirect():
+    return RedirectResponse(url="/report/")
 
 
 # Include routers
