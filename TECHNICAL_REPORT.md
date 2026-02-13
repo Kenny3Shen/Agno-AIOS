@@ -8,7 +8,7 @@
 
 AgentOS 是一个面向安全运营场景的 AI Agent 平台，采用 **单 Agent + 多 Skill + MCP Tools** 架构，将大语言模型的推理能力与安全领域知识（威胁情报数据库、SOAR 剧本引擎）深度融合，实现从情报检索到自动化处置的闭环。
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────┐
 │                     Vue 3 Frontend                           │
 │   Session Sidebar │ Streaming Chat │ Markdown Render          │
@@ -47,7 +47,7 @@ AgentOS 是一个面向安全运营场景的 AI Agent 平台，采用 **单 Agen
 在调研了 LangChain、CrewAI、AutoGen 等主流 Agent 框架后，最终选择 **Agno** 作为底层运行时，核心原因如下：
 
 | 维度 | Agno | LangChain/LangGraph | CrewAI |
-|------|------|---------------------|--------|
+| --- | --- | --- | --- |
 | **编排方式** | 模型自主编排（指令驱动） | 需手動定义状态图/链 | 预设角色+流程 |
 | **复杂度** | 极低，仅需写 Skill + Prompt | 高，需理解 DAG/State Machine | 中，需定义 Task/Crew |
 | **MCP 支持** | 原生内置 `MCPTools` | 需额外适配 | 不支持 |
@@ -103,7 +103,7 @@ Skill 体系的核心挑战在于：**如何让 LLM 安全、高效地访问私�
 以 `threat-trace-skill` 为例，需要解决以下问题：
 
 | 问题 | 解决方案 |
-|------|---------|
+| --- | --- |
 | LLM 无法直连 MySQL | 封装为独立 Python 脚本（`recall.py`、`finegrain.py`），Agent 通过 `get_skill_script` 调用 |
 | 数据库连接池生命周期 | 使用 `aiomysql.Pool` 全局单例 + `close_pool.py` 显式释放 |
 | 查询参数注入风险 | 使用参数化 SQL（`%s` 占位符），禁止字符串拼接 |
@@ -112,7 +112,7 @@ Skill 体系的核心挑战在于：**如何让 LLM 安全、高效地访问私�
 
 **两阶段检索模式**是关键设计：
 
-```
+```text
 用户查询 "Notepad++ 威胁情报"
     │
     ▼
@@ -218,7 +218,7 @@ MCP 的优势在于：
 
 前端通过 `fetch` + `ReadableStream` 实现 Server-Sent Events 消费：
 
-```
+```text
 Browser ──POST /api/chat──▶ FastAPI ──async for──▶ Agent.arun(stream=True)
          ◀──SSE chunks────            ◀──RunEvent──
 ```
@@ -276,7 +276,7 @@ Flex 子元素的 `overflow-y: auto` 生效的前提是：**从根容器到该�
 
 #### 正确的高度约束链
 
-```
+```text
 html/body (默认)
 └─ #app div          h-screen overflow-hidden        ← 固定视口高度
    └─ main           flex-1 flex flex-col overflow-hidden
@@ -298,10 +298,53 @@ html/body (默认)
 
 ---
 
+### 3.4 Tracing 观测页与可观测性增强（新增）
+
+为满足安全运营“可审计、可回溯、可定位”的要求，平台新增了 **Tracing 观测页面** 与对应后端 API，将 Agno `tmp/traces.db` 中的 Trace/Span 数据可视化。
+
+#### 3.4.1 后端接口
+
+- `GET /api/traces`：分页查询 Trace 列表，支持 `session_id / status / start_time / end_time` 过滤
+- `GET /api/traces/{trace_id}`：查询单条 Trace 详情，返回 Trace 元信息、扁平 Span 列表与组装后的 Span Tree（父子层级）
+
+核心实现位于：
+
+- `api/services/tracing_service.py`
+- `api/routes/traces.py`
+
+#### 3.4.2 前端观测体验
+
+新增 `frontend/src/components/AgentTracing.vue`，提供：
+
+- Trace 列表（状态、耗时、Spans、Errors）
+- 详情面板（Trace 元信息 + Span 树 + Span attributes）
+- 过滤器（Session、状态、时间范围）
+- 一键复制（trace_id / session_id / run_id / span json）
+
+并针对使用反馈做了两项优化：
+
+1. **布局权重优化**：`Traces : 详情` 从 1:1 调整为约 **1:2**（`lg:col-span-4` vs `lg:col-span-8`），突出排障主视图。
+2. **耗时友好显示**：将原始浮点毫秒（如 `35516.00128412247ms`）转换为可读格式（如 `35.5 s`、`1m 12.3s`）。
+
+#### 3.4.3 Agent 时间工具（新增）
+
+为避免模型“推测日期”导致时间语义误差，新增本地工具：
+
+- `get_current_datetime`
+
+行为：
+
+- 默认 `Asia/Shanghai` 时区（可由 `AGENT_TIMEZONE` 覆盖）
+- 返回 `iso_datetime / date / time / weekday / timezone`
+
+该工具已加入 Agent `tools`，用于“今天几号/当前时间”等问题的精确回答。
+
+---
+
 ## 四、项目技术栈
 
 | 层 | 技术 | 用途 |
-|---|------|------|
+| --- | --- | --- |
 | 前端 | Vue 3 + TypeScript | SPA 框架 |
 | UI | Element Plus + TailwindCSS | UI 组件 + 原子化样式 |
 | Markdown | markdown-it + highlight.js | 流式 Markdown 渲染 + 代码高亮 |
@@ -309,15 +352,17 @@ html/body (默认)
 | 后端 | FastAPI + Uvicorn | HTTP API + SSE |
 | Agent | Agno (v2.4+) | 单 Agent 运行时 |
 | 模型协议 | MCP (Streamable HTTP) | 外部工具集成 |
+| 可观测性 | Agno Tracing + OpenTelemetry | Agent/Tool/LLM 调用链追踪 |
 | 数据库 | MySQL (aiomysql) | 威胁情报数据源 |
 | 会话存储 | SQLite (agno SqliteDb) | Agent 对话持久化 |
+| Tracing 存储 | SQLite (`tmp/traces.db`) | Trace/Span 运行轨迹 |
 | 语言 | Python 3.12 / TypeScript 5.x | 后端/前端 |
 
 ---
 
 ## 五、目录结构说明
 
-```
+```text
 .
 ├── .skills/                          # Skill 能力层
 │   ├── threat-trace-skill/           # 威胁情报检索与分析
@@ -334,24 +379,28 @@ html/body (默认)
 │       └── agent.py                  # NDR 告警研判 Agent
 ├── api/                              # FastAPI 应用层
 │   ├── services/
-│   │   └── llm_service.py            # Agent 核心：模型配置、会话管理、流式对话
+│   │   ├── llm_service.py            # Agent 核心：模型配置、会话管理、流式对话
+│   │   └── tracing_service.py        # Tracing 查询与 Span 树构建
 │   ├── routes/
 │   │   ├── chat.py                   # 聊天 API（流式 + 会话 CRUD）
 │   │   ├── settings.py               # 运行时配置 API
 │   │   ├── cve.py                    # CVE 漏洞查询
-│   │   └── asset.py                  # 资产管理
+│   │   ├── asset.py                  # 资产管理
+│   │   └── traces.py                 # Tracing API（列表/详情）
 │   └── utils/
 │       └── db.py                     # 公共数据库工具
 ├── frontend/src/                     # Vue 3 前端
 │   ├── components/
 │   │   ├── LlmChat.vue              # 聊天界面（会话侧边栏 + 流式 Markdown）
+│   │   ├── AgentTracing.vue          # Tracing 观测页（Trace/Span 可视化）
 │   │   ├── Settings.vue              # 系统配置界面
 │   │   ├── CveSearch.vue             # CVE 检索
 │   │   └── AssetSearch.vue           # 资产检索
 │   ├── composables/
 │   │   └── useApi.ts                 # API 封装（SSE 流式消费）
 │   └── App.vue                       # 主布局（Flex 高度约束链）
-└── security_agent.db                 # Agent 会话持久化数据库
+├── security_agent.db                 # Agent 会话持久化数据库
+└── tmp/traces.db                     # Agno Tracing 数据库
 ```
 
 ---

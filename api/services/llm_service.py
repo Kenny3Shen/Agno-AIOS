@@ -1,5 +1,7 @@
 import os
 from typing import Any, AsyncIterator, cast
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from textwrap import dedent
 from agno.agent import Agent
@@ -8,8 +10,13 @@ from agno.db.sqlite import SqliteDb
 from agno.tools.mcp import MCPTools
 from agno.run.agent import RunEvent
 from agno.skills import Skills, LocalSkills
+from agno.tracing import setup_tracing
 
 load_dotenv(override=True)
+# Set up database for traces
+db = SqliteDb(db_file=os.environ.get("AGNO_TRACE_DB_FILE", "tmp/traces.db"))
+# Enable tracing (call once at startup)
+setup_tracing(db=db)
 
 
 def _get_env(key: str, default: str = "") -> str:
@@ -25,6 +32,25 @@ def _build_model() -> OpenAILike:
     )
 
 
+def get_current_datetime() -> dict[str, str]:
+    """获取当前日期与时间（默认 Asia/Shanghai 时区）"""
+    tz_name = _get_env("AGENT_TIMEZONE", "Asia/Shanghai")
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:
+        tz = ZoneInfo("Asia/Shanghai")
+        tz_name = "Asia/Shanghai"
+
+    now = datetime.now(tz)
+    return {
+        "timezone": tz_name,
+        "iso_datetime": now.isoformat(),
+        "date": now.strftime("%Y-%m-%d"),
+        "time": now.strftime("%H:%M:%S"),
+        "weekday": now.strftime("%A"),
+    }
+
+
 AGENT_INSTRUCTIONS = dedent("""\
     你是安全运营助手，具备 **威胁情报分析** 和 **安全剧本执行** 两大核心能力。
 
@@ -32,19 +58,25 @@ AGENT_INSTRUCTIONS = dedent("""\
     ## 一、威胁情报分析
 
     使用 `threat-trace-skill` 技能检索、分析并汇报网络威胁情报。
+    使用 `darknet-trace-skill` 技能获取暗网相关情报线索。
 
     ---
     ## 二、安全剧本执行
 
-    使用 `playbook-skill` 技能和 MCP 工具调用安全自动化剧本（w5-soar / octomation）。
+    使用 `playbook-skill` 技能和 MCP 工具调用安全自动化剧本（w5-soar / octomation / hi-agent）。
 
     ---
     ## 三、通知与上报
 
     若用户要求"发送通知"或"上报"，使用 `basic_send_feishu_notify` 工具。
+
+    ---
+    ## 四、时间能力
+
+    需要根据当前时间设置参数时，使用 `get_current_datetime` 工具返回精确时间信息。
     
     ---
-    ## 四、行为准则
+    ## 五、行为准则
 
     - **依数行事**：仅使用工具和脚本提供的数据事实，严禁虚构信息。
     - **信息不足时**：先提 1-3 个关键澄清问题，再执行。
@@ -176,7 +208,7 @@ async def stream_chat_with_agent(
             description="集威胁情报分析与安全剧本执行于一体的安全运营助手，可完成情报检索、深度分析和自动化处置全流程。",
             instructions=[AGENT_INSTRUCTIONS],
             model=_build_model(),
-            tools=[mcp_tools],
+            tools=[mcp_tools, get_current_datetime],
             skills=Skills(loaders=[LocalSkills(".skills")]),
             db=SqliteDb(DB_FILE),
             dependencies=dependencies,

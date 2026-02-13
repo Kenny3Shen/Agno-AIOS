@@ -21,6 +21,13 @@
             <div class="text-[10px] opacity-60 mt-1">{{ formatTime(s.updated_at) }}</div>
           </div>
           <button
+            @click.stop="copySessionId(s.session_id)"
+            class="absolute right-7 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 hover:bg-slate-100 dark:hover:bg-[#21262D] rounded cursor-pointer"
+            title="复制 session_id"
+          >
+            <el-icon class="text-slate-600 dark:text-[#8B949E]" size="14"><CopyDocument /></el-icon>
+          </button>
+          <button
             @click.stop="confirmDeleteSession(s.session_id)"
             class="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded cursor-pointer"
             title="删除会话"
@@ -204,6 +211,13 @@
               <div class="text-[10px] opacity-60 mt-1">{{ formatTime(s.updated_at) }}</div>
             </div>
             <button
+              @click.stop="copySessionId(s.session_id)"
+              class="absolute right-7 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 hover:bg-slate-100 dark:hover:bg-[#21262D] rounded cursor-pointer"
+              title="复制 session_id"
+            >
+              <el-icon class="text-slate-600 dark:text-[#8B949E]" size="14"><CopyDocument /></el-icon>
+            </button>
+            <button
               @click.stop="confirmDeleteSession(s.session_id)"
               class="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded cursor-pointer"
               title="删除会话"
@@ -223,7 +237,7 @@ import MarkdownIt from "markdown-it"
 import hljs from "highlight.js"
 import { useChatApi, useChatHistory } from "../composables/useApi"
 import type { ChatSession, Message } from "../types"
-import { Promotion, Loading, ChatDotRound, Plus, Close, Delete } from "@element-plus/icons-vue"
+import { Promotion, Loading, ChatDotRound, Plus, Close, Delete, CopyDocument } from "@element-plus/icons-vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 
 // ── Markdown ──────────────────────────────────────────────────────
@@ -304,6 +318,15 @@ const formatTime = (ts: number) => {
 }
 
 const generateSessionId = () => crypto.randomUUID()
+
+const copySessionId = async (sessionId: string) => {
+  try {
+    await navigator.clipboard.writeText(sessionId)
+    ElMessage.success("session_id 已复制")
+  } catch {
+    ElMessage.warning("复制失败（请检查浏览器权限）")
+  }
+}
 
 // ── Sessions ──────────────────────────────────────────────────────
 const loadSessionList = async () => {

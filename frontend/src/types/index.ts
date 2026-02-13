@@ -91,3 +91,58 @@ export interface SettingsResponse {
 export interface SettingsUpdate {
   settings: Record<string, string>
 }
+
+// Tracing 相关类型（Agno Tracing）
+export type TraceStatus = "OK" | "ERROR" | "UNSET" | string
+export type SpanStatus = "OK" | "ERROR" | "UNSET" | string
+
+export interface TraceItem {
+  trace_id: string
+  name: string
+  status: TraceStatus
+  duration_ms: number
+  start_time: string
+  end_time: string
+  total_spans?: number
+  error_count?: number
+  run_id?: string | null
+  session_id?: string | null
+  user_id?: string | null
+  agent_id?: string | null
+  team_id?: string | null
+  workflow_id?: string | null
+  created_at?: string
+}
+
+export interface SpanItem {
+  span_id: string
+  trace_id: string
+  parent_span_id?: string | null
+  name: string
+  status_code: SpanStatus
+  status_message?: string | null
+  duration_ms: number
+  start_time: string
+  end_time: string
+  attributes?: Record<string, any> | null
+  events?: any[] | null
+  kind?: string | null
+}
+
+export interface SpanTreeNode {
+  span: SpanItem
+  children: SpanTreeNode[]
+}
+
+export interface TraceListResponse {
+  items: TraceItem[]
+  total_count: number
+  page: number
+  limit: number
+}
+
+export interface TraceDetailResponse {
+  trace: TraceItem
+  spans: SpanItem[]
+  tree: SpanTreeNode[]
+}

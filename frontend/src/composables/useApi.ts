@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import type { CveSearchParams, CveSearchResponse, AssetSearchParams, AssetSearchResponse, Url2MdParseResponse, UpdateResponse, SettingsResponse, ChatSession, Message } from '../types'
+import type { CveSearchParams, CveSearchResponse, AssetSearchParams, AssetSearchResponse, Url2MdParseResponse, UpdateResponse, SettingsResponse, ChatSession, Message, TraceListResponse, TraceDetailResponse, TraceStatus } from '../types'
 
 const API_BASE = '/api'
 
@@ -296,5 +296,75 @@ export function useSettingsApi() {
     saving,
     fetchSettings,
     updateSettings
+  }
+}
+
+/**
+ * Tracing API
+ */
+export function useTracingApi() {
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  const listTraces = async (params: {
+    page?: number
+    limit?: number
+    status?: TraceStatus | ''
+    session_id?: string
+    run_id?: string
+    agent_id?: string
+    start_time?: string
+    end_time?: string
+  }): Promise<TraceListResponse> => {
+    loading.value = true
+    error.value = null
+    try {
+      const qs = new URLSearchParams()
+      if (params.page) qs.set('page', String(params.page))
+      if (params.limit) qs.set('limit', String(params.limit))
+      if (params.status) qs.set('status', String(params.status))
+      if (params.session_id) qs.set('session_id', params.session_id)
+      if (params.run_id) qs.set('run_id', params.run_id)
+      if (params.agent_id) qs.set('agent_id', params.agent_id)
+      if (params.start_time) qs.set('start_time', params.start_time)
+      if (params.end_time) qs.set('end_time', params.end_time)
+
+      const response = await fetch(`${API_BASE}/traces?${qs.toString()}`)
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.detail || data.message || '获取 traces 失败')
+      }
+      return await response.json()
+    } catch (err: any) {
+      error.value = err.message || '获取 traces 失败'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const getTrace = async (traceId: string): Promise<TraceDetailResponse> => {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await fetch(`${API_BASE}/traces/${encodeURIComponent(traceId)}`)
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.detail || data.message || '获取 trace 详情失败')
+      }
+      return await response.json()
+    } catch (err: any) {
+      error.value = err.message || '获取 trace 详情失败'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  return {
+    loading,
+    error,
+    listTraces,
+    getTrace
   }
 }

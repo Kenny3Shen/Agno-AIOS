@@ -3,7 +3,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from api.routes import cve, asset, chat, url2md, settings
+from api.routes import cve, asset, chat, url2md, settings, traces
 
 # from fastmcp.utilities.lifespan import combine_lifespans
 from api.utils.db import get_db_pool, close_db_pool
@@ -109,6 +109,7 @@ app.include_router(asset.router)
 app.include_router(chat.router)
 app.include_router(url2md.router)
 app.include_router(settings.router)
+app.include_router(traces.router)
 
 # Mount MCP server
 # app.mount("/mcp", mcp_app, name="mcp")

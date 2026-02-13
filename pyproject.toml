@@ -17,6 +17,9 @@ dependencies = [
     "fastmcp>=3.0.0b1",
     "ddgs>=9.10.0",
     "sqlalchemy>=2.0.46",
+    "opentelemetry-api>=1.39.1",
+    "opentelemetry-sdk>=1.39.1",
+    "openinference-instrumentation-agno>=0.1.27",
 ]
 
 [dependency-groups]

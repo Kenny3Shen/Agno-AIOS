@@ -206,6 +206,7 @@ import AssetSearch from "./components/AssetSearch.vue"
 import LlmChat from "./components/LlmChat.vue"
 import Url2Md from "./components/Url2Md.vue"
 import Settings from "./components/Settings.vue"
+import AgentTracing from "./components/AgentTracing.vue"
 
 const activeTab = ref("cve")
 
@@ -218,6 +219,8 @@ const activeComponent = computed(() => {
       return LlmChat
     case "url2md":
       return Url2Md
+    case "tracing":
+      return AgentTracing
     case "settings":
       return Settings
     case "cve":
@@ -235,6 +238,8 @@ const currentTitle = computed(() => {
       return "LLM 聊天"
     case "url2md":
       return "网页解析"
+    case "tracing":
+      return "运行观测"
     case "settings":
       return "系统配置"
     case "cve":
@@ -294,6 +299,7 @@ const navItems = computed<NavItem[]>(() => [
   { id: "asset", label: "资产搜索", icon: "Monitor", group: "搜索" },
   { id: "url2md", label: "网页解析", icon: "WarningFilled", group: "工具" },
   { id: "chat", label: "LLM 聊天", icon: "ChatDotRound", group: "工具", badge: "Beta" },
+  { id: "tracing", label: "运行观测", icon: "DataAnalysis", group: "工具", badge: "New" },
   { id: "settings", label: "系统配置", icon: "Setting", group: "工具" }
 ])
 
