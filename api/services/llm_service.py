@@ -32,28 +32,9 @@ def _build_model() -> OpenAILike:
     )
 
 
-def get_current_datetime() -> dict[str, str]:
-    """获取当前日期与时间（默认 Asia/Shanghai 时区）"""
-    tz_name = _get_env("AGENT_TIMEZONE", "Asia/Shanghai")
-    try:
-        tz = ZoneInfo(tz_name)
-    except Exception:
-        tz = ZoneInfo("Asia/Shanghai")
-        tz_name = "Asia/Shanghai"
-
-    now = datetime.now(tz)
-    return {
-        "timezone": tz_name,
-        "iso_datetime": now.isoformat(),
-        "date": now.strftime("%Y-%m-%d"),
-        "time": now.strftime("%H:%M:%S"),
-        "weekday": now.strftime("%A"),
-    }
-
-
 AGENT_INSTRUCTIONS = dedent("""\
     你是安全运营助手，具备 **威胁情报分析** 和 **安全剧本执行** 两大核心能力。
-
+    当前时间为 {current_datetime}，请基于以下指令和工具，协助用户完成安全运营相关任务：
     ---
     ## 一、威胁情报分析
 
@@ -69,14 +50,9 @@ AGENT_INSTRUCTIONS = dedent("""\
     ## 三、通知与上报
 
     若用户要求"发送通知"或"上报"，使用 `basic_send_feishu_notify` 工具。
-
-    ---
-    ## 四、时间能力
-
-    需要根据当前时间设置参数时，使用 `get_current_datetime` 工具返回精确时间信息。
     
     ---
-    ## 五、行为准则
+    ## 四、行为准则
 
     - **依数行事**：仅使用工具和脚本提供的数据事实，严禁虚构信息。
     - **信息不足时**：先提 1-3 个关键澄清问题，再执行。
@@ -87,6 +63,7 @@ AGENT_INSTRUCTIONS = dedent("""\
 
 dependencies = {
     "feishu_webhook_url": _get_env("FEISHU_WEBHOOK_URL"),
+    "current_datetime": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(),
 }
 
 
@@ -200,7 +177,6 @@ async def stream_chat_with_agent(
         transport="streamable-http",
         url=f"{_get_env('MCP_SERVER_URL')}?token={_get_env('MCP_TOKEN')}",
         timeout_seconds=20,
-        refresh_connection=True,
     ) as mcp_tools:
         security_agent = Agent(
             name="安全运营助手",
@@ -208,7 +184,7 @@ async def stream_chat_with_agent(
             description="集威胁情报分析与安全剧本执行于一体的安全运营助手，可完成情报检索、深度分析和自动化处置全流程。",
             instructions=[AGENT_INSTRUCTIONS],
             model=_build_model(),
-            tools=[mcp_tools, get_current_datetime],
+            tools=[mcp_tools],
             skills=Skills(loaders=[LocalSkills(".skills")]),
             db=SqliteDb(DB_FILE),
             dependencies=dependencies,
