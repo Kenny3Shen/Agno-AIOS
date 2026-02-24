@@ -5,6 +5,24 @@ export interface Message {
   final?: boolean
 }
 
+// Skills 管理相关类型
+export interface SkillInfo {
+  name: string
+  description: string
+  enabled: boolean
+  has_scripts: boolean
+  scripts: string[]
+}
+
+export interface SkillListResponse {
+  skills: SkillInfo[]
+}
+
+export interface SkillToggleResponse {
+  name: string
+  enabled: boolean
+}
+
 export interface ChatSession {
   session_id: string
   preview: string

@@ -1,9 +1,9 @@
 import os
+import json
 from typing import Any, AsyncIterator, cast
-from datetime import datetime
-from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from textwrap import dedent
+from pathlib import Path
 from agno.agent import Agent
 from agno.models.openai import OpenAILike
 from agno.db.sqlite import SqliteDb
@@ -34,7 +34,6 @@ def _build_model() -> OpenAILike:
 
 AGENT_INSTRUCTIONS = dedent("""\
     你是安全运营助手，具备 **威胁情报分析** 和 **安全剧本执行** 两大核心能力。
-    当前时间为 {current_datetime}，请基于以下指令和工具，协助用户完成安全运营相关任务：
     ---
     ## 一、威胁情报分析
 
@@ -63,8 +62,40 @@ AGENT_INSTRUCTIONS = dedent("""\
 
 dependencies = {
     "feishu_webhook_url": _get_env("FEISHU_WEBHOOK_URL"),
-    "current_datetime": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(),
 }
+
+
+SKILLS_DIR = Path(".skills")
+SKILLS_CONFIG_FILE = Path("tmp/skills_config.json")
+
+
+def _load_skills_config() -> dict[str, bool]:
+    """加载 skills 启用/禁用配置"""
+    if SKILLS_CONFIG_FILE.exists():
+        try:
+            return json.loads(SKILLS_CONFIG_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def _build_enabled_skills() -> Skills | None:
+    """根据配置构建仅启用的 Skills 加载器；全部禁用时返回 None"""
+    cfg = _load_skills_config()
+    if not SKILLS_DIR.is_dir():
+        return None
+
+    enabled_dirs: list[str] = []
+    for entry in sorted(SKILLS_DIR.iterdir()):
+        if not entry.is_dir() or entry.name.startswith("."):
+            continue
+        # 默认启用
+        if cfg.get(entry.name, True):
+            enabled_dirs.append(str(entry))
+
+    if not enabled_dirs:
+        return None
+    return Skills(loaders=[LocalSkills(d) for d in enabled_dirs])
 
 
 DB_FILE = "security_agent.db"
@@ -185,13 +216,14 @@ async def stream_chat_with_agent(
             instructions=[AGENT_INSTRUCTIONS],
             model=_build_model(),
             tools=[mcp_tools],
-            skills=Skills(loaders=[LocalSkills(".skills")]),
+            skills=_build_enabled_skills(),
             db=SqliteDb(DB_FILE),
             dependencies=dependencies,
             add_dependencies_to_context=True,
             add_history_to_context=True,
             update_memory_on_run=True,
             num_history_runs=5,
+            add_datetime_to_context=True,
             markdown=True,
         )
 

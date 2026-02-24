@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import type { CveSearchParams, CveSearchResponse, AssetSearchParams, AssetSearchResponse, Url2MdParseResponse, UpdateResponse, SettingsResponse, ChatSession, Message, TraceListResponse, TraceDetailResponse, TraceStatus } from '../types'
+import type { CveSearchParams, CveSearchResponse, AssetSearchParams, AssetSearchResponse, Url2MdParseResponse, UpdateResponse, SettingsResponse, ChatSession, Message, TraceListResponse, TraceDetailResponse, TraceStatus, SkillListResponse, SkillToggleResponse } from '../types'
 
 const API_BASE = '/api'
 
@@ -366,5 +366,62 @@ export function useTracingApi() {
     error,
     listTraces,
     getTrace
+  }
+}
+
+/**
+ * Skills 管理 API
+ */
+export function useSkillsApi() {
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+  const toggling = ref(false)
+
+  const fetchSkills = async (): Promise<SkillListResponse> => {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await fetch(`${API_BASE}/skills`)
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.detail || '获取 Skills 列表失败')
+      }
+      return await response.json()
+    } catch (err: any) {
+      error.value = err.message || '获取 Skills 列表失败'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const toggleSkill = async (skillName: string, enabled: boolean): Promise<SkillToggleResponse> => {
+    toggling.value = true
+    error.value = null
+    try {
+      const response = await fetch(`${API_BASE}/skills/${encodeURIComponent(skillName)}/toggle`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.detail || '切换 Skill 状态失败')
+      }
+      return await response.json()
+    } catch (err: any) {
+      error.value = err.message || '切换 Skill 状态失败'
+      throw err
+    } finally {
+      toggling.value = false
+    }
+  }
+
+  return {
+    loading,
+    error,
+    toggling,
+    fetchSkills,
+    toggleSkill
   }
 }

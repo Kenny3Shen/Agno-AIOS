@@ -341,6 +341,173 @@ html/body (默认)
 
 ---
 
+### 3.5 架构演进探索：Agent Team (多 Agent 协作)
+
+随着安全运营场景复杂度的增加（如：不仅是检索，还需要进行复杂的恶意代码分析或自动化渗透测试回访），单 Agent 的 Context 窗口和指令遵循能力可能达到瓶颈。基于 Agno 的原生能力，项目探索了从“单兵作战”向“团队协作（Agent Team）”演进的可行性。
+
+#### 3.5.1 核心协作模式 (Team Modes)
+
+Agno 提供的 `Team` 架构支持四种核心编排模式，为安全场景提供了灵活的选型：
+
+1. **Coordinate (协作模式 - 默认)**：
+   - **逻辑**：Team Leader 接收原始请求，将其拆解并分发给成员 Agent，最后汇总结果。
+   - **安全场景**：综合研判。Leader 负责调度“漏洞专家”、“资产专家”和“情报专家”，最后输出闭环报告。
+
+2. **Route (路由模式)**：
+   - **逻辑**：Leader 仅作为入口，根据问题意图直接转发给唯一的专家 Agent。
+   - **安全场景**：垂直查询。多语言报表，将流量精准导向专门处理 SQL 或 Python 处理的子智能体。
+
+3. **Broadcast (广播模式)**：
+   - **逻辑**：任务同时发送给所有成员，Leader 综合所有视角。
+   - **安全场景**：多源情报碰撞。同时询问 3 个不同的情报 Agent（针对不同数据源），对比结论的一致性。
+
+4. **Task (任务自治模式)**：
+   - **逻辑**：Leader 自主进行任务分解，生成一系列子任务（Tasks）并根据依赖关系执行。
+   - **安全场景**：自动化渗透/处置。针对受感染主机，自主拆解为“断网隔离->内存取证->清理自启动->复查”一系列有序任务。
+
+#### 3.5.2 决策矩阵：Team vs. Workflow
+
+根据 Agno 官方架构指引，在安全场景下选择 **Team** 还是 **Workflow** 的主要依据是任务的**确定性**：
+
+| 特性 | Agent Team | Step-based Workflow |
+| --- | --- | --- |
+| **执行路径** | 动态、由模型决定 | 预定义、确定性强 |
+| **状态转移** | 自主、非线性 | 顺序、循环、条件分支 |
+| **适用场景** | 开放性研究、综合研判、创意分析 | 定时任务、合规审计、标准化处置步骤 (SOP) |
+| **可观测性** | 追踪调用链 (Tracing) | 追踪具体的 Step 执行状态 |
+
+在 AgentOS 中，**Team** 更适合作为分析师的辅助大脑，而 **Workflow** 则是封装固定安全策略（如：自动封禁 IP）的最佳选择。
+
+#### 3.5.3 演进收益分析
+
+- **指令卸载 (Instruction Offloading)**：细粒度的系统提示词（System Prompt）可以分配给特定 Agent，避免单 Agent 上下文中包含过多无关指令导致的注意力耗散（Lost in the Middle）。
+- **知识库隔离 (Knowledge Isolation)**：不同 Agent 可以挂载不同的 Vector DB 或私有数据集。例如“CVE 专家”只需索引 NVD 库。
+- **并行加速**：基于 `concurrent` 执行能力，多 Agent 可以并行处理独立子任务，显著降低长任务的响应时延。
+
+#### 3.5.4 落地挑战
+
+- **状态管理复杂度**：成员间的历史记录（History）和内存（Memory）同步需要通过 `Team` 实例进行精细配置，否则可能出现信息孤岛。
+- **成本与延迟**：多 Agent 协作意味着更多的内部 LLM 调用（Orchestration Turns），会增加 Token 消耗和端到端延迟。
+- **Tracing 深度**：需要支持跨 Agent 的调用链追踪。当前平台的 Tracing 界面已部分支持 Span 树结构，未来需增强对 `Team Delegation` 过程的视觉表达。
+
+### 3.6 Skills 运行时管理（新增）
+
+实现了前后端联动的 Skill 启用/禁用管理功能，使运维人员无需重启服务即可动态控制 Agent 可用的技能集合。
+
+#### 3.6.1 后端实现
+
+**配置持久化**：使用 `tmp/skills_config.json` 存储各 Skill 的启用状态（`true`/`false`），默认全部启用。
+
+**API 设计**（`api/routes/skills.py`）：
+
+| 端点 | 方法 | 功能 |
+| --- | --- | --- |
+| `/api/skills` | GET | 列出所有 Skill 及元数据（name、description、scripts、enabled） |
+| `/api/skills/{name}/toggle` | PUT | 切换指定 Skill 的启用/禁用状态 |
+| `/api/skills/upload` | POST | 预留：上传 Skill 压缩包（当前返回 501） |
+
+**Skill 元数据解析**：自动读取每个 Skill 目录下的 `SKILL.md` YAML front-matter，提取 `name` 和 `description` 字段。
+
+**动态加载集成**：在 `llm_service.py` 中，Agent 每次创建时调用 `_build_enabled_skills()` 函数，仅加载配置中标记为启用的 Skill 目录（通过多个 `LocalSkills` 实例），而非原先的全量加载：
+
+```python
+def _build_enabled_skills() -> Skills | None:
+    cfg = _load_skills_config()
+    enabled_dirs = [str(d) for d in SKILLS_DIR.iterdir()
+                    if d.is_dir() and cfg.get(d.name, True)]
+    if not enabled_dirs:
+        return None
+    return Skills(loaders=[LocalSkills(d) for d in enabled_dirs])
+```
+
+#### 3.6.2 前端实现
+
+新增 **SkillManage.vue** 标签页（侧边栏"工具"分组），提供以下交互能力：
+
+- **卡片列表**：每个 Skill 以卡片形式展示名称、描述、脚本数量和启用开关
+- **实时切换**：通过 `el-switch` 调用 `PUT /api/skills/{name}/toggle`，即时生效
+- **脚本详情**：可展开查看 Skill 包含的可执行脚本列表
+- **上传预留**：顶部"上传"按钮已预留，目前提示用户手动放置 Skill 文件夹
+
+#### 3.6.3 设计考量
+
+- **每次对话生效**：Skill 状态在 Agent 实例创建时读取，因此切换后下一次对话即生效，无需重启服务
+- **默认全启用**：未配置的 Skill 默认启用，降低初始配置负担
+- **向前兼容**：上传接口（POST）和 Agent Team 分配矩阵已预留扩展点
+
+### 3.7 Agent Team + Skills 分配架构展望
+
+当平台演进到 Agent Team 多 Agent 协作模式后，Skills 管理将从"全局开关"升级为"按 Agent 分配"。以下是前端交互与后端实现的设计思考。
+
+#### 3.7.1 目标架构
+
+```text
+┌──────────────────────────────────────────────────────┐
+│                    Coordinator Agent                  │
+│          (Team Leader / Router / Broadcaster)         │
+├────────────┬────────────┬────────────┬───────────────┤
+│ 情报分析    │ 暗网监测    │ 剧本执行    │ 告警研判       │
+│ Agent      │ Agent      │ Agent      │ Agent         │
+├────────────┼────────────┼────────────┼───────────────┤
+│ threat-    │ darknet-   │ playbook-  │ intranet-ip-  │
+│ trace-skill│ trace-skill│ skill      │ skill         │
+└────────────┴────────────┴────────────┴───────────────┘
+```
+
+每个 Agent 成员仅携带与其职责匹配的 Skill 子集，实现**能力隔离**与**安全边界**：一个 Agent 无法越权调用不属于它的脚本。
+
+#### 3.7.2 前端交互设计
+
+Skills 管理页面将在 Team 模式下扩展为**二维分配矩阵**：
+
+| | 情报分析 Agent | 暗网监测 Agent | 剧本执行 Agent | 告警研判 Agent |
+| --- | :---: | :---: | :---: | :---: |
+| threat-trace-skill | ✅ | | | |
+| darknet-trace-skill | | ✅ | | |
+| playbook-skill | | | ✅ | |
+| intranet-ip-skill | | | | ✅ |
+
+交互方式：
+1. **拖拽分配**：将 Skill 卡片拖入对应 Agent 的 Slot 中
+2. **Checkbox 矩阵**：表格形式勾选每个 Agent 持有的 Skill
+3. **批量模板**：预设常见的 Skill 分配方案（如"全栈模式"、"职责分离模式"）
+
+#### 3.7.3 后端配置模型
+
+配置将从简单的 `{skill_name: boolean}` 扩展为：
+
+```json
+{
+  "mode": "team",
+  "agents": {
+    "threat-analyst": {
+      "role": "威胁情报分析专家",
+      "skills": ["threat-trace-skill"],
+      "model": "gpt-4o"
+    },
+    "darknet-monitor": {
+      "role": "暗网监测专家",
+      "skills": ["darknet-trace-skill"],
+      "model": "gpt-4o"
+    },
+    "playbook-executor": {
+      "role": "安全剧本执行专家",
+      "skills": ["playbook-skill"],
+      "model": "gpt-4o-mini"
+    }
+  },
+  "team_mode": "coordinate"
+}
+```
+
+#### 3.7.4 关键挑战
+
+1. **Skill 共享与冲突**：多个 Agent 挂载同一 Skill 时，需确保脚本执行的并发安全（如数据库连接池的独立管理）
+2. **动态成员注册**：用户在前端创建新 Agent 并分配 Skill 后，后端需动态构建 Agno `Team` 实例
+3. **上下文传递**：被分配不同 Skill 的 Agent 之间协作时，需通过 Team Leader 中转上下文，避免直接跨 Agent 数据访问
+
+---
+
 ## 四、项目技术栈
 
 | 层 | 技术 | 用途 |
@@ -374,6 +541,9 @@ html/body (默认)
 │   │       └── close_pool.py         # 连接池释放
 │   ├── playbook-skill/               # SOAR 剧本执行
 │   │   └── SKILL.md
+│   ├── darknet-trace-skill/          # 暗网数据泄露检索与态势研判
+│   │   ├── SKILL.md
+│   │   └── scripts/
 │   └── intranet-ip-skill/            # 内网 IP 资产查询
 │       ├── SKILL.md
 │       └── agent.py                  # NDR 告警研判 Agent
@@ -384,6 +554,7 @@ html/body (默认)
 │   ├── routes/
 │   │   ├── chat.py                   # 聊天 API（流式 + 会话 CRUD）
 │   │   ├── settings.py               # 运行时配置 API
+│   │   ├── skills.py                 # Skills 管理 API（列表/切换/上传预留）
 │   │   ├── cve.py                    # CVE 漏洞查询
 │   │   ├── asset.py                  # 资产管理
 │   │   └── traces.py                 # Tracing API（列表/详情）
@@ -393,6 +564,7 @@ html/body (默认)
 │   ├── components/
 │   │   ├── LlmChat.vue              # 聊天界面（会话侧边栏 + 流式 Markdown）
 │   │   ├── AgentTracing.vue          # Tracing 观测页（Trace/Span 可视化）
+│   │   ├── SkillManage.vue           # Skills 管理页（启用/禁用 + 上传预留）
 │   │   ├── Settings.vue              # 系统配置界面
 │   │   ├── CveSearch.vue             # CVE 检索
 │   │   └── AssetSearch.vue           # 资产检索
@@ -407,11 +579,13 @@ html/body (默认)
 
 ## 六、后续规划
 
-1. **Skill 扩展**：增加漏洞验证 Skill（集成 Nuclei/XRAY 扫描器）
-2. **多模型支持**：通过 Settings 页面动态切换不同 LLM 供应商
-3. **权限管理**：基于角色的会话隔离与操作审计
-4. **知识库增强**：接入 RAG 管道，支持企业内部安全文档检索
-5. **流式工具调用展示**：前端展示 Agent 调用工具的中间过程（Tool Call Events）
+1. **Skill 上传与热加载**：实现 Skill 压缩包上传自动解压，支持不重启服务动态注册新 Skill
+2. **Agent Team 落地**：基于 3.7 节设计，实现多 Agent 协作与按 Agent 的 Skill 分配矩阵
+3. **Skill 扩展**：增加漏洞验证 Skill（集成 Nuclei/XRAY 扫描器）
+4. **多模型支持**：通过 Settings 页面动态切换不同 LLM 供应商
+5. **权限管理**：基于角色的会话隔离与操作审计
+6. **知识库增强**：接入 RAG 管道，支持企业内部安全文档检索
+7. **流式工具调用展示**：前端展示 Agent 调用工具的中间过程（Tool Call Events）
 
 ---
 
