@@ -84,15 +84,15 @@ CREATE DATABASE cve_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 USE cve_db;
 
-CREATE TABLE cves (
+CREATE TABLE IF NOT EXISTS cves (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    cve_id VARCHAR(50) NOT NULL,
+    cve_id VARCHAR(255) NOT NULL,
     description TEXT,
-    github_url VARCHAR(500),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    github_url VARCHAR(255) NOT NULL,
+    source VARCHAR(50) NOT NULL,
+    create_time DATETIME,
     UNIQUE KEY unique_cve_url (cve_id, github_url)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
 ## 使用说明

@@ -11,7 +11,6 @@ import os
 import sys
 from loguru import logger
 from dotenv import load_dotenv
-import asyncio
 import aiomysql
 import httpx
 
@@ -31,47 +30,17 @@ logger.add(
 )
 
 
-async def create_asset_client() -> httpx.AsyncClient:
-    client = httpx.AsyncClient(verify=False, timeout=30.0, follow_redirects=True)
-    """从 .env 获取 ACL API token 或登录获取新 token"""
-    login_url = "https://10.192.56.37:8088/api/user/login"
-    login_data = {
-        "username": os.getenv("ACL_USERNAME"),
-        "password": os.getenv("ACL_PASSWORD"),
-    }
-
-    logger.info("正在登录 ACL API 获取新 token")
-    login_resp = await client.post(login_url, json=login_data)
-    login_resp.raise_for_status()
-    login_result = login_resp.json()
-
-    if login_result.get("code") != 200:
-        logger.error("ACL 登录失败: {}", login_result.get("message"))
-        raise Exception(f"登录失败: {login_result.get('message')}")
-
-    token = login_result["data"]["token"]
-
-    logger.info("成功登录 ACL API")
-    client.headers.update({"Token": token, "Content-Type": "application/json"})
-    return client
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # initialize resources
     pool: aiomysql.Pool = await get_db_pool()
-    asset_client = await create_asset_client()
     app.state.db_pool = pool
-    app.state.asset_client = asset_client
-    # lock to protect token refresh for asset_client
-    app.state.asset_lock = asyncio.Lock()
 
     try:
         yield
     finally:
         # cleanup resources
         await close_db_pool()
-        await asset_client.aclose()
 
 
 # mcp_app = mcp.http_app(path="/", transport="sse")

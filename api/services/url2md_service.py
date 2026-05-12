@@ -12,7 +12,8 @@ def _get_title_text(soup: BeautifulSoup) -> str:
     if soup.title:
         title = soup.title.get_text(strip=True)
     if not title:
-        title = soup.find("h1").get_text(strip=True) if soup.find("h1") else "No Title"
+        h1 = soup.find("h1")
+        title = h1.get_text(strip=True) if h1 else "No Title"
 
     for suffix in title_suffixes:
         if title.endswith(suffix):
