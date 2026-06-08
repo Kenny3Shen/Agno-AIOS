@@ -195,6 +195,7 @@ import {
   Connection,
   DataAnalysis,
   DataBoard,
+  Files,
   Menu,
   Monitor,
   Moon,
@@ -214,9 +215,10 @@ import AgentSituation from "./components/AgentSituation.vue"
 import AgentTracing from "./components/AgentTracing.vue"
 import SkillManage from "./components/SkillManage.vue"
 import McpManage from "./components/McpManage.vue"
+import KnowledgeManage from "./components/KnowledgeManage.vue"
 
-type NavId = "cve" | "asset" | "url2md" | "situation" | "chat" | "tracing" | "mcp" | "skills" | "settings"
-type NavGroup = "情报检索" | "AI 工作台" | "运营配置"
+type NavId = "cve" | "asset" | "url2md" | "situation" | "chat" | "knowledge" | "tracing" | "mcp" | "skills" | "settings"
+type NavGroup = "AI 工作台" | "情报检索" | "运营配置"
 
 type NavItem = {
   id: NavId
@@ -228,32 +230,33 @@ type NavItem = {
 }
 
 const navItems: NavItem[] = [
+  { id: "situation", label: "态势总览", description: "Agent 运行态势与异常", icon: DataBoard, group: "AI 工作台", badge: "Live" },
+  { id: "chat", label: "Agent 对话", description: "任务编排与流式分析", icon: ChatDotRound, group: "AI 工作台" },
+  { id: "knowledge", label: "RAG 知识库", description: "知识写入、检索与参数", icon: Files, group: "AI 工作台" },
+  { id: "tracing", label: "运行观测", description: "Agent Trace 与 Span 追踪", icon: DataAnalysis, group: "AI 工作台" },
+  { id: "mcp", label: "MCP 工具中枢", description: "服务、Token 与外部 Agent", icon: Connection, group: "AI 工作台" },
   { id: "cve", label: "CVE 情报", description: "漏洞检索与攻击面线索", icon: Search, group: "情报检索" },
   { id: "asset", label: "资产画像", description: "指纹、IP 与暴露面查询", icon: Monitor, group: "情报检索" },
   { id: "url2md", label: "网页解析", description: "情报页面转 Markdown", icon: WarningFilled, group: "情报检索" },
-  { id: "situation", label: "态势总览", description: "Agent 运行态势与异常", icon: DataBoard, group: "AI 工作台", badge: "Live" },
-  { id: "chat", label: "AI 安全助手", description: "任务编排与流式分析", icon: ChatDotRound, group: "AI 工作台" },
-  { id: "tracing", label: "运行观测", description: "Agent Trace 与 Span 追踪", icon: DataAnalysis, group: "AI 工作台" },
-  { id: "mcp", label: "MCP 工具中枢", description: "服务、Token 与外部 Agent", icon: Connection, group: "AI 工作台" },
   { id: "skills", label: "Skills 管理", description: "安全能力模块开关", icon: SetUp, group: "运营配置" },
   { id: "settings", label: "系统配置", description: "模型、MCP 与通知配置", icon: Setting, group: "运营配置" },
 ]
 
 const componentMap: Record<NavId, Component> = {
+  situation: AgentSituation,
+  chat: LlmChat,
+  knowledge: KnowledgeManage,
+  tracing: AgentTracing,
+  mcp: McpManage,
   cve: CveSearch,
   asset: AssetSearch,
   url2md: Url2Md,
-  situation: AgentSituation,
-  chat: LlmChat,
-  tracing: AgentTracing,
-  mcp: McpManage,
   skills: SkillManage,
   settings: Settings,
 }
 
 const fullCanvasTabs = new Set<NavId>(["situation", "chat", "tracing", "mcp"])
-const navGroups: NavGroup[] = ["情报检索", "AI 工作台", "运营配置"]
-const ACTIVE_TAB_KEY = "agno-aios-active-tab"
+const navGroups: NavGroup[] = ["AI 工作台", "情报检索", "运营配置"]
 const THEME_STORAGE_KEY = "theme"
 
 const activeTab = ref<NavId>("situation")
@@ -300,10 +303,6 @@ const navSections = computed(() => {
     .filter((section) => section.items.length > 0)
 })
 
-const isNavId = (value: string | null): value is NavId => {
-  return Boolean(value && navItems.some((item) => item.id === value))
-}
-
 const checkMobile = () => {
   isMobile.value = window.innerWidth < 1024
   if (!isMobile.value) sidebarOpen.value = false
@@ -335,14 +334,11 @@ const toggleTheme = () => {
 
 const selectNav = (id: NavId) => {
   activeTab.value = id
-  localStorage.setItem(ACTIVE_TAB_KEY, id)
   closeSidebar()
 }
 
 onMounted(() => {
   initTheme()
-  const savedTab = localStorage.getItem(ACTIVE_TAB_KEY)
-  if (isNavId(savedTab)) activeTab.value = savedTab
   checkMobile()
   window.addEventListener("resize", checkMobile)
 })

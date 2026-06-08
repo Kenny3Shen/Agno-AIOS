@@ -156,7 +156,7 @@
             v-model:page-size="pageSize"
             :total="total"
             :page-sizes="[10, 20, 50, 100]"
-            :small="isMobile"
+            :size="isMobile ? 'small' : 'default'"
             layout="total, sizes, prev, pager, next, jumper"
             @current-change="handlePageChange"
             @size-change="handleSizeChange"
@@ -179,11 +179,33 @@
         </el-empty>
       </transition>
     </template>
+
+    <template v-else>
+      <div class="query-empty">
+        <span class="query-empty-icon">
+          <el-icon><Search /></el-icon>
+        </span>
+        <h4>等待检索条件</h4>
+        <p>CVE 编号、组件名或漏洞关键词</p>
+        <div class="mt-4 flex flex-wrap justify-center gap-2">
+          <button
+            v-for="sample in sampleQueries"
+            :key="sample"
+            type="button"
+            class="sample-chip"
+            @click="applySampleQuery(sample)"
+          >
+            {{ sample }}
+          </button>
+        </div>
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, onUnmounted } from "vue"
+import { ElMessageBox } from "element-plus"
 import { useCveApi } from "../composables/useApi"
 import { usePagination } from "../composables/usePagination"
 import { Search, Refresh } from "@element-plus/icons-vue"
@@ -219,6 +241,7 @@ const updateMessage = ref<{
   description: string
 } | null>(null)
 const updating = ref(false)
+const sampleQueries = ["CVE-2024", "nginx", "spring"]
 
 // 分页
 const { currentPage, pageSize, total, setPage, setPageSize, setTotal } = usePagination()
@@ -300,7 +323,28 @@ const handleSearch = async () => {
   }
 }
 
+const applySampleQuery = (sample: string) => {
+  query.value = sample
+  currentPage.value = 1
+  handleSearch()
+}
+
 const handleUpdateDatabase = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '更新会触发后端 CVE 数据同步任务，执行期间可能需要等待一段时间。',
+      '更新 CVE 数据库',
+      {
+        confirmButtonText: '更新',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    throw error
+  }
+
   updating.value = true
   updateMessage.value = null
 
@@ -351,5 +395,83 @@ const handleUpdateDatabase = async () => {
 /* 过渡动画 */
 .el-table {
   transition: all 0.3s ease;
+}
+
+.query-empty {
+  display: grid;
+  min-height: 360px;
+  place-items: center;
+  align-content: center;
+  border: 1px dashed #2a3a45;
+  border-radius: 8px;
+  color: #91a4b3;
+  text-align: center;
+}
+
+.query-empty-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid #22313a;
+  border-radius: 8px;
+  background: #0b151c;
+  color: #8bd9ff;
+}
+
+.query-empty h4 {
+  margin: 14px 0 4px;
+  color: #dce7ef;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.query-empty p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.sample-chip {
+  cursor: pointer;
+  border: 1px solid #2a3a45;
+  border-radius: 8px;
+  padding: 5px 10px;
+  background: #0b151c;
+  color: #91a4b3;
+  font-size: 12px;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.sample-chip:hover,
+.sample-chip:focus-visible {
+  border-color: rgba(47, 143, 237, 0.6);
+  background: #102638;
+  color: #8bd9ff;
+}
+
+html:not(.dark) .query-empty {
+  border-color: #cbd6e2;
+  color: #64748b;
+}
+
+html:not(.dark) .query-empty-icon,
+html:not(.dark) .sample-chip {
+  border-color: #cbd6e2;
+  background: #f8fafc;
+}
+
+html:not(.dark) .query-empty h4 {
+  color: #0f172a;
+}
+
+html:not(.dark) .sample-chip {
+  color: #475569;
+}
+
+html:not(.dark) .sample-chip:hover,
+html:not(.dark) .sample-chip:focus-visible {
+  border-color: rgba(47, 143, 237, 0.55);
+  background: #eaf5ff;
+  color: #0f4f8f;
 }
 </style>

@@ -158,6 +158,55 @@ export interface ModelConfigResponse {
   models: ModelConfig[]
 }
 
+// RAG 知识库相关类型
+export interface KnowledgeStatus {
+  collection: string
+  path: string
+  documents: number
+  chunks: number
+  embedding: string
+}
+
+export interface KnowledgeDocument {
+  id: string
+  title: string
+  source: string
+  chunks: number
+  created_at: string
+  metadata?: Record<string, string>
+}
+
+export interface KnowledgeStatusResponse {
+  status: KnowledgeStatus
+  documents: KnowledgeDocument[]
+}
+
+export interface KnowledgeTextRequest {
+  title: string
+  content: string
+  source?: string
+  metadata?: Record<string, string>
+}
+
+export interface KnowledgeFileRequest {
+  path: string
+  title?: string | null
+}
+
+export interface KnowledgeSearchResult {
+  content: string
+  score: number
+  distance: number
+  doc_id: string
+  title: string
+  source: string
+  chunk_index: number
+}
+
+export interface KnowledgeSearchResponse {
+  results: KnowledgeSearchResult[]
+}
+
 // Tracing 相关类型（Agno Tracing）
 export type TraceStatus = "OK" | "ERROR" | "UNSET" | string
 export type SpanStatus = "OK" | "ERROR" | "UNSET" | string

@@ -75,7 +75,7 @@
                 <el-icon><Cpu /></el-icon>
               </div>
               <div class="min-w-0">
-                <h3 class="truncate text-sm font-semibold text-[#15202B] dark:text-white">AI 安全助手</h3>
+                <h3 class="truncate text-sm font-semibold text-[#15202B] dark:text-white">Agent 对话</h3>
                 <p class="mt-1 truncate text-xs text-[#6B7C8A] dark:text-[#91A4B3]">
                   {{ loading ? '执行中' : '待命' }} · {{ currentModelName }} · {{ compactSessionId }}
                 </p>

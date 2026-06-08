@@ -4,8 +4,8 @@
     <div class="rounded-xl border border-slate-200/70 bg-white/80 p-3 sm:p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
       <div class="flex flex-col sm:flex-row gap-3">
         <el-radio-group v-model="searchMode" class="shrink-0" size="default">
-          <el-radio-button label="fingerprint">指纹</el-radio-button>
-          <el-radio-button label="ip">IP</el-radio-button>
+          <el-radio-button value="fingerprint">指纹</el-radio-button>
+          <el-radio-button value="ip">IP</el-radio-button>
         </el-radio-group>
 
         <el-input
@@ -30,6 +30,10 @@
           <el-icon class="mr-1"><Search /></el-icon>
           搜索
         </el-button>
+      </div>
+
+      <div v-if="validationNotice" class="mt-2 text-xs text-[#F6C343]">
+        {{ validationNotice }}
       </div>
 
       <!-- 筛选（基于结果的本地筛选） -->
@@ -210,7 +214,7 @@
             v-model:page-size="pageSize"
             :total="total"
             :page-sizes="[10, 20, 50, 100]"
-            :small="isMobile"
+            :size="isMobile ? 'small' : 'default'"
             layout="total, sizes, prev, pager, next, jumper"
             @current-change="handlePageChange"
             @size-change="handleSizeChange"
@@ -232,6 +236,27 @@
           </template>
         </el-empty>
       </transition>
+    </template>
+
+    <template v-else>
+      <div class="query-empty">
+        <span class="query-empty-icon">
+          <el-icon><Monitor /></el-icon>
+        </span>
+        <h4>等待资产查询</h4>
+        <p>{{ searchMode === 'ip' ? '输入单个 IPv4 地址' : '输入技术指纹或组件关键词' }}</p>
+        <div class="mt-4 flex flex-wrap justify-center gap-2">
+          <button
+            v-for="sample in activeSamples"
+            :key="sample.label"
+            type="button"
+            class="sample-chip"
+            @click="applySampleQuery(sample)"
+          >
+            {{ sample.label }}
+          </button>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -263,6 +288,15 @@ const assetQuery = ref("")
 const searchMode = ref<"fingerprint" | "ip">("fingerprint")
 const allResults = ref<AssetResult[]>([])
 const searched = ref(false)
+const fingerprintSamples = [
+  { label: "Vue", mode: "fingerprint" as const, value: "Vue" },
+  { label: "React", mode: "fingerprint" as const, value: "React" },
+  { label: "nginx", mode: "fingerprint" as const, value: "nginx" },
+]
+const ipSamples = [
+  { label: "10.192.20.170", mode: "ip" as const, value: "10.192.20.170" },
+  { label: "47.99.2.74", mode: "ip" as const, value: "47.99.2.74" },
+]
 
 // 筛选状态
 const selectedIpType = ref<string | null>(null)
@@ -291,6 +325,14 @@ const isSearchDisabled = computed(() => {
   if (searchMode.value === 'ip') return !isValidIpv4(q)
   return false
 })
+
+const validationNotice = computed(() => {
+  const q = assetQuery.value?.trim()
+  if (!q || searchMode.value !== 'ip' || isValidIpv4(q)) return ''
+  return 'IP 查询仅支持合法 IPv4 地址'
+})
+
+const activeSamples = computed(() => searchMode.value === 'ip' ? ipSamples : fingerprintSamples)
 
 const ipTypeOptions = computed(() => {
   const set = new Set<string>()
@@ -420,7 +462,7 @@ const handleSizeChange = (size: number) => {
 }
 
 const handleSearch = async () => {
-  if (!assetQuery.value || !assetQuery.value.trim()) return
+  if (isSearchDisabled.value) return
 
   try {
     const q = assetQuery.value.trim()
@@ -439,6 +481,13 @@ const handleSearch = async () => {
   } catch (error: unknown) {
     console.error('Search failed:', error)
   }
+}
+
+const applySampleQuery = (sample: (typeof fingerprintSamples)[number] | (typeof ipSamples)[number]) => {
+  searchMode.value = sample.mode
+  assetQuery.value = sample.value
+  setPage(1)
+  handleSearch()
 }
 </script>
 
@@ -459,5 +508,83 @@ const handleSearch = async () => {
     padding: 0 6px;
     font-size: 10px;
   }
+}
+
+.query-empty {
+  display: grid;
+  min-height: 360px;
+  place-items: center;
+  align-content: center;
+  border: 1px dashed #2a3a45;
+  border-radius: 8px;
+  color: #91a4b3;
+  text-align: center;
+}
+
+.query-empty-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid #22313a;
+  border-radius: 8px;
+  background: #0b151c;
+  color: #8bd9ff;
+}
+
+.query-empty h4 {
+  margin: 14px 0 4px;
+  color: #dce7ef;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.query-empty p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.sample-chip {
+  cursor: pointer;
+  border: 1px solid #2a3a45;
+  border-radius: 8px;
+  padding: 5px 10px;
+  background: #0b151c;
+  color: #91a4b3;
+  font-size: 12px;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.sample-chip:hover,
+.sample-chip:focus-visible {
+  border-color: rgba(47, 143, 237, 0.6);
+  background: #102638;
+  color: #8bd9ff;
+}
+
+html:not(.dark) .query-empty {
+  border-color: #cbd6e2;
+  color: #64748b;
+}
+
+html:not(.dark) .query-empty-icon,
+html:not(.dark) .sample-chip {
+  border-color: #cbd6e2;
+  background: #f8fafc;
+}
+
+html:not(.dark) .query-empty h4 {
+  color: #0f172a;
+}
+
+html:not(.dark) .sample-chip {
+  color: #475569;
+}
+
+html:not(.dark) .sample-chip:hover,
+html:not(.dark) .sample-chip:focus-visible {
+  border-color: rgba(47, 143, 237, 0.55);
+  background: #eaf5ff;
+  color: #0f4f8f;
 }
 </style>

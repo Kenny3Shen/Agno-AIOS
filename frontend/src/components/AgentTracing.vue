@@ -67,7 +67,7 @@
             <div class="mt-0.5 text-[11px] text-[#91A0AD]">共 {{ totalCount }} 条 · page {{ page }}</div>
           </div>
           <el-pagination
-            small
+            size="small"
             background
             layout="prev, next"
             :total="totalCount"

@@ -6,6 +6,11 @@ import type {
   CveSearchParams,
   CveSearchResponse,
   HiAgentEntry,
+  KnowledgeDocument,
+  KnowledgeFileRequest,
+  KnowledgeSearchResponse,
+  KnowledgeStatusResponse,
+  KnowledgeTextRequest,
   McpServiceId,
   McpServiceStatusResponse,
   McpTokenInfo,
@@ -499,6 +504,74 @@ export function useSkillsApi() {
     toggling,
     fetchSkills,
     toggleSkill
+  }
+}
+
+/**
+ * RAG 知识库管理 API
+ */
+export function useKnowledgeApi() {
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  const request = async <T>(path = '', options: RequestInit = {}, fallback = '知识库请求失败'): Promise<T> => {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await fetch(`${API_BASE}/knowledge${path}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options.headers || {})
+        }
+      })
+      if (!response.ok) {
+        const data: unknown = await response.json().catch(() => ({}))
+        throw new Error(messageFromResponse(data, fallback))
+      }
+      return await response.json()
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, fallback)
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const fetchKnowledge = () => request<KnowledgeStatusResponse>('', {}, '获取知识库状态失败')
+
+  const addTextDocument = (payload: KnowledgeTextRequest) => request<KnowledgeDocument>('/documents/text', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }, '写入知识文档失败')
+
+  const addFileDocument = (payload: KnowledgeFileRequest) => request<KnowledgeDocument>('/documents/file', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }, '导入本地文件失败')
+
+  const deleteKnowledgeDocument = (docId: string) => request<{ success: boolean }>(`/documents/${encodeURIComponent(docId)}`, {
+    method: 'DELETE'
+  }, '删除知识文档失败')
+
+  const clearKnowledge = () => request<{ documents: number; chunks: number }>('', {
+    method: 'DELETE'
+  }, '清空知识库失败')
+
+  const searchKnowledge = (query: string, limit: number) => request<KnowledgeSearchResponse>('/search', {
+    method: 'POST',
+    body: JSON.stringify({ query, limit })
+  }, '检索知识库失败')
+
+  return {
+    loading,
+    error,
+    fetchKnowledge,
+    addTextDocument,
+    addFileDocument,
+    deleteKnowledgeDocument,
+    clearKnowledge,
+    searchKnowledge
   }
 }
 

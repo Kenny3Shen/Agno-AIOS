@@ -7,16 +7,17 @@
         <p class="text-xs text-slate-500 dark:text-[#8B949E] mt-1">管理 Agent 可用的技能模块，启用或禁用特定 Skill</p>
       </div>
       <div class="flex items-center gap-2">
-        <!-- 上传按钮（预留） -->
-        <el-tooltip content="上传 Skill（即将支持）" placement="top">
-          <el-button
-            type="default"
-            :icon="Upload"
-            @click="handleUpload"
-            class="!border-[#D0D7DE] dark:!border-[#30363D] !bg-white dark:!bg-[#161B22] hover:!bg-slate-50 dark:hover:!bg-[#21262D]"
-          >
-            上传
-          </el-button>
+        <el-tooltip content="后端上传接口当前为占位，暂不可用" placement="top">
+          <span>
+            <el-button
+              type="default"
+              :icon="Upload"
+              disabled
+              class="!border-[#D0D7DE] dark:!border-[#30363D] !bg-white dark:!bg-[#161B22]"
+            >
+              上传
+            </el-button>
+          </span>
         </el-tooltip>
         <!-- 刷新按钮 -->
         <el-button
@@ -184,10 +185,6 @@ const toggleExpand = (name: string) => {
   } else {
     expandedSkills.add(name)
   }
-}
-
-const handleUpload = () => {
-  ElMessage.info('Skill 上传功能即将支持，请手动将 Skill 文件夹放置到 .skills/ 目录')
 }
 
 onMounted(() => {
