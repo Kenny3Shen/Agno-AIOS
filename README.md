@@ -13,7 +13,7 @@ Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基
 - **运行观测**：查看 Agent Trace/Span、耗时、错误和运行链路。
 - **态势总览**：展示 Agent 运行成功率、耗时分布和错误态势。
 - **MCP 工具中枢**：FastMCP 与主 API 同进程运行，支持服务开关、Token 和 Hi-Agent MCP 接入。
-- **Skills 管理**：启用、禁用和查看本地 `.skills/` 能力包。
+- **Skills 管理**：启用、禁用和查看本地 `api/agent/skills/` 能力包。
 - **RAG 知识库**：基于 ChromaDB 的本地知识库，Agent 可通过 `search_knowledge_base` 检索内部资料。
 
 ## 技术栈
@@ -36,17 +36,20 @@ Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基
 │   │   ├── server.py           # MCP ASGI 入口
 │   │   ├── config.py           # MCP 配置、Token、Hi-Agent 状态
 │   │   └── tools/              # 内置 MCP 工具模块
+│   ├── agent/                  # Agent 本地资源
+│   │   └── skills/             # Agent 可加载的本地技能
 │   ├── models/                 # Pydantic 数据模型
+│   ├── tasks/                  # 数据更新任务与命令入口
+│   │   ├── update_cve.py       # CVE 数据更新任务
+│   │   ├── update_ip_asset.py  # IP 资产数据更新任务
+│   │   └── cve_sources.py      # CVE 数据源与增量对比逻辑
 │   ├── utils/                  # 数据库与数据处理工具
 │   └── data/                   # CVE/资产数据缓存
-├── .skills/                    # Agent 可加载的本地技能
 ├── frontend/                   # Vue 3 + TypeScript + UnoCSS 前端源码
 ├── source/                     # 前端生产构建输出，供 FastAPI 托管
+├── scripts/                    # 运维包装脚本
+│   └── run_update_cve.sh       # CVE 定时更新包装脚本
 ├── config.toml                 # 数据源配置
-├── update_cve.py               # CVE 数据更新脚本
-├── update_ip_asset.py          # IP 资产数据更新脚本
-├── update_utils.py             # 数据更新公共逻辑
-├── run_update_cve.sh           # CVE 定时更新包装脚本
 ├── pyproject.toml              # Python 依赖与项目配置
 └── README.md
 ```
@@ -125,6 +128,8 @@ LOG_DIR=logs
 MCP_SERVER_URL=http://127.0.0.1:8000/mcp/
 MCP_TOKEN=your_mcp_access_token
 AGENT_TIMEZONE=Asia/Shanghai
+AGNO_SKILLS_DIR=api/agent/skills
+AGNO_SKILLS_CONFIG_FILE=tmp/skills_config.json
 
 # RAG 知识库，可选
 AGNO_KNOWLEDGE_CHROMA_PATH=tmp/chroma
@@ -176,23 +181,23 @@ CREATE TABLE IF NOT EXISTS cves (
 更新 CVE 数据：
 
 ```bash
-uv run update_cve.py
+uv run update-cve
 ```
 
 更新 IP 资产数据：
 
 ```bash
-uv run update_ip_asset.py
+uv run update-ip-asset
 ```
 
 推荐定时任务：
 
 ```bash
 # 每天 08:00 更新 CVE 数据
-0 8 * * * cd /home/shenss/python/Agno-AIOS && ./run_update_cve.sh >> logs/cron_cve.log 2>&1
+0 8 * * * cd /home/shenss/python/Agno-AIOS && ./scripts/run_update_cve.sh >> logs/cron_cve.log 2>&1
 
 # 每天 03:00 更新 IP 资产数据
-0 3 * * * cd /home/shenss/python/Agno-AIOS && uv run update_ip_asset.py >> logs/cron_asset.log 2>&1
+0 3 * * * cd /home/shenss/python/Agno-AIOS && uv run update-ip-asset >> logs/cron_asset.log 2>&1
 ```
 
 ## Agent 实现
@@ -201,7 +206,7 @@ uv run update_ip_asset.py
 
 - 使用系统配置中的 OpenAI-compatible 模型。
 - 通过 `MCPTools` 调用同进程 FastMCP 工具。
-- 通过 `LocalSkills` 加载 `.skills/` 本地能力包。
+- 通过 `LocalSkills` 加载 `api/agent/skills/` 本地能力包。
 - 使用 `SqliteDb` 保存会话和运行记录。
 - 使用 Agno tracing 记录运行链路。
 - 通过 `knowledge_retriever` 接入 ChromaDB 知识库。
@@ -303,7 +308,7 @@ MCP 已整合进主 API 进程：
 
 ## Skills
 
-本地能力放在 `.skills/<skill-name>/`，每个 Skill 至少包含一个 `SKILL.md`。稳定执行的数据访问或分析逻辑建议放入 `scripts/`，避免让模型直接生成复杂脚本。
+本地能力放在 `api/agent/skills/<skill-name>/`，每个 Skill 至少包含一个 `SKILL.md`。稳定执行的数据访问或分析逻辑建议放入 `scripts/`，避免让模型直接生成复杂脚本。
 
 当前内置能力：
 
@@ -316,7 +321,7 @@ MCP 已整合进主 API 进程：
 新增 Skill 的建议结构：
 
 ```text
-.skills/example-skill/
+api/agent/skills/example-skill/
 ├── SKILL.md
 └── scripts/
     └── base.py
@@ -381,6 +386,7 @@ bun run build
 - `logs/`
 - `tmp/`
 - `*.db`
+- `.run_update_cve.lock`
 - `__pycache__/`
 - `.pytest_cache/`
 - `.ruff_cache/`

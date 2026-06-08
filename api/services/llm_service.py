@@ -1,9 +1,7 @@
 import os
-import json
 from typing import Any, AsyncIterator, cast
 from dotenv import load_dotenv
 from textwrap import dedent
-from pathlib import Path
 from urllib.parse import urlencode
 from agno.agent import Agent
 from agno.models.openai import OpenAILike
@@ -14,6 +12,7 @@ from agno.skills import Skills, LocalSkills
 from agno.tracing import setup_tracing
 from api.services.model_config_service import get_model_for_run
 from api.services.knowledge_service import agno_knowledge_retriever
+from api.services.skill_service import get_enabled_skill_dirs
 
 load_dotenv(override=True)
 # Set up database for traces
@@ -90,34 +89,9 @@ dependencies = {
 }
 
 
-SKILLS_DIR = Path(".skills")
-SKILLS_CONFIG_FILE = Path("tmp/skills_config.json")
-
-
-def _load_skills_config() -> dict[str, bool]:
-    """加载 skills 启用/禁用配置"""
-    if SKILLS_CONFIG_FILE.exists():
-        try:
-            return json.loads(SKILLS_CONFIG_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            return {}
-    return {}
-
-
 def _build_enabled_skills() -> Skills | None:
     """根据配置构建仅启用的 Skills 加载器；全部禁用时返回 None"""
-    cfg = _load_skills_config()
-    if not SKILLS_DIR.is_dir():
-        return None
-
-    enabled_dirs: list[str] = []
-    for entry in sorted(SKILLS_DIR.iterdir()):
-        if not entry.is_dir() or entry.name.startswith("."):
-            continue
-        # 默认启用
-        if cfg.get(entry.name, True):
-            enabled_dirs.append(str(entry))
-
+    enabled_dirs = [str(skill_dir) for skill_dir in get_enabled_skill_dirs()]
     if not enabled_dirs:
         return None
     return Skills(loaders=[LocalSkills(d) for d in enabled_dirs])

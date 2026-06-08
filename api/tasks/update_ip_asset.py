@@ -4,30 +4,31 @@ IP 资产数据更新脚本
 从 ACL API 获取 IP 实体数据并进行聚合处理
 
 使用方法:
-    uv run update_ip_asset.py
+    uv run update-ip-asset
+    uv run python -m api.tasks.update_ip_asset
 
 环境变量:
     ACL_USERNAME: ACL API 用户名
     ACL_PASSWORD: ACL API 密码
 """
 
-import os
-import sys
 import asyncio
 import json
+import os
+import sys
 import time
 import warnings
 from datetime import datetime
+
 import httpx
-from loguru import logger
 from dotenv import load_dotenv, set_key
+from loguru import logger
+
 from api.utils.asset_utils import aggregate_ip_entities
 
 warnings.filterwarnings("ignore", message="Unverified HTTPS request")
 
 load_dotenv()
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 # 配置日志
@@ -135,5 +136,10 @@ async def main():
         return 1
 
 
-if __name__ == "__main__":
+def run() -> None:
+    """Console script entrypoint."""
     sys.exit(asyncio.run(main()))
+
+
+if __name__ == "__main__":
+    run()

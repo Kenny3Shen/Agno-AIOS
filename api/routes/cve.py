@@ -3,7 +3,7 @@ import aiomysql
 from api.dependencies import get_pool
 from api.models.schemas import CveSearchRequest
 from api.services.cve_service import search_cves
-from update_cve import main as update_cve_main
+from api.tasks.update_cve import main as update_cve_main
 from loguru import logger
 
 router = APIRouter(prefix="/api/cve", tags=["CVE"])

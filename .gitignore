@@ -11,6 +11,7 @@ logs/
 tmp/
 *.db
 .shared
+.run_update_cve.lock
 # Virtual environments
 .venv
 node_modules/

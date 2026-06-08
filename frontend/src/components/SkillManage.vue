@@ -44,7 +44,7 @@
       class="text-center py-16 text-slate-400 dark:text-[#484F58]"
     >
       <el-icon class="text-4xl mb-3"><FolderOpened /></el-icon>
-      <p class="text-sm">未检测到任何 Skill，请将 Skill 文件夹放置到 <code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-[#0D1117] text-xs">.skills/</code> 目录</p>
+      <p class="text-sm">未检测到任何 Skill，请将 Skill 文件夹放置到 <code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-[#0D1117] text-xs">api/agent/skills/</code> 目录</p>
     </div>
 
     <!-- Skill 卡片列表 -->

@@ -4,23 +4,24 @@ CVE数据库更新脚本
 支持从多个数据源获取CVE信息并更新到数据库
 
 使用方法:
-    uv run update_cve.py
+    uv run update-cve
+    uv run python -m api.tasks.update_cve
 
 数据源:
     - github
     - exploit-db
 """
 
-import aiomysql
+import asyncio
 import os
 import sys
-import asyncio
 from datetime import datetime
+
+import aiomysql
 from loguru import logger
 import polars as pl
-from update_utils import DATA_SOURCES
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from api.tasks.cve_sources import DATA_SOURCES
 
 # 配置日志
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -221,7 +222,7 @@ async def get_add_del_data(
             os.makedirs(os.path.dirname(local_commit_path), exist_ok=True)
             with open(local_commit_path, "w") as f:
                 f.write(remote_commit)
-        
+
         # 仅在返回给数据库更新函数时转换为 list[dict]
         return df_inc.to_dicts(), df_del.to_dicts()
     else:
@@ -262,5 +263,10 @@ async def main() -> tuple[int, int]:
         return (0, 0)
 
 
-if __name__ == "__main__":
+def run() -> None:
+    """Console script entrypoint."""
     asyncio.run(main())
+
+
+if __name__ == "__main__":
+    run()

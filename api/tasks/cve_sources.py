@@ -2,19 +2,19 @@
 """
 CVE更新工具和数据源类
 
-将辅助函数和数据源类放在这里，保持 update_cve.py 的核心流程简洁
+将辅助函数和数据源类放在这里，保持 CVE 更新任务的核心流程简洁
 """
 
 import os
 import re
+import tomllib
 from abc import ABC, abstractmethod
 from typing import Any
 
 import httpx
-import tomllib
 import polars as pl
-from loguru import logger
 from dotenv import load_dotenv
+from loguru import logger
 
 load_dotenv()
 
