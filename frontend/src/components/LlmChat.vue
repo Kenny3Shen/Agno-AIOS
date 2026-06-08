@@ -193,6 +193,7 @@
                 :loading="modelLoading"
                 placeholder="选择模型"
                 class="agent-model-select"
+                popper-class="agent-model-select-popper"
                 placement="top-start"
                 @change="persistSelectedModel"
               >
@@ -203,18 +204,18 @@
                   :value="model.id"
                   :disabled="!model.enabled"
                 >
-                  <div class="flex min-w-0 items-center justify-between gap-3">
+                  <div class="model-option">
                     <span class="min-w-0">
-                      <span class="block truncate text-xs font-semibold">{{ model.name }}</span>
-                      <span class="block truncate text-[11px] text-[#6B7C8A] dark:text-[#91A4B3]">
+                      <span class="model-option-title">{{ model.name }}</span>
+                      <span class="model-option-subtitle">
                         {{ model.model_id || '未填写模型 ID' }}
                       </span>
                     </span>
                     <span
-                      class="shrink-0 rounded border px-1.5 py-0.5 text-[10px]"
+                      class="model-option-status"
                       :class="model.configured
-                        ? 'border-[#54D38A]/40 text-[#14824A] dark:text-[#7CF0A7]'
-                        : 'border-[#F6C343]/50 text-[#9A6400] dark:text-[#FFD166]'"
+                        ? 'is-ready'
+                        : 'is-pending'"
                     >
                       {{ model.configured ? 'Ready' : 'Config' }}
                     </span>
@@ -707,15 +708,101 @@ onUnmounted(() => { window.removeEventListener("resize", checkMobile) })
 }
 
 .agent-model-select {
-  width: min(240px, 100%);
+  width: min(210px, 100%);
 }
 
 .agent-model-select .el-select__wrapper {
   min-height: 32px;
-  border: 1px solid #d8e0e7;
+  border: 1px solid transparent;
   border-radius: 8px;
-  background: #ffffff;
+  background: rgba(47, 143, 237, 0.08);
   box-shadow: none;
+  padding: 0 10px;
+}
+
+.agent-model-select .el-select__selected-item {
+  color: #0f4f8f;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.agent-model-select .el-select__caret {
+  color: #5f7484;
+}
+
+.agent-model-select-popper {
+  border: 1px solid #cbd6e2 !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.16) !important;
+}
+
+.agent-model-select-popper .el-select-dropdown {
+  padding: 4px;
+}
+
+.agent-model-select-popper .el-select-dropdown__item {
+  height: auto;
+  min-height: 54px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  line-height: 1.25;
+}
+
+.agent-model-select-popper .el-select-dropdown__item.is-selected {
+  background: #eaf5ff;
+}
+
+.model-option {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.model-option-title,
+.model-option-subtitle {
+  display: block;
+  max-width: 148px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-option-title {
+  color: #15202b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.model-option-subtitle {
+  margin-top: 4px;
+  color: #6b7c8a;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.model-option-status {
+  flex: 0 0 auto;
+  border: 1px solid;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.model-option-status.is-ready {
+  border-color: rgba(84, 211, 138, 0.4);
+  color: #14824a;
+}
+
+.model-option-status.is-pending {
+  border-color: rgba(246, 195, 67, 0.5);
+  color: #9a6400;
 }
 
 .send-button {
@@ -749,9 +836,54 @@ html.dark .chat-composer {
 }
 
 html.dark .agent-model-select .el-select__wrapper {
-  border-color: #2d414d;
-  background: #071014;
+  border-color: transparent;
+  background: rgba(139, 217, 255, 0.09);
   box-shadow: none;
+}
+
+html.dark .agent-model-select .el-select__selected-item {
+  color: #c8f0ff;
+}
+
+html.dark .agent-model-select .el-select__caret {
+  color: #8ea0ae;
+}
+
+html.dark .agent-model-select-popper {
+  border-color: #22313a !important;
+  background: #0f1b22 !important;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.4) !important;
+}
+
+html.dark .agent-model-select-popper .el-popper__arrow::before {
+  border-color: #22313a !important;
+  background: #0f1b22 !important;
+}
+
+html.dark .agent-model-select-popper .el-select-dropdown__item {
+  color: #dce7ef;
+}
+
+html.dark .agent-model-select-popper .el-select-dropdown__item.is-selected,
+html.dark .agent-model-select-popper .el-select-dropdown__item.hover,
+html.dark .agent-model-select-popper .el-select-dropdown__item:hover {
+  background: #102638;
+}
+
+html.dark .model-option-title {
+  color: #ffffff;
+}
+
+html.dark .model-option-subtitle {
+  color: #91a4b3;
+}
+
+html.dark .model-option-status.is-ready {
+  color: #7cf0a7;
+}
+
+html.dark .model-option-status.is-pending {
+  color: #ffd166;
 }
 
 html.dark .agent-pill {

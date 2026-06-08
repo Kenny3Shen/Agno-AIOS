@@ -23,6 +23,7 @@ dependencies = [
     "requests>=2.34.2",
     "beautifulsoup4>=4.15.0",
     "pyyaml>=6.0.3",
+    "chromadb>=1.5.9",
 ]
 
 [[tool.uv.index]]

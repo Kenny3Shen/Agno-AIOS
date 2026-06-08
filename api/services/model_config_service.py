@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 MODEL_CONFIG_FILE = Path("tmp/model_config.json")
 
@@ -71,12 +71,16 @@ def load_model_config() -> dict[str, Any]:
     if isinstance(models_raw, list):
         for index, entry in enumerate(models_raw):
             if isinstance(entry, dict):
-                models.append(_normalize_model(entry, f"model-{index + 1}"))
+                models.append(
+                    _normalize_model(cast(dict[str, Any], entry), f"model-{index + 1}")
+                )
 
     by_id = {model["id"]: model for model in models}
     for default_model in DEFAULT_MODELS:
         if default_model["id"] not in by_id:
-            models.insert(len([m for m in models if m.get("builtin")]), default_model.copy())
+            models.insert(
+                len([m for m in models if m.get("builtin")]), default_model.copy()
+            )
 
     active_model_id = str(raw.get("active_model_id") or "").strip()
     if not active_model_id or active_model_id not in {model["id"] for model in models}:
@@ -97,7 +101,9 @@ def public_model_config() -> dict[str, Any]:
                 **model,
                 "api_key": _mask_secret(model.get("api_key", "")),
                 "configured": bool(
-                    model.get("api_key") and model.get("base_url") and model.get("model_id")
+                    model.get("api_key")
+                    and model.get("base_url")
+                    and model.get("model_id")
                 ),
             }
         )
@@ -107,7 +113,9 @@ def public_model_config() -> dict[str, Any]:
     }
 
 
-def save_model_config(models: list[dict[str, Any]], active_model_id: str | None) -> dict[str, Any]:
+def save_model_config(
+    models: list[dict[str, Any]], active_model_id: str | None
+) -> dict[str, Any]:
     existing = {model["id"]: model for model in load_model_config()["models"]}
     normalized: list[dict[str, Any]] = []
 
@@ -151,7 +159,11 @@ def get_model_for_run(model_id: str | None = None) -> dict[str, Any]:
 
     missing = [
         label
-        for label, key in (("API Key", "api_key"), ("Base URL", "base_url"), ("Model ID", "model_id"))
+        for label, key in (
+            ("API Key", "api_key"),
+            ("Base URL", "base_url"),
+            ("Model ID", "model_id"),
+        )
         if not model.get(key)
     ]
     if missing:

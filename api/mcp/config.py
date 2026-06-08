@@ -73,12 +73,17 @@ def write_mcp_config(data: dict[str, Any]) -> None:
 
 def services_from_config(data: dict[str, Any] | None = None) -> dict[str, bool]:
     cfg = read_mcp_config() if data is None else data
-    mcp_cfg = cfg.get("mcp") if isinstance(cfg.get("mcp"), dict) else {}
-    return {service_id: bool(mcp_cfg.get(service_id, True)) for service_id in SERVICE_IDS}
+    raw_mcp_cfg = cfg.get("mcp")
+    mcp_cfg: dict[str, Any] = raw_mcp_cfg if isinstance(raw_mcp_cfg, dict) else {}
+    return {
+        service_id: bool(mcp_cfg.get(service_id, True)) for service_id in SERVICE_IDS
+    }
 
 
 def enabled_service_ids() -> set[str]:
-    return {service_id for service_id, enabled in services_from_config().items() if enabled}
+    return {
+        service_id for service_id, enabled in services_from_config().items() if enabled
+    }
 
 
 def enabled_hiagent_urls() -> list[str]:

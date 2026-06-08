@@ -1,17 +1,28 @@
 # Agno AIOS AI 信息安全中台
 
-Agno AIOS 是一个基于 FastAPI、Vue 3、Agno 和 FastMCP 的 AI 信息安全中台。系统把 CVE 情报、资产画像、网页情报解析、Agent 对话、运行观测、Skills 管理和 MCP 工具中枢整合到同一个主服务中，不再依赖独立 MCP-Server 进程。
+Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基于 FastAPI、Vue 3、Agno、FastMCP 和 ChromaDB，把 CVE 情报、资产画像、网页情报解析、Agent 对话、运行观测、MCP 工具中枢、Skills 能力包和基础 RAG 知识库整合到同一个主服务中。
 
-## 核心功能
+当前目标不是做一个通用聊天页面，而是构建可持续扩展的安全 Agent 工作台：安全人员可以在一个界面内完成情报查询、漏洞研判、资产排查、剧本调用、知识检索和运行观测。
 
-- **AI 安全助手**：流式 Agent 对话，可在输入框旁选择模型，支持会话历史。
-- **CVE 情报**：按 CVE 编号、应用名或关键词检索漏洞与 PoC 来源。
+## 核心能力
+
+- **AI 安全助手**：基于 Agno Agent 的流式对话，支持模型切换、会话历史、MCP 工具、Skills 和知识库检索。
+- **CVE 情报**：按 CVE 编号、应用名或关键词检索漏洞记录和 PoC 来源。
 - **资产搜索**：基于指纹或 IP 查询资产画像。
-- **URL 转 Markdown**：解析网页正文并转换为 Markdown。
-- **运行观测**：基于 Agno Trace/Span 数据查看运行链路、耗时和错误。
+- **URL 转 Markdown**：抓取网页正文并转换为 Markdown，便于情报沉淀。
+- **运行观测**：查看 Agent Trace/Span、耗时、错误和运行链路。
 - **态势总览**：展示 Agent 运行成功率、耗时分布和错误态势。
-- **MCP 工具中枢**：同进程 FastMCP 服务开关、Token 和 Hi-Agent MCP 管理。
+- **MCP 工具中枢**：FastMCP 与主 API 同进程运行，支持服务开关、Token 和 Hi-Agent MCP 接入。
 - **Skills 管理**：启用、禁用和查看本地 `.skills/` 能力包。
+- **RAG 知识库**：基于 ChromaDB 的本地知识库，Agent 可通过 `search_knowledge_base` 检索内部资料。
+
+## 技术栈
+
+- 前端：Vue 3、TypeScript、Element Plus、UnoCSS、Vite/Rolldown、markdown-it、highlight.js。
+- 后端：FastAPI、Uvicorn、aiomysql、httpx、Polars、loguru、python-dotenv。
+- Agent：Agno、OpenAILike、LocalSkills、SqliteDb、Tracing、ChromaDB RAG。
+- MCP：FastMCP，同进程 ASGI 挂载。
+- 包管理：uv、Bun。
 
 ## 项目结构
 
@@ -20,7 +31,7 @@ Agno AIOS 是一个基于 FastAPI、Vue 3、Agno 和 FastMCP 的 AI 信息安全
 ├── api/
 │   ├── main.py                 # FastAPI 应用入口
 │   ├── routes/                 # API 路由
-│   ├── services/               # 业务逻辑
+│   ├── services/               # 业务逻辑服务
 │   ├── mcp/                    # 内置 FastMCP 运行时
 │   │   ├── server.py           # MCP ASGI 入口
 │   │   ├── config.py           # MCP 配置、Token、Hi-Agent 状态
@@ -47,16 +58,50 @@ Agno AIOS 是一个基于 FastAPI、Vue 3、Agno 和 FastMCP 的 AI 信息安全
 - Bun 1.3+ 或 Node.js 18+
 - MySQL 5.7+
 
-## 安装
+## 快速启动
+
+安装后端依赖：
 
 ```bash
 uv sync
+```
 
+安装前端依赖：
+
+```bash
 cd frontend
 bun install
 ```
 
-## 配置
+启动后端：
+
+```bash
+uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+启动前端开发服务：
+
+```bash
+cd frontend
+bun run dev
+```
+
+开发访问地址：
+
+```text
+http://localhost:5173
+```
+
+生产构建前端：
+
+```bash
+cd frontend
+bun run build
+```
+
+构建产物会输出到仓库根目录 `source/`，并由 FastAPI 静态资源服务托管。
+
+## 配置说明
 
 创建 `.env` 文件或设置环境变量：
 
@@ -80,9 +125,33 @@ LOG_DIR=logs
 MCP_SERVER_URL=http://127.0.0.1:8000/mcp/
 MCP_TOKEN=your_mcp_access_token
 AGENT_TIMEZONE=Asia/Shanghai
+
+# RAG 知识库，可选
+AGNO_KNOWLEDGE_CHROMA_PATH=tmp/chroma
+AGNO_KNOWLEDGE_INDEX_FILE=tmp/knowledge_docs.json
+AGNO_KNOWLEDGE_COLLECTION=security_knowledge
+AGNO_KNOWLEDGE_TOP_K=5
 ```
 
-模型参数不再通过 `LLM_*` 环境变量维护。启动服务后进入 **系统配置 -> 模型路由**，配置 API Key、Base URL、Model ID、启用状态和默认模型；运行时配置会保存到 `tmp/model_config.json`。
+模型参数不再通过 `LLM_*` 环境变量维护。启动服务后进入 **系统配置 -> 模型路由**，配置 API Key、Base URL、Model ID、启用状态和默认模型。运行时配置会保存到：
+
+```text
+tmp/model_config.json
+```
+
+MCP 配置和 Token 会保存到：
+
+```text
+tmp/mcp/mcp_config.toml
+tmp/mcp/mcp_tokens.db
+```
+
+知识库文件会保存到：
+
+```text
+tmp/chroma
+tmp/knowledge_docs.json
+```
 
 ## 数据库初始化
 
@@ -102,33 +171,86 @@ CREATE TABLE IF NOT EXISTS cves (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
-## 启动
+## 数据更新
+
+更新 CVE 数据：
 
 ```bash
-uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+uv run update_cve.py
 ```
 
-开发前端：
+更新 IP 资产数据：
 
 ```bash
-cd frontend
-bun run dev
+uv run update_ip_asset.py
 ```
 
-访问 `http://localhost:5173`。
-
-生产构建：
+推荐定时任务：
 
 ```bash
-cd frontend
-bun run build
+# 每天 08:00 更新 CVE 数据
+0 8 * * * cd /home/shenss/python/Agno-AIOS && ./run_update_cve.sh >> logs/cron_cve.log 2>&1
+
+# 每天 03:00 更新 IP 资产数据
+0 3 * * * cd /home/shenss/python/Agno-AIOS && uv run update_ip_asset.py >> logs/cron_asset.log 2>&1
 ```
 
-前端产物会输出到仓库根目录 `source/`，由后端静态资源服务托管。
+## Agent 实现
+
+当前 Agent 位于 `api/services/llm_service.py`，核心能力包括：
+
+- 使用系统配置中的 OpenAI-compatible 模型。
+- 通过 `MCPTools` 调用同进程 FastMCP 工具。
+- 通过 `LocalSkills` 加载 `.skills/` 本地能力包。
+- 使用 `SqliteDb` 保存会话和运行记录。
+- 使用 Agno tracing 记录运行链路。
+- 通过 `knowledge_retriever` 接入 ChromaDB 知识库。
+
+Agent 在以下场景会优先检索知识库：
+
+- 内部制度和处置规范。
+- 历史报告和研判结论。
+- 资产说明和业务背景。
+- 漏洞风险研判资料。
+- 用户明确要求基于已沉淀资料回答。
+
+## RAG 知识库
+
+当前知识库是基础可运行版本，默认使用本地哈希 embedding，不依赖外部 embedding API。该实现适合先跑通 Agent RAG 链路；生产环境建议升级为 OpenAI-compatible embedding、BGE、bge-m3 或企业内部向量服务。
+
+写入文本知识：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/knowledge/documents/text \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"应急处置规范","content":"发现公网暴露服务后先确认资产归属、认证状态和漏洞利用迹象。","source":"manual"}'
+```
+
+写入本地 Markdown/TXT 文件：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/knowledge/documents/file \
+  -H 'Content-Type: application/json' \
+  -d '{"path":"/abs/path/report.md","title":"历史处置报告"}'
+```
+
+检索知识库：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/knowledge/search \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"公网暴露服务如何处置","limit":5}'
+```
+
+查看状态：
+
+```bash
+curl http://127.0.0.1:8000/api/knowledge
+```
 
 ## MCP 工具中枢
 
-MCP 已完全整合进主 API 进程：
+MCP 已整合进主 API 进程：
 
 - MCP 协议入口：`/mcp/`
 - 管理 API：`/api/mcp/*`
@@ -162,11 +284,11 @@ MCP 已完全整合进主 API 进程：
 
 4. 在 `frontend/src/types/index.ts` 的 `McpServiceId` 中加入 `"scanner"`。
 5. 在 `frontend/src/components/McpManage.vue` 的服务卡片列表中增加该服务。
-6. 执行 `uv run ruff check .` 和 `bun run build`。
+6. 执行 `uv run ruff check .`、`ty check .` 和 `bun run build`。
 
 ## Skills
 
-本地能力放在 `.skills/<skill-name>/`，每个 Skill 至少包含一个 `SKILL.md`。需要稳定执行的数据访问或分析逻辑放入 `scripts/`。
+本地能力放在 `.skills/<skill-name>/`，每个 Skill 至少包含一个 `SKILL.md`。稳定执行的数据访问或分析逻辑建议放入 `scripts/`，避免让模型直接生成复杂脚本。
 
 当前内置能力：
 
@@ -176,67 +298,27 @@ MCP 已完全整合进主 API 进程：
 - `playbook-skill`：安全剧本调用规范。
 - `cve-intel-skill`：CVE/应用漏洞情报、PoC 来源和风险态势分析。
 
-新增 Skill 示例：
+新增 Skill 的建议结构：
 
 ```text
 .skills/example-skill/
 ├── SKILL.md
 └── scripts/
-    └── example.py
+    └── base.py
 ```
 
-`SKILL.md` 需要包含 YAML frontmatter：
+`SKILL.md` 应说明：
 
-```markdown
----
-name: example-skill
-description: 示例安全能力，说明触发场景和能力边界。
----
-
-# SOP
-
-1. 明确输入。
-2. 调用脚本获取事实。
-3. 基于事实输出结论，禁止编造。
-```
-
-## CVE 情报 Skill 调用
-
-```bash
-uv run python .skills/cve-intel-skill/scripts/cve_intel.py --query CVE-2023-6019 --limit 20
-uv run python .skills/cve-intel-skill/scripts/cve_intel.py --query Ray --limit 20 --latest 3
-```
-
-脚本优先查询 MySQL `cves` 表；数据库不可用或无命中时回退读取 `api/data/github_cve_cache.csv` 与 `api/data/exploit_db.csv`。
-
-## 数据更新
-
-CVE 数据：
-
-```bash
-uv run update_cve.py
-uv run update_cve.py --source github
-uv run update_cve.py --source exploit-db
-```
-
-IP 资产数据：
-
-```bash
-uv run update_ip_asset.py
-```
-
-定时任务示例：
-
-```bash
-# 每天 08:00 更新 CVE 数据
-0 8 * * * cd /home/shenss/python/Agno-AIOS && ./run_update_cve.sh >> logs/cron_cve.log 2>&1
-
-# 每天 03:00 更新 IP 资产数据
-0 3 * * * cd /home/shenss/python/Agno-AIOS && uv run update_ip_asset.py >> logs/cron_asset.log 2>&1
-```
+- 触发场景。
+- 输入要求。
+- 可调用脚本。
+- 输出格式。
+- 安全边界。
+- 失败时如何降级。
 
 ## API 摘要
 
+- `GET /api/health`：健康检查。
 - `POST /api/chat`：Agent 流式对话。
 - `GET /api/chat/sessions`：会话列表。
 - `GET /api/chat/sessions/{session_id}`：会话历史。
@@ -245,26 +327,33 @@ uv run update_ip_asset.py
 - `POST /api/cve/update`：更新 CVE 数据。
 - `POST /api/asset/search`：资产查询。
 - `POST /api/url2md/parse`：URL 转 Markdown。
+- `GET /api/settings` / `PUT /api/settings`：系统配置。
 - `GET /api/models` / `PUT /api/models`：模型配置。
 - `GET /api/traces` / `GET /api/traces/{trace_id}`：运行观测。
 - `GET /api/skills` / `PUT /api/skills/{name}/toggle`：Skills 管理。
 - `GET /api/mcp/config` / `POST /api/mcp/config`：MCP 服务开关。
 - `GET /api/mcp/tokens` / `POST /api/mcp/tokens/issue` / `POST /api/mcp/tokens/delete`：MCP Token。
 - `GET /api/mcp/hiagent` / `POST /api/mcp/hiagent/*`：Hi-Agent MCP 接入。
+- `GET /api/knowledge`：知识库状态与文档列表。
+- `POST /api/knowledge/documents/text`：写入文本知识。
+- `POST /api/knowledge/documents/file`：写入本地文本/Markdown 文件。
+- `POST /api/knowledge/search`：检索知识库。
+- `DELETE /api/knowledge/documents/{doc_id}`：删除单个知识文档。
+- `DELETE /api/knowledge`：清空知识库。
 
-## 技术栈
+## 质量检查
 
-- 前端：Vue 3、TypeScript、Element Plus、UnoCSS、Vite(Rolldown)、markdown-it、highlight.js。
-- 后端：FastAPI、Uvicorn、aiomysql、httpx、Polars、loguru、python-dotenv。
-- Agent：Agno、OpenAILike、LocalSkills、SqliteDb、Tracing。
-- MCP：FastMCP，同进程 ASGI 挂载。
-
-## 代码质量
+Python 语法、类型和风格检查：
 
 ```bash
+ty check .
 uv run ruff check .
 uv run ruff format .
+```
 
+前端构建检查：
+
+```bash
 cd frontend
 bun run build
 ```
@@ -278,11 +367,72 @@ bun run build
 - `tmp/`
 - `*.db`
 - `__pycache__/`
+- `.pytest_cache/`
 - `.ruff_cache/`
 
-## 故障排除
+## 发展路线
 
-- 数据库连接失败：检查 MySQL 服务、`.env`、数据库权限和 `cves` 表。
-- 前端无法访问后端：确认 API 运行在 `8000`，开发代理配置在 `frontend/vite.config.ts`。
-- MCP 初始化失败：确认主 API 已启动、`MCP_TOKEN` 与中台签发 Token 一致、访问路径为 `/mcp/`。
-- 数据更新失败：检查网络、`config.toml` 数据源和 `api/data/` 写入权限。
+### 阶段一：可用安全中台
+
+目标是让平台稳定完成日常安全运营任务。
+
+- 完成 CVE、资产、URL 情报、Agent 对话、MCP 工具、Skills 和运行观测的基础闭环。
+- 完成模型路由配置，支持多模型选择。
+- 完成 ChromaDB 基础知识库接入。
+- 完成前后端暗黑模式、信息架构和核心页面可读性优化。
+
+### 阶段二：Agent 能力增强
+
+目标是让 Agent 从“能调用工具”升级为“能稳定完成任务”。
+
+- 将单 Agent 拆分为情报分析 Agent、资产研判 Agent、处置剧本 Agent 和知识库研判 Agent。
+- 引入 Agno Team，支持多 Agent 协同。
+- 增加结构化输出，用 Pydantic 固定漏洞研判、资产风险和处置建议格式。
+- 增加 session summary、长期 memory 和用户偏好记忆。
+- 增加 tool call guardrail，限制危险操作和未授权 PoC 指令。
+
+### 阶段三：RAG 知识库增强
+
+目标是让内部知识成为 Agent 的稳定上下文来源。
+
+- 把本地哈希 embedding 替换为可配置 embedding 模型。
+- 支持 Markdown、PDF、HTML、CSV、JSON、网页和 Git 仓库导入。
+- 支持 metadata filters，例如业务线、资产组、漏洞类型、报告来源、时间范围。
+- 引入 reranker，提高长文档和相似漏洞检索质量。
+- 在前端展示引用来源、命中 chunk、相似度和知识更新时间。
+
+### 阶段四：运营闭环
+
+目标是从“辅助研判”升级为“可观测、可评估、可追踪的安全运营系统”。
+
+- 接入 Agent 评测，包括准确性、可靠性、工具调用成功率和响应延迟。
+- 建立任务状态机，支持排队、审批、执行、回滚和审计。
+- 将 MCP 工具调用与 SOAR、工单、告警平台联动。
+- 建立风险态势页面，展示漏洞、资产、告警、Agent 任务和处置进展。
+- 增加权限模型、审计日志和敏感配置加密。
+
+## 规划路线
+
+### 短期计划
+
+- 为知识库增加前端管理页面。
+- 支持 embedding 模型配置和向量重建。
+- 增加 RAG 检索引用展示。
+- 修复前端构建环境依赖一致性，确保 `bun run build` 可稳定输出到 `source/`。
+- 为核心服务补充最小单元测试。
+
+### 中期计划
+
+- 引入 Agno Team，拆分专业 Agent。
+- 建立标准化漏洞研判输出 schema。
+- 增加 Agent 运行质量指标和失败原因归类。
+- 支持 MCP 工具权限分级和执行审批。
+- 支持更多知识源导入，包括报告目录、网页、Git 仓库和安全文档库。
+
+### 长期计划
+
+- 建设面向 SOC 的任务编排和闭环处置能力。
+- 建设企业内部安全知识图谱。
+- 支持多租户、RBAC、审计和配置加密。
+- 支持离线部署和私有模型/私有 embedding 服务。
+- 形成安全运营数据、工具、知识和 Agent 的统一控制平面。

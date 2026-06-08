@@ -1,4 +1,5 @@
 import aiomysql
+from typing import Any
 
 
 async def search_cves(
@@ -12,7 +13,7 @@ async def search_cves(
     async with pool.acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cursor:
             conditions = ["(cve_id LIKE %s OR description LIKE %s)"]
-            params = [f"%{query}%", f"%{query}%"]
+            params: list[Any] = [f"%{query}%", f"%{query}%"]
 
             if source:
                 conditions.append("source = %s")

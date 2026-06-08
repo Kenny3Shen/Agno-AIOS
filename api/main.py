@@ -3,7 +3,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from api.routes import asset, chat, cve, mcp as mcp_routes, settings, skills, traces, url2md
+from api.routes import asset, chat, cve, knowledge, mcp as mcp_routes, settings, skills, traces, url2md
 from api.mcp.server import bootstrap_mcp_token, mcp_runtime
 from api.utils.db import get_db_pool, close_db_pool
 import os
@@ -86,6 +86,7 @@ app.include_router(settings.router)
 app.include_router(traces.router)
 app.include_router(skills.router)
 app.include_router(mcp_routes.router)
+app.include_router(knowledge.router)
 
 # Integrated FastMCP protocol endpoint. Same process, same port:
 # http://<host>:8000/mcp?token=...

@@ -13,6 +13,7 @@ from agno.run.agent import RunEvent
 from agno.skills import Skills, LocalSkills
 from agno.tracing import setup_tracing
 from api.services.model_config_service import get_model_for_run
+from api.services.knowledge_service import agno_knowledge_retriever
 
 load_dotenv(override=True)
 # Set up database for traces
@@ -67,9 +68,15 @@ AGENT_INSTRUCTIONS = dedent("""\
     ## 三、通知与上报
 
     若用户要求"发送通知"或"上报"，使用 `basic_send_feishu_notify` 工具。
+
+    ---
+    ## 四、内部知识库
+
+    当用户询问制度、处置规范、历史报告、资产说明、漏洞研判资料或要求基于已沉淀资料回答时，优先调用 `search_knowledge_base` 检索内部知识库。
+    若知识库没有命中，必须明确说明"未检索到内部知识库依据"，再使用其他工具或通用推理补充。
     
     ---
-    ## 四、行为准则
+    ## 五、行为准则
 
     - **依数行事**：仅使用工具和脚本提供的数据事实，严禁虚构信息。
     - **信息不足时**：先提 1-3 个关键澄清问题，再执行。
@@ -234,6 +241,9 @@ async def stream_chat_with_agent(
             instructions=[AGENT_INSTRUCTIONS],
             model=_build_model(model_id),
             tools=[mcp_tools],
+            knowledge_retriever=agno_knowledge_retriever,
+            search_knowledge=True,
+            add_search_knowledge_instructions=True,
             skills=_build_enabled_skills(),
             db=SqliteDb(DB_FILE),
             dependencies=dependencies,
