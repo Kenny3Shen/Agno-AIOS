@@ -1,181 +1,243 @@
 <template>
-  <div class="flex flex-row h-full min-h-0 bg-white dark:bg-[#0D1117] overflow-hidden">
-    <!-- 会话列表侧边栏 -->
-    <div class="w-56 border-r border-[#D0D7DE] dark:border-[#30363D] flex-col hidden sm:flex flex-shrink-0 min-h-0">
-      <div class="p-3 border-b border-[#D0D7DE] dark:border-[#30363D] flex-shrink-0">
-        <el-button class="w-full cursor-pointer" @click="createNewChat" :icon="Plus">新对话</el-button>
-      </div>
-      <div class="flex-1 overflow-y-auto p-2 space-y-1 min-h-0">
-        <div
-          v-for="s in sessions"
-          :key="s.session_id"
-          :class="[
-            'group relative p-2.5 rounded-lg cursor-pointer text-sm transition-colors duration-200',
-            currentSessionId === s.session_id
-              ? 'bg-[#0969DA]/10 text-[#0969DA] dark:bg-[#1F6FEB]/20 dark:text-[#58A6FF]'
-              : 'hover:bg-slate-100 dark:hover:bg-[#161B22] text-slate-600 dark:text-[#8B949E]'
-          ]"
-        >
-          <div @click="selectSession(s.session_id)" class="pr-6">
-            <div class="font-medium truncate text-xs">{{ s.preview || '新对话' }}</div>
-            <div class="text-[10px] opacity-60 mt-1">{{ formatTime(s.updated_at) }}</div>
+  <div class="agent-chat h-full min-h-0 overflow-hidden bg-[#F7FAFC] text-[#15202B] dark:bg-[#071014] dark:text-[#DCE7EF]">
+    <div class="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[236px_minmax(0,1fr)]">
+      <aside class="hidden min-h-0 border-r border-[#CBD6E2] bg-[#F1F5F9] lg:flex lg:flex-col dark:border-[#22313A] dark:bg-[#0A151B]">
+        <div class="border-b border-[#CBD6E2] p-3 dark:border-[#22313A]">
+          <el-button type="primary" class="!w-full cursor-pointer" @click="createNewChat" :icon="Plus">
+            新建对话
+          </el-button>
+        </div>
+
+        <div class="min-h-0 flex-1 overflow-y-auto p-2">
+          <div class="mb-2 flex items-center justify-between px-2 text-[11px] font-semibold uppercase tracking-wide text-[#526170] dark:text-[#758998]">
+            <span>Sessions</span>
+            <span class="font-mono">{{ sessions.length }}</span>
           </div>
           <button
-            @click.stop="copySessionId(s.session_id)"
-            class="absolute right-7 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 hover:bg-slate-100 dark:hover:bg-[#21262D] rounded cursor-pointer"
-            title="复制 session_id"
-          >
-            <el-icon class="text-slate-600 dark:text-[#8B949E]" size="14"><CopyDocument /></el-icon>
-          </button>
-          <button
-            @click.stop="confirmDeleteSession(s.session_id)"
-            class="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded cursor-pointer"
-            title="删除会话"
-          >
-            <el-icon class="text-red-500 dark:text-red-400" size="14"><Delete /></el-icon>
-          </button>
-        </div>
-        <div v-if="!sessions.length && !loadingSessions" class="text-center text-xs text-slate-400 dark:text-[#484F58] py-6">
-          暂无历史会话
-        </div>
-      </div>
-    </div>
-
-    <!-- 主聊天区域 -->
-    <div class="flex-1 flex flex-col min-w-0 min-h-0">
-      <!-- 顶部栏 -->
-      <div class="flex items-center justify-between px-4 py-3 border-b border-[#D0D7DE] dark:border-[#30363D] flex-shrink-0">
-        <div class="flex items-center gap-2">
-          <!-- 移动端会话列表按钮 -->
-          <el-button
-            v-if="isMobile"
-            type="text"
-            size="small"
-            class="sm:hidden cursor-pointer"
-            @click="showMobileSidebar = !showMobileSidebar"
-          >
-            <el-icon><ChatDotRound /></el-icon>
-          </el-button>
-          <span class="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span class="text-sm font-semibold text-slate-800 dark:text-[#C9D1D9]">AgentOS 安全智能体</span>
-          <span class="text-xs text-slate-500 dark:text-[#8B949E] hidden sm:inline">技能驱动 · 流式对话</span>
-        </div>
-        <span class="text-xs text-slate-400 dark:text-[#484F58]">支持 MCP 工具</span>
-      </div>
-
-      <!-- 聊天消息区域 - flex-1 + min-h-0 确保滚动不溢出 -->
-      <div
-        ref="chatContainer"
-        class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 bg-gradient-to-b from-slate-50/50 to-white dark:from-[#0D1117]/50 dark:to-[#0D1117] min-h-0"
-      >
-        <transition-group name="msg-fade">
-          <div
-            v-for="(msg, index) in messages"
-            :key="index"
+            v-for="s in sessions"
+            :key="s.session_id"
+            type="button"
             :class="[
-              'flex gap-3 items-start',
-              msg.role === 'user' ? 'justify-end' : 'justify-start'
+              'group mb-1 flex w-full cursor-pointer items-start gap-2 rounded-lg border p-2 text-left transition-colors duration-200',
+              currentSessionId === s.session_id
+                ? 'border-[#2F8FED]/50 bg-[#EAF5FF] text-[#0F4F8F] dark:bg-[#102638] dark:text-[#8BD9FF]'
+                : 'border-transparent text-[#334155] hover:border-[#B8C8D8] hover:bg-white dark:text-[#91A4B3] dark:hover:border-[#22313A] dark:hover:bg-[#101C23]',
             ]"
+            @click="selectSession(s.session_id)"
           >
-            <!-- AI 头像 -->
-            <div
-              v-if="msg.role === 'assistant'"
-              class="h-8 w-8 rounded-lg bg-slate-900 dark:bg-[#1F6FEB] text-white text-xs flex items-center justify-center shadow-sm flex-shrink-0"
-            >
-              AI
+            <span class="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md border border-[#D8E0E7] bg-white dark:border-[#22313A] dark:bg-[#071014]">
+              <el-icon size="14"><ChatDotRound /></el-icon>
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-xs font-semibold">{{ s.preview || '新对话' }}</span>
+              <span class="mt-1 block truncate font-mono text-[10px] opacity-70">{{ formatTime(s.updated_at) }}</span>
+            </span>
+            <span class="flex shrink-0 gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+              <button
+                type="button"
+                class="grid h-6 w-6 cursor-pointer place-items-center rounded hover:bg-black/5 dark:hover:bg-white/10"
+                title="复制 session_id"
+                @click.stop="copySessionId(s.session_id)"
+              >
+                <el-icon size="13"><CopyDocument /></el-icon>
+              </button>
+              <button
+                type="button"
+                class="grid h-6 w-6 cursor-pointer place-items-center rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                title="删除会话"
+                @click.stop="confirmDeleteSession(s.session_id)"
+              >
+                <el-icon size="13"><Delete /></el-icon>
+              </button>
+            </span>
+          </button>
+          <div v-if="!sessions.length && !loadingSessions" class="rounded-lg border border-dashed border-[#D8E0E7] p-6 text-center text-xs text-[#6B7C8A] dark:border-[#22313A] dark:text-[#758998]">
+            暂无历史会话
+          </div>
+        </div>
+      </aside>
+
+      <main class="flex min-h-0 min-w-0 flex-col">
+        <header class="border-b border-[#CBD6E2] bg-white px-4 py-3 dark:border-[#22313A] dark:bg-[#0A151B]">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex min-w-0 items-center gap-2.5">
+              <el-button
+                v-if="isMobile"
+                type="primary"
+                plain
+                size="small"
+                class="lg:hidden cursor-pointer"
+                @click="showMobileSidebar = !showMobileSidebar"
+              >
+                <el-icon><ChatDotRound /></el-icon>
+              </el-button>
+              <div class="agent-core" :class="{ 'is-running': loading }">
+                <el-icon><Cpu /></el-icon>
+              </div>
+              <div class="min-w-0">
+                <h3 class="truncate text-sm font-semibold text-[#15202B] dark:text-white">AI 安全助手</h3>
+                <p class="mt-1 truncate text-xs text-[#6B7C8A] dark:text-[#91A4B3]">
+                  {{ loading ? '执行中' : '待命' }} · {{ currentModelName }} · {{ compactSessionId }}
+                </p>
+              </div>
             </div>
 
-            <!-- 消息气泡 -->
+            <div class="hidden items-center gap-2 rounded-md border border-[#CBD6E2] bg-[#F8FAFC] px-2.5 py-1.5 text-xs text-[#526170] dark:border-[#22313A] dark:bg-[#0F1B22] dark:text-[#91A4B3] sm:flex">
+              <span class="h-1.5 w-1.5 rounded-full" :class="selectedModelReady ? 'bg-[#22C55E]' : 'bg-[#F6C343]'" />
+              <span class="max-w-[180px] truncate">{{ currentModelName }}</span>
+            </div>
+          </div>
+        </header>
+
+        <div
+          ref="chatContainer"
+          class="agent-stream min-h-0 flex-1 overflow-y-auto p-4"
+        >
+          <transition-group name="msg-fade">
             <div
+              v-for="(msg, index) in messages"
+              :key="index"
               :class="[
-                'max-w-[85%] sm:max-w-[78%] rounded-xl px-4 py-3 shadow-sm transition-all border',
-                msg.role === 'user'
-                  ? 'bg-[#0969DA] text-white border-[#0969DA]/40 dark:bg-[#1F6FEB] dark:border-[#1F6FEB]/40'
-                  : 'bg-white dark:bg-[#161B22] text-slate-800 dark:text-[#C9D1D9] border-[#D0D7DE] dark:border-[#30363D]'
+                'message-row',
+                msg.role === 'user' ? 'is-user' : 'is-agent',
               ]"
             >
-              <div
-                v-if="msg.role === 'assistant'"
-                class="markdown-body prose prose-sm max-w-none dark:prose-invert"
-                v-html="renderMarkdown(msg.content)"
-              ></div>
-              <p v-else class="whitespace-pre-wrap text-sm sm:text-base break-words">{{ msg.content }}</p>
-            </div>
+              <div class="message-rail">
+                <div :class="['message-avatar', msg.role === 'user' ? 'user' : 'agent']">
+                  <el-icon v-if="msg.role === 'assistant'"><Cpu /></el-icon>
+                  <span v-else>U</span>
+                </div>
+                <span v-if="msg.role === 'assistant'" class="rail-line" />
+              </div>
 
-            <!-- 用户头像 -->
-            <div
-              v-if="msg.role === 'user'"
-              class="h-8 w-8 rounded-lg bg-[#0969DA] dark:bg-[#1F6FEB] text-white text-xs flex items-center justify-center shadow-sm flex-shrink-0"
-            >
-              U
+              <article :class="['message-card', msg.role === 'user' ? 'user' : 'agent']">
+                <div class="mb-2 flex items-center justify-between gap-3">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-semibold">
+                      {{ msg.role === 'user' ? 'Operator' : 'Security Agent' }}
+                    </span>
+                    <span v-if="msg.role === 'assistant' && !msg.final" class="agent-pill">Streaming</span>
+                  </div>
+                  <span class="font-mono text-[10px] text-[#7D8D9A]">#{{ index + 1 }}</span>
+                </div>
+                <div
+                  v-if="msg.role === 'assistant'"
+                  class="markdown-body prose prose-sm max-w-none dark:prose-invert"
+                  v-html="renderMarkdown(msg.content)"
+                ></div>
+                <p v-else class="whitespace-pre-wrap break-words text-sm leading-relaxed">{{ msg.content }}</p>
+              </article>
             </div>
-          </div>
-        </transition-group>
+          </transition-group>
 
-        <!-- 加载状态 -->
+          <transition name="msg-fade">
+            <div v-if="loading" class="message-row is-agent">
+              <div class="message-rail">
+                <div class="message-avatar agent">
+                  <el-icon class="is-loading"><Loading /></el-icon>
+                </div>
+              </div>
+              <article class="message-card agent">
+                <div class="flex items-center gap-2 text-sm font-semibold">
+                  <span class="agent-pulse" />
+                  Agent 正在规划下一步
+                </div>
+              </article>
+            </div>
+          </transition>
+        </div>
+
         <transition name="msg-fade">
-          <div v-if="loading" class="flex justify-start gap-3 items-start">
-            <div class="h-8 w-8 rounded-lg bg-slate-900 dark:bg-[#1F6FEB] text-white text-xs flex items-center justify-center shadow-sm flex-shrink-0">
-              AI
-            </div>
-            <div class="bg-white dark:bg-[#161B22] border border-[#D0D7DE] dark:border-[#30363D] shadow-sm rounded-xl px-4 py-3 text-slate-500 dark:text-[#8B949E] flex items-center gap-2">
-              <el-icon class="is-loading"><Loading /></el-icon>
-              <span class="text-sm">思考中...</span>
+          <el-alert
+            v-if="error"
+            type="error"
+            :title="error"
+            show-icon
+            class="mx-4 mb-2 flex-shrink-0"
+            closable
+            @close="clearError"
+          />
+        </transition>
+
+        <footer class="border-t border-[#D8E0E7] bg-white/95 p-3 dark:border-[#22313A] dark:bg-[#0A151B]">
+          <div v-if="showQuickPrompts" class="mb-2 flex flex-wrap gap-2">
+            <button
+              v-for="prompt in quickPrompts"
+              :key="prompt"
+              type="button"
+              class="cursor-pointer rounded-md border border-[#D8E0E7] px-2.5 py-1.5 text-xs text-[#526170] transition-colors duration-200 hover:border-[#2F8FED]/50 hover:bg-[#EAF5FF] hover:text-[#0F4F8F] dark:border-[#22313A] dark:text-[#91A4B3] dark:hover:bg-[#102638] dark:hover:text-[#8BD9FF]"
+              @click="inputMessage = prompt"
+            >
+              {{ prompt }}
+            </button>
+          </div>
+          <div
+            v-if="modelConfigNotice"
+            class="mb-2 rounded-md border border-[#F6C343]/50 bg-[#FFF8E1] px-3 py-2 text-xs text-[#7A5200] dark:bg-[#2A2413] dark:text-[#FFD166]"
+          >
+            {{ modelConfigNotice }}
+          </div>
+          <div class="chat-composer">
+            <el-input
+              v-model="inputMessage"
+              placeholder="描述目标，例如：分析这个 CVE 对我资产面的影响"
+              @keyup.enter.exact="sendMessage"
+              :disabled="loading"
+              :autosize="{ minRows: 1, maxRows: 6 }"
+              type="textarea"
+              class="chat-input"
+            />
+            <div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <el-select
+                v-model="selectedModelId"
+                :loading="modelLoading"
+                placeholder="选择模型"
+                class="agent-model-select"
+                placement="top-start"
+                @change="persistSelectedModel"
+              >
+                <el-option
+                  v-for="model in modelOptions"
+                  :key="model.id"
+                  :label="model.name"
+                  :value="model.id"
+                  :disabled="!model.enabled"
+                >
+                  <div class="flex min-w-0 items-center justify-between gap-3">
+                    <span class="min-w-0">
+                      <span class="block truncate text-xs font-semibold">{{ model.name }}</span>
+                      <span class="block truncate text-[11px] text-[#6B7C8A] dark:text-[#91A4B3]">
+                        {{ model.model_id || '未填写模型 ID' }}
+                      </span>
+                    </span>
+                    <span
+                      class="shrink-0 rounded border px-1.5 py-0.5 text-[10px]"
+                      :class="model.configured
+                        ? 'border-[#54D38A]/40 text-[#14824A] dark:text-[#7CF0A7]'
+                        : 'border-[#F6C343]/50 text-[#9A6400] dark:text-[#FFD166]'"
+                    >
+                      {{ model.configured ? 'Ready' : 'Config' }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <el-tooltip content="发送任务" placement="top">
+                <el-button
+                  type="primary"
+                  @click="sendMessage"
+                  :loading="loading"
+                  :disabled="!inputMessage.trim() || loading || !selectedModelReady"
+                  class="send-button cursor-pointer"
+                >
+                  <el-icon><Promotion /></el-icon>
+                </el-button>
+              </el-tooltip>
             </div>
           </div>
-        </transition>
-      </div>
-
-      <!-- 错误提示 -->
-      <transition name="msg-fade">
-        <el-alert
-          v-if="error"
-          type="error"
-          :title="error"
-          show-icon
-          class="mx-4 mb-2 flex-shrink-0"
-          closable
-          @close="clearError"
-        />
-      </transition>
-
-      <!-- 输入区域 -->
-      <div class="border-t border-[#D0D7DE] dark:border-[#30363D] px-4 pt-3 pb-4 space-y-2 flex-shrink-0">
-        <div class="flex gap-2">
-          <el-input
-            v-model="inputMessage"
-            placeholder="描述你的安全任务或问题..."
-            @keyup.enter.exact="sendMessage"
-            :disabled="loading"
-            :rows="1"
-            type="textarea"
-            autosize
-            class="flex-1 chat-input"
-          />
-          <el-button
-            type="primary"
-            @click="sendMessage"
-            :loading="loading"
-            :disabled="!inputMessage.trim() || loading"
-            class="self-end cursor-pointer"
-          >
-            <el-icon><Promotion /></el-icon>
-          </el-button>
-          <el-button
-            @click="clearChat"
-            :disabled="loading || messages.length === 0"
-            class="self-end cursor-pointer"
-          >
-            清空
-          </el-button>
-        </div>
-        <div class="text-xs text-slate-400 dark:text-[#484F58]">
-          Enter 发送 · Shift+Enter 换行
-        </div>
-      </div>
+        </footer>
+      </main>
     </div>
 
-    <!-- 移动端会话侧边栏遮罩 -->
     <transition name="el-fade-in">
       <div
         v-if="isMobile && showMobileSidebar"
@@ -187,9 +249,9 @@
     <transition name="slide-left">
       <div
         v-if="isMobile && showMobileSidebar"
-        class="fixed left-0 top-0 bottom-0 w-64 bg-white dark:bg-[#0D1117] border-r border-[#D0D7DE] dark:border-[#30363D] z-50 flex flex-col sm:hidden"
+        class="fixed bottom-0 left-0 top-0 z-50 flex w-72 flex-col border-r border-[#D8E0E7] bg-white dark:border-[#22313A] dark:bg-[#0A151B] lg:hidden"
       >
-        <div class="p-3 border-b border-[#D0D7DE] dark:border-[#30363D] flex items-center justify-between">
+        <div class="flex items-center justify-between border-b border-[#D8E0E7] p-3 dark:border-[#22313A]">
           <el-button size="small" class="cursor-pointer" @click="createNewChat" :icon="Plus">新对话</el-button>
           <el-button type="text" @click="showMobileSidebar = false" class="cursor-pointer">
             <el-icon><Close /></el-icon>
@@ -232,12 +294,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted, onUnmounted } from "vue"
+import { computed, ref, nextTick, onMounted, onUnmounted } from "vue"
 import MarkdownIt from "markdown-it"
 import hljs from "highlight.js"
-import { useChatApi, useChatHistory } from "../composables/useApi"
-import type { ChatSession, Message } from "../types"
-import { Promotion, Loading, ChatDotRound, Plus, Close, Delete, CopyDocument } from "@element-plus/icons-vue"
+import { useChatApi, useChatHistory, useSettingsApi } from "../composables/useApi"
+import type { ChatSession, Message, ModelConfig } from "../types"
+import {
+  ChatDotRound,
+  Close,
+  CopyDocument,
+  Cpu,
+  Delete,
+  Loading,
+  Plus,
+  Promotion,
+} from "@element-plus/icons-vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 
 // ── Markdown ──────────────────────────────────────────────────────
@@ -285,6 +356,7 @@ const renderMarkdown = (content: string) => md.render(normalizeInlineTable(conte
 // ── State ─────────────────────────────────────────────────────────
 const inputMessage = ref("")
 const WELCOME = "你好！我是 AgentOS 安全智能体，集成了威胁追踪和剧本执行技能。请告诉我你的目标或问题。"
+const MODEL_STORAGE_KEY = "agno-aios-chat-model-id"
 
 interface ChatMessage {
   role: "user" | "assistant"
@@ -300,9 +372,71 @@ const currentSessionId = ref<string | null>(null)
 const sessions = ref<ChatSession[]>([])
 const showMobileSidebar = ref(false)
 const isMobile = ref(false)
+const modelLoading = ref(false)
+const modelOptions = ref<ModelConfig[]>([])
+const selectedModelId = ref<string | null>(null)
 
 const { loading, error, sendMessageStream } = useChatApi()
 const { loadingSessions, listSessions, getSessionHistory, deleteSession } = useChatHistory()
+const { fetchModels } = useSettingsApi()
+
+const compactSessionId = computed(() => {
+  if (!currentSessionId.value) return "New task"
+  return `${currentSessionId.value.slice(0, 8)}...${currentSessionId.value.slice(-4)}`
+})
+
+const selectedModel = computed(() => {
+  return modelOptions.value.find((model) => model.id === selectedModelId.value)
+    ?? modelOptions.value.find((model) => model.enabled)
+    ?? null
+})
+
+const selectedModelReady = computed(() => Boolean(selectedModel.value?.enabled && selectedModel.value.configured))
+const currentModelName = computed(() => selectedModel.value?.name ?? "未选择")
+const modelConfigNotice = computed(() => {
+  if (modelLoading.value) return ""
+  if (!modelOptions.value.length) return "未加载到模型配置，请先在系统配置中添加模型。"
+  if (!selectedModel.value) return "请选择一个可用模型。"
+  if (!selectedModel.value.enabled) return `当前模型 ${selectedModel.value.name} 已禁用，请切换模型。`
+  if (!selectedModel.value.configured) return `当前模型 ${selectedModel.value.name} 未完成参数配置，请在系统配置中补全 API Key、Base URL 和 Model ID。`
+  return ""
+})
+
+const quickPrompts = [
+  "帮我评估 CVE 对当前资产的影响",
+  "生成一次外部暴露面排查计划",
+  "把这段告警整理成处置步骤",
+]
+
+const showQuickPrompts = computed(() => messages.value.length <= 1 && !loading.value)
+
+const persistSelectedModel = () => {
+  if (selectedModelId.value) {
+    localStorage.setItem(MODEL_STORAGE_KEY, selectedModelId.value)
+  }
+}
+
+const loadModels = async () => {
+  modelLoading.value = true
+  try {
+    const config = await fetchModels()
+    modelOptions.value = config.models
+    const savedId = localStorage.getItem(MODEL_STORAGE_KEY)
+    const enabledIds = new Set(config.models.filter((model) => model.enabled).map((model) => model.id))
+    if (savedId && enabledIds.has(savedId)) {
+      selectedModelId.value = savedId
+    } else if (enabledIds.has(config.active_model_id)) {
+      selectedModelId.value = config.active_model_id
+    } else {
+      selectedModelId.value = config.models.find((model) => model.enabled)?.id ?? config.models[0]?.id ?? null
+    }
+    persistSelectedModel()
+  } catch {
+    ElMessage.warning("模型配置加载失败")
+  } finally {
+    modelLoading.value = false
+  }
+}
 
 // ── Helpers ───────────────────────────────────────────────────────
 const scrollToBottom = async () => {
@@ -370,7 +504,7 @@ const confirmDeleteSession = async (sessionId: string) => {
     }
     await loadSessionList()
     ElMessage.success('已删除')
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (err !== 'cancel') {
       ElMessage.error('删除失败')
     }
@@ -380,6 +514,10 @@ const confirmDeleteSession = async (sessionId: string) => {
 // ── Chat ──────────────────────────────────────────────────────────
 const sendMessage = async () => {
   if (!inputMessage.value.trim() || loading.value) return
+  if (!selectedModelReady.value) {
+    ElMessage.warning(modelConfigNotice.value || "模型不可用")
+    return
+  }
   const userMsg = inputMessage.value
   messages.value.push({ role: "user", content: userMsg })
   inputMessage.value = ""
@@ -393,7 +531,7 @@ const sendMessage = async () => {
   try {
     const idx = messages.value.push({ role: "assistant", content: "", final: false }) - 1
 
-    await sendMessageStream(userMsg, currentSessionId.value, (chunk) => {
+    await sendMessageStream(userMsg, currentSessionId.value, selectedModelId.value, (chunk) => {
       const m = messages.value[idx]
       if (m) m.content += chunk
       scrollToBottom()
@@ -411,11 +549,6 @@ const sendMessage = async () => {
   }
 }
 
-const clearChat = () => {
-  messages.value = []
-  inputMessage.value = ""
-}
-
 const clearError = () => { if (error.value) error.value = null }
 
 // ── Lifecycle ─────────────────────────────────────────────────────
@@ -424,14 +557,136 @@ const checkMobile = () => { isMobile.value = window.innerWidth < 640 }
 onMounted(async () => {
   checkMobile()
   window.addEventListener("resize", checkMobile)
-  await loadSessionList()
+  await Promise.all([loadSessionList(), loadModels()])
   scrollToBottom()
 })
 
 onUnmounted(() => { window.removeEventListener("resize", checkMobile) })
 </script>
 
-<style scoped>
+<style>
+.agent-chat {
+  font-family: "Fira Sans", "Microsoft YaHei", sans-serif;
+}
+
+.agent-core {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(47, 143, 237, 0.35);
+  border-radius: 8px;
+  background: #eaf5ff;
+  color: #0969da;
+}
+
+.agent-core.is-running {
+  animation: agent-glow 1.4s ease-in-out infinite;
+}
+
+.agent-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  border: 1px solid rgba(84, 211, 138, 0.35);
+  border-radius: 999px;
+  padding: 0 8px;
+  background: rgba(84, 211, 138, 0.1);
+  color: #14824a;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.agent-stream {
+  background: #f7fafc;
+}
+
+.message-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.message-row.is-user {
+  grid-template-columns: minmax(0, 1fr) 34px;
+}
+
+.message-row.is-user .message-rail {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.message-row.is-user .message-card {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: end;
+}
+
+.message-rail {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  position: relative;
+}
+
+.rail-line {
+  position: absolute;
+  top: 38px;
+  bottom: -18px;
+  width: 1px;
+  background: #cbd6e2;
+}
+
+.message-avatar {
+  z-index: 1;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.message-avatar.agent {
+  border: 1px solid rgba(47, 143, 237, 0.35);
+  background: #eaf5ff;
+  color: #0969da;
+}
+
+.message-avatar.user {
+  background: #15202b;
+  color: #ffffff;
+}
+
+.message-card {
+  max-width: min(860px, 100%);
+  border: 1px solid #cbd6e2;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.message-card.agent {
+  background: #ffffff;
+}
+
+.message-card.user {
+  width: min(720px, 100%);
+  background: #15202b;
+  color: #ffffff;
+}
+
+.agent-pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #54d38a;
+  box-shadow: 0 0 0 6px rgba(84, 211, 138, 0.15);
+}
+
 /* 过渡动画 */
 .msg-fade-enter-active,
 .msg-fade-leave-active { transition: all 0.3s ease; }
@@ -443,13 +698,114 @@ onUnmounted(() => { window.removeEventListener("resize", checkMobile) })
 .slide-left-enter-from,
 .slide-left-leave-to { transform: translateX(-100%); }
 
-/* 输入框 */
-.chat-input :deep(.el-textarea__inner) {
+.chat-composer {
+  border: 1px solid #cbd6e2;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 10px;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
+}
+
+.agent-model-select {
+  width: min(240px, 100%);
+}
+
+.agent-model-select .el-select__wrapper {
+  min-height: 32px;
+  border: 1px solid #d8e0e7;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.send-button {
+  width: 38px;
+  height: 34px;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.chat-input .el-textarea__inner {
+  min-height: 38px !important;
   background: transparent;
-  border: 1px solid var(--el-border-color);
-  border-radius: 12px;
+  border: 0;
+  box-shadow: none;
+  padding: 4px 2px;
   resize: none;
   font-size: 14px;
+}
+
+html.dark .agent-core,
+html.dark .message-avatar.agent {
+  border-color: rgba(139, 217, 255, 0.28);
+  background: #102638;
+  color: #8bd9ff;
+}
+
+html.dark .chat-composer {
+  border-color: #22313a;
+  background: #0f1b22;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+}
+
+html.dark .agent-model-select .el-select__wrapper {
+  border-color: #2d414d;
+  background: #071014;
+  box-shadow: none;
+}
+
+html.dark .agent-pill {
+  color: #7cf0a7;
+}
+
+html.dark .agent-stream {
+  background: #071014;
+}
+
+html.dark .rail-line {
+  background: #22313a;
+}
+
+html.dark .message-card {
+  border-color: #22313a;
+}
+
+html.dark .message-card.agent {
+  background: #0f1b22;
+  border-color: #22313a;
+}
+
+html.dark .chat-input .el-textarea__inner {
+  color: #dce7ef;
+}
+
+html.dark .message-card.user {
+  background: #17334a;
+}
+
+@keyframes agent-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(47, 143, 237, 0.2); }
+  50% { box-shadow: 0 0 0 8px rgba(47, 143, 237, 0.08); }
+}
+
+@media (max-width: 640px) {
+  .message-row,
+  .message-row.is-user {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .message-row.is-user .message-rail {
+    grid-column: 1;
+  }
+
+  .message-row.is-user .message-card {
+    grid-column: 2;
+  }
+
+  .agent-model-select,
+  .send-button {
+    width: 100%;
+  }
 }
 
 /* 滚动条 */
@@ -466,20 +822,20 @@ onUnmounted(() => { window.removeEventListener("resize", checkMobile) })
 
 /* Markdown 内容 */
 .markdown-body { color: inherit; line-height: 1.6; }
-.markdown-body :deep(p) { margin: 0.5em 0; }
-.markdown-body :deep(ul),
-.markdown-body :deep(ol) { margin: 0.5em 0; padding-left: 1.5em; }
+.markdown-body p { margin: 0.5em 0; }
+.markdown-body ul,
+.markdown-body ol { margin: 0.5em 0; padding-left: 1.5em; }
 
-.markdown-body :deep(code) {
+.markdown-body code {
   background: rgba(148, 163, 184, 0.15);
   padding: 0.2em 0.4em;
   border-radius: 4px;
   font-size: 0.88em;
   font-family: 'Courier New', monospace;
 }
-html.dark .markdown-body :deep(code) { background: rgba(110, 118, 129, 0.2); }
+html.dark .markdown-body code { background: rgba(110, 118, 129, 0.2); }
 
-.markdown-body :deep(pre) {
+.markdown-body pre {
   background: rgba(15, 23, 42, 0.95);
   color: #e2e8f0;
   padding: 1em;
@@ -487,39 +843,39 @@ html.dark .markdown-body :deep(code) { background: rgba(110, 118, 129, 0.2); }
   overflow-x: auto;
   margin: 0.8em 0;
 }
-.markdown-body :deep(pre code) { background: none; padding: 0; color: inherit; }
+.markdown-body pre code { background: none; padding: 0; color: inherit; }
 
 /* 表格 */
-.markdown-body :deep(table) {
+.markdown-body table {
   width: 100%; border-collapse: collapse; margin: 1em 0;
   font-size: 0.9em; overflow-x: auto; display: block;
 }
-.markdown-body :deep(thead),
-.markdown-body :deep(tbody) { display: table; width: 100%; table-layout: fixed; }
-.markdown-body :deep(th),
-.markdown-body :deep(td) {
+.markdown-body thead,
+.markdown-body tbody { display: table; width: 100%; table-layout: fixed; }
+.markdown-body th,
+.markdown-body td {
   border: 1px solid rgba(148, 163, 184, 0.25);
   padding: 0.6em 0.8em; text-align: left;
 }
-.markdown-body :deep(th) {
+.markdown-body th {
   background: rgba(241, 245, 249, 0.95); font-weight: 600; color: rgba(51, 65, 85, 1);
 }
-html.dark .markdown-body :deep(th) { background: rgba(22, 27, 34, 0.95); color: rgba(201, 209, 217, 1); }
-.markdown-body :deep(tbody tr:nth-child(even)) { background: rgba(248, 250, 252, 0.4); }
-html.dark .markdown-body :deep(tbody tr:nth-child(even)) { background: rgba(22, 27, 34, 0.3); }
-.markdown-body :deep(tbody tr:hover) { background: rgba(241, 245, 249, 0.6); }
-html.dark .markdown-body :deep(tbody tr:hover) { background: rgba(22, 27, 34, 0.5); }
+html.dark .markdown-body th { background: rgba(22, 27, 34, 0.95); color: rgba(201, 209, 217, 1); }
+.markdown-body tbody tr:nth-child(even) { background: rgba(248, 250, 252, 0.4); }
+html.dark .markdown-body tbody tr:nth-child(even) { background: rgba(22, 27, 34, 0.3); }
+.markdown-body tbody tr:hover { background: rgba(241, 245, 249, 0.6); }
+html.dark .markdown-body tbody tr:hover { background: rgba(22, 27, 34, 0.5); }
 
-.markdown-body :deep(blockquote) {
+.markdown-body blockquote {
   border-left: 4px solid rgba(148, 163, 184, 0.4);
   padding-left: 1em; margin: 0.8em 0; color: rgba(100, 116, 139, 1);
 }
-html.dark .markdown-body :deep(blockquote) { color: rgba(139, 148, 158, 1); }
+html.dark .markdown-body blockquote { color: rgba(139, 148, 158, 1); }
 
-.markdown-body :deep(h1),
-.markdown-body :deep(h2),
-.markdown-body :deep(h3) { margin: 1em 0 0.5em; font-weight: 600; line-height: 1.3; }
-.markdown-body :deep(h1) { font-size: 1.5em; }
-.markdown-body :deep(h2) { font-size: 1.3em; }
-.markdown-body :deep(h3) { font-size: 1.1em; }
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 { margin: 1em 0 0.5em; font-weight: 600; line-height: 1.3; }
+.markdown-body h1 { font-size: 1.5em; }
+.markdown-body h2 { font-size: 1.3em; }
+.markdown-body h3 { font-size: 1.1em; }
 </style>

@@ -12,24 +12,21 @@
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
     "@types/markdown-it": "^14.1.2",
-    "element-plus": "^2.12.0",
+    "element-plus": "^2.14.1",
     "highlight.js": "^11.11.1",
-    "markdown-it": "^14.1.0",
-    "vue": "^3.5.24"
+    "markdown-it": "^14.2.0",
+    "vue": "^3.5.35"
   },
   "devDependencies": {
-    "@tailwindcss/typography": "^0.5.19",
-    "@types/node": "^24.10.1",
-    "@vitejs/plugin-vue": "^6.0.1",
-    "@vue/tsconfig": "^0.8.1",
-    "autoprefixer": "^10.4.22",
-    "postcss": "^8.5.6",
-    "tailwindcss": "3",
-    "typescript": "~5.9.3",
-    "vite": "npm:rolldown-vite@7.2.5",
-    "vue-tsc": "^3.1.4"
+    "@types/node": "^25.9.2",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/tsconfig": "^0.9.1",
+    "typescript": "~6.0.3",
+    "unocss": "^66.7.0",
+    "vite": "npm:rolldown-vite@7.3.1",
+    "vue-tsc": "^3.3.4"
   },
   "overrides": {
-    "vite": "npm:rolldown-vite@7.2.5"
+    "vite": "npm:rolldown-vite@7.3.1"
   }
 }

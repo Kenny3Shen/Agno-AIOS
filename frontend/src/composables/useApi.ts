@@ -1,7 +1,51 @@
 import { ref } from 'vue'
-import type { CveSearchParams, CveSearchResponse, AssetSearchParams, AssetSearchResponse, Url2MdParseResponse, UpdateResponse, SettingsResponse, ChatSession, Message, TraceListResponse, TraceDetailResponse, TraceStatus, SkillListResponse, SkillToggleResponse } from '../types'
+import type {
+  AssetSearchParams,
+  AssetSearchResponse,
+  ChatSession,
+  CveSearchParams,
+  CveSearchResponse,
+  HiAgentEntry,
+  McpServiceId,
+  McpServiceStatusResponse,
+  McpTokenInfo,
+  McpTokenIssueResponse,
+  Message,
+  ModelConfigResponse,
+  SettingsResponse,
+  SkillListResponse,
+  SkillToggleResponse,
+  TraceDetailResponse,
+  TraceListResponse,
+  TraceStatus,
+  UpdateResponse,
+  Url2MdParseResponse,
+} from '../types'
 
 const API_BASE = '/api'
+
+const messageFromUnknown = (err: unknown, fallback: string) => {
+  if (err instanceof Error && err.message) return err.message
+  return fallback
+}
+
+const messageFromResponse = (data: unknown, fallback: string) => {
+  if (data && typeof data === 'object') {
+    const record = data as Record<string, unknown>
+    const detail = record.detail
+    const message = record.message
+    if (typeof detail === 'string' && detail) return detail
+    if (typeof message === 'string' && message) return message
+    if (detail && typeof detail === 'object') {
+      const detailRecord = detail as Record<string, unknown>
+      const detailError = detailRecord.error
+      const detailMessage = detailRecord.message
+      if (typeof detailError === 'string' && detailError) return detailError
+      if (typeof detailMessage === 'string' && detailMessage) return detailMessage
+    }
+  }
+  return fallback
+}
 
 /**
  * CVE 搜索 API
@@ -23,12 +67,12 @@ export function useCveApi() {
         body: JSON.stringify(params)
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.message || '搜索失败')
+        const data: unknown = await response.json()
+        throw new Error(messageFromResponse(data, '搜索失败'))
       }
       return await response.json()
-    } catch (err: any) {
-      error.value = err.message || '搜索失败'
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, '搜索失败')
       throw err
     } finally {
       loading.value = false
@@ -44,12 +88,12 @@ export function useCveApi() {
         method: 'POST'
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.message || '更新失败')
+        const data: unknown = await response.json()
+        throw new Error(messageFromResponse(data, '更新失败'))
       }
       return await response.json()
-    } catch (err: any) {
-      error.value = err.message || '更新失败'
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, '更新失败')
       throw err
     } finally {
       loading.value = false
@@ -84,12 +128,12 @@ export function useAssetApi() {
         body: JSON.stringify(params)
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.message || '搜索失败')
+        const data: unknown = await response.json()
+        throw new Error(messageFromResponse(data, '搜索失败'))
       }
       return await response.json()
-    } catch (err: any) {
-      error.value = err.message || '搜索失败'
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, '搜索失败')
       throw err
     } finally {
       loading.value = false
@@ -113,6 +157,7 @@ export function useChatApi() {
   const sendMessageStream = async (
     message: string,
     sessionId: string | null,
+    modelId: string | null,
     onChunk: (chunk: string) => void
   ): Promise<void> => {
     loading.value = true
@@ -125,7 +170,7 @@ export function useChatApi() {
           'Content-Type': 'application/json',
           'Accept': 'text/event-stream'
         },
-        body: JSON.stringify({ message, session_id: sessionId })
+        body: JSON.stringify({ message, session_id: sessionId, model_id: modelId })
       })
 
       if (!response.ok || !response.body) {
@@ -162,8 +207,8 @@ export function useChatApi() {
           onChunk(data)
         }
       }
-    } catch (err: any) {
-      error.value = err.response?.data?.detail || err.message || '发送失败'
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, '发送失败')
       throw err
     } finally {
       loading.value = false
@@ -237,12 +282,12 @@ export function useUrl2MdApi() {
         body: JSON.stringify({ url })
       })
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.message || '解析失败')
+        const data: unknown = await response.json()
+        throw new Error(messageFromResponse(data, '解析失败'))
       }
       return await response.json()
-    } catch (err: any) {
-      error.value = err.message || '解析失败'
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, '解析失败')
       throw err
     } finally {
       loading.value = false
@@ -291,11 +336,42 @@ export function useSettingsApi() {
     }
   }
 
+  const fetchModels = async (): Promise<ModelConfigResponse> => {
+    loadingSettings.value = true
+    try {
+      const response = await fetch(`${API_BASE}/models`)
+      if (!response.ok) throw new Error('获取模型配置失败')
+      return await response.json()
+    } finally {
+      loadingSettings.value = false
+    }
+  }
+
+  const updateModels = async (payload: ModelConfigResponse): Promise<ModelConfigResponse> => {
+    saving.value = true
+    try {
+      const response = await fetch(`${API_BASE}/models`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      if (!response.ok) {
+        const data: unknown = await response.json().catch(() => ({}))
+        throw new Error(messageFromResponse(data, '保存模型配置失败'))
+      }
+      return await response.json()
+    } finally {
+      saving.value = false
+    }
+  }
+
   return {
     loadingSettings,
     saving,
     fetchSettings,
-    updateSettings
+    updateSettings,
+    fetchModels,
+    updateModels
   }
 }
 
@@ -331,12 +407,12 @@ export function useTracingApi() {
 
       const response = await fetch(`${API_BASE}/traces?${qs.toString()}`)
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
-        throw new Error(data.detail || data.message || '获取 traces 失败')
+        const data: unknown = await response.json().catch(() => ({}))
+        throw new Error(messageFromResponse(data, '获取 traces 失败'))
       }
       return await response.json()
-    } catch (err: any) {
-      error.value = err.message || '获取 traces 失败'
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, '获取 traces 失败')
       throw err
     } finally {
       loading.value = false
@@ -349,12 +425,12 @@ export function useTracingApi() {
     try {
       const response = await fetch(`${API_BASE}/traces/${encodeURIComponent(traceId)}`)
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
-        throw new Error(data.detail || data.message || '获取 trace 详情失败')
+        const data: unknown = await response.json().catch(() => ({}))
+        throw new Error(messageFromResponse(data, '获取 trace 详情失败'))
       }
       return await response.json()
-    } catch (err: any) {
-      error.value = err.message || '获取 trace 详情失败'
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, '获取 trace 详情失败')
       throw err
     } finally {
       loading.value = false
@@ -383,12 +459,12 @@ export function useSkillsApi() {
     try {
       const response = await fetch(`${API_BASE}/skills`)
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
-        throw new Error(data.detail || '获取 Skills 列表失败')
+        const data: unknown = await response.json().catch(() => ({}))
+        throw new Error(messageFromResponse(data, '获取 Skills 列表失败'))
       }
       return await response.json()
-    } catch (err: any) {
-      error.value = err.message || '获取 Skills 列表失败'
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, '获取 Skills 列表失败')
       throw err
     } finally {
       loading.value = false
@@ -405,12 +481,12 @@ export function useSkillsApi() {
         body: JSON.stringify({ enabled })
       })
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
-        throw new Error(data.detail || '切换 Skill 状态失败')
+        const data: unknown = await response.json().catch(() => ({}))
+        throw new Error(messageFromResponse(data, '切换 Skill 状态失败'))
       }
       return await response.json()
-    } catch (err: any) {
-      error.value = err.message || '切换 Skill 状态失败'
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, '切换 Skill 状态失败')
       throw err
     } finally {
       toggling.value = false
@@ -423,5 +499,87 @@ export function useSkillsApi() {
     toggling,
     fetchSkills,
     toggleSkill
+  }
+}
+
+/**
+ * MCP 管理 API
+ */
+export function useMcpApi() {
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  const request = async <T>(path: string, options: RequestInit = {}, fallback = 'MCP 请求失败'): Promise<T> => {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await fetch(`${API_BASE}/mcp${path}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options.headers || {})
+        }
+      })
+      if (!response.ok) {
+        const data: unknown = await response.json().catch(() => ({}))
+        throw new Error(messageFromResponse(data, fallback))
+      }
+      return await response.json()
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, fallback)
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const fetchConfig = () => request<McpServiceStatusResponse>('/config', {}, '获取 MCP 配置失败')
+
+  const updateConfig = (id: McpServiceId, enabled: boolean) => request<{ success: boolean; restart_required?: boolean }>('/config', {
+    method: 'POST',
+    body: JSON.stringify({ id, enabled })
+  }, '更新 MCP 配置失败')
+
+  const listTokens = () => request<McpTokenInfo[]>('/tokens', {}, '获取 MCP Token 失败')
+
+  const issueToken = (name: string, expiresIn: number) => request<McpTokenIssueResponse>('/tokens/issue', {
+    method: 'POST',
+    body: JSON.stringify({ name, expires_in: expiresIn })
+  }, '签发 MCP Token 失败')
+
+  const deleteToken = (id: number) => request<{ success: boolean }>('/tokens/delete', {
+    method: 'POST',
+    body: JSON.stringify({ id })
+  }, '删除 MCP Token 失败')
+
+  const listHiAgents = () => request<HiAgentEntry[]>('/hiagent', {}, '获取 Hi-Agent 失败')
+
+  const addHiAgent = (entry: HiAgentEntry) => request<{ success: boolean }>('/hiagent/add', {
+    method: 'POST',
+    body: JSON.stringify(entry)
+  }, '添加 Hi-Agent 失败')
+
+  const updateHiAgent = (payload: Partial<HiAgentEntry> & { target_url?: string; url: string }) => request<{ success: boolean }>('/hiagent/update', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }, '更新 Hi-Agent 失败')
+
+  const deleteHiAgent = (url: string) => request<{ success: boolean }>('/hiagent/delete', {
+    method: 'POST',
+    body: JSON.stringify({ url })
+  }, '删除 Hi-Agent 失败')
+
+  return {
+    loading,
+    error,
+    fetchConfig,
+    updateConfig,
+    listTokens,
+    issueToken,
+    deleteToken,
+    listHiAgents,
+    addHiAgent,
+    updateHiAgent,
+    deleteHiAgent
   }
 }

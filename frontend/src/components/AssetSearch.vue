@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 sm:space-y-6">
+  <div class="security-page space-y-4 sm:space-y-6">
     <!-- 搜索 & 筛选区域 -->
     <div class="rounded-xl border border-slate-200/70 bg-white/80 p-3 sm:p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
       <div class="flex flex-col sm:flex-row gap-3">
@@ -436,7 +436,7 @@ const handleSearch = async () => {
       clearFilters()
       setTotal(data.total)
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Search failed:', error)
   }
 }

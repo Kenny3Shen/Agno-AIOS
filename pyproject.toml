@@ -1,7 +1,7 @@
 [project]
-name = "cve-acl"
+name = "agno-aios"
 version = "0.1.0"
-description = "Add your description here"
+description = "AI security operations center powered by FastAPI, Vue 3, Agno, and FastMCP."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -15,17 +15,14 @@ dependencies = [
     "agno>=2.4.3",
     "openai>=2.15.0",
     "fastmcp>=3.0.0b1",
-    "ddgs>=9.10.0",
     "sqlalchemy>=2.0.46",
     "opentelemetry-api>=1.39.1",
     "opentelemetry-sdk>=1.39.1",
     "openinference-instrumentation-agno>=0.1.27",
-]
-
-[dependency-groups]
-dev = [
-    "jupyter>=1.1.1",
-    "notebook>=7.5.0",
+    "tomli-w>=1.2.0",
+    "requests>=2.34.2",
+    "beautifulsoup4>=4.15.0",
+    "pyyaml>=6.0.3",
 ]
 
 [[tool.uv.index]]

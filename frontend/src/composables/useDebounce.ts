@@ -27,7 +27,7 @@ export function useDebounce<T>(value: Ref<T>, delay: number = 300) {
  * @param fn 需要防抖的函数
  * @param delay 延迟时间（毫秒）
  */
-export function useDebounceFn<T extends (...args: any[]) => any>(
+export function useDebounceFn<T extends (...args: never[]) => unknown>(
   fn: T,
   delay: number = 300
 ): (...args: Parameters<T>) => void {

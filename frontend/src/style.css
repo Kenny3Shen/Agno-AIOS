@@ -1,18 +1,249 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+* {
+	box-sizing: border-box;
+}
 
-@layer base {
-	html {
-		font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-			"Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
-	}
+html {
+	font-family: "Fira Sans", "Microsoft YaHei", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+		"Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	background: #f3f6f8;
+	color: #0f172a;
+}
 
-	body {
-		@apply bg-[#F6F8FA] text-slate-900 antialiased;
-	}
+body {
+	min-width: 320px;
+	margin: 0;
+	background: #f3f6f8;
+	color: #0f172a;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
 
-	html.dark body {
-    @apply bg-[#212830] text-[#C9D1D9];
+button,
+input,
+textarea,
+select {
+	font: inherit;
+}
+
+button {
+	background: transparent;
+	border: 0;
+	color: inherit;
+}
+
+#app {
+	min-height: 100vh;
+}
+
+html.dark,
+html.dark body {
+	background: #071014;
+	color: #e6edf3;
+}
+
+.security-page {
+	font-family: "Fira Sans", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+}
+
+.security-page :where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner) {
+	border-radius: 8px;
+}
+
+html:not(.dark) .security-page :where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner, .el-date-editor.el-input__wrapper) {
+	background: #f8fafc;
+	border: 1px solid #cbd6e2;
+	box-shadow: none;
+}
+
+html:not(.dark) :where(.situation-page, .mcp-console, .trace-console, .agent-chat) {
+	background: #f7fafc !important;
+	color: #15202b !important;
+}
+
+html:not(.dark) :where(
+	.situation-header,
+	.situation-metric,
+	.situation-panel,
+	.mcp-metric,
+	.mcp-card,
+	.mcp-panel,
+	.trace-metric,
+	.trace-detail-metric,
+	.trace-card,
+	.runtime-card,
+	.model-card,
+	.settings-section
+) {
+	background: #ffffff !important;
+	border-color: #c2d0dc !important;
+	color: #15202b !important;
+	box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+html:not(.dark) :where(
+	.run-row,
+	.agent-load-row,
+	.incident-row,
+	.token-row,
+	.agent-row,
+	.span-row,
+	.empty-box
+) {
+	background: #f8fafc !important;
+	border-color: #cbd6e2 !important;
+	color: #334155 !important;
+}
+
+html:not(.dark) :where(.situation-metric span, .situation-metric em, .mcp-metric span, .mcp-metric em, .trace-metric span, .trace-detail-metric span, .trace-card em) {
+	color: #475569 !important;
+}
+
+html:not(.dark) :where(.situation-metric strong, .mcp-metric strong, .mcp-card strong, .trace-metric strong, .trace-detail-metric strong, .trace-card strong) {
+	color: #0f172a !important;
+}
+
+html.dark .security-page :where(.el-table, .el-table__inner-wrapper, .el-table tr, .el-table th.el-table__cell) {
+	background-color: #0f1b22;
+	color: #dce7ef;
+}
+
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: rgba(111, 131, 148, 0.45);
+	border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: rgba(111, 131, 148, 0.7);
+}
+
+html.dark {
+	--el-bg-color: #0f1b22;
+	--el-bg-color-overlay: #101c24;
+	--el-fill-color-blank: #0f1b22;
+	--el-fill-color-light: #13232d;
+	--el-fill-color-lighter: #172a35;
+	--el-border-color: #22313a;
+	--el-border-color-light: #2a3a45;
+	--el-border-color-lighter: #2f414d;
+	--el-text-color-primary: #dce7ef;
+	--el-text-color-regular: #b8c7d3;
+	--el-text-color-secondary: #91a4b3;
+	--el-text-color-placeholder: #6f8394;
+	--el-mask-color: rgba(2, 6, 23, 0.72);
+}
+
+html.dark :where(.el-card, .el-dialog, .el-message-box, .el-drawer, .el-popover, .el-popper, .el-picker-panel, .el-select-dropdown) {
+	background: #101c24;
+	border-color: #22313a;
+	color: #dce7ef;
+}
+
+html.dark :where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner, .el-date-editor.el-input__wrapper) {
+	background: #0b151c;
+	border: 1px solid #22313a;
+	box-shadow: none;
+	color: #dce7ef;
+}
+
+html.dark :where(.el-input__inner, .el-select__placeholder, .el-textarea__inner, .el-range-input) {
+	color: #dce7ef;
+}
+
+html.dark :where(.el-range-separator, .el-input__prefix, .el-input__suffix) {
+	color: #91a4b3;
+}
+
+html.dark :where(.el-button:not(.el-button--primary):not(.el-button--danger):not(.el-button--success):not(.el-button--warning)) {
+	background: #101c24;
+	border-color: #2a3a45;
+	color: #dce7ef;
+}
+
+html.dark :where(.el-button:not(.el-button--primary):not(.el-button--danger):not(.el-button--success):not(.el-button--warning):hover) {
+	background: #132638;
+	border-color: rgba(139, 217, 255, 0.4);
+	color: #8bd9ff;
+}
+
+html.dark :where(.el-tabs__item) {
+	color: #91a4b3;
+}
+
+html.dark :where(.el-tabs__item.is-active) {
+	color: #8bd9ff;
+}
+
+html.dark :where(.el-tabs__nav-wrap::after) {
+	background: #22313a;
+}
+
+html.dark :where(.el-table, .el-table__expanded-cell, .el-table tr, .el-table th.el-table__cell, .el-table td.el-table__cell) {
+	background: #0f1b22;
+	color: #dce7ef;
+}
+
+html.dark :where(.el-table__row:hover > td.el-table__cell) {
+	background: #132638 !important;
+}
+
+html.dark :where(.el-pagination.is-background .btn-prev, .el-pagination.is-background .btn-next, .el-pagination.is-background .el-pager li) {
+	background: #101c24;
+	color: #b8c7d3;
+}
+
+html.dark :where(.el-tree, .el-tree-node__content) {
+	background: transparent;
+	color: #dce7ef;
+}
+
+html.dark :where(.el-tree-node__content:hover) {
+	background: #132638;
+}
+
+html.dark :where(.el-picker-panel__body, .el-picker-panel__footer, .el-time-panel, .el-time-panel__content::after, .el-time-panel__content::before) {
+	background: #101c24;
+	border-color: #22313a;
+}
+
+html.dark :where(
+	.situation-header,
+	.situation-metric,
+	.situation-panel,
+	.run-row,
+	.agent-load-row,
+	.incident-row,
+	.mcp-metric,
+	.mcp-card,
+	.mcp-panel,
+	.token-row,
+	.agent-row,
+	.trace-metric,
+	.agent-stat
+) {
+	background: #0e171f !important;
+	border-color: #20313d !important;
+	color: #dce7ef !important;
+}
+
+html.dark :where(.empty-box) {
+	background: #0b141b !important;
+	border-color: #2a3a45 !important;
+	color: #8ea0ae !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	* {
+		animation-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+		transition-duration: 0.01ms !important;
 	}
 }

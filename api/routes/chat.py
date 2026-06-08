@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api", tags=["Chat"])
 class ChatRequest(BaseModel):
     message: str
     session_id: str | None = None
+    model_id: str | None = None
 
 
 def _format_sse(data: str) -> str:
@@ -22,9 +23,11 @@ def _format_sse(data: str) -> str:
     return "".join(f"data: {line}\n" for line in lines) + "\n"
 
 
-async def _event_generator(message: str, session_id: str | None = None):
+async def _event_generator(
+    message: str, session_id: str | None = None, model_id: str | None = None
+):
     try:
-        async for chunk in stream_chat_with_agent(message, session_id):
+        async for chunk in stream_chat_with_agent(message, session_id, model_id):
             if chunk:
                 yield _format_sse(chunk)
         yield _format_sse("[DONE]")
@@ -38,7 +41,7 @@ async def chat_agent(request: ChatRequest):
     """使用 LLM 处理聊天消息（流式）"""
     try:
         return StreamingResponse(
-            _event_generator(request.message, request.session_id),
+            _event_generator(request.message, request.session_id, request.model_id),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache"},
         )
@@ -80,4 +83,3 @@ async def remove_session(session_id: str):
     except Exception as e:
         logger.error(f"删除会话失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-

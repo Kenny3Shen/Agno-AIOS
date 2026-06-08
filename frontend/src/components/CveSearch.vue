@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 sm:space-y-6">
+  <div class="security-page space-y-4 sm:space-y-6">
     <!-- 搜索区域 -->
     <div class="flex flex-col sm:flex-row gap-3">
       <el-input
@@ -250,7 +250,7 @@ const toggleExpand = (id: number) => {
   }
 }
 
-const formatDate = (_: CveResult, __: any, cellValue: string) => {
+const formatDate = (_row: CveResult, _column: unknown, cellValue: string) => {
   if (!cellValue) return ''
   const date = new Date(cellValue)
   return date.toLocaleString('zh-CN', {
@@ -320,11 +320,11 @@ const handleUpdateDatabase = async () => {
         description: response.message || '未知错误'
       }
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     updateMessage.value = {
       type: 'error',
       title: '更新失败',
-      description: error.message || '网络错误'
+      description: error instanceof Error ? error.message : '网络错误'
     }
   } finally {
     updating.value = false

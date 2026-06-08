@@ -1,83 +1,90 @@
-# CVE & IP资产情报平台
+# Agno AIOS AI 信息安全中台
 
-基于 FastAPI 和 Vue.js 的安全情报查询平台，支持 CVE 漏洞和 IP 资产信息的查询与管理。
+Agno AIOS 是一个基于 FastAPI、Vue 3、Agno 和 FastMCP 的 AI 信息安全中台。系统把 CVE 情报、资产画像、网页情报解析、Agent 对话、运行观测、Skills 管理和 MCP 工具中枢整合到同一个主服务中，不再依赖独立 MCP-Server 进程。
 
-## 功能特性
+## 核心功能
 
-- **CVE 查询**: 搜索和查看 CVE 漏洞信息及相关 GitHub PoC/Exp
-- **资产搜索**: 基于指纹信息搜索 IP 资产
-- **LLM 聊天**: 智能问答助手，辅助安全分析
+- **AI 安全助手**：流式 Agent 对话，可在输入框旁选择模型，支持会话历史。
+- **CVE 情报**：按 CVE 编号、应用名或关键词检索漏洞与 PoC 来源。
+- **资产搜索**：基于指纹或 IP 查询资产画像。
+- **URL 转 Markdown**：解析网页正文并转换为 Markdown。
+- **运行观测**：基于 Agno Trace/Span 数据查看运行链路、耗时和错误。
+- **态势总览**：展示 Agent 运行成功率、耗时分布和错误态势。
+- **MCP 工具中枢**：同进程 FastMCP 服务开关、Token 和 Hi-Agent MCP 管理。
+- **Skills 管理**：启用、禁用和查看本地 `.skills/` 能力包。
 
 ## 项目结构
 
-```
+```text
 .
-├── api/                    # 后端 API
-│   ├── main.py            # FastAPI 应用入口
-│   ├── routes/            # API 路由
-│   ├── services/          # 业务逻辑
-│   ├── database/          # 数据库操作
-│   ├── models/            # 数据模型
-│   ├── utils/             # 工具函数
-│   └── data/              # 数据文件和缓存
-├── frontend/              # 前端 Vue.js 应用
-│   ├── src/               # 源代码
-│   ├── public/            # 静态资源
-│   └── dist/              # 构建输出
-├── config.toml            # 配置文件
-├── update_cve.py          # CVE 数据更新脚本
-├── update_ip_asset.py     # IP 资产数据更新脚本
-├── update_utils.py        # 数据更新工具
-├── run_update_cve.sh      # CVE 更新脚本包装器
-├── pyproject.toml         # Python 项目配置
-├── main.py                # 占位符文件
-└── README.md              # 项目说明
+├── api/
+│   ├── main.py                 # FastAPI 应用入口
+│   ├── routes/                 # API 路由
+│   ├── services/               # 业务逻辑
+│   ├── mcp/                    # 内置 FastMCP 运行时
+│   │   ├── server.py           # MCP ASGI 入口
+│   │   ├── config.py           # MCP 配置、Token、Hi-Agent 状态
+│   │   └── tools/              # 内置 MCP 工具模块
+│   ├── models/                 # Pydantic 数据模型
+│   ├── utils/                  # 数据库与数据处理工具
+│   └── data/                   # CVE/资产数据缓存
+├── .skills/                    # Agent 可加载的本地技能
+├── frontend/                   # Vue 3 + TypeScript + UnoCSS 前端源码
+├── source/                     # 前端生产构建输出，供 FastAPI 托管
+├── config.toml                 # 数据源配置
+├── update_cve.py               # CVE 数据更新脚本
+├── update_ip_asset.py          # IP 资产数据更新脚本
+├── update_utils.py             # 数据更新公共逻辑
+├── run_update_cve.sh           # CVE 定时更新包装脚本
+├── pyproject.toml              # Python 依赖与项目配置
+└── README.md
 ```
 
 ## 环境要求
 
-- Python 3.10+
-- Node.js 18+ 或 Bun (前端开发)
+- Python 3.12+
+- uv
+- Bun 1.3+ 或 Node.js 18+
 - MySQL 5.7+
-- uv (Python 包管理工具)
 
-## 安装与配置
-
-### 1. 安装依赖
+## 安装
 
 ```bash
-# 安装 Python 依赖
 uv sync
 
-# 安装前端依赖
 cd frontend
-bun install  # 或 npm install
+bun install
 ```
 
-### 2. 配置环境变量
+## 配置
 
-创建 `.env` 文件或设置以下环境变量：
+创建 `.env` 文件或设置环境变量：
 
 ```bash
-# 数据库配置
+# MySQL
 MYSQL_TEST_HOST=localhost
 MYSQL_TEST_USER=root
 MYSQL_TEST_PASSWORD=your_password
 MYSQL_TEST_DATABASE=cve_db
 MYSQL_TEST_PORT=3306
 
-# ACL API 配置（用于 IP 资产更新）
+# ACL 资产数据更新
 ACL_USERNAME=your_username
 ACL_PASSWORD=your_password
 
-# 日志配置
+# 日志
 LOG_LEVEL=INFO
 LOG_DIR=logs
+
+# Agent / MCP
+MCP_SERVER_URL=http://127.0.0.1:8000/mcp/
+MCP_TOKEN=your_mcp_access_token
+AGENT_TIMEZONE=Asia/Shanghai
 ```
 
-### 3. 数据库初始化
+模型参数不再通过 `LLM_*` 环境变量维护。启动服务后进入 **系统配置 -> 模型路由**，配置 API Key、Base URL、Model ID、启用状态和默认模型；运行时配置会保存到 `tmp/model_config.json`。
 
-确保 MySQL 数据库已创建，并运行以下 SQL 创建表：
+## 数据库初始化
 
 ```sql
 CREATE DATABASE cve_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -95,243 +102,187 @@ CREATE TABLE IF NOT EXISTS cves (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
-## 使用说明
-
-### 启动应用
+## 启动
 
 ```bash
-# 启动后端服务
 uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
-
-# 启动前端开发服务器
-cd frontend
-bun run dev  # 或 npm run dev
 ```
 
-访问 <http://localhost:5173> 使用应用
-
-### 数据更新
-
-#### 更新 CVE 数据
-
-从 GitHub 仓库更新 CVE 漏洞信息：
+开发前端：
 
 ```bash
-# 使用默认数据源 (GitHub)
-uv run update_cve.py
-
-# 指定数据源
-uv run update_cve.py --source github
+cd frontend
+bun run dev
 ```
 
-**数据源说明：**
+访问 `http://localhost:5173`。
 
-- `github`: 从 [ycdxsb/PocOrExp_in_Github](https://github.com/ycdxsb/PocOrExp_in_Github) 获取
-- `exploit-db`: 从 Exploit Database 获取
+生产构建：
 
-**更新逻辑：**
+```bash
+cd frontend
+bun run build
+```
 
-1. 获取远程仓库最新 commit
-2. 与本地 commit 对比，如果相同则跳过更新
-3. 从远程获取最新数据
-4. 与本地缓存对比，计算增量和删除
-5. 批量更新数据库
-6. 更新本地缓存文件和 commit 记录
+前端产物会输出到仓库根目录 `source/`，由后端静态资源服务托管。
 
-**去重说明（重要）**
+## MCP 工具中枢
 
-- 在写入数据库前，更新脚本会对来源数据进行去重（基于 `cve_id` 和 `github_url` 两字段的组合），避免插入重复记录从而触发数据库唯一性约束（`UNIQUE KEY unique_cve_url (cve_id, github_url)`）。
+MCP 已完全整合进主 API 进程：
 
-#### 更新 IP 资产数据
+- MCP 协议入口：`/mcp/`
+- 管理 API：`/api/mcp/*`
+- 配置文件：`tmp/mcp/mcp_config.toml`
+- Token 数据库：`tmp/mcp/mcp_tokens.db`
+- 访问方式：`Authorization: Bearer <token>` 或 `/mcp/?token=<token>`
 
-从 ACL API 获取并聚合 IP 资产信息：
+主服务启动时会自动确保存在一个 bootstrap token。服务开关和 Hi-Agent 配置更新后，重启主 API 后对 MCP 协议工具列表生效。
+
+### 新增 MCP 服务
+
+1. 在 `api/mcp/tools/` 新建模块，例如 `scanner.py`：
+
+   ```python
+   from fastmcp import FastMCP
+
+   scanner_mcp = FastMCP("Scanner")
+
+   @scanner_mcp.tool()
+   async def run_scan(target: str) -> dict:
+       return {"target": target, "status": "queued"}
+   ```
+
+2. 在 `api/mcp/config.py` 的 `SERVICE_IDS` 中加入 `"scanner"`。
+3. 在 `api/mcp/server.py` 导入 `scanner_mcp`，并在 `build_main_mcp()` 中挂载：
+
+   ```python
+   if "scanner" in enabled:
+       main_mcp.mount(scanner_mcp, namespace="scanner")
+   ```
+
+4. 在 `frontend/src/types/index.ts` 的 `McpServiceId` 中加入 `"scanner"`。
+5. 在 `frontend/src/components/McpManage.vue` 的服务卡片列表中增加该服务。
+6. 执行 `uv run ruff check .` 和 `bun run build`。
+
+## Skills
+
+本地能力放在 `.skills/<skill-name>/`，每个 Skill 至少包含一个 `SKILL.md`。需要稳定执行的数据访问或分析逻辑放入 `scripts/`。
+
+当前内置能力：
+
+- `threat-trace-skill`：威胁情报检索与研判。
+- `darknet-trace-skill`：暗网泄露信息态势分析。
+- `intranet-ip-skill`：内网告警/资产风险分析。
+- `playbook-skill`：安全剧本调用规范。
+- `cve-intel-skill`：CVE/应用漏洞情报、PoC 来源和风险态势分析。
+
+新增 Skill 示例：
+
+```text
+.skills/example-skill/
+├── SKILL.md
+└── scripts/
+    └── example.py
+```
+
+`SKILL.md` 需要包含 YAML frontmatter：
+
+```markdown
+---
+name: example-skill
+description: 示例安全能力，说明触发场景和能力边界。
+---
+
+# SOP
+
+1. 明确输入。
+2. 调用脚本获取事实。
+3. 基于事实输出结论，禁止编造。
+```
+
+## CVE 情报 Skill 调用
+
+```bash
+uv run python .skills/cve-intel-skill/scripts/cve_intel.py --query CVE-2023-6019 --limit 20
+uv run python .skills/cve-intel-skill/scripts/cve_intel.py --query Ray --limit 20 --latest 3
+```
+
+脚本优先查询 MySQL `cves` 表；数据库不可用或无命中时回退读取 `api/data/github_cve_cache.csv` 与 `api/data/exploit_db.csv`。
+
+## 数据更新
+
+CVE 数据：
+
+```bash
+uv run update_cve.py
+uv run update_cve.py --source github
+uv run update_cve.py --source exploit-db
+```
+
+IP 资产数据：
 
 ```bash
 uv run update_ip_asset.py
 ```
 
-**更新流程：**
-
-1. 登录 ACL API 获取 token（支持自动重试）
-2. 拉取所有 IP 实体数据
-3. 保存原始数据到 `api/data/raw_ip_entities.json`
-4. 聚合处理数据并缓存到 `api/data/aggregated_ip_entities.json`
-
-**注意事项：**
-
-- 需要配置 `ACL_USERNAME` 和 `ACL_PASSWORD` 环境变量
-- 数据量较大时可能需要几分钟完成
-
-### 定时任务
-
-建议使用 cron 或 systemd timer 定期更新数据：
+定时任务示例：
 
 ```bash
-# 示例 crontab 配置
-# 使用脚本 `run_update_cve.sh`（推荐）
-# 每天 08:00 更新 CVE 数据（请根据实际路径修改）
-0 8 * * * /home/shenss/python/fastapi/run_update_cve.sh >> /home/shenss/python/fastapi/logs/cron_cve.log 2>&1
-
-# 或者直接使用 uv（不使用 wrapper 脚本）
-0 8 * * * cd /home/shenss/python/fastapi && /usr/bin/env bash -lc 'set -a; [ -f /home/shenss/python/fastapi/.env ] && source /home/shenss/python/fastapi/.env; set +a; /home/shenss/python/fastapi/.venv/bin/uv run update_cve.py' >> /home/shenss/python/fastapi/logs/cron_cve.log 2>&1
+# 每天 08:00 更新 CVE 数据
+0 8 * * * cd /home/shenss/python/Agno-AIOS && ./run_update_cve.sh >> logs/cron_cve.log 2>&1
 
 # 每天 03:00 更新 IP 资产数据
-0 3 * * * cd /home/shenss/python/fastapi && /usr/bin/env bash -lc 'set -a; [ -f /home/shenss/python/fastapi/.env ] && source /home/shenss/python/fastapi/.env; set +a; /home/shenss/python/fastapi/.venv/bin/uv run update_ip_asset.py' >> /home/shenss/python/fastapi/logs/cron_asset.log 2>&1
+0 3 * * * cd /home/shenss/python/Agno-AIOS && uv run update_ip_asset.py >> logs/cron_asset.log 2>&1
 ```
 
-## API 接口
+## API 摘要
 
-### CVE 相关
+- `POST /api/chat`：Agent 流式对话。
+- `GET /api/chat/sessions`：会话列表。
+- `GET /api/chat/sessions/{session_id}`：会话历史。
+- `DELETE /api/chat/sessions/{session_id}`：删除会话。
+- `POST /api/cve/search`：CVE 查询。
+- `POST /api/cve/update`：更新 CVE 数据。
+- `POST /api/asset/search`：资产查询。
+- `POST /api/url2md/parse`：URL 转 Markdown。
+- `GET /api/models` / `PUT /api/models`：模型配置。
+- `GET /api/traces` / `GET /api/traces/{trace_id}`：运行观测。
+- `GET /api/skills` / `PUT /api/skills/{name}/toggle`：Skills 管理。
+- `GET /api/mcp/config` / `POST /api/mcp/config`：MCP 服务开关。
+- `GET /api/mcp/tokens` / `POST /api/mcp/tokens/issue` / `POST /api/mcp/tokens/delete`：MCP Token。
+- `GET /api/mcp/hiagent` / `POST /api/mcp/hiagent/*`：Hi-Agent MCP 接入。
 
-- `POST /api/cve/search` - 搜索 CVE
+## 技术栈
 
-  ```json
-  {
-    "cve_id": "CVE-2024-1234",
-    "page": 1,
-    "size": 10
-  }
-  ```
+- 前端：Vue 3、TypeScript、Element Plus、UnoCSS、Vite(Rolldown)、markdown-it、highlight.js。
+- 后端：FastAPI、Uvicorn、aiomysql、httpx、Polars、loguru、python-dotenv。
+- Agent：Agno、OpenAILike、LocalSkills、SqliteDb、Tracing。
+- MCP：FastMCP，同进程 ASGI 挂载。
 
-### 资产相关
-
-- `POST /api/asset/search` - 搜索资产
-
-  ```json
-  {
-    "fingerprint": "Vue.js"
-  }
-  ```
-
-### LLM 聊天
-
-- `POST /api/chat` - 发送聊天消息
-
-  ```json
-  {
-    "message": "查询 CVE-2024-1234"
-  }
-  ```
-
-## 开发说明
-
-### 代码质量
-
-项目已完成全面的代码审计和优化：
-
-- **中文化**: 所有日志记录、注释和文档字符串已转换为中文
-- **错误处理**: 移除了无效的 try-except 包装，简化了错误处理逻辑
-- **代码清理**: 删除了冗余代码，提高了代码可读性和维护性
-
-### 前端开发
+## 代码质量
 
 ```bash
-cd frontend
-bun run dev     # 开发服务器
-bun run build   # 生产构建
-bun run preview # 预览构建结果
-```
-
-### 后端开发
-
-```bash
-# 运行测试
-uv run pytest
-
-# 代码格式化
+uv run ruff check .
 uv run ruff format .
 
-# 代码检查
-uv run ruff check .
+cd frontend
+bun run build
 ```
 
-## 架构说明
+## 运行时文件
 
-### 前端架构
+以下文件属于本地运行状态，不应提交：
 
-- **框架**: Vue 3 + TypeScript
-- **UI 库**: Element Plus
-- **样式**: Tailwind CSS
-- **构建工具**: Vite + Bun
-- **HTTP 客户端**: Axios
-
-### 后端架构
-
-- **框架**: FastAPI (异步)
-- **数据库**: MySQL (aiomysql 异步驱动)
-- **配置**: TOML 配置文件 + python-dotenv
-- **日志**: loguru (支持轮转和保留)
-- **HTTP 客户端**: httpx (异步)
-- **数据处理**: Polars (高效 DataFrame 操作)
-
-### 数据流
-
-```
-配置 (config.toml)
-    ↓
-更新脚本 (update_*.py)
-    ↓
-数据库 (MySQL) + 本地缓存 (api/data/)
-    ↓
-API Services (业务逻辑)
-    ↓
-API Routes (路由处理)
-    ↓
-前端组件 (Vue.js)
-```
-
-### 配置管理
-
-项目使用 `config.toml` 进行数据源配置，支持：
-
-- GitHub 数据源配置 (远程 URL、本地缓存路径、API 端点等)
-- Exploit-DB 数据源配置
-- 灵活的配置管理，便于部署和维护
+- `.env`
+- `logs/`
+- `tmp/`
+- `*.db`
+- `__pycache__/`
+- `.ruff_cache/`
 
 ## 故障排除
 
-### 数据库连接失败
-
-- 检查 MySQL 服务是否运行：`sudo systemctl status mysql`
-- 验证环境变量配置是否正确
-- 确认数据库和表已创建
-- 检查用户权限：`GRANT ALL PRIVILEGES ON cve_db.* TO 'user'@'localhost';`
-
-### ACL API 连接问题
-
-- 检查网络连接和 ACL API 地址可访问性
-- 验证 `ACL_USERNAME` 和 `ACL_PASSWORD` 环境变量
-- 查看日志中的 token 获取和 API 调用错误
-- 确认 ACL API 支持当前使用的端点和参数
-
-### 前端无法连接后端
-
-- 确认后端服务已启动：`uv run uvicorn api.main:app --host 0.0.0.0 --port 8000`
-- 检查前端 `vite.config.ts` 中的代理配置
-- 查看浏览器控制台和后端日志的 CORS 错误
-- 确认防火墙设置允许相应端口
-
-### 数据更新失败
-
-- 检查网络连接和数据源可访问性
-- 验证配置文件 `config.toml` 中的 URL 和路径
-- 查看日志中的 commit 比较和数据获取错误
-- 确认本地缓存目录权限：`chmod 755 api/data/`
-
-### 性能问题
-
-- CVE 数据量大时，首次更新可能较慢
-- 考虑调整数据库索引和查询优化
-- 定期清理日志文件：`find logs/ -name "*.log" -mtime +30 -delete`
-
-## 许可证
-
-MIT License
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
----
-
-**最后更新**: 2025年12月11日
+- 数据库连接失败：检查 MySQL 服务、`.env`、数据库权限和 `cves` 表。
+- 前端无法访问后端：确认 API 运行在 `8000`，开发代理配置在 `frontend/vite.config.ts`。
+- MCP 初始化失败：确认主 API 已启动、`MCP_TOKEN` 与中台签发 Token 一致、访问路径为 `/mcp/`。
+- 数据更新失败：检查网络、`config.toml` 数据源和 `api/data/` 写入权限。

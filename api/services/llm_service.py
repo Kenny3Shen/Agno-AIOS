@@ -4,6 +4,7 @@ from typing import Any, AsyncIterator, cast
 from dotenv import load_dotenv
 from textwrap import dedent
 from pathlib import Path
+from urllib.parse import urlencode
 from agno.agent import Agent
 from agno.models.openai import OpenAILike
 from agno.db.sqlite import SqliteDb
@@ -11,6 +12,7 @@ from agno.tools.mcp import MCPTools
 from agno.run.agent import RunEvent
 from agno.skills import Skills, LocalSkills
 from agno.tracing import setup_tracing
+from api.services.model_config_service import get_model_for_run
 
 load_dotenv(override=True)
 # Set up database for traces
@@ -24,12 +26,28 @@ def _get_env(key: str, default: str = "") -> str:
     return os.environ.get(key, default)
 
 
-def _build_model() -> OpenAILike:
+def _build_model(model_id: str | None = None) -> OpenAILike:
+    model = get_model_for_run(model_id)
     return OpenAILike(
-        id=_get_env("LLM_EP", "gpt-3.5-turbo"),
-        api_key=_get_env("LLM_API_KEY"),
-        base_url=_get_env("LLM_URL"),
+        id=model["model_id"],
+        api_key=model["api_key"],
+        base_url=model["base_url"],
     )
+
+
+def _get_mcp_token() -> str:
+    return (_get_env("MCP_TOKEN") or _get_env("MCP_Token")).strip()
+
+
+def _build_mcp_url() -> str:
+    base_url = _get_env("MCP_SERVER_URL", "http://127.0.0.1:8000/mcp/").strip()
+    token = _get_mcp_token()
+    if not base_url:
+        raise RuntimeError("MCP_SERVER_URL 未配置，请在 .env 或系统配置中设置 MCP 服务地址。")
+    if not token:
+        raise RuntimeError("MCP_TOKEN 未配置，请在 .env 或系统配置中设置 MCP 访问 Token。")
+    separator = "&" if "?" in base_url else "?"
+    return f"{base_url}{separator}{urlencode({'token': token})}"
 
 
 AGENT_INSTRUCTIONS = dedent("""\
@@ -201,12 +219,12 @@ def delete_session(session_id: str) -> bool:
 
 
 async def stream_chat_with_agent(
-    message: str, session_id: str | None = None
+    message: str, session_id: str | None = None, model_id: str | None = None
 ) -> AsyncIterator[str]:
     """流式聊天，使用单个 Agent 统一处理安全运营任务"""
     async with MCPTools(
         transport="streamable-http",
-        url=f"{_get_env('MCP_SERVER_URL')}?token={_get_env('MCP_TOKEN')}",
+        url=_build_mcp_url(),
         timeout_seconds=20,
     ) as mcp_tools:
         security_agent = Agent(
@@ -214,7 +232,7 @@ async def stream_chat_with_agent(
             role="安全运营综合专家",
             description="集威胁情报分析与安全剧本执行于一体的安全运营助手，可完成情报检索、深度分析和自动化处置全流程。",
             instructions=[AGENT_INSTRUCTIONS],
-            model=_build_model(),
+            model=_build_model(model_id),
             tools=[mcp_tools],
             skills=_build_enabled_skills(),
             db=SqliteDb(DB_FILE),

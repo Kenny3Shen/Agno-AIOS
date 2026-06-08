@@ -23,6 +23,37 @@ export interface SkillToggleResponse {
   enabled: boolean
 }
 
+// MCP 管理相关类型
+export type McpServiceId = "playbook" | "agent" | "basic"
+
+export interface McpServiceStatusResponse {
+  services: Record<McpServiceId, boolean>
+  control_mode?: string
+  fastmcp?: string
+  mcp_url?: string
+  config_path?: string
+  tokens_db_path?: string
+}
+
+export interface McpTokenInfo {
+  id: number
+  name: string
+  token: string
+  created_at: number
+  expires_at: number
+}
+
+export interface McpTokenIssueResponse {
+  token: string
+}
+
+export interface HiAgentEntry {
+  name: string
+  url: string
+  description: string
+  enabled: boolean
+}
+
 export interface ChatSession {
   session_id: string
   preview: string
@@ -110,6 +141,23 @@ export interface SettingsUpdate {
   settings: Record<string, string>
 }
 
+export interface ModelConfig {
+  id: string
+  name: string
+  model_id: string
+  base_url: string
+  api_key: string
+  description: string
+  enabled: boolean
+  builtin: boolean
+  configured?: boolean
+}
+
+export interface ModelConfigResponse {
+  active_model_id: string
+  models: ModelConfig[]
+}
+
 // Tracing 相关类型（Agno Tracing）
 export type TraceStatus = "OK" | "ERROR" | "UNSET" | string
 export type SpanStatus = "OK" | "ERROR" | "UNSET" | string
@@ -142,8 +190,8 @@ export interface SpanItem {
   duration_ms: number
   start_time: string
   end_time: string
-  attributes?: Record<string, any> | null
-  events?: any[] | null
+  attributes?: Record<string, unknown> | null
+  events?: unknown[] | null
   kind?: string | null
 }
 

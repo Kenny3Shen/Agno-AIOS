@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-5 max-w-4xl mx-auto">
+  <div class="security-page space-y-5 max-w-5xl mx-auto">
     <!-- 标题栏 -->
     <div class="flex items-center justify-between">
       <div>

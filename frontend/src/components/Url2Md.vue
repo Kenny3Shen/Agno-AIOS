@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4">
+  <div class="security-page space-y-4">
     <!-- 搜索区域 -->
     <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
       <el-input
@@ -160,7 +160,7 @@ const { loading, parseUrl } = useUrl2MdApi()
 const renderedHtml = computed(() => {
   try {
     return md.render(markdownText.value || '')
-  } catch (e) {
+  } catch {
     return ''
   }
 })
@@ -170,7 +170,7 @@ const isValidUrl = computed(() => {
   try {
     new URL(url.value)
     return true
-  } catch (e) {
+  } catch {
     return false
   }
 })
@@ -195,7 +195,7 @@ const copyMarkdown = async () => {
   try {
     await navigator.clipboard.writeText(markdownText.value)
     ElMessage.success('已复制到剪贴板')
-  } catch (err) {
+  } catch {
     ElMessage.error('复制失败')
   }
 }
@@ -234,12 +234,12 @@ const handleParse = async () => {
         description: '后端未返回 Markdown 文本'
       }
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('URL parse error:', err)
     message.value = {
       type: 'error',
       title: '解析失败',
-      description: err.message || '网络或后端错误'
+      description: err instanceof Error ? err.message : '网络或后端错误'
     }
   }
 }

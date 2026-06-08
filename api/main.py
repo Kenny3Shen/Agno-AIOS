@@ -1,18 +1,16 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from api.routes import cve, asset, chat, url2md, settings, traces, skills
-
-# from fastmcp.utilities.lifespan import combine_lifespans
+from api.routes import asset, chat, cve, mcp as mcp_routes, settings, skills, traces, url2md
+from api.mcp.server import bootstrap_mcp_token, mcp_runtime
 from api.utils.db import get_db_pool, close_db_pool
 import os
 import sys
 from loguru import logger
 from dotenv import load_dotenv
 import aiomysql
-import httpx
 
 load_dotenv(override=True)
 
@@ -35,19 +33,19 @@ async def lifespan(app: FastAPI):
     # initialize resources
     pool: aiomysql.Pool = await get_db_pool()
     app.state.db_pool = pool
+    bootstrap_mcp_token(os.getenv("MCP_TOKEN") or os.getenv("MCP_Token"))
+    await mcp_runtime.startup()
 
     try:
         yield
     finally:
         # cleanup resources
+        await mcp_runtime.shutdown()
         await close_db_pool()
 
 
-# mcp_app = mcp.http_app(path="/", transport="sse")
-
 app = FastAPI(
-    title="CVE Intelligence Platform API",
-    # lifespan=combine_lifespans(lifespan, mcp_app.lifespan),
+    title="Agno AIOS Security Platform API",
     lifespan=lifespan,
 )
 
@@ -72,6 +70,13 @@ async def report_redirect():
     return RedirectResponse(url="/report/")
 
 
+@app.api_route("/mcp", methods=["GET", "POST", "DELETE", "OPTIONS"], include_in_schema=False)
+async def mcp_redirect(request: Request):
+    query = request.url.query
+    target = "/mcp/" + (f"?{query}" if query else "")
+    return RedirectResponse(url=target, status_code=307)
+
+
 # Include routers
 app.include_router(cve.router)
 app.include_router(asset.router)
@@ -80,9 +85,11 @@ app.include_router(url2md.router)
 app.include_router(settings.router)
 app.include_router(traces.router)
 app.include_router(skills.router)
+app.include_router(mcp_routes.router)
 
-# Mount MCP server
-# app.mount("/mcp", mcp_app, name="mcp")
+# Integrated FastMCP protocol endpoint. Same process, same port:
+# http://<host>:8000/mcp?token=...
+app.mount("/mcp", mcp_runtime.asgi_app(), name="mcp")
 
 # Serve frontend static files
 app.mount("/", StaticFiles(directory="source", html=True), name="frontend")

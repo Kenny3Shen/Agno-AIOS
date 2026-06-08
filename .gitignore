@@ -8,7 +8,8 @@ wheels/
 .ruff_cache/
 .logs/
 logs/
-.github
+tmp/
+*.db
 .shared
 # Virtual environments
 .venv

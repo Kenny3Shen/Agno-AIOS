@@ -1,267 +1,321 @@
 <template>
-  <div class="h-screen flex bg-[#F6F8FA] text-slate-900 dark:bg-[#212830] dark:text-[#C9D1D9] overflow-hidden">
-    <!-- 移动端遮罩层 -->
-    <transition name="el-fade-in">
-      <div
-        v-if="isMobile && sidebarVisible"
-        class="fixed inset-0 bg-black/50 z-40 sm:hidden"
+  <div class="security-page h-dvh overflow-hidden bg-[#EEF3F7] text-[#111827] dark:bg-[#071014] dark:text-[#E6EDF3]">
+    <transition name="fade">
+      <button
+        v-if="isMobile && sidebarOpen"
+        type="button"
+        class="fixed inset-0 z-40 bg-black/60 lg:hidden"
+        aria-label="关闭导航遮罩"
         @click="closeSidebar"
       />
     </transition>
 
-    <!-- 侧边栏 -->
-    <aside
-      ref="sidebarRef"
-      :class="[
-        'bg-white dark:bg-[#212830] border border-[#D0D7DE] dark:border-[#30363D] shadow-sm flex flex-col z-50 transition-all duration-300 overflow-hidden',
-        isMobile
-          ? 'fixed h-full sm:relative rounded-none'
-          : 'relative m-4 rounded-2xl h-[calc(100vh-2rem)]',
-        isMobile && sidebarVisible
-          ? 'translate-x-0'
-          : (isMobile ? '-translate-x-full' : 'translate-x-0')
-      ]"
-      :style="{ width: collapsed && !isMobile ? `${collapsedWidth}px` : `${sidebarWidth}px` }"
-    >
-      <!-- Logo 区域 -->
-      <div class="p-4 sm:p-5 border-b border-[#D0D7DE] dark:border-[#30363D] flex items-center justify-between">
-        <div class="flex items-center overflow-hidden">
-          <el-icon class="text-slate-900 dark:text-[#C9D1D9] text-xl sm:text-2xl flex-shrink-0">
-            <Platform />
-          </el-icon>
-          <transition name="el-fade-in">
-            <h1
-              v-if="!collapsed && !isMobile"
-              class="ml-3 text-base sm:text-lg font-semibold text-slate-900 dark:text-[#C9D1D9] whitespace-nowrap"
-            >
-              情报平台
-            </h1>
-          </transition>
-        </div>
-        <!-- 移动端关闭按钮 -->
-        <el-button
-          v-if="isMobile"
-          type="text"
-          @click="closeSidebar"
-          class="text-slate-700 dark:text-[#C9D1D9] hover:bg-slate-100 dark:hover:bg-[#212830]/80 -mr-2"
-          aria-label="关闭侧边栏"
-        >
-          <el-icon><Close /></el-icon>
-        </el-button>
-      </div>
-
-      <!-- 菜单区域 -->
-      <nav class="flex-1 overflow-y-auto">
-        <div v-if="!collapsed || isMobile" class="px-3 sm:px-4 pt-3 sm:pt-4">
-          <label class="sr-only" for="nav-search">搜索功能</label>
-          <el-input
-            id="nav-search"
-            v-model="navQuery"
-            clearable
-            size="small"
-            placeholder="搜索功能…"
-            class="[&_.el-input__wrapper]:!bg-transparent [&_.el-input__wrapper]:!shadow-none [&_.el-input__wrapper]:!border [&_.el-input__wrapper]:!border-[#D0D7DE] dark:[&_.el-input__wrapper]:!border-[#30363D]"
-          />
-        </div>
-
-        <div class="px-2 sm:px-3 pb-3 sm:pb-4" :class="(!collapsed || isMobile) ? 'pt-3 sm:pt-4' : 'pt-3'">
-          <template v-for="section in navSections" :key="section.title">
-            <div v-if="(!collapsed && !isMobile)" class="px-2 pb-2 text-[11px] font-semibold tracking-wide text-slate-600 dark:text-[#8B949E]">
-              {{ section.title }}
-            </div>
-            <div class="space-y-1">
-              <template v-for="item in section.items" :key="item.id">
-                <el-tooltip
-                  :disabled="!collapsed || isMobile"
-                  :content="item.label"
-                  placement="right"
-                  :show-after="150"
-                >
-                  <button
-                    type="button"
-                    @click="selectNav(item.id)"
-                    class="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl border border-transparent transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0969DA] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-[#212830]"
-                    :class="item.id === activeTab
-                      ? 'bg-[#0969DA]/10 dark:bg-[#1F6FEB]/20 text-slate-900 dark:text-[#C9D1D9] border-[#0969DA]/20 dark:border-[#1F6FEB]/30'
-                      : 'hover:bg-slate-900/5 dark:hover:bg-[#212830]/80 text-slate-700 dark:text-[#C9D1D9]'"
-                    :aria-current="item.id === activeTab ? 'page' : undefined"
-                  >
-                    <span class="flex items-center gap-3 min-w-0">
-                      <span class="grid place-items-center w-8 h-8 rounded-lg bg-slate-900/5 dark:bg-[#0D1117] border border-[#D0D7DE] dark:border-[#30363D] flex-shrink-0">
-                        <el-icon class="text-slate-700 dark:text-[#8B949E]">
-                          <component :is="item.icon" />
-                        </el-icon>
-                      </span>
-
-                      <span v-if="!collapsed && !isMobile" class="min-w-0">
-                        <div class="text-sm font-medium truncate">{{ item.label }}</div>
-                      </span>
-                    </span>
-
-                    <span v-if="!collapsed && !isMobile && item.badge" class="text-[11px] px-2 py-0.5 rounded-full border border-[#D0D7DE] dark:border-[#30363D] text-slate-600 dark:text-[#8B949E]">
-                      {{ item.badge }}
-                    </span>
-                  </button>
-                </el-tooltip>
-              </template>
-            </div>
-
-            <div class="h-3" />
-          </template>
-        </div>
-      </nav>
-
-      <!-- 折叠按钮（桌面端） -->
-      <transition name="el-fade-in">
-        <div
-          v-if="!isMobile"
-          class="p-2 sm:p-4 border-t border-[#D0D7DE] dark:border-[#30363D] flex justify-center"
-        >
-          <el-button
-            type="text"
-            @click="toggleCollapse"
-            class="text-slate-700 dark:text-[#C9D1D9] hover:bg-slate-100 dark:hover:bg-[#21262D] w-full rounded-xl"
-            aria-label="折叠侧边栏"
-          >
-            <el-icon>
-              <Expand v-if="collapsed" />
-              <Fold v-else />
-            </el-icon>
-          </el-button>
-        </div>
-      </transition>
-    </aside>
-
-    <!-- 拖拽缩放条（仅桌面端） -->
-    <div
-      v-if="!isMobile"
-      class="resizer bg-transparent cursor-col-resize hidden sm:block my-4 rounded-full"
-      @mousedown.prevent="startDrag"
-      title="拖动调整侧边栏宽度"
-    />
-
-    <!-- 主内容区 -->
-    <main class="flex-1 flex flex-col min-w-0 overflow-hidden p-3 sm:p-4">
-      <!-- 状态栏 -->
-      <div
-        class="flex-shrink-0 bg-white dark:bg-[#212830] shadow-sm border border-[#D0D7DE] dark:border-[#30363D] px-4 sm:px-5 py-3 rounded-2xl flex items-center justify-between"
+    <div class="h-full min-h-0 lg:grid lg:grid-cols-[272px_minmax(0,1fr)]">
+      <aside
+        :class="[
+          'fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col overflow-hidden border-r border-[#B8C8D8] bg-[#E1E9F1] transition-transform duration-200 lg:relative lg:z-auto lg:translate-x-0 dark:border-[#20313D] dark:bg-[#0B141B]',
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+        ]"
       >
-        <div class="flex items-center space-x-2 sm:space-x-4">
-          <!-- 移动端菜单按钮 -->
-          <el-button
-            v-if="isMobile"
-            type="text"
-            @click="openSidebar"
-            class="text-slate-700 dark:text-[#C9D1D9] hover:bg-slate-100 dark:hover:bg-[#212830]/80 rounded-xl"
-            aria-label="打开侧边栏"
-          >
-            <el-icon size="20"><Menu /></el-icon>
-          </el-button>
-          <!-- 面包屑/标题 -->
-          <div class="flex items-center space-x-2">
-            <el-icon class="text-slate-500 dark:text-[#8B949E] hidden sm:block"><Platform /></el-icon>
-            <h2 class="text-base sm:text-lg font-semibold text-slate-900 dark:text-[#C9D1D9]">
-              {{ currentTitle }}
-            </h2>
+        <div class="shrink-0 border-b border-[#B8C8D8] p-4 dark:border-[#20313D]">
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex min-w-0 items-center gap-3">
+              <span class="grid h-10 w-10 shrink-0 place-items-center rounded-2 border border-[#2F8FED]/35 bg-[#EAF5FF] text-[#0969DA] dark:bg-[#102638] dark:text-[#6AD7FF]">
+                <el-icon size="21"><Platform /></el-icon>
+              </span>
+              <div class="min-w-0">
+                <h1 class="truncate text-base font-700 text-[#0F172A] dark:text-white">Agno AIOS</h1>
+                <p class="mt-1 truncate text-xs text-[#64748B] dark:text-[#8EA0AE]">AI 信息安全中台</p>
+              </div>
+            </div>
+
+            <el-button v-if="isMobile" text aria-label="关闭侧边栏" @click="closeSidebar">
+              <el-icon><Close /></el-icon>
+            </el-button>
+          </div>
+
+          <div class="mt-4 grid grid-cols-2 gap-2">
+            <div v-for="metric in sidebarMetrics" :key="metric.label" class="rounded-2 border border-[#B8C8D8] bg-[#F8FAFC] p-2.5 dark:border-[#20313D] dark:bg-[#0E171F]">
+              <div class="text-[11px] text-[#64748B] dark:text-[#8EA0AE]">{{ metric.label }}</div>
+              <div class="mt-1 text-sm font-700 text-[#0F172A] dark:text-[#E6EDF3]">{{ metric.value }}</div>
+            </div>
           </div>
         </div>
-        <!-- 右侧操作区 -->
-        <div class="flex items-center space-x-2">
-          <el-button
-            circle
-            type="default"
-            class="!border-[#D0D7DE] dark:!border-[#30363D] bg-white dark:bg-[#212830] hover:bg-slate-50 dark:hover:bg-[#212830]/80"
-            @click="toggleTheme"
-            :aria-label="isDark ? '切换到浅色模式' : '切换到深色模式'"
-          >
-            <el-icon>
-              <Moon v-if="!isDark" />
-              <Sunny v-else />
-            </el-icon>
-          </el-button>
-        </div>
-      </div>
 
-      <!-- 内容区域 -->
-      <div class="flex-1 mt-3 sm:mt-4 overflow-hidden flex flex-col min-h-0">
-        <div :class="[
-          'mx-auto bg-white dark:bg-[#212830] rounded-2xl border border-[#D0D7DE] dark:border-[#30363D] shadow-sm',
-          activeTab === 'chat' ? 'w-full h-full flex flex-col min-h-0 overflow-hidden' : 'max-w-7xl w-full overflow-auto p-4 sm:p-6'
-        ]">
-          <transition name="el-fade-in" mode="out-in">
-            <keep-alive>
-              <component :is="activeComponent" :key="activeTab" class="h-full min-h-0" />
-            </keep-alive>
-          </transition>
+        <div class="shrink-0 border-b border-[#B8C8D8] p-3 dark:border-[#20313D]">
+          <label class="sr-only" for="nav-search">搜索模块</label>
+          <el-input id="nav-search" v-model="navQuery" clearable size="small" placeholder="搜索模块" class="security-nav-search">
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
         </div>
-      </div>
-    </main>
+
+        <nav class="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+          <section v-for="section in navSections" :key="section.title" class="mb-5">
+            <div class="mb-2 px-2 text-[11px] font-700 tracking-wide text-[#64748B] dark:text-[#6F8394]">
+              {{ section.title }}
+            </div>
+
+            <div class="space-y-1">
+              <button
+                v-for="item in section.items"
+                :key="item.id"
+                type="button"
+                class="soc-focus group flex h-12 w-full cursor-pointer items-center gap-3 rounded-2 border px-2.5 text-left transition-colors duration-150"
+                :class="item.id === activeTab
+                  ? 'border-[#2F8FED]/65 bg-white text-[#0F4F8F] shadow-sm dark:bg-[#102638] dark:text-[#DDF4FF]'
+                : 'border-transparent text-[#263342] hover:border-[#B8C8D8] hover:bg-white dark:text-[#B7C4CF] dark:hover:border-[#20313D] dark:hover:bg-[#0E171F]'"
+                :aria-current="item.id === activeTab ? 'page' : undefined"
+                @click="selectNav(item.id)"
+              >
+                <span
+                  class="grid h-8 w-8 shrink-0 place-items-center rounded-2 border"
+                  :class="item.id === activeTab
+                    ? 'border-[#2F8FED]/45 bg-white text-[#0969DA] dark:bg-[#0B141B] dark:text-[#6AD7FF]'
+                    : 'border-[#CBD6E2] bg-[#F8FAFC] text-[#526170] group-hover:bg-white group-hover:text-[#0969DA] dark:border-[#20313D] dark:bg-[#071014] dark:text-[#8EA0AE]'"
+                >
+                  <el-icon>
+                    <component :is="item.icon" />
+                  </el-icon>
+                </span>
+
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-sm font-650">{{ item.label }}</span>
+                  <span class="mt-0.5 block truncate text-[11px] text-[#64748B] dark:text-[#6F8394]">{{ item.description }}</span>
+                </span>
+
+                <span v-if="item.badge" class="shrink-0 rounded-1 border border-[#CBD5E1] px-1.5 py-0.5 text-[10px] text-[#64748B] dark:border-[#2A3A45] dark:text-[#8EA0AE]">
+                  {{ item.badge }}
+                </span>
+              </button>
+            </div>
+          </section>
+        </nav>
+
+        <div class="shrink-0 border-t border-[#B8C8D8] p-3 dark:border-[#20313D]">
+          <div class="rounded-2 border border-[#B8C8D8] bg-[#F8FAFC] p-3 dark:border-[#20313D] dark:bg-[#0E171F]">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-650 text-[#334155] dark:text-[#D8E1E8]">平台联通状态</span>
+              <span class="inline-flex items-center gap-1.5 text-[11px] font-650 text-[#14824A] dark:text-[#54D38A]">
+                <span class="h-2 w-2 rounded-full bg-[#54D38A]" />
+                Online
+              </span>
+            </div>
+            <p class="mt-2 text-[11px] leading-5 text-[#64748B] dark:text-[#8EA0AE]">
+              情报、资产、Agent 工具链统一编排。
+            </p>
+          </div>
+        </div>
+      </aside>
+
+      <main class="flex h-dvh min-w-0 flex-col overflow-hidden">
+        <header class="shrink-0 border-b border-[#B8C8D8] bg-white px-4 py-3 shadow-sm dark:border-[#20313D] dark:bg-[#0B141B] dark:shadow-none">
+          <div class="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div class="flex min-w-0 items-center gap-3">
+              <el-button v-if="isMobile" text class="!rounded-2" aria-label="打开侧边栏" @click="openSidebar">
+                <el-icon size="20"><Menu /></el-icon>
+              </el-button>
+
+              <span class="grid h-10 w-10 shrink-0 place-items-center rounded-2 border border-[#D8E0E7] bg-[#F8FAFC] text-[#0969DA] dark:border-[#20313D] dark:bg-[#0E171F] dark:text-[#6AD7FF]">
+                <el-icon><component :is="currentMeta.icon" /></el-icon>
+              </span>
+
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="rounded-1 border border-[#CBD5E1] bg-[#F8FAFC] px-2 py-0.5 text-[11px] font-650 text-[#475569] dark:border-[#20313D] dark:bg-[#0E171F] dark:text-[#8EA0AE]">
+                    Security Command Center
+                  </span>
+                  <span class="rounded-1 border border-[#2F8FED]/30 bg-[#EAF5FF] px-2 py-0.5 text-[11px] font-650 text-[#0969DA] dark:bg-[#102638] dark:text-[#6AD7FF]">
+                    Agent Ready
+                  </span>
+                </div>
+                <h2 class="mt-1 truncate text-xl font-750 text-[#0F172A] dark:text-white">{{ currentMeta.label }}</h2>
+                <p class="mt-0.5 truncate text-xs text-[#64748B] dark:text-[#8EA0AE]">{{ currentMeta.description }}</p>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <div v-for="signal in headerSignals" :key="signal.label" class="min-w-[88px] rounded-2 border border-[#C6D3DF] bg-[#F8FAFC] px-3 py-2 dark:border-[#20313D] dark:bg-[#0E171F]">
+                <div class="text-[10px] font-650 uppercase tracking-wide text-[#64748B] dark:text-[#6F8394]">{{ signal.label }}</div>
+                <div class="mt-0.5 truncate text-sm font-750 text-[#0F172A] dark:text-[#E6EDF3]">{{ signal.value }}</div>
+              </div>
+
+              <el-tooltip :content="isDark ? '切换浅色模式' : '切换深色模式'" placement="bottom">
+                <el-button
+                  circle
+                  class="!border-[#CBD5E1] !bg-white dark:!border-[#20313D] dark:!bg-[#0E171F]"
+                  :aria-label="isDark ? '切换到浅色模式' : '切换到深色模式'"
+                  @click="toggleTheme"
+                >
+                  <el-icon>
+                    <Moon v-if="!isDark" />
+                    <Sunny v-else />
+                  </el-icon>
+                </el-button>
+              </el-tooltip>
+            </div>
+          </div>
+        </header>
+
+        <section class="hidden shrink-0 grid-cols-4 gap-3 border-b border-[#C6D3DF] bg-[#E8EEF4] px-4 py-3 xl:grid dark:border-[#20313D] dark:bg-[#071014]">
+          <article v-for="metric in workspaceMetrics" :key="metric.label" class="rounded-2 border border-[#C6D3DF] bg-white p-3 shadow-sm dark:border-[#20313D] dark:bg-[#0E171F] dark:shadow-none">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-650 text-[#475569] dark:text-[#8EA0AE]">{{ metric.label }}</span>
+              <span class="h-2 w-2 rounded-full" :class="metric.dot" />
+            </div>
+            <div class="mt-2 truncate text-base font-750 text-[#0F172A] dark:text-white">{{ metric.value }}</div>
+            <div class="mt-1 truncate text-[11px] text-[#64748B] dark:text-[#6F8394]">{{ metric.note }}</div>
+          </article>
+        </section>
+
+        <section class="min-h-0 flex-1 overflow-hidden bg-[#EEF3F7] p-3 sm:p-4 dark:bg-[#071014]">
+          <div class="h-full min-h-0 overflow-hidden rounded-2 border border-[#C2D0DC] bg-white shadow-sm dark:border-[#20313D] dark:bg-[#0E171F] dark:shadow-none">
+            <transition name="fade" mode="out-in">
+              <keep-alive>
+                <component
+                  :is="activeComponent"
+                  :key="activeTab"
+                  :class="contentClass"
+                />
+              </keep-alive>
+            </transition>
+          </div>
+        </section>
+      </main>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue"
+import { computed, onMounted, onUnmounted, ref, type Component } from "vue"
+import {
+  ChatDotRound,
+  Close,
+  Connection,
+  DataAnalysis,
+  DataBoard,
+  Menu,
+  Monitor,
+  Moon,
+  Platform,
+  Search,
+  Setting,
+  SetUp,
+  Sunny,
+  WarningFilled,
+} from "@element-plus/icons-vue"
 import CveSearch from "./components/CveSearch.vue"
 import AssetSearch from "./components/AssetSearch.vue"
 import LlmChat from "./components/LlmChat.vue"
 import Url2Md from "./components/Url2Md.vue"
 import Settings from "./components/Settings.vue"
+import AgentSituation from "./components/AgentSituation.vue"
 import AgentTracing from "./components/AgentTracing.vue"
 import SkillManage from "./components/SkillManage.vue"
+import McpManage from "./components/McpManage.vue"
 
-const activeTab = ref("cve")
+type NavId = "cve" | "asset" | "url2md" | "situation" | "chat" | "tracing" | "mcp" | "skills" | "settings"
+type NavGroup = "情报检索" | "AI 工作台" | "运营配置"
 
-// 将 activeTab 映射到组件
-const activeComponent = computed(() => {
-  switch (activeTab.value) {
-    case "asset":
-      return AssetSearch
-    case "chat":
-      return LlmChat
-    case "url2md":
-      return Url2Md
-    case "tracing":
-      return AgentTracing
-    case "skills":
-      return SkillManage
-    case "settings":
-      return Settings
-    case "cve":
-    default:
-      return CveSearch
-  }
-})
-
-// 当前页面标题
-const currentTitle = computed(() => {
-  switch (activeTab.value) {
-    case "asset":
-      return "资产搜索"
-    case "chat":
-      return "LLM 聊天"
-    case "url2md":
-      return "网页解析"
-    case "tracing":
-      return "运行观测"
-    case "skills":
-      return "Skills 管理"
-    case "settings":
-      return "系统配置"
-    case "cve":
-    default:
-      return "CVE 搜索"
-  }
-})
-
-// 响应式检测
-const isMobile = ref(false)
-const checkMobile = () => {
-  isMobile.value = window.innerWidth < 640
+type NavItem = {
+  id: NavId
+  label: string
+  description: string
+  badge?: string
+  icon: Component
+  group: NavGroup
 }
 
-// 主题（深色模式）
+const navItems: NavItem[] = [
+  { id: "cve", label: "CVE 情报", description: "漏洞检索与攻击面线索", icon: Search, group: "情报检索" },
+  { id: "asset", label: "资产画像", description: "指纹、IP 与暴露面查询", icon: Monitor, group: "情报检索" },
+  { id: "url2md", label: "网页解析", description: "情报页面转 Markdown", icon: WarningFilled, group: "情报检索" },
+  { id: "situation", label: "态势总览", description: "Agent 运行态势与异常", icon: DataBoard, group: "AI 工作台", badge: "Live" },
+  { id: "chat", label: "AI 安全助手", description: "任务编排与流式分析", icon: ChatDotRound, group: "AI 工作台" },
+  { id: "tracing", label: "运行观测", description: "Agent Trace 与 Span 追踪", icon: DataAnalysis, group: "AI 工作台" },
+  { id: "mcp", label: "MCP 工具中枢", description: "服务、Token 与外部 Agent", icon: Connection, group: "AI 工作台" },
+  { id: "skills", label: "Skills 管理", description: "安全能力模块开关", icon: SetUp, group: "运营配置" },
+  { id: "settings", label: "系统配置", description: "模型、MCP 与通知配置", icon: Setting, group: "运营配置" },
+]
+
+const componentMap: Record<NavId, Component> = {
+  cve: CveSearch,
+  asset: AssetSearch,
+  url2md: Url2Md,
+  situation: AgentSituation,
+  chat: LlmChat,
+  tracing: AgentTracing,
+  mcp: McpManage,
+  skills: SkillManage,
+  settings: Settings,
+}
+
+const fullCanvasTabs = new Set<NavId>(["situation", "chat", "tracing", "mcp"])
+const navGroups: NavGroup[] = ["情报检索", "AI 工作台", "运营配置"]
+const ACTIVE_TAB_KEY = "agno-aios-active-tab"
 const THEME_STORAGE_KEY = "theme"
-const isDark = ref(false)
+
+const activeTab = ref<NavId>("situation")
+const navQuery = ref("")
+const isMobile = ref(false)
+const sidebarOpen = ref(false)
+const isDark = ref(true)
+
+const sidebarMetrics = computed(() => [
+  { label: "能力模块", value: String(navItems.length) },
+  { label: "工作模式", value: "SOC" },
+])
+
+const headerSignals = [
+  { label: "LLM", value: "Routing" },
+  { label: "MCP", value: "Direct" },
+  { label: "Risk", value: "Watched" },
+]
+
+const workspaceMetrics = [
+  { label: "情报源", value: "CVE / Exploit", note: "漏洞与利用线索聚合", dot: "bg-[#2F8FED]" },
+  { label: "资产面", value: "Fingerprint", note: "按 IP 或技术栈定位", dot: "bg-[#54D38A]" },
+  { label: "AI 编排", value: "AgentOS", note: "支持技能驱动分析", dot: "bg-[#F6C343]" },
+  { label: "运行态势", value: "Run / Trace", note: "异常可观测、链路可追溯", dot: "bg-[#F06A6A]" },
+]
+
+const activeComponent = computed(() => componentMap[activeTab.value])
+const fallbackMeta = navItems[0]!
+const currentMeta = computed<NavItem>(() => navItems.find((item) => item.id === activeTab.value) ?? fallbackMeta)
+const contentClass = computed(() => {
+  const base = "block h-full min-h-0"
+  return fullCanvasTabs.has(activeTab.value) ? base : `${base} overflow-auto p-4 sm:p-5`
+})
+
+const navSections = computed(() => {
+  const query = navQuery.value.trim().toLowerCase()
+  const items = navItems.filter((item) => {
+    if (!query) return true
+    return [item.label, item.description, item.group].some((text) => text.toLowerCase().includes(query))
+  })
+
+  return navGroups
+    .map((group) => ({ title: group, items: items.filter((item) => item.group === group) }))
+    .filter((section) => section.items.length > 0)
+})
+
+const isNavId = (value: string | null): value is NavId => {
+  return Boolean(value && navItems.some((item) => item.id === value))
+}
+
+const checkMobile = () => {
+  isMobile.value = window.innerWidth < 1024
+  if (!isMobile.value) sidebarOpen.value = false
+}
+
+const openSidebar = () => {
+  sidebarOpen.value = true
+}
+
+const closeSidebar = () => {
+  sidebarOpen.value = false
+}
 
 const applyTheme = (dark: boolean) => {
   isDark.value = dark
@@ -270,18 +324,7 @@ const applyTheme = (dark: boolean) => {
 }
 
 const initTheme = () => {
-  const saved = localStorage.getItem(THEME_STORAGE_KEY)
-  if (saved === "dark") {
-    applyTheme(true)
-    return
-  }
-  if (saved === "light") {
-    applyTheme(false)
-    return
-  }
-
-  const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches
-  applyTheme(Boolean(prefersDark))
+  applyTheme(localStorage.getItem(THEME_STORAGE_KEY) !== "light")
 }
 
 const toggleTheme = () => {
@@ -290,45 +333,16 @@ const toggleTheme = () => {
   localStorage.setItem(THEME_STORAGE_KEY, next ? "dark" : "light")
 }
 
-type NavItem = {
-  id: string
-  label: string
-  badge?: string
-  icon: string
-  group: "搜索" | "工具"
-}
-
-const navQuery = ref("")
-const navItems = computed<NavItem[]>(() => [
-  { id: "cve", label: "CVE 搜索", icon: "Search", group: "搜索" },
-  { id: "asset", label: "资产搜索", icon: "Monitor", group: "搜索" },
-  { id: "url2md", label: "网页解析", icon: "WarningFilled", group: "工具" },
-  { id: "chat", label: "LLM 聊天", icon: "ChatDotRound", group: "工具", badge: "Beta" },
-  { id: "tracing", label: "运行观测", icon: "DataAnalysis", group: "工具", badge: "New" },
-  { id: "skills", label: "Skills 管理", icon: "SetUp", group: "工具" },
-  { id: "settings", label: "系统配置", icon: "Setting", group: "工具" }
-])
-
-const navSections = computed(() => {
-  const q = navQuery.value.trim().toLowerCase()
-  const items = navItems.value.filter((it) => {
-    if (!q) return true
-    return [it.label, it.group].filter(Boolean).some((s) => String(s).toLowerCase().includes(q))
-  })
-
-  const groups: Array<NavItem["group"]> = ["搜索", "工具"]
-  return groups
-    .map((g) => ({ title: g, items: items.filter((it) => it.group === g) }))
-    .filter((s) => s.items.length > 0)
-})
-
-const selectNav = (id: string) => {
+const selectNav = (id: NavId) => {
   activeTab.value = id
-  if (isMobile.value) closeSidebar()
+  localStorage.setItem(ACTIVE_TAB_KEY, id)
+  closeSidebar()
 }
 
 onMounted(() => {
   initTheme()
+  const savedTab = localStorage.getItem(ACTIVE_TAB_KEY)
+  if (isNavId(savedTab)) activeTab.value = savedTab
   checkMobile()
   window.addEventListener("resize", checkMobile)
 })
@@ -336,141 +350,28 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener("resize", checkMobile)
 })
-
-// Sidebar state
-const collapsed = ref(false)
-const sidebarVisible = ref(false)
-const sidebarRef = ref<HTMLElement | null>(null)
-const sidebarWidth = ref(170)
-const collapsedWidth = 72
-const minWidth = 64
-const maxWidth = 380
-let dragging = false
-
-// 移动端侧边栏控制
-const openSidebar = () => {
-  sidebarVisible.value = true
-}
-
-const closeSidebar = () => {
-  sidebarVisible.value = false
-}
-
-// 桌面端折叠控制
-const toggleCollapse = () => {
-  collapsed.value = !collapsed.value
-}
-
-// 拖拽调整宽度（仅桌面端）
-const startDrag = (_: MouseEvent) => {
-  if (collapsed.value || isMobile.value) return
-  dragging = true
-  window.addEventListener('mousemove', onDrag)
-  window.addEventListener('mouseup', stopDrag)
-}
-
-const onDrag = (e: MouseEvent) => {
-  if (!dragging) return
-  const sidebarRect = sidebarRef.value?.getBoundingClientRect()
-  if (!sidebarRect) return
-  const newWidth = e.clientX - sidebarRect.left
-  if (newWidth >= minWidth && newWidth <= maxWidth) {
-    sidebarWidth.value = newWidth
-  }
-}
-
-const stopDrag = () => {
-  if (!dragging) return
-  dragging = false
-  window.removeEventListener('mousemove', onDrag)
-  window.removeEventListener('mouseup', stopDrag)
-}
 </script>
 
 <style>
-/* 全局样式重置 */
-* {
-  box-sizing: border-box;
+.security-nav-search .el-input__wrapper {
+  background: #f8fafc;
+  border: 1px solid #d8e0e7;
+  border-radius: 8px;
+  box-shadow: none;
 }
 
-/* 拖拽调整条样式 */
-.resizer {
-  width: 6px;
-  cursor: col-resize;
-  transition: background-color 0.2s;
+html.dark .security-nav-search .el-input__wrapper {
+  background: #071014;
+  border-color: #20313d;
 }
 
-.resizer:hover {
-  background-color: rgba(48, 54, 61, 0.35);
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.16s ease;
 }
 
-.resizer:active {
-  background-color: rgba(48, 54, 61, 0.55);
-}
-
-html.dark .resizer:hover {
-  background-color: rgba(148, 163, 184, 0.25);
-}
-
-html.dark .resizer:active {
-  background-color: rgba(148, 163, 184, 0.4);
-}
-
-/* 移动端过渡动画 */
-@media (max-width: 640px) {
-  aside {
-    transition: transform 0.3s ease;
-  }
-}
-
-/* 滚动条美化 */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(156, 163, 175, 0.5);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(156, 163, 175, 0.7);
-}
-
-html.dark ::-webkit-scrollbar-thumb {
-  background: rgba(48, 54, 61, 0.65);
-}
-
-html.dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(48, 54, 61, 0.85);
-}
-
-/* Element Plus 过渡动画优化 */
-.el-fade-in-enter-active,
-.el-fade-in-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.el-fade-in-enter-from,
-.el-fade-in-leave-to {
+.fade-enter-from,
+.fade-leave-to {
   opacity: 0;
-}
-
-/* 移动端优化触摸反馈 */
-@media (hover: none) and (pointer: coarse) {
-  button:active { opacity: 0.98; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  * {
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
 }
 </style>
