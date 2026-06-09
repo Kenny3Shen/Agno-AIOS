@@ -1,5 +1,4 @@
 import secrets
-import sqlite3
 import time
 import tomllib
 from pathlib import Path
@@ -7,11 +6,15 @@ from typing import Any
 
 import tomli_w
 
+from api.services.mysql_store import mysql_connect, mysql_label
+
 SERVICE_IDS = ("playbook", "agent", "basic")
 MCP_DATA_DIR = Path("tmp/mcp")
 MCP_CONFIG_FILE = MCP_DATA_DIR / "mcp_config.toml"
-MCP_TOKENS_DB = MCP_DATA_DIR / "mcp_tokens.db"
-HIAGENT_CACHE_DB = MCP_DATA_DIR / "hiagent_cache.db"
+MCP_TOKENS_TABLE = "mcp_tokens"
+HIAGENT_CACHE_TABLE = "hiagent_exec_cache"
+MCP_TOKENS_DB = mysql_label(MCP_TOKENS_TABLE)
+HIAGENT_CACHE_DB = mysql_label(HIAGENT_CACHE_TABLE)
 
 
 def _ensure_data_dir() -> None:
@@ -95,43 +98,55 @@ def enabled_hiagent_urls() -> list[str]:
     ]
 
 
-def init_tokens_db() -> None:
-    _ensure_data_dir()
-    conn = sqlite3.connect(MCP_TOKENS_DB)
+def init_mcp_mysql_tables() -> None:
+    conn = mysql_connect()
     try:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tokens (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                token TEXT NOT NULL UNIQUE,
-                created_at INTEGER NOT NULL,
-                expires_at INTEGER NOT NULL
+        with conn.cursor() as cursor:
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {MCP_TOKENS_TABLE} (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    token VARCHAR(255) NOT NULL UNIQUE,
+                    created_at BIGINT NOT NULL,
+                    expires_at BIGINT NOT NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """
             )
-            """
-        )
-        conn.commit()
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {HIAGENT_CACHE_TABLE} (
+                    exec_id VARCHAR(128) PRIMARY KEY,
+                    tool_name VARCHAR(255) NOT NULL,
+                    status VARCHAR(50) NOT NULL,
+                    result LONGTEXT,
+                    error LONGTEXT,
+                    created_at DOUBLE NOT NULL,
+                    INDEX idx_hiagent_exec_created_at (created_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """
+            )
     finally:
         conn.close()
 
 
+def init_tokens_db() -> None:
+    init_mcp_mysql_tables()
+
+
 def list_tokens() -> list[dict[str, Any]]:
     init_tokens_db()
-    conn = sqlite3.connect(MCP_TOKENS_DB)
+    conn = mysql_connect()
     try:
-        rows = conn.execute(
-            "SELECT id, name, token, created_at, expires_at FROM tokens ORDER BY created_at DESC"
-        ).fetchall()
-        return [
-            {
-                "id": row[0],
-                "name": row[1],
-                "token": row[2],
-                "created_at": row[3],
-                "expires_at": row[4],
-            }
-            for row in rows
-        ]
+        with conn.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT id, name, token, created_at, expires_at
+                FROM {MCP_TOKENS_TABLE}
+                ORDER BY created_at DESC
+                """
+            )
+            return list(cursor.fetchall())
     finally:
         conn.close()
 
@@ -141,14 +156,20 @@ def insert_token(name: str, expires_in: int, token: str | None = None) -> str:
     now = int(time.time())
     token_value = token or secrets.token_urlsafe(32)
     expires_at = 0 if expires_in == 0 else now + expires_in
-    conn = sqlite3.connect(MCP_TOKENS_DB)
+    conn = mysql_connect()
     try:
-        conn.execute(
-            "INSERT INTO tokens (name, token, created_at, expires_at) VALUES (?, ?, ?, ?) "
-            "ON CONFLICT(token) DO UPDATE SET name = excluded.name, expires_at = excluded.expires_at",
-            (name, token_value, now, expires_at),
-        )
-        conn.commit()
+        with conn.cursor() as cursor:
+            cursor.execute(
+                f"""
+                INSERT INTO {MCP_TOKENS_TABLE}
+                    (name, token, created_at, expires_at)
+                VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    name = VALUES(name),
+                    expires_at = VALUES(expires_at)
+                """,
+                (name, token_value, now, expires_at),
+            )
         return token_value
     finally:
         conn.close()
@@ -156,37 +177,143 @@ def insert_token(name: str, expires_in: int, token: str | None = None) -> str:
 
 def delete_token(token_id: int | None, token_value: str | None) -> bool:
     init_tokens_db()
-    conn = sqlite3.connect(MCP_TOKENS_DB)
+    conn = mysql_connect()
     try:
-        if token_id is not None:
-            cursor = conn.execute("DELETE FROM tokens WHERE id = ?", (token_id,))
-        elif token_value:
-            cursor = conn.execute("DELETE FROM tokens WHERE token = ?", (token_value,))
-        else:
-            return False
-        conn.commit()
-        return cursor.rowcount > 0
+        with conn.cursor() as cursor:
+            if token_id is not None:
+                cursor.execute(
+                    f"DELETE FROM {MCP_TOKENS_TABLE} WHERE id = %s", (token_id,)
+                )
+            elif token_value:
+                cursor.execute(
+                    f"DELETE FROM {MCP_TOKENS_TABLE} WHERE token = %s",
+                    (token_value,),
+                )
+            else:
+                return False
+            return cursor.rowcount > 0
     finally:
         conn.close()
 
 
 def find_token(token: str) -> dict[str, Any] | None:
     init_tokens_db()
-    conn = sqlite3.connect(MCP_TOKENS_DB)
+    conn = mysql_connect()
     try:
-        row = conn.execute(
-            "SELECT id, name, token, created_at, expires_at FROM tokens WHERE token = ?",
-            (token,),
-        ).fetchone()
-        if not row:
-            return None
-        return {
-            "id": row[0],
-            "name": row[1],
-            "token": row[2],
-            "created_at": row[3],
-            "expires_at": row[4],
-        }
+        with conn.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT id, name, token, created_at, expires_at
+                FROM {MCP_TOKENS_TABLE}
+                WHERE token = %s
+                """,
+                (token,),
+            )
+            return cursor.fetchone()
+    finally:
+        conn.close()
+
+
+def save_hiagent_exec(
+    exec_id: str,
+    tool_name: str,
+    status: str,
+    result: str = "",
+    error: str = "",
+) -> None:
+    init_mcp_mysql_tables()
+    conn = mysql_connect()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                f"""
+                INSERT INTO {HIAGENT_CACHE_TABLE}
+                    (exec_id, tool_name, status, result, error, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    tool_name = VALUES(tool_name),
+                    status = VALUES(status),
+                    result = VALUES(result),
+                    error = VALUES(error),
+                    created_at = VALUES(created_at)
+                """,
+                (exec_id, tool_name, status, result, error, time.time()),
+            )
+    finally:
+        conn.close()
+
+
+def load_hiagent_exec(exec_id: str) -> dict[str, Any] | None:
+    init_mcp_mysql_tables()
+    conn = mysql_connect()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT exec_id, tool_name, status, result, error, created_at
+                FROM {HIAGENT_CACHE_TABLE}
+                WHERE exec_id = %s
+                """,
+                (exec_id,),
+            )
+            return cursor.fetchone()
+    finally:
+        conn.close()
+
+
+def upsert_token_record(record: dict[str, Any]) -> None:
+    init_tokens_db()
+    conn = mysql_connect()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                f"""
+                INSERT INTO {MCP_TOKENS_TABLE}
+                    (id, name, token, created_at, expires_at)
+                VALUES (%s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    name = VALUES(name),
+                    created_at = VALUES(created_at),
+                    expires_at = VALUES(expires_at)
+                """,
+                (
+                    record.get("id"),
+                    record.get("name"),
+                    record.get("token"),
+                    record.get("created_at"),
+                    record.get("expires_at"),
+                ),
+            )
+    finally:
+        conn.close()
+
+
+def upsert_hiagent_exec_record(record: dict[str, Any]) -> None:
+    init_mcp_mysql_tables()
+    conn = mysql_connect()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                f"""
+                INSERT INTO {HIAGENT_CACHE_TABLE}
+                    (exec_id, tool_name, status, result, error, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    tool_name = VALUES(tool_name),
+                    status = VALUES(status),
+                    result = VALUES(result),
+                    error = VALUES(error),
+                    created_at = VALUES(created_at)
+                """,
+                (
+                    record.get("exec_id"),
+                    record.get("tool_name"),
+                    record.get("status"),
+                    record.get("result"),
+                    record.get("error"),
+                    record.get("created_at"),
+                ),
+            )
     finally:
         conn.close()
 

@@ -283,7 +283,7 @@ const controlInfo = reactive({
   fastmcp: "in-process",
   mcpUrl: "/mcp/",
   configPath: "tmp/mcp/mcp_config.toml",
-  tokensDbPath: "tmp/mcp/mcp_tokens.db",
+  tokensDbPath: "mysql:mcp_tokens",
 })
 
 const services = ref<ServiceItem[]>([
@@ -339,7 +339,7 @@ const loadConfig = async () => {
   controlInfo.fastmcp = data.fastmcp || "in-process"
   controlInfo.mcpUrl = data.mcp_url || "/mcp/"
   controlInfo.configPath = data.config_path || "tmp/mcp/mcp_config.toml"
-  controlInfo.tokensDbPath = data.tokens_db_path || "tmp/mcp/mcp_tokens.db"
+  controlInfo.tokensDbPath = data.tokens_db_path || "mysql:mcp_tokens"
 }
 
 const loadTokens = async () => {

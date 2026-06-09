@@ -5,18 +5,23 @@ from textwrap import dedent
 from urllib.parse import urlencode
 from agno.agent import Agent
 from agno.models.openai import OpenAILike
-from agno.db.sqlite import SqliteDb
 from agno.tools.mcp import MCPTools
 from agno.run.agent import RunEvent
 from agno.skills import Skills, LocalSkills
 from agno.tracing import setup_tracing
 from api.services.model_config_service import get_model_for_run
 from api.services.knowledge_service import agno_knowledge_retriever
+from api.services.mysql_store import (
+    coerce_json_value,
+    ensure_agno_mysql_tables,
+    get_agno_mysql_db,
+    mysql_connect,
+)
 from api.services.skill_service import get_enabled_skill_dirs
 
 load_dotenv(override=True)
 # Set up database for traces
-db = SqliteDb(db_file=os.environ.get("AGNO_TRACE_DB_FILE", "tmp/traces.db"))
+db = get_agno_mysql_db()
 # Enable tracing (call once at startup)
 setup_tracing(db=db)
 
@@ -97,106 +102,91 @@ def _build_enabled_skills() -> Skills | None:
     return Skills(loaders=[LocalSkills(d) for d in enabled_dirs])
 
 
-DB_FILE = "security_agent.db"
-
-
 def get_all_sessions() -> list[dict]:
-    """从 security_agent.db 读取所有会话摘要"""
-    import sqlite3
-    import json
-
-    if not os.path.exists(DB_FILE):
-        return []
-    conn = sqlite3.connect(DB_FILE)
+    """从 MySQL 读取所有会话摘要。"""
+    ensure_agno_mysql_tables()
+    conn = mysql_connect()
     try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT session_id, created_at, updated_at, runs "
-            "FROM agno_sessions ORDER BY updated_at DESC"
-        )
-        sessions: list[dict] = []
-        for sid, created, updated, runs_raw in cur.fetchall():
-            preview = ""
-            try:
-                runs_str = json.loads(runs_raw)
-                runs = json.loads(runs_str) if isinstance(runs_str, str) else runs_str
-                if runs and isinstance(runs[0], dict):
-                    inp = runs[0].get("input", {})
-                    if isinstance(inp, dict):
-                        preview = inp.get("input_content", "")[:80]
-                    elif isinstance(inp, str):
-                        preview = inp[:80]
-            except Exception:
-                pass
-            sessions.append(
-                {
-                    "session_id": sid,
-                    "preview": preview.strip() or "新对话",
-                    "created_at": created,
-                    "updated_at": updated,
-                }
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT session_id, created_at, updated_at, runs
+                FROM agno_sessions
+                LIMIT 500
+                """
             )
-        return sessions
+            rows = cursor.fetchall()
     finally:
         conn.close()
+
+    rows.sort(
+        key=lambda row: int(row.get("updated_at") or row.get("created_at") or 0),
+        reverse=True,
+    )
+    sessions: list[dict] = []
+    for row in rows:
+        preview = ""
+        runs = coerce_json_value(row.get("runs"))
+        if isinstance(runs, list) and runs and isinstance(runs[0], dict):
+            inp = runs[0].get("input", {})
+            if isinstance(inp, dict):
+                preview = str(inp.get("input_content") or "")[:80]
+            elif isinstance(inp, str):
+                preview = inp[:80]
+        sessions.append(
+            {
+                "session_id": row.get("session_id"),
+                "preview": preview.strip() or "新对话",
+                "created_at": row.get("created_at"),
+                "updated_at": row.get("updated_at"),
+            }
+        )
+    return sessions
 
 
 def get_session_messages(session_id: str) -> list[dict]:
-    """从 security_agent.db 读取指定会话的用户/助手消息列表"""
-    import sqlite3
-    import json
-
-    if not os.path.exists(DB_FILE):
-        return []
-    conn = sqlite3.connect(DB_FILE)
+    """从 MySQL 读取指定会话的用户/助手消息列表。"""
+    ensure_agno_mysql_tables()
+    conn = mysql_connect()
     try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT runs FROM agno_sessions WHERE session_id = ?", (session_id,)
-        )
-        row = cur.fetchone()
-        if not row or not row[0]:
-            return []
-
-        runs_str = json.loads(row[0])
-        runs = json.loads(runs_str) if isinstance(runs_str, str) else runs_str
-
-        messages: list[dict] = []
-        for run in runs:
-            if not isinstance(run, dict):
-                continue
-            # 用户消息
-            inp = run.get("input", {})
-            user_text = ""
-            if isinstance(inp, dict):
-                user_text = inp.get("input_content", "")
-            elif isinstance(inp, str):
-                user_text = inp
-            if user_text.strip():
-                messages.append({"role": "user", "content": user_text.strip()})
-            # 助手回复
-            content = run.get("content", "")
-            if isinstance(content, str) and content.strip():
-                messages.append({"role": "assistant", "content": content.strip()})
-        return messages
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT runs FROM agno_sessions WHERE session_id = %s", (session_id,)
+            )
+            row = cursor.fetchone()
     finally:
         conn.close()
+
+    if not row:
+        return []
+
+    runs = coerce_json_value(row.get("runs"))
+    if not isinstance(runs, list):
+        return []
+
+    messages: list[dict] = []
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        inp = run.get("input", {})
+        user_text = ""
+        if isinstance(inp, dict):
+            user_text = str(inp.get("input_content") or "")
+        elif isinstance(inp, str):
+            user_text = inp
+        if user_text.strip():
+            messages.append({"role": "user", "content": user_text.strip()})
+
+        content = run.get("content", "")
+        if isinstance(content, str) and content.strip():
+            messages.append({"role": "assistant", "content": content.strip()})
+    return messages
 
 
 def delete_session(session_id: str) -> bool:
-    """删除指定会话"""
-    import sqlite3
-
-    if not os.path.exists(DB_FILE):
-        return False
-    conn = sqlite3.connect(DB_FILE)
-    try:
-        cur = conn.cursor()
-        cur.execute("DELETE FROM agno_sessions WHERE session_id = ?", (session_id,))
-        conn.commit()
-        return cur.rowcount > 0
-    finally:
-        conn.close()
+    """删除指定会话。"""
+    ensure_agno_mysql_tables()
+    return get_agno_mysql_db().delete_session(session_id)
 
 
 async def stream_chat_with_agent(
@@ -219,7 +209,7 @@ async def stream_chat_with_agent(
             search_knowledge=True,
             add_search_knowledge_instructions=True,
             skills=_build_enabled_skills(),
-            db=SqliteDb(DB_FILE),
+            db=get_agno_mysql_db(),
             dependencies=dependencies,
             add_dependencies_to_context=True,
             add_history_to_context=True,

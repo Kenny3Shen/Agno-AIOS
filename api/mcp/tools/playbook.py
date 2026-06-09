@@ -1,13 +1,16 @@
 import asyncio
 import json
-import sqlite3
-import time
 import uuid
 from fastmcp import FastMCP
 import os
 import httpx
 from dotenv import load_dotenv
-from api.mcp.config import HIAGENT_CACHE_DB, enabled_hiagent_urls
+from api.mcp.config import (
+    enabled_hiagent_urls,
+    init_mcp_mysql_tables,
+    load_hiagent_exec,
+    save_hiagent_exec,
+)
 
 load_dotenv(override=True)
 playbook_mcp = FastMCP("Playbook")
@@ -236,69 +239,29 @@ class HiAgentAdapter:
         "User-Agent": "Mozilla/5.0",
     }
 
-    _DB_PATH = HIAGENT_CACHE_DB
-
     def __init__(self):
         self.client = httpx.AsyncClient(timeout=60.0, verify=False)
         # 内存缓存: tool_name -> {url, description, input_schema}
         self._tool_registry: dict[str, dict] = {}
-        # SQLite 持久化执行结果
+        # MySQL 持久化执行结果
         self._init_db()
 
-    # ── 内部: SQLite 持久化 ──────────────────────────────
+    # ── 内部: MySQL 持久化 ──────────────────────────────
     def _init_db(self) -> None:
-        conn = sqlite3.connect(self._DB_PATH)
-        try:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS hiagent_exec_cache (
-                    exec_id TEXT PRIMARY KEY,
-                    tool_name TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    result TEXT,
-                    error TEXT,
-                    created_at REAL NOT NULL
-                )
-                """
-            )
-            conn.commit()
-        finally:
-            conn.close()
+        init_mcp_mysql_tables()
 
-    def _save_exec(self, exec_id: str, tool_name: str, status: str,
-                   result: str = "", error: str = "") -> None:
-        conn = sqlite3.connect(self._DB_PATH)
-        try:
-            conn.execute(
-                "INSERT OR REPLACE INTO hiagent_exec_cache "
-                "(exec_id, tool_name, status, result, error, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (exec_id, tool_name, status, result, error, time.time()),
-            )
-            conn.commit()
-        finally:
-            conn.close()
+    def _save_exec(
+        self,
+        exec_id: str,
+        tool_name: str,
+        status: str,
+        result: str = "",
+        error: str = "",
+    ) -> None:
+        save_hiagent_exec(exec_id, tool_name, status, result, error)
 
     def _load_exec(self, exec_id: str) -> dict | None:
-        conn = sqlite3.connect(self._DB_PATH)
-        try:
-            row = conn.execute(
-                "SELECT exec_id, tool_name, status, result, error, created_at "
-                "FROM hiagent_exec_cache WHERE exec_id = ?",
-                (exec_id,),
-            ).fetchone()
-            if not row:
-                return None
-            return {
-                "exec_id": row[0],
-                "tool_name": row[1],
-                "status": row[2],
-                "result": row[3],
-                "error": row[4],
-                "created_at": row[5],
-            }
-        finally:
-            conn.close()
+        return load_hiagent_exec(exec_id)
 
     # ── 内部: SSE/JSON 响应解析 ────────────────────────────
     @staticmethod

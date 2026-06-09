@@ -79,6 +79,14 @@ def _save_index(index: dict[str, dict[str, Any]]) -> None:
     )
 
 
+def _safe_metadata(metadata: dict[str, Any] | None) -> dict[str, str]:
+    return {
+        key: str(value)
+        for key, value in (metadata or {}).items()
+        if value is not None and isinstance(key, str)
+    }
+
+
 def _chunk_text(text: str, max_chars: int = 1200, overlap: int = 160) -> list[str]:
     paragraphs = [part.strip() for part in re.split(r"\n{2,}", text) if part.strip()]
     chunks: list[str] = []
@@ -99,6 +107,65 @@ def _chunk_text(text: str, max_chars: int = 1200, overlap: int = 160) -> list[st
     return chunks
 
 
+def import_knowledge_document(
+    doc: dict[str, Any],
+    chunks: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Import an existing document and chunks into ChromaDB, preserving IDs."""
+    doc_id = str(doc["id"])
+    title = str(doc.get("title") or "未命名知识")
+    source = str(doc.get("source") or "manual")
+    created_at = str(doc.get("created_at") or datetime.now(UTC).isoformat())
+    metadata = _safe_metadata(cast(dict[str, Any], doc.get("metadata") or {}))
+    ordered_chunks = sorted(chunks, key=lambda item: int(item.get("chunk_index") or 0))
+
+    existing = _load_index()
+    collection = _collection()
+    try:
+        collection.delete(where={"doc_id": doc_id})
+    except Exception:
+        pass
+    existing.pop(doc_id, None)
+
+    if ordered_chunks:
+        ids: list[str] = []
+        documents: list[str] = []
+        metadatas: list[dict[str, Any]] = []
+        for index, chunk in enumerate(ordered_chunks):
+            content = str(chunk.get("content") or "")
+            chunk_index = int(chunk.get("chunk_index") or index)
+            chunk_id = str(chunk.get("id") or f"{doc_id}:{chunk_index}")
+            chunk_metadata = _safe_metadata(
+                cast(dict[str, Any], chunk.get("metadata") or {})
+            )
+            ids.append(chunk_id)
+            documents.append(content)
+            metadatas.append(
+                {
+                    **metadata,
+                    **chunk_metadata,
+                    "doc_id": doc_id,
+                    "title": title,
+                    "source": source,
+                    "chunk_index": chunk_index,
+                    "created_at": str(chunk.get("created_at") or created_at),
+                }
+            )
+        collection.add(ids=ids, documents=documents, metadatas=metadatas)
+
+    imported_doc = {
+        "id": doc_id,
+        "title": title,
+        "source": source,
+        "chunks": len(ordered_chunks),
+        "created_at": created_at,
+        "metadata": metadata,
+    }
+    existing[doc_id] = imported_doc
+    _save_index(existing)
+    return imported_doc
+
+
 def add_text_document(
     title: str,
     content: str,
@@ -115,43 +182,34 @@ def add_text_document(
     ).hexdigest()[:16]
     chunks = _chunk_text(clean_content)
     now = datetime.now(UTC).isoformat()
-    safe_metadata = {
-        key: str(value)
-        for key, value in (metadata or {}).items()
-        if value is not None and isinstance(key, str)
-    }
-
-    collection = _collection()
-    existing = _load_index()
-    if doc_id in existing:
-        delete_document(doc_id)
-        existing = _load_index()
-
-    ids = [f"{doc_id}:{index}" for index in range(len(chunks))]
-    metadatas = [
+    safe_metadata = _safe_metadata(metadata)
+    chunk_rows = [
         {
-            "doc_id": doc_id,
+            "id": f"{doc_id}:{index}",
+            "content": chunk,
+            "chunk_index": index,
+            "metadata": {
+                "doc_id": doc_id,
+                "title": clean_title,
+                "source": source,
+                "chunk_index": str(index),
+                "created_at": now,
+                **safe_metadata,
+            },
+            "created_at": now,
+        }
+        for index, chunk in enumerate(chunks)
+    ]
+    return import_knowledge_document(
+        {
+            "id": doc_id,
             "title": clean_title,
             "source": source,
-            "chunk_index": index,
             "created_at": now,
-            **safe_metadata,
-        }
-        for index in range(len(chunks))
-    ]
-    collection.add(ids=ids, documents=chunks, metadatas=metadatas)
-
-    doc = {
-        "id": doc_id,
-        "title": clean_title,
-        "source": source,
-        "chunks": len(chunks),
-        "created_at": now,
-        "metadata": safe_metadata,
-    }
-    existing[doc_id] = doc
-    _save_index(existing)
-    return doc
+            "metadata": safe_metadata,
+        },
+        chunk_rows,
+    )
 
 
 def add_file_document(path: str, title: str | None = None) -> dict[str, Any]:
@@ -178,8 +236,7 @@ def delete_document(doc_id: str) -> bool:
     index = _load_index()
     if doc_id not in index:
         return False
-    collection = _collection()
-    collection.delete(where={"doc_id": doc_id})
+    _collection().delete(where={"doc_id": doc_id})
     index.pop(doc_id, None)
     _save_index(index)
     return True
@@ -245,7 +302,9 @@ def knowledge_status() -> dict[str, Any]:
     docs = list_documents()
     return {
         "collection": COLLECTION_NAME,
+        "storage": "chromadb",
         "path": str(CHROMA_PATH),
+        "index_file": str(INDEX_FILE),
         "documents": len(docs),
         "chunks": collection.count(),
         "embedding": f"local-hash-{EMBEDDING_DIMENSIONS}",

@@ -235,6 +235,10 @@
           </div>
           <dl class="mt-4 space-y-3 text-xs">
             <div class="context-row">
+              <dt>Storage</dt>
+              <dd>{{ status?.storage || "-" }}</dd>
+            </div>
+            <div class="context-row">
               <dt>Collection</dt>
               <dd>{{ status?.collection || "-" }}</dd>
             </div>
@@ -243,8 +247,12 @@
               <dd>{{ status?.embedding || "-" }}</dd>
             </div>
             <div class="context-row">
-              <dt>Chroma Path</dt>
-              <dd :title="status?.path">{{ status?.path || "-" }}</dd>
+              <dt>Path</dt>
+              <dd :title="status?.path || '-'">{{ status?.path || "-" }}</dd>
+            </div>
+            <div class="context-row">
+              <dt>Index</dt>
+              <dd :title="status?.index_file || '-'">{{ status?.index_file || "-" }}</dd>
             </div>
           </dl>
         </section>
@@ -426,7 +434,7 @@ const metrics = computed(() => [
   { label: "Documents", value: status.value?.documents ?? documents.value.length, hint: "已登记文档" },
   { label: "Chunks", value: status.value?.chunks ?? totalChunks.value, hint: "向量切片数" },
   { label: "Embedding", value: status.value?.embedding || "unknown", hint: "当前向量实现" },
-  { label: "Collection", value: status.value?.collection || "-", hint: "Chroma 集合" },
+  { label: "Storage", value: status.value?.storage || "chromadb", hint: "知识库存储" },
 ])
 
 const totalChunks = computed(() => documents.value.reduce((sum, item) => sum + Number(item.chunks || 0), 0))

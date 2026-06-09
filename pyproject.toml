@@ -24,11 +24,13 @@ dependencies = [
     "beautifulsoup4>=4.15.0",
     "pyyaml>=6.0.3",
     "chromadb>=1.5.9",
+    "pymysql>=1.2.0",
 ]
 
 [project.scripts]
 update-cve = "api.tasks.update_cve:run"
 update-ip-asset = "api.tasks.update_ip_asset:run"
+migrate-sqlite-to-mysql = "api.tasks.migrate_sqlite_to_mysql:run"
 
 [build-system]
 requires = ["hatchling"]

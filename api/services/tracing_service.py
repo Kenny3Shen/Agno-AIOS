@@ -1,30 +1,13 @@
-import os
 import asyncio
 from datetime import datetime
 from typing import Any
 
 from fastapi.encoders import jsonable_encoder
 
-from agno.db.sqlite import SqliteDb
-
-
-def _get_env(key: str, default: str = "") -> str:
-    return os.environ.get(key, default)
-
-
-TRACE_DB_FILE = _get_env("AGNO_TRACE_DB_FILE", "tmp/traces.db")
-
-
-def _ensure_parent_dir(path: str) -> None:
-    parent = os.path.dirname(path)
-    if parent:
-        os.makedirs(parent, exist_ok=True)
-
-
-_ensure_parent_dir(TRACE_DB_FILE)
+from api.services.mysql_store import get_agno_mysql_db
 
 # Keep a single DB wrapper instance.
-_trace_db = SqliteDb(db_file=TRACE_DB_FILE)
+_trace_db = get_agno_mysql_db()
 
 
 def _parse_dt(value: str | None) -> datetime | None:
@@ -53,7 +36,7 @@ async def list_traces(
 ) -> dict[str, Any]:
     """Return a paginated list of traces.
 
-    Uses Agno `SqliteDb.get_traces()` convenience API.
+    Uses Agno `MySQLDb.get_traces()` convenience API.
     """
     if limit <= 0:
         limit = 20
@@ -64,9 +47,6 @@ async def list_traces(
 
     st = _parse_dt(start_time)
     et = _parse_dt(end_time)
-
-    if not os.path.exists(TRACE_DB_FILE):
-        return {"items": [], "total_count": 0, "page": page, "limit": limit}
 
     traces, total_count = await asyncio.to_thread(
         _trace_db.get_traces,
@@ -132,9 +112,6 @@ def _build_span_tree(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 async def get_trace_detail(trace_id: str) -> dict[str, Any] | None:
-    if not os.path.exists(TRACE_DB_FILE):
-        return None
-
     trace = await asyncio.to_thread(_trace_db.get_trace, trace_id=trace_id)
     if not trace:
         return None

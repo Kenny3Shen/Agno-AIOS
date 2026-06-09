@@ -1,6 +1,6 @@
 # Agno AIOS AI 信息安全中台
 
-Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基于 FastAPI、Vue 3、Agno、FastMCP 和 ChromaDB，把 CVE 情报、资产画像、网页情报解析、Agent 对话、运行观测、MCP 工具中枢、Skills 能力包和基础 RAG 知识库整合到同一个主服务中。
+Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基于 FastAPI、Vue 3、Agno、FastMCP、MySQL 和 ChromaDB，把 CVE 情报、资产画像、网页情报解析、Agent 对话、运行观测、MCP 工具中枢、Skills 能力包和基础 RAG 知识库整合到同一个主服务中。
 
 当前目标不是做一个通用聊天页面，而是构建可持续扩展的安全 Agent 工作台：安全人员可以在一个界面内完成情报查询、漏洞研判、资产排查、剧本调用、知识检索和运行观测。
 
@@ -20,7 +20,7 @@ Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基
 
 - 前端：Vue 3、TypeScript、Element Plus、UnoCSS、Vite/Rolldown、markdown-it、highlight.js。
 - 后端：FastAPI、Uvicorn、aiomysql、httpx、Polars、loguru、python-dotenv。
-- Agent：Agno、OpenAILike、LocalSkills、SqliteDb、Tracing、ChromaDB RAG。
+- Agent：Agno、OpenAILike、LocalSkills、MySQLDb、Tracing、ChromaDB RAG。
 - MCP：FastMCP，同进程 ASGI 挂载。
 - 包管理：uv、Bun。
 
@@ -148,10 +148,11 @@ MCP 配置和 Token 会保存到：
 
 ```text
 tmp/mcp/mcp_config.toml
-tmp/mcp/mcp_tokens.db
+MySQL 表：mcp_tokens
+MySQL 表：hiagent_exec_cache
 ```
 
-知识库文件会保存到：
+知识库会保存到：
 
 ```text
 tmp/chroma
@@ -177,6 +178,14 @@ CREATE TABLE IF NOT EXISTS cves (
 ```
 
 ## 数据更新
+
+从旧 SQLite 运行库迁移到 MySQL：
+
+```bash
+uv run migrate-sqlite-to-mysql
+```
+
+迁移命令会读取旧的 `security_agent.db`、`tmp/traces.db`、`tmp/mcp/mcp_tokens.db` 和 `tmp/mcp/hiagent_cache.db`，并幂等写入 MySQL。RAG 知识库继续使用 ChromaDB 的 `tmp/chroma` 和 `tmp/knowledge_docs.json`，不会迁移为 MySQL 表。
 
 更新 CVE 数据：
 
@@ -207,7 +216,7 @@ uv run update-ip-asset
 - 使用系统配置中的 OpenAI-compatible 模型。
 - 通过 `MCPTools` 调用同进程 FastMCP 工具。
 - 通过 `LocalSkills` 加载 `api/agent/skills/` 本地能力包。
-- 使用 `SqliteDb` 保存会话和运行记录。
+- 使用 Agno `MySQLDb` 保存会话、记忆和运行记录。
 - 使用 Agno tracing 记录运行链路。
 - 通过 `knowledge_retriever` 接入 ChromaDB 知识库。
 
@@ -260,7 +269,8 @@ MCP 已整合进主 API 进程：
 - MCP 协议入口：`/mcp/`
 - 管理 API：`/api/mcp/*`
 - 配置文件：`tmp/mcp/mcp_config.toml`
-- Token 数据库：`tmp/mcp/mcp_tokens.db`
+- Token 表：`mcp_tokens`
+- Hi-Agent 执行缓存表：`hiagent_exec_cache`
 - 访问方式：`Authorization: Bearer <token>` 或 `/mcp/?token=<token>`
 
 主服务启动时会自动确保存在一个 bootstrap token。服务开关和 Hi-Agent 配置更新后，重启主 API 后对 MCP 协议工具列表生效。

@@ -161,7 +161,9 @@ export interface ModelConfigResponse {
 // RAG 知识库相关类型
 export interface KnowledgeStatus {
   collection: string
-  path: string
+  storage?: string
+  path?: string
+  index_file?: string
   documents: number
   chunks: number
   embedding: string
