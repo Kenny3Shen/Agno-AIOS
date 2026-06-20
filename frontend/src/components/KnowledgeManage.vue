@@ -34,7 +34,7 @@
       </article>
     </section>
 
-    <div class="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
+    <div class="grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_380px]">
       <main class="min-w-0 space-y-4">
         <section class="knowledge-panel">
           <div class="panel-title">
@@ -170,64 +170,72 @@
             加载中...
           </div>
 
-          <el-table
-            v-else
-            :data="filteredDocuments"
-            class="knowledge-table"
-            empty-text="暂无知识文档"
-          >
-            <el-table-column label="文档" min-width="260">
-              <template #default="{ row }: { row: KnowledgeDocument }">
-                <div class="min-w-0">
-                  <div class="flex min-w-0 items-center gap-2">
-                    <span class="doc-title truncate">{{ row.title }}</span>
-                    <span class="doc-id">{{ row.id }}</span>
-                  </div>
-                  <div class="mt-2 flex flex-wrap gap-1.5">
-                    <span
-                      v-for="tag in metadataTags(row)"
-                      :key="tag"
-                      class="metadata-tag"
-                    >
-                      {{ tag }}
-                    </span>
-                  </div>
+          <div v-else class="document-table" role="table" aria-label="知识文档列表">
+            <div class="document-table-head" role="row">
+              <span role="columnheader">文档</span>
+              <span role="columnheader">来源</span>
+              <span role="columnheader">Chunks</span>
+              <span role="columnheader">创建时间</span>
+              <span role="columnheader">操作</span>
+            </div>
+
+            <div v-if="filteredDocuments.length === 0" class="empty-box">暂无知识文档</div>
+
+            <article
+              v-for="row in filteredDocuments"
+              :key="row.id"
+              class="document-row"
+              role="row"
+            >
+              <div class="document-cell document-main" role="cell">
+                <div class="document-primary">
+                  <span class="doc-title" :title="row.title">{{ row.title }}</span>
+                  <span class="doc-id" :title="row.id">{{ shortId(row.id) }}</span>
                 </div>
-              </template>
-            </el-table-column>
-            <el-table-column label="来源" min-width="220">
-              <template #default="{ row }: { row: KnowledgeDocument }">
+                <div class="metadata-strip">
+                  <span
+                    v-for="tag in metadataTags(row)"
+                    :key="tag"
+                    class="metadata-tag"
+                    :title="tag"
+                  >
+                    {{ tag }}
+                  </span>
+                </div>
+              </div>
+
+              <div class="document-cell" role="cell">
                 <span class="source-text" :title="row.source">{{ row.source || "manual" }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="Chunks" width="96" align="right">
-              <template #default="{ row }: { row: KnowledgeDocument }">
-                <span class="font-mono text-xs">{{ row.chunks }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="创建时间" width="170">
-              <template #default="{ row }: { row: KnowledgeDocument }">
-                <span class="text-xs text-[#6B7C8A] dark:text-[#91A4B3]">{{ formatDate(row.created_at) }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="92" fixed="right" align="center">
-              <template #default="{ row }: { row: KnowledgeDocument }">
-                <el-button
-                  type="danger"
-                  text
-                  class="cursor-pointer"
-                  :loading="deletingDocId === row.id"
-                  @click="deleteDocument(row)"
-                >
-                  <el-icon><Delete /></el-icon>
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
+              </div>
+
+              <div class="document-cell document-number" role="cell">
+                {{ row.chunks }}
+              </div>
+
+              <div class="document-cell document-time" role="cell">
+                {{ formatDate(row.created_at) }}
+              </div>
+
+              <div class="document-actions" role="cell">
+                <el-tooltip content="删除文档" placement="top">
+                  <el-button
+                    type="danger"
+                    text
+                    class="cursor-pointer"
+                    :loading="deletingDocId === row.id"
+                    :aria-label="`删除 ${row.title}`"
+                    @click="deleteDocument(row)"
+                  >
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </el-tooltip>
+              </div>
+            </article>
+          </div>
         </section>
       </main>
 
-      <aside class="space-y-4">
+      <aside class="min-w-0 space-y-4">
         <section class="knowledge-panel">
           <div class="panel-title">
             <el-icon><DataLine /></el-icon>
@@ -239,12 +247,28 @@
               <dd>{{ status?.storage || "-" }}</dd>
             </div>
             <div class="context-row">
-              <dt>Collection</dt>
+              <dt>Vector</dt>
               <dd>{{ status?.collection || "-" }}</dd>
+            </div>
+            <div class="context-row">
+              <dt>Database</dt>
+              <dd :title="status?.database || '-'">{{ status?.database || "-" }}</dd>
+            </div>
+            <div class="context-row">
+              <dt>Contents</dt>
+              <dd :title="status?.contents_db || '-'">{{ status?.contents_db || "-" }}</dd>
+            </div>
+            <div class="context-row">
+              <dt>Schema</dt>
+              <dd>{{ status?.postgres_schema || "-" }}</dd>
             </div>
             <div class="context-row">
               <dt>Embedding</dt>
               <dd>{{ status?.embedding || "-" }}</dd>
+            </div>
+            <div class="context-row">
+              <dt>Dimension</dt>
+              <dd>{{ status?.embedding_dimensions || "-" }}</dd>
             </div>
             <div class="context-row">
               <dt>Rerank</dt>
@@ -255,14 +279,21 @@
               <dd>{{ status?.retrieval_candidates || "-" }}</dd>
             </div>
             <div class="context-row">
-              <dt>Path</dt>
-              <dd :title="status?.path || '-'">{{ status?.path || "-" }}</dd>
+              <dt>Chunk</dt>
+              <dd>{{ status?.chunk_size || "-" }} / {{ status?.chunk_overlap ?? "-" }}</dd>
             </div>
             <div class="context-row">
-              <dt>Index</dt>
-              <dd :title="status?.index_file || '-'">{{ status?.index_file || "-" }}</dd>
+              <dt>Device</dt>
+              <dd>{{ status?.device || "-" }}</dd>
+            </div>
+            <div class="context-row">
+              <dt>Runtime</dt>
+              <dd>{{ status?.torch_runtime_ok === false ? "degraded" : "ready" }}</dd>
             </div>
           </dl>
+          <p v-if="status?.cold_start_note" class="mt-3 text-xs text-[#5F6F7C] dark:text-[#91A4B3]">
+            {{ status.cold_start_note }}
+          </p>
         </section>
 
         <section class="knowledge-panel">
@@ -291,7 +322,7 @@
             </div>
           </div>
 
-          <div class="mt-4 space-y-2">
+          <div class="search-results mt-4 space-y-2">
             <div v-if="searching" class="empty-box">检索中...</div>
             <div v-else-if="searched && searchResults.length === 0" class="empty-box">暂无命中</div>
             <article
@@ -441,8 +472,8 @@ const {
 const metrics = computed(() => [
   { label: "Documents", value: status.value?.documents ?? documents.value.length, hint: "已登记文档" },
   { label: "Chunks", value: status.value?.chunks ?? totalChunks.value, hint: "向量切片数" },
-  { label: "Embedding", value: status.value?.embedding || "unknown", hint: "当前向量实现" },
-  { label: "Rerank", value: status.value?.rerank_enabled === false ? "off" : status.value?.rerank || "unknown", hint: "二阶段重排" },
+  { label: "Embedding", value: status.value?.embedding_dimensions ? `${status.value.embedding_dimensions}d` : status.value?.embedding || "unknown", hint: "当前向量实现" },
+  { label: "Storage", value: status.value?.storage || "pgvector", hint: "向量存储" },
 ])
 
 const totalChunks = computed(() => documents.value.reduce((sum, item) => sum + Number(item.chunks || 0), 0))
@@ -464,7 +495,16 @@ const loadKnowledge = async () => {
     if (data.status.embedding) {
       ragSettings.embeddingProvider = data.status.embedding
     }
-    ragSettings.reranker = data.status.rerank_enabled !== false
+    ragSettings.reranker = data.status.rerank_enabled
+    if (data.status.chunk_size) {
+      ragSettings.chunkSize = data.status.chunk_size
+    }
+    if (typeof data.status.chunk_overlap === "number") {
+      ragSettings.chunkOverlap = data.status.chunk_overlap
+    }
+    if (data.status.top_k) {
+      ragSettings.agentTopK = data.status.top_k
+    }
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : "加载知识库失败")
   }
@@ -658,6 +698,11 @@ const metadataTags = (doc: KnowledgeDocument) => {
     .map(([key, value]) => `${key}: ${value}`)
 }
 
+const shortId = (value: string) => {
+  if (!value) return "-"
+  return value.length > 14 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value
+}
+
 const formatDate = (value: string) => {
   if (!value) return "-"
   const date = new Date(value)
@@ -739,9 +784,13 @@ onMounted(() => {
 }
 
 .doc-title {
+  min-width: 0;
+  overflow: hidden;
   color: #15202b;
   font-size: 13px;
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .doc-id,
@@ -769,7 +818,7 @@ onMounted(() => {
 }
 
 .metadata-tag {
-  max-width: 220px;
+  max-width: min(100%, 260px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -777,12 +826,91 @@ onMounted(() => {
 
 .source-text {
   display: block;
+  max-width: 100%;
   overflow: hidden;
   color: #526170;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.document-table {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #d8e0e7;
+  border-radius: 8px;
+}
+
+.document-table-head,
+.document-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.45fr) minmax(160px, 0.9fr) 78px 136px 58px;
+  min-width: 0;
+}
+
+.document-table-head {
+  border-bottom: 1px solid #d8e0e7;
+  background: #f8fafc;
+  color: #526170;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.document-table-head > span,
+.document-cell,
+.document-actions {
+  min-width: 0;
+  padding: 11px 12px;
+}
+
+.document-row {
+  background: #ffffff;
+}
+
+.document-row + .document-row {
+  border-top: 1px solid #d8e0e7;
+}
+
+.document-main {
+  display: grid;
+  gap: 8px;
+}
+
+.document-primary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.metadata-strip {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.document-number {
+  color: #15202b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.document-time {
+  overflow: hidden;
+  color: #6b7c8a;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-actions {
+  display: flex;
+  justify-content: center;
 }
 
 .context-row {
@@ -830,6 +958,13 @@ onMounted(() => {
   line-height: 1.6;
 }
 
+.search-results {
+  max-height: clamp(220px, 34vh, 440px);
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .empty-box {
   border: 1px solid #d8e0e7;
   border-radius: 8px;
@@ -852,10 +987,6 @@ onMounted(() => {
   background: #f8fafc;
 }
 
-.knowledge-table :deep(.el-table__cell) {
-  vertical-align: top;
-}
-
 html.dark .knowledge-metric,
 html.dark .knowledge-panel,
 html.dark .search-hit {
@@ -876,6 +1007,7 @@ html.dark .search-hit p {
 html.dark .knowledge-metric strong,
 html.dark .panel-title,
 html.dark .doc-title,
+html.dark .document-number,
 html.dark .context-row dd,
 html.dark .search-hit strong {
   color: #dce7ef;
@@ -883,10 +1015,37 @@ html.dark .search-hit strong {
 
 html.dark .doc-id,
 html.dark .metadata-tag,
-html.dark .placeholder-badge,
+html.dark .placeholder-badge {
+  border-color: #2a3a45;
+  background: #0b141b;
+  color: #91a4b3;
+}
+
 html.dark .empty-box {
   border-color: #2a3a45;
   background: #0b141b;
+  color: #91a4b3;
+}
+
+html.dark .document-table {
+  border-color: #20313d;
+}
+
+html.dark .document-table-head {
+  border-color: #20313d;
+  background: #0b141b;
+  color: #91a4b3;
+}
+
+html.dark .document-row {
+  background: #0e171f;
+}
+
+html.dark .document-row + .document-row {
+  border-color: #20313d;
+}
+
+html.dark .document-time {
   color: #91a4b3;
 }
 
@@ -899,6 +1058,75 @@ html.dark .knowledge-upload :deep(.el-upload-dragger) {
   .context-row {
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+}
+
+@media (max-width: 1120px) {
+  .document-table-head {
+    display: none;
+  }
+
+  .document-table {
+    display: grid;
+    gap: 10px;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .document-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    border: 1px solid #d8e0e7;
+    border-radius: 8px;
+  }
+
+  .document-row + .document-row {
+    border-top: 1px solid #d8e0e7;
+  }
+
+  .document-main {
+    grid-column: 1 / -1;
+  }
+
+  .document-cell,
+  .document-actions {
+    padding: 10px 12px;
+  }
+
+  .document-cell:not(.document-main) {
+    padding-top: 0;
+  }
+
+  .document-number {
+    text-align: left;
+  }
+
+  .document-actions {
+    grid-column: 2;
+    grid-row: 2 / span 2;
+    align-self: center;
+  }
+
+  html.dark .document-row {
+    border-color: #20313d;
+  }
+}
+
+@media (max-width: 640px) {
+  .document-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .document-actions {
+    grid-column: 1;
+    grid-row: auto;
+    justify-content: flex-start;
+  }
+
+  .document-primary {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

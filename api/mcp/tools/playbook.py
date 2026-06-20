@@ -7,7 +7,7 @@ import httpx
 from dotenv import load_dotenv
 from api.mcp.config import (
     enabled_hiagent_urls,
-    init_mcp_mysql_tables,
+    init_mcp_postgres_tables,
     load_hiagent_exec,
     save_hiagent_exec,
 )
@@ -243,12 +243,12 @@ class HiAgentAdapter:
         self.client = httpx.AsyncClient(timeout=60.0, verify=False)
         # 内存缓存: tool_name -> {url, description, input_schema}
         self._tool_registry: dict[str, dict] = {}
-        # MySQL 持久化执行结果
+        # PostgreSQL 持久化执行结果
         self._init_db()
 
-    # ── 内部: MySQL 持久化 ──────────────────────────────
+    # ── 内部: PostgreSQL 持久化 ─────────────────────────
     def _init_db(self) -> None:
-        init_mcp_mysql_tables()
+        init_mcp_postgres_tables()
 
     def _save_exec(
         self,

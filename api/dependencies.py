@@ -1,11 +1,13 @@
-from fastapi import Request, HTTPException
 import asyncio
+from typing import Any
+
 import httpx
-import aiomysql
+from fastapi import HTTPException, Request
+from psycopg_pool import AsyncConnectionPool
 
 
-def get_pool(request: Request) -> aiomysql.Pool:
-    """Return the aiomysql pool stored on app.state.
+def get_pool(request: Request) -> AsyncConnectionPool[Any]:
+    """Return the PostgreSQL pool stored on app.state.
 
     This is placed in a separate module to avoid circular imports between
     `api.main` and route modules that depend on it.
@@ -14,6 +16,7 @@ def get_pool(request: Request) -> aiomysql.Pool:
     if pool is None:
         raise HTTPException(503, "数据库连接未初始化，请稍后重试。")
     return pool
+
 
 def get_asset_client(request: Request) -> httpx.AsyncClient:
     """Return the httpx AsyncClient for asset API stored on app.state.

@@ -17,10 +17,12 @@ import os
 import sys
 from datetime import datetime
 
-import aiomysql
 from loguru import logger
 import polars as pl
+import psycopg
+from psycopg import sql
 
+from api.services.postgres_store import app_schema, ensure_app_tables, postgres_dsn
 from api.tasks.cve_sources import DATA_SOURCES
 
 # 配置日志
@@ -36,117 +38,80 @@ logger.add(
     retention="10 days",
 )
 
-DB_CONFIG = {
-    "host": os.getenv("MYSQL_TEST_HOST", "localhost"),
-    "user": os.getenv("MYSQL_TEST_USER", "root"),
-    "password": os.getenv("MYSQL_TEST_PASSWORD", ""),
-    "db": os.getenv("MYSQL_TEST_DATABASE", "cve_db"),
-    "port": int(os.getenv("MYSQL_TEST_PORT", 3306)),
-    "charset": "utf8mb4",
-    "autocommit": True,
-}
-
-
 async def update_cve_database(
     increment_data: list[dict[str, str]],
     deleted_data: list[dict[str, str]],
 ) -> tuple[int, int]:
     """
-    异步更新 MySQL 数据库：
-    - 插入新增数据（INSERT IGNORE）
+    更新 PostgreSQL 数据库：
+    - 插入新增数据（ON CONFLICT DO NOTHING）
     - 删除远程已移除的数据（DELETE）
     返回 (新增条数, 删除条数)
     """
-
-    async with aiomysql.create_pool(**DB_CONFIG) as pool:
-        async with pool.acquire() as conn:
+    ensure_app_tables()
+    new_count = 0
+    del_count = 0
+    batch_size = 500
+    async with await psycopg.AsyncConnection.connect(postgres_dsn()) as conn:
+        try:
             async with conn.cursor() as cursor:
-                # 1. 创建表
-                await cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS cves (
-                        id INT AUTO_INCREMENT PRIMARY KEY,
-                        cve_id VARCHAR(255) NOT NULL,
-                        description TEXT,
-                        github_url VARCHAR(255) NOT NULL,
-                        source VARCHAR(50) NOT NULL,
-                        create_time DATETIME,
-                        UNIQUE KEY unique_cve_url (cve_id, github_url)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-                    """)
+                cves_table = sql.Identifier(app_schema(), "cves")
+                insert_sql = sql.SQL(
+                    """
+                    INSERT INTO {}
+                        (cve_id, description, github_url, source, create_time)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (cve_id, github_url) DO NOTHING
+                    """
+                ).format(cves_table)
+                for i in range(0, len(increment_data), batch_size):
+                    batch = increment_data[i : i + batch_size]
+                    create_time = datetime.now()
+                    params = [
+                        (
+                            item.get("cve_id"),
+                            item.get("description", ""),
+                            item.get("github_url", ""),
+                            item.get("source", ""),
+                            create_time,
+                        )
+                        for item in batch
+                    ]
+                    if params:
+                        await cursor.executemany(insert_sql, params)
+                        new_count += max(cursor.rowcount or 0, 0)
 
-                new_count = 0
-                del_count = 0
+                delete_sql = sql.SQL(
+                    "DELETE FROM {} WHERE cve_id = %s AND github_url = %s"
+                ).format(cves_table)
+                for i in range(0, len(deleted_data), batch_size):
+                    batch = deleted_data[i : i + batch_size]
+                    params = [
+                        (item.get("cve_id"), item.get("github_url"))
+                        for item in batch
+                    ]
+                    if params:
+                        await cursor.executemany(delete_sql, params)
+                        del_count += max(cursor.rowcount or 0, 0)
 
-                # 开启事务
-                await conn.begin()
-
-                try:
-                    # 2. 插入新增数据（批量执行）
-                    insert_sql = """
-                                INSERT IGNORE INTO cves (cve_id, description, github_url, source, create_time)
-                                VALUES (%s, %s, %s, %s, %s)
-                                """
-                    batch_size = 500
-                    for i in range(0, len(increment_data), batch_size):
-                        batch = increment_data[i : i + batch_size]
-                        create_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        params = [
-                            (
-                                item.get("cve_id"),
-                                item.get("description", ""),
-                                item.get("github_url", ""),
-                                item.get("source", ""),
-                                create_time,
-                            )
-                            for item in batch
-                        ]
-                        if params:
-                            await cursor.executemany(insert_sql, params)
-                            # cursor.rowcount should report number of inserted rows for the batch
-                            inserted = (
-                                cursor.rowcount
-                                if cursor.rowcount and cursor.rowcount > 0
-                                else 0
-                            )
-                            new_count += inserted
-
-                    # 3. 删除远程已移除的数据（批量执行）
-                    delete_sql = (
-                        "DELETE FROM cves WHERE cve_id = %s AND github_url = %s"
-                    )
-                    batch_size = 500
-                    for i in range(0, len(deleted_data), batch_size):
-                        batch = deleted_data[i : i + batch_size]
-                        params = [
-                            (item.get("cve_id"), item.get("github_url"))
-                            for item in batch
-                        ]
-                        if params:
-                            await cursor.executemany(delete_sql, params)
-                            deleted = (
-                                cursor.rowcount
-                                if cursor.rowcount and cursor.rowcount > 0
-                                else 0
-                            )
-                            del_count += deleted
-
-                    await conn.commit()
-                except Exception as e:
-                    await conn.rollback()
-                    logger.exception("同步过程中出错，已回滚: {}", e)
-                    raise
-
-                await cursor.execute("SELECT count(*) FROM cves")
-                result = await cursor.fetchone()
-                total_count = result[0]
-
-                logger.info(
-                    "同步完成。新增: {} 条，删除: {} 条，数据库总记录: {} 条。",
-                    new_count,
-                    del_count,
-                    total_count,
+                await cursor.execute(
+                    sql.SQL("SELECT count(*) FROM {}").format(cves_table)
                 )
-                return new_count, del_count
+                result = await cursor.fetchone()
+                total_count = int(result[0]) if result else 0
+            await conn.commit()
+        except Exception as e:
+            await conn.rollback()
+            logger.exception("同步过程中出错，已回滚: {}", e)
+            raise
+
+    logger.info(
+        "同步完成。新增: {} 条，删除: {} 条，数据库总记录: {} 条。",
+        new_count,
+        del_count,
+        total_count,
+    )
+    return new_count, del_count
 
 
 async def get_add_del_data(

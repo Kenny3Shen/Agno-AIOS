@@ -1,34 +1,57 @@
-import aiomysql
+from __future__ import annotations
+
 from typing import Any
+
+from psycopg import sql
+from psycopg_pool import AsyncConnectionPool
+
+from api.services.postgres_store import app_schema
 
 
 async def search_cves(
-    pool: aiomysql.Pool,
+    pool: AsyncConnectionPool[Any],
     query: str,
     source: str | None = None,
     page: int = 1,
     size: int = 10,
-) -> tuple[list[dict], int]:
-    """统一的 CVE 搜索函数：按 cve_id 或 description 匹配查询词"""
-    async with pool.acquire() as conn:
-        async with conn.cursor(aiomysql.DictCursor) as cursor:
-            conditions = ["(cve_id LIKE %s OR description LIKE %s)"]
-            params: list[Any] = [f"%{query}%", f"%{query}%"]
+) -> tuple[list[dict[str, Any]], int]:
+    """Search CVEs by CVE ID or description."""
+    params: dict[str, Any] = {"query": f"%{query}%"}
+    if source:
+        params["source"] = source
 
-            if source:
-                conditions.append("source = %s")
-                params.append(source)
+    params["limit"] = size
+    params["offset"] = (page - 1) * size
 
-            where_clause = " AND ".join(conditions)
-
-            count_sql = f"SELECT COUNT(*) as count FROM cves WHERE {where_clause}"
-            await cursor.execute(count_sql, params)
+    async with pool.connection() as conn:
+        async with conn.cursor() as cursor:
+            table = sql.Identifier(app_schema(), "cves")
+            where_clause = (
+                sql.SQL(
+                    "(cve_id ILIKE %(query)s OR description ILIKE %(query)s) "
+                    "AND source = %(source)s"
+                )
+                if source
+                else sql.SQL("(cve_id ILIKE %(query)s OR description ILIKE %(query)s)")
+            )
+            await cursor.execute(
+                sql.SQL("SELECT COUNT(*) AS count FROM {} WHERE ").format(table)
+                + where_clause,
+                params,
+            )
             count_result = await cursor.fetchone()
-            total = count_result["count"] if count_result else 0
+            total = int(count_result["count"]) if count_result else 0
 
-            sql = f"SELECT * FROM cves WHERE {where_clause} ORDER BY id DESC LIMIT %s OFFSET %s"
-            params.extend([size, (page - 1) * size])
-            await cursor.execute(sql, params)
-            result = await cursor.fetchall()
-
-            return result, total
+            await cursor.execute(
+                sql.SQL(
+                    """
+                SELECT id, cve_id, description, github_url, source, create_time
+                FROM {}
+                WHERE {}
+                ORDER BY id DESC
+                LIMIT %(limit)s OFFSET %(offset)s
+                """
+                ).format(table, where_clause),
+                params,
+            )
+            return list(await cursor.fetchall()), total

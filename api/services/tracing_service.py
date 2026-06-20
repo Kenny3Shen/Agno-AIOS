@@ -4,10 +4,10 @@ from typing import Any
 
 from fastapi.encoders import jsonable_encoder
 
-from api.services.mysql_store import get_agno_mysql_db
+from api.services.postgres_store import get_agno_postgres_db
 
 # Keep a single DB wrapper instance.
-_trace_db = get_agno_mysql_db()
+_trace_db = get_agno_postgres_db()
 
 
 def _parse_dt(value: str | None) -> datetime | None:
@@ -36,7 +36,7 @@ async def list_traces(
 ) -> dict[str, Any]:
     """Return a paginated list of traces.
 
-    Uses Agno `MySQLDb.get_traces()` convenience API.
+    Uses Agno `PostgresDb.get_traces()` convenience API.
     """
     if limit <= 0:
         limit = 20

@@ -23,17 +23,20 @@ dependencies = [
     "requests>=2.34.2",
     "beautifulsoup4>=4.15.0",
     "pyyaml>=6.0.3",
-    "chromadb>=1.5.9",
     "pymysql>=1.2.0",
     "sentence-transformers>=3.0.0",
     "FlagEmbedding>=1.3.0",
     "torch>=2.12.1",
+    "pgvector>=0.4.2",
+    "psycopg>=3.3.4",
+    "psycopg-pool>=3.3.1",
 ]
 
 [project.scripts]
 update-cve = "api.tasks.update_cve:run"
 update-ip-asset = "api.tasks.update_ip_asset:run"
 migrate-sqlite-to-mysql = "api.tasks.migrate_sqlite_to_mysql:run"
+migrate-mysql-to-postgres = "api.tasks.migrate_mysql_to_postgres:run"
 
 [build-system]
 requires = ["hatchling"]

@@ -9,19 +9,21 @@ from agno.tools.mcp import MCPTools
 from agno.run.agent import RunEvent
 from agno.skills import Skills, LocalSkills
 from agno.tracing import setup_tracing
+from psycopg import sql
 from api.services.model_config_service import get_model_for_run
-from api.services.knowledge_service import agno_knowledge_retriever
-from api.services.mysql_store import (
+from api.services.knowledge_service import get_knowledge_base
+from api.services.postgres_store import (
+    agno_schema,
     coerce_json_value,
-    ensure_agno_mysql_tables,
-    get_agno_mysql_db,
-    mysql_connect,
+    ensure_agno_postgres_tables,
+    get_agno_postgres_db,
+    postgres_connect,
 )
 from api.services.skill_service import get_enabled_skill_dirs
 
 load_dotenv(override=True)
 # Set up database for traces
-db = get_agno_mysql_db()
+db = get_agno_postgres_db()
 # Enable tracing (call once at startup)
 setup_tracing(db=db)
 
@@ -77,7 +79,7 @@ AGENT_INSTRUCTIONS = dedent("""\
     ## 四、内部知识库
 
     当用户询问制度、处置规范、历史报告、资产说明、漏洞研判资料或要求基于已沉淀资料回答时，主动调用 `search_knowledge_base` 检索内部知识库。
-    复杂问题应拆成 2-3 个检索 query 多次检索，综合 BGE 向量召回和 rerank 后的结果回答。
+    复杂问题应拆成 2-3 个检索 query 多次检索，综合 PgVector 向量召回和 rerank 后的结果回答。
     使用知识库命中内容时，需要在回答中标明来源标题或 source；不要把未命中的内容伪装成内部知识。
     若知识库没有命中，必须明确说明"未检索到内部知识库依据"，再使用其他工具或通用推理补充。
     
@@ -105,26 +107,32 @@ def _build_enabled_skills() -> Skills | None:
 
 
 def get_all_sessions() -> list[dict]:
-    """从 MySQL 读取所有会话摘要。"""
-    ensure_agno_mysql_tables()
-    conn = mysql_connect()
-    try:
+    """从 PostgreSQL 读取所有会话摘要。"""
+    ensure_agno_postgres_tables()
+    with postgres_connect() as conn:
         with conn.cursor() as cursor:
             cursor.execute(
-                """
+                sql.SQL(
+                    """
                 SELECT session_id, created_at, updated_at, runs
-                FROM agno_sessions
+                FROM {}
                 LIMIT 500
                 """
+                ).format(sql.Identifier(agno_schema(), "agno_sessions"))
             )
             rows = cursor.fetchall()
-    finally:
-        conn.close()
 
-    rows.sort(
-        key=lambda row: int(row.get("updated_at") or row.get("created_at") or 0),
-        reverse=True,
-    )
+    def _sort_time(row: dict[str, Any]) -> float:
+        value = row.get("updated_at") or row.get("created_at") or 0
+        timestamp = getattr(value, "timestamp", None)
+        if callable(timestamp):
+            return float(timestamp())
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
+    rows.sort(key=_sort_time, reverse=True)
     sessions: list[dict] = []
     for row in rows:
         preview = ""
@@ -147,17 +155,17 @@ def get_all_sessions() -> list[dict]:
 
 
 def get_session_messages(session_id: str) -> list[dict]:
-    """从 MySQL 读取指定会话的用户/助手消息列表。"""
-    ensure_agno_mysql_tables()
-    conn = mysql_connect()
-    try:
+    """从 PostgreSQL 读取指定会话的用户/助手消息列表。"""
+    ensure_agno_postgres_tables()
+    with postgres_connect() as conn:
         with conn.cursor() as cursor:
             cursor.execute(
-                "SELECT runs FROM agno_sessions WHERE session_id = %s", (session_id,)
+                sql.SQL("SELECT runs FROM {} WHERE session_id = %s").format(
+                    sql.Identifier(agno_schema(), "agno_sessions")
+                ),
+                (session_id,),
             )
             row = cursor.fetchone()
-    finally:
-        conn.close()
 
     if not row:
         return []
@@ -187,8 +195,8 @@ def get_session_messages(session_id: str) -> list[dict]:
 
 def delete_session(session_id: str) -> bool:
     """删除指定会话。"""
-    ensure_agno_mysql_tables()
-    return get_agno_mysql_db().delete_session(session_id)
+    ensure_agno_postgres_tables()
+    return get_agno_postgres_db().delete_session(session_id)
 
 
 async def stream_chat_with_agent(
@@ -207,11 +215,11 @@ async def stream_chat_with_agent(
             instructions=[AGENT_INSTRUCTIONS],
             model=_build_model(model_id),
             tools=[mcp_tools],
-            knowledge_retriever=agno_knowledge_retriever,
+            knowledge=get_knowledge_base(),
             search_knowledge=True,
             add_search_knowledge_instructions=True,
             skills=_build_enabled_skills(),
-            db=get_agno_mysql_db(),
+            db=get_agno_postgres_db(),
             dependencies=dependencies,
             add_dependencies_to_context=True,
             add_history_to_context=True,

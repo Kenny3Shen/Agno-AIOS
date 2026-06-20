@@ -1,6 +1,6 @@
 # Agno AIOS AI 信息安全中台
 
-Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基于 FastAPI、Vue 3、Agno、FastMCP、MySQL 和 ChromaDB，把 CVE 情报、资产画像、网页情报解析、Agent 对话、运行观测、MCP 工具中枢、Skills 能力包和基础 RAG 知识库整合到同一个主服务中。
+Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基于 FastAPI、Vue 3、Agno、FastMCP、PostgreSQL、PostgresDb 和 PgVector，把 CVE 情报、资产画像、网页情报解析、Agent 对话、运行观测、MCP 工具中枢、Skills 能力包和基础 RAG 知识库整合到同一个主服务中。
 
 当前目标不是做一个通用聊天页面，而是构建可持续扩展的安全 Agent 工作台：安全人员可以在一个界面内完成情报查询、漏洞研判、资产排查、剧本调用、知识检索和运行观测。
 
@@ -14,13 +14,13 @@ Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基
 - **态势总览**：展示 Agent 运行成功率、耗时分布和错误态势。
 - **MCP 工具中枢**：FastMCP 与主 API 同进程运行，支持服务开关、Token 和 Hi-Agent MCP 接入。
 - **Skills 管理**：启用、禁用和查看本地 `api/agent/skills/` 能力包。
-- **RAG 知识库**：基于 ChromaDB 的本地知识库，Agent 可通过 `search_knowledge_base` 检索内部资料。
+- **RAG 知识库**：基于 Agno Knowledge、PostgresDb 和 PgVector 的知识库，Agent 可通过 `search_knowledge_base` 检索内部资料。
 
 ## 技术栈
 
 - 前端：Vue 3、TypeScript、Element Plus、UnoCSS、Vite/Rolldown、markdown-it、highlight.js。
-- 后端：FastAPI、Uvicorn、aiomysql、httpx、Polars、loguru、python-dotenv。
-- Agent：Agno、OpenAILike、LocalSkills、MySQLDb、Tracing、ChromaDB RAG。
+- 后端：FastAPI、Uvicorn、psycopg、psycopg-pool、httpx、Polars、loguru、python-dotenv。
+- Agent：Agno、OpenAILike、LocalSkills、PostgresDb、Tracing、PgVector RAG。
 - MCP：FastMCP，同进程 ASGI 挂载。
 - 包管理：uv、Bun。
 
@@ -59,7 +59,7 @@ Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基
 - Python 3.12+
 - uv
 - Bun 1.3+ 或 Node.js 18+
-- MySQL 5.7+
+- PostgreSQL 15+，并启用 pgvector 扩展
 
 ## 快速启动
 
@@ -109,12 +109,16 @@ bun run build
 创建 `.env` 文件或设置环境变量：
 
 ```bash
-# MySQL
-MYSQL_TEST_HOST=localhost
-MYSQL_TEST_USER=root
-MYSQL_TEST_PASSWORD=your_password
-MYSQL_TEST_DATABASE=cve_db
-MYSQL_TEST_PORT=3306
+# PostgreSQL / PgVector
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=agno_aios
+POSTGRES_PASSWORD=agno_aios
+POSTGRES_DB=agno_aios
+AGNO_APP_SCHEMA=app
+AGNO_DB_SCHEMA=agno
+AGNO_MCP_SCHEMA=mcp
+AGNO_KNOWLEDGE_SCHEMA=knowledge
 
 # ACL 资产数据更新
 ACL_USERNAME=your_username
@@ -131,18 +135,22 @@ AGENT_TIMEZONE=Asia/Shanghai
 AGNO_SKILLS_DIR=api/agent/skills
 AGNO_SKILLS_CONFIG_FILE=tmp/skills_config.json
 
-# RAG 知识库，可选
-AGNO_KNOWLEDGE_CHROMA_PATH=tmp/chroma
-AGNO_KNOWLEDGE_INDEX_FILE=tmp/knowledge_docs.json
-AGNO_KNOWLEDGE_COLLECTION=security_knowledge_bge
+AGNO_KNOWLEDGE_PGVECTOR_TABLE=security_knowledge_vectors
+AGNO_POSTGRES_KNOWLEDGE_TABLE=agno_knowledge
+AGNO_KNOWLEDGE_NAME=security_knowledge
 AGNO_KNOWLEDGE_TOP_K=5
+AGNO_KNOWLEDGE_CHUNK_SIZE=1200
+AGNO_KNOWLEDGE_CHUNK_OVERLAP=160
 AGNO_KNOWLEDGE_EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
+AGNO_KNOWLEDGE_EMBEDDING_DIMENSIONS=512
 AGNO_KNOWLEDGE_RERANK_MODEL=BAAI/bge-reranker-base
 AGNO_KNOWLEDGE_DEVICE=auto
 AGNO_KNOWLEDGE_RERANK_ENABLED=true
 AGNO_KNOWLEDGE_RERANK_CANDIDATE_MULTIPLIER=3
 AGNO_KNOWLEDGE_RERANK_MIN_CANDIDATES=10
 ```
+
+默认 `uv sync` 会安装 CPU 版 `torch`，这是为了避免在不一致的 CUDA / cuDNN 环境下出现运行时崩溃。需要 GPU 推理时，先确认本机显卡和 PyTorch wheel 兼容，再覆盖安装对应的 GPU 版本。
 
 模型参数不再通过 `LLM_*` 环境变量维护。启动服务后进入 **系统配置 -> 模型路由**，配置 API Key、Base URL、Model ID、启用状态和默认模型。运行时配置会保存到：
 
@@ -154,44 +162,57 @@ MCP 配置和 Token 会保存到：
 
 ```text
 tmp/mcp/mcp_config.toml
-MySQL 表：mcp_tokens
-MySQL 表：hiagent_exec_cache
+PostgreSQL 表：mcp.mcp_tokens
+PostgreSQL 表：mcp.hiagent_exec_cache
 ```
 
 知识库会保存到：
 
 ```text
-tmp/chroma
-tmp/knowledge_docs.json
+PostgreSQL schema：knowledge
+PgVector 表：knowledge.security_knowledge_vectors
+Agno content 表：knowledge.agno_knowledge
 ```
 
 ## 数据库初始化
 
-```sql
-CREATE DATABASE cve_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+WSL2 / Ubuntu 本地安装 PostgreSQL 和 pgvector：
 
-USE cve_db;
-
-CREATE TABLE IF NOT EXISTS cves (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    cve_id VARCHAR(255) NOT NULL,
-    description TEXT,
-    github_url VARCHAR(255) NOT NULL,
-    source VARCHAR(50) NOT NULL,
-    create_time DATETIME,
-    UNIQUE KEY unique_cve_url (cve_id, github_url)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```bash
+sudo apt-get update
+sudo apt-get install -y postgresql postgresql-contrib postgresql-16-pgvector
+sudo pg_ctlcluster 16 main start
 ```
+
+创建数据库、用户、schema 和 pgvector 扩展：
+
+```bash
+sudo -u postgres psql <<'SQL'
+CREATE ROLE agno_aios WITH LOGIN PASSWORD 'agno_aios';
+CREATE DATABASE agno_aios OWNER agno_aios;
+\connect agno_aios
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE SCHEMA IF NOT EXISTS app AUTHORIZATION agno_aios;
+CREATE SCHEMA IF NOT EXISTS agno AUTHORIZATION agno_aios;
+CREATE SCHEMA IF NOT EXISTS mcp AUTHORIZATION agno_aios;
+CREATE SCHEMA IF NOT EXISTS knowledge AUTHORIZATION agno_aios;
+ALTER DATABASE agno_aios SET search_path TO app, agno, mcp, knowledge, public;
+SQL
+```
+
+主 API 启动时会确保 `app.cves`、`agno.*`、`mcp.*` 基础表存在。知识库第一次写入、检索或查看状态时，`PgVector.create()` 会创建 `knowledge.security_knowledge_vectors`，`PostgresDb` 会创建 `knowledge.agno_knowledge` 内容登记表。若使用托管 PostgreSQL，需要提前确认数据库已安装 pgvector 扩展，且运行用户有建表权限。
 
 ## 数据更新
 
-从旧 SQLite 运行库迁移到 MySQL：
+从旧 MySQL 主库迁移到 PostgreSQL：
 
 ```bash
-uv run migrate-sqlite-to-mysql
+uv run migrate-mysql-to-postgres
 ```
 
-迁移命令会读取旧的 `security_agent.db`、`tmp/traces.db`、`tmp/mcp/mcp_tokens.db` 和 `tmp/mcp/hiagent_cache.db`，并幂等写入 MySQL。RAG 知识库继续使用 ChromaDB 的 `tmp/chroma` 和 `tmp/knowledge_docs.json`，不会迁移为 MySQL 表。
+迁移命令会读取旧 MySQL 的 `cves`、`agno_*`、`mcp_tokens` 和 `hiagent_exec_cache` 表，并幂等写入 PostgreSQL 的 `app`、`agno` 和 `mcp` schema。迁移源仍使用 `MYSQL_TEST_HOST`、`MYSQL_TEST_USER`、`MYSQL_TEST_PASSWORD`、`MYSQL_TEST_DATABASE`、`MYSQL_TEST_PORT` 环境变量。
+
+旧 ChromaDB 知识库不会自动迁移到 PgVector，切换后需要通过知识库 API 重新写入或批量导入文档。
 
 更新 CVE 数据：
 
@@ -222,9 +243,9 @@ uv run update-ip-asset
 - 使用系统配置中的 OpenAI-compatible 模型。
 - 通过 `MCPTools` 调用同进程 FastMCP 工具。
 - 通过 `LocalSkills` 加载 `api/agent/skills/` 本地能力包。
-- 使用 Agno `MySQLDb` 保存会话、记忆和运行记录。
+- 使用 Agno `PostgresDb` 保存会话、记忆和运行记录。
 - 使用 Agno tracing 记录运行链路。
-- 通过 `knowledge_retriever` 接入 ChromaDB 知识库。
+- 通过 Agno `knowledge=Knowledge(...)` 接入 PostgresDb + PgVector 知识库。
 
 Agent 在以下场景会优先检索知识库：
 
@@ -236,9 +257,11 @@ Agent 在以下场景会优先检索知识库：
 
 ## RAG 知识库
 
-当前知识库使用 ChromaDB + `BAAI/bge-small-zh-v1.5` 做向量化，并使用 `BAAI/bge-reranker-base` 对召回候选进行二阶段重排。Agent 通过 Agno 的 `search_knowledge_base` 工具按需检索内部知识库，实现 Agentic RAG。
+当前知识库使用 Agno `Knowledge`，`PostgresDb` 保存内容登记，`PgVector` 保存向量切片，`BAAI/bge-small-zh-v1.5` 做向量化，并使用 `BAAI/bge-reranker-base` 对召回候选进行二阶段重排。Agent 通过 Agno 的 `search_knowledge_base` 工具按需检索内部知识库，实现 Agentic RAG。
 
-默认集合名为 `security_knowledge_bge`，用于避免和旧的本地 hash embedding 集合维度冲突。切换 embedding 模型后需要重新写入或重建知识库索引。
+默认向量表为 `knowledge.security_knowledge_vectors`，内容登记表为 `knowledge.agno_knowledge`。切换 embedding 模型后需要重新写入或重建知识库索引，避免向量维度冲突。
+
+首次触发向量检索或 rerank 时会同步加载本地模型；如果本机尚未缓存 Hugging Face 权重，还会先下载，冷启动可能阻塞 30-120 秒。
 
 写入文本知识：
 
@@ -277,8 +300,8 @@ MCP 已整合进主 API 进程：
 - MCP 协议入口：`/mcp/`
 - 管理 API：`/api/mcp/*`
 - 配置文件：`tmp/mcp/mcp_config.toml`
-- Token 表：`mcp_tokens`
-- Hi-Agent 执行缓存表：`hiagent_exec_cache`
+- Token 表：`mcp.mcp_tokens`
+- Hi-Agent 执行缓存表：`mcp.hiagent_exec_cache`
 - 访问方式：`Authorization: Bearer <token>` 或 `/mcp/?token=<token>`
 
 主服务启动时会自动确保存在一个 bootstrap token。服务开关和 Hi-Agent 配置更新后，重启主 API 后对 MCP 协议工具列表生效。
@@ -384,8 +407,8 @@ api/agent/skills/example-skill/
 Python 语法、类型和风格检查：
 
 ```bash
+ruff check .
 ty check .
-uv run ruff check .
 uv run ruff format .
 ```
 
@@ -417,7 +440,7 @@ bun run build
 
 - 完成 CVE、资产、URL 情报、Agent 对话、MCP 工具、Skills 和运行观测的基础闭环。
 - 完成模型路由配置，支持多模型选择。
-- 完成 ChromaDB 基础知识库接入。
+- 完成 PgVector 基础知识库接入。
 - 完成前后端暗黑模式、信息架构和核心页面可读性优化。
 
 ### 阶段二：Agent 能力增强

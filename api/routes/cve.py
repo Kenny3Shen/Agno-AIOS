@@ -1,5 +1,8 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends
-import aiomysql
+from psycopg_pool import AsyncConnectionPool
+
 from api.dependencies import get_pool
 from api.models.schemas import CveSearchRequest
 from api.services.cve_service import search_cves
@@ -11,7 +14,7 @@ router = APIRouter(prefix="/api/cve", tags=["CVE"])
 
 @router.post("/search")
 async def search_cve(
-    request: CveSearchRequest, pool: aiomysql.Pool = Depends(get_pool)
+    request: CveSearchRequest, pool: AsyncConnectionPool[Any] = Depends(get_pool)
 ) -> dict:
     """Search CVEs by ID and/or keyword with pagination"""
     try:

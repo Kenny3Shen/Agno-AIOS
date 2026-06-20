@@ -164,13 +164,22 @@ export interface KnowledgeStatus {
   storage?: string
   path?: string
   index_file?: string
+  database?: string
+  contents_db?: string
+  postgres_schema?: string
   documents: number
   chunks: number
   embedding: string
+  embedding_dimensions?: number | null
   rerank?: string
   device?: string
-  rerank_enabled?: boolean
+  rerank_enabled: boolean
+  top_k?: number
   retrieval_candidates?: number
+  chunk_size?: number
+  chunk_overlap?: number
+  cold_start_note?: string
+  torch_runtime_ok?: boolean
 }
 
 export interface KnowledgeDocument {
@@ -202,11 +211,12 @@ export interface KnowledgeFileRequest {
 export interface KnowledgeSearchResult {
   content: string
   score: number
-  distance: number
+  distance: number | null
   doc_id: string
   title: string
   source: string
   chunk_index: number
+  metadata?: Record<string, unknown>
 }
 
 export interface KnowledgeSearchResponse {

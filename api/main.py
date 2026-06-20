@@ -10,7 +10,6 @@ import os
 import sys
 from loguru import logger
 from dotenv import load_dotenv
-import aiomysql
 
 load_dotenv(override=True)
 
@@ -31,7 +30,7 @@ logger.add(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # initialize resources
-    pool: aiomysql.Pool = await get_db_pool()
+    pool = await get_db_pool()
     app.state.db_pool = pool
     bootstrap_mcp_token(os.getenv("MCP_TOKEN") or os.getenv("MCP_Token"))
     await mcp_runtime.startup()
