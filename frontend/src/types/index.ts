@@ -167,6 +167,10 @@ export interface KnowledgeStatus {
   documents: number
   chunks: number
   embedding: string
+  rerank?: string
+  device?: string
+  rerank_enabled?: boolean
+  retrieval_candidates?: number
 }
 
 export interface KnowledgeDocument {

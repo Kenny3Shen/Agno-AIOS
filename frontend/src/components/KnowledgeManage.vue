@@ -247,6 +247,14 @@
               <dd>{{ status?.embedding || "-" }}</dd>
             </div>
             <div class="context-row">
+              <dt>Rerank</dt>
+              <dd>{{ status?.rerank || "-" }}</dd>
+            </div>
+            <div class="context-row">
+              <dt>Candidates</dt>
+              <dd>{{ status?.retrieval_candidates || "-" }}</dd>
+            </div>
+            <div class="context-row">
               <dt>Path</dt>
               <dd :title="status?.path || '-'">{{ status?.path || "-" }}</dd>
             </div>
@@ -325,7 +333,7 @@
             <label class="knowledge-field">
               <span>Embedding Provider</span>
               <el-select v-model="ragSettings.embeddingProvider" disabled>
-                <el-option label="Local Hash 256" value="local-hash-256" />
+                <el-option label="BGE small zh v1.5" value="BAAI/bge-small-zh-v1.5" />
                 <el-option label="OpenAI-compatible" value="openai-compatible" />
                 <el-option label="BGE / bge-m3" value="bge-m3" />
               </el-select>
@@ -416,8 +424,8 @@ const ragSettings = reactive({
   agentTopK: 5,
   chunkSize: 1200,
   chunkOverlap: 160,
-  embeddingProvider: "local-hash-256",
-  reranker: false,
+  embeddingProvider: "BAAI/bge-small-zh-v1.5",
+  reranker: true,
 })
 
 const {
@@ -434,7 +442,7 @@ const metrics = computed(() => [
   { label: "Documents", value: status.value?.documents ?? documents.value.length, hint: "已登记文档" },
   { label: "Chunks", value: status.value?.chunks ?? totalChunks.value, hint: "向量切片数" },
   { label: "Embedding", value: status.value?.embedding || "unknown", hint: "当前向量实现" },
-  { label: "Storage", value: status.value?.storage || "chromadb", hint: "知识库存储" },
+  { label: "Rerank", value: status.value?.rerank_enabled === false ? "off" : status.value?.rerank || "unknown", hint: "二阶段重排" },
 ])
 
 const totalChunks = computed(() => documents.value.reduce((sum, item) => sum + Number(item.chunks || 0), 0))
@@ -456,6 +464,7 @@ const loadKnowledge = async () => {
     if (data.status.embedding) {
       ragSettings.embeddingProvider = data.status.embedding
     }
+    ragSettings.reranker = data.status.rerank_enabled !== false
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : "加载知识库失败")
   }

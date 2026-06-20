@@ -134,8 +134,14 @@ AGNO_SKILLS_CONFIG_FILE=tmp/skills_config.json
 # RAG 知识库，可选
 AGNO_KNOWLEDGE_CHROMA_PATH=tmp/chroma
 AGNO_KNOWLEDGE_INDEX_FILE=tmp/knowledge_docs.json
-AGNO_KNOWLEDGE_COLLECTION=security_knowledge
+AGNO_KNOWLEDGE_COLLECTION=security_knowledge_bge
 AGNO_KNOWLEDGE_TOP_K=5
+AGNO_KNOWLEDGE_EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
+AGNO_KNOWLEDGE_RERANK_MODEL=BAAI/bge-reranker-base
+AGNO_KNOWLEDGE_DEVICE=auto
+AGNO_KNOWLEDGE_RERANK_ENABLED=true
+AGNO_KNOWLEDGE_RERANK_CANDIDATE_MULTIPLIER=3
+AGNO_KNOWLEDGE_RERANK_MIN_CANDIDATES=10
 ```
 
 模型参数不再通过 `LLM_*` 环境变量维护。启动服务后进入 **系统配置 -> 模型路由**，配置 API Key、Base URL、Model ID、启用状态和默认模型。运行时配置会保存到：
@@ -230,7 +236,9 @@ Agent 在以下场景会优先检索知识库：
 
 ## RAG 知识库
 
-当前知识库是基础可运行版本，默认使用本地哈希 embedding，不依赖外部 embedding API。该实现适合先跑通 Agent RAG 链路；生产环境建议升级为 OpenAI-compatible embedding、BGE、bge-m3 或企业内部向量服务。
+当前知识库使用 ChromaDB + `BAAI/bge-small-zh-v1.5` 做向量化，并使用 `BAAI/bge-reranker-base` 对召回候选进行二阶段重排。Agent 通过 Agno 的 `search_knowledge_base` 工具按需检索内部知识库，实现 Agentic RAG。
+
+默认集合名为 `security_knowledge_bge`，用于避免和旧的本地 hash embedding 集合维度冲突。切换 embedding 模型后需要重新写入或重建知识库索引。
 
 写入文本知识：
 
@@ -426,10 +434,10 @@ bun run build
 
 目标是让内部知识成为 Agent 的稳定上下文来源。
 
-- 把本地哈希 embedding 替换为可配置 embedding 模型。
+- 支持更多 embedding 模型配置和索引重建。
 - 支持 Markdown、PDF、HTML、CSV、JSON、网页和 Git 仓库导入。
 - 支持 metadata filters，例如业务线、资产组、漏洞类型、报告来源、时间范围。
-- 引入 reranker，提高长文档和相似漏洞检索质量。
+- 扩展 reranker 配置和评估，提高长文档和相似漏洞检索质量。
 - 在前端展示引用来源、命中 chunk、相似度和知识更新时间。
 
 ### 阶段四：运营闭环
