@@ -39,7 +39,7 @@
       <article class="situation-panel min-w-0">
         <div class="panel-title">
           <el-icon><TrendCharts /></el-icon>
-          运行链路态势
+          最近会话
         </div>
         <div class="mt-4 space-y-2">
           <div v-for="trace in recentRuns" :key="trace.trace_id" class="run-row">
@@ -54,6 +54,11 @@
                   <span class="duration-bar" :class="{ error: hasError(trace) }" :style="{ width: durationWidth(trace.duration_ms) }" />
                 </span>
                 <span class="shrink-0 font-mono text-[10px] text-[#8A99A6]">{{ shortId(trace.trace_id) }}</span>
+              </div>
+              <div class="mt-2 flex flex-wrap gap-1.5">
+                <span class="record-chip mono">会话 {{ shortId(trace.session_id || "") }}</span>
+                <span class="record-chip mono">运行 {{ shortId(trace.run_id || "") }}</span>
+                <span class="record-chip">Agent {{ shortId(trace.agent_id || trace.team_id || trace.workflow_id || "") }}</span>
               </div>
             </div>
           </div>
@@ -202,7 +207,7 @@ const rangeStart = () => {
 const loadSituation = async () => {
   const response = await listTraces({
     page: 1,
-    limit: 100,
+    limit: 60,
     start_time: rangeStart(),
   })
   traces.value = response.items || []
@@ -383,6 +388,20 @@ onMounted(() => {
   background: linear-gradient(90deg, #f06a6a, #f6c343);
 }
 
+.record-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #d8e0e7;
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: #526170;
+  font-size: 10px;
+}
+
+.record-chip.mono {
+  font-family: "Fira Code", monospace;
+}
+
 .status-bar.ok {
   background: #54d38a;
 }
@@ -469,6 +488,11 @@ html.dark .incident-row strong {
 html.dark .duration-track,
 html.dark .status-track {
   background: #22313a;
+}
+
+html.dark .record-chip {
+  border-color: #22313a;
+  color: #91a4b3;
 }
 
 html.dark .agent-load-row em,

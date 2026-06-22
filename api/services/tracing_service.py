@@ -73,7 +73,6 @@ def _build_span_tree(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
     Input spans are dicts with at least: span_id, parent_span_id.
     """
     by_id: dict[str, dict[str, Any]] = {}
-    children_by_parent: dict[str | None, list[dict[str, Any]]] = {}
 
     for s in spans:
         span_id = str(s.get("span_id", ""))
@@ -81,8 +80,6 @@ def _build_span_tree(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         node = {"span": s, "children": []}
         by_id[span_id] = node
-        parent = s.get("parent_span_id")
-        children_by_parent.setdefault(parent, []).append(node)
 
     # attach children
     for span_id, node in by_id.items():
@@ -112,11 +109,12 @@ def _build_span_tree(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 async def get_trace_detail(trace_id: str) -> dict[str, Any] | None:
-    trace = await asyncio.to_thread(_trace_db.get_trace, trace_id=trace_id)
+    trace_task = asyncio.to_thread(_trace_db.get_trace, trace_id=trace_id)
+    spans_task = asyncio.to_thread(_trace_db.get_spans, trace_id=trace_id)
+    trace, spans = await asyncio.gather(trace_task, spans_task)
     if not trace:
         return None
 
-    spans = await asyncio.to_thread(_trace_db.get_spans, trace_id=trace_id)
     span_dicts = [jsonable_encoder(s.to_dict()) for s in spans]
     tree = _build_span_tree(span_dicts)
 
