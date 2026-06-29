@@ -1,5 +1,22 @@
 <template>
-  <div class="security-page h-dvh overflow-hidden bg-[#EEF3F7] text-[#111827] dark:bg-[#071014] dark:text-[#E6EDF3]">
+  <AuthScreen
+    v-if="!authBooting && !currentUser"
+    :is-dark="isDark"
+    @authenticated="handleAuthenticated"
+    @toggle-theme="toggleTheme"
+  />
+
+  <div
+    v-else-if="authBooting"
+    class="grid h-dvh place-items-center bg-[#EEF3F7] text-[#111827] dark:bg-[#071014] dark:text-[#E6EDF3]"
+  >
+    <div class="rounded-2 border border-[#C2D0DC] bg-white px-5 py-4 text-sm shadow-sm dark:border-[#20313D] dark:bg-[#0E171F]">
+      <el-icon class="is-loading mr-2"><Loading /></el-icon>
+      正在校验安全会话
+    </div>
+  </div>
+
+  <div v-else class="security-page h-dvh overflow-hidden bg-[#EEF3F7] text-[#111827] dark:bg-[#071014] dark:text-[#E6EDF3]">
     <transition name="fade">
       <button
         v-if="isMobile && sidebarOpen"
@@ -25,7 +42,7 @@
               </span>
               <div class="min-w-0">
                 <h1 class="truncate text-base font-700 text-[#0F172A] dark:text-white">Agno AIOS</h1>
-                <p class="mt-1 truncate text-xs text-[#64748B] dark:text-[#8EA0AE]">AI 信息安全中台</p>
+                <p class="mt-1 truncate text-xs text-[#64748B] dark:text-[#8EA0AE]">AI 安全数据中台</p>
               </div>
             </div>
 
@@ -96,14 +113,14 @@
         <div class="shrink-0 border-t border-[#B8C8D8] p-3 dark:border-[#20313D]">
           <div class="rounded-2 border border-[#B8C8D8] bg-[#F8FAFC] p-3 dark:border-[#20313D] dark:bg-[#0E171F]">
             <div class="flex items-center justify-between gap-2">
-              <span class="text-xs font-650 text-[#334155] dark:text-[#D8E1E8]">平台联通状态</span>
+              <span class="text-xs font-650 text-[#334155] dark:text-[#D8E1E8]">中台联通状态</span>
               <span class="inline-flex items-center gap-1.5 text-[11px] font-650 text-[#14824A] dark:text-[#54D38A]">
                 <span class="h-2 w-2 rounded-full bg-[#54D38A]" />
                 Online
               </span>
             </div>
             <p class="mt-2 text-[11px] leading-5 text-[#64748B] dark:text-[#8EA0AE]">
-              情报、资产、Agent 工具链统一编排。
+              数据、情报、Agent 和响应工具统一编排。
             </p>
           </div>
         </div>
@@ -124,10 +141,10 @@
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
                   <span class="rounded-1 border border-[#CBD5E1] bg-[#F8FAFC] px-2 py-0.5 text-[11px] font-650 text-[#475569] dark:border-[#20313D] dark:bg-[#0E171F] dark:text-[#8EA0AE]">
-                    Security Command Center
+                    AI Security Data Platform
                   </span>
                   <span class="rounded-1 border border-[#2F8FED]/30 bg-[#EAF5FF] px-2 py-0.5 text-[11px] font-650 text-[#0969DA] dark:bg-[#102638] dark:text-[#6AD7FF]">
-                    Agent Ready
+                    Response Ready
                   </span>
                 </div>
                 <h2 class="mt-1 truncate text-xl font-750 text-[#0F172A] dark:text-white">{{ currentMeta.label }}</h2>
@@ -141,6 +158,11 @@
                 <div class="mt-0.5 truncate text-sm font-750 text-[#0F172A] dark:text-[#E6EDF3]">{{ signal.value }}</div>
               </div>
 
+              <div class="flex min-w-0 items-center gap-2 rounded-2 border border-[#C6D3DF] bg-[#F8FAFC] px-3 py-2 dark:border-[#20313D] dark:bg-[#0E171F]">
+                <el-icon class="shrink-0 text-[#0969DA] dark:text-[#6AD7FF]"><UserFilled /></el-icon>
+                <span class="max-w-[160px] truncate text-xs font-650 text-[#334155] dark:text-[#D8E1E8]">{{ currentUserEmail }}</span>
+              </div>
+
               <el-tooltip :content="isDark ? '切换浅色模式' : '切换深色模式'" placement="bottom">
                 <el-button
                   circle
@@ -152,6 +174,18 @@
                     <Moon v-if="!isDark" />
                     <Sunny v-else />
                   </el-icon>
+                </el-button>
+              </el-tooltip>
+
+              <el-tooltip content="退出登录" placement="bottom">
+                <el-button
+                  circle
+                  class="!border-[#CBD5E1] !bg-white dark:!border-[#20313D] dark:!bg-[#0E171F]"
+                  aria-label="退出登录"
+                  :loading="loggingOut"
+                  @click="handleLogout"
+                >
+                  <el-icon><SwitchButton /></el-icon>
                 </el-button>
               </el-tooltip>
             </div>
@@ -196,6 +230,7 @@ import {
   DataAnalysis,
   DataBoard,
   Files,
+  Loading,
   Menu,
   Monitor,
   Moon,
@@ -204,8 +239,11 @@ import {
   Setting,
   SetUp,
   Sunny,
+  SwitchButton,
+  UserFilled,
   WarningFilled,
 } from "@element-plus/icons-vue"
+import AuthScreen from "./components/AuthScreen.vue"
 import CveSearch from "./components/CveSearch.vue"
 import AssetSearch from "./components/AssetSearch.vue"
 import LlmChat from "./components/LlmChat.vue"
@@ -216,9 +254,11 @@ import AgentTracing from "./components/AgentTracing.vue"
 import SkillManage from "./components/SkillManage.vue"
 import McpManage from "./components/McpManage.vue"
 import KnowledgeManage from "./components/KnowledgeManage.vue"
+import { clearStoredAuthToken, fetchCurrentUser, getStoredAuthToken, logout as authLogout } from "./lib/authClient"
+import type { AuthUser } from "./types"
 
 type NavId = "cve" | "asset" | "url2md" | "situation" | "chat" | "knowledge" | "tracing" | "mcp" | "skills" | "settings"
-type NavGroup = "AI 工作台" | "情报检索" | "运营配置"
+type NavGroup = "安全运营" | "数据底座" | "AI 编排" | "系统治理"
 
 type NavItem = {
   id: NavId
@@ -230,16 +270,16 @@ type NavItem = {
 }
 
 const navItems: NavItem[] = [
-  { id: "situation", label: "态势总览", description: "Agent 运行态势与异常", icon: DataBoard, group: "AI 工作台", badge: "Live" },
-  { id: "chat", label: "Agent 对话", description: "任务编排与流式分析", icon: ChatDotRound, group: "AI 工作台" },
-  { id: "knowledge", label: "RAG 知识库", description: "知识写入、检索与参数", icon: Files, group: "AI 工作台" },
-  { id: "tracing", label: "运行观测", description: "Agent Trace 与 Span 追踪", icon: DataAnalysis, group: "AI 工作台" },
-  { id: "mcp", label: "MCP 工具中枢", description: "服务、Token 与外部 Agent", icon: Connection, group: "AI 工作台" },
-  { id: "cve", label: "CVE 情报", description: "漏洞检索与攻击面线索", icon: Search, group: "情报检索" },
-  { id: "asset", label: "资产画像", description: "指纹、IP 与暴露面查询", icon: Monitor, group: "情报检索" },
-  { id: "url2md", label: "网页解析", description: "情报页面转 Markdown", icon: WarningFilled, group: "情报检索" },
-  { id: "skills", label: "Skills 管理", description: "安全能力模块开关", icon: SetUp, group: "运营配置" },
-  { id: "settings", label: "系统配置", description: "模型、MCP 与通知配置", icon: Setting, group: "运营配置" },
+  { id: "situation", label: "安全态势", description: "资产、漏洞、响应闭环总览", icon: DataBoard, group: "安全运营", badge: "Live" },
+  { id: "cve", label: "漏洞情报", description: "CVE、PoC 与攻击面线索", icon: Search, group: "安全运营" },
+  { id: "asset", label: "资产治理", description: "指纹、IP 与暴露面查询", icon: Monitor, group: "数据底座" },
+  { id: "knowledge", label: "知识资产", description: "RAG 写入、检索与参数治理", icon: Files, group: "数据底座" },
+  { id: "url2md", label: "情报采集", description: "网页情报转 Markdown 入库", icon: WarningFilled, group: "数据底座" },
+  { id: "chat", label: "Agent 编排", description: "任务规划、剧本调用与流式分析", icon: ChatDotRound, group: "AI 编排" },
+  { id: "tracing", label: "运行观测", description: "Trace、Span 与异常追踪", icon: DataAnalysis, group: "AI 编排" },
+  { id: "mcp", label: "MCP 工具中枢", description: "服务、Token 与外部 Agent", icon: Connection, group: "AI 编排" },
+  { id: "skills", label: "能力治理", description: "安全 Skills 模块开关", icon: SetUp, group: "系统治理" },
+  { id: "settings", label: "系统配置", description: "模型路由、MCP 与通知配置", icon: Setting, group: "系统治理" },
 ]
 
 const componentMap: Record<NavId, Component> = {
@@ -256,7 +296,7 @@ const componentMap: Record<NavId, Component> = {
 }
 
 const fullCanvasTabs = new Set<NavId>(["situation", "chat", "tracing", "mcp"])
-const navGroups: NavGroup[] = ["AI 工作台", "情报检索", "运营配置"]
+const navGroups: NavGroup[] = ["安全运营", "数据底座", "AI 编排", "系统治理"]
 const THEME_STORAGE_KEY = "theme"
 
 const activeTab = ref<NavId>("situation")
@@ -264,28 +304,32 @@ const navQuery = ref("")
 const isMobile = ref(false)
 const sidebarOpen = ref(false)
 const isDark = ref(true)
+const authBooting = ref(true)
+const currentUser = ref<AuthUser | null>(null)
+const loggingOut = ref(false)
 
 const sidebarMetrics = computed(() => [
-  { label: "能力模块", value: String(navItems.length) },
-  { label: "工作模式", value: "SOC" },
+  { label: "能力域", value: String(navGroups.length) },
+  { label: "当前身份", value: currentUserEmail.value },
 ])
 
 const headerSignals = [
-  { label: "LLM", value: "Routing" },
-  { label: "MCP", value: "Direct" },
+  { label: "Data", value: "Governed" },
+  { label: "MCP", value: "Orchestrated" },
   { label: "Risk", value: "Watched" },
 ]
 
 const workspaceMetrics = [
-  { label: "情报源", value: "CVE / Exploit", note: "漏洞与利用线索聚合", dot: "bg-[#2F8FED]" },
-  { label: "资产面", value: "Fingerprint", note: "按 IP 或技术栈定位", dot: "bg-[#54D38A]" },
-  { label: "AI 编排", value: "AgentOS", note: "支持技能驱动分析", dot: "bg-[#F6C343]" },
-  { label: "运行态势", value: "Run / Trace", note: "异常可观测、链路可追溯", dot: "bg-[#F06A6A]" },
+  { label: "数据汇聚", value: "Intel / Asset", note: "情报采集与资产目录统一治理", dot: "bg-[#2F8FED]" },
+  { label: "漏洞情报", value: "CVE / Exploit", note: "漏洞、利用与影响面联动", dot: "bg-[#F06A6A]" },
+  { label: "Agent 编排", value: "Playbook", note: "技能驱动分析与响应建议", dot: "bg-[#F6C343]" },
+  { label: "Trace 观测", value: "Run / Span", note: "执行链路可审计、异常可追溯", dot: "bg-[#54D38A]" },
 ]
 
 const activeComponent = computed(() => componentMap[activeTab.value])
 const fallbackMeta = navItems[0]!
 const currentMeta = computed<NavItem>(() => navItems.find((item) => item.id === activeTab.value) ?? fallbackMeta)
+const currentUserEmail = computed(() => currentUser.value?.email || "未登录")
 const contentClass = computed(() => {
   const base = "block h-full min-h-0"
   return fullCanvasTabs.has(activeTab.value) ? base : `${base} overflow-auto p-4 sm:p-5`
@@ -332,6 +376,38 @@ const toggleTheme = () => {
   localStorage.setItem(THEME_STORAGE_KEY, next ? "dark" : "light")
 }
 
+const handleAuthenticated = (user: AuthUser) => {
+  currentUser.value = user
+}
+
+const restoreSession = async () => {
+  const token = getStoredAuthToken()
+  if (!token) {
+    authBooting.value = false
+    return
+  }
+
+  try {
+    currentUser.value = await fetchCurrentUser(token)
+  } catch {
+    clearStoredAuthToken()
+    currentUser.value = null
+  } finally {
+    authBooting.value = false
+  }
+}
+
+const handleLogout = async () => {
+  loggingOut.value = true
+  try {
+    await authLogout(getStoredAuthToken())
+  } finally {
+    currentUser.value = null
+    loggingOut.value = false
+    closeSidebar()
+  }
+}
+
 const selectNav = (id: NavId) => {
   activeTab.value = id
   closeSidebar()
@@ -340,6 +416,7 @@ const selectNav = (id: NavId) => {
 onMounted(() => {
   initTheme()
   checkMobile()
+  restoreSession()
   window.addEventListener("resize", checkMobile)
 })
 

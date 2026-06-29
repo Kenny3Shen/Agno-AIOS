@@ -45,11 +45,13 @@ html.dark body {
 	font-family: "Fira Sans", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
 }
 
-.security-page :where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner) {
+.security-page :where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner),
+.auth-screen :where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner) {
 	border-radius: 8px;
 }
 
-html:not(.dark) .security-page :where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner, .el-date-editor.el-input__wrapper) {
+html:not(.dark) .security-page :where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner, .el-date-editor.el-input__wrapper),
+html:not(.dark) .auth-screen :where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner, .el-date-editor.el-input__wrapper) {
 	background: #f8fafc;
 	border: 1px solid #cbd6e2;
 	box-shadow: none;

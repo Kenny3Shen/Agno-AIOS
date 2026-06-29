@@ -6,8 +6,8 @@
           <el-icon><DataBoard /></el-icon>
         </div>
         <div class="min-w-0">
-          <h3 class="truncate text-sm font-semibold text-[#15202B] dark:text-white">Agent 态势总览</h3>
-          <p class="mt-1 text-xs text-[#6B7C8A] dark:text-[#91A4B3]">最近运行、错误态势、耗时分布与 Agent 负载</p>
+          <h3 class="truncate text-sm font-semibold text-[#15202B] dark:text-white">安全运营态势总览</h3>
+          <p class="mt-1 text-xs text-[#6B7C8A] dark:text-[#91A4B3]">资产、漏洞、响应链路、异常态势与 Agent 负载</p>
         </div>
       </div>
 
@@ -39,7 +39,7 @@
       <article class="situation-panel min-w-0">
         <div class="panel-title">
           <el-icon><TrendCharts /></el-icon>
-          最近会话
+          最近研判链路
         </div>
         <div class="mt-4 space-y-2">
           <div v-for="trace in recentRuns" :key="trace.trace_id" class="run-row">
@@ -90,7 +90,7 @@
       <article class="situation-panel">
         <div class="panel-title">
           <el-icon><Cpu /></el-icon>
-          Agent 负载
+          Agent 响应负载
         </div>
         <div class="mt-4 space-y-2">
           <div v-for="agent in agentRows" :key="agent.id" class="agent-load-row">
@@ -107,7 +107,7 @@
       <article class="situation-panel min-w-0">
         <div class="panel-title">
           <el-icon><Odometer /></el-icon>
-          最近异常
+          异常响应
         </div>
         <div class="mt-4 space-y-2">
           <div v-for="trace in errorRuns" :key="trace.trace_id" class="incident-row">
@@ -155,10 +155,10 @@ const successRate = computed(() => {
 })
 
 const topMetrics = computed<Array<{ label: string; value: string | number; hint: string; icon: Component }>>(() => [
-  { label: "Runs", value: totalCount.value, hint: `当前样本 ${sampleSize.value} 条`, icon: TrendCharts },
-  { label: "Success Rate", value: successRate.value, hint: "按最近样本计算", icon: DataBoard },
-  { label: "Error Runs", value: errorRunCount.value, hint: "状态 ERROR 或含错误 Span", icon: WarningFilled },
-  { label: "Avg Latency", value: formatDuration(avgDuration.value), hint: `${totalSpans.value} spans observed`, icon: Odometer },
+  { label: "运行样本", value: totalCount.value, hint: `当前样本 ${sampleSize.value} 条`, icon: TrendCharts },
+  { label: "响应成功率", value: successRate.value, hint: "按最近样本计算", icon: DataBoard },
+  { label: "异常运行", value: errorRunCount.value, hint: "状态 ERROR 或含错误 Span", icon: WarningFilled },
+  { label: "平均耗时", value: formatDuration(avgDuration.value), hint: `${totalSpans.value} spans observed`, icon: Odometer },
 ])
 
 const recentRuns = computed(() => traces.value.slice(0, 12))

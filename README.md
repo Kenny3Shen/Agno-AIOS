@@ -1,6 +1,6 @@
 # Agno AIOS AI 信息安全中台
 
-Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基于 FastAPI、Vue 3、Agno、FastMCP、PostgreSQL、PostgresDb 和 PgVector，把 CVE 情报、资产画像、网页情报解析、Agent 对话、运行观测、MCP 工具中枢、Skills 能力包和基础 RAG 知识库整合到同一个主服务中。
+Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基于 FastAPI、Vue 3、Agno、FastMCP、PostgreSQL、PostgresDb 和 PgVector，把 CVE 情报、资产画像、网页情报解析、Agent 对话、运行观测、MCP 工具中枢、Skills 能力包、用户认证和基础 RAG 知识库整合到同一个主服务中。
 
 当前目标不是做一个通用聊天页面，而是构建可持续扩展的安全 Agent 工作台：安全人员可以在一个界面内完成情报查询、漏洞研判、资产排查、剧本调用、知识检索和运行观测。
 
@@ -10,19 +10,21 @@ Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基
 - **CVE 情报**：按 CVE 编号、应用名或关键词检索漏洞记录和 PoC 来源。
 - **资产搜索**：基于指纹或 IP 查询资产画像。
 - **URL 转 Markdown**：抓取网页正文并转换为 Markdown，便于情报沉淀。
-- **运行观测**：查看 Agent Trace/Span、耗时、错误和运行链路。
+- **运行观测**：按状态、会话、日期范围和分页查看 Agent Trace/Span、耗时、错误、时间线和关联对话。
 - **态势总览**：展示 Agent 运行成功率、耗时分布和错误态势。
 - **MCP 工具中枢**：FastMCP 与主 API 同进程运行，支持服务开关、Token 和 Hi-Agent MCP 接入。
 - **Skills 管理**：启用、禁用和查看本地 `api/agent/skills/` 能力包。
-- **RAG 知识库**：基于 Agno Knowledge、PostgresDb 和 PgVector 的知识库，Agent 可通过 `search_knowledge_base` 检索内部资料。
+- **RAG 知识库**：基于 Agno Knowledge、PostgresDb 和 PgVector 的知识库，Agent 可通过 `search_knowledge_base` 检索内部资料，文档列表会压缩超长 metadata 以保证中后台布局稳定。
+- **认证与 OAuth**：基于 FastAPI Users、JWT、SQLAlchemy Async，支持注册、密码登录和 GitHub/Google/Microsoft OAuth2 登录。
+- **中后台工作台**：`frontend` 进入后即为安全数据中台工作区，提供注册登录、会话恢复、模块导航、全局指标、亮暗模式切换和退出登录。
 
 ## 技术栈
 
-- 前端：Vue 3、TypeScript、Element Plus、UnoCSS、Vite/Rolldown、markdown-it、highlight.js。
-- 后端：FastAPI、Uvicorn、psycopg、psycopg-pool、httpx、Polars、loguru、python-dotenv。
+- 前端：Vue 3、TypeScript、Element Plus、UnoCSS、Vite/Rolldown、markdown-it、highlight.js、npm。
+- 后端：FastAPI、FastAPI Users、SQLAlchemy Async、Pydantic Settings、Uvicorn、psycopg、psycopg-pool、httpx、Polars、loguru。
 - Agent：Agno、OpenAILike、LocalSkills、PostgresDb、Tracing、PgVector RAG。
 - MCP：FastMCP，同进程 ASGI 挂载。
-- 包管理：uv、Bun。
+- 包管理：uv、npm。
 
 ## 项目结构
 
@@ -45,7 +47,8 @@ Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基
 │   │   └── cve_sources.py      # CVE 数据源与增量对比逻辑
 │   ├── utils/                  # 数据库与数据处理工具
 │   └── data/                   # CVE/资产数据缓存
-├── frontend/                   # Vue 3 + TypeScript + UnoCSS 前端源码
+├── frontend/                   # Vue 3 + TypeScript + Element Plus + UnoCSS 主前端源码
+├── frontend-react/             # React 实验/历史前端目录，不作为当前主前端
 ├── source/                     # 前端生产构建输出，供 FastAPI 托管
 ├── scripts/                    # 运维包装脚本
 │   └── run_update_cve.sh       # CVE 定时更新包装脚本
@@ -58,7 +61,7 @@ Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基
 
 - Python 3.12+
 - uv
-- Bun 1.3+ 或 Node.js 18+
+- Node.js 24+ 与 npm
 - PostgreSQL 15+，并启用 pgvector 扩展
 
 ## 快速启动
@@ -73,7 +76,7 @@ uv sync
 
 ```bash
 cd frontend
-bun install
+npm install
 ```
 
 启动后端：
@@ -86,7 +89,7 @@ uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
 ```bash
 cd frontend
-bun run dev
+npm run dev
 ```
 
 开发访问地址：
@@ -99,10 +102,20 @@ http://localhost:5173
 
 ```bash
 cd frontend
-bun run build
+npm run build
 ```
 
 构建产物会输出到仓库根目录 `source/`，并由 FastAPI 静态资源服务托管。
+
+### 前端工作台说明
+
+`frontend` 是当前主前端。未登录时先进入注册/登录页，登录成功后进入 AI 信息安全中台工作区：
+
+- 注册/登录页调用 FastAPI Users 的 JWT 接口，支持邮箱密码注册、登录、会话恢复和 OAuth Provider 发现。
+- 左侧导航按 **安全运营 / 数据底座 / AI 编排 / 系统治理** 组织模块，贴合数据中台和 SOC 工作流。
+- 顶部展示当前模块、数据治理状态、MCP 编排状态、风险观测状态、当前用户、亮暗模式切换和退出登录。
+- 中央工作区保留 CVE 情报、资产治理、情报采集、Agent 编排、知识资产、运行观测、MCP 工具、Skills 和系统配置等既有能力。
+- 生产构建仍输出到仓库根目录 `source/`，由 FastAPI 静态资源服务托管。
 
 ## 配置说明
 
@@ -127,6 +140,29 @@ ACL_PASSWORD=your_password
 # 日志
 LOG_LEVEL=INFO
 LOG_DIR=logs
+LOG_FILE=poc.log
+CORS_ORIGINS=["*"]
+
+# Auth / JWT / OAuth
+AUTH_JWT_SECRET=replace-with-long-random-secret
+AUTH_RESET_PASSWORD_SECRET=replace-with-long-random-secret
+AUTH_VERIFICATION_SECRET=replace-with-long-random-secret
+AUTH_OAUTH_STATE_SECRET=replace-with-long-random-secret
+AUTH_TOKEN_LIFETIME_SECONDS=3600
+AUTH_COOKIE_SECURE=false
+OAUTH_ASSOCIATE_BY_EMAIL=true
+OAUTH_IS_VERIFIED_BY_DEFAULT=true
+
+GITHUB_OAUTH_CLIENT_ID=
+GITHUB_OAUTH_CLIENT_SECRET=
+GITHUB_OAUTH_REDIRECT_URL=
+GOOGLE_OAUTH_CLIENT_ID=
+GOOGLE_OAUTH_CLIENT_SECRET=
+GOOGLE_OAUTH_REDIRECT_URL=
+MICROSOFT_OAUTH_CLIENT_ID=
+MICROSOFT_OAUTH_CLIENT_SECRET=
+MICROSOFT_OAUTH_TENANT=common
+MICROSOFT_OAUTH_REDIRECT_URL=
 
 # Agent / MCP
 MCP_SERVER_URL=http://127.0.0.1:8000/mcp/
@@ -201,6 +237,8 @@ SQL
 ```
 
 主 API 启动时会确保 `app.cves`、`agno.*`、`mcp.*` 基础表存在。知识库第一次写入、检索或查看状态时，`PgVector.create()` 会创建 `knowledge.security_knowledge_vectors`，`PostgresDb` 会创建 `knowledge.agno_knowledge` 内容登记表。若使用托管 PostgreSQL，需要提前确认数据库已安装 pgvector 扩展，且运行用户有建表权限。
+
+认证模块启动时会通过 SQLAlchemy Async 自动创建 FastAPI Users 所需的 `user` 和 `oauth_account` 表。OAuth Provider 只有在对应 `*_OAUTH_CLIENT_ID` 和 `*_OAUTH_CLIENT_SECRET` 配置存在时才会启用。
 
 ## 数据更新
 
@@ -330,7 +368,7 @@ MCP 已整合进主 API 进程：
 
 4. 在 `frontend/src/types/index.ts` 的 `McpServiceId` 中加入 `"scanner"`。
 5. 在 `frontend/src/components/McpManage.vue` 的服务卡片列表中增加该服务。
-6. 执行 `uv run ruff check .`、`ty check .` 和 `bun run build`。
+6. 执行 `uv run ruff check .`、`uv run ty check .` 和 `cd frontend && npm run build`。
 
 ## 低代码工作流编排规划
 
@@ -380,6 +418,14 @@ api/agent/skills/example-skill/
 ## API 摘要
 
 - `GET /api/health`：健康检查。
+- `POST /api/auth/register`：注册用户。
+- `POST /api/auth/jwt/login`：密码登录，返回 Bearer JWT。
+- `POST /api/auth/jwt/logout`：JWT 登出。
+- `GET /api/auth/users/me`：读取当前用户。
+- `GET /api/auth/oauth/providers`：查看已启用 OAuth Provider。
+- `GET /api/auth/github/authorize` / `GET /api/auth/github/callback`：GitHub OAuth2。
+- `GET /api/auth/google/authorize` / `GET /api/auth/google/callback`：Google OAuth2。
+- `GET /api/auth/microsoft/authorize` / `GET /api/auth/microsoft/callback`：Microsoft OAuth2。
 - `POST /api/chat`：Agent 流式对话。
 - `GET /api/chat/sessions`：会话列表。
 - `GET /api/chat/sessions/{session_id}`：会话历史。
@@ -407,8 +453,8 @@ api/agent/skills/example-skill/
 Python 语法、类型和风格检查：
 
 ```bash
-ruff check .
-ty check .
+uv run ruff check .
+uv run ty check .
 uv run ruff format .
 ```
 
@@ -416,7 +462,16 @@ uv run ruff format .
 
 ```bash
 cd frontend
-bun run build
+npm run test:auth
+npm run build
+```
+
+界面回归检查：
+
+```bash
+# 启动 frontend 开发服务后使用 Playwright 截图检查登录页和工作台
+cd frontend
+npm run dev
 ```
 
 ## 运行时文件
@@ -481,7 +536,7 @@ bun run build
 - 为知识库增加前端管理页面。
 - 支持 embedding 模型配置和向量重建。
 - 增加 RAG 检索引用展示。
-- 修复前端构建环境依赖一致性，确保 `bun run build` 可稳定输出到 `source/`。
+- 修复前端构建环境依赖一致性，确保 `npm run build` 可稳定输出到 `source/`。
 - 为核心服务补充最小单元测试。
 
 ### 中期计划

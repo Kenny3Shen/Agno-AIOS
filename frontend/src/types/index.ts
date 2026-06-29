@@ -124,6 +124,35 @@ export type MessageType = {
   description?: string
 }
 
+// 认证相关类型
+export interface AuthTokenResponse {
+  access_token: string
+  token_type: string
+}
+
+export interface AuthUser {
+  id: string
+  email: string
+  is_active: boolean
+  is_superuser?: boolean
+  is_verified?: boolean
+}
+
+export interface AuthCredentials {
+  email: string
+  password: string
+}
+
+export type OAuthProvider = 'github' | 'google' | 'microsoft' | string
+
+export interface OAuthProvidersResponse {
+  providers: OAuthProvider[]
+}
+
+export interface OAuthAuthorizationResponse {
+  authorization_url: string
+}
+
 // 更新响应类型
 export interface UpdateResponse {
   status: number
