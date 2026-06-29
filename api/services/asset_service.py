@@ -1,24 +1,24 @@
-import httpx
-import os
+import asyncio
 import time
 import warnings
-import asyncio
+
+import httpx
 from loguru import logger
-from dotenv import load_dotenv
+
+from api.config import get_settings
 from ..utils.asset_utils import process_asset_data
 
 warnings.filterwarnings("ignore", message="Unverified HTTPS request")
-
-load_dotenv()
 
 
 async def relogin(client: httpx.AsyncClient, lock: asyncio.Lock) -> httpx.AsyncClient:
     logger.info("Token 过期，正在重新登录获取新 Token")
     async with lock:
+        settings = get_settings()
         login_url = "https://10.192.56.37:8088/api/user/login"
         login_data = {
-            "username": os.getenv("ACL_USERNAME"),
-            "password": os.getenv("ACL_PASSWORD"),
+            "username": settings.acl_username,
+            "password": settings.acl_password.get_secret_value(),
         }
         login_resp = await client.post(login_url, json=login_data)
         login_resp.raise_for_status()

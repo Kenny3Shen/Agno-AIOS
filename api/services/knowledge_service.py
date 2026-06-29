@@ -80,6 +80,19 @@ COLD_START_NOTE = (
     "首次触发知识写入、向量检索或重排时会同步加载/下载本地模型，"
     "冷启动可能阻塞 30-120 秒，取决于网络、磁盘和 CPU。"
 )
+DOCUMENT_METADATA_KEYS = (
+    "title",
+    "source",
+    "file_path",
+    "file_name",
+    "file_size",
+    "mime_type",
+    "input_mode",
+    "upload_mode",
+    "chunks",
+)
+DOCUMENT_METADATA_MAX_ITEMS = 12
+DOCUMENT_METADATA_VALUE_MAX_LENGTH = 160
 
 _embedding_model: SentenceTransformer | None = None
 _embedding_dimensions: int | None = None
@@ -453,6 +466,29 @@ def _metadata_value(metadata: dict[str, Any], *keys: str, default: str = "") -> 
     return default
 
 
+def _compact_metadata_value(value: Any) -> str:
+    text = str(value)
+    if len(text) <= DOCUMENT_METADATA_VALUE_MAX_LENGTH:
+        return text
+    return f"{text[: DOCUMENT_METADATA_VALUE_MAX_LENGTH - 3]}..."
+
+
+def _document_metadata(metadata: dict[str, Any]) -> dict[str, str]:
+    compact_metadata: dict[str, str] = {}
+    for key in DOCUMENT_METADATA_KEYS:
+        value = metadata.get(key)
+        if value is not None:
+            compact_metadata[key] = _compact_metadata_value(value)
+
+    for key, value in metadata.items():
+        if len(compact_metadata) >= DOCUMENT_METADATA_MAX_ITEMS:
+            break
+        if key not in compact_metadata:
+            compact_metadata[key] = _compact_metadata_value(value)
+
+    return compact_metadata
+
+
 def _format_timestamp(value: Any) -> str:
     if isinstance(value, int | float):
         return datetime.fromtimestamp(value, UTC).isoformat()
@@ -468,7 +504,7 @@ def _content_to_document(content: Any) -> dict[str, Any]:
         "source": _metadata_value(metadata, "source", "file_path", default="manual"),
         "chunks": int(metadata.get("chunks") or 0),
         "created_at": _format_timestamp(created_at),
-        "metadata": {key: str(value) for key, value in metadata.items()},
+        "metadata": _document_metadata(metadata),
     }
 
 

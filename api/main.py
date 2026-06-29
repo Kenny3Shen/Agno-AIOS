@@ -1,57 +1,76 @@
+import asyncio
+from contextlib import asynccontextmanager
+
+import httpx
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-from api.routes import asset, chat, cve, knowledge, mcp as mcp_routes, settings, skills, traces, url2md
-from api.mcp.server import bootstrap_mcp_token, mcp_runtime
-from api.utils.db import get_db_pool, close_db_pool
-import os
-import sys
 from loguru import logger
-from dotenv import load_dotenv
 
-load_dotenv(override=True)
-
-# Configure logger
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-logger.remove()
-logger.add(sys.stderr, level=LOG_LEVEL)
-log_dir = os.getenv("LOG_DIR", "logs")
-os.makedirs(log_dir, exist_ok=True)
-logger.add(
-    os.path.join(log_dir, "poc.log"),
-    level=LOG_LEVEL,
-    rotation="10 MB",
-    retention="10 days",
+from api.auth.database import close_auth_engine, create_auth_tables
+from api.auth.router import router as auth_router
+from api.config import get_settings
+from api.core.logging import configure_logging
+from api.mcp.server import bootstrap_mcp_token, mcp_runtime
+from api.routes import (
+    asset,
+    chat,
+    cve,
+    knowledge,
+    mcp as mcp_routes,
+    settings,
+    skills,
+    traces,
+    url2md,
 )
+from api.utils.db import close_db_pool, get_db_pool
+
+app_settings = get_settings()
+configure_logging(app_settings)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # initialize resources
+    logger.info("启动 {}", app_settings.app_name)
+    app.state.settings = app_settings
     pool = await get_db_pool()
     app.state.db_pool = pool
-    bootstrap_mcp_token(os.getenv("MCP_TOKEN") or os.getenv("MCP_Token"))
+    await create_auth_tables()
+
+    headers = {"Content-Type": "application/json"}
+    acl_token = app_settings.acl_token.get_secret_value()
+    if acl_token:
+        headers["Token"] = acl_token
+    app.state.asset_client = httpx.AsyncClient(
+        headers=headers,
+        timeout=30.0,
+        verify=False,
+    )
+    app.state.asset_lock = asyncio.Lock()
+
+    bootstrap_mcp_token(app_settings.mcp_token.get_secret_value())
     await mcp_runtime.startup()
 
     try:
         yield
     finally:
-        # cleanup resources
         await mcp_runtime.shutdown()
+        await app.state.asset_client.aclose()
+        await close_auth_engine()
         await close_db_pool()
+        logger.info("关闭 {}", app_settings.app_name)
 
 
 app = FastAPI(
-    title="Agno AIOS Security Platform API",
+    title=app_settings.app_name,
+    version=app_settings.app_version,
     lifespan=lifespan,
 )
 
-# CORS Configuration
 app.add_middleware(
-    CORSMiddleware,  # type: ignore
-    allow_origins=["*"],  # In production, replace with specific origins
+    CORSMiddleware,  # type: ignore[arg-type]
+    allow_origins=app_settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,7 +80,7 @@ app.add_middleware(
 # Health check
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok"}
+    return {"status": "ok", "environment": app_settings.environment}
 
 
 @app.get("/report", include_in_schema=False)
@@ -77,6 +96,7 @@ async def mcp_redirect(request: Request):
 
 
 # Include routers
+app.include_router(auth_router)
 app.include_router(cve.router)
 app.include_router(asset.router)
 app.include_router(chat.router)

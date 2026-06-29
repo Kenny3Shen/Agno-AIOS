@@ -1,77 +1,61 @@
 from __future__ import annotations
 
 import json
-import os
 from contextlib import contextmanager
 from functools import lru_cache
 from typing import Any, Iterator, cast
-from urllib.parse import quote_plus
 
 import psycopg
 from agno.db.postgres import PostgresDb
-from dotenv import load_dotenv
 from psycopg import Connection, sql
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
-load_dotenv(override=True)
+from api.config import get_settings
 
 
 def postgres_host() -> str:
-    return os.getenv("POSTGRES_HOST") or os.getenv("AGNO_POSTGRES_HOST", "localhost")
+    return get_settings().postgres_host
 
 
 def postgres_port() -> int:
-    raw = os.getenv("POSTGRES_PORT") or os.getenv("AGNO_POSTGRES_PORT", "5432")
-    try:
-        return int(raw)
-    except ValueError:
-        return 5432
+    return get_settings().postgres_port
 
 
 def postgres_user() -> str:
-    return os.getenv("POSTGRES_USER") or os.getenv("AGNO_POSTGRES_USER", "agno_aios")
+    return get_settings().postgres_user
 
 
 def postgres_password() -> str:
-    return os.getenv("POSTGRES_PASSWORD") or os.getenv("AGNO_POSTGRES_PASSWORD", "agno_aios")
+    return get_settings().postgres_password.get_secret_value()
 
 
 def postgres_database() -> str:
-    return os.getenv("POSTGRES_DB") or os.getenv("AGNO_POSTGRES_DB", "agno_aios")
+    return get_settings().postgres_db
 
 
 def app_schema() -> str:
-    return os.getenv("AGNO_APP_SCHEMA", "app")
+    return get_settings().agno_app_schema
 
 
 def agno_schema() -> str:
-    return os.getenv("AGNO_DB_SCHEMA", "agno")
+    return get_settings().agno_db_schema
 
 
 def mcp_schema() -> str:
-    return os.getenv("AGNO_MCP_SCHEMA", "mcp")
+    return get_settings().agno_mcp_schema
 
 
 def knowledge_schema() -> str:
-    return os.getenv("AGNO_KNOWLEDGE_SCHEMA", "knowledge")
+    return get_settings().agno_knowledge_schema
 
 
 def postgres_dsn() -> str:
-    explicit_url = os.getenv("AGNO_POSTGRES_URL") or os.getenv("POSTGRES_URL")
-    if explicit_url:
-        return explicit_url
-    return (
-        f"postgresql://{quote_plus(postgres_user())}:{quote_plus(postgres_password())}"
-        f"@{postgres_host()}:{postgres_port()}/{quote_plus(postgres_database())}"
-    )
+    return get_settings().postgres_dsn
 
 
 def postgres_sqlalchemy_url() -> str:
-    explicit_url = os.getenv("AGNO_POSTGRES_SQLALCHEMY_URL")
-    if explicit_url:
-        return explicit_url
-    return postgres_dsn().replace("postgresql://", "postgresql+psycopg://", 1)
+    return get_settings().postgres_sqlalchemy_url
 
 
 def postgres_label(schema: str, table_name: str) -> str:
@@ -134,7 +118,7 @@ def get_knowledge_postgres_db() -> PostgresDb:
     return PostgresDb(
         db_url=postgres_sqlalchemy_url(),
         db_schema=knowledge_schema(),
-        knowledge_table=os.getenv("AGNO_POSTGRES_KNOWLEDGE_TABLE", "agno_knowledge"),
+        knowledge_table=get_settings().agno_postgres_knowledge_table,
         versions_table="agno_schema_versions",
     )
 

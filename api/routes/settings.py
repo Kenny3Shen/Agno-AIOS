@@ -1,8 +1,11 @@
-from fastapi import APIRouter
-from pydantic import BaseModel
-from loguru import logger
 import os
 
+from fastapi import APIRouter, Depends
+from loguru import logger
+from pydantic import BaseModel
+
+from api.config import Settings, get_settings
+from api.dependencies import get_app_settings
 from api.services.model_config_service import public_model_config, save_model_config
 
 router = APIRouter(prefix="/api", tags=["Settings"])
@@ -49,12 +52,27 @@ class ModelConfigUpdate(BaseModel):
     models: list[ModelConfig]
 
 
+def _setting_value(settings: Settings, key: str) -> str:
+    runtime_value = os.environ.get(key)
+    if runtime_value is not None:
+        return runtime_value
+    if key == "MCP_SERVER_URL":
+        return settings.mcp_server_url
+    if key == "MCP_TOKEN":
+        return settings.mcp_token.get_secret_value()
+    if key == "FEISHU_WEBHOOK_URL":
+        return settings.feishu_webhook_url.get_secret_value()
+    return ""
+
+
 @router.get("/settings")
-async def get_settings() -> SettingsResponse:
+async def read_settings(
+    settings: Settings = Depends(get_app_settings),
+) -> SettingsResponse:
     """获取当前可配置项（敏感值已脱敏）"""
     result: dict[str, str] = {}
     for key in CONFIGURABLE_KEYS:
-        raw = os.environ.get(key, "")
+        raw = _setting_value(settings, key)
         result[key] = _mask_secret(key, raw)
     return SettingsResponse(settings=result)
 
@@ -86,12 +104,14 @@ async def update_settings(body: SettingsUpdate) -> SettingsResponse:
         if "*" in value:
             continue
         os.environ[key] = value
+        get_settings.cache_clear()
         logger.info(f"配置已更新: {key}")
         updated[key] = _mask_secret(key, value)
 
     # 返回完整配置
     result: dict[str, str] = {}
+    active_settings = get_settings()
     for key in CONFIGURABLE_KEYS:
-        raw = os.environ.get(key, "")
+        raw = _setting_value(active_settings, key)
         result[key] = _mask_secret(key, raw)
     return SettingsResponse(settings=result)
