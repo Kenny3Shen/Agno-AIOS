@@ -20,6 +20,7 @@ from api.routes import (
     cve,
     knowledge,
     mcp as mcp_routes,
+    os_control,
     settings,
     skills,
     trace,
@@ -106,6 +107,7 @@ app.include_router(trace.router)
 app.include_router(skills.router)
 app.include_router(mcp_routes.router)
 app.include_router(knowledge.router)
+app.include_router(os_control.router)
 
 # Integrated FastMCP protocol endpoint. Same process, same port:
 # http://<host>:8000/mcp?token=...

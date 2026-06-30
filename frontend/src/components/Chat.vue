@@ -228,6 +228,10 @@ const normalizeInlineTable = (content: string) => {
 
 const renderMarkdown = (content: string) => md.render(normalizeInlineTable(content))
 
+const props = defineProps<{
+  currentUserId?: string | null
+}>()
+
 // ── State ─────────────────────────────────────────────────────────
 const inputMessage = ref("")
 const WELCOME = "你好！我是 AgentOS 安全智能体，集成了威胁追踪和剧本执行技能。请告诉我你的目标或问题。"
@@ -390,7 +394,7 @@ const sendMessage = async () => {
   try {
     const idx = messages.value.push({ role: "assistant", content: "", final: false }) - 1
 
-    await sendMessageStream(userMsg, sessionId, selectedModelId.value, (chunk) => {
+    await sendMessageStream(userMsg, sessionId, selectedModelId.value, props.currentUserId ?? null, (chunk) => {
       const m = messages.value[idx]
       if (m) m.content += chunk
       void scrollToBottom()

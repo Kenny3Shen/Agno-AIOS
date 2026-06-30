@@ -83,6 +83,24 @@
               </span>
             </button>
 
+            <button
+              type="button"
+              class="ag-nav-item ag-nav-dashboard soc-focus"
+              :class="{ active: activeTab === 'dashboard' }"
+              :aria-current="activeTab === 'dashboard' ? 'page' : undefined"
+              @click="selectNav('dashboard')"
+            >
+              <span class="ag-nav-icon">
+                <el-icon><DataBoard /></el-icon>
+              </span>
+              <span class="ag-nav-text min-w-0 flex-1">
+                <span class="ag-nav-label">{{ dashboardItem.label }}</span>
+              </span>
+              <span v-if="dashboardItem.badge" class="ag-nav-badge">
+                {{ dashboardItem.badge }}
+              </span>
+            </button>
+
             <div class="ag-nav-divider" aria-hidden="true" />
 
             <div class="ag-nav-list">
@@ -136,26 +154,113 @@
                         <strong>{{ chatSessions.length }}</strong>
                       </div>
 
-                      <button
+                      <div
                         v-for="session in chatSessions"
                         :key="session.session_id"
-                        type="button"
-                        class="ag-chat-session-item"
+                        class="ag-chat-session-row"
                         :class="{ active: currentChatSessionId === session.session_id }"
-                        :title="session.preview || session.session_id"
-                        @click="selectChatSession(session.session_id)"
                       >
-                        <span class="ag-chat-session-icon">
-                          <el-icon><ChatDotRound /></el-icon>
-                        </span>
-                        <span class="ag-chat-session-copy">
-                          <strong>{{ session.preview || 'New chat' }}</strong>
-                          <em>{{ formatSessionTime(session.updated_at) }}</em>
-                        </span>
-                      </button>
+                        <button
+                          type="button"
+                          class="ag-chat-session-item"
+                          :title="session.preview || session.session_id"
+                          @click="selectChatSession(session.session_id)"
+                        >
+                          <span class="ag-chat-session-icon">
+                            <el-icon><ChatDotRound /></el-icon>
+                          </span>
+                          <span class="ag-chat-session-copy">
+                            <strong>{{ session.preview || 'New chat' }}</strong>
+                            <em>{{ formatSessionTime(session.updated_at) }}</em>
+                          </span>
+                        </button>
+
+                        <el-tooltip content="归档会话" placement="right">
+                          <button
+                            type="button"
+                            class="ag-chat-session-archive"
+                            :aria-label="`归档会话 ${session.preview || session.session_id}`"
+                            @click.stop="archiveSidebarChatSession(session.session_id)"
+                          >
+                            <el-icon><Delete /></el-icon>
+                          </button>
+                        </el-tooltip>
+                      </div>
 
                       <div v-if="!chatSessions.length && !loadingSessions" class="ag-chat-session-empty">
                         No sessions
+                      </div>
+                    </div>
+                  </transition>
+                </div>
+
+                <div v-else-if="item.id === 'trace'" class="ag-nav-trace-block">
+                  <div class="ag-nav-chat-row">
+                    <button
+                      type="button"
+                      class="ag-nav-item ag-nav-item-main soc-focus"
+                      :class="{ active: item.id === activeTab }"
+                      :aria-current="item.id === activeTab ? 'page' : undefined"
+                      @click="selectNav(item.id)"
+                    >
+                      <span class="ag-nav-icon">
+                        <el-icon>
+                          <component :is="item.icon" />
+                        </el-icon>
+                      </span>
+
+                      <span class="ag-nav-text min-w-0 flex-1">
+                        <span class="ag-nav-label">{{ item.label }}</span>
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      class="ag-chat-session-toggle"
+                      :aria-label="traceQueueExpanded ? '收起 Trace 队列' : '展开 Trace 队列'"
+                      :aria-expanded="traceQueueExpanded"
+                      @click.stop="toggleTraceQueue"
+                    >
+                      <el-icon>
+                        <ArrowDown v-if="traceQueueExpanded" />
+                        <ArrowRight v-else />
+                      </el-icon>
+                    </button>
+                  </div>
+
+                  <transition name="fade">
+                    <div
+                      v-if="traceQueueExpanded && !isSidebarCompact"
+                      class="ag-trace-queue-panel"
+                    >
+                      <button type="button" class="ag-chat-new-session" :disabled="loadingTraceQueue" @click="loadSidebarTraceQueue">
+                        <el-icon><Refresh /></el-icon>
+                        <span>Refresh traces</span>
+                      </button>
+
+                      <div class="ag-chat-session-head">
+                        <span>Trace Queue</span>
+                        <strong>{{ traceQueueItems.length }}</strong>
+                      </div>
+
+                      <button
+                        v-for="trace in traceQueueItems"
+                        :key="trace.trace_id"
+                        type="button"
+                        class="ag-trace-queue-item"
+                        :class="{ active: currentTraceId === trace.trace_id, error: isTraceError(trace) }"
+                        :title="trace.name || trace.trace_id"
+                        @click="selectTraceFromSidebar(trace)"
+                      >
+                        <span class="ag-trace-status" :class="traceStatusTone(trace)" />
+                        <span class="ag-chat-session-copy">
+                          <strong>{{ trace.name || trace.trace_id }}</strong>
+                          <em>{{ formatTraceMeta(trace) }}</em>
+                        </span>
+                      </button>
+
+                      <div v-if="!traceQueueItems.length && !loadingTraceQueue" class="ag-chat-session-empty">
+                        No traces
                       </div>
                     </div>
                   </transition>
@@ -375,6 +480,7 @@
                     v-if="activeComponent"
                     :key="activeComponentKey"
                     :class="contentClass"
+                    v-bind="activeComponentProps"
                   />
                 </keep-alive>
               </div>
@@ -391,15 +497,21 @@ import { computed, nextTick, onMounted, onUnmounted, ref, type Component } from 
 import {
   ArrowDown,
   ArrowRight,
+  Calendar,
   ChatDotRound,
+  Clock,
   Close,
   Connection,
+  Cpu,
   DataAnalysis,
   DataBoard,
+  Delete,
   Expand,
   Files,
   Fold,
+  Finished,
   Loading,
+  MagicStick,
   Menu,
   Monitor,
   MoreFilled,
@@ -412,8 +524,11 @@ import {
   SetUp,
   Sunny,
   SwitchButton,
+  Tickets,
   WarningFilled,
 } from "@element-plus/icons-vue"
+import { ElMessage } from "element-plus"
+import AgentOSControl from "./components/AgentOSControl.vue"
 import AuthScreen from "./components/AuthScreen.vue"
 import CVE from "./components/CVE.vue"
 import Assets from "./components/Assets.vue"
@@ -425,11 +540,28 @@ import Trace from "./components/Trace.vue"
 import Skills from "./components/Skills.vue"
 import MCP from "./components/MCP.vue"
 import Knowledge from "./components/Knowledge.vue"
-import { useChatHistory, useSettingsApi } from "./composables/useApi"
+import { useChatHistory, useSettingsApi, useTracingApi } from "./composables/useApi"
 import { clearStoredAuthToken, fetchCurrentUser, getStoredAuthToken, logout as authLogout } from "./lib/authClient"
-import type { AuthUser, ChatSession } from "./types"
+import type { AuthUser, ChatSession, OsControlModule, TraceItem } from "./types"
 
-type ModuleNavId = "dashboard" | "cve" | "assets" | "knowledge" | "collect" | "chat" | "trace" | "mcp" | "skills" | "settings"
+type ModuleNavId =
+  | "dashboard"
+  | "cve"
+  | "assets"
+  | "knowledge"
+  | "collect"
+  | "chat"
+  | "trace"
+  | "mcp"
+  | "skills"
+  | "sessions"
+  | "studio"
+  | "memory"
+  | "metrics"
+  | "evaluation"
+  | "approvals"
+  | "scheduler"
+  | "settings"
 type NavId = "home" | ModuleNavId
 type NavTone = "red" | "blue" | "green" | "yellow"
 
@@ -455,16 +587,31 @@ const homeItem: NavItem = {
   tone: "blue",
 }
 
+const dashboardItem: NavItem = {
+  id: "dashboard",
+  label: "Dashboard",
+  description: "资产、漏洞、响应闭环总览",
+  icon: DataBoard,
+  badge: "Live",
+  tone: "green",
+}
+
 const navItems: NavItem[] = [
-  { id: "dashboard", label: "Dashboard", description: "资产、漏洞、响应闭环总览", icon: DataBoard, badge: "Live", tone: "green" },
+  { id: "chat", label: "Chat", description: "任务规划、剧本调用与流式分析", icon: ChatDotRound, tone: "blue" },
+  { id: "skills", label: "Skills", description: "安全 Skills 模块开关", icon: SetUp, tone: "red" },
+  { id: "mcp", label: "MCP", description: "服务、Token 与外部 Agent", icon: Connection, tone: "yellow" },
+  { id: "knowledge", label: "Knowledge", description: "RAG 写入、检索与参数治理", icon: Files, tone: "green" },
+  { id: "trace", label: "Trace", description: "Trace、Span 与异常追踪", icon: DataAnalysis, tone: "green" },
+  { id: "sessions", label: "Sessions", description: "会话库存与上下文历史", icon: Clock, tone: "blue" },
+  { id: "studio", label: "Studio", description: "Agent、Team 与组件注册", icon: MagicStick, tone: "yellow" },
+  { id: "memory", label: "Memory", description: "用户记忆与增长监测", icon: Cpu, tone: "green" },
+  { id: "metrics", label: "Metrics", description: "运行、延迟与错误指标", icon: DataAnalysis, tone: "blue" },
+  { id: "evaluation", label: "Evaluation", description: "评测运行与质量基线", icon: Finished, tone: "green" },
+  { id: "approvals", label: "Approvals", description: "敏感操作审批队列", icon: Tickets, tone: "red" },
+  { id: "scheduler", label: "Scheduler", description: "周期任务与运行窗口", icon: Calendar, tone: "yellow" },
   { id: "cve", label: "CVE", description: "CVE、PoC 与攻击面线索", icon: Search, tone: "red" },
   { id: "assets", label: "Assets", description: "指纹、IP 与暴露面查询", icon: Monitor, tone: "blue" },
-  { id: "knowledge", label: "Knowledge", description: "RAG 写入、检索与参数治理", icon: Files, tone: "green" },
   { id: "collect", label: "Collect", description: "网页情报转 Markdown 入库", icon: WarningFilled, tone: "yellow" },
-  { id: "chat", label: "Chat", description: "任务规划、剧本调用与流式分析", icon: ChatDotRound, tone: "blue" },
-  { id: "trace", label: "Trace", description: "Trace、Span 与异常追踪", icon: DataAnalysis, tone: "green" },
-  { id: "mcp", label: "MCP", description: "服务、Token 与外部 Agent", icon: Connection, tone: "yellow" },
-  { id: "skills", label: "Skills", description: "安全 Skills 模块开关", icon: SetUp, tone: "red" },
   { id: "settings", label: "Settings", description: "模型路由、MCP 与通知配置", icon: Setting, tone: "blue" },
 ]
 
@@ -478,18 +625,41 @@ const componentMap: Record<ModuleNavId, Component> = {
   assets: Assets,
   collect: Collect,
   skills: Skills,
+  sessions: AgentOSControl,
+  studio: AgentOSControl,
+  memory: AgentOSControl,
+  metrics: AgentOSControl,
+  evaluation: AgentOSControl,
+  approvals: AgentOSControl,
+  scheduler: AgentOSControl,
   settings: Settings,
 }
 
-const fullCanvasTabs = new Set<ModuleNavId>(["dashboard", "chat", "trace", "mcp"])
+const osControlTabs = new Set<OsControlModule>([
+  "sessions",
+  "studio",
+  "memory",
+  "metrics",
+  "evaluation",
+  "approvals",
+  "scheduler",
+])
+const fullCanvasTabs = new Set<ModuleNavId>([
+  "dashboard",
+  "chat",
+  "trace",
+  "mcp",
+  ...osControlTabs,
+])
 const settingsItem = navItems.find((item) => item.id === "settings") as NavItem
 const primaryNavItems = navItems.filter((item) => item.id !== "settings")
-const navItemById = Object.fromEntries(navItems.map((item) => [item.id, item])) as Record<ModuleNavId, NavItem>
+const moduleNavItems = [dashboardItem, ...navItems]
+const navItemById = Object.fromEntries(moduleNavItems.map((item) => [item.id, item])) as Record<ModuleNavId, NavItem>
 const homeSections: HomeSection[] = [
-  { title: "Operations", items: [navItemById.dashboard, navItemById.cve] },
-  { title: "Data plane", items: [navItemById.assets, navItemById.knowledge, navItemById.collect] },
-  { title: "Agent work", items: [navItemById.chat, navItemById.trace, navItemById.mcp] },
-  { title: "System", items: [navItemById.skills, navItemById.settings] },
+  { title: "Operations", items: [navItemById.dashboard, navItemById.chat, navItemById.trace] },
+  { title: "Control plane", items: [navItemById.sessions, navItemById.studio, navItemById.memory, navItemById.metrics] },
+  { title: "Governance", items: [navItemById.evaluation, navItemById.approvals, navItemById.scheduler] },
+  { title: "Security data", items: [navItemById.skills, navItemById.mcp, navItemById.knowledge, navItemById.cve, navItemById.assets, navItemById.collect] },
 ]
 const THEME_STORAGE_KEY = "theme"
 const CHAT_MODEL_STORAGE_KEY = "agno-aios-chat-model-id"
@@ -510,10 +680,14 @@ const currentModelName = ref("DeepSeek V4 Pro")
 const chatSessionsExpanded = ref(true)
 const chatSessions = ref<ChatSession[]>([])
 const currentChatSessionId = ref<string | null>(null)
+const traceQueueExpanded = ref(true)
+const traceQueueItems = ref<TraceItem[]>([])
+const currentTraceId = ref<string | null>(null)
 const userMenuOpen = ref(false)
 
 const { fetchModels } = useSettingsApi()
-const { loadingSessions, listSessions } = useChatHistory()
+const { loadingSessions, listSessions, archiveSession } = useChatHistory()
+const { loading: loadingTraceQueue, listTraces: listSidebarTraces } = useTracingApi()
 
 const activeComponent = computed<Component | null>(() => {
   const tab = activeTab.value
@@ -522,7 +696,7 @@ const activeComponent = computed<Component | null>(() => {
 })
 const currentMeta = computed<NavItem>(() => {
   if (activeTab.value === "home") return homeItem
-  return navItems.find((item) => item.id === activeTab.value) ?? homeItem
+  return moduleNavItems.find((item) => item.id === activeTab.value) ?? homeItem
 })
 const currentUserEmail = computed(() => currentUser.value?.email || "未登录")
 const userInitials = computed(() => {
@@ -532,6 +706,18 @@ const userInitials = computed(() => {
 })
 const activeComponentKey = computed(() => `${activeTab.value}-${componentRenderKey.value}`)
 const currentModelLabel = computed(() => formatModelLabel(currentModelName.value))
+const currentUserId = computed(() => currentUser.value?.id || currentUser.value?.email || null)
+const activeComponentProps = computed(() => {
+  const tab = activeTab.value
+  const baseProps = { currentUserId: currentUserId.value }
+  if (tab === "trace") {
+    return { ...baseProps, selectedTraceId: currentTraceId.value }
+  }
+  if (tab !== "home" && osControlTabs.has(tab as OsControlModule)) {
+    return { ...baseProps, osModule: tab }
+  }
+  return baseProps
+})
 const contentClass = computed(() => {
   const base = "block h-full min-h-0"
   const tab = activeTab.value
@@ -553,7 +739,7 @@ const sidebarStyle = computed(() => ({
 }))
 
 const workspaceSignals = computed(() => [
-  { label: "Modules", value: navItems.length },
+  { label: "Modules", value: moduleNavItems.length },
   { label: "Data plane", value: "RAG + ASM" },
   { label: "Runtime", value: "Trace" },
   { label: "Session", value: currentUser.value?.is_active ? "Active" : "Ready" },
@@ -565,7 +751,7 @@ const osPlanes = [
     icon: Platform,
     status: "online",
     statusText: "Current",
-    metrics: ["10 modules", "JWT", "Vue"],
+    metrics: ["17 modules", "JWT", "Vue"],
   },
   {
     name: "Security Data Fabric",
@@ -628,11 +814,52 @@ const formatSessionTime = (timestamp: number) => {
   })
 }
 
+const formatTraceTime = (iso?: string | null) => {
+  if (!iso) return ""
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ""
+  return date.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
+const compactTraceId = (value?: string | null) => {
+  const text = (value || "").trim()
+  if (!text) return "-"
+  return text.length > 14 ? `${text.slice(0, 6)}...${text.slice(-4)}` : text
+}
+
+const isTraceError = (trace: TraceItem) => {
+  return trace.status === "ERROR" || Number(trace.error_count || 0) > 0
+}
+
+const traceStatusTone = (trace: TraceItem) => {
+  if (isTraceError(trace)) return "error"
+  if (trace.status === "OK") return "ok"
+  return "other"
+}
+
+const formatTraceMeta = (trace: TraceItem) => {
+  return `${formatTraceTime(trace.start_time)} · ${compactTraceId(trace.trace_id)} · ${trace.total_spans ?? 0} spans`
+}
+
 const loadSidebarChatSessions = async () => {
   try {
     chatSessions.value = await listSessions()
   } catch {
     chatSessions.value = []
+  }
+}
+
+const loadSidebarTraceQueue = async () => {
+  try {
+    const response = await listSidebarTraces({ page: 1, limit: 12 })
+    traceQueueItems.value = response.items || []
+  } catch {
+    traceQueueItems.value = []
   }
 }
 
@@ -645,6 +872,11 @@ const dispatchChatEvent = (name: string, detail?: Record<string, unknown>) => {
 const toggleChatSessions = () => {
   chatSessionsExpanded.value = !chatSessionsExpanded.value
   if (chatSessionsExpanded.value) void loadSidebarChatSessions()
+}
+
+const toggleTraceQueue = () => {
+  traceQueueExpanded.value = !traceQueueExpanded.value
+  if (traceQueueExpanded.value) void loadSidebarTraceQueue()
 }
 
 const selectChatSession = (sessionId: string) => {
@@ -661,6 +893,30 @@ const createSidebarChat = () => {
   userMenuOpen.value = false
   dispatchChatEvent("agno-aios-chat-new")
   closeSidebar()
+}
+
+const selectTraceFromSidebar = (trace: TraceItem) => {
+  currentTraceId.value = trace.trace_id
+  activeTab.value = "trace"
+  userMenuOpen.value = false
+  dispatchChatEvent("agno-aios-trace-select", { traceId: trace.trace_id })
+  closeSidebar()
+}
+
+const archiveSidebarChatSession = async (sessionId: string) => {
+  const previousSessions = chatSessions.value
+  chatSessions.value = chatSessions.value.filter((session) => session.session_id !== sessionId)
+  if (currentChatSessionId.value === sessionId) {
+    currentChatSessionId.value = null
+    dispatchChatEvent("agno-aios-chat-new")
+  }
+  try {
+    await archiveSession(sessionId, currentUserId.value)
+    ElMessage.success("会话已归档")
+  } catch {
+    chatSessions.value = previousSessions
+    ElMessage.error("归档会话失败")
+  }
 }
 
 const handleChatSessionsChange = (event: Event) => {
@@ -689,6 +945,7 @@ const toggleSidebarSize = () => {
 const refreshWorkspace = () => {
   componentRenderKey.value += 1
   void loadCurrentModel()
+  void loadSidebarTraceQueue()
 }
 
 const applyTheme = (dark: boolean) => {
@@ -711,6 +968,7 @@ const handleAuthenticated = (user: AuthUser) => {
   currentUser.value = user
   void loadCurrentModel()
   void loadSidebarChatSessions()
+  void loadSidebarTraceQueue()
 }
 
 const restoreSession = async () => {
@@ -723,6 +981,7 @@ const restoreSession = async () => {
   try {
     currentUser.value = await fetchCurrentUser(token)
     void loadSidebarChatSessions()
+    void loadSidebarTraceQueue()
   } catch {
     clearStoredAuthToken()
     currentUser.value = null

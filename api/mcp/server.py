@@ -1,4 +1,5 @@
 from urllib.parse import parse_qs
+from typing import Any
 
 from fastmcp import FastMCP
 from loguru import logger
@@ -45,6 +46,7 @@ class AuthenticatedMcpApp:
 def build_main_mcp() -> FastMCP:
     enabled = enabled_service_ids()
     main_mcp = FastMCP("Agno AIOS MCP")
+    _install_middleware(main_mcp)
     if "playbook" in enabled:
         main_mcp.mount(playbook_mcp, namespace="playbook")
     if "agent" in enabled:
@@ -52,6 +54,39 @@ def build_main_mcp() -> FastMCP:
     if "basic" in enabled:
         main_mcp.mount(basic_mcp, namespace="basic")
     return main_mcp
+
+
+def _install_middleware(main_mcp: FastMCP) -> None:
+    """Install FastMCP middleware when the installed version supports it."""
+    middleware_specs: list[tuple[str, str, dict[str, Any]]] = [
+        (
+            "fastmcp.server.middleware.error_handling",
+            "ErrorHandlingMiddleware",
+            {"transform_errors": True},
+        ),
+        (
+            "fastmcp.server.middleware.rate_limiting",
+            "RateLimitingMiddleware",
+            {"max_requests_per_second": 50.0, "burst_capacity": 100},
+        ),
+        (
+            "fastmcp.server.middleware.timing",
+            "TimingMiddleware",
+            {},
+        ),
+        (
+            "fastmcp.server.middleware.response_limiting",
+            "ResponseLimitingMiddleware",
+            {"max_size": 500_000},
+        ),
+    ]
+    for module_name, class_name, kwargs in middleware_specs:
+        try:
+            module = __import__(module_name, fromlist=[class_name])
+            middleware_cls = getattr(module, class_name)
+            main_mcp.add_middleware(middleware_cls(**kwargs))
+        except Exception as exc:
+            logger.debug(f"跳过 FastMCP middleware {class_name}: {exc}")
 
 
 class IntegratedMcpRuntime:

@@ -16,6 +16,21 @@ const readOptionalSource = (relativePath) => {
 const app = readSource("App.vue")
 const authScreen = readSource("components/AuthScreen.vue")
 const chat = readOptionalSource("components/Chat.vue")
+const trace = readOptionalSource("components/Trace.vue")
+const dashboard = readOptionalSource("components/Dashboard.vue")
+
+const assertTextOrder = (source, labels, message) => {
+  let previousIndex = -1
+  for (const label of labels) {
+    const currentIndex = source.indexOf(label)
+    assert.notEqual(currentIndex, -1, `${message}: missing ${label}`)
+    assert.ok(
+      currentIndex > previousIndex,
+      `${message}: ${label} must appear after the previous label`,
+    )
+    previousIndex = currentIndex
+  }
+}
 
 assert.equal(
   app.includes("ag-nav-desc"),
@@ -81,6 +96,34 @@ assert.match(
 
 assert.match(
   app,
+  /dashboardItem/,
+  "Dashboard must be modeled separately so it can sit directly under Home",
+)
+
+assertTextOrder(
+  app,
+  ['label: "Home"', 'label: "Dashboard"', 'label: "Chat"', 'label: "Skills"', 'label: "MCP"', 'label: "Knowledge"', 'label: "Trace"'],
+  "sidebar navigation order must match Agno OS control-plane priority",
+)
+
+for (const controlPlaneLabel of [
+  'label: "Sessions"',
+  'label: "Studio"',
+  'label: "Memory"',
+  'label: "Metrics"',
+  'label: "Evaluation"',
+  'label: "Approvals"',
+  'label: "Scheduler"',
+]) {
+  assert.match(
+    app,
+    new RegExp(controlPlaneLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    `sidebar must include missing AgentOS control-plane page ${controlPlaneLabel}`,
+  )
+}
+
+assert.match(
+  app,
   /ag-chat-session-toggle/,
   "Chat nav item must include a small session expand/collapse trigger",
 )
@@ -89,6 +132,24 @@ assert.match(
   app,
   /ag-chat-session-panel/,
   "Chat sessions must render under the Chat nav item",
+)
+
+assert.match(
+  app,
+  /ag-chat-session-archive/,
+  "Chat session rows must include an archive/delete affordance",
+)
+
+assert.match(
+  app,
+  /archiveSidebarChatSession/,
+  "Chat session archive action must be wired from the sidebar",
+)
+
+assert.match(
+  readSource("composables/useApi.ts"),
+  /archiveSession/,
+  "Chat history API must expose archiveSession instead of permanent deletion for sidebar delete",
 )
 
 assert.match(
@@ -223,4 +284,60 @@ assert.match(
   chat,
   /chat-composer-row/,
   "Chat input, model selector, and send button must share one composer row",
+)
+
+assert.match(
+  trace,
+  /trace-run-title/,
+  "Trace detail header must use a stable block title container",
+)
+
+assert.match(
+  app,
+  /ag-trace-queue-panel/,
+  "Trace Queue must be rendered as an expandable sidebar panel under the Trace nav item",
+)
+
+assert.equal(
+  trace.includes("当前查询总量"),
+  false,
+  "Trace page must not keep dashboard-style query total metrics in the content area",
+)
+
+assert.equal(
+  trace.includes("trace-summary-grid"),
+  false,
+  "Trace page summary metric grid must move out of Trace and into Dashboard",
+)
+
+for (const chartClass of ["latency-chart", "hour-heatmap", "radar-chart", "span-bar-list"]) {
+  assert.match(
+    dashboard,
+    new RegExp(chartClass),
+    `Dashboard must include data-platform chart surface ${chartClass}`,
+  )
+}
+
+assert.match(
+  trace,
+  /trace-id-line/,
+  "Trace identifiers must render in a dedicated wrapping line",
+)
+
+assert.match(
+  trace,
+  /trace-waterfall-row/,
+  "Trace waterfall rows must use the refactored layout-safe row class",
+)
+
+assert.match(
+  trace,
+  /overflow-wrap:\s*anywhere/,
+  "Trace page CSS must allow long IDs and JSON-like values to wrap instead of overlapping",
+)
+
+assert.match(
+  trace,
+  /scrollDetailIntoView/,
+  "Trace mobile selection must move the detail pane into view after choosing a run",
 )

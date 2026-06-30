@@ -59,6 +59,44 @@ export interface ChatSession {
   preview: string
   created_at: number
   updated_at: number
+  archived?: boolean
+  archived_at?: string | null
+}
+
+export type OsControlModule =
+  | "sessions"
+  | "studio"
+  | "memory"
+  | "metrics"
+  | "evaluation"
+  | "approvals"
+  | "scheduler"
+
+export interface OsControlMetric {
+  label: string
+  value: string | number
+  hint?: string
+  tone?: "red" | "blue" | "green" | "yellow" | string
+}
+
+export interface OsControlRecord {
+  id: string
+  title: string
+  subtitle?: string
+  status: string
+  meta?: Record<string, unknown>
+  updated_at?: string
+}
+
+export interface OsControlResponse {
+  module: OsControlModule
+  title: string
+  description: string
+  status: string
+  metrics: OsControlMetric[]
+  records: OsControlRecord[]
+  notes?: string[]
+  generated_at: string
 }
 
 // CVE 相关类型

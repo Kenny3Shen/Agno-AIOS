@@ -5,7 +5,7 @@ from api.services.llm_service import (
     stream_chat_with_agent,
     get_all_sessions,
     get_session_messages,
-    delete_session,
+    archive_session,
 )
 from loguru import logger
 
@@ -16,6 +16,7 @@ class ChatRequest(BaseModel):
     message: str
     session_id: str | None = None
     model_id: str | None = None
+    user_id: str | None = None
 
 
 def _format_sse(data: str) -> str:
@@ -24,10 +25,13 @@ def _format_sse(data: str) -> str:
 
 
 async def _event_generator(
-    message: str, session_id: str | None = None, model_id: str | None = None
+    message: str,
+    session_id: str | None = None,
+    model_id: str | None = None,
+    user_id: str | None = None,
 ):
     try:
-        async for chunk in stream_chat_with_agent(message, session_id, model_id):
+        async for chunk in stream_chat_with_agent(message, session_id, model_id, user_id):
             if chunk:
                 yield _format_sse(chunk)
         yield _format_sse("[DONE]")
@@ -41,7 +45,12 @@ async def chat_agent(request: ChatRequest):
     """使用 LLM 处理聊天消息（流式）"""
     try:
         return StreamingResponse(
-            _event_generator(request.message, request.session_id, request.model_id),
+            _event_generator(
+                request.message,
+                request.session_id,
+                request.model_id,
+                request.user_id,
+            ),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache"},
         )
@@ -71,15 +80,15 @@ async def get_session(session_id: str):
 
 
 @router.delete("/chat/sessions/{session_id}")
-async def remove_session(session_id: str):
-    """删除指定会话"""
+async def remove_session(session_id: str, user_id: str | None = None):
+    """归档指定会话；不删除 Agno runs/traces。"""
     try:
-        success = delete_session(session_id)
+        success = archive_session(session_id, user_id)
         if not success:
             raise HTTPException(status_code=404, detail="会话不存在")
-        return {"success": True}
+        return {"success": True, "archived": True}
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"删除会话失败: {e}")
+        logger.error(f"归档会话失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -17,6 +17,8 @@ import type {
   McpTokenIssueResponse,
   Message,
   ModelConfigResponse,
+  OsControlModule,
+  OsControlResponse,
   SettingsResponse,
   SkillListResponse,
   SkillToggleResponse,
@@ -163,6 +165,7 @@ export function useChatApi() {
     message: string,
     sessionId: string | null,
     modelId: string | null,
+    userId: string | null,
     onChunk: (chunk: string) => void
   ): Promise<void> => {
     loading.value = true
@@ -175,7 +178,12 @@ export function useChatApi() {
           'Content-Type': 'application/json',
           'Accept': 'text/event-stream'
         },
-        body: JSON.stringify({ message, session_id: sessionId, model_id: modelId })
+        body: JSON.stringify({
+          message,
+          session_id: sessionId,
+          model_id: modelId,
+          user_id: userId,
+        })
       })
 
       if (!response.ok || !response.body) {
@@ -228,6 +236,39 @@ export function useChatApi() {
 }
 
 /**
+ * AgentOS 控制面 API
+ */
+export function useOsControlApi() {
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  const fetchModule = async (module: OsControlModule): Promise<OsControlResponse> => {
+    loading.value = true
+    error.value = null
+
+    try {
+      const response = await fetch(`${API_BASE}/os/${module}`)
+      if (!response.ok) {
+        const data: unknown = await response.json()
+        throw new Error(messageFromResponse(data, '加载控制面失败'))
+      }
+      return await response.json()
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, '加载控制面失败')
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  return {
+    loading,
+    error,
+    fetchModule
+  }
+}
+
+/**
  * 聊天会话历史 API
  */
 export function useChatHistory() {
@@ -251,18 +292,19 @@ export function useChatHistory() {
   }
 
 
-  const deleteSession = async (sessionId: string): Promise<void> => {
-    const response = await fetch(`${API_BASE}/chat/sessions/${sessionId}`, {
+  const archiveSession = async (sessionId: string, userId: string | null = null): Promise<void> => {
+    const query = userId ? `?user_id=${encodeURIComponent(userId)}` : ''
+    const response = await fetch(`${API_BASE}/chat/sessions/${sessionId}${query}`, {
       method: 'DELETE'
     })
-    if (!response.ok) throw new Error('删除会话失败')
+    if (!response.ok) throw new Error('归档会话失败')
   }
 
   return {
     loadingSessions,
     listSessions,
     getSessionHistory,
-    deleteSession
+    archiveSession
   }
 }
 

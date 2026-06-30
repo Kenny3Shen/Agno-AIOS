@@ -1,18 +1,19 @@
 # Agno AIOS AI 信息安全中台
 
-Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基于 FastAPI、Vue 3、Agno、FastMCP、PostgreSQL、PostgresDb 和 PgVector，把 CVE 情报、资产画像、网页情报解析、Agent 对话、运行观测、MCP 工具中枢、Skills 能力包、用户认证和基础 RAG 知识库整合到同一个主服务中。
+Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基于 FastAPI、Vue 3、Agno、FastMCP、PostgreSQL、PostgresDb 和 PgVector，把 CVE 情报、资产画像、网页情报解析、Agent 对话、运行观测、MCP 工具中枢、Skills 能力包、用户认证、AgentOS 风格控制面和基础 RAG 知识库整合到同一个主服务中。
 
 当前目标不是做一个通用聊天页面，而是构建可持续扩展的安全 Agent 工作台：安全人员可以在一个界面内完成情报查询、漏洞研判、资产排查、剧本调用、知识检索和运行观测。
 
 ## 核心能力
 
-- **AI 安全助手**：基于 Agno Agent 的流式对话，支持模型切换、会话历史、MCP 工具、Skills 和知识库检索。
+- **AI 安全助手**：基于 Agno Agent 的流式对话，支持模型切换、用户隔离的会话历史、MCP 工具、Skills、Memory 和知识库检索。
+- **AgentOS 控制面**：参考 Agno OS 左侧导航补齐 Sessions、Studio、Memory、Metrics、Evaluation、Approvals 和 Scheduler，统一查看 Agent 运行状态和治理对象。
 - **CVE 情报**：按 CVE 编号、应用名或关键词检索漏洞记录和 PoC 来源。
 - **资产搜索**：基于指纹或 IP 查询资产画像。
 - **URL 转 Markdown**：抓取网页正文并转换为 Markdown，便于情报沉淀。
-- **运行观测**：按状态、会话、日期范围和分页查看 Agent Trace/Span、耗时、错误、时间线和关联对话。
-- **态势总览**：展示 Agent 运行成功率、耗时分布和错误态势。
-- **MCP 工具中枢**：FastMCP 与主 API 同进程运行，支持服务开关、Token 和 Hi-Agent MCP 接入。
+- **运行观测**：在左侧 `Trace` 导航下展开最近 Trace Queue，右侧查看选中 Trace 的 Span Waterfall、树状关系和属性详情。
+- **态势总览**：展示 Agent 运行成功率、耗时趋势、小时热力、Span/Error 分布、Agent 负载雷达和错误态势。
+- **MCP 工具中枢**：FastMCP 与主 API 同进程运行，支持服务开关、Token、Hi-Agent MCP 接入、生命周期管理和基础 middleware 防护。
 - **Skills 管理**：启用、禁用和查看本地 `api/agent/skills/` 能力包。
 - **RAG 知识库**：基于 Agno Knowledge、PostgresDb 和 PgVector 的知识库，Agent 可通过 `search_knowledge_base` 检索内部资料，文档列表会压缩超长 metadata 以保证中后台布局稳定。
 - **认证与 OAuth**：基于 FastAPI Users、JWT、SQLAlchemy Async，支持注册、密码登录和 GitHub/Google/Microsoft OAuth2 登录。
@@ -112,10 +113,21 @@ npm run build
 `frontend` 是当前主前端。未登录时先进入注册/登录页，登录成功后进入 AI 信息安全中台工作区：
 
 - 注册/登录页调用 FastAPI Users 的 JWT 接口，支持邮箱密码注册、登录、会话恢复和 OAuth Provider 发现。
-- 左侧导航按 **安全运营 / 数据底座 / AI 编排 / 系统治理** 组织模块，贴合数据中台和 SOC 工作流。
+- 左侧导航按 Agno OS 控制面习惯组织：`Home` 下方直接是 `Dashboard`，中段优先为 `Chat / Skills / MCP / Knowledge / Trace`，随后是 `Sessions / Studio / Memory / Metrics / Evaluation / Approvals / Scheduler` 和安全数据工具。`Chat` 下方可展开会话列表，`Trace` 下方可展开最近 Trace Queue。
 - 顶部展示当前模块、数据治理状态、MCP 编排状态、风险观测状态、当前用户、亮暗模式切换和退出登录。
-- 中央工作区保留 CVE 情报、资产治理、情报采集、Agent 编排、知识资产、运行观测、MCP 工具、Skills 和系统配置等既有能力。
+- 中央工作区保留 CVE 情报、资产治理、情报采集、Agent 编排、知识资产、运行观测、MCP 工具、Skills 和系统配置等既有能力，并新增 AgentOS 风格轻量控制面页面。
 - 生产构建仍输出到仓库根目录 `source/`，由 FastAPI 静态资源服务托管。
+
+### AgentOS 对齐说明
+
+本轮通过 `agno-docs` MCP 检查了 Agno Agent API、AgentOS API Overview、Memory Best Practices、Session Storage、Update Session 和 Delete Session 文档。Agno 文档建议生产 Agent API 覆盖 runs、sessions、memory、knowledge、evals、traces、metrics、schedules、approvals 和 components，并为 memory/session 提供 user 维度隔离。Agno AIOS 当前实现：
+
+- 已有 `PostgresDb`、Tracing、Knowledge、PgVector、Skills 和 MCPTools。
+- `/api/chat` 会把当前用户 ID 传入 Agno run，避免不同登录用户共享默认 memory/session 语义。
+- Agno 文档中的 `DELETE /sessions/{session_id}` 是永久删除 session 和 runs；Agno AIOS 的 Chat 侧栏删除按钮改为软归档，写入 `app.chat_session_archives` 并同步 `agno_sessions.metadata.agno_aios_archived=true`，不会删除 Trace 或历史 runs。
+- `/api/os/sessions`、`/api/os/studio`、`/api/os/memory`、`/api/os/metrics`、`/api/os/evaluation`、`/api/os/approvals`、`/api/os/scheduler` 提供 AgentOS 风格控制面数据。
+
+当前 Evaluation、Approvals 和 Scheduler 是 registry scaffolding：页面和表结构已经存在，后续可接入评测执行器、paused run 审批恢复和真实调度执行器。
 
 ## 配置说明
 
@@ -342,6 +354,8 @@ MCP 已整合进主 API 进程：
 - Hi-Agent 执行缓存表：`mcp.hiagent_exec_cache`
 - 访问方式：`Authorization: Bearer <token>` 或 `/mcp/?token=<token>`
 
+本轮通过 `fastmcp-docs` MCP 检查了 FastAPI 集成、lifespan、HTTP deployment 和 middleware 文档。Agno AIOS 当前保留显式 FastMCP ASGI lifespan 启动方式，并继续用 ASGI token wrapper 兼容 `MCPTools` query token。同时在可用版本中接入 FastMCP `ErrorHandlingMiddleware`、`RateLimitingMiddleware`、`TimingMiddleware` 和 `ResponseLimitingMiddleware`。
+
 主服务启动时会自动确保存在一个 bootstrap token。服务开关和 Hi-Agent 配置更新后，重启主 API 后对 MCP 协议工具列表生效。
 
 ### 新增 MCP 服务
@@ -367,7 +381,7 @@ MCP 已整合进主 API 进程：
    ```
 
 4. 在 `frontend/src/types/index.ts` 的 `McpServiceId` 中加入 `"scanner"`。
-5. 在 `frontend/src/components/McpManage.vue` 的服务卡片列表中增加该服务。
+5. 在 `frontend/src/components/MCP.vue` 的服务卡片列表中增加该服务。
 6. 执行 `uv run ruff check .`、`uv run ty check .` 和 `cd frontend && npm run build`。
 
 ## 低代码工作流编排规划
@@ -429,7 +443,7 @@ api/agent/skills/example-skill/
 - `POST /api/chat`：Agent 流式对话。
 - `GET /api/chat/sessions`：会话列表。
 - `GET /api/chat/sessions/{session_id}`：会话历史。
-- `DELETE /api/chat/sessions/{session_id}`：删除会话。
+- `DELETE /api/chat/sessions/{session_id}`：软归档会话，不删除 Agno runs/traces。
 - `POST /api/cve/search`：CVE 查询。
 - `POST /api/cve/update`：更新 CVE 数据。
 - `POST /api/asset/search`：资产查询。
@@ -437,6 +451,13 @@ api/agent/skills/example-skill/
 - `GET /api/settings` / `PUT /api/settings`：系统配置。
 - `GET /api/models` / `PUT /api/models`：模型配置。
 - `GET /api/traces` / `GET /api/traces/{trace_id}`：运行观测。
+- `GET /api/os/sessions`：AgentOS 会话库存。
+- `GET /api/os/studio`：Agent、Team、MCP、Hi-Agent 和 Skills 组件注册视图。
+- `GET /api/os/memory`：Agno memory 库存与增长状态。
+- `GET /api/os/metrics`：会话、Trace、Span、错误和 Memory 聚合指标。
+- `GET /api/os/evaluation`：评测 registry。
+- `GET /api/os/approvals`：审批 registry。
+- `GET /api/os/scheduler`：调度 registry。
 - `GET /api/skills` / `PUT /api/skills/{name}/toggle`：Skills 管理。
 - `GET /api/mcp/config` / `POST /api/mcp/config`：MCP 服务开关。
 - `GET /api/mcp/tokens` / `POST /api/mcp/tokens/issue` / `POST /api/mcp/tokens/delete`：MCP Token。
@@ -455,7 +476,6 @@ Python 语法、类型和风格检查：
 ```bash
 uv run ruff check .
 uv run ty check .
-uv run ruff format .
 ```
 
 前端构建检查：
@@ -463,6 +483,7 @@ uv run ruff format .
 ```bash
 cd frontend
 npm run test:auth
+npm run test:shell
 npm run build
 ```
 
@@ -472,7 +493,14 @@ npm run build
 # 启动 frontend 开发服务后使用 Playwright 截图检查登录页和工作台
 cd frontend
 npm run dev
+playwright-cli open http://localhost:5173
 ```
+
+## 技术文档
+
+- `docs/agent-os-control-plane.md`：Agno OS 参考图差距、Agno docs MCP 审查、FastMCP docs MCP 审查、会话软归档和本轮控制面实现范围。
+- `docs/superpowers/specs/2026-07-01-agentos-control-plane-design.md`：控制面设计规格。
+- `docs/superpowers/plans/2026-07-01-agentos-control-plane.md`：实现计划与验证步骤。
 
 ## 运行时文件
 
@@ -497,6 +525,8 @@ npm run dev
 - 完成模型路由配置，支持多模型选择。
 - 完成 PgVector 基础知识库接入。
 - 完成前后端暗黑模式、信息架构和核心页面可读性优化。
+- 完成 AgentOS 风格 Sessions、Studio、Memory、Metrics、Evaluation、Approvals 和 Scheduler 轻量控制面。
+- 完成 Chat 会话软归档、Trace Queue 左侧展开和 Dashboard 多图表态势总览。
 
 ### 阶段二：Agent 能力增强
 
@@ -506,6 +536,7 @@ npm run dev
 - 引入 Agno Team，支持多 Agent 协同。
 - 增加结构化输出，用 Pydantic 固定漏洞研判、资产风险和处置建议格式。
 - 增加 session summary、长期 memory 和用户偏好记忆。
+- 将 Evaluation、Approvals 和 Scheduler 从 registry scaffolding 接入真实执行器。
 - 增加 tool call guardrail，限制危险操作和未授权 PoC 指令。
 
 ### 阶段三：RAG 知识库增强

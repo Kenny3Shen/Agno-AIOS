@@ -35,6 +35,89 @@
       </article>
     </section>
 
+    <section class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)]">
+      <article class="situation-panel chart-panel min-w-0">
+        <div class="panel-title">
+          <el-icon><TrendCharts /></el-icon>
+          Trace 延迟趋势
+        </div>
+        <svg class="latency-chart" viewBox="0 0 320 140" role="img" aria-label="Trace latency trend">
+          <path class="chart-gridline" d="M0 35 H320 M0 70 H320 M0 105 H320" />
+          <path v-if="latencyAreaPoints" class="latency-area" :d="`M ${latencyAreaPoints} Z`" />
+          <polyline v-if="latencyTrendPoints" class="latency-line" :points="latencyTrendPoints" />
+          <circle
+            v-for="point in latencyDots"
+            :key="`${point.x}-${point.y}`"
+            class="latency-dot"
+            :cx="point.x"
+            :cy="point.y"
+            r="2.6"
+          />
+        </svg>
+        <div class="chart-legend">
+          <span>最近 {{ trendRuns.length }} 次运行</span>
+          <strong>{{ formatDuration(maxTrendDuration) }} peak</strong>
+        </div>
+      </article>
+
+      <article class="situation-panel chart-panel">
+        <div class="panel-title">
+          <el-icon><Histogram /></el-icon>
+          小时运行热力
+        </div>
+        <div class="hour-heatmap">
+          <span
+            v-for="hour in hourlyHeatmap"
+            :key="hour.hour"
+            class="heat-cell"
+            :class="{ error: hour.errors > 0 }"
+            :style="{ opacity: hour.opacity }"
+            :title="`${hour.label}: ${hour.count} runs / ${hour.errors} errors`"
+          >
+            {{ hour.label }}
+          </span>
+        </div>
+      </article>
+    </section>
+
+    <section class="mt-3 grid gap-3 xl:grid-cols-[minmax(360px,0.85fr)_minmax(0,1.15fr)]">
+      <article class="situation-panel chart-panel">
+        <div class="panel-title">
+          <el-icon><Odometer /></el-icon>
+          Agent 负载雷达
+        </div>
+        <svg class="radar-chart" viewBox="0 0 180 180" role="img" aria-label="Agent runtime load radar">
+          <polygon class="radar-ring" points="90,24 152,66 128,138 52,138 28,66" />
+          <polygon class="radar-ring inner" points="90,54 123,76 110,114 70,114 57,76" />
+          <line v-for="axis in radarAxes" :key="axis.label" class="radar-axis" x1="90" y1="90" :x2="axis.x" :y2="axis.y" />
+          <polygon v-if="radarPolygon" class="radar-value" :points="radarPolygon" />
+          <text v-for="axis in radarAxes" :key="`${axis.label}-label`" class="radar-label" :x="axis.labelX" :y="axis.labelY">
+            {{ axis.label }}
+          </text>
+        </svg>
+      </article>
+
+      <article class="situation-panel chart-panel min-w-0">
+        <div class="panel-title">
+          <el-icon><DataBoard /></el-icon>
+          Span / Error 分布
+        </div>
+        <div class="span-bar-list">
+          <div v-for="bar in spanBars" :key="bar.id" class="span-bar-row">
+            <div class="span-bar-label">
+              <strong>{{ bar.name }}</strong>
+              <span>{{ bar.spans }} spans · {{ bar.errors }} errors</span>
+            </div>
+            <span class="span-bar-track">
+              <span class="span-bar-fill" :style="{ width: bar.spanWidth }" />
+              <span v-if="bar.errors" class="span-bar-error" :style="{ width: bar.errorWidth }" />
+            </span>
+          </div>
+          <div v-if="!spanBars.length && !loading" class="empty-box">暂无 Span 分布数据</div>
+        </div>
+      </article>
+    </section>
+
     <section class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(360px,0.8fr)]">
       <article class="situation-panel min-w-0">
         <div class="panel-title">
@@ -138,7 +221,7 @@ type TimeScope = "24h" | "7d" | "30d"
 const { loading, error, listTraces } = useTracingApi()
 const traces = ref<TraceItem[]>([])
 const totalCount = ref(0)
-const timeScope = ref<TimeScope>("24h")
+const timeScope = ref<TimeScope>("30d")
 
 const apiError = computed(() => error.value)
 const sampleSize = computed(() => traces.value.length)
@@ -164,6 +247,32 @@ const topMetrics = computed<Array<{ label: string; value: string | number; hint:
 const recentRuns = computed(() => traces.value.slice(0, 12))
 const errorRuns = computed(() => traces.value.filter((trace) => hasError(trace)).slice(0, 8))
 const maxDuration = computed(() => Math.max(...traces.value.map((trace) => Number(trace.duration_ms || 0)), 1))
+const sortedRuns = computed(() => {
+  return [...traces.value].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+})
+const trendRuns = computed(() => sortedRuns.value.slice(-24))
+const maxTrendDuration = computed(() => Math.max(...trendRuns.value.map((trace) => Number(trace.duration_ms || 0)), 1))
+
+const latencyDots = computed(() => {
+  const runs = trendRuns.value
+  if (!runs.length) return []
+  const width = 320
+  const height = 124
+  const bottom = 132
+  const step = runs.length === 1 ? 0 : width / (runs.length - 1)
+  return runs.map((trace, index) => {
+    const ratio = Math.min(Number(trace.duration_ms || 0) / maxTrendDuration.value, 1)
+    return {
+      x: Number((index * step).toFixed(2)),
+      y: Number((bottom - ratio * height).toFixed(2)),
+    }
+  })
+})
+const latencyTrendPoints = computed(() => latencyDots.value.map((point) => `${point.x},${point.y}`).join(" "))
+const latencyAreaPoints = computed(() => {
+  if (!latencyDots.value.length) return ""
+  return `0,132 ${latencyTrendPoints.value} 320,132`
+})
 
 const statusBars = computed(() => {
   const total = Math.max(sampleSize.value, 1)
@@ -192,6 +301,76 @@ const agentRows = computed(() => {
     .map((item) => ({ ...item, avgDuration: item.runs ? item.duration / item.runs : 0 }))
     .sort((a, b) => b.runs - a.runs)
     .slice(0, 8)
+})
+
+const spanBars = computed(() => {
+  const maxSpans = Math.max(...traces.value.map((trace) => Number(trace.total_spans || 0)), 1)
+  return traces.value.slice(0, 12).map((trace) => {
+    const spans = Number(trace.total_spans || 0)
+    const errors = Number(trace.error_count || 0)
+    return {
+      id: trace.trace_id,
+      name: trace.name || shortId(trace.trace_id),
+      spans,
+      errors,
+      spanWidth: `${Math.max((spans / maxSpans) * 100, spans ? 8 : 0)}%`,
+      errorWidth: `${Math.max((errors / Math.max(spans, 1)) * 100, errors ? 6 : 0)}%`,
+    }
+  })
+})
+
+const hourlyHeatmap = computed(() => {
+  const buckets = Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0, errors: 0 }))
+  for (const trace of traces.value) {
+    const date = new Date(trace.start_time)
+    if (Number.isNaN(date.getTime())) continue
+    const bucket = buckets[date.getHours()]
+    bucket.count += 1
+    bucket.errors += hasError(trace) ? 1 : 0
+  }
+  const maxCount = Math.max(...buckets.map((item) => item.count), 1)
+  return buckets.map((item) => ({
+    ...item,
+    label: `${String(item.hour).padStart(2, "0")}`,
+    opacity: String(Math.max(item.count / maxCount, item.count ? 0.45 : 0.16)),
+  }))
+})
+
+const polarPoint = (index: number, total: number, radius: number) => {
+  const angle = -Math.PI / 2 + (Math.PI * 2 * index) / total
+  return {
+    x: 90 + Math.cos(angle) * radius,
+    y: 90 + Math.sin(angle) * radius,
+  }
+}
+
+const radarAxes = computed(() => {
+  const rows = agentRows.value.slice(0, 5)
+  const labels = rows.length ? rows.map((row) => shortId(row.id)) : ["Agent", "MCP", "Trace", "Memory", "Tools"]
+  return labels.map((label, index) => {
+    const axis = polarPoint(index, labels.length, 66)
+    const labelPoint = polarPoint(index, labels.length, 80)
+    return {
+      label,
+      x: axis.x,
+      y: axis.y,
+      labelX: labelPoint.x,
+      labelY: labelPoint.y,
+    }
+  })
+})
+
+const radarPolygon = computed(() => {
+  const rows = agentRows.value.slice(0, 5)
+  if (!rows.length) return ""
+  const maxRuns = Math.max(...rows.map((row) => row.runs), 1)
+  return rows
+    .map((row, index) => {
+      const radius = 18 + (row.runs / maxRuns) * 54
+      const point = polarPoint(index, rows.length, radius)
+      return `${point.x.toFixed(2)},${point.y.toFixed(2)}`
+    })
+    .join(" ")
 })
 
 const rangeStart = () => {
@@ -294,6 +473,173 @@ onMounted(() => {
 .situation-metric,
 .situation-panel {
   padding: 14px;
+}
+
+.chart-panel {
+  overflow: hidden;
+}
+
+.latency-chart,
+.radar-chart {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+}
+
+.latency-chart {
+  height: 180px;
+}
+
+.chart-gridline {
+  stroke: #d8e0e7;
+  stroke-dasharray: 3 6;
+  stroke-width: 1;
+}
+
+.latency-area {
+  fill: rgba(47, 143, 237, 0.13);
+}
+
+.latency-line {
+  fill: none;
+  stroke: #2f8fed;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+}
+
+.latency-dot {
+  fill: #ffffff;
+  stroke: #2f8fed;
+  stroke-width: 2;
+}
+
+.chart-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  color: #6b7c8a;
+  font-size: 11px;
+}
+
+.chart-legend strong {
+  color: #15202b;
+  font-family: "Fira Code", monospace;
+}
+
+.hour-heatmap {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.heat-cell {
+  display: grid;
+  min-height: 32px;
+  place-items: center;
+  border: 1px solid rgba(47, 143, 237, 0.24);
+  border-radius: 7px;
+  background: #2f8fed;
+  color: #ffffff;
+  font-family: "Fira Code", monospace;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.heat-cell.error {
+  border-color: rgba(240, 106, 106, 0.34);
+  background: #f06a6a;
+}
+
+.radar-chart {
+  height: 230px;
+}
+
+.radar-ring,
+.radar-axis {
+  fill: none;
+  stroke: #d8e0e7;
+  stroke-width: 1;
+}
+
+.radar-ring.inner {
+  stroke-dasharray: 4 5;
+}
+
+.radar-value {
+  fill: rgba(84, 211, 138, 0.2);
+  stroke: #28a66f;
+  stroke-width: 2;
+}
+
+.radar-label {
+  fill: #526170;
+  font-family: "Fira Code", monospace;
+  font-size: 8px;
+  text-anchor: middle;
+}
+
+.span-bar-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.span-bar-row {
+  display: grid;
+  gap: 7px;
+}
+
+.span-bar-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.span-bar-label strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #15202b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.span-bar-label span {
+  flex: 0 0 auto;
+  color: #6b7c8a;
+  font-family: "Fira Code", monospace;
+  font-size: 10px;
+}
+
+.span-bar-track {
+  display: block;
+  position: relative;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e6edf3;
+}
+
+.span-bar-fill,
+.span-bar-error {
+  display: block;
+  position: absolute;
+  inset: 0 auto 0 0;
+  min-width: 4px;
+  border-radius: inherit;
+}
+
+.span-bar-fill {
+  background: linear-gradient(90deg, #2f8fed, #54d38a);
+}
+
+.span-bar-error {
+  background: linear-gradient(90deg, rgba(240, 106, 106, 0.95), rgba(246, 195, 67, 0.95));
 }
 
 .situation-metric span,
@@ -486,8 +832,31 @@ html.dark .incident-row strong {
 }
 
 html.dark .duration-track,
-html.dark .status-track {
+html.dark .status-track,
+html.dark .span-bar-track {
   background: #22313a;
+}
+
+html.dark .chart-gridline,
+html.dark .radar-ring,
+html.dark .radar-axis {
+  stroke: #22313a;
+}
+
+html.dark .latency-dot {
+  fill: #0f1b22;
+}
+
+html.dark .chart-legend,
+html.dark .span-bar-label span,
+html.dark .radar-label {
+  color: #758998;
+  fill: #758998;
+}
+
+html.dark .chart-legend strong,
+html.dark .span-bar-label strong {
+  color: #dce7ef;
 }
 
 html.dark .record-chip {

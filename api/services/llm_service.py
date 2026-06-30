@@ -14,6 +14,7 @@ from api.services.model_config_service import get_model_for_run
 from api.services.knowledge_service import get_knowledge_base
 from api.services.postgres_store import (
     agno_schema,
+    app_schema,
     coerce_json_value,
     ensure_agno_postgres_tables,
     get_agno_postgres_db,
@@ -106,19 +107,133 @@ def _build_enabled_skills() -> Skills | None:
     return Skills(loaders=[LocalSkills(d) for d in enabled_dirs])
 
 
-def get_all_sessions() -> list[dict]:
+def _archive_table() -> sql.Identifier:
+    return sql.Identifier(app_schema(), "chat_session_archives")
+
+
+def ensure_chat_session_archive_table() -> None:
+    with postgres_connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
+                    sql.Identifier(app_schema())
+                )
+            )
+            cursor.execute(
+                sql.SQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS {} (
+                        session_id TEXT PRIMARY KEY,
+                        user_id TEXT NOT NULL DEFAULT '',
+                        archived_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                        reason TEXT NOT NULL DEFAULT '',
+                        metadata JSONB NOT NULL DEFAULT '{{}}'::jsonb
+                    )
+                    """
+                ).format(_archive_table())
+            )
+
+
+def is_session_archived(session_id: str) -> bool:
+    ensure_chat_session_archive_table()
+    with postgres_connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                sql.SQL("SELECT 1 FROM {} WHERE session_id = %s").format(
+                    _archive_table()
+                ),
+                (session_id,),
+            )
+            return cursor.fetchone() is not None
+
+
+def _is_archived_metadata(value: Any) -> bool:
+    metadata = coerce_json_value(value or {})
+    if not isinstance(metadata, dict):
+        return False
+    return metadata.get("agno_aios_archived") is True
+
+
+def archive_session(session_id: str, user_id: str | None = None) -> bool:
+    """Soft-archive a chat session without deleting Agno runs or traces."""
+    ensure_agno_postgres_tables()
+    ensure_chat_session_archive_table()
+    archived_by = (user_id or "").strip()
+
+    with postgres_connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                sql.SQL(
+                    "SELECT session_id, user_id FROM {} WHERE session_id = %s"
+                ).format(sql.Identifier(agno_schema(), "agno_sessions")),
+                (session_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return False
+
+            session_user_id = str(row.get("user_id") or archived_by)
+            cursor.execute(
+                sql.SQL(
+                    """
+                    INSERT INTO {} (session_id, user_id, archived_at, metadata)
+                    VALUES (%s, %s, now(), jsonb_build_object('archived_by', %s::text))
+                    ON CONFLICT (session_id) DO UPDATE SET
+                        user_id = EXCLUDED.user_id,
+                        archived_at = now(),
+                        metadata = EXCLUDED.metadata
+                    """
+                ).format(_archive_table()),
+                (session_id, session_user_id, archived_by),
+            )
+            cursor.execute(
+                sql.SQL(
+                    """
+                    UPDATE {}
+                    SET metadata = coalesce(metadata, '{{}}'::jsonb)
+                        || jsonb_build_object(
+                            'agno_aios_archived', true,
+                            'agno_aios_archived_by', %s::text,
+                            'agno_aios_archived_at', now()
+                        )
+                    WHERE session_id = %s
+                    """
+                ).format(sql.Identifier(agno_schema(), "agno_sessions")),
+                (archived_by, session_id),
+            )
+            return True
+
+
+def get_all_sessions(*, include_archived: bool = False) -> list[dict]:
     """从 PostgreSQL 读取所有会话摘要。"""
     ensure_agno_postgres_tables()
+    ensure_chat_session_archive_table()
     with postgres_connect() as conn:
         with conn.cursor() as cursor:
             cursor.execute(
                 sql.SQL(
                     """
-                SELECT session_id, created_at, updated_at, runs
-                FROM {}
+                SELECT
+                    s.session_id,
+                    s.created_at,
+                    s.updated_at,
+                    s.runs,
+                    s.metadata,
+                    a.archived_at
+                FROM {} AS s
+                LEFT JOIN {} AS a ON a.session_id = s.session_id
+                WHERE %s
+                    OR (
+                        a.session_id IS NULL
+                        AND coalesce(s.metadata ->> 'agno_aios_archived', 'false') <> 'true'
+                    )
                 LIMIT 500
                 """
-                ).format(sql.Identifier(agno_schema(), "agno_sessions"))
+                ).format(
+                    sql.Identifier(agno_schema(), "agno_sessions"),
+                    _archive_table(),
+                ),
+                (include_archived,),
             )
             rows = cursor.fetchall()
 
@@ -149,6 +264,9 @@ def get_all_sessions() -> list[dict]:
                 "preview": preview.strip() or "新对话",
                 "created_at": row.get("created_at"),
                 "updated_at": row.get("updated_at"),
+                "archived": bool(row.get("archived_at"))
+                or _is_archived_metadata(row.get("metadata")),
+                "archived_at": row.get("archived_at"),
             }
         )
     return sessions
@@ -193,14 +311,11 @@ def get_session_messages(session_id: str) -> list[dict]:
     return messages
 
 
-def delete_session(session_id: str) -> bool:
-    """删除指定会话。"""
-    ensure_agno_postgres_tables()
-    return get_agno_postgres_db().delete_session(session_id)
-
-
 async def stream_chat_with_agent(
-    message: str, session_id: str | None = None, model_id: str | None = None
+    message: str,
+    session_id: str | None = None,
+    model_id: str | None = None,
+    user_id: str | None = None,
 ) -> AsyncIterator[str]:
     """流式聊天，使用单个 Agent 统一处理安全运营任务"""
     async with MCPTools(
@@ -230,7 +345,10 @@ async def stream_chat_with_agent(
         )
 
         async for event in security_agent.arun(
-            message, session_id=session_id, stream=True
+            message,
+            session_id=session_id,
+            user_id=(user_id or "anonymous").strip() or "anonymous",
+            stream=True,
         ):
             event_type: str | None = None
             content: Any = None
