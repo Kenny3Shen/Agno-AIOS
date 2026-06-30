@@ -19,10 +19,14 @@ node_modules/
 dataset/
 .codex
 .claude
+.tmp
 
 # Playwright
+.playwright-cli
 /test-results/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+/frontend-react

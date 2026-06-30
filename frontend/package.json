@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "test:auth": "tsc src/lib/authClient.ts --ignoreConfig --target ES2022 --module ES2022 --moduleResolution bundler --lib ES2022,DOM --strict --outDir dist-test && node --test src/lib/authClient.test.mjs",
+    "test:shell": "node --test src/uiShell.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

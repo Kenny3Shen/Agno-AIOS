@@ -1,15 +1,49 @@
 <template>
   <main class="auth-screen">
-    <section class="auth-card" aria-label="Agno AIOS 认证入口">
-      <div class="auth-panel">
-        <div class="auth-brand">
-          <span class="auth-logo">
-            <el-icon><Platform /></el-icon>
-          </span>
-          <div>
-            <h1>Agno AIOS</h1>
-            <p>AI 信息安全中台</p>
+    <section class="auth-card auth-brief-shell" aria-label="Agno AIOS 认证入口">
+      <aside class="auth-brief" aria-label="平台入口信息">
+        <header class="auth-brief-header">
+          <div class="auth-brand">
+            <span class="auth-logo">
+              <el-icon><Platform /></el-icon>
+            </span>
+            <div>
+              <h1>Agno</h1>
+              <p>AIOS</p>
+            </div>
           </div>
+
+          <button
+            type="button"
+            class="theme-chip"
+            :aria-label="isDark ? '切换到浅色模式' : '切换到深色模式'"
+            @click="$emit('toggle-theme')"
+          >
+            <el-icon>
+              <Sunny v-if="isDark" />
+              <Moon v-else />
+            </el-icon>
+          </button>
+        </header>
+
+        <div class="auth-brief-title">
+          <span>AGENT CONTROL</span>
+          <h2>Agno AIOS</h2>
+          <p>登录后继续使用 Chat、MCP、Trace 与模型设置。</p>
+        </div>
+
+        <div class="auth-brief-grid">
+          <span v-for="item in briefItems" :key="item.label" :class="item.tone">
+            <el-icon><component :is="item.icon" /></el-icon>
+            {{ item.label }}
+          </span>
+        </div>
+      </aside>
+
+      <div class="auth-panel">
+        <div class="auth-panel-heading">
+          <span>{{ mode === 'login' ? 'SIGN IN' : 'CREATE' }}</span>
+          <h2>{{ mode === 'login' ? '进入工作台' : '创建账号' }}</h2>
         </div>
 
         <div class="auth-tabs" role="tablist" aria-label="认证方式">
@@ -72,12 +106,12 @@
             type="primary"
             :loading="submitting"
           >
-            {{ mode === 'login' ? '进入工作台' : '创建账号并进入' }}
+            {{ mode === 'login' ? '进入 Agno AIOS' : '创建并进入' }}
           </el-button>
         </form>
 
         <div v-if="oauthProviders.length" class="auth-oauth">
-          <span>也可以使用 OAuth 登录</span>
+          <span>OAuth</span>
           <div>
             <el-button
               v-for="provider in oauthProviders"
@@ -92,62 +126,18 @@
         </div>
 
         <div class="auth-footer">
-          <span>JWT 认证</span>
-          <span>PgVector 知识库</span>
-          <span>MCP 工具链</span>
+          <span>JWT</span>
+          <span>PgVector</span>
+          <span>MCP</span>
         </div>
       </div>
-
-      <aside class="lineage-panel" aria-label="平台能力矩阵">
-        <div class="lineage-header">
-          <span>Security data fabric</span>
-          <button
-            type="button"
-            class="theme-chip"
-            :aria-label="isDark ? '切换到浅色模式' : '切换到深色模式'"
-            @click="$emit('toggle-theme')"
-          >
-            <el-icon>
-              <Sunny v-if="isDark" />
-              <Moon v-else />
-            </el-icon>
-          </button>
-        </div>
-
-        <div class="lineage-grid">
-          <span
-            v-for="cell in lineageCells"
-            :key="cell.label"
-            class="lineage-cell"
-            :class="cell.tone"
-          >
-            <strong>{{ cell.value }}</strong>
-            <em>{{ cell.label }}</em>
-          </span>
-        </div>
-
-        <div class="risk-rail">
-          <div v-for="item in riskRails" :key="item.label">
-            <span>{{ item.label }}</span>
-            <strong>{{ item.value }}</strong>
-            <i :style="{ width: item.width }" />
-          </div>
-        </div>
-
-        <div class="auth-copy">
-          <h2>把数据治理、漏洞情报和 Agent 响应收束到同一个控制面。</h2>
-          <p>
-            登录后进入面向 SOC 的中台工作区：资产画像、CVE 情报、RAG 知识、运行观测和 MCP 工具统一编排。
-          </p>
-        </div>
-      </aside>
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { Moon, Platform, Sunny } from '@element-plus/icons-vue'
+import { onMounted, ref, type Component } from 'vue'
+import { ChatDotRound, Connection, DataAnalysis, Moon, Platform, Sunny } from '@element-plus/icons-vue'
 import {
   clearStoredAuthToken,
   fetchCurrentUser,
@@ -169,6 +159,11 @@ const emit = defineEmits<{
 }>()
 
 type AuthMode = 'login' | 'register'
+type BriefItem = {
+  label: string
+  tone: string
+  icon: Component
+}
 
 const mode = ref<AuthMode>('login')
 const email = ref('')
@@ -178,19 +173,11 @@ const errorMessage = ref('')
 const oauthProviders = ref<OAuthProvider[]>([])
 const oauthLoading = ref<OAuthProvider | ''>('')
 
-const lineageCells = [
-  { label: '资产面', value: 'ASM', tone: 'blue' },
-  { label: '漏洞情报', value: 'CVE', tone: 'red' },
-  { label: '知识切片', value: 'RAG', tone: 'green' },
-  { label: '运行链路', value: 'Trace', tone: 'blue' },
-  { label: '剧本工具', value: 'MCP', tone: 'yellow' },
-  { label: '响应闭环', value: 'SOAR', tone: 'green' },
-]
-
-const riskRails = [
-  { label: '数据接入', value: 'Online', width: '84%' },
-  { label: '治理覆盖', value: 'Mapped', width: '72%' },
-  { label: '威胁调查', value: 'Ready', width: '91%' },
+const briefItems: BriefItem[] = [
+  { label: 'Chat', tone: 'blue', icon: ChatDotRound },
+  { label: 'MCP', tone: 'yellow', icon: Connection },
+  { label: 'Trace', tone: 'green', icon: DataAnalysis },
+  { label: 'Model', tone: 'red', icon: Platform },
 ]
 
 const validate = () => {
@@ -261,158 +248,222 @@ onMounted(async () => {
 
 <style scoped>
 .auth-screen {
-  min-height: 100dvh;
   display: grid;
+  min-height: 100dvh;
   place-items: center;
-  padding: 24px;
+  padding: 20px;
   background:
-    linear-gradient(rgba(47, 143, 237, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(47, 143, 237, 0.08) 1px, transparent 1px),
-    #eef3f7;
-  background-size: 44px 44px;
-  color: #111827;
-}
-
-html.dark .auth-screen {
-  background:
-    linear-gradient(rgba(106, 215, 255, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(106, 215, 255, 0.08) 1px, transparent 1px),
-    #071014;
-  color: #e6edf3;
+    linear-gradient(90deg, rgba(92, 105, 124, 0.08) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(92, 105, 124, 0.06) 1px, transparent 1px),
+    var(--ag-page);
+  background-size: 34px 34px;
+  color: var(--ag-text);
 }
 
 .auth-card {
-  width: min(1120px, 100%);
-  min-height: min(720px, calc(100dvh - 48px));
   display: grid;
-  grid-template-columns: minmax(340px, 0.82fr) minmax(420px, 1.18fr);
+  width: min(980px, 100%);
+  min-height: min(620px, calc(100dvh - 40px));
+  grid-template-columns: minmax(300px, 0.72fr) minmax(340px, 1fr);
   overflow: hidden;
-  border: 1px solid #b8c8d8;
+  border: 1px solid var(--ag-border);
   border-radius: 8px;
-  background: #f8fafc;
-  box-shadow: 0 18px 60px rgba(15, 23, 42, 0.16);
+  background: var(--ag-frame);
+  box-shadow: var(--ag-shadow);
 }
 
-html.dark .auth-card {
-  border-color: #20313d;
-  background: #0b141b;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
-}
-
-.auth-panel,
-.lineage-panel {
+.auth-brief,
+.auth-panel {
   min-width: 0;
-  padding: 32px;
+  padding: clamp(22px, 4vw, 38px);
+}
+
+.auth-brief {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 32px;
+  border-right: 1px solid var(--ag-border);
+  background: var(--ag-sidebar);
+  color: var(--ag-sidebar-text);
+}
+
+.auth-brief-header,
+.auth-brand {
+  display: flex;
+  align-items: center;
+}
+
+.auth-brief-header {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.auth-brand {
+  gap: 12px;
+}
+
+.auth-logo {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid var(--ag-sidebar-border);
+  border-radius: 8px;
+  background: var(--ag-sidebar-icon);
+  color: var(--ag-accent);
+}
+
+.auth-brand h1,
+.auth-brand p,
+.auth-panel-heading h2,
+.auth-brief-title h2,
+.auth-brief-title p {
+  margin: 0;
+}
+
+.auth-brand h1 {
+  color: var(--ag-sidebar-strong);
+  font-size: 17px;
+  font-weight: 780;
+}
+
+.auth-brand p {
+  margin-top: 2px;
+  color: var(--ag-sidebar-muted);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.theme-chip {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--ag-sidebar-border);
+  border-radius: 8px;
+  background: var(--ag-sidebar-icon);
+  color: var(--ag-sidebar-text);
+}
+
+.auth-brief-title span,
+.auth-panel-heading span {
+  display: block;
+  color: var(--ag-accent);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.auth-brief-title h2 {
+  margin-top: 10px;
+  color: var(--ag-sidebar-strong);
+  font-size: clamp(34px, 5vw, 54px);
+  font-weight: 840;
+  line-height: 0.98;
+}
+
+.auth-brief-title p {
+  max-width: 360px;
+  margin-top: 14px;
+  color: var(--ag-sidebar-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.auth-brief-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.auth-brief-grid span {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--ag-sidebar-border);
+  border-radius: 8px;
+  background: var(--ag-sidebar-item);
+  padding: 0 12px;
+  color: var(--ag-sidebar-strong);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.auth-brief-grid .blue {
+  color: var(--ag-blue);
+}
+
+.auth-brief-grid .green {
+  color: var(--ag-green);
+}
+
+.auth-brief-grid .yellow {
+  color: var(--ag-yellow);
+}
+
+.auth-brief-grid .red {
+  color: var(--ag-accent);
 }
 
 .auth-panel {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  border-right: 1px solid #cbd6e2;
-  background: #ffffff;
+  background: var(--ag-panel);
 }
 
-html.dark .auth-panel {
-  border-color: #20313d;
-  background: #0e171f;
-}
-
-.auth-brand {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.auth-logo {
-  display: grid;
-  width: 46px;
-  height: 46px;
-  place-items: center;
-  border: 1px solid rgba(47, 143, 237, 0.42);
-  border-radius: 8px;
-  background: #eaf5ff;
-  color: #0969da;
-}
-
-html.dark .auth-logo {
-  background: #102638;
-  color: #6ad7ff;
-}
-
-.auth-brand h1 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: 0;
-}
-
-.auth-brand p,
-.auth-footer,
-.auth-oauth > span,
-.auth-field > span {
-  color: #5f7080;
-}
-
-html.dark .auth-brand p,
-html.dark .auth-footer,
-html.dark .auth-oauth > span,
-html.dark .auth-field > span {
-  color: #8ea0ae;
-}
-
-.auth-brand p {
-  margin: 4px 0 0;
-  font-size: 13px;
+.auth-panel-heading h2 {
+  margin-top: 8px;
+  color: var(--ag-heading);
+  font-size: 28px;
+  font-weight: 820;
 }
 
 .auth-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 4px;
-  margin-top: 34px;
-  padding: 4px;
-  border: 1px solid #cbd6e2;
+  margin-top: 28px;
+  border: 1px solid var(--ag-border);
   border-radius: 8px;
-  background: #eef3f7;
-}
-
-html.dark .auth-tabs {
-  border-color: #20313d;
-  background: #071014;
+  background: var(--ag-panel-soft);
+  padding: 4px;
 }
 
 .auth-tabs button {
-  min-height: 40px;
-  cursor: pointer;
+  min-height: 38px;
   border-radius: 6px;
-  font-size: 14px;
-  font-weight: 700;
-  color: #5f7080;
+  color: var(--ag-muted);
+  font-size: 13px;
+  font-weight: 750;
 }
 
 .auth-tabs button.active {
-  background: #ffffff;
-  color: #0f4f8f;
+  background: var(--ag-panel-raised);
+  color: var(--ag-heading);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
-html.dark .auth-tabs button.active {
-  background: #102638;
-  color: #ddf4ff;
-}
-
 .auth-form {
-  margin-top: 26px;
   display: grid;
   gap: 16px;
+  margin-top: 22px;
 }
 
 .auth-field {
   display: grid;
   gap: 8px;
-  font-size: 13px;
-  font-weight: 700;
+}
+
+.auth-field > span,
+.auth-oauth > span {
+  color: var(--ag-muted-strong);
+  font-size: 12px;
+  font-weight: 750;
 }
 
 .auth-alert {
@@ -421,13 +472,12 @@ html.dark .auth-tabs button.active {
 
 .auth-submit {
   width: 100%;
-  margin-top: 2px;
 }
 
 .auth-oauth {
-  margin-top: 22px;
   display: grid;
   gap: 10px;
+  margin-top: 20px;
 }
 
 .auth-oauth > div {
@@ -444,182 +494,26 @@ html.dark .auth-tabs button.active {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 28px;
-  font-size: 11px;
+  margin-top: 22px;
 }
 
 .auth-footer span {
-  border: 1px solid #d8e0e7;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--ag-border);
   border-radius: 6px;
-  padding: 4px 7px;
-  background: #f8fafc;
+  background: var(--ag-panel-soft);
+  padding: 3px 7px;
+  color: var(--ag-muted);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+  font-weight: 800;
 }
 
-html.dark .auth-footer span {
-  border-color: #20313d;
-  background: #0b141b;
-}
-
-.lineage-panel {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 28px;
-  background: #e8eef4;
-}
-
-html.dark .lineage-panel {
-  background: #071014;
-}
-
-.lineage-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  color: #475569;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  text-transform: uppercase;
-}
-
-html.dark .lineage-header {
-  color: #8ea0ae;
-}
-
-.theme-chip {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  cursor: pointer;
-  place-items: center;
-  border: 1px solid #cbd6e2;
-  border-radius: 8px;
-  background: #ffffff;
-}
-
-html.dark .theme-chip {
-  border-color: #20313d;
-  background: #0e171f;
-}
-
-.lineage-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.lineage-cell {
-  min-height: 118px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  border: 1px solid #c6d3df;
-  border-radius: 8px;
-  padding: 14px;
-  background: #ffffff;
-}
-
-html.dark .lineage-cell {
-  border-color: #20313d;
-  background: #0e171f;
-}
-
-.lineage-cell strong {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 22px;
-  color: #0f172a;
-}
-
-html.dark .lineage-cell strong {
-  color: #e6edf3;
-}
-
-.lineage-cell em {
-  font-style: normal;
-  font-size: 12px;
-  color: #64748b;
-}
-
-.lineage-cell.blue {
-  box-shadow: inset 0 3px 0 #2f8fed;
-}
-
-.lineage-cell.green {
-  box-shadow: inset 0 3px 0 #54d38a;
-}
-
-.lineage-cell.yellow {
-  box-shadow: inset 0 3px 0 #f6c343;
-}
-
-.lineage-cell.red {
-  box-shadow: inset 0 3px 0 #f06a6a;
-}
-
-.risk-rail {
-  display: grid;
-  gap: 12px;
-}
-
-.risk-rail div {
-  display: grid;
-  grid-template-columns: 92px 74px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  color: #475569;
-  font-size: 12px;
-}
-
-html.dark .risk-rail div {
-  color: #8ea0ae;
-}
-
-.risk-rail strong {
-  color: #0f172a;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-
-html.dark .risk-rail strong {
-  color: #e6edf3;
-}
-
-.risk-rail i {
-  height: 8px;
-  border-radius: 4px;
-  background: #2f8fed;
-  box-shadow: 0 0 0 1px rgba(47, 143, 237, 0.22);
-}
-
-.auth-copy h2 {
-  max-width: 620px;
-  margin: 0;
-  font-size: clamp(28px, 4vw, 46px);
-  line-height: 1.08;
-  letter-spacing: 0;
-  color: #0f172a;
-}
-
-html.dark .auth-copy h2 {
-  color: #ffffff;
-}
-
-.auth-copy p {
-  max-width: 560px;
-  margin: 16px 0 0;
-  color: #526170;
-  font-size: 14px;
-  line-height: 1.8;
-}
-
-html.dark .auth-copy p {
-  color: #9aacb9;
-}
-
-@media (max-width: 860px) {
+@media (max-width: 820px) {
   .auth-screen {
-    padding: 12px;
     place-items: stretch;
+    padding: 12px;
   }
 
   .auth-card {
@@ -627,33 +521,20 @@ html.dark .auth-copy p {
     grid-template-columns: 1fr;
   }
 
-  .auth-panel {
+  .auth-brief {
     border-right: 0;
-    border-bottom: 1px solid #cbd6e2;
-  }
-
-  .lineage-panel {
-    padding-top: 24px;
-  }
-
-  .lineage-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-bottom: 1px solid var(--ag-border);
   }
 }
 
 @media (max-width: 520px) {
-  .auth-panel,
-  .lineage-panel {
+  .auth-brief,
+  .auth-panel {
     padding: 20px;
   }
 
-  .lineage-cell {
-    min-height: 92px;
-  }
-
-  .risk-rail div {
+  .auth-brief-grid {
     grid-template-columns: 1fr;
-    gap: 5px;
   }
 }
 </style>

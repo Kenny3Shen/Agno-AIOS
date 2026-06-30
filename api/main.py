@@ -14,15 +14,15 @@ from api.config import get_settings
 from api.core.logging import configure_logging
 from api.mcp.server import bootstrap_mcp_token, mcp_runtime
 from api.routes import (
-    asset,
+    assets,
     chat,
+    collect,
     cve,
     knowledge,
     mcp as mcp_routes,
     settings,
     skills,
-    traces,
-    url2md,
+    trace,
 )
 from api.utils.db import close_db_pool, get_db_pool
 
@@ -98,11 +98,11 @@ async def mcp_redirect(request: Request):
 # Include routers
 app.include_router(auth_router)
 app.include_router(cve.router)
-app.include_router(asset.router)
+app.include_router(assets.router)
 app.include_router(chat.router)
-app.include_router(url2md.router)
+app.include_router(collect.router)
 app.include_router(settings.router)
-app.include_router(traces.router)
+app.include_router(trace.router)
 app.include_router(skills.router)
 app.include_router(mcp_routes.router)
 app.include_router(knowledge.router)

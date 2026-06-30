@@ -1,76 +1,9 @@
 <template>
   <div class="agent-chat h-full min-h-0 overflow-hidden bg-[#F7FAFC] text-[#15202B] dark:bg-[#071014] dark:text-[#DCE7EF]">
-    <div class="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[236px_minmax(0,1fr)]">
-      <aside class="hidden min-h-0 border-r border-[#CBD6E2] bg-[#F1F5F9] lg:flex lg:flex-col dark:border-[#22313A] dark:bg-[#0A151B]">
-        <div class="border-b border-[#CBD6E2] p-3 dark:border-[#22313A]">
-          <el-button type="primary" class="!w-full cursor-pointer" @click="createNewChat" :icon="Plus">
-            新建对话
-          </el-button>
-        </div>
-
-        <div class="min-h-0 flex-1 overflow-y-auto p-2">
-          <div class="mb-2 flex items-center justify-between px-2 text-[11px] font-semibold uppercase tracking-wide text-[#526170] dark:text-[#758998]">
-            <span>Sessions</span>
-            <span class="font-mono">{{ sessions.length }}</span>
-          </div>
-          <button
-            v-for="s in sessions"
-            :key="s.session_id"
-            type="button"
-            :class="[
-              'group mb-1 flex w-full cursor-pointer items-start gap-2 rounded-lg border p-2 text-left transition-colors duration-200',
-              currentSessionId === s.session_id
-                ? 'border-[#2F8FED]/50 bg-[#EAF5FF] text-[#0F4F8F] dark:bg-[#102638] dark:text-[#8BD9FF]'
-                : 'border-transparent text-[#334155] hover:border-[#B8C8D8] hover:bg-white dark:text-[#91A4B3] dark:hover:border-[#22313A] dark:hover:bg-[#101C23]',
-            ]"
-            @click="selectSession(s.session_id)"
-          >
-            <span class="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md border border-[#D8E0E7] bg-white dark:border-[#22313A] dark:bg-[#071014]">
-              <el-icon size="14"><ChatDotRound /></el-icon>
-            </span>
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-xs font-semibold">{{ s.preview || '新对话' }}</span>
-              <span class="mt-1 block truncate font-mono text-[10px] opacity-70">{{ formatTime(s.updated_at) }}</span>
-            </span>
-            <span class="flex shrink-0 gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-              <button
-                type="button"
-                class="grid h-6 w-6 cursor-pointer place-items-center rounded hover:bg-black/5 dark:hover:bg-white/10"
-                title="复制 session_id"
-                @click.stop="copySessionId(s.session_id)"
-              >
-                <el-icon size="13"><CopyDocument /></el-icon>
-              </button>
-              <button
-                type="button"
-                class="grid h-6 w-6 cursor-pointer place-items-center rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
-                title="删除会话"
-                @click.stop="confirmDeleteSession(s.session_id)"
-              >
-                <el-icon size="13"><Delete /></el-icon>
-              </button>
-            </span>
-          </button>
-          <div v-if="!sessions.length && !loadingSessions" class="rounded-lg border border-dashed border-[#D8E0E7] p-6 text-center text-xs text-[#6B7C8A] dark:border-[#22313A] dark:text-[#758998]">
-            暂无历史会话
-          </div>
-        </div>
-      </aside>
-
-      <main class="flex min-h-0 min-w-0 flex-col">
+    <main class="flex h-full min-h-0 min-w-0 flex-col">
         <header class="border-b border-[#CBD6E2] bg-white px-4 py-3 dark:border-[#22313A] dark:bg-[#0A151B]">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex min-w-0 items-center gap-2.5">
-              <el-button
-                v-if="isMobile"
-                type="primary"
-                plain
-                size="small"
-                class="lg:hidden cursor-pointer"
-                @click="showMobileSidebar = !showMobileSidebar"
-              >
-                <el-icon><ChatDotRound /></el-icon>
-              </el-button>
               <div class="agent-core" :class="{ 'is-running': loading }">
                 <el-icon><Cpu /></el-icon>
               </div>
@@ -178,16 +111,16 @@
             {{ modelConfigNotice }}
           </div>
           <div class="chat-composer">
-            <el-input
-              v-model="inputMessage"
-              placeholder="描述目标，例如：分析这个 CVE 对我资产面的影响"
-              @keyup.enter.exact="sendMessage"
-              :disabled="loading"
-              :autosize="{ minRows: 1, maxRows: 6 }"
-              type="textarea"
-              class="chat-input"
-            />
-            <div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div class="chat-composer-row">
+              <el-input
+                v-model="inputMessage"
+                placeholder="描述目标，例如：分析这个 CVE 对我资产面的影响"
+                @keyup.enter.exact="sendMessage"
+                :disabled="loading"
+                :autosize="{ minRows: 1, maxRows: 4 }"
+                type="textarea"
+                class="chat-input"
+              />
               <el-select
                 v-model="selectedModelId"
                 :loading="modelLoading"
@@ -236,81 +169,22 @@
             </div>
           </div>
         </footer>
-      </main>
-    </div>
-
-    <transition name="el-fade-in">
-      <div
-        v-if="isMobile && showMobileSidebar"
-        class="fixed inset-0 bg-black/40 z-40 sm:hidden"
-        @click="showMobileSidebar = false"
-      />
-    </transition>
-    <!-- 移动端会话侧边栏 -->
-    <transition name="slide-left">
-      <div
-        v-if="isMobile && showMobileSidebar"
-        class="fixed bottom-0 left-0 top-0 z-50 flex w-72 flex-col border-r border-[#D8E0E7] bg-white dark:border-[#22313A] dark:bg-[#0A151B] lg:hidden"
-      >
-        <div class="flex items-center justify-between border-b border-[#D8E0E7] p-3 dark:border-[#22313A]">
-          <el-button size="small" class="cursor-pointer" @click="createNewChat" :icon="Plus">新对话</el-button>
-          <el-button type="text" @click="showMobileSidebar = false" class="cursor-pointer">
-            <el-icon><Close /></el-icon>
-          </el-button>
-        </div>
-        <div class="flex-1 overflow-y-auto p-2 space-y-1">
-          <div
-            v-for="s in sessions"
-            :key="s.session_id"
-            :class="[
-              'group relative p-2.5 rounded-lg cursor-pointer text-sm transition-colors duration-200',
-              currentSessionId === s.session_id
-                ? 'bg-[#0969DA]/10 text-[#0969DA] dark:bg-[#1F6FEB]/20 dark:text-[#58A6FF]'
-                : 'hover:bg-slate-100 dark:hover:bg-[#161B22] text-slate-600 dark:text-[#8B949E]'
-            ]"
-          >
-            <div @click="selectSession(s.session_id); showMobileSidebar = false" class="pr-6">
-              <div class="font-medium truncate text-xs">{{ s.preview || '新对话' }}</div>
-              <div class="text-[10px] opacity-60 mt-1">{{ formatTime(s.updated_at) }}</div>
-            </div>
-            <button
-              @click.stop="copySessionId(s.session_id)"
-              class="absolute right-7 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 hover:bg-slate-100 dark:hover:bg-[#21262D] rounded cursor-pointer"
-              title="复制 session_id"
-            >
-              <el-icon class="text-slate-600 dark:text-[#8B949E]" size="14"><CopyDocument /></el-icon>
-            </button>
-            <button
-              @click.stop="confirmDeleteSession(s.session_id)"
-              class="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded cursor-pointer"
-              title="删除会话"
-            >
-              <el-icon class="text-red-500 dark:text-red-400" size="14"><Delete /></el-icon>
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
+    </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, nextTick, onMounted, onUnmounted } from "vue"
+import { computed, ref, nextTick, onMounted, onUnmounted, watch } from "vue"
 import MarkdownIt from "markdown-it"
 import hljs from "highlight.js"
 import { useChatApi, useChatHistory, useSettingsApi } from "../composables/useApi"
-import type { ChatSession, Message, ModelConfig } from "../types"
+import type { Message, ModelConfig } from "../types"
 import {
-  ChatDotRound,
-  Close,
-  CopyDocument,
   Cpu,
-  Delete,
   Loading,
-  Plus,
   Promotion,
 } from "@element-plus/icons-vue"
-import { ElMessage, ElMessageBox } from "element-plus"
+import { ElMessage } from "element-plus"
 
 // ── Markdown ──────────────────────────────────────────────────────
 const md: MarkdownIt = new MarkdownIt({
@@ -370,15 +244,12 @@ const messages = ref<ChatMessage[]>([
 ])
 const chatContainer = ref<HTMLElement | null>(null)
 const currentSessionId = ref<string | null>(null)
-const sessions = ref<ChatSession[]>([])
-const showMobileSidebar = ref(false)
-const isMobile = ref(false)
 const modelLoading = ref(false)
 const modelOptions = ref<ModelConfig[]>([])
 const selectedModelId = ref<string | null>(null)
 
 const { loading, error, sendMessageStream } = useChatApi()
-const { loadingSessions, listSessions, getSessionHistory, deleteSession } = useChatHistory()
+const { getSessionHistory } = useChatHistory()
 const { fetchModels } = useSettingsApi()
 
 const compactSessionId = computed(() => {
@@ -411,10 +282,21 @@ const quickPrompts = [
 
 const showQuickPrompts = computed(() => messages.value.length <= 1 && !loading.value)
 
+const notifyModelChange = () => {
+  const model = selectedModel.value
+  window.dispatchEvent(new CustomEvent("agno-aios-model-change", {
+    detail: {
+      id: model?.id ?? selectedModelId.value,
+      name: model?.name ?? "未选择",
+    },
+  }))
+}
+
 const persistSelectedModel = () => {
   if (selectedModelId.value) {
     localStorage.setItem(MODEL_STORAGE_KEY, selectedModelId.value)
   }
+  notifyModelChange()
 }
 
 const loadModels = async () => {
@@ -445,31 +327,22 @@ const scrollToBottom = async () => {
   chatContainer.value?.scrollTo({ top: chatContainer.value.scrollHeight, behavior: 'smooth' })
 }
 
-const formatTime = (ts: number) => {
-  if (!ts) return ""
-  return new Date(ts * 1000).toLocaleString("zh-CN", {
-    month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit"
-  })
-}
-
 const generateSessionId = () => crypto.randomUUID()
 
-const copySessionId = async (sessionId: string) => {
-  try {
-    await navigator.clipboard.writeText(sessionId)
-    ElMessage.success("session_id 已复制")
-  } catch {
-    ElMessage.warning("复制失败（请检查浏览器权限）")
-  }
+// ── Sessions ──────────────────────────────────────────────────────
+const notifySessionChange = () => {
+  window.dispatchEvent(new CustomEvent("agno-aios-chat-sessions-change", {
+    detail: { sessionId: currentSessionId.value },
+  }))
 }
 
-// ── Sessions ──────────────────────────────────────────────────────
-const loadSessionList = async () => {
-  try {
-    sessions.value = await listSessions()
-  } catch {
-    // ignore
-  }
+const handleExternalSessionSelect = (event: Event) => {
+  const detail = (event as CustomEvent<{ sessionId?: string }>).detail
+  if (detail?.sessionId) void selectSession(detail.sessionId)
+}
+
+const handleExternalNewChat = () => {
+  createNewChat()
 }
 
 const selectSession = async (sessionId: string) => {
@@ -484,32 +357,15 @@ const selectSession = async (sessionId: string) => {
   } catch {
     messages.value = [{ role: "assistant", content: WELCOME, final: true }]
   }
-  scrollToBottom()
+  notifySessionChange()
+  void scrollToBottom()
 }
 
 const createNewChat = () => {
   currentSessionId.value = null
   messages.value = [{ role: "assistant", content: WELCOME, final: true }]
-}
-
-const confirmDeleteSession = async (sessionId: string) => {
-  try {
-    await ElMessageBox.confirm('确定要删除这个对话吗？', '警告', {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-    await deleteSession(sessionId)
-    if (currentSessionId.value === sessionId) {
-      createNewChat()
-    }
-    await loadSessionList()
-    ElMessage.success('已删除')
-  } catch (err: unknown) {
-    if (err !== 'cancel') {
-      ElMessage.error('删除失败')
-    }
-  }
+  notifySessionChange()
+  void scrollToBottom()
 }
 
 // ── Chat ──────────────────────────────────────────────────────────
@@ -522,47 +378,51 @@ const sendMessage = async () => {
   const userMsg = inputMessage.value
   messages.value.push({ role: "user", content: userMsg })
   inputMessage.value = ""
-  scrollToBottom()
+  void scrollToBottom()
 
-  // 如果没有 session_id，生成一个新的
-  if (!currentSessionId.value) {
-    currentSessionId.value = generateSessionId()
+  let sessionId = currentSessionId.value
+  if (!sessionId) {
+    sessionId = generateSessionId()
+    currentSessionId.value = sessionId
+    notifySessionChange()
   }
 
   try {
     const idx = messages.value.push({ role: "assistant", content: "", final: false }) - 1
 
-    await sendMessageStream(userMsg, currentSessionId.value, selectedModelId.value, (chunk) => {
+    await sendMessageStream(userMsg, sessionId, selectedModelId.value, (chunk) => {
       const m = messages.value[idx]
       if (m) m.content += chunk
-      scrollToBottom()
+      void scrollToBottom()
     })
 
     const m = messages.value[idx]
     if (m) m.final = true
 
-    // 刷新会话列表
-    await loadSessionList()
+    notifySessionChange()
   } catch {
     messages.value.push({ role: "assistant", content: "抱歉，处理请求时遇到错误。请稍后再试。" })
   } finally {
-    scrollToBottom()
+    void scrollToBottom()
   }
 }
 
 const clearError = () => { if (error.value) error.value = null }
 
-// ── Lifecycle ─────────────────────────────────────────────────────
-const checkMobile = () => { isMobile.value = window.innerWidth < 640 }
+watch(currentModelName, notifyModelChange)
 
 onMounted(async () => {
-  checkMobile()
-  window.addEventListener("resize", checkMobile)
-  await Promise.all([loadSessionList(), loadModels()])
-  scrollToBottom()
+  window.addEventListener("agno-aios-chat-session-select", handleExternalSessionSelect)
+  window.addEventListener("agno-aios-chat-new", handleExternalNewChat)
+  await loadModels()
+  notifySessionChange()
+  void scrollToBottom()
 })
 
-onUnmounted(() => { window.removeEventListener("resize", checkMobile) })
+onUnmounted(() => {
+  window.removeEventListener("agno-aios-chat-session-select", handleExternalSessionSelect)
+  window.removeEventListener("agno-aios-chat-new", handleExternalNewChat)
+})
 </script>
 
 <style>
@@ -694,11 +554,6 @@ onUnmounted(() => { window.removeEventListener("resize", checkMobile) })
 .msg-fade-enter-from { opacity: 0; transform: translateY(8px); }
 .msg-fade-leave-to { opacity: 0; }
 
-.slide-left-enter-active,
-.slide-left-leave-active { transition: transform 0.3s ease; }
-.slide-left-enter-from,
-.slide-left-leave-to { transform: translateX(-100%); }
-
 .chat-composer {
   border: 1px solid #cbd6e2;
   border-radius: 10px;
@@ -707,8 +562,20 @@ onUnmounted(() => { window.removeEventListener("resize", checkMobile) })
   box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
 }
 
+.chat-composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.chat-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .agent-model-select {
-  width: min(210px, 100%);
+  flex: 0 0 220px;
+  width: 220px;
 }
 
 .agent-model-select .el-select__wrapper {
@@ -806,6 +673,7 @@ onUnmounted(() => { window.removeEventListener("resize", checkMobile) })
 }
 
 .send-button {
+  flex: 0 0 38px;
   width: 38px;
   height: 34px;
   padding: 0;
@@ -934,9 +802,18 @@ html.dark .message-card.user {
     grid-column: 2;
   }
 
-  .agent-model-select,
+  .chat-composer-row {
+    flex-wrap: wrap;
+  }
+
+  .agent-model-select {
+    flex: 1 1 calc(100% - 48px);
+    width: auto;
+  }
+
   .send-button {
-    width: 100%;
+    flex: 0 0 38px;
+    width: 38px;
   }
 }
 

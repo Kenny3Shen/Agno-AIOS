@@ -16,140 +16,270 @@
     </div>
   </div>
 
-  <div v-else class="security-page h-dvh overflow-hidden bg-[#EEF3F7] text-[#111827] dark:bg-[#071014] dark:text-[#E6EDF3]">
+  <div v-else class="ag-os security-page h-dvh overflow-hidden">
     <transition name="fade">
       <button
         v-if="isMobile && sidebarOpen"
         type="button"
-        class="fixed inset-0 z-40 bg-black/60 lg:hidden"
+        class="ag-mobile-scrim fixed inset-0 z-40 lg:hidden"
         aria-label="关闭导航遮罩"
         @click="closeSidebar"
       />
     </transition>
 
-    <div class="h-full min-h-0 lg:grid" :style="shellGridStyle">
-      <div class="contents lg:relative lg:block lg:min-h-0">
-      <aside
-        :style="sidebarStyle"
-        :class="[
-          'fixed inset-y-0 left-0 z-50 flex max-w-[calc(100vw-32px)] flex-col overflow-hidden border-r border-[#B8C8D8] bg-[#E1E9F1] transition-transform duration-200 lg:relative lg:z-auto lg:max-w-none lg:translate-x-0 dark:border-[#20313D] dark:bg-[#0B141B]',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full',
-        ]"
-      >
-        <div class="shrink-0 border-b border-[#B8C8D8] p-4 dark:border-[#20313D]">
-          <div class="flex items-center justify-between gap-3">
-            <div class="flex min-w-0 items-center gap-3">
-              <span class="grid h-10 w-10 shrink-0 place-items-center rounded-2 border border-[#2F8FED]/35 bg-[#EAF5FF] text-[#0969DA] dark:bg-[#102638] dark:text-[#6AD7FF]">
-                <el-icon size="21"><Platform /></el-icon>
+    <div class="ag-shell h-full min-h-0 lg:grid" :style="shellGridStyle">
+      <div class="contents lg:relative lg:block lg:h-full lg:min-h-0">
+        <aside
+          :style="sidebarStyle"
+          :class="[
+            'ag-sidebar fixed inset-y-0 left-0 z-50 flex h-dvh min-h-0 max-w-[calc(100vw-32px)] flex-col overflow-hidden transition-transform duration-200 lg:relative lg:z-auto lg:h-full lg:max-w-none lg:translate-x-0',
+            sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+            { 'is-compact': isSidebarCompact && !isMobile },
+          ]"
+        >
+          <div class="ag-brand">
+            <div class="ag-brand-main">
+              <span class="ag-brand-mark">
+                <span>A</span>
               </span>
-              <div class="min-w-0">
-                <h1 class="truncate text-base font-700 text-[#0F172A] dark:text-white">Agno AIOS</h1>
-                <p class="mt-1 truncate text-xs text-[#64748B] dark:text-[#8EA0AE]">AI 安全数据中台</p>
+              <div class="ag-brand-text min-w-0">
+                <h1>Agno</h1>
+                <p>AIOS</p>
               </div>
+              <span class="ag-pro-chip" :title="currentModelName">{{ currentModelLabel }}</span>
             </div>
+
+            <button
+              v-if="!isMobile"
+              type="button"
+              class="ag-sidebar-toggle"
+              :aria-label="isSidebarCompact ? '展开导航栏' : '收起导航栏'"
+              @click="toggleSidebarSize"
+            >
+              <el-icon>
+                <Expand v-if="isSidebarCompact" />
+                <Fold v-else />
+              </el-icon>
+            </button>
 
             <el-button v-if="isMobile" text aria-label="关闭侧边栏" @click="closeSidebar">
               <el-icon><Close /></el-icon>
             </el-button>
           </div>
-        </div>
 
-        <nav class="min-h-0 flex-1 overflow-y-auto px-3 py-4">
-          <section v-for="section in navSections" :key="section.title" class="mb-5">
-            <div class="mb-2 px-2 text-[11px] font-700 tracking-wide text-[#64748B] dark:text-[#6F8394]">
-              {{ section.title }}
-            </div>
+          <nav class="ag-nav min-h-0 flex-1 overflow-y-auto">
+            <button
+              type="button"
+              class="ag-nav-item ag-nav-home"
+              :class="{ active: activeTab === 'home' }"
+              :aria-current="activeTab === 'home' ? 'page' : undefined"
+              @click="selectNav('home')"
+            >
+              <span class="ag-nav-icon">
+                <el-icon><Platform /></el-icon>
+              </span>
+              <span class="ag-nav-text min-w-0 flex-1">
+                <span class="ag-nav-label">{{ homeItem.label }}</span>
+              </span>
+            </button>
 
-            <div class="space-y-1">
-              <button
-                v-for="item in section.items"
-                :key="item.id"
-                type="button"
-                class="soc-focus group flex h-12 w-full cursor-pointer items-center gap-3 rounded-2 border px-2.5 text-left transition-colors duration-150"
-                :class="item.id === activeTab
-                  ? 'border-[#2F8FED]/65 bg-white text-[#0F4F8F] shadow-sm dark:bg-[#102638] dark:text-[#DDF4FF]'
-                : 'border-transparent text-[#263342] hover:border-[#B8C8D8] hover:bg-white dark:text-[#B7C4CF] dark:hover:border-[#20313D] dark:hover:bg-[#0E171F]'"
-                :aria-current="item.id === activeTab ? 'page' : undefined"
-                @click="selectNav(item.id)"
-              >
-                <span
-                  class="grid h-8 w-8 shrink-0 place-items-center rounded-2 border"
-                  :class="item.id === activeTab
-                    ? 'border-[#2F8FED]/45 bg-white text-[#0969DA] dark:bg-[#0B141B] dark:text-[#6AD7FF]'
-                    : 'border-[#CBD6E2] bg-[#F8FAFC] text-[#526170] group-hover:bg-white group-hover:text-[#0969DA] dark:border-[#20313D] dark:bg-[#071014] dark:text-[#8EA0AE]'"
+            <div class="ag-nav-divider" aria-hidden="true" />
+
+            <div class="ag-nav-list">
+              <template v-for="item in primaryNavItems" :key="item.id">
+                <div v-if="item.id === 'chat'" class="ag-nav-chat-block">
+                  <div class="ag-nav-chat-row">
+                    <button
+                      type="button"
+                      class="ag-nav-item ag-nav-item-main soc-focus"
+                      :class="{ active: item.id === activeTab }"
+                      :aria-current="item.id === activeTab ? 'page' : undefined"
+                      @click="selectNav(item.id)"
+                    >
+                      <span class="ag-nav-icon">
+                        <el-icon>
+                          <component :is="item.icon" />
+                        </el-icon>
+                      </span>
+
+                      <span class="ag-nav-text min-w-0 flex-1">
+                        <span class="ag-nav-label">{{ item.label }}</span>
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      class="ag-chat-session-toggle"
+                      :aria-label="chatSessionsExpanded ? '收起 Chat 会话' : '展开 Chat 会话'"
+                      :aria-expanded="chatSessionsExpanded"
+                      @click.stop="toggleChatSessions"
+                    >
+                      <el-icon>
+                        <ArrowDown v-if="chatSessionsExpanded" />
+                        <ArrowRight v-else />
+                      </el-icon>
+                    </button>
+                  </div>
+
+                  <transition name="fade">
+                    <div
+                      v-if="chatSessionsExpanded && !isSidebarCompact"
+                      class="ag-chat-session-panel"
+                    >
+                      <button type="button" class="ag-chat-new-session" @click="createSidebarChat">
+                        <el-icon><Plus /></el-icon>
+                        <span>New chat</span>
+                      </button>
+
+                      <div class="ag-chat-session-head">
+                        <span>Sessions</span>
+                        <strong>{{ chatSessions.length }}</strong>
+                      </div>
+
+                      <button
+                        v-for="session in chatSessions"
+                        :key="session.session_id"
+                        type="button"
+                        class="ag-chat-session-item"
+                        :class="{ active: currentChatSessionId === session.session_id }"
+                        :title="session.preview || session.session_id"
+                        @click="selectChatSession(session.session_id)"
+                      >
+                        <span class="ag-chat-session-icon">
+                          <el-icon><ChatDotRound /></el-icon>
+                        </span>
+                        <span class="ag-chat-session-copy">
+                          <strong>{{ session.preview || 'New chat' }}</strong>
+                          <em>{{ formatSessionTime(session.updated_at) }}</em>
+                        </span>
+                      </button>
+
+                      <div v-if="!chatSessions.length && !loadingSessions" class="ag-chat-session-empty">
+                        No sessions
+                      </div>
+                    </div>
+                  </transition>
+                </div>
+
+                <button
+                  v-else
+                  type="button"
+                  class="ag-nav-item soc-focus"
+                  :class="{ active: item.id === activeTab }"
+                  :aria-current="item.id === activeTab ? 'page' : undefined"
+                  @click="selectNav(item.id)"
                 >
-                  <el-icon>
-                    <component :is="item.icon" />
-                  </el-icon>
-                </span>
+                  <span class="ag-nav-icon">
+                    <el-icon>
+                      <component :is="item.icon" />
+                    </el-icon>
+                  </span>
 
-                <span class="min-w-0 flex-1">
-                  <span class="block truncate text-sm font-650">{{ item.label }}</span>
-                  <span class="mt-0.5 block truncate text-[11px] text-[#64748B] dark:text-[#6F8394]">{{ item.description }}</span>
-                </span>
+                  <span class="ag-nav-text min-w-0 flex-1">
+                    <span class="ag-nav-label">{{ item.label }}</span>
+                  </span>
 
-                <span v-if="item.badge" class="shrink-0 rounded-1 border border-[#CBD5E1] px-1.5 py-0.5 text-[10px] text-[#64748B] dark:border-[#2A3A45] dark:text-[#8EA0AE]">
-                  {{ item.badge }}
-                </span>
-              </button>
+                  <span v-if="item.badge" class="ag-nav-badge">
+                    {{ item.badge }}
+                  </span>
+                </button>
+              </template>
             </div>
-          </section>
-        </nav>
 
-        <div class="shrink-0 border-t border-[#B8C8D8] p-3 dark:border-[#20313D]">
-          <div class="rounded-2 border border-[#B8C8D8] bg-[#F8FAFC] p-3 dark:border-[#20313D] dark:bg-[#0E171F]">
+            <div class="ag-nav-divider" aria-hidden="true" />
+
+            <button
+              type="button"
+              class="ag-nav-item soc-focus"
+              :class="{ active: settingsItem.id === activeTab }"
+              :aria-current="settingsItem.id === activeTab ? 'page' : undefined"
+              @click="selectNav(settingsItem.id)"
+            >
+              <span class="ag-nav-icon">
+                <el-icon>
+                  <component :is="settingsItem.icon" />
+                </el-icon>
+              </span>
+
+              <span class="ag-nav-text min-w-0 flex-1">
+                <span class="ag-nav-label">{{ settingsItem.label }}</span>
+              </span>
+            </button>
+          </nav>
+
+          <div class="ag-sidebar-footer">
             <div class="flex items-center justify-between gap-2">
-              <span class="text-xs font-650 text-[#334155] dark:text-[#D8E1E8]">当前会话</span>
-              <span class="inline-flex items-center gap-1.5 text-[11px] font-650 text-[#14824A] dark:text-[#54D38A]">
-                <span class="h-2 w-2 rounded-full bg-[#54D38A]" />
+              <span class="ag-footer-label">当前会话</span>
+              <span class="ag-live-dot">
+                <span />
                 已认证
               </span>
             </div>
-            <p class="mt-2 text-[11px] leading-5 text-[#64748B] dark:text-[#8EA0AE]">
-              {{ currentUserEmail }} 已通过安全会话校验。
-            </p>
-          </div>
-        </div>
-      </aside>
 
-      <button
-        v-if="!isMobile"
-        type="button"
-        class="absolute top-0 right-[-4px] z-20 hidden h-full w-2 cursor-col-resize border-x border-transparent transition-colors hover:border-[#2F8FED]/35 hover:bg-[#2F8FED]/10 lg:block dark:hover:border-[#6AD7FF]/30 dark:hover:bg-[#6AD7FF]/10"
-        :class="isResizingSidebar ? 'border-[#2F8FED]/60 bg-[#2F8FED]/15 dark:border-[#6AD7FF]/45 dark:bg-[#6AD7FF]/15' : ''"
-        aria-label="拖拽调整导航宽度"
-        @pointerdown="startSidebarResize"
-      />
+            <div class="ag-user-menu-wrap">
+              <div class="ag-user-row" :title="currentUserEmail">
+                <span>{{ userInitials }}</span>
+                <strong class="ag-footer-meta">{{ currentUserEmail }}</strong>
+              </div>
+
+              <button
+                type="button"
+                class="ag-user-menu-trigger"
+                aria-label="打开用户菜单"
+                :aria-expanded="userMenuOpen"
+                @click="toggleUserMenu"
+              >
+                <el-icon><MoreFilled /></el-icon>
+              </button>
+
+              <transition name="fade">
+                <div v-if="userMenuOpen" class="ag-user-menu" role="menu">
+                  <button type="button" role="menuitem" @click="openUserSettings">
+                    <el-icon><Setting /></el-icon>
+                    <span>用户设置</span>
+                  </button>
+                  <button type="button" role="menuitem" :disabled="loggingOut" @click="handleLogout">
+                    <el-icon><SwitchButton /></el-icon>
+                    <span>{{ loggingOut ? '退出中' : '退出登录' }}</span>
+                  </button>
+                </div>
+              </transition>
+            </div>
+          </div>
+        </aside>
       </div>
 
-      <main class="flex h-dvh min-w-0 flex-col overflow-hidden">
-        <header class="shrink-0 border-b border-[#B8C8D8] bg-white px-4 py-3 shadow-sm dark:border-[#20313D] dark:bg-[#0B141B] dark:shadow-none">
-          <div class="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div class="flex min-w-0 items-center gap-3">
+      <main class="ag-main">
+        <section class="ag-workbench">
+          <header class="ag-topbar">
+            <div class="ag-topbar-title">
               <el-button v-if="isMobile" text class="!rounded-2" aria-label="打开侧边栏" @click="openSidebar">
                 <el-icon size="20"><Menu /></el-icon>
               </el-button>
 
-              <span class="grid h-10 w-10 shrink-0 place-items-center rounded-2 border border-[#D8E0E7] bg-[#F8FAFC] text-[#0969DA] dark:border-[#20313D] dark:bg-[#0E171F] dark:text-[#6AD7FF]">
+              <span class="ag-current-icon">
                 <el-icon><component :is="currentMeta.icon" /></el-icon>
               </span>
 
               <div class="min-w-0">
-                <h2 class="truncate text-xl font-750 text-[#0F172A] dark:text-white">{{ currentMeta.label }}</h2>
-                <p class="mt-0.5 truncate text-xs text-[#64748B] dark:text-[#8EA0AE]">{{ currentMeta.description }}</p>
+                <div class="ag-os-name">
+                  <span>{{ currentMeta.label }}</span>
+                  <i />
+                </div>
+                <p>{{ currentMeta.description }}</p>
               </div>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2">
-              <div class="flex min-w-0 items-center gap-2 rounded-2 border border-[#C6D3DF] bg-[#F8FAFC] px-3 py-2 dark:border-[#20313D] dark:bg-[#0E171F]">
-                <el-icon class="shrink-0 text-[#0969DA] dark:text-[#6AD7FF]"><UserFilled /></el-icon>
-                <span class="max-w-[160px] truncate text-xs font-650 text-[#334155] dark:text-[#D8E1E8]">{{ currentUserEmail }}</span>
-              </div>
+            <div class="ag-topbar-actions">
+              <button type="button" class="ag-topbar-button" @click="refreshWorkspace">
+                <el-icon><Refresh /></el-icon>
+                <span>刷新</span>
+              </button>
 
               <el-tooltip :content="isDark ? '切换浅色模式' : '切换深色模式'" placement="bottom">
                 <el-button
                   circle
-                  class="!border-[#CBD5E1] !bg-white dark:!border-[#20313D] dark:!bg-[#0E171F]"
+                  class="ag-icon-button"
                   :aria-label="isDark ? '切换到浅色模式' : '切换到深色模式'"
                   @click="toggleTheme"
                 >
@@ -160,33 +290,96 @@
                 </el-button>
               </el-tooltip>
 
-              <el-tooltip content="退出登录" placement="bottom">
-                <el-button
-                  circle
-                  class="!border-[#CBD5E1] !bg-white dark:!border-[#20313D] dark:!bg-[#0E171F]"
-                  aria-label="退出登录"
-                  :loading="loggingOut"
-                  @click="handleLogout"
-                >
-                  <el-icon><SwitchButton /></el-icon>
-                </el-button>
-              </el-tooltip>
             </div>
-          </div>
-        </header>
+          </header>
 
-        <section class="min-h-0 flex-1 overflow-hidden bg-[#EEF3F7] p-3 sm:p-4 dark:bg-[#071014]">
-          <div class="h-full min-h-0 overflow-hidden rounded-2 border border-[#C2D0DC] bg-white shadow-sm dark:border-[#20313D] dark:bg-[#0E171F] dark:shadow-none">
+          <section class="ag-stage">
             <transition name="fade" mode="out-in">
-              <keep-alive>
-                <component
-                  :is="activeComponent"
-                  :key="activeTab"
-                  :class="contentClass"
-                />
-              </keep-alive>
+              <div v-if="activeTab === 'home'" key="home" class="ag-home">
+                <section class="ag-command">
+                  <div class="min-w-0">
+                    <span class="ag-command-kicker">AIOS CONTROL PLANE</span>
+                    <h2>Agno AIOS 工作台</h2>
+                    <p>把安全数据、知识、Agent 和运行观测收束到一个可调度的控制面。</p>
+                  </div>
+
+                  <div class="ag-signal-grid">
+                    <div v-for="signal in workspaceSignals" :key="signal.label" class="ag-signal">
+                      <span>{{ signal.label }}</span>
+                      <strong>{{ signal.value }}</strong>
+                    </div>
+                  </div>
+                </section>
+
+                <section v-for="section in homeSections" :key="section.title" class="ag-home-section">
+                  <div class="ag-section-heading">
+                    <span class="ag-section-caret">⌃</span>
+                    <h3>{{ section.title }}</h3>
+                  </div>
+
+                  <div class="ag-module-grid">
+                    <article
+                      v-for="item in section.items"
+                      :key="item.id"
+                      class="ag-module-card"
+                      :class="[`tone-${item.tone}`, { active: item.id === activeTab }]"
+                    >
+                      <button type="button" class="ag-module-main" @click="selectNav(item.id)">
+                        <span class="ag-module-icon">
+                          <el-icon><component :is="item.icon" /></el-icon>
+                        </span>
+                        <span class="min-w-0">
+                          <strong>{{ item.label }}</strong>
+                          <em>{{ item.description }}</em>
+                        </span>
+                      </button>
+
+                      <div class="ag-module-actions">
+                        <span v-if="item.badge" class="ag-module-badge">{{ item.badge }}</span>
+                        <button type="button" @click="selectNav(item.id)">打开</button>
+                      </div>
+                    </article>
+                  </div>
+                </section>
+
+                <section class="ag-home-section">
+                  <div class="ag-section-heading">
+                    <span class="ag-section-caret">⌃</span>
+                    <h3>运行平面</h3>
+                  </div>
+
+                  <div class="ag-plane-grid">
+                    <article v-for="plane in osPlanes" :key="plane.name" class="ag-plane-card">
+                      <div class="flex min-w-0 items-center gap-3">
+                        <span class="ag-plane-icon">
+                          <el-icon><component :is="plane.icon" /></el-icon>
+                        </span>
+                        <div class="min-w-0">
+                          <strong>{{ plane.name }}</strong>
+                          <p>{{ plane.description }}</p>
+                        </div>
+                      </div>
+                      <span class="ag-plane-status" :class="plane.status">{{ plane.statusText }}</span>
+                      <div class="ag-plane-footer">
+                        <span v-for="metric in plane.metrics" :key="metric">{{ metric }}</span>
+                      </div>
+                    </article>
+                  </div>
+                </section>
+              </div>
+
+              <div v-else key="module" class="ag-module-host">
+                <keep-alive>
+                  <component
+                    :is="activeComponent"
+                    v-if="activeComponent"
+                    :key="activeComponentKey"
+                    :class="contentClass"
+                  />
+                </keep-alive>
+              </div>
             </transition>
-          </div>
+          </section>
         </section>
       </main>
     </div>
@@ -194,43 +387,51 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, type Component } from "vue"
+import { computed, nextTick, onMounted, onUnmounted, ref, type Component } from "vue"
 import {
+  ArrowDown,
+  ArrowRight,
   ChatDotRound,
   Close,
   Connection,
   DataAnalysis,
   DataBoard,
+  Expand,
   Files,
+  Fold,
   Loading,
   Menu,
   Monitor,
+  MoreFilled,
   Moon,
   Platform,
+  Plus,
+  Refresh,
   Search,
   Setting,
   SetUp,
   Sunny,
   SwitchButton,
-  UserFilled,
   WarningFilled,
 } from "@element-plus/icons-vue"
 import AuthScreen from "./components/AuthScreen.vue"
-import CveSearch from "./components/CveSearch.vue"
-import AssetSearch from "./components/AssetSearch.vue"
-import LlmChat from "./components/LlmChat.vue"
-import Url2Md from "./components/Url2Md.vue"
+import CVE from "./components/CVE.vue"
+import Assets from "./components/Assets.vue"
+import Chat from "./components/Chat.vue"
+import Collect from "./components/Collect.vue"
 import Settings from "./components/Settings.vue"
-import AgentSituation from "./components/AgentSituation.vue"
-import AgentTracing from "./components/AgentTracing.vue"
-import SkillManage from "./components/SkillManage.vue"
-import McpManage from "./components/McpManage.vue"
-import KnowledgeManage from "./components/KnowledgeManage.vue"
+import Dashboard from "./components/Dashboard.vue"
+import Trace from "./components/Trace.vue"
+import Skills from "./components/Skills.vue"
+import MCP from "./components/MCP.vue"
+import Knowledge from "./components/Knowledge.vue"
+import { useChatHistory, useSettingsApi } from "./composables/useApi"
 import { clearStoredAuthToken, fetchCurrentUser, getStoredAuthToken, logout as authLogout } from "./lib/authClient"
-import type { AuthUser } from "./types"
+import type { AuthUser, ChatSession } from "./types"
 
-type NavId = "cve" | "asset" | "url2md" | "situation" | "chat" | "knowledge" | "tracing" | "mcp" | "skills" | "settings"
-type NavGroup = "安全运营" | "数据底座" | "AI 编排" | "系统治理"
+type ModuleNavId = "dashboard" | "cve" | "assets" | "knowledge" | "collect" | "chat" | "trace" | "mcp" | "skills" | "settings"
+type NavId = "home" | ModuleNavId
+type NavTone = "red" | "blue" | "green" | "yellow"
 
 type NavItem = {
   id: NavId
@@ -238,108 +439,238 @@ type NavItem = {
   description: string
   badge?: string
   icon: Component
-  group: NavGroup
+  tone: NavTone
+}
+
+type HomeSection = {
+  title: string
+  items: NavItem[]
+}
+
+const homeItem: NavItem = {
+  id: "home",
+  label: "Home",
+  description: "工作台总览",
+  icon: Platform,
+  tone: "blue",
 }
 
 const navItems: NavItem[] = [
-  { id: "situation", label: "安全态势", description: "资产、漏洞、响应闭环总览", icon: DataBoard, group: "安全运营", badge: "Live" },
-  { id: "cve", label: "漏洞情报", description: "CVE、PoC 与攻击面线索", icon: Search, group: "安全运营" },
-  { id: "asset", label: "资产治理", description: "指纹、IP 与暴露面查询", icon: Monitor, group: "数据底座" },
-  { id: "knowledge", label: "知识资产", description: "RAG 写入、检索与参数治理", icon: Files, group: "数据底座" },
-  { id: "url2md", label: "情报采集", description: "网页情报转 Markdown 入库", icon: WarningFilled, group: "数据底座" },
-  { id: "chat", label: "Agent 编排", description: "任务规划、剧本调用与流式分析", icon: ChatDotRound, group: "AI 编排" },
-  { id: "tracing", label: "运行观测", description: "Trace、Span 与异常追踪", icon: DataAnalysis, group: "AI 编排" },
-  { id: "mcp", label: "MCP 工具中枢", description: "服务、Token 与外部 Agent", icon: Connection, group: "AI 编排" },
-  { id: "skills", label: "能力治理", description: "安全 Skills 模块开关", icon: SetUp, group: "系统治理" },
-  { id: "settings", label: "系统配置", description: "模型路由、MCP 与通知配置", icon: Setting, group: "系统治理" },
+  { id: "dashboard", label: "Dashboard", description: "资产、漏洞、响应闭环总览", icon: DataBoard, badge: "Live", tone: "green" },
+  { id: "cve", label: "CVE", description: "CVE、PoC 与攻击面线索", icon: Search, tone: "red" },
+  { id: "assets", label: "Assets", description: "指纹、IP 与暴露面查询", icon: Monitor, tone: "blue" },
+  { id: "knowledge", label: "Knowledge", description: "RAG 写入、检索与参数治理", icon: Files, tone: "green" },
+  { id: "collect", label: "Collect", description: "网页情报转 Markdown 入库", icon: WarningFilled, tone: "yellow" },
+  { id: "chat", label: "Chat", description: "任务规划、剧本调用与流式分析", icon: ChatDotRound, tone: "blue" },
+  { id: "trace", label: "Trace", description: "Trace、Span 与异常追踪", icon: DataAnalysis, tone: "green" },
+  { id: "mcp", label: "MCP", description: "服务、Token 与外部 Agent", icon: Connection, tone: "yellow" },
+  { id: "skills", label: "Skills", description: "安全 Skills 模块开关", icon: SetUp, tone: "red" },
+  { id: "settings", label: "Settings", description: "模型路由、MCP 与通知配置", icon: Setting, tone: "blue" },
 ]
 
-const componentMap: Record<NavId, Component> = {
-  situation: AgentSituation,
-  chat: LlmChat,
-  knowledge: KnowledgeManage,
-  tracing: AgentTracing,
-  mcp: McpManage,
-  cve: CveSearch,
-  asset: AssetSearch,
-  url2md: Url2Md,
-  skills: SkillManage,
+const componentMap: Record<ModuleNavId, Component> = {
+  dashboard: Dashboard,
+  chat: Chat,
+  knowledge: Knowledge,
+  trace: Trace,
+  mcp: MCP,
+  cve: CVE,
+  assets: Assets,
+  collect: Collect,
+  skills: Skills,
   settings: Settings,
 }
 
-const fullCanvasTabs = new Set<NavId>(["situation", "chat", "tracing", "mcp"])
-const navGroups: NavGroup[] = ["安全运营", "数据底座", "AI 编排", "系统治理"]
+const fullCanvasTabs = new Set<ModuleNavId>(["dashboard", "chat", "trace", "mcp"])
+const settingsItem = navItems.find((item) => item.id === "settings") as NavItem
+const primaryNavItems = navItems.filter((item) => item.id !== "settings")
+const navItemById = Object.fromEntries(navItems.map((item) => [item.id, item])) as Record<ModuleNavId, NavItem>
+const homeSections: HomeSection[] = [
+  { title: "Operations", items: [navItemById.dashboard, navItemById.cve] },
+  { title: "Data plane", items: [navItemById.assets, navItemById.knowledge, navItemById.collect] },
+  { title: "Agent work", items: [navItemById.chat, navItemById.trace, navItemById.mcp] },
+  { title: "System", items: [navItemById.skills, navItemById.settings] },
+]
 const THEME_STORAGE_KEY = "theme"
-const MIN_SIDEBAR_WIDTH = 224
-const DEFAULT_SIDEBAR_WIDTH = 272
-const MAX_SIDEBAR_WIDTH = 392
+const CHAT_MODEL_STORAGE_KEY = "agno-aios-chat-model-id"
+const SIDEBAR_EXPANDED_WIDTH = 264
+const SIDEBAR_COMPACT_WIDTH = 76
+const isMobileViewport = () => typeof window !== "undefined" && window.innerWidth < 1024
 
-const activeTab = ref<NavId>("situation")
-const sidebarWidth = ref(DEFAULT_SIDEBAR_WIDTH)
-const isMobile = ref(false)
+const activeTab = ref<NavId>("home")
+const isSidebarCompact = ref(false)
+const isMobile = ref(isMobileViewport())
 const sidebarOpen = ref(false)
-const isResizingSidebar = ref(false)
 const isDark = ref(true)
 const authBooting = ref(true)
 const currentUser = ref<AuthUser | null>(null)
 const loggingOut = ref(false)
+const componentRenderKey = ref(0)
+const currentModelName = ref("DeepSeek V4 Pro")
+const chatSessionsExpanded = ref(true)
+const chatSessions = ref<ChatSession[]>([])
+const currentChatSessionId = ref<string | null>(null)
+const userMenuOpen = ref(false)
 
-const activeComponent = computed(() => componentMap[activeTab.value])
-const fallbackMeta = navItems[0]!
-const currentMeta = computed<NavItem>(() => navItems.find((item) => item.id === activeTab.value) ?? fallbackMeta)
+const { fetchModels } = useSettingsApi()
+const { loadingSessions, listSessions } = useChatHistory()
+
+const activeComponent = computed<Component | null>(() => {
+  const tab = activeTab.value
+  if (tab === "home") return null
+  return componentMap[tab]
+})
+const currentMeta = computed<NavItem>(() => {
+  if (activeTab.value === "home") return homeItem
+  return navItems.find((item) => item.id === activeTab.value) ?? homeItem
+})
 const currentUserEmail = computed(() => currentUser.value?.email || "未登录")
+const userInitials = computed(() => {
+  const email = currentUserEmail.value
+  if (!email || email === "未登录") return "AI"
+  return email.slice(0, 2).toUpperCase()
+})
+const activeComponentKey = computed(() => `${activeTab.value}-${componentRenderKey.value}`)
+const currentModelLabel = computed(() => formatModelLabel(currentModelName.value))
 const contentClass = computed(() => {
   const base = "block h-full min-h-0"
-  return fullCanvasTabs.has(activeTab.value) ? base : `${base} overflow-auto p-4 sm:p-5`
+  const tab = activeTab.value
+  if (tab === "home") return base
+  return fullCanvasTabs.has(tab) ? base : `${base} overflow-auto p-4 sm:p-5`
+})
+
+const sidebarPixelWidth = computed(() => {
+  if (isMobile.value) return SIDEBAR_EXPANDED_WIDTH
+  return isSidebarCompact.value ? SIDEBAR_COMPACT_WIDTH : SIDEBAR_EXPANDED_WIDTH
 })
 
 const shellGridStyle = computed(() => ({
-  gridTemplateColumns: `${sidebarWidth.value}px minmax(0, 1fr)`,
+  gridTemplateColumns: `${sidebarPixelWidth.value}px minmax(0, 1fr)`,
 }))
 
 const sidebarStyle = computed(() => ({
-  width: isMobile.value ? `min(${sidebarWidth.value}px, calc(100vw - 32px))` : `${sidebarWidth.value}px`,
+  width: isMobile.value ? `min(${SIDEBAR_EXPANDED_WIDTH}px, calc(100vw - 32px))` : `${sidebarPixelWidth.value}px`,
 }))
 
-const navSections = computed(() => {
-  return navGroups
-    .map((group) => ({ title: group, items: navItems.filter((item) => item.group === group) }))
-    .filter((section) => section.items.length > 0)
-})
-
-let previousBodyCursor = ""
-let previousBodyUserSelect = ""
-
-const clampSidebarWidth = (width: number) => Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width))
-
-const resizeSidebar = (event: PointerEvent) => {
-  sidebarWidth.value = clampSidebarWidth(event.clientX)
-}
-
-const stopSidebarResize = () => {
-  if (!isResizingSidebar.value) return
-  isResizingSidebar.value = false
-  document.body.style.cursor = previousBodyCursor
-  document.body.style.userSelect = previousBodyUserSelect
-  window.removeEventListener("pointermove", resizeSidebar)
-  window.removeEventListener("pointerup", stopSidebarResize)
-}
-
-const startSidebarResize = (event: PointerEvent) => {
-  if (isMobile.value || isResizingSidebar.value) return
-  event.preventDefault()
-  isResizingSidebar.value = true
-  previousBodyCursor = document.body.style.cursor
-  previousBodyUserSelect = document.body.style.userSelect
-  document.body.style.cursor = "col-resize"
-  document.body.style.userSelect = "none"
-  window.addEventListener("pointermove", resizeSidebar)
-  window.addEventListener("pointerup", stopSidebarResize, { once: true })
-}
+const workspaceSignals = computed(() => [
+  { label: "Modules", value: navItems.length },
+  { label: "Data plane", value: "RAG + ASM" },
+  { label: "Runtime", value: "Trace" },
+  { label: "Session", value: currentUser.value?.is_active ? "Active" : "Ready" },
+])
+const osPlanes = [
+  {
+    name: "Agno AIOS",
+    description: "运营控制面",
+    icon: Platform,
+    status: "online",
+    statusText: "Current",
+    metrics: ["10 modules", "JWT", "Vue"],
+  },
+  {
+    name: "Security Data Fabric",
+    description: "资产、漏洞、知识入库",
+    icon: Files,
+    status: "online",
+    statusText: "Online",
+    metrics: ["ASM", "CVE", "RAG"],
+  },
+  {
+    name: "Agent Runtime",
+    description: "对话、MCP、Trace 观测",
+    icon: Connection,
+    status: "standby",
+    statusText: "Standby",
+    metrics: ["Agent", "MCP", "Trace"],
+  },
+]
 
 const checkMobile = () => {
-  isMobile.value = window.innerWidth < 1024
+  isMobile.value = isMobileViewport()
   if (!isMobile.value) sidebarOpen.value = false
+}
+
+const formatModelLabel = (name: string) => {
+  const compact = name
+    .replace(/deepseek/gi, "DS")
+    .replace(/\bv(\d)/gi, "v$1")
+    .replace(/\s+/g, " ")
+    .trim()
+  return compact || "Model"
+}
+
+const loadCurrentModel = async () => {
+  try {
+    const config = await fetchModels()
+    const savedId = localStorage.getItem(CHAT_MODEL_STORAGE_KEY)
+    const selected = config.models.find((model) => model.id === savedId)
+      ?? config.models.find((model) => model.id === config.active_model_id)
+      ?? config.models.find((model) => model.enabled)
+      ?? config.models[0]
+    if (selected?.name) currentModelName.value = selected.name
+  } catch {
+    currentModelName.value = "DeepSeek V4 Pro"
+  }
+}
+
+const handleModelChange = (event: Event) => {
+  const detail = (event as CustomEvent<{ name?: string }>).detail
+  if (detail?.name) currentModelName.value = detail.name
+}
+
+const formatSessionTime = (timestamp: number) => {
+  if (!timestamp) return ""
+  return new Date(timestamp * 1000).toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
+const loadSidebarChatSessions = async () => {
+  try {
+    chatSessions.value = await listSessions()
+  } catch {
+    chatSessions.value = []
+  }
+}
+
+const dispatchChatEvent = (name: string, detail?: Record<string, unknown>) => {
+  void nextTick(() => {
+    window.dispatchEvent(new CustomEvent(name, { detail }))
+  })
+}
+
+const toggleChatSessions = () => {
+  chatSessionsExpanded.value = !chatSessionsExpanded.value
+  if (chatSessionsExpanded.value) void loadSidebarChatSessions()
+}
+
+const selectChatSession = (sessionId: string) => {
+  currentChatSessionId.value = sessionId
+  activeTab.value = "chat"
+  userMenuOpen.value = false
+  dispatchChatEvent("agno-aios-chat-session-select", { sessionId })
+  closeSidebar()
+}
+
+const createSidebarChat = () => {
+  currentChatSessionId.value = null
+  activeTab.value = "chat"
+  userMenuOpen.value = false
+  dispatchChatEvent("agno-aios-chat-new")
+  closeSidebar()
+}
+
+const handleChatSessionsChange = (event: Event) => {
+  const detail = (event as CustomEvent<{ sessionId?: string | null }>).detail
+  if (detail && "sessionId" in detail) currentChatSessionId.value = detail.sessionId ?? null
+  void loadSidebarChatSessions()
+}
+
+const toggleUserMenu = () => {
+  userMenuOpen.value = !userMenuOpen.value
 }
 
 const openSidebar = () => {
@@ -348,6 +679,16 @@ const openSidebar = () => {
 
 const closeSidebar = () => {
   sidebarOpen.value = false
+}
+
+const toggleSidebarSize = () => {
+  isSidebarCompact.value = !isSidebarCompact.value
+  userMenuOpen.value = false
+}
+
+const refreshWorkspace = () => {
+  componentRenderKey.value += 1
+  void loadCurrentModel()
 }
 
 const applyTheme = (dark: boolean) => {
@@ -368,6 +709,8 @@ const toggleTheme = () => {
 
 const handleAuthenticated = (user: AuthUser) => {
   currentUser.value = user
+  void loadCurrentModel()
+  void loadSidebarChatSessions()
 }
 
 const restoreSession = async () => {
@@ -379,6 +722,7 @@ const restoreSession = async () => {
 
   try {
     currentUser.value = await fetchCurrentUser(token)
+    void loadSidebarChatSessions()
   } catch {
     clearStoredAuthToken()
     currentUser.value = null
@@ -394,25 +738,36 @@ const handleLogout = async () => {
   } finally {
     currentUser.value = null
     loggingOut.value = false
+    userMenuOpen.value = false
     closeSidebar()
   }
 }
 
 const selectNav = (id: NavId) => {
   activeTab.value = id
+  userMenuOpen.value = false
   closeSidebar()
+}
+
+const openUserSettings = () => {
+  userMenuOpen.value = false
+  selectNav("settings")
 }
 
 onMounted(() => {
   initTheme()
   checkMobile()
   restoreSession()
+  void loadCurrentModel()
   window.addEventListener("resize", checkMobile)
+  window.addEventListener("agno-aios-model-change", handleModelChange)
+  window.addEventListener("agno-aios-chat-sessions-change", handleChatSessionsChange)
 })
 
 onUnmounted(() => {
-  stopSidebarResize()
   window.removeEventListener("resize", checkMobile)
+  window.removeEventListener("agno-aios-model-change", handleModelChange)
+  window.removeEventListener("agno-aios-chat-sessions-change", handleChatSessionsChange)
 })
 </script>
 
