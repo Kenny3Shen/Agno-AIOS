@@ -1,0 +1,31 @@
+{
+  "name": "agno-aios",
+  "version": "1.0.0",
+  "description": "Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基于 FastAPI、Vue 3、Agno、FastMCP、PostgreSQL、PostgresDb 和 PgVector，把 CVE 情报、资产画像、网页情报解析、Agent 对话、运行观测、MCP 工具中枢、Skills 能力包、用户认证和基础 RAG 知识库整合到同一个主服务中。",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "dependencies": {
+    "playwright": "^1.61.1",
+    "playwright-core": "^1.61.1",
+    "undici-types": "^8.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.0.1"
+  },
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kenny3Shen/Agno-AIOS.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Kenny3Shen/Agno-AIOS/issues"
+  },
+  "homepage": "https://github.com/Kenny3Shen/Agno-AIOS#readme"
+}

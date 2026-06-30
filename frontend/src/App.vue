@@ -27,10 +27,12 @@
       />
     </transition>
 
-    <div class="h-full min-h-0 lg:grid lg:grid-cols-[272px_minmax(0,1fr)]">
+    <div class="h-full min-h-0 lg:grid" :style="shellGridStyle">
+      <div class="contents lg:relative lg:block lg:min-h-0">
       <aside
+        :style="sidebarStyle"
         :class="[
-          'fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col overflow-hidden border-r border-[#B8C8D8] bg-[#E1E9F1] transition-transform duration-200 lg:relative lg:z-auto lg:translate-x-0 dark:border-[#20313D] dark:bg-[#0B141B]',
+          'fixed inset-y-0 left-0 z-50 flex max-w-[calc(100vw-32px)] flex-col overflow-hidden border-r border-[#B8C8D8] bg-[#E1E9F1] transition-transform duration-200 lg:relative lg:z-auto lg:max-w-none lg:translate-x-0 dark:border-[#20313D] dark:bg-[#0B141B]',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full',
         ]"
       >
@@ -50,22 +52,6 @@
               <el-icon><Close /></el-icon>
             </el-button>
           </div>
-
-          <div class="mt-4 grid grid-cols-2 gap-2">
-            <div v-for="metric in sidebarMetrics" :key="metric.label" class="rounded-2 border border-[#B8C8D8] bg-[#F8FAFC] p-2.5 dark:border-[#20313D] dark:bg-[#0E171F]">
-              <div class="text-[11px] text-[#64748B] dark:text-[#8EA0AE]">{{ metric.label }}</div>
-              <div class="mt-1 text-sm font-700 text-[#0F172A] dark:text-[#E6EDF3]">{{ metric.value }}</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="shrink-0 border-b border-[#B8C8D8] p-3 dark:border-[#20313D]">
-          <label class="sr-only" for="nav-search">搜索模块</label>
-          <el-input id="nav-search" v-model="navQuery" clearable size="small" placeholder="搜索模块" class="security-nav-search">
-            <template #prefix>
-              <el-icon><Search /></el-icon>
-            </template>
-          </el-input>
         </div>
 
         <nav class="min-h-0 flex-1 overflow-y-auto px-3 py-4">
@@ -113,18 +99,28 @@
         <div class="shrink-0 border-t border-[#B8C8D8] p-3 dark:border-[#20313D]">
           <div class="rounded-2 border border-[#B8C8D8] bg-[#F8FAFC] p-3 dark:border-[#20313D] dark:bg-[#0E171F]">
             <div class="flex items-center justify-between gap-2">
-              <span class="text-xs font-650 text-[#334155] dark:text-[#D8E1E8]">中台联通状态</span>
+              <span class="text-xs font-650 text-[#334155] dark:text-[#D8E1E8]">当前会话</span>
               <span class="inline-flex items-center gap-1.5 text-[11px] font-650 text-[#14824A] dark:text-[#54D38A]">
                 <span class="h-2 w-2 rounded-full bg-[#54D38A]" />
-                Online
+                已认证
               </span>
             </div>
             <p class="mt-2 text-[11px] leading-5 text-[#64748B] dark:text-[#8EA0AE]">
-              数据、情报、Agent 和响应工具统一编排。
+              {{ currentUserEmail }} 已通过安全会话校验。
             </p>
           </div>
         </div>
       </aside>
+
+      <button
+        v-if="!isMobile"
+        type="button"
+        class="absolute top-0 right-[-4px] z-20 hidden h-full w-2 cursor-col-resize border-x border-transparent transition-colors hover:border-[#2F8FED]/35 hover:bg-[#2F8FED]/10 lg:block dark:hover:border-[#6AD7FF]/30 dark:hover:bg-[#6AD7FF]/10"
+        :class="isResizingSidebar ? 'border-[#2F8FED]/60 bg-[#2F8FED]/15 dark:border-[#6AD7FF]/45 dark:bg-[#6AD7FF]/15' : ''"
+        aria-label="拖拽调整导航宽度"
+        @pointerdown="startSidebarResize"
+      />
+      </div>
 
       <main class="flex h-dvh min-w-0 flex-col overflow-hidden">
         <header class="shrink-0 border-b border-[#B8C8D8] bg-white px-4 py-3 shadow-sm dark:border-[#20313D] dark:bg-[#0B141B] dark:shadow-none">
@@ -139,25 +135,12 @@
               </span>
 
               <div class="min-w-0">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="rounded-1 border border-[#CBD5E1] bg-[#F8FAFC] px-2 py-0.5 text-[11px] font-650 text-[#475569] dark:border-[#20313D] dark:bg-[#0E171F] dark:text-[#8EA0AE]">
-                    AI Security Data Platform
-                  </span>
-                  <span class="rounded-1 border border-[#2F8FED]/30 bg-[#EAF5FF] px-2 py-0.5 text-[11px] font-650 text-[#0969DA] dark:bg-[#102638] dark:text-[#6AD7FF]">
-                    Response Ready
-                  </span>
-                </div>
-                <h2 class="mt-1 truncate text-xl font-750 text-[#0F172A] dark:text-white">{{ currentMeta.label }}</h2>
+                <h2 class="truncate text-xl font-750 text-[#0F172A] dark:text-white">{{ currentMeta.label }}</h2>
                 <p class="mt-0.5 truncate text-xs text-[#64748B] dark:text-[#8EA0AE]">{{ currentMeta.description }}</p>
               </div>
             </div>
 
             <div class="flex flex-wrap items-center gap-2">
-              <div v-for="signal in headerSignals" :key="signal.label" class="min-w-[88px] rounded-2 border border-[#C6D3DF] bg-[#F8FAFC] px-3 py-2 dark:border-[#20313D] dark:bg-[#0E171F]">
-                <div class="text-[10px] font-650 uppercase tracking-wide text-[#64748B] dark:text-[#6F8394]">{{ signal.label }}</div>
-                <div class="mt-0.5 truncate text-sm font-750 text-[#0F172A] dark:text-[#E6EDF3]">{{ signal.value }}</div>
-              </div>
-
               <div class="flex min-w-0 items-center gap-2 rounded-2 border border-[#C6D3DF] bg-[#F8FAFC] px-3 py-2 dark:border-[#20313D] dark:bg-[#0E171F]">
                 <el-icon class="shrink-0 text-[#0969DA] dark:text-[#6AD7FF]"><UserFilled /></el-icon>
                 <span class="max-w-[160px] truncate text-xs font-650 text-[#334155] dark:text-[#D8E1E8]">{{ currentUserEmail }}</span>
@@ -191,17 +174,6 @@
             </div>
           </div>
         </header>
-
-        <section class="hidden shrink-0 grid-cols-4 gap-3 border-b border-[#C6D3DF] bg-[#E8EEF4] px-4 py-3 xl:grid dark:border-[#20313D] dark:bg-[#071014]">
-          <article v-for="metric in workspaceMetrics" :key="metric.label" class="rounded-2 border border-[#C6D3DF] bg-white p-3 shadow-sm dark:border-[#20313D] dark:bg-[#0E171F] dark:shadow-none">
-            <div class="flex items-center justify-between gap-2">
-              <span class="text-xs font-650 text-[#475569] dark:text-[#8EA0AE]">{{ metric.label }}</span>
-              <span class="h-2 w-2 rounded-full" :class="metric.dot" />
-            </div>
-            <div class="mt-2 truncate text-base font-750 text-[#0F172A] dark:text-white">{{ metric.value }}</div>
-            <div class="mt-1 truncate text-[11px] text-[#64748B] dark:text-[#6F8394]">{{ metric.note }}</div>
-          </article>
-        </section>
 
         <section class="min-h-0 flex-1 overflow-hidden bg-[#EEF3F7] p-3 sm:p-4 dark:bg-[#071014]">
           <div class="h-full min-h-0 overflow-hidden rounded-2 border border-[#C2D0DC] bg-white shadow-sm dark:border-[#20313D] dark:bg-[#0E171F] dark:shadow-none">
@@ -298,33 +270,19 @@ const componentMap: Record<NavId, Component> = {
 const fullCanvasTabs = new Set<NavId>(["situation", "chat", "tracing", "mcp"])
 const navGroups: NavGroup[] = ["安全运营", "数据底座", "AI 编排", "系统治理"]
 const THEME_STORAGE_KEY = "theme"
+const MIN_SIDEBAR_WIDTH = 224
+const DEFAULT_SIDEBAR_WIDTH = 272
+const MAX_SIDEBAR_WIDTH = 392
 
 const activeTab = ref<NavId>("situation")
-const navQuery = ref("")
+const sidebarWidth = ref(DEFAULT_SIDEBAR_WIDTH)
 const isMobile = ref(false)
 const sidebarOpen = ref(false)
+const isResizingSidebar = ref(false)
 const isDark = ref(true)
 const authBooting = ref(true)
 const currentUser = ref<AuthUser | null>(null)
 const loggingOut = ref(false)
-
-const sidebarMetrics = computed(() => [
-  { label: "能力域", value: String(navGroups.length) },
-  { label: "当前身份", value: currentUserEmail.value },
-])
-
-const headerSignals = [
-  { label: "Data", value: "Governed" },
-  { label: "MCP", value: "Orchestrated" },
-  { label: "Risk", value: "Watched" },
-]
-
-const workspaceMetrics = [
-  { label: "数据汇聚", value: "Intel / Asset", note: "情报采集与资产目录统一治理", dot: "bg-[#2F8FED]" },
-  { label: "漏洞情报", value: "CVE / Exploit", note: "漏洞、利用与影响面联动", dot: "bg-[#F06A6A]" },
-  { label: "Agent 编排", value: "Playbook", note: "技能驱动分析与响应建议", dot: "bg-[#F6C343]" },
-  { label: "Trace 观测", value: "Run / Span", note: "执行链路可审计、异常可追溯", dot: "bg-[#54D38A]" },
-]
 
 const activeComponent = computed(() => componentMap[activeTab.value])
 const fallbackMeta = navItems[0]!
@@ -335,17 +293,49 @@ const contentClass = computed(() => {
   return fullCanvasTabs.has(activeTab.value) ? base : `${base} overflow-auto p-4 sm:p-5`
 })
 
-const navSections = computed(() => {
-  const query = navQuery.value.trim().toLowerCase()
-  const items = navItems.filter((item) => {
-    if (!query) return true
-    return [item.label, item.description, item.group].some((text) => text.toLowerCase().includes(query))
-  })
+const shellGridStyle = computed(() => ({
+  gridTemplateColumns: `${sidebarWidth.value}px minmax(0, 1fr)`,
+}))
 
+const sidebarStyle = computed(() => ({
+  width: isMobile.value ? `min(${sidebarWidth.value}px, calc(100vw - 32px))` : `${sidebarWidth.value}px`,
+}))
+
+const navSections = computed(() => {
   return navGroups
-    .map((group) => ({ title: group, items: items.filter((item) => item.group === group) }))
+    .map((group) => ({ title: group, items: navItems.filter((item) => item.group === group) }))
     .filter((section) => section.items.length > 0)
 })
+
+let previousBodyCursor = ""
+let previousBodyUserSelect = ""
+
+const clampSidebarWidth = (width: number) => Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width))
+
+const resizeSidebar = (event: PointerEvent) => {
+  sidebarWidth.value = clampSidebarWidth(event.clientX)
+}
+
+const stopSidebarResize = () => {
+  if (!isResizingSidebar.value) return
+  isResizingSidebar.value = false
+  document.body.style.cursor = previousBodyCursor
+  document.body.style.userSelect = previousBodyUserSelect
+  window.removeEventListener("pointermove", resizeSidebar)
+  window.removeEventListener("pointerup", stopSidebarResize)
+}
+
+const startSidebarResize = (event: PointerEvent) => {
+  if (isMobile.value || isResizingSidebar.value) return
+  event.preventDefault()
+  isResizingSidebar.value = true
+  previousBodyCursor = document.body.style.cursor
+  previousBodyUserSelect = document.body.style.userSelect
+  document.body.style.cursor = "col-resize"
+  document.body.style.userSelect = "none"
+  window.addEventListener("pointermove", resizeSidebar)
+  window.addEventListener("pointerup", stopSidebarResize, { once: true })
+}
 
 const checkMobile = () => {
   isMobile.value = window.innerWidth < 1024
@@ -421,23 +411,12 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  stopSidebarResize()
   window.removeEventListener("resize", checkMobile)
 })
 </script>
 
 <style>
-.security-nav-search .el-input__wrapper {
-  background: #f8fafc;
-  border: 1px solid #d8e0e7;
-  border-radius: 8px;
-  box-shadow: none;
-}
-
-html.dark .security-nav-search .el-input__wrapper {
-  background: #071014;
-  border-color: #20313d;
-}
-
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.16s ease;

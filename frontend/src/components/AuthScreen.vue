@@ -137,7 +137,7 @@
         <div class="auth-copy">
           <h2>把数据治理、漏洞情报和 Agent 响应收束到同一个控制面。</h2>
           <p>
-            登录后进入面向 SOC 的中台工作区：资产画像、CVE 情报、RAG 知识、Trace 观测和 MCP 工具统一编排。
+            登录后进入面向 SOC 的中台工作区：资产画像、CVE 情报、RAG 知识、运行观测和 MCP 工具统一编排。
           </p>
         </div>
       </aside>
