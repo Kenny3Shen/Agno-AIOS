@@ -600,9 +600,9 @@ export function useKnowledgeApi() {
     method: 'DELETE'
   }, '清空知识库失败')
 
-  const searchKnowledge = (query: string, limit: number) => request<KnowledgeSearchResponse>('/search', {
+  const searchKnowledge = (query: string, limit: number, searchType?: string) => request<KnowledgeSearchResponse>('/search', {
     method: 'POST',
-    body: JSON.stringify({ query, limit })
+    body: JSON.stringify({ query, limit, search_type: searchType || undefined })
   }, '检索知识库失败')
 
   return {

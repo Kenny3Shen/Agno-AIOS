@@ -29,6 +29,10 @@ class KnowledgeFileRequest(BaseModel):
 class KnowledgeSearchRequest(BaseModel):
     query: str = Field(..., min_length=1)
     limit: int = Field(5, ge=1, le=20)
+    search_type: str | None = Field(
+        default=None,
+        description="vector / keyword / hybrid，默认使用 AGNO_KNOWLEDGE_SEARCH_TYPE",
+    )
 
 
 @router.get("")
@@ -66,7 +70,16 @@ async def remove_document(doc_id: str) -> dict:
 
 @router.post("/search")
 async def search_knowledge(request: KnowledgeSearchRequest) -> dict:
-    return {"results": search_documents(request.query, request.limit)}
+    try:
+        return {
+            "results": search_documents(
+                request.query,
+                request.limit,
+                search_type=request.search_type,
+            )
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.delete("")

@@ -19,7 +19,11 @@ node_modules/
 dataset/
 .codex
 .claude
+.agents
 .tmp
+.codegraph
+.comet
+openspec
 
 # Playwright
 .playwright-cli
@@ -30,3 +34,5 @@ dataset/
 /playwright/.auth/
 
 /frontend-react
+
+

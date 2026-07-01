@@ -5,15 +5,25 @@ import os
 import threading
 import warnings
 from datetime import UTC, datetime
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from agno.knowledge.chunking.code import CodeChunking
+from agno.knowledge.chunking.document import DocumentChunking
+from agno.knowledge.chunking.markdown import MarkdownChunking
+from agno.knowledge.chunking.row import RowChunking
 from agno.knowledge.chunking.recursive import RecursiveChunking
+from agno.knowledge.chunking.semantic import SemanticChunking
 from agno.knowledge.document import Document
 from agno.knowledge.embedder import Embedder
 from agno.knowledge.knowledge import Knowledge
+from agno.knowledge.reader.csv_reader import CSVReader
+from agno.knowledge.reader.docx_reader import DocxReader
+from agno.knowledge.reader.json_reader import JSONReader
 from agno.knowledge.reader.markdown_reader import MarkdownReader
+from agno.knowledge.reader.pdf_reader import PDFReader
 from agno.knowledge.reader.text_reader import TextReader
 from agno.knowledge.reranker.base import Reranker
 from agno.vectordb.distance import Distance
@@ -51,6 +61,13 @@ def _env_bool(key: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_float(key: str, default: float) -> float:
+    try:
+        return float(os.getenv(key, str(default)))
+    except ValueError:
+        return default
+
+
 KNOWLEDGE_NAME = os.getenv("AGNO_KNOWLEDGE_NAME", "security_knowledge")
 PGVECTOR_TABLE = os.getenv("AGNO_KNOWLEDGE_PGVECTOR_TABLE", "security_knowledge_vectors")
 POSTGRES_SCHEMA = os.getenv("AGNO_KNOWLEDGE_SCHEMA", knowledge_schema())
@@ -66,6 +83,11 @@ BGE_QUERY_PROMPT = os.getenv(
 TOP_K = max(1, _env_int("AGNO_KNOWLEDGE_TOP_K", 5))
 CHUNK_SIZE = max(200, _env_int("AGNO_KNOWLEDGE_CHUNK_SIZE", 1200))
 CHUNK_OVERLAP = max(0, _env_int("AGNO_KNOWLEDGE_CHUNK_OVERLAP", 160))
+CODE_CHUNK_SIZE = max(256, _env_int("AGNO_KNOWLEDGE_CODE_CHUNK_SIZE", 1800))
+SEMANTIC_THRESHOLD = _env_float("AGNO_KNOWLEDGE_SEMANTIC_THRESHOLD", 0.52)
+VECTOR_SCORE_WEIGHT = _env_float("AGNO_KNOWLEDGE_VECTOR_SCORE_WEIGHT", 0.55)
+CONTENT_LANGUAGE = os.getenv("AGNO_KNOWLEDGE_CONTENT_LANGUAGE", "english")
+PREFIX_MATCH = _env_bool("AGNO_KNOWLEDGE_PREFIX_MATCH", False)
 RERANK_ENABLED = _env_bool("AGNO_KNOWLEDGE_RERANK_ENABLED", True)
 RERANK_CANDIDATE_MULTIPLIER = max(
     1,
@@ -85,6 +107,9 @@ DOCUMENT_METADATA_KEYS = (
     "source",
     "file_path",
     "file_name",
+    "file_type",
+    "chunk_strategy",
+    "reader",
     "file_size",
     "mime_type",
     "input_mode",
@@ -102,6 +127,95 @@ _torch_import_error: Exception | None = None
 _embedding_model_lock = threading.Lock()
 _reranker_model_lock = threading.Lock()
 _knowledge_lock = threading.Lock()
+
+
+@dataclass(frozen=True)
+class KnowledgeIngestProfile:
+    suffixes: tuple[str, ...]
+    strategy: str
+    reader: str
+    label: str
+    description: str
+
+
+MARKDOWN_SUFFIXES = (".md", ".markdown", ".mdown", ".mkd")
+CSV_SUFFIXES = (".csv", ".tsv")
+JSON_SUFFIXES = (".json", ".jsonl")
+CODE_SUFFIXES = (
+    ".py",
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".vue",
+    ".go",
+    ".rs",
+    ".java",
+    ".c",
+    ".cc",
+    ".cpp",
+    ".h",
+    ".hpp",
+    ".cs",
+    ".php",
+    ".rb",
+    ".sh",
+    ".sql",
+)
+STRUCTURED_DOC_SUFFIXES = (".pdf", ".docx")
+TEXT_SUFFIXES = (".txt", ".log", ".rst", ".yaml", ".yml", ".toml")
+
+SUPPORTED_FILE_SUFFIXES = (
+    *MARKDOWN_SUFFIXES,
+    *CSV_SUFFIXES,
+    *JSON_SUFFIXES,
+    *CODE_SUFFIXES,
+    *STRUCTURED_DOC_SUFFIXES,
+    *TEXT_SUFFIXES,
+)
+
+_PROFILE_MARKDOWN = KnowledgeIngestProfile(
+    suffixes=MARKDOWN_SUFFIXES,
+    strategy="markdown",
+    reader="MarkdownReader",
+    label="Markdown",
+    description="按标题结构保留层级，适合 runbook、设计文档和知识手册。",
+)
+_PROFILE_CSV = KnowledgeIngestProfile(
+    suffixes=CSV_SUFFIXES,
+    strategy="csv_row",
+    reader="CSVReader",
+    label="CSV Row",
+    description="每行一个逻辑 chunk，适合资产、告警和漏洞清单。",
+)
+_PROFILE_JSON = KnowledgeIngestProfile(
+    suffixes=JSON_SUFFIXES,
+    strategy="json",
+    reader="JSONReader",
+    label="JSON",
+    description="对象和数组元素先结构化读取，再按递归策略切分长字段。",
+)
+_PROFILE_CODE = KnowledgeIngestProfile(
+    suffixes=CODE_SUFFIXES,
+    strategy="code",
+    reader="TextReader",
+    label="Code",
+    description="按函数、类和语法节点边界切分，适合脚本和源码。",
+)
+_PROFILE_STRUCTURED = KnowledgeIngestProfile(
+    suffixes=STRUCTURED_DOC_SUFFIXES,
+    strategy="document",
+    reader="DocumentReader",
+    label="Document",
+    description="按段落、页和章节保留文档结构，适合 PDF/DOCX。",
+)
+_PROFILE_TEXT = KnowledgeIngestProfile(
+    suffixes=TEXT_SUFFIXES,
+    strategy="semantic",
+    reader="TextReader",
+    label="Semantic",
+    description="按语义边界切分通用文本，提升自然语言检索命中质量。",
+)
 
 
 def _load_torch() -> Any | None:
@@ -404,16 +518,135 @@ def _get_reranker() -> FlagEmbeddingReranker | None:
     return FlagEmbeddingReranker()
 
 
-@lru_cache(maxsize=1)
-def get_knowledge_base() -> Knowledge:
+def _search_type_from_name(value: str | None) -> SearchType:
+    clean_value = (value or "").strip().lower()
+    if not clean_value:
+        return SearchType.hybrid
+    try:
+        return SearchType(clean_value)
+    except ValueError as exc:
+        allowed = ", ".join(item.value for item in SearchType)
+        raise ValueError(f"不支持的 search_type: {value}. 可选值: {allowed}") from exc
+
+
+def search_type_from_env() -> SearchType:
+    return _search_type_from_name(os.getenv("AGNO_KNOWLEDGE_SEARCH_TYPE", "hybrid"))
+
+
+def knowledge_profile_for_filename(filename: str | None) -> KnowledgeIngestProfile:
+    suffix = Path(filename or "").suffix.lower()
+    if suffix in MARKDOWN_SUFFIXES:
+        return _PROFILE_MARKDOWN
+    if suffix in CSV_SUFFIXES:
+        return _PROFILE_CSV
+    if suffix in JSON_SUFFIXES:
+        return _PROFILE_JSON
+    if suffix in CODE_SUFFIXES:
+        return _PROFILE_CODE
+    if suffix in STRUCTURED_DOC_SUFFIXES:
+        return _PROFILE_STRUCTURED
+    return _PROFILE_TEXT
+
+
+def _semantic_chunking() -> SemanticChunking:
+    return SemanticChunking(
+        embedder=_get_embedder(),
+        chunk_size=CHUNK_SIZE,
+        similarity_threshold=SEMANTIC_THRESHOLD,
+    )
+
+
+def _document_chunking() -> DocumentChunking:
+    return DocumentChunking(chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
+
+
+def _recursive_chunking() -> RecursiveChunking:
+    return RecursiveChunking(chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
+
+
+def reader_for_profile(
+    profile: KnowledgeIngestProfile,
+    filename: str | None = None,
+) -> TextReader | MarkdownReader | CSVReader | JSONReader | PDFReader | DocxReader:
+    suffix = Path(filename or "").suffix.lower()
+    if profile.strategy == "markdown":
+        return MarkdownReader(
+            chunking_strategy=MarkdownChunking(
+                chunk_size=CHUNK_SIZE,
+                overlap=CHUNK_OVERLAP,
+                split_on_headings=True,
+            )
+        )
+    if profile.strategy == "csv_row":
+        return CSVReader(chunking_strategy=RowChunking(skip_header=False))
+    if profile.strategy == "json":
+        return JSONReader(chunking_strategy=_recursive_chunking())
+    if profile.strategy == "code":
+        return TextReader(
+            chunking_strategy=CodeChunking(
+                chunk_size=CODE_CHUNK_SIZE,
+                language="auto",
+            )
+        )
+    if profile.strategy == "document":
+        if suffix == ".pdf":
+            return PDFReader(chunking_strategy=_document_chunking())
+        if suffix == ".docx":
+            return DocxReader(chunking_strategy=_document_chunking())
+        return TextReader(chunking_strategy=_document_chunking())
+    return TextReader(chunking_strategy=_semantic_chunking())
+
+
+def reader_for_filename(
+    filename: str | None,
+) -> TextReader | MarkdownReader | CSVReader | JSONReader | PDFReader | DocxReader:
+    return reader_for_profile(knowledge_profile_for_filename(filename), filename)
+
+
+def pipeline_status() -> dict[str, Any]:
+    profiles = [
+        _PROFILE_MARKDOWN,
+        _PROFILE_CSV,
+        _PROFILE_JSON,
+        _PROFILE_CODE,
+        _PROFILE_STRUCTURED,
+        _PROFILE_TEXT,
+    ]
+    return {
+        "search_type": search_type_from_env().value,
+        "vector_score_weight": VECTOR_SCORE_WEIGHT,
+        "prefix_match": PREFIX_MATCH,
+        "content_language": CONTENT_LANGUAGE,
+        "supported_suffixes": sorted(SUPPORTED_FILE_SUFFIXES),
+        "chunk_profiles": [
+            {
+                "label": profile.label,
+                "strategy": profile.strategy,
+                "reader": profile.reader,
+                "suffixes": list(profile.suffixes),
+                "description": profile.description,
+            }
+            for profile in profiles
+        ],
+        "semantic_threshold": SEMANTIC_THRESHOLD,
+        "code_chunk_size": CODE_CHUNK_SIZE,
+    }
+
+
+@lru_cache(maxsize=4)
+def get_knowledge_base(search_type: SearchType | None = None) -> Knowledge:
     embedder = _get_embedder()
+    effective_search_type = search_type or search_type_from_env()
     vector_db = PgVector(
         table_name=PGVECTOR_TABLE,
         schema=POSTGRES_SCHEMA,
         db_url=postgres_sqlalchemy_url(),
         embedder=embedder,
-        search_type=SearchType.vector,
+        search_type=effective_search_type,
         distance=Distance.cosine,
+        prefix_match=PREFIX_MATCH,
+        vector_score_weight=VECTOR_SCORE_WEIGHT,
+        content_language=CONTENT_LANGUAGE,
         reranker=_get_reranker(),
     )
     contents_db = get_knowledge_postgres_db()
@@ -426,18 +659,10 @@ def get_knowledge_base() -> Knowledge:
         if RERANK_ENABLED
         else TOP_K,
         readers={
-            "text": TextReader(
-                chunking_strategy=RecursiveChunking(
-                    chunk_size=CHUNK_SIZE,
-                    overlap=CHUNK_OVERLAP,
-                )
-            ),
-            "markdown": MarkdownReader(
-                chunking_strategy=RecursiveChunking(
-                    chunk_size=CHUNK_SIZE,
-                    overlap=CHUNK_OVERLAP,
-                )
-            ),
+            "text": reader_for_profile(_PROFILE_TEXT),
+            "markdown": reader_for_profile(_PROFILE_MARKDOWN),
+            "csv": reader_for_profile(_PROFILE_CSV),
+            "json": reader_for_profile(_PROFILE_JSON),
         },
     )
 
@@ -585,11 +810,17 @@ def add_text_document(
     if not clean_content:
         raise ValueError("知识内容不能为空")
 
+    base_metadata = _safe_metadata(metadata)
+    filename = str(base_metadata.get("file_name") or clean_title)
+    profile = knowledge_profile_for_filename(filename)
     safe_metadata = {
-        **_safe_metadata(metadata),
+        **base_metadata,
         "title": clean_title,
         "source": source.strip() or "manual",
-        "input_mode": _safe_metadata(metadata).get("input_mode", "manual"),
+        "file_type": Path(filename).suffix.lower() or "text",
+        "chunk_strategy": profile.strategy,
+        "reader": profile.reader,
+        "input_mode": base_metadata.get("input_mode", "manual"),
     }
     knowledge = get_knowledge_base()
     with _knowledge_lock:
@@ -599,12 +830,7 @@ def add_text_document(
             description=source.strip() or "manual",
             text_content=clean_content,
             metadata=safe_metadata,
-            reader=TextReader(
-                chunking_strategy=RecursiveChunking(
-                    chunk_size=CHUNK_SIZE,
-                    overlap=CHUNK_OVERLAP,
-                )
-            ),
+            reader=reader_for_profile(profile, filename),
             upsert=True,
             skip_if_exists=False,
         )
@@ -619,32 +845,23 @@ def add_file_document(path: str, title: str | None = None) -> dict[str, Any]:
     file_path = Path(path).expanduser().resolve()
     if not file_path.exists() or not file_path.is_file():
         raise FileNotFoundError(f"文件不存在: {path}")
-    if file_path.suffix.lower() not in {".txt", ".md", ".markdown", ".log"}:
-        raise ValueError("当前基础知识库仅支持 txt/md/markdown/log 文本文件")
+    if file_path.suffix.lower() not in SUPPORTED_FILE_SUFFIXES:
+        supported = ", ".join(SUPPORTED_FILE_SUFFIXES)
+        raise ValueError(f"当前知识库支持的文件后缀: {supported}")
 
     clean_title = (title or file_path.stem).strip() or file_path.stem
+    profile = knowledge_profile_for_filename(file_path.name)
     metadata = {
         "title": clean_title,
         "source": str(file_path),
         "file_path": str(file_path),
         "file_name": file_path.name,
+        "file_type": file_path.suffix.lower(),
+        "chunk_strategy": profile.strategy,
+        "reader": profile.reader,
         "input_mode": "path",
     }
-    reader = (
-        MarkdownReader(
-            chunking_strategy=RecursiveChunking(
-                chunk_size=CHUNK_SIZE,
-                overlap=CHUNK_OVERLAP,
-            )
-        )
-        if file_path.suffix.lower() in {".md", ".markdown"}
-        else TextReader(
-            chunking_strategy=RecursiveChunking(
-                chunk_size=CHUNK_SIZE,
-                overlap=CHUNK_OVERLAP,
-            )
-        )
-    )
+    reader = reader_for_profile(profile, file_path.name)
     knowledge = get_knowledge_base()
     with _knowledge_lock:
         _ensure_knowledge_storage()
@@ -698,10 +915,15 @@ def clear_knowledge_base() -> dict[str, Any]:
     return {"documents": 0, "chunks": 0}
 
 
-def search_documents(query: str, limit: int = 5) -> list[dict[str, Any]]:
+def search_documents(
+    query: str,
+    limit: int = 5,
+    search_type: str | None = None,
+) -> list[dict[str, Any]]:
     clean_query = query.strip()
     if not clean_query:
         return []
+    effective_search_type = _search_type_from_name(search_type) if search_type else search_type_from_env()
     _ensure_knowledge_storage()
     knowledge = get_knowledge_base()
     retrieval_limit = (
@@ -709,7 +931,11 @@ def search_documents(query: str, limit: int = 5) -> list[dict[str, Any]]:
         if RERANK_ENABLED
         else limit
     )
-    documents = knowledge.search(clean_query, max_results=retrieval_limit)
+    documents = knowledge.search(
+        clean_query,
+        max_results=retrieval_limit,
+        search_type=effective_search_type.value,
+    )
     _hydrate_content_ids(documents)
     return [_result_from_document(document) for document in documents[:limit]]
 
@@ -722,6 +948,7 @@ def knowledge_status() -> dict[str, Any]:
     chunk_count = vector_db.get_count()
     device = _model_device()
     return {
+        **pipeline_status(),
         "collection": PGVECTOR_TABLE,
         "storage": "pgvector",
         "database": postgres_label(POSTGRES_SCHEMA, PGVECTOR_TABLE),

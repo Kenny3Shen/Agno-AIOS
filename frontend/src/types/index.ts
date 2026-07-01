@@ -243,10 +243,26 @@ export interface KnowledgeStatus {
   rerank_enabled: boolean
   top_k?: number
   retrieval_candidates?: number
+  search_type?: "vector" | "keyword" | "hybrid" | string
+  vector_score_weight?: number
+  prefix_match?: boolean
+  content_language?: string
   chunk_size?: number
   chunk_overlap?: number
+  code_chunk_size?: number
+  semantic_threshold?: number
+  supported_suffixes?: string[]
+  chunk_profiles?: KnowledgeChunkProfile[]
   cold_start_note?: string
   torch_runtime_ok?: boolean
+}
+
+export interface KnowledgeChunkProfile {
+  label: string
+  strategy: string
+  reader: string
+  suffixes: string[]
+  description: string
 }
 
 export interface KnowledgeDocument {
@@ -325,6 +341,36 @@ export interface SpanItem {
   attributes?: Record<string, unknown> | null
   events?: unknown[] | null
   kind?: string | null
+  parsed?: ParsedSpanDisplay | null
+}
+
+export interface ParsedSpanPayload {
+  format: "empty" | "json" | "markdown" | "text" | string
+  text: string
+  data?: unknown
+}
+
+export interface ParsedSpanEvent {
+  name: string
+  message: string
+  attributes?: Record<string, unknown>
+}
+
+export interface ParsedSpanDisplay {
+  input: ParsedSpanPayload
+  output: ParsedSpanPayload
+  metadata: {
+    model?: string | null
+    provider?: string | null
+    tool?: string | null
+    operation?: string | null
+    tokens?: {
+      prompt?: number | null
+      completion?: number | null
+      total?: number | null
+    }
+  }
+  events: ParsedSpanEvent[]
 }
 
 export interface SpanTreeNode {

@@ -32,6 +32,12 @@ dependencies = [
     "psycopg-pool>=3.3.1",
     "fastapi-users[oauth,sqlalchemy]>=14.0.0",
     "pydantic-settings>=2.0.0",
+    "aiofiles>=25.1.0",
+    "pypdf>=6.14.2",
+    "python-docx>=1.2.0",
+    "unstructured>=0.23.1",
+    "markdown>=3.10.2",
+    "chonkie[code,semantic]>=1.6.8",
 ]
 
 [project.scripts]

@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import datetime
 from typing import Any
 
@@ -8,6 +9,143 @@ from api.services.postgres_store import get_agno_postgres_db
 
 # Keep a single DB wrapper instance.
 _trace_db = get_agno_postgres_db()
+
+INPUT_ATTRIBUTE_KEYS = (
+    "input.value",
+    "input",
+    "openinference.input.value",
+    "llm.input_messages",
+    "gen_ai.prompt",
+    "tool.input",
+    "tool.arguments",
+    "function.arguments",
+)
+OUTPUT_ATTRIBUTE_KEYS = (
+    "output.value",
+    "output",
+    "openinference.output.value",
+    "llm.output_messages",
+    "gen_ai.completion",
+    "tool.output",
+    "tool.result",
+    "function.response",
+)
+
+
+def _first_attribute(attributes: dict[str, Any], keys: tuple[str, ...]) -> Any:
+    for key in keys:
+        if key in attributes and attributes[key] not in (None, ""):
+            return attributes[key]
+    return None
+
+
+def _json_or_text(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {"format": "empty", "text": "", "data": None}
+    if isinstance(value, dict | list):
+        return {
+            "format": "json",
+            "text": json.dumps(value, ensure_ascii=False, indent=2),
+            "data": value,
+        }
+
+    text = str(value)
+    stripped = text.strip()
+    if not stripped:
+        return {"format": "empty", "text": "", "data": None}
+    if stripped[0:1] in {"{", "["}:
+        try:
+            data = json.loads(stripped)
+            return {
+                "format": "json",
+                "text": json.dumps(data, ensure_ascii=False, indent=2),
+                "data": data,
+            }
+        except json.JSONDecodeError:
+            pass
+
+    markdown_markers = ("# ", "## ", "- ", "* ", "```", "|", "> ")
+    fmt = "markdown" if any(marker in stripped for marker in markdown_markers) else "text"
+    return {"format": fmt, "text": stripped, "data": None}
+
+
+def _compact_event(event: Any) -> dict[str, Any]:
+    if not isinstance(event, dict):
+        return {"name": "event", "message": str(event), "attributes": {}}
+    attributes = event.get("attributes")
+    attrs = attributes if isinstance(attributes, dict) else {}
+    message = (
+        attrs.get("exception.message")
+        or attrs.get("message")
+        or event.get("message")
+        or event.get("name")
+        or ""
+    )
+    return {
+        "name": str(event.get("name") or "event"),
+        "message": str(message),
+        "attributes": attrs,
+    }
+
+
+def _token_value(attributes: dict[str, Any], *keys: str) -> int | None:
+    for key in keys:
+        value = attributes.get(key)
+        if value is None:
+            continue
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def parse_span_display(span: dict[str, Any]) -> dict[str, Any]:
+    attributes = span.get("attributes")
+    attrs = attributes if isinstance(attributes, dict) else {}
+    input_value = _first_attribute(attrs, INPUT_ATTRIBUTE_KEYS)
+    output_value = _first_attribute(attrs, OUTPUT_ATTRIBUTE_KEYS)
+    prompt_tokens = _token_value(
+        attrs,
+        "gen_ai.usage.prompt_tokens",
+        "llm.token_count.prompt",
+        "openinference.llm.token_count.prompt",
+    )
+    completion_tokens = _token_value(
+        attrs,
+        "gen_ai.usage.completion_tokens",
+        "llm.token_count.completion",
+        "openinference.llm.token_count.completion",
+    )
+    total_tokens = _token_value(
+        attrs,
+        "gen_ai.usage.total_tokens",
+        "llm.token_count.total",
+        "openinference.llm.token_count.total",
+    )
+    if total_tokens is None and prompt_tokens is not None and completion_tokens is not None:
+        total_tokens = prompt_tokens + completion_tokens
+
+    events = span.get("events")
+    event_items = events if isinstance(events, list) else []
+    return {
+        "input": _json_or_text(input_value),
+        "output": _json_or_text(output_value),
+        "metadata": {
+            "model": attrs.get("gen_ai.request.model")
+            or attrs.get("llm.model_name")
+            or attrs.get("model"),
+            "provider": attrs.get("gen_ai.system") or attrs.get("llm.provider"),
+            "tool": attrs.get("tool.name") or attrs.get("function.name"),
+            "operation": attrs.get("gen_ai.operation.name") or span.get("name"),
+            "tokens": {
+                "prompt": prompt_tokens,
+                "completion": completion_tokens,
+                "total": total_tokens,
+            },
+        },
+        "events": [_compact_event(event) for event in event_items],
+    }
 
 
 def _parse_dt(value: str | None) -> datetime | None:
@@ -116,6 +254,8 @@ async def get_trace_detail(trace_id: str) -> dict[str, Any] | None:
         return None
 
     span_dicts = [jsonable_encoder(s.to_dict()) for s in spans]
+    for span in span_dicts:
+        span["parsed"] = parse_span_display(span)
     tree = _build_span_tree(span_dicts)
 
     return {

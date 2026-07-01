@@ -58,171 +58,144 @@
           </div>
         </div>
 
-        <div v-else class="trace-detail-shell">
-          <section class="trace-detail-main">
-            <div class="trace-run-header">
-              <div class="trace-run-title">
-                <div class="trace-run-heading">
-                  <span class="trace-status-dot large" :class="statusClass(selectedTrace.status)" />
-                  <div>
-                    <h4 :title="selectedTrace.name">
-                      {{ selectedTrace.name }}
-                    </h4>
-                  </div>
-                  <el-tag :type="tagType(selectedTrace.status)" effect="light" size="small">{{ selectedTrace.status }}</el-tag>
+        <div v-else class="trace-detail-shell trace-inspector-shell">
+          <div class="trace-run-header">
+            <div class="trace-run-title">
+              <div class="trace-run-heading">
+                <span class="trace-status-dot large" :class="statusClass(selectedTrace.status)" />
+                <div>
+                  <h4 :title="selectedTrace.name">
+                    {{ selectedTrace.name }}
+                  </h4>
                 </div>
-                <p class="trace-id-line">{{ selectedTrace.trace_id }}</p>
+                <el-tag :type="tagType(selectedTrace.status)" effect="light" size="small">{{ selectedTrace.status }}</el-tag>
+              </div>
+            </div>
+
+            <div class="trace-copy-actions">
+              <el-button size="small" plain class="cursor-pointer" @click="refreshSelectedTrace" :loading="loadingDetail">
+                重新拉取
+              </el-button>
+            </div>
+
+            <div class="trace-evidence-strip" aria-label="Trace metadata">
+              <button
+                v-for="item in selectedTraceEvidence"
+                :key="item.label"
+                type="button"
+                class="trace-evidence-chip"
+                :disabled="!item.copyable"
+                @click="copyText(item.value)"
+              >
+                <span>{{ item.label }}:</span>
+                <strong :title="item.value">{{ item.displayValue }}</strong>
+                <el-icon v-if="item.copyable"><CopyDocument /></el-icon>
+              </button>
+            </div>
+          </div>
+
+          <div class="trace-content-layout">
+            <aside class="trace-span-hierarchy">
+              <div class="trace-panel-header">
+                <div>
+                  <p>Trace Hierarchy</p>
+                  <span>按父子关系查看 Agent、LLM、Tool 与 Hook</span>
+                </div>
+                <strong>{{ spans.length }} spans</strong>
               </div>
 
-              <div class="trace-copy-actions">
-                <el-button size="small" plain class="cursor-pointer" @click="copySelectedTraceId" :disabled="!selectedTrace">
-                  trace_id
-                </el-button>
-                <el-button size="small" plain class="cursor-pointer" @click="copyText(selectedTrace.session_id || '')" :disabled="!selectedTrace.session_id">
-                  session_id
-                </el-button>
-                <el-button size="small" plain class="cursor-pointer" @click="copyText(selectedTrace.run_id || '')" :disabled="!selectedTrace.run_id">
-                  run_id
-                </el-button>
-                <el-button size="small" plain class="cursor-pointer" @click="refreshSelectedTrace" :loading="loadingDetail">
-                  重新拉取
-                </el-button>
-              </div>
+              <el-tree
+                v-if="tree.length"
+                :data="tree"
+                node-key="span.span_id"
+                :expand-on-click-node="false"
+                default-expand-all
+                class="trace-tree trace-hierarchy-tree"
+                @node-click="onSpanNodeClick"
+              >
+                <template #default="{ data }">
+                  <button
+                    type="button"
+                    class="trace-tree-node trace-hierarchy-node"
+                    :class="{ active: selectedSpan?.span_id === data.span.span_id, error: data.span.status_code === 'ERROR' }"
+                    @click.stop="selectSpan(data.span)"
+                  >
+                    <span class="trace-status-dot" :class="statusClass(data.span.status_code)" />
+                    <span class="trace-hierarchy-node-copy">
+                      <strong :title="data.span.name">{{ data.span.name }}</strong>
+                      <small>{{ data.span.kind || 'span' }} · {{ formatDuration(data.span.duration_ms) }}</small>
+                    </span>
+                  </button>
+                </template>
+              </el-tree>
 
-              <div class="trace-fact-grid">
+              <div v-else-if="spans.length" class="trace-hierarchy-fallback">
                 <button
-                  v-for="fact in selectedTraceFacts"
-                  :key="fact.label"
+                  v-for="span in spans"
+                  :key="span.span_id"
                   type="button"
-                  class="trace-fact-card"
-                  @click="copyText(fact.value)"
+                  class="trace-tree-node trace-hierarchy-node"
+                  :class="{ active: selectedSpan?.span_id === span.span_id, error: span.status_code === 'ERROR' }"
+                  @click="selectSpan(span)"
                 >
-                  <span>{{ fact.label }}</span>
-                  <strong class="trace-fact-value" :title="fact.value">{{ fact.displayValue }}</strong>
+                  <span class="trace-status-dot" :class="statusClass(span.status_code)" />
+                  <span class="trace-hierarchy-node-copy">
+                    <strong :title="span.name">{{ span.name }}</strong>
+                    <small>{{ span.kind || 'span' }} · {{ formatDuration(span.duration_ms) }}</small>
+                  </span>
                 </button>
               </div>
-            </div>
 
-            <div class="trace-panel-scroll">
-              <section class="trace-panel trace-waterfall-panel">
-                <div class="trace-panel-header">
-                  <div>
-                    <p>Span Waterfall</p>
-                    <span>按 Trace 时间线定位调用层级和耗时分布</span>
-                  </div>
-                  <strong>{{ spans.length }} spans</strong>
-                </div>
-
-                <div v-if="spans.length" class="trace-waterfall-list">
-                  <button
-                    v-for="span in spans"
-                    :key="span.span_id"
-                    type="button"
-                    class="trace-waterfall-row"
-                    :class="{ active: selectedSpan?.span_id === span.span_id, error: span.status_code === 'ERROR' }"
-                    @click="selectedSpan = span"
-                  >
-                    <div class="trace-span-name">
-                      <div>
-                        <span class="trace-status-dot" :class="statusClass(span.status_code)" />
-                        <strong :title="span.name">{{ span.name }}</strong>
-                      </div>
-                      <span>{{ span.kind || 'span' }} · {{ compactId(span.span_id) }}</span>
-                    </div>
-                    <div class="trace-timeline">
-                      <div class="trace-timeline-track">
-                        <span class="trace-timeline-bar" :class="{ error: span.status_code === 'ERROR' }" :style="spanTimelineStyle(span)" />
-                      </div>
-                    </div>
-                    <div class="span-duration">
-                      <strong>{{ formatDuration(span.duration_ms) }}</strong>
-                      <small>{{ spanOffset(span) }}</small>
-                    </div>
-                  </button>
-                </div>
-
-                <div v-else class="empty-observe">
-                  <el-icon><Connection /></el-icon>
-                  <strong>暂无 spans</strong>
-                  <span>该 Trace 可能尚未写入 Span 数据，或当前查询未命中明细。</span>
-                </div>
-              </section>
-
-              <section class="trace-panel">
-                <div class="trace-panel-header">
-                  <div>
-                    <p>Span Tree</p>
-                    <span>点击节点定位属性详情</span>
-                  </div>
-                </div>
-
-                <el-tree
-                  v-if="tree.length"
-                  :data="tree"
-                  node-key="span.span_id"
-                  :expand-on-click-node="false"
-                  default-expand-all
-                  class="trace-tree"
-                  @node-click="onSpanNodeClick"
-                >
-                  <template #default="{ data }">
-                    <div class="trace-tree-node">
-                      <span class="trace-status-dot" :class="statusClass(data.span.status_code)" />
-                      <strong :title="data.span.name">{{ data.span.name }}</strong>
-                      <small>{{ formatDuration(data.span.duration_ms) }}</small>
-                    </div>
-                  </template>
-                </el-tree>
-
-                <div v-else class="empty-observe">
-                  <el-icon><Connection /></el-icon>
-                  <strong>暂无树状关系</strong>
-                  <span>该 Trace 没有可展示的父子 Span 关系。</span>
-                </div>
-              </section>
-            </div>
-          </section>
-
-          <aside class="trace-diagnostics">
-            <div class="trace-panel">
-              <div class="trace-panel-title">
-                <el-icon><Cpu /></el-icon>
-                <span>Span 诊断</span>
+              <div v-else class="empty-observe">
+                <el-icon><Connection /></el-icon>
+                <strong>暂无 spans</strong>
+                <span>该 Trace 可能尚未写入 Span 数据，或当前查询未命中明细。</span>
               </div>
+            </aside>
 
+            <section class="trace-content-detail">
               <div v-if="!selectedSpan" class="empty-observe">
                 <el-icon><Aim /></el-icon>
                 <strong>点击 Span 查看详情</strong>
-                <span>这里会展示状态、时序和 attributes。</span>
+                <span>这里会展示输入、输出、元数据与原始 attributes。</span>
               </div>
 
-              <div v-else class="trace-diagnostic-body">
-                <div class="trace-selected-span">
-                  <div>
-                    <span>名称</span>
-                    <strong>{{ selectedSpan.name }}</strong>
-                    <em>{{ selectedSpan.kind || 'span' }}</em>
+              <template v-else>
+                <div class="trace-content-titlebar">
+                  <div class="trace-selected-span">
+                    <div class="trace-content-glyph" :class="{ error: selectedSpan.status_code === 'ERROR' }">
+                      <el-icon><Cpu /></el-icon>
+                    </div>
+                    <div>
+                      <strong>{{ selectedSpan.name }}</strong>
+                      <em>{{ selectedSpan.kind || 'span' }}</em>
+                    </div>
                   </div>
-                  <el-tag :type="tagType(selectedSpan.status_code)" effect="light" size="small">{{ selectedSpan.status_code }}</el-tag>
+                  <div class="trace-content-badges">
+                    <span>LATENCY {{ formatDuration(selectedSpan.duration_ms) }}</span>
+                    <el-tag :type="tagType(selectedSpan.status_code)" effect="light" size="small">{{ selectedSpan.status_code }}</el-tag>
+                  </div>
                 </div>
 
-                <div class="trace-detail-grid">
-                  <div class="trace-detail-metric">
-                    <span>耗时</span>
-                    <strong>{{ formatDuration(selectedSpan.duration_ms) }}</strong>
-                  </div>
-                  <div class="trace-detail-metric">
-                    <span>开始偏移</span>
-                    <strong>{{ spanOffset(selectedSpan) }}</strong>
-                  </div>
-                  <div class="trace-detail-metric">
-                    <span>Parent</span>
-                    <strong :title="selectedSpan.parent_span_id || '-'">{{ compactId(selectedSpan.parent_span_id) }}</strong>
-                  </div>
-                  <div class="trace-detail-metric">
-                    <span>Events</span>
-                    <strong>{{ selectedSpan.events?.length ?? 0 }}</strong>
-                  </div>
+                <div class="trace-content-tabs" role="tablist" aria-label="Span detail sections">
+                  <button
+                    type="button"
+                    role="tab"
+                    :aria-selected="activeDetailTab === 'info'"
+                    :class="{ active: activeDetailTab === 'info' }"
+                    @click="activeDetailTab = 'info'"
+                  >
+                    Info
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    :aria-selected="activeDetailTab === 'metadata'"
+                    :class="{ active: activeDetailTab === 'metadata' }"
+                    @click="activeDetailTab = 'metadata'"
+                  >
+                    Metadata
+                  </button>
                 </div>
 
                 <div v-if="selectedSpan.status_message" class="trace-error-box">
@@ -230,20 +203,90 @@
                   <strong>{{ selectedSpan.status_message }}</strong>
                 </div>
 
-                <div>
-                  <div class="trace-json-head">
-                    <span>Attributes</span>
-                    <el-button size="small" plain class="cursor-pointer" :disabled="!selectedSpan" @click="copySpanJson">
-                      复制 JSON
-                    </el-button>
-                  </div>
-                  <pre class="trace-json">{{ prettyJson(selectedSpan.attributes) }}</pre>
-                </div>
-              </div>
-            </div>
+                <template v-if="activeDetailTab === 'info'">
+                  <section class="trace-io-section">
+                    <div class="trace-io-head">
+                      <span>Input</span>
+                      <div>
+                        <span class="trace-mode-chip" :class="{ active: parsedSpan.input.format === 'json' }">JSON</span>
+                        <span class="trace-mode-chip" :class="{ active: parsedSpan.input.format === 'markdown' }">MARKDOWN</span>
+                        <span class="trace-mode-chip" :class="{ active: parsedSpan.input.format === 'text' }">TEXT</span>
+                      </div>
+                    </div>
+                    <pre
+                      v-if="isJsonPayload(parsedSpan.input)"
+                      class="trace-io-block trace-json-payload"
+                      :class="{ empty: !parsedSpan.input.text }"
+                    >{{ formatPayloadText(parsedSpan.input, "No input captured") }}</pre>
+                    <div
+                      v-else
+                      class="trace-markdown-render trace-io-block"
+                      :class="{ empty: !parsedSpan.input.text }"
+                      v-html="renderPayloadMarkup(parsedSpan.input, 'No input captured')"
+                    />
+                  </section>
 
-            <el-alert v-if="apiError" class="trace-alert" type="error" :title="apiError" show-icon />
-          </aside>
+                  <section class="trace-io-section">
+                    <div class="trace-io-head">
+                      <span>Output</span>
+                      <div>
+                        <span class="trace-mode-chip" :class="{ active: parsedSpan.output.format === 'json' }">JSON</span>
+                        <span class="trace-mode-chip" :class="{ active: parsedSpan.output.format === 'markdown' }">MARKDOWN</span>
+                        <span class="trace-mode-chip" :class="{ active: parsedSpan.output.format === 'text' }">TEXT</span>
+                      </div>
+                    </div>
+                    <pre
+                      v-if="isJsonPayload(parsedSpan.output)"
+                      class="trace-io-block trace-json-payload"
+                      :class="{ empty: !parsedSpan.output.text }"
+                    >{{ formatPayloadText(parsedSpan.output, "No output captured") }}</pre>
+                    <div
+                      v-else
+                      class="trace-markdown-render trace-io-block"
+                      :class="{ empty: !parsedSpan.output.text }"
+                      v-html="renderPayloadMarkup(parsedSpan.output, 'No output captured')"
+                    />
+                  </section>
+                </template>
+
+                <template v-else>
+                  <section class="trace-metadata-panel trace-metadata-ledger">
+                    <div class="trace-json-head">
+                      <span>Metadata</span>
+                    </div>
+                    <div class="trace-metadata-grid">
+                      <div v-for="item in spanMetadataItems" :key="item.label" class="trace-metadata-item">
+                        <span>{{ item.label }}</span>
+                        <strong :title="item.value">{{ item.displayValue }}</strong>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section v-if="parsedSpan.events.length" class="trace-events-panel">
+                    <div class="trace-json-head">
+                      <span>Events</span>
+                    </div>
+                    <article v-for="event in parsedSpan.events" :key="`${event.name}:${event.message}`" class="trace-event-row">
+                      <strong>{{ event.name }}</strong>
+                      <span>{{ event.message }}</span>
+                    </article>
+                  </section>
+
+                  <div>
+                    <div class="trace-json-head">
+                      <span>Attributes</span>
+                      <el-button size="small" plain class="cursor-pointer" :disabled="!selectedSpan" @click="copySpanJson">
+                        复制 JSON
+                      </el-button>
+                    </div>
+                    <pre class="trace-json">{{ prettyJson(selectedSpan.attributes) }}</pre>
+                  </div>
+                </template>
+              </template>
+
+              <el-alert v-if="apiError" class="trace-alert" type="error" :title="apiError" show-icon />
+            </section>
+          </div>
         </div>
       </main>
     </div>
@@ -253,17 +296,24 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue"
 import { ElMessage } from "element-plus"
+import MarkdownIt from "markdown-it"
 import {
   Aim,
   Connection,
+  CopyDocument,
   Cpu,
   DataAnalysis,
   Refresh,
 } from "@element-plus/icons-vue"
 import { useTracingApi } from "../composables/useApi"
-import type { SpanItem, SpanTreeNode, TraceItem, TraceStatus } from "../types"
+import type { ParsedSpanPayload, SpanItem, SpanTreeNode, TraceItem, TraceStatus } from "../types"
 
 const { loading, error, listTraces, getTrace } = useTracingApi()
+const markdownRenderer = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true,
+})
 const props = defineProps<{
   selectedTraceId?: string | null
 }>()
@@ -283,28 +333,128 @@ const selectedTrace = ref<TraceItem | null>(null)
 const spans = ref<SpanItem[]>([])
 const tree = ref<SpanTreeNode[]>([])
 const selectedSpan = ref<SpanItem | null>(null)
+const activeDetailTab = ref<"info" | "metadata">("info")
 
 const loadingDetail = ref(false)
 const apiError = computed(() => error.value)
 
-const selectedTraceFacts = computed(() => {
+const selectedTraceEvidence = computed(() => {
   const trace = selectedTrace.value
   if (!trace) return []
-  return [
-    { label: "Session", value: trace.session_id || "-", displayValue: compactId(trace.session_id) },
-    { label: "Run", value: trace.run_id || "-", displayValue: compactId(trace.run_id) },
+  const rows = [
+    { label: "Created At", value: trace.created_at || trace.start_time || "-", displayValue: formatDateTime(trace.created_at || trace.start_time) },
+    { label: "Trace ID", value: trace.trace_id || "-", displayValue: compactId(trace.trace_id) },
+    { label: "Run ID", value: trace.run_id || "-", displayValue: compactId(trace.run_id) },
+    { label: "Session ID", value: trace.session_id || "-", displayValue: compactId(trace.session_id) },
     { label: "Agent", value: trace.agent_id || trace.team_id || "-", displayValue: compactId(trace.agent_id || trace.team_id) },
     { label: "Workflow", value: trace.workflow_id || "-", displayValue: compactId(trace.workflow_id) },
   ]
+  if (trace.user_id) {
+    rows.push({ label: "User ID", value: trace.user_id, displayValue: compactId(trace.user_id) })
+  }
+  return rows.map((item) => ({ ...item, copyable: item.value !== "-" }))
 })
 
 const selectedTraceStartMs = computed(() => toMs(selectedTrace.value?.start_time))
-const selectedTraceDurationMs = computed(() => Math.max(Number(selectedTrace.value?.duration_ms || 0), 1))
+const emptyParsedSpan = {
+  input: { format: "empty", text: "", data: null },
+  output: { format: "empty", text: "", data: null },
+  metadata: {
+    model: null,
+    provider: null,
+    tool: null,
+    operation: null,
+    tokens: {
+      prompt: null,
+      completion: null,
+      total: null,
+    },
+  },
+  events: [],
+}
+const parsedSpan = computed(() => selectedSpan.value?.parsed || emptyParsedSpan)
+const parsedMetadata = computed(() => {
+  const metadata = parsedSpan.value.metadata || emptyParsedSpan.metadata
+  const tokens = metadata.tokens || {}
+  return [
+    { label: "Model", value: valueOrDash(metadata.model), displayValue: valueOrDash(metadata.model) },
+    { label: "Provider", value: valueOrDash(metadata.provider), displayValue: valueOrDash(metadata.provider) },
+    { label: "Tool", value: valueOrDash(metadata.tool), displayValue: valueOrDash(metadata.tool) },
+    { label: "Operation", value: valueOrDash(metadata.operation), displayValue: valueOrDash(metadata.operation) },
+    { label: "Prompt tokens", value: valueOrDash(tokens.prompt), displayValue: valueOrDash(tokens.prompt) },
+    { label: "Completion tokens", value: valueOrDash(tokens.completion), displayValue: valueOrDash(tokens.completion) },
+    { label: "Total tokens", value: valueOrDash(tokens.total), displayValue: valueOrDash(tokens.total) },
+  ]
+})
+
+const spanMetadataItems = computed(() => {
+  const span = selectedSpan.value
+  if (!span) return []
+  const eventCount = Math.max(parsedSpan.value.events?.length || 0, span.events?.length || 0)
+  return [
+    { label: "开始偏移", value: spanOffset(span), displayValue: spanOffset(span) },
+    { label: "Parent", value: valueOrDash(span.parent_span_id), displayValue: compactId(span.parent_span_id) },
+    { label: "Events", value: String(eventCount), displayValue: String(eventCount) },
+    { label: "Span ID", value: valueOrDash(span.span_id), displayValue: compactId(span.span_id) },
+    { label: "Kind", value: valueOrDash(span.kind), displayValue: valueOrDash(span.kind) },
+    { label: "Status", value: valueOrDash(span.status_code), displayValue: valueOrDash(span.status_code) },
+    { label: "Duration", value: formatDuration(span.duration_ms), displayValue: formatDuration(span.duration_ms) },
+    { label: "Start Time", value: valueOrDash(span.start_time), displayValue: formatDateTime(span.start_time) },
+    { label: "End Time", value: valueOrDash(span.end_time), displayValue: formatDateTime(span.end_time) },
+    ...parsedMetadata.value,
+  ]
+})
+const valueOrDash = (value: unknown) => {
+  if (value === null || value === undefined || value === "") return "-"
+  return String(value)
+}
+const renderMarkdown = (value: string) => {
+  return markdownRenderer.render(value || "")
+}
+
+const isJsonPayload = (payload: ParsedSpanPayload) => {
+  if (payload.format === "json" || payload.data !== null && payload.data !== undefined) return true
+  const text = payload.text?.trim()
+  if (!text || !["{", "["].includes(text[0])) return false
+  try {
+    JSON.parse(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
+const formatPayloadText = (payload: ParsedSpanPayload, fallback: string) => {
+  if (!payload.text) return fallback
+  if (payload.data !== null && payload.data !== undefined) return prettyJson(payload.data)
+  try {
+    return JSON.stringify(JSON.parse(payload.text), null, 2)
+  } catch {
+    return payload.text
+  }
+}
+
+const renderPayloadMarkup = (payload: ParsedSpanPayload, fallback: string) => {
+  return renderMarkdown(payload.text || fallback)
+}
+
 const compactId = (value?: string | null) => {
   const text = (value || "").trim()
   if (!text) return "-"
   if (text.length <= 18) return text
   return `${text.slice(0, 8)}...${text.slice(-4)}`
+}
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return "-"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
 }
 
 const toMs = (value?: string | null) => {
@@ -360,29 +510,6 @@ const prettyJson = (obj: unknown) => {
   }
 }
 
-const spanTimelineStyle = (span: SpanItem) => {
-  const traceStart = selectedTraceStartMs.value
-  const traceDuration = selectedTraceDurationMs.value
-  if (traceStart == null || !traceDuration) {
-    return { left: "0%", width: "8%" }
-  }
-
-  const start = toMs(span.start_time)
-  const end = toMs(span.end_time) ?? start
-  if (start == null || end == null) {
-    return { left: "0%", width: "8%" }
-  }
-
-  const offset = Math.max(0, ((start - traceStart) / traceDuration) * 100)
-  const width = Math.max(2, ((end - start) / traceDuration) * 100)
-  const clampedLeft = Math.min(offset, 96)
-  const clampedWidth = Math.min(width, 100 - clampedLeft)
-  return {
-    left: `${clampedLeft}%`,
-    width: `${Math.max(clampedWidth, 4)}%`,
-  }
-}
-
 const spanOffset = (span: SpanItem) => {
   const traceStart = selectedTraceStartMs.value
   const start = toMs(span.start_time)
@@ -428,7 +555,7 @@ const refreshSelectedTrace = async () => {
     selectedTrace.value = resp.trace
     spans.value = resp.spans || []
     tree.value = resp.tree || []
-    selectedSpan.value = null
+    selectedSpan.value = firstAvailableSpan()
   } finally {
     loadingDetail.value = false
   }
@@ -443,15 +570,24 @@ const selectTraceById = async (traceId: string | null | undefined) => {
     selectedTrace.value = resp.trace
     spans.value = resp.spans || []
     tree.value = resp.tree || []
-    selectedSpan.value = null
+    selectedSpan.value = firstAvailableSpan()
     scrollDetailIntoView()
   } finally {
     loadingDetail.value = false
   }
 }
 
+const firstAvailableSpan = () => {
+  return tree.value[0]?.span || spans.value[0] || null
+}
+
+const selectSpan = (span: SpanItem) => {
+  selectedSpan.value = span
+  activeDetailTab.value = "info"
+}
+
 const onSpanNodeClick = (node: SpanTreeNode) => {
-  selectedSpan.value = node.span
+  selectSpan(node.span)
 }
 
 const resetFilters = async () => {
@@ -470,11 +606,6 @@ const copyText = async (text: string) => {
   } catch {
     ElMessage.warning("复制失败（请检查浏览器权限）")
   }
-}
-
-const copySelectedTraceId = async () => {
-  if (!selectedTrace.value) return
-  await copyText(selectedTrace.value.trace_id)
 }
 
 const copySpanJson = async () => {
@@ -520,18 +651,21 @@ onUnmounted(() => {
 
 <style>
 .trace-console {
-  --trace-bg: #eef3f7;
-  --trace-panel: #ffffff;
-  --trace-panel-soft: #f7fafc;
-  --trace-border: #cfd9e3;
-  --trace-border-strong: #9fb0bf;
-  --trace-text: #14202a;
-  --trace-muted: #637484;
-  --trace-muted-soft: #8b9ba8;
-  --trace-blue: #147fa2;
-  --trace-blue-soft: #e5f5fb;
-  --trace-red: #d34a42;
-  --trace-yellow: #c78624;
+  --trace-bg: var(--ag-frame);
+  --trace-panel: var(--ag-panel);
+  --trace-panel-soft: var(--ag-panel-soft);
+  --trace-border: var(--ag-border);
+  --trace-border-strong: var(--ag-border-strong);
+  --trace-text: var(--ag-text);
+  --trace-muted: var(--ag-muted);
+  --trace-muted-soft: var(--ag-muted);
+  --trace-blue: var(--ag-blue);
+  --trace-blue-soft: var(--ag-blue-soft);
+  --trace-purple: #8a63ff;
+  --trace-red: var(--ag-red);
+  --trace-yellow: var(--ag-yellow);
+  --trace-code-bg: #f3f6fa;
+  --trace-code-text: #182230;
   display: flex;
   height: 100%;
   min-height: 0;
@@ -548,7 +682,7 @@ onUnmounted(() => {
 
 .trace-hero {
   border-bottom: 1px solid var(--trace-border);
-  background: color-mix(in srgb, var(--trace-panel) 92%, transparent);
+  background: linear-gradient(180deg, var(--trace-panel), var(--trace-bg));
   padding: 16px;
 }
 
@@ -576,15 +710,15 @@ onUnmounted(() => {
   width: 38px;
   height: 38px;
   place-items: center;
-  border: 1px solid rgba(20, 127, 162, 0.3);
+  border: 1px solid rgba(161, 116, 255, 0.36);
   border-radius: 8px;
-  background: var(--trace-blue-soft);
-  color: var(--trace-blue);
+  background: rgba(161, 116, 255, 0.12);
+  color: var(--trace-purple);
 }
 
 .trace-core.has-error {
   border-color: rgba(211, 74, 66, 0.36);
-  background: #fff0ed;
+  background: var(--ag-red-soft);
   color: var(--trace-red);
 }
 
@@ -644,7 +778,10 @@ onUnmounted(() => {
 
 .trace-detail-main,
 .trace-diagnostics,
-.trace-canvas {
+.trace-canvas,
+.trace-content-layout,
+.trace-span-hierarchy,
+.trace-content-detail {
   min-height: 0;
   overflow: hidden;
 }
@@ -674,7 +811,7 @@ onUnmounted(() => {
   height: 10px;
   overflow: hidden;
   border-radius: 999px;
-  background: #dfe8ef;
+  background: #252b34;
 }
 
 .trace-timeline-track {
@@ -687,7 +824,7 @@ onUnmounted(() => {
   inset: 0 auto 0 0;
   min-width: 6px;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--trace-blue), #51c7de);
+  background: linear-gradient(90deg, var(--trace-purple), var(--trace-blue));
 }
 
 .trace-timeline-bar.error {
@@ -727,6 +864,7 @@ onUnmounted(() => {
 }
 
 .trace-canvas {
+  height: 100%;
   background: var(--trace-bg);
 }
 
@@ -738,10 +876,11 @@ onUnmounted(() => {
 }
 
 .trace-detail-shell {
-  display: grid;
+  display: flex;
   height: 100%;
   min-height: 0;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .trace-detail-main {
@@ -751,8 +890,9 @@ onUnmounted(() => {
 }
 
 .trace-run-header {
+  flex: 0 0 auto;
   border-bottom: 1px solid var(--trace-border);
-  background: color-mix(in srgb, var(--trace-panel) 88%, transparent);
+  background: var(--trace-panel);
   padding: 16px;
 }
 
@@ -795,29 +935,57 @@ onUnmounted(() => {
   justify-content: flex-end;
 }
 
-.trace-fact-grid {
-  display: grid;
+.trace-evidence-strip {
+  display: flex;
   flex: 1 0 100%;
   width: 100%;
+  flex-wrap: wrap;
   gap: 8px;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
-.trace-fact-card {
+.trace-evidence-chip {
+  display: inline-flex;
+  max-width: min(100%, 320px);
+  align-items: center;
+  gap: 6px;
   border: 1px solid var(--trace-border);
-  border-radius: 8px;
-  background: var(--trace-panel);
-  padding: 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--trace-panel-soft) 72%, var(--trace-panel));
+  padding: 4px 8px;
   text-align: left;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
 
-.trace-fact-card:hover {
-  border-color: rgba(20, 127, 162, 0.36);
-  transform: translateY(-1px);
+.trace-evidence-chip:enabled:hover {
+  border-color: color-mix(in srgb, var(--trace-purple) 54%, var(--trace-border));
+  background: color-mix(in srgb, var(--trace-blue-soft) 52%, var(--trace-panel));
 }
 
-.trace-fact-card span,
+.trace-evidence-chip span {
+  flex: 0 0 auto;
+  color: var(--trace-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.trace-evidence-chip strong {
+  overflow: hidden;
+  color: var(--trace-text);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trace-evidence-chip .el-icon {
+  flex: 0 0 auto;
+  color: var(--trace-muted);
+  font-size: 12px;
+}
+
 .trace-detail-metric span,
 .trace-selected-span span,
 .trace-error-box span,
@@ -829,7 +997,6 @@ onUnmounted(() => {
   line-height: 1.3;
 }
 
-.trace-fact-value,
 .trace-detail-metric strong {
   display: block;
   margin-top: 5px;
@@ -867,6 +1034,108 @@ onUnmounted(() => {
   border-radius: 8px;
   background: var(--trace-panel);
   padding: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.trace-content-layout {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.trace-span-hierarchy {
+  overflow: auto;
+  border-right: 1px solid var(--trace-border);
+  background: var(--trace-panel-soft);
+  padding: 14px;
+}
+
+.trace-content-detail {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  overflow: auto;
+  background: var(--trace-panel);
+  padding: 14px;
+}
+
+.trace-content-detail > .empty-observe {
+  align-self: center;
+}
+
+.trace-content-titlebar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--trace-border);
+  padding-bottom: 12px;
+}
+
+.trace-content-glyph {
+  display: grid;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid rgba(161, 116, 255, 0.42);
+  border-radius: 8px;
+  background: rgba(161, 116, 255, 0.15);
+  color: var(--trace-purple);
+}
+
+.trace-content-glyph.error {
+  border-color: rgba(240, 93, 94, 0.45);
+  background: rgba(240, 93, 94, 0.14);
+  color: var(--trace-red);
+}
+
+.trace-content-badges {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.trace-content-badges > span {
+  color: var(--trace-muted);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.trace-content-tabs {
+  display: flex;
+  gap: 22px;
+  border-bottom: 1px solid var(--trace-border);
+}
+
+.trace-content-tabs button {
+  position: relative;
+  padding: 0 0 10px;
+  color: var(--trace-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.trace-content-tabs button.active {
+  color: var(--trace-text);
+}
+
+.trace-content-tabs button.active::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--trace-purple);
+  content: "";
 }
 
 .trace-waterfall-panel {
@@ -879,7 +1148,7 @@ onUnmounted(() => {
   position: absolute;
   inset: 54px 14px auto;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(20, 127, 162, 0.36), transparent);
+  background: linear-gradient(90deg, transparent, rgba(161, 116, 255, 0.42), transparent);
   content: "";
 }
 
@@ -917,7 +1186,7 @@ onUnmounted(() => {
 
 .trace-waterfall-row:hover,
 .trace-waterfall-row.active {
-  border-color: rgba(20, 127, 162, 0.45);
+  border-color: rgba(161, 116, 255, 0.55);
   background: color-mix(in srgb, var(--trace-blue-soft) 44%, var(--trace-panel));
 }
 
@@ -984,6 +1253,31 @@ onUnmounted(() => {
   background: transparent;
 }
 
+.trace-hierarchy-tree {
+  color: var(--trace-text);
+}
+
+.trace-hierarchy-tree .el-tree-node__content {
+  height: auto;
+  min-height: 0;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+.trace-hierarchy-tree .el-tree-node__children {
+  position: relative;
+  margin-left: 10px;
+  padding-left: 10px;
+}
+
+.trace-hierarchy-tree .el-tree-node__children::before {
+  position: absolute;
+  inset: 0 auto 8px 0;
+  width: 1px;
+  background: var(--trace-border-strong);
+  content: "";
+}
+
 .trace-tree-node {
   display: grid;
   width: 100%;
@@ -998,6 +1292,55 @@ onUnmounted(() => {
 
 .trace-tree-node small {
   color: var(--trace-muted);
+  font-size: 10px;
+}
+
+.trace-hierarchy-fallback {
+  display: grid;
+  gap: 8px;
+}
+
+.trace-hierarchy-node {
+  grid-template-columns: 12px minmax(0, 1fr);
+  margin-bottom: 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  padding: 9px;
+  text-align: left;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.trace-hierarchy-node:hover,
+.trace-hierarchy-node.active {
+  border-color: rgba(161, 116, 255, 0.48);
+  background: rgba(161, 116, 255, 0.12);
+}
+
+.trace-hierarchy-node.error {
+  border-color: rgba(240, 93, 94, 0.3);
+}
+
+.trace-hierarchy-node-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.trace-hierarchy-node-copy strong {
+  display: block;
+  overflow: hidden;
+  color: var(--trace-text);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trace-hierarchy-node-copy small {
+  color: var(--trace-muted);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
   font-size: 10px;
 }
 
@@ -1052,7 +1395,7 @@ onUnmounted(() => {
 .trace-error-box {
   border: 1px solid rgba(211, 74, 66, 0.28);
   border-radius: 8px;
-  background: #fff0ed;
+  background: rgba(240, 93, 94, 0.12);
   padding: 10px;
 }
 
@@ -1065,15 +1408,200 @@ onUnmounted(() => {
   margin-bottom: 8px;
 }
 
+.trace-io-section,
+.trace-metadata-panel,
+.trace-events-panel {
+  border: 1px solid var(--trace-border);
+  border-radius: 8px;
+  background: var(--trace-panel);
+  padding: 10px;
+}
+
+.trace-io-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.trace-io-head span {
+  color: var(--trace-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.trace-io-head > div {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.trace-mode-chip {
+  border: 1px solid var(--trace-border);
+  border-radius: 6px;
+  background: var(--trace-panel-soft);
+  padding: 3px 7px;
+  color: var(--trace-muted);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.trace-mode-chip.active {
+  border-color: rgba(161, 116, 255, 0.5);
+  background: rgba(161, 116, 255, 0.16);
+  color: var(--trace-text);
+}
+
+.trace-io-block {
+  max-height: 260px;
+  min-height: 84px;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid var(--trace-border);
+  border-radius: 8px;
+  background: var(--trace-code-bg);
+  padding: 12px;
+  color: var(--trace-code-text);
+  font-family: "Inter", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.62;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.trace-json-payload {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+}
+
+.trace-markdown-render {
+  white-space: normal;
+}
+
+.trace-markdown-render :where(p, ul, ol, pre, blockquote) {
+  margin: 0;
+}
+
+.trace-markdown-render :where(p + p, p + ul, p + ol, ul + p, ol + p, pre + p) {
+  margin-top: 10px;
+}
+
+.trace-markdown-render :where(ul, ol) {
+  padding-left: 22px;
+}
+
+.trace-markdown-render li + li {
+  margin-top: 5px;
+}
+
+.trace-markdown-render :where(strong, b) {
+  color: var(--trace-text);
+  font-weight: 800;
+}
+
+.trace-markdown-render a {
+  color: var(--trace-blue);
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.trace-markdown-render code {
+  border: 1px solid var(--trace-border);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--trace-code-bg) 82%, var(--trace-panel));
+  padding: 1px 5px;
+  color: var(--trace-blue);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 0.94em;
+}
+
+.trace-markdown-render pre {
+  overflow: auto;
+  border: 1px solid var(--trace-border);
+  border-radius: 8px;
+  background: var(--trace-code-bg);
+  padding: 10px;
+}
+
+.trace-markdown-render pre code {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.trace-io-block.empty {
+  color: var(--trace-muted-soft);
+  font-style: italic;
+}
+
+.trace-metadata-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.trace-metadata-item {
+  min-width: 0;
+  border: 1px solid var(--trace-border);
+  border-radius: 8px;
+  background: var(--trace-panel-soft);
+  padding: 8px;
+}
+
+.trace-metadata-item span {
+  display: block;
+  color: var(--trace-muted);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.trace-metadata-item strong {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--trace-text);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trace-event-row {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--trace-border);
+  border-radius: 8px;
+  background: var(--trace-panel-soft);
+  padding: 8px;
+}
+
+.trace-event-row + .trace-event-row {
+  margin-top: 6px;
+}
+
+.trace-event-row strong {
+  color: var(--trace-yellow);
+  font-size: 11px;
+}
+
+.trace-event-row span {
+  color: var(--trace-muted);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .trace-json {
   max-height: 340px;
   overflow: auto;
   margin: 0;
   border: 1px solid var(--trace-border);
   border-radius: 8px;
-  background: #10151a;
+  background: var(--trace-code-bg);
   padding: 12px;
-  color: #e9f5fb;
+  color: var(--trace-code-text);
   font-family: "JetBrains Mono", "Fira Code", monospace;
   font-size: 11px;
   line-height: 1.6;
@@ -1121,18 +1649,21 @@ onUnmounted(() => {
 }
 
 html.dark .trace-console {
-  --trace-bg: #15161b;
-  --trace-panel: #1c1d22;
-  --trace-panel-soft: #17181d;
-  --trace-border: #34363d;
-  --trace-border-strong: #4c4e57;
-  --trace-text: #f1f1ec;
-  --trace-muted: #9a9ba3;
+  --trace-bg: var(--ag-frame);
+  --trace-panel: var(--ag-panel);
+  --trace-panel-soft: var(--ag-panel-soft);
+  --trace-border: var(--ag-border);
+  --trace-border-strong: var(--ag-border-strong);
+  --trace-text: var(--ag-text);
+  --trace-muted: var(--ag-muted);
   --trace-muted-soft: #777982;
-  --trace-blue: #6da8ff;
-  --trace-blue-soft: rgba(109, 168, 255, 0.13);
-  --trace-red: #ff6f63;
-  --trace-yellow: #f0bd57;
+  --trace-blue: var(--ag-blue);
+  --trace-blue-soft: var(--ag-blue-soft);
+  --trace-purple: #a174ff;
+  --trace-red: var(--ag-red);
+  --trace-yellow: var(--ag-yellow);
+  --trace-code-bg: #101115;
+  --trace-code-text: #e7e7e4;
 }
 
 html.dark .trace-core.has-error,
@@ -1144,7 +1675,8 @@ html.dark .trace-timeline-track {
   background: #2a2c33;
 }
 
-html.dark .trace-json {
+html.dark .trace-json,
+html.dark .trace-json-payload {
   background: #101115;
   color: #e7e7e4;
 }
@@ -1155,28 +1687,16 @@ html.dark .trace-waterfall-row.active {
 }
 
 @media (max-width: 1480px) {
-  .trace-detail-shell {
-    display: block;
-    overflow-y: auto;
-  }
-
-  .trace-detail-main {
-    display: block;
-    overflow: visible;
-  }
-
-  .trace-panel-scroll {
-    overflow: visible;
-  }
-
-  .trace-diagnostics {
-    overflow: visible;
-    border-top: 1px solid var(--trace-border);
-    border-left: 0;
+  .trace-content-layout {
+    grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
   }
 }
 
 @media (max-width: 1180px) {
+  .trace-content-layout {
+    grid-template-columns: minmax(230px, 290px) minmax(0, 1fr);
+  }
+
   .trace-waterfall-row {
     grid-template-columns: 1fr;
   }
@@ -1200,19 +1720,52 @@ html.dark .trace-waterfall-row.active {
   .trace-canvas {
     overflow: visible;
   }
+
+  .trace-detail-shell {
+    height: auto;
+    overflow: visible;
+  }
+
+  .trace-content-layout {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: visible;
+  }
+
+  .trace-span-hierarchy {
+    max-height: 360px;
+    overflow: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--trace-border);
+  }
+
+  .trace-content-detail {
+    overflow: visible;
+  }
 }
 
 @media (max-width: 768px) {
   .trace-hero,
   .trace-run-header,
-  .trace-panel-scroll,
-  .trace-diagnostics {
+  .trace-span-hierarchy,
+  .trace-content-detail {
     padding: 12px;
   }
 
-  .trace-fact-grid,
-  .trace-detail-grid {
+  .trace-detail-grid,
+  .trace-metadata-grid {
     grid-template-columns: 1fr;
+  }
+
+  .trace-evidence-chip {
+    max-width: 100%;
+  }
+
+  .trace-content-titlebar {
+    flex-direction: column;
+  }
+
+  .trace-content-badges {
+    justify-content: flex-start;
   }
 
   .trace-filter-bar,
