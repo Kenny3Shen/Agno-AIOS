@@ -120,6 +120,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useUrl2MdApi } from '../composables/useApi'
+import { copyToClipboard } from '../lib/clipboard'
 import { ElMessage } from 'element-plus'
 import { Link, Connection, Delete, DocumentCopy, Document, View } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
@@ -192,10 +193,9 @@ const decodeHtmlEntities = (s: string) => {
 }
 
 const copyMarkdown = async () => {
-  try {
-    await navigator.clipboard.writeText(markdownText.value)
+  if (await copyToClipboard(markdownText.value)) {
     ElMessage.success('已复制到剪贴板')
-  } catch {
+  } else {
     ElMessage.error('复制失败')
   }
 }

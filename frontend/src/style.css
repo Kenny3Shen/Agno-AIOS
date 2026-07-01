@@ -16,9 +16,11 @@
 	--ag-sidebar-icon: #ffffff;
 	--ag-sidebar-user: #ffffff;
 	--ag-panel: #ffffff;
+	--ag-panel-bg: #ffffff;
 	--ag-panel-soft: #eef3f7;
 	--ag-panel-raised: #ffffff;
 	--ag-border: #c6d0db;
+	--ag-panel-border: #c6d0db;
 	--ag-border-strong: #9eacba;
 	--ag-text: #15171c;
 	--ag-heading: #0f1115;
@@ -56,9 +58,11 @@ html.dark {
 	--ag-sidebar-icon: #111216;
 	--ag-sidebar-user: #14151a;
 	--ag-panel: #1c1d22;
+	--ag-panel-bg: #1c1d22;
 	--ag-panel-soft: #17181d;
 	--ag-panel-raised: #202127;
 	--ag-border: #34363d;
+	--ag-panel-border: #34363d;
 	--ag-border-strong: #4c4e57;
 	--ag-text: #e7e7e4;
 	--ag-heading: #f6f6f2;
@@ -117,6 +121,14 @@ button:enabled {
 
 .security-page {
 	font-family: "Inter", "Fira Sans", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+}
+
+.skills-console {
+	border: 1px solid var(--ag-panel-border);
+	border-radius: 8px;
+	background: var(--ag-panel-bg);
+	padding: 16px;
+	box-shadow: var(--ag-shadow);
 }
 
 .security-page :where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner),

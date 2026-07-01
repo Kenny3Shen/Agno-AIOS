@@ -129,6 +129,25 @@ npm run build
 
 当前 Evaluation、Approvals 和 Scheduler 是 registry scaffolding：页面和表结构已经存在，后续可接入评测执行器、paused run 审批恢复和真实调度执行器。
 
+### Security model
+
+Agno AIOS uses authenticated FastAPI users with `admin`, `user`, and `guest` roles. Backend APIs derive ownership from the JWT-authenticated user and do not trust frontend-provided `user_id` values for authorization.
+
+- `admin` can read and operate across users.
+- `user` can read and write their own Session/Chat data and read their own Trace data.
+- `guest` is read-only for owned resources.
+- Session and Trace APIs enforce backend ownership checks. Missing or foreign resources are hidden from non-admin users.
+- Audit events are stored in `app.audit_logs` for login, logout, Session archive, Knowledge, MCP, Skill, Settings, and admin-style operations.
+
+Required verification after Python changes:
+
+```bash
+uv run ruff check .
+uv run ty check .
+```
+
+After frontend/backend changes, run the relevant frontend checks and Playwright browser validation before merging.
+
 ## 配置说明
 
 创建 `.env` 文件或设置环境变量：

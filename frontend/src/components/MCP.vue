@@ -1,18 +1,15 @@
 <template>
-  <div class="mcp-console h-full min-h-0 overflow-hidden bg-[#F5F7FA] text-[#15202B] dark:bg-[#071014] dark:text-[#DCE7EF]">
+  <div class="mcp-console h-full min-h-0 overflow-hidden bg-[var(--ag-panel-soft)] text-[var(--ag-text)] dark:text-[var(--ag-text)]">
     <div class="grid h-full min-h-0 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px]">
       <main class="flex min-h-0 flex-col overflow-hidden">
-        <header class="border-b border-[#D8E0E7] bg-white/90 p-3 dark:border-[#22313A] dark:bg-[#0A151B]">
+        <header class="border-b border-[var(--ag-panel-border)] bg-[var(--ag-panel-bg)] p-3">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex items-center gap-3">
               <div class="mcp-core">
                 <el-icon><Connection /></el-icon>
               </div>
               <div>
-                <h3 class="text-sm font-semibold text-[#15202B] dark:text-white">MCP 工具中枢</h3>
-                <p class="mt-1 text-xs text-[#6B7C8A] dark:text-[#91A4B3]">
-                  基于 FastMCP 的服务控制、访问 Token 与外部 Hi-Agent 接入
-                </p>
+                <h3 class="text-sm font-semibold text-[var(--ag-heading)]">MCP</h3>
               </div>
             </div>
 
@@ -197,7 +194,7 @@
         </div>
       </main>
 
-      <aside class="hidden min-h-0 border-l border-[#D8E0E7] bg-white/85 p-3 xl:block dark:border-[#22313A] dark:bg-[#0A151B]">
+      <aside class="hidden min-h-0 border-l border-[var(--ag-panel-border)] bg-[var(--ag-panel-bg)] p-3 xl:block">
         <section class="mcp-panel">
           <div class="panel-title">
             <el-icon><DataLine /></el-icon>
@@ -256,6 +253,7 @@ import {
   Tools,
 } from "@element-plus/icons-vue"
 import { useMcpApi } from "../composables/useApi"
+import { copyToClipboard } from "../lib/clipboard"
 import type { HiAgentEntry, McpServiceId, McpTokenInfo } from "../types"
 
 type TabId = "services" | "tokens" | "hiagent"
@@ -487,10 +485,9 @@ const isExpired = (timestamp: number) => {
 }
 
 const copyText = async (text: string) => {
-  try {
-    await navigator.clipboard.writeText(text)
+  if (await copyToClipboard(text)) {
     ElMessage.success("已复制")
-  } catch {
+  } else {
     ElMessage.warning("复制失败")
   }
 }

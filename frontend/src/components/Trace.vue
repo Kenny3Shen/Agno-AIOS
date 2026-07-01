@@ -7,9 +7,7 @@
             <el-icon><DataAnalysis /></el-icon>
           </div>
           <div class="trace-hero-copy">
-            <p>TRACE CONSOLE</p>
-            <h3>Agent 观测中心</h3>
-            <span>会话记录、Trace 队列、Span 瀑布与错误上下文统一查看</span>
+            <h3>Trace</h3>
           </div>
         </div>
 
@@ -306,6 +304,7 @@ import {
   Refresh,
 } from "@element-plus/icons-vue"
 import { useTracingApi } from "../composables/useApi"
+import { copyToClipboard } from "../lib/clipboard"
 import type { ParsedSpanPayload, SpanItem, SpanTreeNode, TraceItem, TraceStatus } from "../types"
 
 const { loading, error, listTraces, getTrace } = useTracingApi()
@@ -600,11 +599,10 @@ const resetFilters = async () => {
 const copyText = async (text: string) => {
   const t = (text || "").trim()
   if (!t) return
-  try {
-    await navigator.clipboard.writeText(t)
+  if (await copyToClipboard(t)) {
     ElMessage.success("已复制")
-  } catch {
-    ElMessage.warning("复制失败（请检查浏览器权限）")
+  } else {
+    ElMessage.warning("复制失败")
   }
 }
 

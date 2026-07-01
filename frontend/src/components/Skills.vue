@@ -1,10 +1,9 @@
 <template>
-  <div class="security-page space-y-5 max-w-5xl mx-auto">
+  <div class="security-page skills-console space-y-5 max-w-5xl mx-auto">
     <!-- 标题栏 -->
     <div class="flex items-center justify-between">
       <div>
-        <h3 class="text-base font-semibold text-slate-900 dark:text-[#C9D1D9]">Skills 管理</h3>
-        <p class="text-xs text-slate-500 dark:text-[#8B949E] mt-1">管理 Agent 可用的技能模块，启用或禁用特定 Skill</p>
+        <h3 class="text-base font-semibold text-slate-900 dark:text-[#C9D1D9]">Skills</h3>
       </div>
       <div class="flex items-center gap-2">
         <el-tooltip content="后端上传接口当前为占位，暂不可用" placement="top">

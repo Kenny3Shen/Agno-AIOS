@@ -171,6 +171,7 @@ export interface AuthTokenResponse {
 export interface AuthUser {
   id: string
   email: string
+  role?: "admin" | "user" | "guest"
   is_active: boolean
   is_superuser?: boolean
   is_verified?: boolean

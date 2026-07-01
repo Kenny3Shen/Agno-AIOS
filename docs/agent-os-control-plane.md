@@ -66,6 +66,19 @@ Implemented backend and UI resolution:
 - `/api/chat/sessions` hides archived sessions by default, while `/api/chat/sessions/{session_id}`, `/api/traces`, and `/api/traces/{trace_id}` keep reading original Agno data.
 - `/api/os/sessions` includes archived sessions so the AgentOS control plane still shows the full inventory.
 
+## Security And RBAC Notes
+
+Agno AIOS now treats frontend identity as display-only. Backend routes derive the actor from the authenticated JWT user and use centralized RBAC helpers for authorization.
+
+- Roles are `admin`, `user`, and `guest`.
+- Admin users can inspect all Session, Conversation, and Trace data.
+- Standard users can access only their own Session, Chat, and Trace data.
+- Guest users are read-only for owned resources.
+- Session ownership is checked before detail reads or archive mutations, preventing Session ID guessing.
+- Trace list filters are preserved, but non-admin users are automatically scoped to their own `user_id`.
+- Audit logs are written to `app.audit_logs` and cover auth, delete/archive, Knowledge, MCP, Skill, Settings, and admin operations.
+- UI visibility is secondary to backend enforcement; protected APIs must reject unauthorized requests even when menus are hidden.
+
 ## FastMCP Docs MCP Review
 
 The FastMCP docs MCP review used `/integrations/fastapi`, `/servers/lifespan`, `/deployment/http`, and `/servers/middleware`.

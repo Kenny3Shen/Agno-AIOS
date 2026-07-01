@@ -5,6 +5,7 @@ from uuid import UUID
 
 from fastapi import Depends
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from api.auth.models import AuthBase, OAuthAccount, User
@@ -18,6 +19,15 @@ async_session_maker = async_sessionmaker(auth_engine, expire_on_commit=False)
 async def create_auth_tables() -> None:
     async with auth_engine.begin() as conn:
         await conn.run_sync(AuthBase.metadata.create_all)
+        await conn.execute(
+            text(
+                """
+                ALTER TABLE "user"
+                ADD COLUMN IF NOT EXISTS role VARCHAR(32) NOT NULL DEFAULT 'user'
+                """
+            )
+        )
+        await conn.execute(text("""UPDATE "user" SET role = 'user' WHERE role IS NULL"""))
 
 
 async def close_auth_engine() -> None:

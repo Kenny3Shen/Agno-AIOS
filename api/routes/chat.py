@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from api.auth.models import User
-from api.auth.permissions import actor_id, actor_role, has_permission
+from api.auth.permissions import actor_id, has_permission
 from api.auth.users import current_active_user
 from api.services.llm_service import (
     stream_chat_with_agent,
@@ -71,7 +71,7 @@ async def chat_agent(
 async def list_sessions(user: User = Depends(current_active_user)):
     """获取所有聊天会话列表"""
     try:
-        owner_user_id = None if actor_role(user) == "admin" else actor_id(user)
+        owner_user_id = None if has_permission(user, "session:read:any") else actor_id(user)
         return get_all_sessions(owner_user_id=owner_user_id)
     except Exception as e:
         logger.error(f"获取会话列表失败: {e}")
@@ -99,7 +99,7 @@ async def remove_session(
     user: User = Depends(current_active_user),
 ):
     """归档指定会话；不删除 Agno runs/traces。"""
-    if not has_permission(user, "session:write:own") and actor_role(user) != "admin":
+    if not has_permission(user, "session:write:own"):
         raise HTTPException(status_code=403, detail="访客账号只读")
     try:
         success = archive_session(session_id, actor=user)

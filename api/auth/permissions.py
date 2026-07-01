@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any, Literal
 
 from fastapi import Depends, HTTPException, status
@@ -37,8 +37,10 @@ def actor_role(user: User | Any) -> Role:
     if bool(getattr(user, "is_superuser", False)):
         return "admin"
     role = str(getattr(user, "role", "user") or "user").lower()
-    if role in {"admin", "user", "guest"}:
-        return role  # type: ignore[return-value]
+    if role == "admin":
+        return "admin"
+    if role == "guest":
+        return "guest"
     return "user"
 
 
@@ -47,7 +49,7 @@ def has_permission(user: User | Any, permission: str) -> bool:
     return "*" in permissions or permission in permissions
 
 
-def require_permission(permission: str) -> Callable[[User], User]:
+def require_permission(permission: str) -> Callable[..., Awaitable[User]]:
     async def dependency(user: User = Depends(current_active_user)) -> User:
         if not has_permission(user, permission):
             raise HTTPException(

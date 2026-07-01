@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { apiFetch } from '../lib/apiClient'
 import type {
   AssetSearchParams,
   AssetSearchResponse,
@@ -28,8 +29,6 @@ import type {
   UpdateResponse,
   Url2MdParseResponse,
 } from '../types'
-
-const API_BASE = '/api'
 
 const messageFromUnknown = (err: unknown, fallback: string) => {
   if (err instanceof Error && err.message) return err.message
@@ -66,7 +65,7 @@ export function useCveApi() {
     error.value = null
 
     try {
-      const response = await fetch(`${API_BASE}/cve/search`, {
+      const response = await apiFetch('/cve/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -91,7 +90,7 @@ export function useCveApi() {
     error.value = null
 
     try {
-      const response = await fetch(`${API_BASE}/cve/update`, {
+      const response = await apiFetch('/cve/update', {
         method: 'POST'
       })
       if (!response.ok) {
@@ -127,7 +126,7 @@ export function useAssetApi() {
     error.value = null
 
     try {
-      const response = await fetch(`${API_BASE}/asset/search`, {
+      const response = await apiFetch('/asset/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -165,14 +164,13 @@ export function useChatApi() {
     message: string,
     sessionId: string | null,
     modelId: string | null,
-    userId: string | null,
     onChunk: (chunk: string) => void
   ): Promise<void> => {
     loading.value = true
     error.value = null
 
     try {
-      const response = await fetch(`${API_BASE}/chat`, {
+      const response = await apiFetch('/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -182,7 +180,6 @@ export function useChatApi() {
           message,
           session_id: sessionId,
           model_id: modelId,
-          user_id: userId,
         })
       })
 
@@ -247,7 +244,7 @@ export function useOsControlApi() {
     error.value = null
 
     try {
-      const response = await fetch(`${API_BASE}/os/${module}`)
+      const response = await apiFetch(`/os/${module}`)
       if (!response.ok) {
         const data: unknown = await response.json()
         throw new Error(messageFromResponse(data, '加载控制面失败'))
@@ -277,7 +274,7 @@ export function useChatHistory() {
   const listSessions = async (): Promise<ChatSession[]> => {
     loadingSessions.value = true
     try {
-      const response = await fetch(`${API_BASE}/chat/sessions`)
+      const response = await apiFetch('/chat/sessions')
       if (!response.ok) throw new Error('获取会话列表失败')
       return await response.json()
     } finally {
@@ -286,15 +283,14 @@ export function useChatHistory() {
   }
 
   const getSessionHistory = async (sessionId: string): Promise<Message[]> => {
-    const response = await fetch(`${API_BASE}/chat/sessions/${sessionId}`)
+    const response = await apiFetch(`/chat/sessions/${sessionId}`)
     if (!response.ok) throw new Error('获取会话记录失败')
     return await response.json()
   }
 
 
-  const archiveSession = async (sessionId: string, userId: string | null = null): Promise<void> => {
-    const query = userId ? `?user_id=${encodeURIComponent(userId)}` : ''
-    const response = await fetch(`${API_BASE}/chat/sessions/${sessionId}${query}`, {
+  const archiveSession = async (sessionId: string): Promise<void> => {
+    const response = await apiFetch(`/chat/sessions/${sessionId}`, {
       method: 'DELETE'
     })
     if (!response.ok) throw new Error('归档会话失败')
@@ -321,7 +317,7 @@ export function useUrl2MdApi() {
     error.value = null
 
     try {
-      const response = await fetch(`${API_BASE}/url2md/parse`, {
+      const response = await apiFetch('/url2md/parse', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -358,7 +354,7 @@ export function useSettingsApi() {
   const fetchSettings = async (): Promise<Record<string, string>> => {
     loadingSettings.value = true
     try {
-      const response = await fetch(`${API_BASE}/settings`)
+      const response = await apiFetch('/settings')
       if (!response.ok) throw new Error('获取配置失败')
       const data: SettingsResponse = await response.json()
       return data.settings
@@ -370,7 +366,7 @@ export function useSettingsApi() {
   const updateSettings = async (settings: Record<string, string>): Promise<Record<string, string>> => {
     saving.value = true
     try {
-      const response = await fetch(`${API_BASE}/settings`, {
+      const response = await apiFetch('/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ settings })
@@ -386,7 +382,7 @@ export function useSettingsApi() {
   const fetchModels = async (): Promise<ModelConfigResponse> => {
     loadingSettings.value = true
     try {
-      const response = await fetch(`${API_BASE}/models`)
+      const response = await apiFetch('/models')
       if (!response.ok) throw new Error('获取模型配置失败')
       return await response.json()
     } finally {
@@ -397,7 +393,7 @@ export function useSettingsApi() {
   const updateModels = async (payload: ModelConfigResponse): Promise<ModelConfigResponse> => {
     saving.value = true
     try {
-      const response = await fetch(`${API_BASE}/models`, {
+      const response = await apiFetch('/models', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -436,6 +432,9 @@ export function useTracingApi() {
     session_id?: string
     run_id?: string
     agent_id?: string
+    team_id?: string
+    workflow_id?: string
+    user_id?: string
     start_time?: string
     end_time?: string
   }): Promise<TraceListResponse> => {
@@ -449,10 +448,13 @@ export function useTracingApi() {
       if (params.session_id) qs.set('session_id', params.session_id)
       if (params.run_id) qs.set('run_id', params.run_id)
       if (params.agent_id) qs.set('agent_id', params.agent_id)
+      if (params.team_id) qs.set('team_id', params.team_id)
+      if (params.workflow_id) qs.set('workflow_id', params.workflow_id)
+      if (params.user_id) qs.set('user_id', params.user_id)
       if (params.start_time) qs.set('start_time', params.start_time)
       if (params.end_time) qs.set('end_time', params.end_time)
 
-      const response = await fetch(`${API_BASE}/traces?${qs.toString()}`)
+      const response = await apiFetch(`/traces?${qs.toString()}`)
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
         throw new Error(messageFromResponse(data, '获取 traces 失败'))
@@ -470,7 +472,7 @@ export function useTracingApi() {
     loading.value = true
     error.value = null
     try {
-      const response = await fetch(`${API_BASE}/traces/${encodeURIComponent(traceId)}`)
+      const response = await apiFetch(`/traces/${encodeURIComponent(traceId)}`)
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
         throw new Error(messageFromResponse(data, '获取 trace 详情失败'))
@@ -504,7 +506,7 @@ export function useSkillsApi() {
     loading.value = true
     error.value = null
     try {
-      const response = await fetch(`${API_BASE}/skills`)
+      const response = await apiFetch('/skills')
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
         throw new Error(messageFromResponse(data, '获取 Skills 列表失败'))
@@ -522,7 +524,7 @@ export function useSkillsApi() {
     toggling.value = true
     error.value = null
     try {
-      const response = await fetch(`${API_BASE}/skills/${encodeURIComponent(skillName)}/toggle`, {
+      const response = await apiFetch(`/skills/${encodeURIComponent(skillName)}/toggle`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled })
@@ -560,7 +562,7 @@ export function useKnowledgeApi() {
     loading.value = true
     error.value = null
     try {
-      const response = await fetch(`${API_BASE}/knowledge${path}`, {
+      const response = await apiFetch(`/knowledge${path}`, {
         ...options,
         headers: {
           'Content-Type': 'application/json',
@@ -628,7 +630,7 @@ export function useMcpApi() {
     loading.value = true
     error.value = null
     try {
-      const response = await fetch(`${API_BASE}/mcp${path}`, {
+      const response = await apiFetch(`/mcp${path}`, {
         ...options,
         headers: {
           'Content-Type': 'application/json',

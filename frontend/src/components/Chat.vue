@@ -54,11 +54,41 @@
                   <span class="font-mono text-[10px] text-[#7D8D9A]">#{{ index + 1 }}</span>
                 </div>
                 <div
-                  v-if="msg.role === 'assistant'"
+                  v-if="msg.role === 'assistant' && (!msg.content && !msg.final)"
+                  class="markdown-skeleton"
+                  aria-label="Markdown 内容加载中"
+                >
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <div
+                  v-else-if="msg.role === 'assistant'"
                   class="markdown-body prose prose-sm max-w-none dark:prose-invert"
                   v-html="renderMarkdown(msg.content)"
                 ></div>
                 <p v-else class="whitespace-pre-wrap break-words text-sm leading-relaxed">{{ msg.content }}</p>
+                <span v-if="msg.role === 'assistant' && !msg.final" class="stream-cursor" aria-hidden="true" />
+
+                <div v-if="msg.role === 'assistant' && hasThinking(msg.content)" class="thinking-collapse">
+                  <button type="button" @click="toggleCollapsed(collapsedThinking, index)">
+                    {{ isCollapsed(collapsedThinking, index) ? '展开思考' : '收起思考' }}
+                  </button>
+                  <pre v-if="!isCollapsed(collapsedThinking, index)">{{ thinkingText(msg.content) }}</pre>
+                </div>
+
+                <div v-if="msg.role === 'assistant' && sourceLines(msg.content).length" class="source-collapse">
+                  <button type="button" @click="toggleCollapsed(collapsedSources, index)">
+                    {{ isCollapsed(collapsedSources, index) ? '展开来源' : '收起来源' }}
+                  </button>
+                  <ul v-if="!isCollapsed(collapsedSources, index)">
+                    <li v-for="source in sourceLines(msg.content)" :key="source">{{ source }}</li>
+                  </ul>
+                </div>
+
+                <ol v-if="msg.role === 'assistant' && toolEvents(msg.content).length" class="tool-timeline">
+                  <li v-for="event in toolEvents(msg.content)" :key="event">{{ event }}</li>
+                </ol>
               </article>
             </div>
           </transition-group>
@@ -170,14 +200,19 @@
           </div>
         </footer>
     </main>
+
+    <button v-if="zoomedImage" type="button" class="image-zoom-backdrop" @click="zoomedImage = null">
+      <img :src="zoomedImage" alt="放大预览" />
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, nextTick, onMounted, onUnmounted, watch } from "vue"
+import { computed, reactive, ref, nextTick, onMounted, onUnmounted, watch } from "vue"
 import MarkdownIt from "markdown-it"
 import hljs from "highlight.js"
 import { useChatApi, useChatHistory, useSettingsApi } from "../composables/useApi"
+import { copyToClipboard } from "../lib/clipboard"
 import type { Message, ModelConfig } from "../types"
 import {
   Cpu,
@@ -193,14 +228,15 @@ const md: MarkdownIt = new MarkdownIt({
   linkify: true,
   typographer: true,
   highlight: (str: string, lang: string): string => {
+    const safeLang = md.utils.escapeHtml(lang || "")
     if (lang && hljs.getLanguage(lang)) {
       try {
-        return '<pre class="hljs"><code>' +
+        return `<pre class="hljs" data-lang="${safeLang}"><code class="language-${safeLang}">` +
                hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
                '</code></pre>'
       } catch {}
     }
-    return '<pre class="hljs"><code>' + md.utils.escapeHtml(str) + '</code></pre>'
+    return `<pre class="hljs" data-lang="${safeLang}"><code class="language-${safeLang}">` + md.utils.escapeHtml(str) + '</code></pre>'
   }
 })
 
@@ -247,6 +283,9 @@ const messages = ref<ChatMessage[]>([
   { role: "assistant", content: WELCOME, final: true }
 ])
 const chatContainer = ref<HTMLElement | null>(null)
+const zoomedImage = ref<string | null>(null)
+const collapsedSources = reactive(new Set<number>())
+const collapsedThinking = reactive(new Set<number>())
 const currentSessionId = ref<string | null>(null)
 const modelLoading = ref(false)
 const modelOptions = ref<ModelConfig[]>([])
@@ -328,10 +367,107 @@ const loadModels = async () => {
 // ── Helpers ───────────────────────────────────────────────────────
 const scrollToBottom = async () => {
   await nextTick()
-  chatContainer.value?.scrollTo({ top: chatContainer.value.scrollHeight, behavior: 'smooth' })
+  if (chatContainer.value) {
+    chatContainer.value.scrollTop = chatContainer.value.scrollHeight
+  }
+}
+
+const isNearBottom = () => {
+  const container = chatContainer.value
+  if (!container) return true
+  return container.scrollHeight - container.clientHeight - container.scrollTop < 120
 }
 
 const generateSessionId = () => crypto.randomUUID()
+
+const toggleCollapsed = (set: Set<number>, index: number) => {
+  if (set.has(index)) {
+    set.delete(index)
+  } else {
+    set.add(index)
+  }
+}
+
+const isCollapsed = (set: Set<number>, index: number) => set.has(index)
+
+const hasThinking = (content: string) => /<think>|<\/think>|思考过程|Thinking/i.test(content)
+
+const thinkingText = (content: string) => {
+  const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/i)
+  if (thinkMatch?.[1]) return thinkMatch[1].trim()
+  const line = content.split("\n").find((item) => /思考过程|Thinking/i.test(item))
+  return line?.trim() || "模型输出包含思考过程标记。"
+}
+
+const sourceLines = (content: string) => {
+  const lines = content.split("\n").map((line) => line.trim()).filter(Boolean)
+  return lines.filter((line) => /^(来源|Source|Sources|References|引用)[:：]/i.test(line))
+}
+
+const toolEvents = (content: string) => {
+  return content
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /(tool|工具调用|MCP|function call)/i.test(line))
+    .slice(0, 8)
+}
+
+const enhanceRenderedMarkdown = async () => {
+  await nextTick()
+  const stickToBottom = isNearBottom()
+  document.querySelectorAll<HTMLElement>(".agent-chat pre").forEach((pre) => {
+    if (pre.querySelector(".code-copy")) return
+    const code = pre.querySelector("code")
+    if (!code) return
+    const button = document.createElement("button")
+    button.type = "button"
+    button.className = "code-copy"
+    button.textContent = "Copy"
+    button.addEventListener("click", async () => {
+      await copyToClipboard(code.textContent || "")
+    })
+    pre.appendChild(button)
+  })
+
+  document.querySelectorAll<HTMLImageElement>(".agent-chat .markdown-body img").forEach((image) => {
+    if (image.dataset.zoomBound === "true") return
+    image.dataset.zoomBound = "true"
+    image.addEventListener("click", () => {
+      zoomedImage.value = image.currentSrc || image.src
+    })
+    image.addEventListener("load", () => {
+      if (stickToBottom) void scrollToBottom()
+    }, { once: true })
+  })
+
+  await renderMermaidBlocks()
+  if (stickToBottom) void scrollToBottom()
+}
+
+const renderMermaidBlocks = async () => {
+  const blocks = Array.from(document.querySelectorAll<HTMLElement>(".agent-chat code.language-mermaid"))
+  if (!blocks.length) return
+  try {
+    const mermaidModule = await import("mermaid")
+    const mermaid = mermaidModule.default
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: document.documentElement.classList.contains("dark") ? "dark" : "default",
+    })
+    for (const [index, block] of blocks.entries()) {
+      const pre = block.parentElement
+      if (!pre || pre.dataset.mermaidRendered === "true") continue
+      const graph = block.textContent || ""
+      const id = `chat-mermaid-${Date.now()}-${index}`
+      const result = await mermaid.render(id, graph)
+      pre.dataset.mermaidRendered = "true"
+      pre.classList.add("mermaid")
+      pre.innerHTML = result.svg
+    }
+  } catch {
+    blocks.forEach((block) => block.parentElement?.classList.add("mermaid-fallback"))
+  }
+}
 
 // ── Sessions ──────────────────────────────────────────────────────
 const notifySessionChange = () => {
@@ -363,6 +499,7 @@ const selectSession = async (sessionId: string) => {
   }
   notifySessionChange()
   void scrollToBottom()
+  void enhanceRenderedMarkdown()
 }
 
 const createNewChat = () => {
@@ -394,14 +531,16 @@ const sendMessage = async () => {
   try {
     const idx = messages.value.push({ role: "assistant", content: "", final: false }) - 1
 
-    await sendMessageStream(userMsg, sessionId, selectedModelId.value, props.currentUserId ?? null, (chunk) => {
+    await sendMessageStream(userMsg, sessionId, selectedModelId.value, (chunk) => {
       const m = messages.value[idx]
       if (m) m.content += chunk
       void scrollToBottom()
+      void enhanceRenderedMarkdown()
     })
 
     const m = messages.value[idx]
     if (m) m.final = true
+    void enhanceRenderedMarkdown()
 
     notifySessionChange()
   } catch {
@@ -414,6 +553,14 @@ const sendMessage = async () => {
 const clearError = () => { if (error.value) error.value = null }
 
 watch(currentModelName, notifyModelChange)
+watch(
+  () => messages.value.map((message) => `${message.content}:${message.final}`).join("\n---\n"),
+  () => {
+    void enhanceRenderedMarkdown()
+    void scrollToBottom()
+  },
+  { flush: "post" },
+)
 
 onMounted(async () => {
   window.addEventListener("agno-aios-chat-session-select", handleExternalSessionSelect)
@@ -421,6 +568,7 @@ onMounted(async () => {
   await loadModels()
   notifySessionChange()
   void scrollToBottom()
+  void enhanceRenderedMarkdown()
 })
 
 onUnmounted(() => {
@@ -550,6 +698,148 @@ onUnmounted(() => {
   border-radius: 999px;
   background: #54d38a;
   box-shadow: 0 0 0 6px rgba(84, 211, 138, 0.15);
+}
+
+.markdown-skeleton {
+  display: grid;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.markdown-skeleton span {
+  display: block;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #e2e8f0 0%, #f8fafc 48%, #e2e8f0 100%);
+  background-size: 220% 100%;
+  animation: skeleton-scan 1.25s ease-in-out infinite;
+}
+
+.markdown-skeleton span:nth-child(2) {
+  width: 78%;
+}
+
+.markdown-skeleton span:nth-child(3) {
+  width: 54%;
+}
+
+.stream-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 16px;
+  margin-left: 3px;
+  vertical-align: -2px;
+  border-radius: 2px;
+  background: #2f8fed;
+  animation: stream-cursor-blink 0.9s steps(2, start) infinite;
+}
+
+.message-card pre {
+  position: relative;
+}
+
+.code-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border: 1px solid #cbd6e2;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #526170;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 5px 7px;
+}
+
+.thinking-collapse,
+.source-collapse,
+.tool-timeline {
+  margin-top: 10px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 10px;
+}
+
+.thinking-collapse button,
+.source-collapse button {
+  border: 1px solid #cbd6e2;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #526170;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.thinking-collapse pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  color: #526170;
+  font-size: 12px;
+}
+
+.source-collapse ul,
+.tool-timeline {
+  margin-bottom: 0;
+  color: #526170;
+  font-size: 12px;
+}
+
+.tool-timeline {
+  list-style: none;
+  padding-left: 0;
+}
+
+.tool-timeline li {
+  position: relative;
+  padding-left: 18px;
+}
+
+.tool-timeline li::before {
+  position: absolute;
+  top: 0.55em;
+  left: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #2f8fed;
+  content: "";
+}
+
+.mermaid {
+  overflow-x: auto;
+}
+
+.mermaid-fallback {
+  border-color: rgba(246, 195, 67, 0.45);
+}
+
+.markdown-body img {
+  cursor: zoom-in;
+  max-height: 420px;
+  border: 1px solid #cbd6e2;
+  border-radius: 8px;
+}
+
+.image-zoom-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: rgba(3, 7, 18, 0.78);
+  cursor: zoom-out;
+  padding: 24px;
+}
+
+.image-zoom-backdrop img {
+  max-width: min(1100px, 96vw);
+  max-height: 92vh;
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
 }
 
 /* 过渡动画 */
@@ -758,6 +1048,36 @@ html.dark .model-option-status.is-pending {
   color: #ffd166;
 }
 
+html.dark .markdown-skeleton span {
+  background: linear-gradient(90deg, #17232c 0%, #243542 48%, #17232c 100%);
+  background-size: 220% 100%;
+}
+
+html.dark .code-copy {
+  border-color: #22313a;
+  background: #0f1b22;
+  color: #91a4b3;
+}
+
+html.dark .thinking-collapse,
+html.dark .source-collapse,
+html.dark .tool-timeline {
+  border-top-color: #22313a;
+}
+
+html.dark .thinking-collapse button,
+html.dark .source-collapse button {
+  border-color: #22313a;
+  background: #0f1b22;
+  color: #91a4b3;
+}
+
+html.dark .thinking-collapse pre,
+html.dark .source-collapse ul,
+html.dark .tool-timeline {
+  color: #91a4b3;
+}
+
 html.dark .agent-pill {
   color: #7cf0a7;
 }
@@ -790,6 +1110,16 @@ html.dark .message-card.user {
 @keyframes agent-glow {
   0%, 100% { box-shadow: 0 0 0 0 rgba(47, 143, 237, 0.2); }
   50% { box-shadow: 0 0 0 8px rgba(47, 143, 237, 0.08); }
+}
+
+@keyframes skeleton-scan {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+@keyframes stream-cursor-blink {
+  0%, 46% { opacity: 1; }
+  47%, 100% { opacity: 0; }
 }
 
 @media (max-width: 640px) {

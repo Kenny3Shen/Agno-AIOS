@@ -4,6 +4,7 @@ from typing import Any
 
 from loguru import logger
 from psycopg import sql
+from psycopg.types.json import Jsonb
 
 from api.services.postgres_store import app_schema, postgres_connect
 
@@ -103,7 +104,7 @@ def record_audit_event(
                         status,
                         ip_address,
                         user_agent,
-                        metadata or {},
+                        Jsonb(metadata or {}),
                     ),
                 )
     except Exception as exc:

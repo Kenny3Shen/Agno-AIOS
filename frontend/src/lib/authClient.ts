@@ -148,7 +148,7 @@ export const logout = async (
 ): Promise<void> => {
   try {
     if (token) {
-      await getFetch(options.fetch)(authUrl('/auth/jwt/logout', options.baseUrl), {
+      await getFetch(options.fetch)(authUrl('/auth/logout', options.baseUrl), {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,

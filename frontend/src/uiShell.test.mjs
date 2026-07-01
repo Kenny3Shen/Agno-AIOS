@@ -18,6 +18,11 @@ const authScreen = readSource("components/AuthScreen.vue")
 const chat = readOptionalSource("components/Chat.vue")
 const trace = readOptionalSource("components/Trace.vue")
 const dashboard = readOptionalSource("components/Dashboard.vue")
+const mcp = readOptionalSource("components/MCP.vue")
+const skills = readOptionalSource("components/Skills.vue")
+const useApi = readSource("composables/useApi.ts")
+const apiClient = readOptionalSource("lib/apiClient.ts")
+const clipboard = readOptionalSource("lib/clipboard.ts")
 
 const assertTextOrder = (source, labels, message) => {
   let previousIndex = -1
@@ -147,9 +152,41 @@ assert.match(
 )
 
 assert.match(
-  readSource("composables/useApi.ts"),
+  useApi,
   /archiveSession/,
   "Chat history API must expose archiveSession instead of permanent deletion for sidebar delete",
+)
+
+assert.match(
+  apiClient,
+  /Authorization.*Bearer/,
+  "shared API client must attach Bearer auth tokens",
+)
+
+assert.equal(
+  /user_id:\s*userId/.test(useApi),
+  false,
+  "Chat API must not send frontend-provided user_id",
+)
+
+assert.equal(
+  /archiveSession\s*=\s*async\s*\([^)]*userId/.test(useApi),
+  false,
+  "archiveSession must not accept frontend-provided user id",
+)
+
+for (const traceParam of ["team_id", "workflow_id", "user_id"]) {
+  assert.match(
+    useApi,
+    new RegExp(`qs\\.set\\('${traceParam}'`),
+    `Trace API must preserve ${traceParam} query parameter when provided`,
+  )
+}
+
+assert.match(
+  clipboard,
+  /execCommand\('copy'\)/,
+  "clipboard helper must fall back when navigator.clipboard is unavailable",
 )
 
 assert.match(
@@ -174,6 +211,43 @@ assert.equal(
   existsSync(sourcePath("components/Chat.vue")),
   true,
   "Chat component file must align with the Chat nav label",
+)
+
+for (const chatHook of [
+  "markdown-skeleton",
+  "stream-cursor",
+  "code-copy",
+  "mermaid",
+  "zoomedImage",
+  "source-collapse",
+  "thinking-collapse",
+  "tool-timeline",
+]) {
+  assert.match(
+    chat,
+    new RegExp(chatHook),
+    `Chat must expose ${chatHook} interaction support`,
+  )
+}
+
+for (const removedPanelCopy of [
+  "MCP 工具中枢",
+  "基于 FastMCP 的服务控制、访问 Token 与外部 Hi-Agent 接入",
+  "TRACE CONSOLE",
+  "Agent 观测中心",
+  "会话记录、Trace 队列、Span 瀑布与错误上下文统一查看",
+]) {
+  assert.equal(
+    `${mcp}\n${trace}`.includes(removedPanelCopy),
+    false,
+    `right/content panel must remove middle explanatory copy: ${removedPanelCopy}`,
+  )
+}
+
+assert.match(
+  skills,
+  /skills-console/,
+  "Skills page must use an explicit bordered console surface",
 )
 
 assert.equal(

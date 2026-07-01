@@ -90,9 +90,15 @@ test("fetchCurrentUser sends Bearer token", async () => {
 
 test("logout clears stored token even when server logout fails", async () => {
   const storage = createStorage({ [AUTH_TOKEN_STORAGE_KEY]: "token-1" })
-  const fetchImpl = async () => jsonResponse({ detail: "server error" }, 500)
+  const calls = []
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init })
+    return jsonResponse({ detail: "server error" }, 500)
+  }
 
   await logout("token-1", { fetch: fetchImpl, storage })
 
+  assert.equal(calls[0].url, "/api/auth/logout")
+  assert.equal(calls[0].init.headers.Authorization, "Bearer token-1")
   assert.equal(storage.getItem(AUTH_TOKEN_STORAGE_KEY), null)
 })

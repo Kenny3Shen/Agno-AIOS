@@ -911,7 +911,7 @@ const archiveSidebarChatSession = async (sessionId: string) => {
     dispatchChatEvent("agno-aios-chat-new")
   }
   try {
-    await archiveSession(sessionId, currentUserId.value)
+    await archiveSession(sessionId)
     ElMessage.success("会话已归档")
   } catch {
     chatSessions.value = previousSessions
