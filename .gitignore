@@ -24,6 +24,7 @@ dataset/
 .codegraph
 .comet
 openspec
+.worktrees
 
 # Playwright
 .playwright-cli
@@ -34,5 +35,4 @@ openspec
 /playwright/.auth/
 
 /frontend-react
-
 
