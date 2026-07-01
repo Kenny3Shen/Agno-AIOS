@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi.encoders import jsonable_encoder
 
+from api.auth.permissions import assert_owned_resource
 from api.services.postgres_store import get_agno_postgres_db
 
 # Keep a single DB wrapper instance.
@@ -246,12 +247,20 @@ def _build_span_tree(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return roots
 
 
-async def get_trace_detail(trace_id: str) -> dict[str, Any] | None:
+async def get_trace_detail(trace_id: str, actor: Any | None = None) -> dict[str, Any] | None:
     trace_task = asyncio.to_thread(_trace_db.get_trace, trace_id=trace_id)
     spans_task = asyncio.to_thread(_trace_db.get_spans, trace_id=trace_id)
     trace, spans = await asyncio.gather(trace_task, spans_task)
     if not trace:
         return None
+
+    trace_dict = jsonable_encoder(trace.to_dict())
+    if actor is not None:
+        assert_owned_resource(
+            actor,
+            owner_user_id=str(trace_dict.get("user_id") or ""),
+            resource_name="Trace",
+        )
 
     span_dicts = [jsonable_encoder(s.to_dict()) for s in spans]
     for span in span_dicts:
@@ -259,7 +268,7 @@ async def get_trace_detail(trace_id: str) -> dict[str, Any] | None:
     tree = _build_span_tree(span_dicts)
 
     return {
-        "trace": jsonable_encoder(trace.to_dict()),
+        "trace": trace_dict,
         "spans": span_dicts,
         "tree": tree,
     }

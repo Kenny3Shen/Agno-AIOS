@@ -6,7 +6,8 @@ from fastapi_users_db_sqlalchemy import (
     SQLAlchemyBaseOAuthAccountTableUUID,
     SQLAlchemyBaseUserTableUUID,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, relationship
+from sqlalchemy import String
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -24,6 +25,12 @@ class User(SQLAlchemyBaseUserTableUUID, AuthBase):
     if TYPE_CHECKING:
         id: UUID
 
+    role: Mapped[str] = mapped_column(
+        String(length=32),
+        nullable=False,
+        default="user",
+        server_default="user",
+    )
     oauth_accounts: Mapped[list[OAuthAccount]] = relationship(
         "OAuthAccount",
         lazy="joined",

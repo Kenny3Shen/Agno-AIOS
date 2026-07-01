@@ -5,12 +5,13 @@ from uuid import UUID
 from fastapi import Depends, Request, Response
 from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin, exceptions
 from fastapi_users.authentication import AuthenticationBackend, BearerTransport, JWTStrategy
-from fastapi_users.db import SQLAlchemyUserDatabase
+from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from loguru import logger
 
 from api.auth.database import get_user_db
 from api.auth.models import User
 from api.config import get_settings
+from api.services.audit_service import record_audit_event
 
 settings = get_settings()
 
@@ -33,6 +34,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, UUID]):
         response: Response | None = None,
     ) -> None:
         logger.info("用户登录成功: {}", user.email)
+        record_audit_event(
+            user,
+            action="auth.login",
+            resource_type="auth",
+            ip_address=request.client.host if request and request.client else "",
+            user_agent=request.headers.get("user-agent", "") if request else "",
+        )
 
 
 async def get_user_manager(

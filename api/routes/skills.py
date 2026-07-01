@@ -5,9 +5,12 @@ Skills 管理 API
 - 预留上传 Skill 文件夹接口
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
+from api.auth.models import User
+from api.auth.permissions import require_permission
+from api.services.audit_service import record_audit_event
 from api.services.skill_service import (
     find_skill_dir,
     get_skills_dir,
@@ -47,7 +50,7 @@ class SkillToggleResponse(BaseModel):
 # ── API 端点 ──────────────────────────────────────────────────
 
 @router.get("", response_model=SkillListResponse)
-async def list_skills():
+async def list_skills(_user: User = Depends(require_permission("skill:read"))):
     """列出所有 Skill 及其元数据和启用状态"""
     if not get_skills_dir().is_dir():
         return SkillListResponse(skills=[])
@@ -71,17 +74,31 @@ async def list_skills():
 
 
 @router.put("/{skill_name}/toggle", response_model=SkillToggleResponse)
-async def toggle_skill(skill_name: str, body: SkillToggleRequest):
+async def toggle_skill(
+    skill_name: str,
+    body: SkillToggleRequest,
+    user: User = Depends(require_permission("skill:write")),
+):
     """启用或禁用指定 Skill"""
     if find_skill_dir(skill_name) is None:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' 不存在")
 
     public_name = set_skill_enabled(skill_name, body.enabled)
+    record_audit_event(
+        user,
+        action="skill.toggle",
+        resource_type="skill",
+        resource_id=public_name,
+        metadata={"enabled": body.enabled},
+    )
     return SkillToggleResponse(name=public_name, enabled=body.enabled)
 
 
 @router.post("/upload", status_code=201)
-async def upload_skill(file: UploadFile = File(...)):
+async def upload_skill(
+    file: UploadFile = File(...),
+    _user: User = Depends(require_permission("skill:write")),
+):
     """
     预留接口：上传 Skill 压缩包（.zip / .tar.gz）。
     上传后自动解压到 Agent skills 目录。

@@ -1,10 +1,21 @@
-from fastapi import APIRouter, HTTPException, Query
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
 
+from api.auth.models import User
+from api.auth.permissions import actor_id, has_permission
+from api.auth.users import current_active_user
 from api.services.tracing_service import list_traces, get_trace_detail
 
 
 router = APIRouter(prefix="/api", tags=["Tracing"])
+
+
+def effective_trace_user_filter(actor: Any, requested_user_id: str | None) -> str | None:
+    if has_permission(actor, "trace:read:any"):
+        return requested_user_id
+    return actor_id(actor)
 
 
 @router.get("/traces")
@@ -24,13 +35,15 @@ async def api_list_traces(
     ),
     limit: int = Query(default=20, ge=1, le=200),
     page: int = Query(default=1, ge=1),
+    user: User = Depends(current_active_user),
 ):
     """List traces from the tracing database."""
     try:
+        effective_user_id = effective_trace_user_filter(user, user_id)
         return await list_traces(
             run_id=run_id,
             session_id=session_id,
-            user_id=user_id,
+            user_id=effective_user_id,
             agent_id=agent_id,
             team_id=team_id,
             workflow_id=workflow_id,
@@ -48,10 +61,13 @@ async def api_list_traces(
 
 
 @router.get("/traces/{trace_id}")
-async def api_get_trace(trace_id: str):
+async def api_get_trace(
+    trace_id: str,
+    user: User = Depends(current_active_user),
+):
     """Get trace detail including spans and a span tree."""
     try:
-        data = await get_trace_detail(trace_id)
+        data = await get_trace_detail(trace_id, actor=user)
         if not data:
             raise HTTPException(status_code=404, detail="Trace 不存在")
         return data

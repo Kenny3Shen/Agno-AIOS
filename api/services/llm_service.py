@@ -10,6 +10,8 @@ from agno.run.agent import RunEvent
 from agno.skills import Skills, LocalSkills
 from agno.tracing import setup_tracing
 from psycopg import sql
+from api.auth.permissions import actor_id, assert_owned_resource
+from api.services.audit_service import record_audit_event
 from api.services.model_config_service import get_model_for_run
 from api.services.knowledge_service import get_knowledge_base
 from api.services.postgres_store import (
@@ -147,6 +149,22 @@ def is_session_archived(session_id: str) -> bool:
             return cursor.fetchone() is not None
 
 
+def get_session_owner(session_id: str) -> str | None:
+    ensure_agno_postgres_tables()
+    with postgres_connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                sql.SQL("SELECT user_id FROM {} WHERE session_id = %s").format(
+                    sql.Identifier(agno_schema(), "agno_sessions")
+                ),
+                (session_id,),
+            )
+            row = cursor.fetchone()
+    if not row:
+        return None
+    return str(row.get("user_id") or "")
+
+
 def _is_archived_metadata(value: Any) -> bool:
     metadata = coerce_json_value(value or {})
     if not isinstance(metadata, dict):
@@ -154,11 +172,16 @@ def _is_archived_metadata(value: Any) -> bool:
     return metadata.get("agno_aios_archived") is True
 
 
-def archive_session(session_id: str, user_id: str | None = None) -> bool:
+def archive_session(
+    session_id: str,
+    user_id: str | None = None,
+    *,
+    actor: Any | None = None,
+) -> bool:
     """Soft-archive a chat session without deleting Agno runs or traces."""
     ensure_agno_postgres_tables()
     ensure_chat_session_archive_table()
-    archived_by = (user_id or "").strip()
+    archived_by = actor_id(actor) if actor is not None else (user_id or "").strip()
 
     with postgres_connect() as conn:
         with conn.cursor() as cursor:
@@ -173,6 +196,12 @@ def archive_session(session_id: str, user_id: str | None = None) -> bool:
                 return False
 
             session_user_id = str(row.get("user_id") or archived_by)
+            if actor is not None:
+                assert_owned_resource(
+                    actor,
+                    owner_user_id=session_user_id,
+                    resource_name="Session",
+                )
             cursor.execute(
                 sql.SQL(
                     """
@@ -201,10 +230,21 @@ def archive_session(session_id: str, user_id: str | None = None) -> bool:
                 ).format(sql.Identifier(agno_schema(), "agno_sessions")),
                 (archived_by, session_id),
             )
+            if actor is not None:
+                record_audit_event(
+                    actor,
+                    action="session.archive",
+                    resource_type="session",
+                    resource_id=session_id,
+                )
             return True
 
 
-def get_all_sessions(*, include_archived: bool = False) -> list[dict]:
+def get_all_sessions(
+    *,
+    include_archived: bool = False,
+    owner_user_id: str | None = None,
+) -> list[dict]:
     """从 PostgreSQL 读取所有会话摘要。"""
     ensure_agno_postgres_tables()
     ensure_chat_session_archive_table()
@@ -217,6 +257,7 @@ def get_all_sessions(*, include_archived: bool = False) -> list[dict]:
                     s.session_id,
                     s.created_at,
                     s.updated_at,
+                    s.user_id,
                     s.runs,
                     s.metadata,
                     a.archived_at
@@ -227,13 +268,14 @@ def get_all_sessions(*, include_archived: bool = False) -> list[dict]:
                         a.session_id IS NULL
                         AND coalesce(s.metadata ->> 'agno_aios_archived', 'false') <> 'true'
                     )
+                    AND (%s IS NULL OR s.user_id = %s)
                 LIMIT 500
                 """
                 ).format(
                     sql.Identifier(agno_schema(), "agno_sessions"),
                     _archive_table(),
                 ),
-                (include_archived,),
+                (include_archived, owner_user_id, owner_user_id),
             )
             rows = cursor.fetchall()
 
@@ -261,6 +303,7 @@ def get_all_sessions(*, include_archived: bool = False) -> list[dict]:
         sessions.append(
             {
                 "session_id": row.get("session_id"),
+                "user_id": row.get("user_id"),
                 "preview": preview.strip() or "新对话",
                 "created_at": row.get("created_at"),
                 "updated_at": row.get("updated_at"),
@@ -272,13 +315,13 @@ def get_all_sessions(*, include_archived: bool = False) -> list[dict]:
     return sessions
 
 
-def get_session_messages(session_id: str) -> list[dict]:
+def get_session_messages(session_id: str, *, actor: Any | None = None) -> list[dict]:
     """从 PostgreSQL 读取指定会话的用户/助手消息列表。"""
     ensure_agno_postgres_tables()
     with postgres_connect() as conn:
         with conn.cursor() as cursor:
             cursor.execute(
-                sql.SQL("SELECT runs FROM {} WHERE session_id = %s").format(
+                sql.SQL("SELECT user_id, runs FROM {} WHERE session_id = %s").format(
                     sql.Identifier(agno_schema(), "agno_sessions")
                 ),
                 (session_id,),
@@ -287,6 +330,13 @@ def get_session_messages(session_id: str) -> list[dict]:
 
     if not row:
         return []
+
+    if actor is not None:
+        assert_owned_resource(
+            actor,
+            owner_user_id=str(row.get("user_id") or ""),
+            resource_name="Session",
+        )
 
     runs = coerce_json_value(row.get("runs"))
     if not isinstance(runs, list):

@@ -1,8 +1,11 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from api.auth.models import User
+from api.auth.permissions import require_permission
+from api.services.audit_service import record_audit_event
 from api.mcp.config import (
     HIAGENT_CACHE_DB,
     MCP_CONFIG_FILE,
@@ -55,7 +58,7 @@ class HiAgentDelete(BaseModel):
 
 
 @router.get("/config")
-async def get_config() -> dict[str, Any]:
+async def get_config(_user: User = Depends(require_permission("mcp:read"))) -> dict[str, Any]:
     data = read_mcp_config()
     return {
         "services": services_from_config(data),
@@ -69,7 +72,10 @@ async def get_config() -> dict[str, Any]:
 
 
 @router.post("/config")
-async def update_config(body: ServiceToggle):
+async def update_config(
+    body: ServiceToggle,
+    user: User = Depends(require_permission("mcp:write")),
+):
     if body.id not in SERVICE_IDS:
         raise HTTPException(status_code=400, detail="Invalid service ID")
 
@@ -81,16 +87,26 @@ async def update_config(body: ServiceToggle):
 
     mcp_cfg[body.id] = body.enabled
     write_mcp_config(data)
+    record_audit_event(
+        user,
+        action="mcp.config_update",
+        resource_type="mcp_service",
+        resource_id=body.id,
+        metadata={"enabled": body.enabled},
+    )
     return {"success": True, "control_mode": "integrated", "restart_required": True}
 
 
 @router.get("/tokens")
-async def get_tokens():
+async def get_tokens(_user: User = Depends(require_permission("mcp:read"))):
     return list_tokens()
 
 
 @router.post("/tokens/issue")
-async def issue_token(body: TokenIssue):
+async def issue_token(
+    body: TokenIssue,
+    user: User = Depends(require_permission("mcp:write")),
+):
     expires_in = int(body.expires_in)
     if expires_in < 0:
         raise HTTPException(status_code=400, detail="Invalid expires_in")
@@ -98,25 +114,44 @@ async def issue_token(body: TokenIssue):
         raise HTTPException(status_code=400, detail="Expires in must be at least 1 day")
 
     token = insert_token(name=body.name.strip() or "未命名 Token", expires_in=expires_in)
+    record_audit_event(
+        user,
+        action="mcp.token_issue",
+        resource_type="mcp_token",
+        resource_id=body.name.strip() or "未命名 Token",
+        metadata={"expires_in": expires_in},
+    )
     return {"token": token}
 
 
 @router.post("/tokens/delete")
-async def remove_token(body: TokenDelete):
+async def remove_token(
+    body: TokenDelete,
+    user: User = Depends(require_permission("mcp:write")),
+):
     deleted = delete_token(body.id, body.token)
     if not deleted:
         raise HTTPException(status_code=404, detail="Token not found")
+    record_audit_event(
+        user,
+        action="mcp.token_delete",
+        resource_type="mcp_token",
+        resource_id=str(body.id or body.token or ""),
+    )
     return {"success": True}
 
 
 @router.get("/hiagent")
-async def list_hiagent():
+async def list_hiagent(_user: User = Depends(require_permission("mcp:read"))):
     data = read_mcp_config()
     return normalize_hiagents(data.get("hiagent", []))
 
 
 @router.post("/hiagent/add")
-async def add_hiagent(body: HiAgentAdd):
+async def add_hiagent(
+    body: HiAgentAdd,
+    user: User = Depends(require_permission("mcp:write")),
+):
     name = body.name.strip()
     url = body.url.strip()
     if not name or not url:
@@ -137,11 +172,21 @@ async def add_hiagent(body: HiAgentAdd):
     )
     data["hiagent"] = entries
     write_mcp_config(data)
+    record_audit_event(
+        user,
+        action="mcp.hiagent_add",
+        resource_type="hiagent",
+        resource_id=url,
+        metadata={"name": name, "enabled": body.enabled},
+    )
     return {"success": True, "restart_required": True}
 
 
 @router.post("/hiagent/update")
-async def update_hiagent(body: HiAgentUpdate):
+async def update_hiagent(
+    body: HiAgentUpdate,
+    user: User = Depends(require_permission("mcp:write")),
+):
     target_url = (body.target_url or body.url or "").strip()
     new_url = body.url.strip()
     if not target_url:
@@ -172,11 +217,21 @@ async def update_hiagent(body: HiAgentUpdate):
 
     data["hiagent"] = entries
     write_mcp_config(data)
+    record_audit_event(
+        user,
+        action="mcp.hiagent_update",
+        resource_type="hiagent",
+        resource_id=target_url,
+        metadata={"url": new_url, "enabled": body.enabled},
+    )
     return {"success": True, "restart_required": True}
 
 
 @router.post("/hiagent/delete")
-async def delete_hiagent(body: HiAgentDelete):
+async def delete_hiagent(
+    body: HiAgentDelete,
+    user: User = Depends(require_permission("mcp:write")),
+):
     url = body.url.strip()
     if not url:
         raise HTTPException(status_code=400, detail="url 不能为空")
@@ -189,4 +244,10 @@ async def delete_hiagent(body: HiAgentDelete):
 
     data["hiagent"] = next_entries
     write_mcp_config(data)
+    record_audit_event(
+        user,
+        action="mcp.hiagent_delete",
+        resource_type="hiagent",
+        resource_id=url,
+    )
     return {"success": True, "restart_required": True}

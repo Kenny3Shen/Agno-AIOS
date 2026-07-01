@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Request
 from httpx_oauth.clients.github import GitHubOAuth2
 from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.clients.microsoft import MicrosoftGraphOAuth2
 
+from api.auth.models import User
 from api.auth.schemas import UserCreate, UserRead, UserUpdate
-from api.auth.users import auth_backend, fastapi_users
+from api.auth.users import auth_backend, current_active_user, fastapi_users
 from api.config import get_settings
+from api.services.audit_service import record_audit_event
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 settings = get_settings()
@@ -88,3 +90,18 @@ if (
 @router.get("/oauth/providers")
 async def list_oauth_providers() -> dict[str, list[str]]:
     return {"providers": enabled_oauth_providers}
+
+
+@router.post("/logout")
+async def audited_logout(
+    request: Request,
+    user: User = Depends(current_active_user),
+) -> dict[str, bool]:
+    record_audit_event(
+        user,
+        action="auth.logout",
+        resource_type="auth",
+        ip_address=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    return {"success": True}

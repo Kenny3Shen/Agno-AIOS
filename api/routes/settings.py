@@ -4,8 +4,11 @@ from fastapi import APIRouter, Depends
 from loguru import logger
 from pydantic import BaseModel
 
+from api.auth.models import User
+from api.auth.permissions import require_permission
 from api.config import Settings, get_settings
 from api.dependencies import get_app_settings
+from api.services.audit_service import record_audit_event
 from api.services.model_config_service import public_model_config, save_model_config
 
 router = APIRouter(prefix="/api", tags=["Settings"])
@@ -67,6 +70,7 @@ def _setting_value(settings: Settings, key: str) -> str:
 
 @router.get("/settings")
 async def read_settings(
+    _user: User = Depends(require_permission("settings:read")),
     settings: Settings = Depends(get_app_settings),
 ) -> SettingsResponse:
     """获取当前可配置项（敏感值已脱敏）"""
@@ -78,23 +82,36 @@ async def read_settings(
 
 
 @router.get("/models")
-async def get_models() -> dict:
+async def get_models(_user: User = Depends(require_permission("settings:read"))) -> dict:
     """获取可选模型配置（敏感值已脱敏）"""
     return public_model_config()
 
 
 @router.put("/models")
-async def update_models(body: ModelConfigUpdate) -> dict:
+async def update_models(
+    body: ModelConfigUpdate,
+    user: User = Depends(require_permission("settings:write")),
+) -> dict:
     """保存模型配置和默认选择"""
     logger.info("模型配置已更新")
-    return save_model_config(
+    result = save_model_config(
         [model.model_dump() for model in body.models],
         body.active_model_id,
     )
+    record_audit_event(
+        user,
+        action="settings.update",
+        resource_type="models",
+        metadata={"active_model_id": body.active_model_id},
+    )
+    return result
 
 
 @router.put("/settings")
-async def update_settings(body: SettingsUpdate) -> SettingsResponse:
+async def update_settings(
+    body: SettingsUpdate,
+    user: User = Depends(require_permission("settings:write")),
+) -> SettingsResponse:
     """更新配置项（运行时生效，写入 os.environ）"""
     updated: dict[str, str] = {}
     for key, value in body.settings.items():
@@ -114,4 +131,10 @@ async def update_settings(body: SettingsUpdate) -> SettingsResponse:
     for key in CONFIGURABLE_KEYS:
         raw = _setting_value(active_settings, key)
         result[key] = _mask_secret(key, raw)
+    record_audit_event(
+        user,
+        action="settings.update",
+        resource_type="settings",
+        metadata={"keys": sorted(updated)},
+    )
     return SettingsResponse(settings=result)

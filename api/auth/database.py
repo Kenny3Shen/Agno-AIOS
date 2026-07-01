@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator
 from uuid import UUID
 
 from fastapi import Depends
-from fastapi_users.db import SQLAlchemyUserDatabase
+from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from api.auth.models import AuthBase, OAuthAccount, User
