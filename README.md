@@ -21,11 +21,11 @@ Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基
 
 ## 技术栈
 
-- 前端：Vue 3、TypeScript、Element Plus、UnoCSS、Vite/Rolldown、markdown-it、highlight.js、npm。
+- 前端：Vue 3、TypeScript、Element Plus、UnoCSS、Vite/Rolldown、markdown-it、highlight.js、Bun。
 - 后端：FastAPI、FastAPI Users、SQLAlchemy Async、Pydantic Settings、Uvicorn、psycopg、psycopg-pool、httpx、Polars、loguru。
 - Agent：Agno、OpenAILike、LocalSkills、PostgresDb、Tracing、PgVector RAG。
 - MCP：FastMCP，同进程 ASGI 挂载。
-- 包管理：uv、npm。
+- 包管理：uv、Bun。
 
 ## 项目结构
 
@@ -49,7 +49,6 @@ Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基
 │   ├── utils/                  # 数据库与数据处理工具
 │   └── data/                   # CVE/资产数据缓存
 ├── frontend/                   # Vue 3 + TypeScript + Element Plus + UnoCSS 主前端源码
-├── frontend-react/             # React 实验/历史前端目录，不作为当前主前端
 ├── source/                     # 前端生产构建输出，供 FastAPI 托管
 ├── scripts/                    # 运维包装脚本
 │   └── run_update_cve.sh       # CVE 定时更新包装脚本
@@ -62,7 +61,7 @@ Agno AIOS 是一个面向安全运营场景的 AI 信息安全中台。系统基
 
 - Python 3.12+
 - uv
-- Node.js 24+ 与 npm
+- Node.js 24+ 与 Bun
 - PostgreSQL 15+，并启用 pgvector 扩展
 
 ## 快速启动
@@ -77,7 +76,7 @@ uv sync
 
 ```bash
 cd frontend
-npm install
+/home/shenss/.bun/bin/bun install
 ```
 
 启动后端：
@@ -113,6 +112,7 @@ npm run build
 `frontend` 是当前主前端。未登录时先进入注册/登录页，登录成功后进入 AI 信息安全中台工作区：
 
 - 注册/登录页调用 FastAPI Users 的 JWT 接口，支持邮箱密码注册、登录、会话恢复和 OAuth Provider 发现。
+- 前端依赖以 Bun lockfile 为准；共享状态统一由 Pinia 承载，界面文案逐步迁移到 vue-i18n 字典。
 - 左侧导航按 Agno OS 控制面习惯组织：`Home` 下方直接是 `Dashboard`，中段优先为 `Chat / Skills / MCP / Knowledge / Trace`，随后是 `Sessions / Studio / Memory / Metrics / Evaluation / Approvals / Scheduler` 和安全数据工具。`Chat` 下方可展开会话列表，`Trace` 下方可展开最近 Trace Queue。
 - 顶部展示当前模块、数据治理状态、MCP 编排状态、风险观测状态、当前用户、亮暗模式切换和退出登录。
 - 中央工作区保留 CVE 情报、资产治理、情报采集、Agent 编排、知识资产、运行观测、MCP 工具、Skills 和系统配置等既有能力，并新增 AgentOS 风格轻量控制面页面。

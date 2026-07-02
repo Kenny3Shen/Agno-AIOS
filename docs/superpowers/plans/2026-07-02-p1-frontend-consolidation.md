@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Work in `/home/shenss/python/Agno-AIOS/.worktrees/security-first-rbac`.
+- Work in `/home/shenss/python/Agno-AIOS` on `master`; the former `security-first-rbac` worktree has been fast-forward merged.
 - Do not edit generated `source/assets/*` directly.
 - Do not delete active code unless `rg` shows no active runtime reference and `npm run build` passes after deletion.
 - Keep Chinese as the default UI locale.
