@@ -209,10 +209,12 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, nextTick, onMounted, onUnmounted, watch } from "vue"
+import { storeToRefs } from "pinia"
 import MarkdownIt from "markdown-it"
 import hljs from "highlight.js"
 import { useChatApi, useChatHistory, useSettingsApi } from "../composables/useApi"
 import { copyToClipboard } from "../lib/clipboard"
+import { useSessionStore } from "../stores/sessions"
 import type { Message, ModelConfig } from "../types"
 import {
   Cpu,
@@ -286,7 +288,8 @@ const chatContainer = ref<HTMLElement | null>(null)
 const zoomedImage = ref<string | null>(null)
 const collapsedSources = reactive(new Set<number>())
 const collapsedThinking = reactive(new Set<number>())
-const currentSessionId = ref<string | null>(null)
+const sessionStore = useSessionStore()
+const { currentChatSessionId: currentSessionId } = storeToRefs(sessionStore)
 const modelLoading = ref(false)
 const modelOptions = ref<ModelConfig[]>([])
 const selectedModelId = ref<string | null>(null)

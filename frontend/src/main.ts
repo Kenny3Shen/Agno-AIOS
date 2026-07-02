@@ -1,4 +1,5 @@
 import { createApp } from "vue"
+import { createPinia } from "pinia"
 import ElementPlus from "element-plus"
 import zhCn from "element-plus/es/locale/lang/zh-cn"
 import "element-plus/dist/index.css"
@@ -12,6 +13,7 @@ import * as ElementPlusIconsVue from "@element-plus/icons-vue"
 const app = createApp(App)
 
 // Use Element Plus with Chinese locale by default
+app.use(createPinia())
 app.use(ElementPlus, { locale: zhCn })
 
 // Ensure the document is marked as Chinese

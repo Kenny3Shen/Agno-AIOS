@@ -494,6 +494,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, type Component } from "vue"
+import { storeToRefs } from "pinia"
 import {
   ArrowDown,
   ArrowRight,
@@ -542,7 +543,11 @@ import MCP from "./components/MCP.vue"
 import Knowledge from "./components/Knowledge.vue"
 import { useChatHistory, useSettingsApi, useTracingApi } from "./composables/useApi"
 import { clearStoredAuthToken, fetchCurrentUser, getStoredAuthToken, logout as authLogout } from "./lib/authClient"
-import type { AuthUser, ChatSession, OsControlModule, TraceItem } from "./types"
+import { useAuthStore } from "./stores/auth"
+import { useSessionStore } from "./stores/sessions"
+import { useShellStore } from "./stores/shell"
+import { useTraceStore } from "./stores/traces"
+import type { AuthUser, OsControlModule, TraceItem } from "./types"
 
 type ModuleNavId =
   | "dashboard"
@@ -667,30 +672,47 @@ const SIDEBAR_EXPANDED_WIDTH = 264
 const SIDEBAR_COMPACT_WIDTH = 76
 const isMobileViewport = () => typeof window !== "undefined" && window.innerWidth < 1024
 
-const activeTab = ref<NavId>("home")
-const isSidebarCompact = ref(false)
-const isMobile = ref(isMobileViewport())
-const sidebarOpen = ref(false)
-const isDark = ref(true)
-const authBooting = ref(true)
-const currentUser = ref<AuthUser | null>(null)
-const loggingOut = ref(false)
-const componentRenderKey = ref(0)
+const authStore = useAuthStore()
+const shellStore = useShellStore()
+const sessionStore = useSessionStore()
+const traceStore = useTraceStore()
+
+const {
+  currentUser,
+  authBooting,
+  loggingOut,
+  userMenuOpen,
+} = storeToRefs(authStore)
+const {
+  activeTab,
+  isSidebarCompact,
+  isMobile,
+  sidebarOpen,
+  isDark,
+  componentRenderKey,
+  chatSessionsExpanded,
+  traceQueueExpanded,
+} = storeToRefs(shellStore)
+const {
+  chatSessions,
+  currentChatSessionId,
+  loadingSessions,
+} = storeToRefs(sessionStore)
+const {
+  traceQueueItems,
+  currentTraceId,
+  loadingTraceQueue,
+} = storeToRefs(traceStore)
+
+shellStore.setIsMobile(isMobileViewport())
 const currentModelName = ref("DeepSeek V4 Pro")
-const chatSessionsExpanded = ref(true)
-const chatSessions = ref<ChatSession[]>([])
-const currentChatSessionId = ref<string | null>(null)
-const traceQueueExpanded = ref(true)
-const traceQueueItems = ref<TraceItem[]>([])
-const currentTraceId = ref<string | null>(null)
-const userMenuOpen = ref(false)
 
 const { fetchModels } = useSettingsApi()
-const { loadingSessions, listSessions, archiveSession } = useChatHistory()
-const { loading: loadingTraceQueue, listTraces: listSidebarTraces } = useTracingApi()
+const { listSessions, archiveSession } = useChatHistory()
+const { listTraces: listSidebarTraces } = useTracingApi()
 
 const activeComponent = computed<Component | null>(() => {
-  const tab = activeTab.value
+  const tab = activeTab.value as NavId
   if (tab === "home") return null
   return componentMap[tab]
 })
@@ -708,7 +730,7 @@ const activeComponentKey = computed(() => `${activeTab.value}-${componentRenderK
 const currentModelLabel = computed(() => formatModelLabel(currentModelName.value))
 const currentUserId = computed(() => currentUser.value?.id || currentUser.value?.email || null)
 const activeComponentProps = computed(() => {
-  const tab = activeTab.value
+  const tab = activeTab.value as NavId
   const baseProps = { currentUserId: currentUserId.value }
   if (tab === "trace") {
     return { ...baseProps, selectedTraceId: currentTraceId.value }
@@ -720,7 +742,7 @@ const activeComponentProps = computed(() => {
 })
 const contentClass = computed(() => {
   const base = "block h-full min-h-0"
-  const tab = activeTab.value
+  const tab = activeTab.value as NavId
   if (tab === "home") return base
   return fullCanvasTabs.has(tab) ? base : `${base} overflow-auto p-4 sm:p-5`
 })
@@ -847,19 +869,29 @@ const formatTraceMeta = (trace: TraceItem) => {
 }
 
 const loadSidebarChatSessions = async () => {
+  sessionStore.setLoadingSessions(true)
+  sessionStore.setSessionError(null)
   try {
     chatSessions.value = await listSessions()
-  } catch {
+  } catch (error) {
     chatSessions.value = []
+    sessionStore.setSessionError(error instanceof Error ? error.message : "会话加载失败")
+  } finally {
+    sessionStore.setLoadingSessions(false)
   }
 }
 
 const loadSidebarTraceQueue = async () => {
+  traceStore.setLoadingTraceQueue(true)
+  traceStore.setTraceError(null)
   try {
     const response = await listSidebarTraces({ page: 1, limit: 12 })
     traceQueueItems.value = response.items || []
-  } catch {
+  } catch (error) {
     traceQueueItems.value = []
+    traceStore.setTraceError(error instanceof Error ? error.message : "Trace 队列加载失败")
+  } finally {
+    traceStore.setLoadingTraceQueue(false)
   }
 }
 

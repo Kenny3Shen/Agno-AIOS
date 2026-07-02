@@ -292,7 +292,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue"
+import { computed, onMounted, onUnmounted, ref, watch } from "vue"
 import { ElMessage } from "element-plus"
 import MarkdownIt from "markdown-it"
 import {
@@ -305,7 +305,8 @@ import {
 } from "@element-plus/icons-vue"
 import { useTracingApi } from "../composables/useApi"
 import { copyToClipboard } from "../lib/clipboard"
-import type { ParsedSpanPayload, SpanItem, SpanTreeNode, TraceItem, TraceStatus } from "../types"
+import { useTraceStore } from "../stores/traces"
+import type { ParsedSpanPayload, SpanItem, SpanTreeNode, TraceItem } from "../types"
 
 const { loading, error, listTraces, getTrace } = useTracingApi()
 const markdownRenderer = new MarkdownIt({
@@ -318,15 +319,8 @@ const props = defineProps<{
 }>()
 
 const limit = ref(20)
-const traceItems = ref<TraceItem[]>([])
-
-const filters = reactive<{ session_id: string; status: TraceStatus | ""; timeRange: [string, string] | null }>(
-  {
-    session_id: "",
-    status: "",
-    timeRange: null,
-  }
-)
+const traceStore = useTraceStore()
+const filters = traceStore.traceFilters
 
 const selectedTrace = ref<TraceItem | null>(null)
 const spans = ref<SpanItem[]>([])
@@ -540,7 +534,7 @@ const refresh = async () => {
     end_time: end_time || undefined,
   })
 
-  traceItems.value = resp.items || []
+  traceStore.setTraceItems(resp.items || [])
   if (props.selectedTraceId) {
     await selectTraceById(props.selectedTraceId)
   }
@@ -570,6 +564,7 @@ const selectTraceById = async (traceId: string | null | undefined) => {
     spans.value = resp.spans || []
     tree.value = resp.tree || []
     selectedSpan.value = firstAvailableSpan()
+    traceStore.setCurrentTraceId(resp.trace.trace_id)
     scrollDetailIntoView()
   } finally {
     loadingDetail.value = false
@@ -590,9 +585,7 @@ const onSpanNodeClick = (node: SpanTreeNode) => {
 }
 
 const resetFilters = async () => {
-  filters.session_id = ""
-  filters.status = ""
-  filters.timeRange = null
+  traceStore.resetTraceFilters()
   await refresh()
 }
 
@@ -614,12 +607,6 @@ const copySpanJson = async () => {
 const hasError = (trace: TraceItem) => {
   return trace.status === "ERROR" || Number(trace.error_count || 0) > 0
 }
-
-watch(
-  () => [filters.session_id, filters.status, filters.timeRange],
-  () => {
-  }
-)
 
 watch(
   () => props.selectedTraceId,
