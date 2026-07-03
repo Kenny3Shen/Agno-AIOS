@@ -51,6 +51,18 @@ test("loginWithPassword submits FastAPI Users form data", async () => {
   assert.equal(calls[0].init.body.get("password"), "correct horse battery")
 })
 
+test("loginWithPassword uses caller-provided fallback message", async () => {
+  const fetchImpl = async () => jsonResponse({}, 500)
+
+  await assert.rejects(
+    () => loginWithPassword(
+      { email: "operator@example.com", password: "correct horse battery" },
+      { fetch: fetchImpl, fallbacks: { loginFailed: "Localized login failed" } },
+    ),
+    /Localized login failed/,
+  )
+})
+
 test("registerWithPassword submits JSON registration payload", async () => {
   const calls = []
   const fetchImpl = async (url, init) => {

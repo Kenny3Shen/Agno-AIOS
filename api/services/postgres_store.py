@@ -204,7 +204,7 @@ def ensure_app_tables() -> None:
                     status TEXT NOT NULL DEFAULT 'success',
                     ip_address TEXT NOT NULL DEFAULT '',
                     user_agent TEXT NOT NULL DEFAULT '',
-                    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    metadata JSONB NOT NULL DEFAULT '{{}}'::jsonb,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
                 )
                 """

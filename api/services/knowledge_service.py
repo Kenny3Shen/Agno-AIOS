@@ -103,6 +103,7 @@ COLD_START_NOTE = (
     "冷启动可能阻塞 30-120 秒，取决于网络、磁盘和 CPU。"
 )
 DOCUMENT_METADATA_KEYS = (
+    "user_id",
     "title",
     "source",
     "file_path",
@@ -714,6 +715,23 @@ def _document_metadata(metadata: dict[str, Any]) -> dict[str, str]:
     return compact_metadata
 
 
+def _owner_metadata(owner_user_id: str | None) -> dict[str, str]:
+    clean_owner = (owner_user_id or "").strip()
+    return {"user_id": clean_owner} if clean_owner else {}
+
+
+def _metadata_owner_user_id(metadata: dict[str, Any]) -> str:
+    return str(metadata.get("user_id") or "").strip()
+
+
+def _content_visible_to_owner(content: Any, owner_user_id: str | None) -> bool:
+    clean_owner = (owner_user_id or "").strip()
+    if not clean_owner:
+        return True
+    metadata = _safe_metadata(getattr(content, "metadata", None))
+    return _metadata_owner_user_id(metadata) == clean_owner
+
+
 def _format_timestamp(value: Any) -> str:
     if isinstance(value, int | float):
         return datetime.fromtimestamp(value, UTC).isoformat()
@@ -733,20 +751,41 @@ def _content_to_document(content: Any) -> dict[str, Any]:
     }
 
 
-def _chunk_counts_by_content_id() -> dict[str, int]:
+def _chunk_counts_by_content_id(owner_user_id: str | None = None) -> dict[str, int]:
     knowledge = get_knowledge_base()
     vector_db = cast(PgVector, knowledge.vector_db)
     table = vector_db.table
     try:
         with vector_db.Session() as sess, sess.begin():
-            rows = sess.execute(
+            stmt = (
                 select(table.c.content_id, func.count())
                 .where(table.c.content_id.is_not(None))
-                .group_by(table.c.content_id)
-            ).fetchall()
+            )
+            owner_filter = _owner_metadata(owner_user_id)
+            if owner_filter:
+                stmt = stmt.where(table.c.meta_data.contains(owner_filter))
+            rows = sess.execute(stmt.group_by(table.c.content_id)).fetchall()
     except Exception:
         return {}
     return {str(content_id): int(count) for content_id, count in rows if content_id}
+
+
+def _chunk_count(owner_user_id: str | None = None) -> int:
+    knowledge = get_knowledge_base()
+    vector_db = cast(PgVector, knowledge.vector_db)
+    owner_filter = _owner_metadata(owner_user_id)
+    if not owner_filter:
+        return int(vector_db.get_count())
+
+    table = vector_db.table
+    try:
+        with vector_db.Session() as sess, sess.begin():
+            count = sess.execute(
+                select(func.count()).where(table.c.meta_data.contains(owner_filter))
+            ).scalar()
+    except Exception:
+        return 0
+    return int(count or 0)
 
 
 def _result_from_document(document: Document) -> dict[str, Any]:
@@ -804,6 +843,7 @@ def add_text_document(
     content: str,
     source: str = "manual",
     metadata: dict[str, Any] | None = None,
+    owner_user_id: str | None = None,
 ) -> dict[str, Any]:
     clean_title = title.strip() or "未命名知识"
     clean_content = content.strip()
@@ -815,6 +855,7 @@ def add_text_document(
     profile = knowledge_profile_for_filename(filename)
     safe_metadata = {
         **base_metadata,
+        **_owner_metadata(owner_user_id),
         "title": clean_title,
         "source": source.strip() or "manual",
         "file_type": Path(filename).suffix.lower() or "text",
@@ -841,7 +882,11 @@ def add_text_document(
     raise RuntimeError("知识写入完成但未能读取内容登记记录")
 
 
-def add_file_document(path: str, title: str | None = None) -> dict[str, Any]:
+def add_file_document(
+    path: str,
+    title: str | None = None,
+    owner_user_id: str | None = None,
+) -> dict[str, Any]:
     file_path = Path(path).expanduser().resolve()
     if not file_path.exists() or not file_path.is_file():
         raise FileNotFoundError(f"文件不存在: {path}")
@@ -852,6 +897,7 @@ def add_file_document(path: str, title: str | None = None) -> dict[str, Any]:
     clean_title = (title or file_path.stem).strip() or file_path.stem
     profile = knowledge_profile_for_filename(file_path.name)
     metadata = {
+        **_owner_metadata(owner_user_id),
         "title": clean_title,
         "source": str(file_path),
         "file_path": str(file_path),
@@ -881,7 +927,7 @@ def add_file_document(path: str, title: str | None = None) -> dict[str, Any]:
     raise RuntimeError("知识写入完成但未能读取内容登记记录")
 
 
-def list_documents() -> list[dict[str, Any]]:
+def list_documents(owner_user_id: str | None = None) -> list[dict[str, Any]]:
     _ensure_knowledge_storage()
     contents, _ = get_knowledge_base().get_content(
         limit=500,
@@ -889,29 +935,37 @@ def list_documents() -> list[dict[str, Any]]:
         sort_by="updated_at",
         sort_order="desc",
     )
-    chunk_counts = _chunk_counts_by_content_id()
+    chunk_counts = _chunk_counts_by_content_id(owner_user_id=owner_user_id)
     documents = []
     for content in contents:
+        if not _content_visible_to_owner(content, owner_user_id):
+            continue
         document = _content_to_document(content)
         document["chunks"] = chunk_counts.get(document["id"], document["chunks"])
         documents.append(document)
     return documents
 
 
-def delete_document(doc_id: str) -> bool:
+def delete_document(doc_id: str, owner_user_id: str | None = None) -> bool:
     _ensure_knowledge_storage()
-    if not _document_status(doc_id):
+    content = get_knowledge_base().get_content_by_id(doc_id)
+    if content is None or not _content_visible_to_owner(content, owner_user_id):
         return False
     with _knowledge_lock:
         get_knowledge_base().remove_content_by_id(doc_id)
     return True
 
 
-def clear_knowledge_base() -> dict[str, Any]:
+def clear_knowledge_base(owner_user_id: str | None = None) -> dict[str, Any]:
     _ensure_knowledge_storage()
     knowledge = get_knowledge_base()
+    documents = list_documents(owner_user_id=owner_user_id)
     with _knowledge_lock:
-        knowledge.remove_all_content()
+        if owner_user_id:
+            for document in documents:
+                knowledge.remove_content_by_id(document["id"])
+        else:
+            knowledge.remove_all_content()
     return {"documents": 0, "chunks": 0}
 
 
@@ -919,6 +973,7 @@ def search_documents(
     query: str,
     limit: int = 5,
     search_type: str | None = None,
+    owner_user_id: str | None = None,
 ) -> list[dict[str, Any]]:
     clean_query = query.strip()
     if not clean_query:
@@ -934,18 +989,17 @@ def search_documents(
     documents = knowledge.search(
         clean_query,
         max_results=retrieval_limit,
+        filters=_owner_metadata(owner_user_id) or None,
         search_type=effective_search_type.value,
     )
     _hydrate_content_ids(documents)
     return [_result_from_document(document) for document in documents[:limit]]
 
 
-def knowledge_status() -> dict[str, Any]:
+def knowledge_status(owner_user_id: str | None = None) -> dict[str, Any]:
     _ensure_knowledge_storage()
-    knowledge = get_knowledge_base()
-    docs = list_documents()
-    vector_db = cast(PgVector, knowledge.vector_db)
-    chunk_count = vector_db.get_count()
+    docs = list_documents(owner_user_id=owner_user_id)
+    chunk_count = _chunk_count(owner_user_id=owner_user_id)
     device = _model_device()
     return {
         **pipeline_status(),

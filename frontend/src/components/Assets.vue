@@ -1,16 +1,15 @@
 <template>
   <div class="security-page space-y-4 sm:space-y-6">
-    <!-- 搜索 & 筛选区域 -->
-    <div class="rounded-xl border border-slate-200/70 bg-white/80 p-3 sm:p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
+    <div class="query-panel">
       <div class="flex flex-col sm:flex-row gap-3">
         <el-radio-group v-model="searchMode" class="shrink-0" size="default">
-          <el-radio-button value="fingerprint">指纹</el-radio-button>
+          <el-radio-button value="fingerprint">{{ t('assets.modes.fingerprint') }}</el-radio-button>
           <el-radio-button value="ip">IP</el-radio-button>
         </el-radio-group>
 
         <el-input
           v-model="assetQuery"
-          :placeholder="searchMode === 'ip' ? '输入 IP 地址 (例如: 192.168.1.1)' : '输入指纹信息 (例如: Vue、React)'"
+          :placeholder="searchMode === 'ip' ? t('assets.input.ipPlaceholder') : t('assets.input.fingerprintPlaceholder')"
           class="flex-1"
           @keyup.enter="handleSearch"
           clearable
@@ -28,22 +27,21 @@
           class="w-full sm:w-auto"
         >
           <el-icon class="mr-1"><Search /></el-icon>
-          搜索
+          {{ t('assets.actions.search') }}
         </el-button>
       </div>
 
-      <div v-if="validationNotice" class="mt-2 text-xs text-[#F6C343]">
+      <div v-if="validationNotice" class="validation-notice">
         {{ validationNotice }}
       </div>
 
-      <!-- 筛选（基于结果的本地筛选） -->
       <transition name="el-fade-in">
         <div v-if="allResults.length > 0" class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
           <el-select
             v-model="selectedIpType"
             clearable
             filterable
-            placeholder="IP 类型"
+            :placeholder="t('assets.filters.ipType')"
             class="w-full"
           >
             <el-option
@@ -58,7 +56,7 @@
             v-model="selectedStatus"
             clearable
             filterable
-            placeholder="状态码"
+            :placeholder="t('assets.filters.statusCode')"
             class="w-full"
           >
             <el-option
@@ -76,7 +74,7 @@
             collapse-tags-tooltip
             clearable
             filterable
-            placeholder="标签（可多选）"
+            :placeholder="t('assets.filters.tags')"
             class="w-full"
           >
             <el-option
@@ -88,13 +86,12 @@
           </el-select>
 
           <el-button class="w-full" @click="clearFilters" :disabled="!hasActiveFilters">
-            清空筛选
+            {{ t('assets.filters.clear') }}
           </el-button>
         </div>
       </transition>
     </div>
 
-    <!-- 结果表格 -->
     <template v-if="allResults.length > 0">
       <transition name="el-fade-in">
         <div class="overflow-x-auto -mx-2 sm:mx-0">
@@ -105,22 +102,22 @@
             stripe
             :flexible="true"
           >
-            <el-table-column prop="site" label="站点" width="180" fixed>
+            <el-table-column prop="site" :label="t('assets.table.site')" width="180" fixed>
               <template #default="scope">
                 <a
                   :href="scope.row.site"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="text-blue-600 hover:text-blue-800 hover:underline text-sm break-all"
+                  class="result-link"
                 >
                   {{ scope.row.site }}
                 </a>
               </template>
             </el-table-column>
-            <el-table-column prop="ip" label="IP 地址" width="120" />
-            <el-table-column prop="hostname" label="主机名" width="120" show-overflow-tooltip />
-            <el-table-column prop="ip_type" label="IP 类型" width="80" />
-            <el-table-column prop="status" label="状态码" width="70">
+            <el-table-column prop="ip" :label="t('assets.table.ipAddress')" width="120" />
+            <el-table-column prop="hostname" :label="t('assets.table.hostname')" width="120" show-overflow-tooltip />
+            <el-table-column prop="ip_type" :label="t('assets.table.ipType')" width="80" />
+            <el-table-column prop="status" :label="t('assets.table.statusCode')" width="70">
               <template #default="scope">
                 <el-tag
                   :type="getStatusType(scope.row.status)"
@@ -130,7 +127,7 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="finger" label="指纹" width="180">
+            <el-table-column prop="finger" :label="t('assets.table.fingerprint')" width="180">
               <template #default="scope">
                 <div class="flex flex-wrap gap-1">
                   <el-tag
@@ -145,69 +142,68 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="tag" label="标签" width="90">
+            <el-table-column prop="tag" :label="t('assets.table.tag')" width="90">
               <template #default="scope">
                 <div class="flex flex-wrap gap-1">
                   <el-tag
-                    v-for="(t, i) in scope.row.tag"
+                    v-for="(tag, i) in scope.row.tag"
                     :key="i"
                     size="small"
-                    :type="t === '无效' ? 'info' : 'success'"
+                    :type="tag === INVALID_ASSET_TAG ? 'info' : 'success'"
                     class="text-xs"
                   >
-                    {{ t }}
+                    {{ tag }}
                   </el-tag>
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="port_info" label="端口信息" width="150">
+            <el-table-column prop="port_info" :label="t('assets.table.portInfo')" width="150">
               <template #default="scope">
                 <div v-if="scope.row.port_info && scope.row.port_info.length > 0" class="text-sm">
                   {{ scope.row.port_info.slice(0, 4).join(', ') }}
-                  <span v-if="scope.row.port_info.length > 4" class="text-gray-500">
+                  <span v-if="scope.row.port_info.length > 4" class="muted-inline">
                     ... (+{{ scope.row.port_info.length - 4 }})
                   </span>
                 </div>
-                <span v-else class="text-gray-400 text-sm">-</span>
+                <span v-else class="muted-inline">-</span>
               </template>
             </el-table-column>
-            <el-table-column prop="title" label="标题" width="150" show-overflow-tooltip />
-            <el-table-column prop="http_server" label="服务器" width="120" show-overflow-tooltip />
-            <el-table-column prop="os_info" label="操作系统" width="140">
+            <el-table-column prop="title" :label="t('assets.table.title')" width="150" show-overflow-tooltip />
+            <el-table-column prop="http_server" :label="t('assets.table.server')" width="120" show-overflow-tooltip />
+            <el-table-column prop="os_info" :label="t('assets.table.os')" width="140">
               <template #default="scope">
                 <div v-if="scope.row.os_info && scope.row.os_info.length > 0">
                   <div v-for="(os, i) in scope.row.os_info.slice(0, 2)" :key="i" class="text-xs">
                     {{ os }}
                   </div>
-                  <span v-if="scope.row.os_info.length > 2" class="text-gray-500 text-xs">
+                  <span v-if="scope.row.os_info.length > 2" class="muted-inline">
                     +{{ scope.row.os_info.length - 2 }}
                   </span>
                 </div>
-                <span v-else class="text-gray-400 text-sm">-</span>
+                <span v-else class="muted-inline">-</span>
               </template>
             </el-table-column>
-            <el-table-column prop="domain" label="域名" width="140">
+            <el-table-column prop="domain" :label="t('assets.table.domain')" width="140">
               <template #default="scope">
                 <div v-if="scope.row.domain && scope.row.domain.length > 0">
                   <div v-for="(d, i) in scope.row.domain.slice(0, 2)" :key="i" class="text-xs">
                     {{ d }}
                   </div>
-                  <span v-if="scope.row.domain.length > 2" class="text-gray-500 text-xs">
+                  <span v-if="scope.row.domain.length > 2" class="muted-inline">
                     +{{ scope.row.domain.length - 2 }}
                   </span>
                 </div>
-                <span v-else class="text-gray-400 text-sm">-</span>
+                <span v-else class="muted-inline">-</span>
               </template>
             </el-table-column>
           </el-table>
         </div>
       </transition>
 
-      <!-- 分页 -->
       <transition name="el-fade-in">
         <div class="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div class="text-sm text-gray-500">
-            共 {{ total }} 条资产，当前显示 {{ paginatedResults.length }} 条
+          <div class="pagination-note">
+            {{ t('assets.pagination.summary', { total, shown: paginatedResults.length }) }}
           </div>
           <el-pagination
             v-model:current-page="currentPage"
@@ -223,16 +219,15 @@
       </transition>
     </template>
 
-    <!-- 空状态 -->
     <template v-else-if="searched">
       <transition name="el-fade-in">
         <el-empty
-          description="未找到资产"
+          :description="t('assets.empty.notFoundDescription')"
           :image-size="isMobile ? 100 : 120"
         >
           <template #description>
-            <p class="text-gray-500">未找到符合条件的资产</p>
-            <p class="text-gray-400 text-sm mt-2">请尝试其他指纹关键词</p>
+            <p class="empty-title">{{ t('assets.empty.notFoundTitle') }}</p>
+            <p class="empty-hint">{{ t('assets.empty.notFoundHint') }}</p>
           </template>
         </el-empty>
       </transition>
@@ -243,8 +238,8 @@
         <span class="query-empty-icon">
           <el-icon><Monitor /></el-icon>
         </span>
-        <h4>等待资产查询</h4>
-        <p>{{ searchMode === 'ip' ? '输入单个 IPv4 地址' : '输入技术指纹或组件关键词' }}</p>
+        <h4>{{ t('assets.empty.waitingTitle') }}</h4>
+        <p>{{ searchMode === 'ip' ? t('assets.empty.waitingIp') : t('assets.empty.waitingFingerprint') }}</p>
         <div class="mt-4 flex flex-wrap justify-center gap-2">
           <button
             v-for="sample in activeSamples"
@@ -262,32 +257,33 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from "vue"
+import { computed, watch } from "vue"
+import { useI18n } from "vue-i18n"
+import { storeToRefs } from "pinia"
 import { useAssetApi } from "../composables/useApi"
 import { usePagination } from "../composables/usePagination"
+import { useSecurityDataStore } from "../stores/securityData"
+import { useShellStore } from "../stores/shell"
 import { Monitor, Search } from "@element-plus/icons-vue"
 import type { AssetResult } from "../types"
 
-// 响应式检测
-const isMobile = ref(false)
-const checkMobile = () => {
-  isMobile.value = window.innerWidth < 640
-}
+const { t } = useI18n()
+const INVALID_ASSET_TAG = "\u65e0\u6548"
+const shellStore = useShellStore()
+const securityDataStore = useSecurityDataStore()
 
-onMounted(() => {
-  checkMobile()
-  window.addEventListener('resize', checkMobile)
-})
+const isMobile = computed(() => shellStore.isMobile)
 
-onUnmounted(() => {
-  window.removeEventListener('resize', checkMobile)
-})
+const {
+  assetQuery,
+  assetSearchMode: searchMode,
+  assetResults: allResults,
+  assetSearched: searched,
+  assetSelectedIpType: selectedIpType,
+  assetSelectedStatus: selectedStatus,
+  assetSelectedTags: selectedTags,
+} = storeToRefs(securityDataStore)
 
-// 查询状态
-const assetQuery = ref("")
-const searchMode = ref<"fingerprint" | "ip">("fingerprint")
-const allResults = ref<AssetResult[]>([])
-const searched = ref(false)
 const fingerprintSamples = [
   { label: "Vue", mode: "fingerprint" as const, value: "Vue" },
   { label: "React", mode: "fingerprint" as const, value: "React" },
@@ -298,18 +294,10 @@ const ipSamples = [
   { label: "47.99.2.74", mode: "ip" as const, value: "47.99.2.74" },
 ]
 
-// 筛选状态
-const selectedIpType = ref<string | null>(null)
-const selectedStatus = ref<number | null>(null)
-const selectedTags = ref<string[]>([])
-
-// API hooks
 const { loading, searchAsset } = useAssetApi()
 
-// 分页
 const { currentPage, pageSize, total, setPage, setPageSize, setTotal } = usePagination()
 
-// 计算属性
 const isValidIpv4 = (value: string) => {
   const s = value.trim()
   if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(s)) return false
@@ -329,7 +317,7 @@ const isSearchDisabled = computed(() => {
 const validationNotice = computed(() => {
   const q = assetQuery.value?.trim()
   if (!q || searchMode.value !== 'ip' || isValidIpv4(q)) return ''
-  return 'IP 查询仅支持合法 IPv4 地址'
+  return t('assets.validation.ipv4Only')
 })
 
 const activeSamples = computed(() => searchMode.value === 'ip' ? ipSamples : fingerprintSamples)
@@ -397,7 +385,6 @@ const paginatedResults = computed(() => {
   return filteredResults.value.slice(start, end)
 })
 
-// 工具函数
 const getStatusType = (status: number) => {
   if (status >= 200 && status < 300) return 'success'
   if (status >= 300 && status < 400) return 'warning'
@@ -430,9 +417,7 @@ const getTopFingers = (row: AssetResult) => {
 }
 
 const clearFilters = () => {
-  selectedIpType.value = null
-  selectedStatus.value = null
-  selectedTags.value = []
+  securityDataStore.clearAssetFilters()
   setPage(1)
 }
 
@@ -445,14 +430,11 @@ watch([selectedIpType, selectedStatus, selectedTags], () => {
 })
 
 watch(searchMode, () => {
-  assetQuery.value = ''
-  allResults.value = []
-  searched.value = false
-  clearFilters()
+  securityDataStore.resetAssetSearch()
+  setPage(1)
   setTotal(0)
-})
+}, { flush: "sync" })
 
-// 事件处理
 const handlePageChange = (page: number) => {
   setPage(page)
 }
@@ -492,7 +474,7 @@ const applySampleQuery = (sample: (typeof fingerprintSamples)[number] | (typeof 
 </script>
 
 <style scoped>
-/* 响应式表格样式 */
+/* Responsive table layout */
 @media (max-width: 640px) {
   :deep(.el-table) {
     font-size: 11px;
@@ -510,81 +492,4 @@ const applySampleQuery = (sample: (typeof fingerprintSamples)[number] | (typeof 
   }
 }
 
-.query-empty {
-  display: grid;
-  min-height: 360px;
-  place-items: center;
-  align-content: center;
-  border: 1px dashed #2a3a45;
-  border-radius: 8px;
-  color: #91a4b3;
-  text-align: center;
-}
-
-.query-empty-icon {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  place-items: center;
-  border: 1px solid #22313a;
-  border-radius: 8px;
-  background: #0b151c;
-  color: #8bd9ff;
-}
-
-.query-empty h4 {
-  margin: 14px 0 4px;
-  color: #dce7ef;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.query-empty p {
-  margin: 0;
-  font-size: 12px;
-}
-
-.sample-chip {
-  cursor: pointer;
-  border: 1px solid #2a3a45;
-  border-radius: 8px;
-  padding: 5px 10px;
-  background: #0b151c;
-  color: #91a4b3;
-  font-size: 12px;
-  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
-}
-
-.sample-chip:hover,
-.sample-chip:focus-visible {
-  border-color: rgba(47, 143, 237, 0.6);
-  background: #102638;
-  color: #8bd9ff;
-}
-
-html:not(.dark) .query-empty {
-  border-color: #cbd6e2;
-  color: #64748b;
-}
-
-html:not(.dark) .query-empty-icon,
-html:not(.dark) .sample-chip {
-  border-color: #cbd6e2;
-  background: #f8fafc;
-}
-
-html:not(.dark) .query-empty h4 {
-  color: #0f172a;
-}
-
-html:not(.dark) .sample-chip {
-  color: #475569;
-}
-
-html:not(.dark) .sample-chip:hover,
-html:not(.dark) .sample-chip:focus-visible {
-  border-color: rgba(47, 143, 237, 0.55);
-  background: #eaf5ff;
-  color: #0f4f8f;
-}
 </style>

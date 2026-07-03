@@ -18,11 +18,20 @@ const authScreen = readSource("components/AuthScreen.vue")
 const chat = readOptionalSource("components/Chat.vue")
 const trace = readOptionalSource("components/Trace.vue")
 const dashboard = readOptionalSource("components/Dashboard.vue")
+const assets = readOptionalSource("components/Assets.vue")
+const cve = readOptionalSource("components/CVE.vue")
 const mcp = readOptionalSource("components/MCP.vue")
 const skills = readOptionalSource("components/Skills.vue")
+const collect = readOptionalSource("components/Collect.vue")
+const settings = readOptionalSource("components/Settings.vue")
+const knowledge = readOptionalSource("components/Knowledge.vue")
+const agentOSControl = readOptionalSource("components/AgentOSControl.vue")
 const useApi = readSource("composables/useApi.ts")
 const apiClient = readOptionalSource("lib/apiClient.ts")
+const authClientSource = readOptionalSource("lib/authClient.ts")
 const clipboard = readOptionalSource("lib/clipboard.ts")
+const authStoreSource = readOptionalSource("stores/auth.ts")
+const permissions = readOptionalSource("lib/permissions.ts")
 
 const assertTextOrder = (source, labels, message) => {
   let previousIndex = -1
@@ -49,6 +58,36 @@ assert.equal(
   "topbar must not render the user identity; the sidebar footer is the single user location",
 )
 
+assert.equal(
+  app.includes("<p>{{ currentMeta.description }}</p>"),
+  false,
+  "topbar must stay compact and avoid rendering duplicate page descriptions",
+)
+
+assert.equal(
+  app.includes("ag-command"),
+  false,
+  "home must avoid the previous oversized hero block",
+)
+
+assert.equal(
+  app.includes("ag-plane-grid"),
+  false,
+  "home must avoid the extra runtime overview card wall",
+)
+
+assert.equal(
+  app.includes("ag-topbar-button"),
+  false,
+  "topbar refresh control must use the compact icon treatment",
+)
+
+assert.match(
+  app,
+  /ag-topbar-icon/,
+  "topbar actions must use compact icon buttons",
+)
+
 assert.match(
   app,
   /ag-sidebar-toggle/,
@@ -60,6 +99,52 @@ assert.match(
   /currentModelLabel/,
   "brand model chip must be driven by the current Agent model label",
 )
+
+assert.match(
+  app,
+  /useI18n\(\)/,
+  "App shell must read display copy from vue-i18n",
+)
+
+assert.match(
+  app,
+  /setI18nLocale/,
+  "App shell must synchronize the shell locale store with vue-i18n",
+)
+
+assert.match(
+  app,
+  /t\("shell\.nav\.home\.label"\)/,
+  "App shell navigation labels must be sourced from i18n messages",
+)
+
+for (const hardcodedShellCopy of [
+  ">New chat<",
+  ">Sessions<",
+  ">No sessions<",
+  ">Refresh traces<",
+  ">Trace Queue<",
+  "关闭导航遮罩",
+  "当前会话",
+  "已认证",
+  "运行平面",
+  "未登录",
+  "运营控制面",
+  "资产、漏洞、知识入库",
+  "对话、MCP、Trace 观测",
+  "会话加载失败",
+  "Trace 队列加载失败",
+  "会话已归档",
+  "归档会话失败",
+  ">打开<",
+  ">No traces<",
+]) {
+  assert.equal(
+    app.includes(hardcodedShellCopy),
+    false,
+    `App shell must not hardcode sidebar copy: ${hardcodedShellCopy}`,
+  )
+}
 
 assert.equal(
   app.includes("startSidebarResize"),
@@ -78,6 +163,83 @@ assert.match(
   /auth-brief/,
   "unauthenticated screen must use the compact shared shell visual language",
 )
+
+assert.match(
+  authScreen,
+  /auth\.brief\.items\.chat/,
+  "AuthScreen brief chips must be sourced from i18n",
+)
+
+assert.match(
+  authScreen,
+  /auth\.oauth\.label/,
+  "AuthScreen OAuth label must be sourced from i18n",
+)
+
+assert.match(
+  authScreen,
+  /auth\.footer\.jwt/,
+  "AuthScreen footer technology chips must be sourced from i18n",
+)
+
+assert.match(
+  authScreen,
+  /useI18n\(\)/,
+  "AuthScreen must read user-facing copy from vue-i18n",
+)
+
+assert.match(
+  authStoreSource,
+  /hasRolePermission/,
+  "auth store must reuse the shared frontend RBAC helper",
+)
+
+assert.match(
+  authStoreSource,
+  /is_superuser/,
+  "auth store must elevate superusers to admin in shell state",
+)
+
+assert.match(
+  authStoreSource,
+  /hasPermission = \(permission: string\)/,
+  "auth store must expose a reusable permission helper",
+)
+
+assert.match(
+  permissions,
+  /ROLE_PERMISSIONS/,
+  "frontend RBAC helper must define the role permission matrix",
+)
+
+assert.match(
+  permissions,
+  /"collect:write"/,
+  "frontend RBAC helper must reflect write-only modules such as Collect",
+)
+
+for (const hardcodedAuthCopy of [
+  "登录后继续使用 Chat、MCP、Trace 与模型设置。",
+  "进入工作台",
+  "创建账号",
+  "登录",
+  "注册",
+  "邮箱",
+  "密码",
+  "至少 8 位",
+  "进入 Agno AIOS",
+  "创建并进入",
+  "请输入有效邮箱",
+  "密码至少需要 8 位",
+  "认证失败",
+  "OAuth 授权失败",
+]) {
+  assert.equal(
+    authScreen.includes(hardcodedAuthCopy),
+    false,
+    `AuthScreen must not hardcode auth copy: ${hardcodedAuthCopy}`,
+  )
+}
 
 assert.equal(
   app.includes("ag-nav-section-title"),
@@ -105,20 +267,88 @@ assert.match(
   "Dashboard must be modeled separately so it can sit directly under Home",
 )
 
+assert.match(
+  app,
+  /ag-home-summary/,
+  "Home must use the compact summary strip",
+)
+
+assert.match(
+  app,
+  /ag-module-tile/,
+  "Home modules must render as compact direct-action tiles",
+)
+
+assert.equal(
+  mcp.includes("xl:grid-cols-[minmax(0,1fr)_320px]"),
+  false,
+  "MCP must avoid the previous wide right-side context rail",
+)
+
+assert.match(
+  mcp,
+  /mcp-summary-strip/,
+  "MCP must use the compact summary strip instead of metric cards and a side rail",
+)
+
+assert.equal(
+  agentOSControl.includes("agentos-notes"),
+  false,
+  "AgentOS control pages must avoid the previous notes sidebar",
+)
+
+assert.equal(
+  agentOSControl.includes("agentos-note-strip"),
+  false,
+  "AgentOS control pages must not render implementation note chips",
+)
+
+assert.match(
+  app,
+  /navPermissions/,
+  "App shell must define module visibility permissions",
+)
+
+assert.match(
+  app,
+  /canAccessNav/,
+  "App shell must gate module access by the current role",
+)
+
+assert.match(
+  app,
+  /visibleNavItems/,
+  "App shell must filter inaccessible modules out of the sidebar",
+)
+
+assert.match(
+  app,
+  /visibleSettingsItem/,
+  "App shell must hide the settings entry when the current role cannot read it",
+)
+
 assertTextOrder(
   app,
-  ['label: "Home"', 'label: "Dashboard"', 'label: "Chat"', 'label: "Skills"', 'label: "MCP"', 'label: "Knowledge"', 'label: "Trace"'],
+  [
+    't("shell.nav.home.label")',
+    't("shell.nav.dashboard.label")',
+    't("shell.nav.chat.label")',
+    't("shell.nav.skills.label")',
+    't("shell.nav.mcp.label")',
+    't("shell.nav.knowledge.label")',
+    't("shell.nav.trace.label")',
+  ],
   "sidebar navigation order must match Agno OS control-plane priority",
 )
 
 for (const controlPlaneLabel of [
-  'label: "Sessions"',
-  'label: "Studio"',
-  'label: "Memory"',
-  'label: "Metrics"',
-  'label: "Evaluation"',
-  'label: "Approvals"',
-  'label: "Scheduler"',
+  't("shell.nav.sessions.label")',
+  't("shell.nav.studio.label")',
+  't("shell.nav.memory.label")',
+  't("shell.nav.metrics.label")',
+  't("shell.nav.evaluation.label")',
+  't("shell.nav.approvals.label")',
+  't("shell.nav.scheduler.label")',
 ]) {
   assert.match(
     app,
@@ -175,18 +405,67 @@ assert.equal(
   "archiveSession must not accept frontend-provided user id",
 )
 
-for (const traceParam of ["team_id", "workflow_id", "user_id"]) {
+for (const traceParam of ["session_id", "run_id", "agent_id", "team_id", "workflow_id", "user_id"]) {
   assert.match(
     useApi,
     new RegExp(`qs\\.set\\('${traceParam}'`),
     `Trace API must preserve ${traceParam} query parameter when provided`,
   )
+  assert.match(
+    trace,
+    new RegExp(`${traceParam}:\\s*filters\\.${traceParam}\\.trim\\(\\)`),
+    `Trace page must pass ${traceParam} from filters into listTraces`,
+  )
 }
+
+for (const traceInteraction of ["@keyup.enter=\"refresh\"", "@click=\"refresh\""]) {
+  assert.match(
+    trace,
+    new RegExp(traceInteraction.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    `Trace filters must keep manual refresh interaction: ${traceInteraction}`,
+  )
+}
+
+assert.match(
+  useApi,
+  /const cleanParam =/,
+  "Trace API must normalize query parameters before appending them to URLSearchParams",
+)
+
+assert.equal(
+  /\p{Script=Han}/u.test(useApi),
+  false,
+  "API composables must not hardcode localized Chinese fallback copy",
+)
+
+assert.match(
+  useApi,
+  /cleanParam\(params\.session_id\)/,
+  "Trace API must trim session_id before querying",
+)
 
 assert.match(
   clipboard,
   /execCommand\('copy'\)/,
   "clipboard helper must fall back when navigator.clipboard is unavailable",
+)
+
+assert.match(
+  clipboard,
+  /catch\s*\{[\s\S]*Fall back below when browser permission or context blocks clipboard API/,
+  "clipboard helper must fall back when navigator.clipboard is blocked by permissions",
+)
+
+assert.match(
+  clipboard,
+  /textarea\.focus/,
+  "clipboard fallback must focus the temporary textarea before copy",
+)
+
+assert.match(
+  clipboard,
+  /setSelectionRange/,
+  "clipboard fallback must explicitly select the text range before copy",
 )
 
 assert.match(
@@ -230,15 +509,90 @@ for (const chatHook of [
   )
 }
 
+for (const bulkyHeaderClass of [
+  "agent-chat-header",
+  "agent-core",
+  "agent-model-pill",
+]) {
+  assert.equal(
+    chat.includes(bulkyHeaderClass),
+    false,
+    `Chat page must remove bulky top header element: ${bulkyHeaderClass}`,
+  )
+}
+
+assert.match(
+  chat,
+  /useI18n\(\)/,
+  "Chat page must read user-facing copy from vue-i18n",
+)
+
+for (const hardcodedChatCopy of [
+  "Agent 对话",
+  "执行中",
+  "待命",
+  "Markdown 内容加载中",
+  "展开思考",
+  "收起思考",
+  "展开来源",
+  "收起来源",
+  "Agent 正在规划下一步",
+  "描述目标，例如：分析这个 CVE 对我资产面的影响",
+  "选择模型",
+  "未填写模型 ID",
+  "发送任务",
+  "放大预览",
+  "你好！我是 AgentOS 安全智能体",
+  "未选择",
+  "未加载到模型配置",
+  "请选择一个可用模型",
+  "已禁用，请切换模型",
+  "未完成参数配置",
+  "帮我评估 CVE 对当前资产的影响",
+  "生成一次外部暴露面排查计划",
+  "把这段告警整理成处置步骤",
+  "模型配置加载失败",
+  "模型不可用",
+  "抱歉，处理请求时遇到错误。请稍后再试。",
+]) {
+  assert.equal(
+    chat.includes(hardcodedChatCopy),
+    false,
+    `Chat page must not hardcode user-facing copy: ${hardcodedChatCopy}`,
+  )
+}
+
+for (const traceFilterHook of [
+  "filters.session_id",
+  "filters.run_id",
+  "filters.user_id",
+  "filters.agent_id",
+  "filters.team_id",
+  "filters.workflow_id",
+  "filters.status",
+  "filters.timeRange",
+  "scheduleFilterRefresh",
+]) {
+  assert.match(
+    trace,
+    new RegExp(traceFilterHook.replace(".", "\\.")),
+    `Trace filters must auto-refresh when ${traceFilterHook} changes`,
+  )
+}
+
 for (const removedPanelCopy of [
   "MCP 工具中枢",
   "基于 FastMCP 的服务控制、访问 Token 与外部 Hi-Agent 接入",
   "TRACE CONSOLE",
   "Agent 观测中心",
   "会话记录、Trace 队列、Span 瀑布与错误上下文统一查看",
+  "从左侧队列进入 Trace，可查看 Span 瀑布、树状关系和属性详情。",
+  "未来规划",
+  "启用 Agent Team 架构后",
+  "注意：Skill 启用/禁用在下一次 Agent 对话时生效。",
 ]) {
   assert.equal(
-    `${mcp}\n${trace}`.includes(removedPanelCopy),
+    `${mcp}\n${trace}\n${skills}`.includes(removedPanelCopy),
     false,
     `right/content panel must remove middle explanatory copy: ${removedPanelCopy}`,
   )
@@ -249,6 +603,152 @@ assert.match(
   /skills-console/,
   "Skills page must use an explicit bordered console surface",
 )
+
+assert.match(
+  skills,
+  /skill-card/,
+  "Skills rows must use the shared tokenized card surface",
+)
+
+assert.match(
+  skills,
+  /skill-summary-strip/,
+  "Skills page must summarize total, enabled, and script counts in a compact strip",
+)
+
+assert.equal(
+  skills.includes("skill-secondary-action"),
+  false,
+  "Skills page must not render the disabled placeholder upload action in the header",
+)
+
+assert.match(
+  skills,
+  /useI18n\(\)/,
+  "Skills page must read user-facing copy from vue-i18n",
+)
+
+assert.match(
+  skills,
+  /hasPermission\("skill:write"\)/,
+  "Skills page must check write permission before allowing skill toggles",
+)
+
+assert.match(
+  skills,
+  /:disabled="!canWriteSkills"/,
+  "Skills page must disable skill toggles for read-only users",
+)
+
+assert.match(
+  mcp,
+  /useI18n\(\)/,
+  "MCP page must read user-facing copy from vue-i18n",
+)
+
+assert.match(
+  mcp,
+  /hasPermission\("mcp:write"\)/,
+  "MCP page must check write permission before allowing mutating actions",
+)
+
+assert.match(
+  mcp,
+  /:disabled="!canWriteMcp"/,
+  "MCP page must disable mutating controls for read-only users",
+)
+
+for (const bulkyMcpMetric of [
+  '"Control"',
+  '"Integrated"',
+]) {
+  assert.equal(
+    mcp.includes(bulkyMcpMetric),
+    false,
+    `MCP summary strip must not render duplicate control metric: ${bulkyMcpMetric}`,
+  )
+}
+
+assert.match(
+  trace,
+  /useI18n\(\)/,
+  "Trace page must read user-facing copy from vue-i18n",
+)
+
+for (const hardcodedSkillsCopy of [
+  "后端上传接口当前为占位，暂不可用",
+  "上传",
+  "刷新",
+  "加载中…",
+  "未检测到任何 Skill",
+  "脚本",
+  "暂无描述",
+  "收起脚本",
+  "查看 ",
+  "已启用",
+  "已禁用",
+  "加载 Skills 列表失败",
+  "切换 Skill 状态失败",
+]) {
+  assert.equal(
+    skills.includes(hardcodedSkillsCopy),
+    false,
+    `Skills page must not hardcode copy: ${hardcodedSkillsCopy}`,
+  )
+}
+
+for (const oldSkillsColor of ["#0969DA", "#D0D7DE", "#30363D", "#0D1117", "rounded-xl"]) {
+  assert.equal(
+    skills.includes(oldSkillsColor),
+    false,
+    `Skills page must not keep old GitHub-style styling token: ${oldSkillsColor}`,
+  )
+}
+
+for (const hardcodedMcpCopy of [
+  "服务能力",
+  "访问 Token",
+  "签发访问 Token",
+  "Token 名称，例如 AgentOS",
+  "仅显示一次，请立即复制",
+  "暂无访问 Token",
+  "注册外部 MCP",
+  "名称，例如 CVE Hunter",
+  "能力描述",
+  "接入说明",
+  "管理入口",
+  "加载 MCP 数据失败",
+  "生成 Token 失败",
+  "删除 Token 失败",
+  "注册 Hi-Agent 失败",
+  "FastMCP",
+  "Client URL",
+]) {
+  assert.equal(
+    mcp.includes(hardcodedMcpCopy),
+    false,
+    `MCP page must not hardcode copy: ${hardcodedMcpCopy}`,
+  )
+}
+
+for (const hardcodedTraceCopy of [
+  "刷新 Trace 队列",
+  "选择一次 Agent Run",
+  "重新拉取",
+  "按父子关系查看 Agent、LLM、Tool 与 Hook",
+  "暂无 spans",
+  "点击 Span 查看详情",
+  "错误信息",
+  "复制 JSON",
+  "开始偏移",
+  "加载 traces 失败",
+]) {
+  assert.equal(
+    trace.includes(hardcodedTraceCopy),
+    false,
+    `Trace page must not hardcode copy: ${hardcodedTraceCopy}`,
+  )
+}
 
 assert.equal(
   existsSync(sourcePath("components/Trace.vue")),
@@ -392,6 +892,96 @@ for (const chartClass of ["latency-chart", "hour-heatmap", "radar-chart", "span-
   )
 }
 
+assert.equal(
+  /#[0-9A-Fa-f]{3,8}/.test(dashboard),
+  false,
+  "Dashboard page must use shared design tokens instead of hardcoded hex colors",
+)
+
+for (const [pageName, pageSource] of [
+  ["Assets", assets],
+  ["CVE", cve],
+  ["Collect", collect],
+  ["Settings", settings],
+  ["Knowledge", knowledge],
+]) {
+  assert.equal(
+    /#[0-9A-Fa-f]{3,8}\b|rgba\(/.test(pageSource),
+    false,
+    `${pageName} page must use shared design tokens instead of hardcoded colors`,
+  )
+}
+
+assert.match(
+  dashboard,
+  /useI18n\(\)/,
+  "Dashboard page must read user-facing copy from vue-i18n",
+)
+
+assert.equal(
+  dashboard.includes("situation-core"),
+  false,
+  "Dashboard must avoid the old oversized header icon block",
+)
+
+for (const hardcodedDashboardCopy of [
+  "安全运营态势总览",
+  "资产、漏洞、响应链路、异常态势与 Agent 负载",
+  "最近 24 小时",
+  "最近 7 天",
+  "最近 30 天",
+  "刷新",
+  "Trace 延迟趋势",
+  "小时运行热力",
+  "Agent 负载雷达",
+  "Span / Error 分布",
+  "暂无 Span 分布数据",
+  "最近研判链路",
+  "会话 ",
+  "运行 ",
+  "暂无 Agent 运行数据",
+  "状态分布",
+  "Agent 响应负载",
+  "暂无 Agent 维度数据",
+  "异常响应",
+  "最近样本未发现异常运行",
+  "运行样本",
+  "当前样本",
+  "响应成功率",
+  "按最近样本计算",
+  "异常运行",
+  "状态 ERROR 或含错误 Span",
+  "平均耗时",
+]) {
+  assert.equal(
+    dashboard.includes(hardcodedDashboardCopy),
+    false,
+    `Dashboard page must not hardcode copy: ${hardcodedDashboardCopy}`,
+  )
+}
+
+assert.match(
+  authClientSource,
+  /fallbacks/,
+  "auth client must accept caller-provided localized fallback messages",
+)
+
+for (const hardcodedAuthClientCopy of [
+  "当前环境不支持 Fetch API",
+  "登录失败",
+  "注册失败",
+  "获取当前用户失败",
+  "获取 OAuth Provider 失败",
+  "获取 OAuth 授权地址失败",
+  "OAuth Provider 未返回授权地址",
+]) {
+  assert.equal(
+    authClientSource.includes(hardcodedAuthClientCopy),
+    false,
+    `auth client must not hardcode localized error copy: ${hardcodedAuthClientCopy}`,
+  )
+}
+
 assert.match(
   trace,
   /trace-id-line/,
@@ -434,13 +1024,23 @@ assert.match(
   "Knowledge page must expose configurable search_type controls",
 )
 
-const knowledge = readOptionalSource("components/Knowledge.vue")
-
 assert.match(
   knowledge,
   /knowledge-workflow-shell/,
   "Knowledge page must be reorganized as an AI workspace workflow shell",
 )
+
+for (const bulkyKnowledgeHeaderClass of [
+  "knowledge-hero",
+  "knowledge-eyebrow",
+  "knowledge-hero-actions",
+]) {
+  assert.equal(
+    knowledge.includes(bulkyKnowledgeHeaderClass),
+    false,
+    `Knowledge page must remove bulky top hero element: ${bulkyKnowledgeHeaderClass}`,
+  )
+}
 
 assert.match(
   knowledge,
@@ -473,6 +1073,54 @@ assert.match(
 )
 
 assert.match(
+  knowledge,
+  /useI18n\(\)/,
+  "Knowledge page must read user-facing copy from vue-i18n",
+)
+
+for (const hardcodedKnowledgeCopy of [
+  "RAG Workspace",
+  "Upload, parse, embed",
+  "刷新",
+  "清空",
+  "上传知识",
+  "Reader 默认自动识别",
+  "文件上传",
+  "文本导入",
+  "服务端路径",
+  "拖入文件或",
+  "选择文件",
+  "标题",
+  "来源",
+  "写入选中文件",
+  "检索验证",
+  "输入检索问题",
+  "正在检索知识库",
+  "暂无命中",
+  "文档管理",
+  "搜索文档",
+  "知识文档列表",
+  "后端重建接口待接入",
+  "RAG 参数",
+  "Document Name",
+  "Embedding Status",
+  "Document Preview",
+  "Document Metadata",
+  "加载知识库失败",
+  "知识库已更新",
+  "请选择文件",
+  "删除知识文档",
+  "清空知识库",
+  "检索问题不能为空",
+]) {
+  assert.equal(
+    knowledge.includes(hardcodedKnowledgeCopy),
+    false,
+    `Knowledge page must not hardcode copy: ${hardcodedKnowledgeCopy}`,
+  )
+}
+
+assert.match(
   trace,
   /trace-inspector-shell/,
   "Trace page must use a two-pane AgentOS-style inspector shell",
@@ -494,6 +1142,18 @@ assert.match(
   trace,
   /trace-content-layout/,
   "Trace content area must use the reference-style left hierarchy and right content layout",
+)
+
+assert.equal(
+  trace.includes("trace-hero"),
+  false,
+  "Trace page must remove the bulky duplicate hero header",
+)
+
+assert.match(
+  trace,
+  /trace-toolbar/,
+  "Trace page must expose a compact filter toolbar instead of a hero header",
 )
 
 assert.match(
@@ -537,3 +1197,254 @@ assert.match(
   /trace-metadata-ledger/,
   "Trace Metadata tab must collect span offsets, parent, events, ids, extracted metadata, and raw attributes",
 )
+
+assert.match(
+  agentOSControl,
+  /useI18n\(\)/,
+  "AgentOS control pages must read user-facing copy from vue-i18n",
+)
+
+for (const bulkyAgentOSHeaderClass of [
+  "agentos-head",
+  "agentos-mark",
+  "agentos-title",
+]) {
+  assert.equal(
+    agentOSControl.includes(bulkyAgentOSHeaderClass),
+    false,
+    `AgentOS control pages must remove bulky top header element: ${bulkyAgentOSHeaderClass}`,
+  )
+}
+
+for (const hardcodedAgentOSCopy of [
+  "加载控制面状态",
+  "暂无记录",
+  "Agno docs MCP 对齐状态",
+  "评测 registry 已就绪，等待接入评测运行。",
+  "审批 registry 已就绪，当前没有待处理请求。",
+  "调度 registry 已就绪，当前没有计划任务。",
+  "当前模块还没有可展示的运行记录。",
+]) {
+  assert.equal(
+    agentOSControl.includes(hardcodedAgentOSCopy),
+    false,
+    `AgentOS control page must not hardcode copy: ${hardcodedAgentOSCopy}`,
+  )
+}
+
+assert.match(
+  collect,
+  /useI18n\(\)/,
+  "Collect page must read user-facing copy from vue-i18n",
+)
+
+assert.match(
+  collect,
+  /useShellStore\(\)/,
+  "Collect page must use the shared shell store for responsive state",
+)
+
+for (const hardcodedCollectCopy of [
+  "请输入要解析的网址",
+  "解析",
+  "清空",
+  "Markdown 文本",
+  "渲染预览",
+  "解析后会在这里显示 Markdown 文本",
+  "输入网址并点击解析",
+  "支持将网页内容转换为 Markdown 格式",
+  "已复制到剪贴板",
+  "复制失败",
+  "无效网址",
+  "请输入一个有效的 URL",
+  "解析成功",
+  "已获取 Markdown 内容",
+  "未返回内容",
+  "后端未返回 Markdown 文本",
+  "解析失败",
+  "网络或后端错误",
+]) {
+  assert.equal(
+    collect.includes(hardcodedCollectCopy),
+    false,
+    `Collect page must not hardcode copy: ${hardcodedCollectCopy}`,
+  )
+}
+
+assert.match(
+  assets,
+  /useI18n\(\)/,
+  "Assets page must read user-facing copy from vue-i18n",
+)
+
+assert.match(
+  assets,
+  /useShellStore\(\)/,
+  "Assets page must use the shared shell store for responsive state",
+)
+
+assert.match(
+  assets,
+  /flush:\s*["']sync["']/,
+  "Assets search mode watcher must reset synchronously before sample searches run",
+)
+
+for (const hardcodedAssetsCopy of [
+  "指纹",
+  "输入 IP 地址",
+  "输入指纹信息",
+  "IP 类型",
+  "状态码",
+  "标签（可多选）",
+  "清空筛选",
+  "站点",
+  "IP 地址",
+  "主机名",
+  "端口信息",
+  "操作系统",
+  "域名",
+  "未找到资产",
+  "未找到符合条件的资产",
+  "等待资产查询",
+  "输入单个 IPv4 地址",
+  "输入技术指纹或组件关键词",
+  "IP 查询仅支持合法 IPv4 地址",
+]) {
+  assert.equal(
+    assets.includes(hardcodedAssetsCopy),
+    false,
+    `Assets page must not hardcode copy: ${hardcodedAssetsCopy}`,
+  )
+}
+
+assert.match(
+  cve,
+  /useI18n\(\)/,
+  "CVE page must read user-facing copy from vue-i18n",
+)
+
+assert.match(
+  cve,
+  /useShellStore\(\)/,
+  "CVE page must use the shared shell store for responsive state",
+)
+
+for (const hardcodedCveCopy of [
+  "输入 CVE 编号或关键字",
+  "数据来源",
+  "全部",
+  "搜索",
+  "更新数据库",
+  "CVE 编号",
+  "来源",
+  "链接",
+  "描述",
+  "展开",
+  "收起",
+  "发现日期",
+  "条结果",
+  "已按来源筛选",
+  "未找到结果",
+  "未找到符合条件的 CVE 记录",
+  "请尝试调整搜索条件",
+  "等待检索条件",
+  "组件名或漏洞关键词",
+  "更新会触发后端 CVE 数据同步任务",
+  "更新 CVE 数据库",
+  "更新成功",
+  "更新失败",
+  "未知错误",
+  "网络错误",
+]) {
+  assert.equal(
+    cve.includes(hardcodedCveCopy),
+    false,
+    `CVE page must not hardcode copy: ${hardcodedCveCopy}`,
+  )
+}
+
+assert.match(
+  settings,
+  /useI18n\(\)/,
+  "Settings page must read user-facing copy from vue-i18n",
+)
+
+assert.match(
+  settings,
+  /hasPermission\("settings:write"\)/,
+  "Settings page must check write permission before allowing configuration changes",
+)
+
+assert.match(
+  settings,
+  /:disabled="!canWriteSettings/,
+  "Settings page must disable configuration controls for read-only users",
+)
+
+for (const hardcodedSettingsCopy of [
+  "系统配置",
+  "运行时参数与 Agent 模型路由配置",
+  "新增模型",
+  "保存",
+  "模型路由",
+  "选择 Agent 默认模型",
+  "默认模型",
+  "未命名模型",
+  "待配置",
+  "自定义模型参数",
+  "启用",
+  "禁用",
+  "显示名称",
+  "例如 DeepSeek V4 Flash",
+  "说明",
+  "用于低延迟研判",
+  "非 LLM 的平台参数",
+  "敏感字段返回时会脱敏",
+  "飞书 Webhook URL",
+  "飞书机器人通知",
+  "自定义模型",
+  "加载配置失败",
+  "确定要删除这个模型配置吗",
+  "删除模型",
+  "删除失败",
+  "配置已保存",
+  "保存配置失败",
+  "Builtin",
+  "Default",
+  "Model ID",
+  "Base URL",
+  "API Key",
+  "MCP Server URL",
+  "MCP Access Token",
+  "YOUR_ACCESS_TOKEN",
+  "https://api.example.com/v1",
+  "sk-...",
+]) {
+  assert.equal(
+    settings.includes(hardcodedSettingsCopy),
+    false,
+    `Settings page must not hardcode copy: ${hardcodedSettingsCopy}`,
+  )
+}
+
+for (const pageWithSharedResponsiveState of [
+  ["Assets", assets],
+  ["CVE", cve],
+  ["Collect", collect],
+]) {
+  assert.match(
+    pageWithSharedResponsiveState[1],
+    /useSecurityDataStore\(\)/,
+    `${pageWithSharedResponsiveState[0]} page must keep workflow state in the shared security data store`,
+  )
+  assert.equal(
+    pageWithSharedResponsiveState[1].includes("checkMobile"),
+    false,
+    `${pageWithSharedResponsiveState[0]} page must not keep page-local mobile resize state`,
+  )
+  assert.equal(
+    /addEventListener\((["'])resize\1/.test(pageWithSharedResponsiveState[1]),
+    false,
+    `${pageWithSharedResponsiveState[0]} page must not attach its own resize listener`,
+  )
+}

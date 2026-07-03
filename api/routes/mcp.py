@@ -1,11 +1,11 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from api.auth.models import User
 from api.auth.permissions import require_permission
-from api.services.audit_service import record_audit_event
+from api.services.audit_service import audit_request_context, record_audit_event
 from api.mcp.config import (
     HIAGENT_CACHE_DB,
     MCP_CONFIG_FILE,
@@ -73,6 +73,7 @@ async def get_config(_user: User = Depends(require_permission("mcp:read"))) -> d
 
 @router.post("/config")
 async def update_config(
+    request: Request,
     body: ServiceToggle,
     user: User = Depends(require_permission("mcp:write")),
 ):
@@ -93,6 +94,7 @@ async def update_config(
         resource_type="mcp_service",
         resource_id=body.id,
         metadata={"enabled": body.enabled},
+        **audit_request_context(request),
     )
     return {"success": True, "control_mode": "integrated", "restart_required": True}
 
@@ -104,6 +106,7 @@ async def get_tokens(_user: User = Depends(require_permission("mcp:read"))):
 
 @router.post("/tokens/issue")
 async def issue_token(
+    request: Request,
     body: TokenIssue,
     user: User = Depends(require_permission("mcp:write")),
 ):
@@ -120,12 +123,14 @@ async def issue_token(
         resource_type="mcp_token",
         resource_id=body.name.strip() or "未命名 Token",
         metadata={"expires_in": expires_in},
+        **audit_request_context(request),
     )
     return {"token": token}
 
 
 @router.post("/tokens/delete")
 async def remove_token(
+    request: Request,
     body: TokenDelete,
     user: User = Depends(require_permission("mcp:write")),
 ):
@@ -137,6 +142,7 @@ async def remove_token(
         action="mcp.token_delete",
         resource_type="mcp_token",
         resource_id=str(body.id or body.token or ""),
+        **audit_request_context(request),
     )
     return {"success": True}
 
@@ -149,6 +155,7 @@ async def list_hiagent(_user: User = Depends(require_permission("mcp:read"))):
 
 @router.post("/hiagent/add")
 async def add_hiagent(
+    request: Request,
     body: HiAgentAdd,
     user: User = Depends(require_permission("mcp:write")),
 ):
@@ -178,12 +185,14 @@ async def add_hiagent(
         resource_type="hiagent",
         resource_id=url,
         metadata={"name": name, "enabled": body.enabled},
+        **audit_request_context(request),
     )
     return {"success": True, "restart_required": True}
 
 
 @router.post("/hiagent/update")
 async def update_hiagent(
+    request: Request,
     body: HiAgentUpdate,
     user: User = Depends(require_permission("mcp:write")),
 ):
@@ -223,12 +232,14 @@ async def update_hiagent(
         resource_type="hiagent",
         resource_id=target_url,
         metadata={"url": new_url, "enabled": body.enabled},
+        **audit_request_context(request),
     )
     return {"success": True, "restart_required": True}
 
 
 @router.post("/hiagent/delete")
 async def delete_hiagent(
+    request: Request,
     body: HiAgentDelete,
     user: User = Depends(require_permission("mcp:write")),
 ):
@@ -249,5 +260,6 @@ async def delete_hiagent(
         action="mcp.hiagent_delete",
         resource_type="hiagent",
         resource_id=url,
+        **audit_request_context(request),
     )
     return {"success": True, "restart_required": True}

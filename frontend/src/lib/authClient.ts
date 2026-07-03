@@ -11,24 +11,46 @@ export const AUTH_TOKEN_STORAGE_KEY = 'agno-aios-auth-token'
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
+export type AuthClientFallbackKey =
+  | 'fetchUnsupported'
+  | 'loginFailed'
+  | 'registerFailed'
+  | 'currentUserFailed'
+  | 'oauthProvidersFailed'
+  | 'oauthAuthorizeFailed'
+  | 'oauthMissingAuthorizationUrl'
 
 export type AuthClientOptions = {
   baseUrl?: string
   fetch?: FetchLike
   storage?: StorageLike
+  fallbacks?: Partial<Record<AuthClientFallbackKey, string>>
 }
 
 const DEFAULT_API_BASE = '/api'
+const DEFAULT_FALLBACKS: Record<AuthClientFallbackKey, string> = {
+  fetchUnsupported: 'Fetch API is not available in this environment',
+  loginFailed: 'Sign in failed',
+  registerFailed: 'Registration failed',
+  currentUserFailed: 'Failed to load current user',
+  oauthProvidersFailed: 'Failed to load OAuth providers',
+  oauthAuthorizeFailed: 'Failed to request OAuth authorization URL',
+  oauthMissingAuthorizationUrl: 'OAuth provider did not return an authorization URL',
+}
 
 const authUrl = (path: string, baseUrl = DEFAULT_API_BASE) => {
   const base = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
   return `${base}${path}`
 }
 
-const getFetch = (fetchImpl?: FetchLike): FetchLike => {
-  if (fetchImpl) return fetchImpl
+const fallbackMessage = (options: AuthClientOptions, key: AuthClientFallbackKey) => {
+  return options.fallbacks?.[key] || DEFAULT_FALLBACKS[key]
+}
+
+const getFetch = (options: AuthClientOptions = {}): FetchLike => {
+  if (options.fetch) return options.fetch
   if (!globalThis.fetch) {
-    throw new Error('当前环境不支持 Fetch API')
+    throw new Error(fallbackMessage(options, 'fetchUnsupported'))
   }
   return globalThis.fetch.bind(globalThis)
 }
@@ -85,47 +107,47 @@ export const loginWithPassword = async (
   body.set('username', credentials.email)
   body.set('password', credentials.password)
 
-  const response = await getFetch(options.fetch)(authUrl('/auth/jwt/login', options.baseUrl), {
+  const response = await getFetch(options)(authUrl('/auth/jwt/login', options.baseUrl), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body,
   })
-  return await readJson<AuthTokenResponse>(response, '登录失败')
+  return await readJson<AuthTokenResponse>(response, fallbackMessage(options, 'loginFailed'))
 }
 
 export const registerWithPassword = async (
   credentials: AuthCredentials,
   options: AuthClientOptions = {},
 ): Promise<AuthUser> => {
-  const response = await getFetch(options.fetch)(authUrl('/auth/register', options.baseUrl), {
+  const response = await getFetch(options)(authUrl('/auth/register', options.baseUrl), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(credentials),
   })
-  return await readJson<AuthUser>(response, '注册失败')
+  return await readJson<AuthUser>(response, fallbackMessage(options, 'registerFailed'))
 }
 
 export const fetchCurrentUser = async (
   token: string,
   options: AuthClientOptions = {},
 ): Promise<AuthUser> => {
-  const response = await getFetch(options.fetch)(authUrl('/auth/users/me', options.baseUrl), {
+  const response = await getFetch(options)(authUrl('/auth/users/me', options.baseUrl), {
     headers: {
       Authorization: `Bearer ${token}`,
     },
   })
-  return await readJson<AuthUser>(response, '获取当前用户失败')
+  return await readJson<AuthUser>(response, fallbackMessage(options, 'currentUserFailed'))
 }
 
 export const fetchOAuthProviders = async (
   options: AuthClientOptions = {},
 ): Promise<OAuthProvider[]> => {
-  const response = await getFetch(options.fetch)(authUrl('/auth/oauth/providers', options.baseUrl))
-  const data = await readJson<OAuthProvidersResponse>(response, '获取 OAuth Provider 失败')
+  const response = await getFetch(options)(authUrl('/auth/oauth/providers', options.baseUrl))
+  const data = await readJson<OAuthProvidersResponse>(response, fallbackMessage(options, 'oauthProvidersFailed'))
   return data.providers || []
 }
 
@@ -134,10 +156,10 @@ export const requestOAuthAuthorization = async (
   options: AuthClientOptions = {},
 ): Promise<string> => {
   const safeProvider = encodeURIComponent(provider)
-  const response = await getFetch(options.fetch)(authUrl(`/auth/${safeProvider}/authorize`, options.baseUrl))
-  const data = await readJson<OAuthAuthorizationResponse>(response, '获取 OAuth 授权地址失败')
+  const response = await getFetch(options)(authUrl(`/auth/${safeProvider}/authorize`, options.baseUrl))
+  const data = await readJson<OAuthAuthorizationResponse>(response, fallbackMessage(options, 'oauthAuthorizeFailed'))
   if (!data.authorization_url) {
-    throw new Error('OAuth Provider 未返回授权地址')
+    throw new Error(fallbackMessage(options, 'oauthMissingAuthorizationUrl'))
   }
   return data.authorization_url
 }
@@ -148,7 +170,7 @@ export const logout = async (
 ): Promise<void> => {
   try {
     if (token) {
-      await getFetch(options.fetch)(authUrl('/auth/logout', options.baseUrl), {
+      await getFetch(options)(authUrl('/auth/logout', options.baseUrl), {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,

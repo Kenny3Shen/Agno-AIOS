@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends
 from api.dependencies import get_asset_client, get_asset_lock
+from api.auth.models import User
+from api.auth.permissions import require_permission
 import asyncio
 import httpx
 from api.models.schemas import AssetSearchRequest
@@ -14,6 +16,7 @@ async def search_asset(
     request: AssetSearchRequest,
     client: httpx.AsyncClient = Depends(get_asset_client),
     asset_lock: asyncio.Lock = Depends(get_asset_lock),
+    _user: User = Depends(require_permission("asset:read")),
 ) -> dict:
     """根据指纹或 IP 搜索资产"""
     try:

@@ -4,7 +4,7 @@
     <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
       <el-input
         v-model="url"
-        placeholder="请输入要解析的网址 (例如：https://example.com)"
+        :placeholder="t('collect.input.urlPlaceholder')"
         class="flex-1"
         clearable
       >
@@ -21,7 +21,7 @@
           class="flex-1 sm:flex-none"
         >
           <el-icon class="mr-1"><Connection /></el-icon>
-          解析
+          {{ t('collect.actions.parse') }}
         </el-button>
         <el-button
           type="default"
@@ -30,7 +30,7 @@
           class="flex-1 sm:flex-none"
         >
           <el-icon class="mr-1"><Delete /></el-icon>
-          清空
+          {{ t('collect.actions.clear') }}
         </el-button>
       </div>
     </div>
@@ -54,12 +54,12 @@
       <div v-if="markdownText || renderedHtml" class="flex flex-col gap-4">
         <!-- Tab 切换 -->
         <el-tabs v-model="activeTab" class="w-full">
-          <!-- Markdown 文本 Tab -->
-          <el-tab-pane label="Markdown 文本" name="markdown">
+          <!-- Markdown editor tab -->
+          <el-tab-pane :label="t('collect.tabs.markdown')" name="markdown">
             <template #label>
               <div class="flex items-center gap-1.5">
                 <el-icon><Document /></el-icon>
-                <span>Markdown 文本</span>
+                <span>{{ t('collect.tabs.markdown') }}</span>
               </div>
             </template>
             <div class="relative">
@@ -67,7 +67,7 @@
                 type="textarea"
                 :rows="isMobile ? 15 : 20"
                 v-model="markdownText"
-                placeholder="解析后会在这里显示 Markdown 文本，可以手动编辑或复制"
+                :placeholder="t('collect.editor.placeholder')"
                 class="w-full font-mono text-sm"
               />
               <!-- 复制按钮 - 浮动在右上角 -->
@@ -84,16 +84,16 @@
             </div>
           </el-tab-pane>
 
-          <!-- 渲染预览 Tab -->
-          <el-tab-pane label="渲染预览" name="preview">
+          <!-- Rendered preview tab -->
+          <el-tab-pane :label="t('collect.tabs.preview')" name="preview">
             <template #label>
               <div class="flex items-center gap-1.5">
                 <el-icon><View /></el-icon>
-                <span>渲染预览</span>
+                <span>{{ t('collect.tabs.preview') }}</span>
               </div>
             </template>
             <div
-              class="prose prose-sm sm:prose max-w-none p-4 bg-white dark:bg-[#212830] border border-[#D0D7DE] dark:border-[#30363D] rounded min-h-[200px] sm:min-h-[300px] overflow-auto"
+              class="markdown-preview prose prose-sm sm:prose max-w-none min-h-[200px] sm:min-h-[300px] overflow-auto"
               v-html="renderedHtml"
             />
           </el-tab-pane>
@@ -105,12 +105,12 @@
     <transition name="el-fade-in">
       <el-empty
         v-if="!markdownText && !loading && !message"
-        description="输入网址并点击解析"
+        :description="t('collect.empty.description')"
         :image-size="isMobile ? 100 : 120"
       >
         <template #description>
-          <p class="text-gray-500">输入网址并点击解析按钮</p>
-          <p class="text-gray-400 text-sm mt-2">支持将网页内容转换为 Markdown 格式</p>
+          <p class="text-gray-500">{{ t('collect.empty.title') }}</p>
+          <p class="text-gray-400 text-sm mt-2">{{ t('collect.empty.hint') }}</p>
         </template>
       </el-empty>
     </transition>
@@ -118,41 +118,30 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { storeToRefs } from 'pinia'
 import { useUrl2MdApi } from '../composables/useApi'
+import { useSecurityDataStore } from '../stores/securityData'
+import { useShellStore } from '../stores/shell'
 import { copyToClipboard } from '../lib/clipboard'
 import { ElMessage } from 'element-plus'
 import { Link, Connection, Delete, DocumentCopy, Document, View } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 
 const md = new MarkdownIt({ html: true, linkify: true })
+const { t } = useI18n()
+const shellStore = useShellStore()
+const securityDataStore = useSecurityDataStore()
 
-// 响应式检测
-const isMobile = ref(false)
-const checkMobile = () => {
-  isMobile.value = window.innerWidth < 640
-}
+const isMobile = computed(() => shellStore.isMobile)
 
-onMounted(() => {
-  checkMobile()
-  window.addEventListener('resize', checkMobile)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('resize', checkMobile)
-})
-
-// Tab 切换状态
-const activeTab = ref<'markdown' | 'preview'>('markdown')
-
-// 查询状态
-const url = ref('')
-const markdownText = ref('')
-const message = ref<{
-  type: 'success' | 'warning' | 'info' | 'error'
-  title: string
-  description?: string
-} | null>(null)
+const {
+  collectActiveTab: activeTab,
+  collectUrl: url,
+  collectMarkdownText: markdownText,
+  collectMessage: message,
+} = storeToRefs(securityDataStore)
 
 // API hooks
 const { loading, parseUrl } = useUrl2MdApi()
@@ -194,9 +183,9 @@ const decodeHtmlEntities = (s: string) => {
 
 const copyMarkdown = async () => {
   if (await copyToClipboard(markdownText.value)) {
-    ElMessage.success('已复制到剪贴板')
+    ElMessage.success(t('collect.messages.copied'))
   } else {
-    ElMessage.error('复制失败')
+    ElMessage.error(t('collect.messages.copyFailed'))
   }
 }
 
@@ -205,8 +194,8 @@ const handleParse = async () => {
   if (!isValidUrl.value) {
     message.value = {
       type: 'warning',
-      title: '无效网址',
-      description: '请输入一个有效的 URL'
+      title: t('collect.messages.invalidUrlTitle'),
+      description: t('collect.messages.invalidUrlDescription')
     }
     return
   }
@@ -224,30 +213,28 @@ const handleParse = async () => {
 
       message.value = {
         type: 'success',
-        title: '解析成功',
-        description: '已获取 Markdown 内容'
+        title: t('collect.messages.parseSuccessTitle'),
+        description: t('collect.messages.parseSuccessDescription')
       }
     } else {
       message.value = {
         type: 'info',
-        title: '未返回内容',
-        description: '后端未返回 Markdown 文本'
+        title: t('collect.messages.emptyContentTitle'),
+        description: t('collect.messages.emptyContentDescription')
       }
     }
   } catch (err: unknown) {
     console.error('URL parse error:', err)
     message.value = {
       type: 'error',
-      title: '解析失败',
-      description: err instanceof Error ? err.message : '网络或后端错误'
+      title: t('collect.messages.parseFailedTitle'),
+      description: err instanceof Error ? err.message : t('collect.messages.networkError')
     }
   }
 }
 
 const clear = () => {
-  url.value = ''
-  markdownText.value = ''
-  message.value = null
+  securityDataStore.resetCollect()
 }
 </script>
 
@@ -273,31 +260,24 @@ const clear = () => {
 }
 
 .prose :deep(a) {
-  color: #2563eb;
+  color: var(--ag-blue);
   text-decoration: underline;
 }
 
 .prose :deep(code) {
-  background-color: #f3f4f6;
+  background-color: var(--ag-code-bg);
+  color: var(--ag-code-text);
   padding: 0.2em 0.4em;
   border-radius: 0.25em;
   font-size: 0.875em;
 }
 
-html.dark .prose :deep(code) {
-  background-color: rgba(148, 163, 184, 0.25);
-}
-
 .prose :deep(pre) {
-  background-color: #1f2937;
-  color: #f9fafb;
+  background-color: var(--ag-code-bg);
+  color: var(--ag-code-text);
   padding: 1em;
   border-radius: 0.5em;
   overflow-x: auto;
-}
-
-html.dark .prose :deep(pre) {
-  background-color: rgba(0, 0, 0, 0.35);
 }
 
 .prose :deep(pre code) {
@@ -312,15 +292,10 @@ html.dark .prose :deep(pre) {
 }
 
 .prose :deep(blockquote) {
-  border-left: 4px solid #e5e7eb;
+  border-left: 4px solid var(--ag-border);
   padding-left: 1em;
   margin: 1em 0;
-  color: #6b7280;
-}
-
-html.dark .prose :deep(blockquote) {
-  border-left-color: #30363d;
-  color: #8b949e;
+  color: var(--ag-muted);
 }
 
 .prose :deep(table) {
@@ -331,22 +306,21 @@ html.dark .prose :deep(blockquote) {
 
 .prose :deep(th),
 .prose :deep(td) {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--ag-border);
   padding: 0.5em;
 }
 
-html.dark .prose :deep(th),
-html.dark .prose :deep(td) {
-  border-color: #30363d;
-}
-
 .prose :deep(th) {
-  background-color: #f9fafb;
+  background-color: var(--ag-panel-soft);
   font-weight: 600;
 }
 
-html.dark .prose :deep(th) {
-  background-color: rgba(148, 163, 184, 0.12);
+.markdown-preview {
+  border: 1px solid var(--ag-panel-border);
+  border-radius: var(--ag-radius-panel);
+  background: var(--ag-panel-bg);
+  padding: var(--ag-space-md);
+  color: var(--ag-text);
 }
 
 /* 响应式优化 */

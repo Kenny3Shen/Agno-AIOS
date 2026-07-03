@@ -1,58 +1,93 @@
 <template>
   <div class="trace-console">
-    <header class="trace-hero">
-      <div class="trace-hero-main">
-        <div class="trace-hero-title">
-          <div class="trace-core" :class="{ 'has-error': selectedTrace && hasError(selectedTrace) }">
-            <el-icon><DataAnalysis /></el-icon>
-          </div>
-          <div class="trace-hero-copy">
-            <h3>Trace</h3>
-          </div>
-        </div>
-
-        <div class="trace-filter-bar">
-          <el-input
-            v-model="filters.session_id"
-            size="small"
-            clearable
-            placeholder="session_id"
-            class="trace-filter-input"
-          />
-          <el-select v-model="filters.status" size="small" clearable placeholder="状态" class="trace-filter-select">
-            <el-option label="OK" value="OK" />
-            <el-option label="ERROR" value="ERROR" />
-            <el-option label="UNSET" value="UNSET" />
-          </el-select>
-          <el-date-picker
-            v-model="filters.timeRange"
-            type="datetimerange"
-            size="small"
-            unlink-panels
-            start-placeholder="开始"
-            end-placeholder="结束"
-            value-format="YYYY-MM-DDTHH:mm:ssXXX"
-            class="trace-date-picker"
-          />
-          <el-button size="small" plain class="cursor-pointer" :disabled="loading" @click="resetFilters">
-            重置
+    <div class="trace-toolbar">
+      <div class="trace-filter-bar">
+        <el-input
+          v-model="filters.session_id"
+          size="small"
+          clearable
+          :placeholder="t('trace.filters.sessionId')"
+          class="trace-filter-input"
+          @keyup.enter="refresh"
+        />
+        <el-input
+          v-model="filters.run_id"
+          size="small"
+          clearable
+          :placeholder="t('trace.filters.runId')"
+          class="trace-filter-input"
+          @keyup.enter="refresh"
+        />
+        <el-input
+          v-model="filters.user_id"
+          size="small"
+          clearable
+          :placeholder="t('trace.filters.userId')"
+          class="trace-filter-input"
+          @keyup.enter="refresh"
+        />
+        <el-input
+          v-model="filters.agent_id"
+          size="small"
+          clearable
+          :placeholder="t('trace.filters.agentId')"
+          class="trace-filter-input"
+          @keyup.enter="refresh"
+        />
+        <el-input
+          v-model="filters.team_id"
+          size="small"
+          clearable
+          :placeholder="t('trace.filters.teamId')"
+          class="trace-filter-input"
+          @keyup.enter="refresh"
+        />
+        <el-input
+          v-model="filters.workflow_id"
+          size="small"
+          clearable
+          :placeholder="t('trace.filters.workflowId')"
+          class="trace-filter-input"
+          @keyup.enter="refresh"
+        />
+        <el-select
+          v-model="filters.status"
+          size="small"
+          clearable
+          :placeholder="t('trace.filters.status')"
+          class="trace-filter-select"
+        >
+          <el-option label="OK" value="OK" />
+          <el-option label="ERROR" value="ERROR" />
+          <el-option label="UNSET" value="UNSET" />
+        </el-select>
+        <el-date-picker
+          v-model="filters.timeRange"
+          type="datetimerange"
+          size="small"
+          unlink-panels
+          :start-placeholder="t('trace.filters.start')"
+          :end-placeholder="t('trace.filters.end')"
+          value-format="YYYY-MM-DDTHH:mm:ssXXX"
+          class="trace-date-picker"
+        />
+        <el-button size="small" plain class="cursor-pointer" :disabled="loading" @click="resetFilters">
+          {{ t('trace.actions.reset') }}
+        </el-button>
+        <el-tooltip :content="t('trace.actions.refreshQueue')" placement="bottom">
+          <el-button size="small" type="primary" :loading="loading" @click="refresh" class="cursor-pointer">
+            <el-icon><Refresh /></el-icon>
           </el-button>
-          <el-tooltip content="刷新 Trace 队列" placement="bottom">
-            <el-button size="small" type="primary" :loading="loading" @click="refresh" class="cursor-pointer">
-              <el-icon><Refresh /></el-icon>
-            </el-button>
-          </el-tooltip>
-        </div>
+        </el-tooltip>
       </div>
-    </header>
+    </div>
 
     <div class="trace-workbench">
       <main class="trace-canvas">
         <div v-if="!selectedTrace" class="trace-empty-stage">
           <div class="empty-observe">
             <el-icon><Aim /></el-icon>
-            <strong>选择一次 Agent Run</strong>
-            <span>从左侧队列进入 Trace，可查看 Span 瀑布、树状关系和属性详情。</span>
+            <strong>{{ t('trace.empty.selectRun') }}</strong>
           </div>
         </div>
 
@@ -72,7 +107,7 @@
 
             <div class="trace-copy-actions">
               <el-button size="small" plain class="cursor-pointer" @click="refreshSelectedTrace" :loading="loadingDetail">
-                重新拉取
+                {{ t('trace.actions.refetch') }}
               </el-button>
             </div>
 
@@ -97,7 +132,7 @@
               <div class="trace-panel-header">
                 <div>
                   <p>Trace Hierarchy</p>
-                  <span>按父子关系查看 Agent、LLM、Tool 与 Hook</span>
+                  <span>{{ t('trace.hierarchy.description') }}</span>
                 </div>
                 <strong>{{ spans.length }} spans</strong>
               </div>
@@ -146,16 +181,16 @@
 
               <div v-else class="empty-observe">
                 <el-icon><Connection /></el-icon>
-                <strong>暂无 spans</strong>
-                <span>该 Trace 可能尚未写入 Span 数据，或当前查询未命中明细。</span>
+                <strong>{{ t('trace.empty.noSpansTitle') }}</strong>
+                <span>{{ t('trace.empty.noSpansDescription') }}</span>
               </div>
             </aside>
 
             <section class="trace-content-detail">
               <div v-if="!selectedSpan" class="empty-observe">
                 <el-icon><Aim /></el-icon>
-                <strong>点击 Span 查看详情</strong>
-                <span>这里会展示输入、输出、元数据与原始 attributes。</span>
+                <strong>{{ t('trace.empty.selectSpanTitle') }}</strong>
+                <span>{{ t('trace.empty.selectSpanDescription') }}</span>
               </div>
 
               <template v-else>
@@ -197,7 +232,7 @@
                 </div>
 
                 <div v-if="selectedSpan.status_message" class="trace-error-box">
-                  <span>错误信息</span>
+                  <span>{{ t('trace.labels.errorMessage') }}</span>
                   <strong>{{ selectedSpan.status_message }}</strong>
                 </div>
 
@@ -274,7 +309,7 @@
                     <div class="trace-json-head">
                       <span>Attributes</span>
                       <el-button size="small" plain class="cursor-pointer" :disabled="!selectedSpan" @click="copySpanJson">
-                        复制 JSON
+                        {{ t('trace.actions.copyJson') }}
                       </el-button>
                     </div>
                     <pre class="trace-json">{{ prettyJson(selectedSpan.attributes) }}</pre>
@@ -295,12 +330,12 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue"
 import { ElMessage } from "element-plus"
 import MarkdownIt from "markdown-it"
+import { useI18n } from "vue-i18n"
 import {
   Aim,
   Connection,
   CopyDocument,
   Cpu,
-  DataAnalysis,
   Refresh,
 } from "@element-plus/icons-vue"
 import { useTracingApi } from "../composables/useApi"
@@ -308,6 +343,7 @@ import { copyToClipboard } from "../lib/clipboard"
 import { useTraceStore } from "../stores/traces"
 import type { ParsedSpanPayload, SpanItem, SpanTreeNode, TraceItem } from "../types"
 
+const { t } = useI18n()
 const { loading, error, listTraces, getTrace } = useTracingApi()
 const markdownRenderer = new MarkdownIt({
   html: false,
@@ -330,6 +366,7 @@ const activeDetailTab = ref<"info" | "metadata">("info")
 
 const loadingDetail = ref(false)
 const apiError = computed(() => error.value)
+let filterRefreshTimer: ReturnType<typeof window.setTimeout> | null = null
 
 const selectedTraceEvidence = computed(() => {
   const trace = selectedTrace.value
@@ -385,7 +422,7 @@ const spanMetadataItems = computed(() => {
   if (!span) return []
   const eventCount = Math.max(parsedSpan.value.events?.length || 0, span.events?.length || 0)
   return [
-    { label: "开始偏移", value: spanOffset(span), displayValue: spanOffset(span) },
+    { label: t("trace.metadata.startOffset"), value: spanOffset(span), displayValue: spanOffset(span) },
     { label: "Parent", value: valueOrDash(span.parent_span_id), displayValue: compactId(span.parent_span_id) },
     { label: "Events", value: String(eventCount), displayValue: String(eventCount) },
     { label: "Span ID", value: valueOrDash(span.span_id), displayValue: compactId(span.span_id) },
@@ -530,6 +567,11 @@ const refresh = async () => {
     limit: limit.value,
     status: filters.status || "",
     session_id: filters.session_id.trim() || undefined,
+    run_id: filters.run_id.trim() || undefined,
+    user_id: filters.user_id.trim() || undefined,
+    agent_id: filters.agent_id.trim() || undefined,
+    team_id: filters.team_id.trim() || undefined,
+    workflow_id: filters.workflow_id.trim() || undefined,
     start_time: start_time || undefined,
     end_time: end_time || undefined,
   })
@@ -589,13 +631,23 @@ const resetFilters = async () => {
   await refresh()
 }
 
+const scheduleFilterRefresh = () => {
+  if (filterRefreshTimer !== null) {
+    window.clearTimeout(filterRefreshTimer)
+  }
+  filterRefreshTimer = window.setTimeout(() => {
+    filterRefreshTimer = null
+    void refresh()
+  }, 250)
+}
+
 const copyText = async (text: string) => {
-  const t = (text || "").trim()
-  if (!t) return
-  if (await copyToClipboard(t)) {
-    ElMessage.success("已复制")
+  const trimmedText = (text || "").trim()
+  if (!trimmedText) return
+  if (await copyToClipboard(trimmedText)) {
+    ElMessage.success(t("common.clipboard.copied"))
   } else {
-    ElMessage.warning("复制失败")
+    ElMessage.warning(t("common.clipboard.failed"))
   }
 }
 
@@ -604,15 +656,26 @@ const copySpanJson = async () => {
   await copyText(JSON.stringify(selectedSpan.value, null, 2))
 }
 
-const hasError = (trace: TraceItem) => {
-  return trace.status === "ERROR" || Number(trace.error_count || 0) > 0
-}
-
 watch(
   () => props.selectedTraceId,
   (traceId) => {
     void selectTraceById(traceId)
   }
+)
+
+watch(
+  () => [
+    filters.session_id,
+    filters.run_id,
+    filters.user_id,
+    filters.agent_id,
+    filters.team_id,
+    filters.workflow_id,
+    filters.status,
+    filters.timeRange?.[0] || "",
+    filters.timeRange?.[1] || "",
+  ],
+  scheduleFilterRefresh
 )
 
 const handleExternalTraceSelect = (event: Event) => {
@@ -625,12 +688,15 @@ onMounted(async () => {
   try {
     await refresh()
   } catch (e: unknown) {
-    ElMessage.error(e instanceof Error ? e.message : "加载 traces 失败")
+    ElMessage.error(e instanceof Error ? e.message : t("trace.messages.loadFailed"))
   }
 })
 
 onUnmounted(() => {
   window.removeEventListener("agno-aios-trace-select", handleExternalTraceSelect)
+  if (filterRefreshTimer !== null) {
+    window.clearTimeout(filterRefreshTimer)
+  }
 })
 </script>
 
@@ -646,11 +712,11 @@ onUnmounted(() => {
   --trace-muted-soft: var(--ag-muted);
   --trace-blue: var(--ag-blue);
   --trace-blue-soft: var(--ag-blue-soft);
-  --trace-purple: #8a63ff;
+  --trace-purple: var(--ag-purple);
   --trace-red: var(--ag-red);
   --trace-yellow: var(--ag-yellow);
-  --trace-code-bg: #f3f6fa;
-  --trace-code-text: #182230;
+  --trace-code-bg: var(--ag-code-bg);
+  --trace-code-text: var(--ag-code-text);
   display: flex;
   height: 100%;
   min-height: 0;
@@ -665,13 +731,13 @@ onUnmounted(() => {
   min-width: 0;
 }
 
-.trace-hero {
+.trace-toolbar {
   border-bottom: 1px solid var(--trace-border);
-  background: linear-gradient(180deg, var(--trace-panel), var(--trace-bg));
-  padding: 16px;
+  background: var(--trace-panel);
+  padding: 12px 16px;
 }
 
-.trace-hero-main,
+.trace-toolbar,
 .trace-run-header {
   display: flex;
   flex-wrap: wrap;
@@ -680,7 +746,6 @@ onUnmounted(() => {
   gap: 14px;
 }
 
-.trace-hero-title,
 .trace-run-heading,
 .trace-panel-title,
 .trace-selected-span {
@@ -688,36 +753,19 @@ onUnmounted(() => {
   align-items: flex-start;
   gap: 10px;
 }
-
-.trace-core {
-  display: grid;
-  flex: 0 0 auto;
-  width: 38px;
-  height: 38px;
-  place-items: center;
-  border: 1px solid rgba(161, 116, 255, 0.36);
-  border-radius: 8px;
-  background: rgba(161, 116, 255, 0.12);
-  color: var(--trace-purple);
-}
-
-.trace-core.has-error {
-  border-color: rgba(211, 74, 66, 0.36);
-  background: var(--ag-red-soft);
-  color: var(--trace-red);
-}
-
-.trace-hero-copy p,
-.trace-panel-header p {
-  margin: 0;
+.trace-panel-header p,
+.trace-io-head span {
   color: var(--trace-muted);
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0;
   text-transform: uppercase;
 }
 
-.trace-hero-copy h3,
+.trace-panel-header p {
+  margin: 0;
+  letter-spacing: 0;
+}
+
 .trace-run-heading h4 {
   margin: 2px 0 0;
   color: var(--trace-text);
@@ -727,7 +775,6 @@ onUnmounted(() => {
   overflow-wrap: anywhere;
 }
 
-.trace-hero-copy span,
 .trace-panel-header span {
   display: block;
   margin-top: 4px;
@@ -738,11 +785,12 @@ onUnmounted(() => {
 
 .trace-filter-bar {
   display: flex;
-  flex: 1 1 520px;
+  flex: 1 1 auto;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
+  width: 100%;
 }
 
 .trace-filter-input,
@@ -796,7 +844,7 @@ onUnmounted(() => {
   height: 10px;
   overflow: hidden;
   border-radius: 999px;
-  background: #252b34;
+  background: var(--trace-panel-soft);
 }
 
 .trace-timeline-track {
@@ -834,7 +882,7 @@ onUnmounted(() => {
 }
 
 .trace-status-dot.ok {
-  background: #28a66f;
+  background: var(--ag-green);
   box-shadow: 0 0 0 3px rgba(40, 166, 111, 0.14);
 }
 
@@ -1410,13 +1458,6 @@ onUnmounted(() => {
   margin-bottom: 8px;
 }
 
-.trace-io-head span {
-  color: var(--trace-muted);
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
 .trace-io-head > div {
   display: inline-flex;
   gap: 4px;
@@ -1641,34 +1682,33 @@ html.dark .trace-console {
   --trace-border-strong: var(--ag-border-strong);
   --trace-text: var(--ag-text);
   --trace-muted: var(--ag-muted);
-  --trace-muted-soft: #777982;
+  --trace-muted-soft: var(--ag-muted);
   --trace-blue: var(--ag-blue);
   --trace-blue-soft: var(--ag-blue-soft);
-  --trace-purple: #a174ff;
+  --trace-purple: var(--ag-purple);
   --trace-red: var(--ag-red);
   --trace-yellow: var(--ag-yellow);
-  --trace-code-bg: #101115;
-  --trace-code-text: #e7e7e4;
+  --trace-code-bg: var(--ag-code-bg);
+  --trace-code-text: var(--ag-code-text);
 }
 
-html.dark .trace-core.has-error,
 html.dark .trace-error-box {
   background: rgba(255, 111, 99, 0.12);
 }
 
 html.dark .trace-timeline-track {
-  background: #2a2c33;
+  background: var(--trace-panel-soft);
 }
 
 html.dark .trace-json,
 html.dark .trace-json-payload {
-  background: #101115;
-  color: #e7e7e4;
+  background: var(--trace-code-bg);
+  color: var(--trace-code-text);
 }
 
 html.dark .trace-waterfall-row:hover,
 html.dark .trace-waterfall-row.active {
-  background: #202127;
+  background: var(--trace-panel-raised, var(--ag-panel-raised));
 }
 
 @media (max-width: 1480px) {
@@ -1729,7 +1769,7 @@ html.dark .trace-waterfall-row.active {
 }
 
 @media (max-width: 768px) {
-  .trace-hero,
+  .trace-toolbar,
   .trace-run-header,
   .trace-span-hierarchy,
   .trace-content-detail {

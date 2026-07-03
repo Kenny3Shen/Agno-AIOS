@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { apiFetch } from '../lib/apiClient'
 import type {
   AssetSearchParams,
@@ -30,6 +31,50 @@ import type {
   Url2MdParseResponse,
 } from '../types'
 
+type ApiFallbackKey =
+  | 'cveSearchFailed'
+  | 'cveUpdateFailed'
+  | 'assetSearchFailed'
+  | 'chatHttpFailed'
+  | 'chatSendFailed'
+  | 'osControlLoadFailed'
+  | 'chatSessionsLoadFailed'
+  | 'chatHistoryLoadFailed'
+  | 'chatArchiveFailed'
+  | 'urlParseFailed'
+  | 'settingsLoadFailed'
+  | 'settingsUpdateFailed'
+  | 'modelsLoadFailed'
+  | 'modelsSaveFailed'
+  | 'tracesLoadFailed'
+  | 'traceDetailLoadFailed'
+  | 'skillsLoadFailed'
+  | 'skillToggleFailed'
+  | 'knowledgeRequestFailed'
+  | 'knowledgeLoadFailed'
+  | 'knowledgeWriteFailed'
+  | 'knowledgeImportFailed'
+  | 'knowledgeDeleteFailed'
+  | 'knowledgeClearFailed'
+  | 'knowledgeSearchFailed'
+  | 'mcpRequestFailed'
+  | 'mcpConfigLoadFailed'
+  | 'mcpConfigUpdateFailed'
+  | 'mcpTokenLoadFailed'
+  | 'mcpTokenIssueFailed'
+  | 'mcpTokenDeleteFailed'
+  | 'mcpHiAgentLoadFailed'
+  | 'mcpHiAgentAddFailed'
+  | 'mcpHiAgentUpdateFailed'
+  | 'mcpHiAgentDeleteFailed'
+
+const useApiMessage = () => {
+  const { t } = useI18n()
+  return (key: ApiFallbackKey, params?: Record<string, string | number>) => {
+    return params ? t(`api.errors.${key}`, params) : t(`api.errors.${key}`)
+  }
+}
+
 const messageFromUnknown = (err: unknown, fallback: string) => {
   if (err instanceof Error && err.message) return err.message
   return fallback
@@ -53,10 +98,15 @@ const messageFromResponse = (data: unknown, fallback: string) => {
   return fallback
 }
 
+const cleanParam = (value: string | null | undefined) => {
+  return (value ?? '').trim()
+}
+
 /**
- * CVE 搜索 API
+ * CVE search API.
  */
 export function useCveApi() {
+  const apiMessage = useApiMessage()
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -74,11 +124,11 @@ export function useCveApi() {
       })
       if (!response.ok) {
         const data: unknown = await response.json()
-        throw new Error(messageFromResponse(data, '搜索失败'))
+        throw new Error(messageFromResponse(data, apiMessage('cveSearchFailed')))
       }
       return await response.json()
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, '搜索失败')
+      error.value = messageFromUnknown(err, apiMessage('cveSearchFailed'))
       throw err
     } finally {
       loading.value = false
@@ -95,11 +145,11 @@ export function useCveApi() {
       })
       if (!response.ok) {
         const data: unknown = await response.json()
-        throw new Error(messageFromResponse(data, '更新失败'))
+        throw new Error(messageFromResponse(data, apiMessage('cveUpdateFailed')))
       }
       return await response.json()
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, '更新失败')
+      error.value = messageFromUnknown(err, apiMessage('cveUpdateFailed'))
       throw err
     } finally {
       loading.value = false
@@ -115,9 +165,10 @@ export function useCveApi() {
 }
 
 /**
- * 资产搜索 API
+ * Asset search API.
  */
 export function useAssetApi() {
+  const apiMessage = useApiMessage()
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -135,11 +186,11 @@ export function useAssetApi() {
       })
       if (!response.ok) {
         const data: unknown = await response.json()
-        throw new Error(messageFromResponse(data, '搜索失败'))
+        throw new Error(messageFromResponse(data, apiMessage('assetSearchFailed')))
       }
       return await response.json()
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, '搜索失败')
+      error.value = messageFromUnknown(err, apiMessage('assetSearchFailed'))
       throw err
     } finally {
       loading.value = false
@@ -154,9 +205,10 @@ export function useAssetApi() {
 }
 
 /**
- * LLM 聊天 API
+ * LLM chat API.
  */
 export function useChatApi() {
+  const apiMessage = useApiMessage()
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -184,7 +236,7 @@ export function useChatApi() {
       })
 
       if (!response.ok || !response.body) {
-        throw new Error(`请求失败: ${response.status}`)
+        throw new Error(apiMessage('chatHttpFailed', { status: response.status }))
       }
 
       const reader = response.body.getReader()
@@ -218,7 +270,7 @@ export function useChatApi() {
         }
       }
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, '发送失败')
+      error.value = messageFromUnknown(err, apiMessage('chatSendFailed'))
       throw err
     } finally {
       loading.value = false
@@ -233,9 +285,10 @@ export function useChatApi() {
 }
 
 /**
- * AgentOS 控制面 API
+ * AgentOS control-plane API.
  */
 export function useOsControlApi() {
+  const apiMessage = useApiMessage()
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -247,11 +300,11 @@ export function useOsControlApi() {
       const response = await apiFetch(`/os/${module}`)
       if (!response.ok) {
         const data: unknown = await response.json()
-        throw new Error(messageFromResponse(data, '加载控制面失败'))
+        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
       }
       return await response.json()
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, '加载控制面失败')
+      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
       throw err
     } finally {
       loading.value = false
@@ -266,16 +319,17 @@ export function useOsControlApi() {
 }
 
 /**
- * 聊天会话历史 API
+ * Chat session history API.
  */
 export function useChatHistory() {
+  const apiMessage = useApiMessage()
   const loadingSessions = ref(false)
 
   const listSessions = async (): Promise<ChatSession[]> => {
     loadingSessions.value = true
     try {
       const response = await apiFetch('/chat/sessions')
-      if (!response.ok) throw new Error('获取会话列表失败')
+      if (!response.ok) throw new Error(apiMessage('chatSessionsLoadFailed'))
       return await response.json()
     } finally {
       loadingSessions.value = false
@@ -284,7 +338,7 @@ export function useChatHistory() {
 
   const getSessionHistory = async (sessionId: string): Promise<Message[]> => {
     const response = await apiFetch(`/chat/sessions/${sessionId}`)
-    if (!response.ok) throw new Error('获取会话记录失败')
+    if (!response.ok) throw new Error(apiMessage('chatHistoryLoadFailed'))
     return await response.json()
   }
 
@@ -293,7 +347,7 @@ export function useChatHistory() {
     const response = await apiFetch(`/chat/sessions/${sessionId}`, {
       method: 'DELETE'
     })
-    if (!response.ok) throw new Error('归档会话失败')
+    if (!response.ok) throw new Error(apiMessage('chatArchiveFailed'))
   }
 
   return {
@@ -309,6 +363,7 @@ export function useChatHistory() {
  * URL2MD API
  */
 export function useUrl2MdApi() {
+  const apiMessage = useApiMessage()
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -326,11 +381,11 @@ export function useUrl2MdApi() {
       })
       if (!response.ok) {
         const data: unknown = await response.json()
-        throw new Error(messageFromResponse(data, '解析失败'))
+        throw new Error(messageFromResponse(data, apiMessage('urlParseFailed')))
       }
       return await response.json()
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, '解析失败')
+      error.value = messageFromUnknown(err, apiMessage('urlParseFailed'))
       throw err
     } finally {
       loading.value = false
@@ -348,6 +403,7 @@ export function useUrl2MdApi() {
  * Settings API
  */
 export function useSettingsApi() {
+  const apiMessage = useApiMessage()
   const loadingSettings = ref(false)
   const saving = ref(false)
 
@@ -355,7 +411,7 @@ export function useSettingsApi() {
     loadingSettings.value = true
     try {
       const response = await apiFetch('/settings')
-      if (!response.ok) throw new Error('获取配置失败')
+      if (!response.ok) throw new Error(apiMessage('settingsLoadFailed'))
       const data: SettingsResponse = await response.json()
       return data.settings
     } finally {
@@ -371,7 +427,7 @@ export function useSettingsApi() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ settings })
       })
-      if (!response.ok) throw new Error('更新配置失败')
+      if (!response.ok) throw new Error(apiMessage('settingsUpdateFailed'))
       const data: SettingsResponse = await response.json()
       return data.settings
     } finally {
@@ -383,7 +439,7 @@ export function useSettingsApi() {
     loadingSettings.value = true
     try {
       const response = await apiFetch('/models')
-      if (!response.ok) throw new Error('获取模型配置失败')
+      if (!response.ok) throw new Error(apiMessage('modelsLoadFailed'))
       return await response.json()
     } finally {
       loadingSettings.value = false
@@ -400,7 +456,7 @@ export function useSettingsApi() {
       })
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
-        throw new Error(messageFromResponse(data, '保存模型配置失败'))
+        throw new Error(messageFromResponse(data, apiMessage('modelsSaveFailed')))
       }
       return await response.json()
     } finally {
@@ -422,6 +478,7 @@ export function useSettingsApi() {
  * Tracing API
  */
 export function useTracingApi() {
+  const apiMessage = useApiMessage()
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -444,24 +501,33 @@ export function useTracingApi() {
       const qs = new URLSearchParams()
       if (params.page) qs.set('page', String(params.page))
       if (params.limit) qs.set('limit', String(params.limit))
-      if (params.status) qs.set('status', String(params.status))
-      if (params.session_id) qs.set('session_id', params.session_id)
-      if (params.run_id) qs.set('run_id', params.run_id)
-      if (params.agent_id) qs.set('agent_id', params.agent_id)
-      if (params.team_id) qs.set('team_id', params.team_id)
-      if (params.workflow_id) qs.set('workflow_id', params.workflow_id)
-      if (params.user_id) qs.set('user_id', params.user_id)
-      if (params.start_time) qs.set('start_time', params.start_time)
-      if (params.end_time) qs.set('end_time', params.end_time)
+      const status = cleanParam(params.status)
+      const sessionId = cleanParam(params.session_id)
+      const runId = cleanParam(params.run_id)
+      const agentId = cleanParam(params.agent_id)
+      const teamId = cleanParam(params.team_id)
+      const workflowId = cleanParam(params.workflow_id)
+      const userId = cleanParam(params.user_id)
+      const startTime = cleanParam(params.start_time)
+      const endTime = cleanParam(params.end_time)
+      if (status) qs.set('status', status)
+      if (sessionId) qs.set('session_id', sessionId)
+      if (runId) qs.set('run_id', runId)
+      if (agentId) qs.set('agent_id', agentId)
+      if (teamId) qs.set('team_id', teamId)
+      if (workflowId) qs.set('workflow_id', workflowId)
+      if (userId) qs.set('user_id', userId)
+      if (startTime) qs.set('start_time', startTime)
+      if (endTime) qs.set('end_time', endTime)
 
       const response = await apiFetch(`/traces?${qs.toString()}`)
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
-        throw new Error(messageFromResponse(data, '获取 traces 失败'))
+        throw new Error(messageFromResponse(data, apiMessage('tracesLoadFailed')))
       }
       return await response.json()
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, '获取 traces 失败')
+      error.value = messageFromUnknown(err, apiMessage('tracesLoadFailed'))
       throw err
     } finally {
       loading.value = false
@@ -475,11 +541,11 @@ export function useTracingApi() {
       const response = await apiFetch(`/traces/${encodeURIComponent(traceId)}`)
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
-        throw new Error(messageFromResponse(data, '获取 trace 详情失败'))
+        throw new Error(messageFromResponse(data, apiMessage('traceDetailLoadFailed')))
       }
       return await response.json()
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, '获取 trace 详情失败')
+      error.value = messageFromUnknown(err, apiMessage('traceDetailLoadFailed'))
       throw err
     } finally {
       loading.value = false
@@ -495,9 +561,10 @@ export function useTracingApi() {
 }
 
 /**
- * Skills 管理 API
+ * Skills management API.
  */
 export function useSkillsApi() {
+  const apiMessage = useApiMessage()
   const loading = ref(false)
   const error = ref<string | null>(null)
   const toggling = ref(false)
@@ -509,11 +576,11 @@ export function useSkillsApi() {
       const response = await apiFetch('/skills')
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
-        throw new Error(messageFromResponse(data, '获取 Skills 列表失败'))
+        throw new Error(messageFromResponse(data, apiMessage('skillsLoadFailed')))
       }
       return await response.json()
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, '获取 Skills 列表失败')
+      error.value = messageFromUnknown(err, apiMessage('skillsLoadFailed'))
       throw err
     } finally {
       loading.value = false
@@ -531,11 +598,11 @@ export function useSkillsApi() {
       })
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
-        throw new Error(messageFromResponse(data, '切换 Skill 状态失败'))
+        throw new Error(messageFromResponse(data, apiMessage('skillToggleFailed')))
       }
       return await response.json()
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, '切换 Skill 状态失败')
+      error.value = messageFromUnknown(err, apiMessage('skillToggleFailed'))
       throw err
     } finally {
       toggling.value = false
@@ -552,13 +619,14 @@ export function useSkillsApi() {
 }
 
 /**
- * RAG 知识库管理 API
+ * RAG knowledge management API.
  */
 export function useKnowledgeApi() {
+  const apiMessage = useApiMessage()
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  const request = async <T>(path = '', options: RequestInit = {}, fallback = '知识库请求失败'): Promise<T> => {
+  const request = async <T>(path = '', options: RequestInit = {}, fallback = apiMessage('knowledgeRequestFailed')): Promise<T> => {
     loading.value = true
     error.value = null
     try {
@@ -582,30 +650,30 @@ export function useKnowledgeApi() {
     }
   }
 
-  const fetchKnowledge = () => request<KnowledgeStatusResponse>('', {}, '获取知识库状态失败')
+  const fetchKnowledge = () => request<KnowledgeStatusResponse>('', {}, apiMessage('knowledgeLoadFailed'))
 
   const addTextDocument = (payload: KnowledgeTextRequest) => request<KnowledgeDocument>('/documents/text', {
     method: 'POST',
     body: JSON.stringify(payload)
-  }, '写入知识文档失败')
+  }, apiMessage('knowledgeWriteFailed'))
 
   const addFileDocument = (payload: KnowledgeFileRequest) => request<KnowledgeDocument>('/documents/file', {
     method: 'POST',
     body: JSON.stringify(payload)
-  }, '导入本地文件失败')
+  }, apiMessage('knowledgeImportFailed'))
 
   const deleteKnowledgeDocument = (docId: string) => request<{ success: boolean }>(`/documents/${encodeURIComponent(docId)}`, {
     method: 'DELETE'
-  }, '删除知识文档失败')
+  }, apiMessage('knowledgeDeleteFailed'))
 
   const clearKnowledge = () => request<{ documents: number; chunks: number }>('', {
     method: 'DELETE'
-  }, '清空知识库失败')
+  }, apiMessage('knowledgeClearFailed'))
 
   const searchKnowledge = (query: string, limit: number, searchType?: string) => request<KnowledgeSearchResponse>('/search', {
     method: 'POST',
     body: JSON.stringify({ query, limit, search_type: searchType || undefined })
-  }, '检索知识库失败')
+  }, apiMessage('knowledgeSearchFailed'))
 
   return {
     loading,
@@ -620,13 +688,14 @@ export function useKnowledgeApi() {
 }
 
 /**
- * MCP 管理 API
+ * MCP management API.
  */
 export function useMcpApi() {
+  const apiMessage = useApiMessage()
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  const request = async <T>(path: string, options: RequestInit = {}, fallback = 'MCP 请求失败'): Promise<T> => {
+  const request = async <T>(path: string, options: RequestInit = {}, fallback = apiMessage('mcpRequestFailed')): Promise<T> => {
     loading.value = true
     error.value = null
     try {
@@ -650,41 +719,41 @@ export function useMcpApi() {
     }
   }
 
-  const fetchConfig = () => request<McpServiceStatusResponse>('/config', {}, '获取 MCP 配置失败')
+  const fetchConfig = () => request<McpServiceStatusResponse>('/config', {}, apiMessage('mcpConfigLoadFailed'))
 
   const updateConfig = (id: McpServiceId, enabled: boolean) => request<{ success: boolean; restart_required?: boolean }>('/config', {
     method: 'POST',
     body: JSON.stringify({ id, enabled })
-  }, '更新 MCP 配置失败')
+  }, apiMessage('mcpConfigUpdateFailed'))
 
-  const listTokens = () => request<McpTokenInfo[]>('/tokens', {}, '获取 MCP Token 失败')
+  const listTokens = () => request<McpTokenInfo[]>('/tokens', {}, apiMessage('mcpTokenLoadFailed'))
 
   const issueToken = (name: string, expiresIn: number) => request<McpTokenIssueResponse>('/tokens/issue', {
     method: 'POST',
     body: JSON.stringify({ name, expires_in: expiresIn })
-  }, '签发 MCP Token 失败')
+  }, apiMessage('mcpTokenIssueFailed'))
 
   const deleteToken = (id: number) => request<{ success: boolean }>('/tokens/delete', {
     method: 'POST',
     body: JSON.stringify({ id })
-  }, '删除 MCP Token 失败')
+  }, apiMessage('mcpTokenDeleteFailed'))
 
-  const listHiAgents = () => request<HiAgentEntry[]>('/hiagent', {}, '获取 Hi-Agent 失败')
+  const listHiAgents = () => request<HiAgentEntry[]>('/hiagent', {}, apiMessage('mcpHiAgentLoadFailed'))
 
   const addHiAgent = (entry: HiAgentEntry) => request<{ success: boolean }>('/hiagent/add', {
     method: 'POST',
     body: JSON.stringify(entry)
-  }, '添加 Hi-Agent 失败')
+  }, apiMessage('mcpHiAgentAddFailed'))
 
   const updateHiAgent = (payload: Partial<HiAgentEntry> & { target_url?: string; url: string }) => request<{ success: boolean }>('/hiagent/update', {
     method: 'POST',
     body: JSON.stringify(payload)
-  }, '更新 Hi-Agent 失败')
+  }, apiMessage('mcpHiAgentUpdateFailed'))
 
   const deleteHiAgent = (url: string) => request<{ success: boolean }>('/hiagent/delete', {
     method: 'POST',
     body: JSON.stringify({ url })
-  }, '删除 Hi-Agent 失败')
+  }, apiMessage('mcpHiAgentDeleteFailed'))
 
   return {
     loading,

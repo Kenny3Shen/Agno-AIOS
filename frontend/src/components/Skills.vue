@@ -1,178 +1,153 @@
 <template>
-  <div class="security-page skills-console space-y-5 max-w-5xl mx-auto">
-    <!-- 标题栏 -->
-    <div class="flex items-center justify-between">
-      <div>
-        <h3 class="text-base font-semibold text-slate-900 dark:text-[#C9D1D9]">Skills</h3>
-      </div>
-      <div class="flex items-center gap-2">
-        <el-tooltip content="后端上传接口当前为占位，暂不可用" placement="top">
-          <span>
-            <el-button
-              type="default"
-              :icon="Upload"
-              disabled
-              class="!border-[#D0D7DE] dark:!border-[#30363D] !bg-white dark:!bg-[#161B22]"
-            >
-              上传
-            </el-button>
+  <div class="skills-console">
+    <main class="skills-main">
+      <header class="skills-header">
+        <div class="skill-summary-strip">
+          <span v-for="metric in summaryMetrics" :key="metric.label" class="skill-summary-chip">
+            <small>{{ metric.label }}</small>
+            <strong>{{ metric.value }}</strong>
           </span>
-        </el-tooltip>
-        <!-- 刷新按钮 -->
+        </div>
+
         <el-button
           type="primary"
           :icon="Refresh"
           :loading="loading"
           @click="loadSkills"
-          class="!bg-[#0969DA] !border-[#0969DA] hover:!bg-[#0860CA]"
+          class="skill-primary-action"
         >
-          刷新
+          {{ t('skills.actions.refresh') }}
         </el-button>
-      </div>
-    </div>
+      </header>
 
-    <!-- 加载中 -->
-    <div v-if="loading && skills.length === 0" class="flex items-center justify-center py-16">
-      <el-icon class="is-loading text-2xl text-[#0969DA]"><Loading /></el-icon>
-      <span class="ml-3 text-sm text-slate-500 dark:text-[#8B949E]">加载中…</span>
-    </div>
+      <section class="skills-body">
+        <div v-if="loading && skills.length === 0" class="skills-state">
+          <el-icon class="skill-loading is-loading"><Loading /></el-icon>
+          <span>{{ t('skills.loading') }}</span>
+        </div>
 
-    <!-- 空状态 -->
-    <div
-      v-else-if="!loading && skills.length === 0"
-      class="text-center py-16 text-slate-400 dark:text-[#484F58]"
-    >
-      <el-icon class="text-4xl mb-3"><FolderOpened /></el-icon>
-      <p class="text-sm">未检测到任何 Skill，请将 Skill 文件夹放置到 <code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-[#0D1117] text-xs">api/agent/skills/</code> 目录</p>
-    </div>
+        <div v-else-if="!loading && skills.length === 0" class="skills-state">
+          <el-icon><FolderOpened /></el-icon>
+          <span>
+            {{ t('skills.empty.noSkillsPrefix') }}
+            <code class="skill-code">api/agent/skills/</code>
+            {{ t('skills.empty.noSkillsSuffix') }}
+          </span>
+        </div>
 
-    <!-- Skill 卡片列表 -->
-    <div v-else class="grid gap-4">
-      <div
-        v-for="skill in skills"
-        :key="skill.name"
-        class="p-4 rounded-xl border transition-all duration-200"
-        :class="skill.enabled
-          ? 'border-[#0969DA]/30 dark:border-[#1F6FEB]/30 bg-white dark:bg-[#161B22]'
-          : 'border-[#D0D7DE] dark:border-[#30363D] bg-slate-50/50 dark:bg-[#0D1117]/50 opacity-70'"
-      >
-        <div class="flex items-start justify-between gap-4">
-          <!-- 左侧信息 -->
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-1.5">
-              <!-- 状态指示灯 -->
-              <span
-                class="w-2 h-2 rounded-full flex-shrink-0"
-                :class="skill.enabled ? 'bg-green-500' : 'bg-slate-300 dark:bg-[#484F58]'"
-              />
-              <h4 class="text-sm font-semibold text-slate-900 dark:text-[#C9D1D9] truncate">
-                {{ skill.name }}
-              </h4>
-              <!-- 脚本数量标签 -->
-              <span
-                v-if="skill.has_scripts"
-                class="text-[10px] font-mono px-2 py-0.5 rounded-full border border-[#D0D7DE] dark:border-[#30363D] text-slate-500 dark:text-[#8B949E] bg-slate-50 dark:bg-[#0D1117] flex-shrink-0"
-              >
-                {{ skill.scripts.length }} 脚本
-              </span>
-            </div>
-
-            <p class="text-xs text-slate-500 dark:text-[#8B949E] leading-relaxed line-clamp-2">
-              {{ skill.description || '暂无描述' }}
-            </p>
-
-            <!-- 脚本列表（可折叠） -->
-            <div v-if="skill.has_scripts && expandedSkills.has(skill.name)" class="mt-3">
-              <div class="flex flex-wrap gap-1.5">
-                <span
-                  v-for="script in skill.scripts"
-                  :key="script"
-                  class="inline-flex items-center text-[11px] font-mono px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#0D1117] text-slate-600 dark:text-[#8B949E] border border-[#D0D7DE] dark:border-[#30363D]"
-                >
-                  <el-icon class="mr-1 text-[10px]"><Document /></el-icon>
-                  {{ script }}
+        <div v-else class="skills-grid">
+          <article
+            v-for="skill in skills"
+            :key="skill.name"
+            class="skill-card"
+            :class="{ 'is-disabled': !skill.enabled, 'is-enabled': skill.enabled }"
+          >
+            <div class="skill-card-head">
+              <div class="skill-card-main">
+                <span class="skill-status-dot" :class="skill.enabled ? 'ok' : 'off'" />
+                <span class="skill-card-copy">
+                  <strong :title="skill.name">{{ skill.name }}</strong>
+                  <em>{{ skill.description || t('skills.empty.description') }}</em>
                 </span>
               </div>
             </div>
 
-            <!-- 展开/收起按钮 -->
-            <button
-              v-if="skill.has_scripts"
-              type="button"
-              @click="toggleExpand(skill.name)"
-              class="mt-2 text-[11px] text-[#0969DA] dark:text-[#58A6FF] hover:underline focus:outline-none"
-            >
-              {{ expandedSkills.has(skill.name) ? '收起脚本' : `查看 ${skill.scripts.length} 个脚本` }}
-            </button>
-          </div>
+            <div class="skill-card-foot">
+              <button
+                v-if="skill.has_scripts"
+                type="button"
+                class="skill-script-toggle"
+                :aria-expanded="expandedSkills.has(skill.name)"
+                :aria-label="
+                  expandedSkills.has(skill.name)
+                    ? t('skills.scripts.collapse')
+                    : t('skills.scripts.expand', { count: skill.scripts.length })
+                "
+                @click="toggleExpand(skill.name)"
+              >
+                <span>{{ t('skills.scripts.count', { count: skill.scripts.length }) }}</span>
+                <el-icon>
+                  <ArrowUp v-if="expandedSkills.has(skill.name)" />
+                  <ArrowDown v-else />
+                </el-icon>
+              </button>
+              <span v-else class="skill-script-empty">{{ t('skills.scripts.count', { count: 0 }) }}</span>
 
-          <!-- 右侧开关 -->
-          <div class="flex-shrink-0 pt-0.5">
-            <el-switch
-              :model-value="skill.enabled"
-              :loading="togglingSkill === skill.name"
-              @change="(val: boolean) => handleToggle(skill.name, val)"
-              active-color="#0969DA"
-              :active-text="skill.enabled ? '已启用' : ''"
-              :inactive-text="!skill.enabled ? '已禁用' : ''"
-            />
-          </div>
+              <el-switch
+                :model-value="skill.enabled"
+                :loading="togglingSkill === skill.name"
+                :disabled="!canWriteSkills"
+                active-color="var(--ag-blue)"
+                @change="(val: string | number | boolean) => handleToggle(skill.name, Boolean(val))"
+              />
+            </div>
+
+            <div v-if="skill.has_scripts && expandedSkills.has(skill.name)" class="skill-script-list">
+              <div>
+                <span
+                  v-for="script in skill.scripts"
+                  :key="script"
+                  class="skill-script-pill"
+                >
+                  <el-icon><Document /></el-icon>
+                  {{ script }}
+                </span>
+              </div>
+            </div>
+          </article>
         </div>
-      </div>
-    </div>
-
-    <!-- 未来规划：Agent Team Skill 分配 -->
-    <div class="p-4 rounded-xl border border-dashed border-[#D0D7DE] dark:border-[#30363D] bg-slate-50/50 dark:bg-[#0D1117]/30">
-      <div class="flex items-center gap-2 mb-2">
-        <el-icon class="text-amber-500"><WarningFilled /></el-icon>
-        <span class="text-xs font-semibold text-slate-600 dark:text-[#8B949E]">未来规划</span>
-      </div>
-      <p class="text-xs text-slate-500 dark:text-[#8B949E] leading-relaxed">
-        启用 Agent Team 架构后，此页面将支持为不同 Agent 成员分配不同的 Skill 组合。
-        例如：情报分析 Agent 仅携带 <code class="px-1 py-0.5 rounded bg-slate-100 dark:bg-[#0D1117] text-[10px]">threat-trace-skill</code>，
-        处置执行 Agent 仅携带 <code class="px-1 py-0.5 rounded bg-slate-100 dark:bg-[#0D1117] text-[10px]">playbook-skill</code>。
-      </p>
-    </div>
-
-    <!-- 提示 -->
-    <div class="text-xs text-slate-400 dark:text-[#484F58] p-3 rounded-lg bg-slate-50 dark:bg-[#0D1117] border border-[#D0D7DE] dark:border-[#30363D]">
-      注意：Skill 启用/禁用在下一次 Agent 对话时生效。每个 Skill 由 SKILL.md（SOP 描述）和 scripts/（可执行脚本）组成。
-    </div>
+      </section>
+    </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { Upload, Refresh, Loading, FolderOpened, Document, WarningFilled } from '@element-plus/icons-vue'
+import { computed, ref, reactive, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { ArrowDown, ArrowUp, Refresh, Loading, FolderOpened, Document } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useSkillsApi } from '../composables/useApi'
+import { useAuthStore } from '../stores/auth'
 import type { SkillInfo } from '../types'
 
 const { loading, fetchSkills: apiFetchSkills, toggleSkill: apiToggleSkill } = useSkillsApi()
+const { t } = useI18n()
+const authStore = useAuthStore()
 
 const skills = ref<SkillInfo[]>([])
 const togglingSkill = ref<string | null>(null)
 const expandedSkills = reactive(new Set<string>())
+const canWriteSkills = computed(() => authStore.hasPermission("skill:write"))
+const enabledSkills = computed(() => skills.value.filter((skill) => skill.enabled).length)
+const totalScripts = computed(() => skills.value.reduce((sum, skill) => sum + skill.scripts.length, 0))
+const summaryMetrics = computed(() => [
+  { label: t('skills.summary.total'), value: skills.value.length },
+  { label: t('skills.summary.enabled'), value: enabledSkills.value },
+  { label: t('skills.summary.scripts'), value: totalScripts.value },
+])
 
 const loadSkills = async () => {
   try {
     const data = await apiFetchSkills()
     skills.value = data.skills
   } catch {
-    ElMessage.error('加载 Skills 列表失败')
+    ElMessage.error(t('skills.messages.loadFailed'))
   }
 }
 
 const handleToggle = async (name: string, enabled: boolean) => {
+  if (!canWriteSkills.value) return
   togglingSkill.value = name
   try {
     await apiToggleSkill(name, enabled)
-    // 更新本地状态
     const skill = skills.value.find(s => s.name === name)
     if (skill) skill.enabled = enabled
-    ElMessage.success(`${name} 已${enabled ? '启用' : '禁用'}`)
+    ElMessage.success(t('skills.messages.toggled', {
+      name,
+      state: t(enabled ? 'skills.state.enabledAction' : 'skills.state.disabledAction'),
+    }))
   } catch {
-    ElMessage.error('切换 Skill 状态失败')
+    ElMessage.error(t('skills.messages.toggleFailed'))
   } finally {
     togglingSkill.value = null
   }
@@ -192,10 +167,292 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+.skills-console {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
   overflow: hidden;
+  background: var(--ag-frame);
+  padding: 0;
+  color: var(--ag-text);
+  font-family: "Inter", "Fira Sans", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+}
+
+.skills-console :where(button, div, section, article, span, strong, small, em, code) {
+  min-width: 0;
+}
+
+.skills-main {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.skills-header {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--ag-panel-border);
+  background: var(--ag-panel-bg);
+  padding: 12px 16px;
+}
+
+.skill-summary-strip {
+  display: flex;
+  flex: 1 1 520px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.skill-summary-chip {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--ag-border);
+  border-radius: 999px;
+  background: var(--ag-panel-soft);
+  padding: 6px 10px;
+}
+
+.skill-summary-chip small {
+  color: var(--ag-muted);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.skill-summary-chip strong {
+  color: var(--ag-heading);
+  font-family: "Fira Code", "JetBrains Mono", monospace;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.skill-primary-action {
+  --el-button-bg-color: var(--ag-blue);
+  --el-button-border-color: var(--ag-blue);
+  --el-button-hover-bg-color: color-mix(in srgb, var(--ag-blue) 86%, var(--ag-heading));
+  --el-button-hover-border-color: color-mix(in srgb, var(--ag-blue) 86%, var(--ag-heading));
+}
+
+.skills-body {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px 16px;
+}
+
+.skills-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+.skill-card {
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-panel);
+  background: var(--ag-panel);
+  padding: 11px 12px;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease;
+}
+
+.skill-card.is-enabled {
+  border-color: var(--ag-border);
+}
+
+.skill-card.is-disabled {
+  background: var(--ag-panel-soft);
+}
+
+.skill-card-head,
+.skill-card-foot,
+.skill-card-main,
+.skill-script-toggle,
+.skill-state-pill,
+.skill-script-empty,
+.skill-script-pill {
+  display: flex;
+  align-items: center;
+}
+
+.skill-card-head {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.skill-card-main {
+  min-width: 0;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.skill-status-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: var(--ag-muted);
+  box-shadow: 0 0 0 3px rgba(139, 155, 168, 0.12);
+}
+
+.skill-status-dot.ok {
+  background: var(--ag-green);
+  box-shadow: 0 0 0 3px rgba(45, 167, 108, 0.14);
+}
+
+.skill-status-dot.off {
+  opacity: 0.65;
+}
+
+.skill-card-copy {
+  min-width: 0;
+}
+
+.skill-card-copy strong {
+  display: block;
+  overflow: hidden;
+  color: var(--ag-heading);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-card-copy em {
+  display: -webkit-box;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--ag-muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.skill-card-foot {
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.skill-script-toggle,
+.skill-script-empty {
+  min-height: 24px;
+  gap: 6px;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-control);
+  background: var(--ag-panel-soft);
+  padding: 3px 7px;
+  color: var(--ag-muted-strong);
+  font-family: "Fira Code", "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.skill-script-toggle:hover,
+.skill-script-toggle:focus-visible {
+  border-color: color-mix(in srgb, var(--ag-blue) 42%, var(--ag-border));
+  color: var(--ag-blue);
+}
+
+.skill-script-toggle:focus-visible {
+  outline: 2px solid var(--ag-blue);
+  outline-offset: 2px;
+}
+
+.skills-console :deep(.el-switch) {
+  flex: 0 0 auto;
+}
+
+.skills-console :deep(.el-switch__core) {
+  min-width: 40px;
+}
+
+.skill-script-pill,
+.skill-code {
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-control);
+  background: var(--ag-panel-soft);
+  color: var(--ag-muted-strong);
+}
+
+.skill-script-list {
+  margin-top: 12px;
+  border-top: 1px solid var(--ag-border);
+  padding-top: 10px;
+}
+
+.skill-script-list > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.skill-script-pill {
+  max-width: 100%;
+  gap: 4px;
+  padding: 3px 7px;
+  overflow-wrap: anywhere;
+  font-family: "Fira Code", "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.skill-code {
+  padding: 2px 6px;
+  font-family: "Fira Code", "JetBrains Mono", monospace;
+  font-size: 11px;
+}
+
+.skills-state {
+  display: grid;
+  min-height: 300px;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  border: 1px dashed var(--ag-border-strong);
+  border-radius: var(--ag-radius-panel);
+  background: var(--ag-panel);
+  padding: 32px;
+  color: var(--ag-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.skills-state .el-icon {
+  color: var(--ag-blue);
+  font-size: 28px;
+}
+
+.skill-loading {
+  color: var(--ag-blue);
+}
+
+@media (max-width: 760px) {
+  .skills-header,
+  .skills-body {
+    padding: 10px;
+  }
+
+  .skills-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .skill-card-head {
+    align-items: flex-start;
+  }
 }
 </style>

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from agno.vectordb.search import SearchType
 
@@ -45,6 +47,53 @@ class KnowledgePipelineContractTest(unittest.TestCase):
         self.assertIn(".csv", status["supported_suffixes"])
         self.assertIn(".py", status["supported_suffixes"])
         self.assertIn(status["search_type"], {"vector", "keyword", "hybrid"})
+
+    def test_owner_visibility_hides_foreign_knowledge_content(self) -> None:
+        owned = SimpleNamespace(metadata={"user_id": "u1"})
+        foreign = SimpleNamespace(metadata={"user_id": "u2"})
+        legacy = SimpleNamespace(metadata={})
+
+        self.assertTrue(knowledge_service._content_visible_to_owner(owned, "u1"))
+        self.assertFalse(knowledge_service._content_visible_to_owner(foreign, "u1"))
+        self.assertFalse(knowledge_service._content_visible_to_owner(legacy, "u1"))
+        self.assertTrue(knowledge_service._content_visible_to_owner(foreign, None))
+
+    def test_search_documents_passes_owner_filter_to_vector_search(self) -> None:
+        captured: dict[str, object] = {}
+
+        class FakeKnowledge:
+            def search(self, *args, **kwargs):
+                captured["filters"] = kwargs.get("filters")
+                return []
+
+        with (
+            patch.object(knowledge_service, "_ensure_knowledge_storage", lambda: None),
+            patch.object(knowledge_service, "get_knowledge_base", return_value=FakeKnowledge()),
+            patch.object(knowledge_service, "_hydrate_content_ids", lambda documents: None),
+        ):
+            results = knowledge_service.search_documents("policy", owner_user_id="u1")
+
+        self.assertEqual(results, [])
+        self.assertEqual(captured["filters"], {"user_id": "u1"})
+
+    def test_delete_document_rejects_foreign_owner(self) -> None:
+        removed: list[str] = []
+
+        class FakeKnowledge:
+            def get_content_by_id(self, content_id: str):
+                return SimpleNamespace(id=content_id, metadata={"user_id": "u2"})
+
+            def remove_content_by_id(self, content_id: str):
+                removed.append(content_id)
+
+        with (
+            patch.object(knowledge_service, "_ensure_knowledge_storage", lambda: None),
+            patch.object(knowledge_service, "get_knowledge_base", return_value=FakeKnowledge()),
+        ):
+            result = knowledge_service.delete_document("doc-1", owner_user_id="u1")
+
+        self.assertFalse(result)
+        self.assertEqual(removed, [])
 
 
 if __name__ == "__main__":

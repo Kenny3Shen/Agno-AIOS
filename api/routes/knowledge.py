@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.auth.models import User
-from api.auth.permissions import require_permission
-from api.services.audit_service import record_audit_event
+from api.auth.permissions import actor_id, has_permission, require_permission
+from api.services.audit_service import audit_request_context, record_audit_event
 from api.services.knowledge_service import (
     add_file_document,
     add_text_document,
@@ -15,6 +15,12 @@ from api.services.knowledge_service import (
 )
 
 router = APIRouter(prefix="/api/knowledge", tags=["Knowledge"])
+
+
+def effective_knowledge_user_filter(user: User) -> str | None:
+    if has_permission(user, "knowledge:read:any"):
+        return None
+    return actor_id(user)
 
 
 class KnowledgeTextRequest(BaseModel):
@@ -39,12 +45,17 @@ class KnowledgeSearchRequest(BaseModel):
 
 
 @router.get("")
-async def get_knowledge_status(_user: User = Depends(require_permission("knowledge:read"))) -> dict:
-    return {"status": knowledge_status(), "documents": list_documents()}
+async def get_knowledge_status(user: User = Depends(require_permission("knowledge:read"))) -> dict:
+    owner_user_id = effective_knowledge_user_filter(user)
+    return {
+        "status": knowledge_status(owner_user_id=owner_user_id),
+        "documents": list_documents(owner_user_id=owner_user_id),
+    }
 
 
 @router.post("/documents/text")
 async def create_text_document(
+    request_ctx: Request,
     request: KnowledgeTextRequest,
     user: User = Depends(require_permission("knowledge:write")),
 ) -> dict:
@@ -54,6 +65,7 @@ async def create_text_document(
             content=request.content,
             source=request.source,
             metadata=request.metadata,
+            owner_user_id=actor_id(user),
         )
         record_audit_event(
             user,
@@ -61,6 +73,7 @@ async def create_text_document(
             resource_type="knowledge_document",
             resource_id=str(result.get("id") or request.title),
             metadata={"source": request.source},
+            **audit_request_context(request_ctx),
         )
         return result
     except Exception as exc:
@@ -69,17 +82,19 @@ async def create_text_document(
 
 @router.post("/documents/file")
 async def create_file_document(
+    request_ctx: Request,
     request: KnowledgeFileRequest,
     user: User = Depends(require_permission("knowledge:write")),
 ) -> dict:
     try:
-        result = add_file_document(path=request.path, title=request.title)
+        result = add_file_document(path=request.path, title=request.title, owner_user_id=actor_id(user))
         record_audit_event(
             user,
             action="knowledge.create",
             resource_type="knowledge_document",
             resource_id=str(result.get("id") or request.title or request.path),
             metadata={"path": request.path},
+            **audit_request_context(request_ctx),
         )
         return result
     except Exception as exc:
@@ -88,16 +103,18 @@ async def create_file_document(
 
 @router.delete("/documents/{doc_id}")
 async def remove_document(
+    request_ctx: Request,
     doc_id: str,
     user: User = Depends(require_permission("knowledge:write")),
 ) -> dict:
-    if not delete_document(doc_id):
+    if not delete_document(doc_id, owner_user_id=effective_knowledge_user_filter(user)):
         raise HTTPException(status_code=404, detail="知识文档不存在")
     record_audit_event(
         user,
         action="knowledge.delete",
         resource_type="knowledge_document",
         resource_id=doc_id,
+        **audit_request_context(request_ctx),
     )
     return {"success": True}
 
@@ -105,7 +122,7 @@ async def remove_document(
 @router.post("/search")
 async def search_knowledge(
     request: KnowledgeSearchRequest,
-    _user: User = Depends(require_permission("knowledge:read")),
+    user: User = Depends(require_permission("knowledge:read")),
 ) -> dict:
     try:
         return {
@@ -113,6 +130,7 @@ async def search_knowledge(
                 request.query,
                 request.limit,
                 search_type=request.search_type,
+                owner_user_id=effective_knowledge_user_filter(user),
             )
         }
     except ValueError as exc:
@@ -120,11 +138,15 @@ async def search_knowledge(
 
 
 @router.delete("")
-async def clear_knowledge(user: User = Depends(require_permission("knowledge:write"))) -> dict:
-    result = clear_knowledge_base()
+async def clear_knowledge(
+    request_ctx: Request,
+    user: User = Depends(require_permission("knowledge:write")),
+) -> dict:
+    result = clear_knowledge_base(owner_user_id=effective_knowledge_user_filter(user))
     record_audit_event(
         user,
         action="knowledge.clear",
         resource_type="knowledge",
+        **audit_request_context(request_ctx),
     )
     return result

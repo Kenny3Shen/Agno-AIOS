@@ -2,15 +2,14 @@
 Skills 管理 API
 - 列出所有 Skill 及其启用状态
 - 切换 Skill 启用/禁用
-- 预留上传 Skill 文件夹接口
 """
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from api.auth.models import User
 from api.auth.permissions import require_permission
-from api.services.audit_service import record_audit_event
+from api.services.audit_service import audit_request_context, record_audit_event
 from api.services.skill_service import (
     find_skill_dir,
     get_skills_dir,
@@ -75,6 +74,7 @@ async def list_skills(_user: User = Depends(require_permission("skill:read"))):
 
 @router.put("/{skill_name}/toggle", response_model=SkillToggleResponse)
 async def toggle_skill(
+    request: Request,
     skill_name: str,
     body: SkillToggleRequest,
     user: User = Depends(require_permission("skill:write")),
@@ -90,24 +90,6 @@ async def toggle_skill(
         resource_type="skill",
         resource_id=public_name,
         metadata={"enabled": body.enabled},
+        **audit_request_context(request),
     )
     return SkillToggleResponse(name=public_name, enabled=body.enabled)
-
-
-@router.post("/upload", status_code=201)
-async def upload_skill(
-    file: UploadFile = File(...),
-    _user: User = Depends(require_permission("skill:write")),
-):
-    """
-    预留接口：上传 Skill 压缩包（.zip / .tar.gz）。
-    上传后自动解压到 Agent skills 目录。
-    当前为占位实现，返回 501 Not Implemented。
-    """
-    raise HTTPException(
-        status_code=501,
-        detail=(
-            "Skill 上传功能尚未实现，请手动将 Skill 文件夹放置到 "
-            f"{get_skills_dir()} 目录"
-        ),
-    )

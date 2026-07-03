@@ -1,7 +1,7 @@
 <template>
   <main class="auth-screen">
-    <section class="auth-card auth-brief-shell" aria-label="Agno AIOS 认证入口">
-      <aside class="auth-brief" aria-label="平台入口信息">
+    <section class="auth-card auth-brief-shell" :aria-label="t('auth.entryAria')">
+      <aside class="auth-brief" :aria-label="t('auth.briefAria')">
         <header class="auth-brief-header">
           <div class="auth-brand">
             <span class="auth-logo">
@@ -16,7 +16,7 @@
           <button
             type="button"
             class="theme-chip"
-            :aria-label="isDark ? '切换到浅色模式' : '切换到深色模式'"
+            :aria-label="isDark ? t('auth.theme.toLight') : t('auth.theme.toDark')"
             @click="$emit('toggle-theme')"
           >
             <el-icon>
@@ -27,9 +27,9 @@
         </header>
 
         <div class="auth-brief-title">
-          <span>AGENT CONTROL</span>
-          <h2>Agno AIOS</h2>
-          <p>登录后继续使用 Chat、MCP、Trace 与模型设置。</p>
+          <span>{{ t('auth.brief.eyebrow') }}</span>
+          <h2>{{ t('auth.brief.title') }}</h2>
+          <p>{{ t('auth.brief.description') }}</p>
         </div>
 
         <div class="auth-brief-grid">
@@ -42,11 +42,11 @@
 
       <div class="auth-panel">
         <div class="auth-panel-heading">
-          <span>{{ mode === 'login' ? 'SIGN IN' : 'CREATE' }}</span>
-          <h2>{{ mode === 'login' ? '进入工作台' : '创建账号' }}</h2>
+          <span>{{ mode === 'login' ? t('auth.modes.loginEyebrow') : t('auth.modes.registerEyebrow') }}</span>
+          <h2>{{ mode === 'login' ? t('auth.modes.loginTitle') : t('auth.modes.registerTitle') }}</h2>
         </div>
 
-        <div class="auth-tabs" role="tablist" aria-label="认证方式">
+        <div class="auth-tabs" role="tablist" :aria-label="t('auth.modes.tabsAria')">
           <button
             type="button"
             :class="{ active: mode === 'login' }"
@@ -54,7 +54,7 @@
             :aria-selected="mode === 'login'"
             @click="mode = 'login'"
           >
-            登录
+            {{ t('auth.modes.login') }}
           </button>
           <button
             type="button"
@@ -63,13 +63,13 @@
             :aria-selected="mode === 'register'"
             @click="mode = 'register'"
           >
-            注册
+            {{ t('auth.modes.register') }}
           </button>
         </div>
 
         <form class="auth-form" @submit.prevent="submitAuth">
           <label class="auth-field">
-            <span>邮箱</span>
+            <span>{{ t('auth.fields.email') }}</span>
             <el-input
               v-model="email"
               autocomplete="email"
@@ -80,11 +80,11 @@
           </label>
 
           <label class="auth-field">
-            <span>密码</span>
+            <span>{{ t('auth.fields.password') }}</span>
             <el-input
               v-model="password"
               autocomplete="current-password"
-              placeholder="至少 8 位"
+              :placeholder="t('auth.fields.passwordPlaceholder')"
               show-password
               size="large"
               type="password"
@@ -106,12 +106,12 @@
             type="primary"
             :loading="submitting"
           >
-            {{ mode === 'login' ? '进入 Agno AIOS' : '创建并进入' }}
+            {{ mode === 'login' ? t('auth.modes.submitLogin') : t('auth.modes.submitRegister') }}
           </el-button>
         </form>
 
         <div v-if="oauthProviders.length" class="auth-oauth">
-          <span>OAuth</span>
+          <span>{{ t('auth.oauth.label') }}</span>
           <div>
             <el-button
               v-for="provider in oauthProviders"
@@ -126,9 +126,7 @@
         </div>
 
         <div class="auth-footer">
-          <span>JWT</span>
-          <span>PgVector</span>
-          <span>MCP</span>
+          <span v-for="item in footerItems" :key="item">{{ item }}</span>
         </div>
       </div>
     </section>
@@ -136,7 +134,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, type Component } from 'vue'
+import { computed, onMounted, ref, type Component } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ChatDotRound, Connection, DataAnalysis, Moon, Platform, Sunny } from '@element-plus/icons-vue'
 import {
   clearStoredAuthToken,
@@ -146,6 +145,7 @@ import {
   registerWithPassword,
   requestOAuthAuthorization,
   storeAuthToken,
+  type AuthClientFallbackKey,
 } from '../lib/authClient'
 import type { AuthUser, OAuthProvider } from '../types'
 
@@ -157,6 +157,7 @@ const emit = defineEmits<{
   authenticated: [user: AuthUser]
   'toggle-theme': []
 }>()
+const { t } = useI18n()
 
 type AuthMode = 'login' | 'register'
 type BriefItem = {
@@ -172,22 +173,36 @@ const submitting = ref(false)
 const errorMessage = ref('')
 const oauthProviders = ref<OAuthProvider[]>([])
 const oauthLoading = ref<OAuthProvider | ''>('')
+const authClientFallbacks = computed<Record<AuthClientFallbackKey, string>>(() => ({
+  fetchUnsupported: t('auth.errors.fetchUnsupported'),
+  loginFailed: t('auth.errors.loginFailed'),
+  registerFailed: t('auth.errors.registerFailed'),
+  currentUserFailed: t('auth.errors.currentUserFailed'),
+  oauthProvidersFailed: t('auth.errors.oauthProvidersFailed'),
+  oauthAuthorizeFailed: t('auth.errors.oauthAuthorizeFailed'),
+  oauthMissingAuthorizationUrl: t('auth.errors.oauthMissingAuthorizationUrl'),
+}))
 
-const briefItems: BriefItem[] = [
-  { label: 'Chat', tone: 'blue', icon: ChatDotRound },
-  { label: 'MCP', tone: 'yellow', icon: Connection },
-  { label: 'Trace', tone: 'green', icon: DataAnalysis },
-  { label: 'Model', tone: 'red', icon: Platform },
-]
+const briefItems = computed<BriefItem[]>(() => [
+  { label: t('auth.brief.items.chat'), tone: 'blue', icon: ChatDotRound },
+  { label: t('auth.brief.items.mcp'), tone: 'yellow', icon: Connection },
+  { label: t('auth.brief.items.trace'), tone: 'green', icon: DataAnalysis },
+  { label: t('auth.brief.items.model'), tone: 'red', icon: Platform },
+])
+const footerItems = computed(() => [
+  t('auth.footer.jwt'),
+  t('auth.footer.pgvector'),
+  t('auth.footer.mcp'),
+])
 
 const validate = () => {
   const normalizedEmail = email.value.trim()
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-    errorMessage.value = '请输入有效邮箱'
+    errorMessage.value = t('auth.errors.invalidEmail')
     return null
   }
   if (password.value.length < 8) {
-    errorMessage.value = '密码至少需要 8 位'
+    errorMessage.value = t('auth.errors.shortPassword')
     return null
   }
   return { email: normalizedEmail, password: password.value }
@@ -201,15 +216,15 @@ const submitAuth = async () => {
   errorMessage.value = ''
   try {
     if (mode.value === 'register') {
-      await registerWithPassword(credentials)
+      await registerWithPassword(credentials, { fallbacks: authClientFallbacks.value })
     }
-    const token = await loginWithPassword(credentials)
+    const token = await loginWithPassword(credentials, { fallbacks: authClientFallbacks.value })
     storeAuthToken(token.access_token)
-    const user = await fetchCurrentUser(token.access_token)
+    const user = await fetchCurrentUser(token.access_token, { fallbacks: authClientFallbacks.value })
     emit('authenticated', user)
   } catch (err: unknown) {
     clearStoredAuthToken()
-    errorMessage.value = err instanceof Error && err.message ? err.message : '认证失败'
+    errorMessage.value = err instanceof Error && err.message ? err.message : t('auth.errors.authFailed')
   } finally {
     submitting.value = false
   }
@@ -228,10 +243,10 @@ const startOAuth = async (provider: OAuthProvider) => {
   oauthLoading.value = provider
   errorMessage.value = ''
   try {
-    const authorizationUrl = await requestOAuthAuthorization(provider)
+    const authorizationUrl = await requestOAuthAuthorization(provider, { fallbacks: authClientFallbacks.value })
     window.location.assign(authorizationUrl)
   } catch (err: unknown) {
-    errorMessage.value = err instanceof Error && err.message ? err.message : 'OAuth 授权失败'
+    errorMessage.value = err instanceof Error && err.message ? err.message : t('auth.errors.oauthFailed')
   } finally {
     oauthLoading.value = ''
   }
@@ -239,7 +254,7 @@ const startOAuth = async (provider: OAuthProvider) => {
 
 onMounted(async () => {
   try {
-    oauthProviders.value = await fetchOAuthProviders()
+    oauthProviders.value = await fetchOAuthProviders({ fallbacks: authClientFallbacks.value })
   } catch {
     oauthProviders.value = []
   }

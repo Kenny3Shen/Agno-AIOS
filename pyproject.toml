@@ -1,7 +1,7 @@
 [project]
 name = "agno-aios"
 version = "0.5.0"
-description = "AI security operations center powered by FastAPI, TanStack Start, Agno, and FastMCP."
+description = "AI security operations control plane powered by FastAPI, Vue, Agno, and FastMCP."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -32,18 +32,14 @@ dependencies = [
     "psycopg-pool>=3.3.1",
     "fastapi-users[oauth,sqlalchemy]>=14.0.0",
     "pydantic-settings>=2.0.0",
-    "aiofiles>=25.1.0",
     "pypdf>=6.14.2",
     "python-docx>=1.2.0",
     "unstructured>=0.23.1",
-    "markdown>=3.10.2",
-    "chonkie[code,semantic]>=1.6.8",
 ]
 
 [project.scripts]
 update-cve = "api.tasks.update_cve:run"
 update-ip-asset = "api.tasks.update_ip_asset:run"
-migrate-sqlite-to-mysql = "api.tasks.migrate_sqlite_to_mysql:run"
 migrate-mysql-to-postgres = "api.tasks.migrate_mysql_to_postgres:run"
 
 [build-system]

@@ -12,7 +12,7 @@
   >
     <div class="rounded-2 border border-[#C2D0DC] bg-white px-5 py-4 text-sm shadow-sm dark:border-[#20313D] dark:bg-[#0E171F]">
       <el-icon class="is-loading mr-2"><Loading /></el-icon>
-      正在校验安全会话
+      {{ t("shell.authChecking") }}
     </div>
   </div>
 
@@ -22,7 +22,7 @@
         v-if="isMobile && sidebarOpen"
         type="button"
         class="ag-mobile-scrim fixed inset-0 z-40 lg:hidden"
-        aria-label="关闭导航遮罩"
+        :aria-label="t('shell.closeSidebar')"
         @click="closeSidebar"
       />
     </transition>
@@ -53,7 +53,7 @@
               v-if="!isMobile"
               type="button"
               class="ag-sidebar-toggle"
-              :aria-label="isSidebarCompact ? '展开导航栏' : '收起导航栏'"
+              :aria-label="isSidebarCompact ? t('shell.expandSidebar') : t('shell.collapseSidebar')"
               @click="toggleSidebarSize"
             >
               <el-icon>
@@ -62,7 +62,7 @@
               </el-icon>
             </button>
 
-            <el-button v-if="isMobile" text aria-label="关闭侧边栏" @click="closeSidebar">
+            <el-button v-if="isMobile" text :aria-label="t('shell.closeSidebar')" @click="closeSidebar">
               <el-icon><Close /></el-icon>
             </el-button>
           </div>
@@ -128,7 +128,7 @@
                     <button
                       type="button"
                       class="ag-chat-session-toggle"
-                      :aria-label="chatSessionsExpanded ? '收起 Chat 会话' : '展开 Chat 会话'"
+                      :aria-label="chatSessionsExpanded ? t('shell.sessions.collapse') : t('shell.sessions.expand')"
                       :aria-expanded="chatSessionsExpanded"
                       @click.stop="toggleChatSessions"
                     >
@@ -146,11 +146,11 @@
                     >
                       <button type="button" class="ag-chat-new-session" @click="createSidebarChat">
                         <el-icon><Plus /></el-icon>
-                        <span>New chat</span>
+                        <span>{{ t("shell.actions.newChat") }}</span>
                       </button>
 
                       <div class="ag-chat-session-head">
-                        <span>Sessions</span>
+                        <span>{{ t("shell.sessions.title") }}</span>
                         <strong>{{ chatSessions.length }}</strong>
                       </div>
 
@@ -170,16 +170,16 @@
                             <el-icon><ChatDotRound /></el-icon>
                           </span>
                           <span class="ag-chat-session-copy">
-                            <strong>{{ session.preview || 'New chat' }}</strong>
+                            <strong>{{ session.preview || t("shell.actions.newChat") }}</strong>
                             <em>{{ formatSessionTime(session.updated_at) }}</em>
                           </span>
                         </button>
 
-                        <el-tooltip content="归档会话" placement="right">
+                        <el-tooltip :content="t('shell.actions.archiveSession')" placement="right">
                           <button
                             type="button"
                             class="ag-chat-session-archive"
-                            :aria-label="`归档会话 ${session.preview || session.session_id}`"
+                            :aria-label="`${t('shell.actions.archiveSession')} ${session.preview || session.session_id}`"
                             @click.stop="archiveSidebarChatSession(session.session_id)"
                           >
                             <el-icon><Delete /></el-icon>
@@ -188,7 +188,7 @@
                       </div>
 
                       <div v-if="!chatSessions.length && !loadingSessions" class="ag-chat-session-empty">
-                        No sessions
+                        {{ t("shell.actions.noSessions") }}
                       </div>
                     </div>
                   </transition>
@@ -217,7 +217,7 @@
                     <button
                       type="button"
                       class="ag-chat-session-toggle"
-                      :aria-label="traceQueueExpanded ? '收起 Trace 队列' : '展开 Trace 队列'"
+                      :aria-label="traceQueueExpanded ? t('shell.traces.collapse') : t('shell.traces.expand')"
                       :aria-expanded="traceQueueExpanded"
                       @click.stop="toggleTraceQueue"
                     >
@@ -235,11 +235,11 @@
                     >
                       <button type="button" class="ag-chat-new-session" :disabled="loadingTraceQueue" @click="loadSidebarTraceQueue">
                         <el-icon><Refresh /></el-icon>
-                        <span>Refresh traces</span>
+                        <span>{{ t("shell.actions.refreshTraces") }}</span>
                       </button>
 
                       <div class="ag-chat-session-head">
-                        <span>Trace Queue</span>
+                        <span>{{ t("shell.traces.title") }}</span>
                         <strong>{{ traceQueueItems.length }}</strong>
                       </div>
 
@@ -260,7 +260,7 @@
                       </button>
 
                       <div v-if="!traceQueueItems.length && !loadingTraceQueue" class="ag-chat-session-empty">
-                        No traces
+                        {{ t("shell.actions.noTraces") }}
                       </div>
                     </div>
                   </transition>
@@ -294,30 +294,31 @@
             <div class="ag-nav-divider" aria-hidden="true" />
 
             <button
+              v-if="visibleSettingsItem"
               type="button"
               class="ag-nav-item soc-focus"
-              :class="{ active: settingsItem.id === activeTab }"
-              :aria-current="settingsItem.id === activeTab ? 'page' : undefined"
-              @click="selectNav(settingsItem.id)"
+              :class="{ active: visibleSettingsItem.id === activeTab }"
+              :aria-current="visibleSettingsItem.id === activeTab ? 'page' : undefined"
+              @click="selectNav(visibleSettingsItem.id)"
             >
               <span class="ag-nav-icon">
                 <el-icon>
-                  <component :is="settingsItem.icon" />
+                  <component :is="visibleSettingsItem.icon" />
                 </el-icon>
               </span>
 
               <span class="ag-nav-text min-w-0 flex-1">
-                <span class="ag-nav-label">{{ settingsItem.label }}</span>
+                <span class="ag-nav-label">{{ visibleSettingsItem.label }}</span>
               </span>
             </button>
           </nav>
 
           <div class="ag-sidebar-footer">
             <div class="flex items-center justify-between gap-2">
-              <span class="ag-footer-label">当前会话</span>
+              <span class="ag-footer-label">{{ t("shell.footer.currentSession") }}</span>
               <span class="ag-live-dot">
                 <span />
-                已认证
+                {{ t("shell.footer.authenticated") }}
               </span>
             </div>
 
@@ -330,7 +331,7 @@
               <button
                 type="button"
                 class="ag-user-menu-trigger"
-                aria-label="打开用户菜单"
+                :aria-label="t('shell.userSettings')"
                 :aria-expanded="userMenuOpen"
                 @click="toggleUserMenu"
               >
@@ -341,11 +342,11 @@
                 <div v-if="userMenuOpen" class="ag-user-menu" role="menu">
                   <button type="button" role="menuitem" @click="openUserSettings">
                     <el-icon><Setting /></el-icon>
-                    <span>用户设置</span>
+                    <span>{{ t("shell.userSettings") }}</span>
                   </button>
                   <button type="button" role="menuitem" :disabled="loggingOut" @click="handleLogout">
                     <el-icon><SwitchButton /></el-icon>
-                    <span>{{ loggingOut ? '退出中' : '退出登录' }}</span>
+                    <span>{{ loggingOut ? t("shell.loggingOut") : t("shell.logout") }}</span>
                   </button>
                 </div>
               </transition>
@@ -357,8 +358,8 @@
       <main class="ag-main">
         <section class="ag-workbench">
           <header class="ag-topbar">
-            <div class="ag-topbar-title">
-              <el-button v-if="isMobile" text class="!rounded-2" aria-label="打开侧边栏" @click="openSidebar">
+            <div class="ag-topbar-title" :title="currentMeta.description">
+              <el-button v-if="isMobile" text class="!rounded-2" :aria-label="t('shell.openSidebar')" @click="openSidebar">
                 <el-icon size="20"><Menu /></el-icon>
               </el-button>
 
@@ -371,21 +372,26 @@
                   <span>{{ currentMeta.label }}</span>
                   <i />
                 </div>
-                <p>{{ currentMeta.description }}</p>
               </div>
             </div>
 
             <div class="ag-topbar-actions">
-              <button type="button" class="ag-topbar-button" @click="refreshWorkspace">
-                <el-icon><Refresh /></el-icon>
-                <span>刷新</span>
-              </button>
-
-              <el-tooltip :content="isDark ? '切换浅色模式' : '切换深色模式'" placement="bottom">
+              <el-tooltip :content="t('shell.actions.refresh')" placement="bottom">
                 <el-button
                   circle
-                  class="ag-icon-button"
-                  :aria-label="isDark ? '切换到浅色模式' : '切换到深色模式'"
+                  class="ag-icon-button ag-topbar-icon"
+                  :aria-label="t('shell.actions.refresh')"
+                  @click="refreshWorkspace"
+                >
+                  <el-icon><Refresh /></el-icon>
+                </el-button>
+              </el-tooltip>
+
+              <el-tooltip :content="isDark ? t('shell.theme.toLight') : t('shell.theme.toDark')" placement="bottom">
+                <el-button
+                  circle
+                  class="ag-icon-button ag-topbar-icon"
+                  :aria-label="isDark ? t('shell.theme.toLight') : t('shell.theme.toDark')"
                   @click="toggleTheme"
                 >
                   <el-icon>
@@ -401,15 +407,14 @@
           <section class="ag-stage">
             <transition name="fade" mode="out-in">
               <div v-if="activeTab === 'home'" key="home" class="ag-home">
-                <section class="ag-command">
-                  <div class="min-w-0">
-                    <span class="ag-command-kicker">AIOS CONTROL PLANE</span>
-                    <h2>Agno AIOS 工作台</h2>
-                    <p>把安全数据、知识、Agent 和运行观测收束到一个可调度的控制面。</p>
+                <section class="ag-home-summary">
+                  <div class="ag-home-summary-copy">
+                    <strong>{{ t("shell.home.title") }}</strong>
+                    <span>{{ t("shell.home.description") }}</span>
                   </div>
 
-                  <div class="ag-signal-grid">
-                    <div v-for="signal in workspaceSignals" :key="signal.label" class="ag-signal">
+                  <div class="ag-home-summary-strip">
+                    <div v-for="signal in workspaceSignals" :key="signal.label" class="ag-home-signal">
                       <span>{{ signal.label }}</span>
                       <strong>{{ signal.value }}</strong>
                     </div>
@@ -418,57 +423,28 @@
 
                 <section v-for="section in homeSections" :key="section.title" class="ag-home-section">
                   <div class="ag-section-heading">
-                    <span class="ag-section-caret">⌃</span>
                     <h3>{{ section.title }}</h3>
+                    <span class="ag-section-count">{{ section.items.length }}</span>
                   </div>
 
                   <div class="ag-module-grid">
-                    <article
+                    <button
                       v-for="item in section.items"
                       :key="item.id"
-                      class="ag-module-card"
+                      type="button"
+                      class="ag-module-card ag-module-tile"
                       :class="[`tone-${item.tone}`, { active: item.id === activeTab }]"
+                      @click="selectNav(item.id)"
                     >
-                      <button type="button" class="ag-module-main" @click="selectNav(item.id)">
-                        <span class="ag-module-icon">
-                          <el-icon><component :is="item.icon" /></el-icon>
-                        </span>
-                        <span class="min-w-0">
-                          <strong>{{ item.label }}</strong>
-                          <em>{{ item.description }}</em>
-                        </span>
-                      </button>
-
-                      <div class="ag-module-actions">
-                        <span v-if="item.badge" class="ag-module-badge">{{ item.badge }}</span>
-                        <button type="button" @click="selectNav(item.id)">打开</button>
-                      </div>
-                    </article>
-                  </div>
-                </section>
-
-                <section class="ag-home-section">
-                  <div class="ag-section-heading">
-                    <span class="ag-section-caret">⌃</span>
-                    <h3>运行平面</h3>
-                  </div>
-
-                  <div class="ag-plane-grid">
-                    <article v-for="plane in osPlanes" :key="plane.name" class="ag-plane-card">
-                      <div class="flex min-w-0 items-center gap-3">
-                        <span class="ag-plane-icon">
-                          <el-icon><component :is="plane.icon" /></el-icon>
-                        </span>
-                        <div class="min-w-0">
-                          <strong>{{ plane.name }}</strong>
-                          <p>{{ plane.description }}</p>
-                        </div>
-                      </div>
-                      <span class="ag-plane-status" :class="plane.status">{{ plane.statusText }}</span>
-                      <div class="ag-plane-footer">
-                        <span v-for="metric in plane.metrics" :key="metric">{{ metric }}</span>
-                      </div>
-                    </article>
+                      <span class="ag-module-icon">
+                        <el-icon><component :is="item.icon" /></el-icon>
+                      </span>
+                      <span class="ag-module-copy">
+                        <strong>{{ item.label }}</strong>
+                        <em>{{ item.description }}</em>
+                      </span>
+                      <span v-if="item.badge" class="ag-module-badge">{{ item.badge }}</span>
+                    </button>
                   </div>
                 </section>
               </div>
@@ -493,7 +469,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, type Component } from "vue"
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Component } from "vue"
+import { useI18n } from "vue-i18n"
 import { storeToRefs } from "pinia"
 import {
   ArrowDown,
@@ -542,7 +519,8 @@ import Skills from "./components/Skills.vue"
 import MCP from "./components/MCP.vue"
 import Knowledge from "./components/Knowledge.vue"
 import { useChatHistory, useSettingsApi, useTracingApi } from "./composables/useApi"
-import { clearStoredAuthToken, fetchCurrentUser, getStoredAuthToken, logout as authLogout } from "./lib/authClient"
+import { setI18nLocale } from "./i18n"
+import { clearStoredAuthToken, fetchCurrentUser, getStoredAuthToken, logout as authLogout, type AuthClientFallbackKey } from "./lib/authClient"
 import { useAuthStore } from "./stores/auth"
 import { useSessionStore } from "./stores/sessions"
 import { useShellStore } from "./stores/shell"
@@ -584,41 +562,61 @@ type HomeSection = {
   items: NavItem[]
 }
 
-const homeItem: NavItem = {
+const { t } = useI18n()
+
+const homeItem = computed<NavItem>(() => ({
   id: "home",
-  label: "Home",
-  description: "工作台总览",
+  label: t("shell.nav.home.label"),
+  description: t("shell.nav.home.description"),
   icon: Platform,
   tone: "blue",
-}
+}))
 
-const dashboardItem: NavItem = {
+const dashboardItem = computed<NavItem>(() => ({
   id: "dashboard",
-  label: "Dashboard",
-  description: "资产、漏洞、响应闭环总览",
+  label: t("shell.nav.dashboard.label"),
+  description: t("shell.nav.dashboard.description"),
   icon: DataBoard,
-  badge: "Live",
+  badge: t("shell.badges.live"),
   tone: "green",
-}
+}))
 
-const navItems: NavItem[] = [
-  { id: "chat", label: "Chat", description: "任务规划、剧本调用与流式分析", icon: ChatDotRound, tone: "blue" },
-  { id: "skills", label: "Skills", description: "安全 Skills 模块开关", icon: SetUp, tone: "red" },
-  { id: "mcp", label: "MCP", description: "服务、Token 与外部 Agent", icon: Connection, tone: "yellow" },
-  { id: "knowledge", label: "Knowledge", description: "RAG 写入、检索与参数治理", icon: Files, tone: "green" },
-  { id: "trace", label: "Trace", description: "Trace、Span 与异常追踪", icon: DataAnalysis, tone: "green" },
-  { id: "sessions", label: "Sessions", description: "会话库存与上下文历史", icon: Clock, tone: "blue" },
-  { id: "studio", label: "Studio", description: "Agent、Team 与组件注册", icon: MagicStick, tone: "yellow" },
-  { id: "memory", label: "Memory", description: "用户记忆与增长监测", icon: Cpu, tone: "green" },
-  { id: "metrics", label: "Metrics", description: "运行、延迟与错误指标", icon: DataAnalysis, tone: "blue" },
-  { id: "evaluation", label: "Evaluation", description: "评测运行与质量基线", icon: Finished, tone: "green" },
-  { id: "approvals", label: "Approvals", description: "敏感操作审批队列", icon: Tickets, tone: "red" },
-  { id: "scheduler", label: "Scheduler", description: "周期任务与运行窗口", icon: Calendar, tone: "yellow" },
-  { id: "cve", label: "CVE", description: "CVE、PoC 与攻击面线索", icon: Search, tone: "red" },
-  { id: "assets", label: "Assets", description: "指纹、IP 与暴露面查询", icon: Monitor, tone: "blue" },
-  { id: "collect", label: "Collect", description: "网页情报转 Markdown 入库", icon: WarningFilled, tone: "yellow" },
-  { id: "settings", label: "Settings", description: "模型路由、MCP 与通知配置", icon: Setting, tone: "blue" },
-]
+const navItems = computed<NavItem[]>(() => [
+  { id: "chat", label: t("shell.nav.chat.label"), description: t("shell.nav.chat.description"), icon: ChatDotRound, tone: "blue" },
+  { id: "skills", label: t("shell.nav.skills.label"), description: t("shell.nav.skills.description"), icon: SetUp, tone: "red" },
+  { id: "mcp", label: t("shell.nav.mcp.label"), description: t("shell.nav.mcp.description"), icon: Connection, tone: "yellow" },
+  { id: "knowledge", label: t("shell.nav.knowledge.label"), description: t("shell.nav.knowledge.description"), icon: Files, tone: "green" },
+  { id: "trace", label: t("shell.nav.trace.label"), description: t("shell.nav.trace.description"), icon: DataAnalysis, tone: "green" },
+  { id: "sessions", label: t("shell.nav.sessions.label"), description: t("shell.nav.sessions.description"), icon: Clock, tone: "blue" },
+  { id: "studio", label: t("shell.nav.studio.label"), description: t("shell.nav.studio.description"), icon: MagicStick, tone: "yellow" },
+  { id: "memory", label: t("shell.nav.memory.label"), description: t("shell.nav.memory.description"), icon: Cpu, tone: "green" },
+  { id: "metrics", label: t("shell.nav.metrics.label"), description: t("shell.nav.metrics.description"), icon: DataAnalysis, tone: "blue" },
+  { id: "evaluation", label: t("shell.nav.evaluation.label"), description: t("shell.nav.evaluation.description"), icon: Finished, tone: "green" },
+  { id: "approvals", label: t("shell.nav.approvals.label"), description: t("shell.nav.approvals.description"), icon: Tickets, tone: "red" },
+  { id: "scheduler", label: t("shell.nav.scheduler.label"), description: t("shell.nav.scheduler.description"), icon: Calendar, tone: "yellow" },
+  { id: "cve", label: t("shell.nav.cve.label"), description: t("shell.nav.cve.description"), icon: Search, tone: "red" },
+  { id: "assets", label: t("shell.nav.assets.label"), description: t("shell.nav.assets.description"), icon: Monitor, tone: "blue" },
+  { id: "collect", label: t("shell.nav.collect.label"), description: t("shell.nav.collect.description"), icon: WarningFilled, tone: "yellow" },
+  { id: "settings", label: t("shell.nav.settings.label"), description: t("shell.nav.settings.description"), icon: Setting, tone: "blue" },
+])
+const navPermissions: Partial<Record<ModuleNavId, string>> = {
+  chat: "session:write:own",
+  skills: "skill:read",
+  mcp: "mcp:read",
+  knowledge: "knowledge:read",
+  trace: "trace:read:own",
+  sessions: "session:read:own",
+  studio: "mcp:read",
+  memory: "memory:read:own",
+  metrics: "metrics:read:own",
+  evaluation: "admin:read",
+  approvals: "admin:read",
+  scheduler: "admin:read",
+  cve: "cve:read",
+  assets: "asset:read",
+  collect: "collect:write",
+  settings: "settings:read",
+}
 
 const componentMap: Record<ModuleNavId, Component> = {
   dashboard: Dashboard,
@@ -656,16 +654,32 @@ const fullCanvasTabs = new Set<ModuleNavId>([
   "mcp",
   ...osControlTabs,
 ])
-const settingsItem = navItems.find((item) => item.id === "settings") as NavItem
-const primaryNavItems = navItems.filter((item) => item.id !== "settings")
-const moduleNavItems = [dashboardItem, ...navItems]
-const navItemById = Object.fromEntries(moduleNavItems.map((item) => [item.id, item])) as Record<ModuleNavId, NavItem>
-const homeSections: HomeSection[] = [
-  { title: "Operations", items: [navItemById.dashboard, navItemById.chat, navItemById.trace] },
-  { title: "Control plane", items: [navItemById.sessions, navItemById.studio, navItemById.memory, navItemById.metrics] },
-  { title: "Governance", items: [navItemById.evaluation, navItemById.approvals, navItemById.scheduler] },
-  { title: "Security data", items: [navItemById.skills, navItemById.mcp, navItemById.knowledge, navItemById.cve, navItemById.assets, navItemById.collect] },
-]
+const canAccessNav = (id: NavId) => {
+  if (id === "home" || id === "dashboard") return true
+  const permission = navPermissions[id]
+  return permission ? authStore.hasPermission(permission) : true
+}
+const settingsItem = computed<NavItem>(() => navItems.value.find((item) => item.id === "settings") as NavItem)
+const visibleNavItems = computed<NavItem[]>(() => navItems.value.filter((item) => canAccessNav(item.id)))
+const visibleSettingsItem = computed<NavItem | null>(() => {
+  const item = settingsItem.value
+  return canAccessNav(item.id) ? item : null
+})
+const primaryNavItems = computed<NavItem[]>(() => visibleNavItems.value.filter((item) => item.id !== "settings"))
+const moduleNavItems = computed<NavItem[]>(() => [dashboardItem.value, ...navItems.value])
+const visibleModuleNavItems = computed<NavItem[]>(() => [dashboardItem.value, ...visibleNavItems.value.filter((item) => item.id !== "dashboard")])
+const navItemById = computed<Record<ModuleNavId, NavItem>>(() => (
+  Object.fromEntries(moduleNavItems.value.map((item) => [item.id, item])) as Record<ModuleNavId, NavItem>
+))
+const homeSections = computed<HomeSection[]>(() => [
+  { title: t("shell.sections.operations"), items: [navItemById.value.dashboard, navItemById.value.chat, navItemById.value.trace] },
+  { title: t("shell.sections.controlPlane"), items: [navItemById.value.sessions, navItemById.value.studio, navItemById.value.memory, navItemById.value.metrics] },
+  { title: t("shell.sections.governance"), items: [navItemById.value.evaluation, navItemById.value.approvals, navItemById.value.scheduler] },
+  { title: t("shell.sections.securityData"), items: [navItemById.value.skills, navItemById.value.mcp, navItemById.value.knowledge, navItemById.value.cve, navItemById.value.assets, navItemById.value.collect] },
+].map((section) => ({
+  ...section,
+  items: section.items.filter((item) => canAccessNav(item.id)),
+})).filter((section) => section.items.length > 0))
 const THEME_STORAGE_KEY = "theme"
 const CHAT_MODEL_STORAGE_KEY = "agno-aios-chat-model-id"
 const SIDEBAR_EXPANDED_WIDTH = 264
@@ -692,6 +706,7 @@ const {
   componentRenderKey,
   chatSessionsExpanded,
   traceQueueExpanded,
+  locale,
 } = storeToRefs(shellStore)
 const {
   chatSessions,
@@ -706,24 +721,36 @@ const {
 
 shellStore.setIsMobile(isMobileViewport())
 const currentModelName = ref("DeepSeek V4 Pro")
+const authClientFallbacks = computed<Record<AuthClientFallbackKey, string>>(() => ({
+  fetchUnsupported: t("auth.errors.fetchUnsupported"),
+  loginFailed: t("auth.errors.loginFailed"),
+  registerFailed: t("auth.errors.registerFailed"),
+  currentUserFailed: t("auth.errors.currentUserFailed"),
+  oauthProvidersFailed: t("auth.errors.oauthProvidersFailed"),
+  oauthAuthorizeFailed: t("auth.errors.oauthAuthorizeFailed"),
+  oauthMissingAuthorizationUrl: t("auth.errors.oauthMissingAuthorizationUrl"),
+}))
 
 const { fetchModels } = useSettingsApi()
 const { listSessions, archiveSession } = useChatHistory()
 const { listTraces: listSidebarTraces } = useTracingApi()
 
+watch(locale, (value) => setI18nLocale(value), { immediate: true })
+
 const activeComponent = computed<Component | null>(() => {
   const tab = activeTab.value as NavId
   if (tab === "home") return null
+  if (!canAccessNav(tab)) return null
   return componentMap[tab]
 })
 const currentMeta = computed<NavItem>(() => {
-  if (activeTab.value === "home") return homeItem
-  return moduleNavItems.find((item) => item.id === activeTab.value) ?? homeItem
+  if (activeTab.value === "home") return homeItem.value
+  return visibleModuleNavItems.value.find((item) => item.id === activeTab.value) ?? homeItem.value
 })
-const currentUserEmail = computed(() => currentUser.value?.email || "未登录")
+const currentUserEmail = computed(() => currentUser.value?.email || t("shell.user.anonymous"))
 const userInitials = computed(() => {
-  const email = currentUserEmail.value
-  if (!email || email === "未登录") return "AI"
+  const email = currentUser.value?.email
+  if (!email) return "AI"
   return email.slice(0, 2).toUpperCase()
 })
 const activeComponentKey = computed(() => `${activeTab.value}-${componentRenderKey.value}`)
@@ -761,37 +788,11 @@ const sidebarStyle = computed(() => ({
 }))
 
 const workspaceSignals = computed(() => [
-  { label: "Modules", value: moduleNavItems.length },
-  { label: "Data plane", value: "RAG + ASM" },
-  { label: "Runtime", value: "Trace" },
-  { label: "Session", value: currentUser.value?.is_active ? "Active" : "Ready" },
+  { label: t("shell.signals.modules"), value: visibleModuleNavItems.value.length },
+  { label: t("shell.signals.dataPlane"), value: t("shell.signalValues.dataPlane") },
+  { label: t("shell.signals.runtime"), value: t("shell.signalValues.runtime") },
+  { label: t("shell.signals.session"), value: currentUser.value?.is_active ? t("common.status.active") : t("common.status.ready") },
 ])
-const osPlanes = [
-  {
-    name: "Agno AIOS",
-    description: "运营控制面",
-    icon: Platform,
-    status: "online",
-    statusText: "Current",
-    metrics: ["17 modules", "JWT", "Vue"],
-  },
-  {
-    name: "Security Data Fabric",
-    description: "资产、漏洞、知识入库",
-    icon: Files,
-    status: "online",
-    statusText: "Online",
-    metrics: ["ASM", "CVE", "RAG"],
-  },
-  {
-    name: "Agent Runtime",
-    description: "对话、MCP、Trace 观测",
-    icon: Connection,
-    status: "standby",
-    statusText: "Standby",
-    metrics: ["Agent", "MCP", "Trace"],
-  },
-]
 
 const checkMobile = () => {
   isMobile.value = isMobileViewport()
@@ -828,7 +829,7 @@ const handleModelChange = (event: Event) => {
 
 const formatSessionTime = (timestamp: number) => {
   if (!timestamp) return ""
-  return new Date(timestamp * 1000).toLocaleString("zh-CN", {
+  return new Date(timestamp * 1000).toLocaleString(locale.value, {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -840,7 +841,7 @@ const formatTraceTime = (iso?: string | null) => {
   if (!iso) return ""
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ""
-  return date.toLocaleString("zh-CN", {
+  return date.toLocaleString(locale.value, {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -865,23 +866,35 @@ const traceStatusTone = (trace: TraceItem) => {
 }
 
 const formatTraceMeta = (trace: TraceItem) => {
-  return `${formatTraceTime(trace.start_time)} · ${compactTraceId(trace.trace_id)} · ${trace.total_spans ?? 0} spans`
+  return t("shell.traces.meta", {
+    time: formatTraceTime(trace.start_time),
+    id: compactTraceId(trace.trace_id),
+    count: trace.total_spans ?? 0,
+  })
 }
 
 const loadSidebarChatSessions = async () => {
+  if (!authStore.hasPermission("session:read:own")) {
+    chatSessions.value = []
+    return
+  }
   sessionStore.setLoadingSessions(true)
   sessionStore.setSessionError(null)
   try {
     chatSessions.value = await listSessions()
   } catch (error) {
     chatSessions.value = []
-    sessionStore.setSessionError(error instanceof Error ? error.message : "会话加载失败")
+    sessionStore.setSessionError(error instanceof Error ? error.message : t("shell.errors.sessionLoadFailed"))
   } finally {
     sessionStore.setLoadingSessions(false)
   }
 }
 
 const loadSidebarTraceQueue = async () => {
+  if (!authStore.hasPermission("trace:read:own")) {
+    traceQueueItems.value = []
+    return
+  }
   traceStore.setLoadingTraceQueue(true)
   traceStore.setTraceError(null)
   try {
@@ -889,7 +902,7 @@ const loadSidebarTraceQueue = async () => {
     traceQueueItems.value = response.items || []
   } catch (error) {
     traceQueueItems.value = []
-    traceStore.setTraceError(error instanceof Error ? error.message : "Trace 队列加载失败")
+    traceStore.setTraceError(error instanceof Error ? error.message : t("shell.errors.traceQueueLoadFailed"))
   } finally {
     traceStore.setLoadingTraceQueue(false)
   }
@@ -902,11 +915,13 @@ const dispatchChatEvent = (name: string, detail?: Record<string, unknown>) => {
 }
 
 const toggleChatSessions = () => {
+  if (!authStore.hasPermission("session:read:own")) return
   chatSessionsExpanded.value = !chatSessionsExpanded.value
   if (chatSessionsExpanded.value) void loadSidebarChatSessions()
 }
 
 const toggleTraceQueue = () => {
+  if (!authStore.hasPermission("trace:read:own")) return
   traceQueueExpanded.value = !traceQueueExpanded.value
   if (traceQueueExpanded.value) void loadSidebarTraceQueue()
 }
@@ -944,10 +959,10 @@ const archiveSidebarChatSession = async (sessionId: string) => {
   }
   try {
     await archiveSession(sessionId)
-    ElMessage.success("会话已归档")
+    ElMessage.success(t("shell.messages.sessionArchived"))
   } catch {
     chatSessions.value = previousSessions
-    ElMessage.error("归档会话失败")
+    ElMessage.error(t("shell.messages.archiveSessionFailed"))
   }
 }
 
@@ -977,7 +992,7 @@ const toggleSidebarSize = () => {
 const refreshWorkspace = () => {
   componentRenderKey.value += 1
   void loadCurrentModel()
-  void loadSidebarTraceQueue()
+  if (authStore.hasPermission("trace:read:own")) void loadSidebarTraceQueue()
 }
 
 const applyTheme = (dark: boolean) => {
@@ -999,8 +1014,8 @@ const toggleTheme = () => {
 const handleAuthenticated = (user: AuthUser) => {
   currentUser.value = user
   void loadCurrentModel()
-  void loadSidebarChatSessions()
-  void loadSidebarTraceQueue()
+  if (authStore.hasPermission("session:read:own")) void loadSidebarChatSessions()
+  if (authStore.hasPermission("trace:read:own")) void loadSidebarTraceQueue()
 }
 
 const restoreSession = async () => {
@@ -1011,9 +1026,9 @@ const restoreSession = async () => {
   }
 
   try {
-    currentUser.value = await fetchCurrentUser(token)
-    void loadSidebarChatSessions()
-    void loadSidebarTraceQueue()
+    currentUser.value = await fetchCurrentUser(token, { fallbacks: authClientFallbacks.value })
+    if (authStore.hasPermission("session:read:own")) void loadSidebarChatSessions()
+    if (authStore.hasPermission("trace:read:own")) void loadSidebarTraceQueue()
   } catch {
     clearStoredAuthToken()
     currentUser.value = null
@@ -1025,7 +1040,7 @@ const restoreSession = async () => {
 const handleLogout = async () => {
   loggingOut.value = true
   try {
-    await authLogout(getStoredAuthToken())
+    await authLogout(getStoredAuthToken(), { fallbacks: authClientFallbacks.value })
   } finally {
     currentUser.value = null
     loggingOut.value = false
@@ -1035,10 +1050,24 @@ const handleLogout = async () => {
 }
 
 const selectNav = (id: NavId) => {
+  if (!canAccessNav(id)) {
+    activeTab.value = "home"
+    userMenuOpen.value = false
+    closeSidebar()
+    return
+  }
   activeTab.value = id
   userMenuOpen.value = false
   closeSidebar()
 }
+
+watch(
+  () => [activeTab.value, currentUser.value?.role, currentUser.value?.is_superuser] as const,
+  () => {
+    if (!canAccessNav(activeTab.value as NavId)) activeTab.value = "home"
+  },
+  { immediate: true },
+)
 
 const openUserSettings = () => {
   userMenuOpen.value = false

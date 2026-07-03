@@ -1,3 +1,4 @@
+import inspect
 from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase, TestCase
 from unittest.mock import patch
@@ -32,13 +33,20 @@ class ChatSessionPermissionsTest(TestCase):
     def test_session_list_service_accepts_owner_filter(self):
         self.assertIn("owner_user_id", llm_service.get_all_sessions.__annotations__ | {})
 
+    def test_session_list_owner_filter_applies_when_including_archived(self):
+        source = inspect.getsource(llm_service.get_all_sessions)
+
+        self.assertIn("WHERE (%s", source)
+        self.assertIn(")\n                    AND (%s::text IS NULL OR s.user_id = %s::text)", source)
+
+    def test_chat_routes_require_explicit_session_permissions(self):
+        self.assertIn('require_permission("session:write:own")', inspect.getsource(chat.chat_agent))
+        self.assertIn('require_permission("session:read:own")', inspect.getsource(chat.list_sessions))
+        self.assertIn('require_permission("session:read:own")', inspect.getsource(chat.get_session))
+        self.assertIn('require_permission("session:write:own")', inspect.getsource(chat.remove_session))
+
 
 class ChatRoutePermissionsTest(IsolatedAsyncioTestCase):
-    async def test_guest_cannot_send_chat_message(self):
-        with self.assertRaises(HTTPException) as exc:
-            await chat.chat_agent(chat.ChatRequest(message="hello"), user=actor("g1", "guest"))
-        self.assertEqual(exc.exception.status_code, 403)
-
     async def test_list_sessions_uses_current_user_as_owner_filter(self):
         captured: dict[str, str | None] = {}
 
@@ -52,3 +60,51 @@ class ChatRoutePermissionsTest(IsolatedAsyncioTestCase):
 
         self.assertEqual(result, [])
         self.assertEqual(captured["owner_user_id"], "u1")
+
+    async def test_chat_rejects_foreign_existing_session_id(self):
+        with patch.object(chat, "get_session_owner", return_value="u2"):
+            with self.assertRaises(HTTPException) as exc:
+                await chat.chat_agent(
+                    chat.ChatRequest(message="hello", session_id="foreign-session"),
+                    user=actor("u1"),
+                )
+
+        self.assertEqual(exc.exception.status_code, 404)
+
+    async def test_chat_allows_owned_existing_session_id(self):
+        with patch.object(chat, "get_session_owner", return_value="u1"):
+            response = await chat.chat_agent(
+                chat.ChatRequest(message="hello", session_id="own-session"),
+                user=actor("u1"),
+            )
+
+        self.assertEqual(response.media_type, "text/event-stream")
+
+    async def test_event_generator_passes_knowledge_owner_filter(self):
+        captured: dict[str, str | None] = {}
+
+        async def fake_stream_chat_with_agent(
+            message: str,
+            session_id: str | None,
+            model_id: str | None,
+            user_id: str | None,
+            *,
+            knowledge_owner_user_id: str | None,
+        ):
+            captured["message"] = message
+            captured["knowledge_owner_user_id"] = knowledge_owner_user_id
+            yield "ok"
+
+        with patch.object(chat, "stream_chat_with_agent", fake_stream_chat_with_agent):
+            chunks = [
+                chunk
+                async for chunk in chat._event_generator(
+                    "hello",
+                    user_id="u1",
+                    knowledge_owner_user_id="u1",
+                )
+            ]
+
+        self.assertEqual(captured["message"], "hello")
+        self.assertEqual(captured["knowledge_owner_user_id"], "u1")
+        self.assertIn("data: ok", chunks[0])

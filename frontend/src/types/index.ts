@@ -95,7 +95,6 @@ export interface OsControlResponse {
   status: string
   metrics: OsControlMetric[]
   records: OsControlRecord[]
-  notes?: string[]
   generated_at: string
 }
 

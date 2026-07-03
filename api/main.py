@@ -8,12 +8,13 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
-from api.auth.database import close_auth_engine, create_auth_tables
+from api.auth.database import bootstrap_admin_user, close_auth_engine, create_auth_tables
 from api.auth.router import router as auth_router
 from api.config import get_settings
 from api.core.logging import configure_logging
 from api.mcp.server import bootstrap_mcp_token, mcp_runtime
 from api.routes import (
+    audit,
     assets,
     chat,
     collect,
@@ -38,6 +39,7 @@ async def lifespan(app: FastAPI):
     pool = await get_db_pool()
     app.state.db_pool = pool
     await create_auth_tables()
+    await bootstrap_admin_user(app_settings)
 
     headers = {"Content-Type": "application/json"}
     acl_token = app_settings.acl_token.get_secret_value()
@@ -98,6 +100,7 @@ async def mcp_redirect(request: Request):
 
 # Include routers
 app.include_router(auth_router)
+app.include_router(audit.router)
 app.include_router(cve.router)
 app.include_router(assets.router)
 app.include_router(chat.router)

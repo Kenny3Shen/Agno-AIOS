@@ -1,37 +1,14 @@
 <template>
   <div class="agentos-control">
-    <header class="agentos-head">
-      <div class="agentos-title">
-        <span class="agentos-mark">
-          <el-icon><component :is="moduleIcon" /></el-icon>
-        </span>
-        <div class="min-w-0">
-          <p>AGENTOS CONTROL</p>
-          <h3>{{ payload?.title || fallbackTitle }}</h3>
-          <span>{{ payload?.description || "加载控制面状态" }}</span>
-        </div>
-      </div>
-
-      <div class="agentos-actions">
-        <span class="agentos-status" :class="payload?.status || 'loading'">
-          {{ payload?.status || "loading" }}
-        </span>
-        <el-button size="small" type="primary" :loading="loading" class="cursor-pointer" @click="loadModule">
-          <el-icon><Refresh /></el-icon>
-        </el-button>
-      </div>
-    </header>
-
-    <section class="agentos-metrics">
+    <section class="agentos-summary-strip">
       <article
         v-for="metric in payload?.metrics || fallbackMetrics"
         :key="metric.label"
-        class="agentos-metric"
+        class="agentos-summary-chip"
         :class="`tone-${metric.tone || 'blue'}`"
       >
         <span>{{ metric.label }}</span>
-        <strong>{{ metric.value }}</strong>
-        <em>{{ metric.hint || "control plane" }}</em>
+        <strong :title="metric.hint || metric.label">{{ metric.value }}</strong>
       </article>
     </section>
 
@@ -41,8 +18,16 @@
       <section class="agentos-panel">
         <div class="agentos-panel-head">
           <div>
-            <p>Runtime Ledger</p>
-            <span>{{ payload?.records.length || 0 }} records · {{ generatedAt }}</span>
+            <p>{{ t("agentOS.ledger.title") }}</p>
+            <span>{{ t("agentOS.ledger.count", { count: payload?.records.length || 0, time: generatedAt }) }}</span>
+          </div>
+          <div class="agentos-panel-actions">
+            <span class="agentos-status" :class="payload?.status || 'loading'">
+              {{ payload?.status || t("agentOS.status.loading") }}
+            </span>
+            <el-button size="small" type="primary" :loading="loading" class="cursor-pointer" @click="loadModule">
+              <el-icon><Refresh /></el-icon>
+            </el-button>
           </div>
         </div>
 
@@ -72,27 +57,10 @@
 
         <div v-else-if="!loading" class="agentos-empty">
           <el-icon><Aim /></el-icon>
-          <strong>暂无记录</strong>
+          <strong>{{ t("agentOS.empty.title") }}</strong>
           <span>{{ emptyMessage }}</span>
         </div>
       </section>
-
-      <aside class="agentos-notes">
-        <div class="agentos-panel">
-          <div class="agentos-panel-head">
-            <div>
-              <p>Implementation Notes</p>
-              <span>Agno docs MCP 对齐状态</span>
-            </div>
-          </div>
-
-          <div class="agentos-note-list">
-            <div v-for="note in notes" :key="note" class="agentos-note">
-              {{ note }}
-            </div>
-          </div>
-        </div>
-      </aside>
     </main>
   </div>
 </template>
@@ -101,16 +69,9 @@
 import { computed, onMounted, ref, watch } from "vue"
 import {
   Aim,
-  Calendar,
-  ChatLineRound,
-  Clock,
-  Cpu,
-  DataAnalysis,
-  Finished,
-  MagicStick,
   Refresh,
-  Tickets,
 } from "@element-plus/icons-vue"
+import { useI18n } from "vue-i18n"
 import { useOsControlApi } from "../composables/useApi"
 import type { OsControlMetric, OsControlModule, OsControlRecord, OsControlResponse } from "../types"
 
@@ -119,49 +80,24 @@ const props = defineProps<{
 }>()
 
 const { loading, error, fetchModule } = useOsControlApi()
+const { t, locale } = useI18n()
 const payload = ref<OsControlResponse | null>(null)
 
-const moduleTitles: Record<OsControlModule, string> = {
-  sessions: "Sessions",
-  studio: "Studio",
-  memory: "Memory",
-  metrics: "Metrics",
-  evaluation: "Evaluation",
-  approvals: "Approvals",
-  scheduler: "Scheduler",
-}
-
-const moduleIcons = {
-  sessions: Clock,
-  studio: MagicStick,
-  memory: Cpu,
-  metrics: DataAnalysis,
-  evaluation: Finished,
-  approvals: Tickets,
-  scheduler: Calendar,
-} satisfies Record<OsControlModule, unknown>
-
-const fallbackTitle = computed(() => moduleTitles[props.osModule])
-const moduleIcon = computed(() => moduleIcons[props.osModule] || ChatLineRound)
 const fallbackMetrics = computed<OsControlMetric[]>(() => [
-  { label: "Status", value: "Loading", hint: "fetching module", tone: "blue" },
+  {
+    label: t("agentOS.metricFallback.label"),
+    value: t("agentOS.metricFallback.value"),
+    hint: t("agentOS.metricFallback.hint"),
+    tone: "blue",
+  },
 ])
 const generatedAt = computed(() => formatTime(payload.value?.generated_at))
 const emptyMessage = computed(() => {
-  if (props.osModule === "evaluation") return "评测 registry 已就绪，等待接入评测运行。"
-  if (props.osModule === "approvals") return "审批 registry 已就绪，当前没有待处理请求。"
-  if (props.osModule === "scheduler") return "调度 registry 已就绪，当前没有计划任务。"
-  return "当前模块还没有可展示的运行记录。"
+  if (props.osModule === "evaluation") return t("agentOS.empty.evaluation")
+  if (props.osModule === "approvals") return t("agentOS.empty.approvals")
+  if (props.osModule === "scheduler") return t("agentOS.empty.scheduler")
+  return t("agentOS.empty.default")
 })
-const notes = computed(() => {
-  const moduleNotes = payload.value?.notes || []
-  if (moduleNotes.length) return moduleNotes
-  return [
-    "该页面来自 Agno AgentOS 控制面参考：sessions、memory、metrics、evals、approvals、schedules 和 components 应可观测。",
-    "当前实现优先读取本地 Postgres 与配置文件，不触发模型推理或知识库 embedding 冷启动。",
-  ]
-})
-
 const loadModule = async () => {
   payload.value = await fetchModule(props.osModule)
 }
@@ -178,7 +114,7 @@ const formatTime = (value?: string) => {
   if (!value) return "-"
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString("zh-CN", {
+  return date.toLocaleString(locale.value, {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -189,11 +125,14 @@ const formatTime = (value?: string) => {
 const compactValue = (value: unknown) => {
   const text = typeof value === "string" ? value : JSON.stringify(value)
   if (!text) return "-"
+  if (/^\d{4}-\d{2}-\d{2}T/.test(text)) return formatTime(text)
   return text.length > 48 ? `${text.slice(0, 45)}...` : text
 }
 
 const metaEntries = (record: OsControlRecord) => {
-  return Object.entries(record.meta || {}).filter(([, value]) => value !== "" && value != null).slice(0, 6)
+  return Object.entries(record.meta || {})
+    .filter(([, value]) => value !== "" && value !== false && value != null)
+    .slice(0, 6)
 }
 
 watch(() => props.osModule, () => {
@@ -230,24 +169,7 @@ onMounted(() => {
   min-width: 0;
 }
 
-.agentos-head,
-.agentos-metrics {
-  border-bottom: 1px solid var(--os-border);
-  background: color-mix(in srgb, var(--os-panel) 92%, transparent);
-}
-
-.agentos-head {
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 16px;
-}
-
-.agentos-title,
-.agentos-actions,
+.agentos-panel-actions,
 .agentos-record-main,
 .agentos-record-side {
   display: flex;
@@ -255,19 +177,6 @@ onMounted(() => {
   gap: 10px;
 }
 
-.agentos-mark {
-  display: grid;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid rgba(20, 127, 162, 0.3);
-  border-radius: 8px;
-  background: #e5f5fb;
-  color: var(--os-blue);
-}
-
-.agentos-title p,
 .agentos-panel-head p {
   margin: 0;
   color: var(--os-muted);
@@ -277,15 +186,6 @@ onMounted(() => {
   text-transform: uppercase;
 }
 
-.agentos-title h3 {
-  margin: 2px 0 0;
-  color: var(--os-text);
-  font-size: 15px;
-  font-weight: 800;
-  line-height: 1.35;
-}
-
-.agentos-title span,
 .agentos-panel-head span {
   display: block;
   margin-top: 4px;
@@ -312,42 +212,42 @@ onMounted(() => {
   overflow-wrap: anywhere;
 }
 
-.agentos-metrics {
+.agentos-summary-strip {
   display: grid;
   flex: 0 0 auto;
-  gap: 10px;
+  gap: 8px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  padding: 12px 16px;
+  padding: 12px 14px 0;
 }
 
-.agentos-metric {
+.agentos-summary-chip {
   position: relative;
   overflow: hidden;
   border: 1px solid var(--os-border);
   border-radius: 8px;
-  background: var(--os-panel);
-  padding: 10px 12px;
+  background: var(--os-panel-soft);
+  padding: 8px 10px;
 }
 
-.agentos-metric::before {
+.agentos-summary-chip::before {
   position: absolute;
   inset: 0 auto 0 0;
-  width: 3px;
+  width: 2px;
   background: var(--os-blue);
   content: "";
 }
 
-.agentos-metric.tone-green::before,
+.agentos-summary-chip.tone-green::before,
 .agentos-dot.green {
   background: var(--os-green);
 }
 
-.agentos-metric.tone-yellow::before,
+.agentos-summary-chip.tone-yellow::before,
 .agentos-dot.yellow {
   background: var(--os-yellow);
 }
 
-.agentos-metric.tone-red::before,
+.agentos-summary-chip.tone-red::before,
 .agentos-dot.red {
   background: var(--os-red);
 }
@@ -374,21 +274,19 @@ onMounted(() => {
   color: var(--os-red);
 }
 
-.agentos-metric span,
-.agentos-metric em {
+.agentos-summary-chip span {
   display: block;
   color: var(--os-muted);
-  font-size: 11px;
-  font-style: normal;
+  font-size: 10px;
   line-height: 1.35;
 }
 
-.agentos-metric strong {
+.agentos-summary-chip strong {
   display: block;
-  margin-top: 6px;
+  margin-top: 2px;
   color: var(--os-text);
   font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 18px;
+  font-size: 13px;
   font-weight: 800;
   line-height: 1.2;
   overflow-wrap: anywhere;
@@ -399,11 +297,9 @@ onMounted(() => {
 }
 
 .agentos-ledger {
-  display: grid;
   min-height: 0;
   flex: 1;
-  gap: 14px;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  display: block;
   overflow: hidden;
   padding: 14px;
 }
@@ -416,8 +312,7 @@ onMounted(() => {
   padding: 14px;
 }
 
-.agentos-ledger > .agentos-panel,
-.agentos-notes .agentos-panel {
+.agentos-ledger > .agentos-panel {
   display: flex;
   flex-direction: column;
 }
@@ -531,27 +426,6 @@ onMounted(() => {
   line-height: 1.55;
 }
 
-.agentos-notes {
-  min-height: 0;
-  overflow: hidden;
-}
-
-.agentos-note-list {
-  display: grid;
-  gap: 8px;
-  overflow-y: auto;
-}
-
-.agentos-note {
-  border: 1px solid var(--os-border);
-  border-radius: 8px;
-  background: var(--os-panel-soft);
-  padding: 10px;
-  color: var(--os-muted);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
 html.dark .agentos-control {
   --os-bg: #15161b;
   --os-panel: #1c1d22;
@@ -565,18 +439,9 @@ html.dark .agentos-control {
   --os-red: #ff6f63;
 }
 
-html.dark .agentos-mark {
-  background: rgba(109, 168, 255, 0.13);
-}
-
 @media (max-width: 1180px) {
   .agentos-ledger {
-    grid-template-columns: 1fr;
     overflow-y: auto;
-  }
-
-  .agentos-notes {
-    overflow: visible;
   }
 }
 
@@ -585,13 +450,12 @@ html.dark .agentos-mark {
     overflow-y: auto;
   }
 
-  .agentos-head,
-  .agentos-metrics,
+  .agentos-summary-strip,
   .agentos-ledger {
     padding: 12px;
   }
 
-  .agentos-metrics {
+  .agentos-summary-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

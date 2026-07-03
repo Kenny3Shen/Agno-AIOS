@@ -1,27 +1,6 @@
 <template>
-  <div class="agent-chat h-full min-h-0 overflow-hidden bg-[#F7FAFC] text-[#15202B] dark:bg-[#071014] dark:text-[#DCE7EF]">
+  <div class="agent-chat h-full min-h-0 overflow-hidden">
     <main class="flex h-full min-h-0 min-w-0 flex-col">
-        <header class="border-b border-[#CBD6E2] bg-white px-4 py-3 dark:border-[#22313A] dark:bg-[#0A151B]">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="flex min-w-0 items-center gap-2.5">
-              <div class="agent-core" :class="{ 'is-running': loading }">
-                <el-icon><Cpu /></el-icon>
-              </div>
-              <div class="min-w-0">
-                <h3 class="truncate text-sm font-semibold text-[#15202B] dark:text-white">Agent 对话</h3>
-                <p class="mt-1 truncate text-xs text-[#6B7C8A] dark:text-[#91A4B3]">
-                  {{ loading ? '执行中' : '待命' }} · {{ currentModelName }} · {{ compactSessionId }}
-                </p>
-              </div>
-            </div>
-
-            <div class="hidden items-center gap-2 rounded-md border border-[#CBD6E2] bg-[#F8FAFC] px-2.5 py-1.5 text-xs text-[#526170] dark:border-[#22313A] dark:bg-[#0F1B22] dark:text-[#91A4B3] sm:flex">
-              <span class="h-1.5 w-1.5 rounded-full" :class="selectedModelReady ? 'bg-[#22C55E]' : 'bg-[#F6C343]'" />
-              <span class="max-w-[180px] truncate">{{ currentModelName }}</span>
-            </div>
-          </div>
-        </header>
-
         <div
           ref="chatContainer"
           class="agent-stream min-h-0 flex-1 overflow-y-auto p-4"
@@ -47,16 +26,16 @@
                 <div class="mb-2 flex items-center justify-between gap-3">
                   <div class="flex items-center gap-2">
                     <span class="text-xs font-semibold">
-                      {{ msg.role === 'user' ? 'Operator' : 'Security Agent' }}
+                      {{ msg.role === 'user' ? t("chat.roles.operator") : t("chat.roles.agent") }}
                     </span>
-                    <span v-if="msg.role === 'assistant' && !msg.final" class="agent-pill">Streaming</span>
+                    <span v-if="msg.role === 'assistant' && !msg.final" class="agent-pill">{{ t("chat.roles.streaming") }}</span>
                   </div>
-                  <span class="font-mono text-[10px] text-[#7D8D9A]">#{{ index + 1 }}</span>
+                  <span class="message-index font-mono text-[10px]">#{{ index + 1 }}</span>
                 </div>
                 <div
                   v-if="msg.role === 'assistant' && (!msg.content && !msg.final)"
                   class="markdown-skeleton"
-                  aria-label="Markdown 内容加载中"
+                  :aria-label="t('chat.loading.markdown')"
                 >
                   <span />
                   <span />
@@ -65,29 +44,29 @@
                 <div
                   v-else-if="msg.role === 'assistant'"
                   class="markdown-body prose prose-sm max-w-none dark:prose-invert"
-                  v-html="renderMarkdown(msg.content)"
+                  v-html="renderMarkdown(parsedAssistantMessage(msg.content).body)"
                 ></div>
                 <p v-else class="whitespace-pre-wrap break-words text-sm leading-relaxed">{{ msg.content }}</p>
                 <span v-if="msg.role === 'assistant' && !msg.final" class="stream-cursor" aria-hidden="true" />
 
-                <div v-if="msg.role === 'assistant' && hasThinking(msg.content)" class="thinking-collapse">
+                <div v-if="msg.role === 'assistant' && parsedAssistantMessage(msg.content).thinking" class="thinking-collapse">
                   <button type="button" @click="toggleCollapsed(collapsedThinking, index)">
-                    {{ isCollapsed(collapsedThinking, index) ? '展开思考' : '收起思考' }}
+                    {{ isCollapsed(collapsedThinking, index) ? t("chat.collapse.expandThinking") : t("chat.collapse.collapseThinking") }}
                   </button>
-                  <pre v-if="!isCollapsed(collapsedThinking, index)">{{ thinkingText(msg.content) }}</pre>
+                  <pre v-if="!isCollapsed(collapsedThinking, index)">{{ parsedAssistantMessage(msg.content).thinking }}</pre>
                 </div>
 
-                <div v-if="msg.role === 'assistant' && sourceLines(msg.content).length" class="source-collapse">
+                <div v-if="msg.role === 'assistant' && parsedAssistantMessage(msg.content).sources.length" class="source-collapse">
                   <button type="button" @click="toggleCollapsed(collapsedSources, index)">
-                    {{ isCollapsed(collapsedSources, index) ? '展开来源' : '收起来源' }}
+                    {{ isCollapsed(collapsedSources, index) ? t("chat.collapse.expandSources") : t("chat.collapse.collapseSources") }}
                   </button>
                   <ul v-if="!isCollapsed(collapsedSources, index)">
-                    <li v-for="source in sourceLines(msg.content)" :key="source">{{ source }}</li>
+                    <li v-for="source in parsedAssistantMessage(msg.content).sources" :key="source">{{ source }}</li>
                   </ul>
                 </div>
 
-                <ol v-if="msg.role === 'assistant' && toolEvents(msg.content).length" class="tool-timeline">
-                  <li v-for="event in toolEvents(msg.content)" :key="event">{{ event }}</li>
+                <ol v-if="msg.role === 'assistant' && parsedAssistantMessage(msg.content).toolEvents.length" class="tool-timeline">
+                  <li v-for="event in parsedAssistantMessage(msg.content).toolEvents" :key="event">{{ event }}</li>
                 </ol>
               </article>
             </div>
@@ -103,7 +82,7 @@
               <article class="message-card agent">
                 <div class="flex items-center gap-2 text-sm font-semibold">
                   <span class="agent-pulse" />
-                  Agent 正在规划下一步
+                  {{ t("chat.loading.planning") }}
                 </div>
               </article>
             </div>
@@ -122,13 +101,13 @@
           />
         </transition>
 
-        <footer class="border-t border-[#D8E0E7] bg-white/95 p-3 dark:border-[#22313A] dark:bg-[#0A151B]">
+        <footer class="agent-chat-footer p-3">
           <div v-if="showQuickPrompts" class="mb-2 flex flex-wrap gap-2">
             <button
               v-for="prompt in quickPrompts"
               :key="prompt"
               type="button"
-              class="cursor-pointer rounded-md border border-[#D8E0E7] px-2.5 py-1.5 text-xs text-[#526170] transition-colors duration-200 hover:border-[#2F8FED]/50 hover:bg-[#EAF5FF] hover:text-[#0F4F8F] dark:border-[#22313A] dark:text-[#91A4B3] dark:hover:bg-[#102638] dark:hover:text-[#8BD9FF]"
+              class="quick-prompt cursor-pointer px-2.5 py-1.5 text-xs transition-colors duration-200"
               @click="inputMessage = prompt"
             >
               {{ prompt }}
@@ -136,7 +115,7 @@
           </div>
           <div
             v-if="modelConfigNotice"
-            class="mb-2 rounded-md border border-[#F6C343]/50 bg-[#FFF8E1] px-3 py-2 text-xs text-[#7A5200] dark:bg-[#2A2413] dark:text-[#FFD166]"
+            class="model-config-notice mb-2 px-3 py-2 text-xs"
           >
             {{ modelConfigNotice }}
           </div>
@@ -144,7 +123,7 @@
             <div class="chat-composer-row">
               <el-input
                 v-model="inputMessage"
-                placeholder="描述目标，例如：分析这个 CVE 对我资产面的影响"
+                :placeholder="t('chat.composer.placeholder')"
                 @keyup.enter.exact="sendMessage"
                 :disabled="loading"
                 :autosize="{ minRows: 1, maxRows: 4 }"
@@ -154,7 +133,7 @@
               <el-select
                 v-model="selectedModelId"
                 :loading="modelLoading"
-                placeholder="选择模型"
+                :placeholder="t('chat.composer.modelPlaceholder')"
                 class="agent-model-select"
                 popper-class="agent-model-select-popper"
                 placement="top-start"
@@ -171,7 +150,7 @@
                     <span class="min-w-0">
                       <span class="model-option-title">{{ model.name }}</span>
                       <span class="model-option-subtitle">
-                        {{ model.model_id || '未填写模型 ID' }}
+                        {{ model.model_id || t("chat.composer.missingModelId") }}
                       </span>
                     </span>
                     <span
@@ -185,7 +164,7 @@
                   </div>
                 </el-option>
               </el-select>
-              <el-tooltip content="发送任务" placement="top">
+              <el-tooltip :content="t('chat.composer.send')" placement="top">
                 <el-button
                   type="primary"
                   @click="sendMessage"
@@ -202,7 +181,7 @@
     </main>
 
     <button v-if="zoomedImage" type="button" class="image-zoom-backdrop" @click="zoomedImage = null">
-      <img :src="zoomedImage" alt="放大预览" />
+      <img :src="zoomedImage" :alt="t('chat.image.zoomPreview')" />
     </button>
   </div>
 </template>
@@ -216,6 +195,7 @@ import { useChatApi, useChatHistory, useSettingsApi } from "../composables/useAp
 import { copyToClipboard } from "../lib/clipboard"
 import { useSessionStore } from "../stores/sessions"
 import type { Message, ModelConfig } from "../types"
+import { useI18n } from "vue-i18n"
 import {
   Cpu,
   Loading,
@@ -271,8 +251,8 @@ const props = defineProps<{
 }>()
 
 // ── State ─────────────────────────────────────────────────────────
+const { t } = useI18n()
 const inputMessage = ref("")
-const WELCOME = "你好！我是 AgentOS 安全智能体，集成了威胁追踪和剧本执行技能。请告诉我你的目标或问题。"
 const MODEL_STORAGE_KEY = "agno-aios-chat-model-id"
 
 interface ChatMessage {
@@ -281,9 +261,15 @@ interface ChatMessage {
   final?: boolean
 }
 
-const messages = ref<ChatMessage[]>([
-  { role: "assistant", content: WELCOME, final: true }
-])
+interface ParsedAssistantMessage {
+  body: string
+  thinking: string
+  sources: string[]
+  toolEvents: string[]
+}
+
+const createWelcomeMessage = (): ChatMessage => ({ role: "assistant", content: t("chat.welcome"), final: true })
+const messages = ref<ChatMessage[]>([createWelcomeMessage()])
 const chatContainer = ref<HTMLElement | null>(null)
 const zoomedImage = ref<string | null>(null)
 const collapsedSources = reactive(new Set<number>())
@@ -298,11 +284,6 @@ const { loading, error, sendMessageStream } = useChatApi()
 const { getSessionHistory } = useChatHistory()
 const { fetchModels } = useSettingsApi()
 
-const compactSessionId = computed(() => {
-  if (!currentSessionId.value) return "New task"
-  return `${currentSessionId.value.slice(0, 8)}...${currentSessionId.value.slice(-4)}`
-})
-
 const selectedModel = computed(() => {
   return modelOptions.value.find((model) => model.id === selectedModelId.value)
     ?? modelOptions.value.find((model) => model.enabled)
@@ -310,21 +291,21 @@ const selectedModel = computed(() => {
 })
 
 const selectedModelReady = computed(() => Boolean(selectedModel.value?.enabled && selectedModel.value.configured))
-const currentModelName = computed(() => selectedModel.value?.name ?? "未选择")
+const currentModelName = computed(() => selectedModel.value?.name ?? t("chat.status.unselected"))
 const modelConfigNotice = computed(() => {
   if (modelLoading.value) return ""
-  if (!modelOptions.value.length) return "未加载到模型配置，请先在系统配置中添加模型。"
-  if (!selectedModel.value) return "请选择一个可用模型。"
-  if (!selectedModel.value.enabled) return `当前模型 ${selectedModel.value.name} 已禁用，请切换模型。`
-  if (!selectedModel.value.configured) return `当前模型 ${selectedModel.value.name} 未完成参数配置，请在系统配置中补全 API Key、Base URL 和 Model ID。`
+  if (!modelOptions.value.length) return t("chat.notices.noModels")
+  if (!selectedModel.value) return t("chat.notices.noSelectedModel")
+  if (!selectedModel.value.enabled) return t("chat.notices.disabledModel", { name: selectedModel.value.name })
+  if (!selectedModel.value.configured) return t("chat.notices.unconfiguredModel", { name: selectedModel.value.name })
   return ""
 })
 
-const quickPrompts = [
-  "帮我评估 CVE 对当前资产的影响",
-  "生成一次外部暴露面排查计划",
-  "把这段告警整理成处置步骤",
-]
+const quickPrompts = computed(() => [
+  t("chat.prompts.cveImpact"),
+  t("chat.prompts.exposurePlan"),
+  t("chat.prompts.alertRunbook"),
+])
 
 const showQuickPrompts = computed(() => messages.value.length <= 1 && !loading.value)
 
@@ -333,7 +314,7 @@ const notifyModelChange = () => {
   window.dispatchEvent(new CustomEvent("agno-aios-model-change", {
     detail: {
       id: model?.id ?? selectedModelId.value,
-      name: model?.name ?? "未选择",
+      name: model?.name ?? t("chat.status.unselected"),
     },
   }))
 }
@@ -361,7 +342,7 @@ const loadModels = async () => {
     }
     persistSelectedModel()
   } catch {
-    ElMessage.warning("模型配置加载失败")
+    ElMessage.warning(t("chat.notices.modelLoadFailed"))
   } finally {
     modelLoading.value = false
   }
@@ -393,26 +374,43 @@ const toggleCollapsed = (set: Set<number>, index: number) => {
 
 const isCollapsed = (set: Set<number>, index: number) => set.has(index)
 
-const hasThinking = (content: string) => /<think>|<\/think>|思考过程|Thinking/i.test(content)
+const parsedAssistantMessage = (content: string): ParsedAssistantMessage => {
+  const sources: string[] = []
+  const toolEvents: string[] = []
+  let thinking = ""
+  let body = content
 
-const thinkingText = (content: string) => {
-  const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/i)
-  if (thinkMatch?.[1]) return thinkMatch[1].trim()
-  const line = content.split("\n").find((item) => /思考过程|Thinking/i.test(item))
-  return line?.trim() || "模型输出包含思考过程标记。"
-}
+  body = body.replace(/<think>([\s\S]*?)(?:<\/think>|$)/gi, (_match, value: string) => {
+    thinking = [thinking, value.trim()].filter(Boolean).join("\n\n")
+    return ""
+  })
 
-const sourceLines = (content: string) => {
-  const lines = content.split("\n").map((line) => line.trim()).filter(Boolean)
-  return lines.filter((line) => /^(来源|Source|Sources|References|引用)[:：]/i.test(line))
-}
+  const bodyLines: string[] = []
+  for (const rawLine of body.split("\n")) {
+    const line = rawLine.trim()
+    if (/^(思考过程|Thinking)\s*[:：]/i.test(line)) {
+      thinking = [thinking, line.replace(/^(思考过程|Thinking)\s*[:：]\s*/i, "").trim() || t("chat.notices.thinkingFallback")]
+        .filter(Boolean)
+        .join("\n\n")
+      continue
+    }
+    if (/^(来源|Source|Sources|References|引用)\s*[:：]/i.test(line)) {
+      sources.push(line)
+      continue
+    }
+    if (/^(tool|工具调用|MCP|function call)\b/i.test(line) || /\b(tool|MCP|function call)\b/i.test(line)) {
+      toolEvents.push(line)
+      continue
+    }
+    bodyLines.push(rawLine)
+  }
 
-const toolEvents = (content: string) => {
-  return content
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => /(tool|工具调用|MCP|function call)/i.test(line))
-    .slice(0, 8)
+  return {
+    body: bodyLines.join("\n").trim(),
+    thinking,
+    sources,
+    toolEvents: toolEvents.slice(0, 8),
+  }
 }
 
 const enhanceRenderedMarkdown = async () => {
@@ -425,9 +423,13 @@ const enhanceRenderedMarkdown = async () => {
     const button = document.createElement("button")
     button.type = "button"
     button.className = "code-copy"
-    button.textContent = "Copy"
+    button.textContent = t("chat.code.copy")
     button.addEventListener("click", async () => {
-      await copyToClipboard(code.textContent || "")
+      if (await copyToClipboard(code.textContent || "")) {
+        ElMessage.success(t("common.clipboard.copied"))
+      } else {
+        ElMessage.warning(t("common.clipboard.failed"))
+      }
     })
     pre.appendChild(button)
   })
@@ -495,10 +497,10 @@ const selectSession = async (sessionId: string) => {
     if (history.length > 0) {
       messages.value = history.map(m => ({ ...m, final: true }))
     } else {
-      messages.value = [{ role: "assistant", content: WELCOME, final: true }]
+      messages.value = [createWelcomeMessage()]
     }
   } catch {
-    messages.value = [{ role: "assistant", content: WELCOME, final: true }]
+    messages.value = [createWelcomeMessage()]
   }
   notifySessionChange()
   void scrollToBottom()
@@ -507,7 +509,7 @@ const selectSession = async (sessionId: string) => {
 
 const createNewChat = () => {
   currentSessionId.value = null
-  messages.value = [{ role: "assistant", content: WELCOME, final: true }]
+  messages.value = [createWelcomeMessage()]
   notifySessionChange()
   void scrollToBottom()
 }
@@ -516,7 +518,7 @@ const createNewChat = () => {
 const sendMessage = async () => {
   if (!inputMessage.value.trim() || loading.value) return
   if (!selectedModelReady.value) {
-    ElMessage.warning(modelConfigNotice.value || "模型不可用")
+    ElMessage.warning(modelConfigNotice.value || t("chat.notices.modelUnavailable"))
     return
   }
   const userMsg = inputMessage.value
@@ -547,7 +549,7 @@ const sendMessage = async () => {
 
     notifySessionChange()
   } catch {
-    messages.value.push({ role: "assistant", content: "抱歉，处理请求时遇到错误。请稍后再试。" })
+    messages.value.push({ role: "assistant", content: t("chat.notices.requestFailed") })
   } finally {
     void scrollToBottom()
   }
@@ -582,23 +584,22 @@ onUnmounted(() => {
 
 <style>
 .agent-chat {
+  background: var(--ag-frame);
+  color: var(--ag-text);
   font-family: "Fira Sans", "Microsoft YaHei", sans-serif;
 }
 
-.agent-core {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid rgba(47, 143, 237, 0.35);
-  border-radius: 8px;
-  background: #eaf5ff;
-  color: #0969da;
+.agent-chat-footer {
+  border-color: var(--ag-panel-border);
+  background: var(--ag-panel-bg);
 }
 
-.agent-core.is-running {
-  animation: agent-glow 1.4s ease-in-out infinite;
+.agent-chat-footer {
+  border-top: 1px solid var(--ag-panel-border);
+}
+
+.message-index {
+  color: var(--ag-muted);
 }
 
 .agent-pill {
@@ -609,13 +610,13 @@ onUnmounted(() => {
   border-radius: 999px;
   padding: 0 8px;
   background: rgba(84, 211, 138, 0.1);
-  color: #14824a;
+  color: var(--ag-green);
   font-size: 10px;
   font-weight: 700;
 }
 
 .agent-stream {
-  background: #f7fafc;
+  background: var(--ag-frame);
 }
 
 .message-row {
@@ -652,7 +653,7 @@ onUnmounted(() => {
   top: 38px;
   bottom: -18px;
   width: 1px;
-  background: #cbd6e2;
+  background: var(--ag-border);
 }
 
 .message-avatar {
@@ -661,37 +662,37 @@ onUnmounted(() => {
   width: 32px;
   height: 32px;
   place-items: center;
-  border-radius: 8px;
+  border-radius: var(--ag-radius-panel);
   font-size: 12px;
   font-weight: 700;
 }
 
 .message-avatar.agent {
   border: 1px solid rgba(47, 143, 237, 0.35);
-  background: #eaf5ff;
-  color: #0969da;
+  background: var(--ag-blue-soft);
+  color: var(--ag-blue);
 }
 
 .message-avatar.user {
-  background: #15202b;
-  color: #ffffff;
+  background: var(--ag-user-message-bg);
+  color: var(--ag-user-message-text);
 }
 
 .message-card {
   max-width: min(860px, 100%);
-  border: 1px solid #cbd6e2;
-  border-radius: 8px;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-panel);
   padding: 12px 14px;
 }
 
 .message-card.agent {
-  background: #ffffff;
+  background: var(--ag-panel);
 }
 
 .message-card.user {
   width: min(720px, 100%);
-  background: #15202b;
-  color: #ffffff;
+  background: var(--ag-user-message-bg);
+  color: var(--ag-user-message-text);
 }
 
 .agent-pulse {
@@ -699,7 +700,7 @@ onUnmounted(() => {
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: #54d38a;
+  background: var(--ag-green);
   box-shadow: 0 0 0 6px rgba(84, 211, 138, 0.15);
 }
 
@@ -713,7 +714,7 @@ onUnmounted(() => {
   display: block;
   height: 10px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #e2e8f0 0%, #f8fafc 48%, #e2e8f0 100%);
+  background: linear-gradient(90deg, var(--ag-panel-soft) 0%, var(--ag-panel) 48%, var(--ag-panel-soft) 100%);
   background-size: 220% 100%;
   animation: skeleton-scan 1.25s ease-in-out infinite;
 }
@@ -733,7 +734,7 @@ onUnmounted(() => {
   margin-left: 3px;
   vertical-align: -2px;
   border-radius: 2px;
-  background: #2f8fed;
+  background: var(--ag-blue);
   animation: stream-cursor-blink 0.9s steps(2, start) infinite;
 }
 
@@ -745,10 +746,10 @@ onUnmounted(() => {
   position: absolute;
   top: 8px;
   right: 8px;
-  border: 1px solid #cbd6e2;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #526170;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-control);
+  background: var(--ag-panel);
+  color: var(--ag-muted-strong);
   cursor: pointer;
   font-size: 10px;
   font-weight: 700;
@@ -760,16 +761,16 @@ onUnmounted(() => {
 .source-collapse,
 .tool-timeline {
   margin-top: 10px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--ag-border);
   padding-top: 10px;
 }
 
 .thinking-collapse button,
 .source-collapse button {
-  border: 1px solid #cbd6e2;
-  border-radius: 6px;
-  background: #f8fafc;
-  color: #526170;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-control);
+  background: var(--ag-panel-soft);
+  color: var(--ag-muted-strong);
   cursor: pointer;
   font-size: 11px;
   font-weight: 700;
@@ -779,14 +780,14 @@ onUnmounted(() => {
 .thinking-collapse pre {
   margin: 8px 0 0;
   white-space: pre-wrap;
-  color: #526170;
+  color: var(--ag-muted-strong);
   font-size: 12px;
 }
 
 .source-collapse ul,
 .tool-timeline {
   margin-bottom: 0;
-  color: #526170;
+  color: var(--ag-muted-strong);
   font-size: 12px;
 }
 
@@ -807,7 +808,7 @@ onUnmounted(() => {
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: #2f8fed;
+  background: var(--ag-blue);
   content: "";
 }
 
@@ -822,8 +823,27 @@ onUnmounted(() => {
 .markdown-body img {
   cursor: zoom-in;
   max-height: 420px;
-  border: 1px solid #cbd6e2;
-  border-radius: 8px;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-panel);
+}
+
+.quick-prompt {
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-control);
+  color: var(--ag-muted-strong);
+}
+
+.quick-prompt:hover {
+  border-color: color-mix(in srgb, var(--ag-blue) 50%, var(--ag-border));
+  background: var(--ag-blue-soft);
+  color: var(--ag-blue);
+}
+
+.model-config-notice {
+  border: 1px solid color-mix(in srgb, var(--ag-yellow) 50%, var(--ag-border));
+  border-radius: var(--ag-radius-control);
+  background: var(--ag-yellow-soft);
+  color: var(--ag-yellow);
 }
 
 .image-zoom-backdrop {
@@ -841,7 +861,7 @@ onUnmounted(() => {
 .image-zoom-backdrop img {
   max-width: min(1100px, 96vw);
   max-height: 92vh;
-  border-radius: 8px;
+  border-radius: var(--ag-radius-panel);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
 }
 
@@ -852,11 +872,11 @@ onUnmounted(() => {
 .msg-fade-leave-to { opacity: 0; }
 
 .chat-composer {
-  border: 1px solid #cbd6e2;
-  border-radius: 10px;
-  background: #f8fafc;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-panel);
+  background: var(--ag-panel-soft);
   padding: 10px;
-  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--ag-shadow-panel);
 }
 
 .chat-composer-row {
@@ -878,27 +898,27 @@ onUnmounted(() => {
 .agent-model-select .el-select__wrapper {
   min-height: 32px;
   border: 1px solid transparent;
-  border-radius: 8px;
-  background: rgba(47, 143, 237, 0.08);
+  border-radius: var(--ag-radius-panel);
+  background: var(--ag-blue-soft);
   box-shadow: none;
   padding: 0 10px;
 }
 
 .agent-model-select .el-select__selected-item {
-  color: #0f4f8f;
+  color: var(--ag-blue);
   font-size: 13px;
   font-weight: 650;
 }
 
 .agent-model-select .el-select__caret {
-  color: #5f7484;
+  color: var(--ag-muted);
 }
 
 .agent-model-select-popper {
-  border: 1px solid #cbd6e2 !important;
-  border-radius: 8px !important;
-  background: #ffffff !important;
-  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.16) !important;
+  border: 1px solid var(--ag-border) !important;
+  border-radius: var(--ag-radius-panel) !important;
+  background: var(--ag-panel) !important;
+  box-shadow: var(--ag-shadow-popover) !important;
 }
 
 .agent-model-select-popper .el-select-dropdown {
@@ -909,12 +929,12 @@ onUnmounted(() => {
   height: auto;
   min-height: 54px;
   padding: 7px 9px;
-  border-radius: 6px;
+  border-radius: var(--ag-radius-control);
   line-height: 1.25;
 }
 
 .agent-model-select-popper .el-select-dropdown__item.is-selected {
-  background: #eaf5ff;
+  background: var(--ag-blue-soft);
 }
 
 .model-option {
@@ -936,7 +956,7 @@ onUnmounted(() => {
 }
 
 .model-option-title {
-  color: #15202b;
+  color: var(--ag-heading);
   font-size: 12px;
   font-weight: 700;
   line-height: 1.2;
@@ -944,7 +964,7 @@ onUnmounted(() => {
 
 .model-option-subtitle {
   margin-top: 4px;
-  color: #6b7c8a;
+  color: var(--ag-muted);
   font-size: 11px;
   line-height: 1.2;
 }
@@ -952,7 +972,7 @@ onUnmounted(() => {
 .model-option-status {
   flex: 0 0 auto;
   border: 1px solid;
-  border-radius: 6px;
+  border-radius: var(--ag-radius-control);
   padding: 2px 6px;
   font-size: 10px;
   font-weight: 700;
@@ -961,12 +981,12 @@ onUnmounted(() => {
 
 .model-option-status.is-ready {
   border-color: rgba(84, 211, 138, 0.4);
-  color: #14824a;
+  color: var(--ag-green);
 }
 
 .model-option-status.is-pending {
   border-color: rgba(246, 195, 67, 0.5);
-  color: #9a6400;
+  color: var(--ag-yellow);
 }
 
 .send-button {
@@ -974,7 +994,7 @@ onUnmounted(() => {
   width: 38px;
   height: 34px;
   padding: 0;
-  border-radius: 8px;
+  border-radius: var(--ag-radius-panel);
 }
 
 .chat-input .el-textarea__inner {
@@ -987,132 +1007,14 @@ onUnmounted(() => {
   font-size: 14px;
 }
 
-html.dark .agent-core,
-html.dark .message-avatar.agent {
-  border-color: rgba(139, 217, 255, 0.28);
-  background: #102638;
-  color: #8bd9ff;
-}
-
-html.dark .chat-composer {
-  border-color: #22313a;
-  background: #0f1b22;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
-}
-
-html.dark .agent-model-select .el-select__wrapper {
-  border-color: transparent;
-  background: rgba(139, 217, 255, 0.09);
-  box-shadow: none;
-}
-
-html.dark .agent-model-select .el-select__selected-item {
-  color: #c8f0ff;
-}
-
-html.dark .agent-model-select .el-select__caret {
-  color: #8ea0ae;
-}
-
-html.dark .agent-model-select-popper {
-  border-color: #22313a !important;
-  background: #0f1b22 !important;
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.4) !important;
-}
-
-html.dark .agent-model-select-popper .el-popper__arrow::before {
-  border-color: #22313a !important;
-  background: #0f1b22 !important;
-}
-
-html.dark .agent-model-select-popper .el-select-dropdown__item {
-  color: #dce7ef;
-}
-
 html.dark .agent-model-select-popper .el-select-dropdown__item.is-selected,
 html.dark .agent-model-select-popper .el-select-dropdown__item.hover,
 html.dark .agent-model-select-popper .el-select-dropdown__item:hover {
-  background: #102638;
-}
-
-html.dark .model-option-title {
-  color: #ffffff;
-}
-
-html.dark .model-option-subtitle {
-  color: #91a4b3;
-}
-
-html.dark .model-option-status.is-ready {
-  color: #7cf0a7;
-}
-
-html.dark .model-option-status.is-pending {
-  color: #ffd166;
-}
-
-html.dark .markdown-skeleton span {
-  background: linear-gradient(90deg, #17232c 0%, #243542 48%, #17232c 100%);
-  background-size: 220% 100%;
-}
-
-html.dark .code-copy {
-  border-color: #22313a;
-  background: #0f1b22;
-  color: #91a4b3;
-}
-
-html.dark .thinking-collapse,
-html.dark .source-collapse,
-html.dark .tool-timeline {
-  border-top-color: #22313a;
-}
-
-html.dark .thinking-collapse button,
-html.dark .source-collapse button {
-  border-color: #22313a;
-  background: #0f1b22;
-  color: #91a4b3;
-}
-
-html.dark .thinking-collapse pre,
-html.dark .source-collapse ul,
-html.dark .tool-timeline {
-  color: #91a4b3;
-}
-
-html.dark .agent-pill {
-  color: #7cf0a7;
-}
-
-html.dark .agent-stream {
-  background: #071014;
-}
-
-html.dark .rail-line {
-  background: #22313a;
-}
-
-html.dark .message-card {
-  border-color: #22313a;
-}
-
-html.dark .message-card.agent {
-  background: #0f1b22;
-  border-color: #22313a;
+  background: var(--ag-blue-soft);
 }
 
 html.dark .chat-input .el-textarea__inner {
-  color: #dce7ef;
-}
-
-html.dark .message-card.user {
-  background: #17334a;
-}
-
-@keyframes agent-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(47, 143, 237, 0.2); }
-  50% { box-shadow: 0 0 0 8px rgba(47, 143, 237, 0.08); }
+  color: var(--ag-text);
 }
 
 @keyframes skeleton-scan {
@@ -1183,9 +1085,9 @@ html.dark .markdown-body code { background: rgba(110, 118, 129, 0.2); }
 
 .markdown-body pre {
   background: rgba(15, 23, 42, 0.95);
-  color: #e2e8f0;
+  color: var(--ag-code-text);
   padding: 1em;
-  border-radius: 8px;
+  border-radius: var(--ag-radius-panel);
   overflow-x: auto;
   margin: 0.8em 0;
 }

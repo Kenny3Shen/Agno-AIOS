@@ -32,6 +32,7 @@ class RbacPermissionsTest(TestCase):
         self.assertTrue(has_permission(actor, "session:read:own"))
         self.assertTrue(has_permission(actor, "session:write:own"))
         self.assertTrue(has_permission(actor, "trace:read:own"))
+        self.assertTrue(has_permission(actor, "knowledge:write"))
         self.assertFalse(has_permission(actor, "session:read:any"))
         self.assertFalse(has_permission(actor, "mcp:write"))
         self.assertFalse(has_permission(actor, "settings:write"))

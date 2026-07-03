@@ -1,50 +1,24 @@
 <template>
   <div class="knowledge-console knowledge-workflow-shell">
-    <header class="knowledge-hero">
-      <div>
-        <p class="knowledge-eyebrow">RAG Workspace</p>
-        <h3>Knowledge</h3>
-        <span>Upload, parse, embed, search, and debug your AI knowledge base from one focused workspace.</span>
-      </div>
-      <div class="knowledge-hero-actions">
-        <el-button class="cursor-pointer" :loading="loading" @click="loadKnowledge">
-          <el-icon class="mr-1"><Refresh /></el-icon>
-          刷新
-        </el-button>
-        <el-button
-          type="danger"
-          plain
-          class="cursor-pointer"
-          :disabled="documents.length === 0"
-          :loading="clearing"
-          @click="clearAllDocuments"
-        >
-          <el-icon class="mr-1"><Delete /></el-icon>
-          清空
-        </el-button>
-      </div>
-    </header>
-
-    <section class="knowledge-stat-dashboard" aria-label="Knowledge statistics">
+    <section class="knowledge-stat-dashboard" :aria-label="t('knowledge.stats.ariaLabel')">
       <article v-for="card in statisticsCards" :key="card.label" class="knowledge-stat-card">
         <span>{{ card.label }}</span>
         <strong :title="card.value">{{ card.value }}</strong>
-        <em>{{ card.hint }}</em>
       </article>
     </section>
 
     <div class="knowledge-workspace-grid">
       <section class="knowledge-panel knowledge-upload-panel">
         <div class="knowledge-section-head">
-          <div>
-            <p>01 Upload</p>
-            <h4>上传知识</h4>
-            <span>Reader 默认自动识别；高级用户可在底部展开配置。</span>
-          </div>
+          <h4>{{ t('knowledge.upload.title') }}</h4>
           <span class="status-badge" :class="ingestTask.status">{{ ingestStatusLabel }}</span>
         </div>
 
-        <div class="knowledge-upload-pipeline" aria-label="RAG ingestion pipeline">
+        <div
+          v-if="ingestTask.status === 'running' || ingestTask.status === 'error'"
+          class="knowledge-upload-pipeline"
+          :aria-label="t('knowledge.labels.pipelineAria')"
+        >
           <div
             v-for="step in ingestSteps"
             :key="step.key"
@@ -55,15 +29,15 @@
           </div>
         </div>
 
-        <div v-if="ingestTask.message" class="task-feedback" :class="ingestTask.status">
+        <div v-if="ingestTask.message && ingestTask.status !== 'idle'" class="task-feedback" :class="ingestTask.status">
           <span>{{ ingestTask.message }}</span>
           <el-button v-if="ingestTask.status === 'error'" size="small" text class="cursor-pointer" @click="retryIngestTask">
-            Retry
+            {{ t('knowledge.actions.retry') }}
           </el-button>
         </div>
 
         <el-tabs v-model="activeIngestTab" class="knowledge-tabs">
-          <el-tab-pane label="文件上传" name="upload">
+          <el-tab-pane :label="t('knowledge.upload.fileTab')" name="upload">
             <div class="upload-mode-grid">
               <el-upload
                 ref="browserUploadRef"
@@ -79,24 +53,24 @@
               >
                 <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
                 <div class="el-upload__text">
-                  拖入文件或 <em>选择文件</em>
+                  {{ t('knowledge.upload.dropText') }} <em>{{ t('knowledge.upload.chooseFile') }}</em>
                 </div>
                 <template #tip>
-                  <div class="el-upload__tip">自动识别 Markdown / TXT / LOG / CSV / JSON / YAML / Code</div>
+                  <div class="el-upload__tip">{{ t('knowledge.upload.supportedTypes') }}</div>
                 </template>
               </el-upload>
 
               <div class="upload-side-form">
                 <label class="knowledge-field">
-                  <span>标题</span>
-                  <el-input v-model="browserForm.title" placeholder="默认使用文件名" clearable />
+                  <span>{{ t('knowledge.upload.titleLabel') }}</span>
+                  <el-input v-model="browserForm.title" :placeholder="t('knowledge.upload.titlePlaceholder')" clearable />
                 </label>
                 <label class="knowledge-field">
-                  <span>来源</span>
+                  <span>{{ t('knowledge.upload.sourceLabel') }}</span>
                   <el-input v-model="browserForm.source" placeholder="upload" clearable />
                 </label>
                 <div class="reader-auto-note">
-                  <strong>Reader</strong>
+                  <strong>{{ t('knowledge.labels.reader') }}</strong>
                   <span>{{ detectedReaderLabel }}</span>
                 </div>
                 <el-button
@@ -106,54 +80,54 @@
                   @click="submitBrowserUpload"
                 >
                   <el-icon class="mr-1"><DocumentAdd /></el-icon>
-                  写入选中文件
+                  {{ t('knowledge.actions.writeSelectedFile') }}
                 </el-button>
               </div>
             </div>
           </el-tab-pane>
 
-          <el-tab-pane label="文本导入" name="text">
+          <el-tab-pane :label="t('knowledge.upload.textTab')" name="text">
             <div class="text-import-grid">
               <label class="knowledge-field">
-                <span>标题</span>
-                <el-input v-model="textForm.title" placeholder="例如 应急处置规范" clearable />
+                <span>{{ t('knowledge.upload.titleLabel') }}</span>
+                <el-input v-model="textForm.title" :placeholder="t('knowledge.upload.textTitlePlaceholder')" clearable />
               </label>
               <label class="knowledge-field">
-                <span>来源</span>
+                <span>{{ t('knowledge.upload.sourceLabel') }}</span>
                 <el-input v-model="textForm.source" placeholder="manual" clearable />
               </label>
               <label class="knowledge-field text-import-content">
-                <span>内容</span>
+                <span>{{ t('knowledge.upload.contentLabel') }}</span>
                 <el-input
                   v-model="textForm.content"
                   type="textarea"
                   :rows="8"
-                  placeholder="输入需要沉淀到知识库的文本"
+                  :placeholder="t('knowledge.upload.contentPlaceholder')"
                 />
               </label>
               <div class="form-action-row">
                 <el-button type="primary" class="cursor-pointer" :loading="savingText" @click="submitTextDocument">
                   <el-icon class="mr-1"><DocumentAdd /></el-icon>
-                  写入文本
+                  {{ t('knowledge.actions.writeText') }}
                 </el-button>
               </div>
             </div>
           </el-tab-pane>
 
-          <el-tab-pane label="服务端路径" name="path">
+          <el-tab-pane :label="t('knowledge.upload.pathTab')" name="path">
             <div class="path-import-grid">
               <label class="knowledge-field">
-                <span>文件路径</span>
+                <span>{{ t('knowledge.upload.pathLabel') }}</span>
                 <el-input v-model="pathForm.path" placeholder="/abs/path/report.md" clearable />
               </label>
               <label class="knowledge-field">
-                <span>标题</span>
-                <el-input v-model="pathForm.title" placeholder="可选" clearable />
+                <span>{{ t('knowledge.upload.titleLabel') }}</span>
+                <el-input v-model="pathForm.title" :placeholder="t('knowledge.upload.optionalPlaceholder')" clearable />
               </label>
               <div class="form-action-row path-action">
                 <el-button type="primary" class="cursor-pointer" :loading="savingPath" @click="submitPathDocument">
                   <el-icon class="mr-1"><FolderOpened /></el-icon>
-                  导入路径
+                  {{ t('knowledge.actions.importPath') }}
                 </el-button>
               </div>
             </div>
@@ -163,11 +137,7 @@
 
       <section class="knowledge-panel retrieval-playground">
         <div class="knowledge-section-head">
-          <div>
-            <p>04 Retrieval Playground</p>
-            <h4>检索验证</h4>
-            <span>查看命中 Chunk、Score、Source 与参考摘要。</span>
-          </div>
+          <h4>{{ t('knowledge.retrieval.title') }}</h4>
           <span class="status-badge embedding">{{ searchForm.searchType }}</span>
         </div>
 
@@ -176,39 +146,39 @@
             v-model="searchForm.query"
             type="textarea"
             :rows="4"
-            placeholder="输入检索问题，例如：如何处理高危漏洞告警？"
+            :placeholder="t('knowledge.retrieval.queryPlaceholder')"
           />
           <div class="playground-controls">
             <label class="knowledge-field">
-              <span>Search Type</span>
+              <span>{{ t('knowledge.labels.searchType') }}</span>
               <el-select v-model="searchForm.searchType" size="small">
-                <el-option label="Hybrid" value="hybrid" />
-                <el-option label="Vector" value="vector" />
-                <el-option label="Keyword" value="keyword" />
+                <el-option :label="t('knowledge.labels.hybrid')" value="hybrid" />
+                <el-option :label="t('knowledge.labels.vector')" value="vector" />
+                <el-option :label="t('knowledge.labels.keyword')" value="keyword" />
               </el-select>
             </label>
             <label class="knowledge-field">
-              <span>TopK</span>
+              <span>{{ t('knowledge.labels.topK') }}</span>
               <el-input-number v-model="searchForm.limit" :min="1" :max="20" size="small" class="!w-full" />
             </label>
             <el-button type="primary" class="cursor-pointer" :loading="searching" @click="runSearch">
-              检索
+              {{ t('knowledge.actions.search') }}
             </el-button>
           </div>
         </div>
 
         <div class="playground-results">
           <div class="result-head">
-            <strong>Retrieved Chunks</strong>
-            <span>{{ searchResults.length }} results</span>
+            <strong>{{ t('knowledge.retrieval.resultTitle') }}</strong>
+            <span>{{ t('knowledge.retrieval.resultCount', { count: searchResults.length }) }}</span>
           </div>
 
           <div v-if="searching" class="empty-box">
             <el-icon class="is-loading mr-1"><Loading /></el-icon>
-            正在检索知识库...
+            {{ t('knowledge.retrieval.searching') }}
           </div>
-          <div v-else-if="searched && searchResults.length === 0" class="empty-box">暂无命中，请尝试换一个问题或提高 TopK。</div>
-          <div v-else-if="!searched" class="empty-box">输入问题后运行检索，这里会显示 Chunk、Score、Source 和 Reference。</div>
+          <div v-else-if="searched && searchResults.length === 0" class="empty-box">{{ t('knowledge.retrieval.noResults') }}</div>
+          <div v-else-if="!searched" class="empty-box">{{ t('knowledge.retrieval.idle') }}</div>
 
           <article
             v-for="result in searchResults"
@@ -216,21 +186,21 @@
             class="retrieval-hit"
           >
             <div class="hit-toolbar">
-              <strong class="truncate">{{ result.title || result.doc_id || "Untitled chunk" }}</strong>
+              <strong class="truncate">{{ result.title || result.doc_id || t('knowledge.labels.untitledChunk') }}</strong>
               <span class="score-badge">{{ formatScore(result.score) }}</span>
             </div>
             <p>{{ result.content }}</p>
             <div class="hit-meta">
-              <span>Chunk #{{ result.chunk_index }}</span>
-              <span :title="result.source">Source {{ result.source || "-" }}</span>
-              <span :title="result.doc_id">Doc {{ shortId(result.doc_id) }}</span>
+              <span>{{ t('knowledge.labels.chunkIndex', { index: result.chunk_index }) }}</span>
+              <span :title="result.source">{{ t('knowledge.labels.sourceValue', { value: result.source || '-' }) }}</span>
+              <span :title="result.doc_id">{{ t('knowledge.labels.docValue', { value: shortId(result.doc_id) }) }}</span>
             </div>
           </article>
 
           <div v-if="searchResults.length" class="answer-preview">
-            <span>Answer</span>
+            <span>{{ t('knowledge.retrieval.answer') }}</span>
             <p>{{ retrievalAnswer }}</p>
-            <em>Reference: {{ retrievalReferences }}</em>
+            <em>{{ t('knowledge.retrieval.reference', { value: retrievalReferences }) }}</em>
           </div>
         </div>
       </section>
@@ -238,48 +208,58 @@
 
     <section class="knowledge-panel knowledge-documents-section">
       <div class="knowledge-section-head documents-head">
-        <div>
-          <p>03 Documents</p>
-          <h4>文档管理</h4>
-          <span>管理文档、查看 Metadata，并追踪 embedding 状态。</span>
-        </div>
+        <h4>{{ t('knowledge.documents.title') }}</h4>
         <div class="document-tools">
-          <el-input v-model="documentQuery" class="document-filter" placeholder="搜索文档、来源或 ID" clearable>
+          <el-button class="cursor-pointer" size="small" :loading="loading" @click="loadKnowledge">
+            <el-icon><Refresh /></el-icon>
+          </el-button>
+          <el-button
+            type="danger"
+            plain
+            size="small"
+            class="cursor-pointer"
+            :disabled="documents.length === 0"
+            :loading="clearing"
+            @click="clearAllDocuments"
+          >
+            <el-icon><Delete /></el-icon>
+          </el-button>
+          <el-input v-model="documentQuery" class="document-filter" :placeholder="t('knowledge.documents.searchPlaceholder')" clearable>
             <template #prefix>
               <el-icon><Search /></el-icon>
             </template>
           </el-input>
-          <el-select v-model="documentTypeFilter" size="small" class="document-select" placeholder="Type">
-            <el-option label="All types" value="all" />
+          <el-select v-model="documentTypeFilter" size="small" class="document-select" :placeholder="t('knowledge.documents.typePlaceholder')">
+            <el-option :label="t('knowledge.documents.allTypes')" value="all" />
             <el-option v-for="type in documentTypes" :key="type" :label="type" :value="type" />
           </el-select>
-          <el-select v-model="documentStatusFilter" size="small" class="document-select" placeholder="Status">
-            <el-option label="All status" value="all" />
-            <el-option label="Ready" value="ready" />
-            <el-option label="Parsing" value="parsing" />
-            <el-option label="Failed" value="failed" />
+          <el-select v-model="documentStatusFilter" size="small" class="document-select" :placeholder="t('knowledge.documents.statusPlaceholder')">
+            <el-option :label="t('knowledge.documents.allStatus')" value="all" />
+            <el-option :label="t('knowledge.status.ready')" value="ready" />
+            <el-option :label="t('knowledge.status.parsing')" value="parsing" />
+            <el-option :label="t('knowledge.status.failed')" value="failed" />
           </el-select>
         </div>
       </div>
 
       <div v-if="loading && documents.length === 0" class="document-loading">
         <el-icon class="is-loading"><Loading /></el-icon>
-        加载知识库文档...
+        {{ t('knowledge.documents.loading') }}
       </div>
 
-      <div v-else class="document-table" role="table" aria-label="知识文档列表">
+      <div v-else class="document-table" role="table" :aria-label="t('knowledge.documents.ariaLabel')">
         <div class="document-table-head" role="row">
-          <span role="columnheader">Document Name</span>
-          <span role="columnheader">Type</span>
-          <span role="columnheader">Size</span>
-          <span role="columnheader">Chunks</span>
-          <span role="columnheader">Embedding Status</span>
-          <span role="columnheader">Updated Time</span>
-          <span role="columnheader">Source</span>
-          <span role="columnheader">Actions</span>
+          <span role="columnheader">{{ t('knowledge.documents.columns.name') }}</span>
+          <span role="columnheader">{{ t('knowledge.documents.columns.type') }}</span>
+          <span role="columnheader">{{ t('knowledge.documents.columns.size') }}</span>
+          <span role="columnheader">{{ t('knowledge.documents.columns.chunks') }}</span>
+          <span role="columnheader">{{ t('knowledge.documents.columns.embeddingStatus') }}</span>
+          <span role="columnheader">{{ t('knowledge.documents.columns.updatedTime') }}</span>
+          <span role="columnheader">{{ t('knowledge.documents.columns.source') }}</span>
+          <span role="columnheader">{{ t('knowledge.documents.columns.actions') }}</span>
         </div>
 
-        <div v-if="filteredDocuments.length === 0" class="empty-box">暂无知识文档。上传文件、导入文本或使用服务端路径开始构建知识库。</div>
+        <div v-if="filteredDocuments.length === 0" class="empty-box">{{ t('knowledge.documents.empty') }}</div>
 
         <article v-for="row in filteredDocuments" :key="row.id" class="document-row" role="row">
           <div class="document-cell document-main" role="cell">
@@ -301,28 +281,28 @@
             <span class="source-text" :title="row.source">{{ row.source || "manual" }}</span>
           </div>
           <div class="document-actions" role="cell">
-            <el-tooltip content="Preview" placement="top">
-              <el-button text class="cursor-pointer" :aria-label="`Preview ${row.title}`" @click="openPreview(row)">
+            <el-tooltip :content="t('knowledge.documents.preview')" placement="top">
+              <el-button text class="cursor-pointer" :aria-label="t('knowledge.documents.previewLabel', { title: row.title })" @click="openPreview(row)">
                 <el-icon><View /></el-icon>
               </el-button>
             </el-tooltip>
-            <el-tooltip content="后端重建接口待接入" placement="top">
-              <el-button text disabled :aria-label="`Re-Embedding ${row.title}`">
+            <el-tooltip :content="t('knowledge.documents.rebuildPending')" placement="top">
+              <el-button text disabled :aria-label="t('knowledge.documents.reEmbeddingLabel', { title: row.title })">
                 <el-icon><RefreshRight /></el-icon>
               </el-button>
             </el-tooltip>
-            <el-tooltip content="Metadata" placement="top">
-              <el-button text class="cursor-pointer" :aria-label="`Metadata ${row.title}`" @click="openMetadata(row)">
+            <el-tooltip :content="t('knowledge.documents.metadata')" placement="top">
+              <el-button text class="cursor-pointer" :aria-label="t('knowledge.documents.metadataLabel', { title: row.title })" @click="openMetadata(row)">
                 <el-icon><Tickets /></el-icon>
               </el-button>
             </el-tooltip>
-            <el-tooltip content="Delete" placement="top">
+            <el-tooltip :content="t('knowledge.documents.delete')" placement="top">
               <el-button
                 type="danger"
                 text
                 class="cursor-pointer"
                 :loading="deletingDocId === row.id"
-                :aria-label="`删除 ${row.title}`"
+                :aria-label="t('knowledge.documents.deleteLabel', { title: row.title })"
                 @click="deleteDocument(row)"
               >
                 <el-icon><Delete /></el-icon>
@@ -339,8 +319,8 @@
           <template #title>
             <div class="advanced-title">
               <el-icon><Setting /></el-icon>
-              <span>Advanced Configuration</span>
-              <em>Reader, Chunk Strategy, Parser, OCR, Metadata and RAG parameters</em>
+              <span>{{ t('knowledge.advanced.title') }}</span>
+              <em>{{ t('knowledge.advanced.description') }}</em>
             </div>
           </template>
 
@@ -348,11 +328,11 @@
             <section class="advanced-card">
               <div class="panel-title">
                 <el-icon><Document /></el-icon>
-                Reader / Chunk Strategy
+                {{ t('knowledge.advanced.readerChunkStrategy') }}
               </div>
               <div class="reader-auto-note roomy">
                 <strong>Reader</strong>
-                <span>Auto detect by suffix and MIME type</span>
+                <span>{{ t('knowledge.advanced.readerAuto') }}</span>
               </div>
               <div class="knowledge-strategy-grid">
                 <article v-for="profile in chunkProfiles" :key="profile.strategy" class="strategy-card">
@@ -369,47 +349,47 @@
             <section class="advanced-card">
               <div class="panel-title">
                 <el-icon><Operation /></el-icon>
-                RAG 参数
+                {{ t('knowledge.advanced.ragParameters') }}
               </div>
               <div class="rag-settings-grid">
                 <label class="knowledge-field">
-                  <span>Search Type</span>
+                  <span>{{ t('knowledge.labels.searchType') }}</span>
                   <el-select v-model="ragSettings.searchType" disabled>
-                    <el-option label="Hybrid" value="hybrid" />
-                    <el-option label="Vector" value="vector" />
-                    <el-option label="Keyword" value="keyword" />
+                    <el-option :label="t('knowledge.labels.hybrid')" value="hybrid" />
+                    <el-option :label="t('knowledge.labels.vector')" value="vector" />
+                    <el-option :label="t('knowledge.labels.keyword')" value="keyword" />
                   </el-select>
                 </label>
                 <label class="knowledge-field">
-                  <span>TopK</span>
+                  <span>{{ t('knowledge.labels.topK') }}</span>
                   <el-slider v-model="ragSettings.agentTopK" :min="1" :max="20" disabled />
                 </label>
                 <label class="knowledge-field">
-                  <span>Candidate</span>
+                  <span>{{ t('knowledge.labels.candidate') }}</span>
                   <el-slider v-model="ragSettings.candidates" :min="1" :max="50" disabled />
                 </label>
                 <label class="knowledge-field">
-                  <span>Chunk Size</span>
+                  <span>{{ t('knowledge.labels.chunkSize') }}</span>
                   <el-slider v-model="ragSettings.chunkSize" :min="200" :max="4000" :step="100" disabled />
                 </label>
                 <label class="knowledge-field">
-                  <span>Overlap</span>
+                  <span>{{ t('knowledge.labels.overlap') }}</span>
                   <el-slider v-model="ragSettings.chunkOverlap" :min="0" :max="800" :step="20" disabled />
                 </label>
                 <label class="knowledge-field">
-                  <span>Threshold</span>
+                  <span>{{ t('knowledge.labels.threshold') }}</span>
                   <el-slider v-model="ragSettings.semanticThreshold" :min="0.1" :max="0.9" :step="0.01" disabled />
                 </label>
                 <label class="knowledge-field">
-                  <span>Vector Weight</span>
+                  <span>{{ t('knowledge.labels.vectorWeight') }}</span>
                   <el-slider v-model="ragSettings.vectorWeight" :min="0" :max="1" :step="0.05" disabled />
                 </label>
                 <label class="knowledge-field">
-                  <span>BM25 Weight</span>
+                  <span>{{ t('knowledge.labels.bm25Weight') }}</span>
                   <el-slider v-model="ragSettings.bm25Weight" :min="0" :max="1" :step="0.05" disabled />
                 </label>
                 <div class="toggle-row">
-                  <span>Hybrid</span>
+                  <span>{{ t('knowledge.labels.hybrid') }}</span>
                   <el-switch v-model="ragSettings.hybrid" disabled />
                 </div>
                 <div class="toggle-row">
@@ -417,7 +397,7 @@
                   <el-switch v-model="ragSettings.mmr" disabled />
                 </div>
                 <div class="toggle-row">
-                  <span>Reranker</span>
+                  <span>{{ t('knowledge.labels.reranker') }}</span>
                   <el-switch v-model="ragSettings.reranker" disabled />
                 </div>
               </div>
@@ -426,19 +406,19 @@
             <section class="advanced-card">
               <div class="panel-title">
                 <el-icon><InfoFilled /></el-icon>
-                Parser / OCR / Metadata
+                {{ t('knowledge.advanced.parserOcrMetadata') }}
               </div>
               <div class="advanced-info-list">
                 <div class="context-row">
-                  <dt>Parser</dt>
-                  <dd>Auto by reader</dd>
+                  <dt>{{ t('knowledge.advanced.parser') }}</dt>
+                  <dd>{{ t('knowledge.advanced.autoByReader') }}</dd>
                 </div>
                 <div class="context-row">
-                  <dt>OCR</dt>
-                  <dd>Not enabled</dd>
+                  <dt>{{ t('knowledge.advanced.ocr') }}</dt>
+                  <dd>{{ t('knowledge.advanced.notEnabled') }}</dd>
                 </div>
                 <div class="context-row">
-                  <dt>Metadata</dt>
+                  <dt>{{ t('knowledge.advanced.metadata') }}</dt>
                   <dd>source, file_name, file_size, file_type</dd>
                 </div>
               </div>
@@ -447,7 +427,7 @@
             <section class="advanced-card">
               <div class="panel-title">
                 <el-icon><DataLine /></el-icon>
-                Advanced Information
+                {{ t('knowledge.advanced.advancedInformation') }}
               </div>
               <dl class="advanced-info-list">
                 <div v-for="row in advancedInfoRows" :key="row.label" class="context-row">
@@ -464,47 +444,47 @@
     <el-drawer
       v-model="previewDrawerOpen"
       class="document-preview-drawer"
-      title="Document Preview"
+      :title="t('knowledge.drawer.previewTitle')"
       direction="rtl"
       size="420px"
     >
       <template v-if="previewDocument">
         <div class="drawer-stack">
           <div>
-            <span class="drawer-label">Document Name</span>
+            <span class="drawer-label">{{ t('knowledge.drawer.documentName') }}</span>
             <strong>{{ previewDocument.title }}</strong>
           </div>
           <div>
-            <span class="drawer-label">Source</span>
+            <span class="drawer-label">{{ t('knowledge.drawer.source') }}</span>
             <p>{{ previewDocument.source || "manual" }}</p>
           </div>
           <div class="drawer-grid">
             <div>
-              <span class="drawer-label">Type</span>
+              <span class="drawer-label">{{ t('knowledge.drawer.type') }}</span>
               <strong>{{ documentType(previewDocument) }}</strong>
             </div>
             <div>
-              <span class="drawer-label">Chunks</span>
+              <span class="drawer-label">{{ t('knowledge.drawer.chunks') }}</span>
               <strong>{{ previewDocument.chunks }}</strong>
             </div>
             <div>
-              <span class="drawer-label">Size</span>
+              <span class="drawer-label">{{ t('knowledge.drawer.size') }}</span>
               <strong>{{ documentSize(previewDocument) }}</strong>
             </div>
             <div>
-              <span class="drawer-label">Updated</span>
+              <span class="drawer-label">{{ t('knowledge.drawer.updated') }}</span>
               <strong>{{ formatDate(previewDocument.created_at) }}</strong>
             </div>
           </div>
           <div>
-            <span class="drawer-label">Reference</span>
+            <span class="drawer-label">{{ t('knowledge.drawer.reference') }}</span>
             <pre class="metadata-json">{{ prettyJson(previewDocument) }}</pre>
           </div>
         </div>
       </template>
     </el-drawer>
 
-    <el-dialog v-model="metadataDialogOpen" title="Document Metadata" width="560px">
+    <el-dialog v-model="metadataDialogOpen" :title="t('knowledge.drawer.metadataTitle')" width="560px">
       <pre class="metadata-json">{{ prettyJson(metadataDocument?.metadata || {}) }}</pre>
     </el-dialog>
   </div>
@@ -512,6 +492,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue"
+import { useI18n } from "vue-i18n"
 import { ElMessage, ElMessageBox } from "element-plus"
 import type { UploadFile, UploadFiles, UploadInstance, UploadUserFile } from "element-plus"
 import {
@@ -537,6 +518,8 @@ import type { KnowledgeDocument, KnowledgeSearchResult, KnowledgeStatus } from "
 type IngestTab = "upload" | "text" | "path"
 type IngestStage = "uploading" | "parsing" | "chunking" | "embedding" | "completed"
 type IngestStatus = "idle" | "running" | "success" | "error"
+
+const { t, locale } = useI18n()
 
 const activeIngestTab = ref<IngestTab>("upload")
 const status = ref<KnowledgeStatus | null>(null)
@@ -569,7 +552,7 @@ const ingestTask = reactive<{
 }>({
   status: "idle",
   stage: "uploading",
-  message: "等待上传或导入任务",
+  message: t("knowledge.upload.waiting"),
 })
 
 const browserForm = reactive({
@@ -623,32 +606,34 @@ const {
 const totalChunks = computed(() => documents.value.reduce((sum, item) => sum + Number(item.chunks || 0), 0))
 
 const statisticsCards = computed(() => [
-  { label: "Documents", value: String(status.value?.documents ?? documents.value.length), hint: "已登记文档" },
-  { label: "Chunks", value: String(status.value?.chunks ?? totalChunks.value), hint: "向量切片数" },
-  { label: "Embedding Model", value: status.value?.embedding || "unknown", hint: status.value?.embedding_dimensions ? `${status.value.embedding_dimensions} dimensions` : "model runtime" },
-  { label: "Vector Database", value: status.value?.collection || "-", hint: status.value?.search_type || "hybrid" },
-  { label: "Storage", value: status.value?.storage || "-", hint: status.value?.database || "postgres" },
-  { label: "Status", value: status.value?.torch_runtime_ok === false ? "Degraded" : "Ready", hint: status.value?.cold_start_note || "Index available" },
+  { label: t("knowledge.stats.documents"), value: String(status.value?.documents ?? documents.value.length), hint: t("knowledge.stats.documentsHint") },
+  { label: t("knowledge.stats.chunks"), value: String(status.value?.chunks ?? totalChunks.value), hint: t("knowledge.stats.chunksHint") },
+  { label: t("knowledge.stats.embeddingModel"), value: status.value?.embedding || "unknown", hint: status.value?.embedding_dimensions ? `${status.value.embedding_dimensions} dimensions` : t("knowledge.stats.modelRuntime") },
+  { label: t("knowledge.stats.vectorDatabase"), value: status.value?.collection || "-", hint: status.value?.search_type || "hybrid" },
+  { label: t("knowledge.stats.storage"), value: status.value?.storage || "-", hint: status.value?.database || "postgres" },
+  { label: t("knowledge.stats.status"), value: status.value?.torch_runtime_ok === false ? t("knowledge.status.degraded") : t("knowledge.status.ready"), hint: status.value?.cold_start_note || t("knowledge.stats.indexAvailable") },
 ])
 
 const ingestStatusLabel = computed(() => {
-  if (ingestTask.status === "running") return ingestTask.stage
-  if (ingestTask.status === "success") return "Completed"
-  if (ingestTask.status === "error") return "Failed"
-  return "Ready"
+  if (ingestTask.status === "running") {
+    return ingestPipeline.value.find((item) => item.key === ingestTask.stage)?.label ?? ingestTask.stage
+  }
+  if (ingestTask.status === "success") return t("knowledge.status.completed")
+  if (ingestTask.status === "error") return t("knowledge.status.failed")
+  return t("knowledge.status.ready")
 })
 
-const ingestPipeline: Array<{ key: IngestStage; label: string }> = [
-  { key: "uploading", label: "Uploading" },
-  { key: "parsing", label: "Parsing" },
-  { key: "chunking", label: "Chunking" },
-  { key: "embedding", label: "Embedding" },
-  { key: "completed", label: "Completed" },
-]
+const ingestPipeline = computed<Array<{ key: IngestStage; label: string }>>(() => [
+  { key: "uploading", label: t("knowledge.status.uploading") },
+  { key: "parsing", label: t("knowledge.status.parsing") },
+  { key: "chunking", label: t("knowledge.status.chunking") },
+  { key: "embedding", label: t("knowledge.status.embedding") },
+  { key: "completed", label: t("knowledge.status.completed") },
+])
 
 const ingestSteps = computed(() => {
-  const currentIndex = ingestPipeline.findIndex((item) => item.key === ingestTask.stage)
-  return ingestPipeline.map((item, index) => ({
+  const currentIndex = ingestPipeline.value.findIndex((item) => item.key === ingestTask.stage)
+  return ingestPipeline.value.map((item, index) => ({
     ...item,
     active: ingestTask.status === "running" && item.key === ingestTask.stage,
     done: ingestTask.status === "success" || currentIndex > index && ingestTask.status !== "error",
@@ -692,30 +677,30 @@ const chunkProfiles = computed(() => status.value?.chunk_profiles || [
     strategy: "markdown",
     reader: "MarkdownReader",
     suffixes: [".md", ".markdown"],
-    description: "按标题结构切分",
+    description: t("knowledge.chunkProfiles.markdown"),
   },
   {
     label: "CSV Row",
     strategy: "csv_row",
     reader: "CSVReader",
     suffixes: [".csv", ".tsv"],
-    description: "按行切分",
+    description: t("knowledge.chunkProfiles.csv"),
   },
   {
     label: "Code",
     strategy: "code",
     reader: "TextReader",
     suffixes: [".py", ".ts", ".vue"],
-    description: "按语法边界切分",
+    description: t("knowledge.chunkProfiles.code"),
   },
 ])
 
 const detectedReaderLabel = computed(() => {
   const file = selectedBrowserFile.value
-  if (!file) return "Auto detect on upload"
+  if (!file) return t("knowledge.reader.autoOnUpload")
   const suffix = file.name.match(/\.[^.]+$/)?.[0]?.toLowerCase() || ""
   const profile = chunkProfiles.value.find((item) => item.suffixes.includes(suffix))
-  return profile ? `${profile.reader} · ${profile.label}` : "TextReader · Auto"
+  return profile ? `${profile.reader} · ${profile.label}` : t("knowledge.reader.textAuto")
 })
 
 const documentTypes = computed(() => {
@@ -734,19 +719,19 @@ const filteredDocuments = computed(() => {
 })
 
 const advancedInfoRows = computed(() => [
-  { label: "Schema", value: status.value?.postgres_schema || "-" },
-  { label: "Dimension", value: valueOrDash(status.value?.embedding_dimensions) },
-  { label: "Runtime", value: status.value?.torch_runtime_ok === false ? "degraded" : "ready" },
-  { label: "Candidates", value: valueOrDash(status.value?.retrieval_candidates) },
-  { label: "Suffix", value: status.value?.supported_suffixes?.join(" ") || "-" },
-  { label: "Device", value: status.value?.device || "-" },
-  { label: "Database", value: status.value?.database || "-" },
-  { label: "Contents", value: status.value?.contents_db || "-" },
-  { label: "Collection", value: status.value?.collection || "-" },
+  { label: t("knowledge.labels.schema"), value: status.value?.postgres_schema || "-" },
+  { label: t("knowledge.labels.dimension"), value: valueOrDash(status.value?.embedding_dimensions) },
+  { label: t("knowledge.labels.runtime"), value: status.value?.torch_runtime_ok === false ? t("knowledge.status.degraded") : t("knowledge.status.ready") },
+  { label: t("knowledge.labels.candidates"), value: valueOrDash(status.value?.retrieval_candidates) },
+  { label: t("knowledge.labels.suffix"), value: status.value?.supported_suffixes?.join(" ") || "-" },
+  { label: t("knowledge.labels.device"), value: status.value?.device || "-" },
+  { label: t("knowledge.labels.database"), value: status.value?.database || "-" },
+  { label: t("knowledge.labels.contents"), value: status.value?.contents_db || "-" },
+  { label: t("knowledge.labels.collection"), value: status.value?.collection || "-" },
 ])
 
 const retrievalAnswer = computed(() => {
-  if (!searchResults.value.length) return "Run retrieval to assemble an answer from matched chunks."
+  if (!searchResults.value.length) return t("knowledge.retrieval.answerFallback")
   const first = searchResults.value[0]
   return first.content.length > 180 ? `${first.content.slice(0, 180)}...` : first.content
 })
@@ -796,7 +781,7 @@ const loadKnowledge = async () => {
       ragSettings.semanticThreshold = data.status.semantic_threshold
     }
   } catch (err) {
-    ElMessage.error(err instanceof Error ? err.message : "加载知识库失败")
+    ElMessage.error(err instanceof Error ? err.message : t("knowledge.messages.loadFailed"))
   }
 }
 
@@ -822,7 +807,7 @@ const handleBrowserFileRemove = () => {
 }
 
 const handleBrowserFileExceed = () => {
-  ElMessage.warning("一次仅支持选择一个文件")
+  ElMessage.warning(t("knowledge.messages.singleFileOnly"))
 }
 
 const resetBrowserUpload = () => {
@@ -839,26 +824,26 @@ const runIngestTask = async (title: string, task: () => Promise<void>, retry: ()
   lastIngestRetry.value = retry
   ingestTask.status = "running"
   ingestTask.stage = "uploading"
-  ingestTask.message = `${title}: Uploading`
+  ingestTask.message = `${title}: ${t("knowledge.status.uploading")}`
   try {
     await wait(80)
     ingestTask.stage = "parsing"
-    ingestTask.message = `${title}: Parsing`
+    ingestTask.message = `${title}: ${t("knowledge.status.parsing")}`
     await task()
     await wait(80)
     ingestTask.stage = "chunking"
-    ingestTask.message = `${title}: Chunking`
+    ingestTask.message = `${title}: ${t("knowledge.status.chunking")}`
     await wait(80)
     ingestTask.stage = "embedding"
-    ingestTask.message = `${title}: Embedding`
+    ingestTask.message = `${title}: ${t("knowledge.status.embedding")}`
     await loadKnowledge()
     ingestTask.stage = "completed"
     ingestTask.status = "success"
-    ingestTask.message = `${title}: Completed`
-    ElMessage.success("知识库已更新")
+    ingestTask.message = `${title}: ${t("knowledge.status.completed")}`
+    ElMessage.success(t("knowledge.messages.updated"))
   } catch (err) {
     ingestTask.status = "error"
-    ingestTask.message = err instanceof Error ? err.message : `${title} 失败`
+    ingestTask.message = err instanceof Error ? err.message : t("knowledge.messages.taskFailed", { title })
     ElMessage.error(ingestTask.message)
   }
 }
@@ -871,20 +856,20 @@ const retryIngestTask = async () => {
 const submitBrowserUpload = async () => {
   const file = selectedBrowserFile.value
   if (!file) {
-    ElMessage.warning("请选择文件")
+    ElMessage.warning(t("knowledge.messages.selectFile"))
     return
   }
   if (!isSupportedTextFile(file)) {
-    ElMessage.warning("请选择文本类知识文件")
+    ElMessage.warning(t("knowledge.messages.selectTextFile"))
     return
   }
 
   uploadingBrowserFile.value = true
   const retry = async () => { await submitBrowserUpload() }
-  await runIngestTask("文件上传", async () => {
+  await runIngestTask(t("knowledge.upload.fileUpload"), async () => {
     const content = (await file.text()).trim()
     if (!content) {
-      throw new Error("文件内容为空")
+      throw new Error(t("knowledge.upload.emptyFile"))
     }
     await addTextDocument({
       title: browserForm.title.trim() || stripExtension(file.name),
@@ -905,12 +890,12 @@ const submitBrowserUpload = async () => {
 
 const submitTextDocument = async () => {
   if (!textForm.title.trim() || !textForm.content.trim()) {
-    ElMessage.warning("标题和内容不能为空")
+    ElMessage.warning(t("knowledge.messages.titleContentRequired"))
     return
   }
   savingText.value = true
   const retry = async () => { await submitTextDocument() }
-  await runIngestTask("文本导入", async () => {
+  await runIngestTask(t("knowledge.upload.textImport"), async () => {
     await addTextDocument({
       title: textForm.title.trim(),
       content: textForm.content.trim(),
@@ -926,12 +911,12 @@ const submitTextDocument = async () => {
 
 const submitPathDocument = async () => {
   if (!pathForm.path.trim()) {
-    ElMessage.warning("文件路径不能为空")
+    ElMessage.warning(t("knowledge.messages.pathRequired"))
     return
   }
   savingPath.value = true
   const retry = async () => { await submitPathDocument() }
-  await runIngestTask("服务端路径", async () => {
+  await runIngestTask(t("knowledge.upload.serverPath"), async () => {
     await addFileDocument({
       path: pathForm.path.trim(),
       title: pathForm.title.trim() || null,
@@ -944,19 +929,19 @@ const submitPathDocument = async () => {
 
 const deleteDocument = async (doc: KnowledgeDocument) => {
   try {
-    await ElMessageBox.confirm(`确认删除「${doc.title}」？`, "删除知识文档", {
-      confirmButtonText: "删除",
-      cancelButtonText: "取消",
+    await ElMessageBox.confirm(t("knowledge.confirm.deleteMessage", { title: doc.title }), t("knowledge.confirm.deleteTitle"), {
+      confirmButtonText: t("knowledge.actions.delete"),
+      cancelButtonText: t("knowledge.actions.cancel"),
       type: "warning",
     })
     deletingDocId.value = doc.id
     await deleteKnowledgeDocument(doc.id)
     documents.value = documents.value.filter((item) => item.id !== doc.id)
     await loadKnowledge()
-    ElMessage.success("知识文档已删除")
+    ElMessage.success(t("knowledge.documents.deleted"))
   } catch (err) {
     if (err !== "cancel" && err !== "close") {
-      ElMessage.error(err instanceof Error ? err.message : "删除知识文档失败")
+      ElMessage.error(err instanceof Error ? err.message : t("knowledge.messages.deleteFailed"))
     }
   } finally {
     deletingDocId.value = null
@@ -966,9 +951,9 @@ const deleteDocument = async (doc: KnowledgeDocument) => {
 const clearAllDocuments = async () => {
   if (documents.value.length === 0) return
   try {
-    await ElMessageBox.confirm("确认清空全部知识文档和向量切片？", "清空知识库", {
-      confirmButtonText: "清空",
-      cancelButtonText: "取消",
+    await ElMessageBox.confirm(t("knowledge.confirm.clearMessage"), t("knowledge.confirm.clearTitle"), {
+      confirmButtonText: t("knowledge.actions.clear"),
+      cancelButtonText: t("knowledge.actions.cancel"),
       type: "warning",
     })
     clearing.value = true
@@ -977,10 +962,10 @@ const clearAllDocuments = async () => {
     searchResults.value = []
     searched.value = false
     await loadKnowledge()
-    ElMessage.success("知识库已清空")
+    ElMessage.success(t("knowledge.messages.cleared"))
   } catch (err) {
     if (err !== "cancel" && err !== "close") {
-      ElMessage.error(err instanceof Error ? err.message : "清空知识库失败")
+      ElMessage.error(err instanceof Error ? err.message : t("knowledge.messages.clearFailed"))
     }
   } finally {
     clearing.value = false
@@ -990,7 +975,7 @@ const clearAllDocuments = async () => {
 const runSearch = async () => {
   const query = searchForm.query.trim()
   if (!query) {
-    ElMessage.warning("检索问题不能为空")
+    ElMessage.warning(t("knowledge.retrieval.questionRequired"))
     return
   }
   searching.value = true
@@ -999,7 +984,7 @@ const runSearch = async () => {
     const data = await searchKnowledge(query, searchForm.limit, searchForm.searchType)
     searchResults.value = data.results
   } catch (err) {
-    ElMessage.error(err instanceof Error ? err.message : "检索知识库失败")
+    ElMessage.error(err instanceof Error ? err.message : t("knowledge.messages.searchFailed"))
   } finally {
     searching.value = false
   }
@@ -1041,9 +1026,9 @@ const documentSize = (doc: KnowledgeDocument) => {
 
 const documentStatus = (doc: KnowledgeDocument) => {
   const raw = metadataValue(doc, "status", "embedding_status").toLowerCase()
-  if (raw.includes("fail") || raw.includes("error")) return { label: "Failed", value: "failed", tone: "failed" }
-  if (Number(doc.chunks || 0) > 0) return { label: "Ready", value: "ready", tone: "ready" }
-  return { label: "Parsing", value: "parsing", tone: "parsing" }
+  if (raw.includes("fail") || raw.includes("error")) return { label: t("knowledge.status.failed"), value: "failed", tone: "failed" }
+  if (Number(doc.chunks || 0) > 0) return { label: t("knowledge.status.ready"), value: "ready", tone: "ready" }
+  return { label: t("knowledge.status.parsing"), value: "parsing", tone: "parsing" }
 }
 
 const shortId = (value: string) => {
@@ -1055,7 +1040,7 @@ const formatDate = (value: string) => {
   if (!value) return "-"
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString("zh-CN", {
+  return date.toLocaleString(locale.value, {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -1112,10 +1097,8 @@ onMounted(() => {
   color: var(--kn-text);
 }
 
-.knowledge-hero,
 .knowledge-section-head,
 .documents-head,
-.knowledge-hero-actions,
 .document-tools,
 .hit-toolbar,
 .hit-meta,
@@ -1127,11 +1110,6 @@ onMounted(() => {
   gap: 12px;
 }
 
-.knowledge-hero {
-  margin-bottom: 14px;
-}
-
-.knowledge-eyebrow,
 .knowledge-section-head p {
   margin: 0;
   color: var(--kn-muted);
@@ -1141,7 +1119,6 @@ onMounted(() => {
   text-transform: uppercase;
 }
 
-.knowledge-hero h3,
 .knowledge-section-head h4 {
   margin: 2px 0 0;
   color: var(--kn-heading);
@@ -1153,7 +1130,6 @@ onMounted(() => {
   font-size: 15px;
 }
 
-.knowledge-hero span,
 .knowledge-section-head span {
   display: block;
   min-width: 0;
@@ -1165,9 +1141,9 @@ onMounted(() => {
 }
 
 .knowledge-stat-dashboard {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
   margin-bottom: 14px;
 }
 
@@ -1184,30 +1160,28 @@ onMounted(() => {
 }
 
 .knowledge-stat-card {
+  flex: 1 1 148px;
   min-width: 0;
-  padding: 12px;
+  padding: 8px 10px;
 }
 
-.knowledge-stat-card span,
-.knowledge-stat-card em {
+.knowledge-stat-card span {
   display: block;
   min-width: 0;
   color: var(--kn-muted);
-  font-size: 11px;
-  font-style: normal;
+  font-size: 10px;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
 .knowledge-stat-card strong {
   display: block;
-  margin-top: 6px;
+  margin-top: 2px;
   overflow: hidden;
   color: var(--kn-heading);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 820;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .knowledge-workspace-grid {
@@ -1220,12 +1194,16 @@ onMounted(() => {
 
 .knowledge-panel {
   min-width: 0;
-  padding: 16px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
+  padding: 14px;
+  box-shadow: var(--ag-shadow-panel);
 }
 
 .knowledge-section-head {
-  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .knowledge-upload-pipeline {
@@ -1830,7 +1808,6 @@ onMounted(() => {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .knowledge-hero,
   .knowledge-section-head,
   .documents-head,
   .playground-controls {

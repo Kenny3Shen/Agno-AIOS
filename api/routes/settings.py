@@ -1,6 +1,6 @@
 import os
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from loguru import logger
 from pydantic import BaseModel
 
@@ -8,7 +8,7 @@ from api.auth.models import User
 from api.auth.permissions import require_permission
 from api.config import Settings, get_settings
 from api.dependencies import get_app_settings
-from api.services.audit_service import record_audit_event
+from api.services.audit_service import audit_request_context, record_audit_event
 from api.services.model_config_service import public_model_config, save_model_config
 
 router = APIRouter(prefix="/api", tags=["Settings"])
@@ -89,6 +89,7 @@ async def get_models(_user: User = Depends(require_permission("settings:read")))
 
 @router.put("/models")
 async def update_models(
+    request: Request,
     body: ModelConfigUpdate,
     user: User = Depends(require_permission("settings:write")),
 ) -> dict:
@@ -103,12 +104,14 @@ async def update_models(
         action="settings.update",
         resource_type="models",
         metadata={"active_model_id": body.active_model_id},
+        **audit_request_context(request),
     )
     return result
 
 
 @router.put("/settings")
 async def update_settings(
+    request: Request,
     body: SettingsUpdate,
     user: User = Depends(require_permission("settings:write")),
 ) -> SettingsResponse:
@@ -136,5 +139,6 @@ async def update_settings(
         action="settings.update",
         resource_type="settings",
         metadata={"keys": sorted(updated)},
+        **audit_request_context(request),
     )
     return SettingsResponse(settings=result)

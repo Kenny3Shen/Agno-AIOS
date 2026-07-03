@@ -263,12 +263,12 @@ def get_all_sessions(
                     a.archived_at
                 FROM {} AS s
                 LEFT JOIN {} AS a ON a.session_id = s.session_id
-                WHERE %s
+                WHERE (%s
                     OR (
                         a.session_id IS NULL
                         AND coalesce(s.metadata ->> 'agno_aios_archived', 'false') <> 'true'
-                    )
-                    AND (%s IS NULL OR s.user_id = %s)
+                    ))
+                    AND (%s::text IS NULL OR s.user_id = %s::text)
                 LIMIT 500
                 """
                 ).format(
@@ -366,6 +366,7 @@ async def stream_chat_with_agent(
     session_id: str | None = None,
     model_id: str | None = None,
     user_id: str | None = None,
+    knowledge_owner_user_id: str | None = None,
 ) -> AsyncIterator[str]:
     """流式聊天，使用单个 Agent 统一处理安全运营任务"""
     async with MCPTools(
@@ -381,6 +382,9 @@ async def stream_chat_with_agent(
             model=_build_model(model_id),
             tools=[mcp_tools],
             knowledge=get_knowledge_base(),
+            knowledge_filters={"user_id": knowledge_owner_user_id}
+            if knowledge_owner_user_id
+            else None,
             search_knowledge=True,
             add_search_knowledge_instructions=True,
             skills=_build_enabled_skills(),

@@ -4,8 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
 
 from api.auth.models import User
-from api.auth.permissions import actor_id, has_permission
-from api.auth.users import current_active_user
+from api.auth.permissions import actor_id, has_permission, require_permission
 from api.services.tracing_service import list_traces, get_trace_detail
 
 
@@ -35,7 +34,7 @@ async def api_list_traces(
     ),
     limit: int = Query(default=20, ge=1, le=200),
     page: int = Query(default=1, ge=1),
-    user: User = Depends(current_active_user),
+    user: User = Depends(require_permission("trace:read:own")),
 ):
     """List traces from the tracing database."""
     try:
@@ -63,7 +62,7 @@ async def api_list_traces(
 @router.get("/traces/{trace_id}")
 async def api_get_trace(
     trace_id: str,
-    user: User = Depends(current_active_user),
+    user: User = Depends(require_permission("trace:read:own")),
 ):
     """Get trace detail including spans and a span tree."""
     try:

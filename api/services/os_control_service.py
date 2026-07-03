@@ -11,6 +11,7 @@ from api.mcp.config import (
     read_mcp_config,
     services_from_config,
 )
+from api.auth.permissions import actor_id, has_permission
 from api.services.llm_service import get_all_sessions
 from api.services.postgres_store import (
     agno_schema,
@@ -95,7 +96,6 @@ def _payload(
     metrics: list[OsMetric],
     records: list[OsRecord],
     status: str = "ready",
-    notes: list[str] | None = None,
 ) -> OsPayload:
     return {
         "module": module,
@@ -104,7 +104,6 @@ def _payload(
         "status": status,
         "metrics": metrics,
         "records": records,
-        "notes": notes or [],
         "generated_at": _iso(_now()),
     }
 
@@ -124,6 +123,27 @@ def _count(schema_name: str, table_name: str) -> int:
     return int(row.get("count") or 0) if row else 0
 
 
+def _count_where(
+    schema_name: str,
+    table_name: str,
+    where: sql.SQL | sql.Composed | None = None,
+    params: tuple[Any, ...] = (),
+) -> int:
+    try:
+        with postgres_connect() as conn:
+            with conn.cursor() as cursor:
+                query = sql.SQL("SELECT count(*) AS count FROM {}").format(
+                    sql.Identifier(schema_name, table_name)
+                )
+                if where is not None:
+                    query += sql.SQL(" WHERE ") + where
+                cursor.execute(query, params)
+                row = cursor.fetchone()
+    except Exception:
+        return 0
+    return int(row.get("count") or 0) if row else 0
+
+
 def _fetch_rows(
     schema_name: str,
     table_name: str,
@@ -131,6 +151,8 @@ def _fetch_rows(
     limit: int = 100,
     order_by: str | None = None,
     descending: bool = True,
+    where: sql.SQL | sql.Composed | None = None,
+    params: tuple[Any, ...] = (),
 ) -> list[dict[str, Any]]:
     try:
         with postgres_connect() as conn:
@@ -138,6 +160,8 @@ def _fetch_rows(
                 query = sql.SQL("SELECT * FROM {}").format(
                     sql.Identifier(schema_name, table_name)
                 )
+                if where is not None:
+                    query += sql.SQL(" WHERE ") + where
                 if order_by:
                     direction = sql.SQL("DESC") if descending else sql.SQL("ASC")
                     query += sql.SQL(" ORDER BY {} {}").format(
@@ -145,17 +169,21 @@ def _fetch_rows(
                         direction,
                     )
                 query += sql.SQL(" LIMIT %s")
-                cursor.execute(query, (limit,))
+                cursor.execute(query, (*params, limit))
                 return list(cursor.fetchall())
     except Exception:
         return []
 
 
-def _scalar_float(query: sql.SQL | sql.Composed, default: float = 0.0) -> float:
+def _scalar_float(
+    query: sql.SQL | sql.Composed,
+    params: tuple[Any, ...] = (),
+    default: float = 0.0,
+) -> float:
     try:
         with postgres_connect() as conn:
             with conn.cursor() as cursor:
-                cursor.execute(query)
+                cursor.execute(query, params)
                 row = cursor.fetchone()
     except Exception:
         return default
@@ -166,6 +194,44 @@ def _scalar_float(query: sql.SQL | sql.Composed, default: float = 0.0) -> float:
         return float(value or default)
     except (TypeError, ValueError):
         return default
+
+
+def _owner_user_id(actor: Any | None, any_permission: str) -> str | None:
+    if actor is not None and has_permission(actor, any_permission):
+        return None
+    return actor_id(actor) if actor is not None else ""
+
+
+def _user_where(actor: Any | None, any_permission: str) -> tuple[sql.SQL | None, tuple[Any, ...]]:
+    owner_user_id = _owner_user_id(actor, any_permission)
+    if owner_user_id is None:
+        return None, ()
+    return sql.SQL("user_id = %s"), (owner_user_id,)
+
+
+def _span_count_for_actor(actor: Any | None) -> int:
+    owner_user_id = _owner_user_id(actor, "trace:read:any")
+    if owner_user_id is None:
+        return _count(agno_schema(), "agno_spans")
+    return int(
+        _scalar_float(
+            sql.SQL(
+                """
+                SELECT count(*)
+                FROM {} AS spans
+                WHERE spans.trace_id IN (
+                    SELECT traces.trace_id
+                    FROM {} AS traces
+                    WHERE traces.user_id = %s
+                )
+                """
+            ).format(
+                sql.Identifier(agno_schema(), "agno_spans"),
+                sql.Identifier(agno_schema(), "agno_traces"),
+            ),
+            (owner_user_id,),
+        )
+    )
 
 
 def _ensure_control_tables() -> None:
@@ -233,9 +299,12 @@ def _runs_count(runs: Any) -> int:
     return len(value) if isinstance(value, list) else 0
 
 
-def get_sessions_payload() -> OsPayload:
+def get_sessions_payload(actor: Any | None = None) -> OsPayload:
     ensure_agno_postgres_tables()
-    sessions = get_all_sessions(include_archived=True)
+    sessions = get_all_sessions(
+        include_archived=True,
+        owner_user_id=_owner_user_id(actor, "session:read:any"),
+    )
     active_cutoff = _now() - timedelta(days=1)
     active_count = 0
     records: list[OsRecord] = []
@@ -276,7 +345,7 @@ def get_sessions_payload() -> OsPayload:
     )
 
 
-def get_studio_payload() -> OsPayload:
+def get_studio_payload(actor: Any | None = None) -> OsPayload:
     data = read_mcp_config()
     services = services_from_config(data)
     hiagents = normalize_hiagents(data.get("hiagent", []))
@@ -351,9 +420,17 @@ def get_studio_payload() -> OsPayload:
     )
 
 
-def get_memory_payload() -> OsPayload:
+def get_memory_payload(actor: Any | None = None) -> OsPayload:
     ensure_agno_postgres_tables()
-    rows = _fetch_rows(agno_schema(), "agno_memories", limit=100, order_by="updated_at")
+    memory_where, memory_params = _user_where(actor, "memory:read:any")
+    rows = _fetch_rows(
+        agno_schema(),
+        "agno_memories",
+        limit=100,
+        order_by="updated_at",
+        where=memory_where,
+        params=memory_params,
+    )
     users = {str(row.get("user_id") or row.get("agent_id") or "default") for row in rows}
     records = []
     for row in rows:
@@ -374,45 +451,55 @@ def get_memory_payload() -> OsPayload:
                 },
                 updated_at=row.get("updated_at") or row.get("created_at"),
             )
-        )
+            )
 
     return _payload(
         module="memory",
         title="Memory",
         description="Agno 用户记忆库存与增长监测。",
         metrics=[
-            _metric("Memories", _count(agno_schema(), "agno_memories"), "PostgresDb memory rows", "blue"),
+            _metric("Memories", _count_where(agno_schema(), "agno_memories", memory_where, memory_params), "PostgresDb memory rows", "blue"),
             _metric("Users", len(users), "本页涉及 user_id", "green"),
             _metric("Mode", "Auto", "update_memory_on_run", "yellow"),
         ],
         records=records,
-        notes=[
-            "Agno docs 建议生产默认使用 automatic memory，并持续监测 memory 增长。",
-            "Chat API 已向 Agno run 传递 user_id 后，记忆会更适合多用户隔离。",
-        ],
     )
 
 
-def get_metrics_payload() -> OsPayload:
+def get_metrics_payload(actor: Any | None = None) -> OsPayload:
     ensure_agno_postgres_tables()
-    trace_count = _count(agno_schema(), "agno_traces")
-    span_count = _count(agno_schema(), "agno_spans")
-    session_count = _count(agno_schema(), "agno_sessions")
-    memory_count = _count(agno_schema(), "agno_memories")
+    trace_where, trace_params = _user_where(actor, "trace:read:any")
+    session_where, session_params = _user_where(actor, "session:read:any")
+    memory_where, memory_params = _user_where(actor, "memory:read:any")
+    trace_count = _count_where(agno_schema(), "agno_traces", trace_where, trace_params)
+    span_count = _span_count_for_actor(actor)
+    session_count = _count_where(agno_schema(), "agno_sessions", session_where, session_params)
+    memory_count = _count_where(agno_schema(), "agno_memories", memory_where, memory_params)
     avg_duration = _scalar_float(
-        sql.SQL("SELECT avg(duration_ms) FROM {}").format(
-            sql.Identifier(agno_schema(), "agno_traces")
-        )
+        sql.SQL("SELECT avg(duration_ms) FROM {}{}").format(
+            sql.Identifier(agno_schema(), "agno_traces"),
+            sql.SQL(" WHERE ") + trace_where if trace_where is not None else sql.SQL(""),
+        ),
+        trace_params,
     )
     error_count = int(
         _scalar_float(
-            sql.SQL("SELECT count(*) FROM {} WHERE status = 'ERROR'").format(
-                sql.Identifier(agno_schema(), "agno_traces")
-            )
+            sql.SQL("SELECT count(*) FROM {} WHERE status = 'ERROR'{}").format(
+                sql.Identifier(agno_schema(), "agno_traces"),
+                sql.SQL(" AND ") + trace_where if trace_where is not None else sql.SQL(""),
+            ),
+            trace_params,
         )
     )
 
-    rows = _fetch_rows(agno_schema(), "agno_traces", limit=20, order_by="start_time")
+    rows = _fetch_rows(
+        agno_schema(),
+        "agno_traces",
+        limit=20,
+        order_by="start_time",
+        where=trace_where,
+        params=trace_params,
+    )
     records = [
         _record(
             record_id=row.get("trace_id"),
@@ -444,7 +531,7 @@ def get_metrics_payload() -> OsPayload:
     )
 
 
-def get_evaluation_payload() -> OsPayload:
+def get_evaluation_payload(actor: Any | None = None) -> OsPayload:
     _ensure_control_tables()
     rows = _fetch_rows(app_schema(), CONTROL_TABLES["evaluation"], limit=100, order_by="updated_at")
     records = [
@@ -459,6 +546,7 @@ def get_evaluation_payload() -> OsPayload:
         for row in rows
     ]
     completed = sum(1 for row in rows if row.get("status") == "completed")
+    draft = sum(1 for row in rows if row.get("status") == "draft")
     return _payload(
         module="evaluation",
         title="Evaluation",
@@ -466,14 +554,13 @@ def get_evaluation_payload() -> OsPayload:
         metrics=[
             _metric("Eval Runs", len(rows), "登记的评测运行", "blue"),
             _metric("Completed", completed, "已完成评测", "green"),
-            _metric("Ready", "Scaffold", "等待接入评测执行器", "yellow"),
+            _metric("Draft", draft, "草稿评测", "yellow"),
         ],
         records=records,
-        notes=["当前版本提供评测 registry，后续可接入 Agno eval runner 或安全问答基准集。"],
     )
 
 
-def get_approvals_payload() -> OsPayload:
+def get_approvals_payload(actor: Any | None = None) -> OsPayload:
     _ensure_control_tables()
     rows = _fetch_rows(app_schema(), CONTROL_TABLES["approvals"], limit=100, order_by="updated_at")
     records = [
@@ -495,14 +582,13 @@ def get_approvals_payload() -> OsPayload:
         metrics=[
             _metric("Requests", len(rows), "审批请求", "blue"),
             _metric("Pending", pending, "等待处理", "red" if pending else "green"),
-            _metric("Mode", "Registry", "等待接入 paused run resume", "yellow"),
+            _metric("Resolved", len(rows) - pending, "已处理", "green"),
         ],
         records=records,
-        notes=["当前版本提供审批 registry；真正恢复 paused runs 需要在 Agent 工具调用层接入 approval gate。"],
     )
 
 
-def get_scheduler_payload() -> OsPayload:
+def get_scheduler_payload(actor: Any | None = None) -> OsPayload:
     _ensure_control_tables()
     rows = _fetch_rows(app_schema(), CONTROL_TABLES["scheduler"], limit=100, order_by="updated_at")
     records = [
@@ -517,6 +603,7 @@ def get_scheduler_payload() -> OsPayload:
         for row in rows
     ]
     enabled = sum(1 for row in rows if row.get("enabled"))
+    disabled = len(rows) - enabled
     return _payload(
         module="scheduler",
         title="Scheduler",
@@ -524,14 +611,13 @@ def get_scheduler_payload() -> OsPayload:
         metrics=[
             _metric("Schedules", len(rows), "计划任务", "blue"),
             _metric("Enabled", enabled, "已启用", "green" if enabled else "yellow"),
-            _metric("Mode", "Registry", "等待接入调度执行器", "yellow"),
+            _metric("Disabled", disabled, "已停用", "yellow"),
         ],
         records=records,
-        notes=["当前版本提供 schedule registry；实际定时执行可后续接 APScheduler、Celery beat 或系统 cron。"],
     )
 
 
-def get_knowledge_payload() -> OsPayload:
+def get_knowledge_payload(actor: Any | None = None) -> OsPayload:
     docs = _count(knowledge_schema(), "agno_knowledge")
     chunks = _count(knowledge_schema(), "security_knowledge_vectors")
     records = [
@@ -574,9 +660,9 @@ MODULE_HANDLERS = {
 }
 
 
-def get_control_payload(module: str) -> OsPayload:
+def get_control_payload(module: str, actor: Any | None = None) -> OsPayload:
     try:
         handler = MODULE_HANDLERS[module]
     except KeyError as exc:
         raise ValueError(f"Unsupported control module: {module}") from exc
-    return handler()
+    return handler(actor=actor)

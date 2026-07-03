@@ -1,37 +1,28 @@
 <template>
-  <div class="situation-page h-full min-h-0 overflow-y-auto bg-[#F5F7FA] p-3 text-[#15202B] dark:bg-[#071014] dark:text-[#DCE7EF]">
+  <div class="situation-page h-full min-h-0 overflow-y-auto p-3">
     <header class="situation-header">
-      <div class="flex min-w-0 items-center gap-3">
-        <div class="situation-core" :class="{ warning: errorRunCount > 0 }">
-          <el-icon><DataBoard /></el-icon>
-        </div>
-        <div class="min-w-0">
-          <h3 class="truncate text-sm font-semibold text-[#15202B] dark:text-white">安全运营态势总览</h3>
-          <p class="mt-1 text-xs text-[#6B7C8A] dark:text-[#91A4B3]">资产、漏洞、响应链路、异常态势与 Agent 负载</p>
-        </div>
+      <div class="min-w-0">
+        <h3 class="situation-title truncate text-sm font-semibold">{{ t("dashboard.title") }}</h3>
+        <p class="situation-subtitle mt-1 text-xs">{{ t("dashboard.description") }}</p>
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
         <el-select v-model="timeScope" size="small" class="w-[132px]" @change="loadSituation">
-          <el-option label="最近 24 小时" value="24h" />
-          <el-option label="最近 7 天" value="7d" />
-          <el-option label="最近 30 天" value="30d" />
+          <el-option :label="t('dashboard.timeScope.last24h')" value="24h" />
+          <el-option :label="t('dashboard.timeScope.last7d')" value="7d" />
+          <el-option :label="t('dashboard.timeScope.last30d')" value="30d" />
         </el-select>
         <el-button type="primary" size="small" :loading="loading" class="cursor-pointer" @click="loadSituation">
           <el-icon class="mr-1"><Refresh /></el-icon>
-          刷新
+          {{ t("dashboard.actions.refresh") }}
         </el-button>
       </div>
     </header>
 
-    <section class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+    <section class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
       <article v-for="metric in topMetrics" :key="metric.label" class="situation-metric">
-        <div class="flex items-center justify-between gap-2">
-          <span>{{ metric.label }}</span>
-          <el-icon><component :is="metric.icon" /></el-icon>
-        </div>
-        <strong>{{ metric.value }}</strong>
-        <em>{{ metric.hint }}</em>
+        <span>{{ metric.label }}</span>
+        <strong :title="metric.hint">{{ metric.value }}</strong>
       </article>
     </section>
 
@@ -39,9 +30,9 @@
       <article class="situation-panel chart-panel min-w-0">
         <div class="panel-title">
           <el-icon><TrendCharts /></el-icon>
-          Trace 延迟趋势
+          {{ t("dashboard.charts.latencyTrend") }}
         </div>
-        <svg class="latency-chart" viewBox="0 0 320 140" role="img" aria-label="Trace latency trend">
+        <svg class="latency-chart" viewBox="0 0 320 140" role="img" :aria-label="t('dashboard.aria.latencyTrend')">
           <path class="chart-gridline" d="M0 35 H320 M0 70 H320 M0 105 H320" />
           <path v-if="latencyAreaPoints" class="latency-area" :d="`M ${latencyAreaPoints} Z`" />
           <polyline v-if="latencyTrendPoints" class="latency-line" :points="latencyTrendPoints" />
@@ -55,15 +46,15 @@
           />
         </svg>
         <div class="chart-legend">
-          <span>最近 {{ trendRuns.length }} 次运行</span>
-          <strong>{{ formatDuration(maxTrendDuration) }} peak</strong>
+          <span>{{ t("dashboard.legend.recentRuns", { count: trendRuns.length }) }}</span>
+          <strong>{{ t("dashboard.legend.peak", { value: formatDuration(maxTrendDuration) }) }}</strong>
         </div>
       </article>
 
       <article class="situation-panel chart-panel">
         <div class="panel-title">
           <el-icon><Histogram /></el-icon>
-          小时运行热力
+          {{ t("dashboard.charts.hourlyHeatmap") }}
         </div>
         <div class="hour-heatmap">
           <span
@@ -72,7 +63,7 @@
             class="heat-cell"
             :class="{ error: hour.errors > 0 }"
             :style="{ opacity: hour.opacity }"
-            :title="`${hour.label}: ${hour.count} runs / ${hour.errors} errors`"
+            :title="t('dashboard.labels.heatmapTitle', { label: hour.label, runs: hour.count, errors: hour.errors })"
           >
             {{ hour.label }}
           </span>
@@ -84,9 +75,9 @@
       <article class="situation-panel chart-panel">
         <div class="panel-title">
           <el-icon><Odometer /></el-icon>
-          Agent 负载雷达
+          {{ t("dashboard.charts.agentRadar") }}
         </div>
-        <svg class="radar-chart" viewBox="0 0 180 180" role="img" aria-label="Agent runtime load radar">
+        <svg class="radar-chart" viewBox="0 0 180 180" role="img" :aria-label="t('dashboard.aria.agentRadar')">
           <polygon class="radar-ring" points="90,24 152,66 128,138 52,138 28,66" />
           <polygon class="radar-ring inner" points="90,54 123,76 110,114 70,114 57,76" />
           <line v-for="axis in radarAxes" :key="axis.label" class="radar-axis" x1="90" y1="90" :x2="axis.x" :y2="axis.y" />
@@ -100,20 +91,20 @@
       <article class="situation-panel chart-panel min-w-0">
         <div class="panel-title">
           <el-icon><DataBoard /></el-icon>
-          Span / Error 分布
+          {{ t("dashboard.charts.spanErrorDistribution") }}
         </div>
         <div class="span-bar-list">
           <div v-for="bar in spanBars" :key="bar.id" class="span-bar-row">
             <div class="span-bar-label">
               <strong>{{ bar.name }}</strong>
-              <span>{{ bar.spans }} spans · {{ bar.errors }} errors</span>
+              <span>{{ t("dashboard.labels.spanErrorCounts", { spans: bar.spans, errors: bar.errors }) }}</span>
             </div>
             <span class="span-bar-track">
               <span class="span-bar-fill" :style="{ width: bar.spanWidth }" />
               <span v-if="bar.errors" class="span-bar-error" :style="{ width: bar.errorWidth }" />
             </span>
           </div>
-          <div v-if="!spanBars.length && !loading" class="empty-box">暂无 Span 分布数据</div>
+          <div v-if="!spanBars.length && !loading" class="empty-box">{{ t("dashboard.empty.spanDistribution") }}</div>
         </div>
       </article>
     </section>
@@ -122,7 +113,7 @@
       <article class="situation-panel min-w-0">
         <div class="panel-title">
           <el-icon><TrendCharts /></el-icon>
-          最近研判链路
+          {{ t("dashboard.charts.recentRuns") }}
         </div>
         <div class="mt-4 space-y-2">
           <div v-for="trace in recentRuns" :key="trace.trace_id" class="run-row">
@@ -130,36 +121,36 @@
             <div class="min-w-0 flex-1">
               <div class="flex items-center justify-between gap-3">
                 <strong class="truncate" :title="trace.name">{{ trace.name || trace.trace_id }}</strong>
-                <span class="font-mono text-[11px] text-[#6B7C8A] dark:text-[#91A4B3]">{{ formatDuration(trace.duration_ms) }}</span>
+                <span class="run-duration font-mono text-[11px]">{{ formatDuration(trace.duration_ms) }}</span>
               </div>
               <div class="mt-2 flex items-center gap-2">
                 <span class="duration-track">
                   <span class="duration-bar" :class="{ error: hasError(trace) }" :style="{ width: durationWidth(trace.duration_ms) }" />
                 </span>
-                <span class="shrink-0 font-mono text-[10px] text-[#8A99A6]">{{ shortId(trace.trace_id) }}</span>
+                <span class="run-id shrink-0 font-mono text-[10px]">{{ shortId(trace.trace_id) }}</span>
               </div>
               <div class="mt-2 flex flex-wrap gap-1.5">
-                <span class="record-chip mono">会话 {{ shortId(trace.session_id || "") }}</span>
-                <span class="record-chip mono">运行 {{ shortId(trace.run_id || "") }}</span>
-                <span class="record-chip">Agent {{ shortId(trace.agent_id || trace.team_id || trace.workflow_id || "") }}</span>
+                <span class="record-chip mono">{{ t("dashboard.labels.session", { value: shortId(trace.session_id || "") }) }}</span>
+                <span class="record-chip mono">{{ t("dashboard.labels.run", { value: shortId(trace.run_id || "") }) }}</span>
+                <span class="record-chip">{{ t("dashboard.labels.agent", { value: shortId(trace.agent_id || trace.team_id || trace.workflow_id || "") }) }}</span>
               </div>
             </div>
           </div>
 
-          <div v-if="!recentRuns.length && !loading" class="empty-box">暂无 Agent 运行数据</div>
+          <div v-if="!recentRuns.length && !loading" class="empty-box">{{ t("dashboard.empty.agentRuns") }}</div>
         </div>
       </article>
 
       <article class="situation-panel">
         <div class="panel-title">
           <el-icon><Histogram /></el-icon>
-          状态分布
+          {{ t("dashboard.charts.statusDistribution") }}
         </div>
         <div class="mt-4 space-y-3">
           <div v-for="item in statusBars" :key="item.label">
             <div class="mb-1 flex items-center justify-between text-xs">
-              <span class="text-[#6B7C8A] dark:text-[#91A4B3]">{{ item.label }}</span>
-              <strong class="text-[#15202B] dark:text-[#DCE7EF]">{{ item.count }}</strong>
+              <span class="status-label">{{ item.label }}</span>
+              <strong class="status-count">{{ item.count }}</strong>
             </div>
             <span class="status-track">
               <span class="status-bar" :class="item.className" :style="{ width: item.width }" />
@@ -173,24 +164,24 @@
       <article class="situation-panel">
         <div class="panel-title">
           <el-icon><Cpu /></el-icon>
-          Agent 响应负载
+          {{ t("dashboard.charts.agentLoad") }}
         </div>
         <div class="mt-4 space-y-2">
           <div v-for="agent in agentRows" :key="agent.id" class="agent-load-row">
             <div class="min-w-0">
               <strong class="truncate">{{ agent.id }}</strong>
-              <span>{{ agent.runs }} runs · {{ agent.errors }} errors</span>
+              <span>{{ t("dashboard.labels.agentErrorCounts", { runs: agent.runs, errors: agent.errors }) }}</span>
             </div>
             <em>{{ formatDuration(agent.avgDuration) }}</em>
           </div>
-          <div v-if="!agentRows.length && !loading" class="empty-box">暂无 Agent 维度数据</div>
+          <div v-if="!agentRows.length && !loading" class="empty-box">{{ t("dashboard.empty.agentDimension") }}</div>
         </div>
       </article>
 
       <article class="situation-panel min-w-0">
         <div class="panel-title">
           <el-icon><Odometer /></el-icon>
-          异常响应
+          {{ t("dashboard.charts.incidents") }}
         </div>
         <div class="mt-4 space-y-2">
           <div v-for="trace in errorRuns" :key="trace.trace_id" class="incident-row">
@@ -199,9 +190,9 @@
               <strong class="truncate" :title="trace.name">{{ trace.name || trace.trace_id }}</strong>
               <p class="truncate font-mono">{{ trace.trace_id }}</p>
             </div>
-            <span>{{ trace.error_count ?? 0 }} errors</span>
+            <span>{{ t("dashboard.labels.incidentErrors", { count: trace.error_count ?? 0 }) }}</span>
           </div>
-          <div v-if="!errorRuns.length && !loading" class="empty-box ok">最近样本未发现异常运行</div>
+          <div v-if="!errorRuns.length && !loading" class="empty-box ok">{{ t("dashboard.empty.incidentsOk") }}</div>
         </div>
       </article>
     </section>
@@ -211,13 +202,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, type Component } from "vue"
-import { Cpu, DataBoard, Histogram, Odometer, Refresh, TrendCharts, WarningFilled } from "@element-plus/icons-vue"
+import { computed, onMounted, ref } from "vue"
+import { useI18n } from "vue-i18n"
+import { Cpu, DataBoard, Histogram, Odometer, Refresh, TrendCharts } from "@element-plus/icons-vue"
 import { useTracingApi } from "../composables/useApi"
 import type { TraceItem } from "../types"
 
 type TimeScope = "24h" | "7d" | "30d"
 
+const { t } = useI18n()
 const { loading, error, listTraces } = useTracingApi()
 const traces = ref<TraceItem[]>([])
 const totalCount = ref(0)
@@ -237,11 +230,11 @@ const successRate = computed(() => {
   return `${Math.round((okRunCount.value / sampleSize.value) * 100)}%`
 })
 
-const topMetrics = computed<Array<{ label: string; value: string | number; hint: string; icon: Component }>>(() => [
-  { label: "运行样本", value: totalCount.value, hint: `当前样本 ${sampleSize.value} 条`, icon: TrendCharts },
-  { label: "响应成功率", value: successRate.value, hint: "按最近样本计算", icon: DataBoard },
-  { label: "异常运行", value: errorRunCount.value, hint: "状态 ERROR 或含错误 Span", icon: WarningFilled },
-  { label: "平均耗时", value: formatDuration(avgDuration.value), hint: `${totalSpans.value} spans observed`, icon: Odometer },
+const topMetrics = computed<Array<{ label: string; value: string | number; hint: string }>>(() => [
+  { label: t("dashboard.metrics.runSamples"), value: totalCount.value, hint: t("dashboard.metrics.sampleHint", { count: sampleSize.value }) },
+  { label: t("dashboard.metrics.successRate"), value: successRate.value, hint: t("dashboard.metrics.successRateHint") },
+  { label: t("dashboard.metrics.errorRuns"), value: errorRunCount.value, hint: t("dashboard.metrics.errorRunsHint") },
+  { label: t("dashboard.metrics.averageDuration"), value: formatDuration(avgDuration.value), hint: t("dashboard.metrics.spansObserved", { count: totalSpans.value }) },
 ])
 
 const recentRuns = computed(() => traces.value.slice(0, 12))
@@ -346,7 +339,13 @@ const polarPoint = (index: number, total: number, radius: number) => {
 
 const radarAxes = computed(() => {
   const rows = agentRows.value.slice(0, 5)
-  const labels = rows.length ? rows.map((row) => shortId(row.id)) : ["Agent", "MCP", "Trace", "Memory", "Tools"]
+  const labels = rows.length ? rows.map((row) => shortId(row.id)) : [
+    t("dashboard.radarFallback.agent"),
+    t("dashboard.radarFallback.mcp"),
+    t("dashboard.radarFallback.trace"),
+    t("dashboard.radarFallback.memory"),
+    t("dashboard.radarFallback.tools"),
+  ]
   return labels.map((label, index) => {
     const axis = polarPoint(index, labels.length, 66)
     const labelPoint = polarPoint(index, labels.length, 80)
@@ -431,6 +430,23 @@ onMounted(() => {
 <style>
 .situation-page {
   font-family: "Fira Sans", "Microsoft YaHei", sans-serif;
+  background: var(--ag-page);
+  color: var(--ag-text);
+}
+
+.situation-title {
+  color: var(--ag-heading);
+}
+
+.situation-subtitle,
+.run-duration,
+.run-id,
+.status-label {
+  color: var(--ag-muted);
+}
+
+.status-count {
+  color: var(--ag-heading);
 }
 
 .situation-header,
@@ -439,9 +455,9 @@ onMounted(() => {
 .run-row,
 .agent-load-row,
 .incident-row {
-  border: 1px solid #d8e0e7;
-  border-radius: 8px;
-  background: #ffffff;
+  border: 1px solid var(--ag-panel-border);
+  border-radius: var(--ag-radius-panel);
+  background: var(--ag-panel);
 }
 
 .situation-header {
@@ -452,27 +468,17 @@ onMounted(() => {
   padding: 12px;
 }
 
-.situation-core {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid rgba(47, 143, 237, 0.35);
-  border-radius: 8px;
-  background: #eaf5ff;
-  color: #0969da;
-}
-
-.situation-core.warning {
-  border-color: rgba(240, 106, 106, 0.45);
-  background: #fff1f1;
-  color: #d93030;
-}
-
 .situation-metric,
 .situation-panel {
   padding: 14px;
+}
+
+.situation-metric {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 11px;
 }
 
 .chart-panel {
@@ -491,26 +497,26 @@ onMounted(() => {
 }
 
 .chart-gridline {
-  stroke: #d8e0e7;
+  stroke: var(--ag-border);
   stroke-dasharray: 3 6;
   stroke-width: 1;
 }
 
 .latency-area {
-  fill: rgba(47, 143, 237, 0.13);
+  fill: color-mix(in srgb, var(--ag-blue) 14%, transparent);
 }
 
 .latency-line {
   fill: none;
-  stroke: #2f8fed;
+  stroke: var(--ag-blue);
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 3;
 }
 
 .latency-dot {
-  fill: #ffffff;
-  stroke: #2f8fed;
+  fill: var(--ag-panel);
+  stroke: var(--ag-blue);
   stroke-width: 2;
 }
 
@@ -520,12 +526,12 @@ onMounted(() => {
   justify-content: space-between;
   gap: 10px;
   margin-top: 10px;
-  color: #6b7c8a;
+  color: var(--ag-muted);
   font-size: 11px;
 }
 
 .chart-legend strong {
-  color: #15202b;
+  color: var(--ag-heading);
   font-family: "Fira Code", monospace;
 }
 
@@ -540,18 +546,18 @@ onMounted(() => {
   display: grid;
   min-height: 32px;
   place-items: center;
-  border: 1px solid rgba(47, 143, 237, 0.24);
-  border-radius: 7px;
-  background: #2f8fed;
-  color: #ffffff;
+  border: 1px solid color-mix(in srgb, var(--ag-blue) 28%, transparent);
+  border-radius: var(--ag-radius-control);
+  background: var(--ag-blue);
+  color: var(--ag-invert);
   font-family: "Fira Code", monospace;
   font-size: 10px;
   font-weight: 700;
 }
 
 .heat-cell.error {
-  border-color: rgba(240, 106, 106, 0.34);
-  background: #f06a6a;
+  border-color: color-mix(in srgb, var(--ag-red) 34%, transparent);
+  background: var(--ag-red);
 }
 
 .radar-chart {
@@ -561,7 +567,7 @@ onMounted(() => {
 .radar-ring,
 .radar-axis {
   fill: none;
-  stroke: #d8e0e7;
+  stroke: var(--ag-border);
   stroke-width: 1;
 }
 
@@ -570,13 +576,13 @@ onMounted(() => {
 }
 
 .radar-value {
-  fill: rgba(84, 211, 138, 0.2);
-  stroke: #28a66f;
+  fill: color-mix(in srgb, var(--ag-green) 20%, transparent);
+  stroke: var(--ag-green);
   stroke-width: 2;
 }
 
 .radar-label {
-  fill: #526170;
+  fill: var(--ag-muted);
   font-family: "Fira Code", monospace;
   font-size: 8px;
   text-anchor: middle;
@@ -603,7 +609,7 @@ onMounted(() => {
 .span-bar-label strong {
   min-width: 0;
   overflow: hidden;
-  color: #15202b;
+  color: var(--ag-heading);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -611,7 +617,7 @@ onMounted(() => {
 
 .span-bar-label span {
   flex: 0 0 auto;
-  color: #6b7c8a;
+  color: var(--ag-muted);
   font-family: "Fira Code", monospace;
   font-size: 10px;
 }
@@ -622,7 +628,7 @@ onMounted(() => {
   height: 12px;
   overflow: hidden;
   border-radius: 999px;
-  background: #e6edf3;
+  background: var(--ag-panel-soft);
 }
 
 .span-bar-fill,
@@ -635,26 +641,26 @@ onMounted(() => {
 }
 
 .span-bar-fill {
-  background: linear-gradient(90deg, #2f8fed, #54d38a);
+  background: linear-gradient(90deg, var(--ag-blue), var(--ag-green));
 }
 
 .span-bar-error {
-  background: linear-gradient(90deg, rgba(240, 106, 106, 0.95), rgba(246, 195, 67, 0.95));
+  background: linear-gradient(90deg, var(--ag-red), var(--ag-yellow));
 }
 
 .situation-metric span,
 .situation-metric em {
   display: block;
-  color: #6b7c8a;
+  color: var(--ag-muted);
   font-size: 11px;
   font-style: normal;
 }
 
 .situation-metric strong {
   display: block;
-  margin-top: 10px;
-  color: #15202b;
-  font-size: 22px;
+  color: var(--ag-heading);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -662,7 +668,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #15202b;
+  color: var(--ag-heading);
   font-size: 13px;
   font-weight: 700;
 }
@@ -681,25 +687,25 @@ onMounted(() => {
   height: 9px;
   flex: 0 0 auto;
   border-radius: 999px;
-  background: #91a0ad;
+  background: var(--ag-muted);
 }
 
 .run-status.ok {
-  background: #54d38a;
+  background: var(--ag-green);
 }
 
 .run-status.error {
-  background: #f06a6a;
+  background: var(--ag-red);
 }
 
 .run-status.other {
-  background: #f6c343;
+  background: var(--ag-yellow);
 }
 
 .run-row strong,
 .agent-load-row strong,
 .incident-row strong {
-  color: #15202b;
+  color: var(--ag-heading);
   font-size: 12px;
 }
 
@@ -708,7 +714,7 @@ onMounted(() => {
   display: block;
   overflow: hidden;
   border-radius: 999px;
-  background: #e6edf3;
+  background: var(--ag-panel-soft);
 }
 
 .duration-track {
@@ -726,21 +732,21 @@ onMounted(() => {
   height: 100%;
   min-width: 4px;
   border-radius: inherit;
-  background: linear-gradient(90deg, #2f8fed, #54d38a);
+  background: linear-gradient(90deg, var(--ag-blue), var(--ag-green));
 }
 
 .duration-bar.error,
 .status-bar.error {
-  background: linear-gradient(90deg, #f06a6a, #f6c343);
+  background: linear-gradient(90deg, var(--ag-red), var(--ag-yellow));
 }
 
 .record-chip {
   display: inline-flex;
   align-items: center;
-  border: 1px solid #d8e0e7;
+  border: 1px solid var(--ag-border);
   border-radius: 999px;
   padding: 2px 7px;
-  color: #526170;
+  color: var(--ag-muted);
   font-size: 10px;
 }
 
@@ -749,11 +755,11 @@ onMounted(() => {
 }
 
 .status-bar.ok {
-  background: #54d38a;
+  background: var(--ag-green);
 }
 
 .status-bar.other {
-  background: #f6c343;
+  background: var(--ag-yellow);
 }
 
 .agent-load-row {
@@ -764,14 +770,14 @@ onMounted(() => {
 .incident-row p {
   display: block;
   margin-top: 4px;
-  color: #6b7c8a;
+  color: var(--ag-muted);
   font-size: 11px;
 }
 
 .agent-load-row em,
 .incident-row > span {
   flex: 0 0 auto;
-  color: #526170;
+  color: var(--ag-muted);
   font-family: "Fira Code", monospace;
   font-size: 11px;
   font-style: normal;
@@ -782,95 +788,15 @@ onMounted(() => {
 }
 
 .empty-box {
-  border: 1px dashed #d8e0e7;
-  border-radius: 8px;
+  border: 1px dashed var(--ag-border);
+  border-radius: var(--ag-radius-panel);
   padding: 28px;
-  color: #6b7c8a;
+  color: var(--ag-muted);
   font-size: 12px;
   text-align: center;
 }
 
 .empty-box.ok {
-  color: #14824a;
-}
-
-html.dark .situation-header,
-html.dark .situation-metric,
-html.dark .situation-panel,
-html.dark .run-row,
-html.dark .agent-load-row,
-html.dark .incident-row {
-  border-color: #22313a;
-  background: #0f1b22;
-}
-
-html.dark .situation-core {
-  border-color: rgba(139, 217, 255, 0.28);
-  background: #102638;
-  color: #8bd9ff;
-}
-
-html.dark .situation-core.warning {
-  border-color: rgba(240, 106, 106, 0.45);
-  background: #2b1518;
-  color: #ff9a9a;
-}
-
-html.dark .situation-metric span,
-html.dark .situation-metric em,
-html.dark .agent-load-row span,
-html.dark .incident-row p {
-  color: #758998;
-}
-
-html.dark .situation-metric strong,
-html.dark .panel-title,
-html.dark .run-row strong,
-html.dark .agent-load-row strong,
-html.dark .incident-row strong {
-  color: #dce7ef;
-}
-
-html.dark .duration-track,
-html.dark .status-track,
-html.dark .span-bar-track {
-  background: #22313a;
-}
-
-html.dark .chart-gridline,
-html.dark .radar-ring,
-html.dark .radar-axis {
-  stroke: #22313a;
-}
-
-html.dark .latency-dot {
-  fill: #0f1b22;
-}
-
-html.dark .chart-legend,
-html.dark .span-bar-label span,
-html.dark .radar-label {
-  color: #758998;
-  fill: #758998;
-}
-
-html.dark .chart-legend strong,
-html.dark .span-bar-label strong {
-  color: #dce7ef;
-}
-
-html.dark .record-chip {
-  border-color: #22313a;
-  color: #91a4b3;
-}
-
-html.dark .agent-load-row em,
-html.dark .incident-row > span {
-  color: #91a4b3;
-}
-
-html.dark .empty-box {
-  border-color: #22313a;
-  color: #758998;
+  color: var(--ag-green);
 }
 </style>

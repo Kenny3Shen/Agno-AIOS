@@ -79,6 +79,17 @@ class Settings(BaseSettings):
     )
     auth_token_lifetime_seconds: int = 3600
     auth_cookie_secure: bool = False
+    bootstrap_admin_email: str = Field(
+        default="",
+        validation_alias=AliasChoices("AGNO_BOOTSTRAP_ADMIN_EMAIL", "BOOTSTRAP_ADMIN_EMAIL"),
+    )
+    bootstrap_admin_password: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias=AliasChoices(
+            "AGNO_BOOTSTRAP_ADMIN_PASSWORD",
+            "BOOTSTRAP_ADMIN_PASSWORD",
+        ),
+    )
 
     oauth_associate_by_email: bool = True
     oauth_is_verified_by_default: bool = True

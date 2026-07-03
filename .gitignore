@@ -28,11 +28,12 @@ openspec
 
 # Playwright
 .playwright-cli
+.playwright-check
 /test-results/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+/frontend/dist-test/
 
 /frontend-react
-

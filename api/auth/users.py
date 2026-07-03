@@ -11,7 +11,7 @@ from loguru import logger
 from api.auth.database import get_user_db
 from api.auth.models import User
 from api.config import get_settings
-from api.services.audit_service import record_audit_event
+from api.services.audit_service import audit_request_context, record_audit_event
 
 settings = get_settings()
 
@@ -38,8 +38,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, UUID]):
             user,
             action="auth.login",
             resource_type="auth",
-            ip_address=request.client.host if request and request.client else "",
-            user_agent=request.headers.get("user-agent", "") if request else "",
+            **audit_request_context(request),
         )
 
 
