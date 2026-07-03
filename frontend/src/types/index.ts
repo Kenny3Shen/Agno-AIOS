@@ -225,6 +225,13 @@ export interface ModelConfigResponse {
   models: ModelConfig[]
 }
 
+export interface ModelConnectivityTestResponse {
+  success: boolean
+  latency_ms?: number | null
+  message: string
+  status_code?: number | null
+}
+
 // RAG 知识库相关类型
 export interface KnowledgeStatus {
   collection: string

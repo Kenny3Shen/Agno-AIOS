@@ -59,6 +59,7 @@ class AuditLogPermissionsTest(TestCase):
             inspect.getsource(knowledge.remove_document),
             inspect.getsource(knowledge.clear_knowledge),
             inspect.getsource(settings.update_models),
+            inspect.getsource(settings.test_model_connectivity),
             inspect.getsource(settings.update_settings),
             inspect.getsource(cve.update_cve_database),
         ):

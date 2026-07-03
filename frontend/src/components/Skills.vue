@@ -44,12 +44,14 @@
           >
             <div class="skill-card-head">
               <div class="skill-card-main">
-                <span class="skill-status-dot" :class="skill.enabled ? 'ok' : 'off'" />
                 <span class="skill-card-copy">
                   <strong :title="skill.name">{{ skill.name }}</strong>
                   <em>{{ skill.description || t('skills.empty.description') }}</em>
                 </span>
               </div>
+              <span class="status-pill" :class="skill.enabled ? 'ok' : 'off'">
+                {{ skill.enabled ? t('common.state.enabled') : t('common.state.disabled') }}
+              </span>
             </div>
 
             <div class="skill-card-foot">
@@ -173,10 +175,12 @@ onMounted(() => {
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
-  background: var(--ag-frame);
+  border: 1px solid var(--ag-panel-border);
+  border-radius: var(--ag-radius-panel);
+  background: var(--ag-panel-soft);
   padding: 0;
   color: var(--ag-text);
-  font-family: "Inter", "Fira Sans", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Fira Sans", "Microsoft YaHei", sans-serif;
 }
 
 .skills-console :where(button, div, section, article, span, strong, small, em, code) {
@@ -189,6 +193,7 @@ onMounted(() => {
   flex: 1;
   flex-direction: column;
   overflow: hidden;
+  border-radius: inherit;
 }
 
 .skills-header {
@@ -200,7 +205,7 @@ onMounted(() => {
   gap: 12px;
   border-bottom: 1px solid var(--ag-panel-border);
   background: var(--ag-panel-bg);
-  padding: 12px 16px;
+  padding: 12px;
 }
 
 .skill-summary-strip {
@@ -246,7 +251,7 @@ onMounted(() => {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding: 12px 16px 16px;
+  padding: 12px;
 }
 
 .skills-grid {
@@ -259,25 +264,20 @@ onMounted(() => {
   border: 1px solid var(--ag-border);
   border-radius: var(--ag-radius-panel);
   background: var(--ag-panel);
-  padding: 11px 12px;
+  padding: 12px;
   transition:
     border-color 0.18s ease,
     background 0.18s ease;
 }
 
-.skill-card.is-enabled {
-  border-color: var(--ag-border);
-}
-
 .skill-card.is-disabled {
-  background: var(--ag-panel-soft);
+  opacity: 0.72;
 }
 
 .skill-card-head,
 .skill-card-foot,
 .skill-card-main,
 .skill-script-toggle,
-.skill-state-pill,
 .skill-script-empty,
 .skill-script-pill {
   display: flex;
@@ -292,26 +292,6 @@ onMounted(() => {
 .skill-card-main {
   min-width: 0;
   align-items: flex-start;
-  gap: 9px;
-}
-
-.skill-status-dot {
-  width: 9px;
-  height: 9px;
-  flex: 0 0 auto;
-  margin-top: 4px;
-  border-radius: 999px;
-  background: var(--ag-muted);
-  box-shadow: 0 0 0 3px rgba(139, 155, 168, 0.12);
-}
-
-.skill-status-dot.ok {
-  background: var(--ag-green);
-  box-shadow: 0 0 0 3px rgba(45, 167, 108, 0.14);
-}
-
-.skill-status-dot.off {
-  opacity: 0.65;
 }
 
 .skill-card-copy {
@@ -341,10 +321,14 @@ onMounted(() => {
   -webkit-line-clamp: 2;
 }
 
+.status-pill {
+  flex: 0 0 auto;
+}
+
 .skill-card-foot {
   justify-content: space-between;
   gap: 10px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .skill-script-toggle,
@@ -391,7 +375,7 @@ onMounted(() => {
 .skill-script-list {
   margin-top: 12px;
   border-top: 1px solid var(--ag-border);
-  padding-top: 10px;
+  padding-top: 12px;
 }
 
 .skill-script-list > div {
@@ -423,7 +407,7 @@ onMounted(() => {
   place-items: center;
   align-content: center;
   gap: 10px;
-  border: 1px dashed var(--ag-border-strong);
+  border: 1px dashed var(--ag-border);
   border-radius: var(--ag-radius-panel);
   background: var(--ag-panel);
   padding: 32px;

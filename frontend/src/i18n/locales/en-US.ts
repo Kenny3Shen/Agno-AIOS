@@ -185,6 +185,7 @@ export const enUS = {
       settingsUpdateFailed: "Failed to update settings",
       modelsLoadFailed: "Failed to load model configuration",
       modelsSaveFailed: "Failed to save model configuration",
+      modelsTestFailed: "Failed to test model connection",
       tracesLoadFailed: "Failed to load traces",
       traceDetailLoadFailed: "Failed to load trace details",
       skillsLoadFailed: "Failed to load Skills",
@@ -651,6 +652,7 @@ export const enUS = {
     actions: {
       addModel: "Add model",
       save: "Save",
+      testConnection: "Test connection",
       delete: "Delete",
       cancel: "Cancel",
     },
@@ -697,6 +699,9 @@ export const enUS = {
       deleteFailed: "Delete failed",
       saved: "Settings saved",
       saveFailed: "Failed to save settings",
+      requiredMissing: "Complete the required parameters first",
+      testSucceeded: "Model connection is healthy in {latency} ms",
+      testFailed: "Model connection failed",
     },
   },
   knowledge: {

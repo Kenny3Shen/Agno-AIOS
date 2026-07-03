@@ -648,6 +648,24 @@ assert.match(
   "Skills page must summarize total, enabled, and script counts in a compact strip",
 )
 
+assert.match(
+  skills,
+  /border:\s*1px solid var\(--ag-panel-border\)/,
+  "Skills console must keep a visible shared border in light mode",
+)
+
+assert.match(
+  skills,
+  /status-pill/,
+  "Skills page must use the shared compact status pill language",
+)
+
+assert.equal(
+  skills.includes("skill-status-dot"),
+  false,
+  "Skills page must avoid the old standalone status dot styling",
+)
+
 assert.equal(
   skills.includes("skill-secondary-action"),
   false,
@@ -1413,6 +1431,36 @@ assert.match(
   "Settings page must disable configuration controls for read-only users",
 )
 
+assert.match(
+  settings,
+  /required-mark/,
+  "Settings page must visibly mark required model and runtime parameters",
+)
+
+assert.match(
+  settings,
+  /testModelConnection/,
+  "Settings page must expose a model connectivity test action",
+)
+
+assert.match(
+  settings,
+  /settings\.actions\.testConnection/,
+  "Settings model connectivity test button must use i18n copy",
+)
+
+assert.match(
+  useApi,
+  /\/models\/test/,
+  "Settings API must call the model connectivity test endpoint",
+)
+
+assert.match(
+  useApi,
+  /modelsTestFailed/,
+  "Settings API must expose a localized model connectivity fallback",
+)
+
 for (const hardcodedSettingsCopy of [
   "系统配置",
   "运行时参数与 Agent 模型路由配置",
@@ -1436,6 +1484,10 @@ for (const hardcodedSettingsCopy of [
   "飞书机器人通知",
   "自定义模型",
   "加载配置失败",
+  "请先补全必填参数",
+  "测试模型连接失败",
+  "模型连接正常",
+  "模型连接失败",
   "确定要删除这个模型配置吗",
   "删除模型",
   "删除失败",

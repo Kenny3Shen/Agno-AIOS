@@ -45,6 +45,18 @@ class ChatSessionPermissionsTest(TestCase):
         self.assertIn('require_permission("session:read:own")', inspect.getsource(chat.get_session))
         self.assertIn('require_permission("session:write:own")', inspect.getsource(chat.remove_session))
 
+    def test_chat_provider_block_falls_back_to_lightweight_agent(self):
+        source = inspect.getsource(llm_service.stream_chat_with_agent)
+
+        self.assertIn("_is_provider_block_error", source)
+        self.assertIn("_build_fallback_agent", source)
+        self.assertIn("无工具降级模式", source)
+
+    def test_provider_block_detector_matches_openai_status_error_text(self):
+        self.assertTrue(
+            llm_service._is_provider_block_error(RuntimeError("Your request was blocked."))
+        )
+
 
 class ChatRoutePermissionsTest(IsolatedAsyncioTestCase):
     async def test_list_sessions_uses_current_user_as_owner_filter(self):

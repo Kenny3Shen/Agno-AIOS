@@ -185,6 +185,7 @@ export const zhCN = {
       settingsUpdateFailed: "更新配置失败",
       modelsLoadFailed: "获取模型配置失败",
       modelsSaveFailed: "保存模型配置失败",
+      modelsTestFailed: "测试模型连接失败",
       tracesLoadFailed: "获取 traces 失败",
       traceDetailLoadFailed: "获取 trace 详情失败",
       skillsLoadFailed: "获取 Skills 列表失败",
@@ -649,6 +650,7 @@ export const zhCN = {
     actions: {
       addModel: "新增模型",
       save: "保存",
+      testConnection: "测试连接",
       delete: "删除",
       cancel: "取消",
     },
@@ -695,6 +697,9 @@ export const zhCN = {
       deleteFailed: "删除失败",
       saved: "配置已保存",
       saveFailed: "保存配置失败",
+      requiredMissing: "请先补全必填参数",
+      testSucceeded: "模型连接正常，耗时 {latency} ms",
+      testFailed: "模型连接失败",
     },
   },
   knowledge: {

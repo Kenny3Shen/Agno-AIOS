@@ -9,6 +9,7 @@ from agno.tools.mcp import MCPTools
 from agno.run.agent import RunEvent
 from agno.skills import Skills, LocalSkills
 from agno.tracing import setup_tracing
+from loguru import logger
 from psycopg import sql
 from api.auth.permissions import actor_id, assert_owned_resource
 from api.services.audit_service import record_audit_event
@@ -95,6 +96,23 @@ AGENT_INSTRUCTIONS = dedent("""\
     - **闭环响应**：确保每个任务都有明确的结论或下一步建议。
 """)
 
+SAFE_FALLBACK_INSTRUCTIONS = dedent("""\
+    你是安全防御运营助手。当前模型服务拦截了完整 Agent 上下文，因此你正在无工具模式下回答。
+
+    工作边界：
+    - 只处理授权环境中的防御、安全运营、排查、治理、总结和规划任务。
+    - 不编造工具结果、内部数据、知识库命中或执行状态。
+    - 如果问题需要 MCP、Skills、知识库或历史上下文，明确说明当前降级模式无法调用这些能力，并给出可执行的人工排查步骤。
+    - 回答保持简洁、结构化、可操作。
+""")
+
+PROVIDER_BLOCK_MARKERS = (
+    "your request was blocked",
+    "request was blocked",
+    "blocked by",
+    "content was blocked",
+)
+
 
 dependencies = {
     "feishu_webhook_url": _get_env("FEISHU_WEBHOOK_URL"),
@@ -107,6 +125,55 @@ def _build_enabled_skills() -> Skills | None:
     if not enabled_dirs:
         return None
     return Skills(loaders=[LocalSkills(d) for d in enabled_dirs])
+
+
+def _is_provider_block_error(error: Exception) -> bool:
+    message = str(error).lower()
+    return any(marker in message for marker in PROVIDER_BLOCK_MARKERS)
+
+
+async def _stream_agent_content(
+    agent: Agent,
+    message: str,
+    *,
+    session_id: str | None,
+    user_id: str | None,
+) -> AsyncIterator[str]:
+    async for event in agent.arun(
+        message,
+        session_id=session_id,
+        user_id=(user_id or "anonymous").strip() or "anonymous",
+        stream=True,
+    ):
+        event_type: str | None = None
+        content: Any = None
+        if isinstance(event, dict):
+            event_dict = cast(dict[str, Any], event)
+            event_type = event_dict.get("event")
+            content = event_dict.get("content")
+        else:
+            event_type = getattr(event, "event", None)
+            content = getattr(event, "content", None)
+
+        if (
+            event_type == RunEvent.run_content.value
+            and isinstance(content, str)
+            and content
+        ):
+            yield content
+
+
+def _build_fallback_agent(model_id: str | None = None) -> Agent:
+    return Agent(
+        name="安全防御助手",
+        role="安全防御运营助手",
+        description="无工具模式下的安全防御运营助手。",
+        instructions=[SAFE_FALLBACK_INSTRUCTIONS],
+        model=_build_model(model_id),
+        db=get_agno_postgres_db(),
+        add_datetime_to_context=True,
+        markdown=True,
+    )
 
 
 def _archive_table() -> sql.Identifier:
@@ -369,54 +436,53 @@ async def stream_chat_with_agent(
     knowledge_owner_user_id: str | None = None,
 ) -> AsyncIterator[str]:
     """流式聊天，使用单个 Agent 统一处理安全运营任务"""
-    async with MCPTools(
-        transport="streamable-http",
-        url=_build_mcp_url(),
-        timeout_seconds=20,
-    ) as mcp_tools:
-        security_agent = Agent(
-            name="安全运营助手",
-            role="安全运营综合专家",
-            description="集威胁情报分析与安全剧本执行于一体的安全运营助手，可完成情报检索、深度分析和自动化处置全流程。",
-            instructions=[AGENT_INSTRUCTIONS],
-            model=_build_model(model_id),
-            tools=[mcp_tools],
-            knowledge=get_knowledge_base(),
-            knowledge_filters={"user_id": knowledge_owner_user_id}
-            if knowledge_owner_user_id
-            else None,
-            search_knowledge=True,
-            add_search_knowledge_instructions=True,
-            skills=_build_enabled_skills(),
-            db=get_agno_postgres_db(),
-            dependencies=dependencies,
-            add_dependencies_to_context=True,
-            add_history_to_context=True,
-            update_memory_on_run=True,
-            num_history_runs=5,
-            add_datetime_to_context=True,
-            markdown=True,
-        )
+    try:
+        async with MCPTools(
+            transport="streamable-http",
+            url=_build_mcp_url(),
+            timeout_seconds=20,
+        ) as mcp_tools:
+            security_agent = Agent(
+                name="安全运营助手",
+                role="安全运营综合专家",
+                description="集威胁情报分析与安全剧本执行于一体的安全运营助手，可完成情报检索、深度分析和自动化处置全流程。",
+                instructions=[AGENT_INSTRUCTIONS],
+                model=_build_model(model_id),
+                tools=[mcp_tools],
+                knowledge=get_knowledge_base(),
+                knowledge_filters={"user_id": knowledge_owner_user_id}
+                if knowledge_owner_user_id
+                else None,
+                search_knowledge=True,
+                add_search_knowledge_instructions=True,
+                skills=_build_enabled_skills(),
+                db=get_agno_postgres_db(),
+                dependencies=dependencies,
+                add_dependencies_to_context=True,
+                add_history_to_context=True,
+                update_memory_on_run=True,
+                num_history_runs=5,
+                add_datetime_to_context=True,
+                markdown=True,
+            )
 
-        async for event in security_agent.arun(
+            async for chunk in _stream_agent_content(
+                security_agent,
+                message,
+                session_id=session_id,
+                user_id=user_id,
+            ):
+                yield chunk
+    except Exception as exc:
+        if not _is_provider_block_error(exc):
+            raise
+        logger.warning("模型服务拦截完整 Agent 上下文，切换到无工具降级模式: {}", exc)
+        yield "模型服务拦截了完整 Agent 上下文，已切换到无工具安全模式。\n\n"
+        fallback_agent = _build_fallback_agent(model_id)
+        async for chunk in _stream_agent_content(
+            fallback_agent,
             message,
             session_id=session_id,
-            user_id=(user_id or "anonymous").strip() or "anonymous",
-            stream=True,
+            user_id=user_id,
         ):
-            event_type: str | None = None
-            content: Any = None
-            if isinstance(event, dict):
-                event_dict = cast(dict[str, Any], event)
-                event_type = event_dict.get("event")
-                content = event_dict.get("content")
-            else:
-                event_type = getattr(event, "event", None)
-                content = getattr(event, "content", None)
-
-            if (
-                event_type == RunEvent.run_content.value
-                and isinstance(content, str)
-                and content
-            ):
-                yield content
+            yield chunk

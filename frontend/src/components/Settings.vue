@@ -88,6 +88,17 @@
               </div>
 
               <div class="flex items-center gap-2">
+                <el-button
+                  plain
+                  size="small"
+                  class="cursor-pointer"
+                  :icon="Connection"
+                  :loading="testingModelId === model.id"
+                  :disabled="!canWriteSettings || !hasRequiredModelFields(model)"
+                  @click="testModel(model)"
+                >
+                  {{ t('settings.actions.testConnection') }}
+                </el-button>
                 <el-switch
                   v-model="model.enabled"
                   inline-prompt
@@ -109,7 +120,7 @@
 
             <div class="mt-3 grid gap-3 lg:grid-cols-2">
               <label class="settings-field">
-                <span>{{ t('settings.models.displayName') }}</span>
+                <span>{{ t('settings.models.displayName') }}<i class="required-mark" aria-hidden="true">*</i></span>
                 <el-input
                   v-model="model.name"
                   :disabled="!canWriteSettings"
@@ -117,7 +128,7 @@
                 />
               </label>
               <label class="settings-field">
-                <span>{{ t('settings.models.modelIdLabel') }}</span>
+                <span>{{ t('settings.models.modelIdLabel') }}<i class="required-mark" aria-hidden="true">*</i></span>
                 <el-input
                   v-model="model.model_id"
                   :disabled="!canWriteSettings"
@@ -125,7 +136,7 @@
                 />
               </label>
               <label class="settings-field">
-                <span>{{ t('settings.models.baseUrlLabel') }}</span>
+                <span>{{ t('settings.models.baseUrlLabel') }}<i class="required-mark" aria-hidden="true">*</i></span>
                 <el-input
                   v-model="model.base_url"
                   :disabled="!canWriteSettings"
@@ -133,7 +144,7 @@
                 />
               </label>
               <label class="settings-field">
-                <span>{{ t('settings.models.apiKeyLabel') }}</span>
+                <span>{{ t('settings.models.apiKeyLabel') }}<i class="required-mark" aria-hidden="true">*</i></span>
                 <el-input
                   v-model="model.api_key"
                   :placeholder="t('settings.models.apiKeyPlaceholder')"
@@ -171,7 +182,9 @@
           >
             <div class="mb-2 flex items-start justify-between gap-3">
               <div>
-                <label class="runtime-label">{{ item.label }}</label>
+                <label class="runtime-label">
+                  {{ item.label }}<i v-if="item.required" class="required-mark" aria-hidden="true">*</i>
+                </label>
                 <p class="runtime-description">{{ item.description }}</p>
               </div>
               <span class="runtime-key">{{ item.key }}</span>
@@ -196,7 +209,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { Check, Delete, Loading, Plus } from "@element-plus/icons-vue"
+import { Check, Connection, Delete, Loading, Plus } from "@element-plus/icons-vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useSettingsApi } from "../composables/useApi"
 import { useAuthStore } from "../stores/auth"
@@ -208,6 +221,7 @@ interface ConfigItem {
   description: string
   placeholder: string
   secret: boolean
+  required: boolean
 }
 
 const { t } = useI18n()
@@ -220,6 +234,7 @@ const configItems = computed<ConfigItem[]>(() => [
     description: t("settings.runtime.mcpServerDescription"),
     placeholder: "http://127.0.0.1:8000/mcp/",
     secret: false,
+    required: true,
   },
   {
     key: "MCP_TOKEN",
@@ -227,6 +242,7 @@ const configItems = computed<ConfigItem[]>(() => [
     description: t("settings.runtime.mcpTokenDescription"),
     placeholder: t("settings.runtime.mcpTokenPlaceholder"),
     secret: true,
+    required: true,
   },
   {
     key: "FEISHU_WEBHOOK_URL",
@@ -234,6 +250,7 @@ const configItems = computed<ConfigItem[]>(() => [
     description: t("settings.runtime.feishuWebhookDescription"),
     placeholder: "https://open.feishu.cn/open-apis/bot/v2/hook/...",
     secret: false,
+    required: false,
   },
 ])
 
@@ -244,6 +261,7 @@ const {
   updateSettings,
   fetchModels,
   updateModels,
+  testModelConnection,
 } = useSettingsApi()
 
 const formData = reactive<Record<string, string>>({})
@@ -251,6 +269,7 @@ const originalData = ref<Record<string, string>>({})
 const modelItems = ref<ModelConfig[]>([])
 const originalModelSnapshot = ref("")
 const activeModelId = ref("")
+const testingModelId = ref<string | null>(null)
 const canWriteSettings = computed(() => authStore.hasPermission("settings:write"))
 
 const enabledModels = computed(() => modelItems.value.filter((model) => model.enabled))
@@ -270,8 +289,17 @@ const serializeModels = () => JSON.stringify({
   models: modelItems.value,
 })
 
+const hasRequiredModelFields = (model: ModelConfig) => {
+  return Boolean(
+    model.name.trim()
+    && model.api_key.trim()
+    && model.base_url.trim()
+    && model.model_id.trim()
+  )
+}
+
 const isConfigured = (model: ModelConfig) => {
-  return Boolean(model.api_key && model.base_url && model.model_id)
+  return Boolean(model.api_key.trim() && model.base_url.trim() && model.model_id.trim())
 }
 
 const makeCustomModel = (): ModelConfig => {
@@ -334,6 +362,28 @@ const removeModel = async (modelId: string) => {
     normalizeActiveModel()
   } catch (err: unknown) {
     if (err !== "cancel") ElMessage.error(t("settings.messages.deleteFailed"))
+  }
+}
+
+const testModel = async (model: ModelConfig) => {
+  if (!canWriteSettings.value) return
+  if (!hasRequiredModelFields(model)) {
+    ElMessage.warning(t("settings.messages.requiredMissing"))
+    return
+  }
+
+  testingModelId.value = model.id
+  try {
+    const result = await testModelConnection(model)
+    if (result.success) {
+      ElMessage.success(t("settings.messages.testSucceeded", { latency: result.latency_ms ?? 0 }))
+    } else {
+      ElMessage.warning(result.message || t("settings.messages.testFailed"))
+    }
+  } catch (err: unknown) {
+    ElMessage.error(err instanceof Error ? err.message : t("settings.messages.testFailed"))
+  } finally {
+    testingModelId.value = null
   }
 }
 
@@ -516,6 +566,13 @@ onMounted(() => { loadSettings() })
 .settings-field {
   display: grid;
   gap: 6px;
+}
+
+.required-mark {
+  margin-left: 3px;
+  color: var(--ag-red);
+  font-style: normal;
+  font-weight: 800;
 }
 
 .settings-field span {

@@ -18,6 +18,8 @@ import type {
   McpTokenInfo,
   McpTokenIssueResponse,
   Message,
+  ModelConfig,
+  ModelConnectivityTestResponse,
   ModelConfigResponse,
   OsControlModule,
   OsControlResponse,
@@ -46,6 +48,7 @@ type ApiFallbackKey =
   | 'settingsUpdateFailed'
   | 'modelsLoadFailed'
   | 'modelsSaveFailed'
+  | 'modelsTestFailed'
   | 'tracesLoadFailed'
   | 'traceDetailLoadFailed'
   | 'skillsLoadFailed'
@@ -464,13 +467,27 @@ export function useSettingsApi() {
     }
   }
 
+  const testModelConnection = async (model: ModelConfig): Promise<ModelConnectivityTestResponse> => {
+    const response = await apiFetch('/models/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(model)
+    })
+    if (!response.ok) {
+      const data: unknown = await response.json().catch(() => ({}))
+      throw new Error(messageFromResponse(data, apiMessage('modelsTestFailed')))
+    }
+    return await response.json()
+  }
+
   return {
     loadingSettings,
     saving,
     fetchSettings,
     updateSettings,
     fetchModels,
-    updateModels
+    updateModels,
+    testModelConnection
   }
 }
 
