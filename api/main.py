@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, Request
@@ -30,6 +31,13 @@ from api.utils.db import close_db_pool, get_db_pool
 
 app_settings = get_settings()
 configure_logging(app_settings)
+
+
+def frontend_static_dir() -> str:
+    source_dir = Path("source")
+    if source_dir.exists():
+        return str(source_dir)
+    return "frontend/dist"
 
 
 @asynccontextmanager
@@ -116,8 +124,8 @@ app.include_router(os_control.router)
 # http://<host>:8000/mcp?token=...
 app.mount("/mcp", mcp_runtime.asgi_app(), name="mcp")
 
-# Serve frontend static files
-app.mount("/", StaticFiles(directory="source", html=True), name="frontend")
+# Serve frontend static files. Production builds are written to source/.
+app.mount("/", StaticFiles(directory=frontend_static_dir(), html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn

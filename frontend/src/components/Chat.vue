@@ -4,6 +4,7 @@
         <div
           ref="chatContainer"
           class="agent-stream min-h-0 flex-1 overflow-y-auto p-4"
+          @scroll="handleChatScroll"
         >
           <transition-group name="msg-fade">
             <div
@@ -17,20 +18,35 @@
               <div class="message-rail">
                 <div :class="['message-avatar', msg.role === 'user' ? 'user' : 'agent']">
                   <el-icon v-if="msg.role === 'assistant'"><Cpu /></el-icon>
-                  <span v-else>U</span>
+                  <span v-else>{{ userAvatarLabel }}</span>
                 </div>
                 <span v-if="msg.role === 'assistant'" class="rail-line" />
               </div>
 
               <article :class="['message-card', msg.role === 'user' ? 'user' : 'agent']">
-                <div class="mb-2 flex items-center justify-between gap-3">
+                <div class="message-card-head mb-2 flex items-center justify-between gap-3">
                   <div class="flex items-center gap-2">
                     <span class="text-xs font-semibold">
                       {{ msg.role === 'user' ? t("chat.roles.operator") : t("chat.roles.agent") }}
                     </span>
                     <span v-if="msg.role === 'assistant' && !msg.final" class="agent-pill">{{ t("chat.roles.streaming") }}</span>
                   </div>
-                  <span class="message-index font-mono text-[10px]">#{{ index + 1 }}</span>
+                  <div class="message-actions">
+                    <span class="message-index font-mono text-[10px]">#{{ index + 1 }}</span>
+                    <el-tooltip :content="copySuccessIndex === index ? t('chat.actions.copied') : t('chat.actions.copyMessage')" placement="top">
+                      <button
+                        type="button"
+                        class="message-action-button"
+                        :aria-label="t('chat.actions.copyMessage')"
+                        @click="copyMessage(index, msg)"
+                      >
+                        <el-icon>
+                          <Check v-if="copySuccessIndex === index" />
+                          <CopyDocument v-else />
+                        </el-icon>
+                      </button>
+                    </el-tooltip>
+                  </div>
                 </div>
                 <div
                   v-if="msg.role === 'assistant' && (!msg.content && !msg.final)"
@@ -66,7 +82,10 @@
                 </div>
 
                 <ol v-if="msg.role === 'assistant' && parsedAssistantMessage(msg.content).toolEvents.length" class="tool-timeline">
-                  <li v-for="event in parsedAssistantMessage(msg.content).toolEvents" :key="event">{{ event }}</li>
+                  <li v-for="event in parsedAssistantMessage(msg.content).toolEvents" :key="event">
+                    <span class="tool-call-pulse" />
+                    <span>{{ event }}</span>
+                  </li>
                 </ol>
               </article>
             </div>
@@ -87,6 +106,32 @@
               </article>
             </div>
           </transition>
+
+          <div class="chat-scroll-actions" aria-live="polite">
+            <el-tooltip :content="t('chat.actions.backToTop')" placement="left">
+              <button
+                v-if="showBackToTop"
+                type="button"
+                class="chat-scroll-button"
+                :aria-label="t('chat.actions.backToTop')"
+                @click="scrollToTop"
+              >
+                <el-icon><Top /></el-icon>
+              </button>
+            </el-tooltip>
+            <el-tooltip :content="pendingNewMessages ? t('chat.actions.newMessages', { count: pendingNewMessages }) : t('chat.actions.scrollToBottom')" placement="left">
+              <button
+                v-if="showScrollToBottom"
+                type="button"
+                class="chat-scroll-button is-bottom"
+                :aria-label="t('chat.actions.scrollToBottom')"
+                @click="scrollToBottomAndClear"
+              >
+                <span v-if="pendingNewMessages" class="new-message-count">{{ pendingNewMessages }}</span>
+                <el-icon><Bottom /></el-icon>
+              </button>
+            </el-tooltip>
+          </div>
         </div>
 
         <transition name="msg-fade">
@@ -197,9 +242,13 @@ import { useSessionStore } from "../stores/sessions"
 import type { Message, ModelConfig } from "../types"
 import { useI18n } from "vue-i18n"
 import {
+  Bottom,
+  Check,
+  CopyDocument,
   Cpu,
   Loading,
   Promotion,
+  Top,
 } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
 
@@ -248,6 +297,7 @@ const renderMarkdown = (content: string) => md.render(normalizeInlineTable(conte
 
 const props = defineProps<{
   currentUserId?: string | null
+  currentUserInitials?: string | null
 }>()
 
 // ── State ─────────────────────────────────────────────────────────
@@ -272,6 +322,10 @@ const createWelcomeMessage = (): ChatMessage => ({ role: "assistant", content: t
 const messages = ref<ChatMessage[]>([createWelcomeMessage()])
 const chatContainer = ref<HTMLElement | null>(null)
 const zoomedImage = ref<string | null>(null)
+const copySuccessIndex = ref<number | null>(null)
+const pendingNewMessages = ref(0)
+const showScrollToBottom = ref(false)
+const showBackToTop = ref(false)
 const collapsedSources = reactive(new Set<number>())
 const collapsedThinking = reactive(new Set<number>())
 const sessionStore = useSessionStore()
@@ -283,6 +337,8 @@ const selectedModelId = ref<string | null>(null)
 const { loading, error, sendMessageStream } = useChatApi()
 const { getSessionHistory } = useChatHistory()
 const { fetchModels } = useSettingsApi()
+
+const userAvatarLabel = computed(() => (props.currentUserInitials || "AI").slice(0, 2).toUpperCase())
 
 const selectedModel = computed(() => {
   return modelOptions.value.find((model) => model.id === selectedModelId.value)
@@ -354,12 +410,65 @@ const scrollToBottom = async () => {
   if (chatContainer.value) {
     chatContainer.value.scrollTop = chatContainer.value.scrollHeight
   }
+  pendingNewMessages.value = 0
+  updateScrollState()
 }
 
 const isNearBottom = () => {
   const container = chatContainer.value
   if (!container) return true
   return container.scrollHeight - container.clientHeight - container.scrollTop < 120
+}
+
+const updateScrollState = () => {
+  const container = chatContainer.value
+  if (!container) {
+    showScrollToBottom.value = false
+    showBackToTop.value = false
+    return
+  }
+  showScrollToBottom.value = !isNearBottom()
+  showBackToTop.value = container.scrollTop > 360
+  if (isNearBottom()) pendingNewMessages.value = 0
+}
+
+const handleChatScroll = () => {
+  updateScrollState()
+}
+
+const scrollToBottomAndClear = () => {
+  void scrollToBottom()
+}
+
+const scrollToTop = async () => {
+  await nextTick()
+  if (chatContainer.value) {
+    chatContainer.value.scrollTo({ top: 0, behavior: "smooth" })
+  }
+  updateScrollState()
+}
+
+const copyMessage = async (index: number, message: ChatMessage) => {
+  const content = message.role === "assistant" ? parsedAssistantMessage(message.content).body : message.content
+  if (!content.trim()) return
+  if (await copyToClipboard(content.trim())) {
+    copySuccessIndex.value = index
+    ElMessage.success(t("common.clipboard.copied"))
+    window.setTimeout(() => {
+      if (copySuccessIndex.value === index) copySuccessIndex.value = null
+    }, 1400)
+  } else {
+    ElMessage.warning(t("common.clipboard.failed"))
+  }
+}
+
+const followStreamPosition = (shouldStick: boolean) => {
+  if (shouldStick) {
+    void scrollToBottom()
+  } else {
+    pendingNewMessages.value = Math.max(1, pendingNewMessages.value)
+    updateScrollState()
+  }
 }
 
 const generateSessionId = () => crypto.randomUUID()
@@ -535,11 +644,12 @@ const sendMessage = async () => {
 
   try {
     const idx = messages.value.push({ role: "assistant", content: "", final: false }) - 1
+    const shouldStickToBottom = isNearBottom()
 
     await sendMessageStream(userMsg, sessionId, selectedModelId.value, (chunk) => {
       const m = messages.value[idx]
       if (m) m.content += chunk
-      void scrollToBottom()
+      followStreamPosition(shouldStickToBottom)
       void enhanceRenderedMarkdown()
     })
 
@@ -549,9 +659,9 @@ const sendMessage = async () => {
 
     notifySessionChange()
   } catch {
-    messages.value.push({ role: "assistant", content: t("chat.notices.requestFailed") })
+    messages.value.push({ role: "assistant", content: t("chat.notices.requestFailed"), final: true })
   } finally {
-    void scrollToBottom()
+    followStreamPosition(isNearBottom())
   }
 }
 
@@ -562,7 +672,7 @@ watch(
   () => messages.value.map((message) => `${message.content}:${message.final}`).join("\n---\n"),
   () => {
     void enhanceRenderedMarkdown()
-    void scrollToBottom()
+    updateScrollState()
   },
   { flush: "post" },
 )
@@ -616,6 +726,7 @@ onUnmounted(() => {
 }
 
 .agent-stream {
+  position: relative;
   background: var(--ag-frame);
 }
 
@@ -624,6 +735,7 @@ onUnmounted(() => {
   grid-template-columns: 34px minmax(0, 1fr);
   gap: 10px;
   margin-bottom: 16px;
+  animation: message-rise 0.24s ease both;
 }
 
 .message-row.is-user {
@@ -674,8 +786,8 @@ onUnmounted(() => {
 }
 
 .message-avatar.user {
-  background: var(--ag-user-message-bg);
-  color: var(--ag-user-message-text);
+  background: var(--ag-sidebar-item-hover);
+  color: var(--ag-sidebar-strong);
 }
 
 .message-card {
@@ -683,6 +795,16 @@ onUnmounted(() => {
   border: 1px solid var(--ag-border);
   border-radius: var(--ag-radius-panel);
   padding: 12px 14px;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+
+.message-card:hover {
+  border-color: color-mix(in srgb, var(--ag-blue) 28%, var(--ag-border));
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
 }
 
 .message-card.agent {
@@ -693,6 +815,47 @@ onUnmounted(() => {
   width: min(720px, 100%);
   background: var(--ag-user-message-bg);
   color: var(--ag-user-message-text);
+}
+
+.message-card-head {
+  min-height: 24px;
+}
+
+.message-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.message-action-button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-control);
+  background: color-mix(in srgb, var(--ag-panel) 82%, transparent);
+  color: var(--ag-muted);
+  opacity: 0;
+  transition:
+    opacity 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease,
+    transform 0.16s ease;
+}
+
+.message-card:hover .message-action-button,
+.message-action-button:focus-visible {
+  opacity: 1;
+}
+
+.message-action-button:hover {
+  border-color: var(--ag-blue);
+  background: var(--ag-blue-soft);
+  color: var(--ag-blue);
+  transform: translateY(-1px);
 }
 
 .agent-pulse {
@@ -798,18 +961,23 @@ onUnmounted(() => {
 
 .tool-timeline li {
   position: relative;
-  padding-left: 18px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding-left: 0;
+  animation: tool-call-enter 0.28s ease both;
 }
 
-.tool-timeline li::before {
-  position: absolute;
-  top: 0.55em;
-  left: 4px;
+.tool-call-pulse {
+  position: relative;
+  top: 0.45em;
   width: 6px;
   height: 6px;
+  flex: 0 0 auto;
   border-radius: 999px;
   background: var(--ag-blue);
-  content: "";
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--ag-blue) 30%, transparent);
+  animation: tool-call-pulse 1.2s ease-out infinite;
 }
 
 .mermaid {
@@ -863,6 +1031,60 @@ onUnmounted(() => {
   max-height: 92vh;
   border-radius: var(--ag-radius-panel);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+}
+
+.chat-scroll-actions {
+  position: sticky;
+  right: 12px;
+  bottom: 12px;
+  z-index: 8;
+  display: grid;
+  justify-content: end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.chat-scroll-button {
+  position: relative;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-panel);
+  background: var(--ag-panel);
+  color: var(--ag-muted-strong);
+  box-shadow: var(--ag-shadow-popover);
+  pointer-events: auto;
+  transition:
+    border-color 0.16s ease,
+    color 0.16s ease,
+    transform 0.16s ease,
+    background 0.16s ease;
+}
+
+.chat-scroll-button:hover {
+  border-color: var(--ag-blue);
+  background: var(--ag-blue-soft);
+  color: var(--ag-blue);
+  transform: translateY(-2px);
+}
+
+.new-message-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  border: 1px solid var(--ag-panel);
+  border-radius: 999px;
+  background: var(--ag-accent);
+  color: #fff;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
 }
 
 /* 过渡动画 */
@@ -1022,9 +1244,40 @@ html.dark .chat-input .el-textarea__inner {
   to { background-position: -100% 0; }
 }
 
+@keyframes message-rise {
+  from { opacity: 0; transform: translateY(10px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 @keyframes stream-cursor-blink {
   0%, 46% { opacity: 1; }
   47%, 100% { opacity: 0; }
+}
+
+@keyframes tool-call-enter {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes tool-call-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ag-blue) 34%, transparent); }
+  72%, 100% { box-shadow: 0 0 0 8px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-row,
+  .tool-timeline li,
+  .markdown-skeleton span,
+  .stream-cursor,
+  .tool-call-pulse {
+    animation: none;
+  }
+
+  .message-card,
+  .message-action-button,
+  .chat-scroll-button {
+    transition: none;
+  }
 }
 
 @media (max-width: 640px) {

@@ -103,6 +103,55 @@ updated_at
 
 Agno 文档将 `agno_sessions` 描述为按 `(user_id, session_id)` 保存会话历史。本项目沿用这个模型：`session_id` 不是授权凭据，所有查询必须同时匹配当前 `user_id` 或通过 admin 权限。
 
+## Trace ID 使用说明
+
+Trace 页面使用 Agno tracing 数据，参考：
+
+- [Trace](https://docs.agno.com/reference/tracing/trace)
+- [Tracing Overview: Span](https://docs.agno.com/tracing/overview#span)
+- [Tracing DB Functions](https://docs.agno.com/tracing/db-functions)
+- [Trace To Database](https://docs.agno.com/examples/integrations/observability/trace-to-database)
+
+各类 ID 的含义：
+
+| ID | 来源 | 用途 |
+| --- | --- | --- |
+| `session_id` | Chat 前端生成并传给 `Agent.arun()` | 会话维度的历史上下文。一个 session 可以包含多次用户提问和多条 run。 |
+| `run_id` | Agno 每次 agent/team/workflow 执行生成 | 单次运行维度。排查“这一轮回答为什么这样执行”时优先用它过滤。 |
+| `trace_id` | Agno tracing 为一次完整 agent 执行生成 | Trace 详情页主键，用于聚合这次执行下所有 spans。 |
+| `span_id` | Agno tracing 为单个操作生成 | Span 详情主键。用于定位 Agent、LLM、Tool 等子步骤。 |
+| `parent_span_id` | Span 之间的父子关系 | 构建 Trace 树和瀑布流，展示 `Agent.run -> LLM.invoke -> Tool.execute` 这类调用链。 |
+| `agent_id` / `team_id` / `workflow_id` | Agno 运行组件标识 | 跨 session 分析某个 Agent、Team 或 Workflow 的运行质量。 |
+| `user_id` | 当前 JWT 用户映射 | 权限过滤边界。普通用户只能看自己的 Trace，admin 可跨用户查询。 |
+
+使用建议：
+
+- 从 Chat 侧栏复制 `session_id`，可在 Trace 页面查看该会话下的运行记录。
+- 如果同一 session 有多轮对话，应出现多条不同 `run_id` / `trace_id` 的记录；每条 Trace 对应一次完整 agent 执行。
+- 如果要排查某次回答，优先按 `run_id` 或 `trace_id` 定位；如果要看一个会话的整体活动，按 `session_id` 过滤。
+- Span 表用于解释“执行过程中发生了什么”，包括模型调用、工具调用、输入输出、token 和异常。
+
+同一 Session 在 Trace 中只有一次记录时，先按下面顺序排查：
+
+1. 本项目的 `GET /api/traces` 没有按 session 聚合，也没有主动去重；它直接把 `session_id`、`run_id` 等过滤条件传给 Agno `db.get_traces()`。
+2. 每次 `POST /api/chat` 都会调用一次 `Agent.arun(..., session_id=...)`。正常情况下，同一 `session_id` 的多轮对话应产生多条 run/trace。
+3. Trace 写入已显式使用 `setup_tracing(db=db, batch_processing=False)`，避免批量 flush 延迟导致页面刚刷新时看不到最新 Trace。
+4. 如果仍只有一条，重点检查 `agno_sessions.runs` 中是否只有一个 run，或多个 run 是否复用了同一个 `run_id`；再检查 `agno_traces` 中同一 `session_id` 的 `run_id` / `trace_id` 是否被上游库覆盖。
+5. 如果 Chat 已产生多条 session run，但 Trace 只有一条，问题在 tracing 写入链路；如果 session run 也只有一条，问题在 Agent session/run 持久化链路。
+
+## MCP tools/list 说明
+
+`tools/list` 不是独立业务页面的数据源，而是 `api/mcp/tools/playbook.py` 中 Hi-Agent 适配器用于发现外部 MCP 工具的协议调用。它会遍历 MCP 配置中的 `hiagent` URL，向每个 URL 发送 JSON-RPC `tools/list`，再把返回的工具缓存到 `_tool_registry`，供后续 `get_method_params()` 和 `invoke_method()` 使用。
+
+`tools/list` 为空的常见原因：
+
+- `MCP` 配置中没有启用或注册任何 Hi-Agent URL。
+- 对端 URL、token、网络或协议不通，返回非 200 或不可解析响应。
+- 对端支持 MCP 连接但没有暴露任何工具。
+- 前端看到的是会话/Trace 运行结果，而不是工具注册表；工具发现结果不会自动合并进 Session，只有实际 tool call 的输入输出会进入 Trace spans。
+
+因此这些内容仍有保留价值：`tools/list` 是安全剧本/外部 Hi-Agent 的发现层，不应直接并入 Session。更合理的合并方式是在 Session 或 Trace 里展示“本次运行实际调用过的工具”，注册表仍留在 MCP/Playbook 层维护。
+
 ## 项目结构
 
 ```text

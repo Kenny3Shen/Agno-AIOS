@@ -28,7 +28,7 @@ load_dotenv(override=True)
 # Set up database for traces
 db = get_agno_postgres_db()
 # Enable tracing (call once at startup)
-setup_tracing(db=db)
+setup_tracing(db=db, batch_processing=False)
 
 
 def _get_env(key: str, default: str = "") -> str:

@@ -37,7 +37,9 @@
               <span class="agentos-dot" :class="statusTone(record.status)" />
               <div class="min-w-0">
                 <strong :title="record.title">{{ record.title }}</strong>
-                <p :title="record.subtitle">{{ record.subtitle || record.id }}</p>
+                <p :title="record.subtitle">
+                  <span class="agentos-id-chip">{{ record.subtitle || record.id }}</span>
+                </p>
               </div>
             </div>
 
@@ -47,7 +49,11 @@
             </div>
 
             <div v-if="metaEntries(record).length" class="agentos-meta">
-              <span v-for="[key, value] in metaEntries(record)" :key="`${record.id}-${key}`">
+              <span
+                v-for="[key, value] in metaEntries(record)"
+                :key="`${record.id}-${key}`"
+                :class="{ 'is-id': isIdEntry(key, value) }"
+              >
                 <b>{{ key }}</b>
                 {{ compactValue(value) }}
               </span>
@@ -127,6 +133,11 @@ const compactValue = (value: unknown) => {
   if (!text) return "-"
   if (/^\d{4}-\d{2}-\d{2}T/.test(text)) return formatTime(text)
   return text.length > 48 ? `${text.slice(0, 45)}...` : text
+}
+
+const isIdEntry = (key: string, value: unknown) => {
+  if (value == null || value === "") return false
+  return key.toLowerCase().endsWith("id") || key.toLowerCase().includes("_id")
 }
 
 const metaEntries = (record: OsControlRecord) => {
@@ -299,17 +310,19 @@ onMounted(() => {
 .agentos-ledger {
   min-height: 0;
   flex: 1;
-  display: block;
+  display: flex;
   overflow: hidden;
   padding: 14px;
 }
 
 .agentos-panel {
   min-height: 0;
+  flex: 1 1 auto;
   border: 1px solid var(--os-border);
   border-radius: 8px;
   background: var(--os-panel);
   padding: 14px;
+  overflow: hidden;
 }
 
 .agentos-ledger > .agentos-panel {
@@ -329,6 +342,8 @@ onMounted(() => {
 .agentos-records {
   display: grid;
   min-height: 0;
+  flex: 1 1 auto;
+  align-content: start;
   gap: 8px;
   overflow-y: auto;
   padding-right: 4px;
@@ -363,6 +378,21 @@ onMounted(() => {
   overflow-wrap: anywhere;
 }
 
+.agentos-id-chip {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--os-blue) 28%, var(--os-border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--os-blue) 8%, var(--os-panel-soft));
+  padding: 2px 6px;
+  color: var(--os-text);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
 .agentos-dot {
   width: 9px;
   height: 9px;
@@ -392,6 +422,12 @@ onMounted(() => {
 
 .agentos-meta b {
   margin-right: 4px;
+  color: var(--os-text);
+}
+
+.agentos-meta span.is-id {
+  border-color: color-mix(in srgb, var(--os-blue) 32%, var(--os-border));
+  background: color-mix(in srgb, var(--os-blue) 9%, var(--os-panel-soft));
   color: var(--os-text);
 }
 

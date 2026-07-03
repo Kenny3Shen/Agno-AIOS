@@ -12,6 +12,7 @@ export const enUS = {
       refresh: "Refresh",
       newChat: "New chat",
       refreshTraces: "Refresh traces",
+      copySessionId: "Copy Session ID",
       archiveSession: "Archive session",
       noSessions: "No sessions",
       noTraces: "No traces",
@@ -54,6 +55,7 @@ export const enUS = {
     messages: {
       sessionArchived: "Session archived",
       archiveSessionFailed: "Failed to archive session",
+      sessionIdCopied: "Session ID copied",
     },
     home: {
       title: "Agno AIOS Workspace",
@@ -64,6 +66,7 @@ export const enUS = {
       count: "Sessions",
       expand: "Expand chat sessions",
       collapse: "Collapse chat sessions",
+      actions: "Session actions",
     },
     traces: {
       title: "Trace Queue",
@@ -301,6 +304,13 @@ export const enUS = {
     },
     code: {
       copy: "Copy",
+    },
+    actions: {
+      copyMessage: "Copy message",
+      copied: "Copied",
+      scrollToBottom: "Scroll to bottom",
+      newMessages: "{count} new messages",
+      backToTop: "Back to top",
     },
     welcome:
       "Hello. I am the AgentOS security agent with threat-tracking and playbook execution skills. Tell me your goal or question.",

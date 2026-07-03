@@ -12,6 +12,7 @@ export const zhCN = {
       refresh: "刷新",
       newChat: "新会话",
       refreshTraces: "刷新 Trace",
+      copySessionId: "复制 Session ID",
       archiveSession: "归档会话",
       noSessions: "暂无会话",
       noTraces: "暂无 Trace",
@@ -54,6 +55,7 @@ export const zhCN = {
     messages: {
       sessionArchived: "会话已归档",
       archiveSessionFailed: "归档会话失败",
+      sessionIdCopied: "Session ID 已复制",
     },
     home: {
       title: "Agno AIOS 工作台",
@@ -64,6 +66,7 @@ export const zhCN = {
       count: "Sessions",
       expand: "展开 Chat 会话",
       collapse: "收起 Chat 会话",
+      actions: "会话操作",
     },
     traces: {
       title: "Trace Queue",
@@ -301,6 +304,13 @@ export const zhCN = {
     },
     code: {
       copy: "Copy",
+    },
+    actions: {
+      copyMessage: "复制消息",
+      copied: "已复制",
+      scrollToBottom: "滚动到底部",
+      newMessages: "{count} 条新消息",
+      backToTop: "返回顶部",
     },
     welcome: "你好！我是 AgentOS 安全智能体，集成了威胁追踪和剧本执行技能。请告诉我你的目标或问题。",
     notices: {

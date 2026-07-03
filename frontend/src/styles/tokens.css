@@ -37,8 +37,8 @@
 	--ag-purple-soft: rgba(138, 99, 255, 0.12);
 	--ag-code-bg: #f3f6fa;
 	--ag-code-text: #182230;
-	--ag-user-message-bg: #15202b;
-	--ag-user-message-text: #ffffff;
+	--ag-user-message-bg: #eaf1f8;
+	--ag-user-message-text: #111827;
 	--ag-shadow: 0 18px 50px rgba(15, 23, 42, 0.12);
 	--ag-shadow-panel: var(--ag-shadow);
 	--ag-shadow-popover: 0 12px 28px rgba(15, 23, 42, 0.18);
@@ -95,8 +95,8 @@ html.dark {
 	--ag-purple-soft: rgba(161, 116, 255, 0.13);
 	--ag-code-bg: #101115;
 	--ag-code-text: #e7e7e4;
-	--ag-user-message-bg: #f6f6f2;
-	--ag-user-message-text: #0a0b0f;
+	--ag-user-message-bg: #22252d;
+	--ag-user-message-text: #f6f6f2;
 	--ag-shadow: none;
 	--ag-shadow-panel: none;
 	--ag-shadow-popover: none;

@@ -175,16 +175,34 @@
                           </span>
                         </button>
 
-                        <el-tooltip :content="t('shell.actions.archiveSession')" placement="right">
+                        <div class="ag-chat-session-menu-wrap">
                           <button
                             type="button"
-                            class="ag-chat-session-archive"
-                            :aria-label="`${t('shell.actions.archiveSession')} ${session.preview || session.session_id}`"
-                            @click.stop="archiveSidebarChatSession(session.session_id)"
+                            class="ag-chat-session-menu-trigger"
+                            :aria-label="t('shell.sessions.actions')"
+                            :aria-expanded="openSessionMenuId === session.session_id"
+                            @click.stop="toggleSessionMenu(session.session_id)"
                           >
-                            <el-icon><Delete /></el-icon>
+                            :
                           </button>
-                        </el-tooltip>
+
+                          <transition name="fade">
+                            <div
+                              v-if="openSessionMenuId === session.session_id"
+                              class="ag-chat-session-menu"
+                              role="menu"
+                            >
+                              <button type="button" role="menuitem" @click.stop="copySidebarSessionId(session.session_id)">
+                                <el-icon><CopyDocument /></el-icon>
+                                <span>{{ t("shell.actions.copySessionId") }}</span>
+                              </button>
+                              <button type="button" role="menuitem" @click.stop="archiveSidebarChatSession(session.session_id)">
+                                <el-icon><Delete /></el-icon>
+                                <span>{{ t("shell.actions.archiveSession") }}</span>
+                              </button>
+                            </div>
+                          </transition>
+                        </div>
                       </div>
 
                       <div v-if="!chatSessions.length && !loadingSessions" class="ag-chat-session-empty">
@@ -480,6 +498,7 @@ import {
   Clock,
   Close,
   Connection,
+  CopyDocument,
   Cpu,
   DataAnalysis,
   DataBoard,
@@ -521,6 +540,7 @@ import Knowledge from "./components/Knowledge.vue"
 import { useChatHistory, useSettingsApi, useTracingApi } from "./composables/useApi"
 import { setI18nLocale } from "./i18n"
 import { clearStoredAuthToken, fetchCurrentUser, getStoredAuthToken, logout as authLogout, type AuthClientFallbackKey } from "./lib/authClient"
+import { copyToClipboard } from "./lib/clipboard"
 import { useAuthStore } from "./stores/auth"
 import { useSessionStore } from "./stores/sessions"
 import { useShellStore } from "./stores/shell"
@@ -721,6 +741,7 @@ const {
 
 shellStore.setIsMobile(isMobileViewport())
 const currentModelName = ref("DeepSeek V4 Pro")
+const openSessionMenuId = ref<string | null>(null)
 const authClientFallbacks = computed<Record<AuthClientFallbackKey, string>>(() => ({
   fetchUnsupported: t("auth.errors.fetchUnsupported"),
   loginFailed: t("auth.errors.loginFailed"),
@@ -758,7 +779,7 @@ const currentModelLabel = computed(() => formatModelLabel(currentModelName.value
 const currentUserId = computed(() => currentUser.value?.id || currentUser.value?.email || null)
 const activeComponentProps = computed(() => {
   const tab = activeTab.value as NavId
-  const baseProps = { currentUserId: currentUserId.value }
+  const baseProps = { currentUserId: currentUserId.value, currentUserInitials: userInitials.value }
   if (tab === "trace") {
     return { ...baseProps, selectedTraceId: currentTraceId.value }
   }
@@ -926,7 +947,21 @@ const toggleTraceQueue = () => {
   if (traceQueueExpanded.value) void loadSidebarTraceQueue()
 }
 
+const toggleSessionMenu = (sessionId: string) => {
+  openSessionMenuId.value = openSessionMenuId.value === sessionId ? null : sessionId
+}
+
+const copySidebarSessionId = async (sessionId: string) => {
+  openSessionMenuId.value = null
+  if (await copyToClipboard(sessionId)) {
+    ElMessage.success(t("shell.messages.sessionIdCopied"))
+  } else {
+    ElMessage.warning(t("common.clipboard.failed"))
+  }
+}
+
 const selectChatSession = (sessionId: string) => {
+  openSessionMenuId.value = null
   currentChatSessionId.value = sessionId
   activeTab.value = "chat"
   userMenuOpen.value = false
@@ -935,6 +970,7 @@ const selectChatSession = (sessionId: string) => {
 }
 
 const createSidebarChat = () => {
+  openSessionMenuId.value = null
   currentChatSessionId.value = null
   activeTab.value = "chat"
   userMenuOpen.value = false
@@ -951,6 +987,7 @@ const selectTraceFromSidebar = (trace: TraceItem) => {
 }
 
 const archiveSidebarChatSession = async (sessionId: string) => {
+  openSessionMenuId.value = null
   const previousSessions = chatSessions.value
   chatSessions.value = chatSessions.value.filter((session) => session.session_id !== sessionId)
   if (currentChatSessionId.value === sessionId) {
@@ -987,6 +1024,7 @@ const closeSidebar = () => {
 const toggleSidebarSize = () => {
   isSidebarCompact.value = !isSidebarCompact.value
   userMenuOpen.value = false
+  openSessionMenuId.value = null
 }
 
 const refreshWorkspace = () => {

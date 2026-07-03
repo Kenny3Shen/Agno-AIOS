@@ -14,6 +14,8 @@ const readOptionalSource = (relativePath) => {
 }
 
 const app = readSource("App.vue")
+const viteConfig = readOptionalSource("../vite.config.ts")
+const apiMain = readOptionalSource("../../api/main.py")
 const authScreen = readSource("components/AuthScreen.vue")
 const chat = readOptionalSource("components/Chat.vue")
 const trace = readOptionalSource("components/Trace.vue")
@@ -50,6 +52,30 @@ assert.equal(
   app.includes("ag-nav-desc"),
   false,
   "sidebar navigation must not render secondary explanatory text",
+)
+
+assert.match(
+  viteConfig,
+  /outDir:\s*['"]\.\.\/source['"]/,
+  "frontend build output must be written to root source/",
+)
+
+assert.match(
+  viteConfig,
+  /manualChunks/,
+  "frontend build must define manual chunks to keep large vendors split",
+)
+
+assert.match(
+  apiMain,
+  /frontend_static_dir/,
+  "backend must resolve the frontend static directory through a reusable helper",
+)
+
+assert.match(
+  apiMain,
+  /Path\("source"\)/,
+  "backend must serve root source/ builds when present",
 )
 
 assert.equal(
@@ -371,8 +397,14 @@ assert.match(
 
 assert.match(
   app,
-  /ag-chat-session-archive/,
-  "Chat session rows must include an archive/delete affordance",
+  /ag-chat-session-menu-trigger/,
+  "Chat session rows must include a compact action menu trigger",
+)
+
+assert.match(
+  app,
+  /copySidebarSessionId/,
+  "Chat session action menu must support copying the Session ID",
 )
 
 assert.match(
