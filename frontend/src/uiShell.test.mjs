@@ -149,7 +149,7 @@ for (const hardcodedShellCopy of [
   ">Sessions<",
   ">No sessions<",
   ">Refresh traces<",
-  ">Trace Queue<",
+  ">Trace Observability<",
   "关闭导航遮罩",
   "当前会话",
   "已认证",
@@ -368,7 +368,6 @@ assertTextOrder(
 )
 
 for (const controlPlaneLabel of [
-  't("shell.nav.sessions.label")',
   't("shell.nav.studio.label")',
   't("shell.nav.memory.label")',
   't("shell.nav.metrics.label")',
@@ -382,6 +381,12 @@ for (const controlPlaneLabel of [
     `sidebar must include missing AgentOS control-plane page ${controlPlaneLabel}`,
   )
 }
+
+assert.equal(
+  app.includes('t("shell.nav.sessions.label")'),
+  false,
+  "Sessions must be merged into Trace instead of remaining as a standalone sidebar page",
+)
 
 assert.match(
   app,
@@ -443,10 +448,13 @@ for (const traceParam of ["session_id", "run_id", "agent_id", "team_id", "workfl
     new RegExp(`qs\\.set\\('${traceParam}'`),
     `Trace API must preserve ${traceParam} query parameter when provided`,
   )
+}
+
+for (const sessionTraceParam of ["session_id", "user_id"]) {
   assert.match(
     trace,
-    new RegExp(`${traceParam}:\\s*filters\\.${traceParam}\\.trim\\(\\)`),
-    `Trace page must pass ${traceParam} from filters into listTraces`,
+    new RegExp(`${sessionTraceParam}:\\s*session\\.${sessionTraceParam === "session_id" ? "session_id" : "user_id"}`),
+    `Trace page must pass selected session ${sessionTraceParam} into listTraces`,
   )
 }
 
@@ -595,14 +603,12 @@ for (const hardcodedChatCopy of [
 }
 
 for (const traceFilterHook of [
-  "filters.session_id",
-  "filters.run_id",
-  "filters.user_id",
-  "filters.agent_id",
-  "filters.team_id",
-  "filters.workflow_id",
-  "filters.status",
-  "filters.timeRange",
+  "sessionFilters.sessionId",
+  "sessionFilters.userId",
+  "sessionFilters.keyword",
+  "sessionFilters.status",
+  "filteredSessions",
+  "selectSession",
   "scheduleFilterRefresh",
 ]) {
   assert.match(
@@ -917,9 +923,33 @@ assert.match(
 )
 
 assert.match(
+  trace,
+  /trace-session-panel/,
+  "Trace page must expose a session filtering panel",
+)
+
+assert.equal(
+  app.includes("ag-trace-queue-panel"),
+  false,
+  "Trace Queue sidebar panel must be removed; Trace observation is reached through Session filtering",
+)
+
+assert.equal(
+  app.includes("toggleTraceQueue"),
+  false,
+  "Trace nav item must not keep a queue expand/collapse action",
+)
+
+assert.match(
   app,
-  /ag-trace-queue-panel/,
-  "Trace Queue must be rendered as an expandable sidebar panel under the Trace nav item",
+  /securityDataNavItems/,
+  "CVE, Assets, and Collect must be rendered as a separate sidebar group",
+)
+
+assert.match(
+  settings,
+  /settings\.tabs\.navigation/,
+  "Settings must include a navigation configuration tab",
 )
 
 assert.equal(

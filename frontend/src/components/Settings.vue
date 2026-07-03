@@ -34,7 +34,9 @@
     </div>
 
     <template v-else>
-      <section class="settings-section">
+      <el-tabs v-model="activeSettingsTab" class="settings-tabs">
+        <el-tab-pane :label="t('settings.tabs.runtime')" name="runtime">
+          <section class="settings-section">
         <div class="settings-section-head">
           <div>
             <h4>{{ t('settings.models.sectionTitle') }}</h4>
@@ -164,9 +166,9 @@
             </div>
           </article>
         </div>
-      </section>
+          </section>
 
-      <section class="settings-section">
+          <section class="settings-section mt-4">
         <div class="settings-section-head">
           <div>
             <h4>{{ t('settings.runtime.sectionTitle') }}</h4>
@@ -200,7 +202,47 @@
             />
           </div>
         </div>
-      </section>
+          </section>
+        </el-tab-pane>
+
+        <el-tab-pane :label="t('settings.tabs.navigation')" name="navigation">
+          <section class="settings-section">
+            <div class="settings-section-head">
+              <div>
+                <h4>{{ t('settings.navigation.sectionTitle') }}</h4>
+                <p>{{ t('settings.navigation.sectionDescription') }}</p>
+              </div>
+            </div>
+
+            <div class="navigation-config-grid">
+              <article
+                v-for="group in navigationGroups"
+                :key="group.key"
+                class="navigation-group-card"
+              >
+                <div class="navigation-group-head">
+                  <strong>{{ group.title }}</strong>
+                  <span>{{ group.items.length }}</span>
+                </div>
+                <div class="navigation-order-list">
+                  <span
+                    v-for="(item, index) in group.items"
+                    :key="item"
+                    class="navigation-order-item"
+                  >
+                    <b>{{ index + 1 }}</b>
+                    <em>{{ item }}</em>
+                  </span>
+                </div>
+              </article>
+            </div>
+
+            <p class="settings-note mt-3">
+              {{ t('settings.navigation.note') }}
+            </p>
+          </section>
+        </el-tab-pane>
+      </el-tabs>
 
     </template>
   </div>
@@ -269,8 +311,32 @@ const originalData = ref<Record<string, string>>({})
 const modelItems = ref<ModelConfig[]>([])
 const originalModelSnapshot = ref("")
 const activeModelId = ref("")
+const activeSettingsTab = ref("runtime")
 const testingModelId = ref<string | null>(null)
 const canWriteSettings = computed(() => authStore.hasPermission("settings:write"))
+
+const navigationGroups = computed(() => [
+  {
+    key: "operations",
+    title: t("settings.navigation.groups.operations"),
+    items: ["Home", "Dashboard", "Chat", "Trace"],
+  },
+  {
+    key: "knowledge",
+    title: t("settings.navigation.groups.knowledge"),
+    items: ["Skills", "MCP", "Knowledge", "Studio", "Memory", "Metrics"],
+  },
+  {
+    key: "securityData",
+    title: t("settings.navigation.groups.securityData"),
+    items: ["CVE", "Assets", "Collect"],
+  },
+  {
+    key: "settings",
+    title: t("settings.navigation.groups.settings"),
+    items: ["Settings"],
+  },
+])
 
 const enabledModels = computed(() => modelItems.value.filter((model) => model.enabled))
 
@@ -470,6 +536,19 @@ onMounted(() => { loadSettings() })
   padding: var(--ag-space-md);
 }
 
+.settings-tabs :deep(.el-tabs__header) {
+  margin-bottom: 14px;
+}
+
+.settings-tabs :deep(.el-tabs__item) {
+  color: var(--ag-muted);
+  font-weight: 700;
+}
+
+.settings-tabs :deep(.el-tabs__item.is-active) {
+  color: var(--ag-blue);
+}
+
 .settings-section-head {
   display: flex;
   align-items: flex-start;
@@ -616,6 +695,84 @@ onMounted(() => { loadSettings() })
   line-height: 1.6;
 }
 
+.navigation-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.navigation-group-card {
+  border: 1px solid var(--ag-panel-border);
+  border-radius: var(--ag-radius-panel);
+  background: var(--ag-panel-soft);
+  padding: 12px;
+}
+
+.navigation-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.navigation-group-head strong {
+  color: var(--ag-heading);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.navigation-group-head span {
+  display: grid;
+  min-width: 24px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-control);
+  color: var(--ag-muted);
+  font-family: "Fira Code", monospace;
+  font-size: 11px;
+}
+
+.navigation-order-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.navigation-order-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-control);
+  background: var(--ag-panel-bg);
+  padding: 7px 8px;
+}
+
+.navigation-order-item b {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--ag-blue-soft);
+  color: var(--ag-blue);
+  font-family: "Fira Code", monospace;
+  font-size: 10px;
+}
+
+.navigation-order-item em {
+  overflow: hidden;
+  color: var(--ag-text);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 640px) {
   .settings-section-head {
     display: grid;
@@ -623,6 +780,10 @@ onMounted(() => { loadSettings() })
 
   .default-model-select {
     width: 100%;
+  }
+
+  .navigation-config-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

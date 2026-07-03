@@ -56,6 +56,7 @@ export interface HiAgentEntry {
 
 export interface ChatSession {
   session_id: string
+  user_id?: string | null
   preview: string
   created_at: number
   updated_at: number

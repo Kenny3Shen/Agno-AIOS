@@ -15,9 +15,7 @@ export interface TraceFilters {
 
 export const useTraceStore = defineStore("traces", () => {
   const traceItems = ref<TraceItem[]>([])
-  const traceQueueItems = ref<TraceItem[]>([])
   const currentTraceId = ref<string | null>(null)
-  const loadingTraceQueue = ref(false)
   const traceError = ref<string | null>(null)
   const traceFilters = reactive<TraceFilters>({
     session_id: "",
@@ -34,16 +32,8 @@ export const useTraceStore = defineStore("traces", () => {
     traceItems.value = items
   }
 
-  const setTraceQueueItems = (items: TraceItem[]) => {
-    traceQueueItems.value = items
-  }
-
   const setCurrentTraceId = (traceId: string | null) => {
     currentTraceId.value = traceId
-  }
-
-  const setLoadingTraceQueue = (value: boolean) => {
-    loadingTraceQueue.value = value
   }
 
   const setTraceError = (message: string | null) => {
@@ -74,15 +64,11 @@ export const useTraceStore = defineStore("traces", () => {
 
   return {
     traceItems,
-    traceQueueItems,
     currentTraceId,
-    loadingTraceQueue,
     traceError,
     traceFilters,
     setTraceItems,
-    setTraceQueueItems,
     setCurrentTraceId,
-    setLoadingTraceQueue,
     setTraceError,
     setTraceFilters,
     resetTraceFilters,

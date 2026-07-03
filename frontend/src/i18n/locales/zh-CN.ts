@@ -69,9 +69,9 @@ export const zhCN = {
       actions: "会话操作",
     },
     traces: {
-      title: "Trace Queue",
-      expand: "展开 Trace 队列",
-      collapse: "收起 Trace 队列",
+      title: "Trace Observability",
+      expand: "展开 Trace 观测",
+      collapse: "收起 Trace 观测",
       meta: "{time} · {id} · {count} spans",
     },
     nav: {
@@ -452,6 +452,7 @@ export const zhCN = {
     actions: {
       reset: "重置",
       refreshQueue: "刷新 Trace 队列",
+      refreshSessions: "刷新 Sessions",
       refetch: "重新拉取",
       copyJson: "复制 JSON",
     },
@@ -463,14 +464,31 @@ export const zhCN = {
       teamId: "Team ID",
       workflowId: "Workflow ID",
       status: "状态",
+      keyword: "预览 / ID",
+      sessionStatus: "Session 状态",
+      activeSessions: "活跃 Session",
+      archivedSessions: "已归档 Session",
+      allSessions: "全部 Session",
       start: "开始",
       end: "结束",
+    },
+    sessions: {
+      title: "Sessions",
+      description: "按 Session ID、User ID 或预览内容定位对话，再查看对应 Trace。",
+      untitled: "未命名 Session",
+      traceCount: "{count} 条 Trace",
     },
     hierarchy: {
       description: "按父子关系查看 Agent、LLM、Tool 与 Hook",
     },
     empty: {
       selectRun: "选择一次 Agent Run",
+      selectSessionTitle: "选择一个 Session",
+      selectSessionDescription: "左侧筛选 Session 后，右侧会加载该会话对应的 Trace 观测。",
+      noSessionsTitle: "暂无 Session",
+      noSessionsDescription: "当前筛选条件没有匹配的会话。",
+      noSessionTracesTitle: "暂无 Trace",
+      noSessionTracesDescription: "该 Session 暂未写入 Trace，或观测数据尚未完成同步。",
       noSpansTitle: "暂无 spans",
       noSpansDescription: "该 Trace 可能尚未写入 Span 数据，或当前查询未命中明细。",
       selectSpanTitle: "点击 Span 查看详情",
@@ -647,6 +665,10 @@ export const zhCN = {
   settings: {
     title: "系统配置",
     description: "运行时参数与 Agent 模型路由配置",
+    tabs: {
+      runtime: "运行配置",
+      navigation: "导航配置",
+    },
     actions: {
       addModel: "新增模型",
       save: "保存",
@@ -687,6 +709,17 @@ export const zhCN = {
       mcpTokenPlaceholder: "YOUR_ACCESS_TOKEN",
       feishuWebhookLabel: "飞书 Webhook URL",
       feishuWebhookDescription: "飞书机器人通知 Webhook 地址",
+    },
+    navigation: {
+      sectionTitle: "导航栏编排",
+      sectionDescription: "预览当前导航顺序与分类，为后续用户自定义顺序、分组和可见性提供入口。",
+      note: "CVE、Assets、Collect 已独立归入安全数据分类，并通过分割线与运行、知识和 Settings 区域区分。",
+      groups: {
+        operations: "运行入口",
+        knowledge: "知识与控制",
+        securityData: "安全数据",
+        settings: "系统设置",
+      },
     },
     confirm: {
       deleteModelTitle: "删除模型",

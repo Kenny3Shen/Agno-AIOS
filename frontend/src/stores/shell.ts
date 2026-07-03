@@ -11,7 +11,6 @@ export const useShellStore = defineStore("shell", () => {
   const isDark = ref(true)
   const componentRenderKey = ref(0)
   const chatSessionsExpanded = ref(true)
-  const traceQueueExpanded = ref(true)
   const locale = ref<LocaleCode>("zh-CN")
 
   const shellThemeClass = computed(() => (isDark.value ? "dark" : "light"))
@@ -44,10 +43,6 @@ export const useShellStore = defineStore("shell", () => {
     chatSessionsExpanded.value = value
   }
 
-  const setTraceQueueExpanded = (value: boolean) => {
-    traceQueueExpanded.value = value
-  }
-
   const setLocale = (value: LocaleCode) => {
     locale.value = value
     document.documentElement.lang = value
@@ -61,7 +56,6 @@ export const useShellStore = defineStore("shell", () => {
     isDark,
     componentRenderKey,
     chatSessionsExpanded,
-    traceQueueExpanded,
     locale,
     shellThemeClass,
     setActiveTab,
@@ -71,7 +65,6 @@ export const useShellStore = defineStore("shell", () => {
     setDark,
     bumpRenderKey,
     setChatSessionsExpanded,
-    setTraceQueueExpanded,
     setLocale,
   }
 })

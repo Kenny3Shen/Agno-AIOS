@@ -1,93 +1,137 @@
 <template>
   <div class="trace-console">
-    <div class="trace-toolbar">
-      <div class="trace-filter-bar">
-        <el-input
-          v-model="filters.session_id"
-          size="small"
-          clearable
-          :placeholder="t('trace.filters.sessionId')"
-          class="trace-filter-input"
-          @keyup.enter="refresh"
-        />
-        <el-input
-          v-model="filters.run_id"
-          size="small"
-          clearable
-          :placeholder="t('trace.filters.runId')"
-          class="trace-filter-input"
-          @keyup.enter="refresh"
-        />
-        <el-input
-          v-model="filters.user_id"
-          size="small"
-          clearable
-          :placeholder="t('trace.filters.userId')"
-          class="trace-filter-input"
-          @keyup.enter="refresh"
-        />
-        <el-input
-          v-model="filters.agent_id"
-          size="small"
-          clearable
-          :placeholder="t('trace.filters.agentId')"
-          class="trace-filter-input"
-          @keyup.enter="refresh"
-        />
-        <el-input
-          v-model="filters.team_id"
-          size="small"
-          clearable
-          :placeholder="t('trace.filters.teamId')"
-          class="trace-filter-input"
-          @keyup.enter="refresh"
-        />
-        <el-input
-          v-model="filters.workflow_id"
-          size="small"
-          clearable
-          :placeholder="t('trace.filters.workflowId')"
-          class="trace-filter-input"
-          @keyup.enter="refresh"
-        />
-        <el-select
-          v-model="filters.status"
-          size="small"
-          clearable
-          :placeholder="t('trace.filters.status')"
-          class="trace-filter-select"
-        >
-          <el-option label="OK" value="OK" />
-          <el-option label="ERROR" value="ERROR" />
-          <el-option label="UNSET" value="UNSET" />
-        </el-select>
-        <el-date-picker
-          v-model="filters.timeRange"
-          type="datetimerange"
-          size="small"
-          unlink-panels
-          :start-placeholder="t('trace.filters.start')"
-          :end-placeholder="t('trace.filters.end')"
-          value-format="YYYY-MM-DDTHH:mm:ssXXX"
-          class="trace-date-picker"
-        />
-        <el-button size="small" plain class="cursor-pointer" :disabled="loading" @click="resetFilters">
-          {{ t('trace.actions.reset') }}
-        </el-button>
-        <el-tooltip :content="t('trace.actions.refreshQueue')" placement="bottom">
-          <el-button size="small" type="primary" :loading="loading" @click="refresh" class="cursor-pointer">
-            <el-icon><Refresh /></el-icon>
-          </el-button>
-        </el-tooltip>
-      </div>
-    </div>
+    <div class="trace-workbench trace-session-workbench">
+      <aside class="trace-session-panel">
+        <div class="trace-toolbar trace-session-toolbar">
+          <div class="trace-panel-header">
+            <div>
+              <p>{{ t('trace.sessions.title') }}</p>
+              <span>{{ t('trace.sessions.description') }}</span>
+            </div>
+            <strong>{{ filteredSessions.length }}</strong>
+          </div>
 
-    <div class="trace-workbench">
+          <div class="trace-filter-bar">
+            <el-input
+              v-model="sessionFilters.sessionId"
+              size="small"
+              clearable
+              :placeholder="t('trace.filters.sessionId')"
+              class="trace-filter-input"
+              @keyup.enter="refresh"
+            />
+            <el-input
+              v-model="sessionFilters.userId"
+              size="small"
+              clearable
+              :placeholder="t('trace.filters.userId')"
+              class="trace-filter-input"
+              @keyup.enter="refresh"
+            />
+            <el-input
+              v-model="sessionFilters.keyword"
+              size="small"
+              clearable
+              :placeholder="t('trace.filters.keyword')"
+              class="trace-filter-input"
+              @keyup.enter="refresh"
+            />
+            <el-select
+              v-model="sessionFilters.status"
+              size="small"
+              :placeholder="t('trace.filters.sessionStatus')"
+              class="trace-filter-select"
+            >
+              <el-option :label="t('trace.filters.activeSessions')" value="active" />
+              <el-option :label="t('trace.filters.archivedSessions')" value="archived" />
+              <el-option :label="t('trace.filters.allSessions')" value="all" />
+            </el-select>
+            <div class="trace-filter-actions">
+              <el-button size="small" plain class="cursor-pointer" :disabled="loading || loadingSessions" @click="resetFilters">
+                {{ t('trace.actions.reset') }}
+              </el-button>
+              <el-tooltip :content="t('trace.actions.refreshSessions')" placement="bottom">
+                <el-button size="small" type="primary" :loading="loading || loadingSessions" @click="refresh" class="cursor-pointer">
+                  <el-icon><Refresh /></el-icon>
+                </el-button>
+              </el-tooltip>
+            </div>
+          </div>
+        </div>
+
+        <div class="trace-session-list">
+          <el-skeleton v-if="loadingSessions && !sessions.length" :rows="5" animated />
+          <template v-else>
+            <button
+              v-for="session in filteredSessions"
+              :key="session.session_id"
+              type="button"
+              class="trace-session-card"
+              :class="{ active: selectedSessionId === session.session_id }"
+              @click="selectSession(session)"
+            >
+              <span class="trace-session-card-head">
+                <strong :title="session.preview || session.session_id">
+                  {{ session.preview || t('trace.sessions.untitled') }}
+                </strong>
+                <em>{{ formatSessionTime(session.updated_at || session.created_at) }}</em>
+              </span>
+              <span class="trace-session-id-grid">
+                <span class="trace-id-box">
+                  <small>{{ t('trace.filters.sessionId') }}</small>
+                  <b :title="session.session_id">{{ compactId(session.session_id) }}</b>
+                </span>
+                <span class="trace-id-box">
+                  <small>{{ t('trace.filters.userId') }}</small>
+                  <b :title="session.user_id || '-'">{{ compactId(session.user_id) }}</b>
+                </span>
+              </span>
+            </button>
+          </template>
+
+          <div v-if="!filteredSessions.length && !loadingSessions" class="empty-observe trace-session-empty">
+            <el-icon><Connection /></el-icon>
+            <strong>{{ t('trace.empty.noSessionsTitle') }}</strong>
+            <span>{{ t('trace.empty.noSessionsDescription') }}</span>
+          </div>
+        </div>
+      </aside>
+
       <main class="trace-canvas">
-        <div v-if="!selectedTrace" class="trace-empty-stage">
+        <div v-if="selectedSession" class="trace-session-trace-strip">
+          <div class="trace-selected-session">
+            <strong :title="selectedSession.session_id">{{ compactId(selectedSession.session_id) }}</strong>
+            <span>{{ t('trace.sessions.traceCount', { count: sessionTraceItems.length }) }}</span>
+          </div>
+          <div class="trace-session-trace-list">
+            <button
+              v-for="trace in sessionTraceItems"
+              :key="trace.trace_id"
+              type="button"
+              class="trace-session-trace-chip"
+              :class="{ active: selectedTrace?.trace_id === trace.trace_id, error: trace.status === 'ERROR' }"
+              @click="selectTraceById(trace.trace_id)"
+            >
+              <span class="trace-status-dot" :class="statusClass(trace.status)" />
+              <strong :title="trace.name || trace.trace_id">{{ trace.name || compactId(trace.trace_id) }}</strong>
+              <em>{{ formatDuration(trace.duration_ms) }}</em>
+            </button>
+          </div>
+        </div>
+
+        <div v-if="!selectedSession" class="trace-empty-stage">
           <div class="empty-observe">
             <el-icon><Aim /></el-icon>
-            <strong>{{ t('trace.empty.selectRun') }}</strong>
+            <strong>{{ t('trace.empty.selectSessionTitle') }}</strong>
+            <span>{{ t('trace.empty.selectSessionDescription') }}</span>
+          </div>
+        </div>
+
+        <div v-else-if="!selectedTrace" class="trace-empty-stage">
+          <div class="empty-observe">
+            <el-icon><Connection /></el-icon>
+            <strong>{{ t('trace.empty.noSessionTracesTitle') }}</strong>
+            <span>{{ t('trace.empty.noSessionTracesDescription') }}</span>
           </div>
         </div>
 
@@ -327,7 +371,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue"
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue"
 import { ElMessage } from "element-plus"
 import MarkdownIt from "markdown-it"
 import { useI18n } from "vue-i18n"
@@ -338,25 +382,32 @@ import {
   Cpu,
   Refresh,
 } from "@element-plus/icons-vue"
-import { useTracingApi } from "../composables/useApi"
+import { useChatHistory, useTracingApi } from "../composables/useApi"
 import { copyToClipboard } from "../lib/clipboard"
 import { useTraceStore } from "../stores/traces"
-import type { ParsedSpanPayload, SpanItem, SpanTreeNode, TraceItem } from "../types"
+import type { ChatSession, ParsedSpanPayload, SpanItem, SpanTreeNode, TraceItem } from "../types"
 
 const { t } = useI18n()
 const { loading, error, listTraces, getTrace } = useTracingApi()
+const { loadingSessions, listSessions } = useChatHistory()
 const markdownRenderer = new MarkdownIt({
   html: false,
   linkify: true,
   breaks: true,
 })
-const props = defineProps<{
-  selectedTraceId?: string | null
-}>()
 
-const limit = ref(20)
+type SessionStatusFilter = "active" | "archived" | "all"
+
 const traceStore = useTraceStore()
-const filters = traceStore.traceFilters
+const sessions = ref<ChatSession[]>([])
+const sessionTraceItems = ref<TraceItem[]>([])
+const selectedSessionId = ref<string | null>(null)
+const sessionFilters = reactive({
+  sessionId: "",
+  userId: "",
+  keyword: "",
+  status: "active" as SessionStatusFilter,
+})
 
 const selectedTrace = ref<TraceItem | null>(null)
 const spans = ref<SpanItem[]>([])
@@ -367,6 +418,31 @@ const activeDetailTab = ref<"info" | "metadata">("info")
 const loadingDetail = ref(false)
 const apiError = computed(() => error.value)
 let filterRefreshTimer: ReturnType<typeof window.setTimeout> | null = null
+
+const normalize = (value?: string | null) => (value || "").trim().toLowerCase()
+
+const filteredSessions = computed(() => {
+  const sessionId = normalize(sessionFilters.sessionId)
+  const userId = normalize(sessionFilters.userId)
+  const keyword = normalize(sessionFilters.keyword)
+  return sessions.value.filter((session) => {
+    if (sessionFilters.status === "active" && session.archived) return false
+    if (sessionFilters.status === "archived" && !session.archived) return false
+    if (sessionId && !normalize(session.session_id).includes(sessionId)) return false
+    if (userId && !normalize(session.user_id).includes(userId)) return false
+    if (keyword) {
+      const haystack = [
+        session.preview,
+        session.session_id,
+        session.user_id,
+      ].map(normalize).join(" ")
+      if (!haystack.includes(keyword)) return false
+    }
+    return true
+  })
+})
+
+const selectedSession = computed(() => sessions.value.find((session) => session.session_id === selectedSessionId.value) || null)
 
 const selectedTraceEvidence = computed(() => {
   const trace = selectedTrace.value
@@ -487,6 +563,16 @@ const formatDateTime = (value?: string | null) => {
   })
 }
 
+const formatSessionTime = (timestamp?: number | null) => {
+  if (!timestamp) return "-"
+  return new Date(timestamp * 1000).toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
 const toMs = (value?: string | null) => {
   if (!value) return null
   const ms = new Date(value).getTime()
@@ -555,31 +641,54 @@ const scrollDetailIntoView = () => {
   })
 }
 
-const refresh = async () => {
+const clearTraceSelection = () => {
   selectedTrace.value = null
   selectedSpan.value = null
   spans.value = []
   tree.value = []
+  sessionTraceItems.value = []
+}
 
-  const [start_time, end_time] = filters.timeRange || ["", ""]
+const refresh = async () => {
+  sessions.value = await listSessions()
+  await reconcileSessionSelection()
+}
+
+const reconcileSessionSelection = async () => {
+  const visibleSessions = filteredSessions.value
+  const currentStillVisible = visibleSessions.some((session) => session.session_id === selectedSessionId.value)
+  if (currentStillVisible && selectedSession.value) return
+
+  clearTraceSelection()
+  const exactSession = visibleSessions.find((session) => normalize(session.session_id) === normalize(sessionFilters.sessionId))
+  const nextSession = exactSession || (visibleSessions.length === 1 ? visibleSessions[0] : null)
+  selectedSessionId.value = nextSession?.session_id || null
+  if (nextSession) await loadSessionTraces(nextSession)
+}
+
+const selectSession = async (session: ChatSession) => {
+  if (selectedSessionId.value === session.session_id && sessionTraceItems.value.length) return
+  selectedSessionId.value = session.session_id
+  await loadSessionTraces(session)
+  scrollDetailIntoView()
+}
+
+const loadSessionTraces = async (session: ChatSession) => {
+  clearTraceSelection()
+  traceStore.setTraceFilters({
+    session_id: session.session_id,
+    user_id: session.user_id || "",
+  })
   const resp = await listTraces({
     page: 1,
-    limit: limit.value,
-    status: filters.status || "",
-    session_id: filters.session_id.trim() || undefined,
-    run_id: filters.run_id.trim() || undefined,
-    user_id: filters.user_id.trim() || undefined,
-    agent_id: filters.agent_id.trim() || undefined,
-    team_id: filters.team_id.trim() || undefined,
-    workflow_id: filters.workflow_id.trim() || undefined,
-    start_time: start_time || undefined,
-    end_time: end_time || undefined,
+    limit: 50,
+    session_id: session.session_id,
+    user_id: session.user_id || undefined,
   })
-
-  traceStore.setTraceItems(resp.items || [])
-  if (props.selectedTraceId) {
-    await selectTraceById(props.selectedTraceId)
-  }
+  const items = resp.items || []
+  sessionTraceItems.value = items
+  traceStore.setTraceItems(items)
+  if (items[0]) await selectTraceById(items[0].trace_id)
 }
 
 const refreshSelectedTrace = async () => {
@@ -627,6 +736,11 @@ const onSpanNodeClick = (node: SpanTreeNode) => {
 }
 
 const resetFilters = async () => {
+  sessionFilters.sessionId = ""
+  sessionFilters.userId = ""
+  sessionFilters.keyword = ""
+  sessionFilters.status = "active"
+  selectedSessionId.value = null
   traceStore.resetTraceFilters()
   await refresh()
 }
@@ -657,25 +771,10 @@ const copySpanJson = async () => {
 }
 
 watch(
-  () => props.selectedTraceId,
-  (traceId) => {
-    void selectTraceById(traceId)
-  }
-)
-
-watch(
-  () => [
-    filters.session_id,
-    filters.run_id,
-    filters.user_id,
-    filters.agent_id,
-    filters.team_id,
-    filters.workflow_id,
-    filters.status,
-    filters.timeRange?.[0] || "",
-    filters.timeRange?.[1] || "",
-  ],
-  scheduleFilterRefresh
+  () => [sessionFilters.sessionId, sessionFilters.userId, sessionFilters.keyword, sessionFilters.status],
+  () => {
+    scheduleFilterRefresh()
+  },
 )
 
 const handleExternalTraceSelect = (event: Event) => {
@@ -809,6 +908,206 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+.trace-session-workbench {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+}
+
+.trace-session-panel {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--trace-border);
+  background: var(--trace-panel);
+}
+
+.trace-session-toolbar {
+  display: grid;
+  gap: 12px;
+  border-bottom: 1px solid var(--trace-border);
+}
+
+.trace-filter-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.trace-session-list {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.trace-session-card {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid var(--trace-border);
+  border-radius: 8px;
+  background: var(--trace-panel-soft);
+  padding: 12px;
+  text-align: left;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.trace-session-card:hover {
+  border-color: color-mix(in srgb, var(--trace-blue) 52%, var(--trace-border));
+  background: color-mix(in srgb, var(--trace-blue-soft) 38%, var(--trace-panel));
+  transform: translateY(-1px);
+}
+
+.trace-session-card.active {
+  border-color: color-mix(in srgb, var(--trace-purple) 64%, var(--trace-border));
+  background: color-mix(in srgb, var(--trace-blue-soft) 55%, var(--trace-panel));
+  box-shadow: inset 3px 0 0 var(--trace-purple);
+}
+
+.trace-session-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.trace-session-card-head strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--trace-text);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.trace-session-card-head em {
+  flex: 0 0 auto;
+  color: var(--trace-muted);
+  font-size: 11px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.trace-session-id-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.trace-id-box {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid var(--trace-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--trace-panel) 76%, transparent);
+  padding: 7px 8px;
+}
+
+.trace-id-box small {
+  color: var(--trace-muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.trace-id-box b {
+  overflow: hidden;
+  color: var(--trace-text);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trace-session-empty {
+  margin-top: 24px;
+}
+
+.trace-session-trace-strip {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--trace-border);
+  background: var(--trace-panel);
+  padding: 10px 12px;
+}
+
+.trace-selected-session {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 2px;
+  max-width: 190px;
+}
+
+.trace-selected-session strong {
+  overflow: hidden;
+  color: var(--trace-text);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trace-selected-session span {
+  color: var(--trace-muted);
+  font-size: 11px;
+}
+
+.trace-session-trace-list {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 8px;
+  overflow: auto;
+}
+
+.trace-session-trace-chip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  max-width: 260px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--trace-border);
+  border-radius: 999px;
+  background: var(--trace-panel-soft);
+  padding: 6px 10px;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.trace-session-trace-chip:hover,
+.trace-session-trace-chip.active {
+  border-color: color-mix(in srgb, var(--trace-purple) 56%, var(--trace-border));
+  background: color-mix(in srgb, var(--trace-blue-soft) 50%, var(--trace-panel));
+}
+
+.trace-session-trace-chip.error {
+  border-color: color-mix(in srgb, var(--trace-red) 44%, var(--trace-border));
+}
+
+.trace-session-trace-chip strong {
+  overflow: hidden;
+  color: var(--trace-text);
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trace-session-trace-chip em {
+  color: var(--trace-muted);
+  font-size: 10px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
 .trace-detail-main,
 .trace-diagnostics,
 .trace-canvas,
@@ -897,19 +1196,26 @@ onUnmounted(() => {
 }
 
 .trace-canvas {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
   height: 100%;
   background: var(--trace-bg);
 }
 
 .trace-empty-stage {
   display: grid;
+  flex: 1 1 auto;
   height: 100%;
+  min-height: 0;
   place-items: center;
   padding: 24px;
 }
 
 .trace-detail-shell {
   display: flex;
+  flex: 1 1 auto;
   height: 100%;
   min-height: 0;
   flex-direction: column;

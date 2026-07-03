@@ -104,7 +104,7 @@
             <div class="ag-nav-divider" aria-hidden="true" />
 
             <div class="ag-nav-list">
-              <template v-for="item in primaryNavItems" :key="item.id">
+              <template v-for="item in mainNavItems" :key="item.id">
                 <div v-if="item.id === 'chat'" class="ag-nav-chat-block">
                   <div class="ag-nav-chat-row">
                     <button
@@ -212,78 +212,6 @@
                   </transition>
                 </div>
 
-                <div v-else-if="item.id === 'trace'" class="ag-nav-trace-block">
-                  <div class="ag-nav-chat-row">
-                    <button
-                      type="button"
-                      class="ag-nav-item ag-nav-item-main soc-focus"
-                      :class="{ active: item.id === activeTab }"
-                      :aria-current="item.id === activeTab ? 'page' : undefined"
-                      @click="selectNav(item.id)"
-                    >
-                      <span class="ag-nav-icon">
-                        <el-icon>
-                          <component :is="item.icon" />
-                        </el-icon>
-                      </span>
-
-                      <span class="ag-nav-text min-w-0 flex-1">
-                        <span class="ag-nav-label">{{ item.label }}</span>
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      class="ag-chat-session-toggle"
-                      :aria-label="traceQueueExpanded ? t('shell.traces.collapse') : t('shell.traces.expand')"
-                      :aria-expanded="traceQueueExpanded"
-                      @click.stop="toggleTraceQueue"
-                    >
-                      <el-icon>
-                        <ArrowDown v-if="traceQueueExpanded" />
-                        <ArrowRight v-else />
-                      </el-icon>
-                    </button>
-                  </div>
-
-                  <transition name="fade">
-                    <div
-                      v-if="traceQueueExpanded && !isSidebarCompact"
-                      class="ag-trace-queue-panel"
-                    >
-                      <button type="button" class="ag-chat-new-session" :disabled="loadingTraceQueue" @click="loadSidebarTraceQueue">
-                        <el-icon><Refresh /></el-icon>
-                        <span>{{ t("shell.actions.refreshTraces") }}</span>
-                      </button>
-
-                      <div class="ag-chat-session-head">
-                        <span>{{ t("shell.traces.title") }}</span>
-                        <strong>{{ traceQueueItems.length }}</strong>
-                      </div>
-
-                      <button
-                        v-for="trace in traceQueueItems"
-                        :key="trace.trace_id"
-                        type="button"
-                        class="ag-trace-queue-item"
-                        :class="{ active: currentTraceId === trace.trace_id, error: isTraceError(trace) }"
-                        :title="trace.name || trace.trace_id"
-                        @click="selectTraceFromSidebar(trace)"
-                      >
-                        <span class="ag-trace-status" :class="traceStatusTone(trace)" />
-                        <span class="ag-chat-session-copy">
-                          <strong>{{ trace.name || trace.trace_id }}</strong>
-                          <em>{{ formatTraceMeta(trace) }}</em>
-                        </span>
-                      </button>
-
-                      <div v-if="!traceQueueItems.length && !loadingTraceQueue" class="ag-chat-session-empty">
-                        {{ t("shell.actions.noTraces") }}
-                      </div>
-                    </div>
-                  </transition>
-                </div>
-
                 <button
                   v-else
                   type="button"
@@ -309,7 +237,37 @@
               </template>
             </div>
 
-            <div class="ag-nav-divider" aria-hidden="true" />
+            <template v-if="securityDataNavItems.length">
+              <div class="ag-nav-divider" aria-hidden="true" />
+
+              <div class="ag-nav-list ag-nav-security-data">
+                <button
+                  v-for="item in securityDataNavItems"
+                  :key="item.id"
+                  type="button"
+                  class="ag-nav-item soc-focus"
+                  :class="{ active: item.id === activeTab }"
+                  :aria-current="item.id === activeTab ? 'page' : undefined"
+                  @click="selectNav(item.id)"
+                >
+                  <span class="ag-nav-icon">
+                    <el-icon>
+                      <component :is="item.icon" />
+                    </el-icon>
+                  </span>
+
+                  <span class="ag-nav-text min-w-0 flex-1">
+                    <span class="ag-nav-label">{{ item.label }}</span>
+                  </span>
+
+                  <span v-if="item.badge" class="ag-nav-badge">
+                    {{ item.badge }}
+                  </span>
+                </button>
+              </div>
+            </template>
+
+            <div v-if="visibleSettingsItem" class="ag-nav-divider" aria-hidden="true" />
 
             <button
               v-if="visibleSettingsItem"
@@ -495,7 +453,6 @@ import {
   ArrowRight,
   Calendar,
   ChatDotRound,
-  Clock,
   Close,
   Connection,
   CopyDocument,
@@ -537,15 +494,14 @@ import Trace from "./components/Trace.vue"
 import Skills from "./components/Skills.vue"
 import MCP from "./components/MCP.vue"
 import Knowledge from "./components/Knowledge.vue"
-import { useChatHistory, useSettingsApi, useTracingApi } from "./composables/useApi"
+import { useChatHistory, useSettingsApi } from "./composables/useApi"
 import { setI18nLocale } from "./i18n"
 import { clearStoredAuthToken, fetchCurrentUser, getStoredAuthToken, logout as authLogout, type AuthClientFallbackKey } from "./lib/authClient"
 import { copyToClipboard } from "./lib/clipboard"
 import { useAuthStore } from "./stores/auth"
 import { useSessionStore } from "./stores/sessions"
 import { useShellStore } from "./stores/shell"
-import { useTraceStore } from "./stores/traces"
-import type { AuthUser, OsControlModule, TraceItem } from "./types"
+import type { AuthUser, OsControlModule } from "./types"
 
 type ModuleNavId =
   | "dashboard"
@@ -607,7 +563,6 @@ const navItems = computed<NavItem[]>(() => [
   { id: "mcp", label: t("shell.nav.mcp.label"), description: t("shell.nav.mcp.description"), icon: Connection, tone: "yellow" },
   { id: "knowledge", label: t("shell.nav.knowledge.label"), description: t("shell.nav.knowledge.description"), icon: Files, tone: "green" },
   { id: "trace", label: t("shell.nav.trace.label"), description: t("shell.nav.trace.description"), icon: DataAnalysis, tone: "green" },
-  { id: "sessions", label: t("shell.nav.sessions.label"), description: t("shell.nav.sessions.description"), icon: Clock, tone: "blue" },
   { id: "studio", label: t("shell.nav.studio.label"), description: t("shell.nav.studio.description"), icon: MagicStick, tone: "yellow" },
   { id: "memory", label: t("shell.nav.memory.label"), description: t("shell.nav.memory.description"), icon: Cpu, tone: "green" },
   { id: "metrics", label: t("shell.nav.metrics.label"), description: t("shell.nav.metrics.description"), icon: DataAnalysis, tone: "blue" },
@@ -680,12 +635,15 @@ const canAccessNav = (id: NavId) => {
   return permission ? authStore.hasPermission(permission) : true
 }
 const settingsItem = computed<NavItem>(() => navItems.value.find((item) => item.id === "settings") as NavItem)
+const securityDataNavIds = new Set<NavId>(["cve", "assets", "collect"])
 const visibleNavItems = computed<NavItem[]>(() => navItems.value.filter((item) => canAccessNav(item.id)))
 const visibleSettingsItem = computed<NavItem | null>(() => {
   const item = settingsItem.value
   return canAccessNav(item.id) ? item : null
 })
 const primaryNavItems = computed<NavItem[]>(() => visibleNavItems.value.filter((item) => item.id !== "settings"))
+const mainNavItems = computed<NavItem[]>(() => primaryNavItems.value.filter((item) => !securityDataNavIds.has(item.id)))
+const securityDataNavItems = computed<NavItem[]>(() => primaryNavItems.value.filter((item) => securityDataNavIds.has(item.id)))
 const moduleNavItems = computed<NavItem[]>(() => [dashboardItem.value, ...navItems.value])
 const visibleModuleNavItems = computed<NavItem[]>(() => [dashboardItem.value, ...visibleNavItems.value.filter((item) => item.id !== "dashboard")])
 const navItemById = computed<Record<ModuleNavId, NavItem>>(() => (
@@ -693,7 +651,7 @@ const navItemById = computed<Record<ModuleNavId, NavItem>>(() => (
 ))
 const homeSections = computed<HomeSection[]>(() => [
   { title: t("shell.sections.operations"), items: [navItemById.value.dashboard, navItemById.value.chat, navItemById.value.trace] },
-  { title: t("shell.sections.controlPlane"), items: [navItemById.value.sessions, navItemById.value.studio, navItemById.value.memory, navItemById.value.metrics] },
+  { title: t("shell.sections.controlPlane"), items: [navItemById.value.studio, navItemById.value.memory, navItemById.value.metrics] },
   { title: t("shell.sections.governance"), items: [navItemById.value.evaluation, navItemById.value.approvals, navItemById.value.scheduler] },
   { title: t("shell.sections.securityData"), items: [navItemById.value.skills, navItemById.value.mcp, navItemById.value.knowledge, navItemById.value.cve, navItemById.value.assets, navItemById.value.collect] },
 ].map((section) => ({
@@ -709,7 +667,6 @@ const isMobileViewport = () => typeof window !== "undefined" && window.innerWidt
 const authStore = useAuthStore()
 const shellStore = useShellStore()
 const sessionStore = useSessionStore()
-const traceStore = useTraceStore()
 
 const {
   currentUser,
@@ -725,7 +682,6 @@ const {
   isDark,
   componentRenderKey,
   chatSessionsExpanded,
-  traceQueueExpanded,
   locale,
 } = storeToRefs(shellStore)
 const {
@@ -733,11 +689,6 @@ const {
   currentChatSessionId,
   loadingSessions,
 } = storeToRefs(sessionStore)
-const {
-  traceQueueItems,
-  currentTraceId,
-  loadingTraceQueue,
-} = storeToRefs(traceStore)
 
 shellStore.setIsMobile(isMobileViewport())
 const currentModelName = ref("DeepSeek V4 Pro")
@@ -754,7 +705,6 @@ const authClientFallbacks = computed<Record<AuthClientFallbackKey, string>>(() =
 
 const { fetchModels } = useSettingsApi()
 const { listSessions, archiveSession } = useChatHistory()
-const { listTraces: listSidebarTraces } = useTracingApi()
 
 watch(locale, (value) => setI18nLocale(value), { immediate: true })
 
@@ -780,9 +730,6 @@ const currentUserId = computed(() => currentUser.value?.id || currentUser.value?
 const activeComponentProps = computed(() => {
   const tab = activeTab.value as NavId
   const baseProps = { currentUserId: currentUserId.value, currentUserInitials: userInitials.value }
-  if (tab === "trace") {
-    return { ...baseProps, selectedTraceId: currentTraceId.value }
-  }
   if (tab !== "home" && osControlTabs.has(tab as OsControlModule)) {
     return { ...baseProps, osModule: tab }
   }
@@ -858,42 +805,6 @@ const formatSessionTime = (timestamp: number) => {
   })
 }
 
-const formatTraceTime = (iso?: string | null) => {
-  if (!iso) return ""
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return ""
-  return date.toLocaleString(locale.value, {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-}
-
-const compactTraceId = (value?: string | null) => {
-  const text = (value || "").trim()
-  if (!text) return "-"
-  return text.length > 14 ? `${text.slice(0, 6)}...${text.slice(-4)}` : text
-}
-
-const isTraceError = (trace: TraceItem) => {
-  return trace.status === "ERROR" || Number(trace.error_count || 0) > 0
-}
-
-const traceStatusTone = (trace: TraceItem) => {
-  if (isTraceError(trace)) return "error"
-  if (trace.status === "OK") return "ok"
-  return "other"
-}
-
-const formatTraceMeta = (trace: TraceItem) => {
-  return t("shell.traces.meta", {
-    time: formatTraceTime(trace.start_time),
-    id: compactTraceId(trace.trace_id),
-    count: trace.total_spans ?? 0,
-  })
-}
-
 const loadSidebarChatSessions = async () => {
   if (!authStore.hasPermission("session:read:own")) {
     chatSessions.value = []
@@ -911,24 +822,6 @@ const loadSidebarChatSessions = async () => {
   }
 }
 
-const loadSidebarTraceQueue = async () => {
-  if (!authStore.hasPermission("trace:read:own")) {
-    traceQueueItems.value = []
-    return
-  }
-  traceStore.setLoadingTraceQueue(true)
-  traceStore.setTraceError(null)
-  try {
-    const response = await listSidebarTraces({ page: 1, limit: 12 })
-    traceQueueItems.value = response.items || []
-  } catch (error) {
-    traceQueueItems.value = []
-    traceStore.setTraceError(error instanceof Error ? error.message : t("shell.errors.traceQueueLoadFailed"))
-  } finally {
-    traceStore.setLoadingTraceQueue(false)
-  }
-}
-
 const dispatchChatEvent = (name: string, detail?: Record<string, unknown>) => {
   void nextTick(() => {
     window.dispatchEvent(new CustomEvent(name, { detail }))
@@ -939,12 +832,6 @@ const toggleChatSessions = () => {
   if (!authStore.hasPermission("session:read:own")) return
   chatSessionsExpanded.value = !chatSessionsExpanded.value
   if (chatSessionsExpanded.value) void loadSidebarChatSessions()
-}
-
-const toggleTraceQueue = () => {
-  if (!authStore.hasPermission("trace:read:own")) return
-  traceQueueExpanded.value = !traceQueueExpanded.value
-  if (traceQueueExpanded.value) void loadSidebarTraceQueue()
 }
 
 const toggleSessionMenu = (sessionId: string) => {
@@ -975,14 +862,6 @@ const createSidebarChat = () => {
   activeTab.value = "chat"
   userMenuOpen.value = false
   dispatchChatEvent("agno-aios-chat-new")
-  closeSidebar()
-}
-
-const selectTraceFromSidebar = (trace: TraceItem) => {
-  currentTraceId.value = trace.trace_id
-  activeTab.value = "trace"
-  userMenuOpen.value = false
-  dispatchChatEvent("agno-aios-trace-select", { traceId: trace.trace_id })
   closeSidebar()
 }
 
@@ -1030,7 +909,6 @@ const toggleSidebarSize = () => {
 const refreshWorkspace = () => {
   componentRenderKey.value += 1
   void loadCurrentModel()
-  if (authStore.hasPermission("trace:read:own")) void loadSidebarTraceQueue()
 }
 
 const applyTheme = (dark: boolean) => {
@@ -1053,7 +931,6 @@ const handleAuthenticated = (user: AuthUser) => {
   currentUser.value = user
   void loadCurrentModel()
   if (authStore.hasPermission("session:read:own")) void loadSidebarChatSessions()
-  if (authStore.hasPermission("trace:read:own")) void loadSidebarTraceQueue()
 }
 
 const restoreSession = async () => {
@@ -1066,7 +943,6 @@ const restoreSession = async () => {
   try {
     currentUser.value = await fetchCurrentUser(token, { fallbacks: authClientFallbacks.value })
     if (authStore.hasPermission("session:read:own")) void loadSidebarChatSessions()
-    if (authStore.hasPermission("trace:read:own")) void loadSidebarTraceQueue()
   } catch {
     clearStoredAuthToken()
     currentUser.value = null

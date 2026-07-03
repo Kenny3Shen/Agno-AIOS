@@ -69,9 +69,9 @@ export const enUS = {
       actions: "Session actions",
     },
     traces: {
-      title: "Trace Queue",
-      expand: "Expand trace queue",
-      collapse: "Collapse trace queue",
+      title: "Trace Observability",
+      expand: "Expand trace observability",
+      collapse: "Collapse trace observability",
       meta: "{time} · {id} · {count} spans",
     },
     nav: {
@@ -454,6 +454,7 @@ export const enUS = {
     actions: {
       reset: "Reset",
       refreshQueue: "Refresh trace queue",
+      refreshSessions: "Refresh sessions",
       refetch: "Refetch",
       copyJson: "Copy JSON",
     },
@@ -465,14 +466,31 @@ export const enUS = {
       teamId: "Team ID",
       workflowId: "Workflow ID",
       status: "Status",
+      keyword: "Preview / ID",
+      sessionStatus: "Session status",
+      activeSessions: "Active sessions",
+      archivedSessions: "Archived sessions",
+      allSessions: "All sessions",
       start: "Start",
       end: "End",
+    },
+    sessions: {
+      title: "Sessions",
+      description: "Find a conversation by Session ID, User ID, or preview, then inspect its traces.",
+      untitled: "Untitled session",
+      traceCount: "{count} traces",
     },
     hierarchy: {
       description: "View Agent, LLM, Tool, and Hook spans by parent-child relationship",
     },
     empty: {
       selectRun: "Select an Agent Run",
+      selectSessionTitle: "Select a session",
+      selectSessionDescription: "Filter sessions on the left to load the corresponding trace observation here.",
+      noSessionsTitle: "No sessions",
+      noSessionsDescription: "No conversations match the current filters.",
+      noSessionTracesTitle: "No traces",
+      noSessionTracesDescription: "This session has not written trace data yet, or observability data is still syncing.",
       noSpansTitle: "No spans",
       noSpansDescription: "This Trace may not have written Span data yet, or the current query did not match details.",
       selectSpanTitle: "Select a Span for details",
@@ -649,6 +667,10 @@ export const enUS = {
   settings: {
     title: "System settings",
     description: "Runtime parameters and Agent model routing",
+    tabs: {
+      runtime: "Runtime config",
+      navigation: "Navigation config",
+    },
     actions: {
       addModel: "Add model",
       save: "Save",
@@ -689,6 +711,17 @@ export const enUS = {
       mcpTokenPlaceholder: "YOUR_ACCESS_TOKEN",
       feishuWebhookLabel: "Feishu Webhook URL",
       feishuWebhookDescription: "Feishu bot notification webhook address",
+    },
+    navigation: {
+      sectionTitle: "Navigation layout",
+      sectionDescription: "Preview the current navigation order and groups as the entry point for user-defined ordering, grouping, and visibility.",
+      note: "CVE, Assets, and Collect now live in a separate security data group split from operations, knowledge, and Settings.",
+      groups: {
+        operations: "Operations",
+        knowledge: "Knowledge and control",
+        securityData: "Security data",
+        settings: "System settings",
+      },
     },
     confirm: {
       deleteModelTitle: "Delete model",
