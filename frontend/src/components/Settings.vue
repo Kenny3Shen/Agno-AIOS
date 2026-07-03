@@ -189,13 +189,6 @@
         </div>
       </section>
 
-      <div class="settings-note">
-        <i18n-t keypath="settings.runtime.note" tag="span">
-          <template #file>
-            <span class="font-mono">tmp/model_config.json</span>
-          </template>
-        </i18n-t>
-      </div>
     </template>
   </div>
 </template>

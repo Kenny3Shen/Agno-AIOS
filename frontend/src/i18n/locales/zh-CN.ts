@@ -668,8 +668,6 @@ export const zhCN = {
     runtime: {
       sectionTitle: "运行时参数",
       sectionDescription: "非 LLM 的平台参数，修改后立即写入当前进程环境变量。",
-      note:
-        "敏感字段返回时会脱敏；未修改的脱敏值不会覆盖真实密钥。模型配置保存在 {file}，运行时参数来自环境变量白名单。",
       mcpServerLabel: "MCP Server URL",
       mcpServerDescription: "Agent 连接 FastMCP 协议入口的地址",
       mcpTokenLabel: "MCP Access Token",

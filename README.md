@@ -372,7 +372,7 @@ cd frontend
 
 - `.env`
 - `logs/`
-- `tmp/`
+- `data/config/` 中的本地运行配置文件
 - `.playwright-check/`
 - `frontend/dist-test/`
 - `*.db`

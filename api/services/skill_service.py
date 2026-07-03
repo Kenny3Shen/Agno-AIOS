@@ -4,24 +4,18 @@ from pathlib import Path
 
 import yaml
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+from api.services.runtime_paths import CONFIG_DIR, PROJECT_ROOT, resolve_project_path
+
 DEFAULT_SKILLS_DIR = PROJECT_ROOT / "api" / "agent" / "skills"
-DEFAULT_SKILLS_CONFIG_FILE = PROJECT_ROOT / "tmp" / "skills_config.json"
-
-
-def _resolve_project_path(value: str | Path) -> Path:
-    path = Path(value).expanduser()
-    if path.is_absolute():
-        return path
-    return PROJECT_ROOT / path
+DEFAULT_SKILLS_CONFIG_FILE = CONFIG_DIR / "skills_config.json"
 
 
 def get_skills_dir() -> Path:
-    return _resolve_project_path(os.getenv("AGNO_SKILLS_DIR") or DEFAULT_SKILLS_DIR)
+    return resolve_project_path(os.getenv("AGNO_SKILLS_DIR") or DEFAULT_SKILLS_DIR)
 
 
 def get_skills_config_file() -> Path:
-    return _resolve_project_path(
+    return resolve_project_path(
         os.getenv("AGNO_SKILLS_CONFIG_FILE") or DEFAULT_SKILLS_CONFIG_FILE
     )
 

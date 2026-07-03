@@ -1,8 +1,12 @@
 import json
-from pathlib import Path
+import os
 from typing import Any, cast
 
-MODEL_CONFIG_FILE = Path("tmp/model_config.json")
+from api.services.runtime_paths import CONFIG_DIR, resolve_project_path
+
+MODEL_CONFIG_FILE = resolve_project_path(
+    os.getenv("AGNO_MODEL_CONFIG_FILE") or CONFIG_DIR / "model_config.json"
+)
 
 DEFAULT_MODELS: list[dict[str, Any]] = [
     {

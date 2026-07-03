@@ -670,8 +670,6 @@ export const enUS = {
     runtime: {
       sectionTitle: "Runtime parameters",
       sectionDescription: "Non-LLM platform parameters are written to the current process environment immediately.",
-      note:
-        "Sensitive fields are masked when returned. Unchanged masked values will not overwrite real secrets. Model configuration is stored in {file}; runtime parameters come from the environment allowlist.",
       mcpServerLabel: "MCP Server URL",
       mcpServerDescription: "Address for the Agent FastMCP protocol entrypoint",
       mcpTokenLabel: "MCP Access Token",

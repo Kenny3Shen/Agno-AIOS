@@ -9,6 +9,8 @@ wheels/
 .logs/
 logs/
 tmp/
+data/config/*
+!data/config/.gitkeep
 *.db
 .shared
 .run_update_cve.lock
