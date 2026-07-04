@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 from api.auth.permissions import assert_owned_resource
 from api.routes import chat
-from api.services import llm_service
+from api.services import llm_service, security_run_runtime
 
 
 def actor(user_id: str, role: str = "user"):
@@ -46,7 +46,7 @@ class ChatSessionPermissionsTest(TestCase):
         self.assertIn('require_permission("session:write:own")', inspect.getsource(chat.remove_session))
 
     def test_chat_provider_block_falls_back_to_lightweight_agent(self):
-        source = inspect.getsource(llm_service.stream_chat_with_agent)
+        source = inspect.getsource(security_run_runtime.stream_chat_with_agent)
 
         self.assertIn("_is_provider_block_error", source)
         self.assertIn("_build_fallback_agent", source)
@@ -54,7 +54,9 @@ class ChatSessionPermissionsTest(TestCase):
 
     def test_provider_block_detector_matches_openai_status_error_text(self):
         self.assertTrue(
-            llm_service._is_provider_block_error(RuntimeError("Your request was blocked."))
+            security_run_runtime._is_provider_block_error(
+                RuntimeError("Your request was blocked.")
+            )
         )
 
 
