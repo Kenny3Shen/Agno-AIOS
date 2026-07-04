@@ -5,10 +5,29 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from agno.knowledge.embedder import Embedder
 from agno.vectordb.search import SearchType
 
 from api.services import knowledge_document_service
+from api.services import knowledge_ingest_service
 from api.services import knowledge_service
+
+
+class FakeEmbedder(Embedder):
+    def __init__(self) -> None:
+        super().__init__(dimensions=3)
+
+    def get_embedding(self, text: str) -> list[float]:
+        return [0.0, 0.0, float(len(text))]
+
+    def get_embedding_and_usage(self, text: str) -> tuple[list[float], None]:
+        return self.get_embedding(text), None
+
+    async def async_get_embedding(self, text: str) -> list[float]:
+        return self.get_embedding(text)
+
+    async def async_get_embedding_and_usage(self, text: str) -> tuple[list[float], None]:
+        return self.get_embedding_and_usage(text)
 
 
 class KnowledgePipelineContractTest(unittest.TestCase):
@@ -23,11 +42,27 @@ class KnowledgePipelineContractTest(unittest.TestCase):
 
         for filename, (expected_strategy, expected_reader) in cases.items():
             with self.subTest(filename=filename):
-                profile = knowledge_service.knowledge_profile_for_filename(filename)
+                profile = knowledge_ingest_service.profile_for_filename(filename)
                 self.assertEqual(profile.strategy, expected_strategy)
 
-                reader = knowledge_service.reader_for_profile(profile)
+                reader = knowledge_ingest_service.reader_for_profile(
+                    profile,
+                    knowledge_ingest_service.KnowledgeReaderConfig(
+                        embedder=FakeEmbedder(),
+                        chunk_size=1200,
+                        chunk_overlap=160,
+                        code_chunk_size=1800,
+                        semantic_threshold=0.52,
+                    ),
+                    filename,
+                )
                 self.assertEqual(reader.__class__.__name__, expected_reader)
+
+    def test_knowledge_service_keeps_compatible_profile_interface(self) -> None:
+        profile = knowledge_service.knowledge_profile_for_filename("runbook.md")
+
+        self.assertEqual(profile.strategy, "markdown")
+        self.assertEqual(knowledge_service.reader_for_profile(profile).__class__.__name__, "MarkdownReader")
 
     def test_status_exposes_supported_suffixes_and_search_type(self) -> None:
         original = os.environ.get("AGNO_KNOWLEDGE_SEARCH_TYPE")
@@ -43,11 +78,22 @@ class KnowledgePipelineContractTest(unittest.TestCase):
             else:
                 os.environ["AGNO_KNOWLEDGE_SEARCH_TYPE"] = original
 
-        status = knowledge_service.pipeline_status()
+        status = knowledge_ingest_service.pipeline_status(
+            search_type=knowledge_service.search_type_from_env().value,
+            vector_score_weight=0.55,
+            prefix_match=False,
+            content_language="english",
+            semantic_threshold=0.52,
+            code_chunk_size=1800,
+        )
         self.assertIn(".md", status["supported_suffixes"])
         self.assertIn(".csv", status["supported_suffixes"])
         self.assertIn(".py", status["supported_suffixes"])
         self.assertIn(status["search_type"], {"vector", "keyword", "hybrid"})
+
+        service_status = knowledge_service.pipeline_status()
+        self.assertEqual(service_status["search_type"], "hybrid")
+        self.assertEqual(service_status["code_chunk_size"], knowledge_service.CODE_CHUNK_SIZE)
 
     def test_owner_visibility_hides_foreign_knowledge_content(self) -> None:
         owned = SimpleNamespace(metadata={"user_id": "u1"})

@@ -4,26 +4,13 @@ import importlib
 import os
 import threading
 import warnings
-from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from agno.knowledge.chunking.code import CodeChunking
-from agno.knowledge.chunking.document import DocumentChunking
-from agno.knowledge.chunking.markdown import MarkdownChunking
-from agno.knowledge.chunking.row import RowChunking
-from agno.knowledge.chunking.recursive import RecursiveChunking
-from agno.knowledge.chunking.semantic import SemanticChunking
 from agno.knowledge.document import Document
 from agno.knowledge.embedder import Embedder
 from agno.knowledge.knowledge import Knowledge
-from agno.knowledge.reader.csv_reader import CSVReader
-from agno.knowledge.reader.docx_reader import DocxReader
-from agno.knowledge.reader.json_reader import JSONReader
-from agno.knowledge.reader.markdown_reader import MarkdownReader
-from agno.knowledge.reader.pdf_reader import PDFReader
-from agno.knowledge.reader.text_reader import TextReader
 from agno.knowledge.reranker.base import Reranker
 from agno.vectordb.distance import Distance
 from agno.vectordb.pgvector import PgVector
@@ -43,6 +30,19 @@ from api.services.knowledge_document_service import (
     owner_metadata as _owner_metadata,
     result_from_document as _result_from_document,
     safe_metadata as _safe_metadata,
+)
+from api.services.knowledge_ingest_service import (
+    PROFILE_CSV as _PROFILE_CSV,
+    PROFILE_JSON as _PROFILE_JSON,
+    PROFILE_MARKDOWN as _PROFILE_MARKDOWN,
+    PROFILE_TEXT as _PROFILE_TEXT,
+    SUPPORTED_FILE_SUFFIXES,
+    KnowledgeIngestProfile,
+    KnowledgeReader,
+    KnowledgeReaderConfig,
+    pipeline_status as _ingest_pipeline_status,
+    profile_for_filename as _profile_for_filename,
+    reader_for_profile as _reader_for_profile,
 )
 
 if TYPE_CHECKING:
@@ -116,95 +116,6 @@ _torch_import_error: Exception | None = None
 _embedding_model_lock = threading.Lock()
 _reranker_model_lock = threading.Lock()
 _knowledge_lock = threading.Lock()
-
-
-@dataclass(frozen=True)
-class KnowledgeIngestProfile:
-    suffixes: tuple[str, ...]
-    strategy: str
-    reader: str
-    label: str
-    description: str
-
-
-MARKDOWN_SUFFIXES = (".md", ".markdown", ".mdown", ".mkd")
-CSV_SUFFIXES = (".csv", ".tsv")
-JSON_SUFFIXES = (".json", ".jsonl")
-CODE_SUFFIXES = (
-    ".py",
-    ".js",
-    ".jsx",
-    ".ts",
-    ".tsx",
-    ".vue",
-    ".go",
-    ".rs",
-    ".java",
-    ".c",
-    ".cc",
-    ".cpp",
-    ".h",
-    ".hpp",
-    ".cs",
-    ".php",
-    ".rb",
-    ".sh",
-    ".sql",
-)
-STRUCTURED_DOC_SUFFIXES = (".pdf", ".docx")
-TEXT_SUFFIXES = (".txt", ".log", ".rst", ".yaml", ".yml", ".toml")
-
-SUPPORTED_FILE_SUFFIXES = (
-    *MARKDOWN_SUFFIXES,
-    *CSV_SUFFIXES,
-    *JSON_SUFFIXES,
-    *CODE_SUFFIXES,
-    *STRUCTURED_DOC_SUFFIXES,
-    *TEXT_SUFFIXES,
-)
-
-_PROFILE_MARKDOWN = KnowledgeIngestProfile(
-    suffixes=MARKDOWN_SUFFIXES,
-    strategy="markdown",
-    reader="MarkdownReader",
-    label="Markdown",
-    description="按标题结构保留层级，适合 runbook、设计文档和知识手册。",
-)
-_PROFILE_CSV = KnowledgeIngestProfile(
-    suffixes=CSV_SUFFIXES,
-    strategy="csv_row",
-    reader="CSVReader",
-    label="CSV Row",
-    description="每行一个逻辑 chunk，适合资产、告警和漏洞清单。",
-)
-_PROFILE_JSON = KnowledgeIngestProfile(
-    suffixes=JSON_SUFFIXES,
-    strategy="json",
-    reader="JSONReader",
-    label="JSON",
-    description="对象和数组元素先结构化读取，再按递归策略切分长字段。",
-)
-_PROFILE_CODE = KnowledgeIngestProfile(
-    suffixes=CODE_SUFFIXES,
-    strategy="code",
-    reader="TextReader",
-    label="Code",
-    description="按函数、类和语法节点边界切分，适合脚本和源码。",
-)
-_PROFILE_STRUCTURED = KnowledgeIngestProfile(
-    suffixes=STRUCTURED_DOC_SUFFIXES,
-    strategy="document",
-    reader="DocumentReader",
-    label="Document",
-    description="按段落、页和章节保留文档结构，适合 PDF/DOCX。",
-)
-_PROFILE_TEXT = KnowledgeIngestProfile(
-    suffixes=TEXT_SUFFIXES,
-    strategy="semantic",
-    reader="TextReader",
-    label="Semantic",
-    description="按语义边界切分通用文本，提升自然语言检索命中质量。",
-)
 
 
 def _load_torch() -> Any | None:
@@ -522,104 +433,51 @@ def search_type_from_env() -> SearchType:
     return _search_type_from_name(os.getenv("AGNO_KNOWLEDGE_SEARCH_TYPE", "hybrid"))
 
 
-def knowledge_profile_for_filename(filename: str | None) -> KnowledgeIngestProfile:
-    suffix = Path(filename or "").suffix.lower()
-    if suffix in MARKDOWN_SUFFIXES:
-        return _PROFILE_MARKDOWN
-    if suffix in CSV_SUFFIXES:
-        return _PROFILE_CSV
-    if suffix in JSON_SUFFIXES:
-        return _PROFILE_JSON
-    if suffix in CODE_SUFFIXES:
-        return _PROFILE_CODE
-    if suffix in STRUCTURED_DOC_SUFFIXES:
-        return _PROFILE_STRUCTURED
-    return _PROFILE_TEXT
-
-
-def _semantic_chunking() -> SemanticChunking:
-    return SemanticChunking(
-        embedder=_get_embedder(),
+def _reader_config(needs_embedder: bool) -> KnowledgeReaderConfig:
+    return KnowledgeReaderConfig(
+        embedder=_get_embedder() if needs_embedder else None,
         chunk_size=CHUNK_SIZE,
-        similarity_threshold=SEMANTIC_THRESHOLD,
+        chunk_overlap=CHUNK_OVERLAP,
+        code_chunk_size=CODE_CHUNK_SIZE,
+        semantic_threshold=SEMANTIC_THRESHOLD,
     )
 
 
-def _document_chunking() -> DocumentChunking:
-    return DocumentChunking(chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
-
-
-def _recursive_chunking() -> RecursiveChunking:
-    return RecursiveChunking(chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
+def knowledge_profile_for_filename(filename: str | None) -> KnowledgeIngestProfile:
+    return _profile_for_filename(filename)
 
 
 def reader_for_profile(
     profile: KnowledgeIngestProfile,
     filename: str | None = None,
-) -> TextReader | MarkdownReader | CSVReader | JSONReader | PDFReader | DocxReader:
-    suffix = Path(filename or "").suffix.lower()
-    if profile.strategy == "markdown":
-        return MarkdownReader(
-            chunking_strategy=MarkdownChunking(
-                chunk_size=CHUNK_SIZE,
-                overlap=CHUNK_OVERLAP,
-                split_on_headings=True,
-            )
-        )
-    if profile.strategy == "csv_row":
-        return CSVReader(chunking_strategy=RowChunking(skip_header=False))
-    if profile.strategy == "json":
-        return JSONReader(chunking_strategy=_recursive_chunking())
-    if profile.strategy == "code":
-        return TextReader(
-            chunking_strategy=CodeChunking(
-                chunk_size=CODE_CHUNK_SIZE,
-                language="auto",
-            )
-        )
-    if profile.strategy == "document":
-        if suffix == ".pdf":
-            return PDFReader(chunking_strategy=_document_chunking())
-        if suffix == ".docx":
-            return DocxReader(chunking_strategy=_document_chunking())
-        return TextReader(chunking_strategy=_document_chunking())
-    return TextReader(chunking_strategy=_semantic_chunking())
+) -> KnowledgeReader:
+    return _reader_for_profile(
+        profile,
+        _reader_config(needs_embedder=profile.strategy == "semantic"),
+        filename,
+    )
 
 
 def reader_for_filename(
     filename: str | None,
-) -> TextReader | MarkdownReader | CSVReader | JSONReader | PDFReader | DocxReader:
-    return reader_for_profile(knowledge_profile_for_filename(filename), filename)
+) -> KnowledgeReader:
+    profile = knowledge_profile_for_filename(filename)
+    return _reader_for_profile(
+        profile,
+        _reader_config(needs_embedder=profile.strategy == "semantic"),
+        filename,
+    )
 
 
 def pipeline_status() -> dict[str, Any]:
-    profiles = [
-        _PROFILE_MARKDOWN,
-        _PROFILE_CSV,
-        _PROFILE_JSON,
-        _PROFILE_CODE,
-        _PROFILE_STRUCTURED,
-        _PROFILE_TEXT,
-    ]
-    return {
-        "search_type": search_type_from_env().value,
-        "vector_score_weight": VECTOR_SCORE_WEIGHT,
-        "prefix_match": PREFIX_MATCH,
-        "content_language": CONTENT_LANGUAGE,
-        "supported_suffixes": sorted(SUPPORTED_FILE_SUFFIXES),
-        "chunk_profiles": [
-            {
-                "label": profile.label,
-                "strategy": profile.strategy,
-                "reader": profile.reader,
-                "suffixes": list(profile.suffixes),
-                "description": profile.description,
-            }
-            for profile in profiles
-        ],
-        "semantic_threshold": SEMANTIC_THRESHOLD,
-        "code_chunk_size": CODE_CHUNK_SIZE,
-    }
+    return _ingest_pipeline_status(
+        search_type=search_type_from_env().value,
+        vector_score_weight=VECTOR_SCORE_WEIGHT,
+        prefix_match=PREFIX_MATCH,
+        content_language=CONTENT_LANGUAGE,
+        semantic_threshold=SEMANTIC_THRESHOLD,
+        code_chunk_size=CODE_CHUNK_SIZE,
+    )
 
 
 @lru_cache(maxsize=4)
