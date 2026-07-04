@@ -786,6 +786,10 @@ const formatModelLabel = (name: string) => {
 }
 
 const loadCurrentModel = async () => {
+  if (!currentUser.value) {
+    currentModelName.value = "DeepSeek V4 Pro"
+    return
+  }
   try {
     const config = await fetchModels()
     const savedId = localStorage.getItem(CHAT_MODEL_STORAGE_KEY)
@@ -971,6 +975,7 @@ const restoreSession = async () => {
 
   try {
     currentUser.value = await fetchCurrentUser(token, { fallbacks: authClientFallbacks.value })
+    void loadCurrentModel()
     if (authStore.hasPermission("session:read:own")) void loadSidebarChatSessions()
   } catch {
     clearStoredAuthToken()
@@ -1021,7 +1026,6 @@ onMounted(() => {
   initTheme()
   checkMobile()
   restoreSession()
-  void loadCurrentModel()
   window.addEventListener("resize", checkMobile)
   window.addEventListener("agno-aios-model-change", handleModelChange)
   window.addEventListener("agno-aios-chat-sessions-change", handleChatSessionsChange)
