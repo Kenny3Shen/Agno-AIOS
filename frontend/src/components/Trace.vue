@@ -485,8 +485,20 @@ import {
 } from "@element-plus/icons-vue"
 import { useChatHistory, useTracingApi } from "../composables/useApi"
 import { copyToClipboard } from "../lib/clipboard"
+import {
+  buildTraceRunRows,
+  buildTraceSummaryCards,
+  filterTraceRunRows,
+  filterTraceSessions,
+  findExactTraceSession,
+  findTraceSession,
+  summarizeTraceItems,
+  type RunStatusFilter,
+  type SessionStatusFilter,
+  type TraceSummaryState,
+} from "../modules/traceWorkbench"
 import { useTraceStore } from "../stores/traces"
-import type { ChatSession, ChatSessionRun, ParsedSpanPayload, SpanItem, SpanTreeNode, TraceItem } from "../types"
+import type { ChatSession, ParsedSpanPayload, SpanItem, SpanTreeNode, TraceItem } from "../types"
 
 const { t } = useI18n()
 const { loading, error, listTraces, getTrace } = useTracingApi()
@@ -496,28 +508,6 @@ const markdownRenderer = new MarkdownIt({
   linkify: true,
   breaks: true,
 })
-
-type SessionStatusFilter = "active" | "archived" | "all"
-type RunStatusFilter = "" | "OK" | "ERROR" | "UNSET"
-
-interface TraceRunRow {
-  key: string
-  title: string
-  runId: string
-  sessionId: string
-  ownerId: string
-  ownerLabel: string
-  trace: TraceItem
-  run?: ChatSessionRun
-}
-
-interface TraceSummaryState {
-  totalTraces: number
-  totalSpans: number
-  errors: number
-  avgLatencyMs: number
-  sampleSize: number
-}
 
 const traceStore = useTraceStore()
 const traceBodyGridRef = ref<HTMLElement | null>(null)
@@ -572,111 +562,30 @@ const MAX_DRAWER_WIDTH = 980
 
 type PayloadViewMode = "text" | "json" | "markdown"
 
-const normalize = (value?: string | null) => (value || "").trim().toLowerCase()
+const filteredSessions = computed(() => filterTraceSessions(sessions.value, sessionFilters))
 
-const filteredSessions = computed(() => {
-  const sessionId = normalize(sessionFilters.sessionId)
-  const userId = normalize(sessionFilters.userId)
-  const keyword = normalize(sessionFilters.keyword)
-  return sessions.value.filter((session) => {
-    if (sessionFilters.status === "active" && session.archived) return false
-    if (sessionFilters.status === "archived" && !session.archived) return false
-    if (sessionId && !normalize(session.session_id).includes(sessionId)) return false
-    if (userId && !normalize(session.user_id).includes(userId)) return false
-    if (keyword) {
-      const haystack = [
-        session.preview,
-        session.session_id,
-        session.user_id,
-      ].map(normalize).join(" ")
-      if (!haystack.includes(keyword)) return false
-    }
-    return true
-  })
-})
+const selectedSession = computed(() => findTraceSession(sessions.value, selectedSessionId.value))
 
-const selectedSession = computed(() => sessions.value.find((session) => session.session_id === selectedSessionId.value) || null)
-
-const sessionRunsByRunId = computed(() => {
-  const map = new Map<string, ChatSessionRun>()
-  const runs = selectedSession.value?.runs || []
-  for (const run of runs) {
-    const runId = typeof run.run_id === "string" ? run.run_id.trim() : ""
-    if (runId) map.set(runId, run)
-  }
-  return map
-})
-
-const runRows = computed<TraceRunRow[]>(() => sessionTraceItems.value.map((trace) => {
-  const runId = trace.run_id || ""
-  const run = runId ? sessionRunsByRunId.value.get(runId) : undefined
-  const ownerId = trace.agent_id || trace.team_id || trace.workflow_id || run?.agent_id || run?.team_id || run?.workflow_id || "-"
-  const ownerLabel = trace.agent_id || run?.agent_id
-    ? t("trace.filters.agentId")
-    : trace.team_id || run?.team_id
-      ? t("trace.filters.teamId")
-      : t("trace.filters.workflowId")
-  return {
-    key: trace.trace_id,
-    title: trace.name || run?.agent_name || runId || trace.trace_id,
-    runId,
-    sessionId: trace.session_id || selectedSessionId.value || "",
-    ownerId,
-    ownerLabel,
-    trace,
-    run,
-  }
+const runRows = computed(() => buildTraceRunRows({
+  traces: sessionTraceItems.value,
+  selectedSession: selectedSession.value,
+  selectedSessionId: selectedSessionId.value,
+  labels: {
+    agentId: t("trace.filters.agentId"),
+    teamId: t("trace.filters.teamId"),
+    workflowId: t("trace.filters.workflowId"),
+  },
 }))
 
-const filteredRunRows = computed(() => {
-  const runId = normalize(runFilters.runId)
-  const agentId = normalize(runFilters.agentId)
-  const teamId = normalize(runFilters.teamId)
-  const workflowId = normalize(runFilters.workflowId)
-  return runRows.value.filter((row) => {
-    const trace = row.trace
-    const run = row.run
-    if (runFilters.status && trace.status !== runFilters.status) return false
-    if (runId && !normalize(row.runId).includes(runId)) return false
-    if (agentId && !normalize(trace.agent_id || run?.agent_id).includes(agentId)) return false
-    if (teamId && !normalize(trace.team_id || run?.team_id).includes(teamId)) return false
-    if (workflowId && !normalize(trace.workflow_id || run?.workflow_id).includes(workflowId)) return false
-    return true
-  })
-})
+const filteredRunRows = computed(() => filterTraceRunRows(runRows.value, runFilters))
 
-const traceSummaryCards = computed(() => [
-  {
-    label: "Sessions",
-    value: sessions.value.length,
-    hint: `${filteredSessions.value.length} visible sessions`,
-    tone: "blue",
-  },
-  {
-    label: "Traces",
-    value: traceSummary.value.totalTraces,
-    hint: `${traceSummary.value.sampleSize} sampled traces`,
-    tone: "green",
-  },
-  {
-    label: "Spans",
-    value: traceSummary.value.totalSpans,
-    hint: "Spans observed in sampled traces",
-    tone: "blue",
-  },
-  {
-    label: "Errors",
-    value: traceSummary.value.errors,
-    hint: "Trace or span errors in sampled traces",
-    tone: traceSummary.value.errors > 0 ? "red" : "green",
-  },
-  {
-    label: "Avg Latency(s)",
-    value: formatLatencySeconds(traceSummary.value.avgLatencyMs),
-    hint: "Average trace duration in sampled traces",
-    tone: latencyTone(traceSummary.value.avgLatencyMs),
-  },
-])
+const traceSummaryCards = computed(() => buildTraceSummaryCards({
+  sessions: sessions.value,
+  visibleSessionCount: filteredSessions.value.length,
+  summary: traceSummary.value,
+  formatLatencySeconds,
+  latencyTone,
+}))
 
 const selectedRunIndex = computed(() => {
   const traceId = selectedTrace.value?.trace_id
@@ -1018,24 +927,11 @@ const loadTraceSummary = async () => {
   try {
     const resp = await listTraces({ page: 1, limit: 100 })
     const items = resp.items || []
-    const durations = items
-      .map((trace) => Number(trace.duration_ms))
-      .filter((value) => Number.isFinite(value) && value >= 0)
-    const totalDuration = durations.reduce((sum, value) => sum + value, 0)
-    traceSummary.value = {
-      totalTraces: Number(resp.total_count || items.length || 0),
-      totalSpans: items.reduce((sum, trace) => sum + Number(trace.total_spans || 0), 0),
-      errors: items.reduce((sum, trace) => sum + Number(trace.error_count ?? (trace.status === "ERROR" ? 1 : 0)), 0),
-      avgLatencyMs: durations.length ? totalDuration / durations.length : 0,
-      sampleSize: items.length,
-    }
+    traceSummary.value = summarizeTraceItems(items, resp.total_count)
   } catch {
     traceSummary.value = {
-      totalTraces: sessionTraceItems.value.length,
-      totalSpans: sessionTraceItems.value.reduce((sum, trace) => sum + Number(trace.total_spans || 0), 0),
-      errors: sessionTraceItems.value.reduce((sum, trace) => sum + Number(trace.error_count ?? (trace.status === "ERROR" ? 1 : 0)), 0),
+      ...summarizeTraceItems(sessionTraceItems.value),
       avgLatencyMs: 0,
-      sampleSize: sessionTraceItems.value.length,
     }
   }
 }
@@ -1046,7 +942,7 @@ const reconcileSessionSelection = async () => {
   if (currentStillVisible && selectedSession.value) return
 
   clearTraceSelection()
-  const exactSession = visibleSessions.find((session) => normalize(session.session_id) === normalize(sessionFilters.sessionId))
+  const exactSession = findExactTraceSession(visibleSessions, sessionFilters.sessionId)
   const nextSession = exactSession || (visibleSessions.length === 1 ? visibleSessions[0] : null)
   selectedSessionId.value = nextSession?.session_id || null
   if (nextSession) await loadSessionTraces(nextSession)

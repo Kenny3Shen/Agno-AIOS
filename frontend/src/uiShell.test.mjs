@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url"
 import { createI18n } from "vue-i18n"
 import { enUS } from "./i18n/locales/en-US.ts"
 import { zhCN } from "./i18n/locales/zh-CN.ts"
+import "./modules/traceWorkbench.test.mjs"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const repoRoot = join(root, "..", "..")
