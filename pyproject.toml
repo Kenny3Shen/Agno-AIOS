@@ -55,6 +55,12 @@ default = true
 [tool.hatch.build.targets.wheel]
 packages = ["api"]
 
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
+
 [tool.uv.sources]
 torch = { index = "pytorch-cpu" }
 

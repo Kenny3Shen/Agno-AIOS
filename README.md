@@ -66,7 +66,7 @@ Python 检查：
 ```bash
 uv run ruff check .
 uv run ty check .
-uv run python -m unittest discover api/tests
+uv run pytest api/tests
 ```
 
 前端检查：

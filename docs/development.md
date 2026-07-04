@@ -80,7 +80,7 @@ uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 ```bash
 uv run ruff check .
 uv run ty check .
-uv run python -m unittest discover api/tests
+uv run pytest api/tests
 
 cd frontend
 /home/shenss/.bun/bin/bun run test:shell
