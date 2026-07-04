@@ -192,6 +192,10 @@
                               class="ag-chat-session-menu"
                               role="menu"
                             >
+                              <button type="button" role="menuitem" @click.stop="copySidebarSessionId(session.session_id)">
+                                <el-icon><CopyDocument /></el-icon>
+                                <span>{{ t("shell.actions.copySessionId") }}</span>
+                              </button>
                               <button type="button" role="menuitem" @click.stop="copySidebarSessionRuns(session.session_id)">
                                 <el-icon><CopyDocument /></el-icon>
                                 <span>{{ t("shell.actions.copyRuns") }}</span>
@@ -519,13 +523,13 @@ type ModuleNavId =
   | "sessions"
   | "studio"
   | "memory"
-  | "metrics"
   | "evaluation"
   | "approvals"
   | "scheduler"
   | "settings"
 type NavId = "home" | ModuleNavId
 type NavTone = "red" | "blue" | "green" | "yellow"
+type ActiveOsControlModule = Exclude<OsControlModule, "metrics">
 
 type NavItem = {
   id: NavId
@@ -569,7 +573,6 @@ const navItems = computed<NavItem[]>(() => [
   { id: "workflow", label: t("shell.nav.workflow.label"), description: t("shell.nav.workflow.description"), icon: Share, tone: "yellow" },
   { id: "studio", label: t("shell.nav.studio.label"), description: t("shell.nav.studio.description"), icon: MagicStick, tone: "yellow" },
   { id: "memory", label: t("shell.nav.memory.label"), description: t("shell.nav.memory.description"), icon: Cpu, tone: "green" },
-  { id: "metrics", label: t("shell.nav.metrics.label"), description: t("shell.nav.metrics.description"), icon: DataAnalysis, tone: "blue" },
   { id: "evaluation", label: t("shell.nav.evaluation.label"), description: t("shell.nav.evaluation.description"), icon: Finished, tone: "green" },
   { id: "approvals", label: t("shell.nav.approvals.label"), description: t("shell.nav.approvals.description"), icon: Tickets, tone: "red" },
   { id: "scheduler", label: t("shell.nav.scheduler.label"), description: t("shell.nav.scheduler.description"), icon: Calendar, tone: "yellow" },
@@ -588,7 +591,6 @@ const navPermissions: Partial<Record<ModuleNavId, string>> = {
   sessions: "session:read:own",
   studio: "mcp:read",
   memory: "memory:read:own",
-  metrics: "metrics:read:own",
   evaluation: "admin:read",
   approvals: "admin:read",
   scheduler: "admin:read",
@@ -612,18 +614,16 @@ const componentMap: Record<ModuleNavId, Component> = {
   sessions: AgentOSControl,
   studio: AgentOSControl,
   memory: AgentOSControl,
-  metrics: AgentOSControl,
   evaluation: AgentOSControl,
   approvals: AgentOSControl,
   scheduler: AgentOSControl,
   settings: Settings,
 }
 
-const osControlTabs = new Set<OsControlModule>([
+const osControlTabs = new Set<ActiveOsControlModule>([
   "sessions",
   "studio",
   "memory",
-  "metrics",
   "evaluation",
   "approvals",
   "scheduler",
@@ -636,7 +636,9 @@ const fullCanvasTabs = new Set<ModuleNavId>([
   "mcp",
   ...osControlTabs,
 ])
+const availableNavIds = computed(() => new Set<NavId>(["home", "dashboard", ...navItems.value.map((item) => item.id)]))
 const canAccessNav = (id: NavId) => {
+  if (!availableNavIds.value.has(id)) return false
   if (id === "home" || id === "dashboard") return true
   const permission = navPermissions[id]
   return permission ? authStore.hasPermission(permission) : true
@@ -658,7 +660,7 @@ const navItemById = computed<Record<ModuleNavId, NavItem>>(() => (
 ))
 const homeSections = computed<HomeSection[]>(() => [
   { title: t("shell.sections.operations"), items: [navItemById.value.dashboard, navItemById.value.chat, navItemById.value.trace, navItemById.value.workflow] },
-  { title: t("shell.sections.controlPlane"), items: [navItemById.value.studio, navItemById.value.memory, navItemById.value.metrics] },
+  { title: t("shell.sections.controlPlane"), items: [navItemById.value.studio, navItemById.value.memory] },
   { title: t("shell.sections.governance"), items: [navItemById.value.evaluation, navItemById.value.approvals, navItemById.value.scheduler] },
   { title: t("shell.sections.securityData"), items: [navItemById.value.skills, navItemById.value.mcp, navItemById.value.knowledge, navItemById.value.cve, navItemById.value.assets, navItemById.value.collect] },
 ].map((section) => ({
@@ -737,7 +739,7 @@ const currentUserId = computed(() => currentUser.value?.id || currentUser.value?
 const activeComponentProps = computed(() => {
   const tab = activeTab.value as NavId
   const baseProps = { currentUserId: currentUserId.value, currentUserInitials: userInitials.value }
-  if (tab !== "home" && osControlTabs.has(tab as OsControlModule)) {
+  if (tab !== "home" && osControlTabs.has(tab as ActiveOsControlModule)) {
     return { ...baseProps, osModule: tab }
   }
   return baseProps
@@ -843,6 +845,15 @@ const toggleChatSessions = () => {
 
 const toggleSessionMenu = (sessionId: string) => {
   openSessionMenuId.value = openSessionMenuId.value === sessionId ? null : sessionId
+}
+
+const copySidebarSessionId = async (sessionId: string) => {
+  openSessionMenuId.value = null
+  if (await copyToClipboard(sessionId)) {
+    ElMessage.success(t("shell.messages.sessionIdCopied"))
+  } else {
+    ElMessage.warning(t("common.clipboard.failed"))
+  }
 }
 
 const copySidebarSessionRuns = async (sessionId: string) => {
@@ -1032,5 +1043,59 @@ onUnmounted(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.ag-stat-strip.ag-stat-strip {
+  align-items: stretch;
+  gap: 8px;
+}
+
+.ag-stat-chip.ag-stat-chip {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--ag-panel-border, var(--ag-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ag-panel-soft, var(--ag-panel)) 86%, var(--ag-panel, #111827));
+  padding: 8px 10px 8px 12px;
+}
+
+.ag-stat-chip.ag-stat-chip::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--ag-blue);
+  content: "";
+}
+
+.ag-stat-chip.tone-green::before {
+  background: var(--ag-green);
+}
+
+.ag-stat-chip.tone-yellow::before {
+  background: var(--ag-yellow);
+}
+
+.ag-stat-chip.tone-red::before {
+  background: var(--ag-red);
+}
+
+.ag-stat-chip.ag-stat-chip :where(span, small) {
+  display: block;
+  color: var(--ag-muted);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.ag-stat-chip.ag-stat-chip strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--ag-heading, var(--ag-text));
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 </style>

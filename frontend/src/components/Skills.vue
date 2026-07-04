@@ -2,8 +2,8 @@
   <div class="skills-console">
     <main class="skills-main">
       <header class="skills-header">
-        <div class="skill-summary-strip">
-          <span v-for="metric in summaryMetrics" :key="metric.label" class="skill-summary-chip">
+        <div class="skill-summary-strip ag-stat-strip">
+          <span v-for="metric in summaryMetrics" :key="metric.label" class="skill-summary-chip ag-stat-chip">
             <small>{{ metric.label }}</small>
             <strong>{{ metric.value }}</strong>
           </span>
@@ -21,6 +21,7 @@
         <el-button
           :icon="Document"
           class="skill-primary-action"
+          :disabled="!canWriteSkills"
           @click="uploadPanelOpen = !uploadPanelOpen"
         >
           {{ t('skills.actions.upload') }}
@@ -37,11 +38,30 @@
           </div>
           <div class="skill-upload-grid">
             <el-input v-model="uploadForm.name" :placeholder="t('skills.upload.namePlaceholder')" />
-            <el-input v-model="uploadForm.source" :placeholder="t('skills.upload.sourcePlaceholder')" />
-            <el-input v-model="uploadForm.description" :placeholder="t('skills.upload.descriptionPlaceholder')" />
-            <el-input v-model="uploadForm.content" type="textarea" :rows="4" :placeholder="t('skills.upload.contentPlaceholder')" />
+            <el-upload
+              ref="skillUploadRef"
+              v-model:file-list="skillFileList"
+              drag
+              :auto-upload="false"
+              :limit="1"
+              accept=".zip,application/zip,application/x-zip-compressed"
+              :on-change="handleSkillFileChange"
+              :on-remove="handleSkillFileRemove"
+              :on-exceed="handleSkillFileExceed"
+            >
+              <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+              <div class="el-upload__text">
+                {{ t('skills.upload.dropText') }} <em>{{ t('skills.upload.chooseFile') }}</em>
+              </div>
+              <template #tip>
+                <div class="el-upload__tip">{{ t('skills.upload.supportedTypes') }}</div>
+              </template>
+            </el-upload>
           </div>
           <div class="skill-upload-actions">
+            <el-button :disabled="submittingUpload" @click="cancelSkillUpload">
+              {{ t('skills.upload.cancel') }}
+            </el-button>
             <el-button type="primary" :loading="submittingUpload" @click="submitSkillUpload">
               {{ t('skills.upload.submit') }}
             </el-button>
@@ -133,8 +153,9 @@
 <script setup lang="ts">
 import { computed, ref, reactive, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ArrowDown, ArrowUp, Refresh, Loading, FolderOpened, Document } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowUp, Refresh, Loading, FolderOpened, Document, UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import type { UploadFile, UploadFiles, UploadInstance, UploadUserFile } from 'element-plus'
 import { useSkillsApi } from '../composables/useApi'
 import { useAuthStore } from '../stores/auth'
 import type { SkillInfo } from '../types'
@@ -143,7 +164,7 @@ const {
   loading,
   fetchSkills: apiFetchSkills,
   toggleSkill: apiToggleSkill,
-  requestSkillUpload,
+  uploadSkill,
 } = useSkillsApi()
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -153,11 +174,11 @@ const togglingSkill = ref<string | null>(null)
 const expandedSkills = reactive(new Set<string>())
 const uploadPanelOpen = ref(false)
 const submittingUpload = ref(false)
+const skillUploadRef = ref<UploadInstance>()
+const skillFileList = ref<UploadUserFile[]>([])
+const selectedSkillArchive = ref<File | null>(null)
 const uploadForm = reactive({
   name: "",
-  description: "",
-  source: "",
-  content: "",
 })
 const canWriteSkills = computed(() => authStore.hasPermission("skill:write"))
 const enabledSkills = computed(() => skills.value.filter((skill) => skill.enabled).length)
@@ -203,24 +224,54 @@ const toggleExpand = (name: string) => {
   }
 }
 
+const stripZipExtension = (filename: string) => filename.replace(/\.zip$/i, "")
+
+const handleSkillFileChange = (uploadFile: UploadFile, uploadFiles: UploadFiles) => {
+  skillFileList.value = uploadFiles.slice(-1)
+  selectedSkillArchive.value = uploadFile.raw ?? null
+  if (!uploadForm.name && uploadFile.name) {
+    uploadForm.name = stripZipExtension(uploadFile.name)
+  }
+}
+
+const handleSkillFileRemove = () => {
+  selectedSkillArchive.value = null
+}
+
+const handleSkillFileExceed = () => {
+  ElMessage.warning(t("skills.messages.singleFileOnly"))
+}
+
+const resetSkillUpload = () => {
+  uploadForm.name = ""
+  selectedSkillArchive.value = null
+  skillFileList.value = []
+  skillUploadRef.value?.clearFiles()
+}
+
+const cancelSkillUpload = () => {
+  resetSkillUpload()
+  uploadPanelOpen.value = false
+}
+
 const submitSkillUpload = async () => {
   if (!uploadForm.name.trim()) {
     ElMessage.warning(t("skills.messages.uploadNameRequired"))
     return
   }
+  if (!selectedSkillArchive.value) {
+    ElMessage.warning(t("skills.messages.uploadFileRequired"))
+    return
+  }
   submittingUpload.value = true
   try {
-    await requestSkillUpload({
+    await uploadSkill({
       name: uploadForm.name.trim(),
-      description: uploadForm.description.trim(),
-      source: uploadForm.source.trim(),
-      content: uploadForm.content,
+      file: selectedSkillArchive.value,
     })
-    uploadForm.name = ""
-    uploadForm.description = ""
-    uploadForm.source = ""
-    uploadForm.content = ""
+    resetSkillUpload()
     uploadPanelOpen.value = false
+    await loadSkills()
     ElMessage.success(t("skills.messages.uploadSubmitted"))
   } catch {
     ElMessage.error(t("skills.messages.uploadFailed"))

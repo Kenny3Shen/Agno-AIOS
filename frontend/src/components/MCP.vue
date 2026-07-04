@@ -4,20 +4,20 @@
       <main class="flex min-h-0 flex-col overflow-hidden">
         <header class="border-b border-[var(--ag-panel-border)] bg-[var(--ag-panel-bg)] p-3">
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="mcp-summary-strip">
-              <div v-for="metric in metrics" :key="metric.label" class="mcp-summary-chip">
+            <div class="mcp-summary-strip ag-stat-strip">
+              <div v-for="metric in metrics" :key="metric.label" class="mcp-summary-chip ag-stat-chip">
                 <span>{{ metric.label }}</span>
                 <strong :title="metric.hint">{{ metric.value }}</strong>
               </div>
 
-              <div class="mcp-summary-chip mcp-summary-url">
+              <div class="mcp-summary-chip mcp-summary-url ag-stat-chip">
                 <span>{{ t('mcp.context.clientUrl') }}</span>
                 <strong :title="clientUrl">{{ clientUrl }}</strong>
               </div>
             </div>
 
             <div class="flex items-center gap-2">
-              <el-button :icon="Plus" class="cursor-pointer" @click="uploadPanelOpen = !uploadPanelOpen">
+              <el-button :icon="Plus" class="cursor-pointer" :disabled="!canWriteMcp" @click="uploadPanelOpen = !uploadPanelOpen">
                 {{ t('mcp.upload.open') }}
               </el-button>
               <el-button type="primary" :loading="loading" class="cursor-pointer" @click="loadAll">
@@ -42,7 +42,10 @@
               <el-input v-model="uploadForm.description" :placeholder="t('mcp.upload.descriptionPlaceholder')" />
               <el-input v-model="uploadForm.manifest" type="textarea" :rows="4" :placeholder="t('mcp.upload.manifestPlaceholder')" />
             </div>
-            <div class="mt-3 flex justify-end">
+            <div class="mt-3 flex justify-end gap-2">
+              <el-button :disabled="submittingUpload" @click="cancelMcpUpload">
+                {{ t('mcp.upload.cancel') }}
+              </el-button>
               <el-button type="primary" :loading="submittingUpload" @click="submitMcpUpload">
                 {{ t('mcp.upload.submit') }}
               </el-button>
@@ -268,7 +271,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, type Component } from "vue"
+import { computed, markRaw, onMounted, reactive, ref, type Component } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useI18n } from "vue-i18n"
 import {
@@ -315,9 +318,9 @@ const createdToken = ref("")
 const mcpUrl = ref("/mcp/")
 
 const services = ref<ServiceItem[]>([
-  { id: "playbook", name: "SOAR", description: t("mcp.services.playbook"), namespace: "playbook.*", enabled: false, icon: Operation },
-  { id: "agent", name: "AI Agent", description: t("mcp.services.agent"), namespace: "agent.*", enabled: false, icon: Cpu },
-  { id: "basic", name: t("mcp.services.basicName"), description: t("mcp.services.basic"), namespace: "basic.*", enabled: false, icon: Tools },
+  { id: "playbook", name: "SOAR", description: t("mcp.services.playbook"), namespace: "playbook.*", enabled: false, icon: markRaw(Operation) },
+  { id: "agent", name: "AI Agent", description: t("mcp.services.agent"), namespace: "agent.*", enabled: false, icon: markRaw(Cpu) },
+  { id: "basic", name: t("mcp.services.basicName"), description: t("mcp.services.basic"), namespace: "basic.*", enabled: false, icon: markRaw(Tools) },
 ])
 
 const tokenForm = reactive({
@@ -350,7 +353,7 @@ const {
   addHiAgent,
   updateHiAgent,
   deleteHiAgent,
-  requestMcpUpload,
+  uploadMcp,
 } = useMcpApi()
 
 const enabledCount = computed(() => services.value.filter((service) => service.enabled).length)
@@ -480,24 +483,38 @@ const addExternalAgent = async () => {
   }
 }
 
+const resetMcpUpload = () => {
+  uploadForm.name = ""
+  uploadForm.url = ""
+  uploadForm.description = ""
+  uploadForm.manifest = ""
+}
+
+const cancelMcpUpload = () => {
+  resetMcpUpload()
+  uploadPanelOpen.value = false
+}
+
 const submitMcpUpload = async () => {
   if (!uploadForm.name.trim()) {
     ElMessage.warning(t("mcp.messages.uploadNameRequired"))
     return
   }
+  if (!uploadForm.url.trim() && !uploadForm.manifest.trim()) {
+    ElMessage.warning(t("mcp.messages.uploadTargetRequired"))
+    return
+  }
   submittingUpload.value = true
   try {
-    await requestMcpUpload({
+    await uploadMcp({
       name: uploadForm.name.trim(),
       url: uploadForm.url.trim(),
       description: uploadForm.description.trim(),
       manifest: uploadForm.manifest,
     })
-    uploadForm.name = ""
-    uploadForm.url = ""
-    uploadForm.description = ""
-    uploadForm.manifest = ""
+    resetMcpUpload()
     uploadPanelOpen.value = false
+    await loadHiAgents()
     ElMessage.success(t("mcp.messages.uploadSubmitted"))
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : t("mcp.messages.uploadFailed"))

@@ -31,7 +31,11 @@ def _ensure_data_dir() -> None:
 
 
 def _default_config() -> dict[str, Any]:
-    return {"mcp": {service_id: True for service_id in SERVICE_IDS}, "hiagent": []}
+    return {
+        "mcp": {service_id: True for service_id in SERVICE_IDS},
+        "hiagent": [],
+        "mcp_servers": [],
+    }
 
 
 def normalize_hiagents(entries: Any) -> list[dict[str, Any]]:
@@ -55,6 +59,32 @@ def normalize_hiagents(entries: Any) -> list[dict[str, Any]]:
     return normalized
 
 
+def normalize_mcp_servers(entries: Any) -> list[dict[str, Any]]:
+    if not isinstance(entries, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name") or "").strip()
+        if not name:
+            continue
+        manifest = entry.get("manifest")
+        if not isinstance(manifest, dict):
+            manifest = {}
+        normalized.append(
+            {
+                "name": name,
+                "description": str(entry.get("description") or "").strip(),
+                "url": str(entry.get("url") or "").strip(),
+                "kind": str(entry.get("kind") or "unknown").strip(),
+                "enabled": bool(entry.get("enabled", True)),
+                "manifest": manifest,
+            }
+        )
+    return normalized
+
+
 def read_mcp_config() -> dict[str, Any]:
     _ensure_data_dir()
     if not MCP_CONFIG_FILE.exists():
@@ -70,6 +100,8 @@ def read_mcp_config() -> dict[str, Any]:
         data["mcp"] = {}
     if "hiagent" not in data or not isinstance(data["hiagent"], list):
         data["hiagent"] = []
+    if "mcp_servers" not in data or not isinstance(data["mcp_servers"], list):
+        data["mcp_servers"] = []
     return data
 
 
@@ -79,6 +111,7 @@ def write_mcp_config(data: dict[str, Any]) -> None:
     if not isinstance(mcp_cfg, dict):
         data["mcp"] = {}
     data["hiagent"] = normalize_hiagents(data.get("hiagent", []))
+    data["mcp_servers"] = normalize_mcp_servers(data.get("mcp_servers", []))
     with MCP_CONFIG_FILE.open("wb") as f:
         tomli_w.dump(data, f)
 

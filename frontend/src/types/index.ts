@@ -50,9 +50,13 @@ export interface SkillToggleResponse {
   enabled: boolean
 }
 
-export interface ApprovalSubmitResponse {
-  id: string
-  status: string
+export interface UploadResultResponse {
+  success: boolean
+  name: string
+  description?: string
+  path?: string
+  kind?: string
+  restart_required?: boolean
 }
 
 // MCP 管理相关类型

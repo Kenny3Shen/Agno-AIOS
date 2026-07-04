@@ -333,7 +333,7 @@ const navigationGroups = computed(() => [
   {
     key: "knowledge",
     title: t("settings.navigation.groups.knowledge"),
-    items: ["Skills", "MCP", "Knowledge", "Studio", "Memory", "Metrics"],
+    items: ["Skills", "MCP", "Knowledge", "Studio", "Memory"],
   },
   {
     key: "securityData",

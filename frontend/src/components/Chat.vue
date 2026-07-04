@@ -33,7 +33,7 @@
                   </div>
                   <div class="message-actions">
                     <span class="message-index font-mono text-[10px]">#{{ index + 1 }}</span>
-                    <el-tooltip :content="copySuccessIndex === index ? t('chat.actions.copied') : t('chat.actions.copyMessage')" placement="top">
+                    <el-tooltip v-if="msg.role === 'user'" :content="copySuccessIndex === index ? t('chat.actions.copied') : t('chat.actions.copyMessage')" placement="top">
                       <button
                         type="button"
                         class="message-action-button"
@@ -44,40 +44,6 @@
                           <Check v-if="copySuccessIndex === index" />
                           <CopyDocument v-else />
                         </el-icon>
-                      </button>
-                    </el-tooltip>
-                    <el-tooltip v-if="msg.role === 'assistant' && msg.raw_run" :content="copyRunSuccessIndex === index ? t('chat.actions.copied') : t('chat.actions.copyRun')" placement="top">
-                      <button
-                        type="button"
-                        class="message-action-button"
-                        :aria-label="t('chat.actions.copyRun')"
-                        @click="copyRun(index, msg)"
-                      >
-                        <el-icon>
-                          <Check v-if="copyRunSuccessIndex === index" />
-                          <CopyDocument v-else />
-                        </el-icon>
-                      </button>
-                    </el-tooltip>
-                    <el-tooltip v-if="msg.role === 'assistant' && messageSessionId(msg)" :content="t('chat.actions.viewTrace')" placement="top">
-                      <button
-                        type="button"
-                        class="message-action-button"
-                        :aria-label="t('chat.actions.viewTrace')"
-                        @click="openTraceForSession(msg)"
-                      >
-                        <el-icon><DataAnalysis /></el-icon>
-                      </button>
-                    </el-tooltip>
-                    <el-tooltip v-if="msg.role === 'assistant' && msg.final && hasUserPromptBefore(index)" :content="t('chat.actions.retryAnswer')" placement="top">
-                      <button
-                        type="button"
-                        class="message-action-button"
-                        :aria-label="t('chat.actions.retryAnswer')"
-                        :disabled="loading"
-                        @click="retryAnswer(index)"
-                      >
-                        <el-icon><RefreshRight /></el-icon>
                       </button>
                     </el-tooltip>
                   </div>
@@ -125,6 +91,56 @@
                 <div v-if="msg.role === 'assistant' && runMetaLine(msg)" class="message-run-strip">
                   <span class="message-run-line">{{ runMetaLine(msg) }}</span>
                 </div>
+
+                <div v-if="msg.role === 'assistant'" class="message-result-actions">
+                  <el-tooltip :content="copySuccessIndex === index ? t('chat.actions.copied') : t('chat.actions.copyMessage')" placement="top">
+                    <button
+                      type="button"
+                      class="message-action-button"
+                      :aria-label="t('chat.actions.copyMessage')"
+                      @click="copyMessage(index, msg)"
+                    >
+                      <el-icon>
+                        <Check v-if="copySuccessIndex === index" />
+                        <CopyDocument v-else />
+                      </el-icon>
+                    </button>
+                  </el-tooltip>
+                  <el-tooltip v-if="msg.raw_run" :content="copyRunSuccessIndex === index ? t('chat.actions.copied') : t('chat.actions.copyRun')" placement="top">
+                    <button
+                      type="button"
+                      class="message-action-button"
+                      :aria-label="t('chat.actions.copyRun')"
+                      @click="copyRun(index, msg)"
+                    >
+                      <el-icon>
+                        <Check v-if="copyRunSuccessIndex === index" />
+                        <CopyDocument v-else />
+                      </el-icon>
+                    </button>
+                  </el-tooltip>
+                  <el-tooltip v-if="messageSessionId(msg)" :content="t('chat.actions.viewTrace')" placement="top">
+                    <button
+                      type="button"
+                      class="message-action-button"
+                      :aria-label="t('chat.actions.viewTrace')"
+                      @click="openTraceForSession(msg)"
+                    >
+                      <el-icon><DataAnalysis /></el-icon>
+                    </button>
+                  </el-tooltip>
+                  <el-tooltip v-if="msg.final && hasUserPromptBefore(index)" :content="t('chat.actions.retryAnswer')" placement="top">
+                    <button
+                      type="button"
+                      class="message-action-button"
+                      :aria-label="t('chat.actions.retryAnswer')"
+                      :disabled="loading"
+                      @click="retryAnswer(index)"
+                    >
+                      <el-icon><RefreshRight /></el-icon>
+                    </button>
+                  </el-tooltip>
+                </div>
               </article>
             </div>
           </transition-group>
@@ -146,9 +162,8 @@
           </transition>
 
           <div class="chat-scroll-actions" aria-live="polite">
-            <el-tooltip :content="t('chat.actions.backToTop')" placement="left">
+            <el-tooltip v-if="showBackToTop" :content="t('chat.actions.backToTop')" placement="left">
               <button
-                v-if="showBackToTop"
                 type="button"
                 class="chat-scroll-button"
                 :aria-label="t('chat.actions.backToTop')"
@@ -157,9 +172,8 @@
                 <el-icon><Top /></el-icon>
               </button>
             </el-tooltip>
-            <el-tooltip :content="pendingNewMessages ? t('chat.actions.newMessages', { count: pendingNewMessages }) : t('chat.actions.scrollToBottom')" placement="left">
+            <el-tooltip v-if="showScrollToBottom" :content="pendingNewMessages ? t('chat.actions.newMessages', { count: pendingNewMessages }) : t('chat.actions.scrollToBottom')" placement="left">
               <button
-                v-if="showScrollToBottom"
                 type="button"
                 class="chat-scroll-button is-bottom"
                 :aria-label="t('chat.actions.scrollToBottom')"
@@ -1048,6 +1062,7 @@ onUnmounted(() => {
 }
 
 .message-card:hover .message-action-button,
+.message-result-actions .message-action-button,
 .message-action-button:focus-visible {
   opacity: 1;
 }
@@ -1194,6 +1209,19 @@ onUnmounted(() => {
   color: var(--ag-muted);
   font-size: 11px;
   line-height: 1.4;
+}
+
+.message-result-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  border-top: 1px solid var(--ag-border);
+  padding-top: 8px;
+}
+
+.message-result-actions .message-action-button {
+  background: color-mix(in srgb, var(--ag-panel-soft) 86%, transparent);
 }
 
 .mermaid {

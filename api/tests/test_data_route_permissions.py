@@ -44,11 +44,12 @@ class DataRoutePermissionsTest(TestCase):
         self.assertIn('status="failure"', update_source)
         self.assertIn('"error": str(e)', update_source)
 
-    def test_skills_api_does_not_register_placeholder_upload_route(self):
+    def test_skills_api_registers_real_upload_route(self):
         route_paths = {
             path
             for route in skills.router.routes
             if isinstance(path := getattr(route, "path", None), str)
         }
 
-        self.assertNotIn("/upload", route_paths)
+        self.assertIn("/api/skills/upload", route_paths)
+        self.assertNotIn("/api/skills/upload-request", route_paths)

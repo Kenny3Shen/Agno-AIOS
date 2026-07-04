@@ -19,8 +19,8 @@
       </div>
     </header>
 
-    <section class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-      <article v-for="metric in topMetrics" :key="metric.label" class="situation-metric">
+    <section class="ag-stat-strip mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+      <article v-for="metric in topMetrics" :key="metric.label" class="situation-metric ag-stat-chip">
         <span>{{ metric.label }}</span>
         <strong :title="metric.hint">{{ metric.value }}</strong>
       </article>

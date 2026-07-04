@@ -2,6 +2,9 @@ import assert from "node:assert/strict"
 import { existsSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { createI18n } from "vue-i18n"
+import { enUS } from "./i18n/locales/en-US.ts"
+import { zhCN } from "./i18n/locales/zh-CN.ts"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const repoRoot = join(root, "..", "..")
@@ -34,6 +37,15 @@ const authClientSource = readOptionalSource("lib/authClient.ts")
 const clipboard = readOptionalSource("lib/clipboard.ts")
 const authStoreSource = readOptionalSource("stores/auth.ts")
 const permissions = readOptionalSource("lib/permissions.ts")
+
+const i18n = createI18n({
+  legacy: false,
+  locale: "zh-CN",
+  messages: {
+    "en-US": enUS,
+    "zh-CN": zhCN,
+  },
+})
 
 const assertTextOrder = (source, labels, message) => {
   let previousIndex = -1
@@ -77,6 +89,14 @@ assert.match(
   /Path\("source"\)/,
   "backend must serve root source/ builds when present",
 )
+
+for (const locale of ["zh-CN", "en-US"]) {
+  i18n.global.locale.value = locale
+  assert.doesNotThrow(
+    () => i18n.global.t("mcp.upload.manifestPlaceholder"),
+    `MCP upload manifest placeholder must compile in ${locale}`,
+  )
+}
 
 assert.equal(
   app.includes("ag-user-chip"),
@@ -370,7 +390,6 @@ assertTextOrder(
 for (const controlPlaneLabel of [
   't("shell.nav.studio.label")',
   't("shell.nav.memory.label")',
-  't("shell.nav.metrics.label")',
   't("shell.nav.evaluation.label")',
   't("shell.nav.approvals.label")',
   't("shell.nav.scheduler.label")',
@@ -381,6 +400,12 @@ for (const controlPlaneLabel of [
     `sidebar must include missing AgentOS control-plane page ${controlPlaneLabel}`,
   )
 }
+
+assert.equal(
+  app.includes('t("shell.nav.metrics.label")'),
+  false,
+  "Metrics must be merged into Trace instead of remaining as a standalone sidebar page",
+)
 
 assert.equal(
   app.includes('t("shell.nav.sessions.label")'),

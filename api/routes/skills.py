@@ -4,16 +4,16 @@ Skills 管理 API
 - 切换 Skill 启用/禁用
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 from api.auth.models import User
-from api.auth.permissions import actor_id, require_permission
+from api.auth.permissions import require_permission
 from api.services.audit_service import audit_request_context, record_audit_event
-from api.services.os_control_service import submit_approval_request
 from api.services.skill_service import (
     find_skill_dir,
     get_skills_dir,
+    install_skill_archive,
     is_skill_enabled,
     iter_skill_dirs,
     list_skill_scripts,
@@ -47,16 +47,11 @@ class SkillToggleResponse(BaseModel):
     enabled: bool
 
 
-class SkillUploadRequest(BaseModel):
+class SkillUploadResponse(BaseModel):
     name: str
-    description: str = ""
-    source: str = ""
-    content: str = ""
-
-
-class ApprovalSubmitResponse(BaseModel):
-    id: str
-    status: str
+    description: str
+    path: str
+    success: bool = True
 
 
 # ── API 端点 ──────────────────────────────────────────────────
@@ -108,33 +103,34 @@ async def toggle_skill(
     return SkillToggleResponse(name=public_name, enabled=body.enabled)
 
 
-@router.post("/upload-request", response_model=ApprovalSubmitResponse)
-async def request_skill_upload(
+@router.post("/upload", response_model=SkillUploadResponse)
+async def upload_skill(
     request: Request,
-    body: SkillUploadRequest,
-    user: User = Depends(require_permission("skill:read")),
+    name: str = Form(""),
+    file: UploadFile = File(...),
+    user: User = Depends(require_permission("skill:write")),
 ):
-    """提交 Skill 上传审核申请；管理员在 Approvals 中处理后再安装。"""
-    name = body.name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Skill name is required")
-    row = submit_approval_request(
-        title=f"Skill upload: {name}",
-        requester=actor_id(user),
-        action="skill.upload",
-        metadata={
-            "name": name,
-            "description": body.description.strip(),
-            "source": body.source.strip(),
-            "content_preview": body.content[:800],
-        },
-    )
+    """上传并安装 Skill zip 包。"""
+    filename = (file.filename or "").strip()
+    if filename and not filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Skill archive must be a zip file")
+
+    try:
+        public_name, description, dest = install_skill_archive(
+            await file.read(),
+            requested_name=name.strip(),
+        )
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail=f"Skill '{exc}' already exists") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     record_audit_event(
         user,
-        action="skill.upload_request",
-        resource_type="approval",
-        resource_id=str(row.get("id") or ""),
-        metadata={"name": name},
+        action="skill.upload",
+        resource_type="skill",
+        resource_id=public_name,
+        metadata={"filename": filename, "path": str(dest)},
         **audit_request_context(request),
     )
-    return ApprovalSubmitResponse(id=str(row.get("id")), status=str(row.get("status") or "pending"))
+    return SkillUploadResponse(name=public_name, description=description, path=str(dest))

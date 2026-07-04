@@ -4,7 +4,6 @@ import { apiFetch } from '../lib/apiClient'
 import type {
   AssetSearchParams,
   AssetSearchResponse,
-  ApprovalSubmitResponse,
   ChatSession,
   CveSearchParams,
   CveSearchResponse,
@@ -33,6 +32,7 @@ import type {
   TraceListResponse,
   TraceStatus,
   UpdateResponse,
+  UploadResultResponse,
   Url2MdParseResponse,
 } from '../types'
 
@@ -654,14 +654,16 @@ export function useSkillsApi() {
     }
   }
 
-  const requestSkillUpload = async (payload: { name: string; description?: string; source?: string; content?: string }): Promise<ApprovalSubmitResponse> => {
+  const uploadSkill = async (payload: { name: string; file: File }): Promise<UploadResultResponse> => {
     loading.value = true
     error.value = null
+    const form = new FormData()
+    form.append('name', payload.name)
+    form.append('file', payload.file)
     try {
-      const response = await apiFetch('/skills/upload-request', {
+      const response = await apiFetch('/skills/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: form
       })
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
@@ -679,7 +681,7 @@ export function useSkillsApi() {
     toggling,
     fetchSkills,
     toggleSkill,
-    requestSkillUpload
+    uploadSkill
   }
 }
 
@@ -820,7 +822,7 @@ export function useMcpApi() {
     body: JSON.stringify({ url })
   }, apiMessage('mcpHiAgentDeleteFailed'))
 
-  const requestMcpUpload = (payload: { name: string; url?: string; description?: string; manifest?: string }) => request<ApprovalSubmitResponse>('/upload-request', {
+  const uploadMcp = (payload: { name: string; url?: string; description?: string; manifest?: string }) => request<UploadResultResponse>('/upload', {
     method: 'POST',
     body: JSON.stringify(payload)
   }, apiMessage('mcpRequestFailed'))
@@ -837,6 +839,6 @@ export function useMcpApi() {
     addHiAgent,
     updateHiAgent,
     deleteHiAgent,
-    requestMcpUpload
+    uploadMcp
   }
 }

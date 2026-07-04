@@ -1,7 +1,7 @@
 <template>
   <div class="knowledge-console knowledge-workflow-shell">
-    <section class="knowledge-stat-dashboard" :aria-label="t('knowledge.stats.ariaLabel')">
-      <article v-for="card in statisticsCards" :key="card.label" class="knowledge-stat-card">
+    <section class="knowledge-stat-dashboard ag-stat-strip" :aria-label="t('knowledge.stats.ariaLabel')">
+      <article v-for="card in statisticsCards" :key="card.label" class="knowledge-stat-card ag-stat-chip">
         <span>{{ card.label }}</span>
         <strong :title="card.value">{{ card.value }}</strong>
       </article>

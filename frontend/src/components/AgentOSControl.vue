@@ -1,10 +1,10 @@
 <template>
   <div class="agentos-control">
-    <section class="agentos-summary-strip">
+    <section class="agentos-summary-strip ag-stat-strip">
       <article
         v-for="metric in payload?.metrics || fallbackMetrics"
         :key="metric.label"
-        class="agentos-summary-chip"
+        class="agentos-summary-chip ag-stat-chip"
         :class="`tone-${metric.tone || 'blue'}`"
       >
         <span>{{ metric.label }}</span>

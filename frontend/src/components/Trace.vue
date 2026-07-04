@@ -1,174 +1,132 @@
 <template>
   <div class="trace-console">
     <div class="trace-workbench trace-session-workbench">
-      <aside class="trace-session-panel">
-        <div class="trace-toolbar trace-session-toolbar">
-          <div class="trace-panel-header">
-            <div>
-              <p>{{ t('trace.sessions.title') }}</p>
-              <span>{{ t('trace.sessions.description') }}</span>
-            </div>
-            <strong>{{ filteredSessions.length }}</strong>
-          </div>
+      <section class="trace-stat-strip ag-stat-strip" aria-label="Trace metrics">
+        <article
+          v-for="metric in traceSummaryCards"
+          :key="metric.label"
+          class="trace-stat-card ag-stat-chip"
+          :class="`tone-${metric.tone}`"
+        >
+          <span>{{ metric.label }}</span>
+          <strong :title="metric.hint">{{ metric.value }}</strong>
+        </article>
+      </section>
 
-          <div class="trace-filter-bar">
-            <el-input
-              v-model="sessionFilters.sessionId"
-              size="small"
-              clearable
-              :placeholder="t('trace.filters.sessionId')"
-              class="trace-filter-input"
-              @keyup.enter="refresh"
-            />
-            <el-input
-              v-model="sessionFilters.userId"
-              size="small"
-              clearable
-              :placeholder="t('trace.filters.userId')"
-              class="trace-filter-input"
-              @keyup.enter="refresh"
-            />
-            <el-input
-              v-model="sessionFilters.keyword"
-              size="small"
-              clearable
-              :placeholder="t('trace.filters.keyword')"
-              class="trace-filter-input"
-              @keyup.enter="refresh"
-            />
-            <el-select
-              v-model="sessionFilters.status"
-              size="small"
-              :placeholder="t('trace.filters.sessionStatus')"
-              class="trace-filter-select"
-            >
-              <el-option :label="t('trace.filters.activeSessions')" value="active" />
-              <el-option :label="t('trace.filters.archivedSessions')" value="archived" />
-              <el-option :label="t('trace.filters.allSessions')" value="all" />
-            </el-select>
-            <div class="trace-filter-actions">
-              <el-button size="small" plain class="cursor-pointer" :disabled="loading || loadingSessions" @click="resetFilters">
-                {{ t('trace.actions.reset') }}
-              </el-button>
-              <el-tooltip :content="t('trace.actions.refreshSessions')" placement="bottom">
-                <el-button size="small" type="primary" :loading="loading || loadingSessions" @click="refresh" class="cursor-pointer">
-                  <el-icon><Refresh /></el-icon>
-                </el-button>
-              </el-tooltip>
-            </div>
-          </div>
+      <div class="trace-query-toolbar">
+        <div class="trace-query-primary">
+          <el-input
+            v-model="sessionFilters.sessionId"
+            size="small"
+            clearable
+            :placeholder="t('trace.filters.searchSessionId')"
+            class="trace-filter-input wide"
+            @keyup.enter="refresh"
+          />
+          <el-input
+            v-model="runFilters.runId"
+            size="small"
+            clearable
+            :placeholder="t('trace.filters.searchRunId')"
+            class="trace-filter-input wide"
+            @keyup.enter="refreshAll"
+          />
+          <el-select
+            v-model="runFilters.status"
+            size="small"
+            clearable
+            :placeholder="t('trace.filters.status')"
+            class="trace-filter-select"
+          >
+            <el-option label="Success" value="OK" />
+            <el-option label="Error" value="ERROR" />
+            <el-option label="Running" value="UNSET" />
+          </el-select>
+          <el-button size="small" plain class="cursor-pointer" @click="traceAdvancedFiltersOpen = !traceAdvancedFiltersOpen">
+            {{ t('trace.filters.advanced') }}
+          </el-button>
         </div>
-
-        <div class="trace-session-list">
-          <el-skeleton v-if="loadingSessions && !sessions.length" :rows="5" animated />
-          <template v-else>
-            <button
-              v-for="session in filteredSessions"
-              :key="session.session_id"
-              type="button"
-              class="trace-session-card"
-              :class="{ active: selectedSessionId === session.session_id }"
-              @click="selectSession(session)"
-            >
-              <span class="trace-session-card-head">
-                <strong :title="session.preview || session.session_id">
-                  {{ session.preview || t('trace.sessions.untitled') }}
-                </strong>
-                <em>{{ formatSessionTime(session.updated_at || session.created_at) }}</em>
-              </span>
-              <span class="trace-session-id-grid">
-                <span class="trace-id-box">
-                  <small>{{ t('trace.filters.sessionId') }}</small>
-                  <b :title="session.session_id">{{ compactId(session.session_id) }}</b>
-                </span>
-                <span class="trace-id-box">
-                  <small>{{ t('trace.filters.userId') }}</small>
-                  <b :title="session.user_id || '-'">{{ compactId(session.user_id) }}</b>
-                </span>
-              </span>
-            </button>
-          </template>
-
-          <div v-if="!filteredSessions.length && !loadingSessions" class="empty-observe trace-session-empty">
-            <el-icon><Connection /></el-icon>
-            <strong>{{ t('trace.empty.noSessionsTitle') }}</strong>
-            <span>{{ t('trace.empty.noSessionsDescription') }}</span>
-          </div>
+        <div class="trace-filter-actions">
+          <el-button size="small" plain class="cursor-pointer" :disabled="loading || loadingSessions" @click="resetAllFilters">
+            {{ t('trace.actions.reset') }}
+          </el-button>
+          <el-tooltip :content="t('trace.actions.refreshAll')" placement="bottom">
+            <el-button size="small" type="primary" :loading="loading || loadingSessions" @click="refresh" class="cursor-pointer">
+              <el-icon><Refresh /></el-icon>
+            </el-button>
+          </el-tooltip>
         </div>
-      </aside>
+        <div v-if="traceAdvancedFiltersOpen" class="trace-advanced-filters">
+          <el-input v-model="sessionFilters.userId" size="small" clearable :placeholder="t('trace.filters.userId')" class="trace-filter-input" @keyup.enter="refreshAll" />
+          <el-input v-model="sessionFilters.keyword" size="small" clearable :placeholder="t('trace.filters.keyword')" class="trace-filter-input" @keyup.enter="refreshAll" />
+          <el-select v-model="sessionFilters.status" size="small" :placeholder="t('trace.filters.sessionStatus')" class="trace-filter-select">
+            <el-option :label="t('trace.filters.activeSessions')" value="active" />
+            <el-option :label="t('trace.filters.archivedSessions')" value="archived" />
+            <el-option :label="t('trace.filters.allSessions')" value="all" />
+          </el-select>
+          <el-input v-model="runFilters.agentId" size="small" clearable :placeholder="t('trace.filters.agentId')" class="trace-filter-input" @keyup.enter="refreshAll" />
+          <el-input v-model="runFilters.teamId" size="small" clearable :placeholder="t('trace.filters.teamId')" class="trace-filter-input" @keyup.enter="refreshAll" />
+          <el-input v-model="runFilters.workflowId" size="small" clearable :placeholder="t('trace.filters.workflowId')" class="trace-filter-input" @keyup.enter="refreshAll" />
+        </div>
+      </div>
 
-      <main class="trace-canvas">
-        <section class="trace-runs-workbench" :class="{ 'drawer-open': traceDrawerOpen }">
-          <div class="trace-runs-toolbar trace-toolbar">
+      <div
+        ref="traceBodyGridRef"
+        class="trace-body-grid"
+        :class="{ 'drawer-active': traceDrawerOpen }"
+        :style="{ '--trace-drawer-width': traceDrawerOpen ? `${drawerWidth}px` : '0px' }"
+      >
+        <aside class="trace-session-panel">
+          <div class="trace-toolbar trace-session-toolbar">
             <div class="trace-panel-header">
               <div>
-                <p>{{ t('trace.runs.title') }}</p>
-                <span>{{ t('trace.runs.description') }}</span>
+                <p>{{ t('trace.sessions.title') }}</p>
+                <span>{{ t('trace.sessions.description') }}</span>
               </div>
-              <strong>{{ filteredRunRows.length }}</strong>
+              <strong>{{ filteredSessions.length }}</strong>
             </div>
+          </div>
 
-            <div class="trace-filter-bar">
-              <el-input
-                v-model="runFilters.runId"
-                size="small"
-                clearable
-                :placeholder="t('trace.filters.runId')"
-                class="trace-filter-input"
-                @keyup.enter="refreshRuns"
-              />
-              <el-input
-                v-model="runFilters.agentId"
-                size="small"
-                clearable
-                :placeholder="t('trace.filters.agentId')"
-                class="trace-filter-input"
-                @keyup.enter="refreshRuns"
-              />
-              <el-input
-                v-model="runFilters.teamId"
-                size="small"
-                clearable
-                :placeholder="t('trace.filters.teamId')"
-                class="trace-filter-input"
-                @keyup.enter="refreshRuns"
-              />
-              <el-input
-                v-model="runFilters.workflowId"
-                size="small"
-                clearable
-                :placeholder="t('trace.filters.workflowId')"
-                class="trace-filter-input"
-                @keyup.enter="refreshRuns"
-              />
-              <el-select
-                v-model="runFilters.status"
-                size="small"
-                clearable
-                :placeholder="t('trace.filters.status')"
-                class="trace-filter-select"
+          <div class="trace-session-list">
+            <el-skeleton v-if="loadingSessions && !sessions.length" :rows="5" animated />
+            <template v-else>
+              <button
+                v-for="session in filteredSessions"
+                :key="session.session_id"
+                type="button"
+                class="trace-session-card"
+                :class="{ active: selectedSessionId === session.session_id }"
+                @click="selectSession(session)"
               >
-                <el-option label="OK" value="OK" />
-                <el-option label="ERROR" value="ERROR" />
-                <el-option label="UNSET" value="UNSET" />
-              </el-select>
-              <div class="trace-filter-actions">
-                <el-button size="small" plain class="cursor-pointer" :disabled="loading" @click="resetRunFilters">
-                  {{ t('trace.actions.reset') }}
-                </el-button>
-                <el-tooltip :content="t('trace.actions.refreshRuns')" placement="bottom">
-                  <el-button size="small" type="primary" :loading="loading" @click="refreshRuns" class="cursor-pointer">
-                    <el-icon><Refresh /></el-icon>
-                  </el-button>
-                </el-tooltip>
-              </div>
+                <span class="trace-session-card-head">
+                  <strong :title="session.preview || session.session_id">
+                    {{ session.preview || t('trace.sessions.untitled') }}
+                  </strong>
+                  <em>{{ formatSessionTime(session.updated_at || session.created_at) }}</em>
+                </span>
+                <span class="trace-session-id-line" :title="session.session_id">{{ compactId(session.session_id) }}</span>
+              </button>
+            </template>
+
+            <div v-if="!filteredSessions.length && !loadingSessions" class="empty-observe trace-session-empty">
+              <el-icon><Connection /></el-icon>
+              <strong>{{ t('trace.empty.noSessionsTitle') }}</strong>
+              <span>{{ t('trace.empty.noSessionsDescription') }}</span>
             </div>
           </div>
+        </aside>
 
-          <div v-if="selectedSession" class="trace-selected-session trace-id-line">
-            <strong :title="selectedSession.session_id">{{ compactId(selectedSession.session_id) }}</strong>
-            <span>{{ t('trace.sessions.traceCount', { count: sessionTraceItems.length }) }}</span>
-          </div>
+        <main class="trace-canvas">
+          <section class="trace-runs-workbench" :class="{ 'drawer-open': traceDrawerOpen }">
+            <div class="trace-runs-toolbar trace-toolbar">
+              <div class="trace-panel-header">
+                <div>
+                  <p>{{ t('trace.runs.title') }}</p>
+                  <span>{{ selectedSession ? compactId(selectedSession.session_id) : t('trace.runs.description') }}</span>
+                </div>
+                <strong>{{ filteredRunRows.length }}</strong>
+              </div>
+            </div>
 
           <div v-if="!selectedSession" class="trace-empty-stage">
             <div class="empty-observe">
@@ -200,13 +158,13 @@
                   <span class="trace-status-dot" :class="statusClass(row.trace.status)" />
                   <strong :title="row.title">{{ row.title }}</strong>
                 </div>
-                <span :title="row.runId">{{ t('trace.filters.runId') }} {{ compactId(row.runId) }}</span>
+                <span :title="row.runId">{{ compactId(row.runId) }}</span>
               </span>
               <span class="trace-run-meta">
-                <span :title="row.sessionId">{{ t('trace.filters.sessionId') }} {{ compactId(row.sessionId) }}</span>
-                <span :title="row.ownerId">{{ row.ownerLabel }} {{ compactId(row.ownerId) }}</span>
+                <el-tag :type="tagType(row.trace.status)" effect="light" size="small">{{ statusLabel(row.trace.status) }}</el-tag>
+                <span :title="row.ownerId">{{ compactId(row.ownerId) }}</span>
               </span>
-              <span class="span-duration">
+              <span class="span-duration" :class="durationClass(row.trace.duration_ms)">
                 <strong>{{ formatDuration(row.trace.duration_ms) }}</strong>
                 <small>{{ formatDateTime(row.trace.created_at || row.trace.start_time) }}</small>
               </span>
@@ -217,256 +175,311 @@
         </section>
 
         <transition name="trace-drawer">
-          <div v-if="traceDrawerOpen && selectedTrace" class="trace-detail-drawer" role="dialog" aria-modal="false">
-            <div class="trace-detail-shell trace-inspector-shell">
-          <div class="trace-run-header">
-            <div class="trace-run-title">
-              <div class="trace-run-heading">
-                <span class="trace-status-dot large" :class="statusClass(selectedTrace.status)" />
-                <div>
-                  <h4 :title="selectedTrace.name">
-                    {{ selectedTrace.name }}
-                  </h4>
-                </div>
-                <el-tag :type="tagType(selectedTrace.status)" effect="light" size="small">{{ selectedTrace.status }}</el-tag>
-              </div>
-            </div>
-
-            <div class="trace-copy-actions">
-              <el-button size="small" plain class="cursor-pointer" @click="refreshSelectedTrace" :loading="loadingDetail">
-                {{ t('trace.actions.refetch') }}
-              </el-button>
-              <el-button size="small" plain class="cursor-pointer" @click="closeTraceDrawer">
-                {{ t('common.actions.cancel') }}
-              </el-button>
-            </div>
-
-            <div class="trace-evidence-strip" aria-label="Trace metadata">
-              <button
-                v-for="item in selectedTraceEvidence"
-                :key="item.label"
-                type="button"
-                class="trace-evidence-chip"
-                :disabled="!item.copyable"
-                @click="copyText(item.value)"
-              >
-                <span>{{ item.label }}:</span>
-                <strong :title="item.value">{{ item.displayValue }}</strong>
-                <el-icon v-if="item.copyable"><CopyDocument /></el-icon>
-              </button>
-            </div>
-          </div>
-
-          <div class="trace-content-layout">
-            <aside class="trace-span-hierarchy">
-              <div class="trace-panel-header">
-                <div>
-                  <p>Trace Hierarchy</p>
-                  <span>{{ t('trace.hierarchy.description') }}</span>
-                </div>
-                <strong>{{ spans.length }} spans</strong>
-              </div>
-
-              <el-tree
-                v-if="tree.length"
-                :data="tree"
-                node-key="span.span_id"
-                :expand-on-click-node="false"
-                default-expand-all
-                class="trace-tree trace-hierarchy-tree"
-                @node-click="onSpanNodeClick"
-              >
-                <template #default="{ data }">
-                  <button
-                    type="button"
-                    class="trace-tree-node trace-hierarchy-node"
-                    :class="{ active: selectedSpan?.span_id === data.span.span_id, error: data.span.status_code === 'ERROR' }"
-                    @click.stop="selectSpan(data.span)"
-                  >
-                    <span class="trace-status-dot" :class="statusClass(data.span.status_code)" />
-                    <span class="trace-hierarchy-node-copy">
-                      <strong :title="data.span.name">{{ data.span.name }}</strong>
-                      <small>{{ data.span.kind || 'span' }} · {{ formatDuration(data.span.duration_ms) }}</small>
-                    </span>
+          <div
+            v-if="traceDrawerOpen && selectedTrace"
+            class="trace-detail-drawer"
+            role="dialog"
+            aria-modal="false"
+          >
+            <div class="trace-drawer-resizer" @mousedown="startDrawerResize" />
+              <div class="trace-detail-shell trace-inspector-shell">
+                <div class="trace-run-header" :class="{ collapsed: drawerHeaderCollapsed }">
+                  <button type="button" class="trace-drawer-close" :aria-label="t('trace.actions.closeDrawer')" @click="closeTraceDrawer">
+                    <el-icon><ArrowRight /></el-icon>
                   </button>
-                </template>
-              </el-tree>
 
-              <div v-else-if="spans.length" class="trace-hierarchy-fallback">
-                <button
-                  v-for="span in spans"
-                  :key="span.span_id"
-                  type="button"
-                  class="trace-tree-node trace-hierarchy-node"
-                  :class="{ active: selectedSpan?.span_id === span.span_id, error: span.status_code === 'ERROR' }"
-                  @click="selectSpan(span)"
-                >
-                  <span class="trace-status-dot" :class="statusClass(span.status_code)" />
-                  <span class="trace-hierarchy-node-copy">
-                    <strong :title="span.name">{{ span.name }}</strong>
-                    <small>{{ span.kind || 'span' }} · {{ formatDuration(span.duration_ms) }}</small>
-                  </span>
-                </button>
-              </div>
-
-              <div v-else class="empty-observe">
-                <el-icon><Connection /></el-icon>
-                <strong>{{ t('trace.empty.noSpansTitle') }}</strong>
-                <span>{{ t('trace.empty.noSpansDescription') }}</span>
-              </div>
-            </aside>
-
-            <section class="trace-content-detail">
-              <div v-if="!selectedSpan" class="empty-observe">
-                <el-icon><Aim /></el-icon>
-                <strong>{{ t('trace.empty.selectSpanTitle') }}</strong>
-                <span>{{ t('trace.empty.selectSpanDescription') }}</span>
-              </div>
-
-              <template v-else>
-                <div class="trace-content-titlebar">
-                  <div class="trace-selected-span">
-                    <div class="trace-content-glyph" :class="{ error: selectedSpan.status_code === 'ERROR' }">
-                      <el-icon><Cpu /></el-icon>
-                    </div>
+                  <div class="trace-run-title">
+                  <div class="trace-run-heading">
+                    <span class="trace-status-dot large" :class="statusClass(selectedTrace.status)" />
                     <div>
-                      <strong>{{ selectedSpan.name }}</strong>
-                      <em>{{ selectedSpan.kind || 'span' }}</em>
+                      <h4 :title="selectedTrace.name">{{ selectedTrace.name }}</h4>
+                      <span v-if="!drawerHeaderCollapsed">{{ formatDateTime(selectedTrace.created_at || selectedTrace.start_time) }}</span>
                     </div>
-                  </div>
-                  <div class="trace-content-badges">
-                    <span>LATENCY {{ formatDuration(selectedSpan.duration_ms) }}</span>
-                    <el-tag :type="tagType(selectedSpan.status_code)" effect="light" size="small">{{ selectedSpan.status_code }}</el-tag>
+                    <el-tag :type="tagType(selectedTrace.status)" effect="light" size="small">{{ statusLabel(selectedTrace.status) }}</el-tag>
+                    <span class="trace-header-duration" :class="durationClass(selectedTrace.duration_ms)">{{ formatDuration(selectedTrace.duration_ms) }}</span>
                   </div>
                 </div>
 
-                <div class="trace-content-tabs" role="tablist" aria-label="Span detail sections">
-                  <button
-                    type="button"
-                    role="tab"
-                    :aria-selected="activeDetailTab === 'info'"
-                    :class="{ active: activeDetailTab === 'info' }"
-                    @click="activeDetailTab = 'info'"
-                  >
-                    Info
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    :aria-selected="activeDetailTab === 'metadata'"
-                    :class="{ active: activeDetailTab === 'metadata' }"
-                    @click="activeDetailTab = 'metadata'"
-                  >
-                    Metadata
-                  </button>
+                <div class="trace-copy-actions">
+                  <el-button size="small" plain class="cursor-pointer" :disabled="!hasPreviousRun" @click="openAdjacentRun(-1)">
+                    {{ t('trace.actions.previousRun') }}
+                  </el-button>
+                  <el-button size="small" plain class="cursor-pointer" :disabled="!hasNextRun" @click="openAdjacentRun(1)">
+                    {{ t('trace.actions.nextRun') }}
+                  </el-button>
+                  <el-button size="small" plain class="cursor-pointer" @click="drawerPinned = !drawerPinned">
+                    {{ drawerPinned ? t('trace.actions.unpin') : t('trace.actions.pin') }}
+                  </el-button>
+                  <el-button size="small" plain class="cursor-pointer" @click="drawerHeaderCollapsed = !drawerHeaderCollapsed">
+                    {{ drawerHeaderCollapsed ? t('trace.actions.expandHeader') : t('trace.actions.collapseHeader') }}
+                  </el-button>
+                  <el-button size="small" plain class="cursor-pointer" @click="refreshSelectedTrace" :loading="loadingDetail">
+                    {{ t('trace.actions.refetch') }}
+                  </el-button>
                 </div>
+              </div>
 
-                <div v-if="selectedSpan.status_message" class="trace-error-box">
-                  <span>{{ t('trace.labels.errorMessage') }}</span>
-                  <strong>{{ selectedSpan.status_message }}</strong>
-                </div>
-
-                <template v-if="activeDetailTab === 'info'">
-                  <section class="trace-io-section">
-                    <div class="trace-io-head">
-                      <span>Input</span>
+              <div class="trace-content-layout trace-inspector-grid">
+                <aside class="trace-inspector-primary">
+                  <section class="trace-hierarchy-compact expanded">
+                    <div class="trace-panel-header">
                       <div>
-                        <span class="trace-mode-chip" :class="{ active: parsedSpan.input.format === 'json' }">JSON</span>
-                        <span class="trace-mode-chip" :class="{ active: parsedSpan.input.format === 'markdown' }">MARKDOWN</span>
-                        <span class="trace-mode-chip" :class="{ active: parsedSpan.input.format === 'text' }">TEXT</span>
+                        <p>Trace Hierarchy</p>
+                        <span>{{ t('trace.hierarchy.description') }}</span>
+                      </div>
+                      <strong>{{ spans.length }} spans</strong>
+                    </div>
+
+                    <div class="trace-span-hierarchy">
+                      <el-tree
+                        v-if="tree.length"
+                        :data="tree"
+                        node-key="span.span_id"
+                        :expand-on-click-node="false"
+                        default-expand-all
+                        class="trace-tree trace-hierarchy-tree"
+                        @node-click="onSpanNodeClick"
+                      >
+                        <template #default="{ data }">
+                          <button
+                            type="button"
+                            class="trace-tree-node trace-hierarchy-node"
+                            :class="{ active: selectedSpan?.span_id === data.span.span_id, error: data.span.status_code === 'ERROR' }"
+                            @click.stop="selectSpan(data.span, 'input')"
+                          >
+                            <span class="trace-status-dot" :class="statusClass(data.span.status_code)" />
+                            <span class="trace-hierarchy-node-copy">
+                              <strong :title="data.span.name">{{ data.span.name }}</strong>
+                              <small>{{ data.span.kind || 'span' }} · {{ formatDuration(data.span.duration_ms) }}</small>
+                            </span>
+                          </button>
+                        </template>
+                      </el-tree>
+
+                      <div v-else-if="spans.length" class="trace-hierarchy-fallback">
+                        <button
+                          v-for="span in spans"
+                          :key="span.span_id"
+                          type="button"
+                          class="trace-tree-node trace-hierarchy-node"
+                          :class="{ active: selectedSpan?.span_id === span.span_id, error: span.status_code === 'ERROR' }"
+                          @click="selectSpan(span, 'input')"
+                        >
+                          <span class="trace-status-dot" :class="statusClass(span.status_code)" />
+                          <span class="trace-hierarchy-node-copy">
+                            <strong :title="span.name">{{ span.name }}</strong>
+                            <small>{{ span.kind || 'span' }} · {{ formatDuration(span.duration_ms) }}</small>
+                          </span>
+                        </button>
+                      </div>
+
+                      <div v-else class="empty-observe">
+                        <el-icon><Connection /></el-icon>
+                        <strong>{{ t('trace.empty.noSpansTitle') }}</strong>
+                        <span>{{ t('trace.empty.noSpansDescription') }}</span>
                       </div>
                     </div>
-                    <pre
-                      v-if="isJsonPayload(parsedSpan.input)"
-                      class="trace-io-block trace-json-payload"
-                      :class="{ empty: !parsedSpan.input.text }"
-                    >{{ formatPayloadText(parsedSpan.input, "No input captured") }}</pre>
-                    <div
-                      v-else
-                      class="trace-markdown-render trace-io-block"
-                      :class="{ empty: !parsedSpan.input.text }"
-                      v-html="renderPayloadMarkup(parsedSpan.input, 'No input captured')"
-                    />
                   </section>
 
-                  <section class="trace-io-section">
-                    <div class="trace-io-head">
-                      <span>Output</span>
-                      <div>
-                        <span class="trace-mode-chip" :class="{ active: parsedSpan.output.format === 'json' }">JSON</span>
-                        <span class="trace-mode-chip" :class="{ active: parsedSpan.output.format === 'markdown' }">MARKDOWN</span>
-                        <span class="trace-mode-chip" :class="{ active: parsedSpan.output.format === 'text' }">TEXT</span>
-                      </div>
-                    </div>
-                    <pre
-                      v-if="isJsonPayload(parsedSpan.output)"
-                      class="trace-io-block trace-json-payload"
-                      :class="{ empty: !parsedSpan.output.text }"
-                    >{{ formatPayloadText(parsedSpan.output, "No output captured") }}</pre>
-                    <div
-                      v-else
-                      class="trace-markdown-render trace-io-block"
-                      :class="{ empty: !parsedSpan.output.text }"
-                      v-html="renderPayloadMarkup(parsedSpan.output, 'No output captured')"
-                    />
-                  </section>
-                </template>
-
-                <template v-else>
-                  <section class="trace-metadata-panel trace-metadata-ledger">
+                  <section class="trace-overview-panel" id="trace-detail-overview">
                     <div class="trace-json-head">
-                      <span>Metadata</span>
+                      <span>Overview</span>
                     </div>
-                    <div class="trace-metadata-grid">
-                      <div v-for="item in spanMetadataItems" :key="item.label" class="trace-metadata-item">
+                    <div class="trace-overview-grid">
+                      <div v-for="item in overviewItems" :key="item.label" class="trace-detail-metric" :class="{ error: item.tone === 'error' }">
                         <span>{{ item.label }}</span>
                         <strong :title="item.value">{{ item.displayValue }}</strong>
                       </div>
                     </div>
                   </section>
+                </aside>
 
-                  <section v-if="parsedSpan.events.length" class="trace-events-panel">
-                    <div class="trace-json-head">
-                      <span>Events</span>
-                    </div>
-                    <article v-for="event in parsedSpan.events" :key="`${event.name}:${event.message}`" class="trace-event-row">
-                      <strong>{{ event.name }}</strong>
-                      <span>{{ event.message }}</span>
-                    </article>
-                  </section>
-
-                  <div>
-                    <div class="trace-json-head">
-                      <span>Attributes</span>
-                      <el-button size="small" plain class="cursor-pointer" :disabled="!selectedSpan" @click="copySpanJson">
-                        {{ t('trace.actions.copyJson') }}
-                      </el-button>
-                    </div>
-                    <pre class="trace-json">{{ prettyJson(selectedSpan.attributes) }}</pre>
+                <section class="trace-content-detail trace-inspector-secondary" :data-active-detail-tab="activeDetailTab">
+                  <div v-if="!selectedSpan" class="empty-observe">
+                    <el-icon><Aim /></el-icon>
+                    <strong>{{ t('trace.empty.selectSpanTitle') }}</strong>
+                    <span>{{ t('trace.empty.selectSpanDescription') }}</span>
                   </div>
-                </template>
-              </template>
 
-              <el-alert v-if="apiError" class="trace-alert" type="error" :title="apiError" show-icon />
-            </section>
-          </div>
+                  <template v-else>
+                    <div class="trace-content-titlebar">
+                      <div class="trace-selected-span">
+                        <div class="trace-content-glyph" :class="{ error: selectedSpan.status_code === 'ERROR' }">
+                          <el-icon><Cpu /></el-icon>
+                        </div>
+                        <div>
+                          <strong>{{ selectedSpan.name }}</strong>
+                          <em>{{ selectedSpan.kind || 'span' }}</em>
+                        </div>
+                      </div>
+                      <div class="trace-content-badges">
+                        <span>LATENCY {{ formatDuration(selectedSpan.duration_ms) }}</span>
+                        <el-tag :type="tagType(selectedSpan.status_code)" effect="light" size="small">{{ selectedSpan.status_code }}</el-tag>
+                      </div>
+                    </div>
+
+                    <div class="trace-content-tabs" role="tablist" aria-label="Span detail sections">
+                      <button
+                        type="button"
+                        role="tab"
+                        :aria-selected="activeDetailTab === 'info'"
+                        :class="{ active: activeDetailTab === 'info' }"
+                        @click="activeDetailTab = 'info'"
+                      >
+                        Info
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        :aria-selected="activeDetailTab === 'metadata'"
+                        :class="{ active: activeDetailTab === 'metadata' }"
+                        @click="activeDetailTab = 'metadata'"
+                      >
+                        Metadata
+                      </button>
+                    </div>
+
+                    <div v-if="selectedSpan.status_message" class="trace-error-box">
+                      <span>{{ t('trace.labels.errorMessage') }}</span>
+                      <strong>{{ selectedSpan.status_message }}</strong>
+                    </div>
+
+                    <div v-if="activeDetailTab === 'info'" class="trace-tab-panel trace-info-tab" id="trace-detail-input">
+                      <section class="trace-io-section">
+                        <div class="trace-io-head">
+                          <span>Input</span>
+                          <div class="trace-io-actions">
+                            <el-select v-model="inputViewMode" size="small" class="trace-mode-select">
+                              <el-option label="Text" value="text" />
+                              <el-option label="JSON" value="json" />
+                              <el-option label="Markdown" value="markdown" />
+                            </el-select>
+                            <el-button size="small" plain class="cursor-pointer" @click="copyPayload(parsedSpan.input, inputViewMode)">{{ t('trace.actions.copy') }}</el-button>
+                            <el-button size="small" plain class="cursor-pointer" @click="togglePayloadExpanded('input')">
+                              {{ expandedPayloads.has('input') ? t('trace.actions.collapse') : t('trace.actions.expand') }}
+                            </el-button>
+                          </div>
+                        </div>
+                        <pre
+                          v-if="inputViewMode === 'json'"
+                          class="trace-io-block trace-json-payload"
+                          :class="{ empty: !parsedSpan.input.text, expanded: expandedPayloads.has('input') }"
+                        >{{ payloadTextForMode(parsedSpan.input, inputViewMode, "No input captured") }}</pre>
+                        <div
+                          v-else
+                          class="trace-markdown-render trace-io-block"
+                          :class="{ empty: !parsedSpan.input.text, expanded: expandedPayloads.has('input') }"
+                          v-html="renderPayloadMarkupForMode(parsedSpan.input, inputViewMode, 'No input captured')"
+                        />
+                      </section>
+
+                      <section id="trace-detail-output" class="trace-io-section">
+                        <div class="trace-io-head">
+                          <span>Output</span>
+                          <div class="trace-io-actions">
+                            <el-select v-model="outputViewMode" size="small" class="trace-mode-select">
+                              <el-option label="Text" value="text" />
+                              <el-option label="JSON" value="json" />
+                              <el-option label="Markdown" value="markdown" />
+                            </el-select>
+                            <el-button size="small" plain class="cursor-pointer" @click="copyPayload(parsedSpan.output, outputViewMode)">{{ t('trace.actions.copy') }}</el-button>
+                            <el-button size="small" plain class="cursor-pointer" @click="togglePayloadExpanded('output')">
+                              {{ expandedPayloads.has('output') ? t('trace.actions.collapse') : t('trace.actions.expand') }}
+                            </el-button>
+                          </div>
+                        </div>
+                        <pre
+                          v-if="outputViewMode === 'json'"
+                          class="trace-io-block trace-json-payload"
+                          :class="{ empty: !parsedSpan.output.text, expanded: expandedPayloads.has('output') }"
+                        >{{ payloadTextForMode(parsedSpan.output, outputViewMode, "No output captured") }}</pre>
+                        <div
+                          v-else
+                          class="trace-markdown-render trace-io-block"
+                          :class="{ empty: !parsedSpan.output.text, expanded: expandedPayloads.has('output') }"
+                          v-html="renderPayloadMarkupForMode(parsedSpan.output, outputViewMode, 'No output captured')"
+                        />
+                      </section>
+                    </div>
+
+                    <div v-else class="trace-tab-panel trace-metadata-tab" id="trace-detail-metadata">
+                      <section class="trace-metadata-panel trace-metadata-ledger">
+                        <div class="trace-json-head">
+                          <span>Metadata</span>
+                          <el-button size="small" plain class="cursor-pointer" :disabled="!selectedSpan" @click="copySpanJson">
+                            {{ t('trace.actions.copyJson') }}
+                          </el-button>
+                        </div>
+                        <div class="trace-metadata-grid">
+                          <div v-for="item in spanMetadataItems" :key="item.label" class="trace-metadata-item">
+                            <span>{{ item.label }}</span>
+                            <strong :title="item.value">{{ item.displayValue }}</strong>
+                          </div>
+                        </div>
+                        <pre class="trace-json">{{ prettyJson(selectedSpan.attributes) }}</pre>
+                      </section>
+
+                      <section id="trace-detail-tools" class="trace-tool-panel">
+                        <div class="trace-json-head">
+                          <span>Tool Calls</span>
+                        </div>
+                        <div v-if="toolCallItems.length" class="trace-tool-list">
+                          <details v-for="tool in toolCallItems" :key="tool.id" class="trace-tool-call">
+                            <summary>
+                              <span class="trace-status-dot" :class="statusClass(tool.status)" />
+                              <strong>{{ tool.name }}</strong>
+                              <em :class="durationClass(tool.durationMs)">{{ formatDuration(tool.durationMs) }}</em>
+                              <el-tag :type="tagType(tool.status)" effect="light" size="small">{{ statusLabel(tool.status) }}</el-tag>
+                            </summary>
+                            <div class="trace-tool-body">
+                              <span>Arguments</span>
+                              <pre>{{ tool.arguments }}</pre>
+                              <span>Response</span>
+                              <pre>{{ tool.response }}</pre>
+                              <span>Metadata</span>
+                              <pre>{{ tool.metadata }}</pre>
+                            </div>
+                          </details>
+                        </div>
+                        <div v-else class="trace-inline-empty">No tool calls captured</div>
+                      </section>
+
+                      <section id="trace-detail-logs" class="trace-events-panel">
+                        <div class="trace-json-head">
+                          <span>Logs</span>
+                        </div>
+                        <div v-if="logItems.length">
+                          <article v-for="event in logItems" :key="`${event.name}:${event.message}`" class="trace-event-row">
+                            <strong>{{ event.name }}</strong>
+                            <span>{{ event.message }}</span>
+                          </article>
+                        </div>
+                        <div v-else class="trace-inline-empty">No logs captured</div>
+                      </section>
+                    </div>
+                  </template>
+
+                  <el-alert v-if="apiError" class="trace-alert" type="error" :title="apiError" show-icon />
+                </section>
+              </div>
             </div>
           </div>
         </transition>
       </main>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue"
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue"
 import { ElMessage } from "element-plus"
 import MarkdownIt from "markdown-it"
 import { useI18n } from "vue-i18n"
 import {
   Aim,
+  ArrowRight,
   Connection,
-  CopyDocument,
   Cpu,
   Refresh,
 } from "@element-plus/icons-vue"
@@ -498,9 +511,25 @@ interface TraceRunRow {
   run?: ChatSessionRun
 }
 
+interface TraceSummaryState {
+  totalTraces: number
+  totalSpans: number
+  errors: number
+  avgLatencyMs: number
+  sampleSize: number
+}
+
 const traceStore = useTraceStore()
+const traceBodyGridRef = ref<HTMLElement | null>(null)
 const sessions = ref<ChatSession[]>([])
 const sessionTraceItems = ref<TraceItem[]>([])
+const traceSummary = ref<TraceSummaryState>({
+  totalTraces: 0,
+  totalSpans: 0,
+  errors: 0,
+  avgLatencyMs: 0,
+  sampleSize: 0,
+})
 const selectedSessionId = ref<string | null>(null)
 const sessionFilters = reactive({
   sessionId: "",
@@ -522,10 +551,26 @@ const tree = ref<SpanTreeNode[]>([])
 const selectedSpan = ref<SpanItem | null>(null)
 const activeDetailTab = ref<"info" | "metadata">("info")
 const traceDrawerOpen = ref(false)
+const traceAdvancedFiltersOpen = ref(false)
+const drawerHeaderCollapsed = ref(false)
+const drawerPinned = ref(false)
+const drawerWidth = ref(520)
+const inputViewMode = ref<PayloadViewMode>("text")
+const outputViewMode = ref<PayloadViewMode>("text")
+const expandedPayloads = reactive(new Set<"input" | "output">())
 
 const loadingDetail = ref(false)
 const apiError = computed(() => error.value)
 let filterRefreshTimer: ReturnType<typeof window.setTimeout> | null = null
+let drawerResizeStartX = 0
+let drawerResizeStartWidth = 0
+
+const ACTIVE_SESSION_COLUMN_WIDTH = 320
+const MIN_RUN_COLUMN_WIDTH = 260
+const MIN_DRAWER_WIDTH = 360
+const MAX_DRAWER_WIDTH = 980
+
+type PayloadViewMode = "text" | "json" | "markdown"
 
 const normalize = (value?: string | null) => (value || "").trim().toLowerCase()
 
@@ -600,21 +645,110 @@ const filteredRunRows = computed(() => {
   })
 })
 
-const selectedTraceEvidence = computed(() => {
+const traceSummaryCards = computed(() => [
+  {
+    label: "Sessions",
+    value: sessions.value.length,
+    hint: `${filteredSessions.value.length} visible sessions`,
+    tone: "blue",
+  },
+  {
+    label: "Traces",
+    value: traceSummary.value.totalTraces,
+    hint: `${traceSummary.value.sampleSize} sampled traces`,
+    tone: "green",
+  },
+  {
+    label: "Spans",
+    value: traceSummary.value.totalSpans,
+    hint: "Spans observed in sampled traces",
+    tone: "blue",
+  },
+  {
+    label: "Errors",
+    value: traceSummary.value.errors,
+    hint: "Trace or span errors in sampled traces",
+    tone: traceSummary.value.errors > 0 ? "red" : "green",
+  },
+  {
+    label: "Avg Latency(s)",
+    value: formatLatencySeconds(traceSummary.value.avgLatencyMs),
+    hint: "Average trace duration in sampled traces",
+    tone: latencyTone(traceSummary.value.avgLatencyMs),
+  },
+])
+
+const selectedRunIndex = computed(() => {
+  const traceId = selectedTrace.value?.trace_id
+  if (!traceId) return -1
+  return filteredRunRows.value.findIndex((row) => row.trace.trace_id === traceId)
+})
+
+const selectedRunRow = computed(() => {
+  const index = selectedRunIndex.value
+  return index >= 0 ? filteredRunRows.value[index] : null
+})
+
+const hasPreviousRun = computed(() => selectedRunIndex.value > 0)
+const hasNextRun = computed(() => selectedRunIndex.value >= 0 && selectedRunIndex.value < filteredRunRows.value.length - 1)
+
+const selectedRunMetrics = computed<Record<string, unknown>>(() => {
+  const metrics = selectedRunRow.value?.run?.metrics
+  return metrics && typeof metrics === "object" ? metrics as Record<string, unknown> : {}
+})
+
+const overviewItems = computed(() => {
   const trace = selectedTrace.value
-  if (!trace) return []
-  const rows = [
-    { label: "Created At", value: trace.created_at || trace.start_time || "-", displayValue: formatDateTime(trace.created_at || trace.start_time) },
-    { label: "Trace ID", value: trace.trace_id || "-", displayValue: compactId(trace.trace_id) },
-    { label: "Run ID", value: trace.run_id || "-", displayValue: compactId(trace.run_id) },
-    { label: "Session ID", value: trace.session_id || "-", displayValue: compactId(trace.session_id) },
-    { label: "Agent", value: trace.agent_id || trace.team_id || "-", displayValue: compactId(trace.agent_id || trace.team_id) },
-    { label: "Workflow", value: trace.workflow_id || "-", displayValue: compactId(trace.workflow_id) },
+  const metadata = parsedSpan.value.metadata || emptyParsedSpan.metadata
+  const tokens = metadata.tokens || {}
+  const totalTokens = valueOrDash(tokens.total ?? selectedRunMetrics.value.total_tokens)
+  const cost = selectedRunMetrics.value.cost
+  const errorText = selectedSpan.value?.status_message || (trace?.status === "ERROR" ? trace.name : "")
+  return [
+    { label: "Status", value: valueOrDash(trace?.status), displayValue: statusLabel(trace?.status || ""), tone: trace?.status === "ERROR" ? "error" : "" },
+    { label: "Latency", value: formatDuration(selectedSpan.value?.duration_ms), displayValue: formatDuration(selectedSpan.value?.duration_ms), tone: "" },
+    { label: "Duration", value: formatDuration(trace?.duration_ms), displayValue: formatDuration(trace?.duration_ms), tone: "" },
+    { label: "Model", value: valueOrDash(metadata.model || selectedRunRow.value?.run?.model), displayValue: valueOrDash(metadata.model || selectedRunRow.value?.run?.model), tone: "" },
+    { label: "Tokens", value: totalTokens, displayValue: totalTokens, tone: "" },
+    { label: "Cost", value: formatCost(cost), displayValue: formatCost(cost), tone: "" },
+    { label: "Error", value: valueOrDash(errorText), displayValue: valueOrDash(errorText), tone: errorText ? "error" : "" },
   ]
-  if (trace.user_id) {
-    rows.push({ label: "User ID", value: trace.user_id, displayValue: compactId(trace.user_id) })
-  }
-  return rows.map((item) => ({ ...item, copyable: item.value !== "-" }))
+})
+
+const toolCallItems = computed(() => spans.value
+  .filter((span) => isToolSpan(span))
+  .map((span) => {
+    const parsed = span.parsed || emptyParsedSpan
+    return {
+      id: span.span_id,
+      name: parsed.metadata?.tool || span.name || "Tool",
+      status: span.status_code,
+      durationMs: span.duration_ms,
+      arguments: formatPayloadText(parsed.input, "No arguments captured"),
+      response: formatPayloadText(parsed.output, "No response captured"),
+      metadata: prettyJson({
+        span_id: span.span_id,
+        kind: span.kind,
+        operation: parsed.metadata?.operation,
+        attributes: span.attributes || {},
+      }),
+    }
+  }))
+
+const logItems = computed(() => {
+  const parsedEvents = parsedSpan.value.events || []
+  const rawEvents = (selectedSpan.value?.events || [])
+    .map((event, index) => {
+      if (event && typeof event === "object") {
+        const record = event as Record<string, unknown>
+        return {
+          name: valueOrDash(record.name || `event-${index + 1}`),
+          message: valueOrDash(record.message || record.body || record.attributes || event),
+        }
+      }
+      return { name: `event-${index + 1}`, message: valueOrDash(event) }
+    })
+  return parsedEvents.length ? parsedEvents : rawEvents
 })
 
 const selectedTraceStartMs = computed(() => toMs(selectedTrace.value?.start_time))
@@ -674,18 +808,6 @@ const renderMarkdown = (value: string) => {
   return markdownRenderer.render(value || "")
 }
 
-const isJsonPayload = (payload: ParsedSpanPayload) => {
-  if (payload.format === "json" || payload.data !== null && payload.data !== undefined) return true
-  const text = payload.text?.trim()
-  if (!text || !["{", "["].includes(text[0])) return false
-  try {
-    JSON.parse(text)
-    return true
-  } catch {
-    return false
-  }
-}
-
 const formatPayloadText = (payload: ParsedSpanPayload, fallback: string) => {
   if (!payload.text) return fallback
   if (payload.data !== null && payload.data !== undefined) return prettyJson(payload.data)
@@ -696,8 +818,16 @@ const formatPayloadText = (payload: ParsedSpanPayload, fallback: string) => {
   }
 }
 
-const renderPayloadMarkup = (payload: ParsedSpanPayload, fallback: string) => {
-  return renderMarkdown(payload.text || fallback)
+const isJsonPayload = (payload: ParsedSpanPayload) => {
+  if (payload.format === "json" || payload.data !== null && payload.data !== undefined) return true
+  const text = payload.text?.trim()
+  if (!text || !["{", "["].includes(text[0])) return false
+  try {
+    JSON.parse(text)
+    return true
+  } catch {
+    return false
+  }
 }
 
 const compactId = (value?: string | null) => {
@@ -749,6 +879,30 @@ const statusClass = (status: string) => {
   return "other"
 }
 
+const statusLabel = (status: string) => {
+  if (status === "OK") return "Success"
+  if (status === "ERROR") return "Error"
+  if (status === "UNSET") return "Running"
+  if (!status) return "-"
+  return status
+}
+
+const durationClass = (durationMs: number | string | null | undefined) => {
+  const n = Number(durationMs)
+  if (!Number.isFinite(n) || n < 0) return "duration-muted"
+  if (n < 500) return "duration-fast"
+  if (n < 2000) return "duration-medium"
+  if (n < 10000) return "duration-slow"
+  return "duration-critical"
+}
+
+const latencyTone = (durationMs: number) => {
+  if (!Number.isFinite(durationMs) || durationMs < 500) return "green"
+  if (durationMs < 2000) return "yellow"
+  if (durationMs < 10000) return "yellow"
+  return "red"
+}
+
 const formatDuration = (durationMs: number | string | null | undefined): string => {
   const n = Number(durationMs)
   if (!Number.isFinite(n) || n < 0) return "-"
@@ -782,6 +936,49 @@ const prettyJson = (obj: unknown) => {
   }
 }
 
+const formatCost = (value: unknown) => {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n <= 0) return "-"
+  if (n < 0.01) return `$${n.toFixed(5)}`
+  return `$${n.toFixed(2)}`
+}
+
+const formatLatencySeconds = (durationMs: number) => {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return "0.00"
+  return (durationMs / 1000).toFixed(2)
+}
+
+const isToolSpan = (span: SpanItem) => {
+  const metadata = span.parsed?.metadata
+  const haystack = [span.kind, span.name, metadata?.tool, metadata?.operation]
+    .map((value) => String(value || "").toLowerCase())
+    .join(" ")
+  return Boolean(metadata?.tool) || haystack.includes("tool") || haystack.includes("function")
+}
+
+const payloadTextForMode = (payload: ParsedSpanPayload, mode: PayloadViewMode, fallback: string) => {
+  if (mode === "json") return isJsonPayload(payload) ? formatPayloadText(payload, fallback) : payload.text || fallback
+  return payload.text || fallback
+}
+
+const renderPayloadMarkupForMode = (payload: ParsedSpanPayload, mode: PayloadViewMode, fallback: string) => {
+  const text = payloadTextForMode(payload, mode, fallback)
+  if (mode === "markdown") return renderMarkdown(text)
+  return renderMarkdown(markdownRenderer.utils.escapeHtml(text))
+}
+
+const copyPayload = async (payload: ParsedSpanPayload, mode: PayloadViewMode) => {
+  await copyText(payloadTextForMode(payload, mode, ""))
+}
+
+const togglePayloadExpanded = (key: "input" | "output") => {
+  if (expandedPayloads.has(key)) {
+    expandedPayloads.delete(key)
+  } else {
+    expandedPayloads.add(key)
+  }
+}
+
 const spanOffset = (span: SpanItem) => {
   const traceStart = selectedTraceStartMs.value
   const start = toMs(span.start_time)
@@ -808,7 +1005,39 @@ const clearTraceSelection = () => {
 
 const refresh = async () => {
   sessions.value = await listSessions({ includeRuns: true })
+  await loadTraceSummary()
+  const currentSession = sessions.value.find((session) => session.session_id === selectedSessionId.value)
+  if (currentSession) {
+    await loadSessionTraces(currentSession, runFilters.runId)
+    return
+  }
   await reconcileSessionSelection()
+}
+
+const loadTraceSummary = async () => {
+  try {
+    const resp = await listTraces({ page: 1, limit: 100 })
+    const items = resp.items || []
+    const durations = items
+      .map((trace) => Number(trace.duration_ms))
+      .filter((value) => Number.isFinite(value) && value >= 0)
+    const totalDuration = durations.reduce((sum, value) => sum + value, 0)
+    traceSummary.value = {
+      totalTraces: Number(resp.total_count || items.length || 0),
+      totalSpans: items.reduce((sum, trace) => sum + Number(trace.total_spans || 0), 0),
+      errors: items.reduce((sum, trace) => sum + Number(trace.error_count ?? (trace.status === "ERROR" ? 1 : 0)), 0),
+      avgLatencyMs: durations.length ? totalDuration / durations.length : 0,
+      sampleSize: items.length,
+    }
+  } catch {
+    traceSummary.value = {
+      totalTraces: sessionTraceItems.value.length,
+      totalSpans: sessionTraceItems.value.reduce((sum, trace) => sum + Number(trace.total_spans || 0), 0),
+      errors: sessionTraceItems.value.reduce((sum, trace) => sum + Number(trace.error_count ?? (trace.status === "ERROR" ? 1 : 0)), 0),
+      avgLatencyMs: 0,
+      sampleSize: sessionTraceItems.value.length,
+    }
+  }
 }
 
 const reconcileSessionSelection = async () => {
@@ -938,7 +1167,11 @@ const selectTraceById = async (traceId: string | null | undefined) => {
 
 const openTraceDrawer = async (traceId: string | null | undefined) => {
   await selectTraceById(traceId)
-  if (selectedTrace.value) traceDrawerOpen.value = true
+  if (selectedTrace.value) {
+    traceDrawerOpen.value = true
+    await nextTick()
+    drawerWidth.value = clampDrawerWidth(drawerWidth.value)
+  }
 }
 
 const closeTraceDrawer = () => {
@@ -949,32 +1182,49 @@ const firstAvailableSpan = () => {
   return tree.value[0]?.span || spans.value[0] || null
 }
 
-const selectSpan = (span: SpanItem) => {
+const scrollDetailSectionIntoView = async (section: "overview" | "input" | "output" | "tools" | "logs" | "metadata") => {
+  await nextTick()
+  const target = document.getElementById(`trace-detail-${section}`)
+  target?.scrollIntoView({ block: "start", behavior: "smooth" })
+}
+
+const selectSpan = (span: SpanItem, section: "overview" | "input" | "output" | "tools" | "logs" | "metadata" = "input") => {
   selectedSpan.value = span
-  activeDetailTab.value = "info"
+  activeDetailTab.value = section === "metadata" ? "metadata" : "info"
+  void scrollDetailSectionIntoView(section)
 }
 
 const onSpanNodeClick = (node: SpanTreeNode) => {
   selectSpan(node.span)
 }
 
-const resetFilters = async () => {
+const openAdjacentRun = async (direction: -1 | 1) => {
+  const next = filteredRunRows.value[selectedRunIndex.value + direction]
+  if (!next) return
+  await openTraceDrawer(next.trace.trace_id)
+}
+
+const resetAllFilters = async () => {
   sessionFilters.sessionId = ""
   sessionFilters.userId = ""
   sessionFilters.keyword = ""
   sessionFilters.status = "active"
-  selectedSessionId.value = null
-  traceStore.resetTraceFilters()
-  await refresh()
-}
-
-const resetRunFilters = async () => {
   runFilters.runId = ""
   runFilters.agentId = ""
   runFilters.teamId = ""
   runFilters.workflowId = ""
   runFilters.status = ""
-  await refreshRuns()
+  selectedSessionId.value = null
+  traceStore.resetTraceFilters()
+  await refresh()
+}
+
+const refreshAll = async () => {
+  if (selectedSession.value) {
+    await refreshRuns()
+  } else {
+    await refresh()
+  }
 }
 
 const refreshRuns = async () => {
@@ -1036,6 +1286,41 @@ const copySpanJson = async () => {
   await copyText(JSON.stringify(selectedSpan.value, null, 2))
 }
 
+const drawerMaxWidth = () => {
+  const containerWidth = traceBodyGridRef.value?.clientWidth || window.innerWidth
+  return Math.max(280, containerWidth - ACTIVE_SESSION_COLUMN_WIDTH - MIN_RUN_COLUMN_WIDTH)
+}
+
+const clampDrawerWidth = (value: number) => {
+  const maxWidth = Math.min(drawerMaxWidth(), MAX_DRAWER_WIDTH)
+  const minWidth = Math.min(MIN_DRAWER_WIDTH, maxWidth)
+  return Math.round(Math.min(Math.max(value, minWidth), maxWidth))
+}
+
+const syncDrawerWidth = () => {
+  if (!traceDrawerOpen.value) return
+  drawerWidth.value = clampDrawerWidth(drawerWidth.value)
+}
+
+const stopDrawerResize = () => {
+  window.removeEventListener("mousemove", resizeDrawer)
+  window.removeEventListener("mouseup", stopDrawerResize)
+}
+
+const resizeDrawer = (event: MouseEvent) => {
+  const delta = drawerResizeStartX - event.clientX
+  drawerWidth.value = clampDrawerWidth(drawerResizeStartWidth + delta)
+}
+
+const startDrawerResize = (event: MouseEvent) => {
+  event.preventDefault()
+  drawerResizeStartX = event.clientX
+  drawerResizeStartWidth = clampDrawerWidth(drawerWidth.value)
+  drawerWidth.value = drawerResizeStartWidth
+  window.addEventListener("mousemove", resizeDrawer)
+  window.addEventListener("mouseup", stopDrawerResize)
+}
+
 watch(
   () => [sessionFilters.sessionId, sessionFilters.userId, sessionFilters.keyword, sessionFilters.status],
   () => {
@@ -1064,6 +1349,7 @@ onMounted(async () => {
   window.addEventListener("agno-aios-trace-select", handleExternalTraceSelect)
   window.addEventListener("agno-aios-trace-session-open", handleExternalSessionSelect)
   window.addEventListener("agno-aios-trace-session-select", handleExternalSessionSelect)
+  window.addEventListener("resize", syncDrawerWidth)
   try {
     await refresh()
   } catch (e: unknown) {
@@ -1075,7 +1361,9 @@ onUnmounted(() => {
   window.removeEventListener("agno-aios-trace-select", handleExternalTraceSelect)
   window.removeEventListener("agno-aios-trace-session-open", handleExternalSessionSelect)
   window.removeEventListener("agno-aios-trace-session-select", handleExternalSessionSelect)
+  window.removeEventListener("resize", syncDrawerWidth)
   clearPendingFilterRefresh()
+  stopDrawerResize()
 })
 </script>
 
@@ -1114,6 +1402,64 @@ onUnmounted(() => {
   border-bottom: 1px solid var(--trace-border);
   background: var(--trace-panel);
   padding: 12px 16px;
+}
+
+.trace-stat-strip {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  border-bottom: 1px solid var(--trace-border);
+  background: color-mix(in srgb, var(--trace-panel) 94%, var(--trace-bg));
+  padding: 10px 14px;
+}
+
+.trace-stat-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--trace-border);
+  border-radius: 8px;
+  background: var(--trace-panel-soft);
+  padding: 8px 10px 8px 12px;
+}
+
+.trace-stat-card::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--trace-blue);
+  content: "";
+}
+
+.trace-stat-card.tone-green::before {
+  background: var(--ag-green);
+}
+
+.trace-stat-card.tone-yellow::before {
+  background: var(--trace-yellow);
+}
+
+.trace-stat-card.tone-red::before {
+  background: var(--trace-red);
+}
+
+.trace-stat-card span {
+  display: block;
+  color: var(--trace-muted);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.trace-stat-card strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--trace-text);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 
 .trace-toolbar,
@@ -2390,6 +2736,10 @@ html.dark .trace-waterfall-row.active {
     width: 100% !important;
   }
 
+  .trace-stat-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
 }
 
 .trace-runs-workbench {
@@ -2399,6 +2749,12 @@ html.dark .trace-waterfall-row.active {
   flex: 1 1 auto;
   flex-direction: column;
   overflow: hidden;
+}
+
+.trace-runs-workbench.drawer-open {
+  min-width: 0;
+  width: auto;
+  max-width: 100%;
 }
 
 .trace-runs-toolbar {
@@ -2435,14 +2791,13 @@ html.dark .trace-waterfall-row.active {
 }
 
 .trace-detail-drawer {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  position: relative;
   z-index: 9;
   display: flex;
-  width: min(720px, 54vw);
-  min-width: 520px;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
   border-left: 1px solid var(--trace-border);
   background: var(--trace-panel);
   box-shadow: -24px 0 60px rgba(0, 0, 0, 0.22);
@@ -2452,8 +2807,433 @@ html.dark .trace-waterfall-row.active {
   width: 100%;
 }
 
+.trace-session-workbench {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.trace-query-toolbar {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 12px;
+  border-bottom: 1px solid var(--trace-border);
+  background: color-mix(in srgb, var(--trace-panel) 92%, var(--trace-bg));
+  padding: 12px 14px;
+}
+
+.trace-query-primary,
+.trace-advanced-filters {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.trace-advanced-filters {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--trace-border);
+  padding-top: 10px;
+}
+
+.trace-filter-input.wide {
+  width: min(240px, 100%);
+}
+
+.trace-body-grid {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.trace-body-grid.drawer-active {
+  grid-template-columns: minmax(250px, 320px) minmax(260px, 1fr) minmax(0, var(--trace-drawer-width));
+}
+
+.trace-body-grid.drawer-active .trace-canvas {
+  display: contents;
+}
+
+.trace-body-grid.drawer-active .trace-runs-workbench {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.trace-body-grid.drawer-active .trace-detail-drawer {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.trace-session-toolbar,
+.trace-runs-toolbar {
+  padding: 12px 14px;
+}
+
+.trace-session-list {
+  gap: 8px;
+  padding: 10px;
+}
+
+.trace-session-card {
+  gap: 7px;
+  border-color: color-mix(in srgb, var(--trace-border) 82%, transparent);
+  background: color-mix(in srgb, var(--trace-panel-soft) 74%, var(--trace-panel));
+  padding: 9px 10px;
+}
+
+.trace-session-card:hover {
+  border-color: color-mix(in srgb, var(--trace-purple) 46%, var(--trace-border));
+  background: color-mix(in srgb, var(--trace-blue-soft) 30%, var(--trace-panel));
+}
+
+.trace-session-card.active {
+  border-color: color-mix(in srgb, var(--trace-purple) 72%, var(--trace-border));
+  background: color-mix(in srgb, var(--trace-purple) 12%, var(--trace-panel));
+  box-shadow: inset 3px 0 0 var(--trace-purple);
+}
+
+.trace-session-card-head strong {
+  -webkit-line-clamp: 1;
+  font-size: 12px;
+}
+
+.trace-session-id-line {
+  overflow: hidden;
+  color: var(--trace-muted);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trace-run-row {
+  grid-template-columns: minmax(180px, 1.35fr) minmax(110px, 0.75fr) 128px;
+  border-color: color-mix(in srgb, var(--trace-border) 82%, transparent);
+  background: color-mix(in srgb, var(--trace-panel-soft) 72%, var(--trace-panel));
+  padding: 11px 12px;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.trace-run-row:hover {
+  border-color: color-mix(in srgb, var(--trace-purple) 54%, var(--trace-border));
+  background: color-mix(in srgb, var(--trace-blue-soft) 34%, var(--trace-panel));
+  transform: translateY(-1px);
+}
+
+.trace-run-row.active {
+  border-color: color-mix(in srgb, var(--trace-purple) 78%, var(--trace-border));
+  background: color-mix(in srgb, var(--trace-purple) 13%, var(--trace-panel));
+  box-shadow: inset 3px 0 0 var(--trace-purple);
+}
+
+.trace-run-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.span-duration.duration-fast strong,
+.trace-header-duration.duration-fast,
+.trace-tool-call em.duration-fast {
+  color: var(--ag-green);
+}
+
+.span-duration.duration-medium strong,
+.trace-header-duration.duration-medium,
+.trace-tool-call em.duration-medium {
+  color: var(--trace-yellow);
+}
+
+.span-duration.duration-slow strong,
+.trace-header-duration.duration-slow,
+.trace-tool-call em.duration-slow {
+  color: #f59e0b;
+}
+
+.span-duration.duration-critical strong,
+.trace-header-duration.duration-critical,
+.trace-tool-call em.duration-critical {
+  color: var(--trace-red);
+}
+
+.trace-header-duration {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.trace-run-header {
+  gap: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 10px 12px;
+}
+
+.trace-run-header.collapsed {
+  align-items: center;
+  padding: 8px 12px;
+}
+
+.trace-run-header.collapsed .trace-run-heading h4 {
+  -webkit-line-clamp: 1;
+}
+
+.trace-drawer-close {
+  grid-column: 2;
+  grid-row: 1;
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  align-self: center;
+  place-items: center;
+  border: 1px solid var(--trace-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--trace-panel-soft) 86%, transparent);
+  color: var(--trace-muted);
+  cursor: pointer;
+}
+
+.trace-drawer-close:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--trace-purple) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.trace-run-title {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.trace-copy-actions {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.trace-run-heading > div > span {
+  color: var(--trace-muted);
+  font-size: 11px;
+}
+
+.trace-copy-actions {
+  gap: 6px;
+}
+
+.trace-drawer-resizer {
+  width: 5px;
+  flex: 0 0 auto;
+  cursor: ew-resize;
+  background: transparent;
+}
+
+.trace-drawer-resizer:hover {
+  background: color-mix(in srgb, var(--trace-purple) 42%, transparent);
+}
+
+.trace-content-layout.trace-inspector-grid {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(250px, 0.9fr) minmax(0, 1.25fr);
+  gap: 12px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--trace-panel) 96%, var(--trace-bg));
+  padding: 12px;
+}
+
+.trace-inspector-primary,
+.trace-inspector-secondary {
+  min-height: 0;
+  overflow: auto;
+}
+
+.trace-inspector-primary {
+  display: grid;
+  grid-template-rows: minmax(260px, 1fr) auto;
+  gap: 12px;
+}
+
+.trace-inspector-secondary {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  height: 100%;
+  background: transparent;
+  padding: 0;
+}
+
+.trace-overview-panel,
+.trace-hierarchy-compact,
+.trace-tool-panel {
+  border: 1px solid var(--trace-border);
+  border-radius: 8px;
+  background: var(--trace-panel);
+  padding: 10px;
+}
+
+.trace-overview-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.trace-detail-metric.error {
+  border-color: rgba(240, 93, 94, 0.34);
+  background: rgba(240, 93, 94, 0.1);
+}
+
+.trace-hierarchy-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--trace-text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.trace-hierarchy-toggle strong {
+  color: var(--trace-muted);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+}
+
+.trace-hierarchy-compact .trace-span-hierarchy {
+  max-height: none;
+  min-height: 0;
+  overflow: auto;
+  margin-top: 0;
+  border: 1px solid var(--trace-border);
+  border-radius: 8px;
+}
+
+.trace-hierarchy-compact {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+}
+
+.trace-tab-panel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.trace-info-tab {
+  grid-template-rows: auto auto;
+}
+
+.trace-metadata-tab {
+  padding-bottom: 8px;
+}
+
+.trace-io-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.trace-mode-select {
+  width: 108px;
+}
+
+.trace-io-block.expanded {
+  max-height: none;
+}
+
+.trace-tool-list {
+  display: grid;
+  gap: 8px;
+}
+
+.trace-tool-call {
+  border: 1px solid var(--trace-border);
+  border-radius: 8px;
+  background: var(--trace-panel-soft);
+}
+
+.trace-tool-call summary {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 9px;
+  cursor: pointer;
+}
+
+.trace-tool-call summary strong {
+  overflow: hidden;
+  color: var(--trace-text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trace-tool-call summary em {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.trace-tool-body {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid var(--trace-border);
+  padding: 9px;
+}
+
+.trace-tool-body span {
+  color: var(--trace-muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.trace-tool-body pre,
+.trace-json {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid var(--trace-border);
+  border-radius: 8px;
+  background: var(--trace-code-bg);
+  padding: 10px;
+  color: var(--trace-code-text);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.trace-inline-empty {
+  border: 1px dashed var(--trace-border);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--trace-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
 .trace-runs-workbench.drawer-open .trace-runs-list {
-  padding-right: min(740px, calc(54vw + 20px));
+  padding-right: 14px;
+}
+
+.trace-runs-workbench.drawer-open .trace-run-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.trace-runs-workbench.drawer-open .trace-run-meta,
+.trace-runs-workbench.drawer-open .span-duration {
+  align-items: flex-start;
+  justify-content: flex-start;
+  text-align: left;
 }
 
 .trace-drawer-enter-active,
@@ -2469,7 +3249,6 @@ html.dark .trace-waterfall-row.active {
 
 @media (max-width: 1180px) {
   .trace-detail-drawer {
-    width: min(680px, 72vw);
     min-width: 0;
   }
 
@@ -2479,11 +3258,32 @@ html.dark .trace-waterfall-row.active {
 }
 
 @media (max-width: 980px) {
+  .trace-body-grid.drawer-active {
+    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  }
+
+  .trace-body-grid.drawer-active .trace-canvas {
+    display: flex;
+  }
+
   .trace-detail-drawer {
     position: fixed;
     inset: 0 0 0 auto;
     width: min(680px, 94vw);
     max-width: 94vw;
+  }
+
+  .trace-content-layout.trace-inspector-grid {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: auto;
+  }
+
+  .trace-inspector-primary {
+    grid-template-rows: auto auto;
+  }
+
+  .trace-hierarchy-compact .trace-span-hierarchy {
+    max-height: 320px;
   }
 
   .trace-run-row {
