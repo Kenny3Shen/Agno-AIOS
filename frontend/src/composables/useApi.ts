@@ -5,7 +5,6 @@ import type {
   ChatSession,
   CveSearchParams,
   CveSearchResponse,
-  HiAgentEntry,
   KnowledgeDocument,
   KnowledgeFileRequest,
   KnowledgeSearchResponse,
@@ -72,10 +71,6 @@ type ApiFallbackKey =
   | 'mcpTokenLoadFailed'
   | 'mcpTokenIssueFailed'
   | 'mcpTokenDeleteFailed'
-  | 'mcpHiAgentLoadFailed'
-  | 'mcpHiAgentAddFailed'
-  | 'mcpHiAgentUpdateFailed'
-  | 'mcpHiAgentDeleteFailed'
 
 const useApiMessage = () => {
   const { t } = useI18n()
@@ -895,24 +890,7 @@ export function useMcpApi() {
     body: JSON.stringify({ id })
   }, apiMessage('mcpTokenDeleteFailed'))
 
-  const listHiAgents = () => request<HiAgentEntry[]>('/hiagent', {}, apiMessage('mcpHiAgentLoadFailed'))
-
-  const addHiAgent = (entry: HiAgentEntry) => request<{ success: boolean }>('/hiagent/add', {
-    method: 'POST',
-    body: JSON.stringify(entry)
-  }, apiMessage('mcpHiAgentAddFailed'))
-
-  const updateHiAgent = (payload: Partial<HiAgentEntry> & { target_url?: string; url: string }) => request<{ success: boolean }>('/hiagent/update', {
-    method: 'POST',
-    body: JSON.stringify(payload)
-  }, apiMessage('mcpHiAgentUpdateFailed'))
-
-  const deleteHiAgent = (url: string) => request<{ success: boolean }>('/hiagent/delete', {
-    method: 'POST',
-    body: JSON.stringify({ url })
-  }, apiMessage('mcpHiAgentDeleteFailed'))
-
-  const uploadMcp = (payload: { name: string; url?: string; description?: string; manifest?: string }) => request<UploadResultResponse>('/upload', {
+  const uploadMcp = (payload: { name: string; description?: string; manifest: string }) => request<UploadResultResponse>('/upload', {
     method: 'POST',
     body: JSON.stringify(payload)
   }, apiMessage('mcpRequestFailed'))
@@ -925,10 +903,6 @@ export function useMcpApi() {
     listTokens,
     issueToken,
     deleteToken,
-    listHiAgents,
-    addHiAgent,
-    updateHiAgent,
-    deleteHiAgent,
     uploadMcp
   }
 }

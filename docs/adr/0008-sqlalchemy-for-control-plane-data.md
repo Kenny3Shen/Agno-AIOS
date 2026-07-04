@@ -22,7 +22,7 @@ Agno 提供 `AsyncPostgresDb`，并要求使用 `postgresql+psycopg_async` 形�
 
 ## 迁移顺序
 
-先从低风险 app-owned tables 开始，例如 `mcp.mcp_tokens`、`mcp.hiagent_exec_cache` 和 `app.audit_logs`。然后迁移 `app.cves`、`app.chat_session_archives`、`app.os_eval_runs` 和 `app.os_approvals`。最后逐一审查剩余的 Agno session 和 trace table 读取路径：能用 Agno APIs 的替换为 Agno APIs；不能替换的路径需要单独设计，不在默认迁移策略中作为例外保留。
+先从低风险 app-owned tables 开始，例如 `mcp.mcp_tokens` 和 `app.audit_logs`。然后迁移 `app.cves`、`app.chat_session_archives`、`app.os_eval_runs` 和 `app.os_approvals`。最后逐一审查剩余的 Agno session 和 trace table 读取路径：能用 Agno APIs 的替换为 Agno APIs；不能替换的路径需要单独设计，不在默认迁移策略中作为例外保留。
 
 ## 持久化形态
 

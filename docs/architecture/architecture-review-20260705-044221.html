@@ -420,7 +420,7 @@ flowchart TD
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 class="font-serif text-2xl font-semibold tracking-normal text-slate-950">MCP Service control module</h2>
-              <p class="mt-1 text-sm text-slate-600">按 ADR-0002，FastMCP 继续保持 in-process；当前 friction 是 config mutation、upload、token lifecycle、Hi-Agent 和 refresh semantics 逃离了同一个 module。</p>
+              <p class="mt-1 text-sm text-slate-600">按 ADR-0002，FastMCP 继续保持 in-process；当前 friction 是 config mutation、upload、token lifecycle 和 refresh semantics 逃离了同一个 module。</p>
             </div>
             <div class="flex gap-2">
               <span class="rounded-md border px-2.5 py-1 text-xs font-black tag-worth">Worth exploring（值得探索）</span>
@@ -454,7 +454,7 @@ flowchart LR
   R --> C[mcp_config_service]
   R -. upload 绕过 .-> F[api/mcp/config.py]
   F --> T[MCP Token storage]
-  F --> H[Hi-Agent config]
+  F --> H[MCP upload config]
   R -. 只返回 restart_required .-> S[IntegratedMcpRuntime]
   P[playbook.py] --> H
   classDef leak stroke:#dc2626,stroke-width:2px,color:#991b1b;

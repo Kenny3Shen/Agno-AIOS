@@ -7,10 +7,8 @@ from psycopg import sql
 from sqlalchemy.dialects import postgresql
 
 from api.mcp.config import (
-    HIAGENT_CACHE_TABLE,
     MCP_TOKENS_TABLE,
     init_mcp_postgres_tables,
-    upsert_hiagent_exec_record,
     upsert_token_record,
 )
 from api.services.mysql_store import mysql_connect
@@ -202,10 +200,6 @@ def migrate_mcp_tables() -> dict[str, Any]:
     for row in token_rows:
         upsert_token_record(row)
 
-    hiagent_rows = _mysql_rows(HIAGENT_CACHE_TABLE)
-    for row in hiagent_rows:
-        upsert_hiagent_exec_record(row)
-
     with postgres_connect() as conn:
         with conn.cursor() as cursor:
             cursor.execute(
@@ -228,11 +222,6 @@ def migrate_mcp_tables() -> dict[str, Any]:
             "source": len(token_rows),
             "migrated": len(token_rows),
             "target": _postgres_count(mcp_schema(), MCP_TOKENS_TABLE),
-        },
-        HIAGENT_CACHE_TABLE: {
-            "source": len(hiagent_rows),
-            "migrated": len(hiagent_rows),
-            "target": _postgres_count(mcp_schema(), HIAGENT_CACHE_TABLE),
         },
     }
 

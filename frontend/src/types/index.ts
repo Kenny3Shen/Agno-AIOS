@@ -83,13 +83,6 @@ export interface McpTokenIssueResponse {
   token: string
 }
 
-export interface HiAgentEntry {
-  name: string
-  url: string
-  description: string
-  enabled: boolean
-}
-
 export interface ChatSession {
   session_id: string
   user_id?: string | null

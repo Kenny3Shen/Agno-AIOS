@@ -10,7 +10,6 @@ from psycopg import sql
 
 from api.mcp.config import (
     SERVICE_IDS,
-    normalize_hiagents,
     read_mcp_config,
     services_from_config,
 )
@@ -430,7 +429,6 @@ def get_sessions_payload(actor: Any | None = None) -> OsPayload:
 def get_studio_payload(actor: Any | None = None) -> OsPayload:
     data = read_mcp_config()
     services = services_from_config(data)
-    hiagents = normalize_hiagents(data.get("hiagent", []))
     skill_dirs = iter_skill_dirs()
 
     skill_records = []
@@ -476,27 +474,16 @@ def get_studio_payload(actor: Any | None = None) -> OsPayload:
                 meta={"type": "mcp"},
             )
         )
-    for entry in hiagents:
-        records.append(
-            _record(
-                record_id=f"hiagent:{entry['url']}",
-                title=entry["name"],
-                subtitle=_compact(entry.get("description") or entry["url"], 120),
-                status="enabled" if entry.get("enabled") else "disabled",
-                meta={"type": "hi-agent", "url": entry["url"]},
-            )
-        )
     records.extend(skill_records)
 
     return _payload(
         module="studio",
         title="Studio",
-        description="Agent、Team、MCP、Hi-Agent 与 Skills 组件注册视图。",
+        description="Agent、Team、MCP 与 Skills 组件注册视图。",
         metrics=[
             _metric("Agents", 1, "当前安全运营 Agent", "green"),
             _metric("MCP", f"{sum(1 for enabled in services.values() if enabled)}/{len(services)}", "启用服务", "yellow"),
             _metric("Skills", f"{enabled_skills}/{len(skill_dirs)}", "启用技能", "blue"),
-            _metric("Hi-Agent", len(hiagents), "外部 Agent 接入", "red"),
         ],
         records=records,
     )

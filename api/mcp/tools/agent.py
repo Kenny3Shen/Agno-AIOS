@@ -9,7 +9,3 @@
 from fastmcp import FastMCP
 
 agent_mcp = FastMCP("Agent")
-# hiagent_mcp = create_proxy(
-#     "https://hiagent.x-peng.com/api/proxy/mcp?api_key=d5o9mr6lvndehbflo70gp"
-# )
-# agent_mcp.mount(hiagent_mcp)

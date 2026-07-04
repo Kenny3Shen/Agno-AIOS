@@ -16,7 +16,7 @@ Agno 文档推荐生产存储使用 `PostgresDb`，并在多数 AgentOS 部署�
 | default schema | FastAPI Users / auth | 用户和 OAuth account records。当前 SQLAlchemy metadata 没有设置显式 schema。 |
 | `app` | Agno AIOS | CVE intelligence、audit logs、evaluation runs 和 approval requests 等控制面记录。 |
 | `agno` | Agno | sessions、memories、traces、spans、schedules、scheduler runs、metrics、approvals、learnings 和 component configs 等运行时记录。 |
-| `mcp` | Agno AIOS | 集成 MCP token 和 Hi-Agent execution cache records。 |
+| `mcp` | Agno AIOS | 集成 MCP token records。 |
 | `knowledge` | Agno / Agno AIOS | Knowledge content catalog 和 PgVector vector index。 |
 
 ## Auth tables
@@ -126,23 +126,6 @@ Agno 文档推荐生产存储使用 `PostgresDb`，并在多数 AgentOS 部署�
 - `created_at`：epoch timestamp。
 - `expires_at`：epoch timestamp；`0` 表示不过期。
 
-### `mcp.hiagent_exec_cache`
-
-归属：Agno AIOS。
-
-用途：存储 Hi-Agent execution cache。
-
-关键列：
-
-- `exec_id`：`TEXT`，主键。
-- `tool_name`：remote tool name。
-- `status`：execution status。
-- `result`、`error`：执行结果或错误。
-- `created_at`：用于 cache ordering。
-- `updated_at`：更新时间。
-
-附加索引：`idx_hiagent_exec_created_at` 覆盖 `created_at`。
-
 ## Agno schema
 
 以下 tables 归 Agno 所有。优先使用 Agno `PostgresDb`、`ScheduleManager`、AgentOS 或 tracing APIs，不直接 SQL。
@@ -247,7 +230,7 @@ Agno 文档推荐生产存储使用 `PostgresDb`，并在多数 AgentOS 部署�
 | Metrics | Agno | `PostgresDb.calculate_metrics()` 和 `get_metrics()` | AgentOS runtime metrics 优先使用 Agno metrics。AIOS-specific dashboard projections 不写入 Agno tables。 |
 | `knowledge.agno_knowledge` 和 vector rows | Agno / PgVector | Agno `Knowledge`、`PostgresDb` contents DB、`PgVector` | 保持 Agno-owned。AIOS 通过 metadata 和 service-level checks 执行 ownership 与 presentation，不重新定义这些 tables。 |
 
-仍然明确属于 app-owned 的 tables：`app.audit_logs`、`app.cves`、`mcp.mcp_tokens` 和 `mcp.hiagent_exec_cache`。它们表示 AIOS security control-plane behavior 或 integrated MCP access，而不是 Agno runtime state。
+仍然明确属于 app-owned 的 tables：`app.audit_logs`、`app.cves` 和 `mcp.mcp_tokens`。它们表示 AIOS security control-plane behavior 或 integrated MCP access，而不是 Agno runtime state。
 
 ## 迁移建议
 

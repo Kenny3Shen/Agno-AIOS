@@ -69,7 +69,7 @@ Admin-only 操作用只有 admin 能通过通配规则满足的 permission 表�
 - Session archive。
 - CVE database update 尝试和结果。
 - Knowledge document 写入、删除和 clear。
-- MCP config 变更、token issue/delete、Hi-Agent 变更和 MCP upload。
+- MCP config 变更、token issue/delete 和 MCP upload。
 - Skill toggle 和 upload。
 - Model 和 settings updates。
 

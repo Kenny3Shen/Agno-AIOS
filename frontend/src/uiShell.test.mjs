@@ -657,7 +657,7 @@ for (const traceFilterHook of [
 
 for (const removedPanelCopy of [
   "MCP 工具中枢",
-  "基于 FastMCP 的服务控制、访问 Token 与外部 Hi-Agent 接入",
+  "基于 FastMCP 的服务控制、访问 Token 与外部接入",
   "TRACE CONSOLE",
   "Agent 观测中心",
   "会话记录、Trace 队列、Span 瀑布与错误上下文统一查看",
@@ -913,7 +913,6 @@ for (const hardcodedMcpCopy of [
   "Token 名称，例如 AgentOS",
   "仅显示一次，请立即复制",
   "暂无访问 Token",
-  "注册外部 MCP",
   "名称，例如 CVE Hunter",
   "能力描述",
   "接入说明",
@@ -921,7 +920,6 @@ for (const hardcodedMcpCopy of [
   "加载 MCP 数据失败",
   "生成 Token 失败",
   "删除 Token 失败",
-  "注册 Hi-Agent 失败",
   "FastMCP",
   "Client URL",
 ]) {

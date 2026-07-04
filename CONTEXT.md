@@ -96,10 +96,6 @@ _避免_: 外部 API
 用于授权访问 MCP endpoint 的 bearer-style token。
 _避免_: 用户会话 token
 
-**Hi-Agent**:
-注册到系统中的外部 MCP-compatible endpoint，供 playbook 工具发现和调用远程工具。
-_避免_: 内置 MCP service
-
 **Knowledge Document**:
 加入知识库、带用户范围的来源条目。
 _避免_: File、chunk

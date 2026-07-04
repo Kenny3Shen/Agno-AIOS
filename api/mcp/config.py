@@ -13,17 +13,11 @@ SERVICE_IDS = ("playbook", "agent", "basic")
 MCP_DATA_DIR = CONFIG_DIR / "mcp"
 MCP_CONFIG_FILE = MCP_DATA_DIR / "mcp_config.toml"
 MCP_TOKENS_TABLE = "mcp_tokens"
-HIAGENT_CACHE_TABLE = "hiagent_exec_cache"
 MCP_TOKENS_DB = postgres_label(mcp_schema(), MCP_TOKENS_TABLE)
-HIAGENT_CACHE_DB = postgres_label(mcp_schema(), HIAGENT_CACHE_TABLE)
 
 
 def _tokens_table() -> sql.Identifier:
     return sql.Identifier(mcp_schema(), MCP_TOKENS_TABLE)
-
-
-def _hiagent_table() -> sql.Identifier:
-    return sql.Identifier(mcp_schema(), HIAGENT_CACHE_TABLE)
 
 
 def _ensure_data_dir() -> None:
@@ -33,30 +27,8 @@ def _ensure_data_dir() -> None:
 def _default_config() -> dict[str, Any]:
     return {
         "mcp": {service_id: True for service_id in SERVICE_IDS},
-        "hiagent": [],
         "mcp_servers": [],
     }
-
-
-def normalize_hiagents(entries: Any) -> list[dict[str, Any]]:
-    if not isinstance(entries, list):
-        return []
-    normalized: list[dict[str, Any]] = []
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        url = str(entry.get("url") or "").strip()
-        if not url:
-            continue
-        normalized.append(
-            {
-                "name": str(entry.get("name") or "未命名 Agent").strip(),
-                "url": url,
-                "description": str(entry.get("description") or "").strip(),
-                "enabled": bool(entry.get("enabled", True)),
-            }
-        )
-    return normalized
 
 
 def normalize_mcp_servers(entries: Any) -> list[dict[str, Any]]:
@@ -76,7 +48,6 @@ def normalize_mcp_servers(entries: Any) -> list[dict[str, Any]]:
             {
                 "name": name,
                 "description": str(entry.get("description") or "").strip(),
-                "url": str(entry.get("url") or "").strip(),
                 "kind": str(entry.get("kind") or "unknown").strip(),
                 "enabled": bool(entry.get("enabled", True)),
                 "manifest": manifest,
@@ -98,8 +69,6 @@ def read_mcp_config() -> dict[str, Any]:
 
     if "mcp" not in data or not isinstance(data["mcp"], dict):
         data["mcp"] = {}
-    if "hiagent" not in data or not isinstance(data["hiagent"], list):
-        data["hiagent"] = []
     if "mcp_servers" not in data or not isinstance(data["mcp_servers"], list):
         data["mcp_servers"] = []
     return data
@@ -110,7 +79,6 @@ def write_mcp_config(data: dict[str, Any]) -> None:
     mcp_cfg = data.setdefault("mcp", {})
     if not isinstance(mcp_cfg, dict):
         data["mcp"] = {}
-    data["hiagent"] = normalize_hiagents(data.get("hiagent", []))
     data["mcp_servers"] = normalize_mcp_servers(data.get("mcp_servers", []))
     with MCP_CONFIG_FILE.open("wb") as f:
         tomli_w.dump(data, f)
@@ -129,15 +97,6 @@ def enabled_service_ids() -> set[str]:
     return {
         service_id for service_id, enabled in services_from_config().items() if enabled
     }
-
-
-def enabled_hiagent_urls() -> list[str]:
-    data = read_mcp_config()
-    return [
-        entry["url"]
-        for entry in normalize_hiagents(data.get("hiagent", []))
-        if entry.get("enabled") and entry.get("url")
-    ]
 
 
 def init_mcp_postgres_tables() -> None:
@@ -160,29 +119,6 @@ def init_mcp_postgres_tables() -> None:
                 )
                 """
                 ).format(_tokens_table())
-            )
-            cursor.execute(
-                sql.SQL(
-                    """
-                CREATE TABLE IF NOT EXISTS {} (
-                    exec_id TEXT PRIMARY KEY,
-                    tool_name TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    result TEXT,
-                    error TEXT,
-                    created_at DOUBLE PRECISION NOT NULL,
-                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                )
-                """
-                ).format(_hiagent_table())
-            )
-            cursor.execute(
-                sql.SQL(
-                    """
-                CREATE INDEX IF NOT EXISTS idx_hiagent_exec_created_at
-                ON {} (created_at)
-                """
-                ).format(_hiagent_table())
             )
 
 
@@ -271,52 +207,6 @@ def find_token(token: str) -> dict[str, Any] | None:
             return cursor.fetchone()
 
 
-def save_hiagent_exec(
-    exec_id: str,
-    tool_name: str,
-    status: str,
-    result: str = "",
-    error: str = "",
-) -> None:
-    init_mcp_postgres_tables()
-    with postgres_connect() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute(
-                sql.SQL(
-                    """
-                INSERT INTO {}
-                    (exec_id, tool_name, status, result, error, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (exec_id) DO UPDATE SET
-                    tool_name = EXCLUDED.tool_name,
-                    status = EXCLUDED.status,
-                    result = EXCLUDED.result,
-                    error = EXCLUDED.error,
-                    created_at = EXCLUDED.created_at,
-                    updated_at = now()
-                """,
-                ).format(_hiagent_table()),
-                (exec_id, tool_name, status, result, error, time.time()),
-            )
-
-
-def load_hiagent_exec(exec_id: str) -> dict[str, Any] | None:
-    init_mcp_postgres_tables()
-    with postgres_connect() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute(
-                sql.SQL(
-                    """
-                SELECT exec_id, tool_name, status, result, error, created_at
-                FROM {}
-                WHERE exec_id = %s
-                """,
-                ).format(_hiagent_table()),
-                (exec_id,),
-            )
-            return cursor.fetchone()
-
-
 def upsert_token_record(record: dict[str, Any]) -> None:
     init_tokens_db()
     with postgres_connect() as conn:
@@ -341,37 +231,6 @@ def upsert_token_record(record: dict[str, Any]) -> None:
                     record.get("expires_at"),
                 ),
             )
-
-
-def upsert_hiagent_exec_record(record: dict[str, Any]) -> None:
-    init_mcp_postgres_tables()
-    with postgres_connect() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute(
-                sql.SQL(
-                    """
-                INSERT INTO {}
-                    (exec_id, tool_name, status, result, error, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (exec_id) DO UPDATE SET
-                    tool_name = EXCLUDED.tool_name,
-                    status = EXCLUDED.status,
-                    result = EXCLUDED.result,
-                    error = EXCLUDED.error,
-                    created_at = EXCLUDED.created_at,
-                    updated_at = now()
-                """,
-                ).format(_hiagent_table()),
-                (
-                    record.get("exec_id"),
-                    record.get("tool_name"),
-                    record.get("status"),
-                    record.get("result"),
-                    record.get("error"),
-                    record.get("created_at"),
-                ),
-            )
-
 
 def is_valid_token(token: str) -> bool:
     record = find_token(token)

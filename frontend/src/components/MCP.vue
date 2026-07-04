@@ -38,7 +38,6 @@
             <p class="mcp-muted mt-1 text-xs">{{ t('mcp.upload.description') }}</p>
             <div class="mt-4 grid gap-3 md:grid-cols-2">
               <el-input v-model="uploadForm.name" :placeholder="t('mcp.upload.namePlaceholder')" />
-              <el-input v-model="uploadForm.url" :placeholder="t('mcp.upload.urlPlaceholder')" />
               <el-input v-model="uploadForm.description" :placeholder="t('mcp.upload.descriptionPlaceholder')" />
               <el-input v-model="uploadForm.manifest" type="textarea" :rows="4" :placeholder="t('mcp.upload.manifestPlaceholder')" />
             </div>
@@ -171,98 +170,6 @@
                 </section>
               </div>
             </el-tab-pane>
-
-            <el-tab-pane :label="t('mcp.tabs.hiAgent')" name="hiagent">
-              <div class="grid gap-3 xl:grid-cols-[360px_minmax(0,1fr)]">
-                <section class="mcp-panel">
-                  <div class="panel-title">
-                    <el-icon><Cpu /></el-icon>
-                    {{ t('mcp.hiAgent.registerTitle') }}
-                  </div>
-                  <div class="mt-4 space-y-3">
-                    <el-input
-                      v-model="hiAgentForm.name"
-                      :disabled="!canWriteMcp"
-                      :placeholder="t('mcp.hiAgent.namePlaceholder')"
-                      clearable
-                    />
-                    <el-input
-                      v-model="hiAgentForm.url"
-                      :disabled="!canWriteMcp"
-                      :placeholder="t('mcp.hiAgent.urlPlaceholder')"
-                      clearable
-                    />
-                    <el-input
-                      v-model="hiAgentForm.description"
-                      type="textarea"
-                      :rows="3"
-                      :disabled="!canWriteMcp"
-                      :placeholder="t('mcp.hiAgent.descriptionPlaceholder')"
-                    />
-                    <el-switch
-                      v-model="hiAgentForm.enabled"
-                      :disabled="!canWriteMcp"
-                      :active-text="t('common.state.enabled')"
-                      :inactive-text="t('common.state.disabled')"
-                    />
-                    <el-button
-                      type="primary"
-                      class="!w-full cursor-pointer"
-                      :disabled="!canWriteMcp"
-                      :loading="addingHiAgent"
-                      @click="addExternalAgent"
-                    >
-                      <el-icon class="mr-1"><Plus /></el-icon>
-                      {{ t('mcp.hiAgent.register') }}
-                    </el-button>
-                  </div>
-                </section>
-
-                <section class="mcp-panel min-w-0">
-                  <div class="mb-3 flex items-center justify-between">
-                    <div class="panel-title">
-                      <el-icon><SetUp /></el-icon>
-                      {{ t('mcp.hiAgent.connectedTitle') }}
-                    </div>
-                    <span class="mcp-muted text-xs">{{ t('mcp.count', { count: hiAgents.length }) }}</span>
-                  </div>
-
-                  <div v-if="hiAgentLoading" class="mcp-muted py-10 text-center text-xs">{{ t('mcp.loading') }}</div>
-                  <div v-else-if="!hiAgents.length" class="empty-box">{{ t('mcp.hiAgent.empty') }}</div>
-                  <div v-else class="space-y-2">
-                    <div v-for="agent in hiAgents" :key="agent.url" class="agent-row">
-                      <div class="min-w-0 flex-1">
-                        <div class="flex items-center gap-2">
-                          <strong class="truncate">{{ agent.name }}</strong>
-                          <span class="status-pill" :class="agent.enabled ? 'ok' : 'off'">
-                            {{ agent.enabled ? t('mcp.state.enabled') : t('mcp.state.disabled') }}
-                          </span>
-                        </div>
-                        <p v-if="agent.description" class="mcp-muted mt-1 line-clamp-2 text-xs">{{ agent.description }}</p>
-                        <p class="mcp-url mt-1 truncate font-mono text-[11px]">{{ agent.url }}</p>
-                      </div>
-                      <div class="flex shrink-0 items-center gap-2">
-                        <el-switch
-                          :model-value="agent.enabled"
-                          :disabled="!canWriteMcp"
-                          active-color="var(--ag-blue)"
-                          @change="(value: boolean) => toggleHiAgent(agent, value)"
-                        />
-                        <el-button
-                          class="cursor-pointer"
-                          plain
-                          type="danger"
-                          :disabled="!canWriteMcp"
-                          @click="deleteExternalAgent(agent.url)"
-                        >
-                          <el-icon><Delete /></el-icon>
-                        </el-button>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-              </div>
-            </el-tab-pane>
           </el-tabs>
         </div>
       </main>
@@ -289,9 +196,9 @@ import {
 import { useMcpApi } from "../composables/useApi"
 import { copyToClipboard } from "../lib/clipboard"
 import { useAuthStore } from "../stores/auth"
-import type { HiAgentEntry, McpServiceId, McpTokenInfo } from "../types"
+import type { McpServiceId, McpTokenInfo } from "../types"
 
-type TabId = "services" | "tokens" | "hiagent"
+type TabId = "services" | "tokens"
 
 type ServiceItem = {
   id: McpServiceId
@@ -307,11 +214,8 @@ const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const serviceToggling = ref<McpServiceId | null>(null)
 const tokens = ref<McpTokenInfo[]>([])
-const hiAgents = ref<HiAgentEntry[]>([])
 const tokensLoading = ref(false)
-const hiAgentLoading = ref(false)
 const issuingToken = ref(false)
-const addingHiAgent = ref(false)
 const uploadPanelOpen = ref(false)
 const submittingUpload = ref(false)
 const createdToken = ref("")
@@ -328,16 +232,8 @@ const tokenForm = reactive({
   expiresIn: 604800,
 })
 
-const hiAgentForm = reactive<HiAgentEntry>({
-  name: "",
-  url: "",
-  description: "",
-  enabled: true,
-})
-
 const uploadForm = reactive({
   name: "",
-  url: "",
   description: "",
   manifest: "",
 })
@@ -349,10 +245,6 @@ const {
   listTokens,
   issueToken,
   deleteToken,
-  listHiAgents,
-  addHiAgent,
-  updateHiAgent,
-  deleteHiAgent,
   uploadMcp,
 } = useMcpApi()
 
@@ -363,7 +255,6 @@ const canWriteMcp = computed(() => authStore.hasPermission("mcp:write"))
 const metrics = computed(() => [
   { label: t("mcp.metricLabels.services"), value: `${enabledCount.value}/${services.value.length}`, hint: t("mcp.metrics.enabledServices") },
   { label: t("mcp.metricLabels.tokens"), value: activeTokenCount.value, hint: t("mcp.metrics.activeTokens") },
-  { label: t("mcp.metricLabels.hiAgent"), value: hiAgents.value.filter((agent) => agent.enabled).length, hint: t("mcp.metrics.enabledHiAgents") },
 ])
 
 const clientUrl = computed(() => `${mcpUrl.value}?token=YOUR_ACCESS_TOKEN`)
@@ -386,18 +277,9 @@ const loadTokens = async () => {
   }
 }
 
-const loadHiAgents = async () => {
-  hiAgentLoading.value = true
-  try {
-    hiAgents.value = await listHiAgents()
-  } finally {
-    hiAgentLoading.value = false
-  }
-}
-
 const loadAll = async () => {
   try {
-    await Promise.all([loadConfig(), loadTokens(), loadHiAgents()])
+    await Promise.all([loadConfig(), loadTokens()])
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : t("mcp.messages.loadFailed"))
   }
@@ -456,36 +338,8 @@ const deleteAccessToken = async (id: number) => {
   }
 }
 
-const addExternalAgent = async () => {
-  if (!canWriteMcp.value) return
-  if (!hiAgentForm.name.trim() || !hiAgentForm.url.trim()) {
-    ElMessage.warning(t("mcp.messages.hiAgentRequired"))
-    return
-  }
-  addingHiAgent.value = true
-  try {
-    await addHiAgent({
-      name: hiAgentForm.name.trim(),
-      url: hiAgentForm.url.trim(),
-      description: hiAgentForm.description.trim(),
-      enabled: hiAgentForm.enabled,
-    })
-    hiAgentForm.name = ""
-    hiAgentForm.url = ""
-    hiAgentForm.description = ""
-    hiAgentForm.enabled = true
-    await loadHiAgents()
-    ElMessage.success(t("mcp.messages.hiAgentRegistered"))
-  } catch (err) {
-    ElMessage.error(err instanceof Error ? err.message : t("mcp.messages.registerHiAgentFailed"))
-  } finally {
-    addingHiAgent.value = false
-  }
-}
-
 const resetMcpUpload = () => {
   uploadForm.name = ""
-  uploadForm.url = ""
   uploadForm.description = ""
   uploadForm.manifest = ""
 }
@@ -500,7 +354,7 @@ const submitMcpUpload = async () => {
     ElMessage.warning(t("mcp.messages.uploadNameRequired"))
     return
   }
-  if (!uploadForm.url.trim() && !uploadForm.manifest.trim()) {
+  if (!uploadForm.manifest.trim()) {
     ElMessage.warning(t("mcp.messages.uploadTargetRequired"))
     return
   }
@@ -508,48 +362,16 @@ const submitMcpUpload = async () => {
   try {
     await uploadMcp({
       name: uploadForm.name.trim(),
-      url: uploadForm.url.trim(),
       description: uploadForm.description.trim(),
       manifest: uploadForm.manifest,
     })
     resetMcpUpload()
     uploadPanelOpen.value = false
-    await loadHiAgents()
     ElMessage.success(t("mcp.messages.uploadSubmitted"))
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : t("mcp.messages.uploadFailed"))
   } finally {
     submittingUpload.value = false
-  }
-}
-
-const toggleHiAgent = async (entry: HiAgentEntry, enabled: boolean) => {
-  if (!canWriteMcp.value) return
-  const previous = entry.enabled
-  entry.enabled = enabled
-  try {
-    await updateHiAgent({ url: entry.url, enabled })
-  } catch (err) {
-    entry.enabled = previous
-    ElMessage.error(err instanceof Error ? err.message : t("mcp.messages.toggleHiAgentFailed"))
-  }
-}
-
-const deleteExternalAgent = async (url: string) => {
-  if (!canWriteMcp.value) return
-  try {
-    await ElMessageBox.confirm(t("mcp.confirm.deleteHiAgentMessage"), t("mcp.confirm.deleteHiAgentTitle"), {
-      confirmButtonText: t("common.actions.delete"),
-      cancelButtonText: t("common.actions.cancel"),
-      type: "warning",
-    })
-    await deleteHiAgent(url)
-    await loadHiAgents()
-    ElMessage.success(t("mcp.messages.hiAgentDeleted"))
-  } catch (err) {
-    if (err !== "cancel") {
-      ElMessage.error(err instanceof Error ? err.message : t("mcp.messages.deleteHiAgentFailed"))
-    }
   }
 }
 

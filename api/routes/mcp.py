@@ -12,15 +12,10 @@ from api.services.audit_service import (
 )
 from api.services.mcp_config_service import (
     McpConfigChange,
-    add_hiagent_entry,
     apply_mcp_upload,
     apply_service_toggle,
-    delete_hiagent_entry,
-    list_hiagent_entries,
-    update_hiagent_entry,
 )
 from api.mcp.config import (
-    HIAGENT_CACHE_DB,
     MCP_CONFIG_FILE,
     MCP_TOKENS_DB,
     delete_token,
@@ -48,28 +43,8 @@ class TokenDelete(BaseModel):
     token: str | None = None
 
 
-class HiAgentAdd(BaseModel):
-    name: str
-    url: str
-    description: str = ""
-    enabled: bool = True
-
-
-class HiAgentUpdate(BaseModel):
-    target_url: str | None = None
-    url: str
-    name: str | None = None
-    description: str | None = None
-    enabled: bool | None = None
-
-
-class HiAgentDelete(BaseModel):
-    url: str
-
-
 class McpUploadRequest(BaseModel):
     name: str
-    url: str = ""
     description: str = ""
     manifest: str = ""
     enabled: bool = True
@@ -107,7 +82,6 @@ async def get_config(_user: User = Depends(require_permission("mcp:read"))) -> d
         "mcp_url": "/mcp/",
         "config_path": str(MCP_CONFIG_FILE),
         "tokens_db_path": str(MCP_TOKENS_DB),
-        "hiagent_cache_path": str(HIAGENT_CACHE_DB),
     }
 
 
@@ -170,54 +144,6 @@ async def remove_token(
     return {"success": True}
 
 
-@router.get("/hiagent")
-async def list_hiagent(_user: User = Depends(require_permission("mcp:read"))):
-    return list_hiagent_entries()
-
-
-@router.post("/hiagent/add")
-async def add_hiagent(
-    request: Request,
-    body: HiAgentAdd,
-    user: User = Depends(require_permission("mcp:write")),
-):
-    change = add_hiagent_entry(
-        name=body.name,
-        url=body.url,
-        description=body.description,
-        enabled=body.enabled,
-    )
-    _record_config_change(user, change, audit_request_context(request))
-    return change.response
-
-
-@router.post("/hiagent/update")
-async def update_hiagent(
-    request: Request,
-    body: HiAgentUpdate,
-    user: User = Depends(require_permission("mcp:write")),
-):
-    change = update_hiagent_entry(
-        target_url=body.target_url,
-        url=body.url,
-        name=body.name,
-        description=body.description,
-        enabled=body.enabled,
-    )
-    _record_config_change(user, change, audit_request_context(request))
-    return change.response
-
-
-@router.post("/hiagent/delete")
-async def delete_hiagent(
-    request: Request,
-    body: HiAgentDelete,
-    user: User = Depends(require_permission("mcp:write")),
-):
-    change = delete_hiagent_entry(body.url)
-    _record_config_change(user, change, audit_request_context(request))
-    return change.response
-
 
 @router.post("/upload", response_model=McpUploadResponse)
 async def upload_mcp(
@@ -225,10 +151,9 @@ async def upload_mcp(
     body: McpUploadRequest,
     user: User = Depends(require_permission("mcp:write")),
 ):
-    """上传 MCP manifest 或注册远程 MCP URL。"""
+    """上传 MCP manifest。"""
     change = apply_mcp_upload(
         name=body.name,
-        url=body.url,
         description=body.description,
         manifest=body.manifest,
         enabled=body.enabled,

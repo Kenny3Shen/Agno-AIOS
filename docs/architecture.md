@@ -26,7 +26,7 @@ PostgreSQL + pgvector
   |
   +-- app        应用表和审计记录
   +-- agno       Agno sessions、runs、memories、traces、spans
-  +-- mcp        MCP tokens 和 Hi-Agent 执行缓存
+  +-- mcp        MCP tokens
   +-- knowledge  knowledge contents 和 vector tables
 ```
 
@@ -42,16 +42,16 @@ FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth table
 - `/api/chat*`：流式 Chat、session list、session history 和 session archive。
 - `/api/traces*`：trace list 和 trace detail。
 - `/api/knowledge*`：knowledge status、document write、search、delete 和 clear。
-- `/api/mcp*`：MCP service config、token management、Hi-Agent entries 和 MCP manifest upload。
+- `/api/mcp*`：MCP service config、token management 和 MCP manifest upload。
 - `/api/skills*`：本地 skill listing、toggle 和 upload。
 - `/api/cve*`、`/api/url2md*`：安全数据 workflows。
 - `/api/settings` 和 `/api/models`：runtime settings 和 model configuration。
 - `/api/audit/logs`：admin audit review。
 - `/api/os/*`：AgentOS control modules。
 
-`api/services/` 负责业务逻辑和持久化辅助层。`postgres_store.py` 集中管理 PostgreSQL 连接设置、schema 名称、Agno `PostgresDb` 构造和应用表创建。`security_run_runtime.py` 承担安全运营助手 Run runtime，集中 model、MCP、Skill、Knowledge、fallback 和流式事件编排；`llm_service.py` 保留 Chat Session persistence、session history 和兼容入口。`knowledge_service.py` 提供 Knowledge Base lifecycle interface，内部集中 Agno Knowledge、PgVector、reader、owner filtering、CRUD、search 和 status。`mcp_config_service.py` 集中 MCP service toggle、Hi-Agent entries 和 MCP upload 配置写入。`security_policy.py` 集中控制面 module permission、Scheduler 写权限和 policy audit event 记录。`tracing_service.py` 读取 Agno traces 与 spans，并整理成前端需要的结构。
+`api/services/` 负责业务逻辑和持久化辅助层。`postgres_store.py` 集中管理 PostgreSQL 连接设置、schema 名称、Agno `PostgresDb` 构造和应用表创建。`security_run_runtime.py` 承担安全运营助手 Run runtime，集中 model、MCP、Skill、Knowledge、fallback 和流式事件编排；`llm_service.py` 保留 Chat Session persistence、session history 和兼容入口。`knowledge_service.py` 提供 Knowledge Base lifecycle interface，内部集中 Agno Knowledge、PgVector、reader、owner filtering、CRUD、search 和 status。`mcp_config_service.py` 集中 MCP service toggle 和 MCP upload 配置写入。`security_policy.py` 集中控制面 module permission、Scheduler 写权限和 policy audit event 记录。`tracing_service.py` 读取 Agno traces 与 spans，并整理成前端需要的结构。
 
-`api/mcp/` 负责集成 MCP runtime。`server.py` 构建主 FastMCP instance、挂载已启用的内置服务、用 token validation 包装 ASGI app，并支持 runtime refresh。`config.py` 读取和写入底层 MCP config、存储 MCP tokens，并跟踪 Hi-Agent execution cache；上层配置 mutation 由 `api/services/mcp_config_service.py` 提供 module interface。
+`api/mcp/` 负责集成 MCP runtime。`server.py` 构建主 FastMCP instance、挂载已启用的内置服务、用 token validation 包装 ASGI app，并支持 runtime refresh。`config.py` 读取和写入底层 MCP config，并存储 MCP tokens；上层配置 mutation 由 `api/services/mcp_config_service.py` 提供 module interface。
 
 `api/tasks/` 负责运维脚本，包括 CVE update、MySQL-to-Postgres migration 和 scheduler execution。
 
@@ -63,7 +63,7 @@ FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth table
 
 - `Chat.vue`：流式助手对话。
 - `Trace.vue`：以 session 为中心的 trace 与 span 检查。
-- `MCP.vue`：MCP services、tokens、Hi-Agent entries 和 uploads。
+- `MCP.vue`：MCP services、tokens 和 uploads。
 - `Skills.vue`：本地 skill 管理。
 - `Knowledge.vue`：document ingestion、retrieval、preview 和 deletion。
 - `CVE.vue`、`Collect.vue`：安全数据 workflows。
@@ -107,7 +107,7 @@ Knowledge documents 通过 metadata 做 user scope。Chat runtime 在存在当�
 
 主 FastAPI app 在 `/mcp/` 挂载集成 MCP runtime。调用该 endpoint 必须通过 `Authorization: Bearer` header 或 `token` query parameter 提供有效 MCP token。
 
-内置 MCP services 是 `playbook`、`agent` 和 `basic`。启用状态最终从 `data/config/mcp/mcp_config.toml` 读取，控制面写入通过 `api/services/mcp_config_service.py` 完成。Hi-Agent entries 是外部 MCP-compatible URLs，供 playbook tools 做 discovery 和 invocation。
+内置 MCP services 是 `playbook`、`agent` 和 `basic`。启用状态最终从 `data/config/mcp/mcp_config.toml` 读取，控制面写入通过 `api/services/mcp_config_service.py` 完成。
 
 ## 数据存储
 
@@ -117,7 +117,7 @@ Knowledge documents 通过 metadata 做 user scope。Chat runtime 在存在当�
 | --- | --- |
 | `app` | FastAPI Users auth tables、CVE records、audit logs、chat session archive markers、AgentOS control tables |
 | `agno` | Agno sessions、memories、traces、spans、schema versions |
-| `mcp` | MCP tokens 和 Hi-Agent execution cache |
+| `mcp` | MCP tokens |
 | `knowledge` | Agno knowledge contents 和 PgVector tables |
 
 Schema 分域是运行时边界，不是独立服务边界。见 [ADR 0001](./adr/0001-postgres-schemas-for-runtime-domains.md)。
