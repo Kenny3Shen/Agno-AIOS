@@ -1,7 +1,12 @@
 import assert from "node:assert/strict"
 import {
+  buildShellComponentProps,
   buildShellHomeSections,
+  buildWorkspaceSignals,
   canAccessShellNav,
+  resolveShellComponent,
+  resolveShellMeta,
+  shellComponentKey,
   shellContentClass,
   splitPrimaryShellNavItems,
 } from "./shellNavigation.ts"
@@ -35,6 +40,25 @@ const navItems = [
 ]
 const navItemById = Object.fromEntries(navItems.map((navItem) => [navItem.id, navItem]))
 const available = new Set(["home", ...navItems.map((navItem) => navItem.id)])
+const components = {
+  dashboard: { name: "Dashboard" },
+  chat: { name: "Chat" },
+  trace: { name: "Trace" },
+  workflow: { name: "Workflow" },
+  studio: { name: "AgentOSControl" },
+  memory: { name: "AgentOSControl" },
+  evaluation: { name: "AgentOSControl" },
+  approvals: { name: "AgentOSControl" },
+  scheduler: { name: "AgentOSControl" },
+  skills: { name: "Skills" },
+  mcp: { name: "MCP" },
+  knowledge: { name: "Knowledge" },
+  cve: { name: "CVE" },
+  assets: { name: "Assets" },
+  collect: { name: "Collect" },
+  sessions: { name: "AgentOSControl" },
+  settings: { name: "Settings" },
+}
 
 assert.equal(
   canAccessShellNav("home", available, () => false),
@@ -114,4 +138,73 @@ assert.equal(
   shellContentClass("knowledge"),
   "block h-full min-h-0 overflow-auto p-4 sm:p-5",
   "dense modules should get the scroll container treatment",
+)
+
+assert.equal(
+  resolveShellComponent("home", () => true, components),
+  null,
+  "home should not mount a module component",
+)
+
+assert.equal(
+  resolveShellComponent("trace", (id) => id === "trace", components),
+  components.trace,
+  "accessible module tabs should resolve their component",
+)
+
+assert.equal(
+  resolveShellComponent("settings", () => false, components),
+  null,
+  "inaccessible module tabs should not resolve a component",
+)
+
+assert.equal(
+  resolveShellMeta("home", item("home"), navItems).id,
+  "home",
+  "home should keep its dedicated metadata",
+)
+
+assert.equal(
+  resolveShellMeta("trace", item("home"), navItems).id,
+  "trace",
+  "module metadata should come from the visible nav items",
+)
+
+assert.equal(
+  resolveShellMeta("settings", item("home"), navItems.filter((navItem) => navItem.id !== "settings")).id,
+  "home",
+  "hidden module metadata should fall back to home",
+)
+
+assert.equal(
+  shellComponentKey("trace", 7),
+  "trace-7",
+  "component keys must include both active tab and render key",
+)
+
+assert.deepEqual(
+  buildShellComponentProps("chat", "user-1", "OP"),
+  { currentUserId: "user-1", currentUserInitials: "OP" },
+  "regular modules should receive user context props",
+)
+
+assert.deepEqual(
+  buildShellComponentProps("scheduler", "user-1", "OP"),
+  { currentUserId: "user-1", currentUserInitials: "OP", osModule: "scheduler" },
+  "AgentOS control tabs must receive their osModule prop",
+)
+
+assert.deepEqual(
+  buildWorkspaceSignals(
+    12,
+    { modules: "Modules", dataPlane: "Data", runtime: "Runtime", session: "Session" },
+    { dataPlane: "Ready", runtime: "Online", session: "Active" },
+  ),
+  [
+    { label: "Modules", value: 12 },
+    { label: "Data", value: "Ready" },
+    { label: "Runtime", value: "Online" },
+    { label: "Session", value: "Active" },
+  ],
+  "workspace signals should preserve shell labels and computed values",
 )

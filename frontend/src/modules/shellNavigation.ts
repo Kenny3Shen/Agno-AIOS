@@ -45,6 +45,17 @@ export type HomeSectionTitles = {
   securityData: string
 }
 
+export type ShellComponentProps = {
+  currentUserId: string | null
+  currentUserInitials: string
+  osModule?: ActiveOsControlModule
+}
+
+export type WorkspaceSignal = {
+  label: string
+  value: string | number
+}
+
 export const navPermissions: Partial<Record<ModuleNavId, string>> = {
   chat: "session:write:own",
   skills: "skill:read",
@@ -140,3 +151,56 @@ export const shellContentClass = (tab: NavId) => {
   if (tab === "home") return base
   return fullCanvasTabs.has(tab) ? base : `${base} overflow-auto p-4 sm:p-5`
 }
+
+export const resolveShellComponent = (
+  tab: NavId,
+  canAccess: (id: NavId) => boolean,
+  componentMap: Record<ModuleNavId, Component>,
+): Component | null => {
+  if (tab === "home") return null
+  if (!canAccess(tab)) return null
+  return componentMap[tab]
+}
+
+export const resolveShellMeta = (
+  tab: NavId,
+  homeItem: NavItem,
+  visibleModuleNavItems: NavItem[],
+): NavItem => {
+  if (tab === "home") return homeItem
+  return visibleModuleNavItems.find((item) => item.id === tab) ?? homeItem
+}
+
+export const shellComponentKey = (tab: NavId, renderKey: number) => `${tab}-${renderKey}`
+
+export const buildShellComponentProps = (
+  tab: NavId,
+  currentUserId: string | null,
+  currentUserInitials: string,
+): ShellComponentProps => {
+  const baseProps = { currentUserId, currentUserInitials }
+  if (tab !== "home" && osControlTabs.has(tab as ActiveOsControlModule)) {
+    return { ...baseProps, osModule: tab as ActiveOsControlModule }
+  }
+  return baseProps
+}
+
+export const buildWorkspaceSignals = (
+  moduleCount: number,
+  labels: {
+    modules: string
+    dataPlane: string
+    runtime: string
+    session: string
+  },
+  values: {
+    dataPlane: string
+    runtime: string
+    session: string
+  },
+): WorkspaceSignal[] => [
+  { label: labels.modules, value: moduleCount },
+  { label: labels.dataPlane, value: values.dataPlane },
+  { label: labels.runtime, value: values.runtime },
+  { label: labels.session, value: values.session },
+]

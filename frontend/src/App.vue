@@ -506,11 +506,14 @@ import { clearStoredAuthToken, fetchCurrentUser, getStoredAuthToken, logout as a
 import { copyToClipboard } from "./lib/clipboard"
 import {
   buildShellHomeSections,
+  buildShellComponentProps,
+  buildWorkspaceSignals,
   canAccessShellNav,
-  osControlTabs,
+  resolveShellComponent,
+  resolveShellMeta,
+  shellComponentKey,
   shellContentClass,
   splitPrimaryShellNavItems,
-  type ActiveOsControlModule,
   type HomeSection,
   type ModuleNavId,
   type NavId,
@@ -651,15 +654,11 @@ const { listSessions, archiveSession } = useChatHistory()
 
 watch(locale, (value) => setI18nLocale(value), { immediate: true })
 
-const activeComponent = computed<Component | null>(() => {
-  const tab = activeTab.value as NavId
-  if (tab === "home") return null
-  if (!canAccessNav(tab)) return null
-  return componentMap[tab]
-})
+const activeComponent = computed<Component | null>(() => (
+  resolveShellComponent(activeTab.value as NavId, canAccessNav, componentMap)
+))
 const currentMeta = computed<NavItem>(() => {
-  if (activeTab.value === "home") return homeItem.value
-  return visibleModuleNavItems.value.find((item) => item.id === activeTab.value) ?? homeItem.value
+  return resolveShellMeta(activeTab.value as NavId, homeItem.value, visibleModuleNavItems.value)
 })
 const currentUserEmail = computed(() => currentUser.value?.email || t("shell.user.anonymous"))
 const userInitials = computed(() => {
@@ -667,17 +666,12 @@ const userInitials = computed(() => {
   if (!email) return "AI"
   return email.slice(0, 2).toUpperCase()
 })
-const activeComponentKey = computed(() => `${activeTab.value}-${componentRenderKey.value}`)
+const activeComponentKey = computed(() => shellComponentKey(activeTab.value as NavId, componentRenderKey.value))
 const currentModelLabel = computed(() => formatModelLabel(currentModelName.value))
 const currentUserId = computed(() => currentUser.value?.id || currentUser.value?.email || null)
-const activeComponentProps = computed(() => {
-  const tab = activeTab.value as NavId
-  const baseProps = { currentUserId: currentUserId.value, currentUserInitials: userInitials.value }
-  if (tab !== "home" && osControlTabs.has(tab as ActiveOsControlModule)) {
-    return { ...baseProps, osModule: tab }
-  }
-  return baseProps
-})
+const activeComponentProps = computed(() => (
+  buildShellComponentProps(activeTab.value as NavId, currentUserId.value, userInitials.value)
+))
 const contentClass = computed(() => {
   return shellContentClass(activeTab.value as NavId)
 })
@@ -695,12 +689,20 @@ const sidebarStyle = computed(() => ({
   width: isMobile.value ? `min(${SIDEBAR_EXPANDED_WIDTH}px, calc(100vw - 32px))` : `${sidebarPixelWidth.value}px`,
 }))
 
-const workspaceSignals = computed(() => [
-  { label: t("shell.signals.modules"), value: visibleModuleNavItems.value.length },
-  { label: t("shell.signals.dataPlane"), value: t("shell.signalValues.dataPlane") },
-  { label: t("shell.signals.runtime"), value: t("shell.signalValues.runtime") },
-  { label: t("shell.signals.session"), value: currentUser.value?.is_active ? t("common.status.active") : t("common.status.ready") },
-])
+const workspaceSignals = computed(() => buildWorkspaceSignals(
+  visibleModuleNavItems.value.length,
+  {
+    modules: t("shell.signals.modules"),
+    dataPlane: t("shell.signals.dataPlane"),
+    runtime: t("shell.signals.runtime"),
+    session: t("shell.signals.session"),
+  },
+  {
+    dataPlane: t("shell.signalValues.dataPlane"),
+    runtime: t("shell.signalValues.runtime"),
+    session: currentUser.value?.is_active ? t("common.status.active") : t("common.status.ready"),
+  },
+))
 
 const checkMobile = () => {
   isMobile.value = isMobileViewport()
