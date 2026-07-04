@@ -46,6 +46,22 @@ _避免_: Session log
 Trace 内部的单个操作，例如 agent step、模型调用、工具调用或检索。
 _避免_: Event
 
+**Workflow**:
+由 Agno 运行的可重复编排管线，通过明确步骤把 Agent、Team、函数或嵌套 Workflow 串联、分支、循环或并行执行。
+_避免_: 通用自动化、触发器链
+
+**Workflow Step**:
+Workflow 内的执行或控制单元，可委派给 executor，也可表达顺序组合、条件、路由、循环或并行分支。
+_避免_: Node、任务卡片
+
+**Executor**:
+Workflow Step 使用的可运行组件，包括 Agent、Team、自定义函数或嵌套 Workflow。
+_避免_: Skill、动作处理器
+
+**Workflow Session**:
+Workflow 的持久化执行历史，记录完整 run、步骤结果、session data 和共享 session state。
+_避免_: Chat Session、Workflow summary
+
 **Memory**:
 与用户或 agent 上下文关联的持久化 agent 记忆。
 _避免_: Knowledge
