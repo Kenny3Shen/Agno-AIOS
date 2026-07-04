@@ -211,6 +211,44 @@ button:enabled {
 	font-weight: 700;
 }
 
+.ag-stat-strip {
+	min-width: 0;
+}
+
+.ag-stat-chip {
+	display: inline-flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+	border: 1px solid var(--ag-border);
+	border-radius: 8px;
+	background: var(--ag-panel-soft);
+	padding: 6px 10px;
+	color: var(--ag-muted-strong);
+}
+
+.ag-stat-chip :where(span, small, em) {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--ag-muted);
+	font-size: 10px;
+	font-style: normal;
+	font-weight: 720;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ag-stat-chip strong {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--ag-heading);
+	font-family: "JetBrains Mono", "Fira Code", monospace;
+	font-size: 11px;
+	font-weight: 800;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .ag-mobile-scrim {
 	background: rgba(0, 0, 0, 0.68);
 }
@@ -1016,10 +1054,6 @@ button:enabled {
 	min-width: 0;
 	align-items: center;
 	gap: 8px;
-	border: 1px solid var(--ag-border);
-	border-radius: 999px;
-	background: var(--ag-panel-soft);
-	padding: 6px 10px;
 }
 
 .ag-home-signal span {
@@ -1032,7 +1066,6 @@ button:enabled {
 }
 
 .ag-home-signal strong {
-	overflow-wrap: anywhere;
 	color: var(--ag-heading);
 	font-family: "JetBrains Mono", "Fira Code", monospace;
 	font-size: 11px;
@@ -1222,7 +1255,7 @@ html:not(.dark) :where(
 	.agent-row,
 	.span-row,
 	.empty-box,
-	.skill-summary-chip,
+	.ag-stat-chip,
 	.skill-script-toggle,
 	.skill-script-empty,
 	.skill-script-pill,
@@ -1233,11 +1266,17 @@ html:not(.dark) :where(
 	color: var(--ag-muted-strong) !important;
 }
 
-html:not(.dark) :where(.situation-metric span, .situation-metric em, .mcp-metric span, .mcp-metric em, .trace-metric span, .trace-detail-metric span, .trace-card em, .skill-summary-chip small, .skill-card-copy em) {
+html:not(.dark) :where(.ag-stat-chip) {
+	border-color: var(--ag-border) !important;
+	background: var(--ag-panel-soft) !important;
+	color: var(--ag-muted-strong) !important;
+}
+
+html:not(.dark) :where(.situation-metric span, .situation-metric em, .mcp-metric span, .mcp-metric em, .trace-metric span, .trace-detail-metric span, .trace-card em, .ag-stat-chip span, .ag-stat-chip small, .ag-stat-chip em, .skill-card-copy em) {
 	color: var(--ag-muted) !important;
 }
 
-html:not(.dark) :where(.situation-metric strong, .mcp-metric strong, .mcp-card strong, .trace-metric strong, .trace-detail-metric strong, .trace-card strong, .skill-summary-chip strong, .skill-card-copy strong) {
+html:not(.dark) :where(.situation-metric strong, .mcp-metric strong, .mcp-card strong, .trace-metric strong, .trace-detail-metric strong, .trace-card strong, .ag-stat-chip strong, .skill-card-copy strong) {
 	color: var(--ag-heading) !important;
 }
 

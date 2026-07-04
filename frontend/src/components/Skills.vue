@@ -332,27 +332,6 @@ onMounted(() => {
   gap: 8px;
 }
 
-.skill-summary-chip {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-}
-
-.skill-summary-chip small {
-  color: var(--ag-muted);
-  font-size: 10px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.skill-summary-chip strong {
-  color: var(--ag-heading);
-  font-family: "Fira Code", "JetBrains Mono", monospace;
-  font-size: 11px;
-  font-weight: 700;
-}
-
 .skill-primary-action {
   --el-button-bg-color: var(--ag-blue);
   --el-button-border-color: var(--ag-blue);

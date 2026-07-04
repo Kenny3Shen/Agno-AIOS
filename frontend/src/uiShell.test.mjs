@@ -18,6 +18,7 @@ const readOptionalSource = (relativePath) => {
 }
 
 const app = readSource("App.vue")
+const appStyle = readSource("style.css")
 const viteConfig = readOptionalSource("../vite.config.ts")
 const apiMain = readOptionalSource("../../api/main.py")
 const authScreen = readSource("components/AuthScreen.vue")
@@ -700,6 +701,12 @@ assertNoPillStatChip(
   "Skills Stat Chips must use the shared 8px rectangular chip shape, not pill styling",
 )
 
+assert.doesNotMatch(
+  skills,
+  /\.skill-summary-chip\s+(span|small|strong)\s*\{/,
+  "Skills Stat Chips must inherit label and value typography from the shared ag-stat-chip style",
+)
+
 assert.match(
   skills,
   /border:\s*1px solid var\(--ag-panel-border\)/,
@@ -781,6 +788,36 @@ assertNoPillStatChip(
   mcp,
   "mcp-summary-chip",
   "MCP Stat Chips must use the shared 8px rectangular chip shape, not pill styling",
+)
+
+assert.doesNotMatch(
+  mcp,
+  /\.mcp-summary-chip\s+(span|small|strong)\s*\{/,
+  "MCP Stat Chips must inherit label and value typography from the shared ag-stat-chip style",
+)
+
+assert.match(
+  appStyle,
+  /\.ag-stat-chip\s*\{[^}]*border-radius:\s*8px[^}]*padding:\s*6px\s+10px/s,
+  "Shared Stat Chip style must define the compact 8px rectangular chip surface",
+)
+
+assert.match(
+  appStyle,
+  /\.ag-stat-chip\s+strong\s*\{[^}]*text-overflow:\s*ellipsis/s,
+  "Shared Stat Chip values must use single-line ellipsis globally",
+)
+
+assert.doesNotMatch(
+  app,
+  /\.ag-stat-chip\.ag-stat-chip\s*\{/,
+  "App shell must not override the shared compact Stat Chip surface",
+)
+
+assert.match(
+  appStyle,
+  /html:not\(\.dark\)\s+:where\(\.ag-stat-chip\)/,
+  "Light mode must style all shared Stat Chips through ag-stat-chip",
 )
 
 assert.match(
@@ -1210,10 +1247,10 @@ assert.doesNotMatch(
   "Knowledge Stat Chips must not stretch into dashboard cards",
 )
 
-assert.match(
+assert.doesNotMatch(
   knowledge,
-  /\.knowledge-stat-chip strong\s*\{[^}]*text-overflow:\s*ellipsis/s,
-  "Knowledge Stat Chip values must stay compact with single-line ellipsis",
+  /\.knowledge-stat-chip\s+(span|small|strong)\s*\{/,
+  "Knowledge Stat Chips must inherit label and value typography from the shared ag-stat-chip style",
 )
 
 assert.match(

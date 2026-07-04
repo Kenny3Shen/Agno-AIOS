@@ -1141,10 +1141,11 @@ onMounted(() => {
 }
 
 .knowledge-stat-strip {
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .knowledge-panel,
@@ -1159,25 +1160,8 @@ onMounted(() => {
 }
 
 .knowledge-stat-chip {
-  display: inline-flex;
   flex: 0 1 auto;
   max-width: min(260px, 100%);
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-}
-
-.knowledge-stat-chip span {
-  flex: 0 0 auto;
-  min-width: 0;
-  white-space: nowrap;
-}
-
-.knowledge-stat-chip strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .knowledge-workspace-grid {
@@ -1751,10 +1735,6 @@ onMounted(() => {
 }
 
 @media (max-width: 1320px) {
-  .knowledge-stat-strip {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
   .knowledge-workspace-grid,
   .advanced-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -1794,7 +1774,6 @@ onMounted(() => {
     padding: 12px;
   }
 
-  .knowledge-stat-strip,
   .upload-mode-grid,
   .text-import-grid,
   .path-import-grid,

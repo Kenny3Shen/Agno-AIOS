@@ -607,29 +607,6 @@ onMounted(() => {
   gap: 8px;
 }
 
-.mcp-summary-chip {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-}
-
-.mcp-summary-chip span {
-  color: var(--ag-muted);
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-.mcp-summary-chip strong {
-  overflow: hidden;
-  color: var(--ag-heading);
-  font-family: "Fira Code", monospace;
-  font-size: 11px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .mcp-summary-url {
   flex: 1 1 320px;
 }

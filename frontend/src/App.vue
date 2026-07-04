@@ -394,7 +394,7 @@
                   </div>
 
                   <div class="ag-home-summary-strip">
-                    <div v-for="signal in workspaceSignals" :key="signal.label" class="ag-home-signal">
+                    <div v-for="signal in workspaceSignals" :key="signal.label" class="ag-home-signal ag-stat-chip">
                       <span>{{ signal.label }}</span>
                       <strong>{{ signal.value }}</strong>
                     </div>
@@ -1049,57 +1049,4 @@ onUnmounted(() => {
   opacity: 0;
 }
 
-.ag-stat-strip.ag-stat-strip {
-  align-items: stretch;
-  gap: 8px;
-}
-
-.ag-stat-chip.ag-stat-chip {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid var(--ag-panel-border, var(--ag-border));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--ag-panel-soft, var(--ag-panel)) 86%, var(--ag-panel, #111827));
-  padding: 8px 10px 8px 12px;
-}
-
-.ag-stat-chip.ag-stat-chip::before {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 2px;
-  background: var(--ag-blue);
-  content: "";
-}
-
-.ag-stat-chip.tone-green::before {
-  background: var(--ag-green);
-}
-
-.ag-stat-chip.tone-yellow::before {
-  background: var(--ag-yellow);
-}
-
-.ag-stat-chip.tone-red::before {
-  background: var(--ag-red);
-}
-
-.ag-stat-chip.ag-stat-chip :where(span, small) {
-  display: block;
-  color: var(--ag-muted);
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1.35;
-  text-transform: uppercase;
-}
-
-.ag-stat-chip.ag-stat-chip strong {
-  display: block;
-  margin-top: 3px;
-  color: var(--ag-heading, var(--ag-text));
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 14px;
-  font-weight: 800;
-  line-height: 1.15;
-  overflow-wrap: anywhere;
-}
 </style>
