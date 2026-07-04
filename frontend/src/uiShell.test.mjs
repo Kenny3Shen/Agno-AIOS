@@ -810,6 +810,24 @@ assert.match(
   "Shared Stat Chip values must use single-line ellipsis globally",
 )
 
+assert.match(
+  appStyle,
+  /\.ag-home-summary-strip\s*\{[^}]*min-width:\s*0/s,
+  "Home summary signal strip must be shrinkable inside the shell card",
+)
+
+assert.match(
+  appStyle,
+  /\.ag-home-signal\s*\{[^}]*flex:\s*1\s+1\s+132px[^}]*justify-content:\s*space-between/s,
+  "Home summary signal chips must reserve stable space between label and value",
+)
+
+assert.match(
+  appStyle,
+  /@media\s*\(max-width:\s*760px\)\s*\{[\s\S]*?\.ag-home-summary-strip\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/,
+  "Home summary signals must switch to a two-column mobile grid to prevent overlap",
+)
+
 assert.doesNotMatch(
   app,
   /\.ag-stat-chip\.ag-stat-chip\s*\{/,

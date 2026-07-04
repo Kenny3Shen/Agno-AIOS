@@ -1047,16 +1047,22 @@ button:enabled {
 	flex-wrap: wrap;
 	justify-content: flex-end;
 	gap: 8px;
+	min-width: 0;
 }
 
 .ag-home-signal {
 	display: inline-flex;
+	flex: 1 1 132px;
+	max-width: 220px;
 	min-width: 0;
 	align-items: center;
 	gap: 8px;
+	justify-content: space-between;
 }
 
 .ag-home-signal span {
+	flex: 1 1 auto;
+	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -1066,6 +1072,11 @@ button:enabled {
 }
 
 .ag-home-signal strong {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 	color: var(--ag-heading);
 	font-family: "JetBrains Mono", "Fira Code", monospace;
 	font-size: 11px;
@@ -1451,8 +1462,15 @@ html.dark :where(.empty-box) {
 	}
 
 	.ag-home-summary-strip {
+		display: grid;
 		flex-basis: 100%;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		justify-content: flex-start;
+	}
+
+	.ag-home-signal {
+		max-width: none;
+		width: 100%;
 	}
 }
 
