@@ -18,6 +18,16 @@ _避免_: 聊天机器人、通用助手
 围绕 Agent、Team、Workflow、Memory、Metrics、Evaluation、Approvals 和 Scheduler 数据构建的控制面视图。
 _避免_: AgentOS 后端
 
+### 界面语言
+
+**Stat Strip**:
+页面标题与主要工作区之间的一组紧凑摘要，用于让操作员快速判断当前模块的规模、健康度或关键配置状态。它只承载数量、状态和关键配置摘要，不承载操作按钮、长说明、表单状态或搜索结果数量。
+_避免_: 统计方框区、KPI Dashboard、Toolbar
+
+**Stat Chip**:
+Stat Strip 中的单项摘要，通常由标签和值组成，可带状态语义，但不承载主要操作或复杂解释。它使用紧凑的 8px 小方块形态，不使用 pill 圆角。
+_避免_: Card、Badge、Metric Card、Pill
+
 ### Agent Runtime
 
 **Chat Session**:

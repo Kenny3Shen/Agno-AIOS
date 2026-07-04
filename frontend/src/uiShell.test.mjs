@@ -61,6 +61,14 @@ const assertTextOrder = (source, labels, message) => {
   }
 }
 
+const assertNoPillStatChip = (source, className, message) => {
+  assert.doesNotMatch(
+    source,
+    new RegExp(`\\.${className}\\s*\\{[^}]*border-radius:\\s*999px`, "s"),
+    message,
+  )
+}
+
 assert.equal(
   app.includes("ag-nav-desc"),
   false,
@@ -682,6 +690,18 @@ assert.match(
 
 assert.match(
   skills,
+  /skill-summary-chip ag-stat-chip/,
+  "Skills summary items must use the shared Stat Chip surface",
+)
+
+assertNoPillStatChip(
+  skills,
+  "skill-summary-chip",
+  "Skills Stat Chips must use the shared 8px rectangular chip shape, not pill styling",
+)
+
+assert.match(
+  skills,
   /border:\s*1px solid var\(--ag-panel-border\)/,
   "Skills console must keep a visible shared border in light mode",
 )
@@ -750,6 +770,18 @@ for (const bulkyMcpMetric of [
     `MCP summary strip must not render duplicate control metric: ${bulkyMcpMetric}`,
   )
 }
+
+assert.match(
+  mcp,
+  /mcp-summary-chip ag-stat-chip/,
+  "MCP summary items must use the shared Stat Chip surface",
+)
+
+assertNoPillStatChip(
+  mcp,
+  "mcp-summary-chip",
+  "MCP Stat Chips must use the shared 8px rectangular chip shape, not pill styling",
+)
 
 assert.match(
   trace,
@@ -1150,8 +1182,26 @@ for (const bulkyKnowledgeHeaderClass of [
 
 assert.match(
   knowledge,
-  /knowledge-stat-dashboard/,
-  "Knowledge page must show status as a statistics dashboard",
+  /knowledge-stat-strip ag-stat-strip/,
+  "Knowledge page must expose status in the shared compact Stat Strip",
+)
+
+assert.match(
+  knowledge,
+  /knowledge-stat-chip ag-stat-chip/,
+  "Knowledge status items must use the shared Stat Chip surface",
+)
+
+assert.equal(
+  knowledge.includes("knowledge-stat-dashboard"),
+  false,
+  "Knowledge page must not use a separate statistics dashboard pattern for Stat Chips",
+)
+
+assertNoPillStatChip(
+  knowledge,
+  "knowledge-stat-chip",
+  "Knowledge Stat Chips must use the shared 8px rectangular chip shape, not pill styling",
 )
 
 assert.match(

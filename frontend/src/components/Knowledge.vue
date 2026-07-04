@@ -1,7 +1,7 @@
 <template>
   <div class="knowledge-console knowledge-workflow-shell">
-    <section class="knowledge-stat-dashboard ag-stat-strip" :aria-label="t('knowledge.stats.ariaLabel')">
-      <article v-for="card in statisticsCards" :key="card.label" class="knowledge-stat-card ag-stat-chip">
+    <section class="knowledge-stat-strip ag-stat-strip" :aria-label="t('knowledge.stats.ariaLabel')">
+      <article v-for="card in statisticsCards" :key="card.label" class="knowledge-stat-chip ag-stat-chip">
         <span>{{ card.label }}</span>
         <strong :title="card.value">{{ card.value }}</strong>
       </article>
@@ -1140,14 +1140,13 @@ onMounted(() => {
   overflow-wrap: anywhere;
 }
 
-.knowledge-stat-dashboard {
+.knowledge-stat-strip {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   margin-bottom: 14px;
 }
 
-.knowledge-stat-card,
 .knowledge-panel,
 .retrieval-hit,
 .answer-preview,
@@ -1159,28 +1158,21 @@ onMounted(() => {
   background: var(--kn-panel);
 }
 
-.knowledge-stat-card {
+.knowledge-stat-chip {
+  display: inline-flex;
   flex: 1 1 148px;
   min-width: 0;
-  padding: 8px 10px;
+  align-items: center;
+  gap: 8px;
 }
 
-.knowledge-stat-card span {
-  display: block;
+.knowledge-stat-chip span {
   min-width: 0;
-  color: var(--kn-muted);
-  font-size: 10px;
-  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
-.knowledge-stat-card strong {
-  display: block;
-  margin-top: 2px;
+.knowledge-stat-chip strong {
   overflow: hidden;
-  color: var(--kn-heading);
-  font-size: 13px;
-  font-weight: 820;
   overflow-wrap: anywhere;
 }
 
@@ -1755,7 +1747,7 @@ onMounted(() => {
 }
 
 @media (max-width: 1320px) {
-  .knowledge-stat-dashboard {
+  .knowledge-stat-strip {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
@@ -1798,7 +1790,7 @@ onMounted(() => {
     padding: 12px;
   }
 
-  .knowledge-stat-dashboard,
+  .knowledge-stat-strip,
   .upload-mode-grid,
   .text-import-grid,
   .path-import-grid,

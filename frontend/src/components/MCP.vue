@@ -612,10 +612,6 @@ onMounted(() => {
   min-width: 0;
   align-items: center;
   gap: 8px;
-  border: 1px solid var(--ag-border);
-  border-radius: 999px;
-  background: var(--ag-panel-soft);
-  padding: 6px 10px;
 }
 
 .mcp-summary-chip span {
