@@ -157,6 +157,66 @@ export interface OsControlResponse {
   schedules?: SchedulerSchedule[]
 }
 
+export interface MemoryItem {
+  id: string
+  memory: string
+  topics: string[]
+  input: string
+  user_id: string
+  agent_id: string
+  team_id: string
+  feedback: string
+  created_at: string
+  updated_at: string
+  status: string
+}
+
+export interface MemoryUserSummary {
+  user_id: string
+  total_memories: number
+  last_memory_updated_at: string
+  status: "healthy" | "review" | "risk" | string
+}
+
+export interface MemoryFilters {
+  user_id: string
+  topic: string
+  search: string
+  page: number
+  limit: number
+  total: number
+}
+
+export interface MemoryThresholds {
+  optimization_review: number
+  abnormal_growth: number
+}
+
+export interface MemoryMode {
+  type: "automatic" | string
+  update_memory_on_run: boolean
+  enable_agentic_memory: boolean
+  enable_session_summaries: boolean
+  readonly: boolean
+}
+
+export interface MemoryControlResponse extends OsControlResponse {
+  memories: MemoryItem[]
+  memory_users: MemoryUserSummary[]
+  memory_topics: string[]
+  memory_filters: MemoryFilters
+  memory_thresholds: MemoryThresholds
+  memory_mode: MemoryMode
+}
+
+export interface MemoryQueryParams {
+  user_id?: string
+  topic?: string
+  search?: string
+  page?: number
+  limit?: number
+}
+
 export type ScheduleTargetType = "agent" | "team" | "workflow"
 
 export interface SchedulerSchedule {

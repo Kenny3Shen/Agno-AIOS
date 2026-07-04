@@ -13,6 +13,8 @@ import type {
   KnowledgeSearchResponse,
   KnowledgeStatusResponse,
   KnowledgeTextRequest,
+  MemoryControlResponse,
+  MemoryQueryParams,
   McpServiceId,
   McpServiceStatusResponse,
   McpTokenInfo,
@@ -321,6 +323,33 @@ export function useOsControlApi() {
     }
   }
 
+  const fetchMemory = async (params: MemoryQueryParams = {}): Promise<MemoryControlResponse> => {
+    loading.value = true
+    error.value = null
+
+    const query = new URLSearchParams()
+    if (params.user_id) query.set('user_id', params.user_id)
+    if (params.topic) query.set('topic', params.topic)
+    if (params.search) query.set('search', params.search)
+    if (params.page) query.set('page', String(params.page))
+    if (params.limit) query.set('limit', String(params.limit))
+
+    try {
+      const suffix = query.toString() ? `?${query.toString()}` : ''
+      const response = await apiFetch(`/os/memory${suffix}`)
+      if (!response.ok) {
+        const data: unknown = await response.json()
+        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+      }
+      return await response.json()
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   const createSchedule = async (payload: ScheduleCreateRequest): Promise<ScheduleCreateResponse> => {
     loading.value = true
     error.value = null
@@ -441,6 +470,7 @@ export function useOsControlApi() {
     loading,
     error,
     fetchModule,
+    fetchMemory,
     createSchedule,
     updateSchedule,
     setScheduleEnabled,

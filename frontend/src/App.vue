@@ -488,6 +488,7 @@ import {
 } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
 import AgentOSControl from "./components/AgentOSControl.vue"
+import MemoryControl from "./components/MemoryControl.vue"
 import AuthScreen from "./components/AuthScreen.vue"
 import CVE from "./components/CVE.vue"
 import Assets from "./components/Assets.vue"
@@ -573,7 +574,7 @@ const componentMap: Record<ModuleNavId, Component> = {
   skills: Skills,
   sessions: AgentOSControl,
   studio: AgentOSControl,
-  memory: AgentOSControl,
+  memory: MemoryControl,
   evaluation: AgentOSControl,
   approvals: AgentOSControl,
   scheduler: AgentOSControl,

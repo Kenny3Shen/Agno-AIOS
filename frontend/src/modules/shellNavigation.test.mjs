@@ -46,7 +46,7 @@ const components = {
   trace: { name: "Trace" },
   workflow: { name: "Workflow" },
   studio: { name: "AgentOSControl" },
-  memory: { name: "AgentOSControl" },
+  memory: { name: "MemoryControl" },
   evaluation: { name: "AgentOSControl" },
   approvals: { name: "AgentOSControl" },
   scheduler: { name: "AgentOSControl" },
