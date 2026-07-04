@@ -12,6 +12,48 @@ def actor(user_id: str, role: str = "user"):
     return SimpleNamespace(id=user_id, role=role, is_superuser=False)
 
 
+class FakeMemoryDb:
+    def __init__(self):
+        self.memory_kwargs: dict[str, object] = {}
+        self.stats_kwargs: dict[str, object] = {}
+        self.topics_user_id: str | None = None
+
+    def get_user_memories(self, **kwargs):
+        self.memory_kwargs = kwargs
+        return (
+            [
+                {
+                    "memory_id": "mem-1",
+                    "memory": "Prefers concise incident summaries",
+                    "topics": ["preference"],
+                    "input": "Please keep incident summaries short.",
+                    "user_id": kwargs.get("user_id") or "u1",
+                    "agent_id": "security-operations",
+                    "created_at": 1714560000,
+                    "updated_at": 1714560300,
+                }
+            ],
+            1,
+        )
+
+    def get_user_memory_stats(self, **kwargs):
+        self.stats_kwargs = kwargs
+        return (
+            [
+                {
+                    "user_id": kwargs.get("user_id") or "u1",
+                    "total_memories": 51,
+                    "last_memory_updated_at": 1714560300,
+                }
+            ],
+            1,
+        )
+
+    def get_all_memory_topics(self, user_id=None):
+        self.topics_user_id = user_id
+        return ["preference"]
+
+
 class OsControlRoutePermissionsTest(IsolatedAsyncioTestCase):
     async def test_guest_cannot_access_studio_inventory(self):
         with self.assertRaises(HTTPException) as context:
@@ -32,7 +74,7 @@ class OsControlRoutePermissionsTest(IsolatedAsyncioTestCase):
             result = await os_control.get_os_control_module("sessions", user=current_actor)
 
         self.assertEqual(result["module"], "sessions")
-        mocked.assert_called_once_with("sessions", actor=current_actor)
+        mocked.assert_called_once_with("sessions", actor=current_actor, query=None)
 
 
 class OsControlServiceOwnershipTest(TestCase):
@@ -79,3 +121,44 @@ class OsControlServiceOwnershipTest(TestCase):
 
         self.assertIsNone(where)
         self.assertEqual(params, ())
+
+    def test_memory_payload_uses_current_user_for_ordinary_actor(self):
+        db = FakeMemoryDb()
+
+        with (
+            patch.object(os_control_service, "ensure_agno_postgres_tables"),
+            patch.object(os_control_service, "get_agno_postgres_db", return_value=db),
+        ):
+            payload = os_control_service.get_memory_payload(
+                actor("u1"),
+                user_id="other-user",
+                topic="preference",
+                search="concise",
+            )
+
+        self.assertEqual(db.memory_kwargs["user_id"], "u1")
+        self.assertEqual(db.memory_kwargs["topics"], ["preference"])
+        self.assertEqual(db.memory_kwargs["search_content"], "concise")
+        self.assertEqual(db.stats_kwargs["user_id"], "u1")
+        self.assertEqual(db.topics_user_id, "u1")
+        self.assertEqual(payload["memory_filters"]["user_id"], "u1")
+        self.assertEqual(payload["memory_users"][0]["status"], "review")
+
+    def test_memory_payload_admin_can_filter_requested_user(self):
+        db = FakeMemoryDb()
+
+        with (
+            patch.object(os_control_service, "ensure_agno_postgres_tables"),
+            patch.object(os_control_service, "get_agno_postgres_db", return_value=db),
+        ):
+            payload = os_control_service.get_memory_payload(
+                actor("admin", "admin"),
+                user_id="u2",
+            )
+
+        self.assertEqual(db.memory_kwargs["user_id"], "u2")
+        self.assertIsNone(db.stats_kwargs["user_id"])
+        self.assertEqual(db.topics_user_id, "u2")
+        self.assertEqual(payload["memory_filters"]["user_id"], "u2")
+        self.assertTrue(payload["memory_mode"]["update_memory_on_run"])
+        self.assertTrue(payload["memory_mode"]["enable_session_summaries"])

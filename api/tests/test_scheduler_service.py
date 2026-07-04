@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest import IsolatedAsyncioTestCase, TestCase
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from fastapi import HTTPException
 
@@ -160,15 +160,15 @@ class SchedulerRouteTest(IsolatedAsyncioTestCase):
 
         with (
             patch.object(os_control, "create_schedule", return_value=created) as create_mock,
-            patch.object(os_control, "record_audit_event") as audit_mock,
+            patch.object(os_control, "record_policy_event") as audit_mock,
         ):
             result = await os_control.create_scheduler_job(request=cast(Any, None), body=body, user=current_actor)
 
         create_mock.assert_called_once()
         self.assertEqual(result.id, "sched-1")
         audit_mock.assert_called_once()
-        self.assertEqual(audit_mock.call_args.kwargs["action"], "scheduler.create")
-        self.assertEqual(audit_mock.call_args.kwargs["resource_id"], "sched-1")
+        self.assertEqual(audit_mock.call_args.args[1].action, "scheduler.create")
+        self.assertEqual(audit_mock.call_args.args[1].resource_id, "sched-1")
 
     async def test_enable_schedule_delegates_to_service(self):
         current_actor = cast(Any, SimpleNamespace(id="admin", role="admin", email="admin@example.com", is_superuser=False))
@@ -176,7 +176,7 @@ class SchedulerRouteTest(IsolatedAsyncioTestCase):
 
         with (
             patch.object(os_control, "set_schedule_enabled", return_value=enabled) as enable_mock,
-            patch.object(os_control, "record_audit_event"),
+            patch.object(os_control, "record_policy_event"),
         ):
             result = await os_control.enable_scheduler_job("sched-1", request=cast(Any, None), user=current_actor)
 
@@ -197,3 +197,42 @@ class SchedulerRouteTest(IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(context.exception.status_code, 503)
+
+    async def test_trigger_uses_running_scheduler_executor_and_records_audit(self):
+        current_actor = cast(Any, SimpleNamespace(id="admin", role="admin", email="admin@example.com", is_superuser=False))
+        run = {
+            "id": "run-1",
+            "schedule_id": "sched-1",
+            "attempt": 1,
+            "triggered_at": 1_800_000_000,
+            "completed_at": 1_800_000_001,
+            "status": "success",
+            "status_code": 200,
+            "run_id": "agent-run-1",
+            "session_id": "session-1",
+        }
+        executor = Mock()
+        executor.execute = AsyncMock()
+        executor.execute.return_value = run
+        request = cast(Any, SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(scheduler_executor=executor))))
+
+        with (
+            patch.object(os_control, "get_schedule", return_value={"id": "sched-1", "enabled": True}),
+            patch.object(os_control, "get_agno_postgres_db", return_value=object()) as db_mock,
+            patch.object(os_control, "record_policy_event") as audit_mock,
+        ):
+            result = await os_control.trigger_scheduler_job(
+                "sched-1",
+                request=request,
+                user=current_actor,
+            )
+
+        executor.execute.assert_awaited_once_with(
+            {"id": "sched-1", "enabled": True},
+            db_mock.return_value,
+            release_schedule=False,
+        )
+        self.assertEqual(result["id"], "run-1")
+        audit_mock.assert_called_once()
+        self.assertEqual(audit_mock.call_args.args[1].action, "scheduler.trigger")
+        self.assertEqual(audit_mock.call_args.args[1].metadata, {"run_id": "run-1"})

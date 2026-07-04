@@ -212,14 +212,22 @@ button:enabled {
 }
 
 .ag-stat-strip {
+	align-items: center;
+	display: flex;
+	flex-wrap: nowrap;
+	gap: 8px;
 	min-width: 0;
+	overflow: hidden;
 }
 
 .ag-stat-chip {
 	display: inline-flex;
+	flex: 0 1 164px;
 	min-width: 0;
+	max-width: 100%;
 	align-items: center;
 	gap: 8px;
+	justify-content: space-between;
 	border: 1px solid var(--ag-border);
 	border-radius: 8px;
 	background: var(--ag-panel-soft);
@@ -228,6 +236,7 @@ button:enabled {
 }
 
 .ag-stat-chip :where(span, small, em) {
+	flex: 1 1 auto;
 	min-width: 0;
 	overflow: hidden;
 	color: var(--ag-muted);
@@ -239,6 +248,7 @@ button:enabled {
 }
 
 .ag-stat-chip strong {
+	flex: 0 1 auto;
 	min-width: 0;
 	overflow: hidden;
 	color: var(--ag-heading);

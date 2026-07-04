@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 from typing import Any
@@ -20,6 +21,7 @@ from api.services.postgres_store import (
     app_schema,
     coerce_json_value,
     ensure_agno_postgres_tables,
+    get_agno_postgres_db,
     knowledge_schema,
     postgres_connect,
 )
@@ -34,6 +36,9 @@ from api.services.scheduler_service import get_scheduler_payload as get_agno_sch
 OsMetric = dict[str, Any]
 OsRecord = dict[str, Any]
 OsPayload = dict[str, Any]
+
+MEMORY_OPTIMIZATION_REVIEW_THRESHOLD = 50
+MEMORY_ABNORMAL_GROWTH_THRESHOLD = 500
 
 CONTROL_TABLES = {
     "evaluation": "os_eval_runs",
@@ -209,6 +214,61 @@ def _user_where(actor: Any | None, any_permission: str) -> tuple[sql.SQL | None,
     if owner_user_id is None:
         return None, ()
     return sql.SQL("user_id = %s"), (owner_user_id,)
+
+
+def _scoped_requested_user_id(
+    actor: Any | None,
+    requested_user_id: str | None,
+    any_permission: str,
+) -> str | None:
+    requested = (requested_user_id or "").strip() or None
+    if actor is not None and has_permission(actor, any_permission):
+        return requested
+    return actor_id(actor) if actor is not None else ""
+
+
+def _memory_status_for_count(count: int) -> str:
+    if count >= MEMORY_ABNORMAL_GROWTH_THRESHOLD:
+        return "risk"
+    if count >= MEMORY_OPTIMIZATION_REVIEW_THRESHOLD:
+        return "review"
+    return "healthy"
+
+
+def _memory_text(value: Any) -> str:
+    memory = coerce_json_value(value)
+    if isinstance(memory, dict):
+        return str(
+            memory.get("memory")
+            or memory.get("content")
+            or memory.get("summary")
+            or ""
+        )
+    return str(memory or "")
+
+
+def _memory_topics(value: Any) -> list[str]:
+    topics = coerce_json_value(value)
+    if not isinstance(topics, list):
+        return []
+    return [str(topic) for topic in topics if str(topic).strip()]
+
+
+def _memory_row(raw_row: Any) -> dict[str, Any]:
+    if isinstance(raw_row, Mapping):
+        return dict(raw_row)
+    mapping = getattr(raw_row, "_mapping", None)
+    if isinstance(mapping, Mapping):
+        return dict(mapping)
+    model_dump = getattr(raw_row, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, Mapping):
+            return dict(dumped)
+    try:
+        return dict(vars(raw_row))
+    except TypeError:
+        return {}
 
 
 def _span_count_for_actor(actor: Any | None) -> int:
@@ -442,50 +502,144 @@ def get_studio_payload(actor: Any | None = None) -> OsPayload:
     )
 
 
-def get_memory_payload(actor: Any | None = None) -> OsPayload:
+def get_memory_payload(
+    actor: Any | None = None,
+    *,
+    user_id: str | None = None,
+    topic: str | None = None,
+    search: str | None = None,
+    page: int = 1,
+    limit: int = 50,
+) -> OsPayload:
     ensure_agno_postgres_tables()
-    memory_where, memory_params = _user_where(actor, "memory:read:any")
-    rows = _fetch_rows(
-        agno_schema(),
-        "agno_memories",
-        limit=100,
-        order_by="updated_at",
-        where=memory_where,
-        params=memory_params,
+    db = get_agno_postgres_db()
+    safe_page = max(1, int(page or 1))
+    safe_limit = min(100, max(1, int(limit or 50)))
+    scoped_user_id = _scoped_requested_user_id(actor, user_id, "memory:read:any")
+    scoped_topic = (topic or "").strip()
+    scoped_search = (search or "").strip()
+    topics_filter = [scoped_topic] if scoped_topic else None
+
+    raw_result = db.get_user_memories(
+        user_id=scoped_user_id,
+        topics=topics_filter,
+        search_content=scoped_search or None,
+        limit=safe_limit,
+        page=safe_page,
+        sort_by="updated_at",
+        sort_order="desc",
+        deserialize=False,
     )
-    users = {str(row.get("user_id") or row.get("agent_id") or "default") for row in rows}
+    if isinstance(raw_result, tuple):
+        raw_memories, total_memories = raw_result
+    else:
+        raw_memories = raw_result
+        total_memories = len(raw_memories)
+
+    stats_scope_user_id = None if actor is not None and has_permission(actor, "memory:read:any") else actor_id(actor)
+    user_stats, total_users = db.get_user_memory_stats(
+        user_id=stats_scope_user_id,
+        limit=500,
+        page=1,
+    )
+    topics = sorted(db.get_all_memory_topics(user_id=scoped_user_id))
+
+    memories = []
     records = []
-    for row in rows:
-        memory = coerce_json_value(row.get("memory") or row.get("memories") or row.get("content"))
-        if isinstance(memory, dict):
-            title = _compact(memory.get("memory") or memory.get("content") or memory.get("summary") or row.get("id"), 80)
-        else:
-            title = _compact(memory or row.get("id"), 80)
+    for raw_row in raw_memories:
+        row = _memory_row(raw_row)
+        memory_id = row.get("memory_id") or row.get("id")
+        memory = _memory_text(row.get("memory") or row.get("memories") or row.get("content"))
+        row_topics = _memory_topics(row.get("topics") or row.get("topic"))
+        item = {
+            "id": str(memory_id or memory or "memory"),
+            "memory": memory,
+            "topics": row_topics,
+            "input": str(row.get("input") or ""),
+            "user_id": str(row.get("user_id") or ""),
+            "agent_id": str(row.get("agent_id") or ""),
+            "team_id": str(row.get("team_id") or ""),
+            "feedback": str(row.get("feedback") or ""),
+            "created_at": _iso(row.get("created_at")),
+            "updated_at": _iso(row.get("updated_at") or row.get("created_at")),
+            "status": "stored",
+        }
+        memories.append(item)
         records.append(
             _record(
-                record_id=row.get("id") or row.get("memory_id") or title,
-                title=title or "Memory",
-                subtitle=str(row.get("user_id") or row.get("agent_id") or "default"),
-                status=str(row.get("status") or "stored"),
+                record_id=item["id"],
+                title=_compact(memory or memory_id or "Memory", 96),
+                subtitle=item["user_id"] or item["agent_id"] or "default",
+                status=item["status"],
                 meta={
-                    "topic": row.get("topic") or row.get("name") or "",
-                    "source": row.get("source") or "agno",
+                    "topics": ", ".join(row_topics),
+                    "agent_id": item["agent_id"],
+                    "input": _compact(item["input"], 120),
                 },
-                updated_at=row.get("updated_at") or row.get("created_at"),
+                updated_at=item["updated_at"],
             )
-            )
+        )
 
-    return _payload(
+    memory_users = [
+        {
+            "user_id": str(row.get("user_id") or "default"),
+            "total_memories": int(row.get("total_memories") or 0),
+            "last_memory_updated_at": _iso(row.get("last_memory_updated_at")),
+            "status": _memory_status_for_count(int(row.get("total_memories") or 0)),
+        }
+        for row in user_stats
+    ]
+    review_users = sum(
+        1
+        for row in memory_users
+        if int(row["total_memories"]) >= MEMORY_OPTIMIZATION_REVIEW_THRESHOLD
+    )
+    risk_users = sum(
+        1
+        for row in memory_users
+        if int(row["total_memories"]) >= MEMORY_ABNORMAL_GROWTH_THRESHOLD
+    )
+
+    payload = _payload(
         module="memory",
         title="Memory",
-        description="Agno 用户记忆库存与增长监测。",
+        description="Agno 用户记忆库存、筛选与增长监测。",
         metrics=[
-            _metric("Memories", _count_where(agno_schema(), "agno_memories", memory_where, memory_params), "PostgresDb memory rows", "blue"),
-            _metric("Users", len(users), "本页涉及 user_id", "green"),
+            _metric("Memories", total_memories, "当前筛选命中的 Agno user memories", "blue"),
+            _metric("Users", total_users, "当前权限范围内的 user_id", "green"),
+            _metric("Review", review_users, f"{MEMORY_OPTIMIZATION_REVIEW_THRESHOLD}+ memories", "yellow"),
+            _metric("Risk", risk_users, f"{MEMORY_ABNORMAL_GROWTH_THRESHOLD}+ memories", "red" if risk_users else "green"),
             _metric("Mode", "Auto", "update_memory_on_run", "yellow"),
         ],
         records=records,
     )
+    payload.update(
+        {
+            "memories": memories,
+            "memory_users": memory_users,
+            "memory_topics": topics,
+            "memory_filters": {
+                "user_id": scoped_user_id or "",
+                "topic": scoped_topic,
+                "search": scoped_search,
+                "page": safe_page,
+                "limit": safe_limit,
+                "total": total_memories,
+            },
+            "memory_thresholds": {
+                "optimization_review": MEMORY_OPTIMIZATION_REVIEW_THRESHOLD,
+                "abnormal_growth": MEMORY_ABNORMAL_GROWTH_THRESHOLD,
+            },
+            "memory_mode": {
+                "type": "automatic",
+                "update_memory_on_run": True,
+                "enable_agentic_memory": False,
+                "enable_session_summaries": True,
+                "readonly": True,
+            },
+        }
+    )
+    return payload
 
 
 def get_metrics_payload(actor: Any | None = None) -> OsPayload:
@@ -664,9 +818,16 @@ MODULE_HANDLERS = {
 }
 
 
-def get_control_payload(module: str, actor: Any | None = None) -> OsPayload:
+def get_control_payload(
+    module: str,
+    actor: Any | None = None,
+    *,
+    query: dict[str, Any] | None = None,
+) -> OsPayload:
     try:
         handler = MODULE_HANDLERS[module]
     except KeyError as exc:
         raise ValueError(f"Unsupported control module: {module}") from exc
+    if module == "memory":
+        return get_memory_payload(actor=actor, **(query or {}))
     return handler(actor=actor)

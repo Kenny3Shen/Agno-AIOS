@@ -49,9 +49,9 @@ FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth table
 - `/api/audit/logs`：admin audit review。
 - `/api/os/*`：AgentOS control modules。
 
-`api/services/` 负责业务逻辑和持久化辅助层。`postgres_store.py` 集中管理 PostgreSQL 连接设置、schema 名称、Agno `PostgresDb` 构造和应用表创建。`llm_service.py` 构建助手运行时、流式返回、归档 sessions、读取 session history，并配置 Agno tracing。`knowledge_service.py` 构建 Agno Knowledge 和 PgVector 存储层。`tracing_service.py` 读取 Agno traces 与 spans，并整理成前端需要的结构。
+`api/services/` 负责业务逻辑和持久化辅助层。`postgres_store.py` 集中管理 PostgreSQL 连接设置、schema 名称、Agno `PostgresDb` 构造和应用表创建。`security_run_runtime.py` 承担安全运营助手 Run runtime，集中 model、MCP、Skill、Knowledge、fallback 和流式事件编排；`llm_service.py` 保留 Chat Session persistence、session history 和兼容入口。`knowledge_service.py` 提供 Knowledge Base lifecycle interface，内部集中 Agno Knowledge、PgVector、reader、owner filtering、CRUD、search 和 status。`mcp_config_service.py` 集中 MCP service toggle、Hi-Agent entries 和 MCP upload 配置写入。`security_policy.py` 集中控制面 module permission、Scheduler 写权限和 policy audit event 记录。`tracing_service.py` 读取 Agno traces 与 spans，并整理成前端需要的结构。
 
-`api/mcp/` 负责集成 MCP runtime。`server.py` 构建主 FastMCP instance、挂载已启用的内置服务、用 token validation 包装 ASGI app，并支持 runtime refresh。`config.py` 读取和写入 MCP service config、存储 MCP tokens，并跟踪 Hi-Agent execution cache。
+`api/mcp/` 负责集成 MCP runtime。`server.py` 构建主 FastMCP instance、挂载已启用的内置服务、用 token validation 包装 ASGI app，并支持 runtime refresh。`config.py` 读取和写入底层 MCP config、存储 MCP tokens，并跟踪 Hi-Agent execution cache；上层配置 mutation 由 `api/services/mcp_config_service.py` 提供 module interface。
 
 `api/tasks/` 负责运维脚本，包括 CVE update、MySQL-to-Postgres migration 和 scheduler execution。
 
@@ -76,7 +76,7 @@ FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth table
 
 `POST /api/chat` 接收 message、session ID 和可选 model ID，并返回 `text/event-stream`。该 route 要求 `session:write:own`。如果客户端传入已有 session ID，非 admin 用户必须拥有该 session。
 
-`api/services/llm_service.py` 创建名为“安全运营助手”的 Agno `Agent`，当前包含：
+`api/services/security_run_runtime.py` 创建名为“安全运营助手”的 Agno `Agent`，当前包含：
 
 - 来自 model configuration service 的 OpenAI-compatible model settings。
 - 通过 streamable HTTP 使用 `MCP_SERVER_URL` 和 `MCP_TOKEN` 的 MCP tools。
@@ -87,7 +87,7 @@ FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth table
 
 Tracing 通过 `setup_tracing(db=db, batch_processing=False)` 启用，因此 Chat runs 会写入 Agno trace tables，并尽量减少 UI 刷新后看不到最新 trace 的延迟。
 
-如果 provider 拦截完整 Agent context，服务会切换到无工具 fallback assistant。fallback 会明确说明能力受限，不声称访问了 tools、knowledge 或内部数据。
+如果 provider 拦截完整 Agent context，Run runtime 会切换到无工具 fallback assistant。fallback 会明确说明能力受限，不声称访问了 tools、knowledge 或内部数据。
 
 ## Sessions、Runs、Traces 和 Spans
 
@@ -99,7 +99,7 @@ Traces 通过 Agno `PostgresDb` functions 从 `agno_traces` 和 `agno_spans` 读
 
 ## Knowledge
 
-Knowledge documents 通过 metadata 做 user scope。Chat runtime 在存在当前用户时传入 `knowledge_filters` user filter。Knowledge service 通过 `knowledge` schema 中的 Agno `PostgresDb` 存储 document contents，并通过 PgVector 存储 vector chunks。
+Knowledge documents 通过 metadata 做 user scope。Chat runtime 在存在当前用户时传入 `knowledge_filters` user filter。Knowledge Base lifecycle module 通过 `knowledge` schema 中的 Agno `PostgresDb` 存储 document contents，并通过 PgVector 存储 vector chunks。
 
 当前写入路径包括后端 text input、后端 server-side file path input，以及前端把 browser file upload 读取成 text 后走文本写入。Search 会返回匹配内容和 metadata，供控制面和助手使用。
 
@@ -107,7 +107,7 @@ Knowledge documents 通过 metadata 做 user scope。Chat runtime 在存在当�
 
 主 FastAPI app 在 `/mcp/` 挂载集成 MCP runtime。调用该 endpoint 必须通过 `Authorization: Bearer` header 或 `token` query parameter 提供有效 MCP token。
 
-内置 MCP services 是 `playbook`、`agent` 和 `basic`。启用状态通过 `api/mcp/config.py` 从 `data/config/mcp/mcp_config.toml` 读取。Hi-Agent entries 是外部 MCP-compatible URLs，供 playbook tools 做 discovery 和 invocation。
+内置 MCP services 是 `playbook`、`agent` 和 `basic`。启用状态最终从 `data/config/mcp/mcp_config.toml` 读取，控制面写入通过 `api/services/mcp_config_service.py` 完成。Hi-Agent entries 是外部 MCP-compatible URLs，供 playbook tools 做 discovery 和 invocation。
 
 ## 数据存储
 

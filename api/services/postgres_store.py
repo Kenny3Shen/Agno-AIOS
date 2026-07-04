@@ -189,40 +189,7 @@ def ensure_app_tables() -> None:
                 """
                 ).format(cves_table)
             )
-            audit_table = sql.Identifier(app_schema(), "audit_logs")
-            cursor.execute(
-                sql.SQL(
-                    """
-                CREATE TABLE IF NOT EXISTS {} (
-                    id BIGSERIAL PRIMARY KEY,
-                    actor_user_id TEXT NOT NULL,
-                    actor_email TEXT NOT NULL DEFAULT '',
-                    actor_role TEXT NOT NULL,
-                    action TEXT NOT NULL,
-                    resource_type TEXT NOT NULL,
-                    resource_id TEXT NOT NULL DEFAULT '',
-                    status TEXT NOT NULL DEFAULT 'success',
-                    ip_address TEXT NOT NULL DEFAULT '',
-                    user_agent TEXT NOT NULL DEFAULT '',
-                    metadata JSONB NOT NULL DEFAULT '{{}}'::jsonb,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                )
-                """
-                ).format(audit_table)
-            )
-            cursor.execute(
-                sql.SQL(
-                    """
-                CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_time
-                ON {} (actor_user_id, created_at DESC)
-                """
-                ).format(audit_table)
-            )
-            cursor.execute(
-                sql.SQL(
-                    """
-                CREATE INDEX IF NOT EXISTS idx_audit_logs_action_time
-                ON {} (action, created_at DESC)
-                """
-                ).format(audit_table)
-            )
+
+    from api.persistence.audit_logs import ensure_audit_logs_table
+
+    ensure_audit_logs_table()

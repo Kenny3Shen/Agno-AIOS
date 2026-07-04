@@ -1,13 +1,11 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from api.auth.models import User
-from api.auth.permissions import has_permission
 from api.auth.users import current_active_user
-from api.services.audit_service import audit_request_context, record_audit_event
 from api.services.os_control_service import get_control_payload
 from api.services.postgres_store import get_agno_postgres_db
 from api.services.scheduler_service import (
@@ -19,19 +17,14 @@ from api.services.scheduler_service import (
     set_schedule_enabled,
     update_schedule,
 )
+from api.services.security_policy import (
+    PolicyAuditEvent,
+    record_policy_event,
+    require_control_module_access,
+    require_scheduler_write,
+)
 
 router = APIRouter(prefix="/api/os", tags=["AgentOS Control Plane"])
-
-MODULE_PERMISSIONS = {
-    "sessions": "session:read:own",
-    "studio": "mcp:read",
-    "memory": "memory:read:own",
-    "metrics": "metrics:read:own",
-    "evaluation": "admin:read",
-    "approvals": "admin:read",
-    "scheduler": "admin:read",
-    "knowledge": "knowledge:read",
-}
 
 
 class ScheduleCreateRequest(BaseModel):
@@ -74,31 +67,38 @@ async def require_os_module_permission(
     module: str,
     user: User = Depends(current_active_user),
 ) -> User:
-    try:
-        permission = MODULE_PERMISSIONS[module]
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Unsupported control module: {module}") from exc
-
-    if not has_permission(user, permission):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="权限不足")
+    require_control_module_access(module, user)
     return user
 
 
 async def require_scheduler_write_permission(
     user: User = Depends(current_active_user),
 ) -> User:
-    if not has_permission(user, "admin:read"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="权限不足")
+    require_scheduler_write(user)
     return user
 
 
 @router.get("/{module}")
 async def get_os_control_module(
     module: str,
+    user_id: str | None = None,
+    topic: str | None = None,
+    search: str | None = None,
+    page: int = 1,
+    limit: int = 50,
     user: User = Depends(require_os_module_permission),
 ):
     try:
-        return get_control_payload(module, actor=user)
+        query: dict[str, Any] | None = None
+        if module == "memory":
+            query = {
+                "user_id": user_id,
+                "topic": topic,
+                "search": search,
+                "page": page,
+                "limit": limit,
+            }
+        return get_control_payload(module, actor=user, query=query)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Unsupported control module: {module}") from exc
     except HTTPException:
@@ -136,13 +136,15 @@ async def create_scheduler_job(
         logger.error(f"创建 Scheduler 任务失败: {exc}")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    record_audit_event(
+    record_policy_event(
         user,
-        action="scheduler.create",
-        resource_type="schedule",
-        resource_id=schedule["id"],
-        metadata={"name": schedule["name"], "endpoint": schedule["endpoint"]},
-        **audit_request_context(request),
+        PolicyAuditEvent(
+            action="scheduler.create",
+            resource_type="schedule",
+            resource_id=schedule["id"],
+            metadata={"name": schedule["name"], "endpoint": schedule["endpoint"]},
+        ),
+        request,
     )
     return ScheduleCreateResponse(**schedule)
 
@@ -163,13 +165,15 @@ async def update_scheduler_job(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     if schedule is None:
         raise HTTPException(status_code=404, detail="Schedule not found")
-    record_audit_event(
+    record_policy_event(
         user,
-        action="scheduler.update",
-        resource_type="schedule",
-        resource_id=schedule_id,
-        metadata={"updates": body.model_dump(exclude_unset=True)},
-        **audit_request_context(request),
+        PolicyAuditEvent(
+            action="scheduler.update",
+            resource_type="schedule",
+            resource_id=schedule_id,
+            metadata={"updates": body.model_dump(exclude_unset=True)},
+        ),
+        request,
     )
     return schedule
 
@@ -187,13 +191,15 @@ async def _set_scheduler_job_enabled(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     if schedule is None:
         raise HTTPException(status_code=404, detail="Schedule not found")
-    record_audit_event(
+    record_policy_event(
         user,
-        action="scheduler.enable" if enabled else "scheduler.disable",
-        resource_type="schedule",
-        resource_id=schedule_id,
-        metadata={"enabled": enabled},
-        **audit_request_context(request),
+        PolicyAuditEvent(
+            action="scheduler.enable" if enabled else "scheduler.disable",
+            resource_type="schedule",
+            resource_id=schedule_id,
+            metadata={"enabled": enabled},
+        ),
+        request,
     )
     return schedule
 
@@ -229,12 +235,14 @@ async def delete_scheduler_job(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     if not deleted:
         raise HTTPException(status_code=404, detail="Schedule not found")
-    record_audit_event(
+    record_policy_event(
         user,
-        action="scheduler.delete",
-        resource_type="schedule",
-        resource_id=schedule_id,
-        **audit_request_context(request),
+        PolicyAuditEvent(
+            action="scheduler.delete",
+            resource_type="schedule",
+            resource_id=schedule_id,
+        ),
+        request,
     )
     return {"id": schedule_id, "deleted": True}
 
@@ -258,13 +266,15 @@ async def trigger_scheduler_job(
     except Exception as exc:
         logger.error(f"触发 Scheduler 任务失败: {exc}")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    record_audit_event(
+    record_policy_event(
         user,
-        action="scheduler.trigger",
-        resource_type="schedule",
-        resource_id=schedule_id,
-        metadata={"run_id": run.get("id")},
-        **audit_request_context(request),
+        PolicyAuditEvent(
+            action="scheduler.trigger",
+            resource_type="schedule",
+            resource_id=schedule_id,
+            metadata={"run_id": run.get("id")},
+        ),
+        request,
     )
     return schedule_run_to_dict(run)
 

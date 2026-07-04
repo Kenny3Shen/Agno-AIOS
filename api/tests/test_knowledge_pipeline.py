@@ -253,6 +253,35 @@ class KnowledgePipelineContractTest(unittest.TestCase):
         self.assertEqual(results, [])
         self.assertEqual(captured["filters"], {"user_id": "u1"})
 
+    def test_lifecycle_search_uses_one_interface_for_owner_filter(self) -> None:
+        captured: dict[str, object] = {}
+
+        class FakeKnowledge:
+            def search(self, *args, **kwargs):
+                captured["query"] = args[0]
+                captured["filters"] = kwargs.get("filters")
+                captured["search_type"] = kwargs.get("search_type")
+                return []
+
+        lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+            knowledge_service.KnowledgeBaseLifecycleDependencies(
+                get_knowledge_base=lambda _search_type=None: FakeKnowledge(),
+                ensure_storage=lambda: None,
+                hydrate_content_ids=lambda _documents: None,
+            )
+        )
+
+        results = lifecycle.search_documents(
+            "policy",
+            search_type="hybrid",
+            owner_user_id="u1",
+        )
+
+        self.assertEqual(results, [])
+        self.assertEqual(captured["query"], "policy")
+        self.assertEqual(captured["filters"], {"user_id": "u1"})
+        self.assertEqual(captured["search_type"], "hybrid")
+
     def test_delete_document_rejects_foreign_owner(self) -> None:
         removed: list[str] = []
 

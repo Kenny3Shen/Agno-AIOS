@@ -1,10 +1,10 @@
 <template>
   <div class="knowledge-console knowledge-workflow-shell">
     <section class="knowledge-stat-strip ag-stat-strip" :aria-label="t('knowledge.stats.ariaLabel')">
-      <article v-for="card in statisticsCards" :key="card.label" class="knowledge-stat-chip ag-stat-chip">
+      <div v-for="card in statisticsCards" :key="card.label" class="knowledge-stat-chip ag-stat-chip">
         <span>{{ card.label }}</span>
         <strong :title="card.value">{{ card.value }}</strong>
-      </article>
+      </div>
     </section>
 
     <div class="knowledge-workspace-grid">
@@ -76,6 +76,7 @@
                 <el-button
                   type="primary"
                   class="!w-full cursor-pointer"
+                  :disabled="!canSubmitBrowserUpload"
                   :loading="uploadingBrowserFile"
                   @click="submitBrowserUpload"
                 >
@@ -94,7 +95,7 @@
               </label>
               <label class="knowledge-field">
                 <span>{{ t('knowledge.upload.sourceLabel') }}</span>
-                <el-input v-model="textForm.source" placeholder="manual" clearable />
+                <el-input v-model="textForm.source" :placeholder="t('knowledge.upload.sourceManualPlaceholder')" clearable />
               </label>
               <label class="knowledge-field text-import-content">
                 <span>{{ t('knowledge.upload.contentLabel') }}</span>
@@ -106,7 +107,13 @@
                 />
               </label>
               <div class="form-action-row">
-                <el-button type="primary" class="cursor-pointer" :loading="savingText" @click="submitTextDocument">
+                <el-button
+                  type="primary"
+                  class="cursor-pointer"
+                  :disabled="!canSubmitTextDocument"
+                  :loading="savingText"
+                  @click="submitTextDocument"
+                >
                   <el-icon class="mr-1"><DocumentAdd /></el-icon>
                   {{ t('knowledge.actions.writeText') }}
                 </el-button>
@@ -125,7 +132,13 @@
                 <el-input v-model="pathForm.title" :placeholder="t('knowledge.upload.optionalPlaceholder')" clearable />
               </label>
               <div class="form-action-row path-action">
-                <el-button type="primary" class="cursor-pointer" :loading="savingPath" @click="submitPathDocument">
+                <el-button
+                  type="primary"
+                  class="cursor-pointer"
+                  :disabled="!canSubmitPathDocument"
+                  :loading="savingPath"
+                  @click="submitPathDocument"
+                >
                   <el-icon class="mr-1"><FolderOpened /></el-icon>
                   {{ t('knowledge.actions.importPath') }}
                 </el-button>
@@ -161,7 +174,13 @@
               <span>{{ t('knowledge.labels.topK') }}</span>
               <el-input-number v-model="searchForm.limit" :min="1" :max="20" size="small" class="!w-full" />
             </label>
-            <el-button type="primary" class="cursor-pointer" :loading="searching" @click="runSearch">
+            <el-button
+              type="primary"
+              class="cursor-pointer"
+              :disabled="searching"
+              :loading="searching"
+              @click="runSearch"
+            >
               {{ t('knowledge.actions.search') }}
             </el-button>
           </div>
@@ -268,46 +287,50 @@
               <span class="doc-id" :title="row.id">{{ shortId(row.id) }}</span>
             </div>
           </div>
-          <div class="document-cell" role="cell">
+          <div class="document-cell" role="cell" :data-label="t('knowledge.documents.columns.type')">
             <span class="type-badge">{{ documentType(row) }}</span>
           </div>
-          <div class="document-cell document-number" role="cell">{{ documentSize(row) }}</div>
-          <div class="document-cell document-number" role="cell">{{ row.chunks }}</div>
-          <div class="document-cell" role="cell">
+          <div class="document-cell document-number" role="cell" :data-label="t('knowledge.documents.columns.size')">{{ documentSize(row) }}</div>
+          <div class="document-cell document-number" role="cell" :data-label="t('knowledge.documents.columns.chunks')">{{ row.chunks }}</div>
+          <div class="document-cell" role="cell" :data-label="t('knowledge.documents.columns.embeddingStatus')">
             <span class="status-badge" :class="documentStatus(row).tone">{{ documentStatus(row).label }}</span>
           </div>
-          <div class="document-cell document-time" role="cell">{{ formatDate(row.created_at) }}</div>
-          <div class="document-cell" role="cell">
-            <span class="source-text" :title="row.source">{{ row.source || "manual" }}</span>
+          <div class="document-cell document-time" role="cell" :data-label="t('knowledge.documents.columns.updatedTime')">
+            <span class="document-time-value">{{ formatDate(row.created_at) }}</span>
           </div>
-          <div class="document-actions" role="cell">
-            <el-tooltip :content="t('knowledge.documents.preview')" placement="top">
-              <el-button text class="cursor-pointer" :aria-label="t('knowledge.documents.previewLabel', { title: row.title })" @click="openPreview(row)">
-                <el-icon><View /></el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip :content="t('knowledge.documents.rebuildPending')" placement="top">
-              <el-button text disabled :aria-label="t('knowledge.documents.reEmbeddingLabel', { title: row.title })">
-                <el-icon><RefreshRight /></el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip :content="t('knowledge.documents.metadata')" placement="top">
-              <el-button text class="cursor-pointer" :aria-label="t('knowledge.documents.metadataLabel', { title: row.title })" @click="openMetadata(row)">
-                <el-icon><Tickets /></el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip :content="t('knowledge.documents.delete')" placement="top">
-              <el-button
-                type="danger"
-                text
-                class="cursor-pointer"
-                :loading="deletingDocId === row.id"
-                :aria-label="t('knowledge.documents.deleteLabel', { title: row.title })"
-                @click="deleteDocument(row)"
-              >
-                <el-icon><Delete /></el-icon>
-              </el-button>
-            </el-tooltip>
+          <div class="document-cell" role="cell" :data-label="t('knowledge.documents.columns.source')">
+            <span class="source-text" :title="row.source">{{ row.source || t('knowledge.labels.manualSource') }}</span>
+          </div>
+          <div class="document-actions" role="cell" :data-label="t('knowledge.documents.columns.actions')">
+            <div class="document-action-buttons">
+              <el-tooltip :content="t('knowledge.documents.preview')" placement="top">
+                <el-button text class="cursor-pointer" :aria-label="t('knowledge.documents.previewLabel', { title: row.title })" @click="openPreview(row)">
+                  <el-icon><View /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip :content="t('knowledge.documents.rebuildPending')" placement="top">
+                <el-button text disabled :aria-label="t('knowledge.documents.reEmbeddingLabel', { title: row.title })">
+                  <el-icon><RefreshRight /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip :content="t('knowledge.documents.metadata')" placement="top">
+                <el-button text class="cursor-pointer" :aria-label="t('knowledge.documents.metadataLabel', { title: row.title })" @click="openMetadata(row)">
+                  <el-icon><Tickets /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip :content="t('knowledge.documents.delete')" placement="top">
+                <el-button
+                  type="danger"
+                  text
+                  class="cursor-pointer"
+                  :loading="deletingDocId === row.id"
+                  :aria-label="t('knowledge.documents.deleteLabel', { title: row.title })"
+                  @click="deleteDocument(row)"
+                >
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </el-tooltip>
+            </div>
           </div>
         </article>
       </div>
@@ -331,7 +354,7 @@
                 {{ t('knowledge.advanced.readerChunkStrategy') }}
               </div>
               <div class="reader-auto-note roomy">
-                <strong>Reader</strong>
+                <strong>{{ t('knowledge.labels.reader') }}</strong>
                 <span>{{ t('knowledge.advanced.readerAuto') }}</span>
               </div>
               <div class="knowledge-strategy-grid">
@@ -456,7 +479,7 @@
           </div>
           <div>
             <span class="drawer-label">{{ t('knowledge.drawer.source') }}</span>
-            <p>{{ previewDocument.source || "manual" }}</p>
+            <p>{{ previewDocument.source || t('knowledge.labels.manualSource') }}</p>
           </div>
           <div class="drawer-grid">
             <div>
@@ -610,8 +633,6 @@ const statisticsCards = computed(() => [
   { label: t("knowledge.stats.chunks"), value: String(status.value?.chunks ?? totalChunks.value), hint: t("knowledge.stats.chunksHint") },
   { label: t("knowledge.stats.embeddingModel"), value: status.value?.embedding || "unknown", hint: status.value?.embedding_dimensions ? `${status.value.embedding_dimensions} dimensions` : t("knowledge.stats.modelRuntime") },
   { label: t("knowledge.stats.vectorDatabase"), value: status.value?.collection || "-", hint: status.value?.search_type || "hybrid" },
-  { label: t("knowledge.stats.storage"), value: status.value?.storage || "-", hint: status.value?.database || "postgres" },
-  { label: t("knowledge.stats.status"), value: status.value?.torch_runtime_ok === false ? t("knowledge.status.degraded") : t("knowledge.status.ready"), hint: status.value?.cold_start_note || t("knowledge.stats.indexAvailable") },
 ])
 
 const ingestStatusLabel = computed(() => {
@@ -791,6 +812,13 @@ const isSupportedTextFile = (file: File) => {
   return browserTextPattern.test(file.name)
 }
 
+const canSubmitBrowserUpload = computed(() => {
+  const file = selectedBrowserFile.value
+  return Boolean(file && isSupportedTextFile(file) && !uploadingBrowserFile.value)
+})
+const canSubmitTextDocument = computed(() => Boolean(textForm.title.trim() && textForm.content.trim() && !savingText.value))
+const canSubmitPathDocument = computed(() => Boolean(pathForm.path.trim() && !savingPath.value))
+
 const handleBrowserFileChange = (uploadFile: UploadFile, uploadFiles: UploadFiles) => {
   browserFileList.value = uploadFiles.slice(-1)
   selectedBrowserFile.value = uploadFile.raw ?? null
@@ -866,26 +894,29 @@ const submitBrowserUpload = async () => {
 
   uploadingBrowserFile.value = true
   const retry = async () => { await submitBrowserUpload() }
-  await runIngestTask(t("knowledge.upload.fileUpload"), async () => {
-    const content = (await file.text()).trim()
-    if (!content) {
-      throw new Error(t("knowledge.upload.emptyFile"))
-    }
-    await addTextDocument({
-      title: browserForm.title.trim() || stripExtension(file.name),
-      content,
-      source: browserForm.source.trim() || `upload:${file.name}`,
-      metadata: {
-        file_name: file.name,
-        upload_mode: "browser",
-        file_size: String(file.size),
-        file_type: file.name.match(/\.[^.]+$/)?.[0]?.toLowerCase() || "text",
-        mime_type: file.type || "text/plain",
-      },
-    })
-    resetBrowserUpload()
-  }, retry)
-  uploadingBrowserFile.value = false
+  try {
+    await runIngestTask(t("knowledge.upload.fileUpload"), async () => {
+      const content = (await file.text()).trim()
+      if (!content) {
+        throw new Error(t("knowledge.upload.emptyFile"))
+      }
+      await addTextDocument({
+        title: browserForm.title.trim() || stripExtension(file.name),
+        content,
+        source: browserForm.source.trim() || `upload:${file.name}`,
+        metadata: {
+          file_name: file.name,
+          upload_mode: "browser",
+          file_size: String(file.size),
+          file_type: file.name.match(/\.[^.]+$/)?.[0]?.toLowerCase() || "text",
+          mime_type: file.type || "text/plain",
+        },
+      })
+      resetBrowserUpload()
+    }, retry)
+  } finally {
+    uploadingBrowserFile.value = false
+  }
 }
 
 const submitTextDocument = async () => {
@@ -895,18 +926,21 @@ const submitTextDocument = async () => {
   }
   savingText.value = true
   const retry = async () => { await submitTextDocument() }
-  await runIngestTask(t("knowledge.upload.textImport"), async () => {
-    await addTextDocument({
-      title: textForm.title.trim(),
-      content: textForm.content.trim(),
-      source: textForm.source.trim() || "manual",
-      metadata: { input_mode: "manual" },
-    })
-    textForm.title = ""
-    textForm.source = "manual"
-    textForm.content = ""
-  }, retry)
-  savingText.value = false
+  try {
+    await runIngestTask(t("knowledge.upload.textImport"), async () => {
+      await addTextDocument({
+        title: textForm.title.trim(),
+        content: textForm.content.trim(),
+        source: textForm.source.trim() || "manual",
+        metadata: { input_mode: "manual" },
+      })
+      textForm.title = ""
+      textForm.source = "manual"
+      textForm.content = ""
+    }, retry)
+  } finally {
+    savingText.value = false
+  }
 }
 
 const submitPathDocument = async () => {
@@ -916,15 +950,18 @@ const submitPathDocument = async () => {
   }
   savingPath.value = true
   const retry = async () => { await submitPathDocument() }
-  await runIngestTask(t("knowledge.upload.serverPath"), async () => {
-    await addFileDocument({
-      path: pathForm.path.trim(),
-      title: pathForm.title.trim() || null,
-    })
-    pathForm.path = ""
-    pathForm.title = ""
-  }, retry)
-  savingPath.value = false
+  try {
+    await runIngestTask(t("knowledge.upload.serverPath"), async () => {
+      await addFileDocument({
+        path: pathForm.path.trim(),
+        title: pathForm.title.trim() || null,
+      })
+      pathForm.path = ""
+      pathForm.title = ""
+    }, retry)
+  } finally {
+    savingPath.value = false
+  }
 }
 
 const deleteDocument = async (doc: KnowledgeDocument) => {
@@ -1141,10 +1178,6 @@ onMounted(() => {
 }
 
 .knowledge-stat-strip {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
   margin-bottom: 12px;
 }
 
@@ -1157,11 +1190,6 @@ onMounted(() => {
   border: 1px solid var(--kn-border);
   border-radius: 12px;
   background: var(--kn-panel);
-}
-
-.knowledge-stat-chip {
-  flex: 0 1 auto;
-  max-width: min(260px, 100%);
 }
 
 .knowledge-workspace-grid {
@@ -1466,7 +1494,15 @@ onMounted(() => {
 .document-table-head,
 .document-row {
   display: grid;
-  grid-template-columns: minmax(190px, 1.45fr) 82px 86px 74px 124px 138px minmax(150px, 1fr) 158px;
+  grid-template-columns:
+    minmax(0, 1.6fr)
+    minmax(64px, 0.42fr)
+    minmax(68px, 0.42fr)
+    minmax(56px, 0.34fr)
+    minmax(96px, 0.62fr)
+    minmax(112px, 0.72fr)
+    minmax(0, 0.92fr)
+    144px;
   min-width: 0;
 }
 
@@ -1482,7 +1518,13 @@ onMounted(() => {
 .document-cell,
 .document-actions {
   min-width: 0;
-  padding: 10px;
+  padding: 10px 8px;
+}
+
+.document-table-head > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .document-row {
@@ -1510,6 +1552,8 @@ onMounted(() => {
 }
 
 .doc-title {
+  display: block;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--kn-heading);
@@ -1534,7 +1578,9 @@ onMounted(() => {
 }
 
 .document-time,
-.source-text {
+.source-text,
+.document-time-value {
+  min-width: 0;
   overflow: hidden;
   color: var(--kn-muted);
   font-size: 11px;
@@ -1542,11 +1588,32 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.source-text,
+.document-time-value {
+  display: block;
+}
+
 .document-actions {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
   gap: 2px;
+}
+
+.document-action-buttons {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.document-action-buttons :deep(.el-button) {
+  width: 28px;
+  height: 28px;
+  margin-left: 0;
+  padding: 0;
 }
 
 .advanced-configuration {
@@ -1764,8 +1831,33 @@ onMounted(() => {
     grid-column: 1 / -1;
   }
 
+  .document-cell:not(.document-main),
   .document-actions {
-    justify-content: flex-start;
+    display: grid;
+    grid-template-columns: minmax(72px, 96px) minmax(0, 1fr);
+    gap: 8px;
+    align-items: center;
+  }
+
+  .document-cell:not(.document-main)::before,
+  .document-actions::before {
+    content: attr(data-label);
+    min-width: 0;
+    overflow: hidden;
+    color: var(--kn-muted);
+    font-size: 10px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .document-actions {
+    justify-content: normal;
+  }
+
+  .document-action-buttons {
+    justify-self: end;
+    flex-wrap: wrap;
   }
 }
 
@@ -1793,6 +1885,11 @@ onMounted(() => {
   .document-filter,
   .document-select {
     width: 100%;
+  }
+
+  .document-cell:not(.document-main),
+  .document-actions {
+    grid-template-columns: minmax(64px, 84px) minmax(0, 1fr);
   }
 }
 </style>

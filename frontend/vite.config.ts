@@ -9,6 +9,21 @@ export default defineConfig({
     outDir: '../source',
     emptyOutDir: true,
     chunkSizeWarningLimit: 3500,
+    rolldownOptions: {
+      onLog(level, log, handler) {
+        const code = typeof log === 'string' ? '' : log.code
+        const message = typeof log === 'string' ? log : log.message
+        const id = typeof log === 'string' ? '' : log.id
+        if (
+          code === 'INVALID_ANNOTATION' &&
+          id?.includes('/@vueuse/core/') &&
+          message.includes('#__PURE__')
+        ) {
+          return
+        }
+        handler(level, log)
+      },
+    },
     rollupOptions: {
       output: {
         manualChunks(id) {

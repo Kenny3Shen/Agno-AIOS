@@ -3,7 +3,6 @@ from dotenv import load_dotenv
 from agno.tracing import setup_tracing
 from api.services.chat_session_service import (
     archive_session as archive_session,
-    ensure_chat_session_archive_table as ensure_chat_session_archive_table,
     get_all_sessions as get_all_sessions,
     get_session_messages as get_session_messages,
     get_session_owner as get_session_owner,

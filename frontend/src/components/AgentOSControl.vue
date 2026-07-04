@@ -45,7 +45,9 @@
             <el-input v-model="scheduleForm.description" :placeholder="t('agentOS.scheduler.descriptionPlaceholder')" />
             <el-input v-model="scheduleForm.timezone" placeholder="UTC" />
             <el-input-number v-model="scheduleForm.timeout_seconds" :min="1" :max="86400" controls-position="right" class="agentos-number" />
-            <el-switch v-model="scheduleForm.enabled" :active-text="t('agentOS.scheduler.enabled')" />
+            <div class="scheduler-enabled-field">
+              <el-switch v-model="scheduleForm.enabled" :active-text="t('agentOS.scheduler.enabled')" />
+            </div>
           </div>
           <el-collapse class="scheduler-advanced">
             <el-collapse-item :title="t('agentOS.scheduler.advanced')" name="advanced">
@@ -801,6 +803,32 @@ onMounted(() => {
 
 .agentos-number {
   width: 100%;
+}
+
+.scheduler-enabled-field {
+  display: flex;
+  min-width: 0;
+  min-height: 32px;
+  align-items: center;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+.scheduler-enabled-field :deep(.el-switch) {
+  flex: 0 0 auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.scheduler-enabled-field :deep(.el-switch__core) {
+  min-width: 40px;
+}
+
+.scheduler-enabled-field :deep(.el-switch__label) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agentos-scheduler-input,

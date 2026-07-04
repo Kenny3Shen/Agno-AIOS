@@ -51,12 +51,12 @@ uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 重要边界：
 
 - Routes 放在 `api/routes/`。
-- 业务逻辑放在 `api/services/`。
+- 业务逻辑放在 `api/services/`。跨 route 复用的 Run runtime、Knowledge lifecycle、MCP config mutation 和 security policy 应放在这里，route 只保留 HTTP 边界和依赖注入。
 - 认证和权限规则放在 `api/auth/`。
 - 集成 MCP runtime 代码放在 `api/mcp/`。
 - 运维脚本放在 `api/tasks/`。
 
-新增受保护 route 时，在 route 边界定义 permission check；涉及用户资源时增加 ownership check。新增安全相关 mutation 时记录 audit event。
+新增受保护 route 时，在 route 边界定义 permission check；涉及用户资源时增加 ownership check。新增安全相关 mutation 时记录 audit event。若同一类 permission、ownership 或 audit policy 被多个 route 复用，应优先通过 `api/services/security_policy.py` 集中表达。
 
 ## 前端开发
 

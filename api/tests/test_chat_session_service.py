@@ -1,39 +1,35 @@
 import unittest
 from unittest.mock import patch
 
+from agno.session.agent import AgentSession
 from api.services import chat_session_service
 
 
-class FakeCursor:
-    def __init__(self, rows: list[dict]):
+class FakeAgnoDb:
+    def __init__(
+        self,
+        rows: list[dict],
+        session_row: dict | None = None,
+        session: AgentSession | None = None,
+    ):
         self.rows = rows
-        self.params = None
+        self.session_row = session_row
+        self.session = session
+        self.get_sessions_kwargs = None
+        self.upserted = None
 
-    def __enter__(self):
-        return self
+    def get_sessions(self, **kwargs):
+        self.get_sessions_kwargs = kwargs
+        return list(self.rows), len(self.rows)
 
-    def __exit__(self, exc_type, exc, tb):
-        return False
+    def get_session(self, session_id: str, deserialize: bool = True):
+        if deserialize:
+            return self.session
+        return self.session_row
 
-    def execute(self, query, params=None):
-        self.params = params
-
-    def fetchall(self):
-        return list(self.rows)
-
-
-class FakeConnection:
-    def __init__(self, cursor: FakeCursor):
-        self._cursor = cursor
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
-
-    def cursor(self):
-        return self._cursor
+    def upsert_session(self, session):
+        self.upserted = session
+        return session
 
 
 class ChatSessionServiceTest(unittest.TestCase):
@@ -46,7 +42,6 @@ class ChatSessionServiceTest(unittest.TestCase):
                 "user_id": "u1",
                 "runs": [{"input": {"input_content": "older preview"}}],
                 "metadata": {},
-                "archived_at": None,
             },
             {
                 "session_id": "newer",
@@ -55,18 +50,16 @@ class ChatSessionServiceTest(unittest.TestCase):
                 "user_id": "u1",
                 "runs": [{"input": "newer preview"}],
                 "metadata": {"agno_aios_archived": True},
-                "archived_at": None,
             },
         ]
-        cursor = FakeCursor(rows)
+        db = FakeAgnoDb(rows)
 
         with (
             patch.object(chat_session_service, "ensure_agno_postgres_tables"),
-            patch.object(chat_session_service, "ensure_chat_session_archive_table"),
             patch.object(
                 chat_session_service,
-                "postgres_connect",
-                return_value=FakeConnection(cursor),
+                "get_agno_postgres_db",
+                return_value=db,
             ),
         ):
             sessions = chat_session_service.get_all_sessions(
@@ -75,13 +68,61 @@ class ChatSessionServiceTest(unittest.TestCase):
                 include_runs=True,
             )
 
-        self.assertEqual(cursor.params, (True, "u1", "u1"))
+        kwargs = db.get_sessions_kwargs
+        assert kwargs is not None
+        self.assertEqual(kwargs["user_id"], "u1")
+        self.assertEqual(kwargs["limit"], 500)
+        self.assertFalse(kwargs["deserialize"])
         self.assertEqual([session["session_id"] for session in sessions], ["newer", "older"])
         self.assertEqual(sessions[0]["preview"], "newer preview")
         self.assertTrue(sessions[0]["archived"])
         self.assertEqual(sessions[0]["runs"], [{"input": "newer preview"}])
         self.assertFalse(sessions[1]["archived"])
         self.assertEqual(sessions[1]["preview"], "older preview")
+
+    def test_get_all_sessions_filters_archived_by_default(self):
+        db = FakeAgnoDb(
+            [
+                {"session_id": "active", "metadata": {}, "runs": []},
+                {
+                    "session_id": "archived",
+                    "metadata": {"agno_aios_archived": True},
+                    "runs": [],
+                },
+            ]
+        )
+
+        with (
+            patch.object(chat_session_service, "ensure_agno_postgres_tables"),
+            patch.object(chat_session_service, "get_agno_postgres_db", return_value=db),
+        ):
+            sessions = chat_session_service.get_all_sessions()
+
+        self.assertEqual([session["session_id"] for session in sessions], ["active"])
+
+    def test_archive_session_updates_agno_session_metadata(self):
+        session = AgentSession(session_id="s1", user_id="u1", metadata={"existing": "value"})
+        db = FakeAgnoDb(
+            rows=[],
+            session_row={"session_id": "s1", "user_id": "u1"},
+            session=session,
+        )
+
+        with (
+            patch.object(chat_session_service, "ensure_agno_postgres_tables"),
+            patch.object(chat_session_service, "get_agno_postgres_db", return_value=db),
+            patch.object(chat_session_service, "record_audit_event"),
+        ):
+            archived = chat_session_service.archive_session("s1", user_id="u1")
+
+        self.assertTrue(archived)
+        self.assertIs(db.upserted, session)
+        metadata = session.metadata
+        assert metadata is not None
+        self.assertEqual(metadata["existing"], "value")
+        self.assertIs(metadata["agno_aios_archived"], True)
+        self.assertEqual(metadata["agno_aios_archived_by"], "u1")
+        self.assertTrue(metadata["agno_aios_archived_at"])
 
 
 if __name__ == "__main__":

@@ -4,9 +4,10 @@ import importlib
 import os
 import threading
 import warnings
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Callable, cast
 
 from agno.knowledge.document import Document
 from agno.knowledge.embedder import Embedder
@@ -592,6 +593,268 @@ def _document_status(content_id: str) -> dict[str, Any] | None:
     return _content_to_document(content)
 
 
+@dataclass(frozen=True)
+class KnowledgeBaseLifecycleDependencies:
+    get_knowledge_base: Callable[[SearchType | None], Any] | None = None
+    ensure_storage: Callable[[], None] | None = None
+    chunk_counts_by_content_id: Callable[[str | None], dict[str, int]] | None = None
+    chunk_count: Callable[[str | None], int] | None = None
+    hydrate_content_ids: Callable[[list[Document]], None] | None = None
+    lock: Any = _knowledge_lock
+
+
+class KnowledgeBaseLifecycle:
+    """Knowledge Document lifecycle, retrieval and status behind one interface."""
+
+    def __init__(
+        self,
+        dependencies: KnowledgeBaseLifecycleDependencies | None = None,
+    ) -> None:
+        self.dependencies = dependencies or KnowledgeBaseLifecycleDependencies()
+
+    def _knowledge(self, search_type: SearchType | None = None) -> Any:
+        if self.dependencies.get_knowledge_base is not None:
+            return self.dependencies.get_knowledge_base(search_type)
+        return get_knowledge_base(search_type)
+
+    def _ensure_storage(self) -> None:
+        if self.dependencies.ensure_storage is not None:
+            self.dependencies.ensure_storage()
+            return
+        _ensure_knowledge_storage()
+
+    def _chunk_counts_by_content_id(self, owner_user_id: str | None) -> dict[str, int]:
+        if self.dependencies.chunk_counts_by_content_id is not None:
+            return self.dependencies.chunk_counts_by_content_id(owner_user_id)
+        return _chunk_counts_by_content_id(owner_user_id)
+
+    def _chunk_count(self, owner_user_id: str | None) -> int:
+        if self.dependencies.chunk_count is not None:
+            return self.dependencies.chunk_count(owner_user_id)
+        return _chunk_count(owner_user_id)
+
+    def _hydrate_content_ids(self, documents: list[Document]) -> None:
+        if self.dependencies.hydrate_content_ids is not None:
+            self.dependencies.hydrate_content_ids(documents)
+            return
+        _hydrate_content_ids(documents)
+
+    def add_text_document(
+        self,
+        title: str,
+        content: str,
+        source: str = "manual",
+        metadata: dict[str, Any] | None = None,
+        owner_user_id: str | None = None,
+    ) -> dict[str, Any]:
+        clean_title = title.strip() or "未命名知识"
+        clean_content = content.strip()
+        if not clean_content:
+            raise ValueError("知识内容不能为空")
+
+        base_metadata = _safe_metadata(metadata)
+        filename = str(base_metadata.get("file_name") or clean_title)
+        profile = knowledge_profile_for_filename(filename)
+        safe_metadata = {
+            **base_metadata,
+            **_owner_metadata(owner_user_id),
+            "title": clean_title,
+            "source": source.strip() or "manual",
+            "file_type": Path(filename).suffix.lower() or "text",
+            "chunk_strategy": profile.strategy,
+            "reader": profile.reader,
+            "input_mode": base_metadata.get("input_mode", "manual"),
+        }
+        knowledge = self._knowledge()
+        with self.dependencies.lock:
+            self._ensure_storage()
+            knowledge.insert(
+                name=clean_title,
+                description=source.strip() or "manual",
+                text_content=clean_content,
+                metadata=safe_metadata,
+                reader=reader_for_profile(profile, filename),
+                upsert=True,
+                skip_if_exists=False,
+            )
+        contents, _ = knowledge.get_content(
+            limit=1,
+            page=1,
+            sort_by="updated_at",
+            sort_order="desc",
+        )
+        for content_row in contents:
+            if content_row.name == clean_title:
+                return _content_to_document(content_row)
+        raise RuntimeError("知识写入完成但未能读取内容登记记录")
+
+    def add_file_document(
+        self,
+        path: str,
+        title: str | None = None,
+        owner_user_id: str | None = None,
+    ) -> dict[str, Any]:
+        file_path = Path(path).expanduser().resolve()
+        if not file_path.exists() or not file_path.is_file():
+            raise FileNotFoundError(f"文件不存在: {path}")
+        if file_path.suffix.lower() not in SUPPORTED_FILE_SUFFIXES:
+            supported = ", ".join(SUPPORTED_FILE_SUFFIXES)
+            raise ValueError(f"当前知识库支持的文件后缀: {supported}")
+
+        clean_title = (title or file_path.stem).strip() or file_path.stem
+        profile = knowledge_profile_for_filename(file_path.name)
+        metadata = {
+            **_owner_metadata(owner_user_id),
+            "title": clean_title,
+            "source": str(file_path),
+            "file_path": str(file_path),
+            "file_name": file_path.name,
+            "file_type": file_path.suffix.lower(),
+            "chunk_strategy": profile.strategy,
+            "reader": profile.reader,
+            "input_mode": "path",
+        }
+        reader = reader_for_profile(profile, file_path.name)
+        knowledge = self._knowledge()
+        with self.dependencies.lock:
+            self._ensure_storage()
+            knowledge.insert(
+                name=clean_title,
+                description=str(file_path),
+                path=str(file_path),
+                metadata=metadata,
+                reader=reader,
+                upsert=True,
+                skip_if_exists=False,
+            )
+        contents, _ = knowledge.get_content(
+            limit=1,
+            page=1,
+            sort_by="updated_at",
+            sort_order="desc",
+        )
+        for content_row in contents:
+            if content_row.name == clean_title:
+                return _content_to_document(content_row)
+        raise RuntimeError("知识写入完成但未能读取内容登记记录")
+
+    def list_documents(self, owner_user_id: str | None = None) -> list[dict[str, Any]]:
+        self._ensure_storage()
+        contents, _ = self._knowledge().get_content(
+            limit=500,
+            page=1,
+            sort_by="updated_at",
+            sort_order="desc",
+        )
+        chunk_counts = self._chunk_counts_by_content_id(owner_user_id)
+        documents = []
+        for content in contents:
+            if not _content_visible_to_owner(content, owner_user_id):
+                continue
+            document = _content_to_document(content)
+            document["chunks"] = chunk_counts.get(document["id"], document["chunks"])
+            documents.append(document)
+        return documents
+
+    def delete_document(
+        self,
+        doc_id: str,
+        owner_user_id: str | None = None,
+    ) -> bool:
+        self._ensure_storage()
+        knowledge = self._knowledge()
+        content = knowledge.get_content_by_id(doc_id)
+        if content is None or not _content_visible_to_owner(content, owner_user_id):
+            return False
+        with self.dependencies.lock:
+            knowledge.remove_content_by_id(doc_id)
+        return True
+
+    def clear_knowledge_base(
+        self,
+        owner_user_id: str | None = None,
+    ) -> dict[str, Any]:
+        self._ensure_storage()
+        knowledge = self._knowledge()
+        documents = self.list_documents(owner_user_id=owner_user_id)
+        with self.dependencies.lock:
+            if owner_user_id:
+                for document in documents:
+                    knowledge.remove_content_by_id(document["id"])
+            else:
+                knowledge.remove_all_content()
+        return {"documents": 0, "chunks": 0}
+
+    def search_documents(
+        self,
+        query: str,
+        limit: int = 5,
+        search_type: str | None = None,
+        owner_user_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        clean_query = query.strip()
+        if not clean_query:
+            return []
+        effective_search_type = (
+            _search_type_from_name(search_type) if search_type else search_type_from_env()
+        )
+        self._ensure_storage()
+        knowledge = self._knowledge()
+        retrieval_limit = retrieval_candidate_limit(
+            limit,
+            rerank_enabled=RERANK_ENABLED,
+            rerank_candidate_multiplier=RERANK_CANDIDATE_MULTIPLIER,
+            rerank_min_candidates=RERANK_MIN_CANDIDATES,
+        )
+        documents = knowledge.search(
+            clean_query,
+            max_results=retrieval_limit,
+            filters=_owner_metadata(owner_user_id) or None,
+            search_type=effective_search_type.value,
+        )
+        self._hydrate_content_ids(documents)
+        return [_result_from_document(document) for document in documents[:limit]]
+
+    def knowledge_status(self, owner_user_id: str | None = None) -> dict[str, Any]:
+        self._ensure_storage()
+        docs = self.list_documents(owner_user_id=owner_user_id)
+        chunk_count = self._chunk_count(owner_user_id)
+        device = _model_device()
+        return {
+            **pipeline_status(),
+            "collection": PGVECTOR_TABLE,
+            "storage": "pgvector",
+            "database": postgres_label(POSTGRES_SCHEMA, PGVECTOR_TABLE),
+            "contents_db": postgres_label(POSTGRES_SCHEMA, POSTGRES_KNOWLEDGE_TABLE),
+            "postgres_schema": POSTGRES_SCHEMA,
+            "documents": len(docs),
+            "chunks": chunk_count,
+            "embedding": EMBEDDING_MODEL,
+            "embedding_dimensions": _embedding_dimensions or EMBEDDING_DIMENSIONS,
+            "rerank": RERANK_MODEL,
+            "device": device,
+            "rerank_enabled": RERANK_ENABLED,
+            "top_k": TOP_K,
+            "retrieval_candidates": retrieval_candidate_limit(
+                TOP_K,
+                rerank_enabled=RERANK_ENABLED,
+                rerank_candidate_multiplier=RERANK_CANDIDATE_MULTIPLIER,
+                rerank_min_candidates=RERANK_MIN_CANDIDATES,
+            ),
+            "chunk_size": CHUNK_SIZE,
+            "chunk_overlap": CHUNK_OVERLAP,
+            "cold_start_note": COLD_START_NOTE,
+            "torch_runtime_ok": _load_torch() is not None,
+        }
+
+
+DEFAULT_KNOWLEDGE_BASE_LIFECYCLE = KnowledgeBaseLifecycle()
+
+
+def get_knowledge_base_lifecycle() -> KnowledgeBaseLifecycle:
+    return DEFAULT_KNOWLEDGE_BASE_LIFECYCLE
+
+
 def add_text_document(
     title: str,
     content: str,
@@ -599,41 +862,13 @@ def add_text_document(
     metadata: dict[str, Any] | None = None,
     owner_user_id: str | None = None,
 ) -> dict[str, Any]:
-    clean_title = title.strip() or "未命名知识"
-    clean_content = content.strip()
-    if not clean_content:
-        raise ValueError("知识内容不能为空")
-
-    base_metadata = _safe_metadata(metadata)
-    filename = str(base_metadata.get("file_name") or clean_title)
-    profile = knowledge_profile_for_filename(filename)
-    safe_metadata = {
-        **base_metadata,
-        **_owner_metadata(owner_user_id),
-        "title": clean_title,
-        "source": source.strip() or "manual",
-        "file_type": Path(filename).suffix.lower() or "text",
-        "chunk_strategy": profile.strategy,
-        "reader": profile.reader,
-        "input_mode": base_metadata.get("input_mode", "manual"),
-    }
-    knowledge = get_knowledge_base()
-    with _knowledge_lock:
-        _ensure_knowledge_storage()
-        knowledge.insert(
-            name=clean_title,
-            description=source.strip() or "manual",
-            text_content=clean_content,
-            metadata=safe_metadata,
-            reader=reader_for_profile(profile, filename),
-            upsert=True,
-            skip_if_exists=False,
-        )
-    contents, _ = knowledge.get_content(limit=1, page=1, sort_by="updated_at", sort_order="desc")
-    for content_row in contents:
-        if content_row.name == clean_title:
-            return _content_to_document(content_row)
-    raise RuntimeError("知识写入完成但未能读取内容登记记录")
+    return DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.add_text_document(
+        title,
+        content,
+        source=source,
+        metadata=metadata,
+        owner_user_id=owner_user_id,
+    )
 
 
 def add_file_document(
@@ -641,86 +876,28 @@ def add_file_document(
     title: str | None = None,
     owner_user_id: str | None = None,
 ) -> dict[str, Any]:
-    file_path = Path(path).expanduser().resolve()
-    if not file_path.exists() or not file_path.is_file():
-        raise FileNotFoundError(f"文件不存在: {path}")
-    if file_path.suffix.lower() not in SUPPORTED_FILE_SUFFIXES:
-        supported = ", ".join(SUPPORTED_FILE_SUFFIXES)
-        raise ValueError(f"当前知识库支持的文件后缀: {supported}")
-
-    clean_title = (title or file_path.stem).strip() or file_path.stem
-    profile = knowledge_profile_for_filename(file_path.name)
-    metadata = {
-        **_owner_metadata(owner_user_id),
-        "title": clean_title,
-        "source": str(file_path),
-        "file_path": str(file_path),
-        "file_name": file_path.name,
-        "file_type": file_path.suffix.lower(),
-        "chunk_strategy": profile.strategy,
-        "reader": profile.reader,
-        "input_mode": "path",
-    }
-    reader = reader_for_profile(profile, file_path.name)
-    knowledge = get_knowledge_base()
-    with _knowledge_lock:
-        _ensure_knowledge_storage()
-        knowledge.insert(
-            name=clean_title,
-            description=str(file_path),
-            path=str(file_path),
-            metadata=metadata,
-            reader=reader,
-            upsert=True,
-            skip_if_exists=False,
-        )
-    contents, _ = knowledge.get_content(limit=1, page=1, sort_by="updated_at", sort_order="desc")
-    for content_row in contents:
-        if content_row.name == clean_title:
-            return _content_to_document(content_row)
-    raise RuntimeError("知识写入完成但未能读取内容登记记录")
+    return DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.add_file_document(
+        path,
+        title=title,
+        owner_user_id=owner_user_id,
+    )
 
 
 def list_documents(owner_user_id: str | None = None) -> list[dict[str, Any]]:
-    _ensure_knowledge_storage()
-    contents, _ = get_knowledge_base().get_content(
-        limit=500,
-        page=1,
-        sort_by="updated_at",
-        sort_order="desc",
-    )
-    chunk_counts = _chunk_counts_by_content_id(owner_user_id=owner_user_id)
-    documents = []
-    for content in contents:
-        if not _content_visible_to_owner(content, owner_user_id):
-            continue
-        document = _content_to_document(content)
-        document["chunks"] = chunk_counts.get(document["id"], document["chunks"])
-        documents.append(document)
-    return documents
+    return DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.list_documents(owner_user_id=owner_user_id)
 
 
 def delete_document(doc_id: str, owner_user_id: str | None = None) -> bool:
-    _ensure_knowledge_storage()
-    content = get_knowledge_base().get_content_by_id(doc_id)
-    if content is None or not _content_visible_to_owner(content, owner_user_id):
-        return False
-    with _knowledge_lock:
-        get_knowledge_base().remove_content_by_id(doc_id)
-    return True
+    return DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.delete_document(
+        doc_id,
+        owner_user_id=owner_user_id,
+    )
 
 
 def clear_knowledge_base(owner_user_id: str | None = None) -> dict[str, Any]:
-    _ensure_knowledge_storage()
-    knowledge = get_knowledge_base()
-    documents = list_documents(owner_user_id=owner_user_id)
-    with _knowledge_lock:
-        if owner_user_id:
-            for document in documents:
-                knowledge.remove_content_by_id(document["id"])
-        else:
-            knowledge.remove_all_content()
-    return {"documents": 0, "chunks": 0}
+    return DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.clear_knowledge_base(
+        owner_user_id=owner_user_id,
+    )
 
 
 def search_documents(
@@ -729,56 +906,15 @@ def search_documents(
     search_type: str | None = None,
     owner_user_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    clean_query = query.strip()
-    if not clean_query:
-        return []
-    effective_search_type = _search_type_from_name(search_type) if search_type else search_type_from_env()
-    _ensure_knowledge_storage()
-    knowledge = get_knowledge_base()
-    retrieval_limit = retrieval_candidate_limit(
-        limit,
-        rerank_enabled=RERANK_ENABLED,
-        rerank_candidate_multiplier=RERANK_CANDIDATE_MULTIPLIER,
-        rerank_min_candidates=RERANK_MIN_CANDIDATES,
+    return DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.search_documents(
+        query,
+        limit=limit,
+        search_type=search_type,
+        owner_user_id=owner_user_id,
     )
-    documents = knowledge.search(
-        clean_query,
-        max_results=retrieval_limit,
-        filters=_owner_metadata(owner_user_id) or None,
-        search_type=effective_search_type.value,
-    )
-    _hydrate_content_ids(documents)
-    return [_result_from_document(document) for document in documents[:limit]]
 
 
 def knowledge_status(owner_user_id: str | None = None) -> dict[str, Any]:
-    _ensure_knowledge_storage()
-    docs = list_documents(owner_user_id=owner_user_id)
-    chunk_count = _chunk_count(owner_user_id=owner_user_id)
-    device = _model_device()
-    return {
-        **pipeline_status(),
-        "collection": PGVECTOR_TABLE,
-        "storage": "pgvector",
-        "database": postgres_label(POSTGRES_SCHEMA, PGVECTOR_TABLE),
-        "contents_db": postgres_label(POSTGRES_SCHEMA, POSTGRES_KNOWLEDGE_TABLE),
-        "postgres_schema": POSTGRES_SCHEMA,
-        "documents": len(docs),
-        "chunks": chunk_count,
-        "embedding": EMBEDDING_MODEL,
-        "embedding_dimensions": _embedding_dimensions or EMBEDDING_DIMENSIONS,
-        "rerank": RERANK_MODEL,
-        "device": device,
-        "rerank_enabled": RERANK_ENABLED,
-        "top_k": TOP_K,
-        "retrieval_candidates": retrieval_candidate_limit(
-            TOP_K,
-            rerank_enabled=RERANK_ENABLED,
-            rerank_candidate_multiplier=RERANK_CANDIDATE_MULTIPLIER,
-            rerank_min_candidates=RERANK_MIN_CANDIDATES,
-        ),
-        "chunk_size": CHUNK_SIZE,
-        "chunk_overlap": CHUNK_OVERLAP,
-        "cold_start_note": COLD_START_NOTE,
-        "torch_runtime_ok": _load_torch() is not None,
-    }
+    return DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.knowledge_status(
+        owner_user_id=owner_user_id,
+    )

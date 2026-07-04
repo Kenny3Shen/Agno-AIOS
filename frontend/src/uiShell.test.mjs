@@ -7,6 +7,7 @@ import { enUS } from "./i18n/locales/en-US.ts"
 import { zhCN } from "./i18n/locales/zh-CN.ts"
 import "./modules/shellNavigation.test.mjs"
 import "./modules/traceWorkbench.test.mjs"
+import "./modules/workflowBuilder.test.mjs"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const repoRoot = join(root, "..", "..")
@@ -805,6 +806,18 @@ assert.match(
 
 assert.match(
   appStyle,
+  /\.ag-stat-strip\s*\{[^}]*flex-wrap:\s*nowrap[^}]*overflow:\s*hidden/s,
+  "Shared Stat Strips must provide the compact single-row layout globally",
+)
+
+assert.match(
+  appStyle,
+  /\.ag-stat-chip\s*\{[^}]*flex:\s*0\s+1\s+164px[^}]*justify-content:\s*space-between/s,
+  "Shared Stat Chips must keep a stable compact width with separated label and value",
+)
+
+assert.match(
+  appStyle,
   /\.ag-stat-chip\s+strong\s*\{[^}]*text-overflow:\s*ellipsis/s,
   "Shared Stat Chip values must use single-line ellipsis globally",
 )
@@ -825,6 +838,24 @@ assert.match(
   appStyle,
   /@media\s*\(max-width:\s*760px\)\s*\{[\s\S]*?\.ag-home-summary-strip\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/,
   "Home summary signals must switch to a two-column mobile grid to prevent overlap",
+)
+
+assert.match(
+  agentOSControl,
+  /class="scheduler-enabled-field"[\s\S]*?<el-switch/,
+  "Scheduler create form enabled switch must use a stable field wrapper",
+)
+
+assert.match(
+  agentOSControl,
+  /\.scheduler-enabled-field\s*\{[^}]*min-width:\s*0[^}]*overflow:\s*hidden/s,
+  "Scheduler enabled switch field must not overlap adjacent form controls",
+)
+
+assert.match(
+  agentOSControl,
+  /\.scheduler-enabled-field\s+:deep\(\.el-switch__core\)\s*\{[^}]*min-width:\s*40px/s,
+  "Scheduler enabled switch core must preserve the Element Plus switch track width",
 )
 
 assert.doesNotMatch(
@@ -1236,6 +1267,19 @@ assert.match(
   "Knowledge status items must use the shared Stat Chip surface",
 )
 
+assert.match(
+  knowledge,
+  /<div v-for="card in statisticsCards"[^>]*class="knowledge-stat-chip ag-stat-chip"/,
+  "Knowledge status metrics must render as compact stat values, not list/article items",
+)
+
+const knowledgeStatisticsCardsBlock = knowledge.match(/const statisticsCards = computed\(\(\) => \[([\s\S]*?)\]\)/)?.[1] ?? ""
+assert.equal(
+  [...knowledgeStatisticsCardsBlock.matchAll(/label:\s*t\("knowledge\.stats\./g)].length,
+  4,
+  "Knowledge status strip must show only the four primary statistics",
+)
+
 assert.equal(
   knowledge.includes("knowledge-stat-dashboard"),
   false,
@@ -1260,6 +1304,18 @@ assert.doesNotMatch(
   "Knowledge Stat Chips must inherit label and value typography from the shared ag-stat-chip style",
 )
 
+assert.doesNotMatch(
+  knowledge,
+  /\.knowledge-stat-strip\s*\{[^}]*display:\s*(flex|grid)/s,
+  "Knowledge Stat Strip must inherit layout from the shared ag-stat-strip style",
+)
+
+assert.doesNotMatch(
+  knowledge,
+  /\.knowledge-stat-chip\s*\{[^}]*flex-basis/s,
+  "Knowledge Stat Chips must not override the shared compact chip width",
+)
+
 assert.match(
   knowledge,
   /knowledge-upload-pipeline/,
@@ -1282,6 +1338,30 @@ assert.match(
   knowledge,
   /document-preview-drawer/,
   "Knowledge document management must provide a preview drawer without requiring backend changes",
+)
+
+assert.doesNotMatch(
+  knowledge,
+  /<el-table[\s\S]*fixed=/,
+  "Knowledge document management must not use fixed Element Plus table columns that overflow narrow shells",
+)
+
+assert.match(
+  knowledge,
+  /document-table.*role="table"/,
+  "Knowledge document management must use the custom responsive document table surface",
+)
+
+assert.match(
+  knowledge,
+  /document-action-buttons/,
+  "Knowledge document actions must stay grouped in a bounded icon button row",
+)
+
+assert.match(
+  knowledge,
+  /@media\s*\(max-width:\s*1120px\)[\s\S]*\.document-row\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/,
+  "Knowledge document rows must collapse into a responsive card grid before they can overflow the shell",
 )
 
 assert.match(

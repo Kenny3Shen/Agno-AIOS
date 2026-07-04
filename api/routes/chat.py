@@ -5,12 +5,12 @@ from pydantic import BaseModel
 from api.auth.models import User
 from api.auth.permissions import actor_id, assert_owned_resource, has_permission, require_permission
 from api.services.llm_service import (
-    stream_chat_with_agent,
     get_all_sessions,
     get_session_owner,
     get_session_messages,
     archive_session,
 )
+from api.services.security_run_runtime import SecurityRunRequest, stream_security_run
 from loguru import logger
 
 router = APIRouter(prefix="/api", tags=["Chat"])
@@ -28,20 +28,10 @@ def _format_sse(data: str) -> str:
 
 
 async def _event_generator(
-    message: str,
-    session_id: str | None = None,
-    model_id: str | None = None,
-    user_id: str | None = None,
-    knowledge_owner_user_id: str | None = None,
+    run_request: SecurityRunRequest,
 ):
     try:
-        async for chunk in stream_chat_with_agent(
-            message,
-            session_id,
-            model_id,
-            user_id,
-            knowledge_owner_user_id=knowledge_owner_user_id,
-        ):
+        async for chunk in stream_security_run(run_request):
             if chunk:
                 yield _format_sse(chunk)
         yield _format_sse("[DONE]")
@@ -65,14 +55,17 @@ async def chat_agent(
                     owner_user_id=owner_user_id,
                     resource_name="Session",
                 )
+        run_request = SecurityRunRequest.from_chat_args(
+            request.message,
+            session_id=request.session_id,
+            model_id=request.model_id,
+            user_id=actor_id(user),
+            knowledge_owner_user_id=None
+            if has_permission(user, "knowledge:read:any")
+            else actor_id(user),
+        )
         return StreamingResponse(
-            _event_generator(
-                request.message,
-                request.session_id,
-                request.model_id,
-                actor_id(user),
-                None if has_permission(user, "knowledge:read:any") else actor_id(user),
-            ),
+            _event_generator(run_request),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache"},
         )

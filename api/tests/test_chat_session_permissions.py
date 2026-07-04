@@ -33,24 +33,18 @@ class ChatSessionPermissionsTest(TestCase):
     def test_session_list_service_accepts_owner_filter(self):
         self.assertIn("owner_user_id", llm_service.get_all_sessions.__annotations__ | {})
 
-    def test_session_list_owner_filter_applies_when_including_archived(self):
+    def test_session_list_uses_agno_db_owner_filter(self):
         source = inspect.getsource(llm_service.get_all_sessions)
 
-        self.assertIn("WHERE (%s", source)
-        self.assertIn(")\n                    AND (%s::text IS NULL OR s.user_id = %s::text)", source)
+        self.assertIn("get_sessions", source)
+        self.assertIn("user_id=owner_user_id", source)
+        self.assertNotIn("chat_session_archives", source)
 
     def test_chat_routes_require_explicit_session_permissions(self):
         self.assertIn('require_permission("session:write:own")', inspect.getsource(chat.chat_agent))
         self.assertIn('require_permission("session:read:own")', inspect.getsource(chat.list_sessions))
         self.assertIn('require_permission("session:read:own")', inspect.getsource(chat.get_session))
         self.assertIn('require_permission("session:write:own")', inspect.getsource(chat.remove_session))
-
-    def test_chat_provider_block_falls_back_to_lightweight_agent(self):
-        source = inspect.getsource(security_run_runtime.stream_chat_with_agent)
-
-        self.assertIn("_is_provider_block_error", source)
-        self.assertIn("_build_fallback_agent", source)
-        self.assertIn("无工具降级模式", source)
 
     def test_provider_block_detector_matches_openai_status_error_text(self):
         self.assertTrue(
@@ -103,25 +97,20 @@ class ChatRoutePermissionsTest(IsolatedAsyncioTestCase):
     async def test_event_generator_passes_knowledge_owner_filter(self):
         captured: dict[str, str | None] = {}
 
-        async def fake_stream_chat_with_agent(
-            message: str,
-            session_id: str | None,
-            model_id: str | None,
-            user_id: str | None,
-            *,
-            knowledge_owner_user_id: str | None,
-        ):
-            captured["message"] = message
-            captured["knowledge_owner_user_id"] = knowledge_owner_user_id
+        async def fake_stream_security_run(run_request):
+            captured["message"] = run_request.message
+            captured["knowledge_owner_user_id"] = run_request.knowledge_owner_user_id
             yield "ok"
 
-        with patch.object(chat, "stream_chat_with_agent", fake_stream_chat_with_agent):
+        with patch.object(chat, "stream_security_run", fake_stream_security_run):
             chunks = [
                 chunk
                 async for chunk in chat._event_generator(
-                    "hello",
-                    user_id="u1",
-                    knowledge_owner_user_id="u1",
+                    security_run_runtime.SecurityRunRequest.from_chat_args(
+                        "hello",
+                        user_id="u1",
+                        knowledge_owner_user_id="u1",
+                    ),
                 )
             ]
 

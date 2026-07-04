@@ -65,6 +65,59 @@ class AuditLogPermissionsTest(TestCase):
         ):
             self.assertIn("audit_request_context(", source)
 
+    def test_record_audit_event_delegates_to_persistence(self):
+        current_actor = SimpleNamespace(
+            id="u1",
+            email="u1@example.test",
+            role="user",
+            is_superuser=False,
+        )
+
+        with patch.object(audit_service, "insert_audit_log") as mocked:
+            audit_service.record_audit_event(
+                current_actor,
+                action="settings.update",
+                resource_type="settings",
+                resource_id="models",
+                metadata={"changed": True},
+                ip_address="127.0.0.1",
+                user_agent="pytest",
+            )
+
+        mocked.assert_called_once_with(
+            actor_user_id="u1",
+            actor_email="u1@example.test",
+            actor_role="user",
+            action="settings.update",
+            resource_type="settings",
+            resource_id="models",
+            status="success",
+            ip_address="127.0.0.1",
+            user_agent="pytest",
+            metadata={"changed": True},
+        )
+
+    def test_list_audit_events_delegates_to_persistence(self):
+        with patch.object(audit_service, "list_audit_logs", return_value=([], 0)) as mocked:
+            result = audit_service.list_audit_events(
+                page=2,
+                limit=25,
+                actor_user_id="u1",
+                action="auth.login",
+                resource_type="auth",
+                status="success",
+            )
+
+        self.assertEqual(result, ([], 0))
+        mocked.assert_called_once_with(
+            page=2,
+            limit=25,
+            actor_user_id="u1",
+            action="auth.login",
+            resource_type="auth",
+            status="success",
+        )
+
 
 class AuditLogRouteTest(IsolatedAsyncioTestCase):
     async def test_admin_list_audit_logs_delegates_to_service(self):

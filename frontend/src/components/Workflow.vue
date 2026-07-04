@@ -124,6 +124,9 @@
                 <em>{{ stepMeta(step) }}</em>
                 <em v-if="step.branches > 1">{{ t("workflow.editor.branchesValue", { count: step.branches }) }}</em>
               </div>
+              <div v-if="branchLabels(step).length" class="workflow-branch-rail" :aria-label="t('workflow.editor.branches')">
+                <span v-for="branch in branchLabels(step)" :key="branch">{{ branch }}</span>
+              </div>
             </div>
             <div class="workflow-step-actions">
               <el-button :aria-label="t('workflow.actions.moveUp')" size="small" text :disabled="index === 0" @click.stop="moveStep(index, -1)">
@@ -160,6 +163,10 @@
               <label>
                 <span>{{ t("workflow.editor.name") }}</span>
                 <el-input v-model="selectedStep.name" size="small" />
+              </label>
+              <label>
+                <span>{{ t("workflow.editor.symbol") }}</span>
+                <el-input v-model="selectedStep.symbol" size="small" />
               </label>
               <label>
                 <span>{{ t("workflow.editor.description") }}</span>
@@ -220,6 +227,12 @@
                 </li>
               </ul>
             </section>
+            <section class="workflow-inspector-section workflow-run-options">
+              <h4>{{ t("workflow.inspector.executionTitle") }}</h4>
+              <el-checkbox v-model="streamEvents">{{ t("workflow.inspector.streamEvents") }}</el-checkbox>
+              <el-checkbox v-model="storeEvents">{{ t("workflow.inspector.storeEvents") }}</el-checkbox>
+              <el-checkbox v-model="addWorkflowHistoryToSteps">{{ t("workflow.inspector.workflowHistory") }}</el-checkbox>
+            </section>
           </el-tab-pane>
 
           <el-tab-pane :label="t('workflow.inspector.previewTab')" name="preview">
@@ -255,21 +268,21 @@ import {
   WarningFilled,
 } from "@element-plus/icons-vue"
 import { useI18n } from "vue-i18n"
+import {
+  buildWorkflowCode,
+  constructorName,
+  workflowNameSymbol,
+  workflowStepSymbol,
+  type WorkflowCodeOptions,
+  type WorkflowExecutorType,
+  type WorkflowStepDraft,
+  type WorkflowStepKind,
+} from "../modules/workflowBuilder"
 
 type Tone = "blue" | "green" | "yellow" | "red" | "purple"
-type StepKind = "step" | "steps" | "condition" | "loop" | "router" | "parallel"
-type ExecutorType = "agent" | "team" | "function" | "workflow"
 type ValidationLevel = "ok" | "warning"
 
-interface WorkflowStep {
-  id: string
-  kind: StepKind
-  executor: ExecutorType
-  name: string
-  description: string
-  expression: string
-  maxIterations: number
-  branches: number
+interface WorkflowStep extends WorkflowStepDraft {
   tone: Tone
 }
 
@@ -282,6 +295,9 @@ const selectedStepId = ref("intake")
 const activeInspectorTab = ref("edit")
 const lastRunId = ref("wf-run-preview")
 const lastSavedAt = ref("")
+const streamEvents = ref(true)
+const storeEvents = ref(true)
+const addWorkflowHistoryToSteps = ref(true)
 
 const workflowSteps = ref<WorkflowStep[]>([
   {
@@ -289,6 +305,7 @@ const workflowSteps = ref<WorkflowStep[]>([
     kind: "step",
     executor: "agent",
     name: t("workflow.sample.intake"),
+    symbol: "intake",
     description: t("workflow.sample.intakeDescription"),
     expression: "",
     maxIterations: 1,
@@ -300,6 +317,7 @@ const workflowSteps = ref<WorkflowStep[]>([
     kind: "parallel",
     executor: "team",
     name: t("workflow.sample.research"),
+    symbol: "research",
     description: t("workflow.sample.researchDescription"),
     expression: "fanout=[cve_context, exposure_context, knowledge_context]",
     maxIterations: 1,
@@ -311,6 +329,7 @@ const workflowSteps = ref<WorkflowStep[]>([
     kind: "router",
     executor: "function",
     name: t("workflow.sample.route"),
+    symbol: "route",
     description: t("workflow.sample.routeDescription"),
     expression: "last_step_content.contains('critical')",
     maxIterations: 1,
@@ -322,6 +341,7 @@ const workflowSteps = ref<WorkflowStep[]>([
     kind: "step",
     executor: "function",
     name: t("workflow.sample.persist"),
+    symbol: "persist",
     description: t("workflow.sample.persistDescription"),
     expression: "",
     maxIterations: 1,
@@ -330,7 +350,7 @@ const workflowSteps = ref<WorkflowStep[]>([
   },
 ])
 
-const toneByKind: Record<StepKind, Tone> = {
+const toneByKind: Record<WorkflowStepKind, Tone> = {
   step: "blue",
   steps: "purple",
   condition: "red",
@@ -345,14 +365,14 @@ const stats = computed(() => [
   { label: t("workflow.stats.persistence"), value: lastSavedAt.value || t("workflow.stats.persisted") },
 ])
 
-const executorTypes = computed<Array<{ type: ExecutorType; badge: string; label: string; description: string }>>(() => [
+const executorTypes = computed<Array<{ type: WorkflowExecutorType; badge: string; label: string; description: string }>>(() => [
   { type: "agent", badge: "AG", label: t("workflow.executors.agent"), description: t("workflow.executors.agentDescription") },
   { type: "team", badge: "TM", label: t("workflow.executors.team"), description: t("workflow.executors.teamDescription") },
   { type: "function", badge: "FN", label: t("workflow.executors.function"), description: t("workflow.executors.functionDescription") },
   { type: "workflow", badge: "WF", label: t("workflow.executors.workflow"), description: t("workflow.executors.workflowDescription") },
 ])
 
-const stepTypes = computed<Array<{ type: StepKind; badge: string; label: string; description: string }>>(() => [
+const stepTypes = computed<Array<{ type: WorkflowStepKind; badge: string; label: string; description: string }>>(() => [
   { type: "step", badge: "ST", label: t("workflow.stepTypes.step"), description: t("workflow.stepTypes.stepDescription") },
   { type: "steps", badge: "SQ", label: t("workflow.stepTypes.steps"), description: t("workflow.stepTypes.stepsDescription") },
   { type: "condition", badge: "IF", label: t("workflow.stepTypes.condition"), description: t("workflow.stepTypes.conditionDescription") },
@@ -365,8 +385,10 @@ const selectedStep = computed(() => workflowSteps.value.find((step) => step.id =
 
 const validationItems = computed<Array<{ level: ValidationLevel; message: string }>>(() => {
   const items: Array<{ level: ValidationLevel; message: string }> = []
-  const names = workflowSteps.value.map((step) => pythonIdentifier(step.name))
+  const names = workflowSteps.value.map((step) => step.name.trim().toLowerCase()).filter(Boolean)
+  const symbols = workflowSteps.value.map((step) => workflowStepSymbol(step))
   const duplicateName = names.some((name, index) => names.indexOf(name) !== index)
+  const duplicateSymbol = symbols.some((symbol, index) => symbols.indexOf(symbol) !== index)
 
   if (workflowName.value.trim()) items.push({ level: "ok", message: t("workflow.validation.named") })
   else items.push({ level: "warning", message: t("workflow.validation.nameMissing") })
@@ -377,11 +399,14 @@ const validationItems = computed<Array<{ level: ValidationLevel; message: string
   if (!duplicateName) items.push({ level: "ok", message: t("workflow.validation.uniqueNames") })
   else items.push({ level: "warning", message: t("workflow.validation.duplicateNames") })
 
+  if (!duplicateSymbol) items.push({ level: "ok", message: t("workflow.validation.uniqueSymbols") })
+  else items.push({ level: "warning", message: t("workflow.validation.duplicateSymbols") })
+
   for (const step of workflowSteps.value) {
     if ((step.kind === "condition" || step.kind === "router" || step.kind === "loop") && !step.expression.trim()) {
       items.push({ level: "warning", message: t("workflow.validation.expressionMissing", { name: step.name }) })
     }
-    if ((step.kind === "parallel" || step.kind === "router" || step.kind === "condition") && step.branches < 2) {
+    if ((step.kind === "parallel" || step.kind === "router" || step.kind === "condition" || step.kind === "steps") && step.branches < 2) {
       items.push({ level: "warning", message: t("workflow.validation.branchesMissing", { name: step.name }) })
     }
   }
@@ -399,8 +424,9 @@ const validationTitle = computed(() => {
 })
 
 const outputItems = computed(() => [
-  { label: t("workflow.outputs.input"), value: "workflow.print_response(input, stream=True)" },
+  { label: t("workflow.outputs.input"), value: "workflow.print_response(..., stream=True)" },
   { label: t("workflow.outputs.stepResults"), value: t("workflow.outputs.stepCount", { count: workflowSteps.value.length }) },
+  { label: t("workflow.outputs.events"), value: streamEvents.value ? "stream_events=True" : "stream_events=False" },
   { label: t("workflow.outputs.finalOutput"), value: lastRunId.value },
 ])
 
@@ -411,30 +437,16 @@ const sessionItems = computed(() => [
 ])
 
 const generatedCode = computed(() => {
-  const imports = new Set(["Workflow", "Step"])
-  workflowSteps.value.forEach((step) => {
-    if (step.kind !== "step") imports.add(constructorName(step.kind))
-  })
-
-  const renderedSteps = workflowSteps.value.map((step) => indent(renderStep(step), 8)).join(",\n")
-  return [
-    `from agno.workflow import ${Array.from(imports).join(", ")}`,
-    "",
-    "# Define agents, teams, functions, and nested workflows above this block.",
-    `workflow = Workflow(`,
-    `    name=${quote(workflowName.value || "security_research_workflow")},`,
-    `    description=${quote(workflowDescription.value || t("workflow.canvas.description"))},`,
-    `    steps=[`,
-    renderedSteps,
-    `    ],`,
-    `)`,
-    "",
-    `workflow.print_response(`,
-    `    input=${quote(runInput.value || t("workflow.config.defaultInput"))},`,
-    `    stream=True,`,
-    `    stream_events=True,`,
-    `)`,
-  ].join("\n")
+  const options: WorkflowCodeOptions = {
+    name: workflowName.value || "security_research_workflow",
+    description: workflowDescription.value || t("workflow.canvas.description"),
+    input: runInput.value || t("workflow.config.defaultInput"),
+    steps: workflowSteps.value,
+    streamEvents: streamEvents.value,
+    storeEvents: storeEvents.value,
+    addWorkflowHistoryToSteps: addWorkflowHistoryToSteps.value,
+  }
+  return buildWorkflowCode(options)
 })
 
 function selectStep(id: string) {
@@ -442,13 +454,14 @@ function selectStep(id: string) {
   activeInspectorTab.value = "edit"
 }
 
-function addStep(kind: StepKind) {
+function addStep(kind: WorkflowStepKind) {
   const index = workflowSteps.value.length + 1
   const step: WorkflowStep = {
     id: `step-${Date.now()}`,
     kind,
     executor: kind === "step" ? "agent" : "function",
     name: t("workflow.editor.defaultStepName", { index }),
+    symbol: `workflow_step_${index}`,
     description: stepLabel(kind),
     expression: defaultExpression(kind),
     maxIterations: kind === "loop" ? 3 : 1,
@@ -459,7 +472,7 @@ function addStep(kind: StepKind) {
   selectedStepId.value = step.id
 }
 
-function applyExecutor(executor: ExecutorType) {
+function applyExecutor(executor: WorkflowExecutorType) {
   if (!selectedStep.value) return
   selectedStep.value.executor = executor
 }
@@ -485,7 +498,7 @@ function validateWorkflow() {
 }
 
 function runPreview() {
-  const safeName = pythonIdentifier(workflowName.value || "workflow")
+  const safeName = workflowNameSymbol(workflowName.value || "workflow")
   lastRunId.value = `${safeName}-${Date.now().toString().slice(-6)}`
 }
 
@@ -500,11 +513,11 @@ function saveDraft() {
   lastSavedAt.value = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date())
 }
 
-function stepLabel(kind: StepKind) {
+function stepLabel(kind: WorkflowStepKind) {
   return stepTypes.value.find((stepType) => stepType.type === kind)?.label || kind
 }
 
-function executorLabel(executor: ExecutorType) {
+function executorLabel(executor: WorkflowExecutorType) {
   return executorTypes.value.find((executorType) => executorType.type === executor)?.label || executor
 }
 
@@ -513,87 +526,21 @@ function stepMeta(step: WorkflowStep) {
   if (step.kind === "router" || step.kind === "condition") return step.expression || t("workflow.editor.needsExpression")
   if (step.kind === "parallel") return t("workflow.editor.parallelValue", { count: step.branches })
   if (step.kind === "steps") return t("workflow.editor.sequenceValue", { count: step.branches })
-  return "Step"
+  return workflowStepSymbol(step)
 }
 
-function defaultExpression(kind: StepKind) {
+function branchLabels(step: WorkflowStep) {
+  if (step.kind !== "parallel" && step.kind !== "router" && step.kind !== "condition" && step.kind !== "steps") return []
+  return Array.from({ length: step.branches }, (_, index) => `${constructorName(step.kind)} ${index + 1}`)
+}
+
+function defaultExpression(kind: WorkflowStepKind) {
   if (kind === "condition") return "last_step_content.contains('critical')"
   if (kind === "loop") return "last_step_content.contains('APPROVED')"
-  if (kind === "router") return "route_by_severity"
+  if (kind === "router") return "last_step_content.contains('critical')"
   if (kind === "parallel") return "fanout=[branch_a, branch_b]"
   if (kind === "steps") return "ordered_steps"
   return ""
-}
-
-function constructorName(kind: StepKind) {
-  const names: Record<StepKind, string> = {
-    step: "Step",
-    steps: "Steps",
-    condition: "Condition",
-    loop: "Loop",
-    router: "Router",
-    parallel: "Parallel",
-  }
-  return names[kind]
-}
-
-function renderStep(step: WorkflowStep): string {
-  if (step.kind === "step") {
-    return `Step(name=${quote(pythonIdentifier(step.name))}, ${executorArgument(step)}, description=${quote(step.description)})`
-  }
-
-  const children = Array.from({ length: step.branches }, (_, index) => {
-    const childName = `${pythonIdentifier(step.name)}_${index + 1}`
-    return `Step(name=${quote(childName)}, ${executorArgument(step)})`
-  })
-
-  if (step.kind === "parallel") {
-    return `Parallel(\n${indent(children.join(",\n"), 4)},\n    name=${quote(pythonIdentifier(step.name))},\n    description=${quote(step.description)},\n)`
-  }
-
-  if (step.kind === "steps") {
-    return `Steps(\n    name=${quote(pythonIdentifier(step.name))},\n    steps=[\n${indent(children.join(",\n"), 8)},\n    ],\n    description=${quote(step.description)},\n)`
-  }
-
-  if (step.kind === "condition") {
-    const [truthy, fallback] = children
-    return `Condition(\n    name=${quote(pythonIdentifier(step.name))},\n    evaluator=${quote(step.expression || "last_step_content.contains('critical')")},\n    steps=[${truthy}],\n    else_steps=[${fallback || truthy}],\n    description=${quote(step.description)},\n)`
-  }
-
-  if (step.kind === "loop") {
-    return `Loop(\n    name=${quote(pythonIdentifier(step.name))},\n    steps=[${children[0]}],\n    end_condition=${quote(step.expression || "last_step_content.contains('APPROVED')")},\n    max_iterations=${step.maxIterations},\n    description=${quote(step.description)},\n)`
-  }
-
-  return `Router(\n    name=${quote(pythonIdentifier(step.name))},\n    selector=${quote(step.expression || "route_by_severity")},\n    choices=[\n${indent(children.join(",\n"), 8)},\n    ],\n    description=${quote(step.description)},\n)`
-}
-
-function executorArgument(step: WorkflowStep) {
-  const name = pythonIdentifier(step.name)
-  if (step.executor === "team") return `team=${name}_team`
-  if (step.executor === "function") return `executor=${name}_executor`
-  if (step.executor === "workflow") return `workflow=${name}_workflow`
-  return `agent=${name}_agent`
-}
-
-function pythonIdentifier(value: string) {
-  const identifier = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-  return identifier || "step"
-}
-
-function quote(value: string) {
-  return JSON.stringify(value)
-}
-
-function indent(value: string, spaces: number) {
-  const padding = " ".repeat(spaces)
-  return value
-    .split("\n")
-    .map((line) => `${padding}${line}`)
-    .join("\n")
 }
 </script>
 
@@ -883,6 +830,28 @@ function indent(value: string, spaces: number) {
   margin-top: 10px;
 }
 
+.workflow-branch-rail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--step-tone) 28%, var(--ag-border));
+}
+
+.workflow-branch-rail span {
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--step-tone) 34%, var(--ag-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--step-tone) 8%, var(--ag-panel-soft));
+  padding: 5px 7px;
+  overflow-wrap: anywhere;
+  color: var(--ag-muted-strong);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+  font-weight: 800;
+}
+
 .workflow-step-actions {
   display: flex;
   flex-direction: column;
@@ -934,7 +903,7 @@ function indent(value: string, spaces: number) {
 
 .workflow-result-strip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   border-top: 1px solid var(--ag-border);
   background: color-mix(in srgb, var(--ag-panel) 90%, transparent);
@@ -983,6 +952,11 @@ function indent(value: string, spaces: number) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.workflow-run-options {
+  display: grid;
+  gap: 8px;
 }
 
 .workflow-check-list {
@@ -1046,10 +1020,13 @@ function indent(value: string, spaces: number) {
 
   .workflow-workbench {
     grid-template-columns: 280px minmax(0, 1fr);
+    grid-auto-rows: minmax(0, auto);
   }
 
   .workflow-inspector {
-    display: none;
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--ag-border);
+    border-left: 0;
   }
 }
 
@@ -1065,6 +1042,10 @@ function indent(value: string, spaces: number) {
 
   .workflow-palette {
     display: none;
+  }
+
+  .workflow-inspector {
+    border-top: 1px solid var(--ag-border);
   }
 
   .workflow-canvas {

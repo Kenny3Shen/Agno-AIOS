@@ -4,41 +4,43 @@
 
 ## 认证
 
-API 使用 FastAPI Users 和 JWT bearer authentication。登录接口位于 `/api/auth/jwt/login`，当前用户接口位于 `/api/auth/users/me`。
+API 使用 FastAPI Users 和 JWT bearer 认证。登录接口位于 `/api/auth/jwt/login`，当前用户接口位于 `/api/auth/users/me`。
 
-当前密码校验要求至少 8 位。配置了 OAuth provider 后，会注册对应 provider routes。
+当前密码校验要求至少 8 位。配置 OAuth provider 后，会注册对应 provider routes。
 
 可选 bootstrap admin 只有在同时配置 `AGNO_BOOTSTRAP_ADMIN_EMAIL` 和 `AGNO_BOOTSTRAP_ADMIN_PASSWORD` 时才会创建或提升。
 
-## Roles 和 Permissions
+## 角色和权限
 
-后端识别三种 role：
+后端识别三种角色：
 
-| Role | 含义 |
+| 角色 | 含义 |
 | --- | --- |
-| `admin` | 通过 wildcard permission 访问所有权限。 |
+| `admin` | 通过通配 permission 访问所有权限。 |
 | `user` | 可读写自己的 sessions 和 knowledge，读取自己的 traces，并使用部分安全数据视图。 |
 | `guest` | 可读取自己的 sessions、traces、部分 memory/metrics 数据、CVE 和 knowledge。 |
 
 当前后端权限定义在 `api/auth/permissions.py`。
 
-| Permission | Admin | User | Guest |
-| --- | --- | --- | --- |
-| `session:read:own` | yes | yes | yes |
-| `session:write:own` | yes | yes | no |
-| `trace:read:own` | yes | yes | yes |
-| `memory:read:own` | yes | yes | yes |
-| `metrics:read:own` | yes | yes | yes |
-| `collect:write` | yes | yes | no |
-| `cve:read` | yes | yes | yes |
-| `knowledge:read` | yes | yes | yes |
-| `knowledge:write` | yes | yes | no |
-| `mcp:read` | yes | yes | no |
-| `skill:read` | yes | yes | no |
-| `settings:read` | yes | yes | no |
-| write/admin permissions | yes | no | no |
+控制面 module permission、Scheduler 写权限和 policy audit event 的复用规则集中在 `api/services/security_policy.py`。Route 仍负责声明 FastAPI dependency，但共享 policy 的判断和 audit event 形状不应重复散落在 route implementation 中。
 
-Admin-only 操作用只有 admin 能通过 wildcard 满足的 permission 表达，例如 `audit:read`、`mcp:write`、`skill:write`、`settings:write` 和 `admin:read`。
+| 权限 | Admin | User | Guest |
+| --- | --- | --- | --- |
+| `session:read:own` | 是 | 是 | 是 |
+| `session:write:own` | 是 | 是 | 否 |
+| `trace:read:own` | 是 | 是 | 是 |
+| `memory:read:own` | 是 | 是 | 是 |
+| `metrics:read:own` | 是 | 是 | 是 |
+| `collect:write` | 是 | 是 | 否 |
+| `cve:read` | 是 | 是 | 是 |
+| `knowledge:read` | 是 | 是 | 是 |
+| `knowledge:write` | 是 | 是 | 否 |
+| `mcp:read` | 是 | 是 | 否 |
+| `skill:read` | 是 | 是 | 否 |
+| `settings:read` | 是 | 是 | 否 |
+| 写入和 admin 权限 | 是 | 否 | 否 |
+
+Admin-only 操作用只有 admin 能通过通配规则满足的 permission 表达，例如 `audit:read`、`mcp:write`、`skill:write`、`settings:write` 和 `admin:read`。
 
 ## 资源归属
 
@@ -61,7 +63,7 @@ Admin-only 操作用只有 admin 能通过 wildcard 满足的 permission 表达�
 
 ## 审计
 
-Audit records 存储在 `app.audit_logs`。当前会审计的动作包括：
+审计记录存储在 `app.audit_logs`。当前会审计的动作包括：
 
 - 登录和登出。
 - Session archive。
@@ -82,7 +84,7 @@ Audit logs 包含 actor identity、role、action、resource type、resource ID�
 - `Authorization: Bearer <token>`
 - `?token=<token>`
 
-Tokens 存储在 `mcp.mcp_tokens` 表中，带 creation 和 expiration timestamps。`MCP_TOKEN` 也可以在 API 启动时 bootstrap 一个 token。
+Tokens 存储在 `mcp.mcp_tokens` 表中，带创建时间和过期时间。`MCP_TOKEN` 也可以在 API 启动时 bootstrap 一个 token。
 
 MCP tokens 和用户 JWT 分离。MCP token 授权 MCP protocol calls，不授权控制面 API calls。
 

@@ -34,6 +34,18 @@ _避免_: Card、Badge、Metric Card、Pill
 归属于用户的一段连续对话历史，可在同一线程下包含多次 agent run。
 _避免_: 把 Conversation 当作安全边界
 
+**Agent Prompt**:
+定义安全运营助手工作边界、任务路由和回答约束的运行时指令。
+_避免_: Code comment、UI copy、控制面配置
+
+**Session History**:
+Chat Session 中保存的对话消息，用于维持同一会话内的上下文连续性。
+_避免_: Memory
+
+**Session Summary**:
+由一段 Chat Session 压缩得到的摘要，用于在不携带全部消息时保留会话要点。
+_避免_: Memory、Trace summary
+
 **Run**:
 Session 中一次 agent、team 或 workflow 执行。
 _避免_: Trace
@@ -50,6 +62,10 @@ _避免_: Event
 由 Agno 运行的可重复编排管线，通过明确步骤把 Agent、Team、函数或嵌套 Workflow 串联、分支、循环或并行执行。
 _避免_: 通用自动化、触发器链
 
+**Workflow Builder**:
+控制面中用于设计、校验和预览 Agno Workflow 的可视化工作区；它表达 Workflow 结构和运行参数，但不是 Workflow run 本身。
+_避免_: Workflow Runtime、Trace 视图
+
 **Workflow Step**:
 Workflow 内的执行或控制单元，可委派给 executor，也可表达顺序组合、条件、路由、循环或并行分支。
 _避免_: Node、任务卡片
@@ -63,8 +79,8 @@ Workflow 的持久化执行历史，记录完整 run、步骤结果、session da
 _避免_: Chat Session、Workflow summary
 
 **Memory**:
-与用户或 agent 上下文关联的持久化 agent 记忆。
-_避免_: Knowledge
+Agent 从交互中学习到并持久化的用户事实、偏好或长期上下文，可在后续交互中被召回。
+_避免_: Knowledge、Session History、Session Summary
 
 ### 工具与知识
 
@@ -91,6 +107,20 @@ _避免_: File、chunk
 **Knowledge Base**:
 可被助手通过检索使用的内部文档集合。
 _避免_: Memory
+
+### 数据归属
+
+**Agno Runtime Data**:
+由 Agno 运行时拥有的 Session、Memory、Trace、Span、Scheduler 和 AgentOS 运行记录。控制面可以读取和呈现这些记录，但不把它们当作应用业务数据重定义。
+_避免_: Control Plane Data、应用表
+
+**Control Plane Data**:
+由 Agno AIOS 控制面拥有的安全运营、访问控制、审计、MCP 配置和操作员工作流记录。
+_避免_: Agno Runtime Data
+
+**Knowledge Storage**:
+Knowledge Base 的持久化存储，包括文档目录和检索索引；它服务于检索，不代表 Agent 从交互中学习到的长期 Memory。
+_避免_: Memory、Session History
 
 ### 安全数据
 

@@ -601,10 +601,7 @@ onMounted(() => {
 }
 
 .mcp-summary-strip {
-  display: flex;
   flex: 1 1 640px;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 
 .mcp-summary-url {

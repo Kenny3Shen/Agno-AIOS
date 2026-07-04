@@ -326,10 +326,7 @@ onMounted(() => {
 }
 
 .skill-summary-strip {
-  display: flex;
   flex: 1 1 520px;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 
 .skill-primary-action {

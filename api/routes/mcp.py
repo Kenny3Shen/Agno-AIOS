@@ -1,4 +1,3 @@
-import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -14,6 +13,7 @@ from api.services.audit_service import (
 from api.services.mcp_config_service import (
     McpConfigChange,
     add_hiagent_entry,
+    apply_mcp_upload,
     apply_service_toggle,
     delete_hiagent_entry,
     list_hiagent_entries,
@@ -26,11 +26,8 @@ from api.mcp.config import (
     delete_token,
     insert_token,
     list_tokens,
-    normalize_hiagents,
-    normalize_mcp_servers,
     read_mcp_config,
     services_from_config,
-    write_mcp_config,
 )
 
 router = APIRouter(prefix="/api/mcp", tags=["MCP"])
@@ -97,85 +94,6 @@ def _record_config_change(
         resource_id=change.resource_id,
         metadata=change.metadata,
         **request_context,
-    )
-
-
-def _require_string(value: Any, field: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise HTTPException(status_code=400, detail=f"{field} must be a non-empty string")
-    return value.strip()
-
-
-def _validate_string_list(value: Any, field: str) -> list[str]:
-    if value is None:
-        return []
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise HTTPException(status_code=400, detail=f"{field} must be a string array")
-    return value
-
-
-def _validate_string_map(value: Any, field: str) -> dict[str, str]:
-    if value is None:
-        return {}
-    if not isinstance(value, dict) or not all(
-        isinstance(key, str) and isinstance(item, str) for key, item in value.items()
-    ):
-        raise HTTPException(status_code=400, detail=f"{field} must be a string map")
-    return value
-
-
-def _parse_mcp_manifest(raw: str, name: str) -> tuple[str, dict[str, Any]]:
-    text = raw.strip()
-    if not text:
-        return "remote-url", {}
-    try:
-        manifest = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=400, detail="manifest must be valid JSON") from exc
-    if not isinstance(manifest, dict):
-        raise HTTPException(status_code=400, detail="manifest must be a JSON object")
-
-    if "mcpServers" in manifest:
-        servers = manifest.get("mcpServers")
-        if not isinstance(servers, dict) or not servers:
-            raise HTTPException(status_code=400, detail="mcpServers must be a non-empty object")
-        selected_name = name if name in servers else next(iter(servers))
-        server = servers.get(selected_name)
-        if not isinstance(server, dict):
-            raise HTTPException(status_code=400, detail="selected mcpServers entry is invalid")
-        normalized_server = {
-            "command": _require_string(server.get("command"), "mcpServers.command"),
-            "args": _validate_string_list(server.get("args"), "mcpServers.args"),
-            "env": _validate_string_map(server.get("env"), "mcpServers.env"),
-        }
-        return "mcp-json", {"mcpServers": {selected_name: normalized_server}}
-
-    if "source" in manifest:
-        source = manifest.get("source")
-        if not isinstance(source, dict):
-            raise HTTPException(status_code=400, detail="source must be an object")
-        normalized_manifest: dict[str, Any] = {
-            "source": {
-                "type": str(source.get("type") or "filesystem"),
-                "path": _require_string(source.get("path"), "source.path"),
-            }
-        }
-        entrypoint = source.get("entrypoint")
-        if entrypoint is not None:
-            normalized_manifest["source"]["entrypoint"] = _require_string(
-                entrypoint, "source.entrypoint"
-            )
-        for section in ("environment", "deployment"):
-            value = manifest.get(section)
-            if value is not None:
-                if not isinstance(value, dict):
-                    raise HTTPException(status_code=400, detail=f"{section} must be an object")
-                normalized_manifest[section] = value
-        return "fastmcp-json", normalized_manifest
-
-    raise HTTPException(
-        status_code=400,
-        detail="manifest must use fastmcp.json source or standard mcpServers format",
     )
 
 
@@ -308,52 +226,12 @@ async def upload_mcp(
     user: User = Depends(require_permission("mcp:write")),
 ):
     """上传 MCP manifest 或注册远程 MCP URL。"""
-    name = body.name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="name 不能为空")
-    url = body.url.strip()
-    description = body.description.strip()
-    kind, manifest = _parse_mcp_manifest(body.manifest, name)
-    if not url and not manifest:
-        raise HTTPException(status_code=400, detail="url 或 manifest 至少填写一项")
-
-    data = read_mcp_config()
-    if url:
-        hiagents = normalize_hiagents(data.get("hiagent", []))
-        if any(entry["url"] == url for entry in hiagents):
-            raise HTTPException(status_code=409, detail="该 URL 已存在")
-        hiagents.append(
-            {
-                "name": name,
-                "url": url,
-                "description": description,
-                "enabled": body.enabled,
-            }
-        )
-        data["hiagent"] = hiagents
-
-    servers = normalize_mcp_servers(data.get("mcp_servers", []))
-    if any(entry["name"] == name for entry in servers):
-        raise HTTPException(status_code=409, detail="该 MCP 名称已存在")
-    servers.append(
-        {
-            "name": name,
-            "description": description,
-            "url": url,
-            "kind": kind,
-            "enabled": body.enabled,
-            "manifest": manifest,
-        }
+    change = apply_mcp_upload(
+        name=body.name,
+        url=body.url,
+        description=body.description,
+        manifest=body.manifest,
+        enabled=body.enabled,
     )
-    data["mcp_servers"] = servers
-    write_mcp_config(data)
-
-    record_audit_event(
-        user,
-        action="mcp.upload",
-        resource_type="mcp",
-        resource_id=name,
-        metadata={"kind": kind, "url": url, "has_manifest": bool(manifest)},
-        **audit_request_context(request),
-    )
-    return McpUploadResponse(success=True, name=name, kind=kind)
+    _record_config_change(user, change, audit_request_context(request))
+    return McpUploadResponse(**change.response)

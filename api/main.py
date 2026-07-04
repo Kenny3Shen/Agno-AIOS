@@ -13,6 +13,7 @@ from api.auth.router import router as auth_router
 from api.config import get_settings
 from api.core.logging import configure_logging
 from api.mcp.server import bootstrap_mcp_token, mcp_runtime
+from api.persistence.database import dispose_control_plane_engine
 from api.routes import (
     audit,
     chat,
@@ -57,6 +58,7 @@ async def lifespan(app: FastAPI):
     finally:
         await mcp_runtime.shutdown()
         await close_auth_engine()
+        dispose_control_plane_engine()
         await close_db_pool()
         logger.info("关闭 {}", app_settings.app_name)
 
