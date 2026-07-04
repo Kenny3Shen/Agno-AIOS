@@ -25,6 +25,10 @@ import type {
   OsControlResponse,
   ScheduleCreateRequest,
   ScheduleCreateResponse,
+  ScheduleRunsResponse,
+  ScheduleUpdateRequest,
+  SchedulerRun,
+  SchedulerSchedule,
   SettingsResponse,
   SkillListResponse,
   SkillToggleResponse,
@@ -339,11 +343,110 @@ export function useOsControlApi() {
     }
   }
 
+  const updateSchedule = async (id: string, payload: ScheduleUpdateRequest): Promise<SchedulerSchedule> => {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await apiFetch(`/os/scheduler/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      if (!response.ok) {
+        const data: unknown = await response.json().catch(() => ({}))
+        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+      }
+      return await response.json()
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const setScheduleEnabled = async (id: string, enabled: boolean): Promise<SchedulerSchedule> => {
+    loading.value = true
+    error.value = null
+    try {
+      const action = enabled ? 'enable' : 'disable'
+      const response = await apiFetch(`/os/scheduler/${encodeURIComponent(id)}/${action}`, { method: 'POST' })
+      if (!response.ok) {
+        const data: unknown = await response.json().catch(() => ({}))
+        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+      }
+      return await response.json()
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const triggerSchedule = async (id: string): Promise<SchedulerRun> => {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await apiFetch(`/os/scheduler/${encodeURIComponent(id)}/trigger`, { method: 'POST' })
+      if (!response.ok) {
+        const data: unknown = await response.json().catch(() => ({}))
+        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+      }
+      return await response.json()
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const deleteSchedule = async (id: string): Promise<void> => {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await apiFetch(`/os/scheduler/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      if (!response.ok) {
+        const data: unknown = await response.json().catch(() => ({}))
+        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+      }
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const listScheduleRuns = async (id: string): Promise<ScheduleRunsResponse> => {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await apiFetch(`/os/scheduler/${encodeURIComponent(id)}/runs`)
+      if (!response.ok) {
+        const data: unknown = await response.json().catch(() => ({}))
+        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+      }
+      return await response.json()
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     loading,
     error,
     fetchModule,
-    createSchedule
+    createSchedule,
+    updateSchedule,
+    setScheduleEnabled,
+    triggerSchedule,
+    deleteSchedule,
+    listScheduleRuns
   }
 }
 

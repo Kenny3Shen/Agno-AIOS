@@ -154,28 +154,76 @@ export interface OsControlResponse {
   metrics: OsControlMetric[]
   records: OsControlRecord[]
   generated_at: string
+  schedules?: SchedulerSchedule[]
+}
+
+export type ScheduleTargetType = "agent" | "team" | "workflow"
+
+export interface SchedulerSchedule {
+  id: string
+  name: string
+  description?: string | null
+  method: string
+  endpoint: string
+  target_type: ScheduleTargetType | ""
+  target_id: string
+  payload: Record<string, unknown>
+  cron_expr: string
+  timezone: string
+  timeout_seconds: number
+  max_retries: number
+  retry_delay_seconds: number
+  enabled: boolean
+  next_run_at?: number | null
+  next_run_at_iso?: string
+  created_at?: number | null
+  created_at_iso?: string
+  updated_at?: number | null
+  updated_at_iso?: string
+}
+
+export interface SchedulerRun {
+  id: string
+  schedule_id: string
+  attempt: number
+  triggered_at?: number | null
+  triggered_at_iso?: string
+  completed_at?: number | null
+  completed_at_iso?: string
+  status: string
+  status_code?: number | null
+  run_id?: string | null
+  session_id?: string | null
+  error?: string | null
+  input?: Record<string, unknown> | null
+  output?: Record<string, unknown> | null
+  requirements?: Record<string, unknown>[] | null
+  created_at?: number | null
+  created_at_iso?: string
 }
 
 export interface ScheduleCreateRequest {
   name: string
-  target_kind: "workflow" | "agent_skill"
+  target_type: ScheduleTargetType
   target_id: string
-  schedule_type: "cron" | "interval" | "once"
-  cron?: string
-  interval_seconds?: number | null
-  run_at?: string | null
-  max_runs?: number | null
+  cron_expr: string
+  description?: string
+  payload?: Record<string, unknown>
+  timezone?: string
+  timeout_seconds?: number
+  max_retries?: number
+  retry_delay_seconds?: number
   enabled?: boolean
-  skill_name?: string
-  agent_id?: string
-  input?: Record<string, unknown>
 }
 
-export interface ScheduleCreateResponse {
-  id: string
-  status: string
-  enabled: boolean
-  celery_task_id?: string | null
+export type ScheduleUpdateRequest = Partial<ScheduleCreateRequest>
+
+export interface ScheduleCreateResponse extends SchedulerSchedule {}
+
+export interface ScheduleRunsResponse {
+  items: SchedulerRun[]
+  page: number
+  limit: number
 }
 
 // CVE 相关类型

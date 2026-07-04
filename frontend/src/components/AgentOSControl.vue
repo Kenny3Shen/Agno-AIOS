@@ -14,81 +14,193 @@
 
     <el-alert v-if="error" class="agentos-alert" type="error" :title="error" show-icon />
 
-    <section v-if="props.osModule === 'scheduler'" class="agentos-scheduler-form">
-      <div class="agentos-panel-head">
-        <div>
-          <p>{{ t("agentOS.scheduler.createTitle") }}</p>
-          <span>{{ t("agentOS.scheduler.createDescription") }}</span>
+    <main v-if="props.osModule === 'scheduler'" class="scheduler-workbench">
+      <section class="agentos-panel scheduler-list-panel">
+        <div class="agentos-panel-head">
+          <div>
+            <p>{{ t("agentOS.scheduler.listTitle") }}</p>
+            <span>{{ t("agentOS.ledger.count", { count: schedules.length, time: generatedAt }) }}</span>
+          </div>
+          <div class="agentos-panel-actions">
+            <el-button size="small" :loading="loading" @click="loadModule">
+              <el-icon><Refresh /></el-icon>
+            </el-button>
+            <el-button size="small" type="primary" @click="showCreateForm = !showCreateForm">
+              <el-icon><Plus /></el-icon>
+              {{ t("agentOS.scheduler.create") }}
+            </el-button>
+          </div>
         </div>
-        <el-switch v-model="scheduleForm.enabled" :active-text="t('agentOS.scheduler.enabled')" />
-      </div>
 
-      <div class="agentos-scheduler-grid">
-        <el-input v-model="scheduleForm.name" :placeholder="t('agentOS.scheduler.namePlaceholder')" />
-        <el-select v-model="scheduleForm.target_kind">
-          <el-option :label="t('agentOS.scheduler.targets.workflow')" value="workflow" />
-          <el-option :label="t('agentOS.scheduler.targets.agentSkill')" value="agent_skill" />
-        </el-select>
-        <el-input v-model="scheduleForm.target_id" :placeholder="targetPlaceholder" />
-        <el-input
-          v-if="scheduleForm.target_kind === 'agent_skill'"
-          v-model="scheduleForm.skill_name"
-          :placeholder="t('agentOS.scheduler.skillPlaceholder')"
-        />
-        <el-input
-          v-if="scheduleForm.target_kind === 'agent_skill'"
-          v-model="scheduleForm.agent_id"
-          :placeholder="t('agentOS.scheduler.agentPlaceholder')"
-        />
-        <el-select v-model="scheduleForm.schedule_type">
-          <el-option :label="t('agentOS.scheduler.scheduleTypes.interval')" value="interval" />
-          <el-option :label="t('agentOS.scheduler.scheduleTypes.cron')" value="cron" />
-          <el-option :label="t('agentOS.scheduler.scheduleTypes.once')" value="once" />
-        </el-select>
-        <el-input-number
-          v-if="scheduleForm.schedule_type === 'interval'"
-          v-model="scheduleForm.interval_seconds"
-          :min="60"
-          :step="60"
-          controls-position="right"
-          class="agentos-number"
-        />
-        <el-input
-          v-if="scheduleForm.schedule_type === 'cron'"
-          v-model="scheduleForm.cron"
-          placeholder="*/30 * * * *"
-        />
-        <el-date-picker
-          v-if="scheduleForm.schedule_type === 'once'"
-          v-model="scheduleForm.run_at"
-          type="datetime"
-          value-format="YYYY-MM-DDTHH:mm:ssZ"
-          class="agentos-date"
-        />
-        <el-input-number
-          v-model="scheduleForm.max_runs"
-          :min="1"
-          :placeholder="t('agentOS.scheduler.maxRunsPlaceholder')"
-          controls-position="right"
-          class="agentos-number"
-        />
-      </div>
+        <section v-if="showCreateForm" class="scheduler-form">
+          <div class="agentos-scheduler-grid">
+            <el-input v-model="scheduleForm.name" :placeholder="t('agentOS.scheduler.namePlaceholder')" />
+            <el-select v-model="scheduleForm.target_type">
+              <el-option :label="t('agentOS.scheduler.targets.agent')" value="agent" />
+              <el-option :label="t('agentOS.scheduler.targets.team')" value="team" />
+              <el-option :label="t('agentOS.scheduler.targets.workflow')" value="workflow" />
+            </el-select>
+            <el-input v-model="scheduleForm.target_id" :placeholder="targetPlaceholder" />
+            <el-input v-model="scheduleForm.cron_expr" placeholder="*/30 * * * *" />
+            <el-input v-model="scheduleForm.description" :placeholder="t('agentOS.scheduler.descriptionPlaceholder')" />
+            <el-input v-model="scheduleForm.timezone" placeholder="UTC" />
+            <el-input-number v-model="scheduleForm.timeout_seconds" :min="1" :max="86400" controls-position="right" class="agentos-number" />
+            <el-switch v-model="scheduleForm.enabled" :active-text="t('agentOS.scheduler.enabled')" />
+          </div>
+          <el-collapse class="scheduler-advanced">
+            <el-collapse-item :title="t('agentOS.scheduler.advanced')" name="advanced">
+              <div class="agentos-scheduler-grid compact">
+                <el-input-number v-model="scheduleForm.max_retries" :min="0" :max="10" controls-position="right" class="agentos-number" />
+                <el-input-number v-model="scheduleForm.retry_delay_seconds" :min="1" :max="3600" controls-position="right" class="agentos-number" />
+              </div>
+            </el-collapse-item>
+          </el-collapse>
+          <el-input
+            v-model="schedulePayloadJson"
+            type="textarea"
+            :rows="3"
+            class="agentos-scheduler-input"
+            :placeholder="t('agentOS.scheduler.inputPlaceholder')"
+          />
+          <div class="agentos-scheduler-actions">
+            <el-button @click="resetCreateForm">{{ t("agentOS.scheduler.reset") }}</el-button>
+            <el-button type="primary" :loading="creatingSchedule" @click="submitSchedule">
+              <el-icon><Plus /></el-icon>
+              {{ t("agentOS.scheduler.create") }}
+            </el-button>
+          </div>
+        </section>
 
-      <el-input
-        v-model="scheduleInputJson"
-        type="textarea"
-        :rows="3"
-        class="agentos-scheduler-input"
-        :placeholder="t('agentOS.scheduler.inputPlaceholder')"
-      />
-      <div class="agentos-scheduler-actions">
-        <el-button type="primary" :loading="creatingSchedule" @click="submitSchedule">
-          {{ t("agentOS.scheduler.create") }}
-        </el-button>
-      </div>
-    </section>
+        <div v-if="schedules.length" class="schedule-table">
+          <button
+            v-for="schedule in schedules"
+            :key="schedule.id"
+            type="button"
+            class="schedule-row"
+            :class="{ selected: schedule.id === selectedScheduleId }"
+            @click="selectSchedule(schedule.id)"
+          >
+            <span class="agentos-dot" :class="statusTone(schedule.enabled ? 'enabled' : 'disabled')" />
+            <span class="schedule-main">
+              <strong :title="schedule.name">{{ schedule.name }}</strong>
+              <small :title="schedule.endpoint">{{ schedule.endpoint }}</small>
+            </span>
+            <span class="schedule-side">
+              <b>{{ schedule.cron_expr }}</b>
+              <small>{{ formatTime(schedule.next_run_at_iso) }}</small>
+            </span>
+          </button>
+        </div>
 
-    <main class="agentos-ledger">
+        <div v-else-if="!loading" class="agentos-empty">
+          <el-icon><Aim /></el-icon>
+          <strong>{{ t("agentOS.empty.title") }}</strong>
+          <span>{{ emptyMessage }}</span>
+        </div>
+      </section>
+
+      <section class="agentos-panel scheduler-detail-panel">
+        <template v-if="selectedSchedule">
+          <div class="agentos-panel-head">
+            <div>
+              <p>{{ selectedSchedule.name }}</p>
+              <span>{{ selectedSchedule.endpoint }}</span>
+            </div>
+            <div class="agentos-panel-actions">
+              <span class="agentos-status" :class="statusTone(selectedSchedule.enabled ? 'enabled' : 'disabled')">
+                {{ selectedSchedule.enabled ? t("agentOS.scheduler.enabled") : t("agentOS.scheduler.disabled") }}
+              </span>
+              <el-button size="small" :loading="loading" @click="toggleSelectedSchedule">
+                <el-icon><SwitchButton /></el-icon>
+              </el-button>
+              <el-button size="small" type="primary" :loading="loading" @click="triggerSelectedSchedule">
+                <el-icon><VideoPlay /></el-icon>
+              </el-button>
+              <el-button size="small" type="danger" :loading="loading" @click="deleteSelectedSchedule">
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </div>
+          </div>
+
+          <div class="scheduler-detail-grid">
+            <label>
+              <span>{{ t("agentOS.scheduler.namePlaceholder") }}</span>
+              <el-input v-model="editForm.name" />
+            </label>
+            <label>
+              <span>{{ t("agentOS.scheduler.targetType") }}</span>
+              <el-select v-model="editForm.target_type">
+                <el-option :label="t('agentOS.scheduler.targets.agent')" value="agent" />
+                <el-option :label="t('agentOS.scheduler.targets.team')" value="team" />
+                <el-option :label="t('agentOS.scheduler.targets.workflow')" value="workflow" />
+              </el-select>
+            </label>
+            <label>
+              <span>{{ t("agentOS.scheduler.targetPlaceholder") }}</span>
+              <el-input v-model="editForm.target_id" />
+            </label>
+            <label>
+              <span>Cron</span>
+              <el-input v-model="editForm.cron_expr" />
+            </label>
+            <label>
+              <span>{{ t("agentOS.scheduler.timezone") }}</span>
+              <el-input v-model="editForm.timezone" />
+            </label>
+            <label>
+              <span>{{ t("agentOS.scheduler.timeout") }}</span>
+              <el-input-number v-model="editForm.timeout_seconds" :min="1" :max="86400" controls-position="right" class="agentos-number" />
+            </label>
+            <label>
+              <span>{{ t("agentOS.scheduler.maxRetries") }}</span>
+              <el-input-number v-model="editForm.max_retries" :min="0" :max="10" controls-position="right" class="agentos-number" />
+            </label>
+            <label>
+              <span>{{ t("agentOS.scheduler.retryDelay") }}</span>
+              <el-input-number v-model="editForm.retry_delay_seconds" :min="1" :max="3600" controls-position="right" class="agentos-number" />
+            </label>
+          </div>
+          <el-input v-model="editForm.description" :placeholder="t('agentOS.scheduler.descriptionPlaceholder')" />
+          <el-input v-model="editPayloadJson" type="textarea" :rows="4" class="agentos-scheduler-input" />
+          <div class="agentos-scheduler-actions">
+            <el-button @click="loadSelectedIntoEdit">{{ t("agentOS.scheduler.reset") }}</el-button>
+            <el-button type="primary" :loading="savingSchedule" @click="saveSelectedSchedule">
+              <el-icon><Check /></el-icon>
+              {{ t("agentOS.scheduler.save") }}
+            </el-button>
+          </div>
+
+          <div class="runs-head">
+            <div>
+              <p>{{ t("agentOS.scheduler.runsTitle") }}</p>
+              <span>{{ t("agentOS.scheduler.runsDescription") }}</span>
+            </div>
+            <el-button size="small" :loading="loadingRuns" @click="loadRuns(selectedSchedule.id)">
+              <el-icon><Refresh /></el-icon>
+            </el-button>
+          </div>
+          <div v-if="runs.length" class="run-list">
+            <article v-for="run in runs" :key="run.id" class="run-row">
+              <span class="agentos-chip" :class="statusTone(run.status)">{{ run.status }}</span>
+              <strong>{{ t("agentOS.scheduler.attempt", { attempt: run.attempt }) }}</strong>
+              <small>{{ formatTime(run.completed_at_iso || run.triggered_at_iso) }}</small>
+              <p v-if="run.error" :title="run.error">{{ run.error }}</p>
+            </article>
+          </div>
+          <div v-else class="agentos-empty compact-empty">
+            <strong>{{ t("agentOS.scheduler.noRuns") }}</strong>
+          </div>
+        </template>
+
+        <div v-else class="agentos-empty">
+          <el-icon><Aim /></el-icon>
+          <strong>{{ t("agentOS.scheduler.selectTitle") }}</strong>
+          <span>{{ t("agentOS.scheduler.selectDescription") }}</span>
+        </div>
+      </section>
+    </main>
+
+    <main v-else class="agentos-ledger">
       <section class="agentos-panel">
         <div class="agentos-panel-head">
           <div>
@@ -149,34 +261,75 @@
 import { computed, onMounted, reactive, ref, watch } from "vue"
 import {
   Aim,
+  Check,
+  Delete,
+  Plus,
   Refresh,
+  SwitchButton,
+  VideoPlay,
 } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
 import { useI18n } from "vue-i18n"
 import { useOsControlApi } from "../composables/useApi"
-import type { OsControlMetric, OsControlModule, OsControlRecord, OsControlResponse } from "../types"
+import type {
+  OsControlMetric,
+  OsControlModule,
+  OsControlRecord,
+  OsControlResponse,
+  ScheduleTargetType,
+  SchedulerRun,
+  SchedulerSchedule,
+} from "../types"
 
 const props = defineProps<{
   osModule: OsControlModule
 }>()
 
-const { loading, error, fetchModule, createSchedule } = useOsControlApi()
+const {
+  loading,
+  error,
+  fetchModule,
+  createSchedule,
+  updateSchedule,
+  setScheduleEnabled,
+  triggerSchedule,
+  deleteSchedule,
+  listScheduleRuns,
+} = useOsControlApi()
 const { t, locale } = useI18n()
 const payload = ref<OsControlResponse | null>(null)
 const creatingSchedule = ref(false)
-const scheduleInputJson = ref("")
+const savingSchedule = ref(false)
+const loadingRuns = ref(false)
+const showCreateForm = ref(false)
+const selectedScheduleId = ref("")
+const runs = ref<SchedulerRun[]>([])
+const schedulePayloadJson = ref("{}")
+const editPayloadJson = ref("{}")
+
 const scheduleForm = reactive({
   name: "",
-  target_kind: "workflow" as "workflow" | "agent_skill",
+  target_type: "workflow" as ScheduleTargetType,
   target_id: "",
-  schedule_type: "interval" as "cron" | "interval" | "once",
-  cron: "",
-  interval_seconds: 3600,
-  run_at: "",
-  max_runs: 1,
+  cron_expr: "",
+  description: "",
+  timezone: "UTC",
+  timeout_seconds: 3600,
+  max_retries: 0,
+  retry_delay_seconds: 60,
   enabled: true,
-  skill_name: "",
-  agent_id: "",
+})
+
+const editForm = reactive({
+  name: "",
+  target_type: "workflow" as ScheduleTargetType,
+  target_id: "",
+  cron_expr: "",
+  description: "",
+  timezone: "UTC",
+  timeout_seconds: 3600,
+  max_retries: 0,
+  retry_delay_seconds: 60,
 })
 
 const fallbackMetrics = computed<OsControlMetric[]>(() => [
@@ -188,59 +341,89 @@ const fallbackMetrics = computed<OsControlMetric[]>(() => [
   },
 ])
 const generatedAt = computed(() => formatTime(payload.value?.generated_at))
+const schedules = computed<SchedulerSchedule[]>(() => payload.value?.schedules || [])
+const selectedSchedule = computed(() => schedules.value.find((schedule) => schedule.id === selectedScheduleId.value) || null)
 const emptyMessage = computed(() => {
   if (props.osModule === "evaluation") return t("agentOS.empty.evaluation")
   if (props.osModule === "approvals") return t("agentOS.empty.approvals")
   if (props.osModule === "scheduler") return t("agentOS.empty.scheduler")
   return t("agentOS.empty.default")
 })
-const targetPlaceholder = computed(() => (
-  scheduleForm.target_kind === "workflow"
-    ? t("agentOS.scheduler.workflowPlaceholder")
-    : t("agentOS.scheduler.targetPlaceholder")
-))
+const targetPlaceholder = computed(() => {
+  if (scheduleForm.target_type === "agent") return t("agentOS.scheduler.agentPlaceholder")
+  if (scheduleForm.target_type === "team") return t("agentOS.scheduler.teamPlaceholder")
+  return t("agentOS.scheduler.workflowPlaceholder")
+})
+
+const parsePayloadJson = (value: string) => {
+  if (!value.trim()) return {}
+  const parsed = JSON.parse(value)
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid")
+  return parsed as Record<string, unknown>
+}
+
 const loadModule = async () => {
-  payload.value = await fetchModule(props.osModule)
+  const nextPayload = await fetchModule(props.osModule)
+  payload.value = nextPayload
+  if (props.osModule !== "scheduler") return
+  const stillSelected = schedules.value.some((schedule) => schedule.id === selectedScheduleId.value)
+  if (!stillSelected) {
+    selectedScheduleId.value = schedules.value[0]?.id || ""
+  }
+  if (selectedSchedule.value) {
+    loadSelectedIntoEdit()
+    await loadRuns(selectedSchedule.value.id)
+  } else {
+    runs.value = []
+    showCreateForm.value = true
+  }
+}
+
+const resetCreateForm = () => {
+  scheduleForm.name = ""
+  scheduleForm.target_type = "workflow"
+  scheduleForm.target_id = ""
+  scheduleForm.cron_expr = ""
+  scheduleForm.description = ""
+  scheduleForm.timezone = "UTC"
+  scheduleForm.timeout_seconds = 3600
+  scheduleForm.max_retries = 0
+  scheduleForm.retry_delay_seconds = 60
+  scheduleForm.enabled = true
+  schedulePayloadJson.value = "{}"
 }
 
 const submitSchedule = async () => {
   if (props.osModule !== "scheduler") return
-  if (!scheduleForm.name.trim() || !scheduleForm.target_id.trim()) {
+  if (!scheduleForm.name.trim() || !scheduleForm.target_id.trim() || !scheduleForm.cron_expr.trim()) {
     ElMessage.warning(t("agentOS.scheduler.required"))
     return
   }
-  let input: Record<string, unknown> = {}
-  if (scheduleInputJson.value.trim()) {
-    try {
-      const parsed = JSON.parse(scheduleInputJson.value)
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid")
-      input = parsed as Record<string, unknown>
-    } catch {
-      ElMessage.warning(t("agentOS.scheduler.invalidInput"))
-      return
-    }
+  let payloadJson: Record<string, unknown>
+  try {
+    payloadJson = parsePayloadJson(schedulePayloadJson.value)
+  } catch {
+    ElMessage.warning(t("agentOS.scheduler.invalidInput"))
+    return
   }
   creatingSchedule.value = true
   try {
-    await createSchedule({
+    const created = await createSchedule({
       name: scheduleForm.name.trim(),
-      target_kind: scheduleForm.target_kind,
+      target_type: scheduleForm.target_type,
       target_id: scheduleForm.target_id.trim(),
-      schedule_type: scheduleForm.schedule_type,
-      cron: scheduleForm.cron.trim(),
-      interval_seconds: scheduleForm.schedule_type === "interval" ? scheduleForm.interval_seconds : null,
-      run_at: scheduleForm.schedule_type === "once" ? scheduleForm.run_at : null,
-      max_runs: scheduleForm.max_runs || null,
+      cron_expr: scheduleForm.cron_expr.trim(),
+      description: scheduleForm.description.trim(),
+      timezone: scheduleForm.timezone.trim() || "UTC",
+      timeout_seconds: scheduleForm.timeout_seconds,
+      max_retries: scheduleForm.max_retries,
+      retry_delay_seconds: scheduleForm.retry_delay_seconds,
       enabled: scheduleForm.enabled,
-      skill_name: scheduleForm.skill_name.trim(),
-      agent_id: scheduleForm.agent_id.trim(),
-      input,
+      payload: payloadJson,
     })
-    scheduleForm.name = ""
-    scheduleForm.target_id = ""
-    scheduleForm.skill_name = ""
-    scheduleForm.agent_id = ""
-    scheduleInputJson.value = ""
+    selectedScheduleId.value = created.id
+    resetCreateForm()
+    showCreateForm.value = false
     await loadModule()
     ElMessage.success(t("agentOS.scheduler.created"))
   } catch (err) {
@@ -250,11 +433,102 @@ const submitSchedule = async () => {
   }
 }
 
+const selectSchedule = async (id: string) => {
+  selectedScheduleId.value = id
+  loadSelectedIntoEdit()
+  await loadRuns(id)
+}
+
+const loadSelectedIntoEdit = () => {
+  const schedule = selectedSchedule.value
+  if (!schedule) return
+  editForm.name = schedule.name
+  editForm.target_type = schedule.target_type || "workflow"
+  editForm.target_id = schedule.target_id
+  editForm.cron_expr = schedule.cron_expr
+  editForm.description = schedule.description || ""
+  editForm.timezone = schedule.timezone || "UTC"
+  editForm.timeout_seconds = schedule.timeout_seconds || 3600
+  editForm.max_retries = schedule.max_retries || 0
+  editForm.retry_delay_seconds = schedule.retry_delay_seconds || 60
+  editPayloadJson.value = JSON.stringify(schedule.payload || {}, null, 2)
+}
+
+const saveSelectedSchedule = async () => {
+  const schedule = selectedSchedule.value
+  if (!schedule) return
+  let payloadJson: Record<string, unknown>
+  try {
+    payloadJson = parsePayloadJson(editPayloadJson.value)
+  } catch {
+    ElMessage.warning(t("agentOS.scheduler.invalidInput"))
+    return
+  }
+  savingSchedule.value = true
+  try {
+    await updateSchedule(schedule.id, {
+      name: editForm.name.trim(),
+      target_type: editForm.target_type,
+      target_id: editForm.target_id.trim(),
+      cron_expr: editForm.cron_expr.trim(),
+      description: editForm.description.trim(),
+      timezone: editForm.timezone.trim() || "UTC",
+      timeout_seconds: editForm.timeout_seconds,
+      max_retries: editForm.max_retries,
+      retry_delay_seconds: editForm.retry_delay_seconds,
+      payload: payloadJson,
+    })
+    await loadModule()
+    ElMessage.success(t("agentOS.scheduler.saved"))
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : t("agentOS.scheduler.saveFailed"))
+  } finally {
+    savingSchedule.value = false
+  }
+}
+
+const toggleSelectedSchedule = async () => {
+  const schedule = selectedSchedule.value
+  if (!schedule) return
+  await setScheduleEnabled(schedule.id, !schedule.enabled)
+  await loadModule()
+}
+
+const triggerSelectedSchedule = async () => {
+  const schedule = selectedSchedule.value
+  if (!schedule) return
+  try {
+    await triggerSchedule(schedule.id)
+    await loadRuns(schedule.id)
+    ElMessage.success(t("agentOS.scheduler.triggered"))
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : t("agentOS.scheduler.triggerFailed"))
+  }
+}
+
+const deleteSelectedSchedule = async () => {
+  const schedule = selectedSchedule.value
+  if (!schedule) return
+  await deleteSchedule(schedule.id)
+  selectedScheduleId.value = ""
+  await loadModule()
+}
+
+const loadRuns = async (id: string) => {
+  loadingRuns.value = true
+  try {
+    const response = await listScheduleRuns(id)
+    runs.value = response.items
+  } finally {
+    loadingRuns.value = false
+  }
+}
+
 const statusTone = (status: string) => {
   const text = status.toLowerCase()
-  if (["online", "ready", "enabled", "active", "completed", "stored"].includes(text)) return "green"
-  if (["pending", "draft", "idle", "loading"].includes(text)) return "yellow"
-  if (["error", "failed", "disabled"].includes(text)) return "red"
+  if (["online", "ready", "enabled", "active", "completed", "stored", "success"].includes(text)) return "green"
+  if (["pending", "draft", "idle", "loading", "running", "paused"].includes(text)) return "yellow"
+  if (["error", "failed", "disabled", "cancelled", "timeout"].includes(text)) return "red"
   return "blue"
 }
 
@@ -318,19 +592,21 @@ onMounted(() => {
   color: var(--os-text);
 }
 
-.agentos-control :where(div, section, aside, main, article, p, span, strong, small) {
+.agentos-control :where(div, section, aside, main, article, p, span, strong, small, button, label) {
   min-width: 0;
 }
 
 .agentos-panel-actions,
 .agentos-record-main,
-.agentos-record-side {
+.agentos-record-side,
+.runs-head {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.agentos-panel-head p {
+.agentos-panel-head p,
+.runs-head p {
   margin: 0;
   color: var(--os-muted);
   font-size: 11px;
@@ -339,7 +615,8 @@ onMounted(() => {
   text-transform: uppercase;
 }
 
-.agentos-panel-head span {
+.agentos-panel-head span,
+.runs-head span {
   display: block;
   margin-top: 4px;
   color: var(--os-muted);
@@ -449,46 +726,26 @@ onMounted(() => {
   margin: 12px 16px 0;
 }
 
-.agentos-scheduler-form {
-  margin: 12px 14px 0;
-  border: 1px solid var(--os-border);
-  border-radius: 8px;
-  background: var(--os-panel);
-  padding: 14px;
-}
-
-.agentos-scheduler-grid {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.agentos-number,
-.agentos-date {
-  width: 100%;
-}
-
-.agentos-scheduler-input {
-  margin-top: 8px;
-}
-
-.agentos-scheduler-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 10px;
-}
-
+.scheduler-workbench,
 .agentos-ledger {
   min-height: 0;
   flex: 1;
-  display: flex;
+  display: grid;
   overflow: hidden;
   padding: 14px;
+}
+
+.scheduler-workbench {
+  gap: 12px;
+  grid-template-columns: minmax(360px, 0.95fr) minmax(420px, 1.05fr);
+}
+
+.agentos-ledger {
+  display: flex;
 }
 
 .agentos-panel {
   min-height: 0;
-  flex: 1 1 auto;
   border: 1px solid var(--os-border);
   border-radius: 8px;
   background: var(--os-panel);
@@ -496,12 +753,15 @@ onMounted(() => {
   overflow: hidden;
 }
 
-.agentos-ledger > .agentos-panel {
+.agentos-ledger > .agentos-panel,
+.scheduler-list-panel,
+.scheduler-detail-panel {
   display: flex;
   flex-direction: column;
 }
 
-.agentos-panel-head {
+.agentos-panel-head,
+.runs-head {
   display: flex;
   flex: 0 0 auto;
   align-items: flex-start;
@@ -510,7 +770,54 @@ onMounted(() => {
   margin-bottom: 12px;
 }
 
-.agentos-records {
+.scheduler-form {
+  flex: 0 0 auto;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--os-border);
+  padding-bottom: 12px;
+}
+
+.agentos-scheduler-grid,
+.scheduler-detail-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.agentos-scheduler-grid.compact {
+  grid-template-columns: repeat(2, minmax(0, 180px));
+}
+
+.scheduler-detail-grid label {
+  display: grid;
+  gap: 4px;
+}
+
+.scheduler-detail-grid label > span {
+  color: var(--os-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.agentos-number {
+  width: 100%;
+}
+
+.agentos-scheduler-input,
+.scheduler-advanced {
+  margin-top: 8px;
+}
+
+.agentos-scheduler-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.schedule-table,
+.agentos-records,
+.run-list {
   display: grid;
   min-height: 0;
   flex: 1 1 auto;
@@ -520,16 +827,27 @@ onMounted(() => {
   padding-right: 4px;
 }
 
-.agentos-record {
+.schedule-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px 12px;
+  width: 100%;
+  grid-template-columns: auto minmax(0, 1fr) minmax(120px, auto);
+  align-items: center;
+  gap: 10px;
   border: 1px solid var(--os-border);
   border-radius: 8px;
   background: var(--os-panel-soft);
-  padding: 11px;
+  padding: 10px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
+.schedule-row.selected {
+  border-color: color-mix(in srgb, var(--os-blue) 48%, var(--os-border));
+  background: color-mix(in srgb, var(--os-blue) 8%, var(--os-panel));
+}
+
+.schedule-main strong,
 .agentos-record-main strong {
   display: block;
   color: var(--os-text);
@@ -541,12 +859,37 @@ onMounted(() => {
   white-space: nowrap;
 }
 
-.agentos-record-main p {
-  margin: 3px 0 0;
+.schedule-main small,
+.schedule-side small,
+.agentos-record-main p,
+.run-row small,
+.run-row p {
   color: var(--os-muted);
   font-size: 11px;
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+.schedule-side {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+}
+
+.schedule-side b {
+  color: var(--os-text);
+}
+
+.agentos-record {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  border: 1px solid var(--os-border);
+  border-radius: 8px;
+  background: var(--os-panel-soft);
+  padding: 11px;
 }
 
 .agentos-id-chip {
@@ -602,6 +945,27 @@ onMounted(() => {
   color: var(--os-text);
 }
 
+.run-list {
+  flex: 0 1 220px;
+  margin-top: 8px;
+}
+
+.run-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--os-border);
+  border-radius: 8px;
+  background: var(--os-panel-soft);
+  padding: 9px;
+}
+
+.run-row p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .agentos-empty {
   display: grid;
   width: min(360px, 100%);
@@ -613,6 +977,11 @@ onMounted(() => {
   background: var(--os-panel-soft);
   padding: 28px;
   text-align: center;
+}
+
+.compact-empty {
+  min-height: 72px;
+  padding: 16px;
 }
 
 .agentos-empty .el-icon {
@@ -647,7 +1016,8 @@ html.dark .agentos-control {
 }
 
 @media (max-width: 1180px) {
-  .agentos-ledger {
+  .scheduler-workbench {
+    grid-template-columns: 1fr;
     overflow-y: auto;
   }
 }
@@ -658,7 +1028,8 @@ html.dark .agentos-control {
   }
 
   .agentos-summary-strip,
-  .agentos-ledger {
+  .agentos-ledger,
+  .scheduler-workbench {
     padding: 12px;
   }
 
@@ -666,7 +1037,8 @@ html.dark .agentos-control {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .agentos-scheduler-grid {
+  .agentos-scheduler-grid,
+  .scheduler-detail-grid {
     grid-template-columns: 1fr;
   }
 
@@ -675,12 +1047,16 @@ html.dark .agentos-control {
     overflow: visible;
   }
 
-  .agentos-record {
+  .agentos-record,
+  .schedule-row,
+  .run-row {
     grid-template-columns: 1fr;
   }
 
+  .schedule-side,
   .agentos-record-side {
     align-items: flex-start;
+    justify-items: start;
   }
 }
 </style>

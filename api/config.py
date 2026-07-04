@@ -69,6 +69,13 @@ class Settings(BaseSettings):
         default="redis://localhost:6379/0",
         validation_alias=AliasChoices("CELERY_RESULT_BACKEND", "AGNO_CELERY_RESULT_BACKEND"),
     )
+    scheduler_enabled: bool = Field(default=True, validation_alias="AGNO_SCHEDULER_ENABLED")
+    scheduler_poll_interval_seconds: int = Field(default=15, validation_alias="AGNO_SCHEDULER_POLL_INTERVAL_SECONDS")
+    scheduler_base_url: str = Field(default="http://127.0.0.1:8000", validation_alias="AGNO_SCHEDULER_BASE_URL")
+    scheduler_internal_service_token: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias="AGNO_SCHEDULER_INTERNAL_SERVICE_TOKEN",
+    )
 
     acl_username: str = ""
     acl_password: SecretStr = SecretStr("")

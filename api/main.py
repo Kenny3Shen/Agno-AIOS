@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
+from agno.os import AgentOS
 
 from api.auth.database import bootstrap_admin_user, close_auth_engine, create_auth_tables
 from api.auth.router import router as auth_router
@@ -27,6 +28,8 @@ from api.routes import (
     skills,
     trace,
 )
+from api.services.postgres_store import get_agno_postgres_db
+from api.services.security_run_runtime import _build_fallback_agent
 from api.utils.db import close_db_pool, get_db_pool
 
 app_settings = get_settings()
@@ -119,6 +122,21 @@ app.include_router(skills.router)
 app.include_router(mcp_routes.router)
 app.include_router(knowledge.router)
 app.include_router(os_control.router)
+
+if app_settings.scheduler_enabled:
+    AgentOS(
+        name="Agno AIOS",
+        agents=[_build_fallback_agent()],
+        db=get_agno_postgres_db(),
+        base_app=app,
+        on_route_conflict="preserve_base_app",
+        scheduler=True,
+        scheduler_poll_interval=app_settings.scheduler_poll_interval_seconds,
+        scheduler_base_url=app_settings.scheduler_base_url,
+        internal_service_token=app_settings.scheduler_internal_service_token.get_secret_value() or None,
+        telemetry=False,
+    ).get_app()
+    app.router.routes = [route for route in app.router.routes if getattr(route, "path", "") != "/"]
 
 # Integrated FastMCP protocol endpoint. Same process, same port:
 # http://<host>:8000/mcp?token=...

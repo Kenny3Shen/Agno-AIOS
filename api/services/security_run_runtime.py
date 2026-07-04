@@ -149,6 +149,7 @@ async def _stream_agent_content(
 
 def _build_fallback_agent(model_id: str | None = None) -> Agent:
     return Agent(
+        id="security-operations",
         name="安全防御助手",
         role="安全防御运营助手",
         description="无工具模式下的安全防御运营助手。",
@@ -167,6 +168,7 @@ def _build_security_agent(
     knowledge_owner_user_id: str | None,
 ) -> Agent:
     return Agent(
+        id="security-operations",
         name="安全运营助手",
         role="安全运营综合专家",
         description="集威胁情报分析与安全剧本执行于一体的安全运营助手，可完成情报检索、深度分析和自动化处置全流程。",
