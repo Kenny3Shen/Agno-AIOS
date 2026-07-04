@@ -62,9 +62,15 @@ class ChatRoutePermissionsTest(IsolatedAsyncioTestCase):
     async def test_list_sessions_uses_current_user_as_owner_filter(self):
         captured: dict[str, str | None] = {}
 
-        def fake_get_all_sessions(*, owner_user_id: str | None, include_archived: bool = False):
+        def fake_get_all_sessions(
+            *,
+            owner_user_id: str | None,
+            include_archived: bool = False,
+            include_runs: bool = False,
+        ):
             captured["owner_user_id"] = owner_user_id
             captured["include_archived"] = str(include_archived)
+            captured["include_runs"] = str(include_runs)
             return []
 
         with patch.object(chat, "get_all_sessions", fake_get_all_sessions):

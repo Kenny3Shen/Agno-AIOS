@@ -8,8 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from api.auth.models import User
-from api.auth.permissions import require_permission
+from api.auth.permissions import actor_id, require_permission
 from api.services.audit_service import audit_request_context, record_audit_event
+from api.services.os_control_service import submit_approval_request
 from api.services.skill_service import (
     find_skill_dir,
     get_skills_dir,
@@ -44,6 +45,18 @@ class SkillToggleRequest(BaseModel):
 class SkillToggleResponse(BaseModel):
     name: str
     enabled: bool
+
+
+class SkillUploadRequest(BaseModel):
+    name: str
+    description: str = ""
+    source: str = ""
+    content: str = ""
+
+
+class ApprovalSubmitResponse(BaseModel):
+    id: str
+    status: str
 
 
 # ── API 端点 ──────────────────────────────────────────────────
@@ -93,3 +106,35 @@ async def toggle_skill(
         **audit_request_context(request),
     )
     return SkillToggleResponse(name=public_name, enabled=body.enabled)
+
+
+@router.post("/upload-request", response_model=ApprovalSubmitResponse)
+async def request_skill_upload(
+    request: Request,
+    body: SkillUploadRequest,
+    user: User = Depends(require_permission("skill:read")),
+):
+    """提交 Skill 上传审核申请；管理员在 Approvals 中处理后再安装。"""
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Skill name is required")
+    row = submit_approval_request(
+        title=f"Skill upload: {name}",
+        requester=actor_id(user),
+        action="skill.upload",
+        metadata={
+            "name": name,
+            "description": body.description.strip(),
+            "source": body.source.strip(),
+            "content_preview": body.content[:800],
+        },
+    )
+    record_audit_event(
+        user,
+        action="skill.upload_request",
+        resource_type="approval",
+        resource_id=str(row.get("id") or ""),
+        metadata={"name": name},
+        **audit_request_context(request),
+    )
+    return ApprovalSubmitResponse(id=str(row.get("id")), status=str(row.get("status") or "pending"))

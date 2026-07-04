@@ -17,6 +17,9 @@
             </div>
 
             <div class="flex items-center gap-2">
+              <el-button :icon="Plus" class="cursor-pointer" @click="uploadPanelOpen = !uploadPanelOpen">
+                {{ t('mcp.upload.open') }}
+              </el-button>
               <el-button type="primary" :loading="loading" class="cursor-pointer" @click="loadAll">
                 <el-icon class="mr-1"><Refresh /></el-icon>
                 {{ t('mcp.actions.refresh') }}
@@ -27,6 +30,25 @@
         </header>
 
         <div class="min-h-0 flex-1 overflow-y-auto p-3">
+          <section v-if="uploadPanelOpen" class="mcp-panel mb-3">
+            <div class="panel-title">
+              <el-icon><SetUp /></el-icon>
+              {{ t('mcp.upload.title') }}
+            </div>
+            <p class="mcp-muted mt-1 text-xs">{{ t('mcp.upload.description') }}</p>
+            <div class="mt-4 grid gap-3 md:grid-cols-2">
+              <el-input v-model="uploadForm.name" :placeholder="t('mcp.upload.namePlaceholder')" />
+              <el-input v-model="uploadForm.url" :placeholder="t('mcp.upload.urlPlaceholder')" />
+              <el-input v-model="uploadForm.description" :placeholder="t('mcp.upload.descriptionPlaceholder')" />
+              <el-input v-model="uploadForm.manifest" type="textarea" :rows="4" :placeholder="t('mcp.upload.manifestPlaceholder')" />
+            </div>
+            <div class="mt-3 flex justify-end">
+              <el-button type="primary" :loading="submittingUpload" @click="submitMcpUpload">
+                {{ t('mcp.upload.submit') }}
+              </el-button>
+            </div>
+          </section>
+
           <el-tabs v-model="activeTab" class="mcp-tabs">
             <el-tab-pane :label="t('mcp.tabs.services')" name="services">
               <div class="grid gap-3 lg:grid-cols-3">
@@ -287,6 +309,8 @@ const tokensLoading = ref(false)
 const hiAgentLoading = ref(false)
 const issuingToken = ref(false)
 const addingHiAgent = ref(false)
+const uploadPanelOpen = ref(false)
+const submittingUpload = ref(false)
 const createdToken = ref("")
 const mcpUrl = ref("/mcp/")
 
@@ -308,6 +332,13 @@ const hiAgentForm = reactive<HiAgentEntry>({
   enabled: true,
 })
 
+const uploadForm = reactive({
+  name: "",
+  url: "",
+  description: "",
+  manifest: "",
+})
+
 const {
   loading,
   fetchConfig,
@@ -319,6 +350,7 @@ const {
   addHiAgent,
   updateHiAgent,
   deleteHiAgent,
+  requestMcpUpload,
 } = useMcpApi()
 
 const enabledCount = computed(() => services.value.filter((service) => service.enabled).length)
@@ -445,6 +477,32 @@ const addExternalAgent = async () => {
     ElMessage.error(err instanceof Error ? err.message : t("mcp.messages.registerHiAgentFailed"))
   } finally {
     addingHiAgent.value = false
+  }
+}
+
+const submitMcpUpload = async () => {
+  if (!uploadForm.name.trim()) {
+    ElMessage.warning(t("mcp.messages.uploadNameRequired"))
+    return
+  }
+  submittingUpload.value = true
+  try {
+    await requestMcpUpload({
+      name: uploadForm.name.trim(),
+      url: uploadForm.url.trim(),
+      description: uploadForm.description.trim(),
+      manifest: uploadForm.manifest,
+    })
+    uploadForm.name = ""
+    uploadForm.url = ""
+    uploadForm.description = ""
+    uploadForm.manifest = ""
+    uploadPanelOpen.value = false
+    ElMessage.success(t("mcp.messages.uploadSubmitted"))
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : t("mcp.messages.uploadFailed"))
+  } finally {
+    submittingUpload.value = false
   }
 }
 

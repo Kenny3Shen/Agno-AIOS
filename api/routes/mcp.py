@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from api.auth.models import User
-from api.auth.permissions import require_permission
+from api.auth.permissions import actor_id, require_permission
 from api.services.audit_service import audit_request_context, record_audit_event
+from api.services.os_control_service import submit_approval_request
 from api.mcp.config import (
     HIAGENT_CACHE_DB,
     MCP_CONFIG_FILE,
@@ -55,6 +56,18 @@ class HiAgentUpdate(BaseModel):
 
 class HiAgentDelete(BaseModel):
     url: str
+
+
+class McpUploadRequest(BaseModel):
+    name: str
+    url: str = ""
+    description: str = ""
+    manifest: str = ""
+
+
+class ApprovalSubmitResponse(BaseModel):
+    id: str
+    status: str
 
 
 @router.get("/config")
@@ -263,3 +276,35 @@ async def delete_hiagent(
         **audit_request_context(request),
     )
     return {"success": True, "restart_required": True}
+
+
+@router.post("/upload-request", response_model=ApprovalSubmitResponse)
+async def request_mcp_upload(
+    request: Request,
+    body: McpUploadRequest,
+    user: User = Depends(require_permission("mcp:read")),
+):
+    """提交 MCP/Hi-Agent 接入审核申请；管理员在 Approvals 中批准后接入。"""
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name 不能为空")
+    row = submit_approval_request(
+        title=f"MCP upload: {name}",
+        requester=actor_id(user),
+        action="mcp.upload",
+        metadata={
+            "name": name,
+            "url": body.url.strip(),
+            "description": body.description.strip(),
+            "manifest_preview": body.manifest[:800],
+        },
+    )
+    record_audit_event(
+        user,
+        action="mcp.upload_request",
+        resource_type="approval",
+        resource_id=str(row.get("id") or ""),
+        metadata={"name": name, "url": body.url.strip()},
+        **audit_request_context(request),
+    )
+    return ApprovalSubmitResponse(id=str(row.get("id")), status=str(row.get("status") or "pending"))

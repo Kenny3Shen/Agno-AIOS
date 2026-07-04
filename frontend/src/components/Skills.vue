@@ -18,9 +18,36 @@
         >
           {{ t('skills.actions.refresh') }}
         </el-button>
+        <el-button
+          :icon="Document"
+          class="skill-primary-action"
+          @click="uploadPanelOpen = !uploadPanelOpen"
+        >
+          {{ t('skills.actions.upload') }}
+        </el-button>
       </header>
 
       <section class="skills-body">
+        <section v-if="uploadPanelOpen" class="skill-upload-panel">
+          <div class="skill-card-head">
+            <span class="skill-card-copy">
+              <strong>{{ t('skills.upload.title') }}</strong>
+              <em>{{ t('skills.upload.description') }}</em>
+            </span>
+          </div>
+          <div class="skill-upload-grid">
+            <el-input v-model="uploadForm.name" :placeholder="t('skills.upload.namePlaceholder')" />
+            <el-input v-model="uploadForm.source" :placeholder="t('skills.upload.sourcePlaceholder')" />
+            <el-input v-model="uploadForm.description" :placeholder="t('skills.upload.descriptionPlaceholder')" />
+            <el-input v-model="uploadForm.content" type="textarea" :rows="4" :placeholder="t('skills.upload.contentPlaceholder')" />
+          </div>
+          <div class="skill-upload-actions">
+            <el-button type="primary" :loading="submittingUpload" @click="submitSkillUpload">
+              {{ t('skills.upload.submit') }}
+            </el-button>
+          </div>
+        </section>
+
         <div v-if="loading && skills.length === 0" class="skills-state">
           <el-icon class="skill-loading is-loading"><Loading /></el-icon>
           <span>{{ t('skills.loading') }}</span>
@@ -112,13 +139,26 @@ import { useSkillsApi } from '../composables/useApi'
 import { useAuthStore } from '../stores/auth'
 import type { SkillInfo } from '../types'
 
-const { loading, fetchSkills: apiFetchSkills, toggleSkill: apiToggleSkill } = useSkillsApi()
+const {
+  loading,
+  fetchSkills: apiFetchSkills,
+  toggleSkill: apiToggleSkill,
+  requestSkillUpload,
+} = useSkillsApi()
 const { t } = useI18n()
 const authStore = useAuthStore()
 
 const skills = ref<SkillInfo[]>([])
 const togglingSkill = ref<string | null>(null)
 const expandedSkills = reactive(new Set<string>())
+const uploadPanelOpen = ref(false)
+const submittingUpload = ref(false)
+const uploadForm = reactive({
+  name: "",
+  description: "",
+  source: "",
+  content: "",
+})
 const canWriteSkills = computed(() => authStore.hasPermission("skill:write"))
 const enabledSkills = computed(() => skills.value.filter((skill) => skill.enabled).length)
 const totalScripts = computed(() => skills.value.reduce((sum, skill) => sum + skill.scripts.length, 0))
@@ -160,6 +200,32 @@ const toggleExpand = (name: string) => {
     expandedSkills.delete(name)
   } else {
     expandedSkills.add(name)
+  }
+}
+
+const submitSkillUpload = async () => {
+  if (!uploadForm.name.trim()) {
+    ElMessage.warning(t("skills.messages.uploadNameRequired"))
+    return
+  }
+  submittingUpload.value = true
+  try {
+    await requestSkillUpload({
+      name: uploadForm.name.trim(),
+      description: uploadForm.description.trim(),
+      source: uploadForm.source.trim(),
+      content: uploadForm.content,
+    })
+    uploadForm.name = ""
+    uploadForm.description = ""
+    uploadForm.source = ""
+    uploadForm.content = ""
+    uploadPanelOpen.value = false
+    ElMessage.success(t("skills.messages.uploadSubmitted"))
+  } catch {
+    ElMessage.error(t("skills.messages.uploadFailed"))
+  } finally {
+    submittingUpload.value = false
   }
 }
 
@@ -252,6 +318,31 @@ onMounted(() => {
   flex: 1;
   overflow-y: auto;
   padding: 12px;
+}
+
+.skill-upload-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-panel);
+  background: var(--ag-panel);
+  padding: 12px;
+}
+
+.skill-upload-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.skill-upload-grid :deep(.el-textarea) {
+  grid-column: 1 / -1;
+}
+
+.skill-upload-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .skills-grid {

@@ -61,6 +61,15 @@ class Settings(BaseSettings):
     )
     feishu_webhook_url: SecretStr = SecretStr("")
 
+    celery_broker_url: str = Field(
+        default="redis://localhost:6379/0",
+        validation_alias=AliasChoices("CELERY_BROKER_URL", "AGNO_CELERY_BROKER_URL"),
+    )
+    celery_result_backend: str = Field(
+        default="redis://localhost:6379/0",
+        validation_alias=AliasChoices("CELERY_RESULT_BACKEND", "AGNO_CELERY_RESULT_BACKEND"),
+    )
+
     acl_username: str = ""
     acl_password: SecretStr = SecretStr("")
     acl_token: SecretStr = Field(default=SecretStr(""), validation_alias="TOKEN")

@@ -232,6 +232,13 @@
                   >
                     <b>{{ index + 1 }}</b>
                     <em>{{ item }}</em>
+                    <el-input
+                      v-model="navigationTags[item]"
+                      size="small"
+                      clearable
+                      :disabled="!canWriteSettings"
+                      :placeholder="t('settings.navigation.tagPlaceholder')"
+                    />
                   </span>
                 </div>
               </article>
@@ -313,6 +320,8 @@ const originalModelSnapshot = ref("")
 const activeModelId = ref("")
 const activeSettingsTab = ref("runtime")
 const testingModelId = ref<string | null>(null)
+const navigationTags = reactive<Record<string, string>>({})
+const originalNavigationTags = ref("")
 const canWriteSettings = computed(() => authStore.hasPermission("settings:write"))
 
 const navigationGroups = computed(() => [
@@ -342,6 +351,7 @@ const enabledModels = computed(() => modelItems.value.filter((model) => model.en
 
 const settingsChanged = computed(() => {
   return configItems.value.some((item) => formData[item.key] !== originalData.value[item.key])
+    || serializeNavigationTags() !== originalNavigationTags.value
 })
 
 const modelsChanged = computed(() => {
@@ -354,6 +364,26 @@ const serializeModels = () => JSON.stringify({
   active_model_id: activeModelId.value,
   models: modelItems.value,
 })
+
+const serializeNavigationTags = () => JSON.stringify(navigationTags)
+
+const navigationItems = computed(() => navigationGroups.value.flatMap((group) => group.items))
+
+const loadNavigationTags = (raw: string) => {
+  for (const key of Object.keys(navigationTags)) delete navigationTags[key]
+  let parsed: unknown = {}
+  try {
+    parsed = raw ? JSON.parse(raw) : {}
+  } catch {
+    parsed = {}
+  }
+  const source = parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {}
+  for (const item of navigationItems.value) {
+    const value = source[item]
+    navigationTags[item] = typeof value === "string" ? value : ""
+  }
+  originalNavigationTags.value = serializeNavigationTags()
+}
 
 const hasRequiredModelFields = (model: ModelConfig) => {
   return Boolean(
@@ -397,6 +427,7 @@ const loadSettings = async () => {
       formData[item.key] = settings[item.key] || ""
       originalData.value[item.key] = settings[item.key] || ""
     }
+    loadNavigationTags(settings.NAV_TAGS || "{}")
     modelItems.value = models.models.map((model) => ({ ...model }))
     activeModelId.value = models.active_model_id
     normalizeActiveModel()
@@ -463,6 +494,10 @@ const saveRuntimeSettings = async () => {
       changed[item.key] = currentVal ?? ""
     }
   }
+  const navPayload = serializeNavigationTags()
+  if (navPayload !== originalNavigationTags.value) {
+    changed.NAV_TAGS = navPayload
+  }
   if (!Object.keys(changed).length) return
 
   const data = await updateSettings(changed)
@@ -472,6 +507,9 @@ const saveRuntimeSettings = async () => {
       formData[item.key] = newVal
       originalData.value[item.key] = newVal
     }
+  }
+  if (data.NAV_TAGS !== undefined) {
+    loadNavigationTags(data.NAV_TAGS || "{}")
   }
 }
 
@@ -764,6 +802,7 @@ onMounted(() => { loadSettings() })
 }
 
 .navigation-order-item em {
+  flex: 0 0 88px;
   overflow: hidden;
   color: var(--ag-text);
   font-size: 12px;
@@ -771,6 +810,11 @@ onMounted(() => { loadSettings() })
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.navigation-order-item :deep(.el-input) {
+  min-width: 92px;
+  flex: 1 1 auto;
 }
 
 @media (max-width: 640px) {

@@ -84,11 +84,14 @@ async def chat_agent(
 
 
 @router.get("/chat/sessions")
-async def list_sessions(user: User = Depends(require_permission("session:read:own"))):
+async def list_sessions(
+    include_runs: bool = False,
+    user: User = Depends(require_permission("session:read:own")),
+):
     """获取所有聊天会话列表"""
     try:
         owner_user_id = None if has_permission(user, "session:read:any") else actor_id(user)
-        return get_all_sessions(owner_user_id=owner_user_id)
+        return get_all_sessions(owner_user_id=owner_user_id, include_runs=include_runs)
     except Exception as e:
         logger.error(f"获取会话列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

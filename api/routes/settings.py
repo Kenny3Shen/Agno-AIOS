@@ -25,6 +25,7 @@ CONFIGURABLE_KEYS = [
     "MCP_SERVER_URL",
     "MCP_TOKEN",
     "FEISHU_WEBHOOK_URL",
+    "NAV_TAGS",
 ]
 
 
@@ -79,6 +80,8 @@ def _setting_value(settings: Settings, key: str) -> str:
         return settings.mcp_token.get_secret_value()
     if key == "FEISHU_WEBHOOK_URL":
         return settings.feishu_webhook_url.get_secret_value()
+    if key == "NAV_TAGS":
+        return os.environ.get("NAV_TAGS", "{}")
     return ""
 
 

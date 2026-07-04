@@ -192,9 +192,9 @@
                               class="ag-chat-session-menu"
                               role="menu"
                             >
-                              <button type="button" role="menuitem" @click.stop="copySidebarSessionId(session.session_id)">
+                              <button type="button" role="menuitem" @click.stop="copySidebarSessionRuns(session.session_id)">
                                 <el-icon><CopyDocument /></el-icon>
-                                <span>{{ t("shell.actions.copySessionId") }}</span>
+                                <span>{{ t("shell.actions.copyRuns") }}</span>
                               </button>
                               <button type="button" role="menuitem" @click.stop="archiveSidebarChatSession(session.session_id)">
                                 <el-icon><Delete /></el-icon>
@@ -476,6 +476,7 @@ import {
   Search,
   Setting,
   SetUp,
+  Share,
   Sunny,
   SwitchButton,
   Tickets,
@@ -491,6 +492,7 @@ import Collect from "./components/Collect.vue"
 import Settings from "./components/Settings.vue"
 import Dashboard from "./components/Dashboard.vue"
 import Trace from "./components/Trace.vue"
+import Workflow from "./components/Workflow.vue"
 import Skills from "./components/Skills.vue"
 import MCP from "./components/MCP.vue"
 import Knowledge from "./components/Knowledge.vue"
@@ -511,6 +513,7 @@ type ModuleNavId =
   | "collect"
   | "chat"
   | "trace"
+  | "workflow"
   | "mcp"
   | "skills"
   | "sessions"
@@ -563,6 +566,7 @@ const navItems = computed<NavItem[]>(() => [
   { id: "mcp", label: t("shell.nav.mcp.label"), description: t("shell.nav.mcp.description"), icon: Connection, tone: "yellow" },
   { id: "knowledge", label: t("shell.nav.knowledge.label"), description: t("shell.nav.knowledge.description"), icon: Files, tone: "green" },
   { id: "trace", label: t("shell.nav.trace.label"), description: t("shell.nav.trace.description"), icon: DataAnalysis, tone: "green" },
+  { id: "workflow", label: t("shell.nav.workflow.label"), description: t("shell.nav.workflow.description"), icon: Share, tone: "yellow" },
   { id: "studio", label: t("shell.nav.studio.label"), description: t("shell.nav.studio.description"), icon: MagicStick, tone: "yellow" },
   { id: "memory", label: t("shell.nav.memory.label"), description: t("shell.nav.memory.description"), icon: Cpu, tone: "green" },
   { id: "metrics", label: t("shell.nav.metrics.label"), description: t("shell.nav.metrics.description"), icon: DataAnalysis, tone: "blue" },
@@ -580,6 +584,7 @@ const navPermissions: Partial<Record<ModuleNavId, string>> = {
   mcp: "mcp:read",
   knowledge: "knowledge:read",
   trace: "trace:read:own",
+  workflow: "mcp:read",
   sessions: "session:read:own",
   studio: "mcp:read",
   memory: "memory:read:own",
@@ -598,6 +603,7 @@ const componentMap: Record<ModuleNavId, Component> = {
   chat: Chat,
   knowledge: Knowledge,
   trace: Trace,
+  workflow: Workflow,
   mcp: MCP,
   cve: CVE,
   assets: Assets,
@@ -626,6 +632,7 @@ const fullCanvasTabs = new Set<ModuleNavId>([
   "dashboard",
   "chat",
   "trace",
+  "workflow",
   "mcp",
   ...osControlTabs,
 ])
@@ -650,7 +657,7 @@ const navItemById = computed<Record<ModuleNavId, NavItem>>(() => (
   Object.fromEntries(moduleNavItems.value.map((item) => [item.id, item])) as Record<ModuleNavId, NavItem>
 ))
 const homeSections = computed<HomeSection[]>(() => [
-  { title: t("shell.sections.operations"), items: [navItemById.value.dashboard, navItemById.value.chat, navItemById.value.trace] },
+  { title: t("shell.sections.operations"), items: [navItemById.value.dashboard, navItemById.value.chat, navItemById.value.trace, navItemById.value.workflow] },
   { title: t("shell.sections.controlPlane"), items: [navItemById.value.studio, navItemById.value.memory, navItemById.value.metrics] },
   { title: t("shell.sections.governance"), items: [navItemById.value.evaluation, navItemById.value.approvals, navItemById.value.scheduler] },
   { title: t("shell.sections.securityData"), items: [navItemById.value.skills, navItemById.value.mcp, navItemById.value.knowledge, navItemById.value.cve, navItemById.value.assets, navItemById.value.collect] },
@@ -838,11 +845,22 @@ const toggleSessionMenu = (sessionId: string) => {
   openSessionMenuId.value = openSessionMenuId.value === sessionId ? null : sessionId
 }
 
-const copySidebarSessionId = async (sessionId: string) => {
+const copySidebarSessionRuns = async (sessionId: string) => {
   openSessionMenuId.value = null
-  if (await copyToClipboard(sessionId)) {
-    ElMessage.success(t("shell.messages.sessionIdCopied"))
-  } else {
+  try {
+    const session = (await listSessions({ includeRuns: true }))
+      .find((item) => item.session_id === sessionId)
+    const payload = {
+      session_id: sessionId,
+      user_id: session?.user_id ?? null,
+      runs: session?.runs ?? [],
+    }
+    if (await copyToClipboard(JSON.stringify(payload, null, 2))) {
+      ElMessage.success(t("shell.messages.runsCopied"))
+    } else {
+      ElMessage.warning(t("common.clipboard.failed"))
+    }
+  } catch {
     ElMessage.warning(t("common.clipboard.failed"))
   }
 }

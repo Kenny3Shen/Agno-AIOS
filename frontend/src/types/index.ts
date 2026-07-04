@@ -3,6 +3,33 @@ export interface Message {
   role: "user" | "assistant"
   content: string
   final?: boolean
+  run_id?: string | null
+  agent_id?: string | null
+  agent_name?: string | null
+  session_id?: string | null
+  workflow_id?: string | null
+  user_id?: string | null
+  model?: string | null
+  model_provider?: string | null
+  metrics?: ChatRunMetrics | null
+  tools?: unknown[] | null
+  created_at?: number | string | null
+  status?: string | null
+  raw_run?: Record<string, unknown> | null
+}
+
+export interface ChatRunMetrics {
+  input_tokens?: number | null
+  output_tokens?: number | null
+  total_tokens?: number | null
+  reasoning_tokens?: number | null
+  cache_read_tokens?: number | null
+  cache_write_tokens?: number | null
+  cost?: number | null
+  duration?: number | null
+  time_to_first_token?: number | null
+  details?: Record<string, unknown>
+  additional_metrics?: Record<string, unknown>
 }
 
 // Skills 管理相关类型
@@ -21,6 +48,11 @@ export interface SkillListResponse {
 export interface SkillToggleResponse {
   name: string
   enabled: boolean
+}
+
+export interface ApprovalSubmitResponse {
+  id: string
+  status: string
 }
 
 // MCP 管理相关类型
@@ -62,6 +94,27 @@ export interface ChatSession {
   updated_at: number
   archived?: boolean
   archived_at?: string | null
+  runs?: ChatSessionRun[]
+}
+
+export interface ChatSessionRun {
+  run_id?: string | null
+  session_id?: string | null
+  user_id?: string | null
+  agent_id?: string | null
+  agent_name?: string | null
+  team_id?: string | null
+  workflow_id?: string | null
+  model?: string | null
+  model_provider?: string | null
+  status?: string | null
+  input?: unknown
+  content?: unknown
+  metrics?: ChatRunMetrics | null
+  tools?: unknown[] | null
+  created_at?: number | string | null
+  updated_at?: number | string | null
+  [key: string]: unknown
 }
 
 export type OsControlModule =
@@ -97,6 +150,28 @@ export interface OsControlResponse {
   metrics: OsControlMetric[]
   records: OsControlRecord[]
   generated_at: string
+}
+
+export interface ScheduleCreateRequest {
+  name: string
+  target_kind: "workflow" | "agent_skill"
+  target_id: string
+  schedule_type: "cron" | "interval" | "once"
+  cron?: string
+  interval_seconds?: number | null
+  run_at?: string | null
+  max_runs?: number | null
+  enabled?: boolean
+  skill_name?: string
+  agent_id?: string
+  input?: Record<string, unknown>
+}
+
+export interface ScheduleCreateResponse {
+  id: string
+  status: string
+  enabled: boolean
+  celery_task_id?: string | null
 }
 
 // CVE 相关类型

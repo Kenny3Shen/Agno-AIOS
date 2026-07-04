@@ -4,6 +4,7 @@ import { apiFetch } from '../lib/apiClient'
 import type {
   AssetSearchParams,
   AssetSearchResponse,
+  ApprovalSubmitResponse,
   ChatSession,
   CveSearchParams,
   CveSearchResponse,
@@ -23,6 +24,8 @@ import type {
   ModelConfigResponse,
   OsControlModule,
   OsControlResponse,
+  ScheduleCreateRequest,
+  ScheduleCreateResponse,
   SettingsResponse,
   SkillListResponse,
   SkillToggleResponse,
@@ -314,10 +317,33 @@ export function useOsControlApi() {
     }
   }
 
+  const createSchedule = async (payload: ScheduleCreateRequest): Promise<ScheduleCreateResponse> => {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await apiFetch('/os/scheduler', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      if (!response.ok) {
+        const data: unknown = await response.json().catch(() => ({}))
+        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+      }
+      return await response.json()
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     loading,
     error,
-    fetchModule
+    fetchModule,
+    createSchedule
   }
 }
 
@@ -328,10 +354,12 @@ export function useChatHistory() {
   const apiMessage = useApiMessage()
   const loadingSessions = ref(false)
 
-  const listSessions = async (): Promise<ChatSession[]> => {
+  const listSessions = async (options: { includeRuns?: boolean } = {}): Promise<ChatSession[]> => {
     loadingSessions.value = true
     try {
-      const response = await apiFetch('/chat/sessions')
+      const qs = new URLSearchParams()
+      if (options.includeRuns) qs.set('include_runs', 'true')
+      const response = await apiFetch(`/chat/sessions${qs.size ? `?${qs.toString()}` : ''}`)
       if (!response.ok) throw new Error(apiMessage('chatSessionsLoadFailed'))
       return await response.json()
     } finally {
@@ -626,12 +654,32 @@ export function useSkillsApi() {
     }
   }
 
+  const requestSkillUpload = async (payload: { name: string; description?: string; source?: string; content?: string }): Promise<ApprovalSubmitResponse> => {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await apiFetch('/skills/upload-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      if (!response.ok) {
+        const data: unknown = await response.json().catch(() => ({}))
+        throw new Error(messageFromResponse(data, apiMessage('skillsLoadFailed')))
+      }
+      return await response.json()
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     loading,
     error,
     toggling,
     fetchSkills,
-    toggleSkill
+    toggleSkill,
+    requestSkillUpload
   }
 }
 
@@ -772,6 +820,11 @@ export function useMcpApi() {
     body: JSON.stringify({ url })
   }, apiMessage('mcpHiAgentDeleteFailed'))
 
+  const requestMcpUpload = (payload: { name: string; url?: string; description?: string; manifest?: string }) => request<ApprovalSubmitResponse>('/upload-request', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }, apiMessage('mcpRequestFailed'))
+
   return {
     loading,
     error,
@@ -783,6 +836,7 @@ export function useMcpApi() {
     listHiAgents,
     addHiAgent,
     updateHiAgent,
-    deleteHiAgent
+    deleteHiAgent,
+    requestMcpUpload
   }
 }

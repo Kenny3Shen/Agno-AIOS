@@ -408,8 +408,8 @@ assert.match(
 
 assert.match(
   app,
-  /copySidebarSessionId/,
-  "Chat session action menu must support copying the Session ID",
+  /copySidebarSessionRuns/,
+  "Chat session action menu must support copying runs",
 )
 
 assert.match(

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 from typing import Any
 
 from psycopg import sql
@@ -294,6 +296,254 @@ def _ensure_control_tables() -> None:
             )
 
 
+def submit_approval_request(
+    *,
+    title: str,
+    requester: str,
+    action: str,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    _ensure_control_tables()
+    request_id = f"approval-{uuid4()}"
+    with postgres_connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                sql.SQL(
+                    """
+                    INSERT INTO {} (id, title, requester, action, status, metadata)
+                    VALUES (%s, %s, %s, %s, 'pending', %s::jsonb)
+                    RETURNING *
+                    """
+                ).format(sql.Identifier(app_schema(), CONTROL_TABLES["approvals"])),
+                (
+                    request_id,
+                    title.strip() or action,
+                    requester,
+                    action,
+                    json.dumps(metadata or {}, ensure_ascii=False),
+                ),
+            )
+            row = cursor.fetchone()
+    return dict(row or {"id": request_id, "status": "pending"})
+
+
+def _normalize_scheduler_kind(value: str) -> str:
+    kind = value.strip().lower()
+    if kind in {"workflow", "agent_skill"}:
+        return kind
+    raise ValueError("target_kind must be workflow or agent_skill")
+
+
+def _normalize_schedule_type(value: str) -> str:
+    schedule_type = value.strip().lower()
+    if schedule_type in {"cron", "interval", "once"}:
+        return schedule_type
+    raise ValueError("schedule_type must be cron, interval, or once")
+
+
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    text = (value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("Invalid datetime format") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed
+
+
+def _next_run_from_schedule(
+    *,
+    schedule_type: str,
+    interval_seconds: int | None,
+    run_at: datetime | None,
+) -> datetime | None:
+    if schedule_type == "interval" and interval_seconds:
+        return _now() + timedelta(seconds=interval_seconds)
+    if schedule_type == "once":
+        return run_at
+    return None
+
+
+def create_schedule_job(
+    *,
+    name: str,
+    target_kind: str,
+    target_id: str,
+    created_by: str,
+    schedule_type: str = "interval",
+    cron: str = "",
+    interval_seconds: int | None = None,
+    run_at: str | None = None,
+    max_runs: int | None = None,
+    enabled: bool = True,
+    skill_name: str = "",
+    agent_id: str = "",
+    input_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    _ensure_control_tables()
+    clean_name = name.strip()
+    clean_target_id = target_id.strip()
+    clean_target_kind = _normalize_scheduler_kind(target_kind)
+    clean_schedule_type = _normalize_schedule_type(schedule_type)
+    if not clean_name:
+        raise ValueError("Schedule name is required")
+    if not clean_target_id:
+        raise ValueError("target_id is required")
+    if clean_schedule_type == "interval" and not interval_seconds:
+        raise ValueError("interval_seconds is required for interval schedules")
+    if clean_schedule_type == "cron" and not cron.strip():
+        raise ValueError("cron is required for cron schedules")
+
+    run_at_dt = _parse_iso_datetime(run_at)
+    next_run_at = _next_run_from_schedule(
+        schedule_type=clean_schedule_type,
+        interval_seconds=interval_seconds,
+        run_at=run_at_dt,
+    )
+    schedule_id = f"schedule-{uuid4()}"
+    metadata = {
+        "target_kind": clean_target_kind,
+        "target_id": clean_target_id,
+        "created_by": created_by,
+        "schedule_type": clean_schedule_type,
+        "interval_seconds": interval_seconds,
+        "run_at": _iso(run_at_dt),
+        "max_runs": max_runs,
+        "run_count": 0,
+        "skill_name": skill_name.strip(),
+        "agent_id": agent_id.strip(),
+        "input": input_payload or {},
+        "celery_task": "api.tasks.scheduler.run_scheduled_job",
+    }
+    with postgres_connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                sql.SQL(
+                    """
+                    INSERT INTO {} (id, name, cron, target, enabled, next_run_at, metadata)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+                    RETURNING *
+                    """
+                ).format(sql.Identifier(app_schema(), CONTROL_TABLES["scheduler"])),
+                (
+                    schedule_id,
+                    clean_name,
+                    cron.strip(),
+                    clean_target_id,
+                    enabled,
+                    next_run_at,
+                    json.dumps(metadata, ensure_ascii=False),
+                ),
+            )
+            row = cursor.fetchone()
+    return dict(row or {"id": schedule_id, "enabled": enabled})
+
+
+def mark_schedule_dispatched(schedule_id: str, *, task_id: str | None = None) -> None:
+    _ensure_control_tables()
+    rows = _fetch_rows(
+        app_schema(),
+        CONTROL_TABLES["scheduler"],
+        limit=1,
+        where=sql.SQL("id = %s"),
+        params=(schedule_id,),
+    )
+    if not rows:
+        return
+    metadata = coerce_json_value(rows[0].get("metadata"))
+    if not isinstance(metadata, dict):
+        metadata = {}
+    metadata["last_task_id"] = task_id or ""
+    metadata["run_count"] = int(metadata.get("run_count") or 0) + 1
+    with postgres_connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                sql.SQL(
+                    """
+                    UPDATE {}
+                    SET last_run_at = now(), updated_at = now(), metadata = %s::jsonb
+                    WHERE id = %s
+                    """
+                ).format(sql.Identifier(app_schema(), CONTROL_TABLES["scheduler"])),
+                (json.dumps(metadata, ensure_ascii=False), schedule_id),
+            )
+
+
+def fetch_due_schedule_jobs(limit: int = 50) -> list[dict[str, Any]]:
+    _ensure_control_tables()
+    rows = _fetch_rows(app_schema(), CONTROL_TABLES["scheduler"], limit=500, order_by="updated_at")
+    now = _now()
+    due: list[dict[str, Any]] = []
+    for row in rows:
+        if not row.get("enabled"):
+            continue
+        metadata = coerce_json_value(row.get("metadata"))
+        if not isinstance(metadata, dict):
+            metadata = {}
+        max_runs = metadata.get("max_runs")
+        run_count = int(metadata.get("run_count") or 0)
+        if isinstance(max_runs, int) and run_count >= max_runs:
+            continue
+        schedule_type = str(metadata.get("schedule_type") or "interval")
+        next_run_at = row.get("next_run_at")
+        if isinstance(next_run_at, datetime):
+            candidate = next_run_at if next_run_at.tzinfo else next_run_at.replace(tzinfo=UTC)
+            if candidate <= now:
+                due.append(row)
+        elif schedule_type == "cron":
+            # Cron rows without a parser-backed next_run_at are scanned once per beat tick.
+            due.append(row)
+        if len(due) >= limit:
+            break
+    return due
+
+
+def update_schedule_after_dispatch(schedule_id: str) -> None:
+    _ensure_control_tables()
+    rows = _fetch_rows(
+        app_schema(),
+        CONTROL_TABLES["scheduler"],
+        limit=1,
+        where=sql.SQL("id = %s"),
+        params=(schedule_id,),
+    )
+    if not rows:
+        return
+    row = rows[0]
+    metadata = coerce_json_value(row.get("metadata"))
+    if not isinstance(metadata, dict):
+        metadata = {}
+    schedule_type = str(metadata.get("schedule_type") or "interval")
+    interval_seconds = metadata.get("interval_seconds")
+    run_count = int(metadata.get("run_count") or 0)
+    max_runs = metadata.get("max_runs")
+    enabled = bool(row.get("enabled"))
+    next_run_at: datetime | None = None
+    if schedule_type == "interval" and isinstance(interval_seconds, int):
+        next_run_at = _now() + timedelta(seconds=interval_seconds)
+    elif schedule_type == "cron":
+        next_run_at = _now() + timedelta(minutes=1)
+    elif schedule_type == "once":
+        enabled = False
+    if isinstance(max_runs, int) and run_count >= max_runs:
+        enabled = False
+    with postgres_connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                sql.SQL(
+                    """
+                    UPDATE {}
+                    SET enabled = %s, next_run_at = %s, updated_at = now()
+                    WHERE id = %s
+                    """
+                ).format(sql.Identifier(app_schema(), CONTROL_TABLES["scheduler"])),
+                (enabled, next_run_at, schedule_id),
+            )
+
+
 def _runs_count(runs: Any) -> int:
     value = coerce_json_value(runs)
     return len(value) if isinstance(value, list) else 0
@@ -569,7 +819,14 @@ def get_approvals_payload(actor: Any | None = None) -> OsPayload:
             title=str(row.get("title") or row.get("id")),
             subtitle=str(row.get("action") or row.get("requester") or ""),
             status=str(row.get("status") or "pending"),
-            meta={"requester": row.get("requester")},
+            meta={
+                "requester": row.get("requester"),
+                **(
+                    coerce_json_value(row.get("metadata"))
+                    if isinstance(coerce_json_value(row.get("metadata")), dict)
+                    else {}
+                ),
+            },
             updated_at=row.get("updated_at"),
         )
         for row in rows
@@ -591,17 +848,31 @@ def get_approvals_payload(actor: Any | None = None) -> OsPayload:
 def get_scheduler_payload(actor: Any | None = None) -> OsPayload:
     _ensure_control_tables()
     rows = _fetch_rows(app_schema(), CONTROL_TABLES["scheduler"], limit=100, order_by="updated_at")
-    records = [
-        _record(
-            record_id=row.get("id"),
-            title=str(row.get("name") or row.get("id")),
-            subtitle=str(row.get("cron") or row.get("target") or ""),
-            status="enabled" if row.get("enabled") else "disabled",
-            meta={"target": row.get("target"), "next_run_at": _iso(row.get("next_run_at"))},
-            updated_at=row.get("last_run_at") or row.get("updated_at"),
+    records = []
+    for row in rows:
+        metadata = coerce_json_value(row.get("metadata"))
+        meta = metadata if isinstance(metadata, dict) else {}
+        records.append(
+            _record(
+                record_id=row.get("id"),
+                title=str(row.get("name") or row.get("id")),
+                subtitle=str(row.get("cron") or row.get("target") or ""),
+                status="enabled" if row.get("enabled") else "disabled",
+                meta={
+                    "target": row.get("target"),
+                    "target_kind": meta.get("target_kind"),
+                    "schedule_type": meta.get("schedule_type"),
+                    "interval_seconds": meta.get("interval_seconds"),
+                    "max_runs": meta.get("max_runs"),
+                    "run_count": meta.get("run_count"),
+                    "skill_name": meta.get("skill_name"),
+                    "agent_id": meta.get("agent_id"),
+                    "next_run_at": _iso(row.get("next_run_at")),
+                    "last_task_id": meta.get("last_task_id"),
+                },
+                updated_at=row.get("last_run_at") or row.get("updated_at"),
+            )
         )
-        for row in rows
-    ]
     enabled = sum(1 for row in rows if row.get("enabled"))
     disabled = len(rows) - enabled
     return _payload(

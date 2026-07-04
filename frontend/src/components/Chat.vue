@@ -46,6 +46,40 @@
                         </el-icon>
                       </button>
                     </el-tooltip>
+                    <el-tooltip v-if="msg.role === 'assistant' && msg.raw_run" :content="copyRunSuccessIndex === index ? t('chat.actions.copied') : t('chat.actions.copyRun')" placement="top">
+                      <button
+                        type="button"
+                        class="message-action-button"
+                        :aria-label="t('chat.actions.copyRun')"
+                        @click="copyRun(index, msg)"
+                      >
+                        <el-icon>
+                          <Check v-if="copyRunSuccessIndex === index" />
+                          <CopyDocument v-else />
+                        </el-icon>
+                      </button>
+                    </el-tooltip>
+                    <el-tooltip v-if="msg.role === 'assistant' && messageSessionId(msg)" :content="t('chat.actions.viewTrace')" placement="top">
+                      <button
+                        type="button"
+                        class="message-action-button"
+                        :aria-label="t('chat.actions.viewTrace')"
+                        @click="openTraceForSession(msg)"
+                      >
+                        <el-icon><DataAnalysis /></el-icon>
+                      </button>
+                    </el-tooltip>
+                    <el-tooltip v-if="msg.role === 'assistant' && msg.final && hasUserPromptBefore(index)" :content="t('chat.actions.retryAnswer')" placement="top">
+                      <button
+                        type="button"
+                        class="message-action-button"
+                        :aria-label="t('chat.actions.retryAnswer')"
+                        :disabled="loading"
+                        @click="retryAnswer(index)"
+                      >
+                        <el-icon><RefreshRight /></el-icon>
+                      </button>
+                    </el-tooltip>
                   </div>
                 </div>
                 <div
@@ -87,6 +121,10 @@
                     <span>{{ event }}</span>
                   </li>
                 </ol>
+
+                <div v-if="msg.role === 'assistant' && runMetaLine(msg)" class="message-run-strip">
+                  <span class="message-run-line">{{ runMetaLine(msg) }}</span>
+                </div>
               </article>
             </div>
           </transition-group>
@@ -239,15 +277,17 @@ import hljs from "highlight.js"
 import { useChatApi, useChatHistory, useSettingsApi } from "../composables/useApi"
 import { copyToClipboard } from "../lib/clipboard"
 import { useSessionStore } from "../stores/sessions"
-import type { Message, ModelConfig } from "../types"
+import type { ChatRunMetrics, Message, ModelConfig } from "../types"
 import { useI18n } from "vue-i18n"
 import {
   Bottom,
   Check,
   CopyDocument,
   Cpu,
+  DataAnalysis,
   Loading,
   Promotion,
+  RefreshRight,
   Top,
 } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
@@ -305,11 +345,7 @@ const { t } = useI18n()
 const inputMessage = ref("")
 const MODEL_STORAGE_KEY = "agno-aios-chat-model-id"
 
-interface ChatMessage {
-  role: "user" | "assistant"
-  content: string
-  final?: boolean
-}
+interface ChatMessage extends Message {}
 
 interface ParsedAssistantMessage {
   body: string
@@ -323,6 +359,7 @@ const messages = ref<ChatMessage[]>([createWelcomeMessage()])
 const chatContainer = ref<HTMLElement | null>(null)
 const zoomedImage = ref<string | null>(null)
 const copySuccessIndex = ref<number | null>(null)
+const copyRunSuccessIndex = ref<number | null>(null)
 const pendingNewMessages = ref(0)
 const showScrollToBottom = ref(false)
 const showBackToTop = ref(false)
@@ -452,13 +489,149 @@ const copyMessage = async (index: number, message: ChatMessage) => {
   const content = message.role === "assistant" ? parsedAssistantMessage(message.content).body : message.content
   if (!content.trim()) return
   if (await copyToClipboard(content.trim())) {
-    copySuccessIndex.value = index
+    markCopied(copySuccessIndex, index)
     ElMessage.success(t("common.clipboard.copied"))
-    window.setTimeout(() => {
-      if (copySuccessIndex.value === index) copySuccessIndex.value = null
-    }, 1400)
   } else {
     ElMessage.warning(t("common.clipboard.failed"))
+  }
+}
+
+const markCopied = (target: typeof copySuccessIndex, index: number) => {
+  target.value = index
+  window.setTimeout(() => {
+    if (target.value === index) target.value = null
+  }, 1400)
+}
+
+const copyRun = async (index: number, message: ChatMessage) => {
+  const run = message.raw_run || {
+    run_id: message.run_id,
+    session_id: message.session_id,
+    user_id: message.user_id,
+    model: message.model,
+    model_provider: message.model_provider,
+    metrics: message.metrics,
+    tools: message.tools,
+    content: message.content,
+  }
+  if (await copyToClipboard(JSON.stringify(run, null, 2))) {
+    markCopied(copyRunSuccessIndex, index)
+    ElMessage.success(t("common.clipboard.copied"))
+  } else {
+    ElMessage.warning(t("common.clipboard.failed"))
+  }
+}
+
+const asNumber = (value: unknown) => {
+  const numberValue = Number(value)
+  return Number.isFinite(numberValue) ? numberValue : null
+}
+
+const formatMetricSeconds = (value: unknown) => {
+  const seconds = asNumber(value)
+  if (seconds === null || seconds < 0) return "-"
+  if (seconds < 1) return `${Math.round(seconds * 1000)} ms`
+  if (seconds < 10) return `${seconds.toFixed(2)} s`
+  if (seconds < 60) return `${seconds.toFixed(1)} s`
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = Math.round(seconds % 60)
+  return `${minutes}m ${remainingSeconds}s`
+}
+
+const formatTokenCount = (value: unknown) => {
+  const count = asNumber(value)
+  if (count === null) return "-"
+  return Math.round(count).toLocaleString()
+}
+
+const rawStringField = (message: ChatMessage, key: string) => {
+  const value = message.raw_run?.[key]
+  return typeof value === "string" && value.trim() ? value.trim() : null
+}
+
+const messageSessionId = (message: ChatMessage) => {
+  return message.session_id || rawStringField(message, "session_id")
+}
+
+const messageRunId = (message: ChatMessage) => {
+  return message.run_id || rawStringField(message, "run_id")
+}
+
+const runMetaLine = (message: ChatMessage) => {
+  const metrics: ChatRunMetrics = message.metrics || {}
+  const parts: string[] = []
+  if (metrics.duration !== undefined && metrics.duration !== null) {
+    parts.push(t("chat.metrics.durationValue", { value: formatMetricSeconds(metrics.duration) }))
+  }
+  if (metrics.total_tokens !== undefined && metrics.total_tokens !== null) {
+    parts.push(t("chat.metrics.tokensValue", { value: formatTokenCount(metrics.total_tokens) }))
+  }
+  if (metrics.input_tokens !== undefined && metrics.input_tokens !== null && metrics.output_tokens !== undefined && metrics.output_tokens !== null) {
+    parts.push(t("chat.metrics.tokenBreakdown", {
+      input: formatTokenCount(metrics.input_tokens),
+      output: formatTokenCount(metrics.output_tokens),
+    }))
+  }
+  const runId = messageRunId(message)
+  if (runId) parts.push(t("chat.metrics.runValue", { value: compactId(runId) }))
+  return parts.join(" · ")
+}
+
+const compactId = (value?: string | null) => {
+  const text = (value || "").trim()
+  if (!text) return "-"
+  if (text.length <= 18) return text
+  return `${text.slice(0, 8)}...${text.slice(-4)}`
+}
+
+const openTraceForSession = (message: ChatMessage) => {
+  const sessionId = messageSessionId(message)
+  if (!sessionId) return
+  window.dispatchEvent(new CustomEvent("agno-aios-trace-session-open", {
+    detail: {
+      sessionId,
+      userId: message.user_id || rawStringField(message, "user_id"),
+      runId: messageRunId(message),
+    },
+  }))
+}
+
+const userPromptBefore = (index: number) => {
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const message = messages.value[i]
+    if (message?.role === "user" && message.content.trim()) return message.content.trim()
+  }
+  return ""
+}
+
+const hasUserPromptBefore = (index: number) => Boolean(userPromptBefore(index))
+
+const mergeAssistantRunMetadata = async (sessionId: string, assistantIndex: number, assistantContent: string) => {
+  const content = assistantContent.trim()
+  if (!content) return
+  try {
+    const history = await getSessionHistory(sessionId)
+    const persistedMessage = [...history]
+      .reverse()
+      .find((message) => message.role === "assistant" && message.content.trim() === content)
+    const currentMessage = messages.value[assistantIndex]
+    if (
+      !persistedMessage
+      || !currentMessage
+      || currentMessage.role !== "assistant"
+      || currentMessage.content.trim() !== content
+      || currentSessionId.value !== sessionId
+    ) return
+    messages.value[assistantIndex] = {
+      ...currentMessage,
+      ...persistedMessage,
+      content: currentMessage.content,
+      final: true,
+      session_id: persistedMessage.session_id || currentMessage.session_id || sessionId,
+      user_id: persistedMessage.user_id || currentMessage.user_id || props.currentUserId || null,
+    }
+  } catch {
+    // Metadata is an enhancement; keep the streamed answer even when history is late.
   }
 }
 
@@ -573,10 +746,19 @@ const renderMermaidBlocks = async () => {
       if (!pre || pre.dataset.mermaidRendered === "true") continue
       const graph = block.textContent || ""
       const id = `chat-mermaid-${Date.now()}-${index}`
-      const result = await mermaid.render(id, graph)
-      pre.dataset.mermaidRendered = "true"
-      pre.classList.add("mermaid")
-      pre.innerHTML = result.svg
+      const originalMarkup = pre.innerHTML
+      try {
+        const parsed = await mermaid.parse(graph, { suppressErrors: true })
+        if (parsed === false) throw new Error("Invalid Mermaid graph")
+        const result = await mermaid.render(id, graph)
+        pre.dataset.mermaidRendered = "true"
+        pre.classList.add("mermaid")
+        pre.innerHTML = result.svg
+      } catch {
+        pre.dataset.mermaidRendered = "true"
+        pre.classList.add("mermaid-fallback")
+        pre.innerHTML = originalMarkup
+      }
     }
   } catch {
     blocks.forEach((block) => block.parentElement?.classList.add("mermaid-fallback"))
@@ -624,16 +806,12 @@ const createNewChat = () => {
 }
 
 // ── Chat ──────────────────────────────────────────────────────────
-const sendMessage = async () => {
-  if (!inputMessage.value.trim() || loading.value) return
+const submitPrompt = async (userMsg: string, options: { appendUser: boolean }) => {
+  if (!userMsg.trim() || loading.value) return
   if (!selectedModelReady.value) {
     ElMessage.warning(modelConfigNotice.value || t("chat.notices.modelUnavailable"))
     return
   }
-  const userMsg = inputMessage.value
-  messages.value.push({ role: "user", content: userMsg })
-  inputMessage.value = ""
-  void scrollToBottom()
 
   let sessionId = currentSessionId.value
   if (!sessionId) {
@@ -642,8 +820,13 @@ const sendMessage = async () => {
     notifySessionChange()
   }
 
+  if (options.appendUser) {
+    messages.value.push({ role: "user", content: userMsg, session_id: sessionId, user_id: props.currentUserId || null })
+    void scrollToBottom()
+  }
+
   try {
-    const idx = messages.value.push({ role: "assistant", content: "", final: false }) - 1
+    const idx = messages.value.push({ role: "assistant", content: "", final: false, session_id: sessionId, user_id: props.currentUserId || null }) - 1
     const shouldStickToBottom = isNearBottom()
 
     await sendMessageStream(userMsg, sessionId, selectedModelId.value, (chunk) => {
@@ -654,15 +837,33 @@ const sendMessage = async () => {
     })
 
     const m = messages.value[idx]
-    if (m) m.final = true
+    if (m) {
+      m.final = true
+      m.session_id = m.session_id || sessionId
+      await mergeAssistantRunMetadata(sessionId, idx, m.content)
+    }
     void enhanceRenderedMarkdown()
 
     notifySessionChange()
   } catch {
-    messages.value.push({ role: "assistant", content: t("chat.notices.requestFailed"), final: true })
+    messages.value.push({ role: "assistant", content: t("chat.notices.requestFailed"), final: true, session_id: sessionId })
   } finally {
     followStreamPosition(isNearBottom())
   }
+}
+
+const sendMessage = async () => {
+  if (!inputMessage.value.trim() || loading.value) return
+  const userMsg = inputMessage.value.trim()
+  inputMessage.value = ""
+  await submitPrompt(userMsg, { appendUser: true })
+}
+
+const retryAnswer = async (index: number) => {
+  const prompt = userPromptBefore(index)
+  if (!prompt || loading.value) return
+  messages.value = messages.value.slice(0, index)
+  await submitPrompt(prompt, { appendUser: false })
 }
 
 const clearError = () => { if (error.value) error.value = null }
@@ -978,6 +1179,21 @@ onUnmounted(() => {
   background: var(--ag-blue);
   box-shadow: 0 0 0 0 color-mix(in srgb, var(--ag-blue) 30%, transparent);
   animation: tool-call-pulse 1.2s ease-out infinite;
+}
+
+.message-run-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  border-top: 1px solid var(--ag-border);
+  padding-top: 8px;
+}
+
+.message-run-line {
+  color: var(--ag-muted);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .mermaid {

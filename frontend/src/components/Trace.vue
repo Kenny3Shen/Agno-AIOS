@@ -98,44 +98,127 @@
       </aside>
 
       <main class="trace-canvas">
-        <div v-if="selectedSession" class="trace-session-trace-strip">
-          <div class="trace-selected-session">
+        <section class="trace-runs-workbench" :class="{ 'drawer-open': traceDrawerOpen }">
+          <div class="trace-runs-toolbar trace-toolbar">
+            <div class="trace-panel-header">
+              <div>
+                <p>{{ t('trace.runs.title') }}</p>
+                <span>{{ t('trace.runs.description') }}</span>
+              </div>
+              <strong>{{ filteredRunRows.length }}</strong>
+            </div>
+
+            <div class="trace-filter-bar">
+              <el-input
+                v-model="runFilters.runId"
+                size="small"
+                clearable
+                :placeholder="t('trace.filters.runId')"
+                class="trace-filter-input"
+                @keyup.enter="refreshRuns"
+              />
+              <el-input
+                v-model="runFilters.agentId"
+                size="small"
+                clearable
+                :placeholder="t('trace.filters.agentId')"
+                class="trace-filter-input"
+                @keyup.enter="refreshRuns"
+              />
+              <el-input
+                v-model="runFilters.teamId"
+                size="small"
+                clearable
+                :placeholder="t('trace.filters.teamId')"
+                class="trace-filter-input"
+                @keyup.enter="refreshRuns"
+              />
+              <el-input
+                v-model="runFilters.workflowId"
+                size="small"
+                clearable
+                :placeholder="t('trace.filters.workflowId')"
+                class="trace-filter-input"
+                @keyup.enter="refreshRuns"
+              />
+              <el-select
+                v-model="runFilters.status"
+                size="small"
+                clearable
+                :placeholder="t('trace.filters.status')"
+                class="trace-filter-select"
+              >
+                <el-option label="OK" value="OK" />
+                <el-option label="ERROR" value="ERROR" />
+                <el-option label="UNSET" value="UNSET" />
+              </el-select>
+              <div class="trace-filter-actions">
+                <el-button size="small" plain class="cursor-pointer" :disabled="loading" @click="resetRunFilters">
+                  {{ t('trace.actions.reset') }}
+                </el-button>
+                <el-tooltip :content="t('trace.actions.refreshRuns')" placement="bottom">
+                  <el-button size="small" type="primary" :loading="loading" @click="refreshRuns" class="cursor-pointer">
+                    <el-icon><Refresh /></el-icon>
+                  </el-button>
+                </el-tooltip>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="selectedSession" class="trace-selected-session trace-id-line">
             <strong :title="selectedSession.session_id">{{ compactId(selectedSession.session_id) }}</strong>
             <span>{{ t('trace.sessions.traceCount', { count: sessionTraceItems.length }) }}</span>
           </div>
-          <div class="trace-session-trace-list">
+
+          <div v-if="!selectedSession" class="trace-empty-stage">
+            <div class="empty-observe">
+              <el-icon><Aim /></el-icon>
+              <strong>{{ t('trace.empty.selectSessionTitle') }}</strong>
+              <span>{{ t('trace.empty.selectSessionDescription') }}</span>
+            </div>
+          </div>
+
+          <div v-else-if="!filteredRunRows.length && !loading" class="trace-empty-stage">
+            <div class="empty-observe">
+              <el-icon><Connection /></el-icon>
+              <strong>{{ t('trace.empty.noSessionTracesTitle') }}</strong>
+              <span>{{ t('trace.empty.noSessionTracesDescription') }}</span>
+            </div>
+          </div>
+
+          <div v-else class="trace-runs-list">
             <button
-              v-for="trace in sessionTraceItems"
-              :key="trace.trace_id"
+              v-for="row in filteredRunRows"
+              :key="row.key"
               type="button"
-              class="trace-session-trace-chip"
-              :class="{ active: selectedTrace?.trace_id === trace.trace_id, error: trace.status === 'ERROR' }"
-              @click="selectTraceById(trace.trace_id)"
+              class="trace-waterfall-row trace-run-row"
+              :class="{ active: selectedTrace?.trace_id === row.trace.trace_id, error: row.trace.status === 'ERROR' }"
+              @click="openTraceDrawer(row.trace.trace_id)"
             >
-              <span class="trace-status-dot" :class="statusClass(trace.status)" />
-              <strong :title="trace.name || trace.trace_id">{{ trace.name || compactId(trace.trace_id) }}</strong>
-              <em>{{ formatDuration(trace.duration_ms) }}</em>
+              <span class="trace-span-name">
+                <div>
+                  <span class="trace-status-dot" :class="statusClass(row.trace.status)" />
+                  <strong :title="row.title">{{ row.title }}</strong>
+                </div>
+                <span :title="row.runId">{{ t('trace.filters.runId') }} {{ compactId(row.runId) }}</span>
+              </span>
+              <span class="trace-run-meta">
+                <span :title="row.sessionId">{{ t('trace.filters.sessionId') }} {{ compactId(row.sessionId) }}</span>
+                <span :title="row.ownerId">{{ row.ownerLabel }} {{ compactId(row.ownerId) }}</span>
+              </span>
+              <span class="span-duration">
+                <strong>{{ formatDuration(row.trace.duration_ms) }}</strong>
+                <small>{{ formatDateTime(row.trace.created_at || row.trace.start_time) }}</small>
+              </span>
             </button>
           </div>
-        </div>
 
-        <div v-if="!selectedSession" class="trace-empty-stage">
-          <div class="empty-observe">
-            <el-icon><Aim /></el-icon>
-            <strong>{{ t('trace.empty.selectSessionTitle') }}</strong>
-            <span>{{ t('trace.empty.selectSessionDescription') }}</span>
-          </div>
-        </div>
+          <el-alert v-if="apiError" class="trace-alert" type="error" :title="apiError" show-icon />
+        </section>
 
-        <div v-else-if="!selectedTrace" class="trace-empty-stage">
-          <div class="empty-observe">
-            <el-icon><Connection /></el-icon>
-            <strong>{{ t('trace.empty.noSessionTracesTitle') }}</strong>
-            <span>{{ t('trace.empty.noSessionTracesDescription') }}</span>
-          </div>
-        </div>
-
-        <div v-else class="trace-detail-shell trace-inspector-shell">
+        <transition name="trace-drawer">
+          <div v-if="traceDrawerOpen && selectedTrace" class="trace-detail-drawer" role="dialog" aria-modal="false">
+            <div class="trace-detail-shell trace-inspector-shell">
           <div class="trace-run-header">
             <div class="trace-run-title">
               <div class="trace-run-heading">
@@ -152,6 +235,9 @@
             <div class="trace-copy-actions">
               <el-button size="small" plain class="cursor-pointer" @click="refreshSelectedTrace" :loading="loadingDetail">
                 {{ t('trace.actions.refetch') }}
+              </el-button>
+              <el-button size="small" plain class="cursor-pointer" @click="closeTraceDrawer">
+                {{ t('common.actions.cancel') }}
               </el-button>
             </div>
 
@@ -364,7 +450,9 @@
               <el-alert v-if="apiError" class="trace-alert" type="error" :title="apiError" show-icon />
             </section>
           </div>
-        </div>
+            </div>
+          </div>
+        </transition>
       </main>
     </div>
   </div>
@@ -385,7 +473,7 @@ import {
 import { useChatHistory, useTracingApi } from "../composables/useApi"
 import { copyToClipboard } from "../lib/clipboard"
 import { useTraceStore } from "../stores/traces"
-import type { ChatSession, ParsedSpanPayload, SpanItem, SpanTreeNode, TraceItem } from "../types"
+import type { ChatSession, ChatSessionRun, ParsedSpanPayload, SpanItem, SpanTreeNode, TraceItem } from "../types"
 
 const { t } = useI18n()
 const { loading, error, listTraces, getTrace } = useTracingApi()
@@ -397,6 +485,18 @@ const markdownRenderer = new MarkdownIt({
 })
 
 type SessionStatusFilter = "active" | "archived" | "all"
+type RunStatusFilter = "" | "OK" | "ERROR" | "UNSET"
+
+interface TraceRunRow {
+  key: string
+  title: string
+  runId: string
+  sessionId: string
+  ownerId: string
+  ownerLabel: string
+  trace: TraceItem
+  run?: ChatSessionRun
+}
 
 const traceStore = useTraceStore()
 const sessions = ref<ChatSession[]>([])
@@ -408,12 +508,20 @@ const sessionFilters = reactive({
   keyword: "",
   status: "active" as SessionStatusFilter,
 })
+const runFilters = reactive({
+  runId: "",
+  agentId: "",
+  teamId: "",
+  workflowId: "",
+  status: "" as RunStatusFilter,
+})
 
 const selectedTrace = ref<TraceItem | null>(null)
 const spans = ref<SpanItem[]>([])
 const tree = ref<SpanTreeNode[]>([])
 const selectedSpan = ref<SpanItem | null>(null)
 const activeDetailTab = ref<"info" | "metadata">("info")
+const traceDrawerOpen = ref(false)
 
 const loadingDetail = ref(false)
 const apiError = computed(() => error.value)
@@ -443,6 +551,54 @@ const filteredSessions = computed(() => {
 })
 
 const selectedSession = computed(() => sessions.value.find((session) => session.session_id === selectedSessionId.value) || null)
+
+const sessionRunsByRunId = computed(() => {
+  const map = new Map<string, ChatSessionRun>()
+  const runs = selectedSession.value?.runs || []
+  for (const run of runs) {
+    const runId = typeof run.run_id === "string" ? run.run_id.trim() : ""
+    if (runId) map.set(runId, run)
+  }
+  return map
+})
+
+const runRows = computed<TraceRunRow[]>(() => sessionTraceItems.value.map((trace) => {
+  const runId = trace.run_id || ""
+  const run = runId ? sessionRunsByRunId.value.get(runId) : undefined
+  const ownerId = trace.agent_id || trace.team_id || trace.workflow_id || run?.agent_id || run?.team_id || run?.workflow_id || "-"
+  const ownerLabel = trace.agent_id || run?.agent_id
+    ? t("trace.filters.agentId")
+    : trace.team_id || run?.team_id
+      ? t("trace.filters.teamId")
+      : t("trace.filters.workflowId")
+  return {
+    key: trace.trace_id,
+    title: trace.name || run?.agent_name || runId || trace.trace_id,
+    runId,
+    sessionId: trace.session_id || selectedSessionId.value || "",
+    ownerId,
+    ownerLabel,
+    trace,
+    run,
+  }
+}))
+
+const filteredRunRows = computed(() => {
+  const runId = normalize(runFilters.runId)
+  const agentId = normalize(runFilters.agentId)
+  const teamId = normalize(runFilters.teamId)
+  const workflowId = normalize(runFilters.workflowId)
+  return runRows.value.filter((row) => {
+    const trace = row.trace
+    const run = row.run
+    if (runFilters.status && trace.status !== runFilters.status) return false
+    if (runId && !normalize(row.runId).includes(runId)) return false
+    if (agentId && !normalize(trace.agent_id || run?.agent_id).includes(agentId)) return false
+    if (teamId && !normalize(trace.team_id || run?.team_id).includes(teamId)) return false
+    if (workflowId && !normalize(trace.workflow_id || run?.workflow_id).includes(workflowId)) return false
+    return true
+  })
+})
 
 const selectedTraceEvidence = computed(() => {
   const trace = selectedTrace.value
@@ -647,10 +803,11 @@ const clearTraceSelection = () => {
   spans.value = []
   tree.value = []
   sessionTraceItems.value = []
+  traceDrawerOpen.value = false
 }
 
 const refresh = async () => {
-  sessions.value = await listSessions()
+  sessions.value = await listSessions({ includeRuns: true })
   await reconcileSessionSelection()
 }
 
@@ -673,22 +830,79 @@ const selectSession = async (session: ChatSession) => {
   scrollDetailIntoView()
 }
 
-const loadSessionTraces = async (session: ChatSession) => {
+const selectSessionById = async (sessionId: string, userId?: string | null, runId?: string | null) => {
+  const normalizedSessionId = sessionId.trim()
+  if (!normalizedSessionId) return
+
+  clearPendingFilterRefresh()
+  sessionFilters.sessionId = normalizedSessionId
+  if (userId !== undefined) sessionFilters.userId = userId || ""
+  sessionFilters.status = "all"
+  runFilters.runId = (runId || "").trim()
+
+  sessions.value = await listSessions({ includeRuns: true })
+  let session = sessions.value.find((item) => item.session_id === normalizedSessionId)
+  if (!session) {
+    session = {
+      session_id: normalizedSessionId,
+      user_id: userId || null,
+      preview: normalizedSessionId,
+      created_at: 0,
+      updated_at: 0,
+      archived: false,
+      archived_at: null,
+      runs: [],
+    }
+    sessions.value = [session, ...sessions.value]
+  }
+
+  selectedSessionId.value = session.session_id
+  await loadSessionTraces(session, runFilters.runId)
+  scrollDetailIntoView()
+}
+
+const loadSessionTraces = async (session: ChatSession, preferredRunId?: string | null) => {
+  const runId = (preferredRunId || "").trim()
   clearTraceSelection()
   traceStore.setTraceFilters({
     session_id: session.session_id,
+    run_id: runId,
     user_id: session.user_id || "",
+    agent_id: runFilters.agentId,
+    team_id: runFilters.teamId,
+    workflow_id: runFilters.workflowId,
+    status: runFilters.status,
   })
-  const resp = await listTraces({
+  const baseParams = {
     page: 1,
     limit: 50,
     session_id: session.session_id,
     user_id: session.user_id || undefined,
-  })
-  const items = resp.items || []
+    agent_id: runFilters.agentId || undefined,
+    team_id: runFilters.teamId || undefined,
+    workflow_id: runFilters.workflowId || undefined,
+    status: runFilters.status,
+  }
+  const resp = await listTraces(baseParams)
+  let items = resp.items || []
+  let traceToSelect = runId ? items.find((trace) => trace.run_id === runId) : null
+  if (runId && !traceToSelect) {
+    const exactResp = await listTraces({
+      ...baseParams,
+      limit: 1,
+      run_id: runId,
+    })
+    traceToSelect = exactResp.items?.[0] || null
+    if (traceToSelect) {
+      items = [
+        traceToSelect,
+        ...items.filter((trace) => trace.trace_id !== traceToSelect?.trace_id),
+      ]
+    }
+  }
   sessionTraceItems.value = items
   traceStore.setTraceItems(items)
-  if (items[0]) await selectTraceById(items[0].trace_id)
+  if (traceToSelect) await openTraceDrawer(traceToSelect.trace_id)
 }
 
 const refreshSelectedTrace = async () => {
@@ -722,6 +936,15 @@ const selectTraceById = async (traceId: string | null | undefined) => {
   }
 }
 
+const openTraceDrawer = async (traceId: string | null | undefined) => {
+  await selectTraceById(traceId)
+  if (selectedTrace.value) traceDrawerOpen.value = true
+}
+
+const closeTraceDrawer = () => {
+  traceDrawerOpen.value = false
+}
+
 const firstAvailableSpan = () => {
   return tree.value[0]?.span || spans.value[0] || null
 }
@@ -745,7 +968,32 @@ const resetFilters = async () => {
   await refresh()
 }
 
-const scheduleFilterRefresh = () => {
+const resetRunFilters = async () => {
+  runFilters.runId = ""
+  runFilters.agentId = ""
+  runFilters.teamId = ""
+  runFilters.workflowId = ""
+  runFilters.status = ""
+  await refreshRuns()
+}
+
+const refreshRuns = async () => {
+  const session = selectedSession.value
+  if (!session) {
+    await refresh()
+    return
+  }
+  await loadSessionTraces(session, runFilters.runId)
+}
+
+const clearPendingFilterRefresh = () => {
+  if (filterRefreshTimer !== null) {
+    window.clearTimeout(filterRefreshTimer)
+    filterRefreshTimer = null
+  }
+}
+
+const scheduleSessionFilterRefresh = () => {
   if (filterRefreshTimer !== null) {
     window.clearTimeout(filterRefreshTimer)
   }
@@ -753,6 +1001,24 @@ const scheduleFilterRefresh = () => {
     filterRefreshTimer = null
     void refresh()
   }, 250)
+}
+
+const scheduleRunFilterRefresh = () => {
+  if (filterRefreshTimer !== null) {
+    window.clearTimeout(filterRefreshTimer)
+  }
+  filterRefreshTimer = window.setTimeout(() => {
+    filterRefreshTimer = null
+    void refreshRuns()
+  }, 250)
+}
+
+const scheduleFilterRefresh = () => {
+  if (selectedSession.value) {
+    scheduleRunFilterRefresh()
+  } else {
+    scheduleSessionFilterRefresh()
+  }
 }
 
 const copyText = async (text: string) => {
@@ -773,17 +1039,31 @@ const copySpanJson = async () => {
 watch(
   () => [sessionFilters.sessionId, sessionFilters.userId, sessionFilters.keyword, sessionFilters.status],
   () => {
+    scheduleSessionFilterRefresh()
+  },
+)
+
+watch(
+  () => [runFilters.runId, runFilters.agentId, runFilters.teamId, runFilters.workflowId, runFilters.status],
+  () => {
     scheduleFilterRefresh()
   },
 )
 
 const handleExternalTraceSelect = (event: Event) => {
   const detail = (event as CustomEvent<{ traceId?: string }>).detail
-  void selectTraceById(detail?.traceId)
+  void openTraceDrawer(detail?.traceId)
+}
+
+const handleExternalSessionSelect = (event: Event) => {
+  const detail = (event as CustomEvent<{ sessionId?: string; userId?: string | null; runId?: string | null }>).detail
+  if (detail?.sessionId) void selectSessionById(detail.sessionId, detail.userId, detail.runId)
 }
 
 onMounted(async () => {
   window.addEventListener("agno-aios-trace-select", handleExternalTraceSelect)
+  window.addEventListener("agno-aios-trace-session-open", handleExternalSessionSelect)
+  window.addEventListener("agno-aios-trace-session-select", handleExternalSessionSelect)
   try {
     await refresh()
   } catch (e: unknown) {
@@ -793,9 +1073,9 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener("agno-aios-trace-select", handleExternalTraceSelect)
-  if (filterRefreshTimer !== null) {
-    window.clearTimeout(filterRefreshTimer)
-  }
+  window.removeEventListener("agno-aios-trace-session-open", handleExternalSessionSelect)
+  window.removeEventListener("agno-aios-trace-session-select", handleExternalSessionSelect)
+  clearPendingFilterRefresh()
 })
 </script>
 
@@ -2110,5 +2390,104 @@ html.dark .trace-waterfall-row.active {
     width: 100% !important;
   }
 
+}
+
+.trace-runs-workbench {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.trace-runs-toolbar {
+  display: grid;
+  gap: 12px;
+}
+
+.trace-runs-list {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+}
+
+.trace-run-row {
+  grid-template-columns: minmax(240px, 1.3fr) minmax(220px, 1fr) 120px;
+}
+
+.trace-run-meta {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  color: var(--trace-muted);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+}
+
+.trace-run-meta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trace-detail-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9;
+  display: flex;
+  width: min(720px, 54vw);
+  min-width: 520px;
+  border-left: 1px solid var(--trace-border);
+  background: var(--trace-panel);
+  box-shadow: -24px 0 60px rgba(0, 0, 0, 0.22);
+}
+
+.trace-detail-drawer .trace-inspector-shell {
+  width: 100%;
+}
+
+.trace-runs-workbench.drawer-open .trace-runs-list {
+  padding-right: min(740px, calc(54vw + 20px));
+}
+
+.trace-drawer-enter-active,
+.trace-drawer-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.trace-drawer-enter-from,
+.trace-drawer-leave-to {
+  opacity: 0;
+  transform: translateX(28px);
+}
+
+@media (max-width: 1180px) {
+  .trace-detail-drawer {
+    width: min(680px, 72vw);
+    min-width: 0;
+  }
+
+  .trace-runs-workbench.drawer-open .trace-runs-list {
+    padding-right: 14px;
+  }
+}
+
+@media (max-width: 980px) {
+  .trace-detail-drawer {
+    position: fixed;
+    inset: 0 0 0 auto;
+    width: min(680px, 94vw);
+    max-width: 94vw;
+  }
+
+  .trace-run-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>

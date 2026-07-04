@@ -311,6 +311,7 @@ def get_all_sessions(
     *,
     include_archived: bool = False,
     owner_user_id: str | None = None,
+    include_runs: bool = False,
 ) -> list[dict]:
     """从 PostgreSQL 读取所有会话摘要。"""
     ensure_agno_postgres_tables()
@@ -367,18 +368,19 @@ def get_all_sessions(
                 preview = str(inp.get("input_content") or "")[:80]
             elif isinstance(inp, str):
                 preview = inp[:80]
-        sessions.append(
-            {
-                "session_id": row.get("session_id"),
-                "user_id": row.get("user_id"),
-                "preview": preview.strip() or "新对话",
-                "created_at": row.get("created_at"),
-                "updated_at": row.get("updated_at"),
-                "archived": bool(row.get("archived_at"))
-                or _is_archived_metadata(row.get("metadata")),
-                "archived_at": row.get("archived_at"),
-            }
-        )
+        session = {
+            "session_id": row.get("session_id"),
+            "user_id": row.get("user_id"),
+            "preview": preview.strip() or "新对话",
+            "created_at": row.get("created_at"),
+            "updated_at": row.get("updated_at"),
+            "archived": bool(row.get("archived_at"))
+            or _is_archived_metadata(row.get("metadata")),
+            "archived_at": row.get("archived_at"),
+        }
+        if include_runs:
+            session["runs"] = runs if isinstance(runs, list) else []
+        sessions.append(session)
     return sessions
 
 
