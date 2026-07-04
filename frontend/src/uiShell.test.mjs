@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url"
 import { createI18n } from "vue-i18n"
 import { enUS } from "./i18n/locales/en-US.ts"
 import { zhCN } from "./i18n/locales/zh-CN.ts"
+import "./modules/shellNavigation.test.mjs"
 import "./modules/traceWorkbench.test.mjs"
 
 const root = dirname(fileURLToPath(import.meta.url))
@@ -39,6 +40,7 @@ const authClientSource = readOptionalSource("lib/authClient.ts")
 const clipboard = readOptionalSource("lib/clipboard.ts")
 const authStoreSource = readOptionalSource("stores/auth.ts")
 const permissions = readOptionalSource("lib/permissions.ts")
+const shellNavigation = readOptionalSource("modules/shellNavigation.ts")
 
 const i18n = createI18n({
   legacy: false,
@@ -360,9 +362,9 @@ assert.equal(
 )
 
 assert.match(
-  app,
+  shellNavigation,
   /navPermissions/,
-  "App shell must define module visibility permissions",
+  "Shell navigation must define module visibility permissions",
 )
 
 assert.match(

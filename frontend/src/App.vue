@@ -504,46 +504,22 @@ import { useChatHistory, useSettingsApi } from "./composables/useApi"
 import { setI18nLocale } from "./i18n"
 import { clearStoredAuthToken, fetchCurrentUser, getStoredAuthToken, logout as authLogout, type AuthClientFallbackKey } from "./lib/authClient"
 import { copyToClipboard } from "./lib/clipboard"
+import {
+  buildShellHomeSections,
+  canAccessShellNav,
+  osControlTabs,
+  shellContentClass,
+  splitPrimaryShellNavItems,
+  type ActiveOsControlModule,
+  type HomeSection,
+  type ModuleNavId,
+  type NavId,
+  type NavItem,
+} from "./modules/shellNavigation"
 import { useAuthStore } from "./stores/auth"
 import { useSessionStore } from "./stores/sessions"
 import { useShellStore } from "./stores/shell"
-import type { AuthUser, OsControlModule } from "./types"
-
-type ModuleNavId =
-  | "dashboard"
-  | "cve"
-  | "assets"
-  | "knowledge"
-  | "collect"
-  | "chat"
-  | "trace"
-  | "workflow"
-  | "mcp"
-  | "skills"
-  | "sessions"
-  | "studio"
-  | "memory"
-  | "evaluation"
-  | "approvals"
-  | "scheduler"
-  | "settings"
-type NavId = "home" | ModuleNavId
-type NavTone = "red" | "blue" | "green" | "yellow"
-type ActiveOsControlModule = Exclude<OsControlModule, "metrics">
-
-type NavItem = {
-  id: NavId
-  label: string
-  description: string
-  badge?: string
-  icon: Component
-  tone: NavTone
-}
-
-type HomeSection = {
-  title: string
-  items: NavItem[]
-}
+import type { AuthUser } from "./types"
 
 const { t } = useI18n()
 
@@ -581,25 +557,6 @@ const navItems = computed<NavItem[]>(() => [
   { id: "collect", label: t("shell.nav.collect.label"), description: t("shell.nav.collect.description"), icon: WarningFilled, tone: "yellow" },
   { id: "settings", label: t("shell.nav.settings.label"), description: t("shell.nav.settings.description"), icon: Setting, tone: "blue" },
 ])
-const navPermissions: Partial<Record<ModuleNavId, string>> = {
-  chat: "session:write:own",
-  skills: "skill:read",
-  mcp: "mcp:read",
-  knowledge: "knowledge:read",
-  trace: "trace:read:own",
-  workflow: "mcp:read",
-  sessions: "session:read:own",
-  studio: "mcp:read",
-  memory: "memory:read:own",
-  evaluation: "admin:read",
-  approvals: "admin:read",
-  scheduler: "admin:read",
-  cve: "cve:read",
-  assets: "asset:read",
-  collect: "collect:write",
-  settings: "settings:read",
-}
-
 const componentMap: Record<ModuleNavId, Component> = {
   dashboard: Dashboard,
   chat: Chat,
@@ -620,53 +577,30 @@ const componentMap: Record<ModuleNavId, Component> = {
   settings: Settings,
 }
 
-const osControlTabs = new Set<ActiveOsControlModule>([
-  "sessions",
-  "studio",
-  "memory",
-  "evaluation",
-  "approvals",
-  "scheduler",
-])
-const fullCanvasTabs = new Set<ModuleNavId>([
-  "dashboard",
-  "chat",
-  "trace",
-  "workflow",
-  "mcp",
-  ...osControlTabs,
-])
 const availableNavIds = computed(() => new Set<NavId>(["home", "dashboard", ...navItems.value.map((item) => item.id)]))
 const canAccessNav = (id: NavId) => {
-  if (!availableNavIds.value.has(id)) return false
-  if (id === "home" || id === "dashboard") return true
-  const permission = navPermissions[id]
-  return permission ? authStore.hasPermission(permission) : true
+  return canAccessShellNav(id, availableNavIds.value, (permission) => authStore.hasPermission(permission))
 }
 const settingsItem = computed<NavItem>(() => navItems.value.find((item) => item.id === "settings") as NavItem)
-const securityDataNavIds = new Set<NavId>(["cve", "assets", "collect"])
 const visibleNavItems = computed<NavItem[]>(() => navItems.value.filter((item) => canAccessNav(item.id)))
 const visibleSettingsItem = computed<NavItem | null>(() => {
   const item = settingsItem.value
   return canAccessNav(item.id) ? item : null
 })
-const primaryNavItems = computed<NavItem[]>(() => visibleNavItems.value.filter((item) => item.id !== "settings"))
-const mainNavItems = computed<NavItem[]>(() => primaryNavItems.value.filter((item) => !securityDataNavIds.has(item.id)))
-const securityDataNavItems = computed<NavItem[]>(() => primaryNavItems.value.filter((item) => securityDataNavIds.has(item.id)))
+const shellNavGroups = computed(() => splitPrimaryShellNavItems(visibleNavItems.value))
+const mainNavItems = computed<NavItem[]>(() => shellNavGroups.value.mainNavItems)
+const securityDataNavItems = computed<NavItem[]>(() => shellNavGroups.value.securityDataNavItems)
 const moduleNavItems = computed<NavItem[]>(() => [dashboardItem.value, ...navItems.value])
 const visibleModuleNavItems = computed<NavItem[]>(() => [dashboardItem.value, ...visibleNavItems.value.filter((item) => item.id !== "dashboard")])
 const navItemById = computed<Record<ModuleNavId, NavItem>>(() => (
   Object.fromEntries(moduleNavItems.value.map((item) => [item.id, item])) as Record<ModuleNavId, NavItem>
 ))
-const homeSections = computed<HomeSection[]>(() => [
-  { title: t("shell.sections.operations"), items: [navItemById.value.dashboard, navItemById.value.chat, navItemById.value.trace, navItemById.value.workflow] },
-  { title: t("shell.sections.controlPlane"), items: [navItemById.value.studio, navItemById.value.memory] },
-  { title: t("shell.sections.governance"), items: [navItemById.value.evaluation, navItemById.value.approvals, navItemById.value.scheduler] },
-  { title: t("shell.sections.securityData"), items: [navItemById.value.skills, navItemById.value.mcp, navItemById.value.knowledge, navItemById.value.cve, navItemById.value.assets, navItemById.value.collect] },
-].map((section) => ({
-  ...section,
-  items: section.items.filter((item) => canAccessNav(item.id)),
-})).filter((section) => section.items.length > 0))
+const homeSections = computed<HomeSection[]>(() => buildShellHomeSections({
+  operations: t("shell.sections.operations"),
+  controlPlane: t("shell.sections.controlPlane"),
+  governance: t("shell.sections.governance"),
+  securityData: t("shell.sections.securityData"),
+}, navItemById.value, canAccessNav))
 const THEME_STORAGE_KEY = "theme"
 const CHAT_MODEL_STORAGE_KEY = "agno-aios-chat-model-id"
 const SIDEBAR_EXPANDED_WIDTH = 264
@@ -745,10 +679,7 @@ const activeComponentProps = computed(() => {
   return baseProps
 })
 const contentClass = computed(() => {
-  const base = "block h-full min-h-0"
-  const tab = activeTab.value as NavId
-  if (tab === "home") return base
-  return fullCanvasTabs.has(tab) ? base : `${base} overflow-auto p-4 sm:p-5`
+  return shellContentClass(activeTab.value as NavId)
 })
 
 const sidebarPixelWidth = computed(() => {
