@@ -4,7 +4,6 @@ import importlib
 import os
 import threading
 import warnings
-from datetime import UTC, datetime
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -37,6 +36,13 @@ from api.services.postgres_store import (
     knowledge_schema,
     postgres_label,
     postgres_sqlalchemy_url,
+)
+from api.services.knowledge_document_service import (
+    content_to_document as _content_to_document,
+    content_visible_to_owner as _content_visible_to_owner,
+    owner_metadata as _owner_metadata,
+    result_from_document as _result_from_document,
+    safe_metadata as _safe_metadata,
 )
 
 if TYPE_CHECKING:
@@ -102,24 +108,6 @@ COLD_START_NOTE = (
     "首次触发知识写入、向量检索或重排时会同步加载/下载本地模型，"
     "冷启动可能阻塞 30-120 秒，取决于网络、磁盘和 CPU。"
 )
-DOCUMENT_METADATA_KEYS = (
-    "user_id",
-    "title",
-    "source",
-    "file_path",
-    "file_name",
-    "file_type",
-    "chunk_strategy",
-    "reader",
-    "file_size",
-    "mime_type",
-    "input_mode",
-    "upload_mode",
-    "chunks",
-)
-DOCUMENT_METADATA_MAX_ITEMS = 12
-DOCUMENT_METADATA_VALUE_MAX_LENGTH = 160
-
 _embedding_model: SentenceTransformer | None = None
 _embedding_dimensions: int | None = None
 _reranker_model: FlagReranker | None = None
@@ -676,81 +664,6 @@ def _ensure_knowledge_storage() -> None:
     contents_db._get_table(table_type="knowledge", create_table_if_not_found=True)
 
 
-def _safe_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
-    return {
-        key: value
-        for key, value in (metadata or {}).items()
-        if value is not None and isinstance(key, str)
-    }
-
-
-def _metadata_value(metadata: dict[str, Any], *keys: str, default: str = "") -> str:
-    for key in keys:
-        value = metadata.get(key)
-        if value is not None:
-            return str(value)
-    return default
-
-
-def _compact_metadata_value(value: Any) -> str:
-    text = str(value)
-    if len(text) <= DOCUMENT_METADATA_VALUE_MAX_LENGTH:
-        return text
-    return f"{text[: DOCUMENT_METADATA_VALUE_MAX_LENGTH - 3]}..."
-
-
-def _document_metadata(metadata: dict[str, Any]) -> dict[str, str]:
-    compact_metadata: dict[str, str] = {}
-    for key in DOCUMENT_METADATA_KEYS:
-        value = metadata.get(key)
-        if value is not None:
-            compact_metadata[key] = _compact_metadata_value(value)
-
-    for key, value in metadata.items():
-        if len(compact_metadata) >= DOCUMENT_METADATA_MAX_ITEMS:
-            break
-        if key not in compact_metadata:
-            compact_metadata[key] = _compact_metadata_value(value)
-
-    return compact_metadata
-
-
-def _owner_metadata(owner_user_id: str | None) -> dict[str, str]:
-    clean_owner = (owner_user_id or "").strip()
-    return {"user_id": clean_owner} if clean_owner else {}
-
-
-def _metadata_owner_user_id(metadata: dict[str, Any]) -> str:
-    return str(metadata.get("user_id") or "").strip()
-
-
-def _content_visible_to_owner(content: Any, owner_user_id: str | None) -> bool:
-    clean_owner = (owner_user_id or "").strip()
-    if not clean_owner:
-        return True
-    metadata = _safe_metadata(getattr(content, "metadata", None))
-    return _metadata_owner_user_id(metadata) == clean_owner
-
-
-def _format_timestamp(value: Any) -> str:
-    if isinstance(value, int | float):
-        return datetime.fromtimestamp(value, UTC).isoformat()
-    return str(value or "")
-
-
-def _content_to_document(content: Any) -> dict[str, Any]:
-    metadata = _safe_metadata(getattr(content, "metadata", None))
-    created_at = getattr(content, "created_at", None)
-    return {
-        "id": str(getattr(content, "id", "") or ""),
-        "title": str(getattr(content, "name", "") or "未命名知识"),
-        "source": _metadata_value(metadata, "source", "file_path", default="manual"),
-        "chunks": int(metadata.get("chunks") or 0),
-        "created_at": _format_timestamp(created_at),
-        "metadata": _document_metadata(metadata),
-    }
-
-
 def _chunk_counts_by_content_id(owner_user_id: str | None = None) -> dict[str, int]:
     knowledge = get_knowledge_base()
     vector_db = cast(PgVector, knowledge.vector_db)
@@ -786,28 +699,6 @@ def _chunk_count(owner_user_id: str | None = None) -> int:
     except Exception:
         return 0
     return int(count or 0)
-
-
-def _result_from_document(document: Document) -> dict[str, Any]:
-    metadata = _safe_metadata(document.meta_data)
-    score = metadata.get("rerank_score") or metadata.get("similarity_score")
-    if score is None:
-        score_value = 0.0
-    else:
-        try:
-            score_value = float(score)
-        except (TypeError, ValueError):
-            score_value = 0.0
-    return {
-        "content": document.content,
-        "score": round(score_value, 4),
-        "distance": None,
-        "doc_id": str(document.content_id or metadata.get("content_id") or ""),
-        "title": str(document.name or metadata.get("title") or ""),
-        "source": _metadata_value(metadata, "source", "file_path", default=""),
-        "chunk_index": int(metadata.get("chunk") or metadata.get("chunk_index") or 0),
-        "metadata": metadata,
-    }
 
 
 def _hydrate_content_ids(documents: list[Document]) -> None:

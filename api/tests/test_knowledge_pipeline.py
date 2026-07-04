@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from agno.vectordb.search import SearchType
 
+from api.services import knowledge_document_service
 from api.services import knowledge_service
 
 
@@ -53,10 +54,56 @@ class KnowledgePipelineContractTest(unittest.TestCase):
         foreign = SimpleNamespace(metadata={"user_id": "u2"})
         legacy = SimpleNamespace(metadata={})
 
-        self.assertTrue(knowledge_service._content_visible_to_owner(owned, "u1"))
-        self.assertFalse(knowledge_service._content_visible_to_owner(foreign, "u1"))
-        self.assertFalse(knowledge_service._content_visible_to_owner(legacy, "u1"))
-        self.assertTrue(knowledge_service._content_visible_to_owner(foreign, None))
+        self.assertTrue(knowledge_document_service.content_visible_to_owner(owned, "u1"))
+        self.assertFalse(knowledge_document_service.content_visible_to_owner(foreign, "u1"))
+        self.assertFalse(knowledge_document_service.content_visible_to_owner(legacy, "u1"))
+        self.assertTrue(knowledge_document_service.content_visible_to_owner(foreign, None))
+
+    def test_document_projection_compacts_metadata_and_formats_timestamps(self) -> None:
+        content = SimpleNamespace(
+            id="doc-1",
+            name="Policy",
+            created_at=0,
+            metadata={
+                "user_id": "u1",
+                "source": "/kb/policy.md",
+                "chunks": 3,
+                "custom": "x" * 200,
+                "ignored": None,
+            },
+        )
+
+        document = knowledge_document_service.content_to_document(content)
+
+        self.assertEqual(document["id"], "doc-1")
+        self.assertEqual(document["title"], "Policy")
+        self.assertEqual(document["source"], "/kb/policy.md")
+        self.assertEqual(document["chunks"], 3)
+        self.assertEqual(document["created_at"], "1970-01-01T00:00:00+00:00")
+        self.assertEqual(document["metadata"]["user_id"], "u1")
+        self.assertNotIn("ignored", document["metadata"])
+        self.assertEqual(len(document["metadata"]["custom"]), 160)
+
+    def test_result_projection_uses_rerank_score_and_source_metadata(self) -> None:
+        document = SimpleNamespace(
+            content="answer",
+            content_id="content-1",
+            name="Runbook",
+            meta_data={
+                "rerank_score": "0.87654",
+                "source": "manual",
+                "chunk": "2",
+            },
+        )
+
+        result = knowledge_document_service.result_from_document(document)
+
+        self.assertEqual(result["content"], "answer")
+        self.assertEqual(result["score"], 0.8765)
+        self.assertEqual(result["doc_id"], "content-1")
+        self.assertEqual(result["title"], "Runbook")
+        self.assertEqual(result["source"], "manual")
+        self.assertEqual(result["chunk_index"], 2)
 
     def test_search_documents_passes_owner_filter_to_vector_search(self) -> None:
         captured: dict[str, object] = {}
