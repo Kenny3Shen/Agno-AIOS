@@ -1160,20 +1160,24 @@ onMounted(() => {
 
 .knowledge-stat-chip {
   display: inline-flex;
-  flex: 1 1 148px;
+  flex: 0 1 auto;
+  max-width: min(260px, 100%);
   min-width: 0;
   align-items: center;
   gap: 8px;
 }
 
 .knowledge-stat-chip span {
+  flex: 0 0 auto;
   min-width: 0;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .knowledge-stat-chip strong {
+  min-width: 0;
   overflow: hidden;
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .knowledge-workspace-grid {

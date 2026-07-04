@@ -1204,6 +1204,18 @@ assertNoPillStatChip(
   "Knowledge Stat Chips must use the shared 8px rectangular chip shape, not pill styling",
 )
 
+assert.doesNotMatch(
+  knowledge,
+  /\.knowledge-stat-chip\s*\{[^}]*flex:\s*1\s+1/s,
+  "Knowledge Stat Chips must not stretch into dashboard cards",
+)
+
+assert.match(
+  knowledge,
+  /\.knowledge-stat-chip strong\s*\{[^}]*text-overflow:\s*ellipsis/s,
+  "Knowledge Stat Chip values must stay compact with single-line ellipsis",
+)
+
 assert.match(
   knowledge,
   /knowledge-upload-pipeline/,
