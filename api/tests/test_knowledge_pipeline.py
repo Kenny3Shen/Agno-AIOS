@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import unittest
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
 
 from agno.knowledge.embedder import Embedder
@@ -10,6 +11,7 @@ from agno.vectordb.search import SearchType
 
 from api.services import knowledge_document_service
 from api.services import knowledge_ingest_service
+from api.services import knowledge_runtime_service
 from api.services import knowledge_service
 
 
@@ -63,6 +65,88 @@ class KnowledgePipelineContractTest(unittest.TestCase):
 
         self.assertEqual(profile.strategy, "markdown")
         self.assertEqual(knowledge_service.reader_for_profile(profile).__class__.__name__, "MarkdownReader")
+
+    def test_runtime_candidate_limit_respects_rerank_policy(self) -> None:
+        self.assertEqual(
+            knowledge_runtime_service.retrieval_candidate_limit(
+                5,
+                rerank_enabled=True,
+                rerank_candidate_multiplier=3,
+                rerank_min_candidates=10,
+            ),
+            15,
+        )
+        self.assertEqual(
+            knowledge_runtime_service.retrieval_candidate_limit(
+                5,
+                rerank_enabled=True,
+                rerank_candidate_multiplier=1,
+                rerank_min_candidates=10,
+            ),
+            10,
+        )
+        self.assertEqual(
+            knowledge_runtime_service.retrieval_candidate_limit(
+                5,
+                rerank_enabled=False,
+                rerank_candidate_multiplier=3,
+                rerank_min_candidates=10,
+            ),
+            5,
+        )
+
+    def test_runtime_builds_pgvector_knowledge_with_small_interface(self) -> None:
+        captured: dict[str, Any] = {}
+
+        class FakePgVector:
+            def __init__(self, **kwargs: Any) -> None:
+                captured["vector"] = kwargs
+
+        class FakeKnowledge:
+            def __init__(self, **kwargs: Any) -> None:
+                captured["knowledge"] = kwargs
+
+        settings = knowledge_runtime_service.KnowledgeRuntimeSettings(
+            name="security",
+            description="Security KB",
+            pgvector_table="vectors",
+            postgres_schema="knowledge",
+            db_url="postgresql://example",
+            prefix_match=True,
+            vector_score_weight=0.7,
+            content_language="english",
+            top_k=5,
+            rerank_enabled=True,
+            rerank_candidate_multiplier=3,
+            rerank_min_candidates=10,
+        )
+        contents_db = object()
+        readers = {"text": object()}
+
+        with (
+            patch.object(knowledge_runtime_service, "PgVector", FakePgVector),
+            patch.object(knowledge_runtime_service, "Knowledge", FakeKnowledge),
+        ):
+            result = knowledge_runtime_service.build_knowledge_base(
+                settings,
+                knowledge_runtime_service.KnowledgeRuntimeDependencies(
+                    embedder=FakeEmbedder(),
+                    reranker=None,
+                    contents_db=contents_db,
+                ),
+                search_type=SearchType.hybrid,
+                readers=readers,
+            )
+
+        self.assertIsInstance(result, FakeKnowledge)
+        self.assertEqual(captured["vector"]["table_name"], "vectors")
+        self.assertEqual(captured["vector"]["schema"], "knowledge")
+        self.assertEqual(captured["vector"]["search_type"], SearchType.hybrid)
+        self.assertEqual(captured["vector"]["prefix_match"], True)
+        self.assertEqual(captured["knowledge"]["name"], "security")
+        self.assertEqual(captured["knowledge"]["contents_db"], contents_db)
+        self.assertEqual(captured["knowledge"]["max_results"], 15)
+        self.assertEqual(captured["knowledge"]["readers"], readers)
 
     def test_status_exposes_supported_suffixes_and_search_type(self) -> None:
         original = os.environ.get("AGNO_KNOWLEDGE_SEARCH_TYPE")

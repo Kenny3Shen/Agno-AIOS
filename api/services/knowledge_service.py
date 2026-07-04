@@ -12,7 +12,6 @@ from agno.knowledge.document import Document
 from agno.knowledge.embedder import Embedder
 from agno.knowledge.knowledge import Knowledge
 from agno.knowledge.reranker.base import Reranker
-from agno.vectordb.distance import Distance
 from agno.vectordb.pgvector import PgVector
 from agno.vectordb.search import SearchType
 from pydantic import ConfigDict
@@ -43,6 +42,12 @@ from api.services.knowledge_ingest_service import (
     pipeline_status as _ingest_pipeline_status,
     profile_for_filename as _profile_for_filename,
     reader_for_profile as _reader_for_profile,
+)
+from api.services.knowledge_runtime_service import (
+    KnowledgeRuntimeDependencies,
+    KnowledgeRuntimeSettings,
+    build_knowledge_base,
+    retrieval_candidate_limit,
 )
 
 if TYPE_CHECKING:
@@ -484,27 +489,27 @@ def pipeline_status() -> dict[str, Any]:
 def get_knowledge_base(search_type: SearchType | None = None) -> Knowledge:
     embedder = _get_embedder()
     effective_search_type = search_type or search_type_from_env()
-    vector_db = PgVector(
-        table_name=PGVECTOR_TABLE,
-        schema=POSTGRES_SCHEMA,
-        db_url=postgres_sqlalchemy_url(),
-        embedder=embedder,
+    return build_knowledge_base(
+        KnowledgeRuntimeSettings(
+            name=KNOWLEDGE_NAME,
+            description="Agno AIOS security knowledge base",
+            pgvector_table=PGVECTOR_TABLE,
+            postgres_schema=POSTGRES_SCHEMA,
+            db_url=postgres_sqlalchemy_url(),
+            prefix_match=PREFIX_MATCH,
+            vector_score_weight=VECTOR_SCORE_WEIGHT,
+            content_language=CONTENT_LANGUAGE,
+            top_k=TOP_K,
+            rerank_enabled=RERANK_ENABLED,
+            rerank_candidate_multiplier=RERANK_CANDIDATE_MULTIPLIER,
+            rerank_min_candidates=RERANK_MIN_CANDIDATES,
+        ),
+        KnowledgeRuntimeDependencies(
+            embedder=embedder,
+            reranker=_get_reranker(),
+            contents_db=get_knowledge_postgres_db(),
+        ),
         search_type=effective_search_type,
-        distance=Distance.cosine,
-        prefix_match=PREFIX_MATCH,
-        vector_score_weight=VECTOR_SCORE_WEIGHT,
-        content_language=CONTENT_LANGUAGE,
-        reranker=_get_reranker(),
-    )
-    contents_db = get_knowledge_postgres_db()
-    return Knowledge(
-        name=KNOWLEDGE_NAME,
-        description="Agno AIOS security knowledge base",
-        vector_db=vector_db,
-        contents_db=contents_db,
-        max_results=max(TOP_K * RERANK_CANDIDATE_MULTIPLIER, RERANK_MIN_CANDIDATES)
-        if RERANK_ENABLED
-        else TOP_K,
         readers={
             "text": reader_for_profile(_PROFILE_TEXT),
             "markdown": reader_for_profile(_PROFILE_MARKDOWN),
@@ -730,10 +735,11 @@ def search_documents(
     effective_search_type = _search_type_from_name(search_type) if search_type else search_type_from_env()
     _ensure_knowledge_storage()
     knowledge = get_knowledge_base()
-    retrieval_limit = (
-        max(limit * RERANK_CANDIDATE_MULTIPLIER, RERANK_MIN_CANDIDATES)
-        if RERANK_ENABLED
-        else limit
+    retrieval_limit = retrieval_candidate_limit(
+        limit,
+        rerank_enabled=RERANK_ENABLED,
+        rerank_candidate_multiplier=RERANK_CANDIDATE_MULTIPLIER,
+        rerank_min_candidates=RERANK_MIN_CANDIDATES,
     )
     documents = knowledge.search(
         clean_query,
@@ -765,12 +771,12 @@ def knowledge_status(owner_user_id: str | None = None) -> dict[str, Any]:
         "device": device,
         "rerank_enabled": RERANK_ENABLED,
         "top_k": TOP_K,
-        "retrieval_candidates": max(
-            TOP_K * RERANK_CANDIDATE_MULTIPLIER,
-            RERANK_MIN_CANDIDATES,
-        )
-        if RERANK_ENABLED
-        else TOP_K,
+        "retrieval_candidates": retrieval_candidate_limit(
+            TOP_K,
+            rerank_enabled=RERANK_ENABLED,
+            rerank_candidate_multiplier=RERANK_CANDIDATE_MULTIPLIER,
+            rerank_min_candidates=RERANK_MIN_CANDIDATES,
+        ),
         "chunk_size": CHUNK_SIZE,
         "chunk_overlap": CHUNK_OVERLAP,
         "cold_start_note": COLD_START_NOTE,
