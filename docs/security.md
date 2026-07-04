@@ -18,7 +18,7 @@ API 使用 FastAPI Users 和 JWT bearer authentication。登录接口位于 `/ap
 | --- | --- |
 | `admin` | 通过 wildcard permission 访问所有权限。 |
 | `user` | 可读写自己的 sessions 和 knowledge，读取自己的 traces，并使用部分安全数据视图。 |
-| `guest` | 可读取自己的 sessions、traces、部分 memory/metrics 数据、assets、CVE 和 knowledge。 |
+| `guest` | 可读取自己的 sessions、traces、部分 memory/metrics 数据、CVE 和 knowledge。 |
 
 当前后端权限定义在 `api/auth/permissions.py`。
 
@@ -29,7 +29,6 @@ API 使用 FastAPI Users 和 JWT bearer authentication。登录接口位于 `/ap
 | `trace:read:own` | yes | yes | yes |
 | `memory:read:own` | yes | yes | yes |
 | `metrics:read:own` | yes | yes | yes |
-| `asset:read` | yes | yes | yes |
 | `collect:write` | yes | yes | no |
 | `cve:read` | yes | yes | yes |
 | `knowledge:read` | yes | yes | yes |

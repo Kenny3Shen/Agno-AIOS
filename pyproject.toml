@@ -42,7 +42,6 @@ dependencies = [
 
 [project.scripts]
 update-cve = "api.tasks.update_cve:run"
-update-ip-asset = "api.tasks.update_ip_asset:run"
 migrate-mysql-to-postgres = "api.tasks.migrate_mysql_to_postgres:run"
 
 [build-system]

@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest import TestCase
 
 from api.auth.permissions import has_permission
-from api.routes import assets, collect, cve, skills
+from api.routes import collect, cve, skills
 
 
 def user(role: str = "user"):
@@ -14,18 +14,12 @@ class DataRoutePermissionsTest(TestCase):
     def test_readonly_security_data_permissions_are_available_to_guest(self):
         guest = user("guest")
 
-        self.assertTrue(has_permission(guest, "asset:read"))
         self.assertTrue(has_permission(guest, "cve:read"))
         self.assertFalse(has_permission(guest, "collect:write"))
 
     def test_user_can_run_collect_but_guest_cannot(self):
         self.assertTrue(has_permission(user("user"), "collect:write"))
         self.assertFalse(has_permission(user("guest"), "collect:write"))
-
-    def test_assets_search_requires_rbac_permission(self):
-        source = inspect.getsource(assets.search_asset)
-
-        self.assertIn('require_permission("asset:read")', source)
 
     def test_collect_parse_requires_write_permission(self):
         source = inspect.getsource(collect.parse_url_to_markdown)

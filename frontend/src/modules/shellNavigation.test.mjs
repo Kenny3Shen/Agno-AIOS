@@ -34,7 +34,6 @@ const navItems = [
   item("mcp"),
   item("knowledge"),
   item("cve"),
-  item("assets"),
   item("collect"),
   item("settings"),
 ]
@@ -54,7 +53,6 @@ const components = {
   mcp: { name: "MCP" },
   knowledge: { name: "Knowledge" },
   cve: { name: "CVE" },
-  assets: { name: "Assets" },
   collect: { name: "Collect" },
   sessions: { name: "AgentOSControl" },
   settings: { name: "Settings" },
@@ -91,10 +89,10 @@ assert.equal(
 )
 
 assert.deepEqual(
-  splitPrimaryShellNavItems([item("chat"), item("cve"), item("assets"), item("settings")]),
+  splitPrimaryShellNavItems([item("chat"), item("cve"), item("collect"), item("settings")]),
   {
     mainNavItems: [item("chat")],
-    securityDataNavItems: [item("cve"), item("assets")],
+    securityDataNavItems: [item("cve"), item("collect")],
   },
   "primary nav splitting must exclude settings and group security data items",
 )
@@ -108,7 +106,7 @@ assert.deepEqual(
       securityData: "Security Data",
     },
     navItemById,
-    (id) => !["approvals", "scheduler", "assets"].includes(id),
+    (id) => !["approvals", "scheduler"].includes(id),
   ).map((section) => ({
     title: section.title,
     items: section.items.map((navItem) => navItem.id),

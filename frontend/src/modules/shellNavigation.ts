@@ -4,7 +4,6 @@ import type { OsControlModule } from "../types"
 export type ModuleNavId =
   | "dashboard"
   | "cve"
-  | "assets"
   | "knowledge"
   | "collect"
   | "chat"
@@ -70,7 +69,6 @@ export const navPermissions: Partial<Record<ModuleNavId, string>> = {
   approvals: "admin:read",
   scheduler: "admin:read",
   cve: "cve:read",
-  assets: "asset:read",
   collect: "collect:write",
   settings: "settings:read",
 }
@@ -93,7 +91,7 @@ export const fullCanvasTabs = new Set<ModuleNavId>([
   ...osControlTabs,
 ])
 
-export const securityDataNavIds = new Set<NavId>(["cve", "assets", "collect"])
+export const securityDataNavIds = new Set<NavId>(["cve", "collect"])
 
 export const canAccessShellNav = (
   id: NavId,
@@ -135,7 +133,6 @@ export const buildShellHomeSections = (
       navItemById.mcp,
       navItemById.knowledge,
       navItemById.cve,
-      navItemById.assets,
       navItemById.collect,
     ],
   },

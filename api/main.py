@@ -1,8 +1,6 @@
-import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
@@ -17,7 +15,6 @@ from api.core.logging import configure_logging
 from api.mcp.server import bootstrap_mcp_token, mcp_runtime
 from api.routes import (
     audit,
-    assets,
     chat,
     collect,
     cve,
@@ -52,17 +49,6 @@ async def lifespan(app: FastAPI):
     await create_auth_tables()
     await bootstrap_admin_user(app_settings)
 
-    headers = {"Content-Type": "application/json"}
-    acl_token = app_settings.acl_token.get_secret_value()
-    if acl_token:
-        headers["Token"] = acl_token
-    app.state.asset_client = httpx.AsyncClient(
-        headers=headers,
-        timeout=30.0,
-        verify=False,
-    )
-    app.state.asset_lock = asyncio.Lock()
-
     bootstrap_mcp_token(app_settings.mcp_token.get_secret_value())
     await mcp_runtime.startup()
 
@@ -70,7 +56,6 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await mcp_runtime.shutdown()
-        await app.state.asset_client.aclose()
         await close_auth_engine()
         await close_db_pool()
         logger.info("关闭 {}", app_settings.app_name)
@@ -113,7 +98,6 @@ async def mcp_redirect(request: Request):
 app.include_router(auth_router)
 app.include_router(audit.router)
 app.include_router(cve.router)
-app.include_router(assets.router)
 app.include_router(chat.router)
 app.include_router(collect.router)
 app.include_router(settings.router)

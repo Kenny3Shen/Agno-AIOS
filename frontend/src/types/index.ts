@@ -308,36 +308,6 @@ export interface CveSearchResponse {
   total: number
 }
 
-// 资产相关类型
-export interface AssetResult {
-  site: string
-  hostname: string
-  ip: string
-  title: string
-  status: number
-  http_server: string
-  finger: string[]
-  tag: string[]
-  port_info: number[]
-  os_info: string[]
-  ip_type: string
-  domain: string[]
-}
-
-export interface AssetSearchParams {
-  fingerprint?: string
-  ip?: string
-  page: number
-  size: number
-}
-
-export interface AssetSearchResponse {
-  status: number
-  items: AssetResult[]
-  total: number
-  message?: string
-}
-
 // URL2MD 相关类型
 export interface Url2MdParseResponse {
   markdown?: string | string[]

@@ -1,8 +1,7 @@
 import { reactive, ref } from "vue"
 import { defineStore } from "pinia"
-import type { AssetResult, CveResult } from "../types"
+import type { CveResult } from "../types"
 
-export type AssetSearchMode = "fingerprint" | "ip"
 export type CollectTab = "markdown" | "preview"
 
 export interface PageMessage {
@@ -12,14 +11,6 @@ export interface PageMessage {
 }
 
 export const useSecurityDataStore = defineStore("securityData", () => {
-  const assetQuery = ref("")
-  const assetSearchMode = ref<AssetSearchMode>("fingerprint")
-  const assetResults = ref<AssetResult[]>([])
-  const assetSearched = ref(false)
-  const assetSelectedIpType = ref<string | null>(null)
-  const assetSelectedStatus = ref<number | null>(null)
-  const assetSelectedTags = ref<string[]>([])
-
   const cveQuery = ref("")
   const cveSourceFilter = ref("")
   const cveResults = ref<CveResult[]>([])
@@ -33,19 +24,6 @@ export const useSecurityDataStore = defineStore("securityData", () => {
   const collectMarkdownText = ref("")
   const collectMessage = ref<PageMessage | null>(null)
 
-  const clearAssetFilters = () => {
-    assetSelectedIpType.value = null
-    assetSelectedStatus.value = null
-    assetSelectedTags.value = []
-  }
-
-  const resetAssetSearch = () => {
-    assetQuery.value = ""
-    assetResults.value = []
-    assetSearched.value = false
-    clearAssetFilters()
-  }
-
   const resetCollect = () => {
     collectUrl.value = ""
     collectMarkdownText.value = ""
@@ -53,13 +31,6 @@ export const useSecurityDataStore = defineStore("securityData", () => {
   }
 
   return {
-    assetQuery,
-    assetSearchMode,
-    assetResults,
-    assetSearched,
-    assetSelectedIpType,
-    assetSelectedStatus,
-    assetSelectedTags,
     cveQuery,
     cveSourceFilter,
     cveResults,
@@ -71,8 +42,6 @@ export const useSecurityDataStore = defineStore("securityData", () => {
     collectUrl,
     collectMarkdownText,
     collectMessage,
-    clearAssetFilters,
-    resetAssetSearch,
     resetCollect,
   }
 })

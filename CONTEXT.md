@@ -98,10 +98,6 @@ _避免_: Memory
 控制面中可检索的漏洞记录和 exploit 引用。
 _避免_: 把 CVE database 当作授权来源
 
-**Asset Query**:
-按 IP 或 fingerprint 查询已配置资产数据源的动作。
-_避免_: Inventory owner
-
 **URL Collection**:
 抓取 URL 并把内容转换为 Markdown 供操作员使用的过程。
 _避免_: Knowledge ingestion

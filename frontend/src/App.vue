@@ -471,7 +471,6 @@ import {
   Loading,
   MagicStick,
   Menu,
-  Monitor,
   MoreFilled,
   Moon,
   Platform,
@@ -491,7 +490,6 @@ import AgentOSControl from "./components/AgentOSControl.vue"
 import MemoryControl from "./components/MemoryControl.vue"
 import AuthScreen from "./components/AuthScreen.vue"
 import CVE from "./components/CVE.vue"
-import Assets from "./components/Assets.vue"
 import Chat from "./components/Chat.vue"
 import Collect from "./components/Collect.vue"
 import Settings from "./components/Settings.vue"
@@ -557,7 +555,6 @@ const navItems = computed<NavItem[]>(() => [
   { id: "approvals", label: t("shell.nav.approvals.label"), description: t("shell.nav.approvals.description"), icon: Tickets, tone: "red" },
   { id: "scheduler", label: t("shell.nav.scheduler.label"), description: t("shell.nav.scheduler.description"), icon: Calendar, tone: "yellow" },
   { id: "cve", label: t("shell.nav.cve.label"), description: t("shell.nav.cve.description"), icon: Search, tone: "red" },
-  { id: "assets", label: t("shell.nav.assets.label"), description: t("shell.nav.assets.description"), icon: Monitor, tone: "blue" },
   { id: "collect", label: t("shell.nav.collect.label"), description: t("shell.nav.collect.description"), icon: WarningFilled, tone: "yellow" },
   { id: "settings", label: t("shell.nav.settings.label"), description: t("shell.nav.settings.description"), icon: Setting, tone: "blue" },
 ])
@@ -569,7 +566,6 @@ const componentMap: Record<ModuleNavId, Component> = {
   workflow: Workflow,
   mcp: MCP,
   cve: CVE,
-  assets: Assets,
   collect: Collect,
   skills: Skills,
   sessions: AgentOSControl,

@@ -2,7 +2,7 @@
 
 Agno AIOS 是一个面向安全运营的控制面和 AI 安全运营平台，基于 FastAPI、Vue、Agno、FastMCP、PostgreSQL 和 pgvector 构建。
 
-系统把 Agent 对话、会话、Trace 观测、MCP 工具、本地 Skills、知识库检索、CVE 情报、资产查询、URL 采集、审计日志、设置和 AgentOS 控制视图收敛到一个需要认证的工作台中。
+系统把 Agent 对话、会话、Trace 观测、MCP 工具、本地 Skills、知识库检索、CVE 情报、URL 采集、审计日志、设置和 AgentOS 控制视图收敛到一个需要认证的工作台中。
 
 ## 文档
 
@@ -82,7 +82,6 @@ cd frontend
 
 ```bash
 uv run update-cve
-uv run update-ip-asset
 uv run migrate-mysql-to-postgres
 ```
 

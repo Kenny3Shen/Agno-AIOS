@@ -301,7 +301,7 @@ const workflowSteps = ref<WorkflowStep[]>([
     executor: "team",
     name: t("workflow.sample.research"),
     description: t("workflow.sample.researchDescription"),
-    expression: "fanout=[cve_context, asset_context, knowledge_context]",
+    expression: "fanout=[cve_context, exposure_context, knowledge_context]",
     maxIterations: 1,
     branches: 3,
     tone: "green",

@@ -147,7 +147,6 @@ Console scripts 定义在 `pyproject.toml`：
 
 ```bash
 uv run update-cve
-uv run update-ip-asset
 uv run migrate-mysql-to-postgres
 ```
 
@@ -155,7 +154,6 @@ Cron 示例：
 
 ```cron
 0 8 * * * cd /home/shenss/python/Agno-AIOS && ./scripts/run_update_cve.sh >> logs/cron_cve.log 2>&1
-0 3 * * * cd /home/shenss/python/Agno-AIOS && uv run update-ip-asset >> logs/cron_asset.log 2>&1
 ```
 
 ## 运行时文件

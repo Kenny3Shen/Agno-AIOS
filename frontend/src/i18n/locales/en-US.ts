@@ -46,7 +46,7 @@ export const enUS = {
       session: "Session",
     },
     signalValues: {
-      dataPlane: "RAG + ASM",
+      dataPlane: "RAG + CTI",
       runtime: "Trace",
     },
     errors: {
@@ -78,7 +78,7 @@ export const enUS = {
     },
     nav: {
       home: { label: "Home", description: "Workspace overview" },
-      dashboard: { label: "Dashboard", description: "Assets, vulnerabilities, and response loops" },
+      dashboard: { label: "Dashboard", description: "Vulnerabilities, response loops, and operations signals" },
       chat: { label: "Chat", description: "Task planning, playbooks, and streaming analysis" },
       skills: { label: "Skills", description: "Security skill module switches" },
       mcp: { label: "MCP", description: "Services, tokens, and external agents" },
@@ -93,7 +93,6 @@ export const enUS = {
       approvals: { label: "Approvals", description: "Sensitive operation approval queue" },
       scheduler: { label: "Scheduler", description: "Recurring jobs and run windows" },
       cve: { label: "CVE", description: "CVE, PoC, and attack-surface signals" },
-      assets: { label: "Assets", description: "Fingerprint, IP, and exposure queries" },
       collect: { label: "Collect", description: "Convert web intelligence to Markdown" },
       settings: { label: "Settings", description: "Model routing, MCP, and notification settings" },
     },
@@ -176,7 +175,6 @@ export const enUS = {
     errors: {
       cveSearchFailed: "Search failed",
       cveUpdateFailed: "Update failed",
-      assetSearchFailed: "Search failed",
       chatHttpFailed: "Request failed: {status}",
       chatSendFailed: "Send failed",
       osControlLoadFailed: "Failed to load control plane",
@@ -214,7 +212,7 @@ export const enUS = {
   },
   dashboard: {
     title: "Security operations overview",
-    description: "Assets, vulnerabilities, response paths, anomalies, and Agent load",
+    description: "Vulnerabilities, response paths, anomalies, and Agent load",
     actions: {
       refresh: "Refresh",
       upload: "Upload request",
@@ -299,7 +297,7 @@ export const enUS = {
       collapseSources: "Collapse sources",
     },
     composer: {
-      placeholder: "Describe the goal, for example: analyze this CVE's impact on my assets",
+      placeholder: "Describe the goal, for example: analyze this CVE's exposure impact",
       modelPlaceholder: "Select model",
       send: "Send task",
       missingModelId: "Model ID not set",
@@ -340,7 +338,7 @@ export const enUS = {
       requestFailed: "Sorry, the request failed. Try again later.",
     },
     prompts: {
-      cveImpact: "Assess a CVE's impact on my current assets",
+      cveImpact: "Assess a CVE's exposure impact",
       exposurePlan: "Create an external exposure review plan",
       alertRunbook: "Turn this alert into response steps",
     },
@@ -520,7 +518,7 @@ export const enUS = {
       namePlaceholder: "workflow_name",
       descriptionPlaceholder: "Describe the workflow goal",
       inputPlaceholder: "Input passed to workflow.run or workflow.print_response",
-      defaultInput: "Investigate CVE-2026-0001 on internet-facing assets and produce an escalation summary.",
+      defaultInput: "Investigate CVE-2026-0001 exposure and produce an escalation summary.",
     },
     palette: {
       title: "Workflow library",
@@ -567,7 +565,7 @@ export const enUS = {
       intakeDescription: "An analyst input becomes structured workflow input for repeatable execution.",
       researchType: "Parallel",
       research: "Collect evidence",
-      researchDescription: "Agents and teams gather CVE, asset, and knowledge context at the same time.",
+      researchDescription: "Agents and teams gather CVE, exposure, and knowledge context at the same time.",
       routeType: "Router",
       route: "Choose response path",
       routeDescription: "CEL or Python selector routes critical findings to escalation, otherwise to reporting.",
@@ -833,53 +831,6 @@ export const enUS = {
       networkError: "Network or backend error",
     },
   },
-  assets: {
-    modes: {
-      fingerprint: "Fingerprint",
-      ip: "IP",
-    },
-    input: {
-      ipPlaceholder: "Enter an IP address, for example 192.168.1.1",
-      fingerprintPlaceholder: "Enter fingerprint data, for example Vue or React",
-    },
-    filters: {
-      ipType: "IP type",
-      statusCode: "Status code",
-      tags: "Tags",
-      clear: "Clear filters",
-    },
-    actions: {
-      search: "Search",
-    },
-    table: {
-      site: "Site",
-      ipAddress: "IP address",
-      hostname: "Hostname",
-      ipType: "IP type",
-      statusCode: "Status code",
-      fingerprint: "Fingerprint",
-      tag: "Tag",
-      portInfo: "Port info",
-      title: "Title",
-      server: "Server",
-      os: "Operating system",
-      domain: "Domain",
-    },
-    pagination: {
-      summary: "{total} assets, showing {shown}",
-    },
-    empty: {
-      notFoundDescription: "No assets found",
-      notFoundTitle: "No matching assets",
-      notFoundHint: "Try another fingerprint keyword",
-      waitingTitle: "Waiting for asset query",
-      waitingIp: "Enter one IPv4 address",
-      waitingFingerprint: "Enter a technology fingerprint or component keyword",
-    },
-    validation: {
-      ipv4Only: "IP search only supports valid IPv4 addresses",
-    },
-  },
   cve: {
     input: {
       queryPlaceholder: "Enter a CVE ID or keyword",
@@ -977,7 +928,7 @@ export const enUS = {
     navigation: {
       sectionTitle: "Navigation layout",
       sectionDescription: "Preview the current navigation order and groups as the entry point for user-defined ordering, grouping, and visibility.",
-      note: "CVE, Assets, and Collect now live in a separate security data group split from operations, knowledge, and Settings.",
+      note: "CVE and Collect live in a separate security data group split from operations, knowledge, and Settings.",
       groups: {
         operations: "Operations",
         knowledge: "Knowledge and control",

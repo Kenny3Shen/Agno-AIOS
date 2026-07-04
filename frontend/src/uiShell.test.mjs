@@ -26,7 +26,6 @@ const authScreen = readSource("components/AuthScreen.vue")
 const chat = readOptionalSource("components/Chat.vue")
 const trace = readOptionalSource("components/Trace.vue")
 const dashboard = readOptionalSource("components/Dashboard.vue")
-const assets = readOptionalSource("components/Assets.vue")
 const cve = readOptionalSource("components/CVE.vue")
 const mcp = readOptionalSource("components/MCP.vue")
 const skills = readOptionalSource("components/Skills.vue")
@@ -614,7 +613,7 @@ for (const hardcodedChatCopy of [
   "展开来源",
   "收起来源",
   "Agent 正在规划下一步",
-  "描述目标，例如：分析这个 CVE 对我资产面的影响",
+  "描述目标，例如：分析这个 CVE 的暴露面影响",
   "选择模型",
   "未填写模型 ID",
   "发送任务",
@@ -625,7 +624,7 @@ for (const hardcodedChatCopy of [
   "请选择一个可用模型",
   "已禁用，请切换模型",
   "未完成参数配置",
-  "帮我评估 CVE 对当前资产的影响",
+  "帮我评估 CVE 的暴露面影响",
   "生成一次外部暴露面排查计划",
   "把这段告警整理成处置步骤",
   "模型配置加载失败",
@@ -934,12 +933,6 @@ assert.equal(
 )
 
 assert.equal(
-  existsSync(sourcePath("components/Assets.vue")),
-  true,
-  "Assets component file must align with the Assets nav label",
-)
-
-assert.equal(
   existsSync(sourcePath("components/Collect.vue")),
   true,
   "Collect component file must align with the Collect nav label",
@@ -973,6 +966,7 @@ for (const oldComponent of [
   "components/LlmChat.vue",
   "components/AgentTracing.vue",
   "components/AgentSituation.vue",
+  "components/Assets.vue",
   "components/AssetSearch.vue",
   "components/Url2Md.vue",
   "components/KnowledgeManage.vue",
@@ -988,12 +982,6 @@ for (const oldComponent of [
 }
 
 assert.equal(
-  existsSync(repoPath("api/routes/assets.py")),
-  true,
-  "backend route filename must align with Assets",
-)
-
-assert.equal(
   existsSync(repoPath("api/routes/collect.py")),
   true,
   "backend route filename must align with Collect",
@@ -1005,7 +993,7 @@ assert.equal(
   "backend route filename must align with Trace",
 )
 
-for (const oldRoute of ["api/routes/asset.py", "api/routes/url2md.py", "api/routes/traces.py"]) {
+for (const oldRoute of ["api/routes/asset.py", "api/routes/assets.py", "api/routes/url2md.py", "api/routes/traces.py"]) {
   assert.equal(
     existsSync(repoPath(oldRoute)),
     false,
@@ -1058,7 +1046,7 @@ assert.equal(
 assert.match(
   app,
   /securityDataNavItems/,
-  "CVE, Assets, and Collect must be rendered as a separate sidebar group",
+  "CVE and Collect must be rendered as a separate sidebar group",
 )
 
 assert.match(
@@ -1094,7 +1082,6 @@ assert.equal(
 )
 
 for (const [pageName, pageSource] of [
-  ["Assets", assets],
   ["CVE", cve],
   ["Collect", collect],
   ["Settings", settings],
@@ -1121,7 +1108,7 @@ assert.equal(
 
 for (const hardcodedDashboardCopy of [
   "安全运营态势总览",
-  "资产、漏洞、响应链路、异常态势与 Agent 负载",
+  "漏洞、响应链路、异常态势与 Agent 负载",
   "最近 24 小时",
   "最近 7 天",
   "最近 30 天",
@@ -1496,51 +1483,17 @@ for (const hardcodedCollectCopy of [
   )
 }
 
-assert.match(
-  assets,
-  /useI18n\(\)/,
-  "Assets page must read user-facing copy from vue-i18n",
+assert.doesNotMatch(
+  app,
+  /shell\.nav\.assets|components\/Assets\.vue|id:\s*["']assets["']/,
+  "Assets navigation and component mapping must be removed",
 )
 
-assert.match(
-  assets,
-  /useShellStore\(\)/,
-  "Assets page must use the shared shell store for responsive state",
+assert.doesNotMatch(
+  useApi,
+  /useAssetApi|\/asset\/search|AssetSearch/,
+  "Asset search API client must be removed from the frontend",
 )
-
-assert.match(
-  assets,
-  /flush:\s*["']sync["']/,
-  "Assets search mode watcher must reset synchronously before sample searches run",
-)
-
-for (const hardcodedAssetsCopy of [
-  "指纹",
-  "输入 IP 地址",
-  "输入指纹信息",
-  "IP 类型",
-  "状态码",
-  "标签（可多选）",
-  "清空筛选",
-  "站点",
-  "IP 地址",
-  "主机名",
-  "端口信息",
-  "操作系统",
-  "域名",
-  "未找到资产",
-  "未找到符合条件的资产",
-  "等待资产查询",
-  "输入单个 IPv4 地址",
-  "输入技术指纹或组件关键词",
-  "IP 查询仅支持合法 IPv4 地址",
-]) {
-  assert.equal(
-    assets.includes(hardcodedAssetsCopy),
-    false,
-    `Assets page must not hardcode copy: ${hardcodedAssetsCopy}`,
-  )
-}
 
 assert.match(
   cve,
@@ -1687,7 +1640,6 @@ for (const hardcodedSettingsCopy of [
 }
 
 for (const pageWithSharedResponsiveState of [
-  ["Assets", assets],
   ["CVE", cve],
   ["Collect", collect],
 ]) {

@@ -338,7 +338,7 @@ const navigationGroups = computed(() => [
   {
     key: "securityData",
     title: t("settings.navigation.groups.securityData"),
-    items: ["CVE", "Assets", "Collect"],
+    items: ["CVE", "Collect"],
   },
   {
     key: "settings",

@@ -46,7 +46,7 @@ export const zhCN = {
       session: "Session",
     },
     signalValues: {
-      dataPlane: "RAG + ASM",
+      dataPlane: "RAG + CTI",
       runtime: "Trace",
     },
     errors: {
@@ -78,7 +78,7 @@ export const zhCN = {
     },
     nav: {
       home: { label: "Home", description: "工作台总览" },
-      dashboard: { label: "Dashboard", description: "资产、漏洞、响应闭环总览" },
+      dashboard: { label: "Dashboard", description: "漏洞、响应闭环与运行信号总览" },
       chat: { label: "Chat", description: "任务规划、剧本调用与流式分析" },
       skills: { label: "Skills", description: "安全 Skills 模块开关" },
       mcp: { label: "MCP", description: "服务、Token 与外部 Agent" },
@@ -93,7 +93,6 @@ export const zhCN = {
       approvals: { label: "Approvals", description: "敏感操作审批队列" },
       scheduler: { label: "Scheduler", description: "周期任务与运行窗口" },
       cve: { label: "CVE", description: "CVE、PoC 与攻击面线索" },
-      assets: { label: "Assets", description: "指纹、IP 与暴露面查询" },
       collect: { label: "Collect", description: "网页情报转 Markdown 入库" },
       settings: { label: "Settings", description: "模型路由、MCP 与通知配置" },
     },
@@ -176,7 +175,6 @@ export const zhCN = {
     errors: {
       cveSearchFailed: "搜索失败",
       cveUpdateFailed: "更新失败",
-      assetSearchFailed: "搜索失败",
       chatHttpFailed: "请求失败: {status}",
       chatSendFailed: "发送失败",
       osControlLoadFailed: "加载控制面失败",
@@ -214,7 +212,7 @@ export const zhCN = {
   },
   dashboard: {
     title: "安全运营态势总览",
-    description: "资产、漏洞、响应链路、异常态势与 Agent 负载",
+    description: "漏洞、响应链路、异常态势与 Agent 负载",
     actions: {
       refresh: "刷新",
       upload: "上传申请",
@@ -299,7 +297,7 @@ export const zhCN = {
       collapseSources: "收起来源",
     },
     composer: {
-      placeholder: "描述目标，例如：分析这个 CVE 对我资产面的影响",
+      placeholder: "描述目标，例如：分析这个 CVE 的暴露面影响",
       modelPlaceholder: "选择模型",
       send: "发送任务",
       missingModelId: "未填写模型 ID",
@@ -338,7 +336,7 @@ export const zhCN = {
       requestFailed: "抱歉，处理请求时遇到错误。请稍后再试。",
     },
     prompts: {
-      cveImpact: "帮我评估 CVE 对当前资产的影响",
+      cveImpact: "帮我评估 CVE 的暴露面影响",
       exposurePlan: "生成一次外部暴露面排查计划",
       alertRunbook: "把这段告警整理成处置步骤",
     },
@@ -518,7 +516,7 @@ export const zhCN = {
       namePlaceholder: "workflow_name",
       descriptionPlaceholder: "描述 workflow 目标",
       inputPlaceholder: "传给 workflow.run 或 workflow.print_response 的输入",
-      defaultInput: "研判互联网暴露资产上的 CVE-2026-0001，并输出升级摘要。",
+      defaultInput: "研判 CVE-2026-0001 的暴露风险，并输出升级摘要。",
     },
     palette: {
       title: "Workflow Library",
@@ -565,7 +563,7 @@ export const zhCN = {
       intakeDescription: "把分析员输入整理成可重复执行的 workflow input。",
       researchType: "Parallel",
       research: "收集证据",
-      researchDescription: "Agent 和 Team 同时收集 CVE、资产与知识库上下文。",
+      researchDescription: "Agent 和 Team 同时收集 CVE、暴露面与知识库上下文。",
       routeType: "Router",
       route: "选择响应路径",
       routeDescription: "通过 CEL 或 Python selector 将关键发现转入升级路径，其余进入报告路径。",
@@ -831,53 +829,6 @@ export const zhCN = {
       networkError: "网络或后端错误",
     },
   },
-  assets: {
-    modes: {
-      fingerprint: "指纹",
-      ip: "IP",
-    },
-    input: {
-      ipPlaceholder: "输入 IP 地址 (例如: 192.168.1.1)",
-      fingerprintPlaceholder: "输入指纹信息 (例如: Vue、React)",
-    },
-    filters: {
-      ipType: "IP 类型",
-      statusCode: "状态码",
-      tags: "标签（可多选）",
-      clear: "清空筛选",
-    },
-    actions: {
-      search: "搜索",
-    },
-    table: {
-      site: "站点",
-      ipAddress: "IP 地址",
-      hostname: "主机名",
-      ipType: "IP 类型",
-      statusCode: "状态码",
-      fingerprint: "指纹",
-      tag: "标签",
-      portInfo: "端口信息",
-      title: "标题",
-      server: "服务器",
-      os: "操作系统",
-      domain: "域名",
-    },
-    pagination: {
-      summary: "共 {total} 条资产，当前显示 {shown} 条",
-    },
-    empty: {
-      notFoundDescription: "未找到资产",
-      notFoundTitle: "未找到符合条件的资产",
-      notFoundHint: "请尝试其他指纹关键词",
-      waitingTitle: "等待资产查询",
-      waitingIp: "输入单个 IPv4 地址",
-      waitingFingerprint: "输入技术指纹或组件关键词",
-    },
-    validation: {
-      ipv4Only: "IP 查询仅支持合法 IPv4 地址",
-    },
-  },
   cve: {
     input: {
       queryPlaceholder: "输入 CVE 编号或关键字",
@@ -975,7 +926,7 @@ export const zhCN = {
     navigation: {
       sectionTitle: "导航栏编排",
       sectionDescription: "预览当前导航顺序与分类，为后续用户自定义顺序、分组和可见性提供入口。",
-      note: "CVE、Assets、Collect 已独立归入安全数据分类，并通过分割线与运行、知识和 Settings 区域区分。",
+      note: "CVE、Collect 已独立归入安全数据分类，并通过分割线与运行、知识和 Settings 区域区分。",
       groups: {
         operations: "运行入口",
         knowledge: "知识与控制",

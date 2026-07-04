@@ -30,7 +30,7 @@ PostgreSQL + pgvector
   +-- knowledge  knowledge contents 和 vector tables
 ```
 
-FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth tables、bootstrap 可选 admin、创建共享数据库连接池、配置资产 HTTP client、启动集成 MCP runtime、include 各 API routers、挂载 `/mcp`，并从 `source/` 或 `frontend/dist` 托管前端静态资源。
+FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth tables、bootstrap 可选 admin、创建共享数据库连接池、启动集成 MCP runtime、include 各 API routers、挂载 `/mcp`，并从 `source/` 或 `frontend/dist` 托管前端静态资源。
 
 ## 后端模块
 
@@ -44,7 +44,7 @@ FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth table
 - `/api/knowledge*`：knowledge status、document write、search、delete 和 clear。
 - `/api/mcp*`：MCP service config、token management、Hi-Agent entries 和 MCP manifest upload。
 - `/api/skills*`：本地 skill listing、toggle 和 upload。
-- `/api/cve*`、`/api/asset*`、`/api/url2md*`：安全数据 workflows。
+- `/api/cve*`、`/api/url2md*`：安全数据 workflows。
 - `/api/settings` 和 `/api/models`：runtime settings 和 model configuration。
 - `/api/audit/logs`：admin audit review。
 - `/api/os/*`：AgentOS control modules。
@@ -53,7 +53,7 @@ FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth table
 
 `api/mcp/` 负责集成 MCP runtime。`server.py` 构建主 FastMCP instance、挂载已启用的内置服务、用 token validation 包装 ASGI app，并支持 runtime refresh。`config.py` 读取和写入 MCP service config、存储 MCP tokens，并跟踪 Hi-Agent execution cache。
 
-`api/tasks/` 负责运维脚本，包括 CVE update、IP asset update、MySQL-to-Postgres migration 和 scheduler execution。
+`api/tasks/` 负责运维脚本，包括 CVE update、MySQL-to-Postgres migration 和 scheduler execution。
 
 ## 前端模块
 
@@ -66,7 +66,7 @@ FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth table
 - `MCP.vue`：MCP services、tokens、Hi-Agent entries 和 uploads。
 - `Skills.vue`：本地 skill 管理。
 - `Knowledge.vue`：document ingestion、retrieval、preview 和 deletion。
-- `CVE.vue`、`Assets.vue`、`Collect.vue`：安全数据 workflows。
+- `CVE.vue`、`Collect.vue`：安全数据 workflows。
 - `Settings.vue`：runtime settings、model configuration 和 navigation tags。
 - `AgentOSControl.vue` 以及 dashboard/workflow components：控制面视图。
 

@@ -2,8 +2,6 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiFetch } from '../lib/apiClient'
 import type {
-  AssetSearchParams,
-  AssetSearchResponse,
   ChatSession,
   CveSearchParams,
   CveSearchResponse,
@@ -45,7 +43,6 @@ import type {
 type ApiFallbackKey =
   | 'cveSearchFailed'
   | 'cveUpdateFailed'
-  | 'assetSearchFailed'
   | 'chatHttpFailed'
   | 'chatSendFailed'
   | 'osControlLoadFailed'
@@ -173,46 +170,6 @@ export function useCveApi() {
     error,
     searchCve,
     updateDatabase
-  }
-}
-
-/**
- * Asset search API.
- */
-export function useAssetApi() {
-  const apiMessage = useApiMessage()
-  const loading = ref(false)
-  const error = ref<string | null>(null)
-
-  const searchAsset = async (params: AssetSearchParams): Promise<AssetSearchResponse> => {
-    loading.value = true
-    error.value = null
-
-    try {
-      const response = await apiFetch('/asset/search', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(params)
-      })
-      if (!response.ok) {
-        const data: unknown = await response.json()
-        throw new Error(messageFromResponse(data, apiMessage('assetSearchFailed')))
-      }
-      return await response.json()
-    } catch (err: unknown) {
-      error.value = messageFromUnknown(err, apiMessage('assetSearchFailed'))
-      throw err
-    } finally {
-      loading.value = false
-    }
-  }
-
-  return {
-    loading,
-    error,
-    searchAsset
   }
 }
 
