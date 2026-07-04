@@ -6,12 +6,23 @@ from pydantic import BaseModel
 
 from api.auth.models import User
 from api.auth.permissions import require_permission
-from api.services.audit_service import audit_request_context, record_audit_event
+from api.services.audit_service import (
+    AuditRequestContext,
+    audit_request_context,
+    record_audit_event,
+)
+from api.services.mcp_config_service import (
+    McpConfigChange,
+    add_hiagent_entry,
+    apply_service_toggle,
+    delete_hiagent_entry,
+    list_hiagent_entries,
+    update_hiagent_entry,
+)
 from api.mcp.config import (
     HIAGENT_CACHE_DB,
     MCP_CONFIG_FILE,
     MCP_TOKENS_DB,
-    SERVICE_IDS,
     delete_token,
     insert_token,
     list_tokens,
@@ -72,6 +83,21 @@ class McpUploadResponse(BaseModel):
     name: str
     kind: str
     restart_required: bool = True
+
+
+def _record_config_change(
+    user: User,
+    change: McpConfigChange,
+    request_context: AuditRequestContext,
+) -> None:
+    record_audit_event(
+        user,
+        action=change.action,
+        resource_type=change.resource_type,
+        resource_id=change.resource_id,
+        metadata=change.metadata,
+        **request_context,
+    )
 
 
 def _require_string(value: Any, field: str) -> str:
@@ -173,26 +199,9 @@ async def update_config(
     body: ServiceToggle,
     user: User = Depends(require_permission("mcp:write")),
 ):
-    if body.id not in SERVICE_IDS:
-        raise HTTPException(status_code=400, detail="Invalid service ID")
-
-    data = read_mcp_config()
-    mcp_cfg = data.setdefault("mcp", {})
-    if not isinstance(mcp_cfg, dict):
-        data["mcp"] = {}
-        mcp_cfg = data["mcp"]
-
-    mcp_cfg[body.id] = body.enabled
-    write_mcp_config(data)
-    record_audit_event(
-        user,
-        action="mcp.config_update",
-        resource_type="mcp_service",
-        resource_id=body.id,
-        metadata={"enabled": body.enabled},
-        **audit_request_context(request),
-    )
-    return {"success": True, "control_mode": "integrated", "restart_required": True}
+    change = apply_service_toggle(body.id, body.enabled)
+    _record_config_change(user, change, audit_request_context(request))
+    return change.response
 
 
 @router.get("/tokens")
@@ -245,8 +254,7 @@ async def remove_token(
 
 @router.get("/hiagent")
 async def list_hiagent(_user: User = Depends(require_permission("mcp:read"))):
-    data = read_mcp_config()
-    return normalize_hiagents(data.get("hiagent", []))
+    return list_hiagent_entries()
 
 
 @router.post("/hiagent/add")
@@ -255,35 +263,14 @@ async def add_hiagent(
     body: HiAgentAdd,
     user: User = Depends(require_permission("mcp:write")),
 ):
-    name = body.name.strip()
-    url = body.url.strip()
-    if not name or not url:
-        raise HTTPException(status_code=400, detail="name 和 url 不能为空")
-
-    data = read_mcp_config()
-    entries = normalize_hiagents(data.get("hiagent", []))
-    if any(entry["url"] == url for entry in entries):
-        raise HTTPException(status_code=409, detail="该 URL 已存在")
-
-    entries.append(
-        {
-            "name": name,
-            "url": url,
-            "description": body.description.strip(),
-            "enabled": body.enabled,
-        }
+    change = add_hiagent_entry(
+        name=body.name,
+        url=body.url,
+        description=body.description,
+        enabled=body.enabled,
     )
-    data["hiagent"] = entries
-    write_mcp_config(data)
-    record_audit_event(
-        user,
-        action="mcp.hiagent_add",
-        resource_type="hiagent",
-        resource_id=url,
-        metadata={"name": name, "enabled": body.enabled},
-        **audit_request_context(request),
-    )
-    return {"success": True, "restart_required": True}
+    _record_config_change(user, change, audit_request_context(request))
+    return change.response
 
 
 @router.post("/hiagent/update")
@@ -292,45 +279,15 @@ async def update_hiagent(
     body: HiAgentUpdate,
     user: User = Depends(require_permission("mcp:write")),
 ):
-    target_url = (body.target_url or body.url or "").strip()
-    new_url = body.url.strip()
-    if not target_url:
-        raise HTTPException(status_code=400, detail="target_url 不能为空")
-
-    data = read_mcp_config()
-    entries = normalize_hiagents(data.get("hiagent", []))
-
-    if new_url and new_url != target_url and any(entry["url"] == new_url for entry in entries):
-        raise HTTPException(status_code=409, detail="该 URL 已存在")
-
-    found = False
-    for entry in entries:
-        if entry["url"] == target_url:
-            if body.name is not None:
-                entry["name"] = body.name
-            if body.description is not None:
-                entry["description"] = body.description
-            if body.enabled is not None:
-                entry["enabled"] = body.enabled
-            if new_url:
-                entry["url"] = new_url
-            found = True
-            break
-
-    if not found:
-        raise HTTPException(status_code=404, detail="未找到该条目")
-
-    data["hiagent"] = entries
-    write_mcp_config(data)
-    record_audit_event(
-        user,
-        action="mcp.hiagent_update",
-        resource_type="hiagent",
-        resource_id=target_url,
-        metadata={"url": new_url, "enabled": body.enabled},
-        **audit_request_context(request),
+    change = update_hiagent_entry(
+        target_url=body.target_url,
+        url=body.url,
+        name=body.name,
+        description=body.description,
+        enabled=body.enabled,
     )
-    return {"success": True, "restart_required": True}
+    _record_config_change(user, change, audit_request_context(request))
+    return change.response
 
 
 @router.post("/hiagent/delete")
@@ -339,26 +296,9 @@ async def delete_hiagent(
     body: HiAgentDelete,
     user: User = Depends(require_permission("mcp:write")),
 ):
-    url = body.url.strip()
-    if not url:
-        raise HTTPException(status_code=400, detail="url 不能为空")
-
-    data = read_mcp_config()
-    entries = normalize_hiagents(data.get("hiagent", []))
-    next_entries = [entry for entry in entries if entry["url"] != url]
-    if len(next_entries) == len(entries):
-        raise HTTPException(status_code=404, detail="未找到该条目")
-
-    data["hiagent"] = next_entries
-    write_mcp_config(data)
-    record_audit_event(
-        user,
-        action="mcp.hiagent_delete",
-        resource_type="hiagent",
-        resource_id=url,
-        **audit_request_context(request),
-    )
-    return {"success": True, "restart_required": True}
+    change = delete_hiagent_entry(body.url)
+    _record_config_change(user, change, audit_request_context(request))
+    return change.response
 
 
 @router.post("/upload", response_model=McpUploadResponse)
