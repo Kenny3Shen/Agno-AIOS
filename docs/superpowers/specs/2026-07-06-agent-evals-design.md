@@ -38,8 +38,9 @@ Implement route 1: AIOS owns eval suite and case orchestration metadata, while
 Agno owns eval execution results.
 
 AIOS app-owned tables use Async SQLAlchemy and live under the app control-plane
-boundary. Agno eval run results are written and read through Agno public APIs.
-The implementation must not query Agno eval internal tables directly.
+boundary. Agno eval run results are written and read through Agno public async
+APIs wherever available. The implementation must not query Agno eval internal
+tables directly.
 
 The first implementation includes backend support for all four Agno dimensions:
 
@@ -51,6 +52,22 @@ The first implementation includes backend support for all four Agno dimensions:
 The frontend must not expose a manual `PerformanceEval` run button in the first
 slice. It may display performance history, filtering, and status if results
 exist.
+
+## Async API Priority
+
+Use Agno async APIs first.
+
+- Eval execution must use `arun()` for Agno Eval classes when the installed
+  class exposes it.
+- Eval result reads must use `AsyncPostgresDb.get_eval_runs()` and
+  `AsyncPostgresDb.get_eval_run()`.
+- Runtime DB access must come from `get_async_agno_postgres_db()`.
+- App-owned suite/case metadata must use the existing Async SQLAlchemy
+  engine/session boundary.
+- A synchronous Agno API is allowed only as a narrow exception when the installed
+  Agno package has no async equivalent for that capability. That exception must
+  stay behind a small adapter, run off the request event loop if needed, and be
+  documented in code and tests.
 
 ## Goals
 
@@ -95,8 +112,7 @@ Add focused services instead of growing `os_control_service.py`.
   Agno Eval type.
 - Maps case configuration to Agno Eval classes.
 - Executes `AccuracyEval`, `AgentAsJudgeEval`, `ReliabilityEval`, and
-  `PerformanceEval` through their public APIs, preferring async `arun()` when
-  the installed class supports it.
+  `PerformanceEval` through their public async `arun()` APIs when available.
 - Reuses a captured Agent response for `agent_as_judge` and `reliability`.
 - Lets `AccuracyEval` run through its official agent-backed API instead of
   forcing a precomputed output path that the local Agno API does not expose.
@@ -120,6 +136,7 @@ Add focused services instead of growing `os_control_service.py`.
 - Does not overload generic `/api/os/{module}` for mutations.
 - Keeps the existing `Evaluation` navigation item but moves it to the dedicated
   feature surface.
+- Does not call synchronous Agno DB APIs from async route handlers.
 
 ### App-Owned Tables
 
@@ -352,6 +369,9 @@ workbench.
 
 - No route or result service queries Agno eval table names directly.
 - Eval result adapters do not import synchronous Agno `PostgresDb`.
+- Eval runner uses Agno `arun()` methods for Eval execution when available.
+- Any synchronous Agno exception is isolated behind a named adapter and covered
+  by a source-level test.
 - Performance run controls are not exposed in the frontend first slice.
 
 ### Frontend Tests
@@ -390,7 +410,8 @@ history, failure detail, and mobile/desktop layout.
   reliability, and backend performance.
 - The frontend does not expose manual performance run controls in the first
   slice.
-- Eval result history and detail are read through Agno async DB APIs.
+- Eval execution and result history/detail use Agno async APIs wherever the
+  installed package exposes them.
 - AIOS stores suite/case orchestration metadata through Async SQLAlchemy.
 - Failed cases are visible and replayable.
 - Expected MCP tool-call status is visible and test-covered.
