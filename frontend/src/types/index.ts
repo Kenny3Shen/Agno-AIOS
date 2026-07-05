@@ -427,6 +427,9 @@ export interface AgentEvalAgnoRun {
   run_id: string
   name: string
   eval_type: AgentEvalType | string
+  case_run_id?: string | null
+  case_id?: string | null
+  suite_run_id?: string | null
   agent_id?: string | null
   team_id?: string | null
   workflow_id?: string | null

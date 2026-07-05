@@ -1199,10 +1199,22 @@ assert.match(
   "AgentEvals should display the PerformanceEval dimension",
 )
 
+assert.match(
+  agentEvals,
+  /t\("agentEvals\.performance\.hiddenRun"\)/,
+  "AgentEvals must render visible text for the disabled PerformanceEval run state",
+)
+
 assert.doesNotMatch(
   agentEvals,
   /runPerformance|performanceRunButton|@click="[^"]*performance/i,
   "AgentEvals must not expose a manual PerformanceEval run action",
+)
+
+assert.match(
+  agentEvals,
+  /filters\.suiteId !== "all"\s*\?\s*filters\.suiteId\s*:\s*""/,
+  "Run suite action must require an explicit suite selection instead of using the first suite",
 )
 
 for (const methodName of [

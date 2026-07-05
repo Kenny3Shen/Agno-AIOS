@@ -108,6 +108,38 @@ def _not_found(resource: str) -> HTTPException:
     return HTTPException(status_code=404, detail=f"{resource} not found")
 
 
+def _eval_run_id(run: dict[str, Any]) -> str:
+    for key in ("run_id", "id"):
+        value = run.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _with_case_run_replay_link(
+    run: dict[str, Any],
+    case_runs_by_eval_id: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    eval_run_id = _eval_run_id(run)
+    if not eval_run_id:
+        return run
+    case_run = case_runs_by_eval_id.get(eval_run_id)
+    if case_run is None:
+        return run
+
+    enriched = dict(run)
+    data = run.get("data")
+    enriched_data = dict(data) if isinstance(data, dict) else {}
+    enriched["case_run_id"] = case_run["id"]
+    enriched["case_id"] = case_run["case_id"]
+    enriched["suite_run_id"] = case_run["suite_run_id"]
+    enriched_data["case_run_id"] = case_run["id"]
+    enriched_data["case_id"] = case_run["case_id"]
+    enriched_data["suite_run_id"] = case_run["suite_run_id"]
+    enriched["data"] = enriched_data
+    return enriched
+
+
 @router.get("/suites")
 async def list_eval_suites(
     enabled: bool | None = None,
@@ -333,4 +365,7 @@ async def list_eval_failures(
     user: User = Depends(require_agent_eval_read_permission),
 ):
     del user
-    return await result_service.list_failed_eval_runs(limit=limit)
+    failures = await result_service.list_failed_eval_runs(limit=limit)
+    eval_run_ids = [eval_run_id for item in failures if (eval_run_id := _eval_run_id(item))]
+    case_runs_by_eval_id = await case_store.list_case_runs_by_agno_eval_run_ids(eval_run_ids)
+    return [_with_case_run_replay_link(item, case_runs_by_eval_id) for item in failures]

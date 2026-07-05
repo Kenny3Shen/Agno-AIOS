@@ -36,7 +36,7 @@
       </article>
       <article class="agent-evals-kpi ag-stat-chip tone-blue performance-eval-chip" :title="t('agentEvals.performance.hiddenRun')">
         <span>{{ t("agentEvals.performance.label") }}</span>
-        <strong>PerformanceEval</strong>
+        <strong>{{ t("agentEvals.performance.hiddenRun") }}</strong>
       </article>
     </section>
 
@@ -311,7 +311,7 @@ const loading = computed(() => api.loading.value)
 const error = computed(() => api.error.value)
 const canWrite = computed(() => authStore.hasPermission("agent_eval:write"))
 const canRun = computed(() => authStore.hasPermission("agent_eval:run"))
-const selectedSuiteId = computed(() => filters.suiteId !== "all" ? filters.suiteId : suites.value[0]?.id)
+const selectedSuiteId = computed(() => filters.suiteId !== "all" ? filters.suiteId : "")
 const suiteNameById = computed(() => new Map(suites.value.map((suite) => [suite.id, suite.name])))
 
 const caseRows = computed<EvalCaseRow[]>(() => cases.value.map((item) => {
@@ -458,6 +458,7 @@ const scoreLabel = (score?: number | null) => {
 const replayCaseRunId = (run: AgentEvalAgnoRun | null) => {
   if (!run) return ""
   const candidates = [
+    run.case_run_id,
     run.data?.case_run_id,
     run.data?.caseRunId,
     run.eval_input?.case_run_id,

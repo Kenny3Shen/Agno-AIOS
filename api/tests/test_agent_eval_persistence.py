@@ -1,17 +1,23 @@
 from types import SimpleNamespace
 
+from sqlalchemy.dialects import postgresql
+
 from api.auth.permissions import has_permission
 from api.persistence.agent_evals import (
     agent_eval_case_runs_table,
     agent_eval_cases_table,
     agent_eval_suite_runs_table,
     agent_eval_suites_table,
+    case_run_by_agno_eval_run_id_statement,
+    case_runs_by_agno_eval_run_ids_statement,
     create_case_row_async,
     create_case_run_row_async,
     create_suite_row_async,
     create_suite_run_row_async,
     get_case_row_async,
+    get_case_run_by_agno_eval_run_id_row_async,
     get_case_run_row_async,
+    list_case_runs_by_agno_eval_run_ids_rows_async,
     get_suite_row_async,
     get_suite_run_row_async,
     list_case_rows_async,
@@ -65,5 +71,26 @@ def test_agent_eval_crud_helpers_are_exported():
     assert update_suite_run_row_async
     assert create_case_run_row_async
     assert list_case_run_rows_async
+    assert list_case_runs_by_agno_eval_run_ids_rows_async
     assert get_case_run_row_async
+    assert get_case_run_by_agno_eval_run_id_row_async
     assert update_case_run_row_async
+
+
+def test_case_run_by_agno_eval_run_id_uses_jsonb_contains_query():
+    stmt = case_run_by_agno_eval_run_id_statement("eval-1")
+    compiled = str(stmt.compile(dialect=postgresql.dialect()))
+
+    assert "agent_eval_case_runs" in compiled
+    assert "agno_eval_run_ids" in compiled
+    assert "@>" in compiled
+
+
+def test_case_runs_by_agno_eval_run_ids_uses_single_jsonb_query():
+    stmt = case_runs_by_agno_eval_run_ids_statement(["eval-1", "eval-2"])
+    compiled = str(stmt.compile(dialect=postgresql.dialect()))
+
+    assert "agent_eval_case_runs" in compiled
+    assert "agno_eval_run_ids" in compiled
+    assert compiled.count("@>") == 2
+    assert " OR " in compiled

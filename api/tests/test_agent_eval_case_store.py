@@ -231,6 +231,73 @@ async def test_create_case_run_sets_defaults_and_replay_link():
 
 
 @pytest.mark.asyncio
+async def test_get_case_run_by_agno_eval_run_id_normalizes_row():
+    with patch.object(
+        store,
+        "get_case_run_by_agno_eval_run_id_row_async",
+        new=AsyncMock(
+            return_value={
+                "id": "case-run-1",
+                "suite_run_id": "suite-run-1",
+                "case_id": "case-1",
+                "status": "failed",
+                "agent_run_id": "agent-run-1",
+                "session_id": "",
+                "trace_id": "",
+                "agno_eval_run_ids": ["eval-1"],
+                "error_type": "assertion",
+                "error_summary": "Missing tool call",
+                "replay_of_case_run_id": "",
+                "started_at": "2026-07-06T00:00:00Z",
+                "completed_at": "2026-07-06T00:01:00Z",
+            }
+        ),
+    ) as get_mock:
+        result = await store.get_case_run_by_agno_eval_run_id("eval-1")
+
+    assert result is not None
+    assert result["id"] == "case-run-1"
+    assert result["agno_eval_run_ids"] == ["eval-1"]
+    get_call = get_mock.await_args
+    assert get_call is not None
+    assert get_call.args == ("eval-1",)
+
+
+@pytest.mark.asyncio
+async def test_list_case_runs_by_agno_eval_run_ids_maps_each_eval_id():
+    with patch.object(
+        store,
+        "list_case_runs_by_agno_eval_run_ids_rows_async",
+        new=AsyncMock(
+            return_value=[
+                {
+                    "id": "case-run-1",
+                    "suite_run_id": "suite-run-1",
+                    "case_id": "case-1",
+                    "status": "failed",
+                    "agent_run_id": "agent-run-1",
+                    "session_id": "",
+                    "trace_id": "",
+                    "agno_eval_run_ids": ["eval-1", "eval-2"],
+                    "error_type": "assertion",
+                    "error_summary": "Missing tool call",
+                    "replay_of_case_run_id": "",
+                    "started_at": "2026-07-06T00:00:00Z",
+                    "completed_at": "2026-07-06T00:01:00Z",
+                }
+            ]
+        ),
+    ) as list_mock:
+        result = await store.list_case_runs_by_agno_eval_run_ids(["eval-2", "eval-1", "eval-2", ""])
+
+    assert result["eval-1"]["id"] == "case-run-1"
+    assert result["eval-2"]["id"] == "case-run-1"
+    list_call = list_mock.await_args
+    assert list_call is not None
+    assert list_call.args == (["eval-2", "eval-1"],)
+
+
+@pytest.mark.asyncio
 async def test_mark_suite_and_case_run_allow_status_only_updates():
     suite_run_row = {
         "id": "suite-run-1",
