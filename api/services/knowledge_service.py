@@ -108,10 +108,11 @@ def knowledge_settings() -> KnowledgeServiceSettings:
 
 
 COLD_START_NOTE = (
-    "首次触发知识写入、向量检索或重排时会同步加载/下载本地模型，"
-    "冷启动可能阻塞 30-120 秒，取决于网络、磁盘和 CPU。"
+    "首次触发知识写入、向量检索或重排时会在线程中加载/下载本地模型，"
+    "当前操作可能等待 30-120 秒，但不会阻塞其它页面请求。"
 )
 _knowledge_async_lock = asyncio.Lock()
+_knowledge_runtime_async_lock = asyncio.Lock()
 
 
 async def _resolve_existing_file_async(path: str) -> Path:
@@ -243,13 +244,50 @@ def get_async_knowledge_base(search_type: SearchType | None = None) -> Knowledge
     )
 
 
-async def _ensure_knowledge_storage_async() -> None:
-    knowledge = get_async_knowledge_base()
-    vector_db = cast(Any, knowledge.vector_db)
-    await vector_db.async_create()
+async def _get_async_knowledge_base_async(search_type: SearchType | None = None) -> Knowledge:
+    async with _knowledge_runtime_async_lock:
+        return await asyncio.to_thread(get_async_knowledge_base, search_type)
+
+
+async def get_async_knowledge_base_async(search_type: SearchType | None = None) -> Knowledge:
+    return await _get_async_knowledge_base_async(search_type)
+
+
+def knowledge_runtime_loaded() -> bool:
+    return get_async_knowledge_base.cache_info().currsize > 0
+
+
+async def _ensure_knowledge_contents_storage_async() -> None:
     contents_db = get_async_knowledge_postgres_db()
     get_table = getattr(contents_db, "_get_table")
     await get_table(table_type="knowledge", create_table_if_not_found=True)
+
+
+async def _ensure_knowledge_storage_async() -> None:
+    knowledge = await _get_async_knowledge_base_async()
+    vector_db = cast(Any, knowledge.vector_db)
+    await vector_db.async_create()
+    await _ensure_knowledge_contents_storage_async()
+
+
+async def _knowledge_content_rows_async(
+    *,
+    limit: int | None = None,
+    page: int | None = None,
+    sort_by: str | None = None,
+    sort_order: str | None = None,
+) -> tuple[list[Any], int]:
+    return await get_async_knowledge_postgres_db().get_knowledge_contents(
+        limit=limit,
+        page=page,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        linked_to=knowledge_settings().name,
+    )
+
+
+async def _knowledge_content_by_id_async(content_id: str) -> Any | None:
+    return await get_async_knowledge_postgres_db().get_knowledge_content(content_id)
 
 
 def _pgvector_projection_table() -> Table:
@@ -317,7 +355,7 @@ async def _delete_vector_rows_by_content_id_async(content_id: str) -> None:
 
 
 async def _delete_knowledge_content_row_async(knowledge: Any, content_id: str) -> None:
-    contents_db = getattr(knowledge, "contents_db", None)
+    contents_db = getattr(knowledge, "contents_db", None) or get_async_knowledge_postgres_db()
     delete_knowledge_content = getattr(contents_db, "delete_knowledge_content", None)
     if delete_knowledge_content is None:
         raise RuntimeError("Knowledge contents DB does not support async content deletion")
@@ -332,7 +370,8 @@ async def _delete_content_async(knowledge: Any, content_id: str) -> None:
 
 
 async def _document_status_async(content_id: str) -> dict[str, Any] | None:
-    content = await get_async_knowledge_base().aget_content_by_id(content_id)
+    await _ensure_knowledge_contents_storage_async()
+    content = await _knowledge_content_by_id_async(content_id)
     if content is None:
         return None
     return _content_to_document(content)
@@ -342,6 +381,9 @@ async def _document_status_async(content_id: str) -> dict[str, Any] | None:
 class KnowledgeBaseLifecycleDependencies:
     get_async_knowledge_base: Callable[[SearchType | None], Any] | None = None
     ensure_storage_async: Callable[[], Any] | None = None
+    ensure_contents_storage_async: Callable[[], Any] | None = None
+    knowledge_content_rows_async: Callable[..., Any] | None = None
+    knowledge_content_by_id_async: Callable[[str], Any] | None = None
     chunk_counts_by_content_id_async: Callable[[str | None], Any] | None = None
     chunk_count_async: Callable[[str | None], Any] | None = None
     hydrate_content_ids_async: Callable[[list[Document]], Any] | None = None
@@ -362,6 +404,11 @@ class KnowledgeBaseLifecycle:
             return self.dependencies.get_async_knowledge_base(search_type)
         return get_async_knowledge_base(search_type)
 
+    async def _async_knowledge_async(self, search_type: SearchType | None = None) -> Any:
+        if self.dependencies.get_async_knowledge_base is not None:
+            return self.dependencies.get_async_knowledge_base(search_type)
+        return await _get_async_knowledge_base_async(search_type)
+
     async def _ensure_storage_async(self) -> None:
         if self.dependencies.ensure_storage_async is not None:
             result = self.dependencies.ensure_storage_async()
@@ -369,6 +416,52 @@ class KnowledgeBaseLifecycle:
                 await result
             return
         await _ensure_knowledge_storage_async()
+
+    async def _ensure_contents_storage_async(self) -> None:
+        if self.dependencies.ensure_contents_storage_async is not None:
+            result = self.dependencies.ensure_contents_storage_async()
+            if hasattr(result, "__await__"):
+                await result
+            return
+        if self.dependencies.ensure_storage_async is not None:
+            result = self.dependencies.ensure_storage_async()
+            if hasattr(result, "__await__"):
+                await result
+            return
+        await _ensure_knowledge_contents_storage_async()
+
+    async def _knowledge_content_rows_async(
+        self,
+        *,
+        limit: int | None = None,
+        page: int | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+    ) -> tuple[list[Any], int]:
+        if self.dependencies.knowledge_content_rows_async is not None:
+            result = self.dependencies.knowledge_content_rows_async(
+                limit=limit,
+                page=page,
+                sort_by=sort_by,
+                sort_order=sort_order,
+            )
+            if hasattr(result, "__await__"):
+                return await result
+            return result
+        return await _knowledge_content_rows_async(
+            limit=limit,
+            page=page,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+
+    async def _knowledge_content_by_id_async(self, content_id: str) -> Any | None:
+        if self.dependencies.knowledge_content_by_id_async is not None:
+            result = self.dependencies.knowledge_content_by_id_async(content_id)
+            if hasattr(result, "__await__"):
+                return await result
+            return result
+        return await _knowledge_content_by_id_async(content_id)
 
     async def _chunk_counts_by_content_id_async(self, owner_user_id: str | None) -> dict[str, int]:
         if self.dependencies.chunk_counts_by_content_id_async is not None:
@@ -404,10 +497,9 @@ class KnowledgeBaseLifecycle:
 
     async def _deletable_content_ids_async(
         self,
-        knowledge: Any,
         owner_user_id: str | None,
     ) -> list[str]:
-        contents, _ = await knowledge.aget_content()
+        contents, _ = await self._knowledge_content_rows_async()
         return [
             content.id
             for content in contents
@@ -440,7 +532,7 @@ class KnowledgeBaseLifecycle:
             "reader": profile.reader,
             "input_mode": base_metadata.get("input_mode", "manual"),
         }
-        knowledge = self._async_knowledge()
+        knowledge = await self._async_knowledge_async()
         async with _knowledge_async_lock:
             await self._ensure_storage_async()
             await knowledge.ainsert(
@@ -488,7 +580,7 @@ class KnowledgeBaseLifecycle:
             "input_mode": "path",
         }
         reader = reader_for_profile(profile, file_path.name)
-        knowledge = self._async_knowledge()
+        knowledge = await self._async_knowledge_async()
         async with _knowledge_async_lock:
             await self._ensure_storage_async()
             await knowledge.ainsert(
@@ -512,8 +604,8 @@ class KnowledgeBaseLifecycle:
         raise RuntimeError("知识写入完成但未能读取内容登记记录")
 
     async def list_documents_async(self, owner_user_id: str | None = None) -> list[dict[str, Any]]:
-        await self._ensure_storage_async()
-        contents, _ = await self._async_knowledge().aget_content(
+        await self._ensure_contents_storage_async()
+        contents, _ = await self._knowledge_content_rows_async(
             limit=500,
             page=1,
             sort_by="updated_at",
@@ -534,23 +626,21 @@ class KnowledgeBaseLifecycle:
         doc_id: str,
         owner_user_id: str | None = None,
     ) -> bool:
-        await self._ensure_storage_async()
-        knowledge = self._async_knowledge()
-        content = await knowledge.aget_content_by_id(doc_id)
+        await self._ensure_contents_storage_async()
+        content = await self._knowledge_content_by_id_async(doc_id)
         if content is None or not _content_visible_to_owner(content, owner_user_id):
             return False
-        await self._delete_content_async(knowledge, doc_id)
+        await self._delete_content_async(None, doc_id)
         return True
 
     async def clear_knowledge_base_async(
         self,
         owner_user_id: str | None = None,
     ) -> dict[str, Any]:
-        await self._ensure_storage_async()
-        knowledge = self._async_knowledge()
-        content_ids = await self._deletable_content_ids_async(knowledge, owner_user_id)
+        await self._ensure_contents_storage_async()
+        content_ids = await self._deletable_content_ids_async(owner_user_id)
         for content_id in content_ids:
-            await self._delete_content_async(knowledge, content_id)
+            await self._delete_content_async(None, content_id)
         return {"documents": 0, "chunks": 0}
 
     async def search_documents_async(
@@ -567,7 +657,7 @@ class KnowledgeBaseLifecycle:
             _search_type_from_name(search_type) if search_type else search_type_from_env()
         )
         await self._ensure_storage_async()
-        knowledge = self._async_knowledge()
+        knowledge = await self._async_knowledge_async(effective_search_type)
         settings = knowledge_settings()
         retrieval_limit = retrieval_candidate_limit(
             limit,
@@ -584,9 +674,16 @@ class KnowledgeBaseLifecycle:
         await self._hydrate_content_ids_async(documents)
         return [_result_from_document(document) for document in documents[:limit]]
 
-    async def knowledge_status_async(self, owner_user_id: str | None = None) -> dict[str, Any]:
-        await self._ensure_storage_async()
-        docs = await self.list_documents_async(owner_user_id=owner_user_id)
+    async def knowledge_status_async(
+        self,
+        owner_user_id: str | None = None,
+        documents: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        docs = (
+            documents
+            if documents is not None
+            else await self.list_documents_async(owner_user_id=owner_user_id)
+        )
         chunk_count = await self._chunk_count_async(owner_user_id)
         settings = knowledge_settings()
         device = _model_device()
@@ -614,6 +711,7 @@ class KnowledgeBaseLifecycle:
             "chunk_size": settings.chunk_size,
             "chunk_overlap": settings.chunk_overlap,
             "cold_start_note": COLD_START_NOTE,
+            "runtime_loaded": knowledge_runtime_loaded(),
             "torch_runtime_ok": find_spec("torch") is not None,
         }
 
@@ -686,7 +784,11 @@ async def search_documents_async(
     )
 
 
-async def knowledge_status_async(owner_user_id: str | None = None) -> dict[str, Any]:
+async def knowledge_status_async(
+    owner_user_id: str | None = None,
+    documents: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.knowledge_status_async(
         owner_user_id=owner_user_id,
+        documents=documents,
     )

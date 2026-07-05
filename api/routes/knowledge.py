@@ -40,9 +40,13 @@ class KnowledgeSearchRequest(BaseModel):
 async def get_knowledge_status(user: User = Depends(require_permission("knowledge:read"))) -> dict:
     owner_user_id = effective_knowledge_user_filter(user)
     knowledge_base = get_knowledge_base_lifecycle()
+    documents = await knowledge_base.list_documents_async(owner_user_id=owner_user_id)
     return {
-        "status": await knowledge_base.knowledge_status_async(owner_user_id=owner_user_id),
-        "documents": await knowledge_base.list_documents_async(owner_user_id=owner_user_id),
+        "status": await knowledge_base.knowledge_status_async(
+            owner_user_id=owner_user_id,
+            documents=documents,
+        ),
+        "documents": documents,
     }
 
 

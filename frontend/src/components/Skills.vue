@@ -1,33 +1,33 @@
 <template>
   <div class="skills-console ag-page-flow">
+    <section class="skill-summary-strip ag-stat-strip">
+      <span v-for="metric in summaryMetrics" :key="metric.label" class="skill-summary-chip ag-stat-chip">
+        <small>{{ metric.label }}</small>
+        <strong>{{ metric.value }}</strong>
+      </span>
+    </section>
+
+    <header class="skills-action-bar ag-content-panel">
+      <el-button
+        type="primary"
+        :icon="Refresh"
+        :loading="loading"
+        @click="loadSkills"
+        class="skill-primary-action"
+      >
+        {{ t('skills.actions.refresh') }}
+      </el-button>
+      <el-button
+        :icon="Document"
+        class="skill-primary-action"
+        :disabled="!canWriteSkills"
+        @click="uploadPanelOpen = !uploadPanelOpen"
+      >
+        {{ t('skills.actions.upload') }}
+      </el-button>
+    </header>
+
     <main class="skills-main">
-      <header class="skills-header ag-content-panel">
-        <div class="skill-summary-strip ag-stat-strip">
-          <span v-for="metric in summaryMetrics" :key="metric.label" class="skill-summary-chip ag-stat-chip">
-            <small>{{ metric.label }}</small>
-            <strong>{{ metric.value }}</strong>
-          </span>
-        </div>
-
-        <el-button
-          type="primary"
-          :icon="Refresh"
-          :loading="loading"
-          @click="loadSkills"
-          class="skill-primary-action"
-        >
-          {{ t('skills.actions.refresh') }}
-        </el-button>
-        <el-button
-          :icon="Document"
-          class="skill-primary-action"
-          :disabled="!canWriteSkills"
-          @click="uploadPanelOpen = !uploadPanelOpen"
-        >
-          {{ t('skills.actions.upload') }}
-        </el-button>
-      </header>
-
       <section class="skills-body">
         <section v-if="uploadPanelOpen" class="skill-upload-panel ag-content-panel">
           <div class="skill-card-head">
@@ -300,16 +300,12 @@ onMounted(() => {
   gap: var(--ag-section-gap);
 }
 
-.skills-header {
+.skills-action-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.skill-summary-strip {
-  flex: 1 1 520px;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .skill-primary-action {
@@ -516,7 +512,7 @@ onMounted(() => {
 }
 
 @media (max-width: 760px) {
-  .skills-header {
+  .skills-action-bar {
     padding: 10px;
   }
 

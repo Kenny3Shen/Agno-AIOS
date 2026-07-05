@@ -493,19 +493,27 @@ async def test_add_file_document_uses_async_insert_and_reload(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_documents_uses_async_get_content_only() -> None:
+async def test_list_documents_uses_contents_db_without_runtime() -> None:
     content_row = SimpleNamespace(
         id="content-3",
         name="Runbook",
         metadata={"user_id": "u1", "source": "/kb/runbook.md", "chunks": 1},
         created_at=0,
     )
-    knowledge = StrictAsyncKnowledge(contents=[content_row])
+    content_calls: list[dict[str, Any]] = []
+
+    async def content_rows_async(**kwargs: Any):
+        content_calls.append(kwargs)
+        return [content_row], 1
+
+    def fail_runtime(_search_type=None):
+        raise AssertionError("status/list must not load Knowledge runtime")
 
     lifecycle = knowledge_service.KnowledgeBaseLifecycle(
         knowledge_service.KnowledgeBaseLifecycleDependencies(
-            get_async_knowledge_base=lambda _search_type=None: knowledge,
-            ensure_storage_async=lambda: None,
+            get_async_knowledge_base=fail_runtime,
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_rows_async=content_rows_async,
             chunk_counts_by_content_id_async=lambda _owner_user_id=None: {
                 "content-3": 4
             },
@@ -528,44 +536,78 @@ async def test_list_documents_uses_async_get_content_only() -> None:
             },
         }
     ]
-    assert knowledge.calls == [("aget_content", (), {"limit": 500, "page": 1, "sort_by": "updated_at", "sort_order": "desc"})]
+    assert content_calls == [
+        {"limit": 500, "page": 1, "sort_by": "updated_at", "sort_order": "desc"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_knowledge_status_uses_prefetched_documents_without_runtime() -> None:
+    def fail_runtime(_search_type=None):
+        raise AssertionError("status must not load Knowledge runtime")
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=fail_runtime,
+            chunk_count_async=lambda _owner_user_id=None: 7,
+        )
+    )
+
+    status = await lifecycle.knowledge_status_async(
+        owner_user_id="u1",
+        documents=[{"id": "content-1"}],
+    )
+
+    assert status["documents"] == 1
+    assert status["chunks"] == 7
+    assert "runtime_loaded" in status
 
 
 @pytest.mark.asyncio
 async def test_delete_document_rejects_foreign_owner() -> None:
-    knowledge = StrictAsyncKnowledge(
-        content_by_id={"doc-1": SimpleNamespace(id="doc-1", metadata={"user_id": "u2"})}
-    )
+    lookups: list[str] = []
 
     async def noop() -> None:
         return None
 
+    async def content_by_id(content_id: str):
+        lookups.append(content_id)
+        return SimpleNamespace(id="doc-1", metadata={"user_id": "u2"})
+
+    def fail_runtime(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("delete authorization must not load Knowledge runtime")
+
     with (
-        patch.object(knowledge_service, "_ensure_knowledge_storage_async", noop),
-        patch.object(knowledge_service, "get_async_knowledge_base", return_value=knowledge),
+        patch.object(knowledge_service, "_ensure_knowledge_contents_storage_async", noop),
+        patch.object(knowledge_service, "_knowledge_content_by_id_async", content_by_id),
+        patch.object(knowledge_service, "get_async_knowledge_base", fail_runtime),
     ):
         result = await knowledge_service.delete_document_async(
             "doc-1", owner_user_id="u1"
         )
     assert not result
-    assert knowledge.calls == [("aget_content_by_id", "doc-1")]
+    assert lookups == ["doc-1"]
 
 
 @pytest.mark.asyncio
 async def test_delete_document_uses_async_delete_dependency_for_owned_content() -> None:
     deleted: list[str] = []
 
-    knowledge = StrictAsyncKnowledge(
-        content_by_id={"doc-1": SimpleNamespace(id="doc-1", metadata={"user_id": "u1"})}
-    )
-
     async def delete_content_async(_knowledge, content_id: str) -> None:
         deleted.append(content_id)
 
+    async def content_by_id(content_id: str):
+        assert content_id == "doc-1"
+        return SimpleNamespace(id="doc-1", metadata={"user_id": "u1"})
+
+    def fail_runtime(_search_type=None):
+        raise AssertionError("delete must not load Knowledge runtime")
+
     lifecycle = knowledge_service.KnowledgeBaseLifecycle(
         knowledge_service.KnowledgeBaseLifecycleDependencies(
-            get_async_knowledge_base=lambda _search_type=None: knowledge,
-            ensure_storage_async=lambda: None,
+            get_async_knowledge_base=fail_runtime,
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_by_id_async=content_by_id,
             delete_content_async=delete_content_async,
         )
     )
@@ -574,28 +616,31 @@ async def test_delete_document_uses_async_delete_dependency_for_owned_content() 
 
     assert result
     assert deleted == ["doc-1"]
-    assert knowledge.calls == [("aget_content_by_id", "doc-1")]
 
 
 @pytest.mark.asyncio
 async def test_clear_knowledge_base_deletes_all_visible_content_with_async_dependency() -> None:
     deleted: list[str] = []
-
-    knowledge = StrictAsyncKnowledge(
-        contents=[
-            SimpleNamespace(id="doc-1", metadata={"user_id": "u1"}),
-            SimpleNamespace(id="doc-2", metadata={"user_id": "u1"}),
-            SimpleNamespace(id="doc-3", metadata={"user_id": "u2"}),
-        ]
-    )
+    contents = [
+        SimpleNamespace(id="doc-1", metadata={"user_id": "u1"}),
+        SimpleNamespace(id="doc-2", metadata={"user_id": "u1"}),
+        SimpleNamespace(id="doc-3", metadata={"user_id": "u2"}),
+    ]
 
     async def delete_content_async(_knowledge, content_id: str) -> None:
         deleted.append(content_id)
 
+    async def content_rows_async(**_kwargs: Any):
+        return contents, len(contents)
+
+    def fail_runtime(_search_type=None):
+        raise AssertionError("clear must not load Knowledge runtime")
+
     lifecycle = knowledge_service.KnowledgeBaseLifecycle(
         knowledge_service.KnowledgeBaseLifecycleDependencies(
-            get_async_knowledge_base=lambda _search_type=None: knowledge,
-            ensure_storage_async=lambda: None,
+            get_async_knowledge_base=fail_runtime,
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_rows_async=content_rows_async,
             delete_content_async=delete_content_async,
         )
     )
@@ -604,4 +649,3 @@ async def test_clear_knowledge_base_deletes_all_visible_content_with_async_depen
 
     assert result == {"documents": 0, "chunks": 0}
     assert deleted == ["doc-1", "doc-2"]
-    assert knowledge.calls == [("aget_content", (), {})]

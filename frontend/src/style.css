@@ -216,6 +216,7 @@ button:enabled {
 	display: flex;
 	flex-wrap: nowrap;
 	gap: 8px;
+	block-size: var(--ag-stat-strip-height);
 	margin-block: 10px;
 	min-width: 0;
 	overflow: hidden;

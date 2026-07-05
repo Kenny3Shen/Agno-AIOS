@@ -467,9 +467,6 @@ export const enUS = {
     },
   },
   workflow: {
-    kicker: "Agno Workflow",
-    title: "Workflow builder",
-    description: "Design repeatable Agno pipelines that orchestrate agents, teams, functions, and nested workflows through typed steps.",
     actions: {
       validate: "Validate",
       copyCode: "Copy code",
@@ -725,7 +722,6 @@ export const enUS = {
       default: "No runtime records.",
     },
     memory: {
-      deskTitle: "Memory Review Desk",
       queryTitle: "Query Scope",
       searchPlaceholder: "Search memory content",
       userPlaceholder: "User ID",
@@ -738,7 +734,6 @@ export const enUS = {
       noUsers: "No user memories",
       memoriesTitle: "User Memories",
       resultSummary: "{start}-{end} / {total}",
-      modeAutomatic: "Automatic Memory",
       modeLabel: "Mode",
       emptyMemory: "Empty memory",
       emptyTitle: "No Memory",
@@ -757,12 +752,6 @@ export const enUS = {
       storedHint: "{count} users",
       thresholdSummary: "R{review} / X{risk}",
       thresholdTitle: "Review threshold {review}, Risk threshold {risk}",
-      updateOnRun: "Updates after runs",
-      updateDisabled: "No run updates",
-      sessionSummaries: "Session summaries on",
-      sessionSummariesOff: "Session summaries off",
-      readonly: "Read only",
-      writeEnabled: "Write enabled",
       detailTitle: "Reading Dossier",
       memoryLabel: "Memory",
       userLabel: "User",

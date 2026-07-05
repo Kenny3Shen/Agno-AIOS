@@ -1,32 +1,29 @@
 <template>
   <div class="mcp-console ag-page-flow">
-      <main class="mcp-main">
-        <header class="mcp-toolbar ag-content-panel">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="mcp-summary-strip ag-stat-strip">
-              <div v-for="metric in metrics" :key="metric.label" class="mcp-summary-chip ag-stat-chip">
-                <span>{{ metric.label }}</span>
-                <strong :title="metric.hint">{{ metric.value }}</strong>
-              </div>
+    <section class="mcp-summary-strip ag-stat-strip">
+      <div v-for="metric in metrics" :key="metric.label" class="mcp-summary-chip ag-stat-chip">
+        <span>{{ metric.label }}</span>
+        <strong :title="metric.hint">{{ metric.value }}</strong>
+      </div>
 
-              <div class="mcp-summary-chip mcp-summary-url ag-stat-chip">
-                <span>{{ t('mcp.context.clientUrl') }}</span>
-                <strong :title="clientUrl">{{ clientUrl }}</strong>
-              </div>
-            </div>
+      <div class="mcp-summary-chip mcp-summary-url ag-stat-chip">
+        <span>{{ t('mcp.context.clientUrl') }}</span>
+        <strong :title="clientUrl">{{ clientUrl }}</strong>
+      </div>
+    </section>
 
-            <div class="flex items-center gap-2">
-              <el-button :icon="Plus" class="cursor-pointer" :disabled="!canWriteMcp" @click="uploadPanelOpen = !uploadPanelOpen">
-                {{ t('mcp.upload.open') }}
-              </el-button>
-              <el-button type="primary" :loading="loading" class="cursor-pointer" @click="loadAll">
-                <el-icon class="mr-1"><Refresh /></el-icon>
-                {{ t('mcp.actions.refresh') }}
-              </el-button>
-            </div>
-          </div>
-
-        </header>
+    <main class="mcp-main">
+      <header class="mcp-toolbar ag-content-panel">
+        <div class="mcp-toolbar-actions">
+          <el-button :icon="Plus" class="cursor-pointer" :disabled="!canWriteMcp" @click="uploadPanelOpen = !uploadPanelOpen">
+            {{ t('mcp.upload.open') }}
+          </el-button>
+          <el-button type="primary" :loading="loading" class="cursor-pointer" @click="loadAll">
+            <el-icon class="mr-1"><Refresh /></el-icon>
+            {{ t('mcp.actions.refresh') }}
+          </el-button>
+        </div>
+      </header>
 
         <section class="mcp-body ag-content-panel">
           <section v-if="uploadPanelOpen" class="mcp-panel mb-3">
@@ -410,11 +407,16 @@ onMounted(() => {
 }
 
 .mcp-toolbar {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
-.mcp-body {
-  display: block;
+.mcp-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .mcp-card-icon {
@@ -432,12 +434,8 @@ onMounted(() => {
   flex: 0 0 auto;
 }
 
-.mcp-summary-strip {
-  flex: 1 1 640px;
-}
-
-.mcp-summary-url {
-  flex: 1 1 320px;
+.mcp-body {
+  display: block;
 }
 
 .mcp-card,

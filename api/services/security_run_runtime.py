@@ -14,7 +14,7 @@ from anyio import to_thread
 from loguru import logger
 
 from api.config import get_settings
-from api.services.knowledge_service import get_async_knowledge_base
+from api.services.knowledge_service import get_async_knowledge_base_async
 
 from api.services.model_config_service import get_model_for_run_async
 from api.services.postgres_store import get_async_agno_postgres_db
@@ -126,7 +126,7 @@ class SecurityRunRequest:
 class SecurityRunRuntimeDependencies:
     build_model: Callable[[str | None], Any] = _build_model_async
     get_db: Callable[[], Any] = get_async_agno_postgres_db
-    get_async_knowledge_base: Callable[[], Any] = get_async_knowledge_base
+    get_async_knowledge_base: Callable[[], Any] = get_async_knowledge_base_async
     get_enabled_skill_dirs: Callable[[], Any] = get_enabled_skill_dirs_async
     get_mcp_url: Callable[[], str] = _build_mcp_url
     mcp_tools_factory: Callable[..., Any] = MCPTools
@@ -207,7 +207,7 @@ class SecurityRunRuntime:
             instructions=[await _load_prompt_async(SECURITY_OPERATIONS_PROMPT)],
             model=await _maybe_await(self.dependencies.build_model(request.model_id)),
             tools=[mcp_tools],
-            knowledge=self.dependencies.get_async_knowledge_base(),
+            knowledge=await _maybe_await(self.dependencies.get_async_knowledge_base()),
             knowledge_filters={"user_id": request.knowledge_owner_user_id}
             if request.knowledge_owner_user_id
             else None,

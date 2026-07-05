@@ -1,6 +1,6 @@
 # 数据库表结构
 
-本文是 Agno AIOS 当前 PostgreSQL 表结构快照。内容来自本地代码和已安装的 Agno package（`agno 2.6.12`），不是 live database introspection。
+本文是 Agno AIOS 当前 PostgreSQL 表结构快照。内容来自本地代码和已安装的 Agno package（`agno 2.6.22`），不是 live database introspection。
 
 Agno 文档推荐生产存储使用 Postgres storage，并在多数 AgentOS 部署中把 `PgVector` 和 Postgres storage 放在同一个 PostgreSQL database 上。本仓库当前 runtime 约定使用 `AsyncPostgresDb`：
 

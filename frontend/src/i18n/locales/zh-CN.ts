@@ -465,9 +465,6 @@ export const zhCN = {
     },
   },
   workflow: {
-    kicker: "Agno Workflow",
-    title: "Workflow Builder",
-    description: "按 Agno 模型设计可重复运行的管线，用 typed steps 编排 Agent、Team、函数和嵌套 Workflow。",
     actions: {
       validate: "校验",
       copyCode: "复制代码",
@@ -723,7 +720,6 @@ export const zhCN = {
       default: "暂无运行记录。",
     },
     memory: {
-      deskTitle: "Memory Review Desk",
       queryTitle: "Query Scope",
       searchPlaceholder: "搜索 memory 内容",
       userPlaceholder: "User ID",
@@ -736,7 +732,6 @@ export const zhCN = {
       noUsers: "暂无用户记忆",
       memoriesTitle: "User Memories",
       resultSummary: "{start}-{end} / {total}",
-      modeAutomatic: "Automatic Memory",
       modeLabel: "Mode",
       emptyMemory: "空 memory",
       emptyTitle: "暂无 Memory",
@@ -755,12 +750,6 @@ export const zhCN = {
       storedHint: "{count} 个用户",
       thresholdSummary: "R{review} / X{risk}",
       thresholdTitle: "Review 阈值 {review}，Risk 阈值 {risk}",
-      updateOnRun: "Run 后更新",
-      updateDisabled: "Run 后不更新",
-      sessionSummaries: "Session summary 开启",
-      sessionSummariesOff: "Session summary 关闭",
-      readonly: "只读",
-      writeEnabled: "可写",
       detailTitle: "Reading Dossier",
       memoryLabel: "Memory",
       userLabel: "User",

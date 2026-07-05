@@ -358,6 +358,18 @@ assert.match(
   "MCP must use the compact summary strip instead of metric cards and a side rail",
 )
 
+assert.match(
+  mcp,
+  /<div class="mcp-console ag-page-flow">\s*<section class="mcp-summary-strip ag-stat-strip">/,
+  "MCP summary strip must be a direct page-flow child like Knowledge",
+)
+
+assert.doesNotMatch(
+  mcp,
+  /mcp-toolbar ag-content-panel[\s\S]{0,800}mcp-summary-strip|\.mcp-summary-url\s*\{[^}]*flex:/s,
+  "MCP toolbar must not wrap or resize the Knowledge-style summary strip",
+)
+
 assert.equal(
   agentOSControl.includes("agentos-notes"),
   false,
@@ -707,6 +719,12 @@ assert.match(
 
 assert.match(
   skills,
+  /<div class="skills-console ag-page-flow">\s*<section class="skill-summary-strip ag-stat-strip">/,
+  "Skills summary strip must be a direct page-flow child like Knowledge",
+)
+
+assert.match(
+  skills,
   /skill-summary-chip ag-stat-chip/,
   "Skills summary items must use the shared Stat Chip surface",
 )
@@ -721,6 +739,12 @@ assert.doesNotMatch(
   skills,
   /\.skill-summary-chip\s+(span|small|strong)\s*\{/,
   "Skills Stat Chips must inherit label and value typography from the shared ag-stat-chip style",
+)
+
+assert.doesNotMatch(
+  skills,
+  /skills-action-bar ag-content-panel[\s\S]{0,800}skill-summary-strip|skills-header ag-content-panel/,
+  "Skills action toolbar must not wrap the Knowledge-style summary strip",
 )
 
 assert.match(
@@ -832,13 +856,19 @@ assert.match(
 
 assert.match(
   appStyle,
+  /\.ag-stat-strip\s*\{[^}]*block-size:\s*var\(--ag-stat-strip-height\)/s,
+  "Shared Stat Strips must use one fixed height across pages",
+)
+
+assert.match(
+  appStyle,
   /\.ag-stat-strip\s*\{[^}]*margin-block:\s*10px/s,
   "Shared Stat Strips must keep consistent vertical spacing from surrounding content",
 )
 
 assert.match(
   designTokens,
-  /--ag-page-title-gap:\s*10px;[\s\S]*--ag-section-gap:\s*12px;[\s\S]*--ag-container-border:\s*1px solid var\(--ag-border\);[\s\S]*--ag-container-radius:\s*12px;[\s\S]*--ag-container-padding:\s*14px;/,
+  /--ag-page-title-gap:\s*10px;[\s\S]*--ag-section-gap:\s*12px;[\s\S]*--ag-stat-strip-height:\s*50px;[\s\S]*--ag-container-border:\s*1px solid var\(--ag-border\);[\s\S]*--ag-container-radius:\s*12px;[\s\S]*--ag-container-padding:\s*14px;/,
   "Layout tokens must define the shared page rhythm and container shell",
 )
 
@@ -870,7 +900,7 @@ for (const [source, pattern, label] of [
   [dashboard, /situation-page ag-page-flow/, "Dashboard page"],
   [dashboard, /situation-header ag-content-panel/, "Dashboard header"],
   [dashboard, /situation-panel ag-content-panel/, "Dashboard panels"],
-  [skills, /skills-header ag-content-panel/, "Skills toolbar"],
+  [skills, /skills-action-bar ag-content-panel/, "Skills toolbar"],
   [skills, /skill-upload-panel ag-content-panel/, "Skills upload"],
   [mcp, /mcp-console ag-page-flow/, "MCP page"],
   [mcp, /mcp-toolbar ag-content-panel/, "MCP toolbar"],
@@ -942,6 +972,18 @@ assert.doesNotMatch(
   memoryControl,
   /\.memory-command\s*\{[^}]*border-bottom:/s,
   "Memory command area must not add a full-width divider outside the shared containers",
+)
+
+assert.doesNotMatch(
+  memoryControl,
+  /memory-command-copy|agentOS\.memory\.modeAutomatic|agentOS\.memory\.deskTitle|memoryModeDetails|agentOS\.memory\.updateOnRun|agentOS\.memory\.sessionSummaries|agentOS\.memory\.readonly/,
+  "Memory page must not render the removed automatic-memory desk copy or mode-status sentence",
+)
+
+assert.doesNotMatch(
+  workflow,
+  /workflow-title|workflow\.kicker|workflow\.title|workflow\.description/,
+  "Workflow page must not render the removed top title and description copy",
 )
 
 assert.match(

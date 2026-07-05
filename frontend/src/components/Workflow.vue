@@ -1,12 +1,6 @@
 <template>
   <div class="workflow-console ag-page-flow">
     <header class="workflow-header ag-content-panel">
-      <div class="workflow-title">
-        <span class="workflow-kicker">{{ t("workflow.kicker") }}</span>
-        <h2>{{ t("workflow.title") }}</h2>
-        <p>{{ t("workflow.description") }}</p>
-      </div>
-
       <section class="workflow-stat-strip ag-stat-strip" :aria-label="t('workflow.stats.ariaLabel')">
         <article v-for="stat in stats" :key="stat.label" class="workflow-stat-chip ag-stat-chip">
           <span>{{ stat.label }}</span>
@@ -566,13 +560,9 @@ function defaultExpression(kind: WorkflowStepKind) {
 
 .workflow-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.75fr) auto;
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 16px;
-}
-
-.workflow-title {
-  min-width: 0;
 }
 
 .workflow-kicker,
@@ -585,20 +575,12 @@ function defaultExpression(kind: WorkflowStepKind) {
   text-transform: uppercase;
 }
 
-.workflow-title h2,
 .workflow-canvas-head h3,
 .workflow-inspector-section h4 {
   margin: 0;
   color: var(--ag-heading);
 }
 
-.workflow-title h2 {
-  margin-top: 4px;
-  font-size: 20px;
-  line-height: 1.2;
-}
-
-.workflow-title p,
 .workflow-canvas-head p,
 .workflow-section-head span,
 .workflow-muted {

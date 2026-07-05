@@ -1,26 +1,16 @@
 <template>
   <div class="memory-control ag-page-flow">
-    <section class="memory-command">
-      <div class="memory-command-copy ag-content-panel">
-        <span class="memory-kicker">
-          {{ t("agentOS.memory.modeAutomatic") }}
-        </span>
-        <h2>{{ t("agentOS.memory.deskTitle") }}</h2>
-        <p>{{ memoryModeDetails }}</p>
-      </div>
-
-      <div class="memory-priority-strip ag-stat-strip">
-        <article
-          v-for="card in priorityCards"
-          :key="card.key"
-          class="memory-priority-card ag-stat-chip"
-          :class="`tone-${card.tone}`"
-          :title="card.hint"
-        >
-          <span>{{ card.label }}</span>
-          <strong :title="String(card.value)">{{ card.value }}</strong>
-        </article>
-      </div>
+    <section class="memory-priority-strip ag-stat-strip">
+      <article
+        v-for="card in priorityCards"
+        :key="card.key"
+        class="memory-priority-card ag-stat-chip"
+        :class="`tone-${card.tone}`"
+        :title="card.hint"
+      >
+        <span>{{ card.label }}</span>
+        <strong :title="String(card.value)">{{ card.value }}</strong>
+      </article>
     </section>
 
     <el-alert v-if="error" class="memory-alert" type="error" :title="error" show-icon />
@@ -419,7 +409,7 @@ const priorityCards = computed(() => [
     key: "mode",
     label: t("agentOS.memory.modeLabel"),
     value: memoryMode.value?.type || "auto",
-    hint: memoryModeDetails.value,
+    hint: t("agentOS.memory.modeLabel"),
     tone: "blue",
   },
 ])
@@ -451,17 +441,6 @@ const thresholdTitle = computed(() => t("agentOS.memory.thresholdTitle", {
   review: thresholds.value?.optimization_review ?? "-",
   risk: thresholds.value?.abnormal_growth ?? "-",
 }))
-
-const memoryModeDetails = computed(() => {
-  const mode = memoryMode.value
-  if (!mode) return "-"
-  const details = [
-    mode.update_memory_on_run ? t("agentOS.memory.updateOnRun") : t("agentOS.memory.updateDisabled"),
-    mode.enable_session_summaries ? t("agentOS.memory.sessionSummaries") : t("agentOS.memory.sessionSummariesOff"),
-    mode.readonly ? t("agentOS.memory.readonly") : t("agentOS.memory.writeEnabled"),
-  ]
-  return details.join(" / ")
-})
 
 const workflowStages = computed(() => {
   const memory = selectedMemory.value
@@ -608,21 +587,6 @@ onMounted(() => {
   min-width: 0;
 }
 
-.memory-command {
-  display: grid;
-  flex: 0 0 auto;
-  gap: 12px;
-  grid-template-columns: minmax(260px, 0.9fr) minmax(480px, 1.5fr);
-}
-
-.memory-command-copy {
-  display: grid;
-  align-content: center;
-  gap: 6px;
-  overflow: hidden;
-}
-
-.memory-kicker,
 .memory-panel-head p,
 .memory-detail-head p,
 .memory-reading span,
@@ -637,28 +601,6 @@ onMounted(() => {
   letter-spacing: 0;
   line-height: 1.35;
   text-transform: uppercase;
-}
-
-.memory-command-copy h2 {
-  margin: 0;
-  color: var(--memory-heading);
-  font-size: 22px;
-  font-weight: 900;
-  line-height: 1.15;
-}
-
-.memory-command-copy p {
-  margin: 0;
-  overflow: hidden;
-  color: var(--memory-muted-strong);
-  font-size: 12px;
-  line-height: 1.45;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.memory-priority-strip {
-  align-self: center;
 }
 
 .memory-alert {
@@ -1200,10 +1142,6 @@ onMounted(() => {
 }
 
 @media (max-width: 1120px) {
-  .memory-command {
-    grid-template-columns: 1fr;
-  }
-
   .memory-workbench {
     grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
   }
