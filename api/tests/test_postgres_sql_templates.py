@@ -24,7 +24,6 @@ from api.services import mysql_store
 from api.services import audit_service
 from api.services import url2md_service
 from api.services import scheduler_service
-from api.services import async_pgvector
 from api.services import mcp_config_service
 from api.services import model_config_service
 from api.services import knowledge_runtime_service
@@ -338,28 +337,11 @@ def test_knowledge_async_lifecycle_uses_agno_async_api() -> None:
     assert not hasattr(knowledge_service, "delete_document")
 
 
-def test_knowledge_runtime_uses_native_async_pgvector_adapter() -> None:
+def test_knowledge_runtime_uses_agno_pgvector_contract() -> None:
     runtime_source = inspect.getsource(knowledge_runtime_service)
-    assert "AsyncPgVector(" in runtime_source
-    assert "from agno.vectordb.pgvector import PgVector" not in runtime_source
-    assert "vector_db = PgVector(" not in runtime_source
-
-    adapter_source = inspect.getsource(async_pgvector.AsyncPgVector)
-    assert "self.async_engine" in adapter_source
-    assert "create_async_engine" in inspect.getsource(async_pgvector)
-    assert "get_async_control_plane_engine" not in adapter_source
-    assert "with self.Session" not in adapter_source
-    assert "sess.execute" not in adapter_source
-    assert "asyncio.to_thread" not in adapter_source
-    assert "async def async_search" in adapter_source
-    assert "async def async_insert" in adapter_source
-    assert "async def async_upsert" in adapter_source
-    assert async_pgvector._async_postgres_url(
-        "postgresql+psycopg://ai:ai@localhost:5532/ai"
-    ).startswith("postgresql+psycopg_async://")
-
-    main_source = Path("api/main.py").read_text(encoding="utf-8")
-    assert "await dispose_async_pgvector_engines()" in main_source
+    assert "from agno.vectordb.pgvector import PgVector" in runtime_source
+    assert "vector_db = PgVector(" in runtime_source
+    assert "AsyncPgVector" not in runtime_source
 
 
 def test_scheduler_service_uses_async_agno_db_without_schedule_manager() -> None:
