@@ -99,6 +99,10 @@ Sessions 和 runs 通过 Agno `AsyncPostgresDb` 从 Agno-owned `agno_sessions` �
 
 Traces 通过 Agno `AsyncPostgresDb` 读取；OS Control dashboard 只在 Agno API 尚不覆盖的聚合计数上保留窄范围 Async SQLAlchemy projection。Trace UI 使用 `session_id`、`run_id`、`trace_id`、`span_id`、`agent_id`、`team_id` 和 `workflow_id` 把用户会话和执行细节关联起来。
 
+## Memory
+
+User memories 存储在 Agno-owned `agno.agno_memories` 中。Chat runtime 在 run 时传入 `user_id`，让 Agno Automatic Memory 按用户维度写入和召回。OS Control Memory 页面通过 Agno `AsyncPostgresDb` memory APIs 读取列表、统计、topic、单条 memory、更新和删除；更新使用 Agno AgentOS Memory API 的 replace 语义，替换整条 memory content 和 topics。普通用户只处理自己的 memories，admin 可以跨用户筛选；所有更新和删除都经过后端 RBAC 与 audit。AIOS 不保留自定义 pruning；后续如需 token 裁剪，应按 Agno `POST /optimize-memories` 独立设计。
+
 ## Knowledge
 
 Knowledge documents 通过 metadata 做 user scope。Chat runtime 在存在当前用户时传入 `knowledge_filters` user filter。Knowledge route 使用 Agno `Knowledge.ainsert()`、`asearch()` 和 `aget_content()`；document contents 存在 `knowledge` schema 中的 Agno `AsyncPostgresDb`，vector chunks 由 Agno `PgVector` 管理。删除和清空不调用 Agno PgVector 的同步 delete helper，而是先通过 async SQLAlchemy 删除 vector rows，再通过 async contents DB 删除 catalog row。

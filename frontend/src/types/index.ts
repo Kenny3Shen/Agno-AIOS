@@ -289,6 +289,31 @@ export interface MemoryQueryParams {
   limit?: number
 }
 
+export interface MemoryDeleteResponse {
+  memory_id: string
+  user_id: string
+  deleted: boolean
+}
+
+export interface MemoryUpdateRequest {
+  user_id?: string
+  memory: string
+  topics: string[]
+}
+
+export interface MemoryUpdateResponse {
+  memory_id: string
+  user_id: string
+  memory: string
+  topics: string[]
+  input: string
+  agent_id: string
+  team_id: string
+  feedback: string
+  created_at: string
+  updated_at: string
+}
+
 export type ScheduleTargetType = "agent" | "team" | "workflow"
 
 export interface SchedulerSchedule {
