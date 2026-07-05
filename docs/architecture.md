@@ -101,9 +101,11 @@ Traces 通过 Agno `AsyncPostgresDb` 和 async Postgres pool projection 从 `agn
 
 ## Knowledge
 
-Knowledge documents 通过 metadata 做 user scope。Chat runtime 在存在当前用户时传入 `knowledge_filters` user filter。Knowledge route 使用 Agno `Knowledge.ainsert()`、`asearch()` 和 `aget_content()`；document contents 存在 `knowledge` schema 中的 Agno `AsyncPostgresDb`，vector chunks 仍由 PgVector 管理。删除和清空不调用 Agno PgVector 的同步 delete helper，而是先通过 async SQLAlchemy 删除 vector rows，再通过 async contents DB 删除 catalog row。
+Knowledge documents 通过 metadata 做 user scope。Chat runtime 在存在当前用户时传入 `knowledge_filters` user filter。Knowledge route 使用 Agno `Knowledge.ainsert()`、`asearch()` 和 `aget_content()`；document contents 存在 `knowledge` schema 中的 Agno `AsyncPostgresDb`，vector chunks 由 Agno `PgVector` 管理。删除和清空不调用 Agno PgVector 的同步 delete helper，而是先通过 async SQLAlchemy 删除 vector rows，再通过 async contents DB 删除 catalog row。
 
-PgVector 入口按 Agno 文档推荐的 async Knowledge API 使用：业务代码只调用 `Knowledge.ainsert()`、`Knowledge.asearch()` 等 async methods。由于本地 Agno `PgVector` 的 async create/search/write helpers 仍会经过同步 SQLAlchemy engine 或同步 session，AIOS runtime 使用 `AsyncPgVector` adapter 保留 Agno table contract，同时按 PgVector `db_url` 派生 async engine，把 PgVector create、write、upsert 和 search I/O 切到 async SQLAlchemy，并在 app shutdown 时释放对应 engine。
+PgVector 入口按 Agno 文档推荐的 async Knowledge API 使用：runtime 构造 Agno `PgVector`，业务代码只调用 `Knowledge.ainsert()`、`Knowledge.asearch()` 等 async methods。AIOS 不再把本地 vector adapter 作为默认 runtime path；新的 Agno-owned persistence 访问必须优先使用 Agno async API。
+
+Agno API gap projections 是窄范围 async product views，不改变 table ownership：Knowledge delete/clear 使用 async SQLAlchemy 删除 vector rows 后通过 async contents DB 删除 catalog row；Knowledge dashboard 的 chunk-count 和 search result 的 content-id hydration 只读取 PgVector table 的 `id`、`content_id`、`meta_data`；Trace UI 和 dashboard 通过 Agno tracing API 读取 trace/span 后整理前端 payload，缺少聚合 API 时用 async Postgres pool 做轻量统计；AgentOS control payload 在 sessions/memory/scheduler 使用 Agno async APIs，在 metrics、knowledge 状态和 AIOS control tables 上保留 async projection。
 
 本地 embedding 和 rerank 模型仍是同步 CPU/GPU 计算，不属于 async DB I/O。BGE embedder 的 async methods 和 PgVector rerank path 会把同步模型调用放入 worker thread，避免在 `ainsert()` / `asearch()` 的 event loop 中直接执行 SentenceTransformer 或 FlagEmbedding。
 
