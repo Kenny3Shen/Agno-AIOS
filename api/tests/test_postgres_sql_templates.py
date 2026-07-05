@@ -31,6 +31,7 @@ from api.services import llm_service, os_control_service, postgres_store
 from api.services import knowledge_service
 from api.services import security_run_runtime
 from api.services import skill_service
+from api.services import agent_eval_result_service
 from api.core import logging as core_logging
 from api.tasks import migrate_mysql_to_postgres, update_cve
 from api.tasks import cve_sources
@@ -417,6 +418,18 @@ def test_security_run_runtime_defaults_to_async_agno_db_and_knowledge() -> None:
     assert "= get_agno_postgres_db" not in source
     assert "= get_knowledge_base" not in source
     assert not hasattr(security_run_runtime, "_build_enabled_skills")
+
+
+def test_agent_eval_result_service_uses_agno_async_api_only() -> None:
+    source = inspect.getsource(agent_eval_result_service)
+    assert "get_async_agno_postgres_db" in source
+    assert "get_eval_runs" in source
+    assert "get_eval_run" in source
+    assert "get_agno_postgres_db" not in source
+    assert "PostgresDb" not in source
+    assert "agno_eval" not in source.lower().replace("agno_eval_run", "")
+    assert "select(" not in source
+    assert "from psycopg" not in source
 
 
 def test_mcp_tables_are_declared_in_sqlalchemy_persistence() -> None:
