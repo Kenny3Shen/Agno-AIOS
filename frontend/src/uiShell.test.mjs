@@ -34,6 +34,7 @@ const collect = readOptionalSource("components/Collect.vue")
 const settings = readOptionalSource("components/Settings.vue")
 const knowledge = readOptionalSource("components/Knowledge.vue")
 const agentOSControl = readOptionalSource("components/AgentOSControl.vue")
+const memoryControl = readOptionalSource("components/MemoryControl.vue")
 const useApi = readSource("composables/useApi.ts")
 const apiClient = readOptionalSource("lib/apiClient.ts")
 const authClientSource = readOptionalSource("lib/authClient.ts")
@@ -806,14 +807,26 @@ assert.doesNotMatch(
 
 assert.match(
   appStyle,
-  /\.ag-stat-chip\s*\{[^}]*border-radius:\s*8px[^}]*padding:\s*6px\s+10px/s,
-  "Shared Stat Chip style must define the compact 8px rectangular chip surface",
+  /\.ag-stat-chip\s*\{[^}]*border-radius:\s*8px[^}]*background:\s*var\(--ag-panel-soft\)[^}]*padding:\s*7px\s+10px/s,
+  "Shared Stat Chip style must define the consistent compact 8px rectangular chip surface",
 )
 
 assert.match(
   appStyle,
   /\.ag-stat-strip\s*\{[^}]*flex-wrap:\s*nowrap[^}]*overflow:\s*hidden/s,
   "Shared Stat Strips must provide the compact single-row layout globally",
+)
+
+assert.match(
+  appStyle,
+  /\.ag-stat-strip\s*\{[^}]*border-bottom:\s*1px\s+solid\s+var\(--ag-border\)[^}]*padding-bottom:\s*10px/s,
+  "Shared Stat Strips must provide the divider before content below",
+)
+
+assert.match(
+  memoryControl,
+  /\.memory-command\s*\{[^}]*border-bottom:\s*1px\s+solid\s+var\(--memory-border\)/s,
+  "Memory Stat Chip area must keep a divider before the content below",
 )
 
 assert.match(
@@ -826,6 +839,18 @@ assert.match(
   appStyle,
   /\.ag-stat-chip\s+strong\s*\{[^}]*text-overflow:\s*ellipsis/s,
   "Shared Stat Chip values must use single-line ellipsis globally",
+)
+
+assert.match(
+  appStyle,
+  /\.ag-stat-chip\s+:where\(span,\s*small,\s*em\)\s*\{[^}]*font-size:\s*11px/s,
+  "Shared Stat Chip labels must be large enough to read at a glance",
+)
+
+assert.match(
+  appStyle,
+  /\.ag-stat-chip\s+strong\s*\{[^}]*font-size:\s*12px/s,
+  "Shared Stat Chip values must be large enough to read at a glance",
 )
 
 assert.match(
@@ -1382,6 +1407,18 @@ assert.match(
   knowledge,
   /knowledge-upload-pipeline/,
   "Knowledge upload area must show the RAG ingestion pipeline",
+)
+
+assert.match(
+  memoryControl,
+  /class="memory-priority-card ag-stat-chip"/,
+  "Memory priority metrics must use the shared Stat Chip surface",
+)
+
+assert.doesNotMatch(
+  memoryControl,
+  /\.memory-priority-card::before/s,
+  "Memory priority metrics must not add local tone bars that make Stat Chip backgrounds look inconsistent",
 )
 
 assert.match(

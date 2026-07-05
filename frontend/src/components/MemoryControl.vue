@@ -13,7 +13,7 @@
         <article
           v-for="card in priorityCards"
           :key="card.key"
-          class="memory-priority-card"
+          class="memory-priority-card ag-stat-chip"
           :class="`tone-${card.tone}`"
         >
           <span>{{ card.label }}</span>
@@ -619,11 +619,11 @@ onMounted(() => {
   flex: 0 0 auto;
   gap: 12px;
   grid-template-columns: minmax(260px, 0.9fr) minmax(480px, 1.5fr);
-  padding: 14px 14px 0;
+  border-bottom: 1px solid var(--memory-border);
+  padding: 14px;
 }
 
 .memory-command-copy,
-.memory-priority-card,
 .memory-query-panel,
 .memory-queue-panel,
 .memory-list-panel,
@@ -684,29 +684,11 @@ onMounted(() => {
 }
 
 .memory-priority-card {
-  position: relative;
-  overflow: hidden;
-  padding: 12px;
-}
-
-.memory-priority-card::before {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 3px;
-  background: var(--memory-blue);
-  content: "";
-}
-
-.memory-priority-card.tone-green::before {
-  background: var(--memory-green);
-}
-
-.memory-priority-card.tone-yellow::before {
-  background: var(--memory-yellow);
-}
-
-.memory-priority-card.tone-red::before {
-  background: var(--memory-red);
+  display: grid;
+  align-content: start;
+  min-height: 84px;
+  gap: 7px;
+  padding: 10px;
 }
 
 .memory-priority-card span,
@@ -722,11 +704,10 @@ onMounted(() => {
 
 .memory-priority-card strong {
   display: block;
-  margin-top: 7px;
   overflow: hidden;
   color: var(--memory-heading);
   font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 900;
   line-height: 1.05;
   text-overflow: ellipsis;
@@ -734,7 +715,6 @@ onMounted(() => {
 }
 
 .memory-priority-card small {
-  margin-top: 7px;
   color: var(--memory-muted-strong);
 }
 

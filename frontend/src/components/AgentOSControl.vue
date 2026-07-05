@@ -646,7 +646,7 @@ onMounted(() => {
 
 .agentos-summary-strip {
   flex: 0 0 auto;
-  padding: 12px 14px 0;
+  padding: 12px 14px;
 }
 
 .agentos-dot.green {
