@@ -1,8 +1,7 @@
 <template>
-  <div class="mcp-console h-full min-h-0 overflow-hidden bg-[var(--ag-panel-soft)] text-[var(--ag-text)]">
-    <div class="grid h-full min-h-0 grid-cols-1">
-      <main class="flex min-h-0 flex-col overflow-hidden">
-        <header class="border-b border-[var(--ag-panel-border)] bg-[var(--ag-panel-bg)] p-3">
+  <div class="mcp-console ag-page-flow">
+      <main class="mcp-main">
+        <header class="mcp-toolbar ag-content-panel">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="mcp-summary-strip ag-stat-strip">
               <div v-for="metric in metrics" :key="metric.label" class="mcp-summary-chip ag-stat-chip">
@@ -29,7 +28,7 @@
 
         </header>
 
-        <div class="min-h-0 flex-1 overflow-y-auto p-3">
+        <section class="mcp-body ag-content-panel">
           <section v-if="uploadPanelOpen" class="mcp-panel mb-3">
             <div class="panel-title">
               <el-icon><SetUp /></el-icon>
@@ -171,9 +170,8 @@
               </div>
             </el-tab-pane>
           </el-tabs>
-        </div>
+        </section>
       </main>
-    </div>
   </div>
 </template>
 
@@ -403,6 +401,20 @@ onMounted(() => {
 <style>
 .mcp-console {
   font-family: "Fira Sans", "Microsoft YaHei", sans-serif;
+}
+
+.mcp-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ag-section-gap);
+}
+
+.mcp-toolbar {
+  display: block;
+}
+
+.mcp-body {
+  display: block;
 }
 
 .mcp-card-icon {

@@ -1,5 +1,5 @@
 <template>
-  <div class="trace-console">
+  <div class="trace-console ag-page-flow">
     <div class="trace-workbench trace-session-workbench">
       <section class="trace-stat-strip ag-stat-strip" aria-label="Trace metrics">
         <article
@@ -13,7 +13,7 @@
         </article>
       </section>
 
-      <div class="trace-query-toolbar">
+      <div class="trace-query-toolbar ag-content-panel">
         <div class="trace-query-primary">
           <el-input
             v-model="sessionFilters.sessionId"
@@ -72,7 +72,7 @@
 
       <div
         ref="traceBodyGridRef"
-        class="trace-body-grid"
+        class="trace-body-grid ag-workspace-panel"
         :class="{ 'drawer-active': traceDrawerOpen }"
         :style="{ '--trace-drawer-width': traceDrawerOpen ? `${drawerWidth}px` : '0px' }"
       >
@@ -177,7 +177,7 @@
         <transition name="trace-drawer">
           <div
             v-if="traceDrawerOpen && selectedTrace"
-            class="trace-detail-drawer"
+            class="trace-detail-drawer ag-right-panel"
             role="dialog"
             aria-modal="false"
           >
@@ -1280,12 +1280,6 @@ onUnmounted(() => {
   --trace-yellow: var(--ag-yellow);
   --trace-code-bg: var(--ag-code-bg);
   --trace-code-text: var(--ag-code-text);
-  display: flex;
-  height: 100%;
-  min-height: 0;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--trace-bg);
   color: var(--trace-text);
   font-family: "Inter", "Fira Sans", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
 }
@@ -1298,11 +1292,6 @@ onUnmounted(() => {
   border-bottom: 1px solid var(--trace-border);
   background: var(--trace-panel);
   padding: 12px 16px;
-}
-
-.trace-stat-strip {
-  border-bottom: 1px solid var(--trace-border);
-  padding: 10px 14px;
 }
 
 .trace-toolbar,
@@ -1371,10 +1360,12 @@ onUnmounted(() => {
 }
 
 .trace-workbench {
-  display: block;
+  display: flex;
   min-height: 0;
-  flex: 1;
-  overflow: hidden;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--ag-section-gap);
+  overflow: visible;
 }
 
 .trace-session-workbench {
@@ -2637,9 +2628,10 @@ html.dark .trace-waterfall-row.active {
   min-width: 0;
   height: 100%;
   min-height: 0;
-  border-left: 1px solid var(--trace-border);
+  border: 1px solid var(--ag-border);
+  border-radius: 12px;
   background: var(--trace-panel);
-  box-shadow: -24px 0 60px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--ag-shadow-panel);
 }
 
 .trace-detail-drawer .trace-inspector-shell {
@@ -2657,9 +2649,6 @@ html.dark .trace-waterfall-row.active {
   flex: 0 0 auto;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px 12px;
-  border-bottom: 1px solid var(--trace-border);
-  background: color-mix(in srgb, var(--trace-panel) 92%, var(--trace-bg));
-  padding: 12px 14px;
 }
 
 .trace-query-primary,

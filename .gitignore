@@ -19,6 +19,7 @@ data/config/*
 node_modules/
 .env
 dataset/
+/source/
 .codex
 .claude
 .agents

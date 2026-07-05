@@ -1,6 +1,6 @@
 <template>
-  <div class="workflow-console">
-    <header class="workflow-header">
+  <div class="workflow-console ag-page-flow">
+    <header class="workflow-header ag-content-panel">
       <div class="workflow-title">
         <span class="workflow-kicker">{{ t("workflow.kicker") }}</span>
         <h2>{{ t("workflow.title") }}</h2>
@@ -30,7 +30,7 @@
       </div>
     </header>
 
-    <div class="workflow-workbench">
+    <div class="workflow-workbench ag-workspace-panel">
       <aside class="workflow-palette workflow-panel" :aria-label="t('workflow.palette.title')">
         <section class="workflow-config">
           <div class="workflow-section-head">
@@ -151,7 +151,7 @@
         </section>
       </main>
 
-      <aside class="workflow-inspector workflow-panel" :aria-label="t('workflow.inspector.title')">
+      <aside class="workflow-inspector workflow-panel ag-right-panel" :aria-label="t('workflow.inspector.title')">
         <div class="workflow-section-head">
           <p>{{ t("workflow.inspector.title") }}</p>
           <span>{{ t("workflow.inspector.description") }}</span>
@@ -561,12 +561,6 @@ function defaultExpression(kind: WorkflowStepKind) {
 
 <style scoped>
 .workflow-console {
-  display: grid;
-  height: 100%;
-  min-height: 0;
-  grid-template-rows: auto minmax(0, 1fr);
-  overflow: hidden;
-  background: var(--ag-frame);
   color: var(--ag-text);
 }
 
@@ -575,9 +569,6 @@ function defaultExpression(kind: WorkflowStepKind) {
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.75fr) auto;
   align-items: start;
   gap: 16px;
-  border-bottom: 1px solid var(--ag-border);
-  background: var(--ag-panel);
-  padding: 14px 16px;
 }
 
 .workflow-title {
@@ -630,6 +621,7 @@ function defaultExpression(kind: WorkflowStepKind) {
 .workflow-workbench {
   display: grid;
   min-height: 0;
+  flex: 1 1 auto;
   grid-template-columns: 320px minmax(0, 1fr) 380px;
   overflow: hidden;
 }
@@ -649,6 +641,10 @@ function defaultExpression(kind: WorkflowStepKind) {
 .workflow-inspector {
   border-right: 0;
   border-left: 1px solid var(--ag-border);
+}
+
+.workflow-inspector.ag-right-panel {
+  margin: 12px 12px 12px 0;
 }
 
 .workflow-config,
@@ -1035,8 +1031,11 @@ function defaultExpression(kind: WorkflowStepKind) {
 
   .workflow-inspector {
     grid-column: 1 / -1;
-    border-top: 1px solid var(--ag-border);
     border-left: 0;
+  }
+
+  .workflow-inspector.ag-right-panel {
+    margin: 0 12px 12px;
   }
 }
 
@@ -1055,7 +1054,11 @@ function defaultExpression(kind: WorkflowStepKind) {
   }
 
   .workflow-inspector {
-    border-top: 1px solid var(--ag-border);
+    border-left: 0;
+  }
+
+  .workflow-inspector.ag-right-panel {
+    margin: 0;
   }
 
   .workflow-canvas {

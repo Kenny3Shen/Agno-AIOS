@@ -1,5 +1,5 @@
 <template>
-  <div class="agentos-control">
+  <div class="agentos-control ag-page-flow">
     <section class="agentos-summary-strip ag-stat-strip">
       <article
         v-for="metric in payload?.metrics || fallbackMetrics"
@@ -15,7 +15,7 @@
     <el-alert v-if="error" class="agentos-alert" type="error" :title="error" show-icon />
 
     <main v-if="props.osModule === 'scheduler'" class="scheduler-workbench">
-      <section class="agentos-panel scheduler-list-panel">
+      <section class="agentos-panel ag-content-panel scheduler-list-panel">
         <div class="agentos-panel-head">
           <div>
             <p>{{ t("agentOS.scheduler.listTitle") }}</p>
@@ -101,7 +101,7 @@
         </div>
       </section>
 
-      <section class="agentos-panel scheduler-detail-panel">
+      <section class="agentos-panel scheduler-detail-panel ag-right-panel">
         <template v-if="selectedSchedule">
           <div class="agentos-panel-head">
             <div>
@@ -203,7 +203,7 @@
     </main>
 
     <main v-else class="agentos-ledger">
-      <section class="agentos-panel">
+      <section class="agentos-panel ag-content-panel">
         <div class="agentos-panel-head">
           <div>
             <p>{{ t("agentOS.ledger.title") }}</p>
@@ -585,12 +585,6 @@ onMounted(() => {
   --os-green: #28a66f;
   --os-yellow: #c78624;
   --os-red: #d34a42;
-  display: flex;
-  height: 100%;
-  min-height: 0;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--os-bg);
   color: var(--os-text);
 }
 
@@ -646,7 +640,6 @@ onMounted(() => {
 
 .agentos-summary-strip {
   flex: 0 0 auto;
-  padding: 12px 14px;
 }
 
 .agentos-dot.green {
@@ -687,13 +680,11 @@ onMounted(() => {
   margin: 12px 16px 0;
 }
 
-.scheduler-workbench,
-.agentos-ledger {
+.scheduler-workbench {
   min-height: 0;
   flex: 1;
   display: grid;
   overflow: hidden;
-  padding: 14px;
 }
 
 .scheduler-workbench {
@@ -702,15 +693,14 @@ onMounted(() => {
 }
 
 .agentos-ledger {
-  display: flex;
+  display: block;
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: visible;
 }
 
 .agentos-panel {
   min-height: 0;
-  border: 1px solid var(--os-border);
-  border-radius: 8px;
-  background: var(--os-panel);
-  padding: 14px;
   overflow: hidden;
 }
 
@@ -719,6 +709,13 @@ onMounted(() => {
 .scheduler-detail-panel {
   display: flex;
   flex-direction: column;
+}
+
+.agentos-ledger > .agentos-panel {
+  width: fit-content;
+  min-width: min(260px, 100%);
+  max-width: min(720px, 100%);
+  max-height: min(720px, calc(100dvh - 180px));
 }
 
 .agentos-panel-head,
@@ -1012,12 +1009,6 @@ html.dark .agentos-control {
 @media (max-width: 760px) {
   .agentos-control {
     overflow-y: auto;
-  }
-
-  .agentos-summary-strip,
-  .agentos-ledger,
-  .scheduler-workbench {
-    padding: 12px;
   }
 
   .agentos-scheduler-grid,

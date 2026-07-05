@@ -1,5 +1,5 @@
 <template>
-  <div class="knowledge-console knowledge-workflow-shell">
+  <div class="knowledge-console knowledge-workflow-shell ag-page-flow">
     <section class="knowledge-stat-strip ag-stat-strip" :aria-label="t('knowledge.stats.ariaLabel')">
       <div v-for="card in statisticsCards" :key="card.label" class="knowledge-stat-chip ag-stat-chip">
         <span>{{ card.label }}</span>
@@ -8,7 +8,7 @@
     </section>
 
     <div class="knowledge-workspace-grid">
-      <section class="knowledge-panel knowledge-upload-panel">
+      <section class="knowledge-panel ag-content-panel knowledge-upload-panel">
         <div class="knowledge-section-head">
           <h4>{{ t('knowledge.upload.title') }}</h4>
           <span class="status-badge" :class="ingestTask.status">{{ ingestStatusLabel }}</span>
@@ -148,7 +148,7 @@
         </el-tabs>
       </section>
 
-      <section class="knowledge-panel retrieval-playground">
+      <section class="knowledge-panel ag-content-panel retrieval-playground">
         <div class="knowledge-section-head">
           <h4>{{ t('knowledge.retrieval.title') }}</h4>
           <span class="status-badge embedding">{{ searchForm.searchType }}</span>
@@ -225,7 +225,7 @@
       </section>
     </div>
 
-    <section class="knowledge-panel knowledge-documents-section">
+    <section class="knowledge-panel ag-content-panel knowledge-documents-section">
       <div class="knowledge-section-head documents-head">
         <h4>{{ t('knowledge.documents.title') }}</h4>
         <div class="document-tools">
@@ -336,7 +336,7 @@
       </div>
     </section>
 
-    <section class="knowledge-panel advanced-configuration">
+    <section class="knowledge-panel ag-content-panel advanced-configuration">
       <el-collapse v-model="advancedSections">
         <el-collapse-item name="advanced">
           <template #title>
@@ -1128,9 +1128,6 @@ onMounted(() => {
   --kn-parsing-soft: var(--ag-yellow-soft);
   --kn-failed: var(--ag-red);
   --kn-failed-soft: var(--ag-red-soft);
-  width: min(1480px, 100%);
-  margin: 0 auto;
-  padding: 16px;
   color: var(--kn-text);
 }
 
@@ -1177,11 +1174,6 @@ onMounted(() => {
   overflow-wrap: anywhere;
 }
 
-.knowledge-stat-strip {
-  margin-bottom: 12px;
-}
-
-.knowledge-panel,
 .retrieval-hit,
 .answer-preview,
 .advanced-card,
@@ -1202,8 +1194,6 @@ onMounted(() => {
 
 .knowledge-panel {
   min-width: 0;
-  padding: 14px;
-  box-shadow: var(--ag-shadow-panel);
 }
 
 .knowledge-section-head {

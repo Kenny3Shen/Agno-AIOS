@@ -143,10 +143,9 @@ export const buildShellHomeSections = (
   }))
   .filter((section) => section.items.length > 0)
 
-export const shellContentClass = (tab: NavId) => {
+export const shellContentClass = (_tab: NavId) => {
   const base = "block h-full min-h-0"
-  if (tab === "home") return base
-  return fullCanvasTabs.has(tab) ? base : `${base} overflow-auto p-4 sm:p-5`
+  return base
 }
 
 export const resolveShellComponent = (

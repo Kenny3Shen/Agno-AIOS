@@ -50,6 +50,15 @@
 	--ag-space-md: 16px;
 	--ag-space-lg: 24px;
 	--ag-space-xl: 32px;
+	--ag-page-title-gap: 10px;
+	--ag-page-padding-inline: 14px;
+	--ag-page-padding-block-end: 14px;
+	--ag-section-gap: 12px;
+	--ag-container-border: 1px solid var(--ag-border);
+	--ag-container-radius: 12px;
+	--ag-container-padding: 14px;
+	--ag-container-bg: var(--ag-panel);
+	--ag-container-shadow: var(--ag-shadow-panel);
 	--ag-bg-app: var(--ag-bg);
 	--ag-bg-surface: var(--ag-panel);
 	--ag-bg-surface-muted: var(--ag-panel-soft);

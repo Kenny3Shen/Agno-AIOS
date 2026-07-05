@@ -1,6 +1,6 @@
 <template>
-  <div class="security-page settings-page mx-auto max-w-6xl space-y-4">
-    <div class="flex flex-wrap items-start justify-between gap-3">
+  <div class="settings-page ag-page-flow">
+    <header class="settings-toolbar ag-content-panel">
       <div>
         <h3 class="settings-title">{{ t('settings.title') }}</h3>
         <p class="settings-description">
@@ -27,7 +27,7 @@
           {{ t('settings.actions.save') }}
         </el-button>
       </div>
-    </div>
+    </header>
 
     <div v-if="loadingSettings && !modelItems.length" class="flex justify-center py-12">
       <el-icon class="loading-icon is-loading"><Loading /></el-icon>
@@ -541,7 +541,6 @@ onMounted(() => { loadSettings() })
 </script>
 
 <style scoped>
-.settings-section,
 .model-card,
 .runtime-card {
   border: 1px solid var(--ag-panel-border);
@@ -551,6 +550,14 @@ onMounted(() => { loadSettings() })
 
 .settings-page {
   color: var(--ag-text);
+}
+
+.settings-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .settings-title {
@@ -571,7 +578,11 @@ onMounted(() => { loadSettings() })
 }
 
 .settings-section {
+  border: var(--ag-container-border);
+  border-radius: var(--ag-container-radius);
+  background: var(--ag-container-bg);
   padding: var(--ag-space-md);
+  box-shadow: var(--ag-container-shadow);
 }
 
 .settings-tabs :deep(.el-tabs__header) {

@@ -1,6 +1,6 @@
 <template>
-  <div class="situation-page h-full min-h-0 overflow-y-auto p-3">
-    <header class="situation-header">
+  <div class="situation-page ag-page-flow">
+    <header class="situation-header ag-content-panel">
       <div class="min-w-0">
         <h3 class="situation-title truncate text-sm font-semibold">{{ t("dashboard.title") }}</h3>
         <p class="situation-subtitle mt-1 text-xs">{{ t("dashboard.description") }}</p>
@@ -19,15 +19,15 @@
       </div>
     </header>
 
-    <section class="ag-stat-strip mt-3">
+    <section class="ag-stat-strip">
       <article v-for="metric in topMetrics" :key="metric.label" class="situation-metric ag-stat-chip">
         <span>{{ metric.label }}</span>
         <strong :title="metric.hint">{{ metric.value }}</strong>
       </article>
     </section>
 
-    <section class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)]">
-      <article class="situation-panel chart-panel min-w-0">
+    <section class="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)]">
+      <article class="situation-panel ag-content-panel chart-panel min-w-0">
         <div class="panel-title">
           <el-icon><TrendCharts /></el-icon>
           {{ t("dashboard.charts.latencyTrend") }}
@@ -51,7 +51,7 @@
         </div>
       </article>
 
-      <article class="situation-panel chart-panel">
+      <article class="situation-panel ag-content-panel chart-panel">
         <div class="panel-title">
           <el-icon><Histogram /></el-icon>
           {{ t("dashboard.charts.hourlyHeatmap") }}
@@ -71,8 +71,8 @@
       </article>
     </section>
 
-    <section class="mt-3 grid gap-3 xl:grid-cols-[minmax(360px,0.85fr)_minmax(0,1.15fr)]">
-      <article class="situation-panel chart-panel">
+    <section class="grid gap-3 xl:grid-cols-[minmax(360px,0.85fr)_minmax(0,1.15fr)]">
+      <article class="situation-panel ag-content-panel chart-panel">
         <div class="panel-title">
           <el-icon><Odometer /></el-icon>
           {{ t("dashboard.charts.agentRadar") }}
@@ -88,7 +88,7 @@
         </svg>
       </article>
 
-      <article class="situation-panel chart-panel min-w-0">
+      <article class="situation-panel ag-content-panel chart-panel min-w-0">
         <div class="panel-title">
           <el-icon><DataBoard /></el-icon>
           {{ t("dashboard.charts.spanErrorDistribution") }}
@@ -109,8 +109,8 @@
       </article>
     </section>
 
-    <section class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(360px,0.8fr)]">
-      <article class="situation-panel min-w-0">
+    <section class="grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(360px,0.8fr)]">
+      <article class="situation-panel ag-content-panel min-w-0">
         <div class="panel-title">
           <el-icon><TrendCharts /></el-icon>
           {{ t("dashboard.charts.recentRuns") }}
@@ -141,7 +141,7 @@
         </div>
       </article>
 
-      <article class="situation-panel">
+      <article class="situation-panel ag-content-panel">
         <div class="panel-title">
           <el-icon><Histogram /></el-icon>
           {{ t("dashboard.charts.statusDistribution") }}
@@ -160,8 +160,8 @@
       </article>
     </section>
 
-    <section class="mt-3 grid gap-3 xl:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.1fr)]">
-      <article class="situation-panel">
+    <section class="grid gap-3 xl:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.1fr)]">
+      <article class="situation-panel ag-content-panel">
         <div class="panel-title">
           <el-icon><Cpu /></el-icon>
           {{ t("dashboard.charts.agentLoad") }}
@@ -178,7 +178,7 @@
         </div>
       </article>
 
-      <article class="situation-panel min-w-0">
+      <article class="situation-panel ag-content-panel min-w-0">
         <div class="panel-title">
           <el-icon><Odometer /></el-icon>
           {{ t("dashboard.charts.incidents") }}
@@ -197,7 +197,7 @@
       </article>
     </section>
 
-    <el-alert v-if="apiError" class="mt-3" type="error" :title="apiError" show-icon />
+    <el-alert v-if="apiError" type="error" :title="apiError" show-icon />
   </div>
 </template>
 
@@ -430,7 +430,7 @@ onMounted(() => {
 <style>
 .situation-page {
   font-family: "Fira Sans", "Microsoft YaHei", sans-serif;
-  background: var(--ag-page);
+  background: var(--ag-frame);
   color: var(--ag-text);
 }
 
@@ -449,8 +449,6 @@ onMounted(() => {
   color: var(--ag-heading);
 }
 
-.situation-header,
-.situation-panel,
 .run-row,
 .agent-load-row,
 .incident-row {
@@ -464,7 +462,6 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px;
 }
 
 .situation-panel {

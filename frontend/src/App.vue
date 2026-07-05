@@ -449,7 +449,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Component } from "vue"
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch, type Component } from "vue"
 import { useI18n } from "vue-i18n"
 import { storeToRefs } from "pinia"
 import {
@@ -486,19 +486,6 @@ import {
   WarningFilled,
 } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
-import AgentOSControl from "./components/AgentOSControl.vue"
-import MemoryControl from "./components/MemoryControl.vue"
-import AuthScreen from "./components/AuthScreen.vue"
-import CVE from "./components/CVE.vue"
-import Chat from "./components/Chat.vue"
-import Collect from "./components/Collect.vue"
-import Settings from "./components/Settings.vue"
-import Dashboard from "./components/Dashboard.vue"
-import Trace from "./components/Trace.vue"
-import Workflow from "./components/Workflow.vue"
-import Skills from "./components/Skills.vue"
-import MCP from "./components/MCP.vue"
-import Knowledge from "./components/Knowledge.vue"
 import { useChatHistory, useSettingsApi } from "./composables/useApi"
 import { setI18nLocale } from "./i18n"
 import { clearStoredAuthToken, fetchCurrentUser, getStoredAuthToken, logout as authLogout, type AuthClientFallbackKey } from "./lib/authClient"
@@ -524,6 +511,19 @@ import { useShellStore } from "./stores/shell"
 import type { AuthUser } from "./types"
 
 const { t } = useI18n()
+const AgentOSControl = defineAsyncComponent(() => import("./components/AgentOSControl.vue"))
+const MemoryControl = defineAsyncComponent(() => import("./components/MemoryControl.vue"))
+const AuthScreen = defineAsyncComponent(() => import("./components/AuthScreen.vue"))
+const CVE = defineAsyncComponent(() => import("./components/CVE.vue"))
+const Chat = defineAsyncComponent(() => import("./components/Chat.vue"))
+const Collect = defineAsyncComponent(() => import("./components/Collect.vue"))
+const Settings = defineAsyncComponent(() => import("./components/Settings.vue"))
+const Dashboard = defineAsyncComponent(() => import("./components/Dashboard.vue"))
+const Trace = defineAsyncComponent(() => import("./components/Trace.vue"))
+const Workflow = defineAsyncComponent(() => import("./components/Workflow.vue"))
+const Skills = defineAsyncComponent(() => import("./components/Skills.vue"))
+const MCP = defineAsyncComponent(() => import("./components/MCP.vue"))
+const Knowledge = defineAsyncComponent(() => import("./components/Knowledge.vue"))
 
 const homeItem = computed<NavItem>(() => ({
   id: "home",

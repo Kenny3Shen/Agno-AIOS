@@ -1,55 +1,57 @@
 <template>
-  <div class="security-page space-y-4 sm:space-y-6">
-    <div class="flex flex-col sm:flex-row gap-3">
-      <el-input
-        v-model="query"
-        :placeholder="t('cve.input.queryPlaceholder')"
-        class="flex-1 min-w-[200px]"
-        @keyup.enter="handleSearch"
-        clearable
-      >
-        <template #prefix>
-          <el-icon><Search /></el-icon>
-        </template>
-      </el-input>
-      <el-select
-        v-model="sourceFilter"
-        :placeholder="t('cve.input.sourcePlaceholder')"
-        clearable
-        class="w-full sm:w-[150px]"
-        @change="handleSourceChange"
-      >
-        <el-option :label="t('cve.filters.all')" value="" />
-        <el-option label="GitHub" value="github" />
-        <el-option label="Exploit-DB" value="exploit-db" />
-      </el-select>
-    </div>
+  <div class="cve-console ag-page-flow">
+    <section class="cve-query-panel ag-content-panel">
+      <div class="flex flex-col gap-3 sm:flex-row">
+        <el-input
+          v-model="query"
+          :placeholder="t('cve.input.queryPlaceholder')"
+          class="min-w-[200px] flex-1"
+          clearable
+          @keyup.enter="handleSearch"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+        <el-select
+          v-model="sourceFilter"
+          :placeholder="t('cve.input.sourcePlaceholder')"
+          clearable
+          class="w-full sm:w-[150px]"
+          @change="handleSourceChange"
+        >
+          <el-option :label="t('cve.filters.all')" value="" />
+          <el-option label="GitHub" value="github" />
+          <el-option label="Exploit-DB" value="exploit-db" />
+        </el-select>
+      </div>
 
-    <div class="flex flex-col sm:flex-row gap-3">
-      <el-button
-        type="primary"
-        @click="handleSearch"
-        :loading="loading"
-        :disabled="isSearchDisabled || loading"
-        class="w-full sm:w-auto"
-      >
-        <el-icon class="mr-1"><Search /></el-icon>
-        {{ t('cve.actions.search') }}
-      </el-button>
-      <el-button
-        type="success"
-        @click="handleUpdateDatabase"
-        :loading="updating"
-        :disabled="updating"
-        class="w-full sm:w-auto"
-      >
-        <el-icon class="mr-1"><Refresh /></el-icon>
-        {{ t('cve.actions.updateDatabase') }}
-      </el-button>
-    </div>
+      <div class="mt-3 flex flex-col gap-3 sm:flex-row">
+        <el-button
+          type="primary"
+          :loading="loading"
+          :disabled="isSearchDisabled || loading"
+          class="w-full sm:w-auto"
+          @click="handleSearch"
+        >
+          <el-icon class="mr-1"><Search /></el-icon>
+          {{ t('cve.actions.search') }}
+        </el-button>
+        <el-button
+          type="success"
+          :loading="updating"
+          :disabled="updating"
+          class="w-full sm:w-auto"
+          @click="handleUpdateDatabase"
+        >
+          <el-icon class="mr-1"><Refresh /></el-icon>
+          {{ t('cve.actions.updateDatabase') }}
+        </el-button>
+      </div>
+    </section>
 
     <transition name="el-fade-in-linear">
-      <div v-if="updateMessage" class="mb-4">
+      <div v-if="updateMessage">
         <el-alert
           :type="updateMessage.type"
           :title="updateMessage.title"
@@ -61,16 +63,17 @@
       </div>
     </transition>
 
-    <template v-if="filteredResults.length > 0">
-      <transition name="el-fade-in">
-        <div class="overflow-x-auto -mx-2 sm:mx-0">
-          <el-table
-            :data="filteredResults"
-            style="width: 100%; min-width: 800px"
-            border
-            stripe
-            :flexible="true"
-          >
+    <section class="cve-results-panel ag-content-panel">
+      <template v-if="filteredResults.length > 0">
+        <transition name="el-fade-in">
+          <div class="overflow-x-auto -mx-2 sm:mx-0">
+            <el-table
+              :data="filteredResults"
+              style="width: 100%; min-width: 800px"
+              border
+              stripe
+              :flexible="true"
+            >
             <el-table-column prop="id" label="ID" width="70" sortable />
             <el-table-column prop="cve_id" :label="t('cve.table.cveId')" width="130" sortable>
               <template #default="scope">
@@ -136,64 +139,65 @@
               sortable
               :formatter="formatDate"
             />
-          </el-table>
-        </div>
-      </transition>
-
-      <transition name="el-fade-in">
-        <div class="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div class="pagination-note">
-            {{ t('cve.pagination.summary', { shown: filteredResults.length, total }) }}
-            <span v-if="sourceFilter">{{ t('cve.filters.sourceFiltered') }}</span>
+            </el-table>
           </div>
-          <el-pagination
-            v-model:current-page="currentPage"
-            v-model:page-size="pageSize"
-            :total="total"
-            :page-sizes="[10, 20, 50, 100]"
-            :size="isMobile ? 'small' : 'default'"
-            layout="total, sizes, prev, pager, next, jumper"
-            @current-change="handlePageChange"
-            @size-change="handleSizeChange"
-          />
-        </div>
-      </transition>
-    </template>
+        </transition>
 
-    <template v-else-if="searched">
-      <transition name="el-fade-in">
-        <el-empty
-          :description="t('cve.empty.notFoundDescription')"
-          :image-size="isMobile ? 100 : 120"
-        >
-          <template #description>
-            <p class="empty-title">{{ t('cve.empty.notFoundTitle') }}</p>
-            <p class="empty-hint">{{ t('cve.empty.notFoundHint') }}</p>
-          </template>
-        </el-empty>
-      </transition>
-    </template>
+        <transition name="el-fade-in">
+          <div class="mt-4 flex flex-col items-center justify-between gap-4 sm:flex-row">
+            <div class="pagination-note">
+              {{ t('cve.pagination.summary', { shown: filteredResults.length, total }) }}
+              <span v-if="sourceFilter">{{ t('cve.filters.sourceFiltered') }}</span>
+            </div>
+            <el-pagination
+              v-model:current-page="currentPage"
+              v-model:page-size="pageSize"
+              :total="total"
+              :page-sizes="[10, 20, 50, 100]"
+              :size="isMobile ? 'small' : 'default'"
+              layout="total, sizes, prev, pager, next, jumper"
+              @current-change="handlePageChange"
+              @size-change="handleSizeChange"
+            />
+          </div>
+        </transition>
+      </template>
 
-    <template v-else>
-      <div class="query-empty">
-        <span class="query-empty-icon">
-          <el-icon><Search /></el-icon>
-        </span>
-        <h4>{{ t('cve.empty.waitingTitle') }}</h4>
-        <p>{{ t('cve.empty.waitingHint') }}</p>
-        <div class="mt-4 flex flex-wrap justify-center gap-2">
-          <button
-            v-for="sample in sampleQueries"
-            :key="sample"
-            type="button"
-            class="sample-chip"
-            @click="applySampleQuery(sample)"
+      <template v-else-if="searched">
+        <transition name="el-fade-in">
+          <el-empty
+            :description="t('cve.empty.notFoundDescription')"
+            :image-size="isMobile ? 100 : 120"
           >
-            {{ sample }}
-          </button>
+            <template #description>
+              <p class="empty-title">{{ t('cve.empty.notFoundTitle') }}</p>
+              <p class="empty-hint">{{ t('cve.empty.notFoundHint') }}</p>
+            </template>
+          </el-empty>
+        </transition>
+      </template>
+
+      <template v-else>
+        <div class="query-empty">
+          <span class="query-empty-icon">
+            <el-icon><Search /></el-icon>
+          </span>
+          <h4>{{ t('cve.empty.waitingTitle') }}</h4>
+          <p>{{ t('cve.empty.waitingHint') }}</p>
+          <div class="mt-4 flex flex-wrap justify-center gap-2">
+            <button
+              v-for="sample in sampleQueries"
+              :key="sample"
+              type="button"
+              class="sample-chip"
+              @click="applySampleQuery(sample)"
+            >
+              {{ sample }}
+            </button>
+          </div>
         </div>
-      </div>
-    </template>
+      </template>
+    </section>
   </div>
 </template>
 

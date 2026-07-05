@@ -1,7 +1,7 @@
 <template>
-  <div class="skills-console">
+  <div class="skills-console ag-page-flow">
     <main class="skills-main">
-      <header class="skills-header">
+      <header class="skills-header ag-content-panel">
         <div class="skill-summary-strip ag-stat-strip">
           <span v-for="metric in summaryMetrics" :key="metric.label" class="skill-summary-chip ag-stat-chip">
             <small>{{ metric.label }}</small>
@@ -29,7 +29,7 @@
       </header>
 
       <section class="skills-body">
-        <section v-if="uploadPanelOpen" class="skill-upload-panel">
+        <section v-if="uploadPanelOpen" class="skill-upload-panel ag-content-panel">
           <div class="skill-card-head">
             <span class="skill-card-copy">
               <strong>{{ t('skills.upload.title') }}</strong>
@@ -287,16 +287,6 @@ onMounted(() => {
 
 <style scoped>
 .skills-console {
-  display: flex;
-  height: 100%;
-  min-height: 0;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid var(--ag-panel-border);
-  border-radius: var(--ag-radius-panel);
-  background: var(--ag-panel-soft);
-  padding: 0;
-  color: var(--ag-text);
   font-family: "Fira Sans", "Microsoft YaHei", sans-serif;
 }
 
@@ -306,23 +296,16 @@ onMounted(() => {
 
 .skills-main {
   display: flex;
-  min-height: 0;
-  flex: 1;
   flex-direction: column;
-  overflow: hidden;
-  border-radius: inherit;
+  gap: var(--ag-section-gap);
 }
 
 .skills-header {
   display: flex;
-  flex: 0 0 auto;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-bottom: 1px solid var(--ag-panel-border);
-  background: var(--ag-panel-bg);
-  padding: 12px;
 }
 
 .skill-summary-strip {
@@ -337,20 +320,13 @@ onMounted(() => {
 }
 
 .skills-body {
-  min-height: 0;
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
+  display: grid;
+  gap: var(--ag-section-gap);
 }
 
 .skill-upload-panel {
   display: grid;
   gap: 12px;
-  margin-bottom: 12px;
-  border: 1px solid var(--ag-border);
-  border-radius: var(--ag-radius-panel);
-  background: var(--ag-panel);
-  padding: 12px;
 }
 
 .skill-upload-grid {
@@ -517,7 +493,7 @@ onMounted(() => {
 
 .skills-state {
   display: grid;
-  min-height: 300px;
+  min-height: 240px;
   place-items: center;
   align-content: center;
   gap: 10px;
@@ -540,8 +516,7 @@ onMounted(() => {
 }
 
 @media (max-width: 760px) {
-  .skills-header,
-  .skills-body {
+  .skills-header {
     padding: 10px;
   }
 

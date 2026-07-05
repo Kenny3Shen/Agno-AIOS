@@ -742,42 +742,7 @@ const enhanceRenderedMarkdown = async () => {
     }, { once: true })
   })
 
-  await renderMermaidBlocks()
   if (stickToBottom) void scrollToBottom()
-}
-
-const renderMermaidBlocks = async () => {
-  const blocks = Array.from(document.querySelectorAll<HTMLElement>(".agent-chat code.language-mermaid"))
-  if (!blocks.length) return
-  try {
-    const mermaidModule = await import("mermaid")
-    const mermaid = mermaidModule.default
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: document.documentElement.classList.contains("dark") ? "dark" : "default",
-    })
-    for (const [index, block] of blocks.entries()) {
-      const pre = block.parentElement
-      if (!pre || pre.dataset.mermaidRendered === "true") continue
-      const graph = block.textContent || ""
-      const id = `chat-mermaid-${Date.now()}-${index}`
-      const originalMarkup = pre.innerHTML
-      try {
-        const parsed = await mermaid.parse(graph, { suppressErrors: true })
-        if (parsed === false) throw new Error("Invalid Mermaid graph")
-        const result = await mermaid.render(id, graph)
-        pre.dataset.mermaidRendered = "true"
-        pre.classList.add("mermaid")
-        pre.innerHTML = result.svg
-      } catch {
-        pre.dataset.mermaidRendered = "true"
-        pre.classList.add("mermaid-fallback")
-        pre.innerHTML = originalMarkup
-      }
-    }
-  } catch {
-    blocks.forEach((block) => block.parentElement?.classList.add("mermaid-fallback"))
-  }
 }
 
 // ── Sessions ──────────────────────────────────────────────────────
@@ -1223,14 +1188,6 @@ onUnmounted(() => {
 
 .message-result-actions .message-action-button {
   background: color-mix(in srgb, var(--ag-panel-soft) 86%, transparent);
-}
-
-.mermaid {
-  overflow-x: auto;
-}
-
-.mermaid-fallback {
-  border-color: rgba(246, 195, 67, 0.45);
 }
 
 .markdown-body img {

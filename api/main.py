@@ -36,6 +36,9 @@ app_settings = get_settings()
 
 
 async def frontend_static_dir() -> str:
+    dist_dir = AsyncPath("frontend/dist")
+    if await dist_dir.exists():
+        return "frontend/dist"
     source_dir = AsyncPath("source")
     if await source_dir.exists():
         return "source"
@@ -166,7 +169,7 @@ if app_settings.scheduler_enabled:
 # http://<host>:8000/mcp?token=...
 app.mount("/mcp", mcp_runtime.asgi_app(), name="mcp")
 
-# Serve frontend static files. Production builds are written to source/.
+# Serve frontend static files. Production builds are written to frontend/dist.
 app.mount("/", LazyFrontendStaticFiles(), name="frontend")
 
 if __name__ == "__main__":

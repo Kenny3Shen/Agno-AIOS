@@ -134,8 +134,8 @@ assert.equal(
 
 assert.equal(
   shellContentClass("knowledge"),
-  "block h-full min-h-0 overflow-auto p-4 sm:p-5",
-  "dense modules should get the scroll container treatment",
+  "block h-full min-h-0",
+  "module pages should delegate scroll padding to their shared page root",
 )
 
 assert.equal(

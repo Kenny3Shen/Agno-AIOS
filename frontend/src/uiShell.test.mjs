@@ -21,6 +21,7 @@ const readOptionalSource = (relativePath) => {
 
 const app = readSource("App.vue")
 const appStyle = readSource("style.css")
+const designTokens = readSource("styles/tokens.css")
 const viteConfig = readOptionalSource("../vite.config.ts")
 const apiMain = readOptionalSource("../../api/main.py")
 const authScreen = readSource("components/AuthScreen.vue")
@@ -35,6 +36,7 @@ const settings = readOptionalSource("components/Settings.vue")
 const knowledge = readOptionalSource("components/Knowledge.vue")
 const agentOSControl = readOptionalSource("components/AgentOSControl.vue")
 const memoryControl = readOptionalSource("components/MemoryControl.vue")
+const workflow = readOptionalSource("components/Workflow.vue")
 const useApi = readSource("composables/useApi.ts")
 const apiClient = readOptionalSource("lib/apiClient.ts")
 const authClientSource = readOptionalSource("lib/authClient.ts")
@@ -81,8 +83,8 @@ assert.equal(
 
 assert.match(
   viteConfig,
-  /outDir:\s*['"]\.\.\/source['"]/,
-  "frontend build output must be written to root source/",
+  /outDir:\s*['"]dist['"]/,
+  "frontend build output must stay in ignored frontend/dist for ordinary commits",
 )
 
 assert.match(
@@ -99,8 +101,8 @@ assert.match(
 
 assert.match(
   apiMain,
-  /Path\("source"\)/,
-  "backend must serve root source/ builds when present",
+  /Path\("frontend\/dist"\)[\s\S]*Path\("source"\)/,
+  "backend must prefer frontend/dist builds and only fall back to root source/",
 )
 
 for (const locale of ["zh-CN", "en-US"]) {
@@ -580,7 +582,6 @@ for (const chatHook of [
   "markdown-skeleton",
   "stream-cursor",
   "code-copy",
-  "mermaid",
   "zoomedImage",
   "source-collapse",
   "thinking-collapse",
@@ -592,6 +593,12 @@ for (const chatHook of [
     `Chat must expose ${chatHook} interaction support`,
   )
 }
+
+assert.doesNotMatch(
+  chat,
+  /import\(["']mermaid["']\)|language-mermaid|mermaid-fallback/,
+  "Chat must not bundle Mermaid rendering support",
+)
 
 for (const bulkyHeaderClass of [
   "agent-chat-header",
@@ -718,8 +725,8 @@ assert.doesNotMatch(
 
 assert.match(
   skills,
-  /border:\s*1px solid var\(--ag-panel-border\)/,
-  "Skills console must keep a visible shared border in light mode",
+  /skills-console ag-page-flow/,
+  "Skills page must use the shared page flow instead of a local full-height surface",
 )
 
 assert.match(
@@ -819,14 +826,122 @@ assert.match(
 
 assert.match(
   appStyle,
-  /\.ag-stat-strip\s*\{[^}]*border-bottom:\s*1px\s+solid\s+var\(--ag-border\)[^}]*padding-bottom:\s*10px/s,
-  "Shared Stat Strips must provide the divider before content below",
+  /\.ag-stat-strip\s*\{[^}]*border:\s*1px\s+solid\s+var\(--ag-border\)[^}]*border-radius:\s*8px[^}]*background:\s*var\(--ag-panel\)[^}]*padding:\s*8px/s,
+  "Shared Stat Strips must render as a consistent standalone bubble bar",
 )
 
 assert.match(
+  appStyle,
+  /\.ag-stat-strip\s*\{[^}]*margin-block:\s*10px/s,
+  "Shared Stat Strips must keep consistent vertical spacing from surrounding content",
+)
+
+assert.match(
+  designTokens,
+  /--ag-page-title-gap:\s*10px;[\s\S]*--ag-section-gap:\s*12px;[\s\S]*--ag-container-border:\s*1px solid var\(--ag-border\);[\s\S]*--ag-container-radius:\s*12px;[\s\S]*--ag-container-padding:\s*14px;/,
+  "Layout tokens must define the shared page rhythm and container shell",
+)
+
+assert.match(
+  appStyle,
+  /\.ag-page-flow\s*\{[^}]*gap:\s*var\(--ag-section-gap\)[^}]*padding:\s*var\(--ag-page-title-gap\)\s+var\(--ag-page-padding-inline\)\s+var\(--ag-page-padding-block-end\)/s,
+  "Shared page flow must own the top spacing and section gap",
+)
+
+assert.match(
+  appStyle,
+  /\.ag-page-flow\s+:where\(\.ag-stat-strip\)\s*\{[^}]*margin-block:\s*0/s,
+  "Page-scoped Stat Strips must rely on the shared page gap instead of adding extra Knowledge top spacing",
+)
+
+assert.match(
+  appStyle,
+  /\.ag-content-panel,\s*\n\.ag-right-panel\s*\{[^}]*border:\s*var\(--ag-container-border\)[^}]*border-radius:\s*var\(--ag-container-radius\)[^}]*background:\s*var\(--ag-container-bg\)[^}]*padding:\s*var\(--ag-container-padding\)[^}]*box-shadow:\s*var\(--ag-container-shadow\)/s,
+  "Shared content panels must use the container token shell",
+)
+
+assert.match(
+  appStyle,
+  /\.ag-workspace-panel\s*\{[^}]*border:\s*var\(--ag-container-border\)[^}]*border-radius:\s*var\(--ag-container-radius\)[^}]*background:\s*var\(--ag-container-bg\)[^}]*box-shadow:\s*var\(--ag-container-shadow\)/s,
+  "Shared workspace panels must use the same container token shell without content padding",
+)
+
+for (const [source, pattern, label] of [
+  [dashboard, /situation-page ag-page-flow/, "Dashboard page"],
+  [dashboard, /situation-header ag-content-panel/, "Dashboard header"],
+  [dashboard, /situation-panel ag-content-panel/, "Dashboard panels"],
+  [skills, /skills-header ag-content-panel/, "Skills toolbar"],
+  [skills, /skill-upload-panel ag-content-panel/, "Skills upload"],
+  [mcp, /mcp-console ag-page-flow/, "MCP page"],
+  [mcp, /mcp-toolbar ag-content-panel/, "MCP toolbar"],
+  [mcp, /mcp-body ag-content-panel/, "MCP body"],
+  [knowledge, /knowledge-console knowledge-workflow-shell ag-page-flow/, "Knowledge page"],
+  [knowledge, /knowledge-panel ag-content-panel knowledge-upload-panel/, "Knowledge upload"],
+  [knowledge, /knowledge-panel ag-content-panel retrieval-playground/, "Knowledge retrieval"],
+  [trace, /trace-console ag-page-flow/, "Trace page"],
+  [trace, /trace-query-toolbar ag-content-panel/, "Trace filters"],
+  [trace, /trace-body-grid ag-workspace-panel/, "Trace workbench"],
+  [workflow, /workflow-console ag-page-flow/, "Workflow page"],
+  [workflow, /workflow-header ag-content-panel/, "Workflow header"],
+  [workflow, /workflow-workbench ag-workspace-panel/, "Workflow workbench"],
+  [memoryControl, /memory-control ag-page-flow/, "Memory page"],
+  [memoryControl, /memory-query-panel ag-content-panel/, "Memory filters"],
+  [memoryControl, /memory-queue-panel ag-workspace-panel/, "Memory queue"],
+  [memoryControl, /memory-list-panel ag-workspace-panel/, "Memory list"],
+  [agentOSControl, /agentos-control ag-page-flow/, "AgentOS page"],
+  [agentOSControl, /agentos-panel ag-content-panel scheduler-list-panel/, "Scheduler list"],
+  [agentOSControl, /agentos-panel ag-content-panel/, "AgentOS ledger"],
+  [cve, /cve-console ag-page-flow/, "CVE page"],
+  [cve, /cve-query-panel ag-content-panel/, "CVE search"],
+  [cve, /cve-results-panel ag-content-panel/, "CVE results"],
+  [collect, /collect-console ag-page-flow/, "Collect page"],
+  [collect, /collect-query-panel ag-content-panel/, "Collect input"],
+  [collect, /collect-result-panel ag-content-panel/, "Collect result"],
+  [settings, /settings-page ag-page-flow/, "Settings page"],
+  [settings, /settings-toolbar ag-content-panel/, "Settings toolbar"],
+]) {
+  assert.match(
+    source,
+    pattern,
+    `${label} must use the shared multi-section container system`,
+  )
+}
+
+for (const [source, pattern, label] of [
+  [workflow, /workflow-inspector workflow-panel ag-right-panel/, "Workflow inspector"],
+  [trace, /trace-detail-drawer ag-right-panel/, "Trace detail"],
+  [memoryControl, /memory-detail-panel ag-right-panel/, "Memory detail"],
+  [agentOSControl, /agentos-panel scheduler-detail-panel ag-right-panel/, "Scheduler detail"],
+]) {
+  assert.match(
+    source,
+    pattern,
+    `${label} right content panel must stay on the shared right panel shell`,
+  )
+}
+
+assert.doesNotMatch(
   memoryControl,
-  /\.memory-command\s*\{[^}]*border-bottom:\s*1px\s+solid\s+var\(--memory-border\)/s,
-  "Memory Stat Chip area must keep a divider before the content below",
+  /\.memory-detail-panel\s*\{[^}]*linear-gradient/s,
+  "Memory right detail panel must not override the shared panel background with a local gradient",
+)
+
+assert.doesNotMatch(
+  trace,
+  /\.trace-detail-drawer\s*\{[^}]*border-left:/s,
+  "Trace right detail panel must not use a one-sided border instead of the shared panel border",
+)
+
+assert.doesNotMatch(
+  appStyle,
+  /\.ag-stat-strip\s*\{[^}]*border-bottom:/s,
+  "Shared Stat Strips must not use the old bottom-divider treatment",
+)
+
+assert.doesNotMatch(
+  memoryControl,
+  /\.memory-command\s*\{[^}]*border-bottom:/s,
+  "Memory command area must not add a full-width divider outside the shared containers",
 )
 
 assert.match(
@@ -881,7 +996,7 @@ for (const [source, className, label] of [
   [dashboard, "situation-metric", "Dashboard"],
   [trace, "trace-stat-card", "Trace"],
   [agentOSControl, "agentos-summary-chip", "AgentOS"],
-  [readOptionalSource("components/Workflow.vue"), "workflow-stat-chip", "Workflow"],
+  [workflow, "workflow-stat-chip", "Workflow"],
 ]) {
   assert.match(
     source,
@@ -903,12 +1018,31 @@ for (const [source, className, label] of [
 for (const [source, className, label] of [
   [trace, "trace-stat-strip", "Trace"],
   [agentOSControl, "agentos-summary-strip", "AgentOS"],
-  [readOptionalSource("components/Workflow.vue"), "workflow-stat-strip", "Workflow"],
+  [workflow, "workflow-stat-strip", "Workflow"],
+  [mcp, "mcp-summary-strip", "MCP"],
+  [skills, "skill-summary-strip", "Skills"],
+  [knowledge, "knowledge-stat-strip", "Knowledge"],
+  [memoryControl, "memory-priority-strip", "Memory"],
 ]) {
   assert.doesNotMatch(
     source,
     new RegExp(`\\.${className}\\s*\\{[^}]*display:\\s*grid`, "s"),
     `${label} Stat Strip must inherit layout from the shared ag-stat-strip style`,
+  )
+  assert.doesNotMatch(
+    source,
+    new RegExp(`\\.${className}\\s*\\{[^}]*border(?:-bottom)?:`, "s"),
+    `${label} Stat Strip must inherit bubble borders from the shared ag-stat-strip style`,
+  )
+  assert.doesNotMatch(
+    source,
+    new RegExp(`\\.${className}\\s*\\{[^}]*background:`, "s"),
+    `${label} Stat Strip must inherit background from the shared ag-stat-strip style`,
+  )
+  assert.doesNotMatch(
+    source,
+    new RegExp(`\\.${className}\\s*\\{[^}]*padding(?:-[a-z]+)?:`, "s"),
+    `${label} Stat Strip must inherit padding from the shared ag-stat-strip style`,
   )
 }
 
@@ -1411,8 +1545,26 @@ assert.match(
 
 assert.match(
   memoryControl,
+  /memory-priority-strip ag-stat-strip/,
+  "Memory priority metrics must use the shared compact Stat Strip",
+)
+
+assert.match(
+  memoryControl,
   /class="memory-priority-card ag-stat-chip"/,
   "Memory priority metrics must use the shared Stat Chip surface",
+)
+
+assert.doesNotMatch(
+  memoryControl,
+  /\.memory-priority-card\s+(span|small|strong)\s*\{/,
+  "Memory priority Stat Chips must inherit label and value typography from the shared ag-stat-chip style",
+)
+
+assert.doesNotMatch(
+  memoryControl,
+  /\.memory-priority-card\s*\{[^}]*min-height:/s,
+  "Memory priority Stat Chips must inherit compact sizing from the shared ag-stat-chip style",
 )
 
 assert.doesNotMatch(

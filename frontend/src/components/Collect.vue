@@ -1,43 +1,44 @@
 <template>
-  <div class="security-page space-y-4">
-    <!-- 搜索区域 -->
-    <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-      <el-input
-        v-model="url"
-        :placeholder="t('collect.input.urlPlaceholder')"
-        class="flex-1"
-        clearable
-      >
-        <template #prefix>
-          <el-icon><Link /></el-icon>
-        </template>
-      </el-input>
-      <div class="flex gap-2">
-        <el-button
-          type="primary"
-          @click="handleParse"
-          :loading="loading"
-          :disabled="loading || !isValidUrl"
-          class="flex-1 sm:flex-none"
+  <div class="collect-console ag-page-flow">
+    <section class="collect-query-panel ag-content-panel">
+      <div class="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+        <el-input
+          v-model="url"
+          :placeholder="t('collect.input.urlPlaceholder')"
+          class="flex-1"
+          clearable
         >
-          <el-icon class="mr-1"><Connection /></el-icon>
-          {{ t('collect.actions.parse') }}
-        </el-button>
-        <el-button
-          type="default"
-          @click="clear"
-          :disabled="loading"
-          class="flex-1 sm:flex-none"
-        >
-          <el-icon class="mr-1"><Delete /></el-icon>
-          {{ t('collect.actions.clear') }}
-        </el-button>
+          <template #prefix>
+            <el-icon><Link /></el-icon>
+          </template>
+        </el-input>
+        <div class="flex gap-2">
+          <el-button
+            type="primary"
+            :loading="loading"
+            :disabled="loading || !isValidUrl"
+            class="flex-1 sm:flex-none"
+            @click="handleParse"
+          >
+            <el-icon class="mr-1"><Connection /></el-icon>
+            {{ t('collect.actions.parse') }}
+          </el-button>
+          <el-button
+            type="default"
+            :disabled="loading"
+            class="flex-1 sm:flex-none"
+            @click="clear"
+          >
+            <el-icon class="mr-1"><Delete /></el-icon>
+            {{ t('collect.actions.clear') }}
+          </el-button>
+        </div>
       </div>
-    </div>
+    </section>
 
     <!-- 消息提示 -->
     <transition name="el-fade-in-linear">
-      <div v-if="message" class="mt-2">
+      <div v-if="message">
         <el-alert
           :type="message.type"
           :title="message.title"
@@ -49,71 +50,67 @@
       </div>
     </transition>
 
-    <!-- 结果展示区域 -->
-    <transition name="el-fade-in">
-      <div v-if="markdownText || renderedHtml" class="flex flex-col gap-4">
-        <!-- Tab 切换 -->
-        <el-tabs v-model="activeTab" class="w-full">
-          <!-- Markdown editor tab -->
-          <el-tab-pane :label="t('collect.tabs.markdown')" name="markdown">
-            <template #label>
-              <div class="flex items-center gap-1.5">
-                <el-icon><Document /></el-icon>
-                <span>{{ t('collect.tabs.markdown') }}</span>
+    <section class="collect-result-panel ag-content-panel">
+      <transition name="el-fade-in">
+        <div v-if="markdownText || renderedHtml" class="flex flex-col gap-4">
+          <el-tabs v-model="activeTab" class="w-full">
+            <el-tab-pane :label="t('collect.tabs.markdown')" name="markdown">
+              <template #label>
+                <div class="flex items-center gap-1.5">
+                  <el-icon><Document /></el-icon>
+                  <span>{{ t('collect.tabs.markdown') }}</span>
+                </div>
+              </template>
+              <div class="relative">
+                <el-input
+                  v-model="markdownText"
+                  type="textarea"
+                  :rows="isMobile ? 15 : 20"
+                  :placeholder="t('collect.editor.placeholder')"
+                  class="w-full font-mono text-sm"
+                />
+                <el-button
+                  v-if="markdownText"
+                  type="primary"
+                  circle
+                  size="small"
+                  class="!absolute top-2 right-2 z-10"
+                  @click="copyMarkdown"
+                >
+                  <el-icon><DocumentCopy /></el-icon>
+                </el-button>
               </div>
-            </template>
-            <div class="relative">
-              <el-input
-                type="textarea"
-                :rows="isMobile ? 15 : 20"
-                v-model="markdownText"
-                :placeholder="t('collect.editor.placeholder')"
-                class="w-full font-mono text-sm"
+            </el-tab-pane>
+
+            <el-tab-pane :label="t('collect.tabs.preview')" name="preview">
+              <template #label>
+                <div class="flex items-center gap-1.5">
+                  <el-icon><View /></el-icon>
+                  <span>{{ t('collect.tabs.preview') }}</span>
+                </div>
+              </template>
+              <div
+                class="markdown-preview prose prose-sm sm:prose max-w-none min-h-[200px] sm:min-h-[300px] overflow-auto"
+                v-html="renderedHtml"
               />
-              <!-- 复制按钮 - 浮动在右上角 -->
-              <el-button
-                v-if="markdownText"
-                type="primary"
-                circle
-                size="small"
-                @click="copyMarkdown"
-                class="!absolute top-2 right-2 z-10"
-              >
-                <el-icon><DocumentCopy /></el-icon>
-              </el-button>
-            </div>
-          </el-tab-pane>
+            </el-tab-pane>
+          </el-tabs>
+        </div>
+      </transition>
 
-          <!-- Rendered preview tab -->
-          <el-tab-pane :label="t('collect.tabs.preview')" name="preview">
-            <template #label>
-              <div class="flex items-center gap-1.5">
-                <el-icon><View /></el-icon>
-                <span>{{ t('collect.tabs.preview') }}</span>
-              </div>
-            </template>
-            <div
-              class="markdown-preview prose prose-sm sm:prose max-w-none min-h-[200px] sm:min-h-[300px] overflow-auto"
-              v-html="renderedHtml"
-            />
-          </el-tab-pane>
-        </el-tabs>
-      </div>
-    </transition>
-
-    <!-- 空状态提示 -->
-    <transition name="el-fade-in">
-      <el-empty
-        v-if="!markdownText && !loading && !message"
-        :description="t('collect.empty.description')"
-        :image-size="isMobile ? 100 : 120"
-      >
-        <template #description>
-          <p class="text-gray-500">{{ t('collect.empty.title') }}</p>
-          <p class="text-gray-400 text-sm mt-2">{{ t('collect.empty.hint') }}</p>
-        </template>
-      </el-empty>
-    </transition>
+      <transition name="el-fade-in">
+        <el-empty
+          v-if="!markdownText && !loading && !message"
+          :description="t('collect.empty.description')"
+          :image-size="isMobile ? 100 : 120"
+        >
+          <template #description>
+            <p class="empty-title">{{ t('collect.empty.title') }}</p>
+            <p class="empty-hint">{{ t('collect.empty.hint') }}</p>
+          </template>
+        </el-empty>
+      </transition>
+    </section>
   </div>
 </template>
 

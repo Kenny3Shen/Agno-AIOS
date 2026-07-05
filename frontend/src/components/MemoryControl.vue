@@ -1,7 +1,7 @@
 <template>
-  <div class="memory-control">
+  <div class="memory-control ag-page-flow">
     <section class="memory-command">
-      <div class="memory-command-copy">
+      <div class="memory-command-copy ag-content-panel">
         <span class="memory-kicker">
           {{ t("agentOS.memory.modeAutomatic") }}
         </span>
@@ -9,23 +9,23 @@
         <p>{{ memoryModeDetails }}</p>
       </div>
 
-      <div class="memory-priority-grid">
+      <div class="memory-priority-strip ag-stat-strip">
         <article
           v-for="card in priorityCards"
           :key="card.key"
           class="memory-priority-card ag-stat-chip"
           :class="`tone-${card.tone}`"
+          :title="card.hint"
         >
           <span>{{ card.label }}</span>
           <strong :title="String(card.value)">{{ card.value }}</strong>
-          <small>{{ card.hint }}</small>
         </article>
       </div>
     </section>
 
     <el-alert v-if="error" class="memory-alert" type="error" :title="error" show-icon />
 
-    <section class="memory-query-panel">
+    <section class="memory-query-panel ag-content-panel">
       <div class="memory-query-label">
         <el-icon><Search /></el-icon>
         <div>
@@ -93,7 +93,7 @@
     </section>
 
     <main class="memory-workbench">
-      <aside class="memory-queue-panel">
+      <aside class="memory-queue-panel ag-workspace-panel">
         <div class="memory-panel-head">
           <div>
             <p>{{ t("agentOS.memory.queueTitle") }}</p>
@@ -150,7 +150,7 @@
         </div>
       </aside>
 
-      <section class="memory-list-panel">
+      <section class="memory-list-panel ag-workspace-panel">
         <div class="memory-panel-head">
           <div>
             <p>{{ t("agentOS.memory.memoriesTitle") }}</p>
@@ -210,7 +210,7 @@
         </div>
       </section>
 
-      <aside class="memory-detail-panel">
+      <aside class="memory-detail-panel ag-right-panel">
         <template v-if="selectedMemory">
           <div class="memory-detail-head">
             <div>
@@ -601,12 +601,6 @@ onMounted(() => {
   --memory-red: var(--ag-red);
   --memory-red-soft: var(--ag-red-soft);
   --memory-row-border: color-mix(in srgb, var(--memory-border) 74%, transparent);
-  display: flex;
-  height: 100%;
-  min-height: 0;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--memory-bg);
   color: var(--memory-text);
 }
 
@@ -619,19 +613,6 @@ onMounted(() => {
   flex: 0 0 auto;
   gap: 12px;
   grid-template-columns: minmax(260px, 0.9fr) minmax(480px, 1.5fr);
-  border-bottom: 1px solid var(--memory-border);
-  padding: 14px;
-}
-
-.memory-command-copy,
-.memory-query-panel,
-.memory-queue-panel,
-.memory-list-panel,
-.memory-detail-panel {
-  border: 1px solid var(--memory-border);
-  border-radius: 8px;
-  background: var(--memory-panel);
-  box-shadow: var(--ag-shadow-panel);
 }
 
 .memory-command-copy {
@@ -639,7 +620,6 @@ onMounted(() => {
   align-content: center;
   gap: 6px;
   overflow: hidden;
-  padding: 14px;
 }
 
 .memory-kicker,
@@ -677,45 +657,8 @@ onMounted(() => {
   white-space: nowrap;
 }
 
-.memory-priority-grid {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.memory-priority-card {
-  display: grid;
-  align-content: start;
-  min-height: 84px;
-  gap: 7px;
-  padding: 10px;
-}
-
-.memory-priority-card span,
-.memory-priority-card small {
-  display: block;
-  overflow: hidden;
-  color: var(--memory-muted);
-  font-size: 11px;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.memory-priority-card strong {
-  display: block;
-  overflow: hidden;
-  color: var(--memory-heading);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 22px;
-  font-weight: 900;
-  line-height: 1.05;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.memory-priority-card small {
-  color: var(--memory-muted-strong);
+.memory-priority-strip {
+  align-self: center;
 }
 
 .memory-alert {
@@ -729,8 +672,6 @@ onMounted(() => {
   gap: 10px;
   grid-template-columns: minmax(180px, 260px) minmax(360px, 1fr) auto;
   align-items: center;
-  margin: 12px 14px 0;
-  padding: 10px;
 }
 
 .memory-query-label {
@@ -803,7 +744,6 @@ onMounted(() => {
   gap: 12px;
   grid-template-columns: minmax(230px, 280px) minmax(300px, 1fr) minmax(280px, 340px);
   min-height: 0;
-  padding: 12px 14px 14px;
 }
 
 .memory-queue-panel,
@@ -1085,12 +1025,6 @@ onMounted(() => {
   color: var(--memory-blue);
 }
 
-.memory-detail-panel {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--memory-blue-soft) 42%, transparent), transparent 160px),
-    var(--memory-panel);
-}
-
 .memory-detail-head {
   align-items: center;
 }
@@ -1308,16 +1242,7 @@ onMounted(() => {
 }
 
 @media (max-width: 680px) {
-  .memory-command,
   .memory-query-panel {
-    padding-inline: 10px;
-  }
-
-  .memory-priority-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .memory-workbench {
     padding-inline: 10px;
   }
 

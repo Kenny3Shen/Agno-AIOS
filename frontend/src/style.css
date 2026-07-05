@@ -157,7 +157,7 @@ button:enabled {
 	color: var(--ag-blue);
 }
 
-.security-page :where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner),
+.ag-page-flow :where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner),
 .auth-screen :where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner) {
 	border-radius: var(--ag-radius-panel);
 }
@@ -216,10 +216,13 @@ button:enabled {
 	display: flex;
 	flex-wrap: nowrap;
 	gap: 8px;
+	margin-block: 10px;
 	min-width: 0;
 	overflow: hidden;
-	border-bottom: 1px solid var(--ag-border);
-	padding-bottom: 10px;
+	border: 1px solid var(--ag-border);
+	border-radius: 8px;
+	background: var(--ag-panel);
+	padding: 8px;
 }
 
 .ag-stat-chip {
@@ -261,6 +264,47 @@ button:enabled {
 	line-height: 1.2;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.ag-page-flow {
+	display: flex;
+	height: 100%;
+	min-height: 0;
+	flex-direction: column;
+	gap: var(--ag-section-gap);
+	overflow-y: auto;
+	background: var(--ag-frame);
+	padding: var(--ag-page-title-gap) var(--ag-page-padding-inline) var(--ag-page-padding-block-end);
+	color: var(--ag-text);
+}
+
+.ag-page-flow > *,
+.ag-page-flow :where(section, aside, main, article, header, div) {
+	min-width: 0;
+}
+
+.ag-page-flow :where(.ag-stat-strip) {
+	margin-block: 0;
+}
+
+.ag-content-panel,
+.ag-right-panel {
+	min-width: 0;
+	border: var(--ag-container-border);
+	border-radius: var(--ag-container-radius);
+	background: var(--ag-container-bg);
+	padding: var(--ag-container-padding);
+	box-shadow: var(--ag-container-shadow);
+}
+
+.ag-workspace-panel {
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	border: var(--ag-container-border);
+	border-radius: var(--ag-container-radius);
+	background: var(--ag-container-bg);
+	box-shadow: var(--ag-container-shadow);
 }
 
 .ag-mobile-scrim {
@@ -1230,6 +1274,9 @@ html:not(.dark) :where(
 	.settings-section,
 	.knowledge-metric,
 	.knowledge-panel,
+	.ag-content-panel,
+	.ag-workspace-panel,
+	.ag-right-panel,
 	.skills-header,
 	.skill-card,
 	.skills-state
@@ -1382,6 +1429,9 @@ html.dark :where(
 	.settings-section,
 	.knowledge-metric,
 	.knowledge-panel,
+	.ag-content-panel,
+	.ag-workspace-panel,
+	.ag-right-panel,
 	.agent-stat,
 	.skills-header,
 	.skill-card,
