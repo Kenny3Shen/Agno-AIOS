@@ -524,6 +524,7 @@ const Workflow = defineAsyncComponent(() => import("./components/Workflow.vue"))
 const Skills = defineAsyncComponent(() => import("./components/Skills.vue"))
 const MCP = defineAsyncComponent(() => import("./components/MCP.vue"))
 const Knowledge = defineAsyncComponent(() => import("./components/Knowledge.vue"))
+const AgentEvals = defineAsyncComponent(() => import("./components/AgentEvals.vue"))
 
 const homeItem = computed<NavItem>(() => ({
   id: "home",
@@ -571,7 +572,7 @@ const componentMap: Record<ModuleNavId, Component> = {
   sessions: AgentOSControl,
   studio: AgentOSControl,
   memory: MemoryControl,
-  evaluation: AgentOSControl,
+  evaluation: AgentEvals,
   approvals: AgentOSControl,
   scheduler: AgentOSControl,
   settings: Settings,

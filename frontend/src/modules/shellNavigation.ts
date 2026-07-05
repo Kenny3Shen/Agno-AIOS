@@ -73,22 +73,18 @@ export const navPermissions: Partial<Record<ModuleNavId, string>> = {
   settings: "settings:read",
 }
 
-export const osControlTabs = new Set<ActiveOsControlModule>([
-  "sessions",
-  "studio",
-  "memory",
-  "evaluation",
-  "approvals",
-  "scheduler",
-])
-
 export const fullCanvasTabs = new Set<ModuleNavId>([
   "dashboard",
   "chat",
   "trace",
   "workflow",
   "mcp",
-  ...osControlTabs,
+  "evaluation",
+  "sessions",
+  "studio",
+  "memory",
+  "approvals",
+  "scheduler",
 ])
 
 export const securityDataNavIds = new Set<NavId>(["cve", "collect"])
@@ -180,6 +176,14 @@ export const buildShellComponentProps = (
   }
   return baseProps
 }
+
+export const osControlTabs = new Set<ActiveOsControlModule>([
+  "sessions",
+  "studio",
+  "memory",
+  "approvals",
+  "scheduler",
+])
 
 export const buildWorkspaceSignals = (
   moduleCount: number,

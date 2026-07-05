@@ -36,6 +36,7 @@ const collect = readOptionalSource("components/Collect.vue")
 const settings = readOptionalSource("components/Settings.vue")
 const knowledge = readOptionalSource("components/Knowledge.vue")
 const agentOSControl = readOptionalSource("components/AgentOSControl.vue")
+const agentEvals = readOptionalSource("components/AgentEvals.vue")
 const memoryControl = readOptionalSource("components/MemoryControl.vue")
 const workflow = readOptionalSource("components/Workflow.vue")
 const typesSource = readSource("types/index.ts")
@@ -1172,6 +1173,36 @@ assert.match(
   useApi,
   /function useAgentEvalsApi\(\)/,
   "Agent Eval API composable must expose useAgentEvalsApi",
+)
+
+assert.match(
+  app,
+  /const AgentEvals = defineAsyncComponent\(\(\) => import\("\.\/components\/AgentEvals\.vue"\)\)/,
+  "Evaluation must load the dedicated AgentEvals workbench",
+)
+
+assert.match(
+  app,
+  /evaluation:\s*AgentEvals/,
+  "Evaluation nav must map to AgentEvals instead of AgentOSControl",
+)
+
+assert.doesNotMatch(
+  shellNavigation,
+  /osControlTabs[\s\S]*"evaluation"/,
+  "Evaluation must not remain an OS control tab",
+)
+
+assert.match(
+  agentEvals,
+  /PerformanceEval/,
+  "AgentEvals should display the PerformanceEval dimension",
+)
+
+assert.doesNotMatch(
+  agentEvals,
+  /runPerformance|performanceRunButton|@click="[^"]*performance/i,
+  "AgentEvals must not expose a manual PerformanceEval run action",
 )
 
 for (const methodName of [
