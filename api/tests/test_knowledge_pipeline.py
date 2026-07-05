@@ -104,10 +104,10 @@ def test_runtime_candidate_limit_respects_rerank_policy() -> None:
     )
 
 
-def test_runtime_builds_async_pgvector_knowledge_with_small_interface() -> None:
+def test_runtime_builds_agno_pgvector_knowledge_with_small_interface() -> None:
     captured: dict[str, Any] = {}
 
-    class FakeAsyncPgVector:
+    class FakePgVector:
         def __init__(self, **kwargs: Any) -> None:
             captured["vector"] = kwargs
 
@@ -132,7 +132,7 @@ def test_runtime_builds_async_pgvector_knowledge_with_small_interface() -> None:
     contents_db = object()
     readers = {"text": object()}
     with (
-        patch.object(knowledge_runtime_service, "AsyncPgVector", FakeAsyncPgVector),
+        patch.object(knowledge_runtime_service, "PgVector", FakePgVector),
         patch.object(knowledge_runtime_service, "Knowledge", FakeKnowledge),
     ):
         result = knowledge_runtime_service.build_knowledge_base(
