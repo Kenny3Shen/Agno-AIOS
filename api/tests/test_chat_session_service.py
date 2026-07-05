@@ -1,5 +1,8 @@
 from unittest.mock import patch
+
 from agno.session.agent import AgentSession
+import pytest
+
 from api.services import chat_session_service
 
 
@@ -29,8 +32,27 @@ class FakeAgnoDb:
         self.upserted = session
         return session
 
+    async def _get_table(self, **_kwargs):
+        return None
 
-def test_get_all_sessions_projects_sorted_archived_session_rows():
+
+class AsyncFakeAgnoDb(FakeAgnoDb):
+    async def get_sessions(self, **kwargs):
+        self.get_sessions_kwargs = kwargs
+        return (list(self.rows), len(self.rows))
+
+    async def get_session(self, session_id: str, deserialize: bool = True):
+        if deserialize:
+            return self.session
+        return self.session_row
+
+    async def upsert_session(self, session):
+        self.upserted = session
+        return session
+
+
+@pytest.mark.asyncio
+async def test_get_all_sessions_projects_sorted_archived_session_rows():
     rows = [
         {
             "session_id": "older",
@@ -49,12 +71,12 @@ def test_get_all_sessions_projects_sorted_archived_session_rows():
             "metadata": {"agno_aios_archived": True},
         },
     ]
-    db = FakeAgnoDb(rows)
+    db = AsyncFakeAgnoDb(rows)
     with (
-        patch.object(chat_session_service, "ensure_agno_postgres_tables"),
-        patch.object(chat_session_service, "get_agno_postgres_db", return_value=db),
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
     ):
-        sessions = chat_session_service.get_all_sessions(
+        sessions = await chat_session_service.get_all_sessions_async(
             include_archived=True, owner_user_id="u1", include_runs=True
         )
     kwargs = db.get_sessions_kwargs
@@ -70,8 +92,50 @@ def test_get_all_sessions_projects_sorted_archived_session_rows():
     assert sessions[1]["preview"] == "older preview"
 
 
-def test_get_all_sessions_filters_archived_by_default():
-    db = FakeAgnoDb(
+@pytest.mark.asyncio
+async def test_get_all_sessions_async_projects_sorted_archived_session_rows():
+    rows = [
+        {
+            "session_id": "older",
+            "created_at": 1,
+            "updated_at": 2,
+            "user_id": "u1",
+            "runs": [{"input": {"input_content": "older preview"}}],
+            "metadata": {},
+        },
+        {
+            "session_id": "newer",
+            "created_at": 3,
+            "updated_at": 4,
+            "user_id": "u1",
+            "runs": [{"input": "newer preview"}],
+            "metadata": {"agno_aios_archived": True},
+        },
+    ]
+    db = AsyncFakeAgnoDb(rows)
+    with (
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
+    ):
+        sessions = await chat_session_service.get_all_sessions_async(
+            include_archived=True, owner_user_id="u1", include_runs=True
+        )
+    kwargs = db.get_sessions_kwargs
+    assert kwargs is not None
+    assert kwargs["user_id"] == "u1"
+    assert kwargs["limit"] == 500
+    assert not kwargs["deserialize"]
+    assert [session["session_id"] for session in sessions] == ["newer", "older"]
+    assert sessions[0]["preview"] == "newer preview"
+    assert sessions[0]["archived"]
+    assert sessions[0]["runs"] == [{"input": "newer preview"}]
+    assert not sessions[1]["archived"]
+    assert sessions[1]["preview"] == "older preview"
+
+
+@pytest.mark.asyncio
+async def test_get_all_sessions_filters_archived_by_default():
+    db = AsyncFakeAgnoDb(
         [
             {"session_id": "active", "metadata": {}, "runs": []},
             {
@@ -82,26 +146,27 @@ def test_get_all_sessions_filters_archived_by_default():
         ]
     )
     with (
-        patch.object(chat_session_service, "ensure_agno_postgres_tables"),
-        patch.object(chat_session_service, "get_agno_postgres_db", return_value=db),
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
     ):
-        sessions = chat_session_service.get_all_sessions()
+        sessions = await chat_session_service.get_all_sessions_async()
     assert [session["session_id"] for session in sessions] == ["active"]
 
 
-def test_archive_session_updates_agno_session_metadata():
+@pytest.mark.asyncio
+async def test_archive_session_updates_agno_session_metadata():
     session = AgentSession(
         session_id="s1", user_id="u1", metadata={"existing": "value"}
     )
-    db = FakeAgnoDb(
+    db = AsyncFakeAgnoDb(
         rows=[], session_row={"session_id": "s1", "user_id": "u1"}, session=session
     )
     with (
-        patch.object(chat_session_service, "ensure_agno_postgres_tables"),
-        patch.object(chat_session_service, "get_agno_postgres_db", return_value=db),
-        patch.object(chat_session_service, "record_audit_event"),
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
+        patch.object(chat_session_service, "record_audit_event_async"),
     ):
-        archived = chat_session_service.archive_session("s1", user_id="u1")
+        archived = await chat_session_service.archive_session("s1", user_id="u1")
     assert archived
     assert db.upserted is session
     metadata = session.metadata

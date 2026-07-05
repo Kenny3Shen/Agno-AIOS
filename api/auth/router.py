@@ -9,7 +9,7 @@ from api.auth.models import User
 from api.auth.schemas import UserCreate, UserRead, UserUpdate
 from api.auth.users import auth_backend, current_active_user, fastapi_users
 from api.config import get_settings
-from api.services.audit_service import audit_request_context, record_audit_event
+from api.services.audit_service import audit_request_context, record_audit_event_async
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 settings = get_settings()
@@ -97,7 +97,7 @@ async def audited_logout(
     request: Request,
     user: User = Depends(current_active_user),
 ) -> dict[str, bool]:
-    record_audit_event(
+    await record_audit_event_async(
         user,
         action="auth.logout",
         resource_type="auth",

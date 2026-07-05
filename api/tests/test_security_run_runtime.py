@@ -1,9 +1,11 @@
 from pathlib import Path
+import threading
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 from api.services import security_run_runtime
 import pytest
+from pydantic import SecretStr
 
 
 class FakeAgent:
@@ -40,28 +42,31 @@ class BlockingRuntime(security_run_runtime.SecurityRunRuntime):
     def _build_security_agent(self, mcp_tools, request):
         return BlockingAgent()
 
-    def _build_fallback_agent(self, model_id=None):
+    def build_fallback_agent(self, model_id=None):
         return FallbackAgent()
 
 
-def test_load_prompt_reads_static_prompt_file():
+@pytest.mark.asyncio
+async def test_load_prompt_reads_static_prompt_file():
     with TemporaryDirectory() as temp_dir:
         prompt_dir = Path(temp_dir)
         (prompt_dir / "agent.md").write_text("\n外置提示词\n", encoding="utf-8")
         with patch.object(security_run_runtime, "PROMPT_DIR", prompt_dir):
-            assert security_run_runtime._load_prompt("agent.md") == "外置提示词"
+            assert await security_run_runtime._load_prompt_async("agent.md") == "外置提示词"
 
 
-def test_load_prompt_rejects_empty_prompt_file():
+@pytest.mark.asyncio
+async def test_load_prompt_rejects_empty_prompt_file():
     with TemporaryDirectory() as temp_dir:
         prompt_dir = Path(temp_dir)
         (prompt_dir / "agent.md").write_text("  \n", encoding="utf-8")
         with patch.object(security_run_runtime, "PROMPT_DIR", prompt_dir):
             with pytest.raises(RuntimeError, match="提示词文件为空"):
-                security_run_runtime._load_prompt("agent.md")
+                await security_run_runtime._load_prompt_async("agent.md")
 
 
-def test_security_agent_loads_prompt_when_agent_is_built():
+@pytest.mark.asyncio
+async def test_security_agent_loads_prompt_when_agent_is_built():
     created: dict = {}
 
     def agent_factory(**kwargs):
@@ -76,13 +81,13 @@ def test_security_agent_loads_prompt_when_agent_is_built():
             security_run_runtime.SecurityRunRuntimeDependencies(
                 build_model=lambda _model_id: object(),
                 get_db=lambda: object(),
-                get_knowledge_base=lambda: object(),
+                get_async_knowledge_base=lambda: object(),
                 get_enabled_skill_dirs=lambda: [],
                 agent_factory=agent_factory,
             )
         )
         with patch.object(security_run_runtime, "PROMPT_DIR", prompt_dir):
-            runtime._build_security_agent(
+            await runtime._build_security_agent(
                 FakeMcpTools(),
                 security_run_runtime.SecurityRunRequest.from_chat_args(
                     "hello",
@@ -93,7 +98,7 @@ def test_security_agent_loads_prompt_when_agent_is_built():
             )
             assert created["instructions"] == ["第一次运行时能力"]
             prompt_file.write_text("第二次运行时能力", encoding="utf-8")
-            runtime._build_security_agent(
+            await runtime._build_security_agent(
                 FakeMcpTools(),
                 security_run_runtime.SecurityRunRequest.from_chat_args(
                     "hello",
@@ -109,7 +114,8 @@ def test_security_agent_loads_prompt_when_agent_is_built():
     assert created["enable_session_summaries"]
 
 
-def test_fallback_agent_loads_prompt_when_agent_is_built():
+@pytest.mark.asyncio
+async def test_fallback_agent_loads_prompt_when_agent_is_built():
     created: dict = {}
 
     def agent_factory(**kwargs):
@@ -128,11 +134,12 @@ def test_fallback_agent_loads_prompt_when_agent_is_built():
             )
         )
         with patch.object(security_run_runtime, "PROMPT_DIR", prompt_dir):
-            runtime._build_fallback_agent(model_id="model-1")
+            await runtime.build_fallback_agent(model_id="model-1")
     assert created["instructions"] == ["降级提示词"]
 
 
-def test_fallback_agent_keeps_memory_and_summary():
+@pytest.mark.asyncio
+async def test_fallback_agent_keeps_memory_and_summary():
     created: dict = {}
 
     def agent_factory(**kwargs):
@@ -146,11 +153,44 @@ def test_fallback_agent_keeps_memory_and_summary():
             agent_factory=agent_factory,
         )
     )
-    runtime._build_fallback_agent(model_id="model-1")
+    await runtime.build_fallback_agent(model_id="model-1")
     assert created["update_memory_on_run"]
     assert created["enable_session_summaries"]
     assert "tools" not in created
     assert "knowledge" not in created
+
+
+@pytest.mark.asyncio
+async def test_enabled_skills_loads_sync_agno_skills_off_event_loop():
+    event_loop_thread_id = threading.get_ident()
+    constructor_thread_id: int | None = None
+
+    class FakeLocalSkills:
+        def __init__(self, path: str):
+            self.path = path
+
+    class FakeSkills:
+        def __init__(self, loaders):
+            nonlocal constructor_thread_id
+            constructor_thread_id = threading.get_ident()
+            self.loaders = loaders
+
+    runtime = security_run_runtime.SecurityRunRuntime(
+        security_run_runtime.SecurityRunRuntimeDependencies(
+            get_enabled_skill_dirs=lambda: [Path("/tmp/security-skill")],
+        )
+    )
+
+    with (
+        patch.object(security_run_runtime, "LocalSkills", FakeLocalSkills),
+        patch.object(security_run_runtime, "Skills", FakeSkills),
+    ):
+        skills = await runtime._build_enabled_skills()
+
+    assert isinstance(skills, FakeSkills)
+    assert [loader.path for loader in skills.loaders] == ["/tmp/security-skill"]
+    assert constructor_thread_id is not None
+    assert constructor_thread_id != event_loop_thread_id
 
 
 @pytest.mark.asyncio
@@ -174,11 +214,11 @@ async def test_provider_block_detector_matches_openai_status_error_text():
 
 @pytest.mark.asyncio
 async def test_mcp_url_includes_runtime_token():
-    env = {
-        "MCP_SERVER_URL": "http://127.0.0.1:8000/mcp/?transport=stream",
-        "MCP_TOKEN": "secret token",
-    }
-    with patch.object(security_run_runtime.os, "environ", env):
+    fake_settings = SimpleNamespace(
+        mcp_server_url="http://127.0.0.1:8000/mcp/?transport=stream",
+        mcp_token=SecretStr("secret token"),
+    )
+    with patch.object(security_run_runtime, "get_settings", return_value=fake_settings):
         assert (
             security_run_runtime._build_mcp_url()
             == "http://127.0.0.1:8000/mcp/?transport=stream&token=secret+token"

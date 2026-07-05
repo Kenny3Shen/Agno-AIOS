@@ -1,5 +1,7 @@
+import importlib
 import re
-import requests
+
+import httpx
 from bs4 import BeautifulSoup
 from api.utils.url2md_utils import domain_rules, title_suffixes
 
@@ -162,9 +164,31 @@ def get_markdown_text(soup: BeautifulSoup, url: str) -> str:
     return f"# {title}\n\n{main_paragraphs}"
 
 
-def fetch_and_parse_url(urls: list[str]) -> list[str]:
+async def _fetch_with_playwright(url: str) -> str:
+    try:
+        async_playwright = importlib.import_module("patchright.async_api").async_playwright
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("patchright is required when USE_PLAYWRIGHT is enabled") from exc
+
+    async with async_playwright() as p:
+        context = await p.chromium.launch_persistent_context(
+            user_data_dir="/home/shenss/.config/patchright-chrome",
+            channel="chrome",
+            headless=False,
+            no_viewport=True,
+        )
+        try:
+            page = context.pages[0] if context.pages else await context.new_page()
+            await page.goto(url)
+            await page.wait_for_timeout(5000)
+            return await page.content()
+        finally:
+            await context.close()
+
+
+async def fetch_and_parse_url(urls: list[str]) -> list[str]:
     """
-    使用 requests 同步获取 URL 内容，检测 WAF 拦截时使用 DrissionPage 获取。
+    使用 async HTTP client 获取 URL 内容，检测 WAF 拦截时可使用 async browser fallback。
 
     Args:
         urls: URL 列表
@@ -186,178 +210,73 @@ def fetch_and_parse_url(urls: list[str]) -> list[str]:
         "Cache-Control": "max-age=0",
     }
 
-    session = requests.Session()
-    session.headers.update(headers)
-
     results = []
-    page = None  # 延迟初始化 DrissionPage
 
-    for url in urls:
-        try:
-            resp = session.get(url, timeout=30, allow_redirects=True)
-            # 自动检测编码，避免中文乱码（requests 默认 text/html 为 ISO-8859-1）
-            if resp.encoding == "ISO-8859-1" or resp.encoding is None:
-                resp.encoding = resp.apparent_encoding
-            body = resp.text
-            waf_features = [
-                "aliyun_waf",
-            ]
-            waf_blocked = any(feature in body.lower() for feature in waf_features)
-            # 如果被 WAF 拦截，使用 patchright 获取
-            if waf_blocked and USE_PLAYWRIGHT:
-                from patchright.sync_api import sync_playwright
+    async with httpx.AsyncClient(
+        headers=headers,
+        timeout=30,
+        follow_redirects=True,
+    ) as client:
+        for url in urls:
+            try:
+                resp = await client.get(url)
+                body = resp.text
+                waf_features = [
+                    "aliyun_waf",
+                ]
+                waf_blocked = any(feature in body.lower() for feature in waf_features)
+                # 如果被 WAF 拦截，使用 patchright 获取
+                if waf_blocked and USE_PLAYWRIGHT:
+                    body = await _fetch_with_playwright(url)
 
-                # 使用 patchright 的 launch_persistent_context 以完全模拟真实用户
-                with sync_playwright() as p:
-                    context = p.chromium.launch_persistent_context(
-                        user_data_dir="/home/shenss/.config/patchright-chrome",
-                        channel="chrome",
-                        headless=False,
-                        no_viewport=True,
-                        # args=["--no-sandbox", "--disable-gpu"],
+                # 检查状态码（WAF 绕过后不再检查原始状态码）
+                if not waf_blocked and resp.status_code != 200:
+                    results.append(f"HTTP error for {url}: status code {resp.status_code}")
+                    continue
+
+                soup = BeautifulSoup(body, "html.parser")
+
+                if len(soup.get_text()) < 500:
+                    results.append(f"Content too short for {url}: page may be inaccessible")
+                    continue
+
+                tags_to_remove = [
+                    "header",
+                    "footer",
+                    "nav",
+                    "aside",
+                    "script",
+                    "style",
+                    "form",
+                    "iframe",
+                ]
+
+                for tag_name in tags_to_remove:
+                    for tag in soup.find_all(tag_name):
+                        tag.decompose()
+
+                text = soup.get_text(separator="\n", strip=True)
+                restricted_markers = [
+                    "access to this vulnerability report requires support",
+                    "verified supporters only",
+                    "请进行验证",
+                ]
+                lowered = text.lower()
+                if any(marker in lowered for marker in restricted_markers):
+                    results.append(
+                        f"Restricted access for {url}: page requires special permissions"
                     )
+                    continue
 
-                    page = context.pages[0] if context.pages else context.new_page()
-                    page.goto(url)
-                    # 等待页面加载和 WAF 挑战完成
-                    page.wait_for_timeout(5000)
-                    body = page.content()
-                    context.close()
+                markdown_text = get_markdown_text(soup, url)
 
-            # 检查状态码（WAF 绕过后不再检查原始状态码）
-            if not waf_blocked and resp.status_code != 200:
-                results.append(f"HTTP error for {url}: status code {resp.status_code}")
+                results.append(markdown_text)
+
+            except httpx.HTTPError as e:
+                results.append(f"Network error for {url}: {e}")
                 continue
-
-            soup = BeautifulSoup(body, "html.parser")
-
-            if len(soup.get_text()) < 500:
-                results.append(f"Content too short for {url}: page may be inaccessible")
+            except Exception as e:
+                results.append(f"Unexpected error for {url}: {e}")
                 continue
-
-            tags_to_remove = [
-                "header",
-                "footer",
-                "nav",
-                "aside",
-                "script",
-                "style",
-                "form",
-                "iframe",
-            ]
-
-            for tag_name in tags_to_remove:
-                for tag in soup.find_all(tag_name):
-                    tag.decompose()
-
-            text = soup.get_text(separator="\n", strip=True)
-            restricted_markers = [
-                "access to this vulnerability report requires support",
-                "verified supporters only",
-                "请进行验证",
-            ]
-            lowered = text.lower()
-            if any(marker in lowered for marker in restricted_markers):
-                results.append(
-                    f"Restricted access for {url}: page requires special permissions"
-                )
-                continue
-
-            markdown_text = get_markdown_text(soup, url)
-
-            results.append(markdown_text)
-
-        except requests.RequestException as e:
-            results.append(f"Network error for {url}: {e}")
-            continue
-        except Exception as e:
-            results.append(f"Unexpected error for {url}: {e}")
-            continue
 
     return results
-
-
-# async def call_llm(input_data: list[str]) -> list[dict]:
-#     """调用大模型分析威胁情报，返回解析后的 JSON 字典。"""
-#     if not input_data:
-#         return [{"error": "No input data provided"}]
-
-#     api_key = os.getenv("DS3_API_KEY")
-#     base_url = os.getenv("DS3_URL")
-#     model_ep = os.getenv("DS3_EP")
-
-#     if not api_key or not base_url or not model_ep:
-#         return [{"error": "LLM configuration is missing"}]
-
-#     client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-#     results = []
-#     for data in input_data:
-#         try:
-#             response = await client.chat.completions.create(
-#                 model=model_ep,
-#                 messages=[
-#                     {"role": "system", "content": system_prompt},
-#                     {"role": "user", "content": data},
-#                 ],
-#                 # thinking={"type": "disabled"},
-#                 response_format={"type": "json_object"},
-#                 # extra_headers={
-#                 #     "x-is-encrypted": "true",
-#                 #     "x-ark-moderation-scene": "aicc-skip",
-#                 # },
-#             )
-
-#             output_text = response.choices[0].message.content.strip()
-#             output_dict = repair_json(
-#                 output_text, return_objects=True, ensure_ascii=False
-#             )
-#             if isinstance(output_dict, dict):
-#                 results.append(output_dict)
-#             else:
-#                 results.append({"error": "LLM output is not a valid JSON object"})
-#         except Exception as e:
-#             results.append({"error": f"LLM call failed: {e}"})
-
-#     return results
-
-
-# if __name__ == "__main__":
-#     import mdformat
-#     from config import DB_CONFIG
-#     import aiomysql
-#     import asyncio
-#     from db import Database
-
-#     # Test with a sample URL
-#     # test_url = [
-#     #     # "https://cybersecuritynews.com/vulnerable-codes-in-legacy-python-packages/"
-#     #     # "https://www.seqrite.com/blog/redis-8-2-2-lua-engine-security-vulnerabilities/",
-#     #     # "https://www.seqrite.com/blog/building-trust-with-data-data-privacy-basics-for-business-leaders/",
-#     #     # "https://www.seqrite.com/blog/zero-trust-the-next-step-for-rural-and-cooperative-bank-security/"
-#     #     # "https://www.freebuf.com/articles/system/458310.html",
-#     #     # "https://www.freebuf.com/news/457924.html",
-#     #     # "https://www.freebuf.com/articles/network/458802.html",
-#     #     "https://securityonline.info/spyware-vendor-intellexa-used-15-zero-days-since-2021-deploying-predator-via-smack-ios-exploit-chain/"
-#     # ]
-#     date_str = "251211"
-#     async def get_vul_urls(date_str: str) -> list[str]:
-#         async with aiomysql.create_pool(**DB_CONFIG) as pool:
-#             db = Database(pool)
-#             vul_urls = await db.get_vul_urls(date_str)
-#             return vul_urls
-
-#     test_url = asyncio.run(get_vul_urls(date_str))
-#     input_data = fetch_and_parse_url(test_url)
-#     # 可选 ：使用 mdformat 格式化 Markdown 内容，去除多余空行和格式问题
-#     input_data = [mdformat.text(item) for item in input_data]
-
-#     file_name = f"/home/shenss/python/threat_info_analyse_user/datasets/md/test_{date_str}.md"
-#     with open(file_name, "w", encoding="utf-8") as f:
-#         f.write("\n\n---\n\n".join(input_data))
-#     result = asyncio.run(call_llm(input_data))
-#     with open(
-#         f"/home/shenss/python/threat_info_analyse_user/datasets/json/test_{date_str}.json",
-#         "w",
-#         encoding="utf-8",
-#     ) as f:
-#         f.write(json.dumps(result, ensure_ascii=False, indent=2))

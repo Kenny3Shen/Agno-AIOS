@@ -7,8 +7,8 @@ from fastapi import HTTPException
 from api.mcp.config import (
     SERVICE_IDS,
     normalize_mcp_servers,
-    read_mcp_config,
-    write_mcp_config,
+    read_mcp_config_async,
+    write_mcp_config_async,
 )
 
 
@@ -21,18 +21,18 @@ class McpConfigChange:
     metadata: dict[str, Any] | None = None
 
 
-def apply_service_toggle(service_id: str, enabled: bool) -> McpConfigChange:
+async def apply_service_toggle_async(service_id: str, enabled: bool) -> McpConfigChange:
     if service_id not in SERVICE_IDS:
         raise HTTPException(status_code=400, detail="Invalid service ID")
 
-    data = read_mcp_config()
+    data = await read_mcp_config_async()
     mcp_cfg = data.setdefault("mcp", {})
     if not isinstance(mcp_cfg, dict):
         data["mcp"] = {}
         mcp_cfg = data["mcp"]
 
     mcp_cfg[service_id] = enabled
-    write_mcp_config(data)
+    await write_mcp_config_async(data)
     return McpConfigChange(
         response={
             "success": True,
@@ -125,7 +125,7 @@ def _parse_mcp_manifest(raw: str, name: str) -> tuple[str, dict[str, Any]]:
     )
 
 
-def apply_mcp_upload(
+async def apply_mcp_upload_async(
     *,
     name: str,
     description: str = "",
@@ -138,7 +138,7 @@ def apply_mcp_upload(
     normalized_description = description.strip()
     kind, normalized_manifest = _parse_mcp_manifest(manifest, normalized_name)
 
-    data = read_mcp_config()
+    data = await read_mcp_config_async()
     servers = normalize_mcp_servers(data.get("mcp_servers", []))
     if any(entry["name"] == normalized_name for entry in servers):
         raise HTTPException(status_code=409, detail="该 MCP 名称已存在")
@@ -152,7 +152,7 @@ def apply_mcp_upload(
         }
     )
     data["mcp_servers"] = servers
-    write_mcp_config(data)
+    await write_mcp_config_async(data)
 
     return McpConfigChange(
         response={

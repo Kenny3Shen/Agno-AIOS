@@ -1,5 +1,5 @@
 import inspect
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
 from api.routes import settings
 import pytest
@@ -85,7 +85,8 @@ async def test_masked_api_key_uses_saved_secret():
     with (
         patch.object(
             settings,
-            "load_model_config",
+            "load_model_config_async",
+            new_callable=AsyncMock,
             return_value={"models": [{"id": "m1", "api_key": "saved-secret"}]},
         ),
         patch.object(

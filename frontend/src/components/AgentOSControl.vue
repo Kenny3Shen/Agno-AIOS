@@ -645,41 +645,18 @@ onMounted(() => {
 }
 
 .agentos-summary-strip {
-  display: grid;
   flex: 0 0 auto;
-  gap: 8px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
   padding: 12px 14px 0;
 }
 
-.agentos-summary-chip {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid var(--os-border);
-  border-radius: 8px;
-  background: var(--os-panel-soft);
-  padding: 8px 10px;
-}
-
-.agentos-summary-chip::before {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 2px;
-  background: var(--os-blue);
-  content: "";
-}
-
-.agentos-summary-chip.tone-green::before,
 .agentos-dot.green {
   background: var(--os-green);
 }
 
-.agentos-summary-chip.tone-yellow::before,
 .agentos-dot.yellow {
   background: var(--os-yellow);
 }
 
-.agentos-summary-chip.tone-red::before,
 .agentos-dot.red {
   background: var(--os-red);
 }
@@ -704,24 +681,6 @@ onMounted(() => {
   border-color: rgba(211, 74, 66, 0.3);
   background: rgba(211, 74, 66, 0.12);
   color: var(--os-red);
-}
-
-.agentos-summary-chip span {
-  display: block;
-  color: var(--os-muted);
-  font-size: 10px;
-  line-height: 1.35;
-}
-
-.agentos-summary-chip strong {
-  display: block;
-  margin-top: 2px;
-  color: var(--os-text);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 13px;
-  font-weight: 800;
-  line-height: 1.2;
-  overflow-wrap: anywhere;
 }
 
 .agentos-alert {
@@ -1059,10 +1018,6 @@ html.dark .agentos-control {
   .agentos-ledger,
   .scheduler-workbench {
     padding: 12px;
-  }
-
-  .agentos-summary-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .agentos-scheduler-grid,

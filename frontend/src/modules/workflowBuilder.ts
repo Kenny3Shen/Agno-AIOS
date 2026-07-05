@@ -17,10 +17,13 @@ export interface WorkflowCodeOptions {
   name: string
   description: string
   input: string
+  sessionId: string
+  userId: string
   steps: WorkflowStepDraft[]
   streamEvents: boolean
   storeEvents: boolean
   addWorkflowHistoryToSteps: boolean
+  numHistoryRuns: number
 }
 
 const constructorNames: Record<WorkflowStepKind, string> = {
@@ -73,6 +76,16 @@ export function buildWorkflowCode(options: WorkflowCodeOptions) {
 
   if (options.storeEvents) workflowArgs.push("    store_events=True,")
   if (options.addWorkflowHistoryToSteps) workflowArgs.push("    add_workflow_history_to_steps=True,")
+  if (options.addWorkflowHistoryToSteps) workflowArgs.push(`    num_history_runs=${boundedHistoryRuns(options.numHistoryRuns)},`)
+
+  const runArgs = [
+    `    input=${quote(options.input)},`,
+    ...(options.sessionId.trim() ? [`    session_id=${quote(options.sessionId.trim())},`] : []),
+    ...(options.userId.trim() ? [`    user_id=${quote(options.userId.trim())},`] : []),
+    "    markdown=True,",
+    "    stream=True,",
+    `    stream_events=${options.streamEvents ? "True" : "False"},`,
+  ]
 
   return [
     `from agno.workflow import ${Array.from(imports).join(", ")}`,
@@ -83,10 +96,7 @@ export function buildWorkflowCode(options: WorkflowCodeOptions) {
     ")",
     "",
     "workflow.print_response(",
-    `    input=${quote(options.input)},`,
-    "    markdown=True,",
-    "    stream=True,",
-    `    stream_events=${options.streamEvents ? "True" : "False"},`,
+    ...runArgs,
     ")",
   ].join("\n")
 }
@@ -134,6 +144,11 @@ function displayName(step: WorkflowStepDraft) {
 
 function quote(value: string) {
   return JSON.stringify(value)
+}
+
+function boundedHistoryRuns(value: number) {
+  if (!Number.isFinite(value)) return 3
+  return Math.max(1, Math.min(12, Math.trunc(value)))
 }
 
 function indent(value: string, spaces: number) {

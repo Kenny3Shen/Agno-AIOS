@@ -1,7 +1,7 @@
-import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, AsyncIterator, Callable, Iterable, cast
+from inspect import isawaitable
+from typing import Any, AsyncIterator, Callable, cast
 from urllib.parse import urlencode
 
 from agno.agent import Agent
@@ -9,21 +9,20 @@ from agno.models.openai import OpenAILike
 from agno.run.agent import RunEvent
 from agno.skills import LocalSkills, Skills
 from agno.tools.mcp import MCPTools
+from anyio import Path as AsyncPath
+from anyio import to_thread
 from loguru import logger
 
-from api.services.knowledge_service import get_knowledge_base
-from api.services.model_config_service import get_model_for_run
-from api.services.postgres_store import get_agno_postgres_db
-from api.services.skill_service import get_enabled_skill_dirs
+from api.config import get_settings
+from api.services.knowledge_service import get_async_knowledge_base
+
+from api.services.model_config_service import get_model_for_run_async
+from api.services.postgres_store import get_async_agno_postgres_db
+from api.services.skill_service import get_enabled_skill_dirs_async
 
 
-def _get_env(key: str, default: str = "") -> str:
-    """优先从 os.environ 读取（支持运行时动态修改），回退到默认值"""
-    return os.environ.get(key, default)
-
-
-def _build_model(model_id: str | None = None) -> OpenAILike:
-    model = get_model_for_run(model_id)
+async def _build_model_async(model_id: str | None = None) -> OpenAILike:
+    model = await get_model_for_run_async(model_id)
     return OpenAILike(
         id=model["model_id"],
         api_key=model["api_key"],
@@ -32,11 +31,11 @@ def _build_model(model_id: str | None = None) -> OpenAILike:
 
 
 def _get_mcp_token() -> str:
-    return (_get_env("MCP_TOKEN") or _get_env("MCP_Token")).strip()
+    return get_settings().mcp_token.get_secret_value().strip()
 
 
 def _build_mcp_url() -> str:
-    base_url = _get_env("MCP_SERVER_URL", "http://127.0.0.1:8000/mcp/").strip()
+    base_url = get_settings().mcp_server_url.strip()
     token = _get_mcp_token()
     if not base_url:
         raise RuntimeError("MCP_SERVER_URL 未配置，请在 .env 或系统配置中设置 MCP 服务地址。")
@@ -51,15 +50,21 @@ SECURITY_OPERATIONS_PROMPT = "security_operations.md"
 SAFE_FALLBACK_PROMPT = "safe_fallback.md"
 
 
-def _load_prompt(filename: str) -> str:
+async def _load_prompt_async(filename: str) -> str:
     prompt_path = PROMPT_DIR / filename
     try:
-        prompt = prompt_path.read_text(encoding="utf-8").strip()
+        prompt = (await AsyncPath(prompt_path).read_text(encoding="utf-8")).strip()
     except OSError as exc:
         raise RuntimeError(f"无法读取 Agent 提示词文件: {prompt_path}") from exc
     if not prompt:
         raise RuntimeError(f"Agent 提示词文件为空: {prompt_path}")
     return prompt
+
+
+async def _maybe_await(value: Any) -> Any:
+    if isawaitable(value):
+        return await value
+    return value
 
 
 PROVIDER_BLOCK_MARKERS = (
@@ -70,9 +75,14 @@ PROVIDER_BLOCK_MARKERS = (
 )
 
 
-AGENT_DEPENDENCIES = {
-    "feishu_webhook_url": _get_env("FEISHU_WEBHOOK_URL"),
-}
+def _agent_dependencies() -> dict[str, str]:
+    return {
+        "feishu_webhook_url": get_settings().feishu_webhook_url.get_secret_value(),
+    }
+
+
+def _load_local_skills(enabled_dirs: list[str]) -> Skills:
+    return Skills(loaders=[LocalSkills(path) for path in enabled_dirs])
 
 
 def _is_provider_block_error(error: Exception) -> bool:
@@ -114,10 +124,10 @@ class SecurityRunRequest:
 
 @dataclass(frozen=True)
 class SecurityRunRuntimeDependencies:
-    build_model: Callable[[str | None], Any] = _build_model
-    get_db: Callable[[], Any] = get_agno_postgres_db
-    get_knowledge_base: Callable[[], Any] = get_knowledge_base
-    get_enabled_skill_dirs: Callable[[], Iterable[Any]] = get_enabled_skill_dirs
+    build_model: Callable[[str | None], Any] = _build_model_async
+    get_db: Callable[[], Any] = get_async_agno_postgres_db
+    get_async_knowledge_base: Callable[[], Any] = get_async_knowledge_base
+    get_enabled_skill_dirs: Callable[[], Any] = get_enabled_skill_dirs_async
     get_mcp_url: Callable[[], str] = _build_mcp_url
     mcp_tools_factory: Callable[..., Any] = MCPTools
     agent_factory: Callable[..., Any] = Agent
@@ -132,13 +142,14 @@ class SecurityRunRuntime:
     ) -> None:
         self.dependencies = dependencies or SecurityRunRuntimeDependencies()
 
-    def _build_enabled_skills(self) -> Skills | None:
+    async def _build_enabled_skills(self) -> Skills | None:
         enabled_dirs = [
-            str(skill_dir) for skill_dir in self.dependencies.get_enabled_skill_dirs()
+            str(skill_dir)
+            for skill_dir in await _maybe_await(self.dependencies.get_enabled_skill_dirs())
         ]
         if not enabled_dirs:
             return None
-        return Skills(loaders=[LocalSkills(d) for d in enabled_dirs])
+        return await to_thread.run_sync(_load_local_skills, enabled_dirs)
 
     async def _stream_agent_content(
         self,
@@ -168,14 +179,14 @@ class SecurityRunRuntime:
             ):
                 yield content
 
-    def _build_fallback_agent(self, model_id: str | None = None) -> Agent:
+    async def build_fallback_agent(self, model_id: str | None = None) -> Agent:
         return self.dependencies.agent_factory(
             id="security-operations",
             name="安全防御助手",
             role="安全防御运营助手",
             description="无工具模式下的安全防御运营助手。",
-            instructions=[_load_prompt(SAFE_FALLBACK_PROMPT)],
-            model=self.dependencies.build_model(model_id),
+            instructions=[await _load_prompt_async(SAFE_FALLBACK_PROMPT)],
+            model=await _maybe_await(self.dependencies.build_model(model_id)),
             db=self.dependencies.get_db(),
             update_memory_on_run=True,
             enable_session_summaries=True,
@@ -183,7 +194,7 @@ class SecurityRunRuntime:
             markdown=True,
         )
 
-    def _build_security_agent(
+    async def _build_security_agent(
         self,
         mcp_tools: Any,
         request: SecurityRunRequest,
@@ -193,18 +204,18 @@ class SecurityRunRuntime:
             name="安全运营助手",
             role="安全运营综合专家",
             description="集威胁情报分析与安全剧本执行于一体的安全运营助手，可完成情报检索、深度分析和自动化处置全流程。",
-            instructions=[_load_prompt(SECURITY_OPERATIONS_PROMPT)],
-            model=self.dependencies.build_model(request.model_id),
+            instructions=[await _load_prompt_async(SECURITY_OPERATIONS_PROMPT)],
+            model=await _maybe_await(self.dependencies.build_model(request.model_id)),
             tools=[mcp_tools],
-            knowledge=self.dependencies.get_knowledge_base(),
+            knowledge=self.dependencies.get_async_knowledge_base(),
             knowledge_filters={"user_id": request.knowledge_owner_user_id}
             if request.knowledge_owner_user_id
             else None,
             search_knowledge=True,
             add_search_knowledge_instructions=True,
-            skills=self._build_enabled_skills(),
+            skills=await self._build_enabled_skills(),
             db=self.dependencies.get_db(),
-            dependencies=AGENT_DEPENDENCIES,
+            dependencies=_agent_dependencies(),
             add_dependencies_to_context=True,
             add_history_to_context=True,
             update_memory_on_run=True,
@@ -221,7 +232,9 @@ class SecurityRunRuntime:
                 url=self.dependencies.get_mcp_url(),
                 timeout_seconds=20,
             ) as mcp_tools:
-                security_agent = self._build_security_agent(mcp_tools, request)
+                security_agent = await _maybe_await(
+                    self._build_security_agent(mcp_tools, request)
+                )
 
                 async for chunk in self._stream_agent_content(
                     security_agent,
@@ -233,7 +246,7 @@ class SecurityRunRuntime:
                 raise
             logger.warning("模型服务拦截完整 Agent 上下文，切换到无工具降级模式: {}", exc)
             yield "模型服务拦截了完整 Agent 上下文，已切换到无工具安全模式。\n\n"
-            fallback_agent = self._build_fallback_agent(request.model_id)
+            fallback_agent = await _maybe_await(self.build_fallback_agent(request.model_id))
             async for chunk in self._stream_agent_content(
                 fallback_agent,
                 request,
@@ -242,10 +255,6 @@ class SecurityRunRuntime:
 
 
 DEFAULT_SECURITY_RUN_RUNTIME = SecurityRunRuntime()
-
-
-def _build_enabled_skills() -> Skills | None:
-    return DEFAULT_SECURITY_RUN_RUNTIME._build_enabled_skills()
 
 
 async def _stream_agent_content(
@@ -265,10 +274,6 @@ async def _stream_agent_content(
         request,
     ):
         yield chunk
-
-
-def _build_fallback_agent(model_id: str | None = None) -> Agent:
-    return DEFAULT_SECURITY_RUN_RUNTIME._build_fallback_agent(model_id)
 
 
 async def stream_security_run(

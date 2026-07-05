@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import HTTPException, Request, status
 
 from api.auth.permissions import has_permission
-from api.services.audit_service import audit_request_context, record_audit_event
+from api.services.audit_service import audit_request_context, record_audit_event_async
 
 CONTROL_MODULE_PERMISSIONS = {
     "sessions": "session:read:own",
@@ -47,12 +47,12 @@ def require_actor_permission(actor: Any, permission: str) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="权限不足")
 
 
-def record_policy_event(
+async def record_policy_event(
     actor: Any,
     event: PolicyAuditEvent,
     request: Request | None,
 ) -> None:
-    record_audit_event(
+    await record_audit_event_async(
         actor,
         action=event.action,
         resource_type=event.resource_type,

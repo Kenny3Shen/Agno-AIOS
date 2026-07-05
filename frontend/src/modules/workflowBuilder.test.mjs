@@ -42,10 +42,13 @@ const code = buildWorkflowCode({
   name: "security_research_workflow",
   description: "Security research workflow",
   input: "研判 CVE-2026-0001 的暴露风险。",
+  sessionId: "security-research-session",
+  userId: "operator@example.com",
   steps,
   streamEvents: true,
   storeEvents: true,
   addWorkflowHistoryToSteps: true,
+  numHistoryRuns: 5,
 })
 
 assert.match(
@@ -70,4 +73,22 @@ assert.match(
   code,
   /store_events=True/,
   "generated Workflow constructor must expose event persistence",
+)
+
+assert.match(
+  code,
+  /num_history_runs=5/,
+  "generated Workflow constructor must cap and expose workflow history run depth",
+)
+
+assert.match(
+  code,
+  /session_id="security-research-session"/,
+  "generated run call must preserve the workflow session id used for persisted run history",
+)
+
+assert.match(
+  code,
+  /user_id="operator@example.com"/,
+  "generated run call must preserve the workflow user id when provided",
 )

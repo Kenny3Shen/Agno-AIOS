@@ -11,7 +11,7 @@ from loguru import logger
 from api.auth.database import get_user_db
 from api.auth.models import User
 from api.config import get_settings
-from api.services.audit_service import audit_request_context, record_audit_event
+from api.services.audit_service import audit_request_context, record_audit_event_async
 
 settings = get_settings()
 
@@ -34,7 +34,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, UUID]):
         response: Response | None = None,
     ) -> None:
         logger.info("用户登录成功: {}", user.email)
-        record_audit_event(
+        await record_audit_event_async(
             user,
             action="auth.login",
             resource_type="auth",

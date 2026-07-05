@@ -1,6 +1,6 @@
 import inspect
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
 from api.auth.permissions import assert_owned_resource
 from api.routes import chat
@@ -32,11 +32,11 @@ def test_chat_request_does_not_accept_authoritative_user_id():
 
 
 def test_session_list_service_accepts_owner_filter():
-    assert "owner_user_id" in llm_service.get_all_sessions.__annotations__ | {}
+    assert "owner_user_id" in llm_service.get_all_sessions_async.__annotations__ | {}
 
 
 def test_session_list_uses_agno_db_owner_filter():
-    source = inspect.getsource(llm_service.get_all_sessions)
+    source = inspect.getsource(llm_service.get_all_sessions_async)
     assert "get_sessions" in source
     assert "user_id=owner_user_id" in source
     assert "chat_session_archives" not in source
@@ -67,7 +67,7 @@ def test_provider_block_detector_matches_openai_status_error_text():
 async def test_list_sessions_uses_current_user_as_owner_filter():
     captured: dict[str, str | None] = {}
 
-    def fake_get_all_sessions(
+    async def fake_get_all_sessions(
         *,
         owner_user_id: str | None,
         include_archived: bool = False,
@@ -78,7 +78,7 @@ async def test_list_sessions_uses_current_user_as_owner_filter():
         captured["include_runs"] = str(include_runs)
         return []
 
-    with patch.object(chat, "get_all_sessions", fake_get_all_sessions):
+    with patch.object(chat, "get_all_sessions_async", fake_get_all_sessions):
         result = await chat.list_sessions(user=actor("u1"))
     assert result == []
     assert captured["owner_user_id"] == "u1"
@@ -86,7 +86,8 @@ async def test_list_sessions_uses_current_user_as_owner_filter():
 
 @pytest.mark.asyncio
 async def test_chat_rejects_foreign_existing_session_id():
-    with patch.object(chat, "get_session_owner", return_value="u2"):
+    with patch.object(chat, "get_session_owner_async", new_callable=AsyncMock) as mocked:
+        mocked.return_value = "u2"
         with pytest.raises(HTTPException) as exc:
             await chat.chat_agent(
                 chat.ChatRequest(message="hello", session_id="foreign-session"),
@@ -97,7 +98,8 @@ async def test_chat_rejects_foreign_existing_session_id():
 
 @pytest.mark.asyncio
 async def test_chat_allows_owned_existing_session_id():
-    with patch.object(chat, "get_session_owner", return_value="u1"):
+    with patch.object(chat, "get_session_owner_async", new_callable=AsyncMock) as mocked:
+        mocked.return_value = "u1"
         response = await chat.chat_agent(
             chat.ChatRequest(message="hello", session_id="own-session"),
             user=actor("u1"),

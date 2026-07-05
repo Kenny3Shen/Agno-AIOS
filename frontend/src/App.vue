@@ -393,7 +393,7 @@
                     <span>{{ t("shell.home.description") }}</span>
                   </div>
 
-                  <div class="ag-home-summary-strip">
+                  <div class="ag-home-summary-strip ag-stat-strip">
                     <div v-for="signal in workspaceSignals" :key="signal.label" class="ag-home-signal ag-stat-chip">
                       <span>{{ signal.label }}</span>
                       <strong>{{ signal.value }}</strong>
@@ -679,7 +679,7 @@ const sidebarPixelWidth = computed(() => {
 })
 
 const shellGridStyle = computed(() => ({
-  gridTemplateColumns: `${sidebarPixelWidth.value}px minmax(0, 1fr)`,
+  gridTemplateColumns: isMobile.value ? undefined : `${sidebarPixelWidth.value}px minmax(0, 1fr)`,
 }))
 
 const sidebarStyle = computed(() => ({

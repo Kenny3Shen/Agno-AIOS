@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from api.auth.models import User
 from api.auth.users import current_active_user
 from api.services.os_control_service import get_control_payload
-from api.services.postgres_store import get_agno_postgres_db
+from api.services.postgres_store import get_async_agno_postgres_db
 from api.services.scheduler_service import (
     create_schedule,
     delete_schedule,
@@ -98,7 +98,7 @@ async def get_os_control_module(
                 "page": page,
                 "limit": limit,
             }
-        return get_control_payload(module, actor=user, query=query)
+        return await get_control_payload(module, actor=user, query=query)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Unsupported control module: {module}") from exc
     except HTTPException:
@@ -117,7 +117,7 @@ async def create_scheduler_job(
     user: User = Depends(require_scheduler_write_permission),
 ):
     try:
-        schedule = create_schedule(
+        schedule = await create_schedule(
             name=body.name,
             target_type=body.target_type,
             target_id=body.target_id,
@@ -136,7 +136,7 @@ async def create_scheduler_job(
         logger.error(f"创建 Scheduler 任务失败: {exc}")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    record_policy_event(
+    await record_policy_event(
         user,
         PolicyAuditEvent(
             action="scheduler.create",
@@ -157,7 +157,7 @@ async def update_scheduler_job(
     user: User = Depends(require_scheduler_write_permission),
 ):
     try:
-        schedule = update_schedule(schedule_id, **body.model_dump(exclude_unset=True))
+        schedule = await update_schedule(schedule_id, **body.model_dump(exclude_unset=True))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
@@ -165,7 +165,7 @@ async def update_scheduler_job(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     if schedule is None:
         raise HTTPException(status_code=404, detail="Schedule not found")
-    record_policy_event(
+    await record_policy_event(
         user,
         PolicyAuditEvent(
             action="scheduler.update",
@@ -185,13 +185,13 @@ async def _set_scheduler_job_enabled(
     user: User,
 ) -> dict[str, Any]:
     try:
-        schedule = set_schedule_enabled(schedule_id, enabled)
+        schedule = await set_schedule_enabled(schedule_id, enabled)
     except Exception as exc:
         logger.error(f"切换 Scheduler 任务状态失败: {exc}")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     if schedule is None:
         raise HTTPException(status_code=404, detail="Schedule not found")
-    record_policy_event(
+    await record_policy_event(
         user,
         PolicyAuditEvent(
             action="scheduler.enable" if enabled else "scheduler.disable",
@@ -229,13 +229,13 @@ async def delete_scheduler_job(
     user: User = Depends(require_scheduler_write_permission),
 ):
     try:
-        deleted = delete_schedule(schedule_id)
+        deleted = await delete_schedule(schedule_id)
     except Exception as exc:
         logger.error(f"删除 Scheduler 任务失败: {exc}")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     if not deleted:
         raise HTTPException(status_code=404, detail="Schedule not found")
-    record_policy_event(
+    await record_policy_event(
         user,
         PolicyAuditEvent(
             action="scheduler.delete",
@@ -253,7 +253,7 @@ async def trigger_scheduler_job(
     request: Request,
     user: User = Depends(require_scheduler_write_permission),
 ):
-    schedule = get_schedule(schedule_id)
+    schedule = await get_schedule(schedule_id)
     if schedule is None:
         raise HTTPException(status_code=404, detail="Schedule not found")
     if not schedule["enabled"]:
@@ -262,11 +262,11 @@ async def trigger_scheduler_job(
     if executor is None:
         raise HTTPException(status_code=503, detail="Scheduler is not running")
     try:
-        run = await executor.execute(schedule, get_agno_postgres_db(), release_schedule=False)
+        run = await executor.execute(schedule, get_async_agno_postgres_db(), release_schedule=False)
     except Exception as exc:
         logger.error(f"触发 Scheduler 任务失败: {exc}")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    record_policy_event(
+    await record_policy_event(
         user,
         PolicyAuditEvent(
             action="scheduler.trigger",
@@ -286,10 +286,10 @@ async def get_scheduler_runs(
     page: int = 1,
     user: User = Depends(require_scheduler_write_permission),
 ):
-    if get_schedule(schedule_id) is None:
+    if await get_schedule(schedule_id) is None:
         raise HTTPException(status_code=404, detail="Schedule not found")
     return {
-        "items": list_schedule_runs(schedule_id, limit=limit, page=page),
+        "items": await list_schedule_runs(schedule_id, limit=limit, page=page),
         "page": page,
         "limit": limit,
     }

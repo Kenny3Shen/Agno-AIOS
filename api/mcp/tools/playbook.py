@@ -1,19 +1,20 @@
 import asyncio
 from fastmcp import FastMCP
-import os
 import httpx
-from dotenv import load_dotenv
 
-load_dotenv(override=True)
+from api.config import get_settings
+from api.services.runtime_env import load_runtime_env_async
+
 playbook_mcp = FastMCP("Playbook")
 
 
 class W5Adapter:
     def __init__(self):
-        self.token = os.getenv("W5_SOAR_TOKEN", "")
+        settings = get_settings()
+        self.token = settings.w5_soar_token.get_secret_value()
         if not self.token:
             raise ValueError("W5_SOAR_TOKEN 环境变量未设置")
-        self.api_base = os.getenv("W5_API_BASE", "")
+        self.api_base = settings.w5_api_base
         if not self.api_base:
             raise ValueError("W5_API_BASE 环境变量未设置")
         self.headers = {"Content-Type": "application/json"}
@@ -62,10 +63,11 @@ class W5Adapter:
 
 class OctomationAdapter:
     def __init__(self):
-        self.token = os.getenv("OCTOMATION_TOKEN", "")
+        settings = get_settings()
+        self.token = settings.octomation_token.get_secret_value()
         if not self.token:
             raise ValueError("OCTOMATION_TOKEN 环境变量未设置")
-        self.api_base = os.getenv("OCTOMATION_API_BASE", "")
+        self.api_base = settings.octomation_api_base
         if not self.api_base:
             raise ValueError("OCTOMATION_API_BASE 环境变量未设置")
         self.headers = {"hg-token": self.token, "Content-Type": "application/json"}
@@ -201,13 +203,19 @@ class OctomationAdapter:
             "msg": "ok",
             "data": {"status": status, "result": result_json},
         }
+
+
+
+
+
 _ADAPTERS_MAP: dict = {
     "w5-soar": W5Adapter,
     "octomation": OctomationAdapter,
 }
 
 
-def get_adapter(platform: str):
+async def get_adapter(platform: str):
+    await load_runtime_env_async()
     key = (platform or "").strip().lower()
     if not key or key not in _ADAPTERS_MAP:
         return None
@@ -224,7 +232,7 @@ def err_platform() -> dict:
 @playbook_mcp.tool()
 async def list_workflows(platform: str) -> dict:
     """获取剧本列表"""
-    adapter = get_adapter(platform)
+    adapter = await get_adapter(platform)
     if not adapter:
         return err_platform()
     if isinstance(adapter, dict):
@@ -242,7 +250,7 @@ async def get_method_params(platform: str, method_id: str) -> dict:
     """获取剧本所需参数"""
     if not method_id:
         return {"code": -1, "msg": "method_id 不能为空", "data": {}}
-    adapter = get_adapter(platform)
+    adapter = await get_adapter(platform)
     if not adapter:
         return err_platform()
     if isinstance(adapter, dict):
@@ -262,7 +270,7 @@ async def invoke_method(
     """调用剧本方法"""
     if not method_id:
         return {"code": -1, "msg": "method_id 不能为空", "data": {}}
-    adapter = get_adapter(platform)
+    adapter = await get_adapter(platform)
     if not adapter:
         return err_platform()
     if isinstance(adapter, dict):
@@ -278,7 +286,7 @@ async def get_exec_result(platform: str, exec_id: str) -> dict:
     """查询剧本执行结果"""
     if not exec_id:
         return {"code": -1, "msg": "exec_id 不能为空", "data": {}}
-    adapter = get_adapter(platform)
+    adapter = await get_adapter(platform)
     if not adapter:
         return err_platform()
     if isinstance(adapter, dict):

@@ -30,7 +30,7 @@ PostgreSQL + pgvector
   +-- knowledge  knowledge contents 和 vector tables
 ```
 
-FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth tables、bootstrap 可选 admin、创建共享数据库连接池、启动集成 MCP runtime、include 各 API routers、挂载 `/mcp`，并从 `source/` 或 `frontend/dist` 托管前端静态资源。
+FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth tables、bootstrap 可选 admin、创建共享数据库连接池、启动集成 MCP runtime、include 各 API routers、挂载 `/mcp`，并从 `source/` 或 `frontend/dist` 托管前端静态资源。AgentOS 注册 fallback agent 时使用 async `AgentFactory`，避免在 module import 阶段同步读取 prompt 或 model config。
 
 ## 后端模块
 
@@ -49,7 +49,7 @@ FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth table
 - `/api/audit/logs`：admin audit review。
 - `/api/os/*`：AgentOS control modules。
 
-`api/services/` 负责业务逻辑和持久化辅助层。`postgres_store.py` 集中管理 PostgreSQL 连接设置、schema 名称、Agno `PostgresDb` 构造和应用表创建。`security_run_runtime.py` 承担安全运营助手 Run runtime，集中 model、MCP、Skill、Knowledge、fallback 和流式事件编排；`llm_service.py` 保留 Chat Session persistence、session history 和兼容入口。`knowledge_service.py` 提供 Knowledge Base lifecycle interface，内部集中 Agno Knowledge、PgVector、reader、owner filtering、CRUD、search 和 status。`mcp_config_service.py` 集中 MCP service toggle 和 MCP upload 配置写入。`security_policy.py` 集中控制面 module permission、Scheduler 写权限和 policy audit event 记录。`tracing_service.py` 读取 Agno traces 与 spans，并整理成前端需要的结构。
+`api/services/` 负责业务逻辑和持久化辅助层。`postgres_store.py` 集中管理 PostgreSQL 连接设置、schema 名称、Agno `AsyncPostgresDb` 构造和应用表创建。`security_run_runtime.py` 承担安全运营助手 Run runtime，集中 model、MCP、Skill、Knowledge、fallback 和流式事件编排；模型配置、prompt 文件、MCP TOML 读取和 Skill metadata/list/toggle 使用 awaitable file API，Skill zip install 这类批量 filesystem operation 通过线程隔离，避免阻塞 Chat stream 的事件循环。`llm_service.py` 保留 Chat Session persistence、session history 和兼容入口。`knowledge_service.py` 提供 async Knowledge Base lifecycle interface，runtime route 走 Agno async Knowledge APIs 和 async contents DB，内部集中 PgVector、reader、owner filtering、CRUD、search 和 status。`mcp_config_service.py` 集中 MCP service toggle 和 MCP upload 配置写入，只暴露 async mutation facade，TOML 文件读写使用 awaitable file API。`security_policy.py` 集中控制面 module permission、Scheduler 写权限和 policy audit event 记录。`url2md_service.py` 使用 async HTTP client 执行 URL collection。`tracing_service.py` 读取 Agno traces 与 spans，并整理成前端需要的结构。
 
 `api/mcp/` 负责集成 MCP runtime。`server.py` 构建主 FastMCP instance、挂载已启用的内置服务、用 token validation 包装 ASGI app，并支持 runtime refresh。`config.py` 读取和写入底层 MCP config，并存储 MCP tokens；上层配置 mutation 由 `api/services/mcp_config_service.py` 提供 module interface。
 
@@ -82,24 +82,30 @@ FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth table
 - 通过 streamable HTTP 使用 `MCP_SERVER_URL` 和 `MCP_TOKEN` 的 MCP tools。
 - 带可选 user filter 的 Agno knowledge base。
 - 来自 `api/agent/skills/` 的已启用 local skills。
-- Agno `PostgresDb` session storage。
+- Agno `AsyncPostgresDb` session、memory、trace 和 schedule storage。
 - History、memory updates、datetime context 和 Markdown output。
 
-Tracing 通过 `setup_tracing(db=db, batch_processing=False)` 启用，因此 Chat runs 会写入 Agno trace tables，并尽量减少 UI 刷新后看不到最新 trace 的延迟。
+Tracing 通过 `setup_tracing(db=AsyncPostgresDb, batch_processing=False)` 启用，因此 Chat runs 会写入 Agno trace tables，并尽量减少 UI 刷新后看不到最新 trace 的延迟。
 
 如果 provider 拦截完整 Agent context，Run runtime 会切换到无工具 fallback assistant。fallback 会明确说明能力受限，不声称访问了 tools、knowledge 或内部数据。
+
+AgentOS 暴露的 fallback assistant 也复用同一个 runtime builder。`AgentFactory` 的 factory callable 是 async function，按 Agno AgentOS factories 文档在请求时 await；因此 model config 和 prompt 文件通过 awaitable file API 读取，而不是在 FastAPI import 或 AgentOS setup 时阻塞事件循环。
 
 ## Sessions、Runs、Traces 和 Spans
 
 Chat session 不是授权 secret。后端把 `session_id` 当作标识符，并通过存储的 `user_id` 检查归属；admin 例外。
 
-Sessions 和 runs 从 Agno `agno_sessions` 表读取。UI 删除 Chat session 是 soft archive：服务会在 `app.chat_session_archives` 中记录 archive state，并标记 Agno session metadata，但不会删除 runs 或 traces。
+Sessions 和 runs 通过 Agno `AsyncPostgresDb` 从 Agno-owned `agno_sessions` 读取。UI 删除 Chat session 是 soft archive：服务把 archive marker 写入 Agno session metadata，不再创建或读写 `app.chat_session_archives`，也不会删除 runs 或 traces。
 
-Traces 通过 Agno `PostgresDb` functions 从 `agno_traces` 和 `agno_spans` 读取。Trace UI 使用 `session_id`、`run_id`、`trace_id`、`span_id`、`agent_id`、`team_id` 和 `workflow_id` 把用户会话和执行细节关联起来。
+Traces 通过 Agno `AsyncPostgresDb` 和 async Postgres pool projection 从 `agno_traces` 和 `agno_spans` 读取。Trace UI 使用 `session_id`、`run_id`、`trace_id`、`span_id`、`agent_id`、`team_id` 和 `workflow_id` 把用户会话和执行细节关联起来。
 
 ## Knowledge
 
-Knowledge documents 通过 metadata 做 user scope。Chat runtime 在存在当前用户时传入 `knowledge_filters` user filter。Knowledge Base lifecycle module 通过 `knowledge` schema 中的 Agno `PostgresDb` 存储 document contents，并通过 PgVector 存储 vector chunks。
+Knowledge documents 通过 metadata 做 user scope。Chat runtime 在存在当前用户时传入 `knowledge_filters` user filter。Knowledge route 使用 Agno `Knowledge.ainsert()`、`asearch()` 和 `aget_content()`；document contents 存在 `knowledge` schema 中的 Agno `AsyncPostgresDb`，vector chunks 仍由 PgVector 管理。删除和清空不调用 Agno PgVector 的同步 delete helper，而是先通过 async SQLAlchemy 删除 vector rows，再通过 async contents DB 删除 catalog row。
+
+PgVector 入口按 Agno 文档推荐的 async Knowledge API 使用：业务代码只调用 `Knowledge.ainsert()`、`Knowledge.asearch()` 等 async methods。由于本地 Agno `PgVector` 的 async create/search/write helpers 仍会经过同步 SQLAlchemy engine 或同步 session，AIOS runtime 使用 `AsyncPgVector` adapter 保留 Agno table contract，同时按 PgVector `db_url` 派生 async engine，把 PgVector create、write、upsert 和 search I/O 切到 async SQLAlchemy，并在 app shutdown 时释放对应 engine。
+
+本地 embedding 和 rerank 模型仍是同步 CPU/GPU 计算，不属于 async DB I/O。BGE embedder 的 async methods 和 PgVector rerank path 会把同步模型调用放入 worker thread，避免在 `ainsert()` / `asearch()` 的 event loop 中直接执行 SentenceTransformer 或 FlagEmbedding。
 
 当前写入路径包括后端 text input、后端 server-side file path input，以及前端把 browser file upload 读取成 text 后走文本写入。Search 会返回匹配内容和 metadata，供控制面和助手使用。
 
@@ -115,7 +121,7 @@ Knowledge documents 通过 metadata 做 user scope。Chat runtime 在存在当�
 
 | Schema | 当前职责 |
 | --- | --- |
-| `app` | FastAPI Users auth tables、CVE records、audit logs、chat session archive markers、AgentOS control tables |
+| `app` | FastAPI Users auth tables、CVE records、audit logs、AgentOS control tables |
 | `agno` | Agno sessions、memories、traces、spans、schema versions |
 | `mcp` | MCP tokens |
 | `knowledge` | Agno knowledge contents 和 PgVector tables |
@@ -128,5 +134,6 @@ Schema 分域是运行时边界，不是独立服务边界。见 [ADR 0001](./ad
 
 - Agno run 使用 `user_id` 和 `session_id` 支持 multi-user sessions。
 - Agno traces 包含 trace records 和层级 spans，带 `run_id`、`session_id`、`user_id` 和组件 ID。
-- Agno 文档推荐 PostgresDb 用于生产式 relational persistence，并用 PgVector 在 PostgreSQL 上做 vector search。
+- Agno 文档推荐 Postgres storage 用于生产式 relational persistence，并用 PgVector 在 PostgreSQL 上做 vector search；AIOS runtime 使用 Agno `AsyncPostgresDb`。
+- Agno AgentOS factories 支持 async callable，并会在请求时 await；AIOS 用它延迟构造 fallback agent。
 - FastMCP 可以作为 ASGI app 挂载到 FastAPI。

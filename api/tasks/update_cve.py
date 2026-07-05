@@ -13,30 +13,81 @@ CVE数据库更新脚本
 """
 
 import asyncio
-import os
-import sys
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
+from anyio import Path as AsyncPath
+from anyio import to_thread
 from loguru import logger
 import polars as pl
-import psycopg
-from psycopg import sql
 
-from api.services.postgres_store import app_schema, ensure_app_tables, postgres_dsn
-from api.tasks.cve_sources import DATA_SOURCES
+from api.config import get_settings
+from api.persistence.cves import count_cve_rows, delete_cve_rows, insert_new_cve_rows
+from api.tasks.cve_sources import DATA_SOURCES, load_cve_source_config
 
-# 配置日志
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-logger.remove()
-logger.add(sys.stderr, level=LOG_LEVEL)
-log_dir = os.getenv("LOG_DIR", "logs")
-os.makedirs(log_dir, exist_ok=True)
-logger.add(
-    os.path.join(log_dir, "update_cve.log"),
-    level=LOG_LEVEL,
-    rotation="10 MB",
-    retention="10 days",
-)
+_FILE_LOGGING_CONFIGURED = False
+
+
+def _configure_file_logging_once() -> None:
+    global _FILE_LOGGING_CONFIGURED
+    if _FILE_LOGGING_CONFIGURED:
+        return
+    settings = get_settings()
+    log_dir = settings.log_dir
+    Path(log_dir).mkdir(parents=True, exist_ok=True)
+    logger.add(
+        log_dir / "update_cve.log",
+        level=settings.log_level,
+        rotation="10 MB",
+        retention="10 days",
+    )
+    _FILE_LOGGING_CONFIGURED = True
+
+
+async def _configure_file_logging_async() -> None:
+    await to_thread.run_sync(_configure_file_logging_once)
+
+
+async def _read_text_if_exists(path: str) -> str | None:
+    async_path = AsyncPath(path)
+    if not await async_path.exists():
+        return None
+    return (await async_path.read_text(encoding="utf-8")).strip()
+
+
+async def _write_text(path: str, value: str) -> None:
+    async_path = AsyncPath(path)
+    await async_path.parent.mkdir(parents=True, exist_ok=True)
+    await async_path.write_text(value, encoding="utf-8")
+
+
+async def _read_csv_if_exists(path: str) -> pl.DataFrame:
+    async_path = AsyncPath(path)
+    if not await async_path.exists():
+        logger.info(f"本地缓存文件不存在: {path}，按全量更新处理")
+        return pl.DataFrame()
+    logger.info(f"从本地缓存加载数据: {path}")
+    try:
+        df_local = await to_thread.run_sync(pl.read_csv, path)
+    except Exception as e:
+        logger.warning(f"加载本地缓存失败: {e}，按全量更新处理")
+        return pl.DataFrame()
+    logger.info(f"从本地缓存加载了 {df_local.height} 条记录")
+    return df_local
+
+
+def _parse_source_data(source: Any, raw_data: Any, source_name: str) -> pl.DataFrame:
+    df_remote = source.parse_data(raw_data)
+    if not df_remote.is_empty():
+        df_remote = df_remote.with_columns(pl.lit(source_name).alias("source"))
+    return df_remote
+
+
+async def _write_csv(path: str, dataframe: pl.DataFrame) -> None:
+    await AsyncPath(Path(path).parent).mkdir(parents=True, exist_ok=True)
+    await to_thread.run_sync(dataframe.write_csv, path)
+
 
 async def update_cve_database(
     increment_data: list[dict[str, str]],
@@ -48,62 +99,18 @@ async def update_cve_database(
     - 删除远程已移除的数据（DELETE）
     返回 (新增条数, 删除条数)
     """
-    ensure_app_tables()
     new_count = 0
     del_count = 0
     batch_size = 500
-    async with await psycopg.AsyncConnection.connect(postgres_dsn()) as conn:
-        try:
-            async with conn.cursor() as cursor:
-                cves_table = sql.Identifier(app_schema(), "cves")
-                insert_sql = sql.SQL(
-                    """
-                    INSERT INTO {}
-                        (cve_id, description, github_url, source, create_time)
-                    VALUES (%s, %s, %s, %s, %s)
-                    ON CONFLICT (cve_id, github_url) DO NOTHING
-                    """
-                ).format(cves_table)
-                for i in range(0, len(increment_data), batch_size):
-                    batch = increment_data[i : i + batch_size]
-                    create_time = datetime.now()
-                    params = [
-                        (
-                            item.get("cve_id"),
-                            item.get("description", ""),
-                            item.get("github_url", ""),
-                            item.get("source", ""),
-                            create_time,
-                        )
-                        for item in batch
-                    ]
-                    if params:
-                        await cursor.executemany(insert_sql, params)
-                        new_count += max(cursor.rowcount or 0, 0)
-
-                delete_sql = sql.SQL(
-                    "DELETE FROM {} WHERE cve_id = %s AND github_url = %s"
-                ).format(cves_table)
-                for i in range(0, len(deleted_data), batch_size):
-                    batch = deleted_data[i : i + batch_size]
-                    params = [
-                        (item.get("cve_id"), item.get("github_url"))
-                        for item in batch
-                    ]
-                    if params:
-                        await cursor.executemany(delete_sql, params)
-                        del_count += max(cursor.rowcount or 0, 0)
-
-                await cursor.execute(
-                    sql.SQL("SELECT count(*) FROM {}").format(cves_table)
-                )
-                result = await cursor.fetchone()
-                total_count = int(result[0]) if result else 0
-            await conn.commit()
-        except Exception as e:
-            await conn.rollback()
-            logger.exception("同步过程中出错，已回滚: {}", e)
-            raise
+    try:
+        for i in range(0, len(increment_data), batch_size):
+            new_count += await insert_new_cve_rows(increment_data[i : i + batch_size])
+        for i in range(0, len(deleted_data), batch_size):
+            del_count += await delete_cve_rows(deleted_data[i : i + batch_size])
+        total_count = await count_cve_rows()
+    except Exception as e:
+        logger.exception("同步过程中出错: {}", e)
+        raise
 
     logger.info(
         "同步完成。新增: {} 条，删除: {} 条，数据库总记录: {} 条。",
@@ -116,6 +123,7 @@ async def update_cve_database(
 
 async def get_add_del_data(
     source_name: str,
+    source_config: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     """从指定数据源获取新增和删除的CVE数据
 
@@ -127,7 +135,7 @@ async def get_add_del_data(
     """
     # 获取数据源
     source_class = DATA_SOURCES[source_name]
-    source = source_class()
+    source = source_class(source_config)
 
     logger.info(f"开始从数据源更新CVE: {source_name}")
 
@@ -145,9 +153,8 @@ async def get_add_del_data(
         local_commit_path = local_cache_path + ".commit"
 
     local_commit = None
-    if remote_commit and os.path.exists(local_commit_path):
-        with open(local_commit_path, "r") as f:
-            local_commit = f.read().strip()
+    if remote_commit:
+        local_commit = await _read_text_if_exists(local_commit_path)
 
     if remote_commit and local_commit == remote_commit:
         logger.info(f"数据源 {source_name} 无变化，跳过拉取")
@@ -155,46 +162,37 @@ async def get_add_del_data(
 
     # 2. 获取远程数据（现在直接得到 DataFrame）
     new_raw_data = await source.fetch_data()
-    df_remote = source.parse_data(new_raw_data)
-
-    # 添加 source 列（Polars 原生操作，非常快）
-    if not df_remote.is_empty():
-        df_remote = df_remote.with_columns(pl.lit(source_name).alias("source"))
+    df_remote = await to_thread.run_sync(
+        _parse_source_data,
+        source,
+        new_raw_data,
+        source_name,
+    )
 
     # 3. 读取本地缓存（直接得到 DataFrame）
     local_cache_path = source.get_local_cache_path()
-    df_local = pl.DataFrame()
-    if os.path.exists(local_cache_path):
-        logger.info(f"从本地缓存加载数据: {local_cache_path}")
-        try:
-            df_local = pl.read_csv(local_cache_path)
-            logger.info(f"从本地缓存加载了 {df_local.height} 条记录")
-        except Exception as e:
-            logger.warning(f"加载本地缓存失败: {e}，按全量更新处理")
-    else:
-        logger.info(f"本地缓存文件不存在: {local_cache_path}，按全量更新处理")
+    df_local = await _read_csv_if_exists(local_cache_path)
 
     # 4. 对比（DataFrame in -> DataFrame out）
-    df_inc, df_del = source.compare_with_local(df_remote, df_local)
+    df_inc, df_del = await to_thread.run_sync(
+        source.compare_with_local,
+        df_remote,
+        df_local,
+    )
 
     # 5. 更新本地缓存（直接写入 DataFrame）
     if not df_inc.is_empty() or not df_del.is_empty():
-        os.makedirs(os.path.dirname(local_cache_path), exist_ok=True)
-        df_remote.write_csv(local_cache_path)
+        await _write_csv(local_cache_path, df_remote)
         logger.info(f"已更新本地缓存: {local_cache_path}")
 
         if remote_commit:
-            os.makedirs(os.path.dirname(local_commit_path), exist_ok=True)
-            with open(local_commit_path, "w") as f:
-                f.write(remote_commit)
+            await _write_text(local_commit_path, remote_commit)
 
         # 仅在返回给数据库更新函数时转换为 list[dict]
         return df_inc.to_dicts(), df_del.to_dicts()
     else:
         if remote_commit:
-            os.makedirs(os.path.dirname(local_commit_path), exist_ok=True)
-            with open(local_commit_path, "w") as f:
-                f.write(remote_commit)
+            await _write_text(local_commit_path, remote_commit)
         logger.info("未检测到数据变化，跳过数据库更新")
         return [], []
 
@@ -202,11 +200,16 @@ async def get_add_del_data(
 async def main() -> tuple[int, int]:
     """主函数"""
     try:
+        await _configure_file_logging_async()
         start_time = datetime.now()
         logger.info(f"CVE 更新开始: {start_time}")
 
         need_add_data, need_del_data = [], []
-        task = [get_add_del_data(source_name) for source_name in DATA_SOURCES.keys()]
+        source_config = await load_cve_source_config()
+        task = [
+            get_add_del_data(source_name, source_config)
+            for source_name in DATA_SOURCES.keys()
+        ]
         results = await asyncio.gather(*task)
 
         for add_data, del_data in results:

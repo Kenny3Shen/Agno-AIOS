@@ -55,6 +55,69 @@ class Settings(BaseSettings):
     agno_knowledge_schema: str = "knowledge"
     agno_postgres_knowledge_table: str = "agno_knowledge"
 
+    agno_knowledge_name: str = "security_knowledge"
+    agno_knowledge_pgvector_table: str = "security_knowledge_vectors"
+    agno_knowledge_embedding_model: str = "BAAI/bge-small-zh-v1.5"
+    agno_knowledge_embedding_dimensions: int = 512
+    agno_knowledge_rerank_model: str = "BAAI/bge-reranker-base"
+    agno_knowledge_query_prompt: str = "为这个句子生成表示以用于检索相关文章："
+    agno_knowledge_top_k: int = 5
+    agno_knowledge_chunk_size: int = 1200
+    agno_knowledge_chunk_overlap: int = 160
+    agno_knowledge_code_chunk_size: int = 1800
+    agno_knowledge_semantic_threshold: float = 0.52
+    agno_knowledge_vector_score_weight: float = 0.55
+    agno_knowledge_content_language: str = "english"
+    agno_knowledge_prefix_match: bool = False
+    agno_knowledge_rerank_enabled: bool = True
+    agno_knowledge_rerank_candidate_multiplier: int = 3
+    agno_knowledge_rerank_min_candidates: int = 10
+    agno_knowledge_device: str = "auto"
+    agno_knowledge_search_type: str = "hybrid"
+    agno_knowledge_rerank_use_fp16: bool = False
+    agno_model_config_file: str | None = None
+    agno_skills_dir: str | None = None
+    agno_skills_config_file: str | None = None
+
+    mysql_test_host: str = "localhost"
+    mysql_test_port: int = 3306
+    mysql_test_user: str = "root"
+    mysql_test_password: SecretStr = SecretStr("")
+    mysql_test_database: str = "cve_db"
+
+    cve_source_config_path: str = Field(
+        default="config.toml",
+        validation_alias=AliasChoices(
+            "AGNO_CVE_SOURCE_CONFIG_PATH",
+            "CVE_SOURCE_CONFIG_PATH",
+            "CONFIG_PATH",
+        ),
+    )
+    github_token: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias=AliasChoices("AGNO_GITHUB_TOKEN", "GITHUB_TOKEN"),
+    )
+
+    w5_soar_token: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias=AliasChoices("AGNO_W5_SOAR_TOKEN", "W5_SOAR_TOKEN"),
+    )
+    w5_api_base: str = Field(
+        default="",
+        validation_alias=AliasChoices("AGNO_W5_API_BASE", "W5_API_BASE"),
+    )
+    octomation_token: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias=AliasChoices("AGNO_OCTOMATION_TOKEN", "OCTOMATION_TOKEN"),
+    )
+    octomation_api_base: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "AGNO_OCTOMATION_API_BASE",
+            "OCTOMATION_API_BASE",
+        ),
+    )
+
     mcp_server_url: str = "http://127.0.0.1:8000/mcp/"
     mcp_token: SecretStr = Field(
         default=SecretStr(""), validation_alias=AliasChoices("MCP_TOKEN", "MCP_Token")
@@ -154,6 +217,17 @@ class Settings(BaseSettings):
         if self.postgres_sqlalchemy_url_override:
             return self.postgres_sqlalchemy_url_override
         return self.postgres_dsn.replace("postgresql://", "postgresql+psycopg://", 1)
+
+    @property
+    def postgres_async_sqlalchemy_url(self) -> str:
+        url = self.postgres_sqlalchemy_url
+        if url.startswith("postgresql+psycopg_async://"):
+            return url
+        if url.startswith("postgresql+psycopg://"):
+            return url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
+        if url.startswith("postgresql://"):
+            return url.replace("postgresql://", "postgresql+psycopg_async://", 1)
+        return url
 
 
 @lru_cache(maxsize=1)

@@ -1,12 +1,7 @@
 from fastmcp import FastMCP
 import httpx
-from dotenv import load_dotenv
 import json
 import asyncio
-
-
-load_dotenv(override=True)
-
 
 basic_mcp = FastMCP("Basic")
 

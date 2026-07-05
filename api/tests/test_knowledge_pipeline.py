@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import threading
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
@@ -103,10 +104,10 @@ def test_runtime_candidate_limit_respects_rerank_policy() -> None:
     )
 
 
-def test_runtime_builds_pgvector_knowledge_with_small_interface() -> None:
+def test_runtime_builds_async_pgvector_knowledge_with_small_interface() -> None:
     captured: dict[str, Any] = {}
 
-    class FakePgVector:
+    class FakeAsyncPgVector:
         def __init__(self, **kwargs: Any) -> None:
             captured["vector"] = kwargs
 
@@ -131,7 +132,7 @@ def test_runtime_builds_pgvector_knowledge_with_small_interface() -> None:
     contents_db = object()
     readers = {"text": object()}
     with (
-        patch.object(knowledge_runtime_service, "PgVector", FakePgVector),
+        patch.object(knowledge_runtime_service, "AsyncPgVector", FakeAsyncPgVector),
         patch.object(knowledge_runtime_service, "Knowledge", FakeKnowledge),
     ):
         result = knowledge_runtime_service.build_knowledge_base(
@@ -151,6 +152,60 @@ def test_runtime_builds_pgvector_knowledge_with_small_interface() -> None:
     assert captured["knowledge"]["contents_db"] == contents_db
     assert captured["knowledge"]["max_results"] == 15
     assert captured["knowledge"]["readers"] == readers
+
+
+@pytest.mark.asyncio
+async def test_bge_async_query_embedding_runs_sync_encoder_off_event_loop() -> None:
+    event_loop_thread_id = threading.get_ident()
+    encoder_thread_id: int | None = None
+
+    def fake_get_embedding(
+        _self: knowledge_service.BGEKnowledgeEmbedder,
+        text: str,
+    ) -> list[float]:
+        nonlocal encoder_thread_id
+        encoder_thread_id = threading.get_ident()
+        return [float(len(text))]
+
+    embedder = knowledge_service.BGEKnowledgeEmbedder()
+
+    with patch.object(
+        knowledge_service.BGEKnowledgeEmbedder,
+        "get_embedding",
+        fake_get_embedding,
+    ):
+        result = await embedder.async_get_embedding("policy")
+
+    assert result == [6.0]
+    assert encoder_thread_id is not None
+    assert encoder_thread_id != event_loop_thread_id
+
+
+@pytest.mark.asyncio
+async def test_bge_async_document_embedding_runs_sync_encoder_off_event_loop() -> None:
+    event_loop_thread_id = threading.get_ident()
+    encoder_thread_id: int | None = None
+
+    def fake_get_embedding_and_usage(
+        _self: knowledge_service.BGEKnowledgeEmbedder,
+        text: str,
+    ) -> tuple[list[float], None]:
+        nonlocal encoder_thread_id
+        encoder_thread_id = threading.get_ident()
+        return [float(len(text))], None
+
+    embedder = knowledge_service.BGEKnowledgeEmbedder()
+
+    with patch.object(
+        knowledge_service.BGEKnowledgeEmbedder,
+        "get_embedding_and_usage",
+        fake_get_embedding_and_usage,
+    ):
+        result = await embedder.async_get_embedding_and_usage("runbook")
+
+    assert result == ([7.0], None)
+    assert encoder_thread_id is not None
+    assert encoder_thread_id != event_loop_thread_id
 
 
 def test_status_exposes_supported_suffixes_and_search_type() -> None:
@@ -177,7 +232,10 @@ def test_status_exposes_supported_suffixes_and_search_type() -> None:
     assert status["search_type"] in {"vector", "keyword", "hybrid"}
     service_status = knowledge_service.pipeline_status()
     assert service_status["search_type"] == "hybrid"
-    assert service_status["code_chunk_size"] == knowledge_service.CODE_CHUNK_SIZE
+    assert (
+        service_status["code_chunk_size"]
+        == knowledge_service.knowledge_settings().code_chunk_size
+    )
 
 
 def test_owner_visibility_hides_foreign_knowledge_content() -> None:
@@ -230,31 +288,43 @@ def test_result_projection_uses_rerank_score_and_source_metadata() -> None:
     assert result["chunk_index"] == 2
 
 
-def test_search_documents_passes_owner_filter_to_vector_search() -> None:
+@pytest.mark.asyncio
+async def test_search_documents_passes_owner_filter_to_vector_search() -> None:
     captured: dict[str, object] = {}
 
     class FakeKnowledge:
-        def search(self, *args, **kwargs):
+        async def asearch(self, *args, **kwargs):
             captured["filters"] = kwargs.get("filters")
             return []
 
+    async def noop() -> None:
+        return None
+
+    async def hydrate_noop(_documents) -> None:
+        return None
+
     with (
-        patch.object(knowledge_service, "_ensure_knowledge_storage", lambda: None),
+        patch.object(knowledge_service, "_ensure_knowledge_storage_async", noop),
         patch.object(
-            knowledge_service, "get_knowledge_base", return_value=FakeKnowledge()
+            knowledge_service, "get_async_knowledge_base", return_value=FakeKnowledge()
         ),
-        patch.object(knowledge_service, "_hydrate_content_ids", lambda documents: None),
+        patch.object(
+            knowledge_service, "_hydrate_content_ids_async", hydrate_noop
+        ),
     ):
-        results = knowledge_service.search_documents("policy", owner_user_id="u1")
+        results = await knowledge_service.search_documents_async(
+            "policy", owner_user_id="u1"
+        )
     assert results == []
     assert captured["filters"] == {"user_id": "u1"}
 
 
-def test_lifecycle_search_uses_one_interface_for_owner_filter() -> None:
+@pytest.mark.asyncio
+async def test_lifecycle_search_uses_one_interface_for_owner_filter() -> None:
     captured: dict[str, object] = {}
 
     class FakeKnowledge:
-        def search(self, *args, **kwargs):
+        async def asearch(self, *args, **kwargs):
             captured["query"] = args[0]
             captured["filters"] = kwargs.get("filters")
             captured["search_type"] = kwargs.get("search_type")
@@ -262,12 +332,12 @@ def test_lifecycle_search_uses_one_interface_for_owner_filter() -> None:
 
     lifecycle = knowledge_service.KnowledgeBaseLifecycle(
         knowledge_service.KnowledgeBaseLifecycleDependencies(
-            get_knowledge_base=lambda _search_type=None: FakeKnowledge(),
-            ensure_storage=lambda: None,
-            hydrate_content_ids=lambda _documents: None,
+            get_async_knowledge_base=lambda _search_type=None: FakeKnowledge(),
+            ensure_storage_async=lambda: None,
+            hydrate_content_ids_async=lambda _documents: None,
         )
     )
-    results = lifecycle.search_documents(
+    results = await lifecycle.search_documents_async(
         "policy", search_type="hybrid", owner_user_id="u1"
     )
     assert results == []
@@ -276,22 +346,85 @@ def test_lifecycle_search_uses_one_interface_for_owner_filter() -> None:
     assert captured["search_type"] == "hybrid"
 
 
-def test_delete_document_rejects_foreign_owner() -> None:
+@pytest.mark.asyncio
+async def test_delete_document_rejects_foreign_owner() -> None:
     removed: list[str] = []
 
     class FakeKnowledge:
-        def get_content_by_id(self, content_id: str):
+        async def aget_content_by_id(self, content_id: str):
             return SimpleNamespace(id=content_id, metadata={"user_id": "u2"})
 
-        def remove_content_by_id(self, content_id: str):
+        async def aremove_content_by_id(self, content_id: str):
             removed.append(content_id)
 
+    async def noop() -> None:
+        return None
+
     with (
-        patch.object(knowledge_service, "_ensure_knowledge_storage", lambda: None),
+        patch.object(knowledge_service, "_ensure_knowledge_storage_async", noop),
         patch.object(
-            knowledge_service, "get_knowledge_base", return_value=FakeKnowledge()
+            knowledge_service, "get_async_knowledge_base", return_value=FakeKnowledge()
         ),
     ):
-        result = knowledge_service.delete_document("doc-1", owner_user_id="u1")
+        result = await knowledge_service.delete_document_async(
+            "doc-1", owner_user_id="u1"
+        )
     assert not result
     assert removed == []
+
+
+@pytest.mark.asyncio
+async def test_delete_document_uses_async_delete_dependency_for_owned_content() -> None:
+    deleted: list[str] = []
+
+    class FakeKnowledge:
+        async def aget_content_by_id(self, content_id: str):
+            return SimpleNamespace(id=content_id, metadata={"user_id": "u1"})
+
+    async def delete_content_async(_knowledge, content_id: str) -> None:
+        deleted.append(content_id)
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: FakeKnowledge(),
+            ensure_storage_async=lambda: None,
+            delete_content_async=delete_content_async,
+        )
+    )
+
+    result = await lifecycle.delete_document_async("doc-1", owner_user_id="u1")
+
+    assert result
+    assert deleted == ["doc-1"]
+
+
+@pytest.mark.asyncio
+async def test_clear_knowledge_base_deletes_all_visible_content_with_async_dependency() -> None:
+    deleted: list[str] = []
+
+    class FakeKnowledge:
+        async def aget_content(self):
+            return (
+                [
+                    SimpleNamespace(id="doc-1", metadata={"user_id": "u1"}),
+                    SimpleNamespace(id="doc-2", metadata={"user_id": "u1"}),
+                    SimpleNamespace(id="doc-3", metadata={"user_id": "u2"}),
+                ],
+                3,
+            )
+
+    async def delete_content_async(_knowledge, content_id: str) -> None:
+        deleted.append(content_id)
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: FakeKnowledge(),
+            ensure_storage_async=lambda: None,
+            delete_content_async=delete_content_async,
+        )
+    )
+
+    result = await lifecycle.clear_knowledge_base_async(owner_user_id="u1")
+
+    assert result == {"documents": 0, "chunks": 0}
+    assert deleted == ["doc-1", "doc-2"]

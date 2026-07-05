@@ -27,6 +27,7 @@ dataset/
 .comet
 openspec
 .worktrees
+.pytest_cache/
 
 # Playwright
 .playwright-cli

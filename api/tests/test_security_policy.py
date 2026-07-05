@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
 from starlette.requests import Request
 from api.services import security_policy
@@ -27,7 +27,8 @@ def test_scheduler_write_requires_admin_permission():
     security_policy.require_scheduler_write(actor("admin", "admin"))
 
 
-def test_record_policy_event_includes_request_context():
+@pytest.mark.asyncio
+async def test_record_policy_event_includes_request_context():
     current_actor = actor("u1")
     request = Request(
         {
@@ -36,8 +37,8 @@ def test_record_policy_event_includes_request_context():
             "client": ("10.0.0.9", 44321),
         }
     )
-    with patch.object(security_policy, "record_audit_event") as mocked:
-        security_policy.record_policy_event(
+    with patch.object(security_policy, "record_audit_event_async", new_callable=AsyncMock) as mocked:
+        await security_policy.record_policy_event(
             current_actor,
             security_policy.PolicyAuditEvent(
                 action="scheduler.trigger",
@@ -47,7 +48,7 @@ def test_record_policy_event_includes_request_context():
             ),
             request,
         )
-    mocked.assert_called_once_with(
+    mocked.assert_awaited_once_with(
         current_actor,
         action="scheduler.trigger",
         resource_type="schedule",

@@ -154,6 +154,12 @@ assert.match(
 
 assert.match(
   app,
+  /gridTemplateColumns:\s*isMobile\.value\s*\?\s*undefined\s*:/,
+  "mobile shell must not keep desktop sidebar grid columns while using a fixed overlay sidebar",
+)
+
+assert.match(
+  app,
   /currentModelLabel/,
   "brand model chip must be driven by the current Agent model label",
 )
@@ -823,21 +829,79 @@ assert.match(
 )
 
 assert.match(
+  app,
+  /ag-home-summary-strip ag-stat-strip/,
+  "Home summary signals must use the shared compact Stat Strip",
+)
+
+assert.match(
   appStyle,
   /\.ag-home-summary-strip\s*\{[^}]*min-width:\s*0/s,
   "Home summary signal strip must be shrinkable inside the shell card",
 )
 
-assert.match(
+assert.doesNotMatch(
   appStyle,
-  /\.ag-home-signal\s*\{[^}]*flex:\s*1\s+1\s+132px[^}]*justify-content:\s*space-between/s,
-  "Home summary signal chips must reserve stable space between label and value",
+  /\.ag-home-signal\s*\{[^}]*flex:/s,
+  "Home summary signal chips must inherit compact width from the shared ag-stat-chip style",
 )
 
-assert.match(
+assert.doesNotMatch(
   appStyle,
-  /@media\s*\(max-width:\s*760px\)\s*\{[\s\S]*?\.ag-home-summary-strip\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/,
-  "Home summary signals must switch to a two-column mobile grid to prevent overlap",
+  /\.ag-home-signal\s+(span|small|strong)\s*\{/,
+  "Home summary signal chips must inherit label and value typography from the shared ag-stat-chip style",
+)
+
+for (const [source, className, label] of [
+  [dashboard, "situation-metric", "Dashboard"],
+  [trace, "trace-stat-card", "Trace"],
+  [agentOSControl, "agentos-summary-chip", "AgentOS"],
+  [readOptionalSource("components/Workflow.vue"), "workflow-stat-chip", "Workflow"],
+]) {
+  assert.match(
+    source,
+    new RegExp(`${className} ag-stat-chip`),
+    `${label} Stat Chips must use the shared Stat Chip surface`,
+  )
+  assertNoPillStatChip(
+    source,
+    className,
+    `${label} Stat Chips must use the shared 8px rectangular chip shape, not pill styling`,
+  )
+  assert.doesNotMatch(
+    source,
+    new RegExp(`\\.${className}\\s+(span|small|strong)\\s*\\{`, "s"),
+    `${label} Stat Chips must inherit label and value typography from the shared ag-stat-chip style`,
+  )
+}
+
+for (const [source, className, label] of [
+  [trace, "trace-stat-strip", "Trace"],
+  [agentOSControl, "agentos-summary-strip", "AgentOS"],
+  [readOptionalSource("components/Workflow.vue"), "workflow-stat-strip", "Workflow"],
+]) {
+  assert.doesNotMatch(
+    source,
+    new RegExp(`\\.${className}\\s*\\{[^}]*display:\\s*grid`, "s"),
+    `${label} Stat Strip must inherit layout from the shared ag-stat-strip style`,
+  )
+}
+
+for (const [source, className, label] of [
+  [trace, "trace-stat-card", "Trace"],
+  [agentOSControl, "agentos-summary-chip", "AgentOS"],
+]) {
+  assert.doesNotMatch(
+    source,
+    new RegExp(`\\.${className}::before`, "s"),
+    `${label} Stat Chips must not add page-specific tone bars`,
+  )
+}
+
+assert.doesNotMatch(
+  dashboard,
+  /class="ag-stat-strip mt-3[^"]*grid/,
+  "Dashboard Stat Strip must not override the shared compact strip with grid utilities",
 )
 
 assert.match(

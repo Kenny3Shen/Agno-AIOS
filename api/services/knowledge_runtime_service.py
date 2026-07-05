@@ -7,8 +7,9 @@ from agno.knowledge.embedder import Embedder
 from agno.knowledge.knowledge import Knowledge
 from agno.knowledge.reranker.base import Reranker
 from agno.vectordb.distance import Distance
-from agno.vectordb.pgvector import PgVector
 from agno.vectordb.search import SearchType
+
+from api.services.async_pgvector import AsyncPgVector
 
 
 @dataclass(frozen=True)
@@ -53,7 +54,7 @@ def build_knowledge_base(
     search_type: SearchType,
     readers: dict[str, Any],
 ) -> Knowledge:
-    vector_db = PgVector(
+    vector_db = AsyncPgVector(
         table_name=settings.pgvector_table,
         schema=settings.postgres_schema,
         db_url=settings.db_url,

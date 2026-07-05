@@ -6,9 +6,9 @@ from fastapi import Request
 from loguru import logger
 
 from api.persistence.audit_logs import (
-    ensure_audit_logs_table,
-    insert_audit_log,
-    list_audit_logs,
+    ensure_audit_logs_table_async,
+    insert_audit_log_async,
+    list_audit_logs_async,
 )
 
 
@@ -35,11 +35,11 @@ def audit_request_context(request: Request | None) -> AuditRequestContext:
     }
 
 
-def ensure_audit_log_table() -> None:
-    ensure_audit_logs_table()
+async def ensure_audit_log_table_async() -> None:
+    await ensure_audit_logs_table_async()
 
 
-def record_audit_event(
+async def record_audit_event_async(
     actor: Any,
     *,
     action: str,
@@ -51,7 +51,7 @@ def record_audit_event(
     user_agent: str = "",
 ) -> None:
     try:
-        insert_audit_log(
+        await insert_audit_log_async(
             actor_user_id=_actor_id(actor),
             actor_email=str(getattr(actor, "email", "") or ""),
             actor_role=_actor_role(actor),
@@ -67,7 +67,7 @@ def record_audit_event(
         logger.warning("审计日志写入失败: {}", exc)
 
 
-def list_audit_events(
+async def list_audit_events_async(
     *,
     page: int = 1,
     limit: int = 50,
@@ -76,7 +76,7 @@ def list_audit_events(
     resource_type: str | None = None,
     status: str | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
-    return list_audit_logs(
+    return await list_audit_logs_async(
         page=page,
         limit=limit,
         actor_user_id=actor_user_id,

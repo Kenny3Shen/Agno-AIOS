@@ -94,7 +94,8 @@ export const filterTraceSessions = (
   const sessionId = normalize(filters.sessionId)
   const userId = normalize(filters.userId)
   const keyword = normalize(filters.keyword)
-  return sessions.filter((session) => {
+  const safeSessions = Array.isArray(sessions) ? sessions : []
+  return safeSessions.filter((session) => {
     if (filters.status === "active" && session.archived) return false
     if (filters.status === "archived" && !session.archived) return false
     if (sessionId && !normalize(session.session_id).includes(sessionId)) return false

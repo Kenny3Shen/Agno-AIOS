@@ -14,7 +14,7 @@ from api.auth.models import AuthBase, OAuthAccount, User
 from api.config import Settings, get_settings
 
 settings = get_settings()
-auth_engine = create_async_engine(settings.postgres_sqlalchemy_url, pool_pre_ping=True)
+auth_engine = create_async_engine(settings.postgres_async_sqlalchemy_url, pool_pre_ping=True)
 async_session_maker = async_sessionmaker(auth_engine, expire_on_commit=False)
 
 

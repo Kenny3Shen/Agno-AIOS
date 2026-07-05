@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 import json
-from contextlib import contextmanager
 from functools import lru_cache
-from typing import Any, Iterator, cast
+from typing import Any, cast
 
-import psycopg
-from agno.db.postgres import PostgresDb
-from psycopg import Connection, sql
+from agno.db.postgres import AsyncPostgresDb
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
@@ -58,24 +55,12 @@ def postgres_sqlalchemy_url() -> str:
     return get_settings().postgres_sqlalchemy_url
 
 
+def postgres_async_sqlalchemy_url() -> str:
+    return get_settings().postgres_async_sqlalchemy_url
+
+
 def postgres_label(schema: str, table_name: str) -> str:
     return f"postgres:{postgres_database()}.{schema}.{table_name}"
-
-
-@contextmanager
-def postgres_connect() -> Iterator[Connection[dict[str, Any]]]:
-    conn = cast(
-        Connection[dict[str, Any]],
-        psycopg.connect(
-            postgres_dsn(),
-            row_factory=cast(Any, dict_row),
-            autocommit=True,
-        ),
-    )
-    try:
-        yield conn
-    finally:
-        conn.close()
 
 
 _async_pool: AsyncConnectionPool[Any] | None = None
@@ -101,9 +86,9 @@ async def close_postgres_pool() -> None:
 
 
 @lru_cache(maxsize=1)
-def get_agno_postgres_db() -> PostgresDb:
-    return PostgresDb(
-        db_url=postgres_sqlalchemy_url(),
+def get_async_agno_postgres_db() -> AsyncPostgresDb:
+    return AsyncPostgresDb(
+        db_url=postgres_async_sqlalchemy_url(),
         db_schema=agno_schema(),
         session_table="agno_sessions",
         memory_table="agno_memories",
@@ -114,20 +99,20 @@ def get_agno_postgres_db() -> PostgresDb:
 
 
 @lru_cache(maxsize=1)
-def get_knowledge_postgres_db() -> PostgresDb:
-    return PostgresDb(
-        db_url=postgres_sqlalchemy_url(),
+def get_async_knowledge_postgres_db() -> AsyncPostgresDb:
+    return AsyncPostgresDb(
+        db_url=postgres_async_sqlalchemy_url(),
         db_schema=knowledge_schema(),
         knowledge_table=get_settings().agno_postgres_knowledge_table,
         versions_table="agno_schema_versions",
     )
 
 
-def ensure_agno_postgres_tables() -> None:
-    db = get_agno_postgres_db()
+async def ensure_agno_postgres_tables_async() -> None:
+    db = get_async_agno_postgres_db()
     get_table = getattr(db, "_get_table")
     for table_type in ("versions", "sessions", "memories", "traces", "spans"):
-        get_table(table_type=table_type, create_table_if_not_found=True)
+        await get_table(table_type=table_type, create_table_if_not_found=True)
 
 
 def coerce_json_value(value: Any) -> Any:
@@ -142,54 +127,20 @@ def coerce_json_value(value: Any) -> Any:
     return current
 
 
-def ensure_app_tables() -> None:
-    with postgres_connect() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute("CREATE EXTENSION IF NOT EXISTS vector")
-            for schema in (app_schema(), agno_schema(), mcp_schema(), knowledge_schema()):
-                cursor.execute(
-                    sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
-                        sql.Identifier(schema)
-                    )
-                )
-            cves_table = sql.Identifier(app_schema(), "cves")
-            cursor.execute(
-                sql.SQL(
-                    """
-                CREATE TABLE IF NOT EXISTS {} (
-                    id BIGSERIAL PRIMARY KEY,
-                    cve_id TEXT NOT NULL,
-                    description TEXT NOT NULL DEFAULT '',
-                    github_url TEXT NOT NULL,
-                    source TEXT NOT NULL,
-                    create_time TIMESTAMPTZ,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                    CONSTRAINT uq_cves_cve_url UNIQUE (cve_id, github_url)
-                )
-                """
-                ).format(cves_table)
-            )
-            cursor.execute(
-                sql.SQL(
-                    "CREATE INDEX IF NOT EXISTS idx_cves_cve_id ON {} (cve_id)"
-                ).format(cves_table)
-            )
-            cursor.execute(
-                sql.SQL(
-                    "CREATE INDEX IF NOT EXISTS idx_cves_source ON {} (source)"
-                ).format(cves_table)
-            )
-            cursor.execute(
-                sql.SQL(
-                    """
-                CREATE INDEX IF NOT EXISTS idx_cves_search
-                ON {}
-                USING gin (to_tsvector('simple', cve_id || ' ' || coalesce(description, '')))
-                """
-                ).format(cves_table)
-            )
+async def ensure_app_tables_async() -> None:
+    from sqlalchemy import text
+    from sqlalchemy.schema import CreateSchema
 
-    from api.persistence.audit_logs import ensure_audit_logs_table
+    from api.mcp.config import init_mcp_postgres_tables
+    from api.persistence.audit_logs import ensure_audit_logs_table_async
+    from api.persistence.cves import ensure_cves_table
+    from api.persistence.database import get_async_control_plane_engine
 
-    ensure_audit_logs_table()
+    async with get_async_control_plane_engine().begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        for schema in (app_schema(), agno_schema(), mcp_schema(), knowledge_schema()):
+            await conn.execute(CreateSchema(schema, if_not_exists=True))
+
+    await ensure_cves_table()
+    await ensure_audit_logs_table_async()
+    await init_mcp_postgres_tables()

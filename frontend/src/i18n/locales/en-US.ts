@@ -492,6 +492,7 @@ export const enUS = {
       namePlaceholder: "workflow_name",
       descriptionPlaceholder: "Describe the workflow goal",
       inputPlaceholder: "Input passed to workflow.run or workflow.print_response",
+      sessionPlaceholder: "workflow session_id",
       defaultInput: "Investigate CVE-2026-0001 exposure and produce an escalation summary.",
     },
     palette: {
@@ -572,6 +573,8 @@ export const enUS = {
       streamEvents: "Stream all workflow events",
       storeEvents: "Store events in workflow_db",
       workflowHistory: "Add workflow history to steps",
+      userId: "User ID",
+      numHistoryRuns: "History runs",
       history: "History",
       database: "Database",
       sessionRun: "Stores the input, output, and run id for each execution.",
@@ -946,6 +949,7 @@ export const enUS = {
     navigation: {
       sectionTitle: "Navigation layout",
       sectionDescription: "Preview the current navigation order and groups as the entry point for user-defined ordering, grouping, and visibility.",
+      tagPlaceholder: "Navigation tag",
       note: "CVE and Collect live in a separate security data group split from operations, knowledge, and Settings.",
       groups: {
         operations: "Operations",

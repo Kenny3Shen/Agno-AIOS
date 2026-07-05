@@ -490,6 +490,7 @@ export const zhCN = {
       namePlaceholder: "workflow_name",
       descriptionPlaceholder: "描述 workflow 目标",
       inputPlaceholder: "传给 workflow.run 或 workflow.print_response 的输入",
+      sessionPlaceholder: "workflow session_id",
       defaultInput: "研判 CVE-2026-0001 的暴露风险，并输出升级摘要。",
     },
     palette: {
@@ -570,6 +571,8 @@ export const zhCN = {
       streamEvents: "流式输出全部 workflow events",
       storeEvents: "将 events 存入 workflow_db",
       workflowHistory: "把 workflow history 注入 steps",
+      userId: "User ID",
+      numHistoryRuns: "History runs",
       history: "History",
       database: "Database",
       sessionRun: "每次执行都会保存 input、output 和 run id。",
@@ -944,6 +947,7 @@ export const zhCN = {
     navigation: {
       sectionTitle: "导航栏编排",
       sectionDescription: "预览当前导航顺序与分类，为后续用户自定义顺序、分组和可见性提供入口。",
+      tagPlaceholder: "导航标签",
       note: "CVE、Collect 已独立归入安全数据分类，并通过分割线与运行、知识和 Settings 区域区分。",
       groups: {
         operations: "运行入口",

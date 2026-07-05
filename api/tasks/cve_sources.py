@@ -5,18 +5,19 @@ CVE更新工具和数据源类
 将辅助函数和数据源类放在这里，保持 CVE 更新任务的核心流程简洁
 """
 
-import os
 import re
 import tomllib
 from abc import ABC, abstractmethod
+from io import StringIO
 from typing import Any
 
+from anyio import Path as AsyncPath
 import httpx
 import polars as pl
-from dotenv import load_dotenv
 from loguru import logger
 
-load_dotenv()
+from api.config import get_settings
+from api.services.runtime_env import load_runtime_env_async
 
 
 class CVEDataSource(ABC):
@@ -86,29 +87,32 @@ class CVEDataSource(ABC):
         return df_increment, df_deleted
 
 
-CONFIG_PATH = os.getenv("CONFIG_PATH", "config.toml")
-try:
-    with open(CONFIG_PATH, "rb") as f:
-        CONFIG = tomllib.load(f)
-except Exception:
-    CONFIG = {}
+async def load_cve_source_config() -> dict[str, Any]:
+    await load_runtime_env_async()
+    config_path = AsyncPath(get_settings().cve_source_config_path)
+    try:
+        content = await config_path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    try:
+        data = tomllib.loads(content)
+    except tomllib.TOMLDecodeError:
+        logger.warning(f"无法解析 CVE 数据源配置: {config_path}")
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 class GitHubPocExpSource(CVEDataSource):
     """从GitHub PocOrExp仓库获取CVE数据"""
 
-    def __init__(self):
-        cfg = CONFIG.get("github", {})
+    def __init__(self, config: dict[str, Any] | None = None):
+        cfg = (config or {}).get("github", {})
         self.remote_url = cfg.get(
             "remote_url",
             "https://raw.githubusercontent.com/ycdxsb/PocOrExp_in_Github/refs/heads/main/PocOrExp.md",
         )
-        self.local_path = cfg.get(
-            "local_cache", os.path.join("./api/data", "github_cve_cache.csv")
-        )
-        self.commit_cache = cfg.get(
-            "commit_cache", os.path.join("./api/data", "github_commit.txt")
-        )
+        self.local_path = cfg.get("local_cache", "./api/data/github_cve_cache.csv")
+        self.commit_cache = cfg.get("commit_cache", "./api/data/github_commit.txt")
         self.repo_api = cfg.get(
             "repo_api", "https://api.github.com/repos/ycdxsb/PocOrExp_in_Github/commits"
         )
@@ -189,7 +193,8 @@ class GitHubPocExpSource(CVEDataSource):
 
     async def get_remote_commit(self) -> str:
         """获取远程数据的最新 commit sha"""
-        github_token = os.getenv("GITHUB_TOKEN", None)
+        await load_runtime_env_async()
+        github_token = get_settings().github_token.get_secret_value()
         headers = {"Authorization": f"token {github_token}"} if github_token else {}
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(
@@ -230,43 +235,40 @@ def _process_file(file_path):
 class ExploitDBSource(CVEDataSource):
     """从Exploit-DB获取CVE数据"""
 
-    def __init__(self):
-        cfg = CONFIG.get("exploit_db", {})
+    def __init__(self, config: dict[str, Any] | None = None):
+        cfg = (config or {}).get("exploit_db", {})
         self.remote_url = cfg.get(
             "remote_url",
             "https://gitlab.com/exploit-database/exploitdb/-/raw/main/files_exploits.csv?ref_type=heads",
         )
-        self.local_path = cfg.get(
-            "local_cache", os.path.join("./api/data", "exploit_db.csv")
-        )
-        self.commit_cache = cfg.get(
-            "commit_cache", os.path.join("./api/data", "exploitdb_commit.txt")
-        )
+        self.local_path = cfg.get("local_cache", "./api/data/exploit_db.csv")
+        self.commit_cache = cfg.get("commit_cache", "./api/data/exploitdb_commit.txt")
         self.repo_api = cfg.get(
             "repo_api",
             "https://gitlab.com/api/v4/projects/exploit-database%2Fexploitdb/repository/commits",
         )
         self.default_branch = cfg.get("default_branch", "main")
 
-    async def fetch_data(self) -> pl.LazyFrame:
+    async def fetch_data(self) -> str:
         """从 Exploit-DB 获取数据"""
-        # df = pl.read_csv(self.remote_url)
-        df = pl.scan_csv(self.remote_url)
-        logger.info(f"成功从 {self.remote_url} 获取数据")
-        return df
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(self.remote_url)
+            resp.raise_for_status()
+            logger.info(f"成功从 {self.remote_url} 获取数据")
+            return resp.text
 
     def parse_data(self, raw_data: Any) -> pl.DataFrame:
         """解析 Exploit-DB 数据
 
         Args:
-            raw_data: pl.LazyFrame（从远程获取）
+            raw_data: CSV 文本（从远程获取）
 
         Returns:
             处理后的 CVE 数据列表
         """
-        if not isinstance(raw_data, pl.LazyFrame):
+        if not isinstance(raw_data, str) or not raw_data:
             logger.warning(
-                f"意外的 raw_data 类型: 预期 pl.LazyFrame，实际 {type(raw_data)}"
+                f"意外的 raw_data 类型: 预期 CSV 文本，实际 {type(raw_data)}"
             )
             return pl.DataFrame()
 
@@ -274,7 +276,9 @@ class ExploitDBSource(CVEDataSource):
         # 基于 (cve_id, github_url) 去重
         # coalesce 从左到右折叠列，保留第一个非空值。
         df_remote_cve = (
-            raw_data.select(
+            pl.read_csv(StringIO(raw_data))
+            .lazy()
+            .select(
                 pl.when(pl.col("codes").is_null() | (pl.col("codes") == ""))
                 .then(pl.col("file"))
                 .otherwise(
@@ -319,4 +323,10 @@ DATA_SOURCES = {
     "exploit-db": ExploitDBSource,
 }
 
-__all__ = ["CVEDataSource", "GitHubPocExpSource", "ExploitDBSource", "DATA_SOURCES"]
+__all__ = [
+    "CVEDataSource",
+    "GitHubPocExpSource",
+    "ExploitDBSource",
+    "DATA_SOURCES",
+    "load_cve_source_config",
+]

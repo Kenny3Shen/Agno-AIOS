@@ -5,7 +5,7 @@ from fastmcp import FastMCP
 from loguru import logger
 from starlette.responses import JSONResponse
 
-from api.mcp.config import enabled_service_ids, ensure_bootstrap_token, is_valid_token
+from api.mcp.config import SERVICE_IDS, enabled_service_ids_async, ensure_bootstrap_token, is_valid_token
 from api.mcp.tools.basic import basic_mcp
 from api.mcp.tools.playbook import playbook_mcp
 
@@ -32,7 +32,9 @@ class AuthenticatedMcpApp:
         self.runtime = runtime
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] in {"http", "websocket"} and not is_valid_token(_extract_token(scope)):
+        if scope["type"] in {"http", "websocket"} and not await is_valid_token(
+            _extract_token(scope)
+        ):
             response = JSONResponse(
                 {"code": 401, "msg": "Unauthorized: invalid_token"},
                 status_code=401,
@@ -42,8 +44,8 @@ class AuthenticatedMcpApp:
         await self.runtime.app(scope, receive, send)
 
 
-def build_main_mcp() -> FastMCP:
-    enabled = enabled_service_ids()
+def build_main_mcp(enabled: set[str] | None = None) -> FastMCP:
+    enabled = set(SERVICE_IDS) if enabled is None else enabled
     main_mcp = FastMCP("Agno AIOS MCP")
     _install_middleware(main_mcp)
     if "playbook" in enabled:
@@ -51,6 +53,10 @@ def build_main_mcp() -> FastMCP:
     if "basic" in enabled:
         main_mcp.mount(basic_mcp, namespace="basic")
     return main_mcp
+
+
+async def build_main_mcp_async() -> FastMCP:
+    return build_main_mcp(await enabled_service_ids_async())
 
 
 def _install_middleware(main_mcp: FastMCP) -> None:
@@ -96,6 +102,8 @@ class IntegratedMcpRuntime:
     async def startup(self) -> None:
         if self._started:
             return
+        self.mcp = await build_main_mcp_async()
+        self.app = self.mcp.http_app(path="/")
         self._lifespan_cm = self.app.lifespan(self.app)
         await self._lifespan_cm.__aenter__()
         self._started = True
@@ -112,7 +120,7 @@ class IntegratedMcpRuntime:
         old_lifespan_cm = self._lifespan_cm
         old_started = self._started
 
-        new_mcp = build_main_mcp()
+        new_mcp = await build_main_mcp_async()
         new_app = new_mcp.http_app(path="/")
         new_lifespan_cm = None
         if old_started:
@@ -141,5 +149,5 @@ async def refresh_mcp_app() -> None:
     await mcp_runtime.refresh()
 
 
-def bootstrap_mcp_token(token: str | None) -> None:
-    ensure_bootstrap_token(token)
+async def bootstrap_mcp_token(token: str | None) -> None:
+    await ensure_bootstrap_token(token)

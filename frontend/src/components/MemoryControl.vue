@@ -325,10 +325,42 @@ const filters = reactive({
   limit: 50,
 })
 
+const defaultMemoryPayload = (): MemoryControlResponse => ({
+  module: "memory",
+  title: "Memory",
+  description: "",
+  status: "ok",
+  metrics: [],
+  records: [],
+  generated_at: "",
+  memories: [],
+  memory_users: [],
+  memory_topics: [],
+  memory_filters: {
+    user_id: "",
+    topic: "",
+    search: "",
+    page: filters.page,
+    limit: filters.limit,
+    total: 0,
+  },
+  memory_thresholds: {
+    optimization_review: 0,
+    abnormal_growth: 0,
+  },
+  memory_mode: {
+    type: "automatic",
+    update_memory_on_run: false,
+    enable_agentic_memory: false,
+    enable_session_summaries: false,
+    readonly: true,
+  },
+})
+
 const memories = computed<MemoryItem[]>(() => payload.value?.memories || [])
 const userOptions = computed<MemoryUserSummary[]>(() => payload.value?.memory_users || [])
 const topicOptions = computed<string[]>(() => payload.value?.memory_topics || [])
-const total = computed(() => payload.value?.memory_filters.total || 0)
+const total = computed(() => payload.value?.memory_filters?.total || 0)
 const thresholds = computed(() => payload.value?.memory_thresholds)
 const memoryMode = computed(() => payload.value?.memory_mode)
 const riskUserCount = computed(() => userOptions.value.filter((user) => user.status === "risk").length)
@@ -501,10 +533,20 @@ const queryParams = (): MemoryQueryParams => ({
 })
 
 const loadMemory = async () => {
-  const nextPayload = await fetchMemory(queryParams())
-  payload.value = nextPayload
-  filters.page = nextPayload.memory_filters.page
-  filters.limit = nextPayload.memory_filters.limit
+  const nextPayload = await fetchMemory(queryParams()).catch(() => defaultMemoryPayload())
+  const memoryFilters = nextPayload.memory_filters || defaultMemoryPayload().memory_filters
+  payload.value = {
+    ...defaultMemoryPayload(),
+    ...nextPayload,
+    memories: Array.isArray(nextPayload.memories) ? nextPayload.memories : [],
+    memory_users: Array.isArray(nextPayload.memory_users) ? nextPayload.memory_users : [],
+    memory_topics: Array.isArray(nextPayload.memory_topics) ? nextPayload.memory_topics : [],
+    memory_filters: memoryFilters,
+    memory_thresholds: nextPayload.memory_thresholds || defaultMemoryPayload().memory_thresholds,
+    memory_mode: nextPayload.memory_mode || defaultMemoryPayload().memory_mode,
+  }
+  filters.page = memoryFilters.page
+  filters.limit = memoryFilters.limit
 }
 
 const applyFilters = async () => {

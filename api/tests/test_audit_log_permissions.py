@@ -1,6 +1,6 @@
 import inspect
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
 from starlette.requests import Request
 from api.auth.permissions import has_permission
@@ -57,12 +57,13 @@ def test_mutating_routes_include_request_context_in_audit_logs():
         assert "audit_request_context(" in source
 
 
-def test_record_audit_event_delegates_to_persistence():
+@pytest.mark.asyncio
+async def test_record_audit_event_delegates_to_async_persistence():
     current_actor = SimpleNamespace(
         id="u1", email="u1@example.test", role="user", is_superuser=False
     )
-    with patch.object(audit_service, "insert_audit_log") as mocked:
-        audit_service.record_audit_event(
+    with patch.object(audit_service, "insert_audit_log_async", new_callable=AsyncMock) as mocked:
+        await audit_service.record_audit_event_async(
             current_actor,
             action="settings.update",
             resource_type="settings",
@@ -71,7 +72,7 @@ def test_record_audit_event_delegates_to_persistence():
             ip_address="127.0.0.1",
             user_agent="pytest",
         )
-    mocked.assert_called_once_with(
+    mocked.assert_awaited_once_with(
         actor_user_id="u1",
         actor_email="u1@example.test",
         actor_role="user",
@@ -85,9 +86,15 @@ def test_record_audit_event_delegates_to_persistence():
     )
 
 
-def test_list_audit_events_delegates_to_persistence():
-    with patch.object(audit_service, "list_audit_logs", return_value=([], 0)) as mocked:
-        result = audit_service.list_audit_events(
+@pytest.mark.asyncio
+async def test_list_audit_events_delegates_to_async_persistence():
+    with patch.object(
+        audit_service,
+        "list_audit_logs_async",
+        new_callable=AsyncMock,
+    ) as mocked:
+        mocked.return_value = ([], 0)
+        result = await audit_service.list_audit_events_async(
             page=2,
             limit=25,
             actor_user_id="u1",
@@ -96,7 +103,7 @@ def test_list_audit_events_delegates_to_persistence():
             status="success",
         )
     assert result == ([], 0)
-    mocked.assert_called_once_with(
+    mocked.assert_awaited_once_with(
         page=2,
         limit=25,
         actor_user_id="u1",
@@ -110,17 +117,23 @@ def test_list_audit_events_delegates_to_persistence():
 async def test_admin_list_audit_logs_delegates_to_service():
     admin = actor("admin", "admin")
     rows = [{"id": 1, "action": "auth.login"}]
-    with patch.object(audit, "list_audit_events", return_value=(rows, 1)) as mocked:
+    with patch.object(audit, "list_audit_events_async", new_callable=AsyncMock) as mocked:
+        mocked.return_value = (rows, 1)
         result = await audit.list_audit_logs(user=admin)
     assert result["items"] == rows
     assert result["total"] == 1
-    mocked.assert_called_once()
+    mocked.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_route_surfaces_service_failure_as_500():
     admin = actor("admin", "admin")
-    with patch.object(audit, "list_audit_events", side_effect=RuntimeError("db down")):
+    with patch.object(
+        audit,
+        "list_audit_events_async",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("db down"),
+    ):
         with pytest.raises(HTTPException) as context:
             await audit.list_audit_logs(user=admin)
     assert context.value.status_code == 500
@@ -136,10 +149,10 @@ async def test_logout_records_request_context():
             "client": ("10.0.0.8", 44321),
         }
     )
-    with patch.object(auth_router, "record_audit_event") as mocked:
+    with patch.object(auth_router, "record_audit_event_async", new_callable=AsyncMock) as mocked:
         result = await auth_router.audited_logout(request=request, user=current_actor)
     assert result == {"success": True}
-    mocked.assert_called_once_with(
+    mocked.assert_awaited_once_with(
         current_actor,
         action="auth.logout",
         resource_type="auth",

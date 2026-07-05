@@ -5,10 +5,10 @@ from pydantic import BaseModel
 from api.auth.models import User
 from api.auth.permissions import actor_id, assert_owned_resource, has_permission, require_permission
 from api.services.llm_service import (
-    get_all_sessions,
-    get_session_owner,
-    get_session_messages,
     archive_session,
+    get_all_sessions_async,
+    get_session_messages_async,
+    get_session_owner_async,
 )
 from api.services.security_run_runtime import SecurityRunRequest, stream_security_run
 from loguru import logger
@@ -48,7 +48,7 @@ async def chat_agent(
     """使用 LLM 处理聊天消息（流式）"""
     try:
         if request.session_id:
-            owner_user_id = get_session_owner(request.session_id)
+            owner_user_id = await get_session_owner_async(request.session_id)
             if owner_user_id is not None:
                 assert_owned_resource(
                     user,
@@ -84,7 +84,10 @@ async def list_sessions(
     """获取所有聊天会话列表"""
     try:
         owner_user_id = None if has_permission(user, "session:read:any") else actor_id(user)
-        return get_all_sessions(owner_user_id=owner_user_id, include_runs=include_runs)
+        return await get_all_sessions_async(
+            owner_user_id=owner_user_id,
+            include_runs=include_runs,
+        )
     except Exception as e:
         logger.error(f"获取会话列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -97,7 +100,7 @@ async def get_session(
 ):
     """获取指定会话的聊天记录"""
     try:
-        return get_session_messages(session_id, actor=user)
+        return await get_session_messages_async(session_id, actor=user)
     except HTTPException:
         raise
     except Exception as e:
@@ -112,7 +115,7 @@ async def remove_session(
 ):
     """归档指定会话；不删除 Agno runs/traces。"""
     try:
-        success = archive_session(session_id, actor=user)
+        success = await archive_session(session_id, actor=user)
         if not success:
             raise HTTPException(status_code=404, detail="会话不存在")
         return {"success": True, "archived": True}

@@ -6,10 +6,10 @@ from typing import Any
 from fastapi.encoders import jsonable_encoder
 
 from api.auth.permissions import assert_owned_resource
-from api.services.postgres_store import get_agno_postgres_db
+from api.services.postgres_store import get_async_agno_postgres_db
 
 # Keep a single DB wrapper instance.
-_trace_db = get_agno_postgres_db()
+_trace_db = get_async_agno_postgres_db()
 
 INPUT_ATTRIBUTE_KEYS = (
     "input.value",
@@ -175,7 +175,7 @@ async def list_traces(
 ) -> dict[str, Any]:
     """Return a paginated list of traces.
 
-    Uses Agno `PostgresDb.get_traces()` convenience API.
+    Uses Agno `AsyncPostgresDb.get_traces()` convenience API.
     """
     if limit <= 0:
         limit = 20
@@ -187,8 +187,7 @@ async def list_traces(
     st = _parse_dt(start_time)
     et = _parse_dt(end_time)
 
-    traces, total_count = await asyncio.to_thread(
-        _trace_db.get_traces,
+    traces, total_count = await _trace_db.get_traces(
         run_id=run_id,
         session_id=session_id,
         user_id=user_id,
@@ -248,8 +247,8 @@ def _build_span_tree(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 async def get_trace_detail(trace_id: str, actor: Any | None = None) -> dict[str, Any] | None:
-    trace_task = asyncio.to_thread(_trace_db.get_trace, trace_id=trace_id)
-    spans_task = asyncio.to_thread(_trace_db.get_spans, trace_id=trace_id)
+    trace_task = _trace_db.get_trace(trace_id=trace_id)
+    spans_task = _trace_db.get_spans(trace_id=trace_id)
     trace, spans = await asyncio.gather(trace_task, spans_task)
     if not trace:
         return None

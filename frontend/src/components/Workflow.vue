@@ -40,6 +40,7 @@
           <el-input v-model="workflowName" size="small" :placeholder="t('workflow.config.namePlaceholder')" />
           <el-input v-model="workflowDescription" size="small" type="textarea" :rows="3" :placeholder="t('workflow.config.descriptionPlaceholder')" />
           <el-input v-model="runInput" size="small" type="textarea" :rows="4" :placeholder="t('workflow.config.inputPlaceholder')" />
+          <el-input v-model="sessionId" size="small" :placeholder="t('workflow.config.sessionPlaceholder')" />
         </section>
 
         <section class="workflow-palette-section">
@@ -229,6 +230,14 @@
             </section>
             <section class="workflow-inspector-section workflow-run-options">
               <h4>{{ t("workflow.inspector.executionTitle") }}</h4>
+              <label class="workflow-option-field">
+                <span>{{ t("workflow.inspector.userId") }}</span>
+                <el-input v-model="userId" size="small" />
+              </label>
+              <label class="workflow-option-field">
+                <span>{{ t("workflow.inspector.numHistoryRuns") }}</span>
+                <el-input-number v-model="numHistoryRuns" size="small" :min="1" :max="12" controls-position="right" />
+              </label>
               <el-checkbox v-model="streamEvents">{{ t("workflow.inspector.streamEvents") }}</el-checkbox>
               <el-checkbox v-model="storeEvents">{{ t("workflow.inspector.storeEvents") }}</el-checkbox>
               <el-checkbox v-model="addWorkflowHistoryToSteps">{{ t("workflow.inspector.workflowHistory") }}</el-checkbox>
@@ -291,6 +300,8 @@ const { t } = useI18n()
 const workflowName = ref("security_research_workflow")
 const workflowDescription = ref(t("workflow.canvas.description"))
 const runInput = ref(t("workflow.config.defaultInput"))
+const sessionId = ref("security-research-session")
+const userId = ref("operator@example.com")
 const selectedStepId = ref("intake")
 const activeInspectorTab = ref("edit")
 const lastRunId = ref("wf-run-preview")
@@ -298,6 +309,7 @@ const lastSavedAt = ref("")
 const streamEvents = ref(true)
 const storeEvents = ref(true)
 const addWorkflowHistoryToSteps = ref(true)
+const numHistoryRuns = ref(3)
 
 const workflowSteps = ref<WorkflowStep[]>([
   {
@@ -424,7 +436,7 @@ const validationTitle = computed(() => {
 })
 
 const outputItems = computed(() => [
-  { label: t("workflow.outputs.input"), value: "workflow.print_response(..., stream=True)" },
+  { label: t("workflow.outputs.input"), value: "workflow.print_response(..., session_id=...)" },
   { label: t("workflow.outputs.stepResults"), value: t("workflow.outputs.stepCount", { count: workflowSteps.value.length }) },
   { label: t("workflow.outputs.events"), value: streamEvents.value ? "stream_events=True" : "stream_events=False" },
   { label: t("workflow.outputs.finalOutput"), value: lastRunId.value },
@@ -441,10 +453,13 @@ const generatedCode = computed(() => {
     name: workflowName.value || "security_research_workflow",
     description: workflowDescription.value || t("workflow.canvas.description"),
     input: runInput.value || t("workflow.config.defaultInput"),
+    sessionId: sessionId.value,
+    userId: userId.value,
     steps: workflowSteps.value,
     streamEvents: streamEvents.value,
     storeEvents: storeEvents.value,
     addWorkflowHistoryToSteps: addWorkflowHistoryToSteps.value,
+    numHistoryRuns: numHistoryRuns.value,
   }
   return buildWorkflowCode(options)
 })
@@ -600,16 +615,6 @@ function defaultExpression(kind: WorkflowStepKind) {
   color: var(--ag-muted);
   font-size: 12px;
   line-height: 1.45;
-}
-
-.workflow-stat-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.workflow-stat-chip {
-  min-height: 50px;
 }
 
 .workflow-actions,
@@ -959,6 +964,11 @@ function defaultExpression(kind: WorkflowStepKind) {
   gap: 8px;
 }
 
+.workflow-option-field {
+  display: grid;
+  gap: 5px;
+}
+
 .workflow-check-list {
   display: grid;
   gap: 9px;
@@ -1053,7 +1063,6 @@ function defaultExpression(kind: WorkflowStepKind) {
     overflow: visible;
   }
 
-  .workflow-stat-strip,
   .workflow-result-strip,
   .workflow-editor-grid {
     grid-template-columns: minmax(0, 1fr);

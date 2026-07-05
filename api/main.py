@@ -1,19 +1,21 @@
 from contextlib import asynccontextmanager
-from pathlib import Path
 
+from anyio import Lock, Path as AsyncPath
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from loguru import logger
+from agno.agent import AgentFactory
 from agno.os import AgentOS
+from agno.factory import RequestContext
+from loguru import logger
 
 from api.auth.database import bootstrap_admin_user, close_auth_engine, create_auth_tables
 from api.auth.router import router as auth_router
 from api.config import get_settings
-from api.core.logging import configure_logging
+from api.core.logging import configure_logging_async
 from api.mcp.server import bootstrap_mcp_token, mcp_runtime
-from api.persistence.database import dispose_control_plane_engine
+from api.persistence.database import dispose_async_control_plane_engine
 from api.routes import (
     audit,
     chat,
@@ -26,23 +28,47 @@ from api.routes import (
     skills,
     trace,
 )
-from api.services.postgres_store import get_agno_postgres_db
-from api.services.security_run_runtime import _build_fallback_agent
+from api.services.postgres_store import get_async_agno_postgres_db
+from api.services.async_pgvector import dispose_async_pgvector_engines
+from api.services.security_run_runtime import DEFAULT_SECURITY_RUN_RUNTIME
 from api.utils.db import close_db_pool, get_db_pool
 
 app_settings = get_settings()
-configure_logging(app_settings)
 
 
-def frontend_static_dir() -> str:
-    source_dir = Path("source")
-    if source_dir.exists():
-        return str(source_dir)
+async def frontend_static_dir() -> str:
+    source_dir = AsyncPath("source")
+    if await source_dir.exists():
+        return "source"
     return "frontend/dist"
+
+
+class LazyFrontendStaticFiles:
+    def __init__(self) -> None:
+        self._app: StaticFiles | None = None
+        self._lock = Lock()
+
+    async def _get_app(self) -> StaticFiles:
+        if self._app is not None:
+            return self._app
+        async with self._lock:
+            if self._app is None:
+                directory = await frontend_static_dir()
+                self._app = StaticFiles(
+                    directory=directory,
+                    html=True,
+                    check_dir=False,
+                )
+            return self._app
+
+    async def __call__(self, scope, receive, send) -> None:
+        static_app = await self._get_app()
+        await static_app(scope, receive, send)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await configure_logging_async(app_settings)
     logger.info("启动 {}", app_settings.app_name)
     app.state.settings = app_settings
     pool = await get_db_pool()
@@ -50,7 +76,7 @@ async def lifespan(app: FastAPI):
     await create_auth_tables()
     await bootstrap_admin_user(app_settings)
 
-    bootstrap_mcp_token(app_settings.mcp_token.get_secret_value())
+    await bootstrap_mcp_token(app_settings.mcp_token.get_secret_value())
     await mcp_runtime.startup()
 
     try:
@@ -58,7 +84,8 @@ async def lifespan(app: FastAPI):
     finally:
         await mcp_runtime.shutdown()
         await close_auth_engine()
-        dispose_control_plane_engine()
+        await dispose_async_pgvector_engines()
+        await dispose_async_control_plane_engine()
         await close_db_pool()
         logger.info("关闭 {}", app_settings.app_name)
 
@@ -96,6 +123,10 @@ async def mcp_redirect(request: Request):
     return RedirectResponse(url=target, status_code=307)
 
 
+async def _build_agentos_fallback_agent(_ctx: RequestContext):
+    return await DEFAULT_SECURITY_RUN_RUNTIME.build_fallback_agent()
+
+
 # Include routers
 app.include_router(auth_router)
 app.include_router(audit.router)
@@ -110,10 +141,19 @@ app.include_router(knowledge.router)
 app.include_router(os_control.router)
 
 if app_settings.scheduler_enabled:
+    agentos_db = get_async_agno_postgres_db()
     AgentOS(
         name="Agno AIOS",
-        agents=[_build_fallback_agent()],
-        db=get_agno_postgres_db(),
+        agents=[
+            AgentFactory(
+                id="security-operations",
+                name="安全防御助手",
+                description="无工具模式下的安全防御运营助手。",
+                db=agentos_db,
+                factory=_build_agentos_fallback_agent,
+            )
+        ],
+        db=agentos_db,
         base_app=app,
         on_route_conflict="preserve_base_app",
         scheduler=True,
@@ -129,7 +169,7 @@ if app_settings.scheduler_enabled:
 app.mount("/mcp", mcp_runtime.asgi_app(), name="mcp")
 
 # Serve frontend static files. Production builds are written to source/.
-app.mount("/", StaticFiles(directory=frontend_static_dir(), html=True), name="frontend")
+app.mount("/", LazyFrontendStaticFiles(), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn

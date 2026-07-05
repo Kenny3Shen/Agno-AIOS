@@ -1,12 +1,11 @@
 import json
-import os
+from pathlib import Path
 from typing import Any, cast
 
-from api.services.runtime_paths import CONFIG_DIR, resolve_project_path
+from anyio import Path as AsyncPath
 
-MODEL_CONFIG_FILE = resolve_project_path(
-    os.getenv("AGNO_MODEL_CONFIG_FILE") or CONFIG_DIR / "model_config.json"
-)
+from api.config import get_settings
+from api.services.runtime_paths import CONFIG_DIR, resolve_project_path
 
 DEFAULT_MODELS: list[dict[str, Any]] = [
     {
@@ -30,6 +29,12 @@ DEFAULT_MODELS: list[dict[str, Any]] = [
         "builtin": True,
     },
 ]
+
+
+def model_config_file() -> Path:
+    return resolve_project_path(
+        get_settings().agno_model_config_file or CONFIG_DIR / "model_config.json"
+    )
 
 
 def _mask_secret(value: str) -> str:
@@ -61,15 +66,7 @@ def _default_config() -> dict[str, Any]:
     }
 
 
-def load_model_config() -> dict[str, Any]:
-    if not MODEL_CONFIG_FILE.exists():
-        return _default_config()
-
-    try:
-        raw = json.loads(MODEL_CONFIG_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return _default_config()
-
+def _coerce_config(raw: dict[str, Any]) -> dict[str, Any]:
     models_raw = raw.get("models", [])
     models: list[dict[str, Any]] = []
     if isinstance(models_raw, list):
@@ -96,8 +93,18 @@ def load_model_config() -> dict[str, Any]:
     }
 
 
-def public_model_config() -> dict[str, Any]:
-    config = load_model_config()
+async def load_model_config_async() -> dict[str, Any]:
+    config_file = AsyncPath(model_config_file())
+    if not await config_file.exists():
+        return _default_config()
+    try:
+        raw = json.loads(await config_file.read_text(encoding="utf-8"))
+    except Exception:
+        return _default_config()
+    return _coerce_config(raw)
+
+
+def _public_model_config_from_loaded(config: dict[str, Any]) -> dict[str, Any]:
     public_models = []
     for model in config["models"]:
         public_models.append(
@@ -117,10 +124,15 @@ def public_model_config() -> dict[str, Any]:
     }
 
 
-def save_model_config(
-    models: list[dict[str, Any]], active_model_id: str | None
+async def public_model_config_async() -> dict[str, Any]:
+    return _public_model_config_from_loaded(await load_model_config_async())
+
+
+def _normalize_config_for_save(
+    models: list[dict[str, Any]],
+    active_model_id: str | None,
+    existing: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
-    existing = {model["id"]: model for model in load_model_config()["models"]}
     normalized: list[dict[str, Any]] = []
 
     for index, entry in enumerate(models):
@@ -138,20 +150,33 @@ def save_model_config(
     if next_active not in model_ids:
         next_active = normalized[0]["id"]
 
-    config = {
+    return {
         "active_model_id": next_active,
         "models": normalized,
     }
-    MODEL_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    MODEL_CONFIG_FILE.write_text(
+
+
+async def save_model_config_async(
+    models: list[dict[str, Any]], active_model_id: str | None
+) -> dict[str, Any]:
+    existing = {model["id"]: model for model in (await load_model_config_async())["models"]}
+    normalized = _normalize_config_for_save(models, active_model_id, existing)
+    config = {
+        "active_model_id": normalized["active_model_id"],
+        "models": normalized["models"],
+    }
+    config_file = AsyncPath(model_config_file())
+    await config_file.parent.mkdir(parents=True, exist_ok=True)
+    await config_file.write_text(
         json.dumps(config, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    return public_model_config()
+    return _public_model_config_from_loaded(config)
 
 
-def get_model_for_run(model_id: str | None = None) -> dict[str, Any]:
-    config = load_model_config()
+def _model_for_run_from_loaded(
+    config: dict[str, Any], model_id: str | None = None
+) -> dict[str, Any]:
     selected_id = model_id or config["active_model_id"]
     models = {model["id"]: model for model in config["models"]}
     model = models.get(selected_id) or models.get(config["active_model_id"])
@@ -175,3 +200,7 @@ def get_model_for_run(model_id: str | None = None) -> dict[str, Any]:
             f"模型配置不完整: {model.get('name')} 缺少 {', '.join(missing)}。请在系统配置中补全。"
         )
     return model
+
+
+async def get_model_for_run_async(model_id: str | None = None) -> dict[str, Any]:
+    return _model_for_run_from_loaded(await load_model_config_async(), model_id)

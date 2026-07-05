@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import importlib
-import os
+import asyncio
 import threading
 import warnings
 from dataclasses import dataclass
@@ -9,18 +9,21 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, cast
 
+from anyio import Path as AsyncPath
+from anyio import to_thread
 from agno.knowledge.document import Document
 from agno.knowledge.embedder import Embedder
 from agno.knowledge.knowledge import Knowledge
 from agno.knowledge.reranker.base import Reranker
-from agno.vectordb.pgvector import PgVector
 from agno.vectordb.search import SearchType
 from pydantic import ConfigDict
-from sqlalchemy import func, select
+from sqlalchemy import Column, MetaData, Table, Text, func, select
+from sqlalchemy.dialects.postgresql import JSONB
 
+from api.config import get_settings
+from api.persistence.database import get_async_control_plane_engine
 from api.services.postgres_store import (
-    get_knowledge_postgres_db,
-    knowledge_schema,
+    get_async_knowledge_postgres_db,
     postgres_label,
     postgres_sqlalchemy_url,
 )
@@ -59,57 +62,63 @@ else:
     SentenceTransformer = Any
 
 
-def _env_int(key: str, default: int) -> int:
-    try:
-        return int(os.getenv(key, str(default)))
-    except ValueError:
-        return default
+@dataclass(frozen=True)
+class KnowledgeServiceSettings:
+    name: str
+    pgvector_table: str
+    postgres_schema: str
+    postgres_knowledge_table: str
+    embedding_model: str
+    embedding_dimensions: int
+    rerank_model: str
+    query_prompt: str
+    top_k: int
+    chunk_size: int
+    chunk_overlap: int
+    code_chunk_size: int
+    semantic_threshold: float
+    vector_score_weight: float
+    content_language: str
+    prefix_match: bool
+    rerank_enabled: bool
+    rerank_candidate_multiplier: int
+    rerank_min_candidates: int
+    model_device: str
+    search_type: str
+    rerank_use_fp16: bool
 
 
-def _env_bool(key: str, default: bool) -> bool:
-    raw = os.getenv(key)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
+def knowledge_settings() -> KnowledgeServiceSettings:
+    settings = get_settings()
+    return KnowledgeServiceSettings(
+        name=settings.agno_knowledge_name,
+        pgvector_table=settings.agno_knowledge_pgvector_table,
+        postgres_schema=settings.agno_knowledge_schema,
+        postgres_knowledge_table=settings.agno_postgres_knowledge_table,
+        embedding_model=settings.agno_knowledge_embedding_model,
+        embedding_dimensions=max(1, settings.agno_knowledge_embedding_dimensions),
+        rerank_model=settings.agno_knowledge_rerank_model,
+        query_prompt=settings.agno_knowledge_query_prompt,
+        top_k=max(1, settings.agno_knowledge_top_k),
+        chunk_size=max(200, settings.agno_knowledge_chunk_size),
+        chunk_overlap=max(0, settings.agno_knowledge_chunk_overlap),
+        code_chunk_size=max(256, settings.agno_knowledge_code_chunk_size),
+        semantic_threshold=settings.agno_knowledge_semantic_threshold,
+        vector_score_weight=settings.agno_knowledge_vector_score_weight,
+        content_language=settings.agno_knowledge_content_language,
+        prefix_match=settings.agno_knowledge_prefix_match,
+        rerank_enabled=settings.agno_knowledge_rerank_enabled,
+        rerank_candidate_multiplier=max(
+            1,
+            settings.agno_knowledge_rerank_candidate_multiplier,
+        ),
+        rerank_min_candidates=max(1, settings.agno_knowledge_rerank_min_candidates),
+        model_device=settings.agno_knowledge_device.strip().lower() or "auto",
+        search_type=settings.agno_knowledge_search_type,
+        rerank_use_fp16=settings.agno_knowledge_rerank_use_fp16,
+    )
 
 
-def _env_float(key: str, default: float) -> float:
-    try:
-        return float(os.getenv(key, str(default)))
-    except ValueError:
-        return default
-
-
-KNOWLEDGE_NAME = os.getenv("AGNO_KNOWLEDGE_NAME", "security_knowledge")
-PGVECTOR_TABLE = os.getenv("AGNO_KNOWLEDGE_PGVECTOR_TABLE", "security_knowledge_vectors")
-POSTGRES_SCHEMA = os.getenv("AGNO_KNOWLEDGE_SCHEMA", knowledge_schema())
-POSTGRES_KNOWLEDGE_TABLE = os.getenv(
-    "AGNO_POSTGRES_KNOWLEDGE_TABLE", "agno_knowledge"
-)
-EMBEDDING_MODEL = os.getenv("AGNO_KNOWLEDGE_EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5")
-EMBEDDING_DIMENSIONS = max(1, _env_int("AGNO_KNOWLEDGE_EMBEDDING_DIMENSIONS", 512))
-RERANK_MODEL = os.getenv("AGNO_KNOWLEDGE_RERANK_MODEL", "BAAI/bge-reranker-base")
-BGE_QUERY_PROMPT = os.getenv(
-    "AGNO_KNOWLEDGE_QUERY_PROMPT", "为这个句子生成表示以用于检索相关文章："
-)
-TOP_K = max(1, _env_int("AGNO_KNOWLEDGE_TOP_K", 5))
-CHUNK_SIZE = max(200, _env_int("AGNO_KNOWLEDGE_CHUNK_SIZE", 1200))
-CHUNK_OVERLAP = max(0, _env_int("AGNO_KNOWLEDGE_CHUNK_OVERLAP", 160))
-CODE_CHUNK_SIZE = max(256, _env_int("AGNO_KNOWLEDGE_CODE_CHUNK_SIZE", 1800))
-SEMANTIC_THRESHOLD = _env_float("AGNO_KNOWLEDGE_SEMANTIC_THRESHOLD", 0.52)
-VECTOR_SCORE_WEIGHT = _env_float("AGNO_KNOWLEDGE_VECTOR_SCORE_WEIGHT", 0.55)
-CONTENT_LANGUAGE = os.getenv("AGNO_KNOWLEDGE_CONTENT_LANGUAGE", "english")
-PREFIX_MATCH = _env_bool("AGNO_KNOWLEDGE_PREFIX_MATCH", False)
-RERANK_ENABLED = _env_bool("AGNO_KNOWLEDGE_RERANK_ENABLED", True)
-RERANK_CANDIDATE_MULTIPLIER = max(
-    1,
-    _env_int("AGNO_KNOWLEDGE_RERANK_CANDIDATE_MULTIPLIER", 3),
-)
-RERANK_MIN_CANDIDATES = max(
-    1,
-    _env_int("AGNO_KNOWLEDGE_RERANK_MIN_CANDIDATES", 10),
-)
-MODEL_DEVICE = os.getenv("AGNO_KNOWLEDGE_DEVICE", "auto").strip().lower() or "auto"
 COLD_START_NOTE = (
     "首次触发知识写入、向量检索或重排时会同步加载/下载本地模型，"
     "冷启动可能阻塞 30-120 秒，取决于网络、磁盘和 CPU。"
@@ -121,7 +130,14 @@ _torch_module: Any | None = None
 _torch_import_error: Exception | None = None
 _embedding_model_lock = threading.Lock()
 _reranker_model_lock = threading.Lock()
-_knowledge_lock = threading.Lock()
+_knowledge_async_lock = asyncio.Lock()
+
+
+async def _resolve_existing_file_async(path: str) -> Path:
+    file_path = Path(path).expanduser().resolve()
+    if not await AsyncPath(file_path).is_file():
+        raise FileNotFoundError(f"文件不存在: {path}")
+    return file_path
 
 
 def _load_torch() -> Any | None:
@@ -189,7 +205,8 @@ def _auto_device() -> str:
 
 
 def _model_device() -> str:
-    return _auto_device() if MODEL_DEVICE == "auto" else MODEL_DEVICE
+    model_device = knowledge_settings().model_device
+    return _auto_device() if model_device == "auto" else model_device
 
 
 def _sentence_transformer_cls() -> type[SentenceTransformer]:
@@ -210,6 +227,7 @@ def _flag_reranker_cls() -> type[FlagReranker]:
 
 def _get_embedding_model() -> SentenceTransformer:
     global _embedding_model, _embedding_dimensions
+    settings = knowledge_settings()
     if _embedding_model is not None:
         return _embedding_model
     with _embedding_model_lock:
@@ -218,18 +236,18 @@ def _get_embedding_model() -> SentenceTransformer:
                 raise _torch_runtime_error()
             sentence_transformer_cls = _sentence_transformer_cls()
             model = sentence_transformer_cls(
-                EMBEDDING_MODEL,
+                settings.embedding_model,
                 device=_model_device(),
             )
             embedding_dimensions = model.get_embedding_dimension()
             if not isinstance(embedding_dimensions, int) or embedding_dimensions <= 0:
                 raise RuntimeError(
-                    f"Failed to detect embedding dimension for model {EMBEDDING_MODEL}"
+                    f"Failed to detect embedding dimension for model {settings.embedding_model}"
                 )
-            if embedding_dimensions != EMBEDDING_DIMENSIONS:
+            if embedding_dimensions != settings.embedding_dimensions:
                 raise RuntimeError(
-                    f"Embedding model {EMBEDDING_MODEL} produces {embedding_dimensions} dimensions, "
-                    f"but AGNO_KNOWLEDGE_EMBEDDING_DIMENSIONS is {EMBEDDING_DIMENSIONS}. "
+                    f"Embedding model {settings.embedding_model} produces {embedding_dimensions} dimensions, "
+                    f"but AGNO_KNOWLEDGE_EMBEDDING_DIMENSIONS is {settings.embedding_dimensions}. "
                     "Set the correct dimension or rebuild the PgVector table."
                 )
             _embedding_model = model
@@ -243,7 +261,7 @@ def _get_embedding_dimensions() -> int:
         _get_embedding_model()
     if _embedding_dimensions is None:
         raise RuntimeError(
-            f"Embedding dimension is unavailable for model {EMBEDDING_MODEL}"
+            f"Embedding dimension is unavailable for model {knowledge_settings().embedding_model}"
         )
     return _embedding_dimensions
 
@@ -252,11 +270,12 @@ class BGEKnowledgeEmbedder(Embedder):
     """SentenceTransformer embedder with BGE query-prompt semantics."""
 
     def __init__(self) -> None:
-        super().__init__(dimensions=EMBEDDING_DIMENSIONS)
+        super().__init__(dimensions=knowledge_settings().embedding_dimensions)
 
     def _encode(self, text: str, *, query: bool) -> list[float]:
         model = _get_embedding_model()
-        encoded_text = f"{BGE_QUERY_PROMPT}{text}" if query else text
+        query_prompt = knowledge_settings().query_prompt
+        encoded_text = f"{query_prompt}{text}" if query else text
         embedding = model.encode(
             [encoded_text],
             normalize_embeddings=True,
@@ -271,12 +290,12 @@ class BGEKnowledgeEmbedder(Embedder):
         return self._encode(text, query=False), None
 
     async def async_get_embedding(self, text: str) -> list[float]:
-        return self.get_embedding(text)
+        return await to_thread.run_sync(self.get_embedding, text)
 
     async def async_get_embedding_and_usage(
         self, text: str
     ) -> tuple[list[float], None]:
-        return self.get_embedding_and_usage(text)
+        return await to_thread.run_sync(self.get_embedding_and_usage, text)
 
 
 def _patch_tokenizer_prepare_for_model(
@@ -365,12 +384,12 @@ def _get_reranker_model() -> FlagReranker:
         if _reranker_model is None:
             if _load_torch() is None:
                 raise _torch_runtime_error()
-            use_fp16 = _env_bool("AGNO_KNOWLEDGE_RERANK_USE_FP16", False)
+            settings = knowledge_settings()
             device = _model_device()
             flag_reranker_cls = _flag_reranker_cls()
             _reranker_model = flag_reranker_cls(
-                RERANK_MODEL,
-                use_fp16=use_fp16 and device.startswith("cuda"),
+                settings.rerank_model,
+                use_fp16=settings.rerank_use_fp16 and device.startswith("cuda"),
                 devices=device,
             )
             tv_size = 1
@@ -419,7 +438,7 @@ def _get_embedder() -> BGEKnowledgeEmbedder:
 
 @lru_cache(maxsize=1)
 def _get_reranker() -> FlagEmbeddingReranker | None:
-    if not RERANK_ENABLED:
+    if not knowledge_settings().rerank_enabled:
         return None
     return FlagEmbeddingReranker()
 
@@ -436,16 +455,17 @@ def _search_type_from_name(value: str | None) -> SearchType:
 
 
 def search_type_from_env() -> SearchType:
-    return _search_type_from_name(os.getenv("AGNO_KNOWLEDGE_SEARCH_TYPE", "hybrid"))
+    return _search_type_from_name(knowledge_settings().search_type)
 
 
 def _reader_config(needs_embedder: bool) -> KnowledgeReaderConfig:
+    settings = knowledge_settings()
     return KnowledgeReaderConfig(
         embedder=_get_embedder() if needs_embedder else None,
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
-        code_chunk_size=CODE_CHUNK_SIZE,
-        semantic_threshold=SEMANTIC_THRESHOLD,
+        chunk_size=settings.chunk_size,
+        chunk_overlap=settings.chunk_overlap,
+        code_chunk_size=settings.code_chunk_size,
+        semantic_threshold=settings.semantic_threshold,
     )
 
 
@@ -476,39 +496,41 @@ def reader_for_filename(
 
 
 def pipeline_status() -> dict[str, Any]:
+    settings = knowledge_settings()
     return _ingest_pipeline_status(
         search_type=search_type_from_env().value,
-        vector_score_weight=VECTOR_SCORE_WEIGHT,
-        prefix_match=PREFIX_MATCH,
-        content_language=CONTENT_LANGUAGE,
-        semantic_threshold=SEMANTIC_THRESHOLD,
-        code_chunk_size=CODE_CHUNK_SIZE,
+        vector_score_weight=settings.vector_score_weight,
+        prefix_match=settings.prefix_match,
+        content_language=settings.content_language,
+        semantic_threshold=settings.semantic_threshold,
+        code_chunk_size=settings.code_chunk_size,
     )
 
 
 @lru_cache(maxsize=4)
-def get_knowledge_base(search_type: SearchType | None = None) -> Knowledge:
+def get_async_knowledge_base(search_type: SearchType | None = None) -> Knowledge:
+    settings = knowledge_settings()
     embedder = _get_embedder()
     effective_search_type = search_type or search_type_from_env()
     return build_knowledge_base(
         KnowledgeRuntimeSettings(
-            name=KNOWLEDGE_NAME,
+            name=settings.name,
             description="Agno AIOS security knowledge base",
-            pgvector_table=PGVECTOR_TABLE,
-            postgres_schema=POSTGRES_SCHEMA,
+            pgvector_table=settings.pgvector_table,
+            postgres_schema=settings.postgres_schema,
             db_url=postgres_sqlalchemy_url(),
-            prefix_match=PREFIX_MATCH,
-            vector_score_weight=VECTOR_SCORE_WEIGHT,
-            content_language=CONTENT_LANGUAGE,
-            top_k=TOP_K,
-            rerank_enabled=RERANK_ENABLED,
-            rerank_candidate_multiplier=RERANK_CANDIDATE_MULTIPLIER,
-            rerank_min_candidates=RERANK_MIN_CANDIDATES,
+            prefix_match=settings.prefix_match,
+            vector_score_weight=settings.vector_score_weight,
+            content_language=settings.content_language,
+            top_k=settings.top_k,
+            rerank_enabled=settings.rerank_enabled,
+            rerank_candidate_multiplier=settings.rerank_candidate_multiplier,
+            rerank_min_candidates=settings.rerank_min_candidates,
         ),
         KnowledgeRuntimeDependencies(
             embedder=embedder,
             reranker=_get_reranker(),
-            contents_db=get_knowledge_postgres_db(),
+            contents_db=get_async_knowledge_postgres_db(),
         ),
         search_type=effective_search_type,
         readers={
@@ -520,63 +542,64 @@ def get_knowledge_base(search_type: SearchType | None = None) -> Knowledge:
     )
 
 
-def _ensure_knowledge_storage() -> None:
-    knowledge = get_knowledge_base()
-    vector_db = cast(PgVector, knowledge.vector_db)
-    vector_db.create()
-    contents_db = get_knowledge_postgres_db()
-    contents_db._get_table(table_type="knowledge", create_table_if_not_found=True)
+async def _ensure_knowledge_storage_async() -> None:
+    knowledge = get_async_knowledge_base()
+    vector_db = cast(Any, knowledge.vector_db)
+    await vector_db.async_create()
+    contents_db = get_async_knowledge_postgres_db()
+    get_table = getattr(contents_db, "_get_table")
+    await get_table(table_type="knowledge", create_table_if_not_found=True)
 
 
-def _chunk_counts_by_content_id(owner_user_id: str | None = None) -> dict[str, int]:
-    knowledge = get_knowledge_base()
-    vector_db = cast(PgVector, knowledge.vector_db)
-    table = vector_db.table
+def _pgvector_projection_table() -> Table:
+    settings = knowledge_settings()
+    return Table(
+        settings.pgvector_table,
+        MetaData(schema=settings.postgres_schema),
+        Column("id", Text),
+        Column("content_id", Text),
+        Column("meta_data", JSONB),
+    )
+
+
+async def _chunk_counts_by_content_id_async(owner_user_id: str | None = None) -> dict[str, int]:
+    table = _pgvector_projection_table()
+    stmt = select(table.c.content_id, func.count()).where(table.c.content_id.is_not(None))
+    owner_filter = _owner_metadata(owner_user_id)
+    if owner_filter:
+        stmt = stmt.where(table.c.meta_data.contains(owner_filter))
+    stmt = stmt.group_by(table.c.content_id)
     try:
-        with vector_db.Session() as sess, sess.begin():
-            stmt = (
-                select(table.c.content_id, func.count())
-                .where(table.c.content_id.is_not(None))
-            )
-            owner_filter = _owner_metadata(owner_user_id)
-            if owner_filter:
-                stmt = stmt.where(table.c.meta_data.contains(owner_filter))
-            rows = sess.execute(stmt.group_by(table.c.content_id)).fetchall()
+        async with get_async_control_plane_engine().begin() as conn:
+            rows = (await conn.execute(stmt)).all()
     except Exception:
         return {}
     return {str(content_id): int(count) for content_id, count in rows if content_id}
 
 
-def _chunk_count(owner_user_id: str | None = None) -> int:
-    knowledge = get_knowledge_base()
-    vector_db = cast(PgVector, knowledge.vector_db)
+async def _chunk_count_async(owner_user_id: str | None = None) -> int:
+    table = _pgvector_projection_table()
+    stmt = select(func.count()).select_from(table)
     owner_filter = _owner_metadata(owner_user_id)
-    if not owner_filter:
-        return int(vector_db.get_count())
-
-    table = vector_db.table
+    if owner_filter:
+        stmt = stmt.where(table.c.meta_data.contains(owner_filter))
     try:
-        with vector_db.Session() as sess, sess.begin():
-            count = sess.execute(
-                select(func.count()).where(table.c.meta_data.contains(owner_filter))
-            ).scalar()
+        async with get_async_control_plane_engine().begin() as conn:
+            count = (await conn.execute(stmt)).scalar()
     except Exception:
         return 0
     return int(count or 0)
 
 
-def _hydrate_content_ids(documents: list[Document]) -> None:
+async def _hydrate_content_ids_async(documents: list[Document]) -> None:
     ids = [document.id for document in documents if document.id]
     if not ids:
         return
-    knowledge = get_knowledge_base()
-    vector_db = cast(PgVector, knowledge.vector_db)
-    table = vector_db.table
+    table = _pgvector_projection_table()
+    stmt = select(table.c.id, table.c.content_id).where(table.c.id.in_(ids))
     try:
-        with vector_db.Session() as sess, sess.begin():
-            rows = sess.execute(
-                select(table.c.id, table.c.content_id).where(table.c.id.in_(ids))
-            ).fetchall()
+        async with get_async_control_plane_engine().begin() as conn:
+            rows = (await conn.execute(stmt)).all()
     except Exception:
         return
     content_ids = {str(row_id): str(content_id) for row_id, content_id in rows if content_id}
@@ -586,8 +609,29 @@ def _hydrate_content_ids(documents: list[Document]) -> None:
             document.meta_data["content_id"] = content_ids[document.id]
 
 
-def _document_status(content_id: str) -> dict[str, Any] | None:
-    content = get_knowledge_base().get_content_by_id(content_id)
+async def _delete_vector_rows_by_content_id_async(content_id: str) -> None:
+    table = _pgvector_projection_table()
+    async with get_async_control_plane_engine().begin() as conn:
+        await conn.execute(table.delete().where(table.c.content_id == content_id))
+
+
+async def _delete_knowledge_content_row_async(knowledge: Any, content_id: str) -> None:
+    contents_db = getattr(knowledge, "contents_db", None)
+    delete_knowledge_content = getattr(contents_db, "delete_knowledge_content", None)
+    if delete_knowledge_content is None:
+        raise RuntimeError("Knowledge contents DB does not support async content deletion")
+    result = delete_knowledge_content(content_id)
+    if hasattr(result, "__await__"):
+        await result
+
+
+async def _delete_content_async(knowledge: Any, content_id: str) -> None:
+    await _delete_vector_rows_by_content_id_async(content_id)
+    await _delete_knowledge_content_row_async(knowledge, content_id)
+
+
+async def _document_status_async(content_id: str) -> dict[str, Any] | None:
+    content = await get_async_knowledge_base().aget_content_by_id(content_id)
     if content is None:
         return None
     return _content_to_document(content)
@@ -595,12 +639,12 @@ def _document_status(content_id: str) -> dict[str, Any] | None:
 
 @dataclass(frozen=True)
 class KnowledgeBaseLifecycleDependencies:
-    get_knowledge_base: Callable[[SearchType | None], Any] | None = None
-    ensure_storage: Callable[[], None] | None = None
-    chunk_counts_by_content_id: Callable[[str | None], dict[str, int]] | None = None
-    chunk_count: Callable[[str | None], int] | None = None
-    hydrate_content_ids: Callable[[list[Document]], None] | None = None
-    lock: Any = _knowledge_lock
+    get_async_knowledge_base: Callable[[SearchType | None], Any] | None = None
+    ensure_storage_async: Callable[[], Any] | None = None
+    chunk_counts_by_content_id_async: Callable[[str | None], Any] | None = None
+    chunk_count_async: Callable[[str | None], Any] | None = None
+    hydrate_content_ids_async: Callable[[list[Document]], Any] | None = None
+    delete_content_async: Callable[[Any, str], Any] | None = None
 
 
 class KnowledgeBaseLifecycle:
@@ -612,34 +656,64 @@ class KnowledgeBaseLifecycle:
     ) -> None:
         self.dependencies = dependencies or KnowledgeBaseLifecycleDependencies()
 
-    def _knowledge(self, search_type: SearchType | None = None) -> Any:
-        if self.dependencies.get_knowledge_base is not None:
-            return self.dependencies.get_knowledge_base(search_type)
-        return get_knowledge_base(search_type)
+    def _async_knowledge(self, search_type: SearchType | None = None) -> Any:
+        if self.dependencies.get_async_knowledge_base is not None:
+            return self.dependencies.get_async_knowledge_base(search_type)
+        return get_async_knowledge_base(search_type)
 
-    def _ensure_storage(self) -> None:
-        if self.dependencies.ensure_storage is not None:
-            self.dependencies.ensure_storage()
+    async def _ensure_storage_async(self) -> None:
+        if self.dependencies.ensure_storage_async is not None:
+            result = self.dependencies.ensure_storage_async()
+            if hasattr(result, "__await__"):
+                await result
             return
-        _ensure_knowledge_storage()
+        await _ensure_knowledge_storage_async()
 
-    def _chunk_counts_by_content_id(self, owner_user_id: str | None) -> dict[str, int]:
-        if self.dependencies.chunk_counts_by_content_id is not None:
-            return self.dependencies.chunk_counts_by_content_id(owner_user_id)
-        return _chunk_counts_by_content_id(owner_user_id)
+    async def _chunk_counts_by_content_id_async(self, owner_user_id: str | None) -> dict[str, int]:
+        if self.dependencies.chunk_counts_by_content_id_async is not None:
+            result = self.dependencies.chunk_counts_by_content_id_async(owner_user_id)
+            if hasattr(result, "__await__"):
+                return await result
+            return result
+        return await _chunk_counts_by_content_id_async(owner_user_id)
 
-    def _chunk_count(self, owner_user_id: str | None) -> int:
-        if self.dependencies.chunk_count is not None:
-            return self.dependencies.chunk_count(owner_user_id)
-        return _chunk_count(owner_user_id)
+    async def _chunk_count_async(self, owner_user_id: str | None) -> int:
+        if self.dependencies.chunk_count_async is not None:
+            result = self.dependencies.chunk_count_async(owner_user_id)
+            if hasattr(result, "__await__"):
+                return await result
+            return result
+        return await _chunk_count_async(owner_user_id)
 
-    def _hydrate_content_ids(self, documents: list[Document]) -> None:
-        if self.dependencies.hydrate_content_ids is not None:
-            self.dependencies.hydrate_content_ids(documents)
+    async def _hydrate_content_ids_async(self, documents: list[Document]) -> None:
+        if self.dependencies.hydrate_content_ids_async is not None:
+            result = self.dependencies.hydrate_content_ids_async(documents)
+            if hasattr(result, "__await__"):
+                await result
             return
-        _hydrate_content_ids(documents)
+        await _hydrate_content_ids_async(documents)
 
-    def add_text_document(
+    async def _delete_content_async(self, knowledge: Any, content_id: str) -> None:
+        if self.dependencies.delete_content_async is not None:
+            result = self.dependencies.delete_content_async(knowledge, content_id)
+            if hasattr(result, "__await__"):
+                await result
+            return
+        await _delete_content_async(knowledge, content_id)
+
+    async def _deletable_content_ids_async(
+        self,
+        knowledge: Any,
+        owner_user_id: str | None,
+    ) -> list[str]:
+        contents, _ = await knowledge.aget_content()
+        return [
+            content.id
+            for content in contents
+            if content.id and _content_visible_to_owner(content, owner_user_id)
+        ]
+
+    async def add_text_document_async(
         self,
         title: str,
         content: str,
@@ -665,10 +739,10 @@ class KnowledgeBaseLifecycle:
             "reader": profile.reader,
             "input_mode": base_metadata.get("input_mode", "manual"),
         }
-        knowledge = self._knowledge()
-        with self.dependencies.lock:
-            self._ensure_storage()
-            knowledge.insert(
+        knowledge = self._async_knowledge()
+        async with _knowledge_async_lock:
+            await self._ensure_storage_async()
+            await knowledge.ainsert(
                 name=clean_title,
                 description=source.strip() or "manual",
                 text_content=clean_content,
@@ -677,7 +751,7 @@ class KnowledgeBaseLifecycle:
                 upsert=True,
                 skip_if_exists=False,
             )
-        contents, _ = knowledge.get_content(
+        contents, _ = await knowledge.aget_content(
             limit=1,
             page=1,
             sort_by="updated_at",
@@ -688,15 +762,13 @@ class KnowledgeBaseLifecycle:
                 return _content_to_document(content_row)
         raise RuntimeError("知识写入完成但未能读取内容登记记录")
 
-    def add_file_document(
+    async def add_file_document_async(
         self,
         path: str,
         title: str | None = None,
         owner_user_id: str | None = None,
     ) -> dict[str, Any]:
-        file_path = Path(path).expanduser().resolve()
-        if not file_path.exists() or not file_path.is_file():
-            raise FileNotFoundError(f"文件不存在: {path}")
+        file_path = await _resolve_existing_file_async(path)
         if file_path.suffix.lower() not in SUPPORTED_FILE_SUFFIXES:
             supported = ", ".join(SUPPORTED_FILE_SUFFIXES)
             raise ValueError(f"当前知识库支持的文件后缀: {supported}")
@@ -715,10 +787,10 @@ class KnowledgeBaseLifecycle:
             "input_mode": "path",
         }
         reader = reader_for_profile(profile, file_path.name)
-        knowledge = self._knowledge()
-        with self.dependencies.lock:
-            self._ensure_storage()
-            knowledge.insert(
+        knowledge = self._async_knowledge()
+        async with _knowledge_async_lock:
+            await self._ensure_storage_async()
+            await knowledge.ainsert(
                 name=clean_title,
                 description=str(file_path),
                 path=str(file_path),
@@ -727,7 +799,7 @@ class KnowledgeBaseLifecycle:
                 upsert=True,
                 skip_if_exists=False,
             )
-        contents, _ = knowledge.get_content(
+        contents, _ = await knowledge.aget_content(
             limit=1,
             page=1,
             sort_by="updated_at",
@@ -738,15 +810,15 @@ class KnowledgeBaseLifecycle:
                 return _content_to_document(content_row)
         raise RuntimeError("知识写入完成但未能读取内容登记记录")
 
-    def list_documents(self, owner_user_id: str | None = None) -> list[dict[str, Any]]:
-        self._ensure_storage()
-        contents, _ = self._knowledge().get_content(
+    async def list_documents_async(self, owner_user_id: str | None = None) -> list[dict[str, Any]]:
+        await self._ensure_storage_async()
+        contents, _ = await self._async_knowledge().aget_content(
             limit=500,
             page=1,
             sort_by="updated_at",
             sort_order="desc",
         )
-        chunk_counts = self._chunk_counts_by_content_id(owner_user_id)
+        chunk_counts = await self._chunk_counts_by_content_id_async(owner_user_id)
         documents = []
         for content in contents:
             if not _content_visible_to_owner(content, owner_user_id):
@@ -756,36 +828,31 @@ class KnowledgeBaseLifecycle:
             documents.append(document)
         return documents
 
-    def delete_document(
+    async def delete_document_async(
         self,
         doc_id: str,
         owner_user_id: str | None = None,
     ) -> bool:
-        self._ensure_storage()
-        knowledge = self._knowledge()
-        content = knowledge.get_content_by_id(doc_id)
+        await self._ensure_storage_async()
+        knowledge = self._async_knowledge()
+        content = await knowledge.aget_content_by_id(doc_id)
         if content is None or not _content_visible_to_owner(content, owner_user_id):
             return False
-        with self.dependencies.lock:
-            knowledge.remove_content_by_id(doc_id)
+        await self._delete_content_async(knowledge, doc_id)
         return True
 
-    def clear_knowledge_base(
+    async def clear_knowledge_base_async(
         self,
         owner_user_id: str | None = None,
     ) -> dict[str, Any]:
-        self._ensure_storage()
-        knowledge = self._knowledge()
-        documents = self.list_documents(owner_user_id=owner_user_id)
-        with self.dependencies.lock:
-            if owner_user_id:
-                for document in documents:
-                    knowledge.remove_content_by_id(document["id"])
-            else:
-                knowledge.remove_all_content()
+        await self._ensure_storage_async()
+        knowledge = self._async_knowledge()
+        content_ids = await self._deletable_content_ids_async(knowledge, owner_user_id)
+        for content_id in content_ids:
+            await self._delete_content_async(knowledge, content_id)
         return {"documents": 0, "chunks": 0}
 
-    def search_documents(
+    async def search_documents_async(
         self,
         query: str,
         limit: int = 5,
@@ -798,51 +865,53 @@ class KnowledgeBaseLifecycle:
         effective_search_type = (
             _search_type_from_name(search_type) if search_type else search_type_from_env()
         )
-        self._ensure_storage()
-        knowledge = self._knowledge()
+        await self._ensure_storage_async()
+        knowledge = self._async_knowledge()
+        settings = knowledge_settings()
         retrieval_limit = retrieval_candidate_limit(
             limit,
-            rerank_enabled=RERANK_ENABLED,
-            rerank_candidate_multiplier=RERANK_CANDIDATE_MULTIPLIER,
-            rerank_min_candidates=RERANK_MIN_CANDIDATES,
+            rerank_enabled=settings.rerank_enabled,
+            rerank_candidate_multiplier=settings.rerank_candidate_multiplier,
+            rerank_min_candidates=settings.rerank_min_candidates,
         )
-        documents = knowledge.search(
+        documents = await knowledge.asearch(
             clean_query,
             max_results=retrieval_limit,
             filters=_owner_metadata(owner_user_id) or None,
             search_type=effective_search_type.value,
         )
-        self._hydrate_content_ids(documents)
+        await self._hydrate_content_ids_async(documents)
         return [_result_from_document(document) for document in documents[:limit]]
 
-    def knowledge_status(self, owner_user_id: str | None = None) -> dict[str, Any]:
-        self._ensure_storage()
-        docs = self.list_documents(owner_user_id=owner_user_id)
-        chunk_count = self._chunk_count(owner_user_id)
+    async def knowledge_status_async(self, owner_user_id: str | None = None) -> dict[str, Any]:
+        await self._ensure_storage_async()
+        docs = await self.list_documents_async(owner_user_id=owner_user_id)
+        chunk_count = await self._chunk_count_async(owner_user_id)
+        settings = knowledge_settings()
         device = _model_device()
         return {
             **pipeline_status(),
-            "collection": PGVECTOR_TABLE,
+            "collection": settings.pgvector_table,
             "storage": "pgvector",
-            "database": postgres_label(POSTGRES_SCHEMA, PGVECTOR_TABLE),
-            "contents_db": postgres_label(POSTGRES_SCHEMA, POSTGRES_KNOWLEDGE_TABLE),
-            "postgres_schema": POSTGRES_SCHEMA,
+            "database": postgres_label(settings.postgres_schema, settings.pgvector_table),
+            "contents_db": postgres_label(settings.postgres_schema, settings.postgres_knowledge_table),
+            "postgres_schema": settings.postgres_schema,
             "documents": len(docs),
             "chunks": chunk_count,
-            "embedding": EMBEDDING_MODEL,
-            "embedding_dimensions": _embedding_dimensions or EMBEDDING_DIMENSIONS,
-            "rerank": RERANK_MODEL,
+            "embedding": settings.embedding_model,
+            "embedding_dimensions": _embedding_dimensions or settings.embedding_dimensions,
+            "rerank": settings.rerank_model,
             "device": device,
-            "rerank_enabled": RERANK_ENABLED,
-            "top_k": TOP_K,
+            "rerank_enabled": settings.rerank_enabled,
+            "top_k": settings.top_k,
             "retrieval_candidates": retrieval_candidate_limit(
-                TOP_K,
-                rerank_enabled=RERANK_ENABLED,
-                rerank_candidate_multiplier=RERANK_CANDIDATE_MULTIPLIER,
-                rerank_min_candidates=RERANK_MIN_CANDIDATES,
+                settings.top_k,
+                rerank_enabled=settings.rerank_enabled,
+                rerank_candidate_multiplier=settings.rerank_candidate_multiplier,
+                rerank_min_candidates=settings.rerank_min_candidates,
             ),
-            "chunk_size": CHUNK_SIZE,
-            "chunk_overlap": CHUNK_OVERLAP,
+            "chunk_size": settings.chunk_size,
+            "chunk_overlap": settings.chunk_overlap,
             "cold_start_note": COLD_START_NOTE,
             "torch_runtime_ok": _load_torch() is not None,
         }
@@ -855,14 +924,14 @@ def get_knowledge_base_lifecycle() -> KnowledgeBaseLifecycle:
     return DEFAULT_KNOWLEDGE_BASE_LIFECYCLE
 
 
-def add_text_document(
+async def add_text_document_async(
     title: str,
     content: str,
     source: str = "manual",
     metadata: dict[str, Any] | None = None,
     owner_user_id: str | None = None,
 ) -> dict[str, Any]:
-    return DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.add_text_document(
+    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.add_text_document_async(
         title,
         content,
         source=source,
@@ -871,42 +940,44 @@ def add_text_document(
     )
 
 
-def add_file_document(
+async def add_file_document_async(
     path: str,
     title: str | None = None,
     owner_user_id: str | None = None,
 ) -> dict[str, Any]:
-    return DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.add_file_document(
+    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.add_file_document_async(
         path,
         title=title,
         owner_user_id=owner_user_id,
     )
 
 
-def list_documents(owner_user_id: str | None = None) -> list[dict[str, Any]]:
-    return DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.list_documents(owner_user_id=owner_user_id)
+async def list_documents_async(owner_user_id: str | None = None) -> list[dict[str, Any]]:
+    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.list_documents_async(
+        owner_user_id=owner_user_id
+    )
 
 
-def delete_document(doc_id: str, owner_user_id: str | None = None) -> bool:
-    return DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.delete_document(
+async def delete_document_async(doc_id: str, owner_user_id: str | None = None) -> bool:
+    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.delete_document_async(
         doc_id,
         owner_user_id=owner_user_id,
     )
 
 
-def clear_knowledge_base(owner_user_id: str | None = None) -> dict[str, Any]:
-    return DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.clear_knowledge_base(
+async def clear_knowledge_base_async(owner_user_id: str | None = None) -> dict[str, Any]:
+    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.clear_knowledge_base_async(
         owner_user_id=owner_user_id,
     )
 
 
-def search_documents(
+async def search_documents_async(
     query: str,
     limit: int = 5,
     search_type: str | None = None,
     owner_user_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    return DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.search_documents(
+    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.search_documents_async(
         query,
         limit=limit,
         search_type=search_type,
@@ -914,7 +985,7 @@ def search_documents(
     )
 
 
-def knowledge_status(owner_user_id: str | None = None) -> dict[str, Any]:
-    return DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.knowledge_status(
+async def knowledge_status_async(owner_user_id: str | None = None) -> dict[str, Any]:
+    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.knowledge_status_async(
         owner_user_id=owner_user_id,
     )

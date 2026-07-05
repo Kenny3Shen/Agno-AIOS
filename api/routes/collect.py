@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Request
 from api.auth.models import User
 from api.auth.permissions import require_permission
 from api.models.schemas import Url2MdRequest
-from api.services.audit_service import audit_request_context, record_audit_event
+from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.url2md_service import fetch_and_parse_url
 from loguru import logger
 
@@ -18,8 +18,8 @@ async def parse_url_to_markdown(
 ) -> dict:
     """Parse the content of a given URL and convert it to Markdown format."""
     try:
-        markdown_content = fetch_and_parse_url([request.url])
-        record_audit_event(
+        markdown_content = await fetch_and_parse_url([request.url])
+        await record_audit_event_async(
             user,
             action="collect.parse",
             resource_type="url2md",
@@ -34,7 +34,7 @@ async def parse_url_to_markdown(
         }
     except Exception as e:
         logger.error(f"URL to Markdown parsing error: {e}")
-        record_audit_event(
+        await record_audit_event_async(
             user,
             action="collect.parse",
             resource_type="url2md",

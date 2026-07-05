@@ -446,7 +446,8 @@ export function useChatHistory() {
       if (options.includeRuns) qs.set('include_runs', 'true')
       const response = await apiFetch(`/chat/sessions${qs.size ? `?${qs.toString()}` : ''}`)
       if (!response.ok) throw new Error(apiMessage('chatSessionsLoadFailed'))
-      return await response.json()
+      const data: unknown = await response.json()
+      return Array.isArray(data) ? data : []
     } finally {
       loadingSessions.value = false
     }
@@ -455,7 +456,8 @@ export function useChatHistory() {
   const getSessionHistory = async (sessionId: string): Promise<Message[]> => {
     const response = await apiFetch(`/chat/sessions/${sessionId}`)
     if (!response.ok) throw new Error(apiMessage('chatHistoryLoadFailed'))
-    return await response.json()
+    const data: unknown = await response.json()
+    return Array.isArray(data) ? data : []
   }
 
 

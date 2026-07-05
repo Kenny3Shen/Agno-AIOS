@@ -1,13 +1,9 @@
-from typing import Any
-
 from fastapi import APIRouter, Depends, Request
-from psycopg_pool import AsyncConnectionPool
 
 from api.auth.models import User
 from api.auth.permissions import require_permission
-from api.dependencies import get_pool
 from api.models.schemas import CveSearchRequest
-from api.services.audit_service import audit_request_context, record_audit_event
+from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.cve_service import search_cves
 from api.tasks.update_cve import main as update_cve_main
 from loguru import logger
@@ -18,13 +14,11 @@ router = APIRouter(prefix="/api/cve", tags=["CVE"])
 @router.post("/search")
 async def search_cve(
     request: CveSearchRequest,
-    pool: AsyncConnectionPool[Any] = Depends(get_pool),
     _user: User = Depends(require_permission("cve:read")),
 ) -> dict:
     """Search CVEs by ID and/or keyword with pagination"""
     try:
         items, total = await search_cves(
-            pool,
             query=request.query,
             source=request.source,
             page=request.page,
@@ -52,7 +46,7 @@ async def update_cve_database(
         logger.info("开始更新 CVE 数据库")
         # 异步运行更新任务
         add_count, del_count = await update_cve_main()
-        record_audit_event(
+        await record_audit_event_async(
             user,
             action="admin.cve.update",
             resource_type="cve",
@@ -69,7 +63,7 @@ async def update_cve_database(
         }
     except Exception as e:
         logger.error(f"更新 CVE 数据库错误: {e}")
-        record_audit_event(
+        await record_audit_event_async(
             user,
             action="admin.cve.update",
             resource_type="cve",

@@ -1301,61 +1301,8 @@ onUnmounted(() => {
 }
 
 .trace-stat-strip {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
   border-bottom: 1px solid var(--trace-border);
-  background: color-mix(in srgb, var(--trace-panel) 94%, var(--trace-bg));
   padding: 10px 14px;
-}
-
-.trace-stat-card {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid var(--trace-border);
-  border-radius: 8px;
-  background: var(--trace-panel-soft);
-  padding: 8px 10px 8px 12px;
-}
-
-.trace-stat-card::before {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 2px;
-  background: var(--trace-blue);
-  content: "";
-}
-
-.trace-stat-card.tone-green::before {
-  background: var(--ag-green);
-}
-
-.trace-stat-card.tone-yellow::before {
-  background: var(--trace-yellow);
-}
-
-.trace-stat-card.tone-red::before {
-  background: var(--trace-red);
-}
-
-.trace-stat-card span {
-  display: block;
-  color: var(--trace-muted);
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1.35;
-  text-transform: uppercase;
-}
-
-.trace-stat-card strong {
-  display: block;
-  margin-top: 3px;
-  color: var(--trace-text);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 15px;
-  font-weight: 800;
-  line-height: 1.15;
-  overflow-wrap: anywhere;
 }
 
 .trace-toolbar,
@@ -2630,10 +2577,6 @@ html.dark .trace-waterfall-row.active {
   .trace-filter-select,
   .trace-date-picker {
     width: 100% !important;
-  }
-
-  .trace-stat-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
 }

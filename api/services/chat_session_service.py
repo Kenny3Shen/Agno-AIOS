@@ -5,11 +5,11 @@ from agno.session.agent import AgentSession
 from agno.session.team import TeamSession
 from agno.session.workflow import WorkflowSession
 from api.auth.permissions import actor_id, assert_owned_resource
-from api.services.audit_service import record_audit_event
+from api.services.audit_service import record_audit_event_async
 from api.services.postgres_store import (
     coerce_json_value,
-    ensure_agno_postgres_tables,
-    get_agno_postgres_db,
+    ensure_agno_postgres_tables_async,
+    get_async_agno_postgres_db,
 )
 
 
@@ -18,17 +18,23 @@ ARCHIVED_BY_METADATA_KEY = "agno_aios_archived_by"
 ARCHIVED_AT_METADATA_KEY = "agno_aios_archived_at"
 
 
-def is_session_archived(session_id: str) -> bool:
-    ensure_agno_postgres_tables()
-    session = get_agno_postgres_db().get_session(session_id, deserialize=False)
+async def is_session_archived_async(session_id: str) -> bool:
+    await ensure_agno_postgres_tables_async()
+    session = await get_async_agno_postgres_db().get_session(
+        session_id,
+        deserialize=False,
+    )
     if not isinstance(session, dict):
         return False
     return _is_archived_metadata(session.get("metadata"))
 
 
-def get_session_owner(session_id: str) -> str | None:
-    ensure_agno_postgres_tables()
-    session = get_agno_postgres_db().get_session(session_id, deserialize=False)
+async def get_session_owner_async(session_id: str) -> str | None:
+    await ensure_agno_postgres_tables_async()
+    session = await get_async_agno_postgres_db().get_session(
+        session_id,
+        deserialize=False,
+    )
     if not isinstance(session, dict):
         return None
     return str(session.get("user_id") or "")
@@ -41,17 +47,17 @@ def _is_archived_metadata(value: Any) -> bool:
     return metadata.get(ARCHIVED_METADATA_KEY) is True
 
 
-def archive_session(
+async def archive_session(
     session_id: str,
     user_id: str | None = None,
     *,
     actor: Any | None = None,
 ) -> bool:
     """Soft-archive a chat session without deleting Agno runs or traces."""
-    ensure_agno_postgres_tables()
+    await ensure_agno_postgres_tables_async()
     archived_by = actor_id(actor) if actor is not None else (user_id or "").strip()
-    db = get_agno_postgres_db()
-    session_row = db.get_session(session_id, deserialize=False)
+    db = get_async_agno_postgres_db()
+    session_row = await db.get_session(session_id, deserialize=False)
     if not isinstance(session_row, dict):
         return False
 
@@ -63,7 +69,7 @@ def archive_session(
             resource_name="Session",
         )
 
-    session: Any = db.get_session(session_id)
+    session: Any = await db.get_session(session_id)
     if not hasattr(session, "metadata"):
         return False
     metadata = coerce_json_value(getattr(session, "metadata", None) or {})
@@ -75,10 +81,10 @@ def archive_session(
         ARCHIVED_BY_METADATA_KEY: archived_by,
         ARCHIVED_AT_METADATA_KEY: datetime.now(UTC).isoformat(),
     }
-    db.upsert_session(cast(AgentSession | TeamSession | WorkflowSession, session))
+    await db.upsert_session(cast(AgentSession | TeamSession | WorkflowSession, session))
 
     if actor is not None:
-        record_audit_event(
+        await record_audit_event_async(
             actor,
             action="session.archive",
             resource_type="session",
@@ -87,15 +93,15 @@ def archive_session(
     return True
 
 
-def get_all_sessions(
+async def get_all_sessions_async(
     *,
     include_archived: bool = False,
     owner_user_id: str | None = None,
     include_runs: bool = False,
 ) -> list[dict[str, Any]]:
-    """Read session summaries through Agno PostgresDb."""
-    ensure_agno_postgres_tables()
-    result: Any = get_agno_postgres_db().get_sessions(
+    """Read session summaries through Agno AsyncPostgresDb."""
+    await ensure_agno_postgres_tables_async()
+    result: Any = await get_async_agno_postgres_db().get_sessions(
         user_id=owner_user_id,
         limit=500,
         page=1,
@@ -156,10 +162,14 @@ def _project_session_rows(
     return sessions
 
 
-def get_session_messages(session_id: str, *, actor: Any | None = None) -> list[dict[str, str]]:
-    """Read chat messages for one session through Agno PostgresDb."""
-    ensure_agno_postgres_tables()
-    row = get_agno_postgres_db().get_session(session_id, deserialize=False)
+async def get_session_messages_async(
+    session_id: str,
+    *,
+    actor: Any | None = None,
+) -> list[dict[str, str]]:
+    """Read chat messages for one session through Agno AsyncPostgresDb."""
+    await ensure_agno_postgres_tables_async()
+    row = await get_async_agno_postgres_db().get_session(session_id, deserialize=False)
     if not isinstance(row, dict):
         return []
 

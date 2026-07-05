@@ -21,7 +21,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.schema import CreateSchema
 
 from api.config import get_settings
-from api.persistence.database import get_control_plane_engine
+from api.persistence.database import get_async_control_plane_engine
 
 AUDIT_LOGS_TABLE = "audit_logs"
 
@@ -64,16 +64,16 @@ def audit_logs_table() -> Table:
     return table
 
 
-def ensure_audit_logs_table() -> None:
+async def ensure_audit_logs_table_async() -> None:
     table = audit_logs_table()
-    with get_control_plane_engine().begin() as conn:
-        conn.execute(CreateSchema(_app_schema(), if_not_exists=True))
-        table.create(conn, checkfirst=True)
+    async with get_async_control_plane_engine().begin() as conn:
+        await conn.execute(CreateSchema(_app_schema(), if_not_exists=True))
+        await conn.run_sync(table.create, checkfirst=True)
         for index in table.indexes:
-            index.create(conn, checkfirst=True)
+            await conn.run_sync(index.create, checkfirst=True)
 
 
-def insert_audit_log(
+async def insert_audit_log_async(
     *,
     actor_user_id: str,
     actor_email: str,
@@ -86,10 +86,10 @@ def insert_audit_log(
     user_agent: str,
     metadata: dict[str, Any],
 ) -> None:
-    ensure_audit_logs_table()
+    await ensure_audit_logs_table_async()
     table = audit_logs_table()
-    with get_control_plane_engine().begin() as conn:
-        conn.execute(
+    async with get_async_control_plane_engine().begin() as conn:
+        await conn.execute(
             insert(table).values(
                 actor_user_id=actor_user_id,
                 actor_email=actor_email,
@@ -105,7 +105,7 @@ def insert_audit_log(
         )
 
 
-def list_audit_logs(
+async def list_audit_logs_async(
     *,
     page: int,
     limit: int,
@@ -114,7 +114,7 @@ def list_audit_logs(
     resource_type: str | None = None,
     status: str | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
-    ensure_audit_logs_table()
+    await ensure_audit_logs_table_async()
     safe_page = max(1, page)
     safe_limit = min(200, max(1, limit))
     offset = (safe_page - 1) * safe_limit
@@ -143,8 +143,8 @@ def list_audit_logs(
         count_stmt = count_stmt.where(where_clause)
         rows_stmt = rows_stmt.where(where_clause)
 
-    with get_control_plane_engine().begin() as conn:
-        total = int(conn.execute(count_stmt).scalar_one())
-        rows = [dict(row) for row in conn.execute(rows_stmt).mappings().all()]
+    async with get_async_control_plane_engine().begin() as conn:
+        total = int((await conn.execute(count_stmt)).scalar_one())
+        rows = [dict(row) for row in (await conn.execute(rows_stmt)).mappings().all()]
 
     return rows, total

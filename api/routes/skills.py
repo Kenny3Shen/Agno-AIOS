@@ -9,16 +9,11 @@ from pydantic import BaseModel
 
 from api.auth.models import User
 from api.auth.permissions import require_permission
-from api.services.audit_service import audit_request_context, record_audit_event
+from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.skill_service import (
-    find_skill_dir,
-    get_skills_dir,
-    install_skill_archive,
-    is_skill_enabled,
-    iter_skill_dirs,
-    list_skill_scripts,
-    parse_skill_metadata,
-    set_skill_enabled,
+    install_skill_archive_async,
+    list_skill_infos_async,
+    set_skill_enabled_async,
 )
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
@@ -59,25 +54,7 @@ class SkillUploadResponse(BaseModel):
 @router.get("", response_model=SkillListResponse)
 async def list_skills(_user: User = Depends(require_permission("skill:read"))):
     """列出所有 Skill 及其元数据和启用状态"""
-    if not get_skills_dir().is_dir():
-        return SkillListResponse(skills=[])
-
-    skills: list[SkillInfo] = []
-
-    for entry in iter_skill_dirs():
-        name, description = parse_skill_metadata(entry)
-        scripts = list_skill_scripts(entry)
-        skills.append(
-            SkillInfo(
-                name=name,
-                description=description,
-                enabled=is_skill_enabled(entry, name),
-                has_scripts=len(scripts) > 0,
-                scripts=scripts,
-            )
-        )
-
-    return SkillListResponse(skills=skills)
+    return SkillListResponse(skills=[SkillInfo(**item) for item in await list_skill_infos_async()])
 
 
 @router.put("/{skill_name}/toggle", response_model=SkillToggleResponse)
@@ -88,11 +65,11 @@ async def toggle_skill(
     user: User = Depends(require_permission("skill:write")),
 ):
     """启用或禁用指定 Skill"""
-    if find_skill_dir(skill_name) is None:
+    try:
+        public_name = await set_skill_enabled_async(skill_name, body.enabled)
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' 不存在")
-
-    public_name = set_skill_enabled(skill_name, body.enabled)
-    record_audit_event(
+    await record_audit_event_async(
         user,
         action="skill.toggle",
         resource_type="skill",
@@ -116,7 +93,7 @@ async def upload_skill(
         raise HTTPException(status_code=400, detail="Skill archive must be a zip file")
 
     try:
-        public_name, description, dest = install_skill_archive(
+        public_name, description, dest = await install_skill_archive_async(
             await file.read(),
             requested_name=name.strip(),
         )
@@ -125,7 +102,7 @@ async def upload_skill(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    record_audit_event(
+    await record_audit_event_async(
         user,
         action="skill.upload",
         resource_type="skill",

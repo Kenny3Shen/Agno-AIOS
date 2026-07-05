@@ -437,15 +437,16 @@ const loadModels = async () => {
   modelLoading.value = true
   try {
     const config = await fetchModels()
-    modelOptions.value = config.models
+    const models = Array.isArray(config.models) ? config.models : []
+    modelOptions.value = models
     const savedId = localStorage.getItem(MODEL_STORAGE_KEY)
-    const enabledIds = new Set(config.models.filter((model) => model.enabled).map((model) => model.id))
+    const enabledIds = new Set(models.filter((model) => model.enabled).map((model) => model.id))
     if (savedId && enabledIds.has(savedId)) {
       selectedModelId.value = savedId
     } else if (enabledIds.has(config.active_model_id)) {
       selectedModelId.value = config.active_model_id
     } else {
-      selectedModelId.value = config.models.find((model) => model.enabled)?.id ?? config.models[0]?.id ?? null
+      selectedModelId.value = models.find((model) => model.enabled)?.id ?? models[0]?.id ?? null
     }
     persistSelectedModel()
   } catch {

@@ -79,6 +79,17 @@ assert.deepEqual(
   "session filters should combine archive status and keyword matching",
 )
 
+assert.deepEqual(
+  filterTraceSessions({ items: sessions }, {
+    sessionId: "",
+    userId: "",
+    keyword: "",
+    status: "active",
+  }),
+  [],
+  "session filters should ignore non-array responses instead of crashing the view",
+)
+
 assert.equal(
   findExactTraceSession(sessions, " SESSION-ALPHA ")?.session_id,
   "session-alpha",

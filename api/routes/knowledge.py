@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 from api.auth.models import User
 from api.auth.permissions import actor_id, has_permission, require_permission
-from api.services.audit_service import audit_request_context, record_audit_event
+from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.knowledge_service import get_knowledge_base_lifecycle
 
 router = APIRouter(prefix="/api/knowledge", tags=["Knowledge"])
@@ -41,8 +41,8 @@ async def get_knowledge_status(user: User = Depends(require_permission("knowledg
     owner_user_id = effective_knowledge_user_filter(user)
     knowledge_base = get_knowledge_base_lifecycle()
     return {
-        "status": knowledge_base.knowledge_status(owner_user_id=owner_user_id),
-        "documents": knowledge_base.list_documents(owner_user_id=owner_user_id),
+        "status": await knowledge_base.knowledge_status_async(owner_user_id=owner_user_id),
+        "documents": await knowledge_base.list_documents_async(owner_user_id=owner_user_id),
     }
 
 
@@ -53,14 +53,14 @@ async def create_text_document(
     user: User = Depends(require_permission("knowledge:write")),
 ) -> dict:
     try:
-        result = get_knowledge_base_lifecycle().add_text_document(
+        result = await get_knowledge_base_lifecycle().add_text_document_async(
             title=request.title,
             content=request.content,
             source=request.source,
             metadata=request.metadata,
             owner_user_id=actor_id(user),
         )
-        record_audit_event(
+        await record_audit_event_async(
             user,
             action="knowledge.create",
             resource_type="knowledge_document",
@@ -80,12 +80,12 @@ async def create_file_document(
     user: User = Depends(require_permission("knowledge:write")),
 ) -> dict:
     try:
-        result = get_knowledge_base_lifecycle().add_file_document(
+        result = await get_knowledge_base_lifecycle().add_file_document_async(
             path=request.path,
             title=request.title,
             owner_user_id=actor_id(user),
         )
-        record_audit_event(
+        await record_audit_event_async(
             user,
             action="knowledge.create",
             resource_type="knowledge_document",
@@ -104,13 +104,13 @@ async def remove_document(
     doc_id: str,
     user: User = Depends(require_permission("knowledge:write")),
 ) -> dict:
-    deleted = get_knowledge_base_lifecycle().delete_document(
+    deleted = await get_knowledge_base_lifecycle().delete_document_async(
         doc_id,
         owner_user_id=effective_knowledge_user_filter(user),
     )
     if not deleted:
         raise HTTPException(status_code=404, detail="知识文档不存在")
-    record_audit_event(
+    await record_audit_event_async(
         user,
         action="knowledge.delete",
         resource_type="knowledge_document",
@@ -127,7 +127,7 @@ async def search_knowledge(
 ) -> dict:
     try:
         return {
-            "results": get_knowledge_base_lifecycle().search_documents(
+            "results": await get_knowledge_base_lifecycle().search_documents_async(
                 request.query,
                 request.limit,
                 search_type=request.search_type,
@@ -143,10 +143,10 @@ async def clear_knowledge(
     request_ctx: Request,
     user: User = Depends(require_permission("knowledge:write")),
 ) -> dict:
-    result = get_knowledge_base_lifecycle().clear_knowledge_base(
+    result = await get_knowledge_base_lifecycle().clear_knowledge_base_async(
         owner_user_id=effective_knowledge_user_filter(user),
     )
-    record_audit_event(
+    await record_audit_event_async(
         user,
         action="knowledge.clear",
         resource_type="knowledge",

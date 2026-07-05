@@ -22,6 +22,7 @@ def test_user_can_run_collect_but_guest_cannot():
 def test_collect_parse_requires_write_permission():
     source = inspect.getsource(collect.parse_url_to_markdown)
     assert 'require_permission("collect:write")' in source
+    assert "await fetch_and_parse_url" in source
     assert "record_audit_event" in source
     assert 'action="collect.parse"' in source
 

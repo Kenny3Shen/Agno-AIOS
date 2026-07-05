@@ -5,7 +5,7 @@ from loguru import logger
 
 from api.auth.models import User
 from api.auth.permissions import require_permission
-from api.services.audit_service import list_audit_events
+from api.services.audit_service import list_audit_events_async
 
 router = APIRouter(prefix="/api/audit", tags=["Audit"])
 
@@ -21,7 +21,7 @@ async def list_audit_logs(
     user: User = Depends(require_permission("audit:read")),
 ) -> dict[str, Any]:
     try:
-        items, total = list_audit_events(
+        items, total = await list_audit_events_async(
             page=page,
             limit=limit,
             actor_user_id=actor_user_id,

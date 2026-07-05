@@ -11,11 +11,11 @@ from api.auth.models import User
 from api.auth.permissions import require_permission
 from api.config import Settings, get_settings
 from api.dependencies import get_app_settings
-from api.services.audit_service import audit_request_context, record_audit_event
+from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.model_config_service import (
-    load_model_config,
-    public_model_config,
-    save_model_config,
+    load_model_config_async,
+    public_model_config_async,
+    save_model_config_async,
 )
 
 router = APIRouter(prefix="/api", tags=["Settings"])
@@ -108,13 +108,13 @@ def _extract_upstream_error(data: Any, fallback: str) -> str:
     return fallback
 
 
-def _resolve_model_secret(model: ModelConfig) -> dict[str, Any]:
+async def _resolve_model_secret(model: ModelConfig) -> dict[str, Any]:
     data = model.model_dump()
     if "*" not in data.get("api_key", ""):
         return data
 
     data["api_key"] = ""
-    for saved in load_model_config().get("models", []):
+    for saved in (await load_model_config_async()).get("models", []):
         if isinstance(saved, dict) and saved.get("id") == model.id:
             data["api_key"] = str(saved.get("api_key") or "")
             break
@@ -141,7 +141,7 @@ def _validate_test_model(model: dict[str, Any]) -> None:
 async def run_model_connectivity_test(
     model: ModelConfig,
 ) -> ModelConnectivityTestResponse:
-    resolved = _resolve_model_secret(model)
+    resolved = await _resolve_model_secret(model)
     _validate_test_model(resolved)
 
     started = perf_counter()
@@ -225,7 +225,7 @@ async def read_settings(
 @router.get("/models")
 async def get_models(_user: User = Depends(require_permission("settings:read"))) -> dict:
     """获取可选模型配置（敏感值已脱敏）"""
-    return public_model_config()
+    return await public_model_config_async()
 
 
 @router.put("/models")
@@ -236,11 +236,11 @@ async def update_models(
 ) -> dict:
     """保存模型配置和默认选择"""
     logger.info("模型配置已更新")
-    result = save_model_config(
+    result = await save_model_config_async(
         [model.model_dump() for model in body.models],
         body.active_model_id,
     )
-    record_audit_event(
+    await record_audit_event_async(
         user,
         action="settings.update",
         resource_type="models",
@@ -258,7 +258,7 @@ async def test_model_connectivity(
 ) -> ModelConnectivityTestResponse:
     """测试 OpenAI-compatible 模型配置连通性。"""
     result = await run_model_connectivity_test(body)
-    record_audit_event(
+    await record_audit_event_async(
         user,
         action="settings.test_model",
         resource_type="models",
@@ -298,7 +298,7 @@ async def update_settings(
     for key in CONFIGURABLE_KEYS:
         raw = _setting_value(active_settings, key)
         result[key] = _mask_secret(key, raw)
-    record_audit_event(
+    await record_audit_event_async(
         user,
         action="settings.update",
         resource_type="settings",

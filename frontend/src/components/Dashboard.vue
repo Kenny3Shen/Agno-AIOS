@@ -19,7 +19,7 @@
       </div>
     </header>
 
-    <section class="ag-stat-strip mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+    <section class="ag-stat-strip mt-3">
       <article v-for="metric in topMetrics" :key="metric.label" class="situation-metric ag-stat-chip">
         <span>{{ metric.label }}</span>
         <strong :title="metric.hint">{{ metric.value }}</strong>
@@ -450,7 +450,6 @@ onMounted(() => {
 }
 
 .situation-header,
-.situation-metric,
 .situation-panel,
 .run-row,
 .agent-load-row,
@@ -468,17 +467,8 @@ onMounted(() => {
   padding: 12px;
 }
 
-.situation-metric,
 .situation-panel {
   padding: 14px;
-}
-
-.situation-metric {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 9px 11px;
 }
 
 .chart-panel {
@@ -646,22 +636,6 @@ onMounted(() => {
 
 .span-bar-error {
   background: linear-gradient(90deg, var(--ag-red), var(--ag-yellow));
-}
-
-.situation-metric span,
-.situation-metric em {
-  display: block;
-  color: var(--ag-muted);
-  font-size: 11px;
-  font-style: normal;
-}
-
-.situation-metric strong {
-  display: block;
-  color: var(--ag-heading);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 14px;
-  font-weight: 700;
 }
 
 .panel-title {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 
+from anyio import to_thread
 from loguru import logger
 
 from api.config import Settings, get_settings
@@ -19,3 +20,7 @@ def configure_logging(settings: Settings | None = None) -> None:
         rotation="10 MB",
         retention="10 days",
     )
+
+
+async def configure_logging_async(settings: Settings | None = None) -> None:
+    await to_thread.run_sync(configure_logging, settings)

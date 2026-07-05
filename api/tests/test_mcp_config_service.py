@@ -6,14 +6,17 @@ import pytest
 from api.services import mcp_config_service
 
 
-def test_apply_service_toggle_updates_config_and_returns_audit_shape():
+@pytest.mark.asyncio
+async def test_apply_service_toggle_updates_config_and_returns_audit_shape():
     stored = {"mcp": {"playbook": True}}
     writes: list[dict] = []
     with (
-        patch.object(mcp_config_service, "read_mcp_config", return_value=stored),
-        patch.object(mcp_config_service, "write_mcp_config", side_effect=writes.append),
+        patch.object(mcp_config_service, "read_mcp_config_async", return_value=stored),
+        patch.object(
+            mcp_config_service, "write_mcp_config_async", side_effect=writes.append
+        ),
     ):
-        change = mcp_config_service.apply_service_toggle("playbook", False)
+        change = await mcp_config_service.apply_service_toggle_async("playbook", False)
     assert writes[0]["mcp"]["playbook"] is False
     assert change.response == {
         "success": True,
@@ -26,13 +29,15 @@ def test_apply_service_toggle_updates_config_and_returns_audit_shape():
     assert change.metadata == {"enabled": False}
 
 
-def test_apply_service_toggle_rejects_removed_agent_service():
+@pytest.mark.asyncio
+async def test_apply_service_toggle_rejects_removed_agent_service():
     with pytest.raises(HTTPException) as exc:
-        mcp_config_service.apply_service_toggle("agent", True)
+        await mcp_config_service.apply_service_toggle_async("agent", True)
     assert exc.value.status_code == 400
 
 
-def test_apply_mcp_upload_normalizes_standard_mcp_manifest():
+@pytest.mark.asyncio
+async def test_apply_mcp_upload_normalizes_standard_mcp_manifest():
     stored = {"mcp_servers": []}
     writes: list[dict] = []
     manifest = """
@@ -47,10 +52,12 @@ def test_apply_mcp_upload_normalizes_standard_mcp_manifest():
         }
         """
     with (
-        patch.object(mcp_config_service, "read_mcp_config", return_value=stored),
-        patch.object(mcp_config_service, "write_mcp_config", side_effect=writes.append),
+        patch.object(mcp_config_service, "read_mcp_config_async", return_value=stored),
+        patch.object(
+            mcp_config_service, "write_mcp_config_async", side_effect=writes.append
+        ),
     ):
-        change = mcp_config_service.apply_mcp_upload(
+        change = await mcp_config_service.apply_mcp_upload_async(
             name="Filesystem", manifest=manifest
         )
     assert writes[0]["mcp_servers"] == [
@@ -74,7 +81,8 @@ def test_apply_mcp_upload_normalizes_standard_mcp_manifest():
     assert change.metadata == {"kind": "mcp-json", "has_manifest": True}
 
 
-def test_apply_mcp_upload_rejects_empty_manifest_and_duplicate_name():
+@pytest.mark.asyncio
+async def test_apply_mcp_upload_rejects_empty_manifest_and_duplicate_name():
     stored = {
         "mcp_servers": [
             {
@@ -86,15 +94,20 @@ def test_apply_mcp_upload_rejects_empty_manifest_and_duplicate_name():
             }
         ],
     }
-    with patch.object(mcp_config_service, "read_mcp_config", return_value=stored):
+    with patch.object(mcp_config_service, "read_mcp_config_async", return_value=stored):
         with pytest.raises(HTTPException) as exc:
-            mcp_config_service.apply_mcp_upload(name="New Agent")
+            await mcp_config_service.apply_mcp_upload_async(name="New Agent")
     assert exc.value.status_code == 400
 
     manifest = '{"mcpServers":{"tool":{"command":"python"}}}'
-    with patch.object(mcp_config_service, "read_mcp_config", return_value=stored):
+    with patch.object(mcp_config_service, "read_mcp_config_async", return_value=stored):
         with pytest.raises(HTTPException) as exc:
-            mcp_config_service.apply_mcp_upload(
+            await mcp_config_service.apply_mcp_upload_async(
                 name="Existing Server", manifest=manifest
             )
     assert exc.value.status_code == 409
+
+
+def test_mcp_config_service_does_not_expose_sync_mutation_facades():
+    assert not hasattr(mcp_config_service, "apply_service_toggle")
+    assert not hasattr(mcp_config_service, "apply_mcp_upload")
