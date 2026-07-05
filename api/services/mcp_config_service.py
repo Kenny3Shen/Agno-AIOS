@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 import json
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import HTTPException
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
 from api.mcp.config import (
     SERVICE_IDS,
@@ -10,6 +11,22 @@ from api.mcp.config import (
     read_mcp_config_async,
     write_mcp_config_async,
 )
+
+NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+class StandardMcpServer(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    command: NonEmptyString
+    args: list[str] = Field(default_factory=list)
+    env: dict[str, str] = Field(default_factory=dict)
+
+
+class StandardMcpManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    mcpServers: dict[NonEmptyString, StandardMcpServer] = Field(min_length=1)
 
 
 @dataclass(frozen=True)
@@ -19,6 +36,17 @@ class McpConfigChange:
     resource_type: str
     resource_id: str
     metadata: dict[str, Any] | None = None
+
+
+def _manifest_validation_error(exc: ValidationError) -> HTTPException:
+    errors = exc.errors()
+    detail = "manifest must use standard MCP mcpServers format"
+    if errors:
+        first = errors[0]
+        loc = ".".join(str(part) for part in first.get("loc", ()))
+        message = first.get("msg", "invalid value")
+        detail = f"{detail}: {loc} {message}" if loc else f"{detail}: {message}"
+    return HTTPException(status_code=400, detail=detail)
 
 
 async def apply_service_toggle_async(service_id: str, enabled: bool) -> McpConfigChange:
@@ -46,31 +74,7 @@ async def apply_service_toggle_async(service_id: str, enabled: bool) -> McpConfi
     )
 
 
-def _require_string(value: Any, field: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise HTTPException(status_code=400, detail=f"{field} must be a non-empty string")
-    return value.strip()
-
-
-def _validate_string_list(value: Any, field: str) -> list[str]:
-    if value is None:
-        return []
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise HTTPException(status_code=400, detail=f"{field} must be a string array")
-    return value
-
-
-def _validate_string_map(value: Any, field: str) -> dict[str, str]:
-    if value is None:
-        return {}
-    if not isinstance(value, dict) or not all(
-        isinstance(key, str) and isinstance(item, str) for key, item in value.items()
-    ):
-        raise HTTPException(status_code=400, detail=f"{field} must be a string map")
-    return value
-
-
-def _parse_mcp_manifest(raw: str, name: str) -> tuple[str, dict[str, Any]]:
+def _parse_mcp_manifest(raw: str) -> tuple[str, dict[str, Any]]:
     text = raw.strip()
     if not text:
         raise HTTPException(status_code=400, detail="manifest 不能为空")
@@ -81,48 +85,18 @@ def _parse_mcp_manifest(raw: str, name: str) -> tuple[str, dict[str, Any]]:
     if not isinstance(manifest, dict):
         raise HTTPException(status_code=400, detail="manifest must be a JSON object")
 
-    if "mcpServers" in manifest:
-        servers = manifest.get("mcpServers")
-        if not isinstance(servers, dict) or not servers:
-            raise HTTPException(status_code=400, detail="mcpServers must be a non-empty object")
-        selected_name = name if name in servers else next(iter(servers))
-        server = servers.get(selected_name)
-        if not isinstance(server, dict):
-            raise HTTPException(status_code=400, detail="selected mcpServers entry is invalid")
-        normalized_server = {
-            "command": _require_string(server.get("command"), "mcpServers.command"),
-            "args": _validate_string_list(server.get("args"), "mcpServers.args"),
-            "env": _validate_string_map(server.get("env"), "mcpServers.env"),
-        }
-        return "mcp-json", {"mcpServers": {selected_name: normalized_server}}
+    if "mcpServers" not in manifest:
+        raise HTTPException(
+            status_code=400,
+            detail="manifest must use standard MCP mcpServers format",
+        )
 
-    if "source" in manifest:
-        source = manifest.get("source")
-        if not isinstance(source, dict):
-            raise HTTPException(status_code=400, detail="source must be an object")
-        normalized_manifest: dict[str, Any] = {
-            "source": {
-                "type": str(source.get("type") or "filesystem"),
-                "path": _require_string(source.get("path"), "source.path"),
-            }
-        }
-        entrypoint = source.get("entrypoint")
-        if entrypoint is not None:
-            normalized_manifest["source"]["entrypoint"] = _require_string(
-                entrypoint, "source.entrypoint"
-            )
-        for section in ("environment", "deployment"):
-            value = manifest.get(section)
-            if value is not None:
-                if not isinstance(value, dict):
-                    raise HTTPException(status_code=400, detail=f"{section} must be an object")
-                normalized_manifest[section] = value
-        return "fastmcp-json", normalized_manifest
+    try:
+        standard_manifest = StandardMcpManifest.model_validate(manifest)
+    except ValidationError as exc:
+        raise _manifest_validation_error(exc) from exc
 
-    raise HTTPException(
-        status_code=400,
-        detail="manifest must use fastmcp.json source or standard mcpServers format",
-    )
+    return "mcp-json", standard_manifest.model_dump(mode="json")
 
 
 async def apply_mcp_upload_async(
@@ -136,7 +110,7 @@ async def apply_mcp_upload_async(
     if not normalized_name:
         raise HTTPException(status_code=400, detail="name 不能为空")
     normalized_description = description.strip()
-    kind, normalized_manifest = _parse_mcp_manifest(manifest, normalized_name)
+    kind, normalized_manifest = _parse_mcp_manifest(manifest)
 
     data = await read_mcp_config_async()
     servers = normalize_mcp_servers(data.get("mcp_servers", []))

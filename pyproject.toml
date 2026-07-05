@@ -19,7 +19,6 @@ dependencies = [
     "opentelemetry-api>=1.39.1",
     "opentelemetry-sdk>=1.39.1",
     "openinference-instrumentation-agno>=0.1.27",
-    "tomli-w>=1.2.0",
     "beautifulsoup4>=4.15.0",
     "pyyaml>=6.0.3",
     "sentence-transformers>=3.0.0",
@@ -36,6 +35,7 @@ dependencies = [
     "pytz>=2026.2",
     "chonkie[code]>=1.6.8",
     "markdown>=3.10.2",
+    "sse-starlette>=3.4.4",
 ]
 
 [project.scripts]

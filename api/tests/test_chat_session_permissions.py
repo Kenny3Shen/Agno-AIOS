@@ -105,6 +105,7 @@ async def test_chat_allows_owned_existing_session_id():
             user=actor("u1"),
         )
     assert response.media_type == "text/event-stream"
+    assert response.sep == "\n"
 
 
 @pytest.mark.asyncio
@@ -117,9 +118,9 @@ async def test_event_generator_passes_knowledge_owner_filter():
         yield "ok"
 
     with patch.object(chat, "stream_security_run", fake_stream_security_run):
-        chunks = [
-            chunk
-            async for chunk in chat._event_generator(
+        events = [
+            event
+            async for event in chat._event_generator(
                 security_run_runtime.SecurityRunRequest.from_chat_args(
                     "hello", user_id="u1", knowledge_owner_user_id="u1"
                 )
@@ -127,4 +128,4 @@ async def test_event_generator_passes_knowledge_owner_filter():
         ]
     assert captured["message"] == "hello"
     assert captured["knowledge_owner_user_id"] == "u1"
-    assert "data: ok" in chunks[0]
+    assert events == [{"data": "ok"}, {"data": "[DONE]"}]

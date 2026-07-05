@@ -456,10 +456,10 @@ export const zhCN = {
     upload: {
       open: "上传",
       title: "上传 MCP",
-      description: "粘贴符合 FastMCP fastmcp.json / 标准 mcpServers 的 JSON manifest。",
+      description: "粘贴标准 MCP JSON，需包含非空 mcpServers；每个 server 可定义 command、args、env。",
       namePlaceholder: "名称，例如 CVE Hunter",
       descriptionPlaceholder: "能力描述",
-      manifestPlaceholder: "粘贴 fastmcp.json 或标准 mcpServers JSON",
+      manifestPlaceholder: "粘贴标准 mcpServers JSON",
       cancel: "取消上传",
       submit: "上传",
     },

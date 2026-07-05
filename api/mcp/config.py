@@ -1,9 +1,9 @@
 import secrets
 import time
+import json
 import tomllib
 from typing import Any
 
-import tomli_w
 from anyio import Path as AsyncPath
 
 from api.persistence.mcp import (
@@ -18,7 +18,7 @@ from api.services.postgres_store import mcp_schema, postgres_label
 
 SERVICE_IDS = ("playbook", "basic")
 MCP_DATA_DIR = CONFIG_DIR / "mcp"
-MCP_CONFIG_FILE = MCP_DATA_DIR / "mcp_config.toml"
+MCP_CONFIG_FILE = MCP_DATA_DIR / "mcp_config.json"
 MCP_TOKENS_TABLE = "mcp_tokens"
 MCP_TOKENS_DB = postgres_label(mcp_schema(), MCP_TOKENS_TABLE)
 
@@ -55,12 +55,38 @@ def normalize_mcp_servers(entries: Any) -> list[dict[str, Any]]:
     return normalized
 
 
+def _normalize_mcp_flags(value: Any) -> dict[str, bool]:
+    raw_mcp_cfg: dict[str, Any] = value if isinstance(value, dict) else {}
+    return {
+        service_id: bool(raw_mcp_cfg.get(service_id, True))
+        for service_id in SERVICE_IDS
+    }
+
+
 def _normalize_mcp_config(data: dict[str, Any]) -> dict[str, Any]:
-    if "mcp" not in data or not isinstance(data["mcp"], dict):
-        data["mcp"] = {}
-    if "mcp_servers" not in data or not isinstance(data["mcp_servers"], list):
-        data["mcp_servers"] = []
-    return data
+    return {
+        "mcp": _normalize_mcp_flags(data.get("mcp")),
+        "mcp_servers": normalize_mcp_servers(data.get("mcp_servers", [])),
+    }
+
+
+async def _legacy_mcp_config_file() -> AsyncPath:
+    return AsyncPath(MCP_DATA_DIR / "mcp_config.toml")
+
+
+async def _read_legacy_mcp_config_async() -> dict[str, Any] | None:
+    legacy_file = await _legacy_mcp_config_file()
+    if not await legacy_file.exists():
+        return None
+    try:
+        data = tomllib.loads(await legacy_file.read_text(encoding="utf-8"))
+    except Exception:
+        return _default_config()
+    if not isinstance(data, dict):
+        return _default_config()
+    normalized = _normalize_mcp_config(data)
+    await write_mcp_config_async(normalized)
+    return normalized
 
 
 async def read_mcp_config_async() -> dict[str, Any]:
@@ -68,10 +94,13 @@ async def read_mcp_config_async() -> dict[str, Any]:
     await data_dir.mkdir(parents=True, exist_ok=True)
     config_file = AsyncPath(MCP_CONFIG_FILE)
     if not await config_file.exists():
-        return _default_config()
+        legacy_config = await _read_legacy_mcp_config_async()
+        return legacy_config if legacy_config is not None else _default_config()
     try:
-        data = tomllib.loads(await config_file.read_text(encoding="utf-8"))
+        data = json.loads(await config_file.read_text(encoding="utf-8"))
     except Exception:
+        return _default_config()
+    if not isinstance(data, dict):
         return _default_config()
     return _normalize_mcp_config(data)
 
@@ -79,20 +108,15 @@ async def read_mcp_config_async() -> dict[str, Any]:
 async def write_mcp_config_async(data: dict[str, Any]) -> None:
     data_dir = AsyncPath(MCP_DATA_DIR)
     await data_dir.mkdir(parents=True, exist_ok=True)
-    mcp_cfg = data.setdefault("mcp", {})
-    if not isinstance(mcp_cfg, dict):
-        data["mcp"] = {}
-    data["mcp_servers"] = normalize_mcp_servers(data.get("mcp_servers", []))
-    await AsyncPath(MCP_CONFIG_FILE).write_text(tomli_w.dumps(data), encoding="utf-8")
+    normalized = _normalize_mcp_config(data)
+    await AsyncPath(MCP_CONFIG_FILE).write_text(
+        json.dumps(normalized, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _services_from_loaded_config(data: dict[str, Any]) -> dict[str, bool]:
-    cfg = data
-    raw_mcp_cfg = cfg.get("mcp")
-    mcp_cfg: dict[str, Any] = raw_mcp_cfg if isinstance(raw_mcp_cfg, dict) else {}
-    return {
-        service_id: bool(mcp_cfg.get(service_id, True)) for service_id in SERVICE_IDS
-    }
+    return _normalize_mcp_flags(data.get("mcp"))
 
 
 async def services_from_config_async(data: dict[str, Any] | None = None) -> dict[str, bool]:

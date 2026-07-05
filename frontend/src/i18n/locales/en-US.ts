@@ -458,10 +458,10 @@ export const enUS = {
     upload: {
       open: "Upload",
       title: "Upload MCP",
-      description: "Paste JSON that follows FastMCP fastmcp.json or standard mcpServers format.",
+      description: "Paste standard MCP JSON with a non-empty mcpServers object. Each server may define command, args, and env.",
       namePlaceholder: "Name, for example CVE Hunter",
       descriptionPlaceholder: "Capability description",
-      manifestPlaceholder: "Paste fastmcp.json or standard mcpServers JSON",
+      manifestPlaceholder: "Paste standard mcpServers JSON",
       cancel: "Cancel upload",
       submit: "Upload",
     },

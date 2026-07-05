@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sse_starlette.sse import EventSourceResponse
 
 from api.auth.models import User
 from api.auth.permissions import actor_id, assert_owned_resource, has_permission, require_permission
@@ -22,22 +22,17 @@ class ChatRequest(BaseModel):
     model_id: str | None = None
 
 
-def _format_sse(data: str) -> str:
-    lines = data.splitlines() or [""]
-    return "".join(f"data: {line}\n" for line in lines) + "\n"
-
-
 async def _event_generator(
     run_request: SecurityRunRequest,
 ):
     try:
         async for chunk in stream_security_run(run_request):
             if chunk:
-                yield _format_sse(chunk)
-        yield _format_sse("[DONE]")
+                yield {"data": chunk}
+        yield {"data": "[DONE]"}
     except Exception as e:
         logger.error(f"处理聊天错误: {e}")
-        yield "event: error\n" + _format_sse(str(e))
+        yield {"event": "error", "data": str(e)}
 
 
 @router.post("/chat")
@@ -64,10 +59,10 @@ async def chat_agent(
             if has_permission(user, "knowledge:read:any")
             else actor_id(user),
         )
-        return StreamingResponse(
+        return EventSourceResponse(
             _event_generator(run_request),
-            media_type="text/event-stream",
             headers={"Cache-Control": "no-cache"},
+            sep="\n",
         )
     except HTTPException:
         raise
