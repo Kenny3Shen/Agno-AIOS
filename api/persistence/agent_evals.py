@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from sqlalchemy import (
@@ -31,6 +32,9 @@ SUITES_TABLE = "agent_eval_suites"
 CASES_TABLE = "agent_eval_cases"
 SUITE_RUNS_TABLE = "agent_eval_suite_runs"
 CASE_RUNS_TABLE = "agent_eval_case_runs"
+
+_agent_eval_tables_lock = asyncio.Lock()
+_agent_eval_tables_ready = False
 
 
 def _app_schema() -> str:
@@ -142,6 +146,17 @@ def agent_eval_case_runs_table() -> Table:
 
 
 async def ensure_agent_eval_tables_async() -> None:
+    global _agent_eval_tables_ready
+    if _agent_eval_tables_ready:
+        return
+    async with _agent_eval_tables_lock:
+        if _agent_eval_tables_ready:
+            return
+        await _create_agent_eval_tables_async()
+        _agent_eval_tables_ready = True
+
+
+async def _create_agent_eval_tables_async() -> None:
     tables = (
         agent_eval_suites_table(),
         agent_eval_cases_table(),

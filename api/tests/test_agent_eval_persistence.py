@@ -1,7 +1,10 @@
+import asyncio
 from types import SimpleNamespace
 
+import pytest
 from sqlalchemy.dialects import postgresql
 
+from api.persistence import agent_evals as persistence
 from api.auth.permissions import has_permission
 from api.persistence.agent_evals import (
     agent_eval_case_runs_table,
@@ -30,6 +33,45 @@ from api.persistence.agent_evals import (
     update_suite_run_row_async,
 )
 from api.services.security_policy import CONTROL_MODULE_PERMISSIONS
+
+
+class FakeBootstrapConnection:
+    def __init__(self, engine: "FakeBootstrapEngine"):
+        self.engine = engine
+
+    async def execute(self, statement: object) -> None:
+        await asyncio.sleep(0)
+
+    async def run_sync(self, callback: object, **kwargs: object) -> None:
+        if self.engine.in_ddl:
+            self.engine.concurrent_ddl_seen = True
+        self.engine.in_ddl = True
+        self.engine.run_sync_calls += 1
+        await asyncio.sleep(0)
+        self.engine.in_ddl = False
+
+
+class FakeBootstrapBegin:
+    def __init__(self, engine: "FakeBootstrapEngine"):
+        self.engine = engine
+
+    async def __aenter__(self) -> FakeBootstrapConnection:
+        self.engine.begin_calls += 1
+        return FakeBootstrapConnection(self.engine)
+
+    async def __aexit__(self, exc_type: object, exc: object, traceback: object) -> None:
+        return None
+
+
+class FakeBootstrapEngine:
+    def __init__(self):
+        self.begin_calls = 0
+        self.run_sync_calls = 0
+        self.in_ddl = False
+        self.concurrent_ddl_seen = False
+
+    def begin(self) -> FakeBootstrapBegin:
+        return FakeBootstrapBegin(self)
 
 
 def actor(role: str):
@@ -94,3 +136,20 @@ def test_case_runs_by_agno_eval_run_ids_uses_single_jsonb_query():
     assert "agno_eval_run_ids" in compiled
     assert compiled.count("@>") == 2
     assert " OR " in compiled
+
+
+@pytest.mark.asyncio
+async def test_ensure_agent_eval_tables_serializes_concurrent_bootstrap(monkeypatch: pytest.MonkeyPatch):
+    engine = FakeBootstrapEngine()
+    monkeypatch.setattr(persistence, "_agent_eval_tables_ready", False, raising=False)
+    monkeypatch.setattr(persistence, "_agent_eval_tables_lock", asyncio.Lock(), raising=False)
+    monkeypatch.setattr(persistence, "get_async_control_plane_engine", lambda: engine)
+
+    await asyncio.gather(
+        persistence.ensure_agent_eval_tables_async(),
+        persistence.ensure_agent_eval_tables_async(),
+    )
+
+    assert engine.concurrent_ddl_seen is False
+    assert engine.begin_calls == 1
+    assert engine.run_sync_calls > 0
