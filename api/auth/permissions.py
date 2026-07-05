@@ -25,6 +25,7 @@ ROLE_PERMISSIONS: dict[Role, set[str]] = {
         "mcp:read",
         "skill:read",
         "settings:read",
+        "agent_eval:read",
     },
     "guest": {
         "session:read:own",

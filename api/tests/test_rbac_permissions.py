@@ -44,3 +44,17 @@ def test_guest_is_read_only_for_owned_resources():
     assert has_permission(actor, "knowledge:read")
     assert not has_permission(actor, "session:write:own")
     assert not has_permission(actor, "knowledge:write")
+
+
+def test_agent_eval_permissions_are_role_scoped():
+    admin = user("admin")
+    normal_user = user("user")
+    guest = user("guest")
+
+    assert has_permission(admin, "agent_eval:read")
+    assert has_permission(admin, "agent_eval:write")
+    assert has_permission(admin, "agent_eval:run")
+    assert has_permission(normal_user, "agent_eval:read")
+    assert not has_permission(normal_user, "agent_eval:write")
+    assert not has_permission(normal_user, "agent_eval:run")
+    assert not has_permission(guest, "agent_eval:read")

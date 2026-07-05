@@ -13,7 +13,7 @@ CONTROL_MODULE_PERMISSIONS = {
     "studio": "mcp:read",
     "memory": "memory:read:own",
     "metrics": "metrics:read:own",
-    "evaluation": "admin:read",
+    "evaluation": "agent_eval:read",
     "approvals": "admin:read",
     "scheduler": "admin:read",
     "knowledge": "knowledge:read",
@@ -40,6 +40,14 @@ def require_control_module_access(module: str, actor: Any) -> None:
 
 def require_scheduler_write(actor: Any) -> None:
     require_actor_permission(actor, "admin:read")
+
+
+def require_agent_eval_write(actor: Any) -> None:
+    require_actor_permission(actor, "agent_eval:write")
+
+
+def require_agent_eval_run(actor: Any) -> None:
+    require_actor_permission(actor, "agent_eval:run")
 
 
 def require_actor_permission(actor: Any, permission: str) -> None:
