@@ -29,7 +29,6 @@ from api.routes import (
     trace,
 )
 from api.services.postgres_store import get_async_agno_postgres_db
-from api.services.async_pgvector import dispose_async_pgvector_engines
 from api.services.security_run_runtime import DEFAULT_SECURITY_RUN_RUNTIME
 from api.utils.db import close_db_pool, get_db_pool
 
@@ -84,7 +83,6 @@ async def lifespan(app: FastAPI):
     finally:
         await mcp_runtime.shutdown()
         await close_auth_engine()
-        await dispose_async_pgvector_engines()
         await dispose_async_control_plane_engine()
         await close_db_pool()
         logger.info("关闭 {}", app_settings.app_name)
