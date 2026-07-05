@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
-from typing import Any, cast
+from typing import Any
 
 from agno.db.postgres import AsyncPostgresDb
-from psycopg.rows import dict_row
-from psycopg_pool import AsyncConnectionPool
 
 from api.config import get_settings
 
@@ -61,28 +59,6 @@ def postgres_async_sqlalchemy_url() -> str:
 
 def postgres_label(schema: str, table_name: str) -> str:
     return f"postgres:{postgres_database()}.{schema}.{table_name}"
-
-
-_async_pool: AsyncConnectionPool[Any] | None = None
-
-
-async def get_postgres_pool() -> AsyncConnectionPool[Any]:
-    global _async_pool
-    if _async_pool is None:
-        _async_pool = AsyncConnectionPool(
-            conninfo=postgres_dsn(),
-            kwargs={"row_factory": cast(Any, dict_row), "autocommit": True},
-            open=False,
-        )
-        await _async_pool.open()
-    return _async_pool
-
-
-async def close_postgres_pool() -> None:
-    global _async_pool
-    if _async_pool is not None:
-        await _async_pool.close()
-        _async_pool = None
 
 
 @lru_cache(maxsize=1)

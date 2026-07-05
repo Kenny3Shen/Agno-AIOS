@@ -97,7 +97,7 @@ Chat session 不是授权 secret。后端把 `session_id` 当作标识符，并�
 
 Sessions 和 runs 通过 Agno `AsyncPostgresDb` 从 Agno-owned `agno_sessions` 读取。UI 删除 Chat session 是 soft archive：服务把 archive marker 写入 Agno session metadata，不再创建或读写 `app.chat_session_archives`，也不会删除 runs 或 traces。
 
-Traces 通过 Agno `AsyncPostgresDb` 和 async Postgres pool projection 从 `agno_traces` 和 `agno_spans` 读取。Trace UI 使用 `session_id`、`run_id`、`trace_id`、`span_id`、`agent_id`、`team_id` 和 `workflow_id` 把用户会话和执行细节关联起来。
+Traces 通过 Agno `AsyncPostgresDb` 读取；OS Control dashboard 只在 Agno API 尚不覆盖的聚合计数上保留窄范围 Async SQLAlchemy projection。Trace UI 使用 `session_id`、`run_id`、`trace_id`、`span_id`、`agent_id`、`team_id` 和 `workflow_id` 把用户会话和执行细节关联起来。
 
 ## Knowledge
 
@@ -105,7 +105,7 @@ Knowledge documents 通过 metadata 做 user scope。Chat runtime 在存在当�
 
 PgVector 入口按 Agno 文档推荐的 async Knowledge API 使用：runtime 构造 Agno `PgVector`，业务代码只调用 `Knowledge.ainsert()`、`Knowledge.asearch()` 等 async methods。AIOS 不再把本地 vector adapter 作为默认 runtime path；新的 Agno-owned persistence 访问必须优先使用 Agno async API。
 
-Agno API gap projections 是窄范围 async product views，不改变 table ownership：Knowledge delete/clear 使用 async SQLAlchemy 删除 vector rows 后通过 async contents DB 删除 catalog row；Knowledge dashboard 的 chunk-count 和 search result 的 content-id hydration 只读取 PgVector table 的 `id`、`content_id`、`meta_data`；Trace UI 和 dashboard 通过 Agno tracing API 读取 trace/span 后整理前端 payload，缺少聚合 API 时用 async Postgres pool 做轻量统计；AgentOS control payload 在 sessions/memory/scheduler 使用 Agno async APIs，在 metrics、knowledge 状态和 AIOS control tables 上保留 async projection。
+Agno API gap projections 是窄范围 async product views，不改变 table ownership：Knowledge delete/clear 使用 async SQLAlchemy 删除 vector rows 后通过 async contents DB 删除 catalog row；Knowledge dashboard 的 chunk-count 和 search result 的 content-id hydration 只读取 PgVector table 的 `id`、`content_id`、`meta_data`；Trace UI 和 dashboard 通过 Agno tracing API 读取 trace/span 后整理前端 payload，缺少聚合 API 时用 Async SQLAlchemy 做轻量统计；AgentOS control payload 在 sessions/memory/scheduler/metrics/knowledge 状态上优先使用 Agno async APIs，AIOS control tables 使用 Async SQLAlchemy。
 
 Embedding 和 rerank 模型计算不属于 async DB I/O。默认 Knowledge runtime 使用 Agno `SentenceTransformerEmbedder` 和 `SentenceTransformerReranker` 接入 `PgVector`，AIOS 不再维护自定义本地模型 adapter；如需调整模型行为，应优先沿用 Agno 提供的 embedder/reranker 扩展点。
 

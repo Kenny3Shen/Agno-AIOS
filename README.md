@@ -17,7 +17,7 @@ Agno AIOS 是一个面向安全运营的控制面和 AI 安全运营平台，基
 ## 技术栈
 
 - 前端：Vue 3、TypeScript、Vite/Rolldown、Element Plus、Pinia、vue-i18n、markdown-it、highlight.js、Mermaid、Bun。
-- 后端：FastAPI、FastAPI Users、SQLAlchemy Async、Pydantic Settings、Uvicorn、psycopg、psycopg-pool、httpx、Polars、loguru。
+- 后端：FastAPI、FastAPI Users、SQLAlchemy Async、Pydantic Settings、Uvicorn、psycopg、httpx、Polars、loguru。
 - Agent Runtime：Agno、OpenAI-compatible models、PostgresDb、Tracing、PgVector Knowledge、LocalSkills、MCPTools。
 - MCP：FastMCP，同进程挂载到 FastAPI 的 `/mcp/`。
 - 数据库：PostgreSQL + pgvector，按 `app`、`agno`、`mcp`、`knowledge` schema 分域。

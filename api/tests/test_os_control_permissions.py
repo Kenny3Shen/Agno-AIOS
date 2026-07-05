@@ -111,27 +111,18 @@ async def test_admin_session_payload_can_read_all_users():
     assert captured["owner_user_id"] is None
 
 
-def test_metrics_user_filter_uses_current_user():
-    where, params = os_control_service._user_where(actor("u1"), "trace:read:any")
-    assert where is not None
-    assert params == ("u1",)
+def test_metrics_user_scope_uses_current_user():
+    assert os_control_service._owner_user_id(actor("u1"), "trace:read:any") == "u1"
 
 
-def test_metrics_admin_filter_reads_all_users():
-    where, params = os_control_service._user_where(
-        actor("admin", "admin"), "trace:read:any"
-    )
-    assert where is None
-    assert params == ()
+def test_metrics_admin_scope_reads_all_users():
+    assert os_control_service._owner_user_id(actor("admin", "admin"), "trace:read:any") is None
 
 
 @pytest.mark.asyncio
 async def test_memory_payload_uses_current_user_for_ordinary_actor():
     db = FakeMemoryDb()
-    with (
-        patch.object(os_control_service, "ensure_agno_postgres_tables_async", new=AsyncMock()),
-        patch.object(os_control_service, "get_async_agno_postgres_db", return_value=db),
-    ):
+    with patch.object(os_control_service, "get_async_agno_postgres_db", return_value=db):
         payload = await os_control_service.get_memory_payload(
             actor("u1"), user_id="other-user", topic="preference", search="concise"
         )
@@ -147,10 +138,7 @@ async def test_memory_payload_uses_current_user_for_ordinary_actor():
 @pytest.mark.asyncio
 async def test_memory_payload_admin_can_filter_requested_user():
     db = FakeMemoryDb()
-    with (
-        patch.object(os_control_service, "ensure_agno_postgres_tables_async", new=AsyncMock()),
-        patch.object(os_control_service, "get_async_agno_postgres_db", return_value=db),
-    ):
+    with patch.object(os_control_service, "get_async_agno_postgres_db", return_value=db):
         payload = await os_control_service.get_memory_payload(
             actor("admin", "admin"), user_id="u2"
         )

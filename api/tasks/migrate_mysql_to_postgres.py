@@ -4,6 +4,7 @@ import asyncio
 import json
 from typing import Any
 
+from sqlalchemy import MetaData, Table, func, select
 from sqlalchemy.dialects import postgresql
 
 from api.mcp.config import (
@@ -12,6 +13,7 @@ from api.mcp.config import (
     upsert_token_record,
 )
 from api.persistence.cves import count_cve_rows, reset_cve_id_sequence, upsert_cve_row
+from api.persistence.database import get_async_control_plane_engine
 from api.persistence.mcp import reset_token_id_sequence
 from api.services.mysql_store import mysql_connect_async
 from api.services.postgres_store import (
@@ -19,7 +21,6 @@ from api.services.postgres_store import (
     coerce_json_value,
     ensure_agno_postgres_tables_async,
     get_async_agno_postgres_db,
-    get_postgres_pool,
     mcp_schema,
 )
 
@@ -78,18 +79,9 @@ async def _mysql_rows(table_name: str) -> list[dict[str, Any]]:
 
 
 async def _postgres_count(schema: str, table_name: str) -> int:
-    from psycopg import sql
-
-    pool = await get_postgres_pool()
-    async with pool.connection() as conn:
-        async with conn.cursor() as cursor:
-            await cursor.execute(
-                sql.SQL("SELECT COUNT(*) AS count FROM {}").format(
-                    sql.Identifier(schema, table_name)
-                )
-            )
-            row = await cursor.fetchone()
-            return int(row["count"]) if row else 0
+    table = Table(table_name, MetaData(schema=schema))
+    async with get_async_control_plane_engine().begin() as conn:
+        return int((await conn.execute(select(func.count()).select_from(table))).scalar_one())
 
 
 def _decode_agno_row(table_name: str, row: dict[str, Any]) -> dict[str, Any]:

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 from typing import Any
 
-from psycopg import sql
+from sqlalchemy import Column, DateTime, Float, MetaData, Table, Text, desc, func, select, text
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.schema import CreateSchema
 
 from api.mcp.config import (
     SERVICE_IDS,
@@ -15,15 +16,14 @@ from api.mcp.config import (
 )
 from api.auth.permissions import actor_id, has_permission
 from api.services.llm_service import get_all_sessions_async
+from api.persistence.database import get_async_control_plane_engine
 from api.services.postgres_store import (
     agno_schema,
     app_schema,
     coerce_json_value,
-    ensure_agno_postgres_tables_async,
     get_async_agno_postgres_db,
-    get_postgres_pool,
-    knowledge_schema,
 )
+from api.services.knowledge_service import knowledge_status_async
 from api.services.skill_service import (
     list_skill_infos_async,
 )
@@ -111,109 +111,82 @@ def _payload(
     }
 
 
-async def _count(schema_name: str, table_name: str) -> int:
+def _metadata(schema_name: str) -> MetaData:
+    return MetaData(schema=schema_name)
+
+
+def _evaluation_table() -> Table:
+    return Table(
+        CONTROL_TABLES["evaluation"],
+        _metadata(app_schema()),
+        Column("id", Text, primary_key=True),
+        Column("name", Text, nullable=False),
+        Column("target", Text, nullable=False, server_default=""),
+        Column("status", Text, nullable=False, server_default="draft"),
+        Column("score", Float),
+        Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+        Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+        Column("metadata", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
+    )
+
+
+def _approvals_table() -> Table:
+    return Table(
+        CONTROL_TABLES["approvals"],
+        _metadata(app_schema()),
+        Column("id", Text, primary_key=True),
+        Column("title", Text, nullable=False),
+        Column("requester", Text, nullable=False, server_default=""),
+        Column("action", Text, nullable=False, server_default=""),
+        Column("status", Text, nullable=False, server_default="pending"),
+        Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+        Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+        Column("metadata", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
+    )
+
+
+def _projection_table(schema_name: str, table_name: str) -> Table:
+    return Table(table_name, _metadata(schema_name))
+
+
+def _row_dict(raw_row: Any) -> dict[str, Any]:
+    if isinstance(raw_row, Mapping):
+        return dict(raw_row)
+    mapping = getattr(raw_row, "_mapping", None)
+    if isinstance(mapping, Mapping):
+        return dict(mapping)
+    model_dump = getattr(raw_row, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, Mapping):
+            return dict(dumped)
     try:
-        pool = await get_postgres_pool()
-        async with pool.connection() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(
-                    sql.SQL("SELECT count(*) AS count FROM {}").format(
-                        sql.Identifier(schema_name, table_name)
-                    )
-                )
-                row = await cursor.fetchone()
+        return dict(vars(raw_row))
+    except TypeError:
+        return {}
+
+
+async def _count_projection(schema_name: str, table_name: str) -> int:
+    """Narrow dashboard projection for Agno API gaps; do not use for normal runtime reads."""
+    try:
+        table = _projection_table(schema_name, table_name)
+        async with get_async_control_plane_engine().begin() as conn:
+            return int((await conn.execute(select(func.count()).select_from(table))).scalar_one())
     except Exception:
         return 0
-    return int(row.get("count") or 0) if row else 0
 
 
-async def _count_where(
-    schema_name: str,
-    table_name: str,
-    where: sql.SQL | sql.Composed | None = None,
-    params: tuple[Any, ...] = (),
-) -> int:
-    try:
-        pool = await get_postgres_pool()
-        async with pool.connection() as conn:
-            async with conn.cursor() as cursor:
-                query = sql.SQL("SELECT count(*) AS count FROM {}").format(
-                    sql.Identifier(schema_name, table_name)
-                )
-                if where is not None:
-                    query += sql.SQL(" WHERE ") + where
-                await cursor.execute(query, params)
-                row = await cursor.fetchone()
-    except Exception:
-        return 0
-    return int(row.get("count") or 0) if row else 0
-
-
-async def _fetch_rows(
-    schema_name: str,
-    table_name: str,
-    *,
-    limit: int = 100,
-    order_by: str | None = None,
-    descending: bool = True,
-    where: sql.SQL | sql.Composed | None = None,
-    params: tuple[Any, ...] = (),
-) -> list[dict[str, Any]]:
-    try:
-        pool = await get_postgres_pool()
-        async with pool.connection() as conn:
-            async with conn.cursor() as cursor:
-                query = sql.SQL("SELECT * FROM {}").format(
-                    sql.Identifier(schema_name, table_name)
-                )
-                if where is not None:
-                    query += sql.SQL(" WHERE ") + where
-                if order_by:
-                    direction = sql.SQL("DESC") if descending else sql.SQL("ASC")
-                    query += sql.SQL(" ORDER BY {} {}").format(
-                        sql.Identifier(order_by),
-                        direction,
-                    )
-                query += sql.SQL(" LIMIT %s")
-                await cursor.execute(query, (*params, limit))
-                return list(await cursor.fetchall())
-    except Exception:
-        return []
-
-
-async def _scalar_float(
-    query: sql.SQL | sql.Composed,
-    params: tuple[Any, ...] = (),
-    default: float = 0.0,
-) -> float:
-    try:
-        pool = await get_postgres_pool()
-        async with pool.connection() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(query, params)
-                row = await cursor.fetchone()
-    except Exception:
-        return default
-    if not row:
-        return default
-    value = next(iter(row.values()), default)
-    try:
-        return float(value or default)
-    except (TypeError, ValueError):
-        return default
+async def _fetch_control_rows(table: Table, *, limit: int = 100) -> list[dict[str, Any]]:
+    await _ensure_control_tables()
+    stmt = select(table).order_by(desc(table.c.updated_at)).limit(limit)
+    async with get_async_control_plane_engine().begin() as conn:
+        return [dict(row) for row in (await conn.execute(stmt)).mappings().all()]
 
 
 def _owner_user_id(actor: Any | None, any_permission: str) -> str | None:
     if actor is not None and has_permission(actor, any_permission):
         return None
     return actor_id(actor) if actor is not None else ""
-
-
-def _user_where(actor: Any | None, any_permission: str) -> tuple[sql.SQL | None, tuple[Any, ...]]:
-    owner_user_id = _owner_user_id(actor, any_permission)
-    if owner_user_id is None:
-        return None, ()
-    return sql.SQL("user_id = %s"), (owner_user_id,)
 
 
 def _scoped_requested_user_id(
@@ -255,95 +228,29 @@ def _memory_topics(value: Any) -> list[str]:
 
 
 def _memory_row(raw_row: Any) -> dict[str, Any]:
-    if isinstance(raw_row, Mapping):
-        return dict(raw_row)
-    mapping = getattr(raw_row, "_mapping", None)
-    if isinstance(mapping, Mapping):
-        return dict(mapping)
-    model_dump = getattr(raw_row, "model_dump", None)
-    if callable(model_dump):
-        dumped = model_dump()
-        if isinstance(dumped, Mapping):
-            return dict(dumped)
-    try:
-        return dict(vars(raw_row))
-    except TypeError:
-        return {}
+    return _row_dict(raw_row)
 
 
 async def _span_count_for_actor(actor: Any | None) -> int:
     owner_user_id = _owner_user_id(actor, "trace:read:any")
     if owner_user_id is None:
-        return await _count(agno_schema(), "agno_spans")
-    return int(
-        await _scalar_float(
-            sql.SQL(
-                """
-                SELECT count(*)
-                FROM {} AS spans
-                WHERE spans.trace_id IN (
-                    SELECT traces.trace_id
-                    FROM {} AS traces
-                    WHERE traces.user_id = %s
-                )
-                """
-            ).format(
-                sql.Identifier(agno_schema(), "agno_spans"),
-                sql.Identifier(agno_schema(), "agno_traces"),
-            ),
-            (owner_user_id,),
-        )
-    )
+        return await _count_projection(agno_schema(), "agno_spans")
+    db = get_async_agno_postgres_db()
+    traces, _ = await db.get_traces(user_id=owner_user_id, limit=500, page=1)
+    total = 0
+    for raw_trace in traces:
+        trace_id = _row_dict(raw_trace).get("trace_id")
+        if not trace_id:
+            continue
+        total += len(await db.get_spans(trace_id=str(trace_id), limit=1000))
+    return total
 
 
 async def _ensure_control_tables() -> None:
-    pool = await get_postgres_pool()
-    async with pool.connection() as conn:
-        async with conn.cursor() as cursor:
-            await cursor.execute(
-                sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
-                    sql.Identifier(app_schema())
-                )
-            )
-            await cursor.execute(
-                sql.SQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS {} (
-                        id TEXT PRIMARY KEY,
-                        name TEXT NOT NULL,
-                        target TEXT NOT NULL DEFAULT '',
-                        status TEXT NOT NULL DEFAULT 'draft',
-                        score DOUBLE PRECISION,
-                        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                        metadata JSONB NOT NULL DEFAULT '{{}}'::jsonb
-                    )
-                    """
-                ).format(sql.Identifier(app_schema(), CONTROL_TABLES["evaluation"]))
-            )
-            await cursor.execute(
-                sql.SQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS {} (
-                        id TEXT PRIMARY KEY,
-                        title TEXT NOT NULL,
-                        requester TEXT NOT NULL DEFAULT '',
-                        action TEXT NOT NULL DEFAULT '',
-                        status TEXT NOT NULL DEFAULT 'pending',
-                        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                        metadata JSONB NOT NULL DEFAULT '{{}}'::jsonb
-                    )
-                    """
-                ).format(sql.Identifier(app_schema(), CONTROL_TABLES["approvals"]))
-            )
-            await cursor.execute(
-                sql.SQL(
-                    """
-                    DROP TABLE IF EXISTS {}
-                    """
-                ).format(sql.Identifier(app_schema(), "os_schedules"))
-            )
+    async with get_async_control_plane_engine().begin() as conn:
+        await conn.execute(CreateSchema(app_schema(), if_not_exists=True))
+        for table in (_evaluation_table(), _approvals_table()):
+            await conn.run_sync(table.create, checkfirst=True)
 
 
 async def submit_approval_request(
@@ -355,32 +262,48 @@ async def submit_approval_request(
 ) -> dict[str, Any]:
     await _ensure_control_tables()
     request_id = f"approval-{uuid4()}"
-    pool = await get_postgres_pool()
-    async with pool.connection() as conn:
-        async with conn.cursor() as cursor:
-            await cursor.execute(
-                sql.SQL(
-                    """
-                    INSERT INTO {} (id, title, requester, action, status, metadata)
-                    VALUES (%s, %s, %s, %s, 'pending', %s::jsonb)
-                    RETURNING *
-                    """
-                ).format(sql.Identifier(app_schema(), CONTROL_TABLES["approvals"])),
-                (
-                    request_id,
-                    title.strip() or action,
-                    requester,
-                    action,
-                    json.dumps(metadata or {}, ensure_ascii=False),
-                ),
-            )
-            row = await cursor.fetchone()
+    table = _approvals_table()
+    stmt = (
+        table.insert()
+        .values(
+            id=request_id,
+            title=title.strip() or action,
+            requester=requester,
+            action=action,
+            status="pending",
+            metadata=metadata or {},
+        )
+        .returning(table)
+    )
+    async with get_async_control_plane_engine().begin() as conn:
+        row = (await conn.execute(stmt)).mappings().first()
     return dict(row or {"id": request_id, "status": "pending"})
 
 
 def _runs_count(runs: Any) -> int:
     value = coerce_json_value(runs)
     return len(value) if isinstance(value, list) else 0
+
+
+def _result_count(result: Any) -> int:
+    if isinstance(result, tuple):
+        return int(result[1] or 0)
+    return len(result) if isinstance(result, list) else 0
+
+
+def _duration_average(rows: list[dict[str, Any]]) -> float:
+    durations: list[float] = []
+    for row in rows:
+        for key in ("avg_duration_ms", "duration_ms", "average_duration_ms"):
+            value = row.get(key)
+            if value is None:
+                continue
+            try:
+                durations.append(float(value))
+                break
+            except (TypeError, ValueError):
+                continue
+    return sum(durations) / len(durations) if durations else 0.0
 
 
 async def get_sessions_payload(actor: Any | None = None) -> OsPayload:
@@ -501,7 +424,6 @@ async def get_memory_payload(
     page: int = 1,
     limit: int = 50,
 ) -> OsPayload:
-    await ensure_agno_postgres_tables_async()
     db = get_async_agno_postgres_db()
     safe_page = max(1, int(page or 1))
     safe_limit = min(100, max(1, int(limit or 50)))
@@ -633,39 +555,48 @@ async def get_memory_payload(
 
 
 async def get_metrics_payload(actor: Any | None = None) -> OsPayload:
-    await ensure_agno_postgres_tables_async()
-    trace_where, trace_params = _user_where(actor, "trace:read:any")
-    session_where, session_params = _user_where(actor, "session:read:any")
-    memory_where, memory_params = _user_where(actor, "memory:read:any")
-    trace_count = await _count_where(agno_schema(), "agno_traces", trace_where, trace_params)
-    span_count = await _span_count_for_actor(actor)
-    session_count = await _count_where(agno_schema(), "agno_sessions", session_where, session_params)
-    memory_count = await _count_where(agno_schema(), "agno_memories", memory_where, memory_params)
-    avg_duration = await _scalar_float(
-        sql.SQL("SELECT avg(duration_ms) FROM {}{}").format(
-            sql.Identifier(agno_schema(), "agno_traces"),
-            sql.SQL(" WHERE ") + trace_where if trace_where is not None else sql.SQL(""),
-        ),
-        trace_params,
+    db = get_async_agno_postgres_db()
+    trace_user_id = _owner_user_id(actor, "trace:read:any")
+    session_user_id = _owner_user_id(actor, "session:read:any")
+    memory_user_id = _owner_user_id(actor, "memory:read:any")
+
+    traces, trace_count = await db.get_traces(
+        user_id=trace_user_id,
+        limit=20,
+        page=1,
     )
-    error_count = int(
-        await _scalar_float(
-            sql.SQL("SELECT count(*) FROM {} WHERE status = 'ERROR'{}").format(
-                sql.Identifier(agno_schema(), "agno_traces"),
-                sql.SQL(" AND ") + trace_where if trace_where is not None else sql.SQL(""),
-            ),
-            trace_params,
-        )
+    trace_stats, _ = await db.get_trace_stats(
+        user_id=trace_user_id,
+        limit=500,
+        page=1,
+    )
+    _, error_count = await db.get_traces(
+        user_id=trace_user_id,
+        status="ERROR",
+        limit=1,
+        page=1,
+    )
+    session_result = await db.get_sessions(
+        user_id=session_user_id,
+        limit=1,
+        page=1,
+        sort_by="updated_at",
+        sort_order="desc",
+        deserialize=False,
+    )
+    memory_stats, _ = await db.get_user_memory_stats(
+        user_id=memory_user_id,
+        limit=500,
+        page=1,
     )
 
-    rows = await _fetch_rows(
-        agno_schema(),
-        "agno_traces",
-        limit=20,
-        order_by="start_time",
-        where=trace_where,
-        params=trace_params,
-    )
+    trace_rows = [_row_dict(row) for row in traces]
+    trace_stat_rows = [_row_dict(row) for row in trace_stats]
+    span_count = await _span_count_for_actor(actor)
+    session_count = _result_count(session_result)
+    memory_count = sum(int(row.get("total_memories") or 0) for row in memory_stats)
+    avg_duration = _duration_average(trace_stat_rows) or _duration_average(trace_rows)
+
     records = [
         _record(
             record_id=row.get("trace_id"),
@@ -678,7 +609,7 @@ async def get_metrics_payload(actor: Any | None = None) -> OsPayload:
             },
             updated_at=row.get("start_time") or row.get("created_at"),
         )
-        for row in rows
+        for row in trace_rows
     ]
 
     return _payload(
@@ -698,8 +629,7 @@ async def get_metrics_payload(actor: Any | None = None) -> OsPayload:
 
 
 async def get_evaluation_payload(actor: Any | None = None) -> OsPayload:
-    await _ensure_control_tables()
-    rows = await _fetch_rows(app_schema(), CONTROL_TABLES["evaluation"], limit=100, order_by="updated_at")
+    rows = await _fetch_control_rows(_evaluation_table(), limit=100)
     records = [
         _record(
             record_id=row.get("id"),
@@ -727,8 +657,7 @@ async def get_evaluation_payload(actor: Any | None = None) -> OsPayload:
 
 
 async def get_approvals_payload(actor: Any | None = None) -> OsPayload:
-    await _ensure_control_tables()
-    rows = await _fetch_rows(app_schema(), CONTROL_TABLES["approvals"], limit=100, order_by="updated_at")
+    rows = await _fetch_control_rows(_approvals_table(), limit=100)
     records = [
         _record(
             record_id=row.get("id"),
@@ -766,22 +695,27 @@ async def get_scheduler_payload(actor: Any | None = None) -> OsPayload:
 
 
 async def get_knowledge_payload(actor: Any | None = None) -> OsPayload:
-    docs = await _count(knowledge_schema(), "agno_knowledge")
-    chunks = await _count(knowledge_schema(), "security_knowledge_vectors")
+    status = await knowledge_status_async(owner_user_id=_owner_user_id(actor, "knowledge:read:any"))
+    docs = int(status.get("documents") or 0)
+    chunks = int(status.get("chunks") or 0)
     records = [
         _record(
             record_id="knowledge:pgvector",
             title="PgVector Knowledge",
-            subtitle="security_knowledge_vectors",
+            subtitle=str(status.get("collection") or "vector collection"),
             status="ready" if chunks else "empty",
-            meta={"chunks": chunks, "schema": knowledge_schema()},
+            meta={
+                "chunks": chunks,
+                "database": status.get("database"),
+                "search_type": status.get("search_type"),
+            },
         ),
         _record(
             record_id="knowledge:contents",
             title="Knowledge Contents",
-            subtitle="agno_knowledge",
+            subtitle=str(status.get("contents_db") or "contents catalog"),
             status="ready" if docs else "empty",
-            meta={"documents": docs, "schema": knowledge_schema()},
+            meta={"documents": docs, "schema": status.get("postgres_schema")},
         ),
     ]
     return _payload(

@@ -30,7 +30,7 @@ from api.routes import (
 )
 from api.services.postgres_store import get_async_agno_postgres_db
 from api.services.security_run_runtime import DEFAULT_SECURITY_RUN_RUNTIME
-from api.utils.db import close_db_pool, get_db_pool
+from api.utils.db import initialize_database
 
 app_settings = get_settings()
 
@@ -73,8 +73,7 @@ async def lifespan(app: FastAPI):
     await configure_logging_async(app_settings)
     logger.info("启动 {}", app_settings.app_name)
     app.state.settings = app_settings
-    pool = await get_db_pool()
-    app.state.db_pool = pool
+    await initialize_database()
     await create_auth_tables()
     await bootstrap_admin_user(app_settings)
 
@@ -87,7 +86,6 @@ async def lifespan(app: FastAPI):
         await mcp_runtime.shutdown()
         await close_auth_engine()
         await dispose_async_control_plane_engine()
-        await close_db_pool()
         logger.info("关闭 {}", app_settings.app_name)
 
 
