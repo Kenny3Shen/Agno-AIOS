@@ -183,7 +183,6 @@ import { ElMessage, ElMessageBox } from "element-plus"
 import { useI18n } from "vue-i18n"
 import {
   CopyDocument,
-  Cpu,
   Delete,
   Key,
   Plus,
@@ -223,7 +222,6 @@ const mcpUrl = ref("/mcp/")
 
 const services = ref<ServiceItem[]>([
   { id: "playbook", name: "SOAR", description: t("mcp.services.playbook"), namespace: "playbook.*", enabled: false, icon: markRaw(Operation) },
-  { id: "agent", name: "AI Agent", description: t("mcp.services.agent"), namespace: "agent.*", enabled: false, icon: markRaw(Cpu) },
   { id: "basic", name: t("mcp.services.basicName"), description: t("mcp.services.basic"), namespace: "basic.*", enabled: false, icon: markRaw(Tools) },
 ])
 

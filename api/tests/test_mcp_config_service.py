@@ -26,6 +26,12 @@ def test_apply_service_toggle_updates_config_and_returns_audit_shape():
     assert change.metadata == {"enabled": False}
 
 
+def test_apply_service_toggle_rejects_removed_agent_service():
+    with pytest.raises(HTTPException) as exc:
+        mcp_config_service.apply_service_toggle("agent", True)
+    assert exc.value.status_code == 400
+
+
 def test_apply_mcp_upload_normalizes_standard_mcp_manifest():
     stored = {"mcp_servers": []}
     writes: list[dict] = []

@@ -9,7 +9,7 @@ from psycopg import sql
 from api.services.runtime_paths import CONFIG_DIR
 from api.services.postgres_store import mcp_schema, postgres_connect, postgres_label
 
-SERVICE_IDS = ("playbook", "agent", "basic")
+SERVICE_IDS = ("playbook", "basic")
 MCP_DATA_DIR = CONFIG_DIR / "mcp"
 MCP_CONFIG_FILE = MCP_DATA_DIR / "mcp_config.toml"
 MCP_TOKENS_TABLE = "mcp_tokens"

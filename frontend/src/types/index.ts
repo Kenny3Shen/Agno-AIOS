@@ -60,7 +60,7 @@ export interface UploadResultResponse {
 }
 
 // MCP 管理相关类型
-export type McpServiceId = "playbook" | "agent" | "basic"
+export type McpServiceId = "playbook" | "basic"
 
 export interface McpServiceStatusResponse {
   services: Record<McpServiceId, boolean>

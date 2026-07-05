@@ -107,7 +107,7 @@ Knowledge documents 通过 metadata 做 user scope。Chat runtime 在存在当�
 
 主 FastAPI app 在 `/mcp/` 挂载集成 MCP runtime。调用该 endpoint 必须通过 `Authorization: Bearer` header 或 `token` query parameter 提供有效 MCP token。
 
-内置 MCP services 是 `playbook`、`agent` 和 `basic`。启用状态最终从 `data/config/mcp/mcp_config.toml` 读取，控制面写入通过 `api/services/mcp_config_service.py` 完成。
+内置 MCP services 是 `playbook` 和 `basic`。启用状态最终从 `data/config/mcp/mcp_config.toml` 读取，控制面写入通过 `api/services/mcp_config_service.py` 完成。旧 Hi-Agent/`agent.*` 接入不再作为内置 MCP service 暴露。
 
 ## 数据存储
 

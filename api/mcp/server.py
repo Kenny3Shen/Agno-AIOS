@@ -6,7 +6,6 @@ from loguru import logger
 from starlette.responses import JSONResponse
 
 from api.mcp.config import enabled_service_ids, ensure_bootstrap_token, is_valid_token
-from api.mcp.tools.agent import agent_mcp
 from api.mcp.tools.basic import basic_mcp
 from api.mcp.tools.playbook import playbook_mcp
 
@@ -49,8 +48,6 @@ def build_main_mcp() -> FastMCP:
     _install_middleware(main_mcp)
     if "playbook" in enabled:
         main_mcp.mount(playbook_mcp, namespace="playbook")
-    if "agent" in enabled:
-        main_mcp.mount(agent_mcp, namespace="agent")
     if "basic" in enabled:
         main_mcp.mount(basic_mcp, namespace="basic")
     return main_mcp
