@@ -15,6 +15,7 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "mcp:read",
     "skill:read",
     "settings:read",
+    "agent_eval:read",
   ],
   guest: [
     "session:read:own",

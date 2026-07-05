@@ -65,7 +65,7 @@ export const navPermissions: Partial<Record<ModuleNavId, string>> = {
   sessions: "session:read:own",
   studio: "mcp:read",
   memory: "memory:read:own",
-  evaluation: "admin:read",
+  evaluation: "agent_eval:read",
   approvals: "admin:read",
   scheduler: "admin:read",
   cve: "cve:read",

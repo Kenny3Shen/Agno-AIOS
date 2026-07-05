@@ -10,6 +10,7 @@ import {
   shellContentClass,
   splitPrimaryShellNavItems,
 } from "./shellNavigation.ts"
+import { hasRolePermission } from "../lib/permissions.ts"
 
 const icon = {}
 const item = (id) => ({
@@ -80,6 +81,24 @@ assert.equal(
   canAccessShellNav("settings", available, () => false),
   false,
   "permissioned nav items must be hidden without their permission",
+)
+
+assert.equal(
+  canAccessShellNav("evaluation", available, (permission) => hasRolePermission("user", permission)),
+  true,
+  "evaluation must be available to users with the agent eval read permission",
+)
+
+assert.equal(
+  canAccessShellNav("evaluation", available, (permission) => permission === "mcp:read"),
+  false,
+  "evaluation must stay hidden when only unrelated permissions are present",
+)
+
+assert.equal(
+  canAccessShellNav("evaluation", available, (permission) => hasRolePermission("guest", permission)),
+  false,
+  "evaluation must stay hidden from guests",
 )
 
 assert.equal(
