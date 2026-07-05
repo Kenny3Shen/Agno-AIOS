@@ -46,6 +46,24 @@ def _score_from_data(data: dict[str, Any]) -> float | None:
     return None
 
 
+def _payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
+    for key in ("eval_data", "data"):
+        value = row.get(key)
+        if isinstance(value, dict):
+            return cast(dict[str, Any], value)
+    return {}
+
+
+def _eval_type_key(value: Any) -> str:
+    raw_value = getattr(value, "value", value)
+    if raw_value is None:
+        return ""
+    text = str(raw_value).strip()
+    if "." in text:
+        text = text.rsplit(".", 1)[-1]
+    return text.lower()
+
+
 def _date_key(value: Any) -> str:
     if isinstance(value, datetime):
         current = value
@@ -68,14 +86,13 @@ def _date_key(value: Any) -> str:
 def normalize_agno_eval_run(raw_run: Any) -> dict[str, Any]:
     row = _row_dict(raw_run)
     run_id = str(row.get("run_id") or row.get("id") or "")
-    raw_data = row.get("data")
-    data: dict[str, Any] = cast(dict[str, Any], raw_data) if isinstance(raw_data, dict) else {}
+    data = _payload_from_row(row)
     raw_input = row.get("eval_input")
     return {
         "id": run_id,
         "run_id": run_id,
         "name": str(row.get("name") or run_id or "Eval Run"),
-        "eval_type": str(row.get("eval_type") or ""),
+        "eval_type": _eval_type_key(row.get("eval_type")),
         "agent_id": row.get("agent_id"),
         "team_id": row.get("team_id"),
         "workflow_id": row.get("workflow_id"),
@@ -118,6 +135,7 @@ async def list_agno_eval_runs(
         sort_order="desc",
         agent_id=agent_id,
         eval_type=eval_type,
+        deserialize=False,
     )
     rows, total = _unpack_runs_result(result)
     items = [normalize_agno_eval_run(row) for row in rows]
@@ -131,7 +149,10 @@ async def list_agno_eval_runs(
 
 
 async def get_agno_eval_run(eval_run_id: str) -> dict[str, Any] | None:
-    raw_run = await get_async_agno_postgres_db().get_eval_run(eval_run_id)
+    raw_run = await get_async_agno_postgres_db().get_eval_run(
+        eval_run_id,
+        deserialize=False,
+    )
     return normalize_agno_eval_run(raw_run) if raw_run is not None else None
 
 

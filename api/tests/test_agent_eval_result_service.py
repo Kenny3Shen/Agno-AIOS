@@ -1,7 +1,8 @@
-from unittest.mock import patch
 from dataclasses import dataclass
+from unittest.mock import patch
 
 import pytest
+from agno.db.schemas.evals import EvalRunRecord, EvalType
 
 from api.services import agent_eval_result_service as service
 
@@ -9,6 +10,7 @@ from api.services import agent_eval_result_service as service
 class FakeEvalDb:
     def __init__(self):
         self.list_kwargs = {}
+        self.get_kwargs = {}
 
     async def get_eval_runs(self, **kwargs):
         self.list_kwargs = kwargs
@@ -23,10 +25,11 @@ class FakeEvalDb:
                     "created_at": 1714560000,
                 }
             ],
-            1,
+            37,
         )
 
-    async def get_eval_run(self, eval_run_id: str, deserialize=True):
+    async def get_eval_run(self, eval_run_id: str, **kwargs):
+        self.get_kwargs = kwargs
         if eval_run_id == "missing":
             return None
         return {
@@ -71,7 +74,8 @@ async def test_list_agno_eval_runs_uses_async_db_api():
 
     assert db.list_kwargs["limit"] == 10
     assert db.list_kwargs["page"] == 2
-    assert result["total"] == 1
+    assert db.list_kwargs["deserialize"] is False
+    assert result["total"] == 37
     assert result["items"][0]["id"] == "eval-1"
 
 
@@ -97,6 +101,7 @@ async def test_get_agno_eval_run_returns_none_for_missing():
         return_value=db,
     ):
         assert await service.get_agno_eval_run("missing") is None
+    assert db.get_kwargs["deserialize"] is False
 
 
 def test_normalize_agno_eval_run_handles_dataclass_objects():
@@ -112,6 +117,23 @@ def test_normalize_agno_eval_run_handles_dataclass_objects():
     assert result["id"] == "eval-3"
     assert result["score"] == 0.75
     assert result["passed"] is None
+
+
+def test_normalize_agno_eval_run_handles_eval_data_and_enum_type():
+    result = service.normalize_agno_eval_run(
+        EvalRunRecord(
+            run_id="eval-4",
+            eval_type=EvalType.ACCURACY,
+            eval_data={"score": 0.8, "passed": True},
+            eval_input={"input": "baseline"},
+        )
+    )
+
+    assert result["id"] == "eval-4"
+    assert result["data"] == {"score": 0.8, "passed": True}
+    assert result["passed"] is True
+    assert result["score"] == 0.8
+    assert result["eval_type"] == "accuracy"
 
 
 def test_build_eval_trends_groups_by_day_type_and_status():
