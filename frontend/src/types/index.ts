@@ -358,6 +358,122 @@ export interface ScheduleRunsResponse {
   limit: number
 }
 
+// Agent Eval 相关类型
+export type AgentEvalType = "accuracy" | "agent_as_judge" | "reliability" | "performance"
+
+export interface AgentEvalSuite {
+  id: string
+  name: string
+  description: string
+  target_agent_id: string
+  enabled: boolean
+  tags: string[]
+  created_by: string
+  created_at?: string | number | null
+  updated_at?: string | number | null
+}
+
+export interface AgentEvalCase {
+  id: string
+  suite_id: string
+  name: string
+  description: string
+  target_agent_id: string
+  input: string
+  expected_output: string
+  criteria: string
+  threshold: number
+  eval_types: AgentEvalType[]
+  expected_tool_calls: string[]
+  expected_tool_call_arguments: Record<string, unknown>
+  allow_additional_tool_calls: boolean
+  performance_config: Record<string, unknown>
+  metadata: Record<string, unknown>
+  enabled: boolean
+  latest_status?: string | null
+  created_at?: string | number | null
+  updated_at?: string | number | null
+}
+
+export interface AgentEvalSuiteRun {
+  id: string
+  suite_id: string
+  status: string
+  started_by: string
+  error_summary: string
+  summary: Record<string, unknown>
+  started_at?: string | number | null
+  completed_at?: string | number | null
+}
+
+export interface AgentEvalCaseRun {
+  id: string
+  suite_run_id: string
+  case_id: string
+  status: string
+  agent_run_id: string
+  session_id: string
+  trace_id: string
+  agno_eval_run_ids: string[]
+  error_type: string
+  error_summary: string
+  replay_of_case_run_id: string
+  started_at?: string | number | null
+  completed_at?: string | number | null
+}
+
+export interface AgentEvalAgnoRun {
+  id: string
+  run_id: string
+  name: string
+  eval_type: AgentEvalType | string
+  agent_id?: string | null
+  team_id?: string | null
+  workflow_id?: string | null
+  model_id?: string | null
+  model_provider?: string | null
+  passed?: boolean | null
+  score?: number | null
+  data: Record<string, unknown>
+  eval_input: Record<string, unknown>
+  created_at?: string | number | null
+  updated_at?: string | number | null
+}
+
+export interface AgentEvalTrendResponse {
+  by_date: Array<{ date: string; total: number; passed: number; failed: number }>
+  by_eval_type: Array<{ eval_type: string; total: number; passed: number; failed: number }>
+  by_status: { passed: number; failed: number; unknown: number }
+}
+
+export type AgentEvalFailureResponse = AgentEvalAgnoRun[]
+
+export interface AgentEvalSuiteCreateRequest {
+  name: string
+  description?: string
+  target_agent_id?: string
+  enabled?: boolean
+  tags?: string[]
+}
+
+export interface AgentEvalCaseCreateRequest {
+  suite_id: string
+  name: string
+  description?: string
+  target_agent_id?: string
+  input: string
+  expected_output?: string
+  criteria?: string
+  threshold?: number
+  eval_types?: AgentEvalType[]
+  expected_tool_calls?: string[]
+  expected_tool_call_arguments?: Record<string, unknown>
+  allow_additional_tool_calls?: boolean
+  performance_config?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+  enabled?: boolean
+}
+
 // CVE 相关类型
 export interface CveResult {
   id: number

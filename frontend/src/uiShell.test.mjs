@@ -6,6 +6,7 @@ import { createI18n } from "vue-i18n"
 import { enUS } from "./i18n/locales/en-US.ts"
 import { zhCN } from "./i18n/locales/zh-CN.ts"
 import "./modules/shellNavigation.test.mjs"
+import "./modules/agentEvalsWorkbench.test.mjs"
 import "./modules/traceWorkbench.test.mjs"
 import "./modules/workflowBuilder.test.mjs"
 
@@ -37,6 +38,7 @@ const knowledge = readOptionalSource("components/Knowledge.vue")
 const agentOSControl = readOptionalSource("components/AgentOSControl.vue")
 const memoryControl = readOptionalSource("components/MemoryControl.vue")
 const workflow = readOptionalSource("components/Workflow.vue")
+const typesSource = readSource("types/index.ts")
 const useApi = readSource("composables/useApi.ts")
 const apiClient = readOptionalSource("lib/apiClient.ts")
 const authClientSource = readOptionalSource("lib/authClient.ts")
@@ -283,6 +285,24 @@ assert.match(
   permissions,
   /"collect:write"/,
   "frontend RBAC helper must reflect write-only modules such as Collect",
+)
+
+assert.match(
+  permissions,
+  /agent_eval:read/,
+  "frontend permissions must include Agent Eval read permission",
+)
+
+assert.match(
+  permissions,
+  /agent_eval:write/,
+  "frontend permissions must include Agent Eval write permission",
+)
+
+assert.match(
+  permissions,
+  /agent_eval:run/,
+  "frontend permissions must include Agent Eval run permission",
 )
 
 for (const hardcodedAuthCopy of [
@@ -1122,6 +1142,71 @@ assert.match(
   /resolveApproval/,
   "AgentOS API composable must expose approval resolve",
 )
+
+for (const typeName of [
+  "AgentEvalType",
+  "AgentEvalSuite",
+  "AgentEvalCase",
+  "AgentEvalSuiteRun",
+  "AgentEvalCaseRun",
+  "AgentEvalAgnoRun",
+  "AgentEvalTrendResponse",
+  "AgentEvalFailureResponse",
+  "AgentEvalSuiteCreateRequest",
+  "AgentEvalCaseCreateRequest",
+]) {
+  assert.match(
+    typesSource,
+    new RegExp(`(?:interface|type)\\s+${typeName}\\b`),
+    `Agent Eval frontend type must be exported: ${typeName}`,
+  )
+}
+
+assert.match(
+  useApi,
+  /agentEvalsRequestFailed/,
+  "Agent Eval API composable must expose a fallback key",
+)
+
+assert.match(
+  useApi,
+  /function useAgentEvalsApi\(\)/,
+  "Agent Eval API composable must expose useAgentEvalsApi",
+)
+
+for (const methodName of [
+  "listSuites",
+  "createSuite",
+  "listCases",
+  "createCase",
+  "runSuite",
+  "runCase",
+  "replayCaseRun",
+  "listAgnoRuns",
+  "getAgnoRun",
+  "getTrends",
+  "listFailures",
+]) {
+  assert.match(
+    useApi,
+    new RegExp(`\\b${methodName}\\b`),
+    `Agent Eval API composable must expose ${methodName}`,
+  )
+}
+
+for (const apiPath of [
+  "/agent-evals/suites",
+  "/agent-evals/cases",
+  "/agent-evals/agno-runs",
+  "/agent-evals/trends",
+  "/agent-evals/failures",
+]) {
+  assert.match(
+    useApi,
+    new RegExp(apiPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    `Agent Eval API composable must call ${apiPath}`,
+  )
+}
 
 assert.match(
   agentOSControl,

@@ -1,5 +1,11 @@
 export type UserRole = "admin" | "user" | "guest"
 
+export const AGENT_EVAL_PERMISSIONS = [
+  "agent_eval:read",
+  "agent_eval:write",
+  "agent_eval:run",
+] as const
+
 const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
   admin: ["*"],
   user: [
