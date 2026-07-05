@@ -1,12 +1,13 @@
 from __future__ import annotations
 import os
-import threading
 from types import SimpleNamespace
-from typing import Any, Callable
+from typing import Any, Callable, get_type_hints
 from unittest.mock import patch
 
 import pytest
 from agno.knowledge.embedder import Embedder
+from agno.knowledge.embedder.sentence_transformer import SentenceTransformerEmbedder
+from agno.knowledge.reranker.sentence_transformer import SentenceTransformerReranker
 from agno.vectordb.search import SearchType
 
 from api.services import knowledge_document_service
@@ -211,58 +212,61 @@ def test_runtime_builds_agno_pgvector_knowledge_with_small_interface() -> None:
     assert captured["knowledge"]["readers"] == readers
 
 
-@pytest.mark.asyncio
-async def test_bge_async_query_embedding_runs_sync_encoder_off_event_loop() -> None:
-    event_loop_thread_id = threading.get_ident()
-    encoder_thread_id: int | None = None
+def test_knowledge_service_uses_agno_sentence_transformer_embedder() -> None:
+    captured: dict[str, Any] = {}
 
-    def fake_get_embedding(
-        _self: knowledge_service.BGEKnowledgeEmbedder,
-        text: str,
-    ) -> list[float]:
-        nonlocal encoder_thread_id
-        encoder_thread_id = threading.get_ident()
-        return [float(len(text))]
-
-    embedder = knowledge_service.BGEKnowledgeEmbedder()
+    class FakeSentenceTransformerEmbedder:
+        def __init__(self, **kwargs: Any) -> None:
+            captured["embedder"] = kwargs
 
     with patch.object(
-        knowledge_service.BGEKnowledgeEmbedder,
-        "get_embedding",
-        fake_get_embedding,
+        knowledge_service,
+        "SentenceTransformerEmbedder",
+        FakeSentenceTransformerEmbedder,
     ):
-        result = await embedder.async_get_embedding("policy")
+        knowledge_service._get_embedder.cache_clear()
+        embedder = knowledge_service._get_embedder()
+        knowledge_service._get_embedder.cache_clear()
 
-    assert result == [6.0]
-    assert encoder_thread_id is not None
-    assert encoder_thread_id != event_loop_thread_id
+    assert isinstance(embedder, FakeSentenceTransformerEmbedder)
+    assert captured["embedder"] == {
+        "id": knowledge_service.knowledge_settings().embedding_model,
+        "dimensions": knowledge_service.knowledge_settings().embedding_dimensions,
+        "prompt": knowledge_service.knowledge_settings().query_prompt,
+        "normalize_embeddings": True,
+    }
 
 
-@pytest.mark.asyncio
-async def test_bge_async_document_embedding_runs_sync_encoder_off_event_loop() -> None:
-    event_loop_thread_id = threading.get_ident()
-    encoder_thread_id: int | None = None
+def test_knowledge_service_uses_agno_sentence_transformer_reranker() -> None:
+    captured: dict[str, Any] = {}
 
-    def fake_get_embedding_and_usage(
-        _self: knowledge_service.BGEKnowledgeEmbedder,
-        text: str,
-    ) -> tuple[list[float], None]:
-        nonlocal encoder_thread_id
-        encoder_thread_id = threading.get_ident()
-        return [float(len(text))], None
-
-    embedder = knowledge_service.BGEKnowledgeEmbedder()
+    class FakeSentenceTransformerReranker:
+        def __init__(self, **kwargs: Any) -> None:
+            captured["reranker"] = kwargs
 
     with patch.object(
-        knowledge_service.BGEKnowledgeEmbedder,
-        "get_embedding_and_usage",
-        fake_get_embedding_and_usage,
+        knowledge_service,
+        "SentenceTransformerReranker",
+        FakeSentenceTransformerReranker,
     ):
-        result = await embedder.async_get_embedding_and_usage("runbook")
+        knowledge_service._get_reranker.cache_clear()
+        reranker = knowledge_service._get_reranker()
+        knowledge_service._get_reranker.cache_clear()
 
-    assert result == ([7.0], None)
-    assert encoder_thread_id is not None
-    assert encoder_thread_id != event_loop_thread_id
+    assert isinstance(reranker, FakeSentenceTransformerReranker)
+    assert captured["reranker"] == {
+        "model": knowledge_service.knowledge_settings().rerank_model,
+    }
+
+
+def test_knowledge_service_no_longer_exposes_custom_model_adapters() -> None:
+    assert not hasattr(knowledge_service, "BGEKnowledgeEmbedder")
+    assert not hasattr(knowledge_service, "FlagEmbeddingReranker")
+    assert get_type_hints(knowledge_service._get_embedder)["return"] is SentenceTransformerEmbedder
+    assert (
+        get_type_hints(knowledge_service._get_reranker)["return"]
+        == SentenceTransformerReranker | None
+    )
 
 
 def test_status_exposes_supported_suffixes_and_search_type() -> None:

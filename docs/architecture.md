@@ -107,7 +107,7 @@ PgVector 入口按 Agno 文档推荐的 async Knowledge API 使用：runtime 构
 
 Agno API gap projections 是窄范围 async product views，不改变 table ownership：Knowledge delete/clear 使用 async SQLAlchemy 删除 vector rows 后通过 async contents DB 删除 catalog row；Knowledge dashboard 的 chunk-count 和 search result 的 content-id hydration 只读取 PgVector table 的 `id`、`content_id`、`meta_data`；Trace UI 和 dashboard 通过 Agno tracing API 读取 trace/span 后整理前端 payload，缺少聚合 API 时用 async Postgres pool 做轻量统计；AgentOS control payload 在 sessions/memory/scheduler 使用 Agno async APIs，在 metrics、knowledge 状态和 AIOS control tables 上保留 async projection。
 
-本地 embedding 和 rerank 模型仍是同步 CPU/GPU 计算，不属于 async DB I/O。BGE embedder 的 async methods 和 PgVector rerank path 会把同步模型调用放入 worker thread，避免在 `ainsert()` / `asearch()` 的 event loop 中直接执行 SentenceTransformer 或 FlagEmbedding。
+Embedding 和 rerank 模型计算不属于 async DB I/O。默认 Knowledge runtime 使用 Agno `SentenceTransformerEmbedder` 和 `SentenceTransformerReranker` 接入 `PgVector`，AIOS 不再维护自定义本地模型 adapter；如需调整模型行为，应优先沿用 Agno 提供的 embedder/reranker 扩展点。
 
 当前写入路径包括后端 text input、后端 server-side file path input，以及前端把 browser file upload 读取成 text 后走文本写入。Search 会返回匹配内容和 metadata，供控制面和助手使用。
 

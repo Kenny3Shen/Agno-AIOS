@@ -2,6 +2,7 @@ import inspect
 from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
 from api.routes import settings
+from api.services import model_config_service
 import pytest
 
 
@@ -45,6 +46,53 @@ class FakeClient:
 def test_route_requires_write_permission():
     source = inspect.getsource(settings.test_model_connectivity)
     assert 'require_permission("settings:write")' in source
+
+
+def test_settings_route_reuses_model_config_service_schema():
+    assert settings.ModelConfig is model_config_service.ModelConfig
+    assert settings.ModelConfigUpdate is model_config_service.ModelConfigUpdate
+
+
+def test_model_config_store_preserves_saved_secret_for_masked_update():
+    existing = model_config_service.ModelConfigStore.from_raw(
+        {
+            "active_model_id": "custom",
+            "models": [
+                {
+                    "id": "custom",
+                    "name": "Custom",
+                    "model_id": "model-name",
+                    "base_url": "https://api.example.com/v1",
+                    "api_key": "saved-secret",
+                    "enabled": True,
+                }
+            ],
+        }
+    )
+    submitted = model_config_service.ModelConfig(
+        id="custom",
+        name="Custom",
+        model_id="model-name",
+        base_url="https://api.example.com/v1",
+        api_key="save****cret",
+    )
+
+    saved = model_config_service.ModelConfigStore.from_submitted(
+        [submitted],
+        active_model_id="custom",
+        existing=existing,
+    )
+    saved_custom = next(model for model in saved.models if model.id == "custom")
+    public_custom = next(
+        model for model in saved.to_public_dict()["models"] if model["id"] == "custom"
+    )
+
+    assert saved_custom.api_key == "saved-secret"
+    assert next(
+        model for model in saved.to_storage_dict()["models"] if model["id"] == "custom"
+    )["api_key"] == "saved-secret"
+    assert public_custom["api_key"] == "save****cret"
+    assert public_custom["configured"] is True
 
 
 @pytest.mark.asyncio

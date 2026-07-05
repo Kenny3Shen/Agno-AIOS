@@ -282,7 +282,10 @@ def test_frontend_static_mount_defers_directory_check() -> None:
 
 
 @pytest.mark.asyncio
-async def test_lazy_frontend_static_files_prefers_source_dir() -> None:
+async def test_lazy_frontend_static_files_prefers_source_dir(tmp_path, monkeypatch) -> None:
+    (tmp_path / "source").mkdir()
+    monkeypatch.chdir(tmp_path)
+
     static_app = api_main.LazyFrontendStaticFiles()
     resolved = await static_app._get_app()
     assert resolved.directory == "source"

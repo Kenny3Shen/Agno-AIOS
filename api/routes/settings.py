@@ -13,6 +13,8 @@ from api.config import Settings, get_settings
 from api.dependencies import get_app_settings
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.model_config_service import (
+    ModelConfig,
+    ModelConfigUpdate,
     load_model_config_async,
     public_model_config_async,
     save_model_config_async,
@@ -45,22 +47,6 @@ class SettingsResponse(BaseModel):
 
 class SettingsUpdate(BaseModel):
     settings: dict[str, str]
-
-
-class ModelConfig(BaseModel):
-    id: str
-    name: str
-    model_id: str
-    base_url: str
-    api_key: str = ""
-    description: str = ""
-    enabled: bool = True
-    builtin: bool = False
-
-
-class ModelConfigUpdate(BaseModel):
-    active_model_id: str | None = None
-    models: list[ModelConfig]
 
 
 class ModelConnectivityTestResponse(BaseModel):
@@ -237,7 +223,7 @@ async def update_models(
     """保存模型配置和默认选择"""
     logger.info("模型配置已更新")
     result = await save_model_config_async(
-        [model.model_dump() for model in body.models],
+        body.models,
         body.active_model_id,
     )
     await record_audit_event_async(
