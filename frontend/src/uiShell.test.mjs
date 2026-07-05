@@ -1112,6 +1112,36 @@ assert.match(
 )
 
 assert.match(
+  useApi,
+  /listApprovals/,
+  "AgentOS API composable must expose approval listing",
+)
+
+assert.match(
+  useApi,
+  /resolveApproval/,
+  "AgentOS API composable must expose approval resolve",
+)
+
+assert.match(
+  agentOSControl,
+  /approvals-workbench/,
+  "AgentOS approvals module must render a dedicated approvals workbench",
+)
+
+assert.match(
+  agentOSControl,
+  /resolveSelectedApproval\("approved"\)/,
+  "AgentOS approvals module must bind an approve action",
+)
+
+assert.match(
+  agentOSControl,
+  /resolveSelectedApproval\("rejected"\)/,
+  "AgentOS approvals module must bind a reject action",
+)
+
+assert.match(
   agentOSControl,
   /\.scheduler-enabled-field\s*\{[^}]*min-width:\s*0[^}]*overflow:\s*hidden/s,
   "Scheduler enabled switch field must not overlap adjacent form controls",

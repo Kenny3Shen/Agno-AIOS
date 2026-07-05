@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
 from typing import Any
 
 from sqlalchemy import Column, DateTime, Float, MetaData, Table, Text, desc, func, select, text
@@ -15,6 +14,7 @@ from api.mcp.config import (
     services_from_config_async,
 )
 from api.auth.permissions import actor_id, has_permission
+from api.services.approval_control_service import list_approvals_payload
 from api.services.llm_service import get_all_sessions_async
 from api.persistence.database import get_async_control_plane_engine
 from api.services.postgres_store import (
@@ -38,7 +38,6 @@ MEMORY_ABNORMAL_GROWTH_THRESHOLD = 500
 
 CONTROL_TABLES = {
     "evaluation": "os_eval_runs",
-    "approvals": "os_approvals",
 }
 
 
@@ -124,21 +123,6 @@ def _evaluation_table() -> Table:
         Column("target", Text, nullable=False, server_default=""),
         Column("status", Text, nullable=False, server_default="draft"),
         Column("score", Float),
-        Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
-        Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
-        Column("metadata", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
-    )
-
-
-def _approvals_table() -> Table:
-    return Table(
-        CONTROL_TABLES["approvals"],
-        _metadata(app_schema()),
-        Column("id", Text, primary_key=True),
-        Column("title", Text, nullable=False),
-        Column("requester", Text, nullable=False, server_default=""),
-        Column("action", Text, nullable=False, server_default=""),
-        Column("status", Text, nullable=False, server_default="pending"),
         Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
         Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
         Column("metadata", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
@@ -249,35 +233,8 @@ async def _span_count_for_actor(actor: Any | None) -> int:
 async def _ensure_control_tables() -> None:
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(CreateSchema(app_schema(), if_not_exists=True))
-        for table in (_evaluation_table(), _approvals_table()):
+        for table in (_evaluation_table(),):
             await conn.run_sync(table.create, checkfirst=True)
-
-
-async def submit_approval_request(
-    *,
-    title: str,
-    requester: str,
-    action: str,
-    metadata: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    await _ensure_control_tables()
-    request_id = f"approval-{uuid4()}"
-    table = _approvals_table()
-    stmt = (
-        table.insert()
-        .values(
-            id=request_id,
-            title=title.strip() or action,
-            requester=requester,
-            action=action,
-            status="pending",
-            metadata=metadata or {},
-        )
-        .returning(table)
-    )
-    async with get_async_control_plane_engine().begin() as conn:
-        row = (await conn.execute(stmt)).mappings().first()
-    return dict(row or {"id": request_id, "status": "pending"})
 
 
 def _runs_count(runs: Any) -> int:
@@ -657,37 +614,7 @@ async def get_evaluation_payload(actor: Any | None = None) -> OsPayload:
 
 
 async def get_approvals_payload(actor: Any | None = None) -> OsPayload:
-    rows = await _fetch_control_rows(_approvals_table(), limit=100)
-    records = [
-        _record(
-            record_id=row.get("id"),
-            title=str(row.get("title") or row.get("id")),
-            subtitle=str(row.get("action") or row.get("requester") or ""),
-            status=str(row.get("status") or "pending"),
-            meta={
-                "requester": row.get("requester"),
-                **(
-                    coerce_json_value(row.get("metadata"))
-                    if isinstance(coerce_json_value(row.get("metadata")), dict)
-                    else {}
-                ),
-            },
-            updated_at=row.get("updated_at"),
-        )
-        for row in rows
-    ]
-    pending = sum(1 for row in rows if row.get("status") == "pending")
-    return _payload(
-        module="approvals",
-        title="Approvals",
-        description="敏感工具调用和人工审批请求。",
-        metrics=[
-            _metric("Requests", len(rows), "审批请求", "blue"),
-            _metric("Pending", pending, "等待处理", "red" if pending else "green"),
-            _metric("Resolved", len(rows) - pending, "已处理", "green"),
-        ],
-        records=records,
-    )
+    return await list_approvals_payload(actor=actor)
 
 
 async def get_scheduler_payload(actor: Any | None = None) -> OsPayload:

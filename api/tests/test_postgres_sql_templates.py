@@ -325,8 +325,9 @@ def test_os_control_control_plane_tables_use_async_sqlalchemy() -> None:
     source = inspect.getsource(os_control_service)
     assert "get_async_control_plane_engine" in source
     assert "Table(" in source
-    assert "table.insert()" in source
-    assert ".values(" in source
+    assert "select(table)" in source
+    assert "os_approvals" not in source
+    assert "submit_approval_request" not in source
     assert "CREATE TABLE IF NOT EXISTS" not in source
 
 

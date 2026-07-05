@@ -202,6 +202,125 @@
       </section>
     </main>
 
+    <main v-else-if="props.osModule === 'approvals'" class="approvals-workbench">
+      <section class="agentos-panel ag-content-panel approvals-list-panel">
+        <div class="agentos-panel-head">
+          <div>
+            <p>{{ t("agentOS.approvals.listTitle") }}</p>
+            <span>{{ t("agentOS.ledger.count", { count: approvals.length, time: generatedAt }) }}</span>
+          </div>
+          <div class="agentos-panel-actions">
+            <el-select v-model="approvalStatusFilter" size="small" class="approval-status-filter" @change="loadModule">
+              <el-option :label="t('agentOS.approvals.allStatuses')" value="" />
+              <el-option :label="t('agentOS.approvals.statusPending')" value="pending" />
+              <el-option :label="t('agentOS.approvals.statusApproved')" value="approved" />
+              <el-option :label="t('agentOS.approvals.statusRejected')" value="rejected" />
+            </el-select>
+            <el-button size="small" type="primary" :loading="loading" class="cursor-pointer" @click="loadModule">
+              <el-icon><Refresh /></el-icon>
+            </el-button>
+          </div>
+        </div>
+
+        <div v-if="approvals.length" class="approval-table">
+          <button
+            v-for="approval in approvals"
+            :key="approval.id"
+            type="button"
+            class="approval-row"
+            :class="{ selected: approval.id === selectedApprovalId }"
+            @click="selectApproval(approval.id)"
+          >
+            <span class="agentos-dot" :class="statusTone(approval.status)" />
+            <span class="approval-main">
+              <strong :title="approval.tool_name || approval.id">{{ approval.tool_name || approval.id }}</strong>
+              <small :title="approval.source_name || approval.source_type || ''">
+                {{ approval.source_name || approval.source_type || "-" }}
+              </small>
+            </span>
+            <span class="approval-side">
+              <b>{{ approval.status }}</b>
+              <small>{{ formatTime(approval.updated_at || approval.created_at) }}</small>
+            </span>
+          </button>
+        </div>
+
+        <div v-else-if="!loading" class="agentos-empty">
+          <el-icon><Aim /></el-icon>
+          <strong>{{ t("agentOS.empty.title") }}</strong>
+          <span>{{ emptyMessage }}</span>
+        </div>
+      </section>
+
+      <section class="agentos-panel approvals-detail-panel ag-right-panel">
+        <template v-if="selectedApproval">
+          <div class="agentos-panel-head">
+            <div>
+              <p>{{ selectedApproval.tool_name || t("agentOS.approvals.detailTitle") }}</p>
+              <span>{{ selectedApproval.run_id || selectedApproval.session_id || selectedApproval.id }}</span>
+            </div>
+            <div class="agentos-panel-actions">
+              <span class="agentos-status" :class="statusTone(selectedApproval.status)">
+                {{ selectedApproval.status }}
+              </span>
+              <el-button
+                v-if="selectedApproval.status === 'pending'"
+                size="small"
+                type="success"
+                :loading="resolvingApproval === 'approved'"
+                @click='resolveSelectedApproval("approved")'
+              >
+                <el-icon><Check /></el-icon>
+                {{ t("agentOS.approvals.approve") }}
+              </el-button>
+              <el-button
+                v-if="selectedApproval.status === 'pending'"
+                size="small"
+                type="danger"
+                :loading="resolvingApproval === 'rejected'"
+                @click='resolveSelectedApproval("rejected")'
+              >
+                <el-icon><Delete /></el-icon>
+                {{ t("agentOS.approvals.reject") }}
+              </el-button>
+            </div>
+          </div>
+
+          <div class="approval-detail-grid">
+            <span><b>Run</b>{{ selectedApproval.run_id || "-" }}</span>
+            <span><b>Session</b>{{ selectedApproval.session_id || "-" }}</span>
+            <span><b>Source</b>{{ selectedApproval.source_name || selectedApproval.source_type || "-" }}</span>
+            <span><b>User</b>{{ selectedApproval.user_id || "-" }}</span>
+            <span><b>Agent</b>{{ selectedApproval.agent_id || "-" }}</span>
+            <span><b>Run Status</b>{{ selectedApproval.run_status || "-" }}</span>
+          </div>
+
+          <section class="approval-json-block">
+            <p>{{ t("agentOS.approvals.argsTitle") }}</p>
+            <pre>{{ formatJson(selectedApproval.tool_args || {}) }}</pre>
+          </section>
+          <section class="approval-json-block">
+            <p>{{ t("agentOS.approvals.contextTitle") }}</p>
+            <pre>{{ formatJson(selectedApproval.context || {}) }}</pre>
+          </section>
+          <section class="approval-json-block">
+            <p>{{ t("agentOS.approvals.requirementsTitle") }}</p>
+            <pre>{{ formatJson(selectedApproval.requirements || []) }}</pre>
+          </section>
+          <section v-if="selectedApproval.resolved_by || selectedApproval.resolution_data" class="approval-json-block">
+            <p>{{ t("agentOS.approvals.resolutionTitle") }}</p>
+            <pre>{{ formatJson({ resolved_by: selectedApproval.resolved_by, resolved_at: selectedApproval.resolved_at, resolution_data: selectedApproval.resolution_data }) }}</pre>
+          </section>
+        </template>
+
+        <div v-else class="agentos-empty">
+          <el-icon><Aim /></el-icon>
+          <strong>{{ t("agentOS.approvals.selectTitle") }}</strong>
+          <span>{{ t("agentOS.approvals.selectDescription") }}</span>
+        </div>
+      </section>
+    </main>
+
     <main v-else class="agentos-ledger">
       <section class="agentos-panel ag-content-panel">
         <div class="agentos-panel-head">
@@ -274,6 +393,7 @@ import { ElMessage } from "element-plus"
 import { useI18n } from "vue-i18n"
 import { useOsControlApi } from "../composables/useApi"
 import type {
+  ApprovalRecord,
   OsControlMetric,
   OsControlModule,
   OsControlRecord,
@@ -291,6 +411,9 @@ const {
   loading,
   error,
   fetchModule,
+  listApprovals,
+  getApproval,
+  resolveApproval,
   createSchedule,
   updateSchedule,
   setScheduleEnabled,
@@ -305,6 +428,9 @@ const savingSchedule = ref(false)
 const loadingRuns = ref(false)
 const showCreateForm = ref(false)
 const selectedScheduleId = ref("")
+const selectedApprovalId = ref("")
+const approvalStatusFilter = ref("")
+const resolvingApproval = ref<"approved" | "rejected" | "">("")
 const runs = ref<SchedulerRun[]>([])
 const schedulePayloadJson = ref("{}")
 const editPayloadJson = ref("{}")
@@ -344,7 +470,9 @@ const fallbackMetrics = computed<OsControlMetric[]>(() => [
 ])
 const generatedAt = computed(() => formatTime(payload.value?.generated_at))
 const schedules = computed<SchedulerSchedule[]>(() => payload.value?.schedules || [])
+const approvals = computed<ApprovalRecord[]>(() => payload.value?.approvals || [])
 const selectedSchedule = computed(() => schedules.value.find((schedule) => schedule.id === selectedScheduleId.value) || null)
+const selectedApproval = computed(() => approvals.value.find((approval) => approval.id === selectedApprovalId.value) || null)
 const emptyMessage = computed(() => {
   if (props.osModule === "evaluation") return t("agentOS.empty.evaluation")
   if (props.osModule === "approvals") return t("agentOS.empty.approvals")
@@ -365,8 +493,21 @@ const parsePayloadJson = (value: string) => {
 }
 
 const loadModule = async () => {
-  const nextPayload = await fetchModule(props.osModule)
+  const nextPayload = props.osModule === "approvals"
+    ? await listApprovals({
+        status: approvalStatusFilter.value || undefined,
+        page: 1,
+        limit: 50,
+      })
+    : await fetchModule(props.osModule)
   payload.value = nextPayload
+  if (props.osModule === "approvals") {
+    const stillSelected = approvals.value.some((approval) => approval.id === selectedApprovalId.value)
+    if (!stillSelected) {
+      selectedApprovalId.value = approvals.value[0]?.id || ""
+    }
+    return
+  }
   if (props.osModule !== "scheduler") return
   const stillSelected = schedules.value.some((schedule) => schedule.id === selectedScheduleId.value)
   if (!stillSelected) {
@@ -439,6 +580,21 @@ const selectSchedule = async (id: string) => {
   selectedScheduleId.value = id
   loadSelectedIntoEdit()
   await loadRuns(id)
+}
+
+const selectApproval = async (id: string) => {
+  selectedApprovalId.value = id
+  try {
+    const detail = await getApproval(id)
+    const current = approvals.value
+    const index = current.findIndex((approval) => approval.id === id)
+    if (!payload.value || index < 0) return
+    const nextApprovals = [...current]
+    nextApprovals[index] = detail
+    payload.value = { ...payload.value, approvals: nextApprovals }
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : t("agentOS.approvals.loadFailed"))
+  }
 }
 
 const loadSelectedIntoEdit = () => {
@@ -516,6 +672,35 @@ const deleteSelectedSchedule = async () => {
   await loadModule()
 }
 
+const resolveSelectedApproval = async (status: "approved" | "rejected") => {
+  const approval = selectedApproval.value
+  if (!approval) return
+  resolvingApproval.value = status
+  try {
+    const resolved = await resolveApproval(approval.id, { status })
+    const current = approvals.value
+    const index = current.findIndex((item) => item.id === approval.id)
+    if (payload.value && index >= 0) {
+      const nextApprovals = [...current]
+      nextApprovals[index] = resolved
+      payload.value = { ...payload.value, approvals: nextApprovals }
+    }
+    await loadModule()
+    if (approvals.value.some((item) => item.id === resolved.id)) {
+      selectedApprovalId.value = resolved.id
+    }
+    ElMessage.success(
+      status === "approved"
+        ? t("agentOS.approvals.approved")
+        : t("agentOS.approvals.rejected")
+    )
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : t("agentOS.approvals.resolveFailed"))
+  } finally {
+    resolvingApproval.value = ""
+  }
+}
+
 const loadRuns = async (id: string) => {
   loadingRuns.value = true
   try {
@@ -528,13 +713,13 @@ const loadRuns = async (id: string) => {
 
 const statusTone = (status: string) => {
   const text = status.toLowerCase()
-  if (["online", "ready", "enabled", "active", "completed", "stored", "success"].includes(text)) return "green"
+  if (["online", "ready", "enabled", "active", "completed", "stored", "success", "approved"].includes(text)) return "green"
   if (["pending", "draft", "idle", "loading", "running", "paused"].includes(text)) return "yellow"
-  if (["error", "failed", "disabled", "cancelled", "timeout"].includes(text)) return "red"
+  if (["error", "failed", "disabled", "cancelled", "timeout", "rejected"].includes(text)) return "red"
   return "blue"
 }
 
-const formatTime = (value?: string) => {
+const formatTime = (value?: string | number | null) => {
   if (!value) return "-"
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -551,6 +736,14 @@ const compactValue = (value: unknown) => {
   if (!text) return "-"
   if (/^\d{4}-\d{2}-\d{2}T/.test(text)) return formatTime(text)
   return text.length > 48 ? `${text.slice(0, 45)}...` : text
+}
+
+const formatJson = (value: unknown) => {
+  try {
+    return JSON.stringify(value ?? {}, null, 2)
+  } catch {
+    return String(value ?? "")
+  }
 }
 
 const isIdEntry = (key: string, value: unknown) => {
@@ -687,9 +880,17 @@ onMounted(() => {
   overflow: hidden;
 }
 
-.scheduler-workbench {
+.scheduler-workbench,
+.approvals-workbench {
   gap: 12px;
   grid-template-columns: minmax(360px, 0.95fr) minmax(420px, 1.05fr);
+}
+
+.approvals-workbench {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  overflow: hidden;
 }
 
 .agentos-ledger {
@@ -706,7 +907,9 @@ onMounted(() => {
 
 .agentos-ledger > .agentos-panel,
 .scheduler-list-panel,
-.scheduler-detail-panel {
+.scheduler-detail-panel,
+.approvals-list-panel,
+.approvals-detail-panel {
   display: flex;
   flex-direction: column;
 }
@@ -800,6 +1003,7 @@ onMounted(() => {
 }
 
 .schedule-table,
+.approval-table,
 .agentos-records,
 .run-list {
   display: grid;
@@ -826,12 +1030,33 @@ onMounted(() => {
   cursor: pointer;
 }
 
+.approval-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto minmax(0, 1fr) minmax(116px, auto);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--os-border);
+  border-radius: 8px;
+  background: var(--os-panel-soft);
+  padding: 10px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.approval-row.selected {
+  border-color: color-mix(in srgb, var(--os-blue) 48%, var(--os-border));
+  background: color-mix(in srgb, var(--os-blue) 8%, var(--os-panel));
+}
+
 .schedule-row.selected {
   border-color: color-mix(in srgb, var(--os-blue) 48%, var(--os-border));
   background: color-mix(in srgb, var(--os-blue) 8%, var(--os-panel));
 }
 
 .schedule-main strong,
+.approval-main strong,
 .agentos-record-main strong {
   display: block;
   color: var(--os-text);
@@ -844,7 +1069,9 @@ onMounted(() => {
 }
 
 .schedule-main small,
+.approval-main small,
 .schedule-side small,
+.approval-side small,
 .agentos-record-main p,
 .run-row small,
 .run-row p {
@@ -860,6 +1087,78 @@ onMounted(() => {
   gap: 3px;
   font-family: "JetBrains Mono", "Fira Code", monospace;
   font-size: 10px;
+}
+
+.approval-side {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+}
+
+.approval-side b {
+  color: var(--os-text);
+}
+
+.approval-status-filter {
+  width: 152px;
+}
+
+.approval-detail-grid {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.approval-detail-grid span {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--os-border);
+  border-radius: 8px;
+  background: var(--os-panel-soft);
+  padding: 8px;
+  color: var(--os-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.approval-detail-grid b,
+.approval-json-block p {
+  color: var(--os-text);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.approval-json-block {
+  display: grid;
+  min-height: 0;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.approval-json-block p {
+  margin: 0;
+}
+
+.approval-json-block pre {
+  max-height: 180px;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--os-border);
+  border-radius: 8px;
+  background: var(--os-panel-soft);
+  padding: 10px;
+  color: var(--os-text);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .schedule-side b {
@@ -1000,7 +1299,8 @@ html.dark .agentos-control {
 }
 
 @media (max-width: 1180px) {
-  .scheduler-workbench {
+  .scheduler-workbench,
+  .approvals-workbench {
     grid-template-columns: 1fr;
     overflow-y: auto;
   }
@@ -1012,7 +1312,8 @@ html.dark .agentos-control {
   }
 
   .agentos-scheduler-grid,
-  .scheduler-detail-grid {
+  .scheduler-detail-grid,
+  .approval-detail-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1023,11 +1324,13 @@ html.dark .agentos-control {
 
   .agentos-record,
   .schedule-row,
+  .approval-row,
   .run-row {
     grid-template-columns: 1fr;
   }
 
   .schedule-side,
+  .approval-side,
   .agentos-record-side {
     align-items: flex-start;
     justify-items: start;

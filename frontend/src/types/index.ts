@@ -148,6 +148,85 @@ export interface OsControlResponse {
   records: OsControlRecord[]
   generated_at: string
   schedules?: SchedulerSchedule[]
+  approvals?: ApprovalRecord[]
+  approval_filters?: ApprovalFilters
+  approval_meta?: ApprovalMeta
+}
+
+export interface ApprovalRecord {
+  id: string
+  run_id?: string | null
+  session_id?: string | null
+  status: string
+  source_type?: string | null
+  approval_type?: string | null
+  pause_type?: string | null
+  tool_name?: string | null
+  tool_args?: Record<string, unknown>
+  expires_at?: number | string | null
+  agent_id?: string | null
+  team_id?: string | null
+  workflow_id?: string | null
+  user_id?: string | null
+  schedule_id?: string | null
+  schedule_run_id?: string | null
+  source_name?: string | null
+  requirements?: Record<string, unknown>[]
+  context?: Record<string, unknown>
+  resolution_data?: Record<string, unknown> | null
+  resolved_by?: string | null
+  resolved_at?: number | string | null
+  created_at?: number | string | null
+  updated_at?: number | string | null
+  run_status?: string | null
+}
+
+export interface ApprovalFilters {
+  status?: string | null
+  source_type?: string | null
+  approval_type?: string | null
+  pause_type?: string | null
+  agent_id?: string | null
+  team_id?: string | null
+  workflow_id?: string | null
+  user_id?: string | null
+  schedule_id?: string | null
+  run_id?: string | null
+  page: number
+  limit: number
+}
+
+export interface ApprovalMeta {
+  page: number
+  limit: number
+  total: number
+  pending: number
+}
+
+export interface ApprovalControlResponse extends OsControlResponse {
+  approvals: ApprovalRecord[]
+  approval_filters: ApprovalFilters
+  approval_meta: ApprovalMeta
+}
+
+export interface ApprovalListParams {
+  status?: string
+  source_type?: string
+  approval_type?: string
+  pause_type?: string
+  agent_id?: string
+  team_id?: string
+  workflow_id?: string
+  user_id?: string
+  schedule_id?: string
+  run_id?: string
+  page?: number
+  limit?: number
+}
+
+export interface ApprovalResolveRequest {
+  status: "approved" | "rejected"
+  resolution_data?: Record<string, unknown> | null
 }
 
 export interface MemoryItem {
