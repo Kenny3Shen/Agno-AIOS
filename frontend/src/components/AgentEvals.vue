@@ -1,28 +1,5 @@
 <template>
   <div class="agent-evals ag-page-flow">
-    <header class="agent-evals-header ag-content-panel">
-      <div class="agent-evals-title">
-        <p>{{ t("agentEvals.title") }}</p>
-        <span>{{ t("agentEvals.subtitle") }}</span>
-      </div>
-
-      <div class="agent-evals-actions">
-        <el-tooltip :content="t('agentEvals.actions.refresh')" placement="bottom">
-          <el-button circle class="ag-icon-button" :loading="loading" :aria-label="t('agentEvals.actions.refresh')" @click="loadWorkbench">
-            <el-icon><Refresh /></el-icon>
-          </el-button>
-        </el-tooltip>
-        <el-button v-if="canWrite" size="small" plain @click="showPermissionNotice">
-          <el-icon><FolderAdd /></el-icon>
-          {{ t("agentEvals.actions.newSuite") }}
-        </el-button>
-        <el-button v-if="canWrite" size="small" type="primary" @click="showPermissionNotice">
-          <el-icon><DocumentAdd /></el-icon>
-          {{ t("agentEvals.actions.newCase") }}
-        </el-button>
-      </div>
-    </header>
-
     <section class="agent-evals-kpis ag-stat-strip">
       <article
         v-for="card in summaryCards"
@@ -257,10 +234,7 @@ import { computed, onMounted, reactive, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { ElMessage } from "element-plus"
 import {
-  DocumentAdd,
   Edit,
-  FolderAdd,
-  Refresh,
   RefreshRight,
   Search,
   VideoPlay,
@@ -306,9 +280,9 @@ const filters = reactive({
   status: "all",
   keyword: "",
 })
+const loading = ref(false)
+const error = ref<string | null>(null)
 
-const loading = computed(() => api.loading.value)
-const error = computed(() => api.error.value)
 const canWrite = computed(() => authStore.hasPermission("agent_eval:write"))
 const canRun = computed(() => authStore.hasPermission("agent_eval:run"))
 const selectedSuiteId = computed(() => filters.suiteId !== "all" ? filters.suiteId : "")
@@ -391,23 +365,63 @@ const toolCallStatuses = computed(() => {
   return expected.length ? expected.map(() => "expected") : ["unknown"]
 })
 
+const emptyTrends = (): AgentEvalTrendResponse => ({
+  by_date: [],
+  by_eval_type: [],
+  by_status: { passed: 0, failed: 0, unknown: 0 },
+})
+
+const errorMessage = (err: unknown) => {
+  if (err instanceof Error && err.message) return err.message
+  return t("api.errors.agentEvalsRequestFailed")
+}
+
+const isNotFoundError = (err: unknown) => (
+  err instanceof Error && err.message.trim().toLowerCase() === "not found"
+)
+
+const requestOrFallback = async <T>(request: () => Promise<T>, fallback: T) => {
+  try {
+    return { data: await request(), usedFallback: false }
+  } catch (err) {
+    if (isNotFoundError(err)) return { data: fallback, usedFallback: true }
+    throw err
+  }
+}
+
 const loadWorkbench = async () => {
-  const [suiteItems, caseItems, agnoRunResult, failureItems, trendResult] = await Promise.all([
-    api.listSuites(),
-    api.listCases(),
-    api.listAgnoRuns({ limit: 50 }),
-    api.listFailures({ limit: 50 }),
-    api.getTrends({ limit: 30 }),
-  ])
-  suites.value = suiteItems
-  cases.value = caseItems
-  agnoRuns.value = agnoRunResult.items
-  failures.value = failureItems
-  trends.value = trendResult
-  selectedCaseId.value = filteredCases.value[0]?.id ?? null
-  selectedRunId.value = agnoRuns.value[0]?.id ?? null
-  selectedFailureId.value = failures.value[0]?.id ?? null
-  ElMessage.success(t("agentEvals.messages.loaded"))
+  loading.value = true
+  error.value = null
+  try {
+    const [suiteItems, caseItems, agnoRunResult, failureItems, trendResult] = await Promise.all([
+      requestOrFallback(() => api.listSuites(), []),
+      requestOrFallback(() => api.listCases(), []),
+      requestOrFallback(() => api.listAgnoRuns({ limit: 50 }), {
+        items: [],
+        total: 0,
+        limit: 50,
+        page: 1,
+        trends: emptyTrends(),
+      }),
+      requestOrFallback(() => api.listFailures({ limit: 50 }), []),
+      requestOrFallback(() => api.getTrends({ limit: 30 }), emptyTrends()),
+    ])
+    suites.value = suiteItems.data
+    cases.value = caseItems.data
+    agnoRuns.value = agnoRunResult.data.items
+    failures.value = failureItems.data
+    trends.value = trendResult.data
+    selectedCaseId.value = filteredCases.value[0]?.id ?? null
+    selectedRunId.value = agnoRuns.value[0]?.id ?? null
+    selectedFailureId.value = failures.value[0]?.id ?? null
+    if (![suiteItems, caseItems, agnoRunResult, failureItems, trendResult].some((item) => item.usedFallback)) {
+      ElMessage.success(t("agentEvals.messages.loaded"))
+    }
+  } catch (err) {
+    error.value = errorMessage(err)
+  } finally {
+    loading.value = false
+  }
 }
 
 const runSelectedSuite = async () => {
@@ -493,19 +507,11 @@ onMounted(() => {
   padding: 14px;
 }
 
-.agent-evals-header,
 .agent-evals-filters {
-  display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
 }
 
-.agent-evals-title {
-  min-width: 0;
-}
-
-.agent-evals-title p,
 .agent-evals-panel-head p,
 .agent-evals-detail-head p,
 .agent-evals-trends p,
@@ -516,7 +522,6 @@ onMounted(() => {
   font-weight: 700;
 }
 
-.agent-evals-title span,
 .agent-evals-panel-head span {
   display: block;
   margin-top: 3px;
@@ -527,7 +532,6 @@ onMounted(() => {
   white-space: nowrap;
 }
 
-.agent-evals-actions,
 .agent-evals-row-actions {
   display: flex;
   flex: 0 0 auto;
@@ -535,8 +539,20 @@ onMounted(() => {
   gap: 8px;
 }
 
-.agent-evals-kpis {
-  grid-template-columns: repeat(6, minmax(112px, 1fr));
+.agent-evals .agent-evals-kpis {
+  align-items: stretch;
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-auto-rows: minmax(34px, auto);
+  height: auto;
+  block-size: auto;
+  min-height: var(--ag-stat-strip-height);
+  overflow: visible;
+}
+
+.agent-evals-kpi {
+  min-height: 34px;
 }
 
 .agent-evals-filters {
@@ -546,6 +562,7 @@ onMounted(() => {
 
 .agent-evals-workbench {
   display: grid;
+  flex: 0 0 auto;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
   gap: 12px;
   min-height: 0;
@@ -558,7 +575,53 @@ onMounted(() => {
 }
 
 .agent-evals-tabs :deep(.el-tabs__header) {
-  margin-bottom: 10px;
+  margin: 0;
+  border-bottom: 1px solid rgba(130, 151, 165, 0.2);
+  border-radius: 8px 8px 0 0;
+  background: rgba(12, 19, 26, 0.72);
+  padding: 6px 10px;
+}
+
+.agent-evals-tabs :deep(.el-tabs__nav-wrap::after),
+.agent-evals-tabs :deep(.el-tabs__active-bar) {
+  display: none;
+}
+
+.agent-evals-tabs :deep(.el-tabs__nav) {
+  display: flex;
+  gap: 6px;
+}
+
+.agent-evals-tabs :deep(.el-tabs__item) {
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0 11px;
+  color: var(--ag-muted, #8ea0ad);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 30px;
+}
+
+.agent-evals-tabs :deep(.el-tabs__item.is-top:nth-child(2)),
+.agent-evals-tabs :deep(.el-tabs__item.is-top:last-child) {
+  padding: 0 11px;
+}
+
+.agent-evals-tabs :deep(.el-tabs__item:hover) {
+  border-color: rgba(96, 165, 250, 0.22);
+  background: rgba(96, 165, 250, 0.08);
+  color: var(--ag-text, #e6edf3);
+}
+
+.agent-evals-tabs :deep(.el-tabs__item.is-active) {
+  border-color: rgba(64, 158, 255, 0.42);
+  background: rgba(64, 158, 255, 0.16);
+  color: #93c5fd;
+}
+
+.agent-evals-tabs :deep(.el-tabs__content) {
+  padding: 12px;
 }
 
 .agent-evals-panel-head,
@@ -707,6 +770,7 @@ onMounted(() => {
 
 .agent-evals-trends {
   display: grid;
+  flex: 0 0 auto;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 0.6fr);
   gap: 12px;
 }
@@ -789,26 +853,58 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 
-  .agent-evals-kpis,
+  .agent-evals .agent-evals-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .agent-evals-filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 760px) {
-  .agent-evals-header,
-  .agent-evals-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .agent-evals-kpis,
   .agent-evals-filters,
   .agent-evals-case-row,
   .agent-evals-run-row,
   .agent-evals-failure-row,
   .agent-evals-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .agent-evals .agent-evals-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .performance-eval-chip {
+    min-height: 34px;
+    align-items: center;
+    flex-direction: row;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .agent-evals-main,
+  .agent-evals-detail {
+    min-height: auto;
+  }
+
+  .agent-evals-empty {
+    min-height: 120px;
+  }
+
+  .agent-evals-empty.detail {
+    min-height: 180px;
+  }
+
+  .agent-evals-panel-head,
+  .agent-evals-detail-head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .agent-evals-run-status {
+    width: 100%;
+    height: 4px;
   }
 }
 </style>
