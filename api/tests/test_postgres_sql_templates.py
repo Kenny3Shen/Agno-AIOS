@@ -32,6 +32,7 @@ from api.services import knowledge_service
 from api.services import security_run_runtime
 from api.services import skill_service
 from api.services import agent_eval_result_service
+from api.services import agent_eval_runner
 from api.core import logging as core_logging
 from api.tasks import migrate_mysql_to_postgres, update_cve
 from api.tasks import cve_sources
@@ -430,6 +431,15 @@ def test_agent_eval_result_service_uses_agno_async_api_only() -> None:
     assert "agno_eval" not in source.lower().replace("agno_eval_run", "")
     assert "select(" not in source
     assert "from psycopg" not in source
+
+
+def test_agent_eval_runner_prefers_agno_async_eval_api() -> None:
+    source = inspect.getsource(agent_eval_runner)
+    assert ".arun(" in source
+    assert ".run(" not in source
+    assert "get_async_agno_postgres_db" in source
+    assert "get_agno_postgres_db" not in source
+    assert "PostgresDb" not in source
 
 
 def test_mcp_tables_are_declared_in_sqlalchemy_persistence() -> None:

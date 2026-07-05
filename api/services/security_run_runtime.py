@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from contextlib import asynccontextmanager
 from pathlib import Path
 from inspect import isawaitable
 from typing import Any, AsyncIterator, Callable, cast
@@ -225,17 +226,21 @@ class SecurityRunRuntime:
             markdown=True,
         )
 
+    @asynccontextmanager
+    async def security_agent_context(self, request: SecurityRunRequest) -> AsyncIterator[Agent]:
+        async with self.dependencies.mcp_tools_factory(
+            transport="streamable-http",
+            url=self.dependencies.get_mcp_url(),
+            timeout_seconds=20,
+        ) as mcp_tools:
+            security_agent = await _maybe_await(
+                self._build_security_agent(mcp_tools, request)
+            )
+            yield security_agent
+
     async def stream(self, request: SecurityRunRequest) -> AsyncIterator[str]:
         try:
-            async with self.dependencies.mcp_tools_factory(
-                transport="streamable-http",
-                url=self.dependencies.get_mcp_url(),
-                timeout_seconds=20,
-            ) as mcp_tools:
-                security_agent = await _maybe_await(
-                    self._build_security_agent(mcp_tools, request)
-                )
-
+            async with self.security_agent_context(request) as security_agent:
                 async for chunk in self._stream_agent_content(
                     security_agent,
                     request,
