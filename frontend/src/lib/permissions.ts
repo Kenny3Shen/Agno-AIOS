@@ -13,6 +13,7 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     "session:write:own",
     "trace:read:own",
     "memory:read:own",
+    "memory:write:own",
     "metrics:read:own",
     "collect:write",
     "cve:read",

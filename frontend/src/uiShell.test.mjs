@@ -5,8 +5,10 @@ import { fileURLToPath } from "node:url"
 import { createI18n } from "vue-i18n"
 import { enUS } from "./i18n/locales/en-US.ts"
 import { zhCN } from "./i18n/locales/zh-CN.ts"
+import { hasRolePermission } from "./lib/permissions.ts"
 import "./modules/shellNavigation.test.mjs"
 import "./modules/agentEvalsWorkbench.test.mjs"
+import "./modules/memoryControl.test.mjs"
 import "./modules/traceWorkbench.test.mjs"
 import "./modules/workflowBuilder.test.mjs"
 
@@ -306,6 +308,18 @@ assert.match(
   "frontend permissions must include Agent Eval run permission",
 )
 
+assert.equal(
+  hasRolePermission("user", "memory:write:own"),
+  true,
+  "ordinary users must be able to update and delete their own memories",
+)
+
+assert.equal(
+  hasRolePermission("guest", "memory:write:own"),
+  false,
+  "guest users must not be able to mutate memories",
+)
+
 for (const hardcodedAuthCopy of [
   "登录后继续使用 Chat、MCP、Trace 与模型设置。",
   "进入工作台",
@@ -501,6 +515,36 @@ assert.match(
   useApi,
   /archiveSession/,
   "Chat history API must expose archiveSession instead of permanent deletion for sidebar delete",
+)
+
+assert.match(
+  useApi,
+  /deleteMemory\s*=\s*async/,
+  "Memory API must expose deleteMemory for Agno user memories",
+)
+
+assert.match(
+  useApi,
+  /apiFetch\(`\/os\/memory\/\$\{encodeURIComponent\(memoryId\)\}/,
+  "deleteMemory must call the authenticated Memory delete endpoint",
+)
+
+assert.match(
+  useApi,
+  /updateMemory\s*=\s*async/,
+  "Memory API must expose updateMemory for Agno user memories",
+)
+
+assert.match(
+  useApi,
+  /method:\s*'PATCH'/,
+  "updateMemory must patch the authenticated Memory endpoint",
+)
+
+assert.doesNotMatch(
+  useApi,
+  /pruneMemory|\/os\/memory\/prune/,
+  "Memory pruning API must not remain exposed after pruning removal",
 )
 
 assert.match(
@@ -826,6 +870,189 @@ assert.match(
   mcp,
   /:disabled="!canWriteMcp"/,
   "MCP page must disable mutating controls for read-only users",
+)
+
+assert.match(
+  memoryControl,
+  /hasPermission\("memory:write:own"\)/,
+  "Memory page must check write permission before exposing memory mutations",
+)
+
+assert.match(
+  memoryControl,
+  /memory-edit-dialog/,
+  "Memory page must render a dedicated edit dialog for updating memories",
+)
+
+assert.match(
+  memoryControl,
+  /memory-row-actions/,
+  "Memory item rows must expose edit/delete actions where the content focus lives",
+)
+
+const memoryRowFacts = memoryControl.match(
+  /<span class="memory-row-facts">([\s\S]*?)<\/span>\s*<\/button>/,
+)?.[1] || ""
+const memoryRowCopy = memoryControl.match(
+  /<span class="memory-row-copy">([\s\S]*?)<\/span>\s*<span class="memory-row-facts">/,
+)?.[1] || ""
+const memoryRowActions = memoryControl.match(
+  /<span v-if="canWriteMemory" class="memory-row-actions">([\s\S]*?)<\/span>\s*<\/article>/,
+)?.[1] || ""
+const memoryDetailMetadata = memoryControl.match(
+  /<section class="memory-metadata-panel">([\s\S]*?)<\/section>/,
+)?.[1] || ""
+
+assert.match(
+  memoryRowFacts,
+  /v-for="topic in memory\.topics"/,
+  "Memory item rows must keep topics under the item content",
+)
+
+assert.doesNotMatch(
+  memoryRowFacts,
+  /memory\.user_id|memory\.agent_id|memory\.team_id|memory\.created_at|memory\.updated_at|createdLabel|updatedLabel/,
+  "Memory item rows must not duplicate user, agent, team, or timestamps from the detail metadata",
+)
+
+assert.doesNotMatch(
+  memoryRowCopy,
+  /memory\.input/,
+  "Memory item rows must not show the source input; it belongs in the detail metadata",
+)
+
+assert.match(
+  memoryRowActions,
+  /:aria-label="t\('agentOS\.memory\.editMemory'\)"/,
+  "Memory row edit action must keep an accessible name while rendering as an icon button",
+)
+
+assert.match(
+  memoryRowActions,
+  /:aria-label="t\('agentOS\.memory\.deleteMemory'\)"/,
+  "Memory row delete action must keep an accessible name while rendering as an icon button",
+)
+
+assert.doesNotMatch(
+  memoryRowActions,
+  /\{\{\s*t\("agentOS\.memory\.(editMemory|deleteMemory)"\)\s*\}\}/,
+  "Memory row edit/delete actions must be icon-only buttons without visible text labels",
+)
+
+for (const metadataField of [
+  "selectedMemory.user_id",
+  "selectedMemory.agent_id",
+  "selectedMemory.team_id",
+  "selectedMemory.created_at",
+  "selectedMemory.updated_at",
+]) {
+  assert.match(
+    memoryDetailMetadata,
+    new RegExp(metadataField.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    `Memory detail metadata must include ${metadataField}`,
+  )
+}
+
+assert.match(
+  memoryDetailMetadata,
+  /selectedMemory\.input/,
+  "Memory detail metadata must include the source input that generated the memory",
+)
+
+assert.match(
+  memoryDetailMetadata,
+  /inputLabel/,
+  "Memory detail metadata must label the source input field",
+)
+
+assert.match(
+  memoryControl,
+  /import MarkdownIt from "markdown-it"/,
+  "Memory source input viewer must use MarkdownIt for formatted source rendering",
+)
+
+assert.match(
+  memoryDetailMetadata,
+  /memory-source-viewer/,
+  "Memory detail metadata must render source input in a formatted viewer",
+)
+
+assert.match(
+  memoryDetailMetadata,
+  /v-html="renderSourceInput\(\)"/,
+  "Memory source input viewer must render formatted markup instead of raw plain text only",
+)
+
+assert.match(
+  memoryDetailMetadata,
+  /sourceInputViewMode/,
+  "Memory source input viewer must support selectable text, JSON, and Markdown modes",
+)
+
+assert.match(
+  memoryDetailMetadata,
+  /copySourceInput/,
+  "Memory source input viewer must provide a copy action",
+)
+
+assert.match(
+  memoryDetailMetadata,
+  /sourceInputExpanded/,
+  "Memory source input viewer must provide an expand/collapse state",
+)
+
+assert.doesNotMatch(
+  memoryDetailMetadata,
+  /memory-source-toolbar">\s*<span>\{\{\s*t\("agentOS\.memory\.inputLabel"\)\s*\}\}<\/span>/,
+  "Memory source input viewer must not duplicate the source label inside the compact toolbar",
+)
+
+assert.match(
+  memoryControl,
+  /\.memory-source-actions\s*\{[\s\S]*grid-template-columns:\s*minmax\(92px,\s*1fr\)\s+auto\s+auto/,
+  "Memory source input actions must stay in one stable row in the narrow right panel",
+)
+
+assert.match(
+  memoryControl,
+  /\.memory-metadata-list\s*>\s*div\s*\{/,
+  "Memory metadata row layout must only target direct rows so nested source viewer divs are not converted into metadata grids",
+)
+
+assert.doesNotMatch(
+  memoryDetailMetadata,
+  /selectedMemory\.topics/,
+  "Memory detail metadata must leave topics in the middle item column",
+)
+
+assert.doesNotMatch(
+  memoryControl,
+  /previewPruneMemory|applyPruneMemory|prunePreview|pruneApply|memory-detail-grid/,
+  "Memory page must remove pruning controls and the old bulky metadata grid",
+)
+
+assert.doesNotMatch(
+  memoryControl,
+  /memory-identity-strip|memory-meta-list|memory-topic-stack|detailFacts/,
+  "Memory detail panel must not duplicate row metadata such as user, topics, and created timestamps",
+)
+
+assert.doesNotMatch(
+  memoryControl,
+  /<aside class="memory-detail-panel"[\s\S]*?(openEditMemoryDialog|deleteSelectedMemory)[\s\S]*?<\/aside>/,
+  "Memory detail panel must not own edit/delete operations",
+)
+
+assert.match(
+  memoryControl,
+  /@media \(max-width: 980px\)[\s\S]*\.memory-workbench\s*\{[\s\S]*flex:\s*0 0 auto/,
+  "Memory mobile workbench must use natural vertical flow so row topics and icon actions are not clipped",
+)
+
+assert.match(
+  memoryControl,
+  /@media \(max-width: 980px\)[\s\S]*\.memory-list\s*\{[\s\S]*overflow:\s*visible/,
+  "Memory mobile list must not hide row topics and icon actions inside a short internal scroller",
 )
 
 for (const bulkyMcpMetric of [

@@ -12,4 +12,4 @@ Scheduler 页面应优先呈现列表，再展示选中 schedule 的 detail 和 
 
 Scheduler 写操作保持 admin-only，并为生命周期 mutation 写入 audit log；读访问可以暂时继续使用当前 admin-read 规则，直到引入更细粒度 scheduler permissions。Scheduler execution 通过 Agno 的 in-process poller 和 executor 运行，lock handling、retries、manual triggers 和 run history 都遵循 Agno Scheduler 语义。
 
-因为旧自定义 scheduler table 没有需要保留的数据，实现应删除旧 `app.os_schedules` table 和相关自定义 scheduler code paths，而不是携带迁移层。这个决策用 Agno 模型替代当前自定义 `app.os_schedules` 加 Celery beat 语义，因为 Agno 已定义 AgentOS Scheduler 需要的 lifecycle interface 和 execution records。
+因为旧自定义 scheduler table 没有需要保留的数据，实现应删除旧 `app.os_schedules` table 和相关自定义 scheduler code paths，而不是携带迁移层。这个决策用 Agno 模型替代当前自定义 `app.os_schedules` 加自定义定时执行语义，因为 Agno 已定义 AgentOS Scheduler 需要的 lifecycle interface 和 execution records。

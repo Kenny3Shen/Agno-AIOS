@@ -154,33 +154,64 @@
         </div>
 
         <div v-if="memories.length" class="memory-list">
-          <button
+          <article
             v-for="memory in memories"
             :key="memory.id"
-            type="button"
             class="memory-row"
             :class="{ selected: memory.id === selectedMemory?.id }"
-            :aria-pressed="memory.id === selectedMemory?.id"
-            @click="selectMemory(memory.id)"
           >
             <span class="memory-row-status" :class="`tone-${memoryStatusTone(memory)}`" />
-            <span class="memory-row-copy">
-              <strong :title="memory.memory">{{ memory.memory || t("agentOS.memory.emptyMemory") }}</strong>
-              <small v-if="memory.input" :title="memory.input">{{ memory.input }}</small>
-            </span>
-            <span class="memory-row-meta">
-              <span class="memory-chip user" :title="memory.user_id">{{ memory.user_id || "default" }}</span>
-              <span
-                v-for="topic in memory.topics.slice(0, 3)"
-                :key="`${memory.id}-${topic}`"
-                class="memory-chip"
-                :title="topic"
-              >
-                {{ topic }}
+            <button
+              type="button"
+              class="memory-row-main"
+              :aria-pressed="memory.id === selectedMemory?.id"
+              @click="selectMemory(memory.id)"
+            >
+              <span class="memory-row-copy">
+                <strong :title="memory.memory">{{ memory.memory || t("agentOS.memory.emptyMemory") }}</strong>
               </span>
-              <small>{{ formatTime(memory.updated_at) }}</small>
+              <span class="memory-row-facts">
+                <span v-if="!memory.topics.length" class="memory-chip">
+                  {{ t("agentOS.memory.noTopics") }}
+                </span>
+                <span
+                  v-for="topic in memory.topics"
+                  :key="`${memory.id}-${topic}`"
+                  class="memory-chip"
+                  :title="topic"
+                >
+                  {{ topic }}
+                </span>
+              </span>
+            </button>
+            <span v-if="canWriteMemory" class="memory-row-actions">
+              <el-button
+                size="small"
+                plain
+                circle
+                class="memory-action-button"
+                :aria-label="t('agentOS.memory.editMemory')"
+                :title="t('agentOS.memory.editMemory')"
+                :disabled="loading"
+                @click.stop="openEditMemoryDialog(memory)"
+              >
+                <el-icon><EditPen /></el-icon>
+              </el-button>
+              <el-button
+                size="small"
+                type="danger"
+                plain
+                circle
+                class="memory-action-button"
+                :aria-label="t('agentOS.memory.deleteMemory')"
+                :title="t('agentOS.memory.deleteMemory')"
+                :disabled="loading"
+                @click.stop="deleteSelectedMemory(memory)"
+              >
+                <el-icon><Delete /></el-icon>
+              </el-button>
             </span>
-          </button>
+          </article>
         </div>
 
         <div v-else-if="!loading" class="memory-empty">
@@ -212,67 +243,94 @@
             </span>
           </div>
 
-          <article class="memory-reading">
-            <span>{{ t("agentOS.memory.memoryLabel") }}</span>
-            <p>{{ selectedMemory.memory || t("agentOS.memory.emptyMemory") }}</p>
-          </article>
-
-          <dl class="memory-detail-grid">
-            <div>
-              <dt>{{ t("agentOS.memory.userLabel") }}</dt>
-              <dd :title="selectedMemory.user_id">{{ selectedMemory.user_id || "default" }}</dd>
-            </div>
-            <div>
-              <dt>{{ t("agentOS.memory.updatedLabel") }}</dt>
-              <dd>{{ formatTime(selectedMemory.updated_at) }}</dd>
-            </div>
-            <div>
-              <dt>{{ t("agentOS.memory.agentLabel") }}</dt>
-              <dd :title="selectedMemory.agent_id">{{ selectedMemory.agent_id || "-" }}</dd>
-            </div>
-            <div>
-              <dt>{{ t("agentOS.memory.teamLabel") }}</dt>
-              <dd :title="selectedMemory.team_id">{{ selectedMemory.team_id || "-" }}</dd>
-            </div>
-          </dl>
-
-          <section class="memory-topic-stack">
-            <p>{{ t("agentOS.memory.topicsLabel") }}</p>
-            <div>
-              <span
-                v-for="topic in selectedMemory.topics"
-                :key="`${selectedMemory.id}-detail-${topic}`"
-                class="memory-chip"
-                :title="topic"
-              >
-                {{ topic }}
-              </span>
-              <span v-if="!selectedMemory.topics.length" class="memory-chip">
-                -
-              </span>
-            </div>
+          <section class="memory-mode-flags">
+            <span
+              v-for="badge in modeBadges"
+              :key="badge.key"
+              class="memory-chip"
+              :class="badge.enabled ? 'tone-green' : 'tone-muted'"
+            >
+              {{ badge.label }}: {{ badge.enabled ? "on" : "off" }}
+            </span>
           </section>
 
-          <section v-if="selectedMemory.input" class="memory-evidence">
-            <p>{{ t("agentOS.memory.inputLabel") }}</p>
-            <pre>{{ selectedMemory.input }}</pre>
-          </section>
-
-          <section class="memory-lifecycle">
-            <p>{{ t("agentOS.memory.workflowTitle") }}</p>
-            <ol>
-              <li
-                v-for="stage in workflowStages"
-                :key="stage.key"
-                :class="`tone-${stage.tone}`"
-              >
-                <span />
-                <div>
-                  <strong>{{ stage.label }}</strong>
-                  <small>{{ stage.value }}</small>
-                </div>
-              </li>
-            </ol>
+          <section class="memory-metadata-panel">
+            <div class="memory-section-head">
+              <span>{{ t("agentOS.memory.metadataLabel") }}</span>
+            </div>
+            <dl class="memory-metadata-list">
+              <div>
+                <dt>{{ t("agentOS.memory.userLabel") }}</dt>
+                <dd :title="selectedMemory.user_id">{{ selectedMemory.user_id || "default" }}</dd>
+              </div>
+              <div>
+                <dt>{{ t("agentOS.memory.agentLabel") }}</dt>
+                <dd :title="selectedMemory.agent_id">{{ selectedMemory.agent_id || "-" }}</dd>
+              </div>
+              <div>
+                <dt>{{ t("agentOS.memory.teamLabel") }}</dt>
+                <dd :title="selectedMemory.team_id">{{ selectedMemory.team_id || "-" }}</dd>
+              </div>
+              <div>
+                <dt>{{ t("agentOS.memory.createdLabel") }}</dt>
+                <dd :title="selectedMemory.created_at">{{ formatTime(selectedMemory.created_at) }}</dd>
+              </div>
+              <div>
+                <dt>{{ t("agentOS.memory.updatedLabel") }}</dt>
+                <dd :title="selectedMemory.updated_at">{{ formatTime(selectedMemory.updated_at) }}</dd>
+              </div>
+              <div>
+                <dt>{{ t("agentOS.memory.feedbackLabel") }}</dt>
+                <dd :title="selectedMemory.feedback">{{ selectedMemory.feedback || "-" }}</dd>
+              </div>
+              <div class="memory-source-row">
+                <dt>{{ t("agentOS.memory.inputLabel") }}</dt>
+                <dd class="memory-metadata-source" :title="selectedMemory.input">
+                  <div
+                    class="memory-source-viewer"
+                    :class="{ expanded: sourceInputExpanded, empty: !selectedSourceInput.trim() }"
+                  >
+                    <div class="memory-source-toolbar">
+                      <div class="memory-source-actions">
+                        <el-select
+                          v-model="sourceInputViewMode"
+                          size="small"
+                          class="memory-source-mode-select"
+                          :aria-label="t('agentOS.memory.sourceModeLabel')"
+                        >
+                          <el-option :label="t('agentOS.memory.sourceModeText')" value="text" />
+                          <el-option :label="t('agentOS.memory.sourceModeJson')" value="json" />
+                          <el-option :label="t('agentOS.memory.sourceModeMarkdown')" value="markdown" />
+                        </el-select>
+                        <el-button
+                          size="small"
+                          plain
+                          class="cursor-pointer"
+                          :disabled="!selectedSourceInput.trim()"
+                          @click="copySourceInput"
+                        >
+                          {{ t("agentOS.memory.sourceCopy") }}
+                        </el-button>
+                        <el-button size="small" plain class="cursor-pointer" @click="sourceInputExpanded = !sourceInputExpanded">
+                          {{ sourceInputExpanded ? t("agentOS.memory.sourceCollapse") : t("agentOS.memory.sourceExpand") }}
+                        </el-button>
+                      </div>
+                    </div>
+                    <pre
+                      v-if="sourceInputViewMode === 'json'"
+                      class="memory-source-content memory-source-json"
+                      :class="{ expanded: sourceInputExpanded, empty: !selectedSourceInput.trim() }"
+                    >{{ sourceInputTextForMode("json") }}</pre>
+                    <div
+                      v-else
+                      class="memory-source-content memory-source-render"
+                      :class="{ expanded: sourceInputExpanded, empty: !selectedSourceInput.trim() }"
+                      v-html="renderSourceInput()"
+                    />
+                  </div>
+                </dd>
+              </div>
+            </dl>
           </section>
         </template>
 
@@ -283,18 +341,76 @@
         </div>
       </aside>
     </main>
+
+    <el-dialog
+      v-model="editDialogVisible"
+      class="memory-edit-dialog"
+      :title="t('agentOS.memory.editMemoryTitle')"
+      width="min(560px, calc(100vw - 32px))"
+      destroy-on-close
+    >
+      <el-form label-position="top">
+        <el-form-item :label="t('agentOS.memory.memoryLabel')">
+          <el-input
+            v-model="editForm.memory"
+            type="textarea"
+            :autosize="{ minRows: 4, maxRows: 8 }"
+            :placeholder="t('agentOS.memory.editMemoryPlaceholder')"
+          />
+        </el-form-item>
+        <el-form-item :label="t('agentOS.memory.topicsLabel')">
+          <el-select
+            v-model="editForm.topics"
+            class="memory-topic-editor"
+            multiple
+            filterable
+            allow-create
+            default-first-option
+            :placeholder="t('agentOS.memory.editTopicsPlaceholder')"
+          >
+            <el-option
+              v-for="topic in topicOptions"
+              :key="topic"
+              :label="topic"
+              :value="topic"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editDialogVisible = false">
+          {{ t("common.actions.cancel") }}
+        </el-button>
+        <el-button type="primary" :loading="loading" @click="saveMemoryUpdate">
+          {{ t("agentOS.memory.saveMemory") }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue"
 import {
+  Delete,
+  EditPen,
   Refresh,
   Search,
   User,
 } from "@element-plus/icons-vue"
+import { ElMessage, ElMessageBox } from "element-plus"
+import MarkdownIt from "markdown-it"
 import { useI18n } from "vue-i18n"
 import { useOsControlApi } from "../composables/useApi"
+import { copyToClipboard } from "../lib/clipboard"
+import {
+  defaultMemoryPayload as buildDefaultMemoryPayload,
+  memoryDisplayStatus,
+  memoryModeBadges,
+  normalizeMemoryPayload,
+  payloadAfterMemoryLoadFailure,
+} from "../modules/memoryControl"
+import { useAuthStore } from "../stores/auth"
 import type {
   MemoryControlResponse,
   MemoryItem,
@@ -303,9 +419,20 @@ import type {
 } from "../types"
 
 const { t, locale } = useI18n()
-const { loading, error, fetchMemory } = useOsControlApi()
+const authStore = useAuthStore()
+const { loading, error, fetchMemory, deleteMemory, updateMemory } = useOsControlApi()
+const markdownRenderer = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true,
+})
 const payload = ref<MemoryControlResponse | null>(null)
 const selectedMemoryId = ref("")
+const editDialogVisible = ref(false)
+const sourceInputViewMode = ref<SourceInputViewMode>("text")
+const sourceInputExpanded = ref(false)
+
+type SourceInputViewMode = "text" | "json" | "markdown"
 
 const filters = reactive({
   user_id: "",
@@ -315,36 +442,14 @@ const filters = reactive({
   limit: 50,
 })
 
-const defaultMemoryPayload = (): MemoryControlResponse => ({
-  module: "memory",
-  title: "Memory",
-  description: "",
-  status: "ok",
-  metrics: [],
-  records: [],
-  generated_at: "",
-  memories: [],
-  memory_users: [],
-  memory_topics: [],
-  memory_filters: {
-    user_id: "",
-    topic: "",
-    search: "",
-    page: filters.page,
-    limit: filters.limit,
-    total: 0,
-  },
-  memory_thresholds: {
-    optimization_review: 0,
-    abnormal_growth: 0,
-  },
-  memory_mode: {
-    type: "automatic",
-    update_memory_on_run: false,
-    enable_agentic_memory: false,
-    enable_session_summaries: false,
-    readonly: true,
-  },
+const editForm = reactive({
+  memory: "",
+  topics: [] as string[],
+})
+
+const defaultMemoryPayload = (): MemoryControlResponse => buildDefaultMemoryPayload({
+  page: filters.page,
+  limit: filters.limit,
 })
 
 const memories = computed<MemoryItem[]>(() => payload.value?.memories || [])
@@ -353,6 +458,8 @@ const topicOptions = computed<string[]>(() => payload.value?.memory_topics || []
 const total = computed(() => payload.value?.memory_filters?.total || 0)
 const thresholds = computed(() => payload.value?.memory_thresholds)
 const memoryMode = computed(() => payload.value?.memory_mode)
+const modeBadges = computed(() => memoryModeBadges(memoryMode.value || defaultMemoryPayload().memory_mode))
+const canWriteMemory = computed(() => authStore.hasPermission("memory:write:own"))
 const riskUserCount = computed(() => userOptions.value.filter((user) => user.status === "risk").length)
 const reviewUserCount = computed(() => userOptions.value.filter((user) => user.status === "review").length)
 const healthyUserCount = computed(() => userOptions.value.filter((user) => user.status === "healthy" || user.status === "stored").length)
@@ -362,13 +469,17 @@ const selectedMemory = computed<MemoryItem | null>(() => {
   if (!memories.value.length) return null
   return memories.value.find((memory) => memory.id === selectedMemoryId.value) || memories.value[0] || null
 })
+const selectedSourceInput = computed(() => selectedMemory.value?.input || "")
 
 const selectedUser = computed(() => {
   const userId = selectedMemory.value?.user_id || filters.user_id
   return userOptions.value.find((user) => user.user_id === userId) || null
 })
 
-const selectedStatus = computed(() => selectedMemory.value?.status || selectedUser.value?.status || "stored")
+const selectedStatus = computed(() => {
+  if (!selectedMemory.value) return selectedUser.value?.status || "stored"
+  return memoryDisplayStatus(selectedMemory.value, userOptions.value)
+})
 const selectedStatusTone = computed(() => statusTone(selectedStatus.value))
 
 const activeFilterCount = computed(() => {
@@ -442,31 +553,6 @@ const thresholdTitle = computed(() => t("agentOS.memory.thresholdTitle", {
   risk: thresholds.value?.abnormal_growth ?? "-",
 }))
 
-const workflowStages = computed(() => {
-  const memory = selectedMemory.value
-  if (!memory) return []
-  return [
-    {
-      key: "capture",
-      label: t("agentOS.memory.workflowCaptured"),
-      value: formatTime(memory.created_at),
-      tone: "green",
-    },
-    {
-      key: "review",
-      label: statusLabel(selectedStatus.value),
-      value: thresholdSummary.value,
-      tone: selectedStatusTone.value,
-    },
-    {
-      key: "recall",
-      label: t("agentOS.memory.workflowRecall"),
-      value: memory.topics.length ? memory.topics.join(" / ") : t("agentOS.memory.noTopics"),
-      tone: "blue",
-    },
-  ]
-})
-
 const statusTone = (status?: string) => {
   if (status === "risk") return "red"
   if (status === "review") return "yellow"
@@ -482,13 +568,44 @@ const statusLabel = (status?: string) => {
 }
 
 const memoryStatusTone = (memory: MemoryItem) => {
-  const user = userOptions.value.find((item) => item.user_id === memory.user_id)
-  return statusTone(memory.status || user?.status || "stored")
+  return statusTone(memoryDisplayStatus(memory, userOptions.value))
 }
 
 const userBarStyle = (user: MemoryUserSummary) => {
   const size = Math.max(10, Math.round((user.total_memories / maxUserMemories.value) * 100))
   return { "--memory-user-size": `${size}%` }
+}
+
+const parseSourceInputJson = (text: string) => {
+  try {
+    return { ok: true as const, value: JSON.parse(text) as unknown }
+  } catch {
+    return { ok: false as const, value: null }
+  }
+}
+
+const sourceInputTextForMode = (mode: SourceInputViewMode = sourceInputViewMode.value) => {
+  const text = selectedSourceInput.value
+  if (!text.trim()) return t("agentOS.memory.sourceEmpty")
+  if (mode !== "json") return text
+  const parsed = parseSourceInputJson(text)
+  if (!parsed.ok) return text
+  return JSON.stringify(parsed.value, null, 2)
+}
+
+const renderSourceInput = () => {
+  const text = sourceInputTextForMode(sourceInputViewMode.value)
+  return markdownRenderer.render(text)
+}
+
+const copySourceInput = async () => {
+  const text = sourceInputTextForMode(sourceInputViewMode.value).trim()
+  if (!text) return
+  if (await copyToClipboard(text)) {
+    ElMessage.success(t("common.clipboard.copied"))
+  } else {
+    ElMessage.error(t("common.clipboard.failed"))
+  }
 }
 
 const formatTime = (value?: string) => {
@@ -512,18 +629,12 @@ const queryParams = (): MemoryQueryParams => ({
 })
 
 const loadMemory = async () => {
-  const nextPayload = await fetchMemory(queryParams()).catch(() => defaultMemoryPayload())
-  const memoryFilters = nextPayload.memory_filters || defaultMemoryPayload().memory_filters
-  payload.value = {
-    ...defaultMemoryPayload(),
-    ...nextPayload,
-    memories: Array.isArray(nextPayload.memories) ? nextPayload.memories : [],
-    memory_users: Array.isArray(nextPayload.memory_users) ? nextPayload.memory_users : [],
-    memory_topics: Array.isArray(nextPayload.memory_topics) ? nextPayload.memory_topics : [],
-    memory_filters: memoryFilters,
-    memory_thresholds: nextPayload.memory_thresholds || defaultMemoryPayload().memory_thresholds,
-    memory_mode: nextPayload.memory_mode || defaultMemoryPayload().memory_mode,
-  }
+  const fallback = defaultMemoryPayload()
+  const nextPayload = await fetchMemory(queryParams())
+    .then((result) => normalizeMemoryPayload(result, fallback))
+    .catch(() => payloadAfterMemoryLoadFailure(payload.value, fallback))
+  payload.value = nextPayload
+  const memoryFilters = nextPayload.memory_filters
   filters.page = memoryFilters.page
   filters.limit = memoryFilters.limit
 }
@@ -547,6 +658,65 @@ const filterByUser = async (userId: string) => {
 
 const selectMemory = (memoryId: string) => {
   selectedMemoryId.value = memoryId
+  sourceInputExpanded.value = false
+}
+
+const currentMutationUserId = (memory?: MemoryItem | null) => {
+  return memory?.user_id || selectedMemory.value?.user_id || filters.user_id || undefined
+}
+
+const openEditMemoryDialog = (memory?: MemoryItem) => {
+  const targetMemory = memory || selectedMemory.value
+  if (!canWriteMemory.value || !targetMemory) return
+  selectedMemoryId.value = targetMemory.id
+  editForm.memory = targetMemory.memory
+  editForm.topics = [...targetMemory.topics]
+  editDialogVisible.value = true
+}
+
+const saveMemoryUpdate = async () => {
+  if (!canWriteMemory.value || !selectedMemory.value) return
+  const nextMemory = editForm.memory.trim()
+  if (!nextMemory) {
+    ElMessage.error(t("agentOS.memory.updateEmpty"))
+    return
+  }
+  try {
+    await updateMemory(selectedMemory.value.id, {
+      user_id: currentMutationUserId(selectedMemory.value),
+      memory: nextMemory,
+      topics: Array.from(new Set(editForm.topics.map((topic) => topic.trim()).filter(Boolean))),
+    })
+    editDialogVisible.value = false
+    await loadMemory()
+    ElMessage.success(t("agentOS.memory.updateSuccess"))
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : t("agentOS.memory.updateFailed"))
+  }
+}
+
+const deleteSelectedMemory = async (memory?: MemoryItem) => {
+  const targetMemory = memory || selectedMemory.value
+  if (!canWriteMemory.value || !targetMemory) return
+  selectedMemoryId.value = targetMemory.id
+  try {
+    await ElMessageBox.confirm(
+      t("agentOS.memory.deleteConfirmMessage"),
+      t("agentOS.memory.deleteConfirmTitle"),
+      {
+        confirmButtonText: t("common.actions.delete"),
+        cancelButtonText: t("common.actions.cancel"),
+        type: "warning",
+      },
+    )
+    await deleteMemory(targetMemory.id, currentMutationUserId(targetMemory))
+    await loadMemory()
+    ElMessage.success(t("agentOS.memory.deleteSuccess"))
+  } catch (err) {
+    if (err !== "cancel") {
+      ElMessage.error(err instanceof Error ? err.message : t("agentOS.memory.deleteFailed"))
+    }
+  }
 }
 
 watch(memories, (nextMemories) => {
@@ -583,16 +753,13 @@ onMounted(() => {
   color: var(--memory-text);
 }
 
-.memory-control :where(div, section, aside, main, article, p, span, strong, small, button, dl, dt, dd, pre, ol, li) {
+.memory-control :where(div, section, aside, main, article, p, span, strong, small, button, dl, dt, dd, pre, ol, ul, li, table, th, td) {
   min-width: 0;
 }
 
 .memory-panel-head p,
 .memory-detail-head p,
-.memory-reading span,
-.memory-topic-stack p,
-.memory-evidence p,
-.memory-lifecycle p,
+.memory-section-head > span,
 .memory-query-label strong {
   margin: 0;
   color: var(--memory-muted);
@@ -734,6 +901,16 @@ onMounted(() => {
   line-height: 1.35;
 }
 
+.memory-chip.tone-green {
+  border-color: color-mix(in srgb, var(--memory-green) 38%, var(--memory-border));
+  background: var(--memory-green-soft);
+  color: var(--memory-green);
+}
+
+.memory-chip.tone-muted {
+  color: var(--memory-muted);
+}
+
 .memory-threshold {
   flex: 0 0 auto;
   margin-top: 0 !important;
@@ -785,8 +962,7 @@ onMounted(() => {
   overflow: auto;
 }
 
-.memory-user-row,
-.memory-row {
+.memory-user-row {
   display: grid;
   width: 100%;
   align-items: center;
@@ -812,7 +988,7 @@ onMounted(() => {
 }
 
 .memory-user-row:focus-visible,
-.memory-row:focus-visible {
+.memory-row-main:focus-visible {
   outline: 2px solid var(--memory-blue);
   outline-offset: -2px;
 }
@@ -848,7 +1024,6 @@ onMounted(() => {
 }
 
 .memory-user-main strong,
-.memory-row-copy strong,
 .memory-detail-head strong {
   display: block;
   overflow: hidden;
@@ -861,8 +1036,7 @@ onMounted(() => {
 }
 
 .memory-user-main small,
-.memory-row-copy small,
-.memory-row-meta small {
+.memory-row-copy small {
   display: -webkit-box;
   margin-top: 4px;
   overflow: hidden;
@@ -897,24 +1071,21 @@ onMounted(() => {
 }
 
 .memory-status.tone-green,
-.memory-status-board .tone-green,
-.memory-lifecycle li.tone-green span {
+.memory-status-board .tone-green {
   border-color: color-mix(in srgb, var(--memory-green) 38%, var(--memory-border));
   background: var(--memory-green-soft);
   color: var(--memory-green);
 }
 
 .memory-status.tone-yellow,
-.memory-status-board .tone-yellow,
-.memory-lifecycle li.tone-yellow span {
+.memory-status-board .tone-yellow {
   border-color: color-mix(in srgb, var(--memory-yellow) 44%, var(--memory-border));
   background: var(--memory-yellow-soft);
   color: var(--memory-yellow);
 }
 
 .memory-status.tone-red,
-.memory-status-board .tone-red,
-.memory-lifecycle li.tone-red span {
+.memory-status-board .tone-red {
   border-color: color-mix(in srgb, var(--memory-red) 44%, var(--memory-border));
   background: var(--memory-red-soft);
   color: var(--memory-red);
@@ -929,15 +1100,23 @@ onMounted(() => {
 }
 
 .memory-row {
-  grid-template-columns: 4px minmax(0, 1fr) minmax(180px, 31%);
+  display: grid;
+  width: 100%;
+  align-items: start;
+  grid-template-columns: 4px minmax(0, 1fr) auto;
   gap: 12px;
+  border-bottom: 1px solid var(--memory-row-border);
   padding: 12px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
 }
 
 .memory-row-status {
   display: block;
   width: 4px;
-  height: 54px;
+  height: 100%;
+  min-height: 68px;
   border-radius: 999px;
   background: var(--memory-blue);
 }
@@ -954,157 +1133,267 @@ onMounted(() => {
   background: var(--memory-red);
 }
 
-.memory-row-meta {
+.memory-row-main {
+  display: grid;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+  gap: 8px;
+  text-align: left;
+}
+
+.memory-row-copy strong {
+  display: block;
+  overflow: hidden;
+  color: var(--memory-heading);
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-row-facts {
   display: flex;
   min-width: 0;
   flex-wrap: wrap;
-  align-content: flex-start;
+  gap: 6px;
+}
+
+.memory-row-actions {
+  display: flex;
+  min-width: max-content;
+  align-items: flex-start;
   justify-content: flex-end;
   gap: 6px;
 }
 
-.memory-chip.user {
-  color: var(--memory-blue);
+.memory-row-actions :deep(.el-button) {
+  margin-left: 0;
+}
+
+.memory-action-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.memory-action-button :deep(.el-icon) {
+  margin: 0;
 }
 
 .memory-detail-head {
   align-items: center;
 }
 
-.memory-reading {
+.memory-mode-flags {
+  display: flex;
   flex: 0 0 auto;
-  margin: 12px;
-  border: 1px solid var(--memory-border);
-  border-radius: 8px;
-  background: var(--memory-panel-raised);
+  flex-wrap: wrap;
+  gap: 6px;
+  border-bottom: 1px solid var(--memory-border);
+  padding: 10px 12px 0;
+}
+
+.memory-metadata-panel {
+  flex: 0 0 auto;
   padding: 12px;
+  border-bottom: 1px solid var(--memory-border);
 }
 
-.memory-reading p {
-  margin: 8px 0 0;
-  color: var(--memory-heading);
-  font-size: 14px;
-  font-weight: 750;
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.memory-detail-grid {
+.memory-metadata-list {
   display: grid;
-  flex: 0 0 auto;
-  gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 0;
-  padding: 0 12px 12px;
+  margin: 8px 0 0;
 }
 
-.memory-detail-grid div {
+.memory-metadata-list > div {
+  display: grid;
+  align-items: baseline;
+  grid-template-columns: minmax(68px, 92px) minmax(0, 1fr);
+  gap: 10px;
+  border-top: 1px solid var(--memory-row-border);
+  padding: 8px 0;
+}
+
+.memory-metadata-list dt {
+  color: var(--memory-muted);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.memory-metadata-list dd {
+  overflow: hidden;
+  margin: 0;
+  color: var(--memory-heading);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-metadata-list .memory-metadata-source {
+  overflow: visible;
+  white-space: normal;
+  word-break: normal;
+}
+
+.memory-metadata-list .memory-source-row {
+  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+.memory-source-viewer {
   overflow: hidden;
   border: 1px solid var(--memory-border);
   border-radius: 8px;
+  background: color-mix(in srgb, var(--memory-panel-raised) 70%, var(--memory-bg));
+}
+
+.memory-source-toolbar {
+  border-bottom: 1px solid var(--memory-row-border);
+  padding: 6px;
+}
+
+.memory-source-actions {
+  display: grid;
+  align-items: center;
+  grid-template-columns: minmax(92px, 1fr) auto auto;
+  gap: 6px;
+  width: 100%;
+}
+
+.memory-source-mode-select {
+  width: 100%;
+}
+
+.memory-source-content {
+  overflow: auto;
+  max-height: 178px;
+  margin: 0;
+  padding: 10px;
+  color: var(--memory-heading);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.memory-source-content.expanded {
+  max-height: 440px;
+}
+
+.memory-source-content.empty {
+  color: var(--memory-muted);
+  font-style: italic;
+}
+
+.memory-source-json {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  white-space: pre;
+}
+
+.memory-source-render {
+  white-space: normal;
+}
+
+.memory-source-render :where(p, ul, ol, pre, blockquote, table) {
+  margin: 0;
+}
+
+.memory-source-render :where(p + p, p + ul, p + ol, ul + p, ol + p, pre + p, blockquote + table) {
+  margin-top: 10px;
+}
+
+.memory-source-render :where(ul, ol) {
+  padding-left: 20px;
+}
+
+.memory-source-render li + li {
+  margin-top: 4px;
+}
+
+.memory-source-render blockquote {
+  border-left: 3px solid var(--memory-border-strong);
+  padding-left: 9px;
+  color: var(--memory-text);
+}
+
+.memory-source-render :where(strong, b) {
+  color: var(--memory-heading);
+  font-weight: 850;
+}
+
+.memory-source-render a {
+  color: var(--memory-blue);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.memory-source-render code {
+  border: 1px solid var(--memory-row-border);
+  border-radius: 5px;
+  background: var(--memory-panel-soft);
+  padding: 1px 5px;
+  color: var(--memory-blue);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 0.94em;
+}
+
+.memory-source-render pre {
+  overflow: auto;
+  border: 1px solid var(--memory-row-border);
+  border-radius: 7px;
   background: var(--memory-panel-soft);
   padding: 9px;
 }
 
-.memory-detail-grid dt {
-  margin: 0;
-  color: var(--memory-muted);
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1.25;
-  text-transform: uppercase;
-}
-
-.memory-detail-grid dd {
-  margin: 5px 0 0;
-  overflow: hidden;
-  color: var(--memory-heading);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.memory-topic-stack,
-.memory-evidence,
-.memory-lifecycle {
-  flex: 0 0 auto;
-  border-top: 1px solid var(--memory-border);
-  padding: 12px;
-}
-
-.memory-topic-stack div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.memory-evidence pre {
-  max-height: 160px;
-  margin: 8px 0 0;
-  overflow: auto;
-  border: 1px solid var(--memory-border);
-  border-radius: 8px;
-  background: var(--ag-code-bg);
-  padding: 10px;
-  color: var(--ag-code-text);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 11px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.memory-lifecycle ol {
-  display: grid;
-  gap: 8px;
-  margin: 10px 0 0;
+.memory-source-render pre code {
+  border: 0;
+  background: transparent;
   padding: 0;
-  list-style: none;
+  color: inherit;
 }
 
-.memory-lifecycle li {
-  display: grid;
-  grid-template-columns: 12px minmax(0, 1fr);
-  gap: 9px;
-  align-items: start;
-}
-
-.memory-lifecycle li > span {
-  width: 12px;
-  height: 12px;
-  margin-top: 3px;
-  border: 1px solid var(--memory-border);
-  border-radius: 999px;
-  background: var(--memory-blue-soft);
-}
-
-.memory-lifecycle li.tone-blue > span {
-  border-color: color-mix(in srgb, var(--memory-blue) 44%, var(--memory-border));
-  background: var(--memory-blue-soft);
-}
-
-.memory-lifecycle strong {
+.memory-source-render table {
   display: block;
+  overflow-x: auto;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.memory-source-render th,
+.memory-source-render td {
+  border-bottom: 1px solid var(--memory-row-border);
+  padding: 5px 7px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.memory-source-render th {
   color: var(--memory-heading);
-  font-size: 12px;
-  line-height: 1.35;
+  font-weight: 850;
 }
 
-.memory-lifecycle small {
-  display: block;
-  overflow: hidden;
-  margin-top: 2px;
-  color: var(--memory-muted);
-  font-size: 11px;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.memory-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
+
+.memory-topic-editor {
+  width: 100%;
+}
+
 
 .memory-empty {
   display: grid;
@@ -1141,6 +1430,21 @@ onMounted(() => {
   padding: 8px 12px;
 }
 
+@media (max-width: 1180px) {
+  .memory-query-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .memory-query-controls {
+    grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px) minmax(150px, 200px);
+  }
+
+  .memory-query-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
 @media (max-width: 1120px) {
   .memory-workbench {
     grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
@@ -1167,15 +1471,27 @@ onMounted(() => {
   }
 
   .memory-workbench {
+    flex: 0 0 auto;
     grid-template-columns: 1fr;
+    min-height: auto;
   }
 
   .memory-queue-panel {
     max-height: 320px;
   }
 
+  .memory-list-panel,
+  .memory-detail-panel {
+    overflow: visible;
+  }
+
+  .memory-list {
+    overflow: visible;
+  }
+
   .memory-detail-panel {
     grid-column: auto;
+    max-height: none;
   }
 }
 
@@ -1198,13 +1514,10 @@ onMounted(() => {
     grid-template-columns: 4px minmax(0, 1fr);
   }
 
-  .memory-row-meta {
+  .memory-row-actions {
     grid-column: 2;
     justify-content: flex-start;
-  }
-
-  .memory-detail-grid {
-    grid-template-columns: 1fr;
+    flex-wrap: wrap;
   }
 }
 </style>

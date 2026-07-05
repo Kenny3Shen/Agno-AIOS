@@ -25,7 +25,10 @@ import type {
   KnowledgeStatusResponse,
   KnowledgeTextRequest,
   MemoryControlResponse,
+  MemoryDeleteResponse,
   MemoryQueryParams,
+  MemoryUpdateRequest,
+  MemoryUpdateResponse,
   McpServiceId,
   McpServiceStatusResponse,
   McpTokenInfo,
@@ -317,6 +320,51 @@ export function useOsControlApi() {
     }
   }
 
+  const deleteMemory = async (memoryId: string, userId?: string): Promise<MemoryDeleteResponse> => {
+    loading.value = true
+    error.value = null
+    const query = new URLSearchParams()
+    if (userId) query.set('user_id', userId)
+    const suffix = query.toString() ? `?${query.toString()}` : ''
+    try {
+      const response = await apiFetch(`/os/memory/${encodeURIComponent(memoryId)}${suffix}`, {
+        method: 'DELETE',
+      })
+      if (!response.ok) {
+        const data: unknown = await response.json().catch(() => ({}))
+        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+      }
+      return await response.json()
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const updateMemory = async (memoryId: string, payload: MemoryUpdateRequest): Promise<MemoryUpdateResponse> => {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await apiFetch(`/os/memory/${encodeURIComponent(memoryId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) {
+        const data: unknown = await response.json().catch(() => ({}))
+        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+      }
+      return await response.json()
+    } catch (err: unknown) {
+      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   const listApprovals = async (params: ApprovalListParams = {}): Promise<ApprovalControlResponse> => {
     loading.value = true
     error.value = null
@@ -510,6 +558,8 @@ export function useOsControlApi() {
     error,
     fetchModule,
     fetchMemory,
+    deleteMemory,
+    updateMemory,
     listApprovals,
     getApproval,
     resolveApproval,

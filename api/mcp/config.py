@@ -134,10 +134,6 @@ async def init_mcp_postgres_tables() -> None:
     await ensure_mcp_tables()
 
 
-async def init_mcp_mysql_tables() -> None:
-    await init_mcp_postgres_tables()
-
-
 async def init_tokens_db() -> None:
     await init_mcp_postgres_tables()
 

@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from agno.memory import UserMemory
 from sqlalchemy import Column, DateTime, Float, MetaData, Table, Text, desc, func, select, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.schema import CreateSchema
@@ -39,6 +40,14 @@ MEMORY_ABNORMAL_GROWTH_THRESHOLD = 500
 CONTROL_TABLES = {
     "evaluation": "os_eval_runs",
 }
+
+
+class MemoryMutationNotFound(ValueError):
+    pass
+
+
+class MemoryMutationFailed(RuntimeError):
+    pass
 
 
 def _now() -> datetime:
@@ -213,6 +222,55 @@ def _memory_topics(value: Any) -> list[str]:
 
 def _memory_row(raw_row: Any) -> dict[str, Any]:
     return _row_dict(raw_row)
+
+
+def _memory_datetime(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+    if isinstance(value, int | float):
+        try:
+            return datetime.fromtimestamp(value, UTC)
+        except (OSError, ValueError):
+            return None
+    text_value = str(value).strip()
+    if not text_value:
+        return None
+    try:
+        if text_value.isdigit():
+            return datetime.fromtimestamp(int(text_value), UTC)
+        parsed = datetime.fromisoformat(text_value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _memory_updated_datetime(row: dict[str, Any]) -> datetime | None:
+    return _memory_datetime(row.get("updated_at") or row.get("created_at"))
+
+
+def _memory_epoch(value: Any) -> int | None:
+    parsed = _memory_datetime(value)
+    if parsed is None:
+        return None
+    return int(parsed.timestamp())
+
+
+def _memory_update_topics(value: Any) -> list[str]:
+    topics: list[str] = []
+    seen: set[str] = set()
+    for topic in _memory_topics(value):
+        safe_topic = topic.strip()
+        if not safe_topic or safe_topic in seen:
+            continue
+        topics.append(safe_topic)
+        seen.add(safe_topic)
+    return topics
 
 
 async def _span_count_for_actor(actor: Any | None) -> int:
@@ -413,42 +471,6 @@ async def get_memory_payload(
     )
     topics = sorted(await db.get_all_memory_topics(user_id=scoped_user_id))
 
-    memories = []
-    records = []
-    for raw_row in raw_memories:
-        row = _memory_row(raw_row)
-        memory_id = row.get("memory_id") or row.get("id")
-        memory = _memory_text(row.get("memory") or row.get("memories") or row.get("content"))
-        row_topics = _memory_topics(row.get("topics") or row.get("topic"))
-        item = {
-            "id": str(memory_id or memory or "memory"),
-            "memory": memory,
-            "topics": row_topics,
-            "input": str(row.get("input") or ""),
-            "user_id": str(row.get("user_id") or ""),
-            "agent_id": str(row.get("agent_id") or ""),
-            "team_id": str(row.get("team_id") or ""),
-            "feedback": str(row.get("feedback") or ""),
-            "created_at": _iso(row.get("created_at")),
-            "updated_at": _iso(row.get("updated_at") or row.get("created_at")),
-            "status": "stored",
-        }
-        memories.append(item)
-        records.append(
-            _record(
-                record_id=item["id"],
-                title=_compact(memory or memory_id or "Memory", 96),
-                subtitle=item["user_id"] or item["agent_id"] or "default",
-                status=item["status"],
-                meta={
-                    "topics": ", ".join(row_topics),
-                    "agent_id": item["agent_id"],
-                    "input": _compact(item["input"], 120),
-                },
-                updated_at=item["updated_at"],
-            )
-        )
-
     memory_users = [
         {
             "user_id": str(row.get("user_id") or "default"),
@@ -458,6 +480,46 @@ async def get_memory_payload(
         }
         for row in user_stats
     ]
+    user_status_by_id: dict[str, str] = {
+        str(row["user_id"]): str(row["status"]) for row in memory_users
+    }
+    memories = []
+    records = []
+    for raw_row in raw_memories:
+        row = _memory_row(raw_row)
+        memory_id = row.get("memory_id") or row.get("id")
+        memory = _memory_text(row.get("memory") or row.get("memories") or row.get("content"))
+        row_topics = _memory_topics(row.get("topics") or row.get("topic"))
+        item_user_id = str(row.get("user_id") or "")
+        item_status = user_status_by_id.get(item_user_id, "stored")
+        item = {
+            "id": str(memory_id or memory or "memory"),
+            "memory": memory,
+            "topics": row_topics,
+            "input": str(row.get("input") or ""),
+            "user_id": item_user_id,
+            "agent_id": str(row.get("agent_id") or ""),
+            "team_id": str(row.get("team_id") or ""),
+            "feedback": str(row.get("feedback") or ""),
+            "created_at": _iso(row.get("created_at")),
+            "updated_at": _iso(row.get("updated_at") or row.get("created_at")),
+            "status": item_status,
+        }
+        memories.append(item)
+        records.append(
+            _record(
+                record_id=item["id"],
+                title=_compact(memory or memory_id or "Memory", 96),
+                subtitle=item["user_id"] or item["agent_id"] or "default",
+                status=item_status,
+                meta={
+                    "topics": ", ".join(row_topics),
+                    "agent_id": item["agent_id"],
+                    "input": _compact(item["input"], 120),
+                },
+                updated_at=item["updated_at"],
+            )
+        )
     review_users = sum(
         1
         for row in memory_users
@@ -504,11 +566,107 @@ async def get_memory_payload(
                 "update_memory_on_run": True,
                 "enable_agentic_memory": False,
                 "enable_session_summaries": True,
-                "readonly": True,
+                "readonly": not (actor is not None and has_permission(actor, "memory:write:own")),
             },
         }
     )
     return payload
+
+
+async def delete_memory_record(
+    actor: Any,
+    *,
+    memory_id: str,
+    user_id: str | None = None,
+) -> dict[str, Any]:
+    safe_memory_id = str(memory_id or "").strip()
+    if not safe_memory_id:
+        raise ValueError("memory_id is required")
+
+    db = get_async_agno_postgres_db()
+    scoped_user_id = _scoped_requested_user_id(actor, user_id, "memory:write:any")
+    raw_memory = await db.get_user_memory(
+        safe_memory_id,
+        user_id=scoped_user_id,
+        deserialize=False,
+    )
+    if raw_memory is None:
+        raise MemoryMutationNotFound("Memory not found")
+
+    row = _memory_row(raw_memory)
+    owner_user_id = str(row.get("user_id") or scoped_user_id or "")
+    await db.delete_user_memory(safe_memory_id, user_id=owner_user_id or scoped_user_id)
+    remaining_memory = await db.get_user_memory(
+        safe_memory_id,
+        user_id=owner_user_id or scoped_user_id,
+        deserialize=False,
+    )
+    if remaining_memory is not None:
+        raise MemoryMutationFailed("Memory delete did not persist")
+    return {
+        "memory_id": safe_memory_id,
+        "user_id": owner_user_id,
+        "deleted": True,
+    }
+
+
+async def update_memory_record(
+    actor: Any,
+    *,
+    memory_id: str,
+    memory: str,
+    topics: list[str] | None = None,
+    user_id: str | None = None,
+) -> dict[str, Any]:
+    safe_memory_id = str(memory_id or "").strip()
+    if not safe_memory_id:
+        raise ValueError("memory_id is required")
+    safe_memory = str(memory or "").strip()
+    if not safe_memory:
+        raise ValueError("memory is required")
+
+    scoped_user_id = _scoped_requested_user_id(actor, user_id, "memory:write:any")
+    db = get_async_agno_postgres_db()
+    raw_memory = await db.get_user_memory(
+        safe_memory_id,
+        user_id=scoped_user_id,
+        deserialize=False,
+    )
+    if raw_memory is None:
+        raise MemoryMutationNotFound("Memory not found")
+
+    row = _memory_row(raw_memory)
+    owner_user_id = str(row.get("user_id") or scoped_user_id or "")
+    safe_topics = _memory_update_topics(topics or [])
+    updated_at = int(_now().timestamp())
+    updated_memory = UserMemory(
+        memory=safe_memory,
+        memory_id=safe_memory_id,
+        topics=safe_topics,
+        user_id=owner_user_id or scoped_user_id,
+        input=str(row.get("input") or ""),
+        created_at=_memory_epoch(row.get("created_at")),
+        updated_at=updated_at,
+        feedback=str(row.get("feedback") or ""),
+        agent_id=str(row.get("agent_id") or ""),
+        team_id=str(row.get("team_id") or ""),
+    )
+    persisted_memory = await db.upsert_user_memory(memory=updated_memory, deserialize=False)
+    if persisted_memory is None:
+        raise MemoryMutationFailed("Memory update did not persist")
+    persisted_row = _memory_row(persisted_memory)
+    return {
+        "memory_id": safe_memory_id,
+        "memory": _memory_text(persisted_row.get("memory")) or safe_memory,
+        "topics": _memory_topics(persisted_row.get("topics")) or safe_topics,
+        "input": str(persisted_row.get("input") or updated_memory.input or ""),
+        "user_id": str(persisted_row.get("user_id") or owner_user_id),
+        "agent_id": str(persisted_row.get("agent_id") or updated_memory.agent_id or ""),
+        "team_id": str(persisted_row.get("team_id") or updated_memory.team_id or ""),
+        "feedback": str(persisted_row.get("feedback") or updated_memory.feedback or ""),
+        "created_at": _iso(persisted_row.get("created_at") or updated_memory.created_at),
+        "updated_at": _iso(persisted_row.get("updated_at") or updated_at),
+    }
 
 
 async def get_metrics_payload(actor: Any | None = None) -> OsPayload:

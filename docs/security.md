@@ -17,7 +17,7 @@ API 使用 FastAPI Users 和 JWT bearer 认证。登录接口位于 `/api/auth/j
 | 角色 | 含义 |
 | --- | --- |
 | `admin` | 通过通配 permission 访问所有权限。 |
-| `user` | 可读写自己的 sessions 和 knowledge，读取自己的 traces，并使用部分安全数据视图。 |
+| `user` | 可读写自己的 sessions、knowledge 和 memories，读取自己的 traces，并使用部分安全数据视图。 |
 | `guest` | 可读取自己的 sessions、traces、部分 memory/metrics 数据、CVE 和 knowledge。 |
 
 当前后端权限定义在 `api/auth/permissions.py`。
@@ -30,6 +30,7 @@ API 使用 FastAPI Users 和 JWT bearer 认证。登录接口位于 `/api/auth/j
 | `session:write:own` | 是 | 是 | 否 |
 | `trace:read:own` | 是 | 是 | 是 |
 | `memory:read:own` | 是 | 是 | 是 |
+| `memory:write:own` | 是 | 是 | 否 |
 | `metrics:read:own` | 是 | 是 | 是 |
 | `collect:write` | 是 | 是 | 否 |
 | `cve:read` | 是 | 是 | 是 |
@@ -50,6 +51,7 @@ Admin-only 操作用只有 admin 能通过通配规则满足的 permission 表�
 
 - Chat session 读取和归档会检查存储的 session owner。
 - Trace list 和 trace detail 会把非 admin 用户限制在自己的 `user_id` 下。
+- Memory 读取、更新和删除会把非 admin 用户限制在自己的 `user_id` 下；admin 可以跨用户筛选并处理 memories。
 - Knowledge 写入会附加 owner metadata；Chat 检索在有当前用户时使用该用户作为 knowledge filter。
 - Admin 用户可以跨用户查看 sessions、traces 和 audit records。
 
@@ -67,6 +69,7 @@ Admin-only 操作用只有 admin 能通过通配规则满足的 permission 表�
 
 - 登录和登出。
 - Session archive。
+- Memory update 和 delete。
 - CVE database update 尝试和结果。
 - Knowledge document 写入、删除和 clear。
 - MCP config 变更、token issue/delete 和 MCP upload。

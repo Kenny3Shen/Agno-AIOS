@@ -14,7 +14,12 @@ from api.services.approval_control_service import (
     list_approvals_payload,
     resolve_approval_record,
 )
-from api.services.os_control_service import get_control_payload
+from api.services.os_control_service import (
+    MemoryMutationNotFound,
+    delete_memory_record,
+    get_control_payload,
+    update_memory_record,
+)
 from api.services.postgres_store import get_async_agno_postgres_db
 from api.services.scheduler_service import (
     create_schedule,
@@ -28,6 +33,7 @@ from api.services.scheduler_service import (
 from api.services.security_policy import (
     PolicyAuditEvent,
     record_policy_event,
+    require_actor_permission,
     require_control_module_access,
     require_scheduler_write,
 )
@@ -76,6 +82,12 @@ class ApprovalResolveRequest(BaseModel):
     resolution_data: dict[str, object] | None = None
 
 
+class MemoryUpdateRequest(BaseModel):
+    user_id: str | None = None
+    memory: str = Field(..., min_length=1)
+    topics: list[str] = Field(default_factory=list)
+
+
 async def require_os_module_permission(
     module: str,
     user: User = Depends(current_active_user),
@@ -88,6 +100,14 @@ async def require_scheduler_write_permission(
     user: User = Depends(current_active_user),
 ) -> User:
     require_scheduler_write(user)
+    return user
+
+
+async def require_memory_write_permission(
+    user: User = Depends(current_active_user),
+) -> User:
+    require_control_module_access("memory", user)
+    require_actor_permission(user, "memory:write:own")
     return user
 
 
@@ -202,6 +222,73 @@ async def resolve_os_approval(
         request,
     )
     return approval
+
+
+@router.delete("/memory/{memory_id}")
+async def delete_os_memory(
+    memory_id: str,
+    request: Request,
+    user_id: str | None = None,
+    user: User = Depends(require_memory_write_permission),
+):
+    try:
+        result = await delete_memory_record(user, memory_id=memory_id, user_id=user_id)
+    except MemoryMutationNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error(f"删除 Agno memory 失败: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to delete memory") from exc
+    await record_policy_event(
+        user,
+        PolicyAuditEvent(
+            action="memory.delete",
+            resource_type="memory",
+            resource_id=memory_id,
+            metadata={"user_id": result.get("user_id", "")},
+        ),
+        request,
+    )
+    return result
+
+
+@router.patch("/memory/{memory_id}")
+async def update_os_memory(
+    memory_id: str,
+    body: MemoryUpdateRequest,
+    request: Request,
+    user: User = Depends(require_memory_write_permission),
+):
+    try:
+        result = await update_memory_record(
+            user,
+            memory_id=memory_id,
+            user_id=body.user_id,
+            memory=body.memory,
+            topics=body.topics,
+        )
+    except MemoryMutationNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error(f"更新 Agno memory 失败: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to update memory") from exc
+    await record_policy_event(
+        user,
+        PolicyAuditEvent(
+            action="memory.update",
+            resource_type="memory",
+            resource_id=memory_id,
+            metadata={
+                "user_id": result.get("user_id", ""),
+                "topics": len(result.get("topics", [])),
+            },
+        ),
+        request,
+    )
+    return result
 
 
 @router.get("/{module}")

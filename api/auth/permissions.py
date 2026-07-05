@@ -17,6 +17,7 @@ ROLE_PERMISSIONS: dict[Role, set[str]] = {
         "session:write:own",
         "trace:read:own",
         "memory:read:own",
+        "memory:write:own",
         "metrics:read:own",
         "collect:write",
         "cve:read",
