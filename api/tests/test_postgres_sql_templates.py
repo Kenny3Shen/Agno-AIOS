@@ -49,6 +49,12 @@ def test_app_table_bootstrap_no_longer_creates_audit_logs_with_raw_sql() -> None
     assert "actor_user_id TEXT NOT NULL" not in source
 
 
+def test_agent_evals_router_is_included() -> None:
+    main_source = inspect.getsource(api_main)
+    assert "agent_evals" in main_source
+    assert "app.include_router(agent_evals.router)" in main_source
+
+
 def test_audit_log_metadata_uses_jsonb_default_in_sqlalchemy_table() -> None:
     metadata_column = audit_logs_table().c.metadata
     server_default = metadata_column.server_default

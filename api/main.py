@@ -17,6 +17,7 @@ from api.core.logging import configure_logging_async
 from api.mcp.server import bootstrap_mcp_token, mcp_runtime
 from api.persistence.database import dispose_async_control_plane_engine
 from api.routes import (
+    agent_evals,
     audit,
     chat,
     collect,
@@ -137,6 +138,7 @@ app.include_router(trace.router)
 app.include_router(skills.router)
 app.include_router(mcp_routes.router)
 app.include_router(knowledge.router)
+app.include_router(agent_evals.router)
 app.include_router(os_control.router)
 
 if app_settings.scheduler_enabled:
