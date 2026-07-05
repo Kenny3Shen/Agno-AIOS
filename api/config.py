@@ -79,12 +79,6 @@ class Settings(BaseSettings):
     agno_skills_dir: str | None = None
     agno_skills_config_file: str | None = None
 
-    mysql_test_host: str = "localhost"
-    mysql_test_port: int = 3306
-    mysql_test_user: str = "root"
-    mysql_test_password: SecretStr = SecretStr("")
-    mysql_test_database: str = "cve_db"
-
     cve_source_config_path: str = Field(
         default="config.toml",
         validation_alias=AliasChoices(
@@ -92,6 +86,10 @@ class Settings(BaseSettings):
             "CVE_SOURCE_CONFIG_PATH",
             "CONFIG_PATH",
         ),
+    )
+    cve_update_lock_path: Path = Field(
+        default=Path("tmp/run_update_cve.lock"),
+        validation_alias=AliasChoices("AGNO_CVE_UPDATE_LOCK_PATH", "CVE_UPDATE_LOCK_PATH"),
     )
     github_token: SecretStr = Field(
         default=SecretStr(""),
@@ -124,14 +122,6 @@ class Settings(BaseSettings):
     )
     feishu_webhook_url: SecretStr = SecretStr("")
 
-    celery_broker_url: str = Field(
-        default="redis://localhost:6379/0",
-        validation_alias=AliasChoices("CELERY_BROKER_URL", "AGNO_CELERY_BROKER_URL"),
-    )
-    celery_result_backend: str = Field(
-        default="redis://localhost:6379/0",
-        validation_alias=AliasChoices("CELERY_RESULT_BACKEND", "AGNO_CELERY_RESULT_BACKEND"),
-    )
     scheduler_enabled: bool = Field(default=True, validation_alias="AGNO_SCHEDULER_ENABLED")
     scheduler_poll_interval_seconds: int = Field(default=15, validation_alias="AGNO_SCHEDULER_POLL_INTERVAL_SECONDS")
     scheduler_base_url: str = Field(default="http://127.0.0.1:8000", validation_alias="AGNO_SCHEDULER_BASE_URL")

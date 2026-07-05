@@ -20,7 +20,6 @@ from api.routes import mcp as mcp_route
 from api.routes import settings as settings_route
 from api.routes import skills as skills_route
 from api.mcp import server as mcp_server
-from api.services import mysql_store
 from api.services import audit_service
 from api.services import url2md_service
 from api.services import scheduler_service
@@ -34,7 +33,7 @@ from api.services import skill_service
 from api.services import agent_eval_result_service
 from api.services import agent_eval_runner
 from api.core import logging as core_logging
-from api.tasks import migrate_mysql_to_postgres, update_cve
+from api.tasks import update_cve
 from api.tasks import cve_sources
 import api.main as api_main
 
@@ -155,30 +154,36 @@ def test_cve_sources_fetch_remote_data_with_async_http() -> None:
     assert "return resp.text" in exploit_fetch_source
 
 
-def test_mysql_migration_reads_source_with_async_mysql() -> None:
-    source = inspect.getsource(migrate_mysql_to_postgres)
-    assert "mysql_connect_async" in source
-    assert "mysql_connect(" not in source
-    assert "asyncio.to_thread" not in source
+def test_completed_mysql_migration_artifacts_are_removed() -> None:
+    assert not Path("api/tasks/migrate_mysql_to_postgres.py").exists()
+    assert not Path("api/services/mysql_store.py").exists()
+
+    pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
+    readme = Path("README.md").read_text(encoding="utf-8")
+    operations = Path("docs/operations.md").read_text(encoding="utf-8")
+    database_docs = Path("docs/database-tables.md").read_text(encoding="utf-8")
+
+    assert "migrate-mysql-to-postgres" not in pyproject
+    assert "migrate-mysql-to-postgres" not in readme
+    assert "migrate-mysql-to-postgres" not in operations
+    assert "migrate_mysql_to_postgres" not in database_docs
 
 
-def test_mysql_migration_counts_target_with_async_sqlalchemy() -> None:
-    source = inspect.getsource(migrate_mysql_to_postgres)
-    assert "get_async_control_plane_engine" in source
-    assert "get_postgres_pool" not in source
-    assert "from psycopg import sql" not in source
+def test_cve_update_automation_uses_cron_without_celery() -> None:
+    pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
+    uv_lock = Path("uv.lock").read_text(encoding="utf-8")
+    operations = Path("docs/operations.md").read_text(encoding="utf-8")
+    database_docs = Path("docs/database-tables.md").read_text(encoding="utf-8")
+    config_source = Path("api/config.py").read_text(encoding="utf-8")
 
-
-def test_mysql_store_no_longer_exposes_sync_source_db_helpers() -> None:
-    source = inspect.getsource(mysql_store)
-    assert hasattr(mysql_store, "mysql_connect_async")
-    assert not hasattr(mysql_store, "mysql_connect")
-    assert not hasattr(mysql_store, "get_agno_mysql_db")
-    assert "os.getenv" not in source
-    assert "\nload_dotenv(" not in source
-    assert "await load_runtime_env_async()" in source
-    assert "pymysql" not in source
-    assert "MySQLDb" not in source
+    assert not Path("api/tasks/celery_app.py").exists()
+    assert "celery" not in pyproject.lower()
+    assert "celery" not in uv_lock.lower()
+    assert "celery" not in operations.lower()
+    assert "celery" not in database_docs.lower()
+    assert "celery_" not in config_source
+    assert "cve_update_cron" not in config_source
+    assert "cve_update_schedule" not in config_source
 
 
 def test_url_collection_uses_async_http_client() -> None:

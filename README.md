@@ -82,7 +82,6 @@ cd frontend
 
 ```bash
 uv run update-cve
-uv run migrate-mysql-to-postgres
 ```
 
 ## 项目结构

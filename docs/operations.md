@@ -147,7 +147,6 @@ Console scripts 定义在 `pyproject.toml`：
 
 ```bash
 uv run update-cve
-uv run migrate-mysql-to-postgres
 ```
 
 Cron 示例：
@@ -162,11 +161,12 @@ Cron 示例：
 
 - `.env`
 - `logs/`
+- `tmp/`
 - `data/config/`
 - `.playwright-cli/`
 - `frontend/dist-test/`
 - `*.db`
-- `.run_update_cve.lock`
+- `tmp/run_update_cve.lock`
 - `__pycache__/`
 - `.pytest_cache/`
 - `.ruff_cache/`
