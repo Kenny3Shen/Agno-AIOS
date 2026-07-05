@@ -317,6 +317,13 @@ def test_knowledge_async_lifecycle_uses_agno_async_api() -> None:
     assert "await knowledge.ainsert" in source
     assert "await knowledge.asearch" in source
     assert "await knowledge.aget_content" in source
+    assert ".insert(" not in source
+    assert ".search(" not in source
+    assert ".load(" not in source
+    assert ".get_content(" not in source
+    assert ".get_content_by_id(" not in source
+    assert ".remove_content_by_id(" not in source
+    assert ".remove_all_content(" not in source
     assert "aremove_content_by_id" not in source
     assert "aremove_all_content" not in source
     assert "await self._delete_content_async" in source

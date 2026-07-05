@@ -2,7 +2,7 @@ from __future__ import annotations
 import os
 import threading
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Callable
 from unittest.mock import patch
 
 import pytest
@@ -32,6 +32,63 @@ class FakeEmbedder(Embedder):
         self, text: str
     ) -> tuple[list[float], None]:
         return self.get_embedding_and_usage(text)
+
+
+class StrictAsyncKnowledge:
+    def __init__(
+        self,
+        *,
+        contents: list[Any] | None = None,
+        content_by_id: dict[str, Any] | None = None,
+        search_results: list[Any] | None = None,
+        search_callback: Callable[..., Any] | None = None,
+    ) -> None:
+        self.calls: list[tuple[Any, ...]] = []
+        self._contents = contents or []
+        self._content_by_id = content_by_id or {}
+        self._search_results = search_results or []
+        self._search_callback = search_callback
+
+    def insert(self, *args: Any, **kwargs: Any) -> None:
+        raise AssertionError("sync insert must not be called")
+
+    def search(self, *args: Any, **kwargs: Any) -> None:
+        raise AssertionError("sync search must not be called")
+
+    def load(self, *args: Any, **kwargs: Any) -> None:
+        raise AssertionError("sync load must not be called")
+
+    def get_content(self, *args: Any, **kwargs: Any) -> None:
+        raise AssertionError("sync get_content must not be called")
+
+    def get_content_by_id(self, *args: Any, **kwargs: Any) -> None:
+        raise AssertionError("sync get_content_by_id must not be called")
+
+    def remove_content_by_id(self, *args: Any, **kwargs: Any) -> None:
+        raise AssertionError("sync remove_content_by_id must not be called")
+
+    def remove_all_content(self, *args: Any, **kwargs: Any) -> None:
+        raise AssertionError("sync remove_all_content must not be called")
+
+    async def ainsert(self, *args: Any, **kwargs: Any) -> None:
+        self.calls.append(("ainsert", args, kwargs))
+
+    async def aget_content(self, *args: Any, **kwargs: Any):
+        self.calls.append(("aget_content", args, kwargs))
+        return self._contents, len(self._contents)
+
+    async def aget_content_by_id(self, content_id: str):
+        self.calls.append(("aget_content_by_id", content_id))
+        return self._content_by_id.get(content_id)
+
+    async def asearch(self, *args: Any, **kwargs: Any):
+        self.calls.append(("asearch", args, kwargs))
+        if self._search_callback is not None:
+            result = self._search_callback(*args, **kwargs)
+            if hasattr(result, "__await__"):
+                return await result
+            return result
+        return self._search_results
 
 
 @pytest.mark.parametrize(
@@ -292,47 +349,59 @@ def test_result_projection_uses_rerank_score_and_source_metadata() -> None:
 async def test_search_documents_passes_owner_filter_to_vector_search() -> None:
     captured: dict[str, object] = {}
 
-    class FakeKnowledge:
-        async def asearch(self, *args, **kwargs):
-            captured["filters"] = kwargs.get("filters")
-            return []
-
     async def noop() -> None:
         return None
 
     async def hydrate_noop(_documents) -> None:
         return None
 
+    async def search(*args, **kwargs):
+        captured["filters"] = kwargs.get("filters")
+        captured["max_results"] = kwargs.get("max_results")
+        captured["search_type"] = kwargs.get("search_type")
+        return []
+
+    knowledge = StrictAsyncKnowledge(search_callback=search)
+
     with (
         patch.object(knowledge_service, "_ensure_knowledge_storage_async", noop),
-        patch.object(
-            knowledge_service, "get_async_knowledge_base", return_value=FakeKnowledge()
-        ),
-        patch.object(
-            knowledge_service, "_hydrate_content_ids_async", hydrate_noop
-        ),
+        patch.object(knowledge_service, "get_async_knowledge_base", return_value=knowledge),
+        patch.object(knowledge_service, "_hydrate_content_ids_async", hydrate_noop),
     ):
         results = await knowledge_service.search_documents_async(
             "policy", owner_user_id="u1"
         )
     assert results == []
     assert captured["filters"] == {"user_id": "u1"}
+    assert knowledge.calls == [
+        (
+            "asearch",
+            ("policy",),
+            {
+                "filters": {"user_id": "u1"},
+                "max_results": captured["max_results"],
+                "search_type": captured["search_type"],
+            },
+        )
+    ]
 
 
 @pytest.mark.asyncio
 async def test_lifecycle_search_uses_one_interface_for_owner_filter() -> None:
     captured: dict[str, object] = {}
 
-    class FakeKnowledge:
-        async def asearch(self, *args, **kwargs):
-            captured["query"] = args[0]
-            captured["filters"] = kwargs.get("filters")
-            captured["search_type"] = kwargs.get("search_type")
-            return []
+    async def search(*args, **kwargs):
+        captured["query"] = args[0]
+        captured["filters"] = kwargs.get("filters")
+        captured["max_results"] = kwargs.get("max_results")
+        captured["search_type"] = kwargs.get("search_type")
+        return []
+
+    knowledge = StrictAsyncKnowledge(search_callback=search)
 
     lifecycle = knowledge_service.KnowledgeBaseLifecycle(
         knowledge_service.KnowledgeBaseLifecycleDependencies(
-            get_async_knowledge_base=lambda _search_type=None: FakeKnowledge(),
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
             ensure_storage_async=lambda: None,
             hydrate_content_ids_async=lambda _documents: None,
         )
@@ -344,49 +413,154 @@ async def test_lifecycle_search_uses_one_interface_for_owner_filter() -> None:
     assert captured["query"] == "policy"
     assert captured["filters"] == {"user_id": "u1"}
     assert captured["search_type"] == "hybrid"
+    assert knowledge.calls == [
+        (
+            "asearch",
+            ("policy",),
+            {
+                "filters": {"user_id": "u1"},
+                "max_results": captured["max_results"],
+                "search_type": "hybrid",
+            },
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_add_text_document_uses_async_insert_and_reload() -> None:
+    content_row = SimpleNamespace(
+        id="content-1",
+        name="Runbook",
+        metadata={"user_id": "u1", "source": "manual", "chunks": 1},
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(contents=[content_row])
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_storage_async=lambda: None,
+        )
+    )
+
+    with patch.object(knowledge_service, "reader_for_profile", return_value=object()):
+        result = await lifecycle.add_text_document_async(
+            "Runbook",
+            "  content  ",
+            owner_user_id="u1",
+        )
+
+    assert result["id"] == "content-1"
+    assert result["title"] == "Runbook"
+    assert knowledge.calls[0][0] == "ainsert"
+    assert knowledge.calls[1][0] == "aget_content"
+
+
+@pytest.mark.asyncio
+async def test_add_file_document_uses_async_insert_and_reload(tmp_path) -> None:
+    file_path = tmp_path / "runbook.md"
+    file_path.write_text("# runbook\n", encoding="utf-8")
+    content_row = SimpleNamespace(
+        id="content-2",
+        name="Runbook",
+        metadata={"user_id": "u1", "source": str(file_path), "chunks": 1},
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(contents=[content_row])
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_storage_async=lambda: None,
+        )
+    )
+
+    with patch.object(knowledge_service, "reader_for_profile", return_value=object()):
+        result = await lifecycle.add_file_document_async(
+            str(file_path),
+            title="Runbook",
+            owner_user_id="u1",
+        )
+
+    assert result["id"] == "content-2"
+    assert result["title"] == "Runbook"
+    assert knowledge.calls[0][0] == "ainsert"
+    assert knowledge.calls[1][0] == "aget_content"
+
+
+@pytest.mark.asyncio
+async def test_list_documents_uses_async_get_content_only() -> None:
+    content_row = SimpleNamespace(
+        id="content-3",
+        name="Runbook",
+        metadata={"user_id": "u1", "source": "/kb/runbook.md", "chunks": 1},
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(contents=[content_row])
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_storage_async=lambda: None,
+            chunk_counts_by_content_id_async=lambda _owner_user_id=None: {
+                "content-3": 4
+            },
+        )
+    )
+
+    documents = await lifecycle.list_documents_async(owner_user_id="u1")
+
+    assert documents == [
+        {
+            "id": "content-3",
+            "title": "Runbook",
+            "source": "/kb/runbook.md",
+            "chunks": 4,
+            "created_at": "1970-01-01T00:00:00+00:00",
+            "metadata": {
+                "user_id": "u1",
+                "source": "/kb/runbook.md",
+                "chunks": "1",
+            },
+        }
+    ]
+    assert knowledge.calls == [("aget_content", (), {"limit": 500, "page": 1, "sort_by": "updated_at", "sort_order": "desc"})]
 
 
 @pytest.mark.asyncio
 async def test_delete_document_rejects_foreign_owner() -> None:
-    removed: list[str] = []
-
-    class FakeKnowledge:
-        async def aget_content_by_id(self, content_id: str):
-            return SimpleNamespace(id=content_id, metadata={"user_id": "u2"})
-
-        async def aremove_content_by_id(self, content_id: str):
-            removed.append(content_id)
+    knowledge = StrictAsyncKnowledge(
+        content_by_id={"doc-1": SimpleNamespace(id="doc-1", metadata={"user_id": "u2"})}
+    )
 
     async def noop() -> None:
         return None
 
     with (
         patch.object(knowledge_service, "_ensure_knowledge_storage_async", noop),
-        patch.object(
-            knowledge_service, "get_async_knowledge_base", return_value=FakeKnowledge()
-        ),
+        patch.object(knowledge_service, "get_async_knowledge_base", return_value=knowledge),
     ):
         result = await knowledge_service.delete_document_async(
             "doc-1", owner_user_id="u1"
         )
     assert not result
-    assert removed == []
+    assert knowledge.calls == [("aget_content_by_id", "doc-1")]
 
 
 @pytest.mark.asyncio
 async def test_delete_document_uses_async_delete_dependency_for_owned_content() -> None:
     deleted: list[str] = []
 
-    class FakeKnowledge:
-        async def aget_content_by_id(self, content_id: str):
-            return SimpleNamespace(id=content_id, metadata={"user_id": "u1"})
+    knowledge = StrictAsyncKnowledge(
+        content_by_id={"doc-1": SimpleNamespace(id="doc-1", metadata={"user_id": "u1"})}
+    )
 
     async def delete_content_async(_knowledge, content_id: str) -> None:
         deleted.append(content_id)
 
     lifecycle = knowledge_service.KnowledgeBaseLifecycle(
         knowledge_service.KnowledgeBaseLifecycleDependencies(
-            get_async_knowledge_base=lambda _search_type=None: FakeKnowledge(),
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
             ensure_storage_async=lambda: None,
             delete_content_async=delete_content_async,
         )
@@ -396,29 +570,27 @@ async def test_delete_document_uses_async_delete_dependency_for_owned_content() 
 
     assert result
     assert deleted == ["doc-1"]
+    assert knowledge.calls == [("aget_content_by_id", "doc-1")]
 
 
 @pytest.mark.asyncio
 async def test_clear_knowledge_base_deletes_all_visible_content_with_async_dependency() -> None:
     deleted: list[str] = []
 
-    class FakeKnowledge:
-        async def aget_content(self):
-            return (
-                [
-                    SimpleNamespace(id="doc-1", metadata={"user_id": "u1"}),
-                    SimpleNamespace(id="doc-2", metadata={"user_id": "u1"}),
-                    SimpleNamespace(id="doc-3", metadata={"user_id": "u2"}),
-                ],
-                3,
-            )
+    knowledge = StrictAsyncKnowledge(
+        contents=[
+            SimpleNamespace(id="doc-1", metadata={"user_id": "u1"}),
+            SimpleNamespace(id="doc-2", metadata={"user_id": "u1"}),
+            SimpleNamespace(id="doc-3", metadata={"user_id": "u2"}),
+        ]
+    )
 
     async def delete_content_async(_knowledge, content_id: str) -> None:
         deleted.append(content_id)
 
     lifecycle = knowledge_service.KnowledgeBaseLifecycle(
         knowledge_service.KnowledgeBaseLifecycleDependencies(
-            get_async_knowledge_base=lambda _search_type=None: FakeKnowledge(),
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
             ensure_storage_async=lambda: None,
             delete_content_async=delete_content_async,
         )
@@ -428,3 +600,4 @@ async def test_clear_knowledge_base_deletes_all_visible_content_with_async_depen
 
     assert result == {"documents": 0, "chunks": 0}
     assert deleted == ["doc-1", "doc-2"]
+    assert knowledge.calls == [("aget_content", (), {})]
