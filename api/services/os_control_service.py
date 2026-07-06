@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
-from inspect import isawaitable
+from functools import partial
+from inspect import isawaitable, iscoroutinefunction
 from typing import Any, cast
 
 from agno.memory import UserMemory
+from anyio import to_thread
 from sqlalchemy import Column, DateTime, Float, MetaData, Table, Text, desc, func, select, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.schema import CreateSchema
@@ -840,7 +842,10 @@ async def get_control_payload(
         raise ValueError(f"Unsupported control module: {module}") from exc
     if module == "memory":
         return await get_memory_payload(actor=actor, **(query or {}))
-    payload = handler(actor=actor)
+    if iscoroutinefunction(handler):
+        payload = handler(actor=actor)
+    else:
+        payload = await to_thread.run_sync(partial(handler, actor=actor))
     if isawaitable(payload):
         return cast(OsPayload, await payload)
     return cast(OsPayload, payload)

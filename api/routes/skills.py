@@ -69,7 +69,7 @@ async def toggle_skill(
 ):
     """启用或禁用指定 Skill"""
     try:
-        public_name = set_skill_enabled(skill_name, body.enabled)
+        public_name = await to_thread.run_sync(set_skill_enabled, skill_name, body.enabled)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' 不存在")
     await record_audit_event_async(

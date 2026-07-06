@@ -194,6 +194,142 @@ async def test_enabled_skills_loads_sync_agno_skills_off_event_loop():
 
 
 @pytest.mark.asyncio
+async def test_enabled_skill_dirs_are_read_off_event_loop():
+    event_loop_thread_id = threading.get_ident()
+    reader_thread_id: int | None = None
+
+    def get_enabled_skill_dirs():
+        nonlocal reader_thread_id
+        reader_thread_id = threading.get_ident()
+        return []
+
+    runtime = security_run_runtime.SecurityRunRuntime(
+        security_run_runtime.SecurityRunRuntimeDependencies(
+            get_enabled_skill_dirs=get_enabled_skill_dirs,
+        )
+    )
+
+    assert await runtime._build_enabled_skills() is None
+    assert reader_thread_id is not None
+    assert reader_thread_id != event_loop_thread_id
+
+
+@pytest.mark.asyncio
+async def test_build_model_dependency_runs_off_event_loop():
+    event_loop_thread_id = threading.get_ident()
+    build_model_thread_id: int | None = None
+    created: dict = {}
+
+    def build_model(_model_id: str | None):
+        nonlocal build_model_thread_id
+        build_model_thread_id = threading.get_ident()
+        return object()
+
+    def agent_factory(**kwargs):
+        created.update(kwargs)
+        return SimpleNamespace()
+
+    with TemporaryDirectory() as temp_dir:
+        prompt_dir = Path(temp_dir)
+        (prompt_dir / security_run_runtime.SAFE_FALLBACK_PROMPT).write_text(
+            "降级提示词",
+            encoding="utf-8",
+        )
+        runtime = security_run_runtime.SecurityRunRuntime(
+            security_run_runtime.SecurityRunRuntimeDependencies(
+                build_model=build_model,
+                get_db=lambda: object(),
+                agent_factory=agent_factory,
+            )
+        )
+        with patch.object(security_run_runtime, "PROMPT_DIR", prompt_dir):
+            await runtime.build_fallback_agent(model_id="model-1")
+
+    assert "model" in created
+    assert build_model_thread_id is not None
+    assert build_model_thread_id != event_loop_thread_id
+
+
+@pytest.mark.asyncio
+async def test_security_agent_context_builds_mcp_url_off_event_loop():
+    event_loop_thread_id = threading.get_ident()
+    get_mcp_url_thread_id: int | None = None
+
+    def get_mcp_url():
+        nonlocal get_mcp_url_thread_id
+        get_mcp_url_thread_id = threading.get_ident()
+        return "http://127.0.0.1:8000/mcp?token=secret"
+
+    runtime = security_run_runtime.SecurityRunRuntime(
+        security_run_runtime.SecurityRunRuntimeDependencies(
+            get_mcp_url=get_mcp_url,
+            mcp_tools_factory=FakeMcpTools,
+            agent_factory=lambda **_kwargs: SimpleNamespace(),
+        )
+    )
+    request = security_run_runtime.SecurityRunRequest.from_chat_args("hello")
+
+    with patch.object(
+        runtime,
+        "_build_security_agent",
+        return_value=SimpleNamespace(),
+    ):
+        async with runtime.security_agent_context(request):
+            pass
+
+    assert get_mcp_url_thread_id is not None
+    assert get_mcp_url_thread_id != event_loop_thread_id
+
+
+@pytest.mark.asyncio
+async def test_agent_dependencies_are_built_off_event_loop():
+    event_loop_thread_id = threading.get_ident()
+    dependency_thread_id: int | None = None
+    created: dict = {}
+
+    def fake_agent_dependencies():
+        nonlocal dependency_thread_id
+        dependency_thread_id = threading.get_ident()
+        return {"feishu_webhook_url": "https://feishu.example/hook"}
+
+    def agent_factory(**kwargs):
+        created.update(kwargs)
+        return SimpleNamespace()
+
+    with TemporaryDirectory() as temp_dir:
+        prompt_dir = Path(temp_dir)
+        (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_PROMPT).write_text(
+            "安全提示词",
+            encoding="utf-8",
+        )
+        runtime = security_run_runtime.SecurityRunRuntime(
+            security_run_runtime.SecurityRunRuntimeDependencies(
+                build_model=lambda _model_id: object(),
+                get_db=lambda: object(),
+                get_async_knowledge_base=lambda: object(),
+                get_enabled_skill_dirs=lambda: [],
+                agent_factory=agent_factory,
+            )
+        )
+        request = security_run_runtime.SecurityRunRequest.from_chat_args("hello")
+        with (
+            patch.object(security_run_runtime, "PROMPT_DIR", prompt_dir),
+            patch.object(
+                security_run_runtime,
+                "_agent_dependencies",
+                fake_agent_dependencies,
+            ),
+        ):
+            await runtime._build_security_agent(FakeMcpTools(), request)
+
+    assert created["dependencies"] == {
+        "feishu_webhook_url": "https://feishu.example/hook"
+    }
+    assert dependency_thread_id is not None
+    assert dependency_thread_id != event_loop_thread_id
+
+
+@pytest.mark.asyncio
 async def test_stream_agent_content_filters_run_content_events():
     chunks = [
         chunk

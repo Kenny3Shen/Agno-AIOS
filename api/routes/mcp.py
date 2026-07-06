@@ -1,5 +1,7 @@
+from functools import partial
 from typing import Any
 
+from anyio import to_thread
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
@@ -91,7 +93,7 @@ async def update_config(
     body: ServiceToggle,
     user: User = Depends(require_permission("mcp:write")),
 ):
-    change = apply_service_toggle(body.id, body.enabled)
+    change = await to_thread.run_sync(apply_service_toggle, body.id, body.enabled)
     await _record_config_change(user, change, audit_request_context(request))
     return change.response
 
@@ -154,11 +156,14 @@ async def upload_mcp(
     user: User = Depends(require_permission("mcp:write")),
 ):
     """上传 MCP manifest。"""
-    change = apply_mcp_upload(
-        name=body.name,
-        description=body.description,
-        manifest=body.manifest,
-        enabled=body.enabled,
+    change = await to_thread.run_sync(
+        partial(
+            apply_mcp_upload,
+            name=body.name,
+            description=body.description,
+            manifest=body.manifest,
+            enabled=body.enabled,
+        )
     )
     await _record_config_change(user, change, audit_request_context(request))
     return McpUploadResponse(**change.response)

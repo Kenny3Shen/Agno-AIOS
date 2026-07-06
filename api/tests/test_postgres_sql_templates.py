@@ -221,15 +221,17 @@ def test_cve_intel_skill_cache_fallback_uses_async_file_io() -> None:
 def test_local_config_services_are_sync_first_without_blocking_event_loop_regressions() -> None:
     settings_source = inspect.getsource(settings_route)
     assert "public_model_config()" in settings_source
-    assert "save_model_config(" in settings_source
-    assert "load_model_config(" in settings_source
+    assert "save_model_config" in settings_source
+    assert "load_model_config" in settings_source
+    assert "await to_thread.run_sync" in settings_source
     assert "public_model_config_async" not in settings_source
     assert "save_model_config_async" not in settings_source
     assert "load_model_config_async" not in settings_source
 
     skills_source = inspect.getsource(skills_route)
     assert "list_skill_infos()" in skills_source
-    assert "set_skill_enabled(" in skills_source
+    assert "set_skill_enabled" in skills_source
+    assert "await to_thread.run_sync(set_skill_enabled" in skills_source
     assert "install_skill_archive_async" not in skills_source
 
     mcp_source = inspect.getsource(mcp_route)
@@ -237,8 +239,9 @@ def test_local_config_services_are_sync_first_without_blocking_event_loop_regres
     assert "services_from_config(" in mcp_source
     assert "read_mcp_config_async" not in mcp_source
     assert "services_from_config_async" not in mcp_source
-    assert "apply_service_toggle(" in mcp_source
-    assert "apply_mcp_upload(" in mcp_source
+    assert "apply_service_toggle" in mcp_source
+    assert "apply_mcp_upload" in mcp_source
+    assert "await to_thread.run_sync(apply_service_toggle" in mcp_source
     assert "apply_service_toggle_async" not in mcp_source
     assert "apply_mcp_upload_async" not in mcp_source
 
@@ -281,6 +284,7 @@ def test_local_config_services_are_sync_first_without_blocking_event_loop_regres
 
     runtime_source = inspect.getsource(security_run_runtime)
     assert "get_enabled_skill_dirs" in runtime_source
+    assert "_run_sync_dependency" in runtime_source
     assert "to_thread.run_sync(_load_local_skills" in runtime_source
     assert "\ndef _build_fallback_agent(" not in runtime_source
 
@@ -435,7 +439,7 @@ def test_security_run_runtime_defaults_to_async_agno_db_and_knowledge() -> None:
     assert "get_enabled_skill_dirs_async" not in source
     runtime_source = inspect.getsource(security_run_runtime.SecurityRunRuntime)
     assert "await _load_prompt_async" in runtime_source
-    assert "await _maybe_await(self.dependencies.build_model" in runtime_source
+    assert "await _run_sync_dependency(self.dependencies.build_model" in runtime_source
     assert "await self._build_enabled_skills()" in runtime_source
     assert "os.environ" not in inspect.getsource(security_run_runtime)
     assert "= get_agno_postgres_db" not in source

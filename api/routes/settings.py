@@ -1,7 +1,9 @@
+from functools import partial
 import os
 from time import perf_counter
 from typing import Any
 
+from anyio import to_thread
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from loguru import logger
@@ -94,13 +96,14 @@ def _extract_upstream_error(data: Any, fallback: str) -> str:
     return fallback
 
 
-def _resolve_model_secret(model: ModelConfig) -> dict[str, Any]:
+async def _resolve_model_secret(model: ModelConfig) -> dict[str, Any]:
     data = model.model_dump()
     if "*" not in data.get("api_key", ""):
         return data
 
     data["api_key"] = ""
-    for saved in load_model_config().get("models", []):
+    saved_config = await to_thread.run_sync(load_model_config)
+    for saved in saved_config.get("models", []):
         if isinstance(saved, dict) and saved.get("id") == model.id:
             data["api_key"] = str(saved.get("api_key") or "")
             break
@@ -127,7 +130,7 @@ def _validate_test_model(model: dict[str, Any]) -> None:
 async def run_model_connectivity_test(
     model: ModelConfig,
 ) -> ModelConnectivityTestResponse:
-    resolved = _resolve_model_secret(model)
+    resolved = await _resolve_model_secret(model)
     _validate_test_model(resolved)
 
     started = perf_counter()
@@ -222,9 +225,12 @@ async def update_models(
 ) -> dict:
     """保存模型配置和默认选择"""
     logger.info("模型配置已更新")
-    result = save_model_config(
-        body.models,
-        body.active_model_id,
+    result = await to_thread.run_sync(
+        partial(
+            save_model_config,
+            body.models,
+            body.active_model_id,
+        )
     )
     await record_audit_event_async(
         user,
@@ -280,7 +286,7 @@ async def update_settings(
 
     # 返回完整配置
     result: dict[str, str] = {}
-    active_settings = get_settings()
+    active_settings = await to_thread.run_sync(get_settings)
     for key in CONFIGURABLE_KEYS:
         raw = _setting_value(active_settings, key)
         result[key] = _mask_secret(key, raw)

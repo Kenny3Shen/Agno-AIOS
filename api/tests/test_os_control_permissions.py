@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+import threading
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -153,6 +154,25 @@ async def test_route_passes_actor_to_service():
         result = await os_control.get_os_control_module("sessions", user=current_actor)
     assert result["module"] == "sessions"
     mocked.assert_awaited_once_with("sessions", actor=current_actor, query=None)
+
+
+@pytest.mark.asyncio
+async def test_sync_control_payload_handler_runs_off_event_loop():
+    event_loop_thread_id = threading.get_ident()
+    handler_thread_id: int | None = None
+
+    def sync_handler(actor=None):
+        nonlocal handler_thread_id
+        del actor
+        handler_thread_id = threading.get_ident()
+        return {"module": "threaded"}
+
+    with patch.dict(os_control_service.MODULE_HANDLERS, {"threaded": sync_handler}):
+        result = await os_control_service.get_control_payload("threaded", actor=actor("u1"))
+
+    assert result == {"module": "threaded"}
+    assert handler_thread_id is not None
+    assert handler_thread_id != event_loop_thread_id
 
 
 @pytest.mark.asyncio

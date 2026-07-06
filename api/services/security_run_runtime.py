@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
 from pathlib import Path
-from inspect import isawaitable
+from inspect import isawaitable, iscoroutinefunction
 from typing import Any, AsyncIterator, Callable, cast
 from urllib.parse import urlencode
 
@@ -66,6 +66,12 @@ async def _maybe_await(value: Any) -> Any:
     if isawaitable(value):
         return await value
     return value
+
+
+async def _run_sync_dependency(func: Callable[..., Any], *args: Any) -> Any:
+    if iscoroutinefunction(func):
+        return await func(*args)
+    return await _maybe_await(await to_thread.run_sync(func, *args))
 
 
 PROVIDER_BLOCK_MARKERS = (
@@ -146,7 +152,9 @@ class SecurityRunRuntime:
     async def _build_enabled_skills(self) -> Skills | None:
         enabled_dirs = [
             str(skill_dir)
-            for skill_dir in await _maybe_await(self.dependencies.get_enabled_skill_dirs())
+            for skill_dir in await _run_sync_dependency(
+                self.dependencies.get_enabled_skill_dirs
+            )
         ]
         if not enabled_dirs:
             return None
@@ -187,7 +195,7 @@ class SecurityRunRuntime:
             role="安全防御运营助手",
             description="无工具模式下的安全防御运营助手。",
             instructions=[await _load_prompt_async(SAFE_FALLBACK_PROMPT)],
-            model=await _maybe_await(self.dependencies.build_model(model_id)),
+            model=await _run_sync_dependency(self.dependencies.build_model, model_id),
             db=self.dependencies.get_db(),
             update_memory_on_run=True,
             enable_session_summaries=True,
@@ -206,7 +214,10 @@ class SecurityRunRuntime:
             role="安全运营综合专家",
             description="集威胁情报分析与安全剧本执行于一体的安全运营助手，可完成情报检索、深度分析和自动化处置全流程。",
             instructions=[await _load_prompt_async(SECURITY_OPERATIONS_PROMPT)],
-            model=await _maybe_await(self.dependencies.build_model(request.model_id)),
+            model=await _run_sync_dependency(
+                self.dependencies.build_model,
+                request.model_id,
+            ),
             tools=[mcp_tools],
             knowledge=await _maybe_await(self.dependencies.get_async_knowledge_base()),
             knowledge_filters={"user_id": request.knowledge_owner_user_id}
@@ -216,7 +227,7 @@ class SecurityRunRuntime:
             add_search_knowledge_instructions=True,
             skills=await self._build_enabled_skills(),
             db=self.dependencies.get_db(),
-            dependencies=_agent_dependencies(),
+            dependencies=await _run_sync_dependency(_agent_dependencies),
             add_dependencies_to_context=True,
             add_history_to_context=True,
             update_memory_on_run=True,
@@ -230,7 +241,7 @@ class SecurityRunRuntime:
     async def security_agent_context(self, request: SecurityRunRequest) -> AsyncIterator[Agent]:
         async with self.dependencies.mcp_tools_factory(
             transport="streamable-http",
-            url=self.dependencies.get_mcp_url(),
+            url=await _run_sync_dependency(self.dependencies.get_mcp_url),
             timeout_seconds=20,
         ) as mcp_tools:
             security_agent = await _maybe_await(

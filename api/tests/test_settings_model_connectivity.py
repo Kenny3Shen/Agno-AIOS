@@ -1,9 +1,17 @@
 import inspect
+from types import SimpleNamespace
+from typing import cast
 from unittest.mock import patch
-from fastapi import HTTPException
+
+from fastapi import HTTPException, Request
+import pytest
+
+from api.auth.models import User
 from api.routes import settings
 from api.services import model_config_service
-import pytest
+
+FAKE_REQUEST = cast(Request, None)
+FAKE_USER = cast(User, object())
 
 
 class FakeResponse:
@@ -41,6 +49,23 @@ class FakeClient:
     async def post(self, url: str, *, headers: dict, json: dict):
         self.captured.update({"url": url, "headers": headers, "json": json})
         return self.response
+
+
+class FakeGetSettings:
+    __name__ = "get_settings"
+
+    def __init__(self, value) -> None:
+        self.value = value
+
+    def __call__(self):
+        return self.value
+
+    def cache_clear(self) -> None:
+        return None
+
+
+async def async_noop(*_args, **_kwargs) -> None:
+    return None
 
 
 def test_route_requires_write_permission():
@@ -123,6 +148,12 @@ async def test_success_posts_openai_compatible_probe():
 @pytest.mark.asyncio
 async def test_masked_api_key_uses_saved_secret():
     captured: dict = {}
+    thread_calls: list[str] = []
+
+    async def fake_run_sync(func, *args):
+        thread_calls.append(func.__name__)
+        return func(*args)
+
     model = settings.ModelConfig(
         id="m1",
         name="Model",
@@ -130,11 +161,23 @@ async def test_masked_api_key_uses_saved_secret():
         base_url="https://api.example.com/v1",
         api_key="real********mask",
     )
+
+    def fake_load_model_config():
+        return {"models": [{"id": "m1", "api_key": "saved-secret"}]}
+
+    fake_load_model_config.__name__ = "load_model_config"
+
     with (
         patch.object(
             settings,
             "load_model_config",
-            return_value={"models": [{"id": "m1", "api_key": "saved-secret"}]},
+            fake_load_model_config,
+        ),
+        patch.object(
+            settings,
+            "to_thread",
+            SimpleNamespace(run_sync=fake_run_sync),
+            create=True,
         ),
         patch.object(
             settings.httpx,
@@ -145,6 +188,96 @@ async def test_masked_api_key_uses_saved_secret():
         result = await settings.run_model_connectivity_test(model)
     assert result.success
     assert captured["headers"]["Authorization"] == "Bearer saved-secret"
+    assert thread_calls == ["load_model_config"]
+
+
+@pytest.mark.asyncio
+async def test_update_models_saves_model_config_off_event_loop():
+    thread_calls: list[str] = []
+    body = settings.ModelConfigUpdate(
+        active_model_id="m1",
+        models=[
+            settings.ModelConfig(
+                id="m1",
+                name="Model",
+                model_id="model-name",
+                base_url="https://api.example.com/v1",
+                api_key="secret-key",
+            )
+        ],
+    )
+
+    async def fake_run_sync(func, *args):
+        thread_calls.append(func.func.__name__ if hasattr(func, "func") else func.__name__)
+        return func(*args)
+
+    def fake_save_model_config(_models, _active_model_id):
+        return {"active_model_id": "m1", "models": []}
+
+    fake_save_model_config.__name__ = "save_model_config"
+
+    with (
+        patch.object(
+            settings,
+            "save_model_config",
+            fake_save_model_config,
+        ),
+        patch.object(
+            settings,
+            "record_audit_event_async",
+            async_noop,
+        ),
+        patch.object(
+            settings,
+            "to_thread",
+            SimpleNamespace(run_sync=fake_run_sync),
+            create=True,
+        ),
+    ):
+        result = await settings.update_models(
+            request=FAKE_REQUEST,
+            body=body,
+            user=FAKE_USER,
+        )
+
+    assert result["active_model_id"] == "m1"
+    assert thread_calls == ["save_model_config"]
+
+
+@pytest.mark.asyncio
+async def test_update_settings_reads_active_settings_off_event_loop():
+    thread_calls: list[str] = []
+    secret = SimpleNamespace(get_secret_value=lambda: "token-secret")
+    fake_settings = SimpleNamespace(
+        mcp_server_url="http://mcp.example/mcp",
+        mcp_token=secret,
+        feishu_webhook_url=secret,
+    )
+
+    async def fake_run_sync(func, *args):
+        thread_calls.append(func.__name__)
+        return func(*args)
+
+    fake_get_settings = FakeGetSettings(fake_settings)
+
+    with (
+        patch.object(settings, "get_settings", fake_get_settings),
+        patch.object(settings, "record_audit_event_async", async_noop),
+        patch.object(
+            settings,
+            "to_thread",
+            SimpleNamespace(run_sync=fake_run_sync),
+            create=True,
+        ),
+    ):
+        result = await settings.update_settings(
+            request=FAKE_REQUEST,
+            body=settings.SettingsUpdate(settings={"NAV_TAGS": "{}"}),
+            user=FAKE_USER,
+        )
+
+    assert result.settings["MCP_SERVER_URL"] == "http://mcp.example/mcp"
+    assert thread_calls == ["get_settings"]
 
 
 @pytest.mark.asyncio
