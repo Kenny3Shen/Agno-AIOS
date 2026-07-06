@@ -7,6 +7,7 @@ import polars as pl
 import pytest
 
 from api.tasks import update_cve
+from api.tasks.cve_sources import ExploitDBSource
 
 
 class _ChangingSource:
@@ -49,6 +50,25 @@ class _EmptySource(_ChangingSource):
                 "github_url": pl.String,
             }
         )
+
+
+def test_exploitdb_source_parses_csv_text() -> None:
+    raw_csv = "\n".join(
+        [
+            "id,file,description,date,author,type,platform,port,codes,tags,verified",
+            "1,exploits/linux/remote/12345.py,Example vuln,2026-01-01,a,remote,linux,,CVE-2026-0001,,1",
+        ]
+    )
+
+    parsed = ExploitDBSource().parse_data(raw_csv)
+
+    assert parsed.to_dicts() == [
+        {
+            "cve_id": "CVE-2026-0001",
+            "description": "Example vuln",
+            "github_url": "https://www.exploit-db.com/exploits/12345",
+        }
+    ]
 
 
 @pytest.mark.asyncio

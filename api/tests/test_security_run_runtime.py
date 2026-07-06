@@ -3,7 +3,7 @@ import threading
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
-from api.services import security_run_runtime
+from api.services import runtime_env, security_run_runtime
 import pytest
 from pydantic import SecretStr
 
@@ -44,6 +44,20 @@ class BlockingRuntime(security_run_runtime.SecurityRunRuntime):
 
     def build_fallback_agent(self, model_id=None):
         return FallbackAgent()
+
+
+@pytest.mark.asyncio
+async def test_runtime_env_loader_runs_dotenv_once() -> None:
+    runtime_env._RUNTIME_ENV_LOADED = False
+    calls: list[dict] = []
+
+    with patch.object(
+        runtime_env, "load_dotenv", side_effect=lambda **kwargs: calls.append(kwargs)
+    ):
+        await runtime_env.load_runtime_env_async()
+        await runtime_env.load_runtime_env_async()
+
+    assert calls == [{"override": True}]
 
 
 @pytest.mark.asyncio

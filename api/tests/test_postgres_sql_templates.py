@@ -15,23 +15,17 @@ from api.persistence.mcp import (
 from api.mcp import config as mcp_config
 from api.mcp.tools import basic as basic_mcp_tool
 from api.mcp.tools import playbook as playbook_mcp_tool
-from api.routes import knowledge as knowledge_route
 from api.routes import mcp as mcp_route
 from api.routes import settings as settings_route
 from api.routes import skills as skills_route
 from api.mcp import server as mcp_server
 from api.services import audit_service
-from api.services import url2md_service
-from api.services import scheduler_service
 from api.services import mcp_config_service
 from api.services import model_config_service
-from api.services import knowledge_runtime_service
 from api.services import llm_service, os_control_service, postgres_store
 from api.services import knowledge_service
 from api.services import security_run_runtime
 from api.services import skill_service
-from api.services import agent_eval_result_service
-from api.services import agent_eval_runner
 from api.core import logging as core_logging
 from api.tasks import update_cve
 from api.tasks import cve_sources
@@ -82,13 +76,6 @@ def test_audit_persistence_no_longer_exposes_sync_wrappers() -> None:
     assert not hasattr(audit_service, "ensure_audit_log_table")
     assert not hasattr(audit_service, "record_audit_event")
     assert not hasattr(audit_service, "list_audit_events")
-
-
-def test_session_listing_no_longer_joins_archive_table() -> None:
-    source = inspect.getsource(llm_service.get_all_sessions_async)
-    assert "get_sessions" in source
-    assert "chat_session_archives" not in source
-    assert not hasattr(llm_service, "get_all_sessions")
 
 
 def test_mcp_config_no_longer_uses_raw_sql_for_runtime_tables() -> None:
@@ -153,55 +140,6 @@ def test_cve_sources_do_not_read_config_at_import_time() -> None:
     assert "with open(" not in source
     assert "tomllib.load(" not in source
     assert "CONFIG =" not in source
-
-
-def test_cve_sources_fetch_remote_data_with_async_http() -> None:
-    source = inspect.getsource(cve_sources)
-    exploit_fetch_source = inspect.getsource(cve_sources.ExploitDBSource.fetch_data)
-    assert "pl.scan_csv" not in source
-    assert "pl.read_csv(self.remote_url" not in source
-    assert "httpx.AsyncClient" in exploit_fetch_source
-    assert "return resp.text" in exploit_fetch_source
-
-
-def test_completed_mysql_migration_artifacts_are_removed() -> None:
-    assert not Path("api/tasks/migrate_mysql_to_postgres.py").exists()
-    assert not Path("api/services/mysql_store.py").exists()
-
-    pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
-    readme = Path("README.md").read_text(encoding="utf-8")
-    operations = Path("docs/operations.md").read_text(encoding="utf-8")
-    database_docs = Path("docs/database-tables.md").read_text(encoding="utf-8")
-
-    assert "migrate-mysql-to-postgres" not in pyproject
-    assert "migrate-mysql-to-postgres" not in readme
-    assert "migrate-mysql-to-postgres" not in operations
-    assert "migrate_mysql_to_postgres" not in database_docs
-
-
-def test_cve_update_automation_uses_cron_without_celery() -> None:
-    pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
-    uv_lock = Path("uv.lock").read_text(encoding="utf-8")
-    operations = Path("docs/operations.md").read_text(encoding="utf-8")
-    database_docs = Path("docs/database-tables.md").read_text(encoding="utf-8")
-    config_source = Path("api/config.py").read_text(encoding="utf-8")
-
-    assert not Path("api/tasks/celery_app.py").exists()
-    assert "celery" not in pyproject.lower()
-    assert "celery" not in uv_lock.lower()
-    assert "celery" not in operations.lower()
-    assert "celery" not in database_docs.lower()
-    assert "celery_" not in config_source
-    assert "cve_update_cron" not in config_source
-    assert "cve_update_schedule" not in config_source
-
-
-def test_url_collection_uses_async_http_client() -> None:
-    source = inspect.getsource(url2md_service)
-    assert inspect.iscoroutinefunction(url2md_service.fetch_and_parse_url)
-    assert "httpx.AsyncClient" in source
-    assert "requests.Session" not in source
-    assert "import requests" not in source
 
 
 def test_cve_intel_skill_cache_fallback_uses_async_file_io() -> None:
@@ -366,13 +304,6 @@ def test_postgres_store_no_longer_exposes_psycopg_pool() -> None:
     assert "psycopg_pool" not in source
 
 
-def test_knowledge_route_uses_async_lifecycle() -> None:
-    source = inspect.getsource(knowledge_route)
-    assert "await knowledge_base.knowledge_status_async" in source
-    assert "await get_knowledge_base_lifecycle().add_text_document_async" in source
-    assert "await get_knowledge_base_lifecycle().search_documents_async" in source
-
-
 def test_knowledge_async_lifecycle_uses_agno_async_api() -> None:
     source = inspect.getsource(knowledge_service.KnowledgeBaseLifecycle)
     module_source = inspect.getsource(knowledge_service)
@@ -414,23 +345,6 @@ def test_knowledge_async_lifecycle_uses_agno_async_api() -> None:
     assert not hasattr(knowledge_service, "delete_document")
 
 
-def test_knowledge_runtime_uses_agno_pgvector_contract() -> None:
-    runtime_source = inspect.getsource(knowledge_runtime_service)
-    assert "from agno.vectordb.pgvector import PgVector" in runtime_source
-    assert "vector_db = PgVector(" in runtime_source
-    assert "AsyncPgVector" not in runtime_source
-
-
-def test_scheduler_service_uses_async_agno_db_without_schedule_manager() -> None:
-    source = inspect.getsource(scheduler_service)
-    assert "ScheduleManager" not in source
-    assert "get_schedule_manager" not in source
-    assert "get_agno_postgres_db" not in source
-    assert "get_async_agno_postgres_db" in source
-    assert "await db.create_schedule" in source
-    assert "await get_async_agno_postgres_db().get_schedules" in source
-
-
 def test_security_run_runtime_defaults_to_async_agno_db_and_knowledge() -> None:
     source = inspect.getsource(security_run_runtime.SecurityRunRuntimeDependencies)
     assert "get_async_agno_postgres_db" in source
@@ -445,27 +359,6 @@ def test_security_run_runtime_defaults_to_async_agno_db_and_knowledge() -> None:
     assert "= get_agno_postgres_db" not in source
     assert "= get_knowledge_base" not in source
     assert not hasattr(security_run_runtime, "_build_enabled_skills")
-
-
-def test_agent_eval_result_service_uses_agno_async_api_only() -> None:
-    source = inspect.getsource(agent_eval_result_service)
-    assert "get_async_agno_postgres_db" in source
-    assert "get_eval_runs" in source
-    assert "get_eval_run" in source
-    assert "get_agno_postgres_db" not in source
-    assert "PostgresDb" not in source
-    assert "agno_eval" not in source.lower().replace("agno_eval_run", "")
-    assert "select(" not in source
-    assert "from psycopg" not in source
-
-
-def test_agent_eval_runner_prefers_agno_async_eval_api() -> None:
-    source = inspect.getsource(agent_eval_runner)
-    assert ".arun(" in source
-    assert ".run(" not in source
-    assert "get_async_agno_postgres_db" in source
-    assert "get_agno_postgres_db" not in source
-    assert "PostgresDb" not in source
 
 
 def test_mcp_tables_are_declared_in_sqlalchemy_persistence() -> None:

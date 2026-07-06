@@ -57,6 +57,16 @@ def test_chat_routes_require_explicit_session_permissions():
     )
 
 
+@pytest.mark.asyncio
+async def test_remove_session_archives_session_and_returns_payload():
+    current_actor = actor("u1")
+    with patch.object(chat, "archive_session", new_callable=AsyncMock) as archive_session:
+        archive_session.return_value = True
+        result = await chat.remove_session("session-1", user=current_actor)
+    assert result == {"success": True, "archived": True}
+    archive_session.assert_awaited_once_with("session-1", actor=current_actor)
+
+
 def test_provider_block_detector_matches_openai_status_error_text():
     assert security_run_runtime._is_provider_block_error(
         RuntimeError("Your request was blocked.")

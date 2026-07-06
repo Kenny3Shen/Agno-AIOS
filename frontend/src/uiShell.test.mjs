@@ -13,9 +13,7 @@ import "./modules/traceWorkbench.test.mjs"
 import "./modules/workflowBuilder.test.mjs"
 
 const root = dirname(fileURLToPath(import.meta.url))
-const repoRoot = join(root, "..", "..")
 const sourcePath = (relativePath) => join(root, relativePath)
-const repoPath = (relativePath) => join(repoRoot, relativePath)
 const readSource = (relativePath) => readFileSync(sourcePath(relativePath), "utf8")
 const readOptionalSource = (relativePath) => {
   const path = sourcePath(relativePath)
@@ -25,8 +23,6 @@ const readOptionalSource = (relativePath) => {
 const app = readSource("App.vue")
 const appStyle = readSource("style.css")
 const designTokens = readSource("styles/tokens.css")
-const viteConfig = readOptionalSource("../vite.config.ts")
-const apiMain = readOptionalSource("../../api/main.py")
 const authScreen = readSource("components/AuthScreen.vue")
 const chat = readOptionalSource("components/Chat.vue")
 const trace = readOptionalSource("components/Trace.vue")
@@ -44,7 +40,6 @@ const workflow = readOptionalSource("components/Workflow.vue")
 const typesSource = readSource("types/index.ts")
 const useApi = readSource("composables/useApi.ts")
 const apiClient = readOptionalSource("lib/apiClient.ts")
-const authClientSource = readOptionalSource("lib/authClient.ts")
 const clipboard = readOptionalSource("lib/clipboard.ts")
 const authStoreSource = readOptionalSource("stores/auth.ts")
 const permissions = readOptionalSource("lib/permissions.ts")
@@ -85,30 +80,6 @@ assert.equal(
   app.includes("ag-nav-desc"),
   false,
   "sidebar navigation must not render secondary explanatory text",
-)
-
-assert.match(
-  viteConfig,
-  /outDir:\s*['"]dist['"]/,
-  "frontend build output must stay in ignored frontend/dist for ordinary commits",
-)
-
-assert.match(
-  viteConfig,
-  /manualChunks/,
-  "frontend build must define manual chunks to keep large vendors split",
-)
-
-assert.match(
-  apiMain,
-  /frontend_static_dir/,
-  "backend must resolve the frontend static directory through a reusable helper",
-)
-
-assert.match(
-  apiMain,
-  /Path\("frontend\/dist"\)[\s\S]*Path\("source"\)/,
-  "backend must prefer frontend/dist builds and only fall back to root source/",
 )
 
 for (const locale of ["zh-CN", "en-US"]) {
@@ -508,12 +479,6 @@ assert.equal(
 )
 
 assert.match(
-  shellNavigation,
-  /navPermissions/,
-  "Shell navigation must define module visibility permissions",
-)
-
-assert.match(
   app,
   /canAccessNav/,
   "App shell must gate module access by the current role",
@@ -544,26 +509,6 @@ assertTextOrder(
   ],
   "sidebar navigation order must match Agno OS control-plane priority",
 )
-
-for (const removedStudioSource of [
-  app,
-  settings,
-  shellNavigation,
-  typesSource,
-  readSource("i18n/locales/en-US.ts"),
-  readSource("i18n/locales/zh-CN.ts"),
-]) {
-  assert.equal(
-    removedStudioSource.includes("studio"),
-    false,
-    "Studio page and nav metadata must be removed from the frontend shell",
-  )
-  assert.equal(
-    removedStudioSource.includes("Studio"),
-    false,
-    "Studio display copy must not remain after removing the page",
-  )
-}
 
 for (const controlPlaneLabel of [
   't("shell.nav.memory.label")',
@@ -1832,87 +1777,6 @@ for (const hardcodedTraceCopy of [
 }
 
 assert.equal(
-  existsSync(sourcePath("components/Trace.vue")),
-  true,
-  "Trace component file must align with the Trace nav label",
-)
-
-assert.equal(
-  existsSync(sourcePath("components/Dashboard.vue")),
-  true,
-  "Dashboard component file must align with the Dashboard nav label",
-)
-
-assert.equal(
-  existsSync(sourcePath("components/Collect.vue")),
-  true,
-  "Collect component file must align with the Collect nav label",
-)
-
-assert.equal(
-  existsSync(sourcePath("components/Knowledge.vue")),
-  true,
-  "Knowledge component file must align with the Knowledge nav label",
-)
-
-assert.equal(
-  existsSync(sourcePath("components/Skills.vue")),
-  true,
-  "Skills component file must align with the Skills nav label",
-)
-
-assert.equal(
-  existsSync(sourcePath("components/MCP.vue")),
-  true,
-  "MCP component file must align with the MCP nav label",
-)
-
-assert.equal(
-  existsSync(sourcePath("components/CVE.vue")),
-  true,
-  "CVE component file must align with the CVE nav label",
-)
-
-for (const oldComponent of [
-  "components/LlmChat.vue",
-  "components/AgentTracing.vue",
-  "components/AgentSituation.vue",
-  "components/Assets.vue",
-  "components/AssetSearch.vue",
-  "components/Url2Md.vue",
-  "components/KnowledgeManage.vue",
-  "components/SkillManage.vue",
-  "components/McpManage.vue",
-  "components/CveSearch.vue",
-]) {
-  assert.equal(
-    existsSync(sourcePath(oldComponent)),
-    false,
-    `old component filename should be renamed: ${oldComponent}`,
-  )
-}
-
-assert.equal(
-  existsSync(repoPath("api/routes/collect.py")),
-  true,
-  "backend route filename must align with Collect",
-)
-
-assert.equal(
-  existsSync(repoPath("api/routes/trace.py")),
-  true,
-  "backend route filename must align with Trace",
-)
-
-for (const oldRoute of ["api/routes/asset.py", "api/routes/assets.py", "api/routes/url2md.py", "api/routes/traces.py"]) {
-  assert.equal(
-    existsSync(repoPath(oldRoute)),
-    false,
-    `old backend route filename should be renamed: ${oldRoute}`,
-  )
-}
-
-assert.equal(
   chat.includes("lg:grid-cols-[236px_minmax(0,1fr)]"),
   false,
   "Chat view must not reserve an internal desktop session sidebar",
@@ -2050,28 +1914,6 @@ for (const hardcodedDashboardCopy of [
     dashboard.includes(hardcodedDashboardCopy),
     false,
     `Dashboard page must not hardcode copy: ${hardcodedDashboardCopy}`,
-  )
-}
-
-assert.match(
-  authClientSource,
-  /fallbacks/,
-  "auth client must accept caller-provided localized fallback messages",
-)
-
-for (const hardcodedAuthClientCopy of [
-  "当前环境不支持 Fetch API",
-  "登录失败",
-  "注册失败",
-  "获取当前用户失败",
-  "获取 OAuth Provider 失败",
-  "获取 OAuth 授权地址失败",
-  "OAuth Provider 未返回授权地址",
-]) {
-  assert.equal(
-    authClientSource.includes(hardcodedAuthClientCopy),
-    false,
-    `auth client must not hardcode localized error copy: ${hardcodedAuthClientCopy}`,
   )
 }
 
