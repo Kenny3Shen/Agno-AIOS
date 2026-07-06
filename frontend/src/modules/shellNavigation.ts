@@ -56,12 +56,7 @@ export type SidebarNavGroup = {
   items: NavItem[]
 }
 
-export type HomeSectionTitles = {
-  operations: string
-  controlPlane: string
-  governance: string
-  securityData: string
-}
+export type HomeSectionTitles = Record<string, string>
 
 export type ShellComponentProps = {
   currentUserId: string | null
@@ -127,32 +122,12 @@ export const splitPrimaryShellNavItems = (items: NavItem[]) => {
 
 export const buildShellHomeSections = (
   titles: HomeSectionTitles,
-  navItemById: Record<ModuleNavId, NavItem>,
-  canAccess: (id: NavId) => boolean,
-): HomeSection[] => [
-  {
-    title: titles.operations,
-    items: [navItemById.dashboard, navItemById.chat, navItemById.trace, navItemById.workflow],
-  },
-  { title: titles.controlPlane, items: [navItemById.memory] },
-  {
-    title: titles.governance,
-    items: [navItemById.evaluation, navItemById.approvals, navItemById.scheduler],
-  },
-  {
-    title: titles.securityData,
-    items: [
-      navItemById.skills,
-      navItemById.mcp,
-      navItemById.knowledge,
-      navItemById.cve,
-      navItemById.collect,
-    ],
-  },
-]
-  .map((section) => ({
-    ...section,
-    items: section.items.filter((item) => canAccess(item.id)),
+  groups: SidebarNavGroup[],
+  excludedIds: Set<NavId> = new Set(["home", "settings"]),
+): HomeSection[] => groups
+  .map((group) => ({
+    title: titles[group.key] || group.key,
+    items: group.items.filter((item) => !excludedIds.has(item.id)),
   }))
   .filter((section) => section.items.length > 0)
 

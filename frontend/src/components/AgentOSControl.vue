@@ -1,17 +1,5 @@
 <template>
   <div class="agentos-control ag-page-flow">
-    <section class="agentos-summary-strip ag-stat-strip">
-      <article
-        v-for="metric in payload?.metrics || fallbackMetrics"
-        :key="metric.label"
-        class="agentos-summary-chip ag-stat-chip"
-        :class="`tone-${metric.tone || 'blue'}`"
-      >
-        <span>{{ metric.label }}</span>
-        <strong :title="metric.hint || metric.label">{{ metric.value }}</strong>
-      </article>
-    </section>
-
     <el-alert v-if="error" class="agentos-alert" type="error" :title="error" show-icon />
 
     <main v-if="props.osModule === 'scheduler'" class="scheduler-workbench">
@@ -394,7 +382,6 @@ import { useI18n } from "vue-i18n"
 import { useOsControlApi } from "../composables/useApi"
 import type {
   ApprovalRecord,
-  OsControlMetric,
   OsControlModule,
   OsControlRecord,
   OsControlResponse,
@@ -460,14 +447,6 @@ const editForm = reactive({
   retry_delay_seconds: 60,
 })
 
-const fallbackMetrics = computed<OsControlMetric[]>(() => [
-  {
-    label: t("agentOS.metricFallback.label"),
-    value: t("agentOS.metricFallback.value"),
-    hint: t("agentOS.metricFallback.hint"),
-    tone: "blue",
-  },
-])
 const generatedAt = computed(() => formatTime(payload.value?.generated_at))
 const schedules = computed<SchedulerSchedule[]>(() => payload.value?.schedules || [])
 const approvals = computed<ApprovalRecord[]>(() => payload.value?.approvals || [])
@@ -829,10 +808,6 @@ onMounted(() => {
   font-weight: 700;
   line-height: 1.35;
   overflow-wrap: anywhere;
-}
-
-.agentos-summary-strip {
-  flex: 0 0 auto;
 }
 
 .agentos-dot.green {

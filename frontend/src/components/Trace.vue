@@ -1,18 +1,6 @@
 <template>
   <div class="trace-console ag-page-flow">
     <div class="trace-workbench trace-session-workbench">
-      <section class="trace-stat-strip ag-stat-strip" aria-label="Trace metrics">
-        <article
-          v-for="metric in traceSummaryCards"
-          :key="metric.label"
-          class="trace-stat-card ag-stat-chip"
-          :class="`tone-${metric.tone}`"
-        >
-          <span>{{ metric.label }}</span>
-          <strong :title="metric.hint">{{ metric.value }}</strong>
-        </article>
-      </section>
-
       <div class="trace-query-toolbar ag-content-panel">
         <div class="trace-query-primary">
           <el-input
@@ -50,11 +38,16 @@
           <el-button size="small" plain class="cursor-pointer" :disabled="loading || loadingSessions" @click="resetAllFilters">
             {{ t('trace.actions.reset') }}
           </el-button>
-          <el-tooltip :content="t('trace.actions.refreshAll')" placement="bottom">
-            <el-button size="small" type="primary" :loading="loading || loadingSessions" @click="refresh" class="cursor-pointer">
-              <el-icon><Refresh /></el-icon>
-            </el-button>
-          </el-tooltip>
+          <el-button
+            size="small"
+            type="primary"
+            :loading="loading || loadingSessions"
+            class="cursor-pointer"
+            :aria-label="t('trace.actions.refreshAll')"
+            @click="refresh"
+          >
+            <el-icon><Refresh /></el-icon>
+          </el-button>
         </div>
         <div v-if="traceAdvancedFiltersOpen" class="trace-advanced-filters">
           <el-input v-model="sessionFilters.userId" size="small" clearable :placeholder="t('trace.filters.userId')" class="trace-filter-input" @keyup.enter="refreshAll" />
@@ -70,18 +63,12 @@
         </div>
       </div>
 
-      <div
-        ref="traceBodyGridRef"
-        class="trace-body-grid ag-workspace-panel"
-        :class="{ 'drawer-active': traceDrawerOpen }"
-        :style="{ '--trace-drawer-width': traceDrawerOpen ? `${drawerWidth}px` : '0px' }"
-      >
+      <div class="trace-body-grid ag-workspace-panel">
         <aside class="trace-session-panel">
           <div class="trace-toolbar trace-session-toolbar">
             <div class="trace-panel-header">
               <div>
                 <p>{{ t('trace.sessions.title') }}</p>
-                <span>{{ t('trace.sessions.description') }}</span>
               </div>
               <strong>{{ filteredSessions.length }}</strong>
             </div>
@@ -91,7 +78,7 @@
             <el-skeleton v-if="loadingSessions && !sessions.length" :rows="5" animated />
             <template v-else>
               <button
-                v-for="session in filteredSessions"
+                v-for="session in pagedSessions"
                 :key="session.session_id"
                 type="button"
                 class="trace-session-card"
@@ -108,6 +95,17 @@
               </button>
             </template>
 
+            <el-pagination
+              v-if="filteredSessions.length > SESSION_PAGE_SIZE"
+              v-model:current-page="sessionPage"
+              class="trace-session-pagination"
+              :page-size="SESSION_PAGE_SIZE"
+              :pager-count="5"
+              :total="filteredSessions.length"
+              layout="prev, pager, next"
+              small
+            />
+
             <div v-if="!filteredSessions.length && !loadingSessions" class="empty-observe trace-session-empty">
               <el-icon><Connection /></el-icon>
               <strong>{{ t('trace.empty.noSessionsTitle') }}</strong>
@@ -117,12 +115,12 @@
         </aside>
 
         <main class="trace-canvas">
-          <section class="trace-runs-workbench" :class="{ 'drawer-open': traceDrawerOpen }">
+          <section class="trace-runs-workbench">
             <div class="trace-runs-toolbar trace-toolbar">
               <div class="trace-panel-header">
                 <div>
                   <p>{{ t('trace.runs.title') }}</p>
-                  <span>{{ selectedSession ? compactId(selectedSession.session_id) : t('trace.runs.description') }}</span>
+                  <span v-if="selectedSession">{{ compactId(selectedSession.session_id) }}</span>
                 </div>
                 <strong>{{ filteredRunRows.length }}</strong>
               </div>
@@ -132,7 +130,6 @@
             <div class="empty-observe">
               <el-icon><Aim /></el-icon>
               <strong>{{ t('trace.empty.selectSessionTitle') }}</strong>
-              <span>{{ t('trace.empty.selectSessionDescription') }}</span>
             </div>
           </div>
 
@@ -151,7 +148,7 @@
               type="button"
               class="trace-waterfall-row trace-run-row"
               :class="{ active: selectedTrace?.trace_id === row.trace.trace_id, error: row.trace.status === 'ERROR' }"
-              @click="openTraceDrawer(row.trace.trace_id)"
+              @click="openTraceDetail(row.trace.trace_id)"
             >
               <span class="trace-span-name">
                 <div>
@@ -174,62 +171,28 @@
           <el-alert v-if="apiError" class="trace-alert" type="error" :title="apiError" show-icon />
         </section>
 
-        <transition name="trace-drawer">
-          <div
-            v-if="traceDrawerOpen && selectedTrace"
-            class="trace-detail-drawer ag-right-panel"
-            role="dialog"
-            aria-modal="false"
+          <aside
+            v-if="selectedTrace"
+            class="trace-detail-panel ag-right-panel"
+            aria-label="Selected run detail"
           >
-            <div class="trace-drawer-resizer" @mousedown="startDrawerResize" />
               <div class="trace-detail-shell trace-inspector-shell">
-                <div class="trace-run-header" :class="{ collapsed: drawerHeaderCollapsed }">
-                  <button type="button" class="trace-drawer-close" :aria-label="t('trace.actions.closeDrawer')" @click="closeTraceDrawer">
-                    <el-icon><ArrowRight /></el-icon>
-                  </button>
-
+                <div class="trace-run-header">
                   <div class="trace-run-title">
                   <div class="trace-run-heading">
                     <span class="trace-status-dot large" :class="statusClass(selectedTrace.status)" />
                     <div>
                       <h4 :title="selectedTrace.name">{{ selectedTrace.name }}</h4>
-                      <span v-if="!drawerHeaderCollapsed">{{ formatDateTime(selectedTrace.created_at || selectedTrace.start_time) }}</span>
+                      <span>{{ formatAnyDateTime(selectedTrace.created_at || selectedTrace.start_time) }}</span>
                     </div>
                     <el-tag :type="tagType(selectedTrace.status)" effect="light" size="small">{{ statusLabel(selectedTrace.status) }}</el-tag>
                     <span class="trace-header-duration" :class="durationClass(selectedTrace.duration_ms)">{{ formatDuration(selectedTrace.duration_ms) }}</span>
                   </div>
                 </div>
-
-                <div class="trace-copy-actions">
-                  <el-button size="small" plain class="cursor-pointer" :disabled="!hasPreviousRun" @click="openAdjacentRun(-1)">
-                    {{ t('trace.actions.previousRun') }}
-                  </el-button>
-                  <el-button size="small" plain class="cursor-pointer" :disabled="!hasNextRun" @click="openAdjacentRun(1)">
-                    {{ t('trace.actions.nextRun') }}
-                  </el-button>
-                  <el-button size="small" plain class="cursor-pointer" @click="drawerPinned = !drawerPinned">
-                    {{ drawerPinned ? t('trace.actions.unpin') : t('trace.actions.pin') }}
-                  </el-button>
-                  <el-button size="small" plain class="cursor-pointer" @click="drawerHeaderCollapsed = !drawerHeaderCollapsed">
-                    {{ drawerHeaderCollapsed ? t('trace.actions.expandHeader') : t('trace.actions.collapseHeader') }}
-                  </el-button>
-                  <el-button size="small" plain class="cursor-pointer" @click="refreshSelectedTrace" :loading="loadingDetail">
-                    {{ t('trace.actions.refetch') }}
-                  </el-button>
-                </div>
               </div>
 
               <div class="trace-content-layout trace-inspector-grid">
                 <aside class="trace-inspector-primary">
-                  <section class="trace-hierarchy-compact expanded">
-                    <div class="trace-panel-header">
-                      <div>
-                        <p>Trace Hierarchy</p>
-                        <span>{{ t('trace.hierarchy.description') }}</span>
-                      </div>
-                      <strong>{{ spans.length }} spans</strong>
-                    </div>
-
                     <div class="trace-span-hierarchy">
                       <el-tree
                         v-if="tree.length"
@@ -279,26 +242,12 @@
                         <span>{{ t('trace.empty.noSpansDescription') }}</span>
                       </div>
                     </div>
-                  </section>
-
-                  <section class="trace-overview-panel" id="trace-detail-overview">
-                    <div class="trace-json-head">
-                      <span>Overview</span>
-                    </div>
-                    <div class="trace-overview-grid">
-                      <div v-for="item in overviewItems" :key="item.label" class="trace-detail-metric" :class="{ error: item.tone === 'error' }">
-                        <span>{{ item.label }}</span>
-                        <strong :title="item.value">{{ item.displayValue }}</strong>
-                      </div>
-                    </div>
-                  </section>
                 </aside>
 
                 <section class="trace-content-detail trace-inspector-secondary" :data-active-detail-tab="activeDetailTab">
                   <div v-if="!selectedSpan" class="empty-observe">
                     <el-icon><Aim /></el-icon>
                     <strong>{{ t('trace.empty.selectSpanTitle') }}</strong>
-                    <span>{{ t('trace.empty.selectSpanDescription') }}</span>
                   </div>
 
                   <template v-else>
@@ -336,6 +285,15 @@
                         @click="activeDetailTab = 'metadata'"
                       >
                         Metadata
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        :aria-selected="activeDetailTab === 'overview'"
+                        :class="{ active: activeDetailTab === 'overview' }"
+                        @click="activeDetailTab = 'overview'"
+                      >
+                        Overview
                       </button>
                     </div>
 
@@ -402,23 +360,44 @@
                       </section>
                     </div>
 
-                    <div v-else class="trace-tab-panel trace-metadata-tab" id="trace-detail-metadata">
+                    <div v-else-if="activeDetailTab === 'metadata'" class="trace-tab-panel trace-metadata-tab" id="trace-detail-metadata">
                       <section class="trace-metadata-panel trace-metadata-ledger">
                         <div class="trace-json-head">
                           <span>Metadata</span>
-                          <el-button size="small" plain class="cursor-pointer" :disabled="!selectedSpan" @click="copySpanJson">
-                            {{ t('trace.actions.copyJson') }}
-                          </el-button>
                         </div>
                         <div class="trace-metadata-grid">
-                          <div v-for="item in spanMetadataItems" :key="item.label" class="trace-metadata-item">
+                          <div v-for="item in traceMetadataItems" :key="item.label" class="trace-metadata-item">
+                            <span>{{ item.label }}</span>
+                            <div class="trace-metadata-value">
+                              <strong :title="item.value">{{ item.displayValue }}</strong>
+                              <el-tooltip :content="t('trace.actions.copy')" placement="top">
+                                <button
+                                  type="button"
+                                  class="trace-metadata-copy"
+                                  :aria-label="`${t('trace.actions.copy')} ${item.label}`"
+                                  @click="copyMetadataValue(item.value)"
+                                >
+                                  <el-icon><CopyDocument /></el-icon>
+                                </button>
+                              </el-tooltip>
+                            </div>
+                          </div>
+                        </div>
+                      </section>
+                    </div>
+
+                    <div v-else class="trace-tab-panel trace-overview-tab" id="trace-detail-overview">
+                      <section class="trace-overview-panel">
+                        <div class="trace-json-head">
+                          <span>Overview</span>
+                        </div>
+                        <div class="trace-overview-grid">
+                          <div v-for="item in overviewItems" :key="item.label" class="trace-detail-metric" :class="{ error: item.tone === 'error' }">
                             <span>{{ item.label }}</span>
                             <strong :title="item.value">{{ item.displayValue }}</strong>
                           </div>
                         </div>
-                        <pre class="trace-json">{{ prettyJson(selectedSpan.attributes) }}</pre>
                       </section>
-
                       <section id="trace-detail-tools" class="trace-tool-panel">
                         <div class="trace-json-head">
                           <span>Tool Calls</span>
@@ -463,8 +442,13 @@
                 </section>
               </div>
             </div>
-          </div>
-        </transition>
+          </aside>
+          <aside v-else class="trace-detail-panel trace-detail-placeholder ag-right-panel">
+            <div class="empty-observe">
+              <el-icon><Aim /></el-icon>
+              <strong>{{ t('trace.empty.selectTraceTitle') }}</strong>
+            </div>
+          </aside>
       </main>
       </div>
     </div>
@@ -478,8 +462,8 @@ import MarkdownIt from "markdown-it"
 import { useI18n } from "vue-i18n"
 import {
   Aim,
-  ArrowRight,
   Connection,
+  CopyDocument,
   Cpu,
   Refresh,
 } from "@element-plus/icons-vue"
@@ -487,7 +471,6 @@ import { useChatHistory, useTracingApi } from "../composables/useApi"
 import { copyToClipboard } from "../lib/clipboard"
 import {
   buildTraceRunRows,
-  buildTraceSummaryCards,
   filterTraceRunRows,
   filterTraceSessions,
   findExactTraceSession,
@@ -510,7 +493,6 @@ const markdownRenderer = new MarkdownIt({
 })
 
 const traceStore = useTraceStore()
-const traceBodyGridRef = ref<HTMLElement | null>(null)
 const sessions = ref<ChatSession[]>([])
 const sessionTraceItems = ref<TraceItem[]>([])
 const traceSummary = ref<TraceSummaryState>({
@@ -539,12 +521,9 @@ const selectedTrace = ref<TraceItem | null>(null)
 const spans = ref<SpanItem[]>([])
 const tree = ref<SpanTreeNode[]>([])
 const selectedSpan = ref<SpanItem | null>(null)
-const activeDetailTab = ref<"info" | "metadata">("info")
-const traceDrawerOpen = ref(false)
+const activeDetailTab = ref<"info" | "metadata" | "overview">("info")
 const traceAdvancedFiltersOpen = ref(false)
-const drawerHeaderCollapsed = ref(false)
-const drawerPinned = ref(false)
-const drawerWidth = ref(520)
+const sessionPage = ref(1)
 const inputViewMode = ref<PayloadViewMode>("text")
 const outputViewMode = ref<PayloadViewMode>("text")
 const expandedPayloads = reactive(new Set<"input" | "output">())
@@ -552,17 +531,15 @@ const expandedPayloads = reactive(new Set<"input" | "output">())
 const loadingDetail = ref(false)
 const apiError = computed(() => error.value)
 let filterRefreshTimer: ReturnType<typeof window.setTimeout> | null = null
-let drawerResizeStartX = 0
-let drawerResizeStartWidth = 0
-
-const ACTIVE_SESSION_COLUMN_WIDTH = 320
-const MIN_RUN_COLUMN_WIDTH = 260
-const MIN_DRAWER_WIDTH = 360
-const MAX_DRAWER_WIDTH = 980
 
 type PayloadViewMode = "text" | "json" | "markdown"
+const SESSION_PAGE_SIZE = 8
 
 const filteredSessions = computed(() => filterTraceSessions(sessions.value, sessionFilters))
+const pagedSessions = computed(() => {
+  const start = (sessionPage.value - 1) * SESSION_PAGE_SIZE
+  return filteredSessions.value.slice(start, start + SESSION_PAGE_SIZE)
+})
 
 const selectedSession = computed(() => findTraceSession(sessions.value, selectedSessionId.value))
 
@@ -579,27 +556,11 @@ const runRows = computed(() => buildTraceRunRows({
 
 const filteredRunRows = computed(() => filterTraceRunRows(runRows.value, runFilters))
 
-const traceSummaryCards = computed(() => buildTraceSummaryCards({
-  sessions: sessions.value,
-  visibleSessionCount: filteredSessions.value.length,
-  summary: traceSummary.value,
-  formatLatencySeconds,
-  latencyTone,
-}))
-
-const selectedRunIndex = computed(() => {
-  const traceId = selectedTrace.value?.trace_id
-  if (!traceId) return -1
-  return filteredRunRows.value.findIndex((row) => row.trace.trace_id === traceId)
-})
-
 const selectedRunRow = computed(() => {
-  const index = selectedRunIndex.value
-  return index >= 0 ? filteredRunRows.value[index] : null
+  const traceId = selectedTrace.value?.trace_id
+  if (!traceId) return null
+  return filteredRunRows.value.find((row) => row.trace.trace_id === traceId) || null
 })
-
-const hasPreviousRun = computed(() => selectedRunIndex.value > 0)
-const hasNextRun = computed(() => selectedRunIndex.value >= 0 && selectedRunIndex.value < filteredRunRows.value.length - 1)
 
 const selectedRunMetrics = computed<Record<string, unknown>>(() => {
   const metrics = selectedRunRow.value?.run?.metrics
@@ -608,19 +569,49 @@ const selectedRunMetrics = computed<Record<string, unknown>>(() => {
 
 const overviewItems = computed(() => {
   const trace = selectedTrace.value
+  const run = selectedRunRow.value?.run
   const metadata = parsedSpan.value.metadata || emptyParsedSpan.metadata
   const tokens = metadata.tokens || {}
-  const totalTokens = valueOrDash(tokens.total ?? selectedRunMetrics.value.total_tokens)
-  const cost = selectedRunMetrics.value.cost
+  const inputTokens = valueOrDash(selectedRunMetrics.value.input_tokens ?? selectedRunMetrics.value.prompt_tokens ?? tokens.prompt)
+  const outputTokens = valueOrDash(selectedRunMetrics.value.output_tokens ?? selectedRunMetrics.value.completion_tokens ?? tokens.completion)
+  const totalTokens = valueOrDash(selectedRunMetrics.value.total_tokens ?? tokens.total)
+  const model = valueOrDash(run?.model || metadata.model)
+  const provider = valueOrDash(run?.model_provider || metadata.provider)
+  const agent = valueOrDash(trace?.agent_id || run?.agent_id || run?.agent_name)
+  const workflow = valueOrDash(trace?.workflow_id || run?.workflow_id)
+  const team = valueOrDash(trace?.team_id || run?.team_id)
   const errorText = selectedSpan.value?.status_message || (trace?.status === "ERROR" ? trace.name : "")
   return [
     { label: "Status", value: valueOrDash(trace?.status), displayValue: statusLabel(trace?.status || ""), tone: trace?.status === "ERROR" ? "error" : "" },
-    { label: "Latency", value: formatDuration(selectedSpan.value?.duration_ms), displayValue: formatDuration(selectedSpan.value?.duration_ms), tone: "" },
     { label: "Duration", value: formatDuration(trace?.duration_ms), displayValue: formatDuration(trace?.duration_ms), tone: "" },
-    { label: "Model", value: valueOrDash(metadata.model || selectedRunRow.value?.run?.model), displayValue: valueOrDash(metadata.model || selectedRunRow.value?.run?.model), tone: "" },
+    { label: "Input Tokens", value: inputTokens, displayValue: inputTokens, tone: "" },
+    { label: "Output Tokens", value: outputTokens, displayValue: outputTokens, tone: "" },
     { label: "Tokens", value: totalTokens, displayValue: totalTokens, tone: "" },
-    { label: "Cost", value: formatCost(cost), displayValue: formatCost(cost), tone: "" },
+    { label: "Model", value: model, displayValue: model, tone: "" },
+    { label: "Provider", value: provider, displayValue: provider, tone: "" },
+    { label: "Agent", value: agent, displayValue: compactId(agent), tone: "" },
+    { label: "Workflow", value: workflow, displayValue: compactId(workflow), tone: "" },
+    { label: "Team", value: team, displayValue: compactId(team), tone: "" },
+    { label: "Cost", value: formatCost(selectedRunMetrics.value.cost), displayValue: formatCost(selectedRunMetrics.value.cost), tone: "" },
     { label: "Error", value: valueOrDash(errorText), displayValue: valueOrDash(errorText), tone: errorText ? "error" : "" },
+  ]
+})
+
+const traceMetadataItems = computed(() => {
+  const trace = selectedTrace.value
+  const run = selectedRunRow.value?.run
+  const session = selectedSession.value
+  return [
+    { label: "Session ID", value: valueOrDash(trace?.session_id || selectedRunRow.value?.sessionId || session?.session_id), displayValue: compactId(trace?.session_id || selectedRunRow.value?.sessionId || session?.session_id) },
+    { label: "User ID", value: valueOrDash(trace?.user_id || run?.user_id || session?.user_id), displayValue: compactId(trace?.user_id || run?.user_id || session?.user_id) },
+    { label: "Run ID", value: valueOrDash(trace?.run_id || run?.run_id), displayValue: compactId(trace?.run_id || run?.run_id) },
+    { label: "Trace ID", value: valueOrDash(trace?.trace_id), displayValue: compactId(trace?.trace_id) },
+    { label: "Span ID", value: valueOrDash(selectedSpan.value?.span_id), displayValue: compactId(selectedSpan.value?.span_id) },
+    { label: "Parent Span", value: valueOrDash(selectedSpan.value?.parent_span_id), displayValue: compactId(selectedSpan.value?.parent_span_id) },
+    { label: "Created", value: valueOrDash(trace?.created_at || run?.created_at), displayValue: formatAnyDateTime(trace?.created_at || run?.created_at) },
+    { label: "Started", value: valueOrDash(trace?.start_time || selectedSpan.value?.start_time), displayValue: formatAnyDateTime(trace?.start_time || selectedSpan.value?.start_time) },
+    { label: "Ended", value: valueOrDash(trace?.end_time || selectedSpan.value?.end_time), displayValue: formatAnyDateTime(trace?.end_time || selectedSpan.value?.end_time) },
+    { label: "Run Updated", value: valueOrDash(run?.updated_at), displayValue: formatAnyDateTime(run?.updated_at) },
   ]
 })
 
@@ -660,7 +651,6 @@ const logItems = computed(() => {
   return parsedEvents.length ? parsedEvents : rawEvents
 })
 
-const selectedTraceStartMs = computed(() => toMs(selectedTrace.value?.start_time))
 const emptyParsedSpan = {
   input: { format: "empty", text: "", data: null },
   output: { format: "empty", text: "", data: null },
@@ -678,37 +668,6 @@ const emptyParsedSpan = {
   events: [],
 }
 const parsedSpan = computed(() => selectedSpan.value?.parsed || emptyParsedSpan)
-const parsedMetadata = computed(() => {
-  const metadata = parsedSpan.value.metadata || emptyParsedSpan.metadata
-  const tokens = metadata.tokens || {}
-  return [
-    { label: "Model", value: valueOrDash(metadata.model), displayValue: valueOrDash(metadata.model) },
-    { label: "Provider", value: valueOrDash(metadata.provider), displayValue: valueOrDash(metadata.provider) },
-    { label: "Tool", value: valueOrDash(metadata.tool), displayValue: valueOrDash(metadata.tool) },
-    { label: "Operation", value: valueOrDash(metadata.operation), displayValue: valueOrDash(metadata.operation) },
-    { label: "Prompt tokens", value: valueOrDash(tokens.prompt), displayValue: valueOrDash(tokens.prompt) },
-    { label: "Completion tokens", value: valueOrDash(tokens.completion), displayValue: valueOrDash(tokens.completion) },
-    { label: "Total tokens", value: valueOrDash(tokens.total), displayValue: valueOrDash(tokens.total) },
-  ]
-})
-
-const spanMetadataItems = computed(() => {
-  const span = selectedSpan.value
-  if (!span) return []
-  const eventCount = Math.max(parsedSpan.value.events?.length || 0, span.events?.length || 0)
-  return [
-    { label: t("trace.metadata.startOffset"), value: spanOffset(span), displayValue: spanOffset(span) },
-    { label: "Parent", value: valueOrDash(span.parent_span_id), displayValue: compactId(span.parent_span_id) },
-    { label: "Events", value: String(eventCount), displayValue: String(eventCount) },
-    { label: "Span ID", value: valueOrDash(span.span_id), displayValue: compactId(span.span_id) },
-    { label: "Kind", value: valueOrDash(span.kind), displayValue: valueOrDash(span.kind) },
-    { label: "Status", value: valueOrDash(span.status_code), displayValue: valueOrDash(span.status_code) },
-    { label: "Duration", value: formatDuration(span.duration_ms), displayValue: formatDuration(span.duration_ms) },
-    { label: "Start Time", value: valueOrDash(span.start_time), displayValue: formatDateTime(span.start_time) },
-    { label: "End Time", value: valueOrDash(span.end_time), displayValue: formatDateTime(span.end_time) },
-    ...parsedMetadata.value,
-  ]
-})
 const valueOrDash = (value: unknown) => {
   if (value === null || value === undefined || value === "") return "-"
   return String(value)
@@ -758,6 +717,20 @@ const formatDateTime = (value?: string | null) => {
   })
 }
 
+const formatAnyDateTime = (value?: unknown) => {
+  if (value === null || value === undefined || value === "") return "-"
+  if (typeof value === "number") {
+    const timestamp = value > 1_000_000_000_000 ? value : value * 1000
+    return new Date(timestamp).toLocaleString("zh-CN", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+  return formatDateTime(String(value))
+}
+
 const formatSessionTime = (timestamp?: number | null) => {
   if (!timestamp) return "-"
   return new Date(timestamp * 1000).toLocaleString("zh-CN", {
@@ -766,12 +739,6 @@ const formatSessionTime = (timestamp?: number | null) => {
     hour: "2-digit",
     minute: "2-digit",
   })
-}
-
-const toMs = (value?: string | null) => {
-  if (!value) return null
-  const ms = new Date(value).getTime()
-  return Number.isNaN(ms) ? null : ms
 }
 
 const tagType = (status: string) => {
@@ -803,13 +770,6 @@ const durationClass = (durationMs: number | string | null | undefined) => {
   if (n < 2000) return "duration-medium"
   if (n < 10000) return "duration-slow"
   return "duration-critical"
-}
-
-const latencyTone = (durationMs: number) => {
-  if (!Number.isFinite(durationMs) || durationMs < 500) return "green"
-  if (durationMs < 2000) return "yellow"
-  if (durationMs < 10000) return "yellow"
-  return "red"
 }
 
 const formatDuration = (durationMs: number | string | null | undefined): string => {
@@ -852,11 +812,6 @@ const formatCost = (value: unknown) => {
   return `$${n.toFixed(2)}`
 }
 
-const formatLatencySeconds = (durationMs: number) => {
-  if (!Number.isFinite(durationMs) || durationMs <= 0) return "0.00"
-  return (durationMs / 1000).toFixed(2)
-}
-
 const isToolSpan = (span: SpanItem) => {
   const metadata = span.parsed?.metadata
   const haystack = [span.kind, span.name, metadata?.tool, metadata?.operation]
@@ -888,18 +843,10 @@ const togglePayloadExpanded = (key: "input" | "output") => {
   }
 }
 
-const spanOffset = (span: SpanItem) => {
-  const traceStart = selectedTraceStartMs.value
-  const start = toMs(span.start_time)
-  if (traceStart == null || start == null) return "-"
-  const diff = Math.max(0, start - traceStart)
-  return `+${formatDuration(diff)}`
-}
-
 const scrollDetailIntoView = () => {
   if (!window.matchMedia("(max-width: 980px)").matches) return
   requestAnimationFrame(() => {
-    document.querySelector<HTMLElement>(".trace-canvas")?.scrollIntoView({ block: "start", behavior: "smooth" })
+    document.querySelector<HTMLElement>(".trace-detail-panel")?.scrollIntoView({ block: "start", behavior: "smooth" })
   })
 }
 
@@ -909,7 +856,6 @@ const clearTraceSelection = () => {
   spans.value = []
   tree.value = []
   sessionTraceItems.value = []
-  traceDrawerOpen.value = false
 }
 
 const refresh = async () => {
@@ -1027,21 +973,7 @@ const loadSessionTraces = async (session: ChatSession, preferredRunId?: string |
   }
   sessionTraceItems.value = items
   traceStore.setTraceItems(items)
-  if (traceToSelect) await openTraceDrawer(traceToSelect.trace_id)
-}
-
-const refreshSelectedTrace = async () => {
-  if (!selectedTrace.value) return
-  loadingDetail.value = true
-  try {
-    const resp = await getTrace(selectedTrace.value.trace_id)
-    selectedTrace.value = resp.trace
-    spans.value = resp.spans || []
-    tree.value = resp.tree || []
-    selectedSpan.value = firstAvailableSpan()
-  } finally {
-    loadingDetail.value = false
-  }
+  if (traceToSelect) await openTraceDetail(traceToSelect.trace_id)
 }
 
 const selectTraceById = async (traceId: string | null | undefined) => {
@@ -1061,17 +993,8 @@ const selectTraceById = async (traceId: string | null | undefined) => {
   }
 }
 
-const openTraceDrawer = async (traceId: string | null | undefined) => {
+const openTraceDetail = async (traceId: string | null | undefined) => {
   await selectTraceById(traceId)
-  if (selectedTrace.value) {
-    traceDrawerOpen.value = true
-    await nextTick()
-    drawerWidth.value = clampDrawerWidth(drawerWidth.value)
-  }
-}
-
-const closeTraceDrawer = () => {
-  traceDrawerOpen.value = false
 }
 
 const firstAvailableSpan = () => {
@@ -1086,18 +1009,12 @@ const scrollDetailSectionIntoView = async (section: "overview" | "input" | "outp
 
 const selectSpan = (span: SpanItem, section: "overview" | "input" | "output" | "tools" | "logs" | "metadata" = "input") => {
   selectedSpan.value = span
-  activeDetailTab.value = section === "metadata" ? "metadata" : "info"
+  activeDetailTab.value = section === "metadata" || section === "overview" ? section : "info"
   void scrollDetailSectionIntoView(section)
 }
 
 const onSpanNodeClick = (node: SpanTreeNode) => {
   selectSpan(node.span)
-}
-
-const openAdjacentRun = async (direction: -1 | 1) => {
-  const next = filteredRunRows.value[selectedRunIndex.value + direction]
-  if (!next) return
-  await openTraceDrawer(next.trace.trace_id)
 }
 
 const resetAllFilters = async () => {
@@ -1177,49 +1094,23 @@ const copyText = async (text: string) => {
   }
 }
 
-const copySpanJson = async () => {
-  if (!selectedSpan.value) return
-  await copyText(JSON.stringify(selectedSpan.value, null, 2))
+const copyMetadataValue = async (value: string) => {
+  if (!value || value === "-") return
+  await copyText(value)
 }
 
-const drawerMaxWidth = () => {
-  const containerWidth = traceBodyGridRef.value?.clientWidth || window.innerWidth
-  return Math.max(280, containerWidth - ACTIVE_SESSION_COLUMN_WIDTH - MIN_RUN_COLUMN_WIDTH)
-}
-
-const clampDrawerWidth = (value: number) => {
-  const maxWidth = Math.min(drawerMaxWidth(), MAX_DRAWER_WIDTH)
-  const minWidth = Math.min(MIN_DRAWER_WIDTH, maxWidth)
-  return Math.round(Math.min(Math.max(value, minWidth), maxWidth))
-}
-
-const syncDrawerWidth = () => {
-  if (!traceDrawerOpen.value) return
-  drawerWidth.value = clampDrawerWidth(drawerWidth.value)
-}
-
-const stopDrawerResize = () => {
-  window.removeEventListener("mousemove", resizeDrawer)
-  window.removeEventListener("mouseup", stopDrawerResize)
-}
-
-const resizeDrawer = (event: MouseEvent) => {
-  const delta = drawerResizeStartX - event.clientX
-  drawerWidth.value = clampDrawerWidth(drawerResizeStartWidth + delta)
-}
-
-const startDrawerResize = (event: MouseEvent) => {
-  event.preventDefault()
-  drawerResizeStartX = event.clientX
-  drawerResizeStartWidth = clampDrawerWidth(drawerWidth.value)
-  drawerWidth.value = drawerResizeStartWidth
-  window.addEventListener("mousemove", resizeDrawer)
-  window.addEventListener("mouseup", stopDrawerResize)
-}
+watch(
+  () => filteredSessions.value.length,
+  (count) => {
+    const maxPage = Math.max(1, Math.ceil(count / SESSION_PAGE_SIZE))
+    if (sessionPage.value > maxPage) sessionPage.value = maxPage
+  },
+)
 
 watch(
   () => [sessionFilters.sessionId, sessionFilters.userId, sessionFilters.keyword, sessionFilters.status],
   () => {
+    sessionPage.value = 1
     scheduleSessionFilterRefresh()
   },
 )
@@ -1233,7 +1124,7 @@ watch(
 
 const handleExternalTraceSelect = (event: Event) => {
   const detail = (event as CustomEvent<{ traceId?: string }>).detail
-  void openTraceDrawer(detail?.traceId)
+  void openTraceDetail(detail?.traceId)
 }
 
 const handleExternalSessionSelect = (event: Event) => {
@@ -1245,7 +1136,6 @@ onMounted(async () => {
   window.addEventListener("agno-aios-trace-select", handleExternalTraceSelect)
   window.addEventListener("agno-aios-trace-session-open", handleExternalSessionSelect)
   window.addEventListener("agno-aios-trace-session-select", handleExternalSessionSelect)
-  window.addEventListener("resize", syncDrawerWidth)
   try {
     await refresh()
   } catch (e: unknown) {
@@ -1257,9 +1147,7 @@ onUnmounted(() => {
   window.removeEventListener("agno-aios-trace-select", handleExternalTraceSelect)
   window.removeEventListener("agno-aios-trace-session-open", handleExternalSessionSelect)
   window.removeEventListener("agno-aios-trace-session-select", handleExternalSessionSelect)
-  window.removeEventListener("resize", syncDrawerWidth)
   clearPendingFilterRefresh()
-  stopDrawerResize()
 })
 </script>
 
@@ -1400,6 +1288,11 @@ onUnmounted(() => {
   min-height: 0;
   overflow: auto;
   padding: 12px;
+}
+
+.trace-session-pagination {
+  justify-self: center;
+  margin-top: 2px;
 }
 
 .trace-session-card {
@@ -1656,12 +1549,9 @@ onUnmounted(() => {
 }
 
 .trace-canvas {
-  display: flex;
+  display: contents;
   min-width: 0;
   min-height: 0;
-  flex-direction: column;
-  height: 100%;
-  background: var(--trace-bg);
 }
 
 .trace-empty-stage {
@@ -2351,13 +2241,41 @@ onUnmounted(() => {
 
 .trace-metadata-item strong {
   display: block;
-  margin-top: 4px;
   overflow: hidden;
   color: var(--trace-text);
   font-family: "JetBrains Mono", "Fira Code", monospace;
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.trace-metadata-value {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  border: 1px solid var(--trace-border-strong);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--trace-panel) 82%, var(--trace-panel-soft));
+  padding: 4px 5px 4px 8px;
+}
+
+.trace-metadata-copy {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--trace-muted);
+}
+
+.trace-metadata-copy:hover,
+.trace-metadata-copy:focus-visible {
+  border-color: color-mix(in srgb, var(--trace-purple) 48%, var(--trace-border));
+  background: color-mix(in srgb, var(--trace-purple) 13%, transparent);
+  color: var(--trace-text);
 }
 
 .trace-event-row {
@@ -2581,12 +2499,6 @@ html.dark .trace-waterfall-row.active {
   overflow: hidden;
 }
 
-.trace-runs-workbench.drawer-open {
-  min-width: 0;
-  width: auto;
-  max-width: 100%;
-}
-
 .trace-runs-toolbar {
   display: grid;
   gap: 12px;
@@ -2620,7 +2532,7 @@ html.dark .trace-waterfall-row.active {
   white-space: nowrap;
 }
 
-.trace-detail-drawer {
+.trace-detail-panel {
   position: relative;
   z-index: 9;
   display: flex;
@@ -2634,8 +2546,14 @@ html.dark .trace-waterfall-row.active {
   box-shadow: var(--ag-shadow-panel);
 }
 
-.trace-detail-drawer .trace-inspector-shell {
+.trace-detail-panel .trace-inspector-shell {
   width: 100%;
+}
+
+.trace-detail-placeholder {
+  display: grid;
+  place-items: center;
+  padding: 20px;
 }
 
 .trace-session-workbench {
@@ -2674,24 +2592,16 @@ html.dark .trace-waterfall-row.active {
   display: grid;
   min-height: 0;
   flex: 1 1 auto;
-  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 20%) minmax(0, 20%) minmax(0, 60%);
   overflow: hidden;
 }
 
-.trace-body-grid.drawer-active {
-  grid-template-columns: minmax(250px, 320px) minmax(260px, 1fr) minmax(0, var(--trace-drawer-width));
-}
-
-.trace-body-grid.drawer-active .trace-canvas {
-  display: contents;
-}
-
-.trace-body-grid.drawer-active .trace-runs-workbench {
+.trace-runs-workbench {
   grid-column: 2;
   grid-row: 1;
 }
 
-.trace-body-grid.drawer-active .trace-detail-drawer {
+.trace-detail-panel {
   grid-column: 3;
   grid-row: 1;
 }
@@ -2739,7 +2649,7 @@ html.dark .trace-waterfall-row.active {
 }
 
 .trace-run-row {
-  grid-template-columns: minmax(180px, 1.35fr) minmax(110px, 0.75fr) 128px;
+  grid-template-columns: minmax(0, 1fr);
   border-color: color-mix(in srgb, var(--trace-border) 82%, transparent);
   background: color-mix(in srgb, var(--trace-panel-soft) 72%, var(--trace-panel));
   padding: 11px 12px;
@@ -2760,7 +2670,8 @@ html.dark .trace-waterfall-row.active {
 
 .trace-run-meta {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: flex-start;
   gap: 8px;
 }
 
@@ -2797,38 +2708,9 @@ html.dark .trace-waterfall-row.active {
 .trace-run-header {
   gap: 10px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   padding: 10px 12px;
-}
-
-.trace-run-header.collapsed {
-  align-items: center;
-  padding: 8px 12px;
-}
-
-.trace-run-header.collapsed .trace-run-heading h4 {
-  -webkit-line-clamp: 1;
-}
-
-.trace-drawer-close {
-  grid-column: 2;
-  grid-row: 1;
-  display: inline-grid;
-  width: 28px;
-  height: 28px;
-  align-self: center;
-  place-items: center;
-  border: 1px solid var(--trace-border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--trace-panel-soft) 86%, transparent);
-  color: var(--trace-muted);
-  cursor: pointer;
-}
-
-.trace-drawer-close:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--trace-purple) 70%, transparent);
-  outline-offset: 2px;
 }
 
 .trace-run-title {
@@ -2850,25 +2732,13 @@ html.dark .trace-waterfall-row.active {
   gap: 6px;
 }
 
-.trace-drawer-resizer {
-  width: 5px;
-  flex: 0 0 auto;
-  cursor: ew-resize;
-  background: transparent;
-}
-
-.trace-drawer-resizer:hover {
-  background: color-mix(in srgb, var(--trace-purple) 42%, transparent);
-}
-
 .trace-content-layout.trace-inspector-grid {
   display: grid;
   flex: 1 1 auto;
-  grid-template-columns: minmax(250px, 0.9fr) minmax(0, 1.25fr);
-  gap: 12px;
+  grid-template-columns: minmax(230px, 0.9fr) minmax(0, 1.1fr);
+  gap: 0;
   overflow: hidden;
   background: color-mix(in srgb, var(--trace-panel) 96%, var(--trace-bg));
-  padding: 12px;
 }
 
 .trace-inspector-primary,
@@ -2878,9 +2748,8 @@ html.dark .trace-waterfall-row.active {
 }
 
 .trace-inspector-primary {
-  display: grid;
-  grid-template-rows: minmax(260px, 1fr) auto;
-  gap: 12px;
+  border-right: 1px solid var(--trace-border);
+  padding: 12px;
 }
 
 .trace-inspector-secondary {
@@ -2889,11 +2758,10 @@ html.dark .trace-waterfall-row.active {
   gap: 12px;
   height: 100%;
   background: transparent;
-  padding: 0;
+  padding: 12px;
 }
 
 .trace-overview-panel,
-.trace-hierarchy-compact,
 .trace-tool-panel {
   border: 1px solid var(--trace-border);
   border-radius: 8px;
@@ -2927,22 +2795,6 @@ html.dark .trace-waterfall-row.active {
   color: var(--trace-muted);
   font-family: "JetBrains Mono", "Fira Code", monospace;
   font-size: 10px;
-}
-
-.trace-hierarchy-compact .trace-span-hierarchy {
-  max-height: none;
-  min-height: 0;
-  overflow: auto;
-  margin-top: 0;
-  border: 1px solid var(--trace-border);
-  border-radius: 8px;
-}
-
-.trace-hierarchy-compact {
-  display: grid;
-  min-height: 0;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 10px;
 }
 
 .trace-tab-panel {
@@ -3049,56 +2901,16 @@ html.dark .trace-waterfall-row.active {
   text-align: center;
 }
 
-.trace-runs-workbench.drawer-open .trace-runs-list {
-  padding-right: 14px;
-}
-
-.trace-runs-workbench.drawer-open .trace-run-row {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.trace-runs-workbench.drawer-open .trace-run-meta,
-.trace-runs-workbench.drawer-open .span-duration {
-  align-items: flex-start;
-  justify-content: flex-start;
-  text-align: left;
-}
-
-.trace-drawer-enter-active,
-.trace-drawer-leave-active {
-  transition: opacity 0.22s ease, transform 0.22s ease;
-}
-
-.trace-drawer-enter-from,
-.trace-drawer-leave-to {
-  opacity: 0;
-  transform: translateX(28px);
-}
-
-@media (max-width: 1180px) {
-  .trace-detail-drawer {
-    min-width: 0;
-  }
-
-  .trace-runs-workbench.drawer-open .trace-runs-list {
-    padding-right: 14px;
-  }
-}
-
 @media (max-width: 980px) {
-  .trace-body-grid.drawer-active {
-    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  .trace-body-grid {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: visible;
   }
 
-  .trace-body-grid.drawer-active .trace-canvas {
-    display: flex;
-  }
-
-  .trace-detail-drawer {
-    position: fixed;
-    inset: 0 0 0 auto;
-    width: min(680px, 94vw);
-    max-width: 94vw;
+  .trace-runs-workbench,
+  .trace-detail-panel {
+    grid-column: 1;
+    grid-row: auto;
   }
 
   .trace-content-layout.trace-inspector-grid {
@@ -3107,11 +2919,8 @@ html.dark .trace-waterfall-row.active {
   }
 
   .trace-inspector-primary {
-    grid-template-rows: auto auto;
-  }
-
-  .trace-hierarchy-compact .trace-span-hierarchy {
-    max-height: 320px;
+    border-right: 0;
+    border-bottom: 1px solid var(--trace-border);
   }
 
   .trace-run-row {

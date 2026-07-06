@@ -1,48 +1,80 @@
 <template>
   <div class="agent-evals ag-page-flow">
-    <section class="agent-evals-kpis ag-stat-strip">
-      <article
-        v-for="card in summaryCards"
-        :key="card.label"
-        class="agent-evals-kpi ag-stat-chip"
-        :class="`tone-${card.tone}`"
-        :title="card.hint"
-      >
-        <span>{{ card.label }}</span>
-        <strong>{{ card.value }}</strong>
-      </article>
-      <article class="agent-evals-kpi ag-stat-chip tone-blue performance-eval-chip" :title="t('agentEvals.performance.hiddenRun')">
-        <span>{{ t("agentEvals.performance.label") }}</span>
-        <strong>{{ t("agentEvals.performance.hiddenRun") }}</strong>
-      </article>
-    </section>
-
     <el-alert v-if="error" class="agent-evals-alert" type="error" :title="error" show-icon />
 
-    <section class="agent-evals-filters ag-content-panel">
-      <el-select v-model="filters.suiteId" size="small" clearable filterable :placeholder="t('agentEvals.filters.suite')">
-        <el-option :label="t('agentEvals.filters.all')" value="all" />
-        <el-option v-for="suite in suites" :key="suite.id" :label="suite.name" :value="suite.id" />
-      </el-select>
-      <el-select v-model="filters.evalType" size="small" :placeholder="t('agentEvals.filters.evalType')">
-        <el-option :label="t('agentEvals.filters.all')" value="all" />
-        <el-option label="AccuracyEval" value="accuracy" />
-        <el-option label="AgentJudgeEval" value="agent_as_judge" />
-        <el-option label="ReliabilityEval" value="reliability" />
-        <el-option label="PerformanceEval" value="performance" />
-      </el-select>
-      <el-select v-model="filters.status" size="small" :placeholder="t('agentEvals.filters.status')">
-        <el-option :label="t('agentEvals.filters.all')" value="all" />
-        <el-option label="passed" value="passed" />
-        <el-option label="failed" value="failed" />
-        <el-option label="queued" value="queued" />
-        <el-option label="running" value="running" />
-      </el-select>
-      <el-input v-model="filters.keyword" size="small" clearable :placeholder="t('agentEvals.filters.keyword')">
-        <template #prefix>
-          <el-icon><Search /></el-icon>
-        </template>
-      </el-input>
+    <section class="agent-evals-command ag-content-panel">
+      <div class="agent-evals-gate">
+        <div class="agent-evals-gate-copy">
+          <span>{{ t("agentEvals.gate.kicker") }}</span>
+          <div class="agent-evals-gate-title-row">
+            <strong>{{ t("agentEvals.gate.title") }}</strong>
+            <em class="agent-evals-performance-badge">
+              {{ t("agentEvals.performance.label") }} · {{ t("agentEvals.performance.hiddenRun") }}
+            </em>
+          </div>
+        </div>
+        <div class="agent-evals-gate-actions">
+          <el-button size="small" :loading="loading" @click="refreshWorkbench">
+            {{ t("agentEvals.actions.refresh") }}
+          </el-button>
+          <el-button size="small" type="primary" :disabled="!canRun || !selectedSuiteId" @click="runSelectedSuite">
+            <el-icon><VideoPlay /></el-icon>
+            {{ t("agentEvals.actions.runSuite") }}
+          </el-button>
+        </div>
+      </div>
+
+      <div class="agent-evals-verdict-rail" :aria-label="t('agentEvals.gate.verdictRail')">
+        <span
+          v-for="segment in verdictSegments"
+          :key="segment.key"
+          class="agent-evals-verdict-segment"
+          :class="`tone-${segment.tone}`"
+          :style="{ inlineSize: segment.width }"
+          :title="segment.title"
+        />
+      </div>
+
+      <div class="agent-evals-command-grid">
+        <div class="agent-evals-scoreboard">
+          <article
+            v-for="card in summaryCards"
+            :key="card.label"
+            class="agent-evals-score-card"
+            :class="`tone-${card.tone}`"
+            :title="card.hint"
+          >
+            <span>{{ card.label }}</span>
+            <strong>{{ card.value }}</strong>
+          </article>
+        </div>
+
+        <div class="agent-evals-filter-grid" :aria-label="t('agentEvals.filters.ariaLabel')">
+          <el-select v-model="filters.suiteId" size="small" clearable filterable :placeholder="t('agentEvals.filters.suite')">
+            <el-option :label="t('agentEvals.filters.all')" value="all" />
+            <el-option v-for="suite in suites" :key="suite.id" :label="suite.name" :value="suite.id" />
+          </el-select>
+          <el-select v-model="filters.evalType" size="small" :placeholder="t('agentEvals.filters.evalType')">
+            <el-option :label="t('agentEvals.filters.all')" value="all" />
+            <el-option label="AccuracyEval" value="accuracy" />
+            <el-option label="AgentJudgeEval" value="agent_as_judge" />
+            <el-option label="ReliabilityEval" value="reliability" />
+            <el-option label="PerformanceEval" value="performance" />
+          </el-select>
+          <el-select v-model="filters.status" size="small" :placeholder="t('agentEvals.filters.status')">
+            <el-option :label="t('agentEvals.filters.all')" value="all" />
+            <el-option label="passed" value="passed" />
+            <el-option label="failed" value="failed" />
+            <el-option label="queued" value="queued" />
+            <el-option label="running" value="running" />
+          </el-select>
+          <el-input v-model="filters.keyword" size="small" clearable :placeholder="t('agentEvals.filters.keyword')">
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+        </div>
+      </div>
     </section>
 
     <main class="agent-evals-workbench">
@@ -98,7 +130,10 @@
                 </div>
               </article>
             </div>
-            <div v-else-if="!loading" class="agent-evals-empty">{{ t("agentEvals.empty.cases") }}</div>
+            <div v-else-if="!loading" class="agent-evals-empty">
+              <strong>{{ t("agentEvals.empty.casesTitle") }}</strong>
+              <span>{{ t("agentEvals.empty.casesDescription") }}</span>
+            </div>
           </el-tab-pane>
 
           <el-tab-pane :label="t('agentEvals.tabs.runs')" name="runs">
@@ -124,7 +159,10 @@
                 <small>{{ formatTime(run.created_at) }}</small>
               </button>
             </div>
-            <div v-else-if="!loading" class="agent-evals-empty">{{ t("agentEvals.empty.runs") }}</div>
+            <div v-else-if="!loading" class="agent-evals-empty">
+              <strong>{{ t("agentEvals.empty.runsTitle") }}</strong>
+              <span>{{ t("agentEvals.empty.runsDescription") }}</span>
+            </div>
           </el-tab-pane>
 
           <el-tab-pane :label="t('agentEvals.tabs.failures')" name="failures">
@@ -153,7 +191,10 @@
                 <em>{{ formatTime(failure.created_at) }}</em>
               </button>
             </div>
-            <div v-else-if="!loading" class="agent-evals-empty">{{ t("agentEvals.empty.failures") }}</div>
+            <div v-else-if="!loading" class="agent-evals-empty ok">
+              <strong>{{ t("agentEvals.empty.failuresTitle") }}</strong>
+              <span>{{ t("agentEvals.empty.failuresDescription") }}</span>
+            </div>
           </el-tab-pane>
 
           <el-tab-pane :label="t('agentEvals.tabs.trends')" name="trends">
@@ -219,11 +260,15 @@
             </div>
           </section>
           <section class="agent-evals-evidence">
-            <p>Payload</p>
+            <p>{{ t("agentEvals.fields.payload") }}</p>
             <pre>{{ detailPayload }}</pre>
           </section>
         </template>
-        <div v-else class="agent-evals-empty detail">{{ t("agentEvals.panels.detail") }}</div>
+        <div v-else class="agent-evals-detail-empty">
+          <span>{{ t("agentEvals.panels.detail") }}</span>
+          <strong>{{ t("agentEvals.empty.detailTitle") }}</strong>
+          <em>{{ t("agentEvals.empty.detailDescription") }}</em>
+        </div>
       </aside>
     </main>
   </div>
@@ -326,6 +371,23 @@ const summaryCards = computed(() => buildEvalSummaryCards({
   performanceSamples: agnoRuns.value.filter((run) => run.eval_type === "performance").length,
 }))
 
+const verdictSegments = computed(() => {
+  const passed = Number(trends.value.by_status.passed || 0)
+  const failed = Number(trends.value.by_status.failed || 0)
+  const unknown = Number(trends.value.by_status.unknown || 0)
+  const hasData = passed + failed + unknown > 0
+  const total = Math.max(passed + failed + unknown, 1)
+  return [
+    { key: "passed", tone: "green", count: passed, label: t("agentEvals.verdict.passed") },
+    { key: "failed", tone: "red", count: failed, label: t("agentEvals.verdict.failed") },
+    { key: "unknown", tone: "blue", count: unknown, label: t("agentEvals.verdict.unknown") },
+  ].map((item) => ({
+    ...item,
+    width: `${hasData ? Math.max((item.count / total) * 100, item.count ? 8 : 0) : item.key === "unknown" ? 100 : 0}%`,
+    title: `${item.label}: ${item.count}`,
+  }))
+})
+
 const detailItem = computed(() => {
   if (activeTab.value === "failures") return selectedFailure.value
   if (activeTab.value === "runs") return selectedRun.value
@@ -389,7 +451,7 @@ const requestOrFallback = async <T>(request: () => Promise<T>, fallback: T) => {
   }
 }
 
-const loadWorkbench = async () => {
+const loadWorkbench = async (options: { notify?: boolean } = {}) => {
   loading.value = true
   error.value = null
   try {
@@ -414,7 +476,7 @@ const loadWorkbench = async () => {
     selectedCaseId.value = filteredCases.value[0]?.id ?? null
     selectedRunId.value = agnoRuns.value[0]?.id ?? null
     selectedFailureId.value = failures.value[0]?.id ?? null
-    if (![suiteItems, caseItems, agnoRunResult, failureItems, trendResult].some((item) => item.usedFallback)) {
+    if (options.notify && ![suiteItems, caseItems, agnoRunResult, failureItems, trendResult].some((item) => item.usedFallback)) {
       ElMessage.success(t("agentEvals.messages.loaded"))
     }
   } catch (err) {
@@ -423,6 +485,8 @@ const loadWorkbench = async () => {
     loading.value = false
   }
 }
+
+const refreshWorkbench = () => loadWorkbench({ notify: true })
 
 const runSelectedSuite = async () => {
   if (!canRun.value || !selectedSuiteId.value) return showPermissionNotice()
@@ -503,67 +567,191 @@ onMounted(() => {
 
 <style scoped>
 .agent-evals {
+  --eval-pass: var(--ag-green);
+  --eval-fail: var(--ag-red);
+  --eval-watch: var(--ag-yellow);
+  --eval-unknown: var(--ag-blue);
+  --eval-rail-bg: color-mix(in srgb, var(--ag-panel-soft) 74%, transparent);
   gap: 12px;
   padding: 14px;
 }
 
-.agent-evals-filters {
+.agent-evals-command {
+  display: grid;
+  gap: 12px;
+}
+
+.agent-evals-gate,
+.agent-evals-command-grid,
+.agent-evals-panel-head,
+.agent-evals-detail-head,
+.agent-evals-row-actions {
+  display: flex;
   align-items: center;
-  gap: 10px;
 }
 
-.agent-evals-panel-head p,
-.agent-evals-detail-head p,
-.agent-evals-trends p,
-.agent-evals-evidence p {
-  margin: 0;
-  color: var(--ag-text, #e6edf3);
-  font-size: 13px;
-  font-weight: 700;
+.agent-evals-gate {
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.agent-evals-panel-head span {
-  display: block;
-  margin-top: 3px;
+.agent-evals-gate-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.agent-evals-gate-copy span {
+  color: var(--ag-muted);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+  font-weight: 820;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.agent-evals-gate-copy strong {
+  min-width: 0;
   overflow: hidden;
-  color: var(--ag-muted, #8ea0ad);
-  font-size: 12px;
+  color: var(--ag-heading);
+  font-size: 15px;
+  font-weight: 780;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.agent-evals-row-actions {
+.agent-evals-gate-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-evals-performance-badge {
+  min-width: 0;
+  max-width: 260px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--eval-unknown) 30%, var(--ag-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--eval-unknown) 10%, transparent);
+  color: var(--ag-muted);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 760;
+  line-height: 1;
+  padding: 4px 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-evals-gate-actions {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   gap: 8px;
 }
 
-.agent-evals .agent-evals-kpis {
+.agent-evals-verdict-rail {
+  display: flex;
+  height: 9px;
+  overflow: hidden;
+  border: 1px solid var(--ag-border);
+  border-radius: 999px;
+  background: var(--eval-rail-bg);
+}
+
+.agent-evals-verdict-segment {
+  display: block;
+  min-width: 0;
+  transition: inline-size 180ms ease;
+}
+
+.agent-evals-verdict-segment.tone-green {
+  background: var(--eval-pass);
+}
+
+.agent-evals-verdict-segment.tone-red {
+  background: var(--eval-fail);
+}
+
+.agent-evals-verdict-segment.tone-blue {
+  background: color-mix(in srgb, var(--eval-unknown) 62%, var(--ag-panel-soft));
+}
+
+.agent-evals-command-grid {
   align-items: stretch;
-  display: grid;
-  flex: 0 0 auto;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  grid-auto-rows: minmax(34px, auto);
-  height: auto;
-  block-size: auto;
-  min-height: var(--ag-stat-strip-height);
-  overflow: visible;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
-.agent-evals-kpi {
-  min-height: 34px;
+.agent-evals-scoreboard {
+  display: grid;
+  flex: 1 1 520px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
 }
 
-.agent-evals-filters {
+.agent-evals-score-card {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) 150px 130px minmax(180px, 1.4fr);
+  min-width: 0;
+  gap: 5px;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-control);
+  background: var(--ag-panel-soft);
+  padding: 8px 9px;
+}
+
+.agent-evals-score-card.tone-green {
+  border-color: color-mix(in srgb, var(--eval-pass) 34%, var(--ag-border));
+}
+
+.agent-evals-score-card.tone-red {
+  border-color: color-mix(in srgb, var(--eval-fail) 36%, var(--ag-border));
+}
+
+.agent-evals-score-card.tone-yellow {
+  border-color: color-mix(in srgb, var(--eval-watch) 36%, var(--ag-border));
+}
+
+.agent-evals-score-card.tone-blue {
+  border-color: color-mix(in srgb, var(--eval-unknown) 30%, var(--ag-border));
+}
+
+.agent-evals-score-card span,
+.agent-evals-score-card strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-evals-score-card span {
+  color: var(--ag-muted);
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.agent-evals-score-card strong {
+  color: var(--ag-heading);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.agent-evals-filter-grid {
+  display: grid;
+  flex: 1 1 500px;
+  grid-template-columns: minmax(120px, 1fr) minmax(118px, 0.85fr) minmax(108px, 0.72fr) minmax(150px, 1.25fr);
+  gap: 8px;
+  min-width: 0;
 }
 
 .agent-evals-workbench {
   display: grid;
   flex: 0 0 auto;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
   gap: 12px;
   min-height: 0;
 }
@@ -571,14 +759,14 @@ onMounted(() => {
 .agent-evals-main,
 .agent-evals-detail {
   min-width: 0;
-  min-height: 520px;
+  min-height: 540px;
 }
 
 .agent-evals-tabs :deep(.el-tabs__header) {
   margin: 0;
-  border-bottom: 1px solid rgba(130, 151, 165, 0.2);
+  border-bottom: 1px solid var(--ag-border);
   border-radius: 8px 8px 0 0;
-  background: rgba(12, 19, 26, 0.72);
+  background: color-mix(in srgb, var(--ag-panel-soft) 84%, transparent);
   padding: 6px 10px;
 }
 
@@ -609,15 +797,15 @@ onMounted(() => {
 }
 
 .agent-evals-tabs :deep(.el-tabs__item:hover) {
-  border-color: rgba(96, 165, 250, 0.22);
-  background: rgba(96, 165, 250, 0.08);
-  color: var(--ag-text, #e6edf3);
+  border-color: color-mix(in srgb, var(--eval-unknown) 28%, var(--ag-border));
+  background: color-mix(in srgb, var(--eval-unknown) 10%, transparent);
+  color: var(--ag-text);
 }
 
 .agent-evals-tabs :deep(.el-tabs__item.is-active) {
-  border-color: rgba(64, 158, 255, 0.42);
-  background: rgba(64, 158, 255, 0.16);
-  color: #93c5fd;
+  border-color: color-mix(in srgb, var(--eval-unknown) 46%, var(--ag-border));
+  background: color-mix(in srgb, var(--eval-unknown) 16%, var(--ag-panel));
+  color: var(--ag-heading);
 }
 
 .agent-evals-tabs :deep(.el-tabs__content) {
@@ -626,11 +814,29 @@ onMounted(() => {
 
 .agent-evals-panel-head,
 .agent-evals-detail-head {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 10px;
+}
+
+.agent-evals-panel-head p,
+.agent-evals-detail-head p,
+.agent-evals-trends p,
+.agent-evals-evidence p {
+  margin: 0;
+  color: var(--ag-heading);
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.agent-evals-panel-head span {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--ag-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agent-evals-case-list,
@@ -646,10 +852,10 @@ onMounted(() => {
   display: grid;
   width: 100%;
   min-width: 0;
-  border: 1px solid rgba(130, 151, 165, 0.18);
+  border: 1px solid var(--ag-border);
   border-radius: 8px;
-  background: rgba(9, 17, 23, 0.52);
-  color: var(--ag-text, #e6edf3);
+  background: color-mix(in srgb, var(--ag-panel-soft) 72%, transparent);
+  color: var(--ag-text);
   text-align: left;
 }
 
@@ -675,8 +881,8 @@ onMounted(() => {
 .agent-evals-case-row.selected,
 .agent-evals-run-row.selected,
 .agent-evals-failure-row.selected {
-  border-color: rgba(64, 158, 255, 0.56);
-  background: rgba(21, 42, 58, 0.72);
+  border-color: color-mix(in srgb, var(--eval-unknown) 58%, var(--ag-border));
+  background: color-mix(in srgb, var(--eval-unknown) 13%, var(--ag-panel));
 }
 
 .agent-evals-case-main {
@@ -699,7 +905,7 @@ onMounted(() => {
 .agent-evals-failure-row em,
 .agent-evals-failure-row small {
   overflow: hidden;
-  color: var(--ag-muted, #8ea0ad);
+  color: var(--ag-muted);
   font-size: 12px;
   font-style: normal;
   text-overflow: ellipsis;
@@ -718,11 +924,11 @@ onMounted(() => {
 .agent-evals-chip {
   max-width: 160px;
   overflow: hidden;
-  border: 1px solid rgba(130, 151, 165, 0.18);
+  border: 1px solid var(--ag-border);
   border-radius: 6px;
   padding: 3px 7px;
-  background: rgba(130, 151, 165, 0.1);
-  color: var(--ag-text, #e6edf3);
+  background: var(--ag-panel-soft);
+  color: var(--ag-text);
   font-size: 11px;
   line-height: 1.3;
   text-overflow: ellipsis;
@@ -731,41 +937,41 @@ onMounted(() => {
 
 .agent-evals-chip.tone-red,
 .agent-evals-status-grid .tone-red {
-  border-color: rgba(248, 113, 113, 0.38);
-  color: #fca5a5;
+  border-color: color-mix(in srgb, var(--eval-fail) 42%, var(--ag-border));
+  color: var(--eval-fail);
 }
 
 .agent-evals-chip.tone-green,
 .agent-evals-status-grid .tone-green {
-  border-color: rgba(74, 222, 128, 0.34);
-  color: #86efac;
+  border-color: color-mix(in srgb, var(--eval-pass) 38%, var(--ag-border));
+  color: var(--eval-pass);
 }
 
 .agent-evals-chip.tone-yellow,
 .agent-evals-status-grid .tone-yellow {
-  border-color: rgba(250, 204, 21, 0.34);
-  color: #fde68a;
+  border-color: color-mix(in srgb, var(--eval-watch) 38%, var(--ag-border));
+  color: var(--eval-watch);
 }
 
 .agent-evals-chip.tone-blue,
 .agent-evals-status-grid .tone-blue {
-  border-color: rgba(96, 165, 250, 0.32);
-  color: #93c5fd;
+  border-color: color-mix(in srgb, var(--eval-unknown) 36%, var(--ag-border));
+  color: var(--eval-unknown);
 }
 
 .agent-evals-run-status {
   width: 8px;
   height: 32px;
   border-radius: 4px;
-  background: #60a5fa;
+  background: var(--eval-unknown);
 }
 
 .agent-evals-run-status.tone-red {
-  background: #f87171;
+  background: var(--eval-fail);
 }
 
 .agent-evals-run-status.tone-green {
-  background: #4ade80;
+  background: var(--eval-pass);
 }
 
 .agent-evals-trends {
@@ -777,10 +983,10 @@ onMounted(() => {
 
 .agent-evals-trends section,
 .agent-evals-evidence {
-  border: 1px solid rgba(130, 151, 165, 0.16);
+  border: 1px solid var(--ag-border);
   border-radius: 8px;
   padding: 10px;
-  background: rgba(9, 17, 23, 0.42);
+  background: color-mix(in srgb, var(--ag-panel-soft) 64%, transparent);
 }
 
 .agent-evals-trend-row {
@@ -788,8 +994,8 @@ onMounted(() => {
   justify-content: space-between;
   gap: 10px;
   padding: 8px 0;
-  border-bottom: 1px solid rgba(130, 151, 165, 0.12);
-  color: var(--ag-muted, #8ea0ad);
+  border-bottom: 1px solid var(--ag-border);
+  color: var(--ag-muted);
   font-size: 12px;
 }
 
@@ -802,21 +1008,21 @@ onMounted(() => {
 
 .agent-evals-detail-grid div {
   min-width: 0;
-  border: 1px solid rgba(130, 151, 165, 0.14);
+  border: 1px solid var(--ag-border);
   border-radius: 8px;
   padding: 8px;
-  background: rgba(9, 17, 23, 0.36);
+  background: color-mix(in srgb, var(--ag-panel-soft) 62%, transparent);
 }
 
 .agent-evals-detail-grid dt {
-  color: var(--ag-muted, #8ea0ad);
+  color: var(--ag-muted);
   font-size: 11px;
 }
 
 .agent-evals-detail-grid dd {
   margin: 3px 0 0;
   overflow: hidden;
-  color: var(--ag-text, #e6edf3);
+  color: var(--ag-text);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -830,40 +1036,94 @@ onMounted(() => {
   max-height: 260px;
   margin: 8px 0 0;
   overflow: auto;
-  color: #b7c8d6;
+  color: var(--ag-text);
   font-size: 11px;
   white-space: pre-wrap;
 }
 
 .agent-evals-empty {
   display: grid;
-  min-height: 160px;
-  place-items: center;
-  color: var(--ag-muted, #8ea0ad);
-  font-size: 12px;
+  min-height: 210px;
+  align-content: center;
+  justify-items: center;
+  gap: 6px;
+  border: 1px dashed var(--ag-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ag-panel-soft) 48%, transparent);
+  padding: 20px;
+  color: var(--ag-muted);
+  text-align: center;
 }
 
-.agent-evals-empty.detail {
-  min-height: 420px;
+.agent-evals-empty strong {
+  color: var(--ag-heading);
+  font-size: 13px;
+}
+
+.agent-evals-empty span {
+  max-width: 360px;
+  color: var(--ag-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.agent-evals-empty.ok strong {
+  color: var(--eval-pass);
+}
+
+.agent-evals-detail-empty {
+  display: grid;
+  min-height: 100%;
+  align-content: center;
+  place-items: center;
+  gap: 7px;
+  color: var(--ag-muted);
+  text-align: center;
+}
+
+.agent-evals-detail-empty span {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.agent-evals-detail-empty strong {
+  color: var(--ag-heading);
+  font-size: 14px;
+}
+
+.agent-evals-detail-empty em {
+  max-width: 260px;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.45;
 }
 
 @media (max-width: 1180px) {
+  .agent-evals-command-grid,
   .agent-evals-workbench,
   .agent-evals-trends {
     grid-template-columns: 1fr;
   }
 
-  .agent-evals .agent-evals-kpis {
+  .agent-evals-scoreboard {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .agent-evals-filters {
+  .agent-evals-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 760px) {
-  .agent-evals-filters,
+  .agent-evals-gate,
+  .agent-evals-gate-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .agent-evals-filter-grid,
   .agent-evals-case-row,
   .agent-evals-run-row,
   .agent-evals-failure-row,
@@ -871,16 +1131,18 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 
-  .agent-evals .agent-evals-kpis {
-    grid-template-columns: 1fr;
+  .agent-evals-gate-title-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
   }
 
-  .performance-eval-chip {
-    min-height: 34px;
-    align-items: center;
-    flex-direction: row;
-    justify-content: space-between;
-    gap: 8px;
+  .agent-evals-performance-badge {
+    max-width: 100%;
+  }
+
+  .agent-evals-scoreboard {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .agent-evals-main,
@@ -889,11 +1151,7 @@ onMounted(() => {
   }
 
   .agent-evals-empty {
-    min-height: 120px;
-  }
-
-  .agent-evals-empty.detail {
-    min-height: 180px;
+    min-height: 150px;
   }
 
   .agent-evals-panel-head,

@@ -1,17 +1,19 @@
 <template>
   <div class="mcp-console ag-page-flow">
-    <section class="mcp-summary-strip ag-stat-strip">
-      <div v-for="metric in metrics" :key="metric.label" class="mcp-summary-chip ag-stat-chip">
-        <span>{{ metric.label }}</span>
-        <strong :title="metric.hint">{{ metric.value }}</strong>
+    <section class="mcp-toolbar ag-content-panel">
+      <div class="mcp-context">
+        <div v-for="metric in metrics" :key="metric.label" class="mcp-context-chip">
+          <span>{{ metric.label }}</span>
+          <strong :title="metric.hint">{{ metric.value }}</strong>
+        </div>
+
+        <div class="mcp-context-chip mcp-context-url">
+          <span>{{ t('mcp.context.clientUrl') }}</span>
+          <strong :title="clientUrl">{{ clientUrl }}</strong>
+        </div>
       </div>
 
-      <div class="mcp-summary-chip mcp-summary-url ag-stat-chip">
-        <span>{{ t('mcp.context.clientUrl') }}</span>
-        <strong :title="clientUrl">{{ clientUrl }}</strong>
-      </div>
-
-      <el-button type="primary" :icon="Plus" class="mcp-summary-action" :disabled="!canWriteMcp" @click="uploadPanelOpen = !uploadPanelOpen">
+      <el-button type="primary" :icon="Plus" class="mcp-toolbar-action" :disabled="!canWriteMcp" @click="uploadPanelOpen = !uploadPanelOpen">
         {{ t('mcp.upload.open') }}
       </el-button>
     </section>
@@ -396,15 +398,59 @@ onMounted(() => {
   gap: var(--ag-section-gap);
 }
 
-.mcp-summary-strip {
-  flex-wrap: wrap;
-  flex-shrink: 0;
-  block-size: auto;
-  min-height: var(--ag-stat-strip-height);
+.mcp-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.mcp-summary-action {
-  margin-left: auto;
+.mcp-context {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mcp-context-chip {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 260px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-control);
+  background: var(--ag-panel-soft);
+  padding: 6px 9px;
+}
+
+.mcp-context-url {
+  max-width: 360px;
+}
+
+.mcp-context-chip span,
+.mcp-context-chip strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-context-chip span {
+  color: var(--ag-muted);
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.mcp-context-chip strong {
+  color: var(--ag-heading);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+}
+
+.mcp-toolbar-action {
+  flex: 0 0 auto;
 }
 
 .mcp-card-icon {
@@ -537,20 +583,19 @@ onMounted(() => {
 }
 
 @media (max-width: 640px) {
-  .mcp-summary-strip {
+  .mcp-toolbar {
     display: grid;
     grid-template-columns: 1fr;
     align-items: stretch;
-    overflow: visible;
   }
 
-  .mcp-summary-chip,
-  .mcp-summary-action {
+  .mcp-context,
+  .mcp-toolbar-action {
     width: 100%;
   }
 
-  .mcp-summary-action {
-    margin-left: 0;
+  .mcp-context {
+    display: grid;
   }
 }
 

@@ -1,18 +1,5 @@
 <template>
   <div class="memory-control ag-page-flow">
-    <section class="memory-priority-strip ag-stat-strip">
-      <article
-        v-for="card in priorityCards"
-        :key="card.key"
-        class="memory-priority-card ag-stat-chip"
-        :class="`tone-${card.tone}`"
-        :title="card.hint"
-      >
-        <span>{{ card.label }}</span>
-        <strong :title="String(card.value)">{{ card.value }}</strong>
-      </article>
-    </section>
-
     <el-alert v-if="error" class="memory-alert" type="error" :title="error" show-icon />
 
     <section class="memory-query-panel ag-content-panel">
@@ -22,6 +9,19 @@
           <strong>{{ t("agentOS.memory.queryTitle") }}</strong>
           <span>{{ activeFilterSummary }}</span>
         </div>
+      </div>
+
+      <div class="memory-priority-inline">
+        <span
+          v-for="card in priorityCards"
+          :key="card.key"
+          class="memory-priority-inline-card"
+          :class="`tone-${card.tone}`"
+          :title="card.hint"
+        >
+          <span>{{ card.label }}</span>
+          <strong :title="String(card.value)">{{ card.value }}</strong>
+        </span>
       </div>
 
       <div class="memory-query-controls">
@@ -779,7 +779,7 @@ onMounted(() => {
   display: grid;
   flex: 0 0 auto;
   gap: 10px;
-  grid-template-columns: minmax(180px, 260px) minmax(360px, 1fr) auto;
+  grid-template-columns: minmax(180px, 240px) minmax(220px, 0.8fr) minmax(360px, 1fr) auto;
   align-items: center;
 }
 
@@ -810,6 +810,53 @@ onMounted(() => {
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.memory-priority-inline {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.memory-priority-inline-card {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  border: 1px solid var(--memory-border);
+  border-radius: var(--ag-radius-control);
+  background: var(--memory-panel-soft);
+  padding: 5px 8px;
+}
+
+.memory-priority-inline-card span,
+.memory-priority-inline-card strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-priority-inline-card span {
+  color: var(--memory-muted);
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.memory-priority-inline-card strong {
+  color: var(--memory-heading);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+}
+
+.memory-priority-inline-card.tone-red {
+  border-color: color-mix(in srgb, var(--memory-red) 32%, var(--memory-border));
+}
+
+.memory-priority-inline-card.tone-yellow {
+  border-color: color-mix(in srgb, var(--memory-yellow) 34%, var(--memory-border));
 }
 
 .memory-query-controls {

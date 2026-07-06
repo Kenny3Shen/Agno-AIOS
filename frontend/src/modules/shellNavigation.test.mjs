@@ -119,23 +119,29 @@ assert.deepEqual(
   buildShellHomeSections(
     {
       operations: "Operations",
-      controlPlane: "Control",
+      knowledge: "Knowledge",
       governance: "Governance",
       securityData: "Security Data",
+      settings: "Settings",
     },
-    navItemById,
-    (id) => !["approvals", "scheduler"].includes(id),
+    [
+      { key: "operations", items: [item("home"), item("dashboard"), item("chat"), item("workflow")] },
+      { key: "knowledge", items: [item("skills"), item("mcp"), item("knowledge"), item("memory")] },
+      { key: "governance", items: [item("trace"), item("evaluation"), item("approvals"), item("scheduler")] },
+      { key: "securityData", items: [item("cve"), item("collect")] },
+      { key: "settings", items: [item("settings")] },
+    ],
   ).map((section) => ({
     title: section.title,
     items: section.items.map((navItem) => navItem.id),
   })),
   [
-    { title: "Operations", items: ["dashboard", "chat", "trace", "workflow"] },
-    { title: "Control", items: ["memory"] },
-    { title: "Governance", items: ["evaluation"] },
-    { title: "Security Data", items: ["skills", "mcp", "knowledge", "cve", "collect"] },
+    { title: "Operations", items: ["dashboard", "chat", "workflow"] },
+    { title: "Knowledge", items: ["skills", "mcp", "knowledge", "memory"] },
+    { title: "Governance", items: ["trace", "evaluation", "approvals", "scheduler"] },
+    { title: "Security Data", items: ["cve", "collect"] },
   ],
-  "home sections must keep product grouping while filtering inaccessible items",
+  "home sections must mirror sidebar groups while excluding Home and Settings",
 )
 
 assert.deepEqual(

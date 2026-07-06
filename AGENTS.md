@@ -1,0 +1,6 @@
+测试账号
+
+```bash
+AGNO_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+AGNO_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
+```

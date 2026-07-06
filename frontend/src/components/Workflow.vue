@@ -1,12 +1,12 @@
 <template>
   <div class="workflow-console ag-page-flow">
     <header class="workflow-header ag-content-panel">
-      <section class="workflow-stat-strip ag-stat-strip" :aria-label="t('workflow.stats.ariaLabel')">
-        <article v-for="stat in stats" :key="stat.label" class="workflow-stat-chip ag-stat-chip">
+      <div class="workflow-context" :aria-label="t('workflow.stats.ariaLabel')">
+        <span v-for="stat in stats" :key="stat.label" class="workflow-context-chip">
           <span>{{ stat.label }}</span>
           <strong>{{ stat.value }}</strong>
-        </article>
-      </section>
+        </span>
+      </div>
 
       <div class="workflow-actions">
         <el-button size="small" plain @click="validateWorkflow">
@@ -563,6 +563,46 @@ function defaultExpression(kind: WorkflowStepKind) {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
+}
+
+.workflow-context {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workflow-context-chip {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 220px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-control);
+  background: var(--ag-panel-soft);
+  padding: 6px 9px;
+}
+
+.workflow-context-chip span,
+.workflow-context-chip strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-context-chip span {
+  color: var(--ag-muted);
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.workflow-context-chip strong {
+  color: var(--ag-heading);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
 }
 
 .workflow-kicker,

@@ -1,17 +1,17 @@
 <template>
   <div class="knowledge-console knowledge-workflow-shell ag-page-flow">
-    <section class="knowledge-stat-strip ag-stat-strip" :aria-label="t('knowledge.stats.ariaLabel')">
-      <div v-for="card in statisticsCards" :key="card.label" class="knowledge-stat-chip ag-stat-chip">
-        <span>{{ card.label }}</span>
-        <strong :title="card.value">{{ card.value }}</strong>
-      </div>
-    </section>
-
     <div class="knowledge-workspace-grid">
       <section class="knowledge-panel ag-content-panel knowledge-upload-panel">
         <div class="knowledge-section-head">
           <h4>{{ t('knowledge.upload.title') }}</h4>
           <span class="status-badge" :class="ingestTask.status">{{ ingestStatusLabel }}</span>
+        </div>
+
+        <div class="knowledge-runtime-summary" :aria-label="t('knowledge.stats.ariaLabel')">
+          <div v-for="card in statisticsCards" :key="card.label" class="knowledge-runtime-chip">
+            <span>{{ card.label }}</span>
+            <strong :title="card.value">{{ card.value }}</strong>
+          </div>
         </div>
 
         <div
@@ -1202,6 +1202,43 @@ onMounted(() => {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.knowledge-runtime-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.knowledge-runtime-chip {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  border: 1px solid var(--kn-border);
+  border-radius: var(--ag-radius-control);
+  background: var(--kn-panel-soft);
+  padding: 8px 10px;
+}
+
+.knowledge-runtime-chip span,
+.knowledge-runtime-chip strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.knowledge-runtime-chip span {
+  color: var(--kn-muted);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.knowledge-runtime-chip strong {
+  color: var(--kn-heading);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 12px;
 }
 
 .knowledge-upload-pipeline {

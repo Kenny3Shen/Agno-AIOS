@@ -538,11 +538,7 @@ const canAccessNav = (id: NavId) => {
   return canAccessShellNav(id, availableNavIds.value, (permission) => authStore.hasPermission(permission))
 }
 const visibleNavItems = computed<NavItem[]>(() => navItems.value.filter((item) => canAccessNav(item.id)))
-const moduleNavItems = computed<NavItem[]>(() => [dashboardItem.value, ...navItems.value])
 const visibleModuleNavItems = computed<NavItem[]>(() => [dashboardItem.value, ...visibleNavItems.value.filter((item) => item.id !== "dashboard")])
-const navItemById = computed<Record<ModuleNavId, NavItem>>(() => (
-  Object.fromEntries(moduleNavItems.value.map((item) => [item.id, item])) as Record<ModuleNavId, NavItem>
-))
 const allNavItems = computed<NavItem[]>(() => [
   homeItem.value,
   dashboardItem.value,
@@ -551,12 +547,6 @@ const allNavItems = computed<NavItem[]>(() => [
 const allNavItemById = computed<Record<NavId, NavItem>>(() => (
   Object.fromEntries(allNavItems.value.map((item) => [item.id, item])) as Record<NavId, NavItem>
 ))
-const homeSections = computed<HomeSection[]>(() => buildShellHomeSections({
-  operations: t("shell.sections.operations"),
-  controlPlane: t("shell.sections.controlPlane"),
-  governance: t("shell.sections.governance"),
-  securityData: t("shell.sections.securityData"),
-}, navItemById.value, canAccessNav))
 const THEME_STORAGE_KEY = "theme"
 const SIDEBAR_EXPANDED_WIDTH = 264
 const SIDEBAR_COMPACT_WIDTH = 76
@@ -751,6 +741,14 @@ const sidebarNavGroups = computed<SidebarNavGroup[]>(() => {
     canAccess: canAccessNav,
   }) as SidebarNavGroup[]
 })
+
+const homeSections = computed<HomeSection[]>(() => buildShellHomeSections({
+  operations: t("settings.navigation.groups.operations"),
+  knowledge: t("settings.navigation.groups.knowledge"),
+  governance: t("settings.navigation.groups.governance"),
+  securityData: t("settings.navigation.groups.securityData"),
+  settings: t("settings.navigation.groups.settings"),
+}, sidebarNavGroups.value))
 
 const checkMobile = () => {
   isMobile.value = isMobileViewport()

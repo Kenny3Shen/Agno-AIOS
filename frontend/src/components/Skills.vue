@@ -1,14 +1,16 @@
 <template>
   <div class="skills-console ag-page-flow">
-    <section class="skill-summary-strip ag-stat-strip">
-      <span v-for="metric in summaryMetrics" :key="metric.label" class="skill-summary-chip ag-stat-chip">
-        <small>{{ metric.label }}</small>
-        <strong>{{ metric.value }}</strong>
-      </span>
+    <section class="skill-toolbar ag-content-panel">
+      <div class="skill-context">
+        <span v-for="metric in summaryMetrics" :key="metric.label" class="skill-context-chip">
+          <small>{{ metric.label }}</small>
+          <strong>{{ metric.value }}</strong>
+        </span>
+      </div>
       <el-button
         :icon="Document"
         type="primary"
-        class="skill-summary-action"
+        class="skill-toolbar-action"
         :disabled="!canWriteSkills"
         @click="uploadPanelOpen = !uploadPanelOpen"
       >
@@ -289,15 +291,54 @@ onMounted(() => {
   gap: var(--ag-section-gap);
 }
 
-.skill-summary-strip {
-  flex-wrap: wrap;
-  flex-shrink: 0;
-  block-size: auto;
-  min-height: var(--ag-stat-strip-height);
+.skill-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.skill-summary-action {
-  margin-left: auto;
+.skill-context {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.skill-context-chip {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-control);
+  background: var(--ag-panel-soft);
+  padding: 6px 9px;
+}
+
+.skill-context-chip small,
+.skill-context-chip strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-context-chip small {
+  color: var(--ag-muted);
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.skill-context-chip strong {
+  color: var(--ag-heading);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+}
+
+.skill-toolbar-action {
+  flex: 0 0 auto;
 }
 
 .skills-body {
@@ -497,20 +538,19 @@ onMounted(() => {
 }
 
 @media (max-width: 760px) {
-  .skill-summary-strip {
+  .skill-toolbar {
     display: grid;
     grid-template-columns: 1fr;
     align-items: stretch;
-    overflow: visible;
   }
 
-  .skill-summary-chip,
-  .skill-summary-action {
+  .skill-context,
+  .skill-toolbar-action {
     width: 100%;
   }
 
-  .skill-summary-action {
-    margin-left: 0;
+  .skill-context {
+    display: grid;
   }
 
   .skills-grid {

@@ -418,6 +418,18 @@ assert.match(
   "Home modules must render as compact direct-action tiles",
 )
 
+assert.match(
+  app,
+  /buildShellHomeSections\([\s\S]*sidebarNavGroups\.value/,
+  "Home module groups must derive from the sidebar navigation groups",
+)
+
+assert.doesNotMatch(
+  app,
+  /buildShellHomeSections\([\s\S]*navItemById\.value/,
+  "Home module groups must not keep a separate grouping map from the sidebar",
+)
+
 assert.equal(
   mcp.includes("xl:grid-cols-[minmax(0,1fr)_320px]"),
   false,
@@ -426,14 +438,14 @@ assert.equal(
 
 assert.match(
   mcp,
-  /mcp-summary-strip/,
-  "MCP must use the compact summary strip instead of metric cards and a side rail",
+  /mcp-toolbar ag-content-panel/,
+  "MCP must use a business toolbar for service context and upload actions",
 )
 
 assert.match(
   mcp,
-  /<div class="mcp-console ag-page-flow">\s*<section class="mcp-summary-strip ag-stat-strip">/,
-  "MCP summary strip must be a direct page-flow child like Knowledge",
+  /mcp-context-chip/,
+  "MCP toolbar must keep service metrics as local context chips",
 )
 
 assert.doesNotMatch(
@@ -444,8 +456,8 @@ assert.doesNotMatch(
 
 assert.doesNotMatch(
   mcp,
-  /mcp-toolbar/,
-  "MCP upload action must be integrated into the summary strip, not isolated in a standalone toolbar container",
+  /mcp-summary-strip/,
+  "MCP must not keep the old page-level summary strip",
 )
 
 assert.doesNotMatch(
@@ -894,6 +906,8 @@ for (const traceFilterHook of [
   "sessionFilters.keyword",
   "sessionFilters.status",
   "filteredSessions",
+  "pagedSessions",
+  "SESSION_PAGE_SIZE",
   "selectSession",
   "scheduleFilterRefresh",
 ]) {
@@ -901,6 +915,33 @@ for (const traceFilterHook of [
     trace,
     new RegExp(traceFilterHook.replace(".", "\\.")),
     `Trace filters must auto-refresh when ${traceFilterHook} changes`,
+  )
+}
+
+assert.match(
+  trace,
+  /v-for="session in pagedSessions"/,
+  "Trace Sessions column must render paginated sessions instead of the full filtered list",
+)
+
+assert.match(
+  trace,
+  /trace-session-pagination/,
+  "Trace Sessions column must expose pagination controls",
+)
+
+for (const removedTraceIntroCopy of [
+  "按 Session ID、User ID 或预览内容定位对话，再查看对应 Trace。",
+  "默认按 runs 查看，可用 Session ID、Run ID、Agent、Team、Workflow 和状态筛选。",
+  "Filter sessions on the left to load the corresponding trace observation here.",
+  "selectSessionDescription",
+  "selectTraceDescription",
+  "selectSpanDescription",
+]) {
+  assert.equal(
+    trace.includes(removedTraceIntroCopy),
+    false,
+    `Trace page must not render explanatory panel copy: ${removedTraceIntroCopy}`,
   )
 }
 
@@ -936,38 +977,38 @@ assert.match(
 
 assert.match(
   skills,
-  /skill-summary-strip/,
-  "Skills page must summarize total, enabled, and script counts in a compact strip",
+  /skill-toolbar ag-content-panel/,
+  "Skills page must summarize total, enabled, and script counts in the business toolbar",
 )
 
 assert.match(
   skills,
-  /<div class="skills-console ag-page-flow">\s*<section class="skill-summary-strip ag-stat-strip">/,
-  "Skills summary strip must be a direct page-flow child like Knowledge",
+  /skill-context-chip/,
+  "Skills summary items must render as local toolbar context chips",
 )
 
 assert.match(
   skills,
-  /skill-summary-chip ag-stat-chip/,
-  "Skills summary items must use the shared Stat Chip surface",
+  /skill-toolbar-action/,
+  "Skills upload action must stay in the Skills toolbar",
 )
 
 assertNoPillStatChip(
   skills,
-  "skill-summary-chip",
-  "Skills Stat Chips must use the shared 8px rectangular chip shape, not pill styling",
+  "skill-context-chip",
+  "Skills toolbar context chips must use the 8px rectangular shape, not pill styling",
 )
 
 assert.doesNotMatch(
   skills,
-  /\.skill-summary-chip\s+(span|small|strong)\s*\{/,
-  "Skills Stat Chips must inherit label and value typography from the shared ag-stat-chip style",
+  /skill-summary-strip|skill-summary-chip|ag-stat-strip|ag-stat-chip/,
+  "Skills must not use the global stat-strip pattern",
 )
 
 assert.doesNotMatch(
   skills,
   /skills-action-bar ag-content-panel[\s\S]{0,800}skill-summary-strip|skills-header ag-content-panel/,
-  "Skills action toolbar must not wrap the Knowledge-style summary strip",
+  "Skills must not keep the old action toolbar or header pattern",
 )
 
 assert.match(
@@ -1232,50 +1273,50 @@ for (const bulkyMcpMetric of [
 
 assert.match(
   mcp,
-  /mcp-summary-chip ag-stat-chip/,
-  "MCP summary items must use the shared Stat Chip surface",
+  /mcp-context-chip/,
+  "MCP summary items must use local context chips",
 )
 
 assertNoPillStatChip(
   mcp,
-  "mcp-summary-chip",
-  "MCP Stat Chips must use the shared 8px rectangular chip shape, not pill styling",
+  "mcp-context-chip",
+  "MCP context chips must use the 8px rectangular shape, not pill styling",
 )
 
 assert.doesNotMatch(
   mcp,
-  /\.mcp-summary-chip\s+(span|small|strong)\s*\{/,
-  "MCP Stat Chips must inherit label and value typography from the shared ag-stat-chip style",
+  /mcp-summary-strip|mcp-summary-chip|ag-stat-strip|ag-stat-chip/,
+  "MCP must not use the global stat-strip pattern",
 )
 
 assert.match(
   appStyle,
-  /\.ag-stat-chip\s*\{[^}]*border-radius:\s*8px[^}]*background:\s*var\(--ag-panel-soft\)[^}]*padding:\s*7px\s+10px/s,
-  "Shared Stat Chip style must define the consistent compact 8px rectangular chip surface",
+  /\.ag-stat-chip\s*\{[^}]*display:\s*grid[^}]*border-radius:\s*8px[^}]*background:\s*var\(--ag-panel-soft\)[^}]*padding:\s*9px\s+10px/s,
+  "Home Stat Chip style must define the compact 8px rectangular chip surface",
 )
 
 assert.match(
   appStyle,
-  /\.ag-stat-strip\s*\{[^}]*flex-wrap:\s*nowrap[^}]*overflow:\s*hidden/s,
-  "Shared Stat Strips must provide the compact single-row layout globally",
+  /\.ag-stat-strip\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/s,
+  "Home Stat Strip must render as a responsive signal grid",
 )
 
-assert.match(
+assert.doesNotMatch(
   appStyle,
-  /\.ag-stat-strip\s*\{[^}]*border:\s*1px\s+solid\s+var\(--ag-border\)[^}]*border-radius:\s*8px[^}]*background:\s*var\(--ag-panel\)[^}]*padding:\s*8px/s,
-  "Shared Stat Strips must render as a consistent standalone bubble bar",
+  /\.ag-stat-strip\s*\{[^}]*border:/s,
+  "Home Stat Strip must not render as a nested standalone bubble bar",
 )
 
-assert.match(
+assert.doesNotMatch(
   appStyle,
-  /\.ag-stat-strip\s*\{[^}]*block-size:\s*var\(--ag-stat-strip-height\)/s,
-  "Shared Stat Strips must use one fixed height across pages",
+  /\.ag-stat-strip\s*\{[^}]*block-size:/s,
+  "Home Stat Strip must not force a fixed height",
 )
 
-assert.match(
+assert.doesNotMatch(
   appStyle,
-  /\.ag-stat-strip\s*\{[^}]*margin-block:\s*10px/s,
-  "Shared Stat Strips must keep consistent vertical spacing from surrounding content",
+  /\.ag-stat-strip\s*\{[^}]*margin-block:/s,
+  "Home Stat Strip spacing must be owned by the Home summary layout",
 )
 
 assert.match(
@@ -1290,11 +1331,23 @@ assert.match(
   "Shared page flow must own the top spacing and section gap",
 )
 
-assert.match(
-  appStyle,
-  /\.ag-page-flow\s+:where\(\.ag-stat-strip\)\s*\{[^}]*margin-block:\s*0/s,
-  "Page-scoped Stat Strips must rely on the shared page gap instead of adding extra Knowledge top spacing",
-)
+for (const [source, label] of [
+  [dashboard, "Dashboard"],
+  [trace, "Trace"],
+  [workflow, "Workflow"],
+  [mcp, "MCP"],
+  [skills, "Skills"],
+  [knowledge, "Knowledge"],
+  [memoryControl, "Memory"],
+  [agentOSControl, "AgentOS"],
+  [agentEvals, "Evaluation"],
+]) {
+  assert.doesNotMatch(
+    source,
+    /ag-stat-strip|ag-stat-chip/,
+    `${label} must not use the global Home stat-strip pattern`,
+  )
+}
 
 assert.match(
   appStyle,
@@ -1309,13 +1362,13 @@ assert.match(
 )
 
 for (const [source, pattern, label] of [
-  [dashboard, /situation-page ag-page-flow/, "Dashboard page"],
-  [dashboard, /situation-header ag-content-panel/, "Dashboard header"],
-  [dashboard, /situation-panel ag-content-panel/, "Dashboard panels"],
-  [skills, /skill-summary-strip ag-stat-strip/, "Skills summary actions"],
+  [dashboard, /dashboard-page ag-page-flow/, "Dashboard page"],
+  [dashboard, /dashboard-header ag-content-panel/, "Dashboard header"],
+  [dashboard, /dashboard-panel ag-content-panel/, "Dashboard panels"],
+  [skills, /skill-toolbar ag-content-panel/, "Skills toolbar"],
   [skills, /skill-upload-panel ag-content-panel/, "Skills upload"],
   [mcp, /mcp-console ag-page-flow/, "MCP page"],
-  [mcp, /mcp-summary-strip ag-stat-strip/, "MCP summary actions"],
+  [mcp, /mcp-toolbar ag-content-panel/, "MCP toolbar"],
   [mcp, /mcp-body ag-content-panel/, "MCP body"],
   [knowledge, /knowledge-console knowledge-workflow-shell ag-page-flow/, "Knowledge page"],
   [knowledge, /knowledge-panel ag-content-panel knowledge-upload-panel/, "Knowledge upload"],
@@ -1375,7 +1428,7 @@ assert.doesNotMatch(
 
 for (const [source, pattern, label] of [
   [workflow, /workflow-inspector workflow-panel ag-right-panel/, "Workflow inspector"],
-  [trace, /trace-detail-drawer ag-right-panel/, "Trace detail"],
+  [trace, /trace-detail-panel ag-right-panel/, "Trace detail"],
   [memoryControl, /memory-detail-panel ag-right-panel/, "Memory detail"],
   [agentOSControl, /agentos-panel scheduler-detail-panel ag-right-panel/, "Scheduler detail"],
 ]) {
@@ -1394,7 +1447,7 @@ assert.doesNotMatch(
 
 assert.doesNotMatch(
   trace,
-  /\.trace-detail-drawer\s*\{[^}]*border-left:/s,
+  /\.trace-detail-panel\s*\{[^}]*border-left:/s,
   "Trace right detail panel must not use a one-sided border instead of the shared panel border",
 )
 
@@ -1424,26 +1477,26 @@ assert.doesNotMatch(
 
 assert.match(
   appStyle,
-  /\.ag-stat-chip\s*\{[^}]*flex:\s*0\s+1\s+164px[^}]*justify-content:\s*space-between/s,
-  "Shared Stat Chips must keep a stable compact width with separated label and value",
+  /\.ag-stat-chip\s*\{[^}]*display:\s*grid[^}]*gap:\s*5px/s,
+  "Home Stat Chips must use a stable grid layout",
 )
 
 assert.match(
   appStyle,
   /\.ag-stat-chip\s+strong\s*\{[^}]*text-overflow:\s*ellipsis/s,
-  "Shared Stat Chip values must use single-line ellipsis globally",
+  "Home Stat Chip values must use single-line ellipsis",
 )
 
 assert.match(
   appStyle,
   /\.ag-stat-chip\s+:where\(span,\s*small,\s*em\)\s*\{[^}]*font-size:\s*11px/s,
-  "Shared Stat Chip labels must be large enough to read at a glance",
+  "Home Stat Chip labels must be large enough to read at a glance",
 )
 
 assert.match(
   appStyle,
-  /\.ag-stat-chip\s+strong\s*\{[^}]*font-size:\s*12px/s,
-  "Shared Stat Chip values must be large enough to read at a glance",
+  /\.ag-stat-chip\s+strong\s*\{[^}]*font-size:\s*13px/s,
+  "Home Stat Chip values must be large enough to read at a glance",
 )
 
 assert.match(
@@ -1461,97 +1514,13 @@ assert.match(
 assert.doesNotMatch(
   appStyle,
   /\.ag-home-signal\s*\{[^}]*flex:/s,
-  "Home summary signal chips must inherit compact width from the shared ag-stat-chip style",
+  "Home summary signal chips must not use flex sizing",
 )
 
 assert.doesNotMatch(
   appStyle,
   /\.ag-home-signal\s+(span|small|strong)\s*\{/,
-  "Home summary signal chips must inherit label and value typography from the shared ag-stat-chip style",
-)
-
-for (const [source, className, label] of [
-  [dashboard, "situation-metric", "Dashboard"],
-  [trace, "trace-stat-card", "Trace"],
-  [agentOSControl, "agentos-summary-chip", "AgentOS"],
-  [workflow, "workflow-stat-chip", "Workflow"],
-]) {
-  assert.match(
-    source,
-    new RegExp(`${className} ag-stat-chip`),
-    `${label} Stat Chips must use the shared Stat Chip surface`,
-  )
-  assertNoPillStatChip(
-    source,
-    className,
-    `${label} Stat Chips must use the shared 8px rectangular chip shape, not pill styling`,
-  )
-  assert.doesNotMatch(
-    source,
-    new RegExp(`\\.${className}\\s+(span|small|strong)\\s*\\{`, "s"),
-    `${label} Stat Chips must inherit label and value typography from the shared ag-stat-chip style`,
-  )
-}
-
-for (const [source, className, label] of [
-  [trace, "trace-stat-strip", "Trace"],
-  [agentOSControl, "agentos-summary-strip", "AgentOS"],
-  [workflow, "workflow-stat-strip", "Workflow"],
-  [mcp, "mcp-summary-strip", "MCP"],
-  [skills, "skill-summary-strip", "Skills"],
-  [knowledge, "knowledge-stat-strip", "Knowledge"],
-  [memoryControl, "memory-priority-strip", "Memory"],
-]) {
-  if (["mcp-summary-strip", "skill-summary-strip"].includes(className)) {
-    assert.doesNotMatch(
-      source.replace(/@media[\s\S]*/g, ""),
-      new RegExp(`\\.${className}\\s*\\{[^}]*display:\\s*grid`, "s"),
-      `${label} Stat Strip must inherit desktop layout from the shared ag-stat-strip style`,
-    )
-    assert.match(
-      source,
-      new RegExp(`\\.${className}\\s*\\{[^}]*flex-shrink:\\s*0`, "s"),
-      `${label} Stat Strip must not shrink below its wrapped mobile content`,
-    )
-  } else {
-    assert.doesNotMatch(
-      source,
-      new RegExp(`\\.${className}\\s*\\{[^}]*display:\\s*grid`, "s"),
-      `${label} Stat Strip must inherit layout from the shared ag-stat-strip style`,
-    )
-  }
-  assert.doesNotMatch(
-    source,
-    new RegExp(`\\.${className}\\s*\\{[^}]*border(?:-bottom)?:`, "s"),
-    `${label} Stat Strip must inherit bubble borders from the shared ag-stat-strip style`,
-  )
-  assert.doesNotMatch(
-    source,
-    new RegExp(`\\.${className}\\s*\\{[^}]*background:`, "s"),
-    `${label} Stat Strip must inherit background from the shared ag-stat-strip style`,
-  )
-  assert.doesNotMatch(
-    source,
-    new RegExp(`\\.${className}\\s*\\{[^}]*padding(?:-[a-z]+)?:`, "s"),
-    `${label} Stat Strip must inherit padding from the shared ag-stat-strip style`,
-  )
-}
-
-for (const [source, className, label] of [
-  [trace, "trace-stat-card", "Trace"],
-  [agentOSControl, "agentos-summary-chip", "AgentOS"],
-]) {
-  assert.doesNotMatch(
-    source,
-    new RegExp(`\\.${className}::before`, "s"),
-    `${label} Stat Chips must not add page-specific tone bars`,
-  )
-}
-
-assert.doesNotMatch(
-  dashboard,
-  /class="ag-stat-strip mt-3[^"]*grid/,
-  "Dashboard Stat Strip must not override the shared compact strip with grid utilities",
+  "Home summary signal chips must inherit label and value typography from ag-stat-chip",
 )
 
 assert.match(
@@ -1866,7 +1835,7 @@ assert.equal(
   "Trace page summary metric grid must move out of Trace and into Dashboard",
 )
 
-for (const chartClass of ["latency-chart", "hour-heatmap", "radar-chart", "span-bar-list"]) {
+for (const chartClass of ["dashboard-kpi-grid", "dashboard-line-chart", "dashboard-bars", "dashboard-run-list", "dashboard-model-list"]) {
   assert.match(
     dashboard,
     new RegExp(chartClass),
@@ -1967,8 +1936,37 @@ assert.match(
 
 assert.match(
   trace,
-  /\.trace-canvas\s*{[^}]*height:\s*100%/s,
-  "Trace canvas must close the desktop height chain so the right detail pane scrolls instead of being clipped",
+  /\.trace-body-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*20%\)\s+minmax\(0,\s*20%\)\s+minmax\(0,\s*60%\)/s,
+  "Trace workbench must use fixed 20/20/60 columns for sessions, runs, and details",
+)
+
+assert.match(
+  trace,
+  /trace-detail-panel ag-right-panel/,
+  "Trace run detail must be a fixed right panel instead of a drawer",
+)
+
+for (const removedTraceDrawerBehavior of [
+  "traceDrawerOpen",
+  "trace-detail-drawer",
+  "trace-drawer-resizer",
+  "openAdjacentRun",
+  "previousRun",
+  "nextRun",
+  "collapseHeader",
+  "refreshSelectedTrace",
+]) {
+  assert.equal(
+    trace.includes(removedTraceDrawerBehavior),
+    false,
+    `Trace fixed detail panel must not retain drawer/navigation behavior: ${removedTraceDrawerBehavior}`,
+  )
+}
+
+assert.match(
+  trace,
+  /scrollIntoView\(\{ block: "start", behavior: "smooth" \}\)/,
+  "Trace mobile selection must scroll the fixed detail panel into view",
 )
 
 assert.match(
@@ -2003,20 +2001,20 @@ for (const bulkyKnowledgeHeaderClass of [
 
 assert.match(
   knowledge,
-  /knowledge-stat-strip ag-stat-strip/,
-  "Knowledge page must expose status in the shared compact Stat Strip",
+  /knowledge-runtime-summary/,
+  "Knowledge page must expose status inside the upload business panel",
 )
 
 assert.match(
   knowledge,
-  /knowledge-stat-chip ag-stat-chip/,
-  "Knowledge status items must use the shared Stat Chip surface",
+  /knowledge-runtime-chip/,
+  "Knowledge status items must use local runtime context chips",
 )
 
 assert.match(
   knowledge,
-  /<div v-for="card in statisticsCards"[^>]*class="knowledge-stat-chip ag-stat-chip"/,
-  "Knowledge status metrics must render as compact stat values, not list/article items",
+  /<div v-for="card in statisticsCards"[^>]*class="knowledge-runtime-chip"/,
+  "Knowledge status metrics must render as compact runtime values",
 )
 
 const knowledgeStatisticsCardsBlock = knowledge.match(/const statisticsCards = computed\(\(\) => \[([\s\S]*?)\]\)/)?.[1] ?? ""
@@ -2034,32 +2032,20 @@ assert.equal(
 
 assertNoPillStatChip(
   knowledge,
-  "knowledge-stat-chip",
-  "Knowledge Stat Chips must use the shared 8px rectangular chip shape, not pill styling",
+  "knowledge-runtime-chip",
+  "Knowledge runtime chips must use the 8px rectangular chip shape, not pill styling",
 )
 
 assert.doesNotMatch(
   knowledge,
-  /\.knowledge-stat-chip\s*\{[^}]*flex:\s*1\s+1/s,
-  "Knowledge Stat Chips must not stretch into dashboard cards",
+  /knowledge-stat-strip|knowledge-stat-chip|ag-stat-strip|ag-stat-chip/,
+  "Knowledge must not use the global stat-strip pattern",
 )
 
 assert.doesNotMatch(
   knowledge,
-  /\.knowledge-stat-chip\s+(span|small|strong)\s*\{/,
-  "Knowledge Stat Chips must inherit label and value typography from the shared ag-stat-chip style",
-)
-
-assert.doesNotMatch(
-  knowledge,
-  /\.knowledge-stat-strip\s*\{[^}]*display:\s*(flex|grid)/s,
-  "Knowledge Stat Strip must inherit layout from the shared ag-stat-strip style",
-)
-
-assert.doesNotMatch(
-  knowledge,
-  /\.knowledge-stat-chip\s*\{[^}]*flex-basis/s,
-  "Knowledge Stat Chips must not override the shared compact chip width",
+  /\.knowledge-runtime-chip\s*\{[^}]*border-radius:\s*999px/s,
+  "Knowledge runtime chips must not use pill styling",
 )
 
 assert.match(
@@ -2070,32 +2056,32 @@ assert.match(
 
 assert.match(
   memoryControl,
-  /memory-priority-strip ag-stat-strip/,
-  "Memory priority metrics must use the shared compact Stat Strip",
+  /memory-priority-inline/,
+  "Memory priority metrics must live inside the query business panel",
 )
 
 assert.match(
   memoryControl,
-  /class="memory-priority-card ag-stat-chip"/,
-  "Memory priority metrics must use the shared Stat Chip surface",
+  /class="memory-priority-inline-card"/,
+  "Memory priority metrics must use local inline context chips",
 )
 
 assert.doesNotMatch(
   memoryControl,
-  /\.memory-priority-card\s+(span|small|strong)\s*\{/,
-  "Memory priority Stat Chips must inherit label and value typography from the shared ag-stat-chip style",
+  /memory-priority-strip|memory-priority-card|ag-stat-strip|ag-stat-chip/,
+  "Memory must not use the global stat-strip pattern",
 )
 
 assert.doesNotMatch(
   memoryControl,
-  /\.memory-priority-card\s*\{[^}]*min-height:/s,
-  "Memory priority Stat Chips must inherit compact sizing from the shared ag-stat-chip style",
+  /\.memory-priority-inline-card\s*\{[^}]*border-radius:\s*999px/s,
+  "Memory priority context chips must not use pill styling",
 )
 
 assert.doesNotMatch(
   memoryControl,
-  /\.memory-priority-card::before/s,
-  "Memory priority metrics must not add local tone bars that make Stat Chip backgrounds look inconsistent",
+  /\.memory-priority-inline-card::before/s,
+  "Memory priority context chips must not add local tone bars",
 )
 
 assert.match(
@@ -2244,14 +2230,14 @@ assert.match(
 
 assert.match(
   trace,
-  /trace-evidence-strip/,
-  "Trace run header must use compact copyable evidence chips instead of large Session/Run/Agent/Workflow cards",
+  /activeDetailTab/,
+  "Trace span detail must expose Info, Metadata, and Overview tab state",
 )
 
 assert.match(
   trace,
-  /activeDetailTab/,
-  "Trace span detail must expose an Info/Metadata tab state",
+  /activeDetailTab\s*=\s*ref<"info" \| "metadata" \| "overview">/,
+  "Trace detail tabs must include the requested Overview tab",
 )
 
 assert.match(
@@ -2263,7 +2249,31 @@ assert.match(
 assert.match(
   trace,
   /trace-metadata-ledger/,
-  "Trace Metadata tab must collect span offsets, parent, events, ids, extracted metadata, and raw attributes",
+  "Trace Metadata tab must render run-level identifiers and timestamps",
+)
+
+assert.match(
+  trace,
+  /trace-metadata-copy/,
+  "Trace Metadata values must provide per-field copy buttons",
+)
+
+assert.match(
+  trace,
+  /copyMetadataValue/,
+  "Trace Metadata copy buttons must use the shared clipboard flow",
+)
+
+assert.match(
+  trace,
+  /Session ID[\s\S]*User ID[\s\S]*Run ID[\s\S]*Trace ID[\s\S]*Span ID/,
+  "Trace Metadata tab must include Session ID, User ID, Run ID, Trace ID, and Span ID",
+)
+
+assert.match(
+  trace,
+  /Input Tokens[\s\S]*Output Tokens[\s\S]*Tokens[\s\S]*Model[\s\S]*Provider/,
+  "Trace Overview tab must summarize token counts, model, provider, status, duration, and cost",
 )
 
 assert.match(
