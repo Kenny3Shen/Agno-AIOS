@@ -1,11 +1,11 @@
 <template>
   <div class="cve-console ag-page-flow">
     <section class="cve-query-panel ag-content-panel">
-      <div class="flex flex-col gap-3 sm:flex-row">
+      <div class="cve-search-row">
         <el-input
           v-model="query"
           :placeholder="t('cve.input.queryPlaceholder')"
-          class="min-w-[200px] flex-1"
+          class="cve-search-input"
           clearable
           @keyup.enter="handleSearch"
         >
@@ -17,21 +17,18 @@
           v-model="sourceFilter"
           :placeholder="t('cve.input.sourcePlaceholder')"
           clearable
-          class="w-full sm:w-[150px]"
+          class="cve-source-select"
           @change="handleSourceChange"
         >
           <el-option :label="t('cve.filters.all')" value="" />
           <el-option label="GitHub" value="github" />
           <el-option label="Exploit-DB" value="exploit-db" />
         </el-select>
-      </div>
-
-      <div class="mt-3 flex flex-col gap-3 sm:flex-row">
         <el-button
           type="primary"
           :loading="loading"
           :disabled="isSearchDisabled || loading"
-          class="w-full sm:w-auto"
+          class="cve-search-action"
           @click="handleSearch"
         >
           <el-icon class="mr-1"><Search /></el-icon>
@@ -41,11 +38,11 @@
           type="success"
           :loading="updating"
           :disabled="updating"
-          class="w-full sm:w-auto"
+          class="cve-update-action"
           @click="handleUpdateDatabase"
         >
           <el-icon class="mr-1"><Refresh /></el-icon>
-          {{ t('cve.actions.updateDatabase') }}
+          {{ t('cve.actions.update') }}
         </el-button>
       </div>
     </section>
@@ -365,8 +362,39 @@ const handleUpdateDatabase = async () => {
 </script>
 
 <style scoped>
+.cve-search-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(140px, 160px) max-content max-content;
+  gap: 12px;
+  align-items: center;
+}
+
+.cve-search-input,
+.cve-source-select {
+  width: 100%;
+}
+
+.cve-search-action,
+.cve-update-action {
+  min-width: 88px;
+  justify-content: center;
+}
+
+.cve-search-row :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
 /* Responsive table layout */
 @media (max-width: 640px) {
+  .cve-search-row {
+    grid-template-columns: 1fr;
+  }
+
+  .cve-search-action,
+  .cve-update-action {
+    width: 100%;
+  }
+
   :deep(.el-table) {
     font-size: 12px;
   }

@@ -1349,6 +1349,30 @@ for (const [source, pattern, label] of [
   )
 }
 
+assert.match(
+  cve,
+  /<div class="cve-search-row[\s\S]*<el-input[\s\S]*<el-select[\s\S]*handleSearch[\s\S]*handleUpdateDatabase[\s\S]*<\/div>/,
+  "CVE search and update actions must stay in the same row as the search controls",
+)
+
+assert.match(
+  cve,
+  /<div class="cve-search-row[\s\S]*t\('cve\.actions\.update'\)[\s\S]*<\/div>/,
+  "CVE inline update button must use the short update label",
+)
+
+assert.doesNotMatch(
+  cve,
+  /<div class="cve-search-row[\s\S]*t\('cve\.actions\.updateDatabase'\)[\s\S]*<\/div>/,
+  "CVE inline update button must not use the long update database label",
+)
+
+assert.doesNotMatch(
+  cve,
+  /mt-3 flex flex-col gap-3 sm:flex-row/,
+  "CVE page must not render search and update actions in a separate row below the search controls",
+)
+
 for (const [source, pattern, label] of [
   [workflow, /workflow-inspector workflow-panel ag-right-panel/, "Workflow inspector"],
   [trace, /trace-detail-drawer ag-right-panel/, "Trace detail"],
