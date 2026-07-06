@@ -46,7 +46,7 @@ class AuthenticatedMcpApp:
 
 def build_main_mcp(enabled: set[str] | None = None) -> FastMCP:
     enabled = set(SERVICE_IDS) if enabled is None else enabled
-    main_mcp = FastMCP("Agno AIOS MCP")
+    main_mcp = FastMCP("Trinity AI Security MCP")
     _install_middleware(main_mcp)
     if "playbook" in enabled:
         main_mcp.mount(playbook_mcp, namespace="playbook")

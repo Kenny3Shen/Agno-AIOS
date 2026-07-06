@@ -478,7 +478,7 @@ def test_mcp_token_insert_omits_identity_id_when_absent() -> None:
     values = _token_insert_values(
         {
             "id": None,
-            "name": "Agno AIOS Agent",
+            "name": "T.A.I.S Agent",
             "token": "token",
             "created_at": 1,
             "expires_at": 0,
@@ -486,4 +486,4 @@ def test_mcp_token_insert_omits_identity_id_when_absent() -> None:
     )
 
     assert "id" not in values
-    assert values["name"] == "Agno AIOS Agent"
+    assert values["name"] == "T.A.I.S Agent"

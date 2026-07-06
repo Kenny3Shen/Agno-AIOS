@@ -10,6 +10,7 @@ export const zhCN = {
     loggingOut: "退出中",
     actions: {
       refresh: "刷新",
+      github: "打开 GitHub 仓库",
       newChat: "新会话",
       refreshTraces: "刷新 Trace",
       copySessionId: "复制 Session ID",
@@ -60,8 +61,8 @@ export const zhCN = {
       runsCopied: "runs 已复制",
     },
     home: {
-      title: "Agno AIOS 工作台",
-      description: "把安全数据、知识、Agent 和运行观测收束到一个可调度的控制面。",
+      title: "T.A.I.S 工作台",
+      description: "围绕发现、处理与闭环，把 AI 安全自动化收束到一个 SDLC 控制面。",
     },
     sessions: {
       title: "Sessions",
@@ -115,16 +116,16 @@ export const zhCN = {
     },
   },
   auth: {
-    entryAria: "Agno AIOS auth entry",
+    entryAria: "T.A.I.S auth entry",
     briefAria: "Platform entry information",
     theme: {
       toLight: "切换到浅色模式",
       toDark: "切换到深色模式",
     },
     brief: {
-      eyebrow: "AGENT CONTROL",
-      title: "Agno AIOS",
-      description: "登录后继续使用 Chat、MCP、Trace 与模型设置。",
+      eyebrow: "TRINITY AI SECURITY",
+      title: "T.A.I.S",
+      description: "登录后继续使用发现、处理与闭环自动化能力。",
       items: {
         chat: "Chat",
         mcp: "MCP",
@@ -148,7 +149,7 @@ export const zhCN = {
       tabsAria: "认证方式",
       login: "登录",
       register: "注册",
-      submitLogin: "进入 Agno AIOS",
+      submitLogin: "进入 T.A.I.S",
       submitRegister: "创建并进入",
     },
     fields: {
@@ -208,7 +209,7 @@ export const zhCN = {
   },
   agentEvals: {
     title: "Agent Evals 评测中心",
-    subtitle: "安全 Agent regression suite、Agno Eval 历史与失败回放。",
+    subtitle: "安全 Agent regression suite、评测历史与失败回放。",
     actions: {
       refresh: "刷新",
       newSuite: "新增 Suite",
@@ -237,7 +238,7 @@ export const zhCN = {
     },
     panels: {
       cases: "评测用例",
-      runs: "Agno Eval 运行",
+      runs: "Agent Eval 运行",
       failures: "失败回放",
       trends: "趋势",
       detail: "样本详情",
@@ -477,7 +478,7 @@ export const zhCN = {
       issueTitle: "签发访问 Token",
       issuedTitle: "已签发 Token",
       namePlaceholder: "Token 名称，例如 AgentOS",
-      defaultName: "Agno AIOS",
+      defaultName: "T.A.I.S",
       generate: "生成 Token",
       copyOnce: "仅显示一次，请立即复制",
       empty: "暂无访问 Token",
@@ -615,7 +616,7 @@ export const zhCN = {
     },
     inspector: {
       title: "Run 配置",
-      description: "表达 Agno Workflow 与 workflow sessions 暴露的关键配置。",
+      description: "表达安全自动化 Workflow 与 workflow sessions 暴露的关键配置。",
       editTab: "编辑",
       validateTab: "校验",
       previewTab: "代码",
@@ -668,7 +669,7 @@ export const zhCN = {
       duplicateSymbols: "Python 标识必须唯一。",
       expressionMissing: "{name} 需要 evaluator 或 selector expression。",
       branchesMissing: "{name} 至少需要两个 branches。",
-      ready: "结构已可用于构建 Agno Workflow。",
+      ready: "结构已可用于构建安全自动化 Workflow。",
     },
   },
   trace: {
@@ -812,7 +813,7 @@ export const zhCN = {
       modeLabel: "Mode",
       emptyMemory: "空 memory",
       emptyTitle: "暂无 Memory",
-      emptyDescription: "当前筛选条件下没有 Agno user memory。",
+      emptyDescription: "当前筛选条件下没有 user memory。",
       allMemoryScope: "全部 user memory",
       activeSearch: "搜索: {value}",
       activeUser: "用户: {value}",
@@ -867,7 +868,7 @@ export const zhCN = {
     scheduler: {
       listTitle: "Schedules",
       createTitle: "新建 Schedule",
-      createDescription: "按 Agno cron 规则运行 Agent、Team 或 Workflow。",
+      createDescription: "按 cron 规则运行 Agent、Team 或 Workflow。",
       enabled: "启用",
       disabled: "停用",
       create: "创建",
@@ -993,6 +994,7 @@ export const zhCN = {
       runtime: "运行配置",
       navigation: "导航配置",
     },
+    tabsAria: "设置分类",
     actions: {
       addModel: "新增模型",
       save: "保存",

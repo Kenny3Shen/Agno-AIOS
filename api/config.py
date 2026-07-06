@@ -16,7 +16,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_name: str = "Agno AIOS Security Platform API"
+    app_name: str = "Trinity AI Security API"
     app_version: str = "0.5.0"
     environment: str = "development"
 

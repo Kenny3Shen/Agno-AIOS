@@ -5,27 +5,16 @@
         <small>{{ metric.label }}</small>
         <strong>{{ metric.value }}</strong>
       </span>
-    </section>
-
-    <header class="skills-action-bar ag-content-panel">
-      <el-button
-        type="primary"
-        :icon="Refresh"
-        :loading="loading"
-        @click="loadSkills"
-        class="skill-primary-action"
-      >
-        {{ t('skills.actions.refresh') }}
-      </el-button>
       <el-button
         :icon="Document"
-        class="skill-primary-action"
+        type="primary"
+        class="skill-summary-action"
         :disabled="!canWriteSkills"
         @click="uploadPanelOpen = !uploadPanelOpen"
       >
         {{ t('skills.actions.upload') }}
       </el-button>
-    </header>
+    </section>
 
     <main class="skills-main">
       <section class="skills-body">
@@ -153,7 +142,7 @@
 <script setup lang="ts">
 import { computed, ref, reactive, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ArrowDown, ArrowUp, Refresh, Loading, FolderOpened, Document, UploadFilled } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowUp, Loading, FolderOpened, Document, UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { UploadFile, UploadFiles, UploadInstance, UploadUserFile } from 'element-plus'
 import { useSkillsApi } from '../composables/useApi'
@@ -300,19 +289,15 @@ onMounted(() => {
   gap: var(--ag-section-gap);
 }
 
-.skills-action-bar {
-  display: flex;
+.skill-summary-strip {
   flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
+  flex-shrink: 0;
+  block-size: auto;
+  min-height: var(--ag-stat-strip-height);
 }
 
-.skill-primary-action {
-  --el-button-bg-color: var(--ag-blue);
-  --el-button-border-color: var(--ag-blue);
-  --el-button-hover-bg-color: color-mix(in srgb, var(--ag-blue) 86%, var(--ag-heading));
-  --el-button-hover-border-color: color-mix(in srgb, var(--ag-blue) 86%, var(--ag-heading));
+.skill-summary-action {
+  margin-left: auto;
 }
 
 .skills-body {
@@ -512,8 +497,20 @@ onMounted(() => {
 }
 
 @media (max-width: 760px) {
-  .skills-action-bar {
-    padding: 10px;
+  .skill-summary-strip {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    overflow: visible;
+  }
+
+  .skill-summary-chip,
+  .skill-summary-action {
+    width: 100%;
+  }
+
+  .skill-summary-action {
+    margin-left: 0;
   }
 
   .skills-grid {

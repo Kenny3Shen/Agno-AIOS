@@ -162,6 +162,51 @@ button:enabled {
 	border-radius: var(--ag-radius-panel);
 }
 
+.security-page :where(.el-button),
+.auth-screen :where(.el-button) {
+	min-height: 32px;
+	border-radius: var(--ag-radius-control);
+	font-weight: 720;
+	letter-spacing: 0;
+}
+
+.security-page :where(.el-button--small),
+.auth-screen :where(.el-button--small) {
+	min-height: 28px;
+}
+
+.security-page :where(.el-button:not(.is-circle)),
+.auth-screen :where(.el-button:not(.is-circle)) {
+	padding-inline: 12px;
+}
+
+.security-page :where(.el-button--primary),
+.auth-screen :where(.el-button--primary) {
+	--el-button-bg-color: var(--ag-blue);
+	--el-button-border-color: var(--ag-blue);
+	--el-button-hover-bg-color: color-mix(in srgb, var(--ag-blue) 86%, var(--ag-heading));
+	--el-button-hover-border-color: color-mix(in srgb, var(--ag-blue) 86%, var(--ag-heading));
+	--el-button-active-bg-color: color-mix(in srgb, var(--ag-blue) 76%, var(--ag-heading));
+	--el-button-active-border-color: color-mix(in srgb, var(--ag-blue) 76%, var(--ag-heading));
+}
+
+.security-page :where(.el-button:not(.el-button--primary):not(.el-button--danger):not(.el-button--success):not(.el-button--warning)),
+.auth-screen :where(.el-button:not(.el-button--primary):not(.el-button--danger):not(.el-button--success):not(.el-button--warning)) {
+	--el-button-bg-color: var(--ag-panel-soft);
+	--el-button-border-color: var(--ag-border);
+	--el-button-text-color: var(--ag-muted-strong);
+	--el-button-hover-bg-color: var(--ag-blue-soft);
+	--el-button-hover-border-color: color-mix(in srgb, var(--ag-blue) 42%, var(--ag-border));
+	--el-button-hover-text-color: var(--ag-blue);
+	--el-button-active-bg-color: color-mix(in srgb, var(--ag-blue-soft) 78%, var(--ag-panel));
+	--el-button-active-border-color: color-mix(in srgb, var(--ag-blue) 50%, var(--ag-border));
+}
+
+.security-page :where(.el-button--danger) {
+	--el-button-hover-bg-color: var(--ag-red-soft);
+	--el-button-hover-border-color: color-mix(in srgb, var(--ag-red) 52%, var(--ag-border));
+}
+
 .soc-focus {
 	outline: none;
 }
@@ -366,23 +411,6 @@ button:enabled {
 	font-family: "JetBrains Mono", "Fira Code", monospace;
 	font-size: 10px;
 	text-transform: uppercase;
-}
-
-.ag-pro-chip {
-	display: inline-flex;
-	max-width: 92px;
-	align-items: center;
-	border: 1px solid var(--ag-sidebar-border);
-	border-radius: 7px;
-	background: var(--ag-sidebar-item);
-	padding: 4px 7px;
-	color: var(--ag-sidebar-muted);
-	font-family: "JetBrains Mono", "Fira Code", monospace;
-	font-size: 11px;
-	font-weight: 700;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 
 .ag-sidebar-toggle {
@@ -911,8 +939,7 @@ button:enabled {
 	padding: 12px 10px;
 }
 
-.ag-sidebar.is-compact .ag-brand-text,
-.ag-sidebar.is-compact .ag-pro-chip {
+.ag-sidebar.is-compact .ag-brand-text {
 	display: none;
 }
 
@@ -1055,6 +1082,12 @@ button:enabled {
 	width: 34px;
 	height: 34px;
 	padding: 0;
+}
+
+.ag-github-icon {
+	display: block;
+	width: 18px;
+	height: 18px;
 }
 
 .ag-stage {

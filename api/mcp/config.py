@@ -178,4 +178,4 @@ async def is_valid_token(token: str) -> bool:
 async def ensure_bootstrap_token(token: str | None) -> None:
     token_value = (token or "").strip()
     if token_value:
-        await insert_token("Agno AIOS Agent", 0, token_value)
+        await insert_token("T.A.I.S Agent", 0, token_value)

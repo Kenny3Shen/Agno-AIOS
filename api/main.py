@@ -144,7 +144,7 @@ app.include_router(os_control.router)
 if app_settings.scheduler_enabled:
     agentos_db = get_async_agno_postgres_db()
     AgentOS(
-        name="Agno AIOS",
+        name="Trinity AI Security",
         agents=[
             AgentFactory(
                 id="security-operations",

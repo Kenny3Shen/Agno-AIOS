@@ -1,1 +1,1 @@
-"""Integrated FastMCP runtime for Agno AIOS."""
+"""Integrated FastMCP runtime for Trinity AI Security."""

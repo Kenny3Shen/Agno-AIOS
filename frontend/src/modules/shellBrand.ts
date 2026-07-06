@@ -1,0 +1,5 @@
+export const PRODUCT_SHORT_NAME = "T.A.I.S"
+export const PRODUCT_FULL_NAME = "Trinity AI Security"
+export const PRODUCT_TAGLINE = "AI-powered SDLC security automation"
+export const PRODUCT_LOOP = "Discover · Remediate · Close"
+export const GITHUB_REPOSITORY_URL = "https://github.com/Kenny3Shen/Agno-AIOS"

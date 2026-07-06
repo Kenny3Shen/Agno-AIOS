@@ -217,7 +217,7 @@ def get_async_knowledge_base(search_type: SearchType | None = None) -> Knowledge
     return build_knowledge_base(
         KnowledgeRuntimeSettings(
             name=settings.name,
-            description="Agno AIOS security knowledge base",
+            description="Trinity AI Security knowledge base",
             pgvector_table=settings.pgvector_table,
             postgres_schema=settings.postgres_schema,
             db_url=postgres_sqlalchemy_url(),

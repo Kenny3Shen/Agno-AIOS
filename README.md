@@ -1,8 +1,8 @@
-# Agno AIOS
+# T.A.I.S (Trinity AI Security)
 
-Agno AIOS 是一个面向安全运营的控制面和 AI 安全运营平台，基于 FastAPI、Vue、Agno、FastMCP、PostgreSQL 和 pgvector 构建。
+T.A.I.S 是一个 AI-powered SDLC security automation 项目，围绕 Discover、Remediate、Close 三位一体的安全闭环构建。
 
-系统把 Agent 对话、会话、Trace 观测、MCP 工具、本地 Skills、知识库检索、CVE 情报、URL 采集、审计日志、设置和 AgentOS 控制视图收敛到一个需要认证的工作台中。
+系统把漏洞与暴露面发现、Agent 辅助处置、Trace 观测、MCP 工具、本地 Skills、知识库检索、CVE 情报、URL 采集、审计日志和运行配置收敛到一个需要认证的工作台中。
 
 ## 文档
 
@@ -18,9 +18,9 @@ Agno AIOS 是一个面向安全运营的控制面和 AI 安全运营平台，基
 
 - 前端：Vue 3、TypeScript、Vite/Rolldown、Element Plus、Pinia、vue-i18n、markdown-it、highlight.js、Mermaid、Bun。
 - 后端：FastAPI、FastAPI Users、SQLAlchemy Async、Pydantic Settings、Uvicorn、psycopg、httpx、Polars、loguru。
-- Agent Runtime：Agno、OpenAI-compatible models、PostgresDb、Tracing、PgVector Knowledge、LocalSkills、MCPTools。
+- Agent Runtime：OpenAI-compatible models、PostgresDb、Tracing、PgVector Knowledge、LocalSkills、MCPTools。
 - MCP：FastMCP，同进程挂载到 FastAPI 的 `/mcp/`。
-- 数据库：PostgreSQL + pgvector，按 `app`、`agno`、`mcp`、`knowledge` schema 分域。
+- 数据库：PostgreSQL + pgvector，按应用、运行时、MCP、知识库 schema 分域。
 - 工具链：uv、ruff、ty、Bun、Playwright。
 
 ## 快速启动

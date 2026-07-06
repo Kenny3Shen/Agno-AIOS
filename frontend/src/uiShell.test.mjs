@@ -49,6 +49,7 @@ const clipboard = readOptionalSource("lib/clipboard.ts")
 const authStoreSource = readOptionalSource("stores/auth.ts")
 const permissions = readOptionalSource("lib/permissions.ts")
 const shellNavigation = readOptionalSource("modules/shellNavigation.ts")
+const shellBrand = readOptionalSource("modules/shellBrand.ts")
 
 const i18n = createI18n({
   legacy: false,
@@ -154,6 +155,59 @@ assert.match(
   "topbar actions must use compact icon buttons",
 )
 
+const topbarActionsTemplate = app.match(/<div class="ag-topbar-actions">[\s\S]*?<\/div>\s*<\/header>/)?.[0] ?? ""
+
+assert.doesNotMatch(
+  topbarActionsTemplate,
+  /<el-tooltip/,
+  "topbar refresh, theme, and GitHub icon buttons must not open hover tooltip popovers",
+)
+
+assert.match(
+  shellBrand,
+  /PRODUCT_SHORT_NAME = "T\.A\.I\.S"/,
+  "shell brand constants must expose the T.A.I.S short name",
+)
+
+assert.match(
+  shellBrand,
+  /PRODUCT_FULL_NAME = "Trinity AI Security"/,
+  "shell brand constants must expose the Trinity AI Security full name",
+)
+
+assert.match(
+  shellBrand,
+  /GITHUB_REPOSITORY_URL = "https:\/\/github\.com\/Kenny3Shen\/Agno-AIOS"/,
+  "shell brand constants must expose the repository URL used by the GitHub button",
+)
+
+assert.match(
+  app,
+  /openRepository/,
+  "topbar must wire a GitHub repository action",
+)
+
+assertTextOrder(
+  app,
+  [
+    ':aria-label="isDark ? t(\'shell.theme.toLight\') : t(\'shell.theme.toDark\')"',
+    ':aria-label="t(\'shell.actions.github\')"',
+  ],
+  "GitHub button must sit to the right of the theme toggle",
+)
+
+assert.equal(
+  app.includes(">GH<"),
+  false,
+  "GitHub repository action must use an icon instead of a text abbreviation",
+)
+
+assert.match(
+  app,
+  /ag-github-icon/,
+  "GitHub repository action must render a GitHub icon",
+)
+
 assert.match(
   app,
   /ag-sidebar-toggle/,
@@ -166,10 +220,16 @@ assert.match(
   "mobile shell must not keep desktop sidebar grid columns while using a fixed overlay sidebar",
 )
 
-assert.match(
-  app,
-  /currentModelLabel/,
-  "brand model chip must be driven by the current Agent model label",
+assert.equal(
+  app.includes("ag-pro-chip"),
+  false,
+  "sidebar brand must not render the current model chip because it overflows on narrow sidebars",
+)
+
+assert.equal(
+  app.includes("currentModelLabel"),
+  false,
+  "App shell must not keep sidebar-only current model label state after removing the chip",
 )
 
 assert.match(
@@ -234,6 +294,12 @@ assert.match(
   authScreen,
   /auth-brief/,
   "unauthenticated screen must use the compact shared shell visual language",
+)
+
+assert.doesNotMatch(
+  authScreen,
+  />Agno<|>AIOS</,
+  "AuthScreen must use shared T.A.I.S brand constants instead of hardcoded legacy brand copy",
 )
 
 assert.match(
@@ -329,7 +395,7 @@ for (const hardcodedAuthCopy of [
   "邮箱",
   "密码",
   "至少 8 位",
-  "进入 Agno AIOS",
+  "进入 T.A.I.S",
   "创建并进入",
   "请输入有效邮箱",
   "密码至少需要 8 位",
@@ -401,8 +467,32 @@ assert.match(
 
 assert.doesNotMatch(
   mcp,
+  /t\('mcp\.actions\.refresh'\)|t\("mcp\.actions\.refresh"\)/,
+  "MCP must rely on the shell title-bar refresh button instead of rendering a page refresh button",
+)
+
+assert.doesNotMatch(
+  mcp,
+  /mcp-toolbar/,
+  "MCP upload action must be integrated into the summary strip, not isolated in a standalone toolbar container",
+)
+
+assert.doesNotMatch(
+  mcp,
   /mcp-toolbar ag-content-panel[\s\S]{0,800}mcp-summary-strip|\.mcp-summary-url\s*\{[^}]*flex:/s,
   "MCP toolbar must not wrap or resize the Knowledge-style summary strip",
+)
+
+assert.doesNotMatch(
+  skills,
+  /t\('skills\.actions\.refresh'\)|t\("skills\.actions\.refresh"\)/,
+  "Skills must rely on the shell title-bar refresh button instead of rendering a page refresh button",
+)
+
+assert.doesNotMatch(
+  skills,
+  /skills-action-bar/,
+  "Skills upload action must be integrated into the summary strip, not isolated in a standalone toolbar container",
 )
 
 assert.equal(
@@ -504,6 +594,30 @@ assert.match(
   settings,
   /moveNavigationItem/,
   "Settings navigation editor must expose keyboard/button movement controls",
+)
+
+assert.doesNotMatch(
+  settings,
+  /settings-toolbar/,
+  "Settings must not keep a standalone title/description toolbar after moving actions into concrete page areas",
+)
+
+assert.doesNotMatch(
+  settings,
+  /t\('settings\.title'\)|t\("settings\.title"\)|t\('settings\.description'\)|t\("settings\.description"\)/,
+  "Settings must not render the removed title and subtitle copy",
+)
+
+assert.match(
+  settings,
+  /settings-tabs-head/,
+  "Settings save action must live beside the tab switcher as the page-level commit action",
+)
+
+assert.match(
+  settings,
+  /model-route-actions/,
+  "Settings add-model action must live in the model routing section header",
 )
 
 assert.match(
@@ -1114,6 +1228,12 @@ assert.match(
 
 assert.match(
   memoryControl,
+  /\.memory-mode-flags\s*\{[\s\S]*padding:\s*10px\s+12px\s+10px/,
+  "Memory mode flag chips must leave bottom padding before the divider when they wrap",
+)
+
+assert.match(
+  memoryControl,
   /\.memory-metadata-list\s*>\s*div\s*\{/,
   "Memory metadata row layout must only target direct rows so nested source viewer divs are not converted into metadata grids",
 )
@@ -1247,10 +1367,10 @@ for (const [source, pattern, label] of [
   [dashboard, /situation-page ag-page-flow/, "Dashboard page"],
   [dashboard, /situation-header ag-content-panel/, "Dashboard header"],
   [dashboard, /situation-panel ag-content-panel/, "Dashboard panels"],
-  [skills, /skills-action-bar ag-content-panel/, "Skills toolbar"],
+  [skills, /skill-summary-strip ag-stat-strip/, "Skills summary actions"],
   [skills, /skill-upload-panel ag-content-panel/, "Skills upload"],
   [mcp, /mcp-console ag-page-flow/, "MCP page"],
-  [mcp, /mcp-toolbar ag-content-panel/, "MCP toolbar"],
+  [mcp, /mcp-summary-strip ag-stat-strip/, "MCP summary actions"],
   [mcp, /mcp-body ag-content-panel/, "MCP body"],
   [knowledge, /knowledge-console knowledge-workflow-shell ag-page-flow/, "Knowledge page"],
   [knowledge, /knowledge-panel ag-content-panel knowledge-upload-panel/, "Knowledge upload"],
@@ -1275,7 +1395,7 @@ for (const [source, pattern, label] of [
   [collect, /collect-query-panel ag-content-panel/, "Collect input"],
   [collect, /collect-result-panel ag-content-panel/, "Collect result"],
   [settings, /settings-page ag-page-flow/, "Settings page"],
-  [settings, /settings-toolbar ag-content-panel/, "Settings toolbar"],
+  [settings, /settings-tabs-head/, "Settings tabs head"],
 ]) {
   assert.match(
     source,
@@ -1413,11 +1533,24 @@ for (const [source, className, label] of [
   [knowledge, "knowledge-stat-strip", "Knowledge"],
   [memoryControl, "memory-priority-strip", "Memory"],
 ]) {
-  assert.doesNotMatch(
-    source,
-    new RegExp(`\\.${className}\\s*\\{[^}]*display:\\s*grid`, "s"),
-    `${label} Stat Strip must inherit layout from the shared ag-stat-strip style`,
-  )
+  if (["mcp-summary-strip", "skill-summary-strip"].includes(className)) {
+    assert.doesNotMatch(
+      source.replace(/@media[\s\S]*/g, ""),
+      new RegExp(`\\.${className}\\s*\\{[^}]*display:\\s*grid`, "s"),
+      `${label} Stat Strip must inherit desktop layout from the shared ag-stat-strip style`,
+    )
+    assert.match(
+      source,
+      new RegExp(`\\.${className}\\s*\\{[^}]*flex-shrink:\\s*0`, "s"),
+      `${label} Stat Strip must not shrink below its wrapped mobile content`,
+    )
+  } else {
+    assert.doesNotMatch(
+      source,
+      new RegExp(`\\.${className}\\s*\\{[^}]*display:\\s*grid`, "s"),
+      `${label} Stat Strip must inherit layout from the shared ag-stat-strip style`,
+    )
+  }
   assert.doesNotMatch(
     source,
     new RegExp(`\\.${className}\\s*\\{[^}]*border(?:-bottom)?:`, "s"),

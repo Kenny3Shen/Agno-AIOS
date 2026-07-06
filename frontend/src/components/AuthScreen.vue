@@ -8,8 +8,8 @@
               <el-icon><Platform /></el-icon>
             </span>
             <div>
-              <h1>Agno</h1>
-              <p>AIOS</p>
+              <h1>{{ PRODUCT_SHORT_NAME }}</h1>
+              <p>{{ PRODUCT_FULL_NAME }}</p>
             </div>
           </div>
 
@@ -147,6 +147,7 @@ import {
   storeAuthToken,
   type AuthClientFallbackKey,
 } from '../lib/authClient'
+import { PRODUCT_FULL_NAME, PRODUCT_SHORT_NAME } from '../modules/shellBrand'
 import type { AuthUser, OAuthProvider } from '../types'
 
 defineProps<{

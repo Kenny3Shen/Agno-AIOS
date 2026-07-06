@@ -1,220 +1,235 @@
 <template>
   <div class="settings-page ag-page-flow">
-    <header class="settings-toolbar ag-content-panel">
-      <div>
-        <h3 class="settings-title">{{ t('settings.title') }}</h3>
-        <p class="settings-description">
-          {{ t('settings.description') }}
-        </p>
-      </div>
-      <div class="flex flex-wrap gap-2">
-        <el-button
-          class="cursor-pointer"
-          :disabled="!canWriteSettings"
-          :icon="Plus"
-          @click="addModel"
+    <div class="settings-tabs-head">
+      <div class="settings-tab-list" role="tablist" :aria-label="t('settings.tabsAria')">
+        <button
+          type="button"
+          role="tab"
+          class="settings-tab-button"
+          :class="{ 'is-active': activeSettingsTab === 'runtime' }"
+          :aria-selected="activeSettingsTab === 'runtime'"
+          @click="activeSettingsTab = 'runtime'"
         >
-          {{ t('settings.actions.addModel') }}
-        </el-button>
-        <el-button
-          type="primary"
-          :loading="saving"
-          :disabled="!canWriteSettings || !hasChanges"
-          class="cursor-pointer"
-          @click="saveAll"
+          {{ t('settings.tabs.runtime') }}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="settings-tab-button"
+          :class="{ 'is-active': activeSettingsTab === 'navigation' }"
+          :aria-selected="activeSettingsTab === 'navigation'"
+          @click="activeSettingsTab = 'navigation'"
         >
-          <el-icon class="mr-1"><Check /></el-icon>
-          {{ t('settings.actions.save') }}
-        </el-button>
+          {{ t('settings.tabs.navigation') }}
+        </button>
       </div>
-    </header>
+      <el-button
+        type="primary"
+        :loading="saving"
+        :disabled="!canWriteSettings || !hasChanges"
+        class="cursor-pointer"
+        @click="saveAll"
+      >
+        <el-icon class="mr-1"><Check /></el-icon>
+        {{ t('settings.actions.save') }}
+      </el-button>
+    </div>
 
     <div v-if="loadingSettings && !modelItems.length" class="flex justify-center py-12">
       <el-icon class="loading-icon is-loading"><Loading /></el-icon>
     </div>
 
     <template v-else>
-      <el-tabs v-model="activeSettingsTab" class="settings-tabs">
-        <el-tab-pane :label="t('settings.tabs.runtime')" name="runtime">
-          <section class="settings-section">
-        <div class="settings-section-head">
-          <div>
-            <h4>{{ t('settings.models.sectionTitle') }}</h4>
-            <p>{{ t('settings.models.sectionDescription') }}</p>
+      <template v-if="activeSettingsTab === 'runtime'">
+        <section class="settings-section">
+          <div class="settings-section-head">
+            <div>
+              <h4>{{ t('settings.models.sectionTitle') }}</h4>
+              <p>{{ t('settings.models.sectionDescription') }}</p>
+            </div>
+            <div class="model-route-actions">
+              <el-select
+                v-model="activeModelId"
+                class="default-model-select"
+                :disabled="!canWriteSettings"
+                :placeholder="t('settings.models.defaultPlaceholder')"
+              >
+                <el-option
+                  v-for="model in enabledModels"
+                  :key="model.id"
+                  :label="model.name"
+                  :value="model.id"
+                />
+              </el-select>
+              <el-button
+                class="cursor-pointer"
+                :disabled="!canWriteSettings"
+                :icon="Plus"
+                @click="addModel"
+              >
+                {{ t('settings.actions.addModel') }}
+              </el-button>
+            </div>
           </div>
-          <el-select
-            v-model="activeModelId"
-            class="default-model-select"
-            :disabled="!canWriteSettings"
-            :placeholder="t('settings.models.defaultPlaceholder')"
-          >
-            <el-option
-              v-for="model in enabledModels"
-              :key="model.id"
-              :label="model.name"
-              :value="model.id"
-            />
-          </el-select>
-        </div>
 
-        <div class="grid gap-3">
-          <article
-            v-for="(model, index) in modelItems"
-            :key="model.id"
-            class="model-card"
-          >
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <div class="flex min-w-0 items-center gap-3">
-                <span class="model-index">{{ index + 1 }}</span>
-                <div class="min-w-0">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <h5 class="model-title">{{ model.name || t('settings.models.unnamed') }}</h5>
-                    <span v-if="model.builtin" class="model-badge">{{ t('settings.models.builtin') }}</span>
-                    <span
-                      class="model-badge"
-                      :class="isConfigured(model) ? 'is-ready' : 'is-warn'"
-                    >
-                      {{ isConfigured(model) ? t('common.status.ready') : t('settings.models.unconfigured') }}
-                    </span>
-                    <span
-                      v-if="activeModelId === model.id"
-                      class="model-badge is-active"
-                    >
-                      {{ t('settings.models.defaultBadge') }}
-                    </span>
+          <div class="grid gap-3">
+            <article
+              v-for="(model, index) in modelItems"
+              :key="model.id"
+              class="model-card"
+            >
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex min-w-0 items-center gap-3">
+                  <span class="model-index">{{ index + 1 }}</span>
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <h5 class="model-title">{{ model.name || t('settings.models.unnamed') }}</h5>
+                      <span v-if="model.builtin" class="model-badge">{{ t('settings.models.builtin') }}</span>
+                      <span
+                        class="model-badge"
+                        :class="isConfigured(model) ? 'is-ready' : 'is-warn'"
+                      >
+                        {{ isConfigured(model) ? t('common.status.ready') : t('settings.models.unconfigured') }}
+                      </span>
+                      <span
+                        v-if="activeModelId === model.id"
+                        class="model-badge is-active"
+                      >
+                        {{ t('settings.models.defaultBadge') }}
+                      </span>
+                    </div>
+                    <p class="model-description">
+                      {{ model.description || t('settings.models.customDescription') }}
+                    </p>
                   </div>
-                  <p class="model-description">
-                    {{ model.description || t('settings.models.customDescription') }}
-                  </p>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <el-button
+                    plain
+                    size="small"
+                    class="cursor-pointer"
+                    :icon="Connection"
+                    :loading="testingModelId === model.id"
+                    :disabled="!canWriteSettings || !hasRequiredModelFields(model)"
+                    @click="testModel(model)"
+                  >
+                    {{ t('settings.actions.testConnection') }}
+                  </el-button>
+                  <el-switch
+                    v-model="model.enabled"
+                    inline-prompt
+                    :disabled="!canWriteSettings"
+                    :active-text="t('settings.models.enabled')"
+                    :inactive-text="t('settings.models.disabled')"
+                  />
+                  <el-button
+                    v-if="!model.builtin"
+                    text
+                    type="danger"
+                    class="cursor-pointer"
+                    :disabled="!canWriteSettings"
+                    :icon="Delete"
+                    @click="removeModel(model.id)"
+                  />
                 </div>
               </div>
 
-              <div class="flex items-center gap-2">
-                <el-button
-                  plain
-                  size="small"
-                  class="cursor-pointer"
-                  :icon="Connection"
-                  :loading="testingModelId === model.id"
-                  :disabled="!canWriteSettings || !hasRequiredModelFields(model)"
-                  @click="testModel(model)"
-                >
-                  {{ t('settings.actions.testConnection') }}
-                </el-button>
-                <el-switch
-                  v-model="model.enabled"
-                  inline-prompt
-                  :disabled="!canWriteSettings"
-                  :active-text="t('settings.models.enabled')"
-                  :inactive-text="t('settings.models.disabled')"
-                />
-                <el-button
-                  v-if="!model.builtin"
-                  text
-                  type="danger"
-                  class="cursor-pointer"
-                  :disabled="!canWriteSettings"
-                  :icon="Delete"
-                  @click="removeModel(model.id)"
-                />
-              </div>
-            </div>
-
-            <div class="mt-3 grid gap-3 lg:grid-cols-2">
-              <label class="settings-field">
-                <span>{{ t('settings.models.displayName') }}<i class="required-mark" aria-hidden="true">*</i></span>
-                <el-input
-                  v-model="model.name"
-                  :disabled="!canWriteSettings"
-                  :placeholder="t('settings.models.displayNamePlaceholder')"
-                />
-              </label>
-              <label class="settings-field">
-                <span>{{ t('settings.models.modelIdLabel') }}<i class="required-mark" aria-hidden="true">*</i></span>
-                <el-input
-                  v-model="model.model_id"
-                  :disabled="!canWriteSettings"
-                  :placeholder="t('settings.models.modelIdPlaceholder')"
-                />
-              </label>
-              <label class="settings-field">
-                <span>{{ t('settings.models.baseUrlLabel') }}<i class="required-mark" aria-hidden="true">*</i></span>
-                <el-input
-                  v-model="model.base_url"
-                  :disabled="!canWriteSettings"
-                  :placeholder="t('settings.models.baseUrlPlaceholder')"
-                />
-              </label>
-              <label class="settings-field">
-                <span>{{ t('settings.models.apiKeyLabel') }}<i class="required-mark" aria-hidden="true">*</i></span>
-                <el-input
-                  v-model="model.api_key"
-                  :placeholder="t('settings.models.apiKeyPlaceholder')"
-                  :disabled="!canWriteSettings"
-                  type="password"
-                  show-password
-                />
-              </label>
-              <label class="settings-field lg:col-span-2">
-                <span>{{ t('settings.models.descriptionLabel') }}</span>
-                <el-input
-                  v-model="model.description"
-                  :disabled="!canWriteSettings"
-                  :placeholder="t('settings.models.descriptionPlaceholder')"
-                />
-              </label>
-            </div>
-          </article>
-        </div>
-          </section>
-
-          <section class="settings-section mt-4">
-        <div class="settings-section-head">
-          <div>
-            <h4>{{ t('settings.runtime.sectionTitle') }}</h4>
-            <p>{{ t('settings.runtime.sectionDescription') }}</p>
-          </div>
-        </div>
-
-        <div class="grid gap-3 md:grid-cols-2">
-          <div
-            v-for="item in configItems"
-            :key="item.key"
-            class="runtime-card"
-          >
-            <div class="mb-2 flex items-start justify-between gap-3">
-              <div>
-                <label class="runtime-label">
-                  {{ item.label }}<i v-if="item.required" class="required-mark" aria-hidden="true">*</i>
+              <div class="mt-3 grid gap-3 lg:grid-cols-2">
+                <label class="settings-field">
+                  <span>{{ t('settings.models.displayName') }}<i class="required-mark" aria-hidden="true">*</i></span>
+                  <el-input
+                    v-model="model.name"
+                    :disabled="!canWriteSettings"
+                    :placeholder="t('settings.models.displayNamePlaceholder')"
+                  />
                 </label>
-                <p class="runtime-description">{{ item.description }}</p>
+                <label class="settings-field">
+                  <span>{{ t('settings.models.modelIdLabel') }}<i class="required-mark" aria-hidden="true">*</i></span>
+                  <el-input
+                    v-model="model.model_id"
+                    :disabled="!canWriteSettings"
+                    :placeholder="t('settings.models.modelIdPlaceholder')"
+                  />
+                </label>
+                <label class="settings-field">
+                  <span>{{ t('settings.models.baseUrlLabel') }}<i class="required-mark" aria-hidden="true">*</i></span>
+                  <el-input
+                    v-model="model.base_url"
+                    :disabled="!canWriteSettings"
+                    :placeholder="t('settings.models.baseUrlPlaceholder')"
+                  />
+                </label>
+                <label class="settings-field">
+                  <span>{{ t('settings.models.apiKeyLabel') }}<i class="required-mark" aria-hidden="true">*</i></span>
+                  <el-input
+                    v-model="model.api_key"
+                    :placeholder="t('settings.models.apiKeyPlaceholder')"
+                    :disabled="!canWriteSettings"
+                    type="password"
+                    show-password
+                  />
+                </label>
+                <label class="settings-field lg:col-span-2">
+                  <span>{{ t('settings.models.descriptionLabel') }}</span>
+                  <el-input
+                    v-model="model.description"
+                    :disabled="!canWriteSettings"
+                    :placeholder="t('settings.models.descriptionPlaceholder')"
+                  />
+                </label>
               </div>
-              <span class="runtime-key">{{ item.key }}</span>
-            </div>
-            <el-input
-              v-model="formData[item.key]"
-              :placeholder="item.placeholder"
-              :type="item.secret ? 'password' : 'text'"
-              :show-password="item.secret"
-              :disabled="!canWriteSettings"
-              clearable
-              class="settings-input"
-            />
+            </article>
           </div>
-        </div>
-          </section>
-        </el-tab-pane>
+        </section>
 
-        <el-tab-pane :label="t('settings.tabs.navigation')" name="navigation">
-          <section class="settings-section">
-            <div class="settings-section-head">
-              <div>
-                <h4>{{ t('settings.navigation.sectionTitle') }}</h4>
-                <p>{{ t('settings.navigation.sectionDescription') }}</p>
-              </div>
+        <section class="settings-section mt-4">
+          <div class="settings-section-head">
+            <div>
+              <h4>{{ t('settings.runtime.sectionTitle') }}</h4>
+              <p>{{ t('settings.runtime.sectionDescription') }}</p>
             </div>
+          </div>
 
-            <div class="navigation-config-grid">
+          <div class="grid gap-3 md:grid-cols-2">
+            <div
+              v-for="item in configItems"
+              :key="item.key"
+              class="runtime-card"
+            >
+              <div class="mb-2 flex items-start justify-between gap-3">
+                <div>
+                  <label class="runtime-label">
+                    {{ item.label }}<i v-if="item.required" class="required-mark" aria-hidden="true">*</i>
+                  </label>
+                  <p class="runtime-description">{{ item.description }}</p>
+                </div>
+                <span class="runtime-key">{{ item.key }}</span>
+              </div>
+              <el-input
+                v-model="formData[item.key]"
+                :placeholder="item.placeholder"
+                :type="item.secret ? 'password' : 'text'"
+                :show-password="item.secret"
+                :disabled="!canWriteSettings"
+                clearable
+                class="settings-input"
+              />
+            </div>
+          </div>
+        </section>
+      </template>
+
+      <template v-else>
+        <section class="settings-section">
+          <div class="settings-section-head">
+            <div>
+              <h4>{{ t('settings.navigation.sectionTitle') }}</h4>
+              <p>{{ t('settings.navigation.sectionDescription') }}</p>
+            </div>
+          </div>
+
+          <div class="navigation-config-grid">
               <article
                 v-for="group in navigationLayout"
                 :key="group.key"
@@ -267,10 +282,9 @@
                   </div>
                 </div>
               </article>
-            </div>
-          </section>
-        </el-tab-pane>
-      </el-tabs>
+          </div>
+        </section>
+      </template>
 
     </template>
   </div>
@@ -703,24 +717,42 @@ onMounted(() => { loadSettings() })
   color: var(--ag-text);
 }
 
-.settings-toolbar {
+.settings-tabs-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  border-bottom: 1px solid var(--ag-border);
+  padding-bottom: 10px;
 }
 
-.settings-title {
-  color: var(--ag-heading);
-  font-size: 18px;
-  font-weight: 700;
+.settings-tab-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.settings-description {
-  margin-top: 4px;
+.settings-tab-button {
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: var(--ag-radius-control);
+  padding: 0 12px;
   color: var(--ag-muted);
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.settings-tab-button:hover,
+.settings-tab-button:focus-visible {
+  border-color: color-mix(in srgb, var(--ag-blue) 42%, var(--ag-border));
+  color: var(--ag-blue);
+}
+
+.settings-tab-button.is-active {
+  border-color: color-mix(in srgb, var(--ag-blue) 50%, var(--ag-border));
+  background: var(--ag-blue-soft);
+  color: var(--ag-blue);
 }
 
 .loading-icon {
@@ -736,25 +768,19 @@ onMounted(() => { loadSettings() })
   box-shadow: var(--ag-container-shadow);
 }
 
-.settings-tabs :deep(.el-tabs__header) {
-  margin-bottom: 14px;
-}
-
-.settings-tabs :deep(.el-tabs__item) {
-  color: var(--ag-muted);
-  font-weight: 700;
-}
-
-.settings-tabs :deep(.el-tabs__item.is-active) {
-  color: var(--ag-blue);
-}
-
 .settings-section-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 14px;
+}
+
+.model-route-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .settings-section-head h4 {

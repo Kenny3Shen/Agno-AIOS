@@ -10,42 +10,34 @@
         <span>{{ t('mcp.context.clientUrl') }}</span>
         <strong :title="clientUrl">{{ clientUrl }}</strong>
       </div>
+
+      <el-button type="primary" :icon="Plus" class="mcp-summary-action" :disabled="!canWriteMcp" @click="uploadPanelOpen = !uploadPanelOpen">
+        {{ t('mcp.upload.open') }}
+      </el-button>
     </section>
 
     <main class="mcp-main">
-      <header class="mcp-toolbar ag-content-panel">
-        <div class="mcp-toolbar-actions">
-          <el-button :icon="Plus" class="cursor-pointer" :disabled="!canWriteMcp" @click="uploadPanelOpen = !uploadPanelOpen">
-            {{ t('mcp.upload.open') }}
-          </el-button>
-          <el-button type="primary" :loading="loading" class="cursor-pointer" @click="loadAll">
-            <el-icon class="mr-1"><Refresh /></el-icon>
-            {{ t('mcp.actions.refresh') }}
-          </el-button>
-        </div>
-      </header>
-
-        <section class="mcp-body ag-content-panel">
-          <section v-if="uploadPanelOpen" class="mcp-panel mb-3">
-            <div class="panel-title">
-              <el-icon><SetUp /></el-icon>
-              {{ t('mcp.upload.title') }}
-            </div>
-            <p class="mcp-muted mt-1 text-xs">{{ t('mcp.upload.description') }}</p>
-            <div class="mt-4 grid gap-3 md:grid-cols-2">
-              <el-input v-model="uploadForm.name" :placeholder="t('mcp.upload.namePlaceholder')" />
-              <el-input v-model="uploadForm.description" :placeholder="t('mcp.upload.descriptionPlaceholder')" />
-              <el-input v-model="uploadForm.manifest" type="textarea" :rows="4" :placeholder="t('mcp.upload.manifestPlaceholder')" />
-            </div>
-            <div class="mt-3 flex justify-end gap-2">
-              <el-button :disabled="submittingUpload" @click="cancelMcpUpload">
-                {{ t('mcp.upload.cancel') }}
-              </el-button>
-              <el-button type="primary" :loading="submittingUpload" @click="submitMcpUpload">
-                {{ t('mcp.upload.submit') }}
-              </el-button>
-            </div>
-          </section>
+      <section class="mcp-body ag-content-panel">
+        <section v-if="uploadPanelOpen" class="mcp-panel mb-3">
+          <div class="panel-title">
+            <el-icon><SetUp /></el-icon>
+            {{ t('mcp.upload.title') }}
+          </div>
+          <p class="mcp-muted mt-1 text-xs">{{ t('mcp.upload.description') }}</p>
+          <div class="mt-4 grid gap-3 md:grid-cols-2">
+            <el-input v-model="uploadForm.name" :placeholder="t('mcp.upload.namePlaceholder')" />
+            <el-input v-model="uploadForm.description" :placeholder="t('mcp.upload.descriptionPlaceholder')" />
+            <el-input v-model="uploadForm.manifest" type="textarea" :rows="4" :placeholder="t('mcp.upload.manifestPlaceholder')" />
+          </div>
+          <div class="mt-3 flex justify-end gap-2">
+            <el-button :disabled="submittingUpload" @click="cancelMcpUpload">
+              {{ t('mcp.upload.cancel') }}
+            </el-button>
+            <el-button type="primary" :loading="submittingUpload" @click="submitMcpUpload">
+              {{ t('mcp.upload.submit') }}
+            </el-button>
+          </div>
+        </section>
 
           <el-tabs v-model="activeTab" class="mcp-tabs">
             <el-tab-pane :label="t('mcp.tabs.services')" name="services">
@@ -167,8 +159,8 @@
               </div>
             </el-tab-pane>
           </el-tabs>
-        </section>
-      </main>
+      </section>
+    </main>
   </div>
 </template>
 
@@ -181,7 +173,6 @@ import {
   Delete,
   Key,
   Plus,
-  Refresh,
   SetUp,
   Tickets,
   Operation,
@@ -232,7 +223,6 @@ const uploadForm = reactive({
 })
 
 const {
-  loading,
   fetchConfig,
   updateConfig,
   listTokens,
@@ -406,17 +396,15 @@ onMounted(() => {
   gap: var(--ag-section-gap);
 }
 
-.mcp-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
+.mcp-summary-strip {
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  block-size: auto;
+  min-height: var(--ag-stat-strip-height);
 }
 
-.mcp-toolbar-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
+.mcp-summary-action {
+  margin-left: auto;
 }
 
 .mcp-card-icon {
@@ -546,6 +534,24 @@ onMounted(() => {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+@media (max-width: 640px) {
+  .mcp-summary-strip {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    overflow: visible;
+  }
+
+  .mcp-summary-chip,
+  .mcp-summary-action {
+    width: 100%;
+  }
+
+  .mcp-summary-action {
+    margin-left: 0;
+  }
 }
 
 </style>

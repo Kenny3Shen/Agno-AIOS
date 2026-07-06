@@ -1195,7 +1195,7 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 6px;
   border-bottom: 1px solid var(--memory-border);
-  padding: 10px 12px 0;
+  padding: 10px 12px 10px;
 }
 
 .memory-metadata-panel {

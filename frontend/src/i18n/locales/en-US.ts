@@ -10,6 +10,7 @@ export const enUS = {
     loggingOut: "Logging out",
     actions: {
       refresh: "Refresh",
+      github: "Open GitHub repository",
       newChat: "New chat",
       refreshTraces: "Refresh traces",
       copySessionId: "Copy Session ID",
@@ -60,8 +61,8 @@ export const enUS = {
       runsCopied: "Runs copied",
     },
     home: {
-      title: "Agno AIOS Workspace",
-      description: "Unify security data, knowledge, agents, and observability in one schedulable control plane.",
+      title: "T.A.I.S Workspace",
+      description: "Unify AI security automation for SDLC discovery, remediation, and closed-loop assurance.",
     },
     sessions: {
       title: "Sessions",
@@ -115,16 +116,16 @@ export const enUS = {
     },
   },
   auth: {
-    entryAria: "Agno AIOS auth entry",
+    entryAria: "T.A.I.S auth entry",
     briefAria: "Platform entry information",
     theme: {
       toLight: "Switch to light mode",
       toDark: "Switch to dark mode",
     },
     brief: {
-      eyebrow: "AGENT CONTROL",
-      title: "Agno AIOS",
-      description: "Sign in to continue with Chat, MCP, Trace, and model settings.",
+      eyebrow: "TRINITY AI SECURITY",
+      title: "T.A.I.S",
+      description: "Sign in to continue with discovery, remediation, and closed-loop automation.",
       items: {
         chat: "Chat",
         mcp: "MCP",
@@ -148,7 +149,7 @@ export const enUS = {
       tabsAria: "Authentication method",
       login: "Sign in",
       register: "Register",
-      submitLogin: "Enter Agno AIOS",
+      submitLogin: "Enter T.A.I.S",
       submitRegister: "Create and enter",
     },
     fields: {
@@ -208,7 +209,7 @@ export const enUS = {
   },
   agentEvals: {
     title: "Agent Evals Workbench",
-    subtitle: "Security Agent regression suites, Agno Eval history, and failure replay.",
+    subtitle: "Security Agent regression suites, evaluation history, and failure replay.",
     actions: {
       refresh: "Refresh",
       newSuite: "New suite",
@@ -237,7 +238,7 @@ export const enUS = {
     },
     panels: {
       cases: "Evaluation cases",
-      runs: "Agno Eval runs",
+      runs: "Agent Eval runs",
       failures: "Failure replay",
       trends: "Trends",
       detail: "Sample detail",
@@ -479,7 +480,7 @@ export const enUS = {
       issueTitle: "Issue access token",
       issuedTitle: "Issued tokens",
       namePlaceholder: "Token name, for example AgentOS",
-      defaultName: "Agno AIOS",
+      defaultName: "T.A.I.S",
       generate: "Generate token",
       copyOnce: "Shown once. Copy it now.",
       empty: "No access tokens",
@@ -617,7 +618,7 @@ export const enUS = {
     },
     inspector: {
       title: "Run configuration",
-      description: "Model the options Agno exposes on Workflow and workflow sessions.",
+      description: "Model the options exposed on Workflow and workflow sessions.",
       editTab: "Edit",
       validateTab: "Validate",
       previewTab: "Code",
@@ -670,7 +671,7 @@ export const enUS = {
       duplicateSymbols: "Python symbols must be unique.",
       expressionMissing: "{name} needs an evaluator or selector expression.",
       branchesMissing: "{name} needs at least two branches.",
-      ready: "Structure is ready for Agno Workflow construction.",
+      ready: "Structure is ready for security automation Workflow construction.",
     },
   },
   trace: {
@@ -814,7 +815,7 @@ export const enUS = {
       modeLabel: "Mode",
       emptyMemory: "Empty memory",
       emptyTitle: "No Memory",
-      emptyDescription: "No Agno user memory matches the current filters.",
+      emptyDescription: "No user memory matches the current filters.",
       allMemoryScope: "All user memory",
       activeSearch: "Search: {value}",
       activeUser: "User: {value}",
@@ -869,7 +870,7 @@ export const enUS = {
     scheduler: {
       listTitle: "Schedules",
       createTitle: "New schedule",
-      createDescription: "Run an Agent, Team, or Workflow with Agno cron semantics.",
+      createDescription: "Run an Agent, Team, or Workflow with cron semantics.",
       enabled: "Enabled",
       disabled: "Disabled",
       create: "Create",
@@ -995,6 +996,7 @@ export const enUS = {
       runtime: "Runtime config",
       navigation: "Navigation config",
     },
+    tabsAria: "Settings sections",
     actions: {
       addModel: "Add model",
       save: "Save",

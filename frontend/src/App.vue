@@ -40,13 +40,12 @@
           <div class="ag-brand">
             <div class="ag-brand-main">
               <span class="ag-brand-mark">
-                <span>A</span>
+                <span>T</span>
               </span>
-              <div class="ag-brand-text min-w-0">
-                <h1>Agno</h1>
-                <p>AIOS</p>
+              <div class="ag-brand-text min-w-0" :title="PRODUCT_TAGLINE">
+                <h1>{{ PRODUCT_SHORT_NAME }}</h1>
+                <p>{{ PRODUCT_FULL_NAME }}</p>
               </div>
-              <span class="ag-pro-chip" :title="currentModelName">{{ currentModelLabel }}</span>
             </div>
 
             <button
@@ -280,30 +279,42 @@
             </div>
 
             <div class="ag-topbar-actions">
-              <el-tooltip :content="t('shell.actions.refresh')" placement="bottom">
-                <el-button
-                  circle
-                  class="ag-icon-button ag-topbar-icon"
-                  :aria-label="t('shell.actions.refresh')"
-                  @click="refreshWorkspace"
-                >
-                  <el-icon><Refresh /></el-icon>
-                </el-button>
-              </el-tooltip>
+              <el-button
+                circle
+                class="ag-icon-button ag-topbar-icon"
+                :aria-label="t('shell.actions.refresh')"
+                @click="refreshWorkspace"
+              >
+                <el-icon><Refresh /></el-icon>
+              </el-button>
 
-              <el-tooltip :content="isDark ? t('shell.theme.toLight') : t('shell.theme.toDark')" placement="bottom">
-                <el-button
-                  circle
-                  class="ag-icon-button ag-topbar-icon"
-                  :aria-label="isDark ? t('shell.theme.toLight') : t('shell.theme.toDark')"
-                  @click="toggleTheme"
-                >
-                  <el-icon>
-                    <Moon v-if="!isDark" />
-                    <Sunny v-else />
-                  </el-icon>
-                </el-button>
-              </el-tooltip>
+              <el-button
+                circle
+                class="ag-icon-button ag-topbar-icon"
+                :aria-label="isDark ? t('shell.theme.toLight') : t('shell.theme.toDark')"
+                @click="toggleTheme"
+              >
+                <el-icon>
+                  <Moon v-if="!isDark" />
+                  <Sunny v-else />
+                </el-icon>
+              </el-button>
+
+              <el-button
+                circle
+                class="ag-icon-button ag-topbar-icon"
+                :aria-label="t('shell.actions.github')"
+                @click="openRepository"
+              >
+                <svg class="ag-github-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path
+                    fill="currentColor"
+                    fill-rule="evenodd"
+                    clip-rule="evenodd"
+                    d="M12 2C6.477 2 2 6.59 2 12.253c0 4.528 2.865 8.368 6.839 9.724.5.095.683-.222.683-.494 0-.244-.009-.889-.014-1.745-2.782.62-3.369-1.375-3.369-1.375-.455-1.185-1.11-1.5-1.11-1.5-.908-.636.069-.623.069-.623 1.004.073 1.532 1.057 1.532 1.057.892 1.566 2.341 1.114 2.91.852.091-.663.349-1.114.635-1.37-2.221-.259-4.555-1.138-4.555-5.065 0-1.119.39-2.034 1.03-2.751-.103-.26-.446-1.302.098-2.714 0 0 .84-.276 2.75 1.051A9.381 9.381 0 0 1 12 6.955a9.37 9.37 0 0 1 2.504.345c1.909-1.327 2.747-1.051 2.747-1.051.546 1.412.203 2.454.1 2.714.64.717 1.028 1.632 1.028 2.751 0 3.937-2.338 4.803-4.566 5.057.359.317.679.943.679 1.9 0 1.371-.013 2.477-.013 2.812 0 .274.18.594.688.493C19.138 20.618 22 16.779 22 12.253 22 6.59 17.523 2 12 2Z"
+                  />
+                </svg>
+              </el-button>
 
             </div>
           </header>
@@ -428,6 +439,12 @@ import {
   type NavId,
   type NavItem,
 } from "./modules/shellNavigation"
+import {
+  GITHUB_REPOSITORY_URL,
+  PRODUCT_FULL_NAME,
+  PRODUCT_SHORT_NAME,
+  PRODUCT_TAGLINE,
+} from "./modules/shellBrand"
 import { useAuthStore } from "./stores/auth"
 import { useSessionStore } from "./stores/sessions"
 import { useShellStore } from "./stores/shell"
@@ -541,7 +558,6 @@ const homeSections = computed<HomeSection[]>(() => buildShellHomeSections({
   securityData: t("shell.sections.securityData"),
 }, navItemById.value, canAccessNav))
 const THEME_STORAGE_KEY = "theme"
-const CHAT_MODEL_STORAGE_KEY = "agno-aios-chat-model-id"
 const SIDEBAR_EXPANDED_WIDTH = 264
 const SIDEBAR_COMPACT_WIDTH = 76
 const isMobileViewport = () => typeof window !== "undefined" && window.innerWidth < 1024
@@ -597,7 +613,6 @@ const {
 } = storeToRefs(sessionStore)
 
 shellStore.setIsMobile(isMobileViewport())
-const currentModelName = ref("DeepSeek V4 Pro")
 const openSessionMenuId = ref<string | null>(null)
 const storedNavigationGroups = ref<SidebarStoredNavGroup[]>([])
 const authClientFallbacks = computed<Record<AuthClientFallbackKey, string>>(() => ({
@@ -610,7 +625,7 @@ const authClientFallbacks = computed<Record<AuthClientFallbackKey, string>>(() =
   oauthMissingAuthorizationUrl: t("auth.errors.oauthMissingAuthorizationUrl"),
 }))
 
-const { fetchModels, fetchSettings } = useSettingsApi()
+const { fetchSettings } = useSettingsApi()
 const { listSessions, archiveSession } = useChatHistory()
 
 watch(locale, (value) => setI18nLocale(value), { immediate: true })
@@ -628,7 +643,6 @@ const userInitials = computed(() => {
   return email.slice(0, 2).toUpperCase()
 })
 const activeComponentKey = computed(() => shellComponentKey(activeTab.value as NavId, componentRenderKey.value))
-const currentModelLabel = computed(() => formatModelLabel(currentModelName.value))
 const currentUserId = computed(() => currentUser.value?.id || currentUser.value?.email || null)
 const activeComponentProps = computed(() => (
   buildShellComponentProps(activeTab.value as NavId, currentUserId.value, userInitials.value)
@@ -741,38 +755,6 @@ const sidebarNavGroups = computed<SidebarNavGroup[]>(() => {
 const checkMobile = () => {
   isMobile.value = isMobileViewport()
   if (!isMobile.value) sidebarOpen.value = false
-}
-
-const formatModelLabel = (name: string) => {
-  const compact = name
-    .replace(/deepseek/gi, "DS")
-    .replace(/\bv(\d)/gi, "v$1")
-    .replace(/\s+/g, " ")
-    .trim()
-  return compact || "Model"
-}
-
-const loadCurrentModel = async () => {
-  if (!currentUser.value) {
-    currentModelName.value = "DeepSeek V4 Pro"
-    return
-  }
-  try {
-    const config = await fetchModels()
-    const savedId = localStorage.getItem(CHAT_MODEL_STORAGE_KEY)
-    const selected = config.models.find((model) => model.id === savedId)
-      ?? config.models.find((model) => model.id === config.active_model_id)
-      ?? config.models.find((model) => model.enabled)
-      ?? config.models[0]
-    if (selected?.name) currentModelName.value = selected.name
-  } catch {
-    currentModelName.value = "DeepSeek V4 Pro"
-  }
-}
-
-const handleModelChange = (event: Event) => {
-  const detail = (event as CustomEvent<{ name?: string }>).detail
-  if (detail?.name) currentModelName.value = detail.name
 }
 
 const formatSessionTime = (timestamp: number) => {
@@ -908,8 +890,11 @@ const toggleSidebarSize = () => {
 
 const refreshWorkspace = () => {
   componentRenderKey.value += 1
-  void loadCurrentModel()
   void loadNavigationLayout()
+}
+
+const openRepository = () => {
+  window.open(GITHUB_REPOSITORY_URL, "_blank", "noopener,noreferrer")
 }
 
 const applyTheme = (dark: boolean) => {
@@ -930,7 +915,6 @@ const toggleTheme = () => {
 
 const handleAuthenticated = (user: AuthUser) => {
   currentUser.value = user
-  void loadCurrentModel()
   void loadNavigationLayout()
   if (authStore.hasPermission("session:read:own")) void loadSidebarChatSessions()
 }
@@ -944,7 +928,6 @@ const restoreSession = async () => {
 
   try {
     currentUser.value = await fetchCurrentUser(token, { fallbacks: authClientFallbacks.value })
-    void loadCurrentModel()
     void loadNavigationLayout()
     if (authStore.hasPermission("session:read:own")) void loadSidebarChatSessions()
   } catch {
@@ -998,14 +981,12 @@ onMounted(() => {
   checkMobile()
   restoreSession()
   window.addEventListener("resize", checkMobile)
-  window.addEventListener("agno-aios-model-change", handleModelChange)
   window.addEventListener("agno-aios-chat-sessions-change", handleChatSessionsChange)
   window.addEventListener("agno-aios-navigation-layout-change", handleNavigationLayoutChange)
 })
 
 onUnmounted(() => {
   window.removeEventListener("resize", checkMobile)
-  window.removeEventListener("agno-aios-model-change", handleModelChange)
   window.removeEventListener("agno-aios-chat-sessions-change", handleChatSessionsChange)
   window.removeEventListener("agno-aios-navigation-layout-change", handleNavigationLayoutChange)
 })
