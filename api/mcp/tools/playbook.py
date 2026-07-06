@@ -20,6 +20,12 @@ class W5Adapter:
         self.headers = {"Content-Type": "application/json"}
         self.client = httpx.AsyncClient(timeout=10, verify=False)
 
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, _exc_type, _exc, _tb) -> None:
+        await self.client.aclose()
+
     async def list_workflows(self) -> dict:
         payload = {"key": self.token}
         resp = await self.client.post(
@@ -72,6 +78,12 @@ class OctomationAdapter:
             raise ValueError("OCTOMATION_API_BASE 环境变量未设置")
         self.headers = {"hg-token": self.token, "Content-Type": "application/json"}
         self.client = httpx.AsyncClient(timeout=10, verify=False)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, _exc_type, _exc, _tb) -> None:
+        await self.client.aclose()
 
     async def list_workflows(self) -> dict:
         request_body = {"publishStatus": "ONLINE"}
@@ -239,8 +251,8 @@ async def list_workflows(platform: str) -> dict:
         return adapter
 
     try:
-        list_workflows_resp = await adapter.list_workflows()
-        return list_workflows_resp
+        async with adapter:
+            return await adapter.list_workflows()
     except Exception as exc:
         return {"code": -1, "msg": f"请求失败: {exc}"}
 
@@ -257,8 +269,8 @@ async def get_method_params(platform: str, method_id: str) -> dict:
         return adapter
 
     try:
-        method_params = await adapter.get_method_params(method_id)
-        return method_params
+        async with adapter:
+            return await adapter.get_method_params(method_id)
     except Exception as exc:
         return {"code": -1, "msg": f"请求失败: {exc}"}
 
@@ -276,7 +288,8 @@ async def invoke_method(
     if isinstance(adapter, dict):
         return adapter
     try:
-        return await adapter.invoke_method(method_id, params or {})
+        async with adapter:
+            return await adapter.invoke_method(method_id, params or {})
     except Exception as exc:
         return {"code": -1, "msg": f"请求失败: {exc}"}
 
@@ -292,18 +305,19 @@ async def get_exec_result(platform: str, exec_id: str) -> dict:
     if isinstance(adapter, dict):
         return adapter
 
-    last_resp: dict | None = None
-    for attempt in range(3):
-        try:
-            resp = await adapter.get_exec_result(exec_id)
-            last_resp = resp
-            if isinstance(resp, dict) and resp.get("code") == 0:
-                return resp
-        except Exception as exc:
-            last_resp = {"code": -1, "msg": f"请求失败: {exc}", "data": {}}
+    async with adapter:
+        last_resp: dict | None = None
+        for attempt in range(3):
+            try:
+                resp = await adapter.get_exec_result(exec_id)
+                last_resp = resp
+                if isinstance(resp, dict) and resp.get("code") == 0:
+                    return resp
+            except Exception as exc:
+                last_resp = {"code": -1, "msg": f"请求失败: {exc}", "data": {}}
 
-        if attempt < 2:
-            delay = 0.5 * (2**attempt)
-            await asyncio.sleep(delay)
+            if attempt < 2:
+                delay = 0.5 * (2**attempt)
+                await asyncio.sleep(delay)
 
-    return last_resp or {"code": -1, "msg": "请求失败", "data": {}}
+        return last_resp or {"code": -1, "msg": "请求失败", "data": {}}
