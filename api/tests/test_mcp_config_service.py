@@ -8,17 +8,16 @@ from api.mcp import config as mcp_config
 from api.services import mcp_config_service
 
 
-@pytest.mark.asyncio
-async def test_apply_service_toggle_updates_config_and_returns_audit_shape():
+def test_apply_service_toggle_updates_config_and_returns_audit_shape():
     stored = {"mcp": {"playbook": True}}
     writes: list[dict] = []
     with (
-        patch.object(mcp_config_service, "read_mcp_config_async", return_value=stored),
+        patch.object(mcp_config_service, "read_mcp_config", return_value=stored),
         patch.object(
-            mcp_config_service, "write_mcp_config_async", side_effect=writes.append
+            mcp_config_service, "write_mcp_config", side_effect=writes.append
         ),
     ):
-        change = await mcp_config_service.apply_service_toggle_async("playbook", False)
+        change = mcp_config_service.apply_service_toggle("playbook", False)
     assert writes[0]["mcp"]["playbook"] is False
     assert change.response == {
         "success": True,
@@ -31,15 +30,13 @@ async def test_apply_service_toggle_updates_config_and_returns_audit_shape():
     assert change.metadata == {"enabled": False}
 
 
-@pytest.mark.asyncio
-async def test_apply_service_toggle_rejects_removed_agent_service():
+def test_apply_service_toggle_rejects_removed_agent_service():
     with pytest.raises(HTTPException) as exc:
-        await mcp_config_service.apply_service_toggle_async("agent", True)
+        mcp_config_service.apply_service_toggle("agent", True)
     assert exc.value.status_code == 400
 
 
-@pytest.mark.asyncio
-async def test_apply_mcp_upload_normalizes_standard_mcp_manifest():
+def test_apply_mcp_upload_normalizes_standard_mcp_manifest():
     stored = {"mcp_servers": []}
     writes: list[dict] = []
     manifest = """
@@ -54,12 +51,12 @@ async def test_apply_mcp_upload_normalizes_standard_mcp_manifest():
         }
         """
     with (
-        patch.object(mcp_config_service, "read_mcp_config_async", return_value=stored),
+        patch.object(mcp_config_service, "read_mcp_config", return_value=stored),
         patch.object(
-            mcp_config_service, "write_mcp_config_async", side_effect=writes.append
+            mcp_config_service, "write_mcp_config", side_effect=writes.append
         ),
     ):
-        change = await mcp_config_service.apply_mcp_upload_async(
+        change = mcp_config_service.apply_mcp_upload(
             name="Filesystem", manifest=manifest
         )
     assert writes[0]["mcp_servers"] == [
@@ -83,11 +80,10 @@ async def test_apply_mcp_upload_normalizes_standard_mcp_manifest():
     assert change.metadata == {"kind": "mcp-json", "has_manifest": True}
 
 
-@pytest.mark.asyncio
-async def test_apply_mcp_upload_rejects_non_mcp_project_manifest():
+def test_apply_mcp_upload_rejects_non_mcp_project_manifest():
     manifest = '{"source":{"path":"server.py"}}'
     with pytest.raises(HTTPException) as exc:
-        await mcp_config_service.apply_mcp_upload_async(
+        mcp_config_service.apply_mcp_upload(
             name="FastMCP Project",
             manifest=manifest,
         )
@@ -95,8 +91,7 @@ async def test_apply_mcp_upload_rejects_non_mcp_project_manifest():
     assert "mcpServers" in str(exc.value.detail)
 
 
-@pytest.mark.asyncio
-async def test_apply_mcp_upload_rejects_non_standard_mcp_server_shape():
+def test_apply_mcp_upload_rejects_non_standard_mcp_server_shape():
     manifest = """
         {
           "mcpServers": {
@@ -110,15 +105,14 @@ async def test_apply_mcp_upload_rejects_non_standard_mcp_server_shape():
         }
         """
     with pytest.raises(HTTPException) as exc:
-        await mcp_config_service.apply_mcp_upload_async(
+        mcp_config_service.apply_mcp_upload(
             name="Filesystem",
             manifest=manifest,
         )
     assert exc.value.status_code == 400
 
 
-@pytest.mark.asyncio
-async def test_apply_mcp_upload_accepts_multi_server_manifest():
+def test_apply_mcp_upload_accepts_multi_server_manifest():
     stored = {"mcp_servers": []}
     writes: list[dict] = []
     manifest = """
@@ -130,12 +124,12 @@ async def test_apply_mcp_upload_accepts_multi_server_manifest():
         }
         """
     with (
-        patch.object(mcp_config_service, "read_mcp_config_async", return_value=stored),
+        patch.object(mcp_config_service, "read_mcp_config", return_value=stored),
         patch.object(
-            mcp_config_service, "write_mcp_config_async", side_effect=writes.append
+            mcp_config_service, "write_mcp_config", side_effect=writes.append
         ),
     ):
-        change = await mcp_config_service.apply_mcp_upload_async(
+        change = mcp_config_service.apply_mcp_upload(
             name="Multi",
             manifest=manifest,
         )
@@ -149,8 +143,7 @@ async def test_apply_mcp_upload_accepts_multi_server_manifest():
     }
 
 
-@pytest.mark.asyncio
-async def test_apply_mcp_upload_rejects_empty_manifest_and_duplicate_name():
+def test_apply_mcp_upload_rejects_empty_manifest_and_duplicate_name():
     stored = {
         "mcp_servers": [
             {
@@ -162,36 +155,37 @@ async def test_apply_mcp_upload_rejects_empty_manifest_and_duplicate_name():
             }
         ],
     }
-    with patch.object(mcp_config_service, "read_mcp_config_async", return_value=stored):
+    with patch.object(mcp_config_service, "read_mcp_config", return_value=stored):
         with pytest.raises(HTTPException) as exc:
-            await mcp_config_service.apply_mcp_upload_async(name="New Agent")
+            mcp_config_service.apply_mcp_upload(name="New Agent")
     assert exc.value.status_code == 400
 
     manifest = '{"mcpServers":{"tool":{"command":"python"}}}'
-    with patch.object(mcp_config_service, "read_mcp_config_async", return_value=stored):
+    with patch.object(mcp_config_service, "read_mcp_config", return_value=stored):
         with pytest.raises(HTTPException) as exc:
-            await mcp_config_service.apply_mcp_upload_async(
+            mcp_config_service.apply_mcp_upload(
                 name="Existing Server", manifest=manifest
             )
     assert exc.value.status_code == 409
 
 
-def test_mcp_config_service_does_not_expose_sync_mutation_facades():
-    assert not hasattr(mcp_config_service, "apply_service_toggle")
-    assert not hasattr(mcp_config_service, "apply_mcp_upload")
+def test_mcp_config_service_exposes_sync_mutation_functions():
+    assert hasattr(mcp_config_service, "apply_service_toggle")
+    assert hasattr(mcp_config_service, "apply_mcp_upload")
+    assert not hasattr(mcp_config_service, "apply_service_toggle_async")
+    assert not hasattr(mcp_config_service, "apply_mcp_upload_async")
 
 
 def test_mcp_config_file_uses_json_format():
     assert mcp_config.MCP_CONFIG_FILE.name == "mcp_config.json"
 
 
-@pytest.mark.asyncio
-async def test_mcp_config_read_write_json_and_drops_legacy_protocols(tmp_path, monkeypatch):
+def test_mcp_config_read_write_json_and_drops_legacy_protocols(tmp_path, monkeypatch):
     config_file = tmp_path / "mcp_config.json"
     monkeypatch.setattr(mcp_config, "MCP_DATA_DIR", tmp_path)
     monkeypatch.setattr(mcp_config, "MCP_CONFIG_FILE", config_file)
 
-    await mcp_config.write_mcp_config_async(
+    mcp_config.write_mcp_config(
         {
             "mcp": {"playbook": False, "basic": True, "agent": True},
             "hiagent": [{"name": "legacy"}],
@@ -205,11 +199,10 @@ async def test_mcp_config_read_write_json_and_drops_legacy_protocols(tmp_path, m
         "mcp_servers": [],
     }
 
-    assert await mcp_config.read_mcp_config_async() == raw
+    assert mcp_config.read_mcp_config() == raw
 
 
-@pytest.mark.asyncio
-async def test_mcp_config_migrates_legacy_toml_to_json(tmp_path, monkeypatch):
+def test_mcp_config_migrates_legacy_toml_to_json(tmp_path, monkeypatch):
     config_file = tmp_path / "mcp_config.json"
     legacy_file = tmp_path / "mcp_config.toml"
     legacy_file.write_text(
@@ -237,7 +230,7 @@ async def test_mcp_config_migrates_legacy_toml_to_json(tmp_path, monkeypatch):
     monkeypatch.setattr(mcp_config, "MCP_DATA_DIR", tmp_path)
     monkeypatch.setattr(mcp_config, "MCP_CONFIG_FILE", config_file)
 
-    data = await mcp_config.read_mcp_config_async()
+    data = mcp_config.read_mcp_config()
 
     assert data == {
         "mcp": {"playbook": False, "basic": True},

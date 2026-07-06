@@ -31,10 +31,9 @@ async def test_create_suite_route_derives_actor_and_calls_store():
     assert create_call.args[1].email == "operator@example.com"
 
 
-@pytest.mark.asyncio
-async def test_run_case_route_requires_run_permission():
+def test_run_case_route_requires_run_permission():
     with pytest.raises(HTTPException) as exc:
-        await agent_evals.require_agent_eval_run_permission(user=actor("user"))
+        agent_evals.require_agent_eval_run_permission(user=actor("user"))
     assert exc.value.status_code == 403
 
 

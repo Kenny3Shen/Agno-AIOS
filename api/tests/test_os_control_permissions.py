@@ -126,26 +126,21 @@ class FakeMemoryMutationDb(FakeMemoryDb):
         return memory
 
 
-@pytest.mark.asyncio
-async def test_guest_cannot_access_studio_inventory():
+def test_guest_cannot_access_studio_inventory():
     with pytest.raises(HTTPException) as context:
-        await os_control.require_os_module_permission(
-            "studio", user=actor("g1", "guest")
-        )
+        os_control.require_os_module_permission("studio", user=actor("g1", "guest"))
     assert context.value.status_code == 403
 
 
-@pytest.mark.asyncio
-async def test_unknown_module_is_rejected_before_payload_lookup():
+def test_unknown_module_is_rejected_before_payload_lookup():
     with pytest.raises(HTTPException) as context:
-        await os_control.require_os_module_permission("unknown", user=actor("u1"))
+        os_control.require_os_module_permission("unknown", user=actor("u1"))
     assert context.value.status_code == 404
 
 
-@pytest.mark.asyncio
-async def test_guest_cannot_mutate_memory():
+def test_guest_cannot_mutate_memory():
     with pytest.raises(HTTPException) as context:
-        await os_control.require_memory_write_permission(user=actor("g1", "guest"))
+        os_control.require_memory_write_permission(user=actor("g1", "guest"))
     assert context.value.status_code == 403
 
 

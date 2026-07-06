@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from typing import Any, Literal
 
 from fastapi import Depends, HTTPException, status
@@ -59,8 +59,8 @@ def has_permission(user: User | Any, permission: str) -> bool:
     return "*" in permissions or permission in permissions
 
 
-def require_permission(permission: str) -> Callable[..., Awaitable[User]]:
-    async def dependency(user: User = Depends(current_active_user)) -> User:
+def require_permission(permission: str) -> Callable[..., User]:
+    def dependency(user: User = Depends(current_active_user)) -> User:
         if not has_permission(user, permission):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

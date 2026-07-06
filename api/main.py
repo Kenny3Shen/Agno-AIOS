@@ -107,17 +107,17 @@ app.add_middleware(
 
 # Health check
 @app.get("/api/health")
-async def health_check():
+def health_check():
     return {"status": "ok", "environment": app_settings.environment}
 
 
 @app.get("/report", include_in_schema=False)
-async def report_redirect():
+def report_redirect():
     return RedirectResponse(url="/report/")
 
 
 @app.api_route("/mcp", methods=["GET", "POST", "DELETE", "OPTIONS"], include_in_schema=False)
-async def mcp_redirect(request: Request):
+def mcp_redirect(request: Request):
     query = request.url.query
     target = "/mcp/" + (f"?{query}" if query else "")
     return RedirectResponse(url=target, status_code=307)

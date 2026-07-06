@@ -88,7 +88,7 @@ if (
 
 
 @router.get("/oauth/providers")
-async def list_oauth_providers() -> dict[str, list[str]]:
+def list_oauth_providers() -> dict[str, list[str]]:
     return {"providers": enabled_oauth_providers}
 
 

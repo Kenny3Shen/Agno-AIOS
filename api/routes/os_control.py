@@ -88,7 +88,7 @@ class MemoryUpdateRequest(BaseModel):
     topics: list[str] = Field(default_factory=list)
 
 
-async def require_os_module_permission(
+def require_os_module_permission(
     module: str,
     user: User = Depends(current_active_user),
 ) -> User:
@@ -96,14 +96,14 @@ async def require_os_module_permission(
     return user
 
 
-async def require_scheduler_write_permission(
+def require_scheduler_write_permission(
     user: User = Depends(current_active_user),
 ) -> User:
     require_scheduler_write(user)
     return user
 
 
-async def require_memory_write_permission(
+def require_memory_write_permission(
     user: User = Depends(current_active_user),
 ) -> User:
     require_control_module_access("memory", user)
@@ -111,14 +111,14 @@ async def require_memory_write_permission(
     return user
 
 
-async def require_approvals_read_permission(
+def require_approvals_read_permission(
     user: User = Depends(current_active_user),
 ) -> User:
     require_control_module_access("approvals", user)
     return user
 
 
-async def require_approvals_write_permission(
+def require_approvals_write_permission(
     user: User = Depends(current_active_user),
 ) -> User:
     require_scheduler_write(user)

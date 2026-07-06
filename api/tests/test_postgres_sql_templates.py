@@ -93,10 +93,14 @@ def test_session_listing_no_longer_joins_archive_table() -> None:
 
 def test_mcp_config_no_longer_uses_raw_sql_for_runtime_tables() -> None:
     source = inspect.getsource(mcp_config)
-    assert not hasattr(mcp_config, "read_mcp_config")
-    assert not hasattr(mcp_config, "write_mcp_config")
-    assert not hasattr(mcp_config, "services_from_config")
-    assert not hasattr(mcp_config, "enabled_service_ids")
+    assert hasattr(mcp_config, "read_mcp_config")
+    assert hasattr(mcp_config, "write_mcp_config")
+    assert hasattr(mcp_config, "services_from_config")
+    assert hasattr(mcp_config, "enabled_service_ids")
+    assert "read_mcp_config_async" not in source
+    assert "write_mcp_config_async" not in source
+    assert "services_from_config_async" not in source
+    assert "enabled_service_ids_async" not in source
     assert "postgres_connect" not in source
     assert "sql.SQL" not in source
     assert "async def list_tokens" in source
@@ -214,64 +218,70 @@ def test_cve_intel_skill_cache_fallback_uses_async_file_io() -> None:
     assert "await fetch_from_cache_async" in cve_intel_source
 
 
-def test_file_backed_config_routes_use_async_wrappers() -> None:
+def test_local_config_services_are_sync_first_without_blocking_event_loop_regressions() -> None:
     settings_source = inspect.getsource(settings_route)
-    assert "await public_model_config_async" in settings_source
-    assert "await save_model_config_async" in settings_source
-    assert "await load_model_config_async" in settings_source
-    assert "load_model_config()" not in settings_source
+    assert "public_model_config()" in settings_source
+    assert "save_model_config(" in settings_source
+    assert "load_model_config(" in settings_source
+    assert "public_model_config_async" not in settings_source
+    assert "save_model_config_async" not in settings_source
+    assert "load_model_config_async" not in settings_source
 
     skills_source = inspect.getsource(skills_route)
-    assert "await list_skill_infos_async" in skills_source
-    assert "await set_skill_enabled_async" in skills_source
-    assert "await install_skill_archive_async" in skills_source
+    assert "list_skill_infos()" in skills_source
+    assert "set_skill_enabled(" in skills_source
+    assert "install_skill_archive_async" not in skills_source
 
     mcp_source = inspect.getsource(mcp_route)
-    assert "await read_mcp_config_async" in mcp_source
-    assert "await services_from_config_async" in mcp_source
-    assert "await apply_service_toggle_async" in mcp_source
-    assert "await apply_mcp_upload_async" in mcp_source
+    assert "read_mcp_config()" in mcp_source
+    assert "services_from_config(" in mcp_source
+    assert "read_mcp_config_async" not in mcp_source
+    assert "services_from_config_async" not in mcp_source
+    assert "apply_service_toggle(" in mcp_source
+    assert "apply_mcp_upload(" in mcp_source
+    assert "apply_service_toggle_async" not in mcp_source
+    assert "apply_mcp_upload_async" not in mcp_source
 
     mcp_server_source = inspect.getsource(mcp_server.IntegratedMcpRuntime)
-    assert "await build_main_mcp_async" in mcp_server_source
-    assert "enabled_service_ids()" not in inspect.getsource(mcp_server.build_main_mcp)
+    assert "build_main_mcp(enabled_service_ids())" in mcp_server_source
+    assert not hasattr(mcp_server, "build_main_mcp_async")
 
     assert "to_thread.run_sync" not in inspect.getsource(model_config_service)
     assert "os.getenv" not in inspect.getsource(model_config_service)
     assert hasattr(model_config_service, "model_config_file")
-    assert not hasattr(model_config_service, "load_model_config")
-    assert not hasattr(model_config_service, "public_model_config")
-    assert not hasattr(model_config_service, "save_model_config")
-    assert not hasattr(model_config_service, "get_model_for_run")
+    assert hasattr(model_config_service, "load_model_config")
+    assert hasattr(model_config_service, "public_model_config")
+    assert hasattr(model_config_service, "save_model_config")
+    assert hasattr(model_config_service, "get_model_for_run")
+    assert not hasattr(model_config_service, "load_model_config_async")
+    assert not hasattr(model_config_service, "public_model_config_async")
+    assert not hasattr(model_config_service, "save_model_config_async")
+    assert not hasattr(model_config_service, "get_model_for_run_async")
     assert "to_thread.run_sync" not in inspect.getsource(mcp_config)
     assert "to_thread.run_sync" not in inspect.getsource(mcp_config_service)
-    assert not hasattr(mcp_config_service, "apply_service_toggle")
-    assert not hasattr(mcp_config_service, "apply_mcp_upload")
+    assert hasattr(mcp_config_service, "apply_service_toggle")
+    assert hasattr(mcp_config_service, "apply_mcp_upload")
+    assert not hasattr(mcp_config_service, "apply_service_toggle_async")
+    assert not hasattr(mcp_config_service, "apply_mcp_upload_async")
     assert "to_thread.run_sync" not in inspect.getsource(
         security_run_runtime._load_prompt_async
     )
-    assert "to_thread.run_sync" not in inspect.getsource(
-        skill_service.list_skill_infos_async
-    )
-    assert "to_thread.run_sync" not in inspect.getsource(
-        skill_service.set_skill_enabled_async
-    )
-    assert "to_thread.run_sync" not in inspect.getsource(
-        skill_service.get_enabled_skill_dirs_async
-    )
     assert "os.getenv" not in inspect.getsource(skill_service)
-    assert "to_thread.run_sync" in inspect.getsource(
-        skill_service.install_skill_archive_async
-    )
-    assert not hasattr(skill_service, "load_skills_config")
-    assert not hasattr(skill_service, "save_skills_config")
-    assert not hasattr(skill_service, "list_skill_infos")
-    assert not hasattr(skill_service, "set_skill_enabled")
-    assert not hasattr(skill_service, "get_enabled_skill_dirs")
+    assert hasattr(skill_service, "load_skills_config")
+    assert hasattr(skill_service, "save_skills_config")
+    assert hasattr(skill_service, "list_skill_infos")
+    assert hasattr(skill_service, "set_skill_enabled")
+    assert hasattr(skill_service, "get_enabled_skill_dirs")
+    assert not hasattr(skill_service, "load_skills_config_async")
+    assert not hasattr(skill_service, "save_skills_config_async")
+    assert not hasattr(skill_service, "list_skill_infos_async")
+    assert not hasattr(skill_service, "set_skill_enabled_async")
+    assert not hasattr(skill_service, "get_enabled_skill_dirs_async")
+    assert not hasattr(skill_service, "install_skill_archive_async")
 
     runtime_source = inspect.getsource(security_run_runtime)
-    assert "\ndef _load_prompt(" not in runtime_source
-    assert "\ndef _build_model(" not in runtime_source
+    assert "get_enabled_skill_dirs" in runtime_source
+    assert "to_thread.run_sync(_load_local_skills" in runtime_source
     assert "\ndef _build_fallback_agent(" not in runtime_source
 
 
@@ -421,7 +431,8 @@ def test_security_run_runtime_defaults_to_async_agno_db_and_knowledge() -> None:
     source = inspect.getsource(security_run_runtime.SecurityRunRuntimeDependencies)
     assert "get_async_agno_postgres_db" in source
     assert "get_async_knowledge_base: Callable" in source
-    assert "get_enabled_skill_dirs_async" in source
+    assert "get_enabled_skill_dirs" in source
+    assert "get_enabled_skill_dirs_async" not in source
     runtime_source = inspect.getsource(security_run_runtime.SecurityRunRuntime)
     assert "await _load_prompt_async" in runtime_source
     assert "await _maybe_await(self.dependencies.build_model" in runtime_source

@@ -8,8 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, Validation
 from api.mcp.config import (
     SERVICE_IDS,
     normalize_mcp_servers,
-    read_mcp_config_async,
-    write_mcp_config_async,
+    read_mcp_config,
+    write_mcp_config,
 )
 
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -49,18 +49,18 @@ def _manifest_validation_error(exc: ValidationError) -> HTTPException:
     return HTTPException(status_code=400, detail=detail)
 
 
-async def apply_service_toggle_async(service_id: str, enabled: bool) -> McpConfigChange:
+def apply_service_toggle(service_id: str, enabled: bool) -> McpConfigChange:
     if service_id not in SERVICE_IDS:
         raise HTTPException(status_code=400, detail="Invalid service ID")
 
-    data = await read_mcp_config_async()
+    data = read_mcp_config()
     mcp_cfg = data.setdefault("mcp", {})
     if not isinstance(mcp_cfg, dict):
         data["mcp"] = {}
         mcp_cfg = data["mcp"]
 
     mcp_cfg[service_id] = enabled
-    await write_mcp_config_async(data)
+    write_mcp_config(data)
     return McpConfigChange(
         response={
             "success": True,
@@ -99,7 +99,7 @@ def _parse_mcp_manifest(raw: str) -> tuple[str, dict[str, Any]]:
     return "mcp-json", standard_manifest.model_dump(mode="json")
 
 
-async def apply_mcp_upload_async(
+def apply_mcp_upload(
     *,
     name: str,
     description: str = "",
@@ -112,7 +112,7 @@ async def apply_mcp_upload_async(
     normalized_description = description.strip()
     kind, normalized_manifest = _parse_mcp_manifest(manifest)
 
-    data = await read_mcp_config_async()
+    data = read_mcp_config()
     servers = normalize_mcp_servers(data.get("mcp_servers", []))
     if any(entry["name"] == normalized_name for entry in servers):
         raise HTTPException(status_code=409, detail="该 MCP 名称已存在")
@@ -126,7 +126,7 @@ async def apply_mcp_upload_async(
         }
     )
     data["mcp_servers"] = servers
-    await write_mcp_config_async(data)
+    write_mcp_config(data)
 
     return McpConfigChange(
         response={

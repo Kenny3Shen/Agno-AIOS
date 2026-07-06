@@ -4,6 +4,9 @@ Skills 管理 API
 - 切换 Skill 启用/禁用
 """
 
+from functools import partial
+
+from anyio import to_thread
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
@@ -11,9 +14,9 @@ from api.auth.models import User
 from api.auth.permissions import require_permission
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.skill_service import (
-    install_skill_archive_async,
-    list_skill_infos_async,
-    set_skill_enabled_async,
+    install_skill_archive,
+    list_skill_infos,
+    set_skill_enabled,
 )
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
@@ -52,9 +55,9 @@ class SkillUploadResponse(BaseModel):
 # ── API 端点 ──────────────────────────────────────────────────
 
 @router.get("", response_model=SkillListResponse)
-async def list_skills(_user: User = Depends(require_permission("skill:read"))):
+def list_skills(_user: User = Depends(require_permission("skill:read"))):
     """列出所有 Skill 及其元数据和启用状态"""
-    return SkillListResponse(skills=[SkillInfo(**item) for item in await list_skill_infos_async()])
+    return SkillListResponse(skills=[SkillInfo(**item) for item in list_skill_infos()])
 
 
 @router.put("/{skill_name}/toggle", response_model=SkillToggleResponse)
@@ -66,7 +69,7 @@ async def toggle_skill(
 ):
     """启用或禁用指定 Skill"""
     try:
-        public_name = await set_skill_enabled_async(skill_name, body.enabled)
+        public_name = set_skill_enabled(skill_name, body.enabled)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' 不存在")
     await record_audit_event_async(
@@ -93,9 +96,12 @@ async def upload_skill(
         raise HTTPException(status_code=400, detail="Skill archive must be a zip file")
 
     try:
-        public_name, description, dest = await install_skill_archive_async(
-            await file.read(),
-            requested_name=name.strip(),
+        public_name, description, dest = await to_thread.run_sync(
+            partial(
+                install_skill_archive,
+                await file.read(),
+                requested_name=name.strip(),
+            )
         )
     except FileExistsError as exc:
         raise HTTPException(status_code=409, detail=f"Skill '{exc}' already exists") from exc

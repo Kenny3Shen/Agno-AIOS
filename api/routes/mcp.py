@@ -12,8 +12,8 @@ from api.services.audit_service import (
 )
 from api.services.mcp_config_service import (
     McpConfigChange,
-    apply_mcp_upload_async,
-    apply_service_toggle_async,
+    apply_mcp_upload,
+    apply_service_toggle,
 )
 from api.mcp.config import (
     MCP_CONFIG_FILE,
@@ -21,8 +21,8 @@ from api.mcp.config import (
     delete_token,
     insert_token,
     list_tokens,
-    read_mcp_config_async,
-    services_from_config_async,
+    read_mcp_config,
+    services_from_config,
 )
 
 router = APIRouter(prefix="/api/mcp", tags=["MCP"])
@@ -73,10 +73,10 @@ async def _record_config_change(
 
 
 @router.get("/config")
-async def get_config(_user: User = Depends(require_permission("mcp:read"))) -> dict[str, Any]:
-    data = await read_mcp_config_async()
+def get_config(_user: User = Depends(require_permission("mcp:read"))) -> dict[str, Any]:
+    data = read_mcp_config()
     return {
-        "services": await services_from_config_async(data),
+        "services": services_from_config(data),
         "control_mode": "integrated",
         "fastmcp": "in-process",
         "mcp_url": "/mcp/",
@@ -91,7 +91,7 @@ async def update_config(
     body: ServiceToggle,
     user: User = Depends(require_permission("mcp:write")),
 ):
-    change = await apply_service_toggle_async(body.id, body.enabled)
+    change = apply_service_toggle(body.id, body.enabled)
     await _record_config_change(user, change, audit_request_context(request))
     return change.response
 
@@ -154,7 +154,7 @@ async def upload_mcp(
     user: User = Depends(require_permission("mcp:write")),
 ):
     """上传 MCP manifest。"""
-    change = await apply_mcp_upload_async(
+    change = apply_mcp_upload(
         name=body.name,
         description=body.description,
         manifest=body.manifest,

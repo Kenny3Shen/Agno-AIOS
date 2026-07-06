@@ -78,18 +78,18 @@ class EvalCaseUpdateRequest(_StrictModel):
     enabled: bool | None = None
 
 
-async def require_agent_eval_read_permission(user: User = Depends(current_active_user)) -> User:
+def require_agent_eval_read_permission(user: User = Depends(current_active_user)) -> User:
     if not has_permission(user, "agent_eval:read"):
         raise HTTPException(status_code=403, detail="权限不足")
     return user
 
 
-async def require_agent_eval_write_permission(user: User = Depends(current_active_user)) -> User:
+def require_agent_eval_write_permission(user: User = Depends(current_active_user)) -> User:
     require_agent_eval_write(user)
     return user
 
 
-async def require_agent_eval_run_permission(user: User = Depends(current_active_user)) -> User:
+def require_agent_eval_run_permission(user: User = Depends(current_active_user)) -> User:
     require_agent_eval_run(user)
     return user
 

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from inspect import isawaitable
+from typing import Any, cast
 
 from agno.memory import UserMemory
 from sqlalchemy import Column, DateTime, Float, MetaData, Table, Text, desc, func, select, text
@@ -11,8 +12,8 @@ from sqlalchemy.schema import CreateSchema
 
 from api.mcp.config import (
     SERVICE_IDS,
-    read_mcp_config_async,
-    services_from_config_async,
+    read_mcp_config,
+    services_from_config,
 )
 from api.auth.permissions import actor_id, has_permission
 from api.services.approval_control_service import list_approvals_payload
@@ -26,7 +27,7 @@ from api.services.postgres_store import (
 )
 from api.services.knowledge_service import knowledge_status_async
 from api.services.skill_service import (
-    list_skill_infos_async,
+    list_skill_infos,
 )
 from api.services.scheduler_service import get_scheduler_payload as get_agno_scheduler_payload
 
@@ -366,10 +367,10 @@ async def get_sessions_payload(actor: Any | None = None) -> OsPayload:
     )
 
 
-async def get_studio_payload(actor: Any | None = None) -> OsPayload:
-    data = await read_mcp_config_async()
-    services = await services_from_config_async(data)
-    skill_infos = await list_skill_infos_async()
+def get_studio_payload(actor: Any | None = None) -> OsPayload:
+    data = read_mcp_config()
+    services = services_from_config(data)
+    skill_infos = list_skill_infos()
 
     skill_records = []
     enabled_skills = 0
@@ -839,4 +840,7 @@ async def get_control_payload(
         raise ValueError(f"Unsupported control module: {module}") from exc
     if module == "memory":
         return await get_memory_payload(actor=actor, **(query or {}))
-    return await handler(actor=actor)
+    payload = handler(actor=actor)
+    if isawaitable(payload):
+        return cast(OsPayload, await payload)
+    return cast(OsPayload, payload)

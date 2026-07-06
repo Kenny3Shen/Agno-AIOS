@@ -17,13 +17,13 @@ from loguru import logger
 from api.config import get_settings
 from api.services.knowledge_service import get_async_knowledge_base_async
 
-from api.services.model_config_service import get_model_for_run_async
+from api.services.model_config_service import get_model_for_run
 from api.services.postgres_store import get_async_agno_postgres_db
-from api.services.skill_service import get_enabled_skill_dirs_async
+from api.services.skill_service import get_enabled_skill_dirs
 
 
-async def _build_model_async(model_id: str | None = None) -> OpenAILike:
-    model = await get_model_for_run_async(model_id)
+def _build_model(model_id: str | None = None) -> OpenAILike:
+    model = get_model_for_run(model_id)
     return OpenAILike(
         id=model["model_id"],
         api_key=model["api_key"],
@@ -125,10 +125,10 @@ class SecurityRunRequest:
 
 @dataclass(frozen=True)
 class SecurityRunRuntimeDependencies:
-    build_model: Callable[[str | None], Any] = _build_model_async
+    build_model: Callable[[str | None], Any] = _build_model
     get_db: Callable[[], Any] = get_async_agno_postgres_db
     get_async_knowledge_base: Callable[[], Any] = get_async_knowledge_base_async
-    get_enabled_skill_dirs: Callable[[], Any] = get_enabled_skill_dirs_async
+    get_enabled_skill_dirs: Callable[[], Any] = get_enabled_skill_dirs
     get_mcp_url: Callable[[], str] = _build_mcp_url
     mcp_tools_factory: Callable[..., Any] = MCPTools
     agent_factory: Callable[..., Any] = Agent

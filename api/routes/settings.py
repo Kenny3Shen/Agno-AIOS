@@ -15,9 +15,9 @@ from api.services.audit_service import audit_request_context, record_audit_event
 from api.services.model_config_service import (
     ModelConfig,
     ModelConfigUpdate,
-    load_model_config_async,
-    public_model_config_async,
-    save_model_config_async,
+    load_model_config,
+    public_model_config,
+    save_model_config,
 )
 
 router = APIRouter(prefix="/api", tags=["Settings"])
@@ -94,13 +94,13 @@ def _extract_upstream_error(data: Any, fallback: str) -> str:
     return fallback
 
 
-async def _resolve_model_secret(model: ModelConfig) -> dict[str, Any]:
+def _resolve_model_secret(model: ModelConfig) -> dict[str, Any]:
     data = model.model_dump()
     if "*" not in data.get("api_key", ""):
         return data
 
     data["api_key"] = ""
-    for saved in (await load_model_config_async()).get("models", []):
+    for saved in load_model_config().get("models", []):
         if isinstance(saved, dict) and saved.get("id") == model.id:
             data["api_key"] = str(saved.get("api_key") or "")
             break
@@ -127,7 +127,7 @@ def _validate_test_model(model: dict[str, Any]) -> None:
 async def run_model_connectivity_test(
     model: ModelConfig,
 ) -> ModelConnectivityTestResponse:
-    resolved = await _resolve_model_secret(model)
+    resolved = _resolve_model_secret(model)
     _validate_test_model(resolved)
 
     started = perf_counter()
@@ -196,7 +196,7 @@ async def run_model_connectivity_test(
 
 
 @router.get("/settings")
-async def read_settings(
+def read_settings(
     _user: User = Depends(require_permission("settings:read")),
     settings: Settings = Depends(get_app_settings),
 ) -> SettingsResponse:
@@ -209,9 +209,9 @@ async def read_settings(
 
 
 @router.get("/models")
-async def get_models(_user: User = Depends(require_permission("settings:read"))) -> dict:
+def get_models(_user: User = Depends(require_permission("settings:read"))) -> dict:
     """获取可选模型配置（敏感值已脱敏）"""
-    return await public_model_config_async()
+    return public_model_config()
 
 
 @router.put("/models")
@@ -222,7 +222,7 @@ async def update_models(
 ) -> dict:
     """保存模型配置和默认选择"""
     logger.info("模型配置已更新")
-    result = await save_model_config_async(
+    result = save_model_config(
         body.models,
         body.active_model_id,
     )

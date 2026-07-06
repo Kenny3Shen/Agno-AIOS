@@ -5,7 +5,7 @@ from fastmcp import FastMCP
 from loguru import logger
 from starlette.responses import JSONResponse
 
-from api.mcp.config import SERVICE_IDS, enabled_service_ids_async, ensure_bootstrap_token, is_valid_token
+from api.mcp.config import SERVICE_IDS, enabled_service_ids, ensure_bootstrap_token, is_valid_token
 from api.mcp.tools.basic import basic_mcp
 from api.mcp.tools.playbook import playbook_mcp
 
@@ -55,10 +55,6 @@ def build_main_mcp(enabled: set[str] | None = None) -> FastMCP:
     return main_mcp
 
 
-async def build_main_mcp_async() -> FastMCP:
-    return build_main_mcp(await enabled_service_ids_async())
-
-
 def _install_middleware(main_mcp: FastMCP) -> None:
     """Install FastMCP middleware when the installed version supports it."""
     middleware_specs: list[tuple[str, str, dict[str, Any]]] = [
@@ -102,7 +98,7 @@ class IntegratedMcpRuntime:
     async def startup(self) -> None:
         if self._started:
             return
-        self.mcp = await build_main_mcp_async()
+        self.mcp = build_main_mcp(enabled_service_ids())
         self.app = self.mcp.http_app(path="/")
         self._lifespan_cm = self.app.lifespan(self.app)
         await self._lifespan_cm.__aenter__()
@@ -120,7 +116,7 @@ class IntegratedMcpRuntime:
         old_lifespan_cm = self._lifespan_cm
         old_started = self._started
 
-        new_mcp = await build_main_mcp_async()
+        new_mcp = build_main_mcp(enabled_service_ids())
         new_app = new_mcp.http_app(path="/")
         new_lifespan_cm = None
         if old_started:

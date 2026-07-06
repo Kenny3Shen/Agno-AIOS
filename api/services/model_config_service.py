@@ -3,7 +3,6 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any, Self
 
-from anyio import Path as AsyncPath
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.config import get_settings
@@ -201,42 +200,42 @@ def _mask_secret(value: str) -> str:
     return value[:4] + "*" * (len(value) - 8) + value[-4:]
 
 
-async def load_model_config_store_async() -> ModelConfigStore:
-    config_file = AsyncPath(model_config_file())
-    if not await config_file.exists():
+def load_model_config_store() -> ModelConfigStore:
+    config_file = model_config_file()
+    if not config_file.exists():
         return ModelConfigStore.default()
     try:
-        raw = json.loads(await config_file.read_text(encoding="utf-8"))
+        raw = json.loads(config_file.read_text(encoding="utf-8"))
     except Exception:
         return ModelConfigStore.default()
     return ModelConfigStore.from_raw(raw)
 
 
-async def load_model_config_async() -> dict[str, Any]:
-    return (await load_model_config_store_async()).to_storage_dict()
+def load_model_config() -> dict[str, Any]:
+    return load_model_config_store().to_storage_dict()
 
 
-async def public_model_config_async() -> dict[str, Any]:
-    return (await load_model_config_store_async()).to_public_dict()
+def public_model_config() -> dict[str, Any]:
+    return load_model_config_store().to_public_dict()
 
 
-async def save_model_config_async(
+def save_model_config(
     models: Iterable[ModelConfig | Mapping[Any, Any]], active_model_id: str | None
 ) -> dict[str, Any]:
-    existing = await load_model_config_store_async()
+    existing = load_model_config_store()
     store = ModelConfigStore.from_submitted(
         models,
         active_model_id=active_model_id,
         existing=existing,
     )
-    config_file = AsyncPath(model_config_file())
-    await config_file.parent.mkdir(parents=True, exist_ok=True)
-    await config_file.write_text(
+    config_file = model_config_file()
+    config_file.parent.mkdir(parents=True, exist_ok=True)
+    config_file.write_text(
         json.dumps(store.to_storage_dict(), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     return store.to_public_dict()
 
 
-async def get_model_for_run_async(model_id: str | None = None) -> dict[str, Any]:
-    return (await load_model_config_store_async()).model_for_run(model_id).model_dump()
+def get_model_for_run(model_id: str | None = None) -> dict[str, Any]:
+    return load_model_config_store().model_for_run(model_id).model_dump()
