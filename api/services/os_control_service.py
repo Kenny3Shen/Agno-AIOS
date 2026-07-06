@@ -12,11 +12,6 @@ from sqlalchemy import Column, DateTime, Float, MetaData, Table, Text, desc, fun
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.schema import CreateSchema
 
-from api.mcp.config import (
-    SERVICE_IDS,
-    read_mcp_config,
-    services_from_config,
-)
 from api.auth.permissions import actor_id, has_permission
 from api.services.approval_control_service import list_approvals_payload
 from api.services.llm_service import get_all_sessions_async
@@ -28,9 +23,6 @@ from api.services.postgres_store import (
     get_async_agno_postgres_db,
 )
 from api.services.knowledge_service import knowledge_status_async
-from api.services.skill_service import (
-    list_skill_infos,
-)
 from api.services.scheduler_service import get_scheduler_payload as get_agno_scheduler_payload
 
 OsMetric = dict[str, Any]
@@ -364,70 +356,6 @@ async def get_sessions_payload(actor: Any | None = None) -> OsPayload:
             _metric("Active 24h", active_count, "最近 24 小时更新", "green"),
             _metric("Archived", sum(1 for session in sessions if session.get("archived")), "Chat 侧栏软归档", "yellow"),
             _metric("Shown", len(records), "当前返回记录", "yellow"),
-        ],
-        records=records,
-    )
-
-
-def get_studio_payload(actor: Any | None = None) -> OsPayload:
-    data = read_mcp_config()
-    services = services_from_config(data)
-    skill_infos = list_skill_infos()
-
-    skill_records = []
-    enabled_skills = 0
-    for skill in skill_infos:
-        name = str(skill["name"])
-        enabled = bool(skill["enabled"])
-        if enabled:
-            enabled_skills += 1
-        scripts = skill["scripts"]
-        skill_records.append(
-            _record(
-                record_id=f"skill:{name}",
-                title=name,
-                subtitle=_compact(str(skill["description"]), 120),
-                status="enabled" if enabled else "disabled",
-                meta={"scripts": len(scripts), "type": "skill"},
-            )
-        )
-
-    records: list[OsRecord] = [
-        _record(
-            record_id="agent:security-operations",
-            title="安全运营助手",
-            subtitle="威胁情报分析、剧本执行、知识检索与运行观测。",
-            status="online",
-            meta={"type": "agent", "runtime": "Agno Agent"},
-        ),
-        _record(
-            record_id="team:security-data-fabric",
-            title="Security Data Fabric",
-            subtitle="CVE、资产、Collect、Knowledge 共同构成安全数据底座。",
-            status="ready",
-            meta={"type": "team", "mode": "coordinate"},
-        ),
-    ]
-    for service_id in SERVICE_IDS:
-        records.append(
-            _record(
-                record_id=f"mcp:{service_id}",
-                title=f"MCP {service_id}",
-                subtitle="FastMCP mounted service",
-                status="enabled" if services.get(service_id) else "disabled",
-                meta={"type": "mcp"},
-            )
-        )
-    records.extend(skill_records)
-
-    return _payload(
-        module="studio",
-        title="Studio",
-        description="Agent、Team、MCP 与 Skills 组件注册视图。",
-        metrics=[
-            _metric("Agents", 1, "当前安全运营 Agent", "green"),
-            _metric("MCP", f"{sum(1 for enabled in services.values() if enabled)}/{len(services)}", "启用服务", "yellow"),
-            _metric("Skills", f"{enabled_skills}/{len(skill_infos)}", "启用技能", "blue"),
         ],
         records=records,
     )
@@ -820,7 +748,6 @@ async def get_knowledge_payload(actor: Any | None = None) -> OsPayload:
 
 MODULE_HANDLERS = {
     "sessions": get_sessions_payload,
-    "studio": get_studio_payload,
     "memory": get_memory_payload,
     "metrics": get_metrics_payload,
     "evaluation": get_evaluation_payload,
@@ -847,5 +774,5 @@ async def get_control_payload(
     else:
         payload = await to_thread.run_sync(partial(handler, actor=actor))
     if isawaitable(payload):
-        return cast(OsPayload, await payload)
+        return await payload
     return cast(OsPayload, payload)

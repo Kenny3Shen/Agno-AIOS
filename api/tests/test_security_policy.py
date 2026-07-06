@@ -14,7 +14,7 @@ def test_control_module_access_uses_declared_permission_map():
     security_policy.require_control_module_access("sessions", actor("u1"))
     with pytest.raises(HTTPException) as exc:
         security_policy.require_control_module_access("studio", actor("guest", "guest"))
-    assert exc.value.status_code == 403
+    assert exc.value.status_code == 404
     with pytest.raises(HTTPException) as exc:
         security_policy.require_control_module_access("unknown", actor("u1"))
     assert exc.value.status_code == 404

@@ -86,7 +86,6 @@ export const zhCN = {
       trace: { label: "Trace", description: "Trace、Span 与异常追踪" },
       workflow: { label: "Workflow", description: "低代码工作流编排" },
       sessions: { label: "Sessions", description: "会话库存与上下文历史" },
-      studio: { label: "Studio", description: "Agent、Team 与组件注册" },
       memory: { label: "Memory", description: "用户记忆与增长监测" },
       metrics: { label: "Metrics", description: "运行、延迟与错误指标" },
       evaluation: { label: "Evaluation", description: "评测运行与质量基线" },
@@ -757,7 +756,6 @@ export const zhCN = {
     },
     modules: {
       sessions: "Sessions",
-      studio: "Studio",
       memory: "Memory",
       metrics: "Metrics",
       evaluation: "Evaluation",
@@ -1038,12 +1036,14 @@ export const zhCN = {
     },
     navigation: {
       sectionTitle: "导航栏编排",
-      sectionDescription: "预览当前导航顺序与分类，为后续用户自定义顺序、分组和可见性提供入口。",
+      sectionDescription: "拖动各个导航项到不同分组，并为侧边栏保留短标签。",
       tagPlaceholder: "导航标签",
-      note: "CVE、Collect 已独立归入安全数据分类，并通过分割线与运行、知识和 Settings 区域区分。",
+      moveUp: "上移",
+      moveDown: "下移",
       groups: {
         operations: "运行入口",
         knowledge: "知识与控制",
+        governance: "系统治理",
         securityData: "安全数据",
         settings: "系统设置",
       },

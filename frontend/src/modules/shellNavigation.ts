@@ -12,7 +12,6 @@ export type ModuleNavId =
   | "mcp"
   | "skills"
   | "sessions"
-  | "studio"
   | "memory"
   | "evaluation"
   | "approvals"
@@ -34,6 +33,26 @@ export type NavItem = {
 
 export type HomeSection = {
   title: string
+  items: NavItem[]
+}
+
+export type SidebarDefaultNavGroup = {
+  key: string
+  ids: NavId[]
+}
+
+export type SidebarStoredNavItem = {
+  id: NavId
+  tag: string
+}
+
+export type SidebarStoredNavGroup = {
+  key: string
+  items: SidebarStoredNavItem[]
+}
+
+export type SidebarNavGroup = {
+  key: string
   items: NavItem[]
 }
 
@@ -63,7 +82,6 @@ export const navPermissions: Partial<Record<ModuleNavId, string>> = {
   trace: "trace:read:own",
   workflow: "mcp:read",
   sessions: "session:read:own",
-  studio: "mcp:read",
   memory: "memory:read:own",
   evaluation: "agent_eval:read",
   approvals: "admin:read",
@@ -81,7 +99,6 @@ export const fullCanvasTabs = new Set<ModuleNavId>([
   "mcp",
   "evaluation",
   "sessions",
-  "studio",
   "memory",
   "approvals",
   "scheduler",
@@ -117,7 +134,7 @@ export const buildShellHomeSections = (
     title: titles.operations,
     items: [navItemById.dashboard, navItemById.chat, navItemById.trace, navItemById.workflow],
   },
-  { title: titles.controlPlane, items: [navItemById.studio, navItemById.memory] },
+  { title: titles.controlPlane, items: [navItemById.memory] },
   {
     title: titles.governance,
     items: [navItemById.evaluation, navItemById.approvals, navItemById.scheduler],
@@ -138,6 +155,61 @@ export const buildShellHomeSections = (
     items: section.items.filter((item) => canAccess(item.id)),
   }))
   .filter((section) => section.items.length > 0)
+
+export const buildSidebarNavGroups = ({
+  defaultGroups,
+  storedGroups,
+  navItemsById,
+  allNavItems,
+  canAccess,
+}: {
+  defaultGroups: SidebarDefaultNavGroup[]
+  storedGroups: SidebarStoredNavGroup[]
+  navItemsById: Record<NavId, NavItem>
+  allNavItems: NavItem[]
+  canAccess: (id: NavId) => boolean
+}): SidebarNavGroup[] => {
+  const assignedItems = new Set<NavId>()
+  const storedItemIds = new Set<NavId>()
+
+  for (const group of storedGroups) {
+    for (const item of group.items) storedItemIds.add(item.id)
+  }
+
+  const groups = defaultGroups.map((defaultGroup) => {
+    const storedGroup = storedGroups.find((group) => group.key === defaultGroup.key)
+    const items: NavItem[] = []
+
+    for (const storedItem of storedGroup?.items ?? []) {
+      const item = navItemsById[storedItem.id]
+      if (!item || assignedItems.has(item.id) || !canAccessNavItem(canAccess, item.id)) continue
+      assignedItems.add(item.id)
+      items.push({
+        ...item,
+        label: storedItem.tag.trim() || item.label,
+      })
+    }
+
+    for (const id of defaultGroup.ids) {
+      const item = navItemsById[id]
+      if (!item || assignedItems.has(id) || storedItemIds.has(id) || !canAccessNavItem(canAccess, id)) continue
+      assignedItems.add(id)
+      items.push(item)
+    }
+
+    return { key: defaultGroup.key, items }
+  })
+
+  for (const item of allNavItems) {
+    if (assignedItems.has(item.id) || storedItemIds.has(item.id) || !canAccessNavItem(canAccess, item.id)) continue
+    assignedItems.add(item.id)
+    groups[0]?.items.push(item)
+  }
+
+  return groups.filter((group) => group.items.length > 0)
+}
+
+const canAccessNavItem = (canAccess: (id: NavId) => boolean, id: NavId) => canAccess(id)
 
 export const shellContentClass = (_tab: NavId) => {
   const base = "block h-full min-h-0"
@@ -179,7 +251,6 @@ export const buildShellComponentProps = (
 
 export const osControlTabs = new Set<ActiveOsControlModule>([
   "sessions",
-  "studio",
   "memory",
   "approvals",
   "scheduler",

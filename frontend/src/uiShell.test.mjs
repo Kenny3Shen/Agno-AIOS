@@ -437,8 +437,8 @@ assert.match(
 
 assert.match(
   app,
-  /visibleSettingsItem/,
-  "App shell must hide the settings entry when the current role cannot read it",
+  /canAccess:\s*canAccessNav/,
+  "App shell must pass permission filtering into persisted navigation group building",
 )
 
 assertTextOrder(
@@ -455,8 +455,27 @@ assertTextOrder(
   "sidebar navigation order must match Agno OS control-plane priority",
 )
 
+for (const removedStudioSource of [
+  app,
+  settings,
+  shellNavigation,
+  typesSource,
+  readSource("i18n/locales/en-US.ts"),
+  readSource("i18n/locales/zh-CN.ts"),
+]) {
+  assert.equal(
+    removedStudioSource.includes("studio"),
+    false,
+    "Studio page and nav metadata must be removed from the frontend shell",
+  )
+  assert.equal(
+    removedStudioSource.includes("Studio"),
+    false,
+    "Studio display copy must not remain after removing the page",
+  )
+}
+
 for (const controlPlaneLabel of [
-  't("shell.nav.studio.label")',
   't("shell.nav.memory.label")',
   't("shell.nav.evaluation.label")',
   't("shell.nav.approvals.label")',
@@ -466,6 +485,86 @@ for (const controlPlaneLabel of [
     app,
     new RegExp(controlPlaneLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
     `sidebar must include missing AgentOS control-plane page ${controlPlaneLabel}`,
+  )
+}
+
+assert.match(
+  settings,
+  /navigationLayout/,
+  "Settings navigation editor must persist user-controlled layout, not only tags",
+)
+
+assert.match(
+  settings,
+  /:draggable="canWriteSettings"/,
+  "Settings navigation items must be draggable when the user can write settings",
+)
+
+assert.match(
+  settings,
+  /moveNavigationItem/,
+  "Settings navigation editor must expose keyboard/button movement controls",
+)
+
+assert.match(
+  app,
+  /sidebarNavGroups/,
+  "App shell sidebar must render from the normalized user navigation layout",
+)
+
+assert.match(
+  app,
+  /fetchSettings/,
+  "App shell must load persisted Settings navigation layout",
+)
+
+assert.match(
+  app,
+  /NAV_TAGS/,
+  "App shell must consume the Settings NAV_TAGS payload",
+)
+
+assert.match(
+  settings,
+  /agno-aios-navigation-layout-change/,
+  "Settings must notify the app shell after saving navigation layout changes",
+)
+
+assert.match(
+  app,
+  /addEventListener\("agno-aios-navigation-layout-change"/,
+  "App shell must listen for Settings navigation layout changes without requiring a refresh",
+)
+
+assert.match(
+  app,
+  /removeEventListener\("agno-aios-navigation-layout-change"/,
+  "App shell must clean up the Settings navigation layout listener",
+)
+
+assert.match(
+  settings,
+  /beforeItemId === draggedNavigationItem\.value\.itemId/,
+  "Settings drag sorting must ignore dropping an item onto itself",
+)
+
+assert.match(
+  settings,
+  /targetIndex -= 1/,
+  "Settings drag sorting must keep the intended insertion point when moving down inside one group",
+)
+
+assert.equal(
+  settings.includes("settings.navigation.note"),
+  false,
+  "Settings navigation editor must not render the bottom drag instruction note",
+)
+
+for (const localeSource of [readSource("i18n/locales/en-US.ts"), readSource("i18n/locales/zh-CN.ts")]) {
+  assert.equal(
+    localeSource.includes("可拖拽项目跨分组排版，也可以用箭头按钮精确调整顺序。"),
+    false,
+    "Settings navigation instruction note copy must be removed from locale messages",
   )
 }
 
@@ -1724,7 +1823,7 @@ assert.equal(
 
 assert.match(
   app,
-  /securityDataNavItems/,
+  /ag-nav-security-data/,
   "CVE and Collect must be rendered as a separate sidebar group",
 )
 

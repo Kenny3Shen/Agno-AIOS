@@ -127,10 +127,10 @@ class FakeMemoryMutationDb(FakeMemoryDb):
         return memory
 
 
-def test_guest_cannot_access_studio_inventory():
+def test_studio_control_module_is_removed():
     with pytest.raises(HTTPException) as context:
         os_control.require_os_module_permission("studio", user=actor("g1", "guest"))
-    assert context.value.status_code == 403
+    assert context.value.status_code == 404
 
 
 def test_unknown_module_is_rejected_before_payload_lookup():

@@ -86,7 +86,6 @@ export const enUS = {
       trace: { label: "Trace", description: "Traces, spans, and exceptions" },
       workflow: { label: "Workflow", description: "Low-code workflow orchestration" },
       sessions: { label: "Sessions", description: "Session inventory and context history" },
-      studio: { label: "Studio", description: "Agent, team, and component registry" },
       memory: { label: "Memory", description: "User memory and growth monitoring" },
       metrics: { label: "Metrics", description: "Runtime, latency, and error metrics" },
       evaluation: { label: "Evaluation", description: "Evaluation runs and quality baselines" },
@@ -759,7 +758,6 @@ export const enUS = {
     },
     modules: {
       sessions: "Sessions",
-      studio: "Studio",
       memory: "Memory",
       metrics: "Metrics",
       evaluation: "Evaluation",
@@ -1040,12 +1038,14 @@ export const enUS = {
     },
     navigation: {
       sectionTitle: "Navigation layout",
-      sectionDescription: "Preview the current navigation order and groups as the entry point for user-defined ordering, grouping, and visibility.",
+      sectionDescription: "Arrange navigation items across groups and keep short labels for the sidebar.",
       tagPlaceholder: "Navigation tag",
-      note: "CVE and Collect live in a separate security data group split from operations, knowledge, and Settings.",
+      moveUp: "Move up",
+      moveDown: "Move down",
       groups: {
         operations: "Operations",
         knowledge: "Knowledge and control",
+        governance: "Governance",
         securityData: "Security data",
         settings: "System settings",
       },

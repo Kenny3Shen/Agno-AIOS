@@ -216,37 +216,58 @@
 
             <div class="navigation-config-grid">
               <article
-                v-for="group in navigationGroups"
+                v-for="group in navigationLayout"
                 :key="group.key"
                 class="navigation-group-card"
+                @dragover.prevent
+                @drop="onNavigationDrop(group.key)"
               >
                 <div class="navigation-group-head">
-                  <strong>{{ group.title }}</strong>
+                  <strong>{{ navigationGroupTitle(group.key) }}</strong>
                   <span>{{ group.items.length }}</span>
                 </div>
                 <div class="navigation-order-list">
-                  <span
+                  <div
                     v-for="(item, index) in group.items"
-                    :key="item"
+                    :key="item.id"
                     class="navigation-order-item"
+                    :class="{ 'is-dragging': draggedNavigationItem?.itemId === item.id }"
+                    :draggable="canWriteSettings"
+                    @dragstart="onNavigationDragStart($event, group.key, item.id)"
+                    @dragend="onNavigationDragEnd"
+                    @dragover.prevent
+                    @drop.stop.prevent="onNavigationDrop(group.key, item.id)"
                   >
                     <b>{{ index + 1 }}</b>
-                    <em>{{ item }}</em>
+                    <el-icon class="navigation-drag-handle"><Rank /></el-icon>
+                    <em>{{ item.id }}</em>
                     <el-input
-                      v-model="navigationTags[item]"
+                      v-model="item.tag"
                       size="small"
                       clearable
                       :disabled="!canWriteSettings"
                       :placeholder="t('settings.navigation.tagPlaceholder')"
                     />
-                  </span>
+                    <el-button-group class="navigation-move-actions">
+                      <el-button
+                        size="small"
+                        :icon="ArrowUp"
+                        :disabled="!canWriteSettings || index === 0"
+                        :aria-label="t('settings.navigation.moveUp')"
+                        @click="moveNavigationItem(group.key, item.id, -1)"
+                      />
+                      <el-button
+                        size="small"
+                        :icon="ArrowDown"
+                        :disabled="!canWriteSettings || index === group.items.length - 1"
+                        :aria-label="t('settings.navigation.moveDown')"
+                        @click="moveNavigationItem(group.key, item.id, 1)"
+                      />
+                    </el-button-group>
+                  </div>
                 </div>
               </article>
             </div>
-
-            <p class="settings-note mt-3">
-              {{ t('settings.navigation.note') }}
-            </p>
           </section>
         </el-tab-pane>
       </el-tabs>
@@ -258,7 +279,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { Check, Connection, Delete, Loading, Plus } from "@element-plus/icons-vue"
+import { ArrowDown, ArrowUp, Check, Connection, Delete, Loading, Plus, Rank } from "@element-plus/icons-vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useSettingsApi } from "../composables/useApi"
 import { useAuthStore } from "../stores/auth"
@@ -272,6 +293,23 @@ interface ConfigItem {
   secret: boolean
   required: boolean
 }
+
+interface NavigationItemConfig {
+  id: string
+  tag: string
+}
+
+interface NavigationGroupConfig {
+  key: string
+  items: NavigationItemConfig[]
+}
+
+interface NavigationDragState {
+  groupKey: string
+  itemId: string
+}
+
+const NAVIGATION_LAYOUT_CHANGE_EVENT = "agno-aios-navigation-layout-change"
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -320,30 +358,31 @@ const originalModelSnapshot = ref("")
 const activeModelId = ref("")
 const activeSettingsTab = ref("runtime")
 const testingModelId = ref<string | null>(null)
-const navigationTags = reactive<Record<string, string>>({})
+const navigationLayout = ref<NavigationGroupConfig[]>([])
+const draggedNavigationItem = ref<NavigationDragState | null>(null)
 const originalNavigationTags = ref("")
 const canWriteSettings = computed(() => authStore.hasPermission("settings:write"))
 
-const navigationGroups = computed(() => [
+const defaultNavigationGroups = computed<NavigationGroupConfig[]>(() => [
   {
     key: "operations",
-    title: t("settings.navigation.groups.operations"),
-    items: ["Home", "Dashboard", "Chat", "Trace"],
+    items: ["Home", "Dashboard", "Chat", "Trace", "Workflow"].map((id) => ({ id, tag: "" })),
   },
   {
     key: "knowledge",
-    title: t("settings.navigation.groups.knowledge"),
-    items: ["Skills", "MCP", "Knowledge", "Studio", "Memory"],
+    items: ["Skills", "MCP", "Knowledge", "Memory"].map((id) => ({ id, tag: "" })),
+  },
+  {
+    key: "governance",
+    items: ["Evaluation", "Approvals", "Scheduler"].map((id) => ({ id, tag: "" })),
   },
   {
     key: "securityData",
-    title: t("settings.navigation.groups.securityData"),
-    items: ["CVE", "Collect"],
+    items: ["CVE", "Collect"].map((id) => ({ id, tag: "" })),
   },
   {
     key: "settings",
-    title: t("settings.navigation.groups.settings"),
-    items: ["Settings"],
+    items: ["Settings"].map((id) => ({ id, tag: "" })),
   },
 ])
 
@@ -365,12 +404,75 @@ const serializeModels = () => JSON.stringify({
   models: modelItems.value,
 })
 
-const serializeNavigationTags = () => JSON.stringify(navigationTags)
+const navigationItemIds = computed(() => defaultNavigationGroups.value.flatMap((group) => group.items.map((item) => item.id)))
 
-const navigationItems = computed(() => navigationGroups.value.flatMap((group) => group.items))
+const navigationGroupTitle = (groupKey: string) => t(`settings.navigation.groups.${groupKey}`)
+
+const cloneBaseNavigationLayout = (tagSource: Record<string, unknown> = {}) => (
+  defaultNavigationGroups.value.map((group) => ({
+    key: group.key,
+    items: group.items.map((item) => ({
+      id: item.id,
+      tag: typeof tagSource[item.id] === "string" ? tagSource[item.id] as string : "",
+    })),
+  }))
+)
+
+const serializeNavigationTags = () => JSON.stringify({
+  version: 1,
+  groups: navigationLayout.value.map((group) => ({
+    key: group.key,
+    items: group.items.map((item) => ({ id: item.id, tag: item.tag })),
+  })),
+})
+
+const dispatchNavigationLayoutChange = (raw: string) => {
+  window.dispatchEvent(new CustomEvent(NAVIGATION_LAYOUT_CHANGE_EVENT, { detail: { raw } }))
+}
+
+const normalizedNavigationGroupsFrom = (source: Record<string, unknown>) => {
+  const allowedItems = new Set(navigationItemIds.value)
+  const assignedItems = new Set<string>()
+  const rawGroups = Array.isArray(source.groups) ? source.groups : []
+
+  const layout = defaultNavigationGroups.value.map((defaultGroup) => {
+    const rawGroup = rawGroups.find((group) => {
+      return group && typeof group === "object" && (group as Record<string, unknown>).key === defaultGroup.key
+    }) as Record<string, unknown> | undefined
+    const rawItems = Array.isArray(rawGroup?.items) ? rawGroup.items : []
+    const items: NavigationItemConfig[] = []
+
+    for (const rawItem of rawItems) {
+      const itemRecord = rawItem && typeof rawItem === "object" ? rawItem as Record<string, unknown> : null
+      const id = typeof rawItem === "string" ? rawItem : itemRecord?.id
+      if (typeof id !== "string" || !allowedItems.has(id) || assignedItems.has(id)) continue
+      assignedItems.add(id)
+      const tag = typeof itemRecord?.tag === "string"
+        ? itemRecord.tag
+        : typeof source[id] === "string" ? source[id] as string : ""
+      items.push({ id, tag })
+    }
+
+    return { key: defaultGroup.key, items }
+  })
+
+  for (const defaultGroup of defaultNavigationGroups.value) {
+    const group = layout.find((item) => item.key === defaultGroup.key)
+    if (!group) continue
+    for (const item of defaultGroup.items) {
+      if (assignedItems.has(item.id)) continue
+      assignedItems.add(item.id)
+      group.items.push({
+        id: item.id,
+        tag: typeof source[item.id] === "string" ? source[item.id] as string : "",
+      })
+    }
+  }
+
+  return layout
+}
 
 const loadNavigationTags = (raw: string) => {
-  for (const key of Object.keys(navigationTags)) delete navigationTags[key]
   let parsed: unknown = {}
   try {
     parsed = raw ? JSON.parse(raw) : {}
@@ -378,11 +480,56 @@ const loadNavigationTags = (raw: string) => {
     parsed = {}
   }
   const source = parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {}
-  for (const item of navigationItems.value) {
-    const value = source[item]
-    navigationTags[item] = typeof value === "string" ? value : ""
-  }
+  navigationLayout.value = Array.isArray(source.groups)
+    ? normalizedNavigationGroupsFrom(source)
+    : cloneBaseNavigationLayout(source)
   originalNavigationTags.value = serializeNavigationTags()
+}
+
+const findNavigationGroup = (groupKey: string) => navigationLayout.value.find((group) => group.key === groupKey)
+
+const moveNavigationItem = (groupKey: string, itemId: string, direction: -1 | 1) => {
+  if (!canWriteSettings.value) return
+  const group = findNavigationGroup(groupKey)
+  if (!group) return
+  const index = group.items.findIndex((item) => item.id === itemId)
+  const nextIndex = index + direction
+  if (index < 0 || nextIndex < 0 || nextIndex >= group.items.length) return
+  const [item] = group.items.splice(index, 1)
+  group.items.splice(nextIndex, 0, item)
+}
+
+const onNavigationDragStart = (event: DragEvent, groupKey: string, itemId: string) => {
+  if (!canWriteSettings.value) return
+  draggedNavigationItem.value = { groupKey, itemId }
+  event.dataTransfer?.setData("text/plain", `${groupKey}:${itemId}`)
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"
+}
+
+const onNavigationDragEnd = () => {
+  draggedNavigationItem.value = null
+}
+
+const onNavigationDrop = (targetGroupKey: string, beforeItemId?: string) => {
+  if (!canWriteSettings.value || !draggedNavigationItem.value) return
+  if (beforeItemId === draggedNavigationItem.value.itemId) {
+    draggedNavigationItem.value = null
+    return
+  }
+  const sourceGroup = findNavigationGroup(draggedNavigationItem.value.groupKey)
+  const targetGroup = findNavigationGroup(targetGroupKey)
+  if (!sourceGroup || !targetGroup) return
+
+  const sourceIndex = sourceGroup.items.findIndex((item) => item.id === draggedNavigationItem.value?.itemId)
+  if (sourceIndex < 0) return
+  let targetIndex = beforeItemId
+    ? targetGroup.items.findIndex((targetItem) => targetItem.id === beforeItemId)
+    : targetGroup.items.length
+  if (targetIndex < 0) targetIndex = targetGroup.items.length
+  if (sourceGroup === targetGroup && targetIndex > sourceIndex) targetIndex -= 1
+  const [item] = sourceGroup.items.splice(sourceIndex, 1)
+  targetGroup.items.splice(targetIndex, 0, item)
+  draggedNavigationItem.value = null
 }
 
 const hasRequiredModelFields = (model: ModelConfig) => {
@@ -508,7 +655,11 @@ const saveRuntimeSettings = async () => {
       originalData.value[item.key] = newVal
     }
   }
-  if (data.NAV_TAGS !== undefined) {
+  if (changed.NAV_TAGS !== undefined) {
+    const persistedNavigationTags = data.NAV_TAGS ?? changed.NAV_TAGS
+    loadNavigationTags(persistedNavigationTags || "{}")
+    dispatchNavigationLayoutChange(persistedNavigationTags || "{}")
+  } else if (data.NAV_TAGS !== undefined) {
     loadNavigationTags(data.NAV_TAGS || "{}")
   }
 }
@@ -797,6 +948,14 @@ onMounted(() => { loadSettings() })
   border-radius: var(--ag-radius-control);
   background: var(--ag-panel-bg);
   padding: 7px 8px;
+  cursor: grab;
+  transition: border-color 0.16s ease, opacity 0.16s ease, transform 0.16s ease;
+}
+
+.navigation-order-item.is-dragging {
+  border-color: var(--ag-blue);
+  opacity: 0.54;
+  transform: scale(0.99);
 }
 
 .navigation-order-item b {
@@ -823,9 +982,19 @@ onMounted(() => { loadSettings() })
   white-space: nowrap;
 }
 
+.navigation-drag-handle {
+  flex: 0 0 auto;
+  color: var(--ag-muted);
+  font-size: 15px;
+}
+
 .navigation-order-item :deep(.el-input) {
   min-width: 92px;
   flex: 1 1 auto;
+}
+
+.navigation-move-actions {
+  flex: 0 0 auto;
 }
 
 @media (max-width: 640px) {
@@ -839,6 +1008,27 @@ onMounted(() => { loadSettings() })
 
   .navigation-config-grid {
     grid-template-columns: 1fr;
+  }
+
+  .navigation-order-item {
+    display: grid;
+    grid-template-columns: 22px 16px minmax(64px, 1fr) auto;
+    align-items: center;
+  }
+
+  .navigation-order-item em {
+    flex: initial;
+    min-width: 0;
+  }
+
+  .navigation-order-item :deep(.el-input) {
+    grid-column: 1 / -1;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .navigation-move-actions {
+    justify-self: end;
   }
 }
 </style>

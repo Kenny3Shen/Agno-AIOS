@@ -116,7 +116,6 @@ export interface ChatSessionRun {
 
 export type OsControlModule =
   | "sessions"
-  | "studio"
   | "memory"
   | "metrics"
   | "evaluation"

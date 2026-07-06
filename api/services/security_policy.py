@@ -10,7 +10,6 @@ from api.services.audit_service import audit_request_context, record_audit_event
 
 CONTROL_MODULE_PERMISSIONS = {
     "sessions": "session:read:own",
-    "studio": "mcp:read",
     "memory": "memory:read:own",
     "metrics": "metrics:read:own",
     "evaluation": "agent_eval:read",

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import {
+  buildSidebarNavGroups,
   buildShellComponentProps,
   buildShellHomeSections,
   buildWorkspaceSignals,
@@ -26,7 +27,6 @@ const navItems = [
   item("chat"),
   item("trace"),
   item("workflow"),
-  item("studio"),
   item("memory"),
   item("evaluation"),
   item("approvals"),
@@ -45,7 +45,6 @@ const components = {
   chat: { name: "Chat" },
   trace: { name: "Trace" },
   workflow: { name: "Workflow" },
-  studio: { name: "AgentOSControl" },
   memory: { name: "MemoryControl" },
   evaluation: { name: "AgentOSControl" },
   approvals: { name: "AgentOSControl" },
@@ -132,11 +131,44 @@ assert.deepEqual(
   })),
   [
     { title: "Operations", items: ["dashboard", "chat", "trace", "workflow"] },
-    { title: "Control", items: ["studio", "memory"] },
+    { title: "Control", items: ["memory"] },
     { title: "Governance", items: ["evaluation"] },
     { title: "Security Data", items: ["skills", "mcp", "knowledge", "cve", "collect"] },
   ],
   "home sections must keep product grouping while filtering inaccessible items",
+)
+
+assert.deepEqual(
+  buildSidebarNavGroups({
+    defaultGroups: [
+      { key: "operations", ids: ["home", "dashboard", "chat", "trace", "workflow"] },
+      { key: "knowledge", ids: ["skills", "mcp", "knowledge", "memory"] },
+      { key: "governance", ids: ["evaluation", "approvals", "scheduler"] },
+      { key: "securityData", ids: ["cve", "collect"] },
+      { key: "settings", ids: ["settings"] },
+    ],
+    storedGroups: [
+      { key: "operations", items: [{ id: "home", tag: "" }, { id: "dashboard", tag: "" }, { id: "chat", tag: "" }, { id: "workflow", tag: "" }] },
+      { key: "knowledge", items: [{ id: "trace", tag: "Trace moved" }, { id: "skills", tag: "" }, { id: "mcp", tag: "" }, { id: "knowledge", tag: "" }, { id: "memory", tag: "" }] },
+      { key: "governance", items: [{ id: "evaluation", tag: "" }, { id: "approvals", tag: "" }, { id: "scheduler", tag: "" }] },
+      { key: "securityData", items: [{ id: "cve", tag: "" }, { id: "collect", tag: "" }] },
+      { key: "settings", items: [{ id: "settings", tag: "" }] },
+    ],
+    navItemsById: { home: item("home"), dashboard: item("dashboard"), ...navItemById },
+    allNavItems: [item("home"), item("dashboard"), ...navItems.filter((navItem) => navItem.id !== "dashboard")],
+    canAccess: () => true,
+  }).map((group) => ({
+    key: group.key,
+    items: group.items.map((navItem) => navItem.label),
+  })),
+  [
+    { key: "operations", items: ["home", "dashboard", "chat", "workflow"] },
+    { key: "knowledge", items: ["Trace moved", "skills", "mcp", "knowledge", "memory"] },
+    { key: "governance", items: ["evaluation", "approvals", "scheduler"] },
+    { key: "securityData", items: ["cve", "collect"] },
+    { key: "settings", items: ["settings"] },
+  ],
+  "sidebar groups must honor user cross-group layout instead of restoring moved items to default groups",
 )
 
 assert.equal(

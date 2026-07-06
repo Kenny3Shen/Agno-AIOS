@@ -68,229 +68,153 @@
           </div>
 
           <nav class="ag-nav min-h-0 flex-1 overflow-y-auto">
-            <button
-              type="button"
-              class="ag-nav-item ag-nav-home"
-              :class="{ active: activeTab === 'home' }"
-              :aria-current="activeTab === 'home' ? 'page' : undefined"
-              @click="selectNav('home')"
-            >
-              <span class="ag-nav-icon">
-                <el-icon><Platform /></el-icon>
-              </span>
-              <span class="ag-nav-text min-w-0 flex-1">
-                <span class="ag-nav-label">{{ homeItem.label }}</span>
-              </span>
-            </button>
+            <template v-for="(group, groupIndex) in sidebarNavGroups" :key="group.key">
+              <div v-if="groupIndex > 0" class="ag-nav-divider" aria-hidden="true" />
 
-            <button
-              type="button"
-              class="ag-nav-item ag-nav-dashboard soc-focus"
-              :class="{ active: activeTab === 'dashboard' }"
-              :aria-current="activeTab === 'dashboard' ? 'page' : undefined"
-              @click="selectNav('dashboard')"
-            >
-              <span class="ag-nav-icon">
-                <el-icon><DataBoard /></el-icon>
-              </span>
-              <span class="ag-nav-text min-w-0 flex-1">
-                <span class="ag-nav-label">{{ dashboardItem.label }}</span>
-              </span>
-              <span v-if="dashboardItem.badge" class="ag-nav-badge">
-                {{ dashboardItem.badge }}
-              </span>
-            </button>
+              <div class="ag-nav-list" :class="{ 'ag-nav-security-data': group.key === 'securityData' }">
+                <template v-for="item in group.items" :key="item.id">
+                  <div v-if="item.id === 'chat'" class="ag-nav-chat-block">
+                    <div class="ag-nav-chat-row">
+                      <button
+                        type="button"
+                        class="ag-nav-item ag-nav-item-main soc-focus"
+                        :class="{ active: item.id === activeTab }"
+                        :aria-current="item.id === activeTab ? 'page' : undefined"
+                        @click="selectNav(item.id)"
+                      >
+                        <span class="ag-nav-icon">
+                          <el-icon>
+                            <component :is="item.icon" />
+                          </el-icon>
+                        </span>
 
-            <div class="ag-nav-divider" aria-hidden="true" />
-
-            <div class="ag-nav-list">
-              <template v-for="item in mainNavItems" :key="item.id">
-                <div v-if="item.id === 'chat'" class="ag-nav-chat-block">
-                  <div class="ag-nav-chat-row">
-                    <button
-                      type="button"
-                      class="ag-nav-item ag-nav-item-main soc-focus"
-                      :class="{ active: item.id === activeTab }"
-                      :aria-current="item.id === activeTab ? 'page' : undefined"
-                      @click="selectNav(item.id)"
-                    >
-                      <span class="ag-nav-icon">
-                        <el-icon>
-                          <component :is="item.icon" />
-                        </el-icon>
-                      </span>
-
-                      <span class="ag-nav-text min-w-0 flex-1">
-                        <span class="ag-nav-label">{{ item.label }}</span>
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      class="ag-chat-session-toggle"
-                      :aria-label="chatSessionsExpanded ? t('shell.sessions.collapse') : t('shell.sessions.expand')"
-                      :aria-expanded="chatSessionsExpanded"
-                      @click.stop="toggleChatSessions"
-                    >
-                      <el-icon>
-                        <ArrowDown v-if="chatSessionsExpanded" />
-                        <ArrowRight v-else />
-                      </el-icon>
-                    </button>
-                  </div>
-
-                  <transition name="fade">
-                    <div
-                      v-if="chatSessionsExpanded && !isSidebarCompact"
-                      class="ag-chat-session-panel"
-                    >
-                      <button type="button" class="ag-chat-new-session" @click="createSidebarChat">
-                        <el-icon><Plus /></el-icon>
-                        <span>{{ t("shell.actions.newChat") }}</span>
+                        <span class="ag-nav-text min-w-0 flex-1">
+                          <span class="ag-nav-label">{{ item.label }}</span>
+                        </span>
                       </button>
 
-                      <div class="ag-chat-session-head">
-                        <span>{{ t("shell.sessions.title") }}</span>
-                        <strong>{{ chatSessions.length }}</strong>
-                      </div>
-
-                      <div
-                        v-for="session in chatSessions"
-                        :key="session.session_id"
-                        class="ag-chat-session-row"
-                        :class="{ active: currentChatSessionId === session.session_id }"
+                      <button
+                        type="button"
+                        class="ag-chat-session-toggle"
+                        :aria-label="chatSessionsExpanded ? t('shell.sessions.collapse') : t('shell.sessions.expand')"
+                        :aria-expanded="chatSessionsExpanded"
+                        @click.stop="toggleChatSessions"
                       >
-                        <button
-                          type="button"
-                          class="ag-chat-session-item"
-                          :title="session.preview || session.session_id"
-                          @click="selectChatSession(session.session_id)"
-                        >
-                          <span class="ag-chat-session-icon">
-                            <el-icon><ChatDotRound /></el-icon>
-                          </span>
-                          <span class="ag-chat-session-copy">
-                            <strong>{{ session.preview || t("shell.actions.newChat") }}</strong>
-                            <em>{{ formatSessionTime(session.updated_at) }}</em>
-                          </span>
+                        <el-icon>
+                          <ArrowDown v-if="chatSessionsExpanded" />
+                          <ArrowRight v-else />
+                        </el-icon>
+                      </button>
+                    </div>
+
+                    <transition name="fade">
+                      <div
+                        v-if="chatSessionsExpanded && !isSidebarCompact"
+                        class="ag-chat-session-panel"
+                      >
+                        <button type="button" class="ag-chat-new-session" @click="createSidebarChat">
+                          <el-icon><Plus /></el-icon>
+                          <span>{{ t("shell.actions.newChat") }}</span>
                         </button>
 
-                        <div class="ag-chat-session-menu-wrap">
+                        <div class="ag-chat-session-head">
+                          <span>{{ t("shell.sessions.title") }}</span>
+                          <strong>{{ chatSessions.length }}</strong>
+                        </div>
+
+                        <div
+                          v-for="session in chatSessions"
+                          :key="session.session_id"
+                          class="ag-chat-session-row"
+                          :class="{ active: currentChatSessionId === session.session_id }"
+                        >
                           <button
                             type="button"
-                            class="ag-chat-session-menu-trigger"
-                            :aria-label="t('shell.sessions.actions')"
-                            :aria-expanded="openSessionMenuId === session.session_id"
-                            @click.stop="toggleSessionMenu(session.session_id)"
+                            class="ag-chat-session-item"
+                            :title="session.preview || session.session_id"
+                            @click="selectChatSession(session.session_id)"
                           >
-                            :
+                            <span class="ag-chat-session-icon">
+                              <el-icon><ChatDotRound /></el-icon>
+                            </span>
+                            <span class="ag-chat-session-copy">
+                              <strong>{{ session.preview || t("shell.actions.newChat") }}</strong>
+                              <em>{{ formatSessionTime(session.updated_at) }}</em>
+                            </span>
                           </button>
 
-                          <transition name="fade">
-                            <div
-                              v-if="openSessionMenuId === session.session_id"
-                              class="ag-chat-session-menu"
-                              role="menu"
+                          <div class="ag-chat-session-menu-wrap">
+                            <button
+                              type="button"
+                              class="ag-chat-session-menu-trigger"
+                              :aria-label="t('shell.sessions.actions')"
+                              :aria-expanded="openSessionMenuId === session.session_id"
+                              @click.stop="toggleSessionMenu(session.session_id)"
                             >
-                              <button type="button" role="menuitem" @click.stop="copySidebarSessionId(session.session_id)">
-                                <el-icon><CopyDocument /></el-icon>
-                                <span>{{ t("shell.actions.copySessionId") }}</span>
-                              </button>
-                              <button type="button" role="menuitem" @click.stop="copySidebarSessionRuns(session.session_id)">
-                                <el-icon><CopyDocument /></el-icon>
-                                <span>{{ t("shell.actions.copyRuns") }}</span>
-                              </button>
-                              <button type="button" role="menuitem" @click.stop="archiveSidebarChatSession(session.session_id)">
-                                <el-icon><Delete /></el-icon>
-                                <span>{{ t("shell.actions.archiveSession") }}</span>
-                              </button>
-                            </div>
-                          </transition>
+                              :
+                            </button>
+
+                            <transition name="fade">
+                              <div
+                                v-if="openSessionMenuId === session.session_id"
+                                class="ag-chat-session-menu"
+                                role="menu"
+                              >
+                                <button type="button" role="menuitem" @click.stop="copySidebarSessionId(session.session_id)">
+                                  <el-icon><CopyDocument /></el-icon>
+                                  <span>{{ t("shell.actions.copySessionId") }}</span>
+                                </button>
+                                <button type="button" role="menuitem" @click.stop="copySidebarSessionRuns(session.session_id)">
+                                  <el-icon><CopyDocument /></el-icon>
+                                  <span>{{ t("shell.actions.copyRuns") }}</span>
+                                </button>
+                                <button type="button" role="menuitem" @click.stop="archiveSidebarChatSession(session.session_id)">
+                                  <el-icon><Delete /></el-icon>
+                                  <span>{{ t("shell.actions.archiveSession") }}</span>
+                                </button>
+                              </div>
+                            </transition>
+                          </div>
+                        </div>
+
+                        <div v-if="!chatSessions.length && !loadingSessions" class="ag-chat-session-empty">
+                          {{ t("shell.actions.noSessions") }}
                         </div>
                       </div>
+                    </transition>
+                  </div>
 
-                      <div v-if="!chatSessions.length && !loadingSessions" class="ag-chat-session-empty">
-                        {{ t("shell.actions.noSessions") }}
-                      </div>
-                    </div>
-                  </transition>
-                </div>
+                  <button
+                    v-else
+                    type="button"
+                    class="ag-nav-item soc-focus"
+                    :class="[
+                      {
+                        active: item.id === activeTab,
+                        'ag-nav-home': item.id === 'home',
+                        'ag-nav-dashboard': item.id === 'dashboard',
+                      },
+                    ]"
+                    :aria-current="item.id === activeTab ? 'page' : undefined"
+                    @click="selectNav(item.id)"
+                  >
+                    <span class="ag-nav-icon">
+                      <el-icon>
+                        <component :is="item.icon" />
+                      </el-icon>
+                    </span>
 
-                <button
-                  v-else
-                  type="button"
-                  class="ag-nav-item soc-focus"
-                  :class="{ active: item.id === activeTab }"
-                  :aria-current="item.id === activeTab ? 'page' : undefined"
-                  @click="selectNav(item.id)"
-                >
-                  <span class="ag-nav-icon">
-                    <el-icon>
-                      <component :is="item.icon" />
-                    </el-icon>
-                  </span>
+                    <span class="ag-nav-text min-w-0 flex-1">
+                      <span class="ag-nav-label">{{ item.label }}</span>
+                    </span>
 
-                  <span class="ag-nav-text min-w-0 flex-1">
-                    <span class="ag-nav-label">{{ item.label }}</span>
-                  </span>
-
-                  <span v-if="item.badge" class="ag-nav-badge">
-                    {{ item.badge }}
-                  </span>
-                </button>
-              </template>
-            </div>
-
-            <template v-if="securityDataNavItems.length">
-              <div class="ag-nav-divider" aria-hidden="true" />
-
-              <div class="ag-nav-list ag-nav-security-data">
-                <button
-                  v-for="item in securityDataNavItems"
-                  :key="item.id"
-                  type="button"
-                  class="ag-nav-item soc-focus"
-                  :class="{ active: item.id === activeTab }"
-                  :aria-current="item.id === activeTab ? 'page' : undefined"
-                  @click="selectNav(item.id)"
-                >
-                  <span class="ag-nav-icon">
-                    <el-icon>
-                      <component :is="item.icon" />
-                    </el-icon>
-                  </span>
-
-                  <span class="ag-nav-text min-w-0 flex-1">
-                    <span class="ag-nav-label">{{ item.label }}</span>
-                  </span>
-
-                  <span v-if="item.badge" class="ag-nav-badge">
-                    {{ item.badge }}
-                  </span>
-                </button>
+                    <span v-if="item.badge" class="ag-nav-badge">
+                      {{ item.badge }}
+                    </span>
+                  </button>
+                </template>
               </div>
             </template>
-
-            <div v-if="visibleSettingsItem" class="ag-nav-divider" aria-hidden="true" />
-
-            <button
-              v-if="visibleSettingsItem"
-              type="button"
-              class="ag-nav-item soc-focus"
-              :class="{ active: visibleSettingsItem.id === activeTab }"
-              :aria-current="visibleSettingsItem.id === activeTab ? 'page' : undefined"
-              @click="selectNav(visibleSettingsItem.id)"
-            >
-              <span class="ag-nav-icon">
-                <el-icon>
-                  <component :is="visibleSettingsItem.icon" />
-                </el-icon>
-              </span>
-
-              <span class="ag-nav-text min-w-0 flex-1">
-                <span class="ag-nav-label">{{ visibleSettingsItem.label }}</span>
-              </span>
-            </button>
           </nav>
 
           <div class="ag-sidebar-footer">
@@ -469,7 +393,6 @@ import {
   Fold,
   Finished,
   Loading,
-  MagicStick,
   Menu,
   MoreFilled,
   Moon,
@@ -491,6 +414,7 @@ import { setI18nLocale } from "./i18n"
 import { clearStoredAuthToken, fetchCurrentUser, getStoredAuthToken, logout as authLogout, type AuthClientFallbackKey } from "./lib/authClient"
 import { copyToClipboard } from "./lib/clipboard"
 import {
+  buildSidebarNavGroups,
   buildShellHomeSections,
   buildShellComponentProps,
   buildWorkspaceSignals,
@@ -499,7 +423,6 @@ import {
   resolveShellMeta,
   shellComponentKey,
   shellContentClass,
-  splitPrimaryShellNavItems,
   type HomeSection,
   type ModuleNavId,
   type NavId,
@@ -509,6 +432,23 @@ import { useAuthStore } from "./stores/auth"
 import { useSessionStore } from "./stores/sessions"
 import { useShellStore } from "./stores/shell"
 import type { AuthUser } from "./types"
+
+type SidebarNavGroupKey = "operations" | "knowledge" | "governance" | "securityData" | "settings"
+
+type SidebarStoredNavItem = {
+  id: NavId
+  tag: string
+}
+
+type SidebarStoredNavGroup = {
+  key: SidebarNavGroupKey
+  items: SidebarStoredNavItem[]
+}
+
+type SidebarNavGroup = {
+  key: SidebarNavGroupKey
+  items: NavItem[]
+}
 
 const { t } = useI18n()
 const AgentOSControl = defineAsyncComponent(() => import("./components/AgentOSControl.vue"))
@@ -550,7 +490,6 @@ const navItems = computed<NavItem[]>(() => [
   { id: "knowledge", label: t("shell.nav.knowledge.label"), description: t("shell.nav.knowledge.description"), icon: Files, tone: "green" },
   { id: "trace", label: t("shell.nav.trace.label"), description: t("shell.nav.trace.description"), icon: DataAnalysis, tone: "green" },
   { id: "workflow", label: t("shell.nav.workflow.label"), description: t("shell.nav.workflow.description"), icon: Share, tone: "yellow" },
-  { id: "studio", label: t("shell.nav.studio.label"), description: t("shell.nav.studio.description"), icon: MagicStick, tone: "yellow" },
   { id: "memory", label: t("shell.nav.memory.label"), description: t("shell.nav.memory.description"), icon: Cpu, tone: "green" },
   { id: "evaluation", label: t("shell.nav.evaluation.label"), description: t("shell.nav.evaluation.description"), icon: Finished, tone: "green" },
   { id: "approvals", label: t("shell.nav.approvals.label"), description: t("shell.nav.approvals.description"), icon: Tickets, tone: "red" },
@@ -570,7 +509,6 @@ const componentMap: Record<ModuleNavId, Component> = {
   collect: Collect,
   skills: Skills,
   sessions: AgentOSControl,
-  studio: AgentOSControl,
   memory: MemoryControl,
   evaluation: AgentEvals,
   approvals: AgentOSControl,
@@ -582,19 +520,19 @@ const availableNavIds = computed(() => new Set<NavId>(["home", "dashboard", ...n
 const canAccessNav = (id: NavId) => {
   return canAccessShellNav(id, availableNavIds.value, (permission) => authStore.hasPermission(permission))
 }
-const settingsItem = computed<NavItem>(() => navItems.value.find((item) => item.id === "settings") as NavItem)
 const visibleNavItems = computed<NavItem[]>(() => navItems.value.filter((item) => canAccessNav(item.id)))
-const visibleSettingsItem = computed<NavItem | null>(() => {
-  const item = settingsItem.value
-  return canAccessNav(item.id) ? item : null
-})
-const shellNavGroups = computed(() => splitPrimaryShellNavItems(visibleNavItems.value))
-const mainNavItems = computed<NavItem[]>(() => shellNavGroups.value.mainNavItems)
-const securityDataNavItems = computed<NavItem[]>(() => shellNavGroups.value.securityDataNavItems)
 const moduleNavItems = computed<NavItem[]>(() => [dashboardItem.value, ...navItems.value])
 const visibleModuleNavItems = computed<NavItem[]>(() => [dashboardItem.value, ...visibleNavItems.value.filter((item) => item.id !== "dashboard")])
 const navItemById = computed<Record<ModuleNavId, NavItem>>(() => (
   Object.fromEntries(moduleNavItems.value.map((item) => [item.id, item])) as Record<ModuleNavId, NavItem>
+))
+const allNavItems = computed<NavItem[]>(() => [
+  homeItem.value,
+  dashboardItem.value,
+  ...navItems.value.filter((item) => item.id !== "dashboard"),
+])
+const allNavItemById = computed<Record<NavId, NavItem>>(() => (
+  Object.fromEntries(allNavItems.value.map((item) => [item.id, item])) as Record<NavId, NavItem>
 ))
 const homeSections = computed<HomeSection[]>(() => buildShellHomeSections({
   operations: t("shell.sections.operations"),
@@ -607,6 +545,30 @@ const CHAT_MODEL_STORAGE_KEY = "agno-aios-chat-model-id"
 const SIDEBAR_EXPANDED_WIDTH = 264
 const SIDEBAR_COMPACT_WIDTH = 76
 const isMobileViewport = () => typeof window !== "undefined" && window.innerWidth < 1024
+const defaultSidebarNavGroupIds: Array<{ key: SidebarNavGroupKey; ids: NavId[] }> = [
+  { key: "operations", ids: ["home", "dashboard", "chat", "trace", "workflow"] },
+  { key: "knowledge", ids: ["skills", "mcp", "knowledge", "memory"] },
+  { key: "governance", ids: ["evaluation", "approvals", "scheduler"] },
+  { key: "securityData", ids: ["cve", "collect"] },
+  { key: "settings", ids: ["settings"] },
+]
+const storedNavigationNameToId: Record<string, NavId> = {
+  Home: "home",
+  Dashboard: "dashboard",
+  Chat: "chat",
+  Trace: "trace",
+  Workflow: "workflow",
+  Skills: "skills",
+  MCP: "mcp",
+  Knowledge: "knowledge",
+  Memory: "memory",
+  Evaluation: "evaluation",
+  Approvals: "approvals",
+  Scheduler: "scheduler",
+  CVE: "cve",
+  Collect: "collect",
+  Settings: "settings",
+}
 
 const authStore = useAuthStore()
 const shellStore = useShellStore()
@@ -637,6 +599,7 @@ const {
 shellStore.setIsMobile(isMobileViewport())
 const currentModelName = ref("DeepSeek V4 Pro")
 const openSessionMenuId = ref<string | null>(null)
+const storedNavigationGroups = ref<SidebarStoredNavGroup[]>([])
 const authClientFallbacks = computed<Record<AuthClientFallbackKey, string>>(() => ({
   fetchUnsupported: t("auth.errors.fetchUnsupported"),
   loginFailed: t("auth.errors.loginFailed"),
@@ -647,7 +610,7 @@ const authClientFallbacks = computed<Record<AuthClientFallbackKey, string>>(() =
   oauthMissingAuthorizationUrl: t("auth.errors.oauthMissingAuthorizationUrl"),
 }))
 
-const { fetchModels } = useSettingsApi()
+const { fetchModels, fetchSettings } = useSettingsApi()
 const { listSessions, archiveSession } = useChatHistory()
 
 watch(locale, (value) => setI18nLocale(value), { immediate: true })
@@ -701,6 +664,79 @@ const workspaceSignals = computed(() => buildWorkspaceSignals(
     session: currentUser.value?.is_active ? t("common.status.active") : t("common.status.ready"),
   },
 ))
+
+const navIdFromStoredName = (value: unknown): NavId | null => {
+  if (typeof value !== "string") return null
+  const direct = value.toLowerCase() as NavId
+  if (availableNavIds.value.has(direct)) return direct
+  return storedNavigationNameToId[value] ?? null
+}
+
+const parseStoredNavigationLayout = (raw: string): SidebarStoredNavGroup[] => {
+  let parsed: unknown = {}
+  try {
+    parsed = raw ? JSON.parse(raw) : {}
+  } catch {
+    parsed = {}
+  }
+  const source = parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {}
+  const rawGroups = Array.isArray(source.groups) ? source.groups : []
+  const assignedItems = new Set<NavId>()
+
+  return defaultSidebarNavGroupIds.map((defaultGroup) => {
+    const rawGroup = rawGroups.find((group) => {
+      return group && typeof group === "object" && (group as Record<string, unknown>).key === defaultGroup.key
+    }) as Record<string, unknown> | undefined
+    const rawItems = Array.isArray(rawGroup?.items) ? rawGroup.items : []
+    const items: SidebarStoredNavItem[] = []
+
+    for (const rawItem of rawItems) {
+      const itemRecord = rawItem && typeof rawItem === "object" ? rawItem as Record<string, unknown> : null
+      const id = navIdFromStoredName(typeof rawItem === "string" ? rawItem : itemRecord?.id)
+      if (!id || assignedItems.has(id)) continue
+      assignedItems.add(id)
+      const tag = typeof itemRecord?.tag === "string"
+        ? itemRecord.tag
+        : typeof source[id] === "string" ? source[id] as string : ""
+      items.push({ id, tag })
+    }
+
+    return { key: defaultGroup.key, items }
+  })
+}
+
+const loadNavigationLayout = async () => {
+  if (!authStore.hasPermission("settings:read")) {
+    storedNavigationGroups.value = []
+    return
+  }
+  try {
+    const settings = await fetchSettings()
+    storedNavigationGroups.value = parseStoredNavigationLayout(settings.NAV_TAGS || "{}")
+  } catch {
+    storedNavigationGroups.value = []
+  }
+}
+
+const handleNavigationLayoutChange = (event: Event) => {
+  if (!authStore.hasPermission("settings:read")) return
+  const detail = (event as CustomEvent<{ raw?: string }>).detail
+  if (typeof detail?.raw === "string") {
+    storedNavigationGroups.value = parseStoredNavigationLayout(detail.raw)
+    return
+  }
+  void loadNavigationLayout()
+}
+
+const sidebarNavGroups = computed<SidebarNavGroup[]>(() => {
+  return buildSidebarNavGroups({
+    defaultGroups: defaultSidebarNavGroupIds,
+    storedGroups: storedNavigationGroups.value,
+    navItemsById: allNavItemById.value,
+    allNavItems: allNavItems.value,
+    canAccess: canAccessNav,
+  }) as SidebarNavGroup[]
+})
 
 const checkMobile = () => {
   isMobile.value = isMobileViewport()
@@ -873,6 +909,7 @@ const toggleSidebarSize = () => {
 const refreshWorkspace = () => {
   componentRenderKey.value += 1
   void loadCurrentModel()
+  void loadNavigationLayout()
 }
 
 const applyTheme = (dark: boolean) => {
@@ -894,6 +931,7 @@ const toggleTheme = () => {
 const handleAuthenticated = (user: AuthUser) => {
   currentUser.value = user
   void loadCurrentModel()
+  void loadNavigationLayout()
   if (authStore.hasPermission("session:read:own")) void loadSidebarChatSessions()
 }
 
@@ -907,6 +945,7 @@ const restoreSession = async () => {
   try {
     currentUser.value = await fetchCurrentUser(token, { fallbacks: authClientFallbacks.value })
     void loadCurrentModel()
+    void loadNavigationLayout()
     if (authStore.hasPermission("session:read:own")) void loadSidebarChatSessions()
   } catch {
     clearStoredAuthToken()
@@ -922,6 +961,7 @@ const handleLogout = async () => {
     await authLogout(getStoredAuthToken(), { fallbacks: authClientFallbacks.value })
   } finally {
     currentUser.value = null
+    storedNavigationGroups.value = []
     loggingOut.value = false
     userMenuOpen.value = false
     closeSidebar()
@@ -960,12 +1000,14 @@ onMounted(() => {
   window.addEventListener("resize", checkMobile)
   window.addEventListener("agno-aios-model-change", handleModelChange)
   window.addEventListener("agno-aios-chat-sessions-change", handleChatSessionsChange)
+  window.addEventListener("agno-aios-navigation-layout-change", handleNavigationLayoutChange)
 })
 
 onUnmounted(() => {
   window.removeEventListener("resize", checkMobile)
   window.removeEventListener("agno-aios-model-change", handleModelChange)
   window.removeEventListener("agno-aios-chat-sessions-change", handleChatSessionsChange)
+  window.removeEventListener("agno-aios-navigation-layout-change", handleNavigationLayoutChange)
 })
 </script>
 
