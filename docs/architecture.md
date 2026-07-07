@@ -52,7 +52,8 @@ FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth table
 - `/api/cve*`、`/api/url2md*`：安全数据 workflows。
 - `/api/settings` 和 `/api/models`：runtime settings 和 model configuration。
 - `/api/audit/logs`：admin audit review。
-- `/api/os/*`：AgentOS control modules。
+- `/api/os/*`：AIOS 仍需 ownership、audit 或 UI-specific projection 的 AgentOS control modules。
+- AgentOS native root APIs：Scheduler 视图直接使用 `/schedules`、`/schedules/{id}`、`/schedules/{id}/runs` 等 Agno AgentOS routes；AIOS 不再提供 `/api/os/scheduler*` wrapper。
 
 `api/services/` 负责业务逻辑和持久化辅助层。`postgres_store.py` 集中管理 PostgreSQL 连接设置、schema 名称、Agno `AsyncPostgresDb` 构造和应用表创建。`security_run_runtime.py` 承担安全运营助手 Run runtime，集中 model、MCP、Skill、Knowledge、fallback 和流式事件编排；模型配置、prompt 文件和 Skill metadata/list/toggle 使用 awaitable file API，Skill zip install 这类批量 filesystem operation 通过线程隔离，避免阻塞 Chat stream 的事件循环。`chat_session_service.py` 负责 Chat Session persistence、session history、owner filtering 和 archive。`knowledge_service.py` 提供 async Knowledge Base lifecycle interface，runtime route 走 Agno async Knowledge APIs 和 async contents DB，内部集中 PgVector、reader、owner filtering、CRUD、search 和 status。`mcp_config_service.py` 集中 MCP service toggle 和 MCP upload 的同步配置 mutation，route 层用 `to_thread.run_sync` 隔离本地 JSON 文件 I/O。`security_policy.py` 只保留控制面 module permission map 和 policy audit event 记录；具体 route 写权限直接使用 `require_permission(...)`。`url2md_service.py` 使用 async HTTP client 执行 URL collection。`tracing_service.py` 显式初始化 Agno tracing，并读取 Agno traces 与 spans，整理成前端需要的结构。
 
@@ -114,7 +115,7 @@ Knowledge documents 通过 metadata 做 user scope。Chat runtime 在存在当�
 
 PgVector 入口按 Agno 文档推荐的 async Knowledge API 使用：runtime 构造 Agno `PgVector`，业务代码只调用 `Knowledge.ainsert()`、`Knowledge.asearch()` 等 async methods。AIOS 不再把本地 vector adapter 作为默认 runtime path；新的 Agno-owned persistence 访问必须优先使用 Agno async API。
 
-Agno API gap projections 是窄范围 async product views，不改变 table ownership：Knowledge delete/clear 使用 async SQLAlchemy 删除 vector rows 后通过 async contents DB 删除 catalog row；Knowledge dashboard 的 chunk-count 和 search result 的 content-id hydration 只读取 PgVector table 的 `id`、`content_id`、`meta_data`；Trace UI 和 dashboard 通过 Agno tracing API 读取 trace/span 后整理前端 payload，缺少聚合 API 时用 Async SQLAlchemy 做轻量统计；AgentOS control payload 在 sessions/memory/scheduler/metrics/knowledge 状态上优先使用 Agno async APIs，AIOS control tables 使用 Async SQLAlchemy。
+Agno API gap projections 是窄范围 async product views，不改变 table ownership：Knowledge delete/clear 使用 async SQLAlchemy 删除 vector rows 后通过 async contents DB 删除 catalog row；Knowledge dashboard 的 chunk-count 和 search result 的 content-id hydration 只读取 PgVector table 的 `id`、`content_id`、`meta_data`；Trace UI 和 dashboard 通过 Agno tracing API 读取 trace/span 后整理前端 payload，缺少聚合 API 时用 Async SQLAlchemy 做轻量统计；AgentOS control payload 在 sessions/memory/metrics/knowledge 状态上优先使用 Agno async APIs，AIOS control tables 使用 Async SQLAlchemy。Scheduler 已退出 `/api/os` facade，前端直接消费 AgentOS `/schedules` API。
 
 Embedding 和 rerank 模型计算不属于 async DB I/O。默认 Knowledge runtime 使用 Agno `SentenceTransformerEmbedder` 和 `SentenceTransformerReranker` 接入 `PgVector`，AIOS 不再维护自定义本地模型 adapter；如需调整模型行为，应优先沿用 Agno 提供的 embedder/reranker 扩展点。
 

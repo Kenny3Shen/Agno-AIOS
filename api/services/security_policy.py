@@ -14,7 +14,6 @@ CONTROL_MODULE_PERMISSIONS = {
     "metrics": "metrics:read:own",
     "evaluation": "agent_eval:read",
     "approvals": "admin:read",
-    "scheduler": "admin:read",
     "knowledge": "knowledge:read",
 }
 

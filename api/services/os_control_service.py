@@ -23,7 +23,6 @@ from api.services.postgres_store import (
     get_async_agno_postgres_db,
 )
 from api.services.knowledge_service import knowledge_status_async
-from api.services.scheduler_service import get_scheduler_payload as get_agno_scheduler_payload
 
 OsMetric = dict[str, Any]
 OsRecord = dict[str, Any]
@@ -701,10 +700,6 @@ async def get_approvals_payload(actor: Any | None = None) -> OsPayload:
     return await list_approvals_payload(actor=actor)
 
 
-async def get_scheduler_payload(actor: Any | None = None) -> OsPayload:
-    return await get_agno_scheduler_payload(actor=actor)
-
-
 async def get_knowledge_payload(actor: Any | None = None) -> OsPayload:
     status = await knowledge_status_async(owner_user_id=_owner_user_id(actor, "knowledge:read:any"))
     docs = int(status.get("documents") or 0)
@@ -747,7 +742,6 @@ MODULE_HANDLERS = {
     "metrics": get_metrics_payload,
     "evaluation": get_evaluation_payload,
     "approvals": get_approvals_payload,
-    "scheduler": get_scheduler_payload,
     "knowledge": get_knowledge_payload,
 }
 

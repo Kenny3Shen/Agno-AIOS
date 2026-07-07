@@ -89,6 +89,18 @@ assert.equal(
 )
 
 assert.equal(
+  canAccessShellNav("scheduler", available, (permission) => permission === "schedules:read"),
+  true,
+  "scheduler must use the native AgentOS schedules read scope",
+)
+
+assert.equal(
+  canAccessShellNav("scheduler", available, (permission) => permission === "admin:read"),
+  false,
+  "scheduler nav must not depend on the removed AIOS admin scheduler facade",
+)
+
+assert.equal(
   hasUserPermission({ role: "guest", permissions: ["agent_eval:read"] }, "agent_eval:read"),
   true,
   "frontend permission checks must prefer server-issued permission claims",

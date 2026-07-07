@@ -153,10 +153,19 @@ def test_guest_cannot_mutate_memory():
     assert context.value.status_code == 403
 
 
-def test_scheduler_write_route_rejects_non_admin_user():
+def test_scheduler_control_module_is_removed():
     with pytest.raises(HTTPException) as context:
-        route_dependency("create_scheduler_job")(user=actor("u1"))
-    assert context.value.status_code == 403
+        os_control.require_os_module_permission("scheduler", user=actor("u1", "admin"))
+    assert context.value.status_code == 404
+
+
+def test_scheduler_facade_routes_are_removed():
+    scheduler_routes = [
+        route.path
+        for route in os_control.router.routes
+        if isinstance(route, APIRoute) and "/scheduler" in route.path
+    ]
+    assert scheduler_routes == []
 
 
 def test_approvals_read_route_rejects_non_admin_user():

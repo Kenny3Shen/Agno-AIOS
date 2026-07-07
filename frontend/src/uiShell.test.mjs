@@ -11,6 +11,7 @@ import "./modules/agentEvalsWorkbench.test.mjs"
 import "./modules/memoryControl.test.mjs"
 import "./modules/traceWorkbench.test.mjs"
 import "./modules/workflowBuilder.test.mjs"
+import "./modules/schedulerAgentOsApi.test.mjs"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const sourcePath = (relativePath) => join(root, relativePath)

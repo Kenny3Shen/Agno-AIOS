@@ -80,7 +80,7 @@ export const navPermissions: Partial<Record<ModuleNavId, string>> = {
   memory: "memory:read:own",
   evaluation: "agent_eval:read",
   approvals: "admin:read",
-  scheduler: "admin:read",
+  scheduler: "schedules:read",
   cve: "cve:read",
   collect: "collect:write",
   settings: "settings:read",
