@@ -262,38 +262,49 @@
     </div>
 
     <section class="knowledge-panel ag-content-panel knowledge-documents-section">
-      <div class="knowledge-section-head documents-head">
-        <h4>{{ t('knowledge.documents.title') }}</h4>
-        <div class="document-tools">
-          <el-button class="cursor-pointer" size="small" :loading="loading" @click="loadKnowledge">
-            <el-icon><Refresh /></el-icon>
-          </el-button>
-          <el-button
-            type="danger"
-            plain
-            size="small"
-            class="cursor-pointer"
-            :disabled="documents.length === 0"
-            :loading="clearing"
-            @click="clearAllDocuments"
-          >
-            <el-icon><Delete /></el-icon>
-          </el-button>
+      <div class="document-management-bar">
+        <div class="document-management-title">
+          <h4>{{ t('knowledge.documents.title') }}</h4>
+          <span>{{ t('knowledge.documents.visibleCount', { count: filteredDocuments.length, total: documents.length }) }}</span>
+        </div>
+        <div class="document-management-controls">
+          <div class="document-command-group">
+            <el-tooltip :content="t('shell.actions.refresh')" placement="top">
+              <el-button class="cursor-pointer" size="small" :loading="loading" @click="loadKnowledge">
+                <el-icon><Refresh /></el-icon>
+              </el-button>
+            </el-tooltip>
+            <el-tooltip :content="t('knowledge.actions.clear')" placement="top">
+              <el-button
+                type="danger"
+                plain
+                size="small"
+                class="cursor-pointer"
+                :disabled="documents.length === 0"
+                :loading="clearing"
+                @click="clearAllDocuments"
+              >
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </el-tooltip>
+          </div>
           <el-input v-model="documentQuery" class="document-filter" :placeholder="t('knowledge.documents.searchPlaceholder')" clearable>
             <template #prefix>
               <el-icon><Search /></el-icon>
             </template>
           </el-input>
-          <el-select v-model="documentTypeFilter" size="small" class="document-select" :placeholder="t('knowledge.documents.typePlaceholder')">
-            <el-option :label="t('knowledge.documents.allTypes')" value="all" />
-            <el-option v-for="type in documentTypes" :key="type" :label="type" :value="type" />
-          </el-select>
-          <el-select v-model="documentStatusFilter" size="small" class="document-select" :placeholder="t('knowledge.documents.statusPlaceholder')">
-            <el-option :label="t('knowledge.documents.allStatus')" value="all" />
-            <el-option :label="t('knowledge.status.ready')" value="ready" />
-            <el-option :label="t('knowledge.status.parsing')" value="parsing" />
-            <el-option :label="t('knowledge.status.failed')" value="failed" />
-          </el-select>
+          <div class="document-filter-group">
+            <el-select v-model="documentTypeFilter" size="small" class="document-select" :placeholder="t('knowledge.documents.typePlaceholder')">
+              <el-option :label="t('knowledge.documents.allTypes')" value="all" />
+              <el-option v-for="type in documentTypes" :key="type" :label="type" :value="type" />
+            </el-select>
+            <el-select v-model="documentStatusFilter" size="small" class="document-select" :placeholder="t('knowledge.documents.statusPlaceholder')">
+              <el-option :label="t('knowledge.documents.allStatus')" value="all" />
+              <el-option :label="t('knowledge.status.ready')" value="ready" />
+              <el-option :label="t('knowledge.status.parsing')" value="parsing" />
+              <el-option :label="t('knowledge.status.failed')" value="failed" />
+            </el-select>
+          </div>
         </div>
       </div>
 
@@ -311,6 +322,7 @@
           <span role="columnheader">{{ t('knowledge.documents.columns.embeddingStatus') }}</span>
           <span role="columnheader">{{ t('knowledge.documents.columns.updatedTime') }}</span>
           <span role="columnheader">{{ t('knowledge.documents.columns.source') }}</span>
+          <span role="columnheader">{{ t('knowledge.documents.columns.visibility') }}</span>
           <span role="columnheader">{{ t('knowledge.documents.columns.actions') }}</span>
         </div>
 
@@ -336,9 +348,23 @@
           </div>
           <div class="document-cell" role="cell" :data-label="t('knowledge.documents.columns.source')">
             <span class="source-text" :title="row.source">{{ row.source || t('knowledge.labels.manualSource') }}</span>
-            <span class="status-badge" :class="row.visibility === 'public' ? 'ready' : 'parsing'">
-              {{ t(`visibility.${row.visibility || 'private'}`) }}
-            </span>
+          </div>
+          <div class="document-cell document-visibility-cell" role="cell" :data-label="t('knowledge.documents.columns.visibility')">
+            <el-select
+              :model-value="row.visibility || 'private'"
+              size="small"
+              class="document-visibility-select"
+              :disabled="!row.can_manage"
+              :aria-label="t('knowledge.documents.visibilityLabel', { title: row.title })"
+              @change="(value: ResourceVisibility) => updateDocumentVisibility(row, value)"
+            >
+              <el-option
+                v-for="option in resourceVisibilityOptions"
+                :key="option.value"
+                :label="t(option.labelKey)"
+                :value="option.value"
+              />
+            </el-select>
           </div>
           <div class="document-actions" role="cell" :data-label="t('knowledge.documents.columns.actions')">
             <div class="document-action-buttons">
@@ -355,17 +381,6 @@
               <el-tooltip :content="t('knowledge.documents.metadata')" placement="top">
                 <el-button text class="cursor-pointer" :aria-label="t('knowledge.documents.metadataLabel', { title: row.title })" @click="openMetadata(row)">
                   <el-icon><Tickets /></el-icon>
-                </el-button>
-              </el-tooltip>
-              <el-tooltip :content="t('visibility.label')" placement="top">
-                <el-button
-                  text
-                  class="cursor-pointer visibility-toggle"
-                  :disabled="!row.can_manage"
-                  :aria-label="t('visibility.label')"
-                  @click="toggleDocumentVisibility(row)"
-                >
-                  {{ t(`visibility.${nextResourceVisibility(row.visibility || 'private')}`) }}
                 </el-button>
               </el-tooltip>
               <el-tooltip :content="t('knowledge.documents.delete')" placement="top">
@@ -586,7 +601,7 @@ import {
   View,
 } from "@element-plus/icons-vue"
 import { useKnowledgeApi } from "../composables/useApi"
-import { nextResourceVisibility, resourceVisibilityOptions } from "../modules/resourceVisibility"
+import { resourceVisibilityOptions } from "../modules/resourceVisibility"
 import type { KnowledgeDocument, KnowledgeSearchResult, KnowledgeStatus, ResourceVisibility } from "../types"
 
 type IngestTab = "upload" | "text" | "path"
@@ -1025,13 +1040,13 @@ const submitPathDocument = async () => {
   }
 }
 
-const toggleDocumentVisibility = async (doc: KnowledgeDocument) => {
+const updateDocumentVisibility = async (doc: KnowledgeDocument, visibility: ResourceVisibility) => {
   if (!doc.can_manage) return
   const currentVisibility = doc.visibility || "private"
-  const nextVisibility = nextResourceVisibility(currentVisibility)
+  if (visibility === currentVisibility) return
   try {
-    const updated = await updateKnowledgeDocumentVisibility(doc.id, nextVisibility)
-    doc.visibility = updated.visibility || nextVisibility
+    const updated = await updateKnowledgeDocumentVisibility(doc.id, visibility)
+    doc.visibility = updated.visibility || visibility
     doc.metadata = updated.metadata || doc.metadata
     ElMessage.success(t("visibility.updated"))
   } catch (err) {
@@ -1207,8 +1222,6 @@ onMounted(() => {
 }
 
 .knowledge-section-head,
-.documents-head,
-.document-tools,
 .hit-toolbar,
 .hit-meta,
 .playground-controls,
@@ -1561,13 +1574,63 @@ onMounted(() => {
   font-style: normal;
 }
 
-.documents-head {
-  align-items: center;
+.document-management-bar {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+  border: 1px solid var(--kn-border);
+  border-radius: var(--ag-radius-control);
+  background: var(--kn-panel-soft);
+  padding: 12px;
 }
 
-.document-tools {
+.document-management-title {
+  display: grid;
+  min-width: min(220px, 100%);
+  gap: 4px;
+}
+
+.document-management-title h4 {
+  margin: 0;
+  color: var(--kn-heading);
+  font-size: 15px;
+  font-weight: 820;
+}
+
+.document-management-title span {
+  min-width: 0;
+  color: var(--kn-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.document-management-controls {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+.document-command-group,
+.document-filter-group {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.document-command-group :deep(.el-button) {
+  width: 32px;
+  height: 32px;
+  margin-left: 0;
+  padding: 0;
 }
 
 .document-filter {
@@ -1597,14 +1660,15 @@ onMounted(() => {
 .document-row {
   display: grid;
   grid-template-columns:
-    minmax(0, 1.6fr)
-    minmax(64px, 0.42fr)
-    minmax(68px, 0.42fr)
-    minmax(56px, 0.34fr)
-    minmax(96px, 0.62fr)
-    minmax(112px, 0.72fr)
-    minmax(0, 0.92fr)
-    144px;
+    minmax(0, 1.45fr)
+    minmax(64px, 0.38fr)
+    minmax(68px, 0.38fr)
+    minmax(56px, 0.32fr)
+    minmax(96px, 0.54fr)
+    minmax(112px, 0.62fr)
+    minmax(0, 0.8fr)
+    minmax(112px, 0.5fr)
+    132px;
   min-width: 0;
 }
 
@@ -1648,14 +1712,13 @@ onMounted(() => {
 }
 
 .document-primary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  align-items: start;
+  gap: 5px;
 }
 
 .doc-title {
   display: block;
-  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--kn-heading);
@@ -1663,6 +1726,10 @@ onMounted(() => {
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.doc-id {
+  width: max-content;
 }
 
 .doc-id,
@@ -1693,6 +1760,16 @@ onMounted(() => {
 .source-text,
 .document-time-value {
   display: block;
+}
+
+.document-visibility-cell {
+  display: flex;
+  align-items: center;
+}
+
+.document-visibility-select {
+  width: 112px;
+  max-width: 100%;
 }
 
 .document-actions {
@@ -1978,15 +2055,23 @@ onMounted(() => {
   }
 
   .knowledge-section-head,
-  .documents-head,
+  .document-management-bar,
+  .document-management-controls,
   .playground-controls {
     flex-direction: column;
   }
 
-  .document-tools,
+  .document-management-controls,
+  .document-command-group,
+  .document-filter-group,
   .document-filter,
-  .document-select {
+  .document-select,
+  .document-visibility-select {
     width: 100%;
+  }
+
+  .document-command-group {
+    justify-content: flex-start;
   }
 
   .document-cell:not(.document-main),

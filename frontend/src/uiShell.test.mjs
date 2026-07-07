@@ -2142,6 +2142,55 @@ assert.match(
 
 assert.match(
   knowledge,
+  /document-management-bar/,
+  "Knowledge document management controls must live in a structured toolbar",
+)
+
+assert.match(
+  knowledge,
+  /knowledge\.documents\.columns\.visibility/,
+  "Knowledge document table must expose visibility as its own column",
+)
+
+assert.match(
+  knowledge,
+  /document-visibility-select[\s\S]*updateDocumentVisibility/,
+  "Knowledge document visibility must be changed with an explicit select control",
+)
+
+for (const locale of ["zh-CN", "en-US"]) {
+  i18n.global.locale.value = locale
+  const visibleCountLabel = i18n.global.t("knowledge.documents.visibleCount", { count: 1, total: 3 })
+  const visibilityColumn = i18n.global.t("knowledge.documents.columns.visibility")
+  const visibilityLabel = i18n.global.t("knowledge.documents.visibilityLabel", { title: "sample.md" })
+  assert.notEqual(
+    visibleCountLabel,
+    "knowledge.documents.visibleCount",
+    `Knowledge document visible count label must be translated in ${locale}`,
+  )
+  assert.ok(
+    visibleCountLabel.includes("1") && visibleCountLabel.includes("3"),
+    `Knowledge document visible count label must include count and total in ${locale}`,
+  )
+  assert.notEqual(
+    visibilityColumn,
+    "knowledge.documents.columns.visibility",
+    `Knowledge document visibility column must be translated in ${locale}`,
+  )
+  assert.ok(
+    visibilityLabel.includes("sample.md"),
+    `Knowledge document visibility select label must include the document title in ${locale}`,
+  )
+}
+
+assert.doesNotMatch(
+  knowledge,
+  /toggleDocumentVisibility/,
+  "Knowledge document visibility must not use an ambiguous toggle action",
+)
+
+assert.match(
+  knowledge,
   /@media\s*\(max-width:\s*1120px\)[\s\S]*\.document-row\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/,
   "Knowledge document rows must collapse into a responsive card grid before they can overflow the shell",
 )
