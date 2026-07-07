@@ -21,7 +21,7 @@ from api.mcp import server as mcp_server
 from api.services import audit_service
 from api.services import mcp_config_service
 from api.services import model_config_service
-from api.services import os_control_service, postgres_store, tracing_service
+from api.services import os_evaluation_control, os_metrics_control, postgres_store, tracing_service
 from api.services import knowledge_service
 from api.services import security_run_runtime
 from api.services import skill_service
@@ -260,8 +260,8 @@ def test_tracing_uses_async_agno_postgres_db() -> None:
 
 
 def test_os_control_agno_runtime_uses_agno_async_api() -> None:
-    source = inspect.getsource(os_control_service)
-    metrics_source = inspect.getsource(os_control_service.get_metrics_payload)
+    source = inspect.getsource(os_metrics_control)
+    metrics_source = inspect.getsource(os_metrics_control.get_metrics_payload)
     assert "get_async_agno_postgres_db" in source
     assert "get_postgres_pool" not in source
     assert "from psycopg import sql" not in source
@@ -275,7 +275,7 @@ def test_os_control_agno_runtime_uses_agno_async_api() -> None:
 
 
 def test_os_control_control_plane_tables_use_async_sqlalchemy() -> None:
-    source = inspect.getsource(os_control_service)
+    source = inspect.getsource(os_evaluation_control)
     assert "get_async_control_plane_engine" in source
     assert "Table(" in source
     assert "select(table)" in source

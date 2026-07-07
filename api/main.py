@@ -26,7 +26,12 @@ from api.routes import (
     cve,
     knowledge,
     mcp as mcp_routes,
-    os_control,
+    os_approvals_control,
+    os_evaluation_control,
+    os_knowledge_control,
+    os_memory_control,
+    os_metrics_control,
+    os_sessions_control,
     settings,
     skills,
     trace,
@@ -161,7 +166,12 @@ app.include_router(skills.router)
 app.include_router(mcp_routes.router)
 app.include_router(knowledge.router)
 app.include_router(agent_evals.router)
-app.include_router(os_control.router)
+app.include_router(os_sessions_control.router)
+app.include_router(os_memory_control.router)
+app.include_router(os_metrics_control.router)
+app.include_router(os_evaluation_control.router)
+app.include_router(os_knowledge_control.router)
+app.include_router(os_approvals_control.router)
 
 if app_settings.scheduler_enabled:
     agentos_db = get_async_agno_postgres_db()

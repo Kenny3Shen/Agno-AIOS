@@ -401,7 +401,7 @@ import {
 import { ElMessage, ElMessageBox } from "element-plus"
 import MarkdownIt from "markdown-it"
 import { useI18n } from "vue-i18n"
-import { useOsControlApi } from "../composables/useApi"
+import { useMemoryControlApi } from "../composables/useMemoryControlApi"
 import { copyToClipboard } from "../lib/clipboard"
 import {
   defaultMemoryPayload as buildDefaultMemoryPayload,
@@ -420,7 +420,7 @@ import type {
 
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
-const { loading, error, fetchMemory, deleteMemory, updateMemory } = useOsControlApi()
+const { loading, error, fetchMemory, deleteMemory, updateMemory } = useMemoryControlApi()
 const markdownRenderer = new MarkdownIt({
   html: false,
   linkify: true,

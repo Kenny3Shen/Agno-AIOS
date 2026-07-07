@@ -379,7 +379,9 @@ import {
 } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
 import { useI18n } from "vue-i18n"
-import { useOsControlApi } from "../composables/useApi"
+import { useApprovalsApi } from "../composables/useApprovalsApi"
+import { type ControlPlanePayloadModule, useControlPlaneApi } from "../composables/useControlPlaneApi"
+import { useSchedulerApi } from "../composables/useSchedulerApi"
 import type {
   ApprovalRecord,
   OsControlModule,
@@ -394,20 +396,22 @@ const props = defineProps<{
   osModule: OsControlModule
 }>()
 
+const controlPlaneApi = useControlPlaneApi()
+const approvalsApi = useApprovalsApi()
+const schedulerApi = useSchedulerApi()
+const loading = computed(() => controlPlaneApi.loading.value || approvalsApi.loading.value || schedulerApi.loading.value)
+const error = computed(() => controlPlaneApi.error.value || approvalsApi.error.value || schedulerApi.error.value)
+const { fetchModule } = controlPlaneApi
+const { listApprovals, getApproval, resolveApproval } = approvalsApi
 const {
-  loading,
-  error,
-  fetchModule,
-  listApprovals,
-  getApproval,
-  resolveApproval,
+  fetchSchedules,
   createSchedule,
   updateSchedule,
   setScheduleEnabled,
   triggerSchedule,
   deleteSchedule,
   listScheduleRuns,
-} = useOsControlApi()
+} = schedulerApi
 const { t, locale } = useI18n()
 const payload = ref<OsControlResponse | null>(null)
 const creatingSchedule = ref(false)
@@ -478,7 +482,9 @@ const loadModule = async () => {
         page: 1,
         limit: 50,
       })
-    : await fetchModule(props.osModule)
+    : props.osModule === "scheduler"
+      ? await fetchSchedules()
+      : await fetchModule(props.osModule as ControlPlanePayloadModule)
   payload.value = nextPayload
   if (props.osModule === "approvals") {
     const stillSelected = approvals.value.some((approval) => approval.id === selectedApprovalId.value)

@@ -33,6 +33,7 @@ import {
   trace,
   typesSource,
   useApi,
+  useApprovalsApiSource,
   useControlPlaneApiSource,
   userRole,
   visibilityTabs,
@@ -534,13 +535,13 @@ assert.match(
 )
 
 assert.match(
-  useControlPlaneApiSource,
+  useApprovalsApiSource,
   /listApprovals/,
   "AgentOS API composable must expose approval listing",
 )
 
 assert.match(
-  useControlPlaneApiSource,
+  useApprovalsApiSource,
   /resolveApproval/,
   "AgentOS API composable must expose approval resolve",
 )

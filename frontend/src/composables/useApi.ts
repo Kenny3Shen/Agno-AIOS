@@ -1,6 +1,5 @@
 export { useCveApi, useUrl2MdApi } from './useSecurityDataApi'
 export { useChatApi, useChatHistory } from './useChatApi'
-export { useOsControlApi } from './useControlPlaneApi'
 export { useSettingsApi } from './useSettingsApi'
 export { useTracingApi } from './useTraceApi'
 export { useSkillsApi, useMcpApi } from './useRuntimeToolsApi'

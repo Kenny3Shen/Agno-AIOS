@@ -4,6 +4,14 @@
 
 Split `frontend/src/composables/useApi.ts` into real same-level domain composable modules while keeping the existing import surface stable.
 
+## Current Status
+
+This design was the first-stage frontend API split. OS control was later split
+again by functional area in
+`docs/superpowers/specs/2026-07-08-os-control-module-split-design.md`, so
+`useControlPlaneApi.ts` now owns only read-only OS payload modules. Memory,
+approvals, and scheduler calls live in dedicated composables.
+
 ## Constraints
 
 - Do not add nested API module directories for this step.
@@ -17,7 +25,10 @@ Split `frontend/src/composables/useApi.ts` into real same-level domain composabl
 - `useApiCore.ts`: shared fallback key type, i18n message helper, response error parsing, unknown error fallback, and clean query param helper.
 - `useSecurityDataApi.ts`: CVE and URL-to-Markdown APIs.
 - `useChatApi.ts`: streaming chat and chat session history APIs.
-- `useControlPlaneApi.ts`: AgentOS/AIOS control-plane payload, memory mutation, approvals, and scheduler adapter APIs.
+- `useControlPlaneApi.ts`: read-only AgentOS/AIOS control-plane payload modules that remain behind `/api/os/*`.
+- `useMemoryControlApi.ts`: Agno user memory list/update/delete APIs.
+- `useApprovalsApi.ts`: Agno approval list/detail/resolve APIs.
+- `useSchedulerApi.ts`: AgentOS scheduler adapter APIs.
 - `useSettingsApi.ts`: settings, model config, and model connectivity APIs.
 - `useTraceApi.ts`: trace list/detail APIs.
 - `useRuntimeToolsApi.ts`: Skills and MCP APIs.

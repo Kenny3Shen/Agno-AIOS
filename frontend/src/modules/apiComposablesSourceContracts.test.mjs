@@ -3,12 +3,15 @@ import {
   existsSync,
   sourcePath,
   useAgentEvalsApiSource,
+  useApprovalsApiSource,
   useApi,
   useApiCore,
   useChatApiSource,
   useControlPlaneApiSource,
   useKnowledgeApiSource,
+  useMemoryControlApiSource,
   useRuntimeToolsApiSource,
+  useSchedulerApiSource,
   useSecurityDataApiSource,
   useSettingsApiSource,
   useTraceApiSource,
@@ -18,6 +21,9 @@ const expectedComposableFiles = [
   "composables/useApiCore.ts",
   "composables/useChatApi.ts",
   "composables/useControlPlaneApi.ts",
+  "composables/useMemoryControlApi.ts",
+  "composables/useApprovalsApi.ts",
+  "composables/useSchedulerApi.ts",
   "composables/useKnowledgeApi.ts",
   "composables/useRuntimeToolsApi.ts",
   "composables/useSecurityDataApi.ts",
@@ -55,7 +61,6 @@ for (const exportName of [
   "useCveApi",
   "useChatApi",
   "useChatHistory",
-  "useOsControlApi",
   "useUrl2MdApi",
   "useSettingsApi",
   "useTracingApi",
@@ -76,7 +81,10 @@ const domainExpectations = [
   [useSecurityDataApiSource, "useUrl2MdApi", "/url2md/parse"],
   [useChatApiSource, "useChatApi", "/chat"],
   [useChatApiSource, "useChatHistory", "/chat/sessions"],
-  [useControlPlaneApiSource, "useOsControlApi", "/os/"],
+  [useControlPlaneApiSource, "useControlPlaneApi", "/os/"],
+  [useMemoryControlApiSource, "useMemoryControlApi", "/os/memory"],
+  [useApprovalsApiSource, "useApprovalsApi", "/os/approvals"],
+  [useSchedulerApiSource, "useSchedulerApi", "/schedules"],
   [useSettingsApiSource, "useSettingsApi", "/settings"],
   [useTraceApiSource, "useTracingApi", "/traces"],
   [useRuntimeToolsApiSource, "useSkillsApi", "/skills"],
@@ -89,3 +97,15 @@ for (const [source, hookName, endpoint] of domainExpectations) {
   assert.match(source, new RegExp(`export function ${hookName}\\(`), `${hookName} must live in its domain module`)
   assert.ok(source.includes(endpoint), `${hookName} module must own endpoint logic for ${endpoint}`)
 }
+
+assert.doesNotMatch(
+  useApi,
+  /useOsControlApi/,
+  "compatibility entry must not re-export the removed aggregate OS control composable",
+)
+
+assert.doesNotMatch(
+  useControlPlaneApiSource + useMemoryControlApiSource + useApprovalsApiSource + useSchedulerApiSource,
+  /export function useOsControlApi\(/,
+  "OS control frontend API must be split into functional composables",
+)

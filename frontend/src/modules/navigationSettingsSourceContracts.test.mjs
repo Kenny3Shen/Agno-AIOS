@@ -36,6 +36,7 @@ import {
   useApiCore,
   useChatApiSource,
   useControlPlaneApiSource,
+  useMemoryControlApiSource,
   useTraceApiSource,
   userRole,
   visibilityTabs,
@@ -252,31 +253,31 @@ assert.match(
 )
 
 assert.match(
-  useControlPlaneApiSource,
+  useMemoryControlApiSource,
   /deleteMemory\s*=\s*async/,
   "Memory API must expose deleteMemory for Agno user memories",
 )
 
 assert.match(
-  useControlPlaneApiSource,
+  useMemoryControlApiSource,
   /apiFetch\(`\/os\/memory\/\$\{encodeURIComponent\(memoryId\)\}/,
   "deleteMemory must call the authenticated Memory delete endpoint",
 )
 
 assert.match(
-  useControlPlaneApiSource,
+  useMemoryControlApiSource,
   /updateMemory\s*=\s*async/,
   "Memory API must expose updateMemory for Agno user memories",
 )
 
 assert.match(
-  useControlPlaneApiSource,
+  useMemoryControlApiSource,
   /method:\s*'PATCH'/,
   "updateMemory must patch the authenticated Memory endpoint",
 )
 
 assert.doesNotMatch(
-  useControlPlaneApiSource,
+  useMemoryControlApiSource,
   /pruneMemory|\/os\/memory\/prune/,
   "Memory pruning API must not remain exposed after pruning removal",
 )
@@ -330,7 +331,7 @@ assert.match(
 )
 
 assert.equal(
-  /\p{Script=Han}/u.test([useApi, useApiCore, useChatApiSource, useControlPlaneApiSource, useTraceApiSource].join("\n")),
+  /\p{Script=Han}/u.test([useApi, useApiCore, useChatApiSource, useControlPlaneApiSource, useMemoryControlApiSource, useTraceApiSource].join("\n")),
   false,
   "API composables must not hardcode localized Chinese fallback copy",
 )
