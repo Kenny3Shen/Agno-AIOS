@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from api.auth.permissions import actor_id, has_permission
+from api.auth.permissions import scope_user_id
 from api.services.postgres_store import get_async_agno_postgres_db
 
 ApprovalRecord = dict[str, Any]
@@ -139,10 +139,7 @@ def approval_record_summary(approval: ApprovalRecord) -> dict[str, Any]:
 
 
 def _scoped_user_id(actor: Any | None, requested_user_id: str | None) -> str | None:
-    requested = (requested_user_id or "").strip() or None
-    if actor is not None and has_permission(actor, "admin:read"):
-        return requested
-    return actor_id(actor) if actor is not None else ""
+    return scope_user_id(actor, requested_user_id, "admin:read")
 
 
 def _query_kwargs(params: ApprovalListParams, actor: Any | None) -> dict[str, Any]:

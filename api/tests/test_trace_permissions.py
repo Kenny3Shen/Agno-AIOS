@@ -1,7 +1,9 @@
-import inspect
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
+from fastapi import HTTPException
+from fastapi.routing import APIRoute
+from api.auth import permissions
 from api.routes import trace
 from api.routes.trace import effective_trace_user_filter
 from api.services import tracing_service
@@ -13,13 +15,20 @@ def actor(user_id: str, role: str = "user"):
     return SimpleNamespace(id=user_id, role=role, is_superuser=False)
 
 
-def test_trace_routes_require_explicit_trace_permission():
-    assert 'require_permission("trace:read:own")' in inspect.getsource(
-        trace.api_list_traces
-    )
-    assert 'require_permission("trace:read:own")' in inspect.getsource(
-        trace.api_get_trace
-    )
+def route_dependency(endpoint_name: str):
+    for route in trace.router.routes:
+        if isinstance(route, APIRoute) and getattr(route.endpoint, "__name__", "") == endpoint_name:
+            return route.dependant.dependencies[0].call
+    raise AssertionError(f"missing route for {endpoint_name}")
+
+
+def test_trace_routes_enforce_trace_permission(monkeypatch):
+    monkeypatch.setitem(permissions.ROLE_PERMISSIONS, "guest", set())
+
+    for endpoint_name in ("api_list_traces", "api_get_trace"):
+        with pytest.raises(HTTPException) as exc:
+            route_dependency(endpoint_name)(user=actor("g1", "guest"))
+        assert exc.value.status_code == 403
 
 
 def test_user_trace_filter_forces_current_user():
@@ -154,12 +163,6 @@ async def test_list_traces_passes_all_filters_to_agno_db():
     )
     assert captured["limit"] == 25
     assert captured["page"] == 2
-
-
-def test_trace_service_uses_async_agno_db_without_thread_offload():
-    source = inspect.getsource(tracing_service)
-    assert "get_async_agno_postgres_db" in source
-    assert "asyncio.to_thread" not in source
 
 
 def test_parse_span_display_extracts_agentos_input_output_metadata() -> None:

@@ -1,4 +1,9 @@
 export type UserRole = "admin" | "user" | "guest"
+export type PermissionUser = {
+  role?: UserRole
+  is_superuser?: boolean
+  permissions?: readonly string[]
+}
 
 export const AGENT_EVAL_PERMISSIONS = [
   "agent_eval:read",
@@ -37,4 +42,20 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
 export const hasRolePermission = (role: UserRole, permission: string) => {
   const permissions = ROLE_PERMISSIONS[role]
   return permissions.includes("*") || permissions.includes(permission)
+}
+
+export const userRole = (user: PermissionUser | null | undefined): UserRole => {
+  if (user?.is_superuser) return "admin"
+  return user?.role ?? "guest"
+}
+
+export const hasUserPermission = (
+  user: PermissionUser | null | undefined,
+  permission: string,
+) => {
+  const permissions = user?.permissions
+  if (permissions) {
+    return permissions.includes("*") || permissions.includes(permission)
+  }
+  return hasRolePermission(userRole(user), permission)
 }

@@ -39,7 +39,7 @@ async def test_mcp_update_config_runs_file_io_off_event_loop() -> None:
 
     with (
         patch.object(mcp, "apply_service_toggle", fake_apply_service_toggle),
-        patch.object(mcp, "_record_config_change", async_noop),
+        patch.object(mcp, "record_audit_event_async", async_noop),
         patch.object(
             mcp,
             "to_thread",
@@ -87,7 +87,7 @@ async def test_mcp_upload_runs_file_io_off_event_loop() -> None:
 
     with (
         patch.object(mcp, "apply_mcp_upload", fake_apply_mcp_upload),
-        patch.object(mcp, "_record_config_change", async_noop),
+        patch.object(mcp, "record_audit_event_async", async_noop),
         patch.object(
             mcp,
             "to_thread",

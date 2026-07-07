@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from api.auth.permissions import actor_role, has_permission
+from api.auth.permissions import actor_role, has_permission, permission_claims, scope_user_id
 
 
 def user(role: str = "user", is_superuser: bool = False):
@@ -58,3 +58,32 @@ def test_agent_eval_permissions_are_role_scoped():
     assert not has_permission(normal_user, "agent_eval:write")
     assert not has_permission(normal_user, "agent_eval:run")
     assert not has_permission(guest, "agent_eval:read")
+
+
+def test_permission_claims_are_expanded_for_frontend_consumers():
+    claims = permission_claims(user("user"))
+
+    assert claims.role == "user"
+    assert "session:read:own" in claims.permissions
+    assert "agent_eval:read" in claims.permissions
+    assert "*" not in claims.permissions
+
+
+def test_admin_permission_claims_keep_wildcard_authority():
+    claims = permission_claims(user("guest", is_superuser=True))
+
+    assert claims.role == "admin"
+    assert claims.permissions == ["*"]
+
+
+def test_scope_user_id_uses_actor_for_ordinary_users():
+    actor = SimpleNamespace(id="u1", role="user", is_superuser=False)
+
+    assert scope_user_id(actor, "other-user", "session:read:any") == "u1"
+
+
+def test_scope_user_id_allows_admin_requested_user_or_all_users():
+    admin = user("admin")
+
+    assert scope_user_id(admin, "u2", "session:read:any") == "u2"
+    assert scope_user_id(admin, None, "session:read:any") is None

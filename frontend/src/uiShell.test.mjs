@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url"
 import { createI18n } from "vue-i18n"
 import { enUS } from "./i18n/locales/en-US.ts"
 import { zhCN } from "./i18n/locales/zh-CN.ts"
-import { hasRolePermission } from "./lib/permissions.ts"
+import { hasRolePermission, hasUserPermission, userRole } from "./lib/permissions.ts"
 import "./modules/shellNavigation.test.mjs"
 import "./modules/agentEvalsWorkbench.test.mjs"
 import "./modules/memoryControl.test.mjs"
@@ -299,14 +299,14 @@ assert.match(
 
 assert.match(
   authStoreSource,
-  /hasRolePermission/,
-  "auth store must reuse the shared frontend RBAC helper",
+  /hasUserPermission/,
+  "auth store must use server-issued permission claims through the shared helper",
 )
 
-assert.match(
-  authStoreSource,
-  /is_superuser/,
-  "auth store must elevate superusers to admin in shell state",
+assert.equal(
+  userRole({ role: "guest", is_superuser: true }),
+  "admin",
+  "shared auth helpers must elevate FastAPI Users superusers to admin in shell state",
 )
 
 assert.match(
@@ -318,7 +318,19 @@ assert.match(
 assert.match(
   permissions,
   /ROLE_PERMISSIONS/,
-  "frontend RBAC helper must define the role permission matrix",
+  "frontend RBAC helper must keep a role permission fallback for legacy responses",
+)
+
+assert.equal(
+  hasUserPermission({ role: "guest", permissions: ["memory:write:own"] }, "memory:write:own"),
+  true,
+  "permission claims from the backend must take precedence over the role fallback",
+)
+
+assert.equal(
+  hasUserPermission({ role: "user", permissions: ["session:read:own"] }, "memory:write:own"),
+  false,
+  "missing permission claims must not be re-expanded from the user's role",
 )
 
 assert.match(

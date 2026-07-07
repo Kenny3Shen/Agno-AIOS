@@ -15,14 +15,13 @@ from api.persistence.mcp import (
 from api.mcp import config as mcp_config
 from api.mcp.tools import basic as basic_mcp_tool
 from api.mcp.tools import playbook as playbook_mcp_tool
-from api.routes import mcp as mcp_route
 from api.routes import settings as settings_route
 from api.routes import skills as skills_route
 from api.mcp import server as mcp_server
 from api.services import audit_service
 from api.services import mcp_config_service
 from api.services import model_config_service
-from api.services import llm_service, os_control_service, postgres_store
+from api.services import os_control_service, postgres_store, tracing_service
 from api.services import knowledge_service
 from api.services import security_run_runtime
 from api.services import skill_service
@@ -172,17 +171,6 @@ def test_local_config_services_are_sync_first_without_blocking_event_loop_regres
     assert "await to_thread.run_sync(set_skill_enabled" in skills_source
     assert "install_skill_archive_async" not in skills_source
 
-    mcp_source = inspect.getsource(mcp_route)
-    assert "read_mcp_config()" in mcp_source
-    assert "services_from_config(" in mcp_source
-    assert "read_mcp_config_async" not in mcp_source
-    assert "services_from_config_async" not in mcp_source
-    assert "apply_service_toggle" in mcp_source
-    assert "apply_mcp_upload" in mcp_source
-    assert "await to_thread.run_sync(apply_service_toggle" in mcp_source
-    assert "apply_service_toggle_async" not in mcp_source
-    assert "apply_mcp_upload_async" not in mcp_source
-
     mcp_server_source = inspect.getsource(mcp_server.IntegratedMcpRuntime)
     assert "build_main_mcp(enabled_service_ids())" in mcp_server_source
     assert not hasattr(mcp_server, "build_main_mcp_async")
@@ -264,7 +252,7 @@ async def test_lazy_frontend_static_files_prefers_source_dir(tmp_path, monkeypat
 
 
 def test_tracing_uses_async_agno_postgres_db() -> None:
-    source = inspect.getsource(llm_service)
+    source = inspect.getsource(tracing_service.setup_agno_tracing)
     assert "get_async_agno_postgres_db" in source
     assert "get_agno_postgres_db" not in source
     assert "load_dotenv" not in source

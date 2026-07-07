@@ -4,7 +4,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from api.auth.models import User
 from api.auth.permissions import actor_id, assert_owned_resource, has_permission, require_permission
-from api.services.llm_service import (
+from api.services.chat_session_service import (
     archive_session,
     get_all_sessions_async,
     get_session_messages_async,

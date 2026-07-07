@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from api.auth.permissions import actor_id
+from api.auth.permissions import actor_id, has_permission, require_permission
 from api.auth.models import User
 from api.auth.users import current_active_user
 from api.services.approval_control_service import (
@@ -33,9 +33,7 @@ from api.services.scheduler_service import (
 from api.services.security_policy import (
     PolicyAuditEvent,
     record_policy_event,
-    require_actor_permission,
     require_control_module_access,
-    require_scheduler_write,
 )
 
 router = APIRouter(prefix="/api/os", tags=["AgentOS Control Plane"])
@@ -96,32 +94,12 @@ def require_os_module_permission(
     return user
 
 
-def require_scheduler_write_permission(
-    user: User = Depends(current_active_user),
-) -> User:
-    require_scheduler_write(user)
-    return user
-
-
 def require_memory_write_permission(
     user: User = Depends(current_active_user),
 ) -> User:
     require_control_module_access("memory", user)
-    require_actor_permission(user, "memory:write:own")
-    return user
-
-
-def require_approvals_read_permission(
-    user: User = Depends(current_active_user),
-) -> User:
-    require_control_module_access("approvals", user)
-    return user
-
-
-def require_approvals_write_permission(
-    user: User = Depends(current_active_user),
-) -> User:
-    require_scheduler_write(user)
+    if not has_permission(user, "memory:write:own"):
+        raise HTTPException(status_code=403, detail="权限不足")
     return user
 
 
@@ -143,7 +121,7 @@ async def list_os_approvals(
     run_id: str | None = None,
     page: int = 1,
     limit: int = 50,
-    user: User = Depends(require_approvals_read_permission),
+    user: User = Depends(require_permission("admin:read")),
 ):
     try:
         return await list_approvals_payload(
@@ -171,7 +149,7 @@ async def list_os_approvals(
 @router.get("/approvals/{approval_id}")
 async def get_os_approval(
     approval_id: str,
-    user: User = Depends(require_approvals_read_permission),
+    user: User = Depends(require_permission("admin:read")),
 ):
     try:
         approval = await get_approval_record(approval_id)
@@ -188,7 +166,7 @@ async def resolve_os_approval(
     approval_id: str,
     body: ApprovalResolveRequest,
     request: Request,
-    user: User = Depends(require_approvals_write_permission),
+    user: User = Depends(require_permission("admin:read")),
 ):
     try:
         approval = await resolve_approval_record(
@@ -327,7 +305,7 @@ async def get_os_control_module(
 async def create_scheduler_job(
     request: Request,
     body: ScheduleCreateRequest,
-    user: User = Depends(require_scheduler_write_permission),
+    user: User = Depends(require_permission("admin:read")),
 ):
     try:
         schedule = await create_schedule(
@@ -367,7 +345,7 @@ async def update_scheduler_job(
     schedule_id: str,
     body: ScheduleUpdateRequest,
     request: Request,
-    user: User = Depends(require_scheduler_write_permission),
+    user: User = Depends(require_permission("admin:read")),
 ):
     try:
         schedule = await update_schedule(schedule_id, **body.model_dump(exclude_unset=True))
@@ -421,7 +399,7 @@ async def _set_scheduler_job_enabled(
 async def enable_scheduler_job(
     schedule_id: str,
     request: Request,
-    user: User = Depends(require_scheduler_write_permission),
+    user: User = Depends(require_permission("admin:read")),
 ):
     return await _set_scheduler_job_enabled(schedule_id, True, request, user)
 
@@ -430,7 +408,7 @@ async def enable_scheduler_job(
 async def disable_scheduler_job(
     schedule_id: str,
     request: Request,
-    user: User = Depends(require_scheduler_write_permission),
+    user: User = Depends(require_permission("admin:read")),
 ):
     return await _set_scheduler_job_enabled(schedule_id, False, request, user)
 
@@ -439,7 +417,7 @@ async def disable_scheduler_job(
 async def delete_scheduler_job(
     schedule_id: str,
     request: Request,
-    user: User = Depends(require_scheduler_write_permission),
+    user: User = Depends(require_permission("admin:read")),
 ):
     try:
         deleted = await delete_schedule(schedule_id)
@@ -464,7 +442,7 @@ async def delete_scheduler_job(
 async def trigger_scheduler_job(
     schedule_id: str,
     request: Request,
-    user: User = Depends(require_scheduler_write_permission),
+    user: User = Depends(require_permission("admin:read")),
 ):
     schedule = await get_schedule(schedule_id)
     if schedule is None:
@@ -497,7 +475,7 @@ async def get_scheduler_runs(
     schedule_id: str,
     limit: int = 20,
     page: int = 1,
-    user: User = Depends(require_scheduler_write_permission),
+    user: User = Depends(require_permission("admin:read")),
 ):
     if await get_schedule(schedule_id) is None:
         raise HTTPException(status_code=404, detail="Schedule not found")

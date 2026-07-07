@@ -31,13 +31,9 @@ def _build_model(model_id: str | None = None) -> OpenAILike:
     )
 
 
-def _get_mcp_token() -> str:
-    return get_settings().mcp_token.get_secret_value().strip()
-
-
 def _build_mcp_url() -> str:
     base_url = get_settings().mcp_server_url.strip()
-    token = _get_mcp_token()
+    token = get_settings().mcp_token.get_secret_value().strip()
     if not base_url:
         raise RuntimeError("MCP_SERVER_URL 未配置，请在 .env 或系统配置中设置 MCP 服务地址。")
     if not token:
@@ -273,25 +269,6 @@ class SecurityRunRuntime:
 DEFAULT_SECURITY_RUN_RUNTIME = SecurityRunRuntime()
 
 
-async def _stream_agent_content(
-    agent: Any,
-    message: str,
-    *,
-    session_id: str | None,
-    user_id: str | None,
-) -> AsyncIterator[str]:
-    request = SecurityRunRequest.from_chat_args(
-        message,
-        session_id=session_id,
-        user_id=user_id,
-    )
-    async for chunk in DEFAULT_SECURITY_RUN_RUNTIME._stream_agent_content(
-        agent,
-        request,
-    ):
-        yield chunk
-
-
 async def stream_security_run(
     request: SecurityRunRequest,
     *,
@@ -299,23 +276,4 @@ async def stream_security_run(
 ) -> AsyncIterator[str]:
     active_runtime = runtime or DEFAULT_SECURITY_RUN_RUNTIME
     async for chunk in active_runtime.stream(request):
-        yield chunk
-
-
-async def stream_chat_with_agent(
-    message: str,
-    session_id: str | None = None,
-    model_id: str | None = None,
-    user_id: str | None = None,
-    knowledge_owner_user_id: str | None = None,
-) -> AsyncIterator[str]:
-    """流式聊天，使用单个 Agent 统一处理安全运营任务"""
-    request = SecurityRunRequest.from_chat_args(
-        message,
-        session_id=session_id,
-        model_id=model_id,
-        user_id=user_id,
-        knowledge_owner_user_id=knowledge_owner_user_id,
-    )
-    async for chunk in stream_security_run(request):
         yield chunk

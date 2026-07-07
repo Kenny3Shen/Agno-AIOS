@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
 
 from api.auth.models import User
-from api.auth.permissions import actor_id, has_permission, require_permission
+from api.auth.permissions import require_permission, scope_user_id
 from api.services.tracing_service import list_traces, get_trace_detail
 
 
@@ -12,9 +12,7 @@ router = APIRouter(prefix="/api", tags=["Tracing"])
 
 
 def effective_trace_user_filter(actor: Any, requested_user_id: str | None) -> str | None:
-    if has_permission(actor, "trace:read:any"):
-        return requested_user_id
-    return actor_id(actor)
+    return scope_user_id(actor, requested_user_id, "trace:read:any")
 
 
 @router.get("/traces")

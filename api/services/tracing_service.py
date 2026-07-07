@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 from typing import Any
 
+from agno.tracing import setup_tracing
 from fastapi.encoders import jsonable_encoder
 
 from api.auth.permissions import assert_owned_resource
@@ -31,6 +32,10 @@ OUTPUT_ATTRIBUTE_KEYS = (
     "tool.result",
     "function.response",
 )
+
+
+def setup_agno_tracing() -> None:
+    setup_tracing(db=get_async_agno_postgres_db(), batch_processing=False)
 
 
 def _first_attribute(attributes: dict[str, Any], keys: tuple[str, ...]) -> Any:

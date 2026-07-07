@@ -31,6 +31,7 @@ from api.routes import (
 )
 from api.services.postgres_store import get_async_agno_postgres_db
 from api.services.security_run_runtime import DEFAULT_SECURITY_RUN_RUNTIME
+from api.services.tracing_service import setup_agno_tracing
 from api.utils.db import initialize_database
 
 app_settings = get_settings()
@@ -75,6 +76,7 @@ async def lifespan(app: FastAPI):
     logger.info("启动 {}", app_settings.app_name)
     app.state.settings = app_settings
     await initialize_database()
+    setup_agno_tracing()
     await create_auth_tables()
     await bootstrap_admin_user(app_settings)
 

@@ -345,10 +345,16 @@ async def test_agent_dependencies_are_built_off_event_loop():
 
 @pytest.mark.asyncio
 async def test_stream_agent_content_filters_run_content_events():
+    runtime = security_run_runtime.SecurityRunRuntime()
     chunks = [
         chunk
-        async for chunk in security_run_runtime._stream_agent_content(
-            FakeAgent(), "hello", session_id="session-1", user_id="u1"
+        async for chunk in runtime._stream_agent_content(
+            FakeAgent(),
+            security_run_runtime.SecurityRunRequest.from_chat_args(
+                "hello",
+                session_id="session-1",
+                user_id="u1",
+            ),
         )
     ]
     assert chunks == ["dict chunk", "object chunk"]

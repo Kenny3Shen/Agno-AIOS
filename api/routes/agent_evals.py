@@ -7,12 +7,10 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.auth.models import User
-from api.auth.permissions import has_permission
-from api.auth.users import current_active_user
+from api.auth.permissions import require_permission
 from api.services import agent_eval_case_store as case_store
 from api.services import agent_eval_result_service as result_service
 from api.services import agent_eval_runner
-from api.services.security_policy import require_agent_eval_run, require_agent_eval_write
 
 router = APIRouter(prefix="/api/agent-evals", tags=["Agent Evals"])
 
@@ -78,22 +76,6 @@ class EvalCaseUpdateRequest(_StrictModel):
     enabled: bool | None = None
 
 
-def require_agent_eval_read_permission(user: User = Depends(current_active_user)) -> User:
-    if not has_permission(user, "agent_eval:read"):
-        raise HTTPException(status_code=403, detail="权限不足")
-    return user
-
-
-def require_agent_eval_write_permission(user: User = Depends(current_active_user)) -> User:
-    require_agent_eval_write(user)
-    return user
-
-
-def require_agent_eval_run_permission(user: User = Depends(current_active_user)) -> User:
-    require_agent_eval_run(user)
-    return user
-
-
 def _http_from_value_error(exc: ValueError) -> HTTPException:
     message = str(exc)
     lowered = message.lower()
@@ -143,7 +125,7 @@ def _with_case_run_replay_link(
 @router.get("/suites")
 async def list_eval_suites(
     enabled: bool | None = None,
-    user: User = Depends(require_agent_eval_read_permission),
+    user: User = Depends(require_permission("agent_eval:read")),
 ):
     del user
     return await case_store.list_suites(enabled=enabled)
@@ -152,7 +134,7 @@ async def list_eval_suites(
 @router.post("/suites")
 async def create_eval_suite(
     body: EvalSuiteCreateRequest,
-    user: User = Depends(require_agent_eval_write_permission),
+    user: User = Depends(require_permission("agent_eval:write")),
 ):
     try:
         return await case_store.create_suite(body.model_dump(), user)
@@ -166,7 +148,7 @@ async def create_eval_suite(
 @router.get("/suites/{suite_id}")
 async def get_eval_suite(
     suite_id: str,
-    user: User = Depends(require_agent_eval_read_permission),
+    user: User = Depends(require_permission("agent_eval:read")),
 ):
     del user
     suite = await case_store.get_suite(suite_id)
@@ -179,7 +161,7 @@ async def get_eval_suite(
 async def update_eval_suite(
     suite_id: str,
     body: EvalSuiteUpdateRequest,
-    user: User = Depends(require_agent_eval_write_permission),
+    user: User = Depends(require_permission("agent_eval:write")),
 ):
     del user
     try:
@@ -198,7 +180,7 @@ async def update_eval_suite(
 async def list_eval_cases(
     suite_id: str | None = None,
     enabled: bool | None = None,
-    user: User = Depends(require_agent_eval_read_permission),
+    user: User = Depends(require_permission("agent_eval:read")),
 ):
     del user
     return await case_store.list_cases(suite_id=suite_id, enabled=enabled)
@@ -207,7 +189,7 @@ async def list_eval_cases(
 @router.post("/cases")
 async def create_eval_case(
     body: EvalCaseCreateRequest,
-    user: User = Depends(require_agent_eval_write_permission),
+    user: User = Depends(require_permission("agent_eval:write")),
 ):
     del user
     try:
@@ -222,7 +204,7 @@ async def create_eval_case(
 @router.get("/cases/{case_id}")
 async def get_eval_case(
     case_id: str,
-    user: User = Depends(require_agent_eval_read_permission),
+    user: User = Depends(require_permission("agent_eval:read")),
 ):
     del user
     case = await case_store.get_case(case_id)
@@ -235,7 +217,7 @@ async def get_eval_case(
 async def update_eval_case(
     case_id: str,
     body: EvalCaseUpdateRequest,
-    user: User = Depends(require_agent_eval_write_permission),
+    user: User = Depends(require_permission("agent_eval:write")),
 ):
     del user
     try:
@@ -254,7 +236,7 @@ async def update_eval_case(
 async def list_eval_suite_runs(
     suite_id: str,
     status: str | None = None,
-    user: User = Depends(require_agent_eval_read_permission),
+    user: User = Depends(require_permission("agent_eval:read")),
 ):
     del user
     return await case_store.list_suite_runs(suite_id=suite_id, status=status)
@@ -263,7 +245,7 @@ async def list_eval_suite_runs(
 @router.post("/suites/{suite_id}/runs")
 async def run_eval_suite(
     suite_id: str,
-    user: User = Depends(require_agent_eval_run_permission),
+    user: User = Depends(require_permission("agent_eval:run")),
 ):
     try:
         return await agent_eval_runner.run_suite(suite_id, actor=user)
@@ -278,7 +260,7 @@ async def run_eval_suite(
 async def list_eval_case_runs(
     case_id: str,
     status: str | None = None,
-    user: User = Depends(require_agent_eval_read_permission),
+    user: User = Depends(require_permission("agent_eval:read")),
 ):
     del user
     return await case_store.list_case_runs(case_id=case_id, status=status)
@@ -287,7 +269,7 @@ async def list_eval_case_runs(
 @router.post("/cases/{case_id}/runs")
 async def run_eval_case(
     case_id: str,
-    user: User = Depends(require_agent_eval_run_permission),
+    user: User = Depends(require_permission("agent_eval:run")),
 ):
     try:
         return await agent_eval_runner.run_case(case_id, actor=user)
@@ -301,7 +283,7 @@ async def run_eval_case(
 @router.post("/case-runs/{case_run_id}/replay")
 async def replay_eval_case_run(
     case_run_id: str,
-    user: User = Depends(require_agent_eval_run_permission),
+    user: User = Depends(require_permission("agent_eval:run")),
 ):
     try:
         return await agent_eval_runner.replay_case_run(case_run_id, actor=user)
@@ -318,7 +300,7 @@ async def list_agno_eval_runs(
     page: int = Query(default=1, ge=1),
     eval_type: list[EvalType] | None = Query(default=None),
     agent_id: str | None = None,
-    user: User = Depends(require_agent_eval_read_permission),
+    user: User = Depends(require_permission("agent_eval:read")),
 ):
     del user
     return await result_service.list_agno_eval_runs(
@@ -332,7 +314,7 @@ async def list_agno_eval_runs(
 @router.get("/agno-runs/{eval_run_id}")
 async def get_agno_eval_run(
     eval_run_id: str,
-    user: User = Depends(require_agent_eval_read_permission),
+    user: User = Depends(require_permission("agent_eval:read")),
 ):
     del user
     result = await result_service.get_agno_eval_run(eval_run_id)
@@ -347,7 +329,7 @@ async def get_eval_trends(
     page: int = Query(default=1, ge=1),
     eval_type: list[EvalType] | None = Query(default=None),
     agent_id: str | None = None,
-    user: User = Depends(require_agent_eval_read_permission),
+    user: User = Depends(require_permission("agent_eval:read")),
 ):
     del user
     result = await result_service.list_agno_eval_runs(
@@ -362,7 +344,7 @@ async def get_eval_trends(
 @router.get("/failures")
 async def list_eval_failures(
     limit: int = Query(default=50, ge=1, le=100),
-    user: User = Depends(require_agent_eval_read_permission),
+    user: User = Depends(require_permission("agent_eval:read")),
 ):
     del user
     failures = await result_service.list_failed_eval_runs(limit=limit)

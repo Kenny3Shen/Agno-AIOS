@@ -8,12 +8,10 @@ from pydantic import BaseModel
 from api.auth.models import User
 from api.auth.permissions import require_permission
 from api.services.audit_service import (
-    AuditRequestContext,
     audit_request_context,
     record_audit_event_async,
 )
 from api.services.mcp_config_service import (
-    McpConfigChange,
     apply_mcp_upload,
     apply_service_toggle,
 )
@@ -59,21 +57,6 @@ class McpUploadResponse(BaseModel):
     restart_required: bool = True
 
 
-async def _record_config_change(
-    user: User,
-    change: McpConfigChange,
-    request_context: AuditRequestContext,
-) -> None:
-    await record_audit_event_async(
-        user,
-        action=change.action,
-        resource_type=change.resource_type,
-        resource_id=change.resource_id,
-        metadata=change.metadata,
-        **request_context,
-    )
-
-
 @router.get("/config")
 def get_config(_user: User = Depends(require_permission("mcp:read"))) -> dict[str, Any]:
     data = read_mcp_config()
@@ -94,7 +77,14 @@ async def update_config(
     user: User = Depends(require_permission("mcp:write")),
 ):
     change = await to_thread.run_sync(apply_service_toggle, body.id, body.enabled)
-    await _record_config_change(user, change, audit_request_context(request))
+    await record_audit_event_async(
+        user,
+        action=change.action,
+        resource_type=change.resource_type,
+        resource_id=change.resource_id,
+        metadata=change.metadata,
+        **audit_request_context(request),
+    )
     return change.response
 
 
@@ -165,5 +155,12 @@ async def upload_mcp(
             enabled=body.enabled,
         )
     )
-    await _record_config_change(user, change, audit_request_context(request))
+    await record_audit_event_async(
+        user,
+        action=change.action,
+        resource_type=change.resource_type,
+        resource_id=change.resource_id,
+        metadata=change.metadata,
+        **audit_request_context(request),
+    )
     return McpUploadResponse(**change.response)

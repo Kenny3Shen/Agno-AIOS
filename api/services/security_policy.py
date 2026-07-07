@@ -34,22 +34,6 @@ def require_control_module_access(module: str, actor: Any) -> None:
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Unsupported control module: {module}") from exc
 
-    require_actor_permission(actor, permission)
-
-
-def require_scheduler_write(actor: Any) -> None:
-    require_actor_permission(actor, "admin:read")
-
-
-def require_agent_eval_write(actor: Any) -> None:
-    require_actor_permission(actor, "agent_eval:write")
-
-
-def require_agent_eval_run(actor: Any) -> None:
-    require_actor_permission(actor, "agent_eval:run")
-
-
-def require_actor_permission(actor: Any, permission: str) -> None:
     if not has_permission(actor, permission):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="权限不足")
 

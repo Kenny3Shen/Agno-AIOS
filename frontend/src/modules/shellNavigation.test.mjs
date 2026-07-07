@@ -11,7 +11,7 @@ import {
   shellContentClass,
   splitPrimaryShellNavItems,
 } from "./shellNavigation.ts"
-import { hasRolePermission } from "../lib/permissions.ts"
+import { hasRolePermission, hasUserPermission } from "../lib/permissions.ts"
 
 const icon = {}
 const item = (id) => ({
@@ -86,6 +86,24 @@ assert.equal(
   canAccessShellNav("evaluation", available, (permission) => hasRolePermission("user", permission)),
   true,
   "evaluation must be available to users with the agent eval read permission",
+)
+
+assert.equal(
+  hasUserPermission({ role: "guest", permissions: ["agent_eval:read"] }, "agent_eval:read"),
+  true,
+  "frontend permission checks must prefer server-issued permission claims",
+)
+
+assert.equal(
+  hasUserPermission({ role: "user", permissions: ["session:read:own"] }, "agent_eval:read"),
+  false,
+  "frontend permission checks must not re-grant missing permissions when claims are present",
+)
+
+assert.equal(
+  hasUserPermission({ role: "guest", permissions: ["*"] }, "settings:write"),
+  true,
+  "frontend permission checks must honor wildcard permission claims",
 )
 
 assert.equal(

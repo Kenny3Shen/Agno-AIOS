@@ -1,9 +1,9 @@
-import inspect
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException, Request
+from fastapi.routing import APIRoute
 import pytest
 
 from api.auth.models import User
@@ -68,9 +68,20 @@ async def async_noop(*_args, **_kwargs) -> None:
     return None
 
 
-def test_route_requires_write_permission():
-    source = inspect.getsource(settings.test_model_connectivity)
-    assert 'require_permission("settings:write")' in source
+def route_dependency(endpoint_name: str):
+    for route in settings.router.routes:
+        if isinstance(route, APIRoute) and getattr(route.endpoint, "__name__", "") == endpoint_name:
+            return route.dependant.dependencies[0].call
+    raise AssertionError(f"missing route for {endpoint_name}")
+
+
+def test_model_connectivity_route_rejects_user_without_write_permission():
+    actor = SimpleNamespace(role="user", is_superuser=False)
+
+    with pytest.raises(HTTPException) as exc:
+        route_dependency("test_model_connectivity")(user=actor)
+
+    assert exc.value.status_code == 403
 
 
 def test_settings_route_reuses_model_config_service_schema():
@@ -143,6 +154,48 @@ async def test_success_posts_openai_compatible_probe():
     assert "安全防御助手" in captured["json"]["messages"][0]["content"]
     assert "OK" in captured["json"]["messages"][1]["content"]
     assert not captured["json"]["stream"]
+
+
+@pytest.mark.asyncio
+async def test_update_models_records_request_context_in_audit_log():
+    current_actor = SimpleNamespace(id="u1", role="user", is_superuser=False)
+    request = Request(
+        {
+            "type": "http",
+            "method": "PUT",
+            "path": "/api/models",
+            "headers": [(b"user-agent", b"settings-browser")],
+            "client": ("10.0.0.9", 44321),
+        }
+    )
+    body = settings.ModelConfigUpdate(
+        models=[
+            settings.ModelConfig(
+                id="m1",
+                name="Model",
+                model_id="model-name",
+                base_url="https://api.example.com/v1",
+                api_key="secret-key",
+            )
+        ],
+        active_model_id="m1",
+    )
+
+    with (
+        patch.object(settings, "save_model_config", return_value={"ok": True}),
+        patch.object(settings, "record_audit_event_async", new_callable=AsyncMock) as mocked,
+    ):
+        result = await settings.update_models(request, body, user=cast(User, current_actor))
+
+    assert result == {"ok": True}
+    mocked.assert_awaited_once_with(
+        current_actor,
+        action="settings.update",
+        resource_type="models",
+        metadata={"active_model_id": "m1"},
+        ip_address="10.0.0.9",
+        user_agent="settings-browser",
+    )
 
 
 @pytest.mark.asyncio

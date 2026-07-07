@@ -12,9 +12,9 @@ from sqlalchemy import Column, DateTime, Float, MetaData, Table, Text, desc, fun
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.schema import CreateSchema
 
-from api.auth.permissions import actor_id, has_permission
+from api.auth.permissions import actor_id, has_permission, scope_user_id
 from api.services.approval_control_service import list_approvals_payload
-from api.services.llm_service import get_all_sessions_async
+from api.services.chat_session_service import get_all_sessions_async
 from api.persistence.database import get_async_control_plane_engine
 from api.services.postgres_store import (
     agno_schema,
@@ -172,9 +172,7 @@ async def _fetch_control_rows(table: Table, *, limit: int = 100) -> list[dict[st
 
 
 def _owner_user_id(actor: Any | None, any_permission: str) -> str | None:
-    if actor is not None and has_permission(actor, any_permission):
-        return None
-    return actor_id(actor) if actor is not None else ""
+    return scope_user_id(actor, None, any_permission)
 
 
 def _scoped_requested_user_id(
@@ -182,10 +180,7 @@ def _scoped_requested_user_id(
     requested_user_id: str | None,
     any_permission: str,
 ) -> str | None:
-    requested = (requested_user_id or "").strip() or None
-    if actor is not None and has_permission(actor, any_permission):
-        return requested
-    return actor_id(actor) if actor is not None else ""
+    return scope_user_id(actor, requested_user_id, any_permission)
 
 
 def _memory_status_for_count(count: int) -> str:

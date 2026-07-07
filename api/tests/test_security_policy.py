@@ -20,13 +20,6 @@ def test_control_module_access_uses_declared_permission_map():
     assert exc.value.status_code == 404
 
 
-def test_scheduler_write_requires_admin_permission():
-    with pytest.raises(HTTPException) as exc:
-        security_policy.require_scheduler_write(actor("u1"))
-    assert exc.value.status_code == 403
-    security_policy.require_scheduler_write(actor("admin", "admin"))
-
-
 @pytest.mark.asyncio
 async def test_record_policy_event_includes_request_context():
     current_actor = actor("u1")

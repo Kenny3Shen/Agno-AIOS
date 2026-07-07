@@ -544,6 +544,7 @@ export interface AuthUser {
   id: string
   email: string
   role?: "admin" | "user" | "guest"
+  permissions?: string[]
   is_active: boolean
   is_superuser?: boolean
   is_verified?: boolean

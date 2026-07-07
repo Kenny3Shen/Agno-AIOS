@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
+from fastapi.routing import APIRoute
 from starlette.requests import Request
 from api.auth.permissions import has_permission
 from api.routes import os_control
@@ -17,6 +18,13 @@ def actor(user_id: str, role: str = "user"):
 
 def request() -> Request:
     return Request({"type": "http", "method": "POST", "path": "/api/os/memory", "headers": []})
+
+
+def route_dependency(endpoint_name: str):
+    for route in os_control.router.routes:
+        if isinstance(route, APIRoute) and getattr(route.endpoint, "__name__", "") == endpoint_name:
+            return route.dependant.dependencies[0].call
+    raise AssertionError(f"missing route for {endpoint_name}")
 
 
 class FakeMemoryDb:
@@ -142,6 +150,18 @@ def test_unknown_module_is_rejected_before_payload_lookup():
 def test_guest_cannot_mutate_memory():
     with pytest.raises(HTTPException) as context:
         os_control.require_memory_write_permission(user=actor("g1", "guest"))
+    assert context.value.status_code == 403
+
+
+def test_scheduler_write_route_rejects_non_admin_user():
+    with pytest.raises(HTTPException) as context:
+        route_dependency("create_scheduler_job")(user=actor("u1"))
+    assert context.value.status_code == 403
+
+
+def test_approvals_read_route_rejects_non_admin_user():
+    with pytest.raises(HTTPException) as context:
+        route_dependency("list_os_approvals")(user=actor("u1"))
     assert context.value.status_code == 403
 
 

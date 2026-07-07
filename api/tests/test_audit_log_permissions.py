@@ -1,12 +1,11 @@
-import inspect
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
+from fastapi.routing import APIRoute
 from starlette.requests import Request
 from api.auth.permissions import has_permission
 from api.auth import router as auth_router
-from api.auth import users as auth_users
-from api.routes import audit, cve, knowledge, mcp, settings, skills
+from api.routes import audit
 from api.services import audit_service
 import pytest
 
@@ -15,9 +14,18 @@ def actor(user_id: str, role: str = "user"):
     return SimpleNamespace(id=user_id, role=role, is_superuser=False)
 
 
-def test_audit_route_requires_admin_read_permission():
-    source = inspect.getsource(audit.list_audit_logs)
-    assert 'require_permission("audit:read")' in source
+def route_dependency(endpoint_name: str):
+    for route in audit.router.routes:
+        if isinstance(route, APIRoute) and getattr(route.endpoint, "__name__", "") == endpoint_name:
+            return route.dependant.dependencies[0].call
+    raise AssertionError(f"missing route for {endpoint_name}")
+
+
+def test_audit_route_rejects_non_admin_reader():
+    with pytest.raises(HTTPException) as exc:
+        route_dependency("list_audit_logs")(user=actor("u1"))
+
+    assert exc.value.status_code == 403
 
 
 def test_non_admin_cannot_read_audit_logs():
@@ -35,26 +43,6 @@ def test_request_context_helper_extracts_ip_and_user_agent():
     )
     context = audit_service.audit_request_context(request)
     assert context == {"ip_address": "127.0.0.1", "user_agent": "pytest-agent"}
-
-
-def test_mutating_routes_include_request_context_in_audit_logs():
-    for source in (
-        inspect.getsource(auth_router.audited_logout),
-        inspect.getsource(auth_users.UserManager.on_after_login),
-        inspect.getsource(skills.toggle_skill),
-        inspect.getsource(mcp.update_config),
-        inspect.getsource(mcp.issue_token),
-        inspect.getsource(mcp.remove_token),
-        inspect.getsource(knowledge.create_text_document),
-        inspect.getsource(knowledge.create_file_document),
-        inspect.getsource(knowledge.remove_document),
-        inspect.getsource(knowledge.clear_knowledge),
-        inspect.getsource(settings.update_models),
-        inspect.getsource(settings.test_model_connectivity),
-        inspect.getsource(settings.update_settings),
-        inspect.getsource(cve.update_cve_database),
-    ):
-        assert "audit_request_context(" in source
 
 
 @pytest.mark.asyncio

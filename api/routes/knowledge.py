@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.auth.models import User
-from api.auth.permissions import actor_id, has_permission, require_permission
+from api.auth.permissions import actor_id, require_permission, scope_user_id
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.knowledge_service import get_knowledge_base_lifecycle
 
@@ -10,9 +10,7 @@ router = APIRouter(prefix="/api/knowledge", tags=["Knowledge"])
 
 
 def effective_knowledge_user_filter(user: User) -> str | None:
-    if has_permission(user, "knowledge:read:any"):
-        return None
-    return actor_id(user)
+    return scope_user_id(user, None, "knowledge:read:any")
 
 
 class KnowledgeTextRequest(BaseModel):

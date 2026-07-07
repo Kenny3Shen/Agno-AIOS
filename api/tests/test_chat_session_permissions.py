@@ -1,10 +1,10 @@
-import inspect
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
+from fastapi.routing import APIRoute
 from api.auth.permissions import assert_owned_resource
 from api.routes import chat
-from api.services import llm_service, security_run_runtime
+from api.services import chat_session_service, security_run_runtime
 import pytest
 
 
@@ -32,29 +32,49 @@ def test_chat_request_does_not_accept_authoritative_user_id():
 
 
 def test_session_list_service_accepts_owner_filter():
-    assert "owner_user_id" in llm_service.get_all_sessions_async.__annotations__ | {}
+    assert "owner_user_id" in chat_session_service.get_all_sessions_async.__annotations__ | {}
 
 
-def test_session_list_uses_agno_db_owner_filter():
-    source = inspect.getsource(llm_service.get_all_sessions_async)
-    assert "get_sessions" in source
-    assert "user_id=owner_user_id" in source
-    assert "chat_session_archives" not in source
+@pytest.mark.asyncio
+async def test_session_list_service_passes_owner_filter_to_agno_db():
+    captured: dict[str, object] = {}
+
+    class FakeDb:
+        async def get_sessions(self, **kwargs):
+            captured.update(kwargs)
+            return []
+
+    with (
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async", new_callable=AsyncMock),
+        patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=FakeDb()),
+    ):
+        result = await chat_session_service.get_all_sessions_async(owner_user_id="u1")
+
+    assert result == []
+    assert captured["user_id"] == "u1"
+    assert captured["deserialize"] is False
 
 
-def test_chat_routes_require_explicit_session_permissions():
-    assert 'require_permission("session:write:own")' in inspect.getsource(
-        chat.chat_agent
-    )
-    assert 'require_permission("session:read:own")' in inspect.getsource(
-        chat.list_sessions
-    )
-    assert 'require_permission("session:read:own")' in inspect.getsource(
-        chat.get_session
-    )
-    assert 'require_permission("session:write:own")' in inspect.getsource(
-        chat.remove_session
-    )
+def route_dependency(endpoint_name: str):
+    for route in chat.router.routes:
+        if isinstance(route, APIRoute) and getattr(route.endpoint, "__name__", "") == endpoint_name:
+            return route.dependant.dependencies[0].call
+    raise AssertionError(f"missing route for {endpoint_name}")
+
+
+def test_chat_write_route_rejects_guest_actor():
+    dependency = route_dependency("chat_agent")
+
+    with pytest.raises(HTTPException) as exc:
+        dependency(user=actor("g1", "guest"))
+
+    assert exc.value.status_code == 403
+
+
+def test_chat_read_route_allows_guest_actor():
+    dependency = route_dependency("list_sessions")
+
+    assert dependency(user=actor("g1", "guest")).id == "g1"
 
 
 @pytest.mark.asyncio
