@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from api.auth.models import User
-from api.auth.claims import actor_id, has_permission
+from api.auth.claims import ADMIN_SCOPE, actor_id, has_permission, scope_user_id
 from api.auth.ownership import assert_owned_resource
 from api.auth.permissions import require_permission
 from api.services.chat_session_service import (
@@ -40,7 +40,7 @@ async def _event_generator(
 @router.post("/chat")
 async def chat_agent(
     request: ChatRequest,
-    user: User = Depends(require_permission("session:write:own")),
+    user: User = Depends(require_permission("sessions:write")),
 ):
     """使用 LLM 处理聊天消息（流式）"""
     try:
@@ -58,7 +58,7 @@ async def chat_agent(
             model_id=request.model_id,
             user_id=actor_id(user),
             knowledge_owner_user_id=None
-            if has_permission(user, "knowledge:read:any")
+            if has_permission(user, ADMIN_SCOPE)
             else actor_id(user),
         )
         return EventSourceResponse(
@@ -76,11 +76,11 @@ async def chat_agent(
 @router.get("/chat/sessions")
 async def list_sessions(
     include_runs: bool = False,
-    user: User = Depends(require_permission("session:read:own")),
+    user: User = Depends(require_permission("sessions:read")),
 ):
     """获取所有聊天会话列表"""
     try:
-        owner_user_id = None if has_permission(user, "session:read:any") else actor_id(user)
+        owner_user_id = scope_user_id(user, None)
         return await get_all_sessions_async(
             owner_user_id=owner_user_id,
             include_runs=include_runs,
@@ -93,7 +93,7 @@ async def list_sessions(
 @router.get("/chat/sessions/{session_id}")
 async def get_session(
     session_id: str,
-    user: User = Depends(require_permission("session:read:own")),
+    user: User = Depends(require_permission("sessions:read")),
 ):
     """获取指定会话的聊天记录"""
     try:
@@ -108,7 +108,7 @@ async def get_session(
 @router.delete("/chat/sessions/{session_id}")
 async def remove_session(
     session_id: str,
-    user: User = Depends(require_permission("session:write:own")),
+    user: User = Depends(require_permission("sessions:write")),
 ):
     """归档指定会话；不删除 Agno runs/traces。"""
     try:

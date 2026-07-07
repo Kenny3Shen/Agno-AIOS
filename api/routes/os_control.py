@@ -53,7 +53,16 @@ def require_memory_write_permission(
     user: User = Depends(current_active_user),
 ) -> User:
     require_control_module_access("memory", user)
-    if not has_permission(user, "memory:write:own"):
+    if not has_permission(user, "memories:write"):
+        raise HTTPException(status_code=403, detail="权限不足")
+    return user
+
+
+def require_memory_delete_permission(
+    user: User = Depends(current_active_user),
+) -> User:
+    require_control_module_access("memory", user)
+    if not has_permission(user, "memories:delete"):
         raise HTTPException(status_code=403, detail="权限不足")
     return user
 
@@ -76,7 +85,7 @@ async def list_os_approvals(
     run_id: str | None = None,
     page: int = 1,
     limit: int = 50,
-    user: User = Depends(require_permission("admin:read")),
+    user: User = Depends(require_permission("approvals:read")),
 ):
     try:
         return await list_approvals_payload(
@@ -104,7 +113,7 @@ async def list_os_approvals(
 @router.get("/approvals/{approval_id}")
 async def get_os_approval(
     approval_id: str,
-    user: User = Depends(require_permission("admin:read")),
+    user: User = Depends(require_permission("approvals:read")),
 ):
     try:
         approval = await get_approval_record(approval_id)
@@ -121,7 +130,7 @@ async def resolve_os_approval(
     approval_id: str,
     body: ApprovalResolveRequest,
     request: Request,
-    user: User = Depends(require_permission("admin:read")),
+    user: User = Depends(require_permission("approvals:write")),
 ):
     try:
         approval = await resolve_approval_record(
@@ -162,7 +171,7 @@ async def delete_os_memory(
     memory_id: str,
     request: Request,
     user_id: str | None = None,
-    user: User = Depends(require_memory_write_permission),
+    user: User = Depends(require_memory_delete_permission),
 ):
     try:
         result = await delete_memory_record(user, memory_id=memory_id, user_id=user_id)

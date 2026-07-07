@@ -13,6 +13,11 @@ class UserRead(schemas.BaseUser[UUID]):
 
     @computed_field
     @property
+    def scopes(self) -> list[str]:
+        return permission_claims(self).scopes
+
+    @computed_field
+    @property
     def permissions(self) -> list[str]:
         return permission_claims(self).permissions
 

@@ -710,7 +710,7 @@ const parseStoredNavigationLayout = (raw: string): SidebarStoredNavGroup[] => {
 }
 
 const loadNavigationLayout = async () => {
-  if (!authStore.hasPermission("settings:read")) {
+  if (!authStore.hasPermission("config:read")) {
     storedNavigationGroups.value = []
     return
   }
@@ -723,7 +723,7 @@ const loadNavigationLayout = async () => {
 }
 
 const handleNavigationLayoutChange = (event: Event) => {
-  if (!authStore.hasPermission("settings:read")) return
+  if (!authStore.hasPermission("config:read")) return
   const detail = (event as CustomEvent<{ raw?: string }>).detail
   if (typeof detail?.raw === "string") {
     storedNavigationGroups.value = parseStoredNavigationLayout(detail.raw)
@@ -766,7 +766,7 @@ const formatSessionTime = (timestamp: number) => {
 }
 
 const loadSidebarChatSessions = async () => {
-  if (!authStore.hasPermission("session:read:own")) {
+  if (!authStore.hasPermission("sessions:read")) {
     chatSessions.value = []
     return
   }
@@ -789,7 +789,7 @@ const dispatchChatEvent = (name: string, detail?: Record<string, unknown>) => {
 }
 
 const toggleChatSessions = () => {
-  if (!authStore.hasPermission("session:read:own")) return
+  if (!authStore.hasPermission("sessions:read")) return
   chatSessionsExpanded.value = !chatSessionsExpanded.value
   if (chatSessionsExpanded.value) void loadSidebarChatSessions()
 }
@@ -914,7 +914,7 @@ const toggleTheme = () => {
 const handleAuthenticated = (user: AuthUser) => {
   currentUser.value = user
   void loadNavigationLayout()
-  if (authStore.hasPermission("session:read:own")) void loadSidebarChatSessions()
+  if (authStore.hasPermission("sessions:read")) void loadSidebarChatSessions()
 }
 
 const restoreSession = async () => {
@@ -927,7 +927,7 @@ const restoreSession = async () => {
   try {
     currentUser.value = await fetchCurrentUser(token, { fallbacks: authClientFallbacks.value })
     void loadNavigationLayout()
-    if (authStore.hasPermission("session:read:own")) void loadSidebarChatSessions()
+    if (authStore.hasPermission("sessions:read")) void loadSidebarChatSessions()
   } catch {
     clearStoredAuthToken()
     currentUser.value = null

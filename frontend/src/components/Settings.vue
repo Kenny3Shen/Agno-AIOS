@@ -375,7 +375,7 @@ const testingModelId = ref<string | null>(null)
 const navigationLayout = ref<NavigationGroupConfig[]>([])
 const draggedNavigationItem = ref<NavigationDragState | null>(null)
 const originalNavigationTags = ref("")
-const canWriteSettings = computed(() => authStore.hasPermission("settings:write"))
+const canWriteSettings = computed(() => authStore.hasPermission("config:write"))
 
 const defaultNavigationGroups = computed<NavigationGroupConfig[]>(() => [
   {

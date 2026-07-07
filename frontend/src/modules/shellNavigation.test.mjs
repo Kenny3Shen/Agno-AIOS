@@ -95,27 +95,27 @@ assert.equal(
 )
 
 assert.equal(
-  canAccessShellNav("scheduler", available, (permission) => permission === "admin:read"),
+  canAccessShellNav("scheduler", available, (permission) => permission === "agent_os:admin"),
   false,
   "scheduler nav must not depend on the removed AIOS admin scheduler facade",
 )
 
 assert.equal(
-  hasUserPermission({ role: "guest", permissions: ["agent_eval:read"] }, "agent_eval:read"),
+  hasUserPermission({ role: "guest", permissions: ["evals:read"] }, "evals:read"),
   true,
   "frontend permission checks must prefer server-issued permission claims",
 )
 
 assert.equal(
-  hasUserPermission({ role: "user", permissions: ["session:read:own"] }, "agent_eval:read"),
+  hasUserPermission({ role: "user", permissions: ["sessions:read"] }, "evals:read"),
   false,
   "frontend permission checks must not re-grant missing permissions when claims are present",
 )
 
 assert.equal(
-  hasUserPermission({ role: "guest", permissions: ["*"] }, "settings:write"),
+  hasUserPermission({ role: "guest", permissions: ["agent_os:admin"] }, "config:write"),
   true,
-  "frontend permission checks must honor wildcard permission claims",
+  "frontend permission checks must honor AgentOS admin scope claims",
 )
 
 assert.equal(

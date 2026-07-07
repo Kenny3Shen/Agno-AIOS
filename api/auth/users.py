@@ -5,9 +5,11 @@ from uuid import UUID
 from fastapi import Depends, Request, Response
 from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin, exceptions
 from fastapi_users.authentication import AuthenticationBackend, BearerTransport, JWTStrategy
+from fastapi_users.jwt import generate_jwt
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from loguru import logger
 
+from api.auth.claims import permission_claims
 from api.auth.database import get_user_db
 from api.auth.models import User
 from api.config import get_settings
@@ -51,8 +53,25 @@ async def get_user_manager(
 bearer_transport = BearerTransport(tokenUrl="/api/auth/jwt/login")
 
 
-def get_jwt_strategy() -> JWTStrategy[User, UUID]:
-    return JWTStrategy(
+class ScopedJWTStrategy(JWTStrategy[User, UUID]):
+    async def write_token(self, user: User) -> str:
+        claims = permission_claims(user)
+        data = {
+            "sub": str(user.id),
+            "aud": self.token_audience,
+            "role": claims.role,
+            "scopes": claims.scopes,
+        }
+        return generate_jwt(
+            data,
+            self.encode_key,
+            self.lifetime_seconds,
+            algorithm=self.algorithm,
+        )
+
+
+def get_jwt_strategy() -> ScopedJWTStrategy:
+    return ScopedJWTStrategy(
         secret=settings.auth_jwt_secret,
         lifetime_seconds=settings.auth_token_lifetime_seconds,
     )

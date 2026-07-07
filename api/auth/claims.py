@@ -3,31 +3,36 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-Role = Literal["admin", "user", "guest"]
+from agno.os.scopes import AgentOSScope, has_required_scopes
 
-ROLE_PERMISSIONS: dict[Role, set[str]] = {
-    "admin": {"*"},
+Role = Literal["admin", "user", "guest"]
+ADMIN_SCOPE = AgentOSScope.ADMIN.value
+
+ROLE_SCOPES: dict[Role, set[str]] = {
+    "admin": {ADMIN_SCOPE},
     "user": {
-        "session:read:own",
-        "session:write:own",
-        "trace:read:own",
-        "memory:read:own",
-        "memory:write:own",
-        "metrics:read:own",
+        "sessions:read",
+        "sessions:write",
+        "traces:read",
+        "memories:read",
+        "memories:write",
+        "memories:delete",
+        "metrics:read",
         "collect:write",
         "cve:read",
         "knowledge:read",
         "knowledge:write",
+        "knowledge:delete",
         "mcp:read",
         "skill:read",
-        "settings:read",
-        "agent_eval:read",
+        "config:read",
+        "evals:read",
     },
     "guest": {
-        "session:read:own",
-        "trace:read:own",
-        "memory:read:own",
-        "metrics:read:own",
+        "sessions:read",
+        "traces:read",
+        "memories:read",
+        "metrics:read",
         "cve:read",
         "knowledge:read",
     },
@@ -37,7 +42,11 @@ ROLE_PERMISSIONS: dict[Role, set[str]] = {
 @dataclass(frozen=True)
 class PermissionClaims:
     role: Role
-    permissions: list[str]
+    scopes: list[str]
+
+    @property
+    def permissions(self) -> list[str]:
+        return list(self.scopes)
 
 
 def actor_id(user: Any) -> str:
@@ -55,26 +64,40 @@ def actor_role(user: Any) -> Role:
     return "user"
 
 
-def has_permission(user: Any, permission: str) -> bool:
-    permissions = ROLE_PERMISSIONS[actor_role(user)]
-    return "*" in permissions or permission in permissions
+def actor_scopes(user: Any) -> list[str]:
+    scopes = set(ROLE_SCOPES[actor_role(user)])
+    return sorted(scopes)
+
+
+def has_permission(
+    user: Any,
+    scope: str,
+    *,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+) -> bool:
+    return has_required_scopes(
+        actor_scopes(user),
+        [scope],
+        resource_type=resource_type,
+        resource_id=resource_id,
+        admin_scope=ADMIN_SCOPE,
+    )
 
 
 def permission_claims(user: Any) -> PermissionClaims:
     role = actor_role(user)
-    permissions = ROLE_PERMISSIONS[role]
     return PermissionClaims(
         role=role,
-        permissions=["*"] if "*" in permissions else sorted(permissions),
+        scopes=actor_scopes(user),
     )
 
 
 def scope_user_id(
     actor: Any | None,
     requested_user_id: str | None,
-    any_permission: str,
 ) -> str | None:
     requested = (requested_user_id or "").strip() or None
-    if actor is not None and has_permission(actor, any_permission):
+    if actor is not None and has_permission(actor, ADMIN_SCOPE):
         return requested
     return actor_id(actor) if actor is not None else ""

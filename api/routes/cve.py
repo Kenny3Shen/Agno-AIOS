@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Request
 
+from api.auth.claims import ADMIN_SCOPE
 from api.auth.models import User
 from api.auth.permissions import require_permission
 from api.models.schemas import CveSearchRequest
@@ -39,7 +40,7 @@ async def search_cve(
 @router.post("/update")
 async def update_cve_database(
     request: Request,
-    user: User = Depends(require_permission("admin:read")),
+    user: User = Depends(require_permission(ADMIN_SCOPE)),
 ):
     """更新 CVE 数据库"""
     try:

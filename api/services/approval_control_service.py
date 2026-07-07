@@ -139,7 +139,7 @@ def approval_record_summary(approval: ApprovalRecord) -> dict[str, Any]:
 
 
 def _scoped_user_id(actor: Any | None, requested_user_id: str | None) -> str | None:
-    return scope_user_id(actor, requested_user_id, "admin:read")
+    return scope_user_id(actor, requested_user_id)
 
 
 def _query_kwargs(params: ApprovalListParams, actor: Any | None) -> dict[str, Any]:

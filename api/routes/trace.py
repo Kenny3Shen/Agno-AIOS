@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api", tags=["Tracing"])
 
 
 def effective_trace_user_filter(actor: Any, requested_user_id: str | None) -> str | None:
-    return scope_user_id(actor, requested_user_id, "trace:read:any")
+    return scope_user_id(actor, requested_user_id)
 
 
 @router.get("/traces")
@@ -33,7 +33,7 @@ async def api_list_traces(
     ),
     limit: int = Query(default=20, ge=1, le=200),
     page: int = Query(default=1, ge=1),
-    user: User = Depends(require_permission("trace:read:own")),
+    user: User = Depends(require_permission("traces:read")),
 ):
     """List traces from the tracing database."""
     try:
@@ -61,7 +61,7 @@ async def api_list_traces(
 @router.get("/traces/{trace_id}")
 async def api_get_trace(
     trace_id: str,
-    user: User = Depends(require_permission("trace:read:own")),
+    user: User = Depends(require_permission("traces:read")),
 ):
     """Get trace detail including spans and a span tree."""
     try:

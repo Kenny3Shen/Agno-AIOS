@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
-from api.auth import permissions
+from api.auth import claims
 from api.routes import trace
 from api.routes.trace import effective_trace_user_filter
 from api.services import tracing_service
@@ -23,7 +23,7 @@ def route_dependency(endpoint_name: str):
 
 
 def test_trace_routes_enforce_trace_permission(monkeypatch):
-    monkeypatch.setitem(permissions.ROLE_PERMISSIONS, "guest", set())
+    monkeypatch.setitem(claims.ROLE_SCOPES, "guest", set())
 
     for endpoint_name in ("api_list_traces", "api_get_trace"):
         with pytest.raises(HTTPException) as exc:

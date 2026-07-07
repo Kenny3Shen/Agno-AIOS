@@ -9,11 +9,11 @@ from api.auth.claims import has_permission
 from api.services.audit_service import audit_request_context, record_audit_event_async
 
 CONTROL_MODULE_PERMISSIONS = {
-    "sessions": "session:read:own",
-    "memory": "memory:read:own",
-    "metrics": "metrics:read:own",
-    "evaluation": "agent_eval:read",
-    "approvals": "admin:read",
+    "sessions": "sessions:read",
+    "memory": "memories:read",
+    "metrics": "metrics:read",
+    "evaluation": "evals:read",
+    "approvals": "approvals:read",
     "knowledge": "knowledge:read",
 }
 

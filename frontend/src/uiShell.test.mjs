@@ -318,18 +318,18 @@ assert.match(
 
 assert.match(
   permissions,
-  /ROLE_PERMISSIONS/,
-  "frontend RBAC helper must keep a role permission fallback for legacy responses",
+  /ROLE_SCOPES/,
+  "frontend RBAC helper must keep a role scope fallback for unauthenticated shell state",
 )
 
 assert.equal(
-  hasUserPermission({ role: "guest", permissions: ["memory:write:own"] }, "memory:write:own"),
+  hasUserPermission({ role: "guest", permissions: ["memories:write"] }, "memories:write"),
   true,
   "permission claims from the backend must take precedence over the role fallback",
 )
 
 assert.equal(
-  hasUserPermission({ role: "user", permissions: ["session:read:own"] }, "memory:write:own"),
+  hasUserPermission({ role: "user", permissions: ["sessions:read"] }, "memories:write"),
   false,
   "missing permission claims must not be re-expanded from the user's role",
 )
@@ -342,30 +342,30 @@ assert.match(
 
 assert.match(
   permissions,
-  /agent_eval:read/,
-  "frontend permissions must include Agent Eval read permission",
+  /evals:read/,
+  "frontend permissions must include AgentOS eval read scope",
 )
 
 assert.match(
   permissions,
-  /agent_eval:write/,
-  "frontend permissions must include Agent Eval write permission",
+  /evals:write/,
+  "frontend permissions must include AgentOS eval write scope",
 )
 
 assert.match(
   permissions,
-  /agent_eval:run/,
-  "frontend permissions must include Agent Eval run permission",
+  /evals:delete/,
+  "frontend permissions must include AgentOS eval delete scope for admin fallback",
 )
 
 assert.equal(
-  hasRolePermission("user", "memory:write:own"),
+  hasRolePermission("user", "memories:write"),
   true,
   "ordinary users must be able to update and delete their own memories",
 )
 
 assert.equal(
-  hasRolePermission("guest", "memory:write:own"),
+  hasRolePermission("guest", "memories:write"),
   false,
   "guest users must not be able to mutate memories",
 )
@@ -1086,7 +1086,7 @@ assert.match(
 
 assert.match(
   memoryControl,
-  /hasPermission\("memory:write:own"\)/,
+  /hasPermission\("memories:write"\)/,
   "Memory page must check write permission before exposing memory mutations",
 )
 
@@ -2428,7 +2428,7 @@ assert.match(
 
 assert.match(
   settings,
-  /hasPermission\("settings:write"\)/,
+  /hasPermission\("config:write"\)/,
   "Settings page must check write permission before allowing configuration changes",
 )
 

@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/knowledge", tags=["Knowledge"])
 
 
 def effective_knowledge_user_filter(user: User) -> str | None:
-    return scope_user_id(user, None, "knowledge:read:any")
+    return scope_user_id(user, None)
 
 
 class KnowledgeTextRequest(BaseModel):
@@ -105,7 +105,7 @@ async def create_file_document(
 async def remove_document(
     request_ctx: Request,
     doc_id: str,
-    user: User = Depends(require_permission("knowledge:write")),
+    user: User = Depends(require_permission("knowledge:delete")),
 ) -> dict:
     deleted = await get_knowledge_base_lifecycle().delete_document_async(
         doc_id,
@@ -144,7 +144,7 @@ async def search_knowledge(
 @router.delete("")
 async def clear_knowledge(
     request_ctx: Request,
-    user: User = Depends(require_permission("knowledge:write")),
+    user: User = Depends(require_permission("knowledge:delete")),
 ) -> dict:
     result = await get_knowledge_base_lifecycle().clear_knowledge_base_async(
         owner_user_id=effective_knowledge_user_filter(user),

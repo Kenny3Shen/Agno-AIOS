@@ -79,7 +79,7 @@ def actor(role: str):
 
 
 def test_evaluation_control_module_uses_agent_eval_read_permission():
-    assert CONTROL_MODULE_PERMISSIONS["evaluation"] == "agent_eval:read"
+    assert CONTROL_MODULE_PERMISSIONS["evaluation"] == "evals:read"
     assert has_permission(actor("user"), CONTROL_MODULE_PERMISSIONS["evaluation"])
 
 

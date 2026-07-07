@@ -7,9 +7,11 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from agno.agent import AgentFactory
 from agno.os import AgentOS
+from agno.os.middleware.jwt import JWTMiddleware
 from agno.factory import RequestContext
 from loguru import logger
 
+from api.auth.claims import ADMIN_SCOPE
 from api.auth.database import bootstrap_admin_user, close_auth_engine, create_auth_tables
 from api.auth.router import router as auth_router
 from api.config import get_settings
@@ -35,6 +37,24 @@ from api.services.tracing_service import setup_agno_tracing
 from api.utils.db import initialize_database
 
 app_settings = get_settings()
+
+AGENTOS_JWT_EXCLUDED_ROUTE_PATHS = [
+    "/",
+    "/index.html",
+    "/assets/*",
+    "/favicon.ico",
+    "/vite.svg",
+    "/report",
+    "/report/*",
+    "/api/auth/*",
+    "/api/health",
+    "/mcp",
+    "/mcp/*",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+    "/docs/oauth2-redirect",
+]
 
 
 async def frontend_static_dir() -> str:
@@ -166,6 +186,17 @@ if app_settings.scheduler_enabled:
         telemetry=False,
     ).get_app()
     app.router.routes = [route for route in app.router.routes if getattr(route, "path", "") != "/"]
+
+app.state.cors_allowed_origins = app_settings.cors_origins
+app.add_middleware(
+    JWTMiddleware,  # type: ignore[arg-type]
+    verification_keys=[app_settings.auth_jwt_secret.get_secret_value()],
+    algorithm="HS256",
+    authorization=True,
+    excluded_route_paths=AGENTOS_JWT_EXCLUDED_ROUTE_PATHS,
+    admin_scope=ADMIN_SCOPE,
+    user_isolation=True,
+)
 
 # Integrated FastMCP protocol endpoint. Same process, same port:
 # http://<host>:8000/mcp?token=...

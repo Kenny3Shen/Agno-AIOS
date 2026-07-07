@@ -3,45 +3,50 @@ export type PermissionUser = {
   role?: UserRole
   is_superuser?: boolean
   permissions?: readonly string[]
+  scopes?: readonly string[]
 }
 
+export const ADMIN_SCOPE = "agent_os:admin"
+
 export const AGENT_EVAL_PERMISSIONS = [
-  "agent_eval:read",
-  "agent_eval:write",
-  "agent_eval:run",
+  "evals:read",
+  "evals:write",
+  "evals:delete",
 ] as const
 
-const ROLE_PERMISSIONS: Record<UserRole, readonly string[]> = {
-  admin: ["*"],
+const ROLE_SCOPES: Record<UserRole, readonly string[]> = {
+  admin: [ADMIN_SCOPE],
   user: [
-    "session:read:own",
-    "session:write:own",
-    "trace:read:own",
-    "memory:read:own",
-    "memory:write:own",
-    "metrics:read:own",
+    "sessions:read",
+    "sessions:write",
+    "traces:read",
+    "memories:read",
+    "memories:write",
+    "memories:delete",
+    "metrics:read",
     "collect:write",
     "cve:read",
     "knowledge:read",
     "knowledge:write",
+    "knowledge:delete",
     "mcp:read",
     "skill:read",
-    "settings:read",
-    "agent_eval:read",
+    "config:read",
+    "evals:read",
   ],
   guest: [
-    "session:read:own",
-    "trace:read:own",
-    "memory:read:own",
-    "metrics:read:own",
+    "sessions:read",
+    "traces:read",
+    "memories:read",
+    "metrics:read",
     "cve:read",
     "knowledge:read",
   ],
 }
 
 export const hasRolePermission = (role: UserRole, permission: string) => {
-  const permissions = ROLE_PERMISSIONS[role]
-  return permissions.includes("*") || permissions.includes(permission)
+  const permissions = ROLE_SCOPES[role]
+  return permissions.includes(ADMIN_SCOPE) || permissions.includes(permission)
 }
 
 export const userRole = (user: PermissionUser | null | undefined): UserRole => {
@@ -53,9 +58,9 @@ export const hasUserPermission = (
   user: PermissionUser | null | undefined,
   permission: string,
 ) => {
-  const permissions = user?.permissions
+  const permissions = user?.scopes ?? user?.permissions
   if (permissions) {
-    return permissions.includes("*") || permissions.includes(permission)
+    return permissions.includes(ADMIN_SCOPE) || permissions.includes(permission)
   }
   return hasRolePermission(userRole(user), permission)
 }

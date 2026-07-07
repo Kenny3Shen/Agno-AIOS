@@ -12,7 +12,7 @@ from sqlalchemy import Column, DateTime, Float, MetaData, Table, Text, desc, fun
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.schema import CreateSchema
 
-from api.auth.claims import actor_id, has_permission, scope_user_id
+from api.auth.claims import has_permission, scope_user_id
 from api.services.approval_control_service import list_approvals_payload
 from api.services.chat_session_service import get_all_sessions_async
 from api.persistence.database import get_async_control_plane_engine
@@ -170,16 +170,15 @@ async def _fetch_control_rows(table: Table, *, limit: int = 100) -> list[dict[st
         return [dict(row) for row in (await conn.execute(stmt)).mappings().all()]
 
 
-def _owner_user_id(actor: Any | None, any_permission: str) -> str | None:
-    return scope_user_id(actor, None, any_permission)
+def _owner_user_id(actor: Any | None) -> str | None:
+    return scope_user_id(actor, None)
 
 
 def _scoped_requested_user_id(
     actor: Any | None,
     requested_user_id: str | None,
-    any_permission: str,
 ) -> str | None:
-    return scope_user_id(actor, requested_user_id, any_permission)
+    return scope_user_id(actor, requested_user_id)
 
 
 def _memory_status_for_count(count: int) -> str:
@@ -263,7 +262,7 @@ def _memory_update_topics(value: Any) -> list[str]:
 
 
 async def _span_count_for_actor(actor: Any | None) -> int:
-    owner_user_id = _owner_user_id(actor, "trace:read:any")
+    owner_user_id = _owner_user_id(actor)
     if owner_user_id is None:
         return await _count_projection(agno_schema(), "agno_spans")
     db = get_async_agno_postgres_db()
@@ -313,7 +312,7 @@ def _duration_average(rows: list[dict[str, Any]]) -> float:
 async def get_sessions_payload(actor: Any | None = None) -> OsPayload:
     sessions = await get_all_sessions_async(
         include_archived=True,
-        owner_user_id=_owner_user_id(actor, "session:read:any"),
+        owner_user_id=_owner_user_id(actor),
     )
     active_cutoff = _now() - timedelta(days=1)
     active_count = 0
@@ -367,7 +366,7 @@ async def get_memory_payload(
     db = get_async_agno_postgres_db()
     safe_page = max(1, int(page or 1))
     safe_limit = min(100, max(1, int(limit or 50)))
-    scoped_user_id = _scoped_requested_user_id(actor, user_id, "memory:read:any")
+    scoped_user_id = _scoped_requested_user_id(actor, user_id)
     scoped_topic = (topic or "").strip()
     scoped_search = (search or "").strip()
     topics_filter = [scoped_topic] if scoped_topic else None
@@ -388,7 +387,7 @@ async def get_memory_payload(
         raw_memories = raw_result
         total_memories = len(raw_memories)
 
-    stats_scope_user_id = None if actor is not None and has_permission(actor, "memory:read:any") else actor_id(actor)
+    stats_scope_user_id = scope_user_id(actor, None)
     user_stats, total_users = await db.get_user_memory_stats(
         user_id=stats_scope_user_id,
         limit=500,
@@ -491,7 +490,7 @@ async def get_memory_payload(
                 "update_memory_on_run": True,
                 "enable_agentic_memory": False,
                 "enable_session_summaries": True,
-                "readonly": not (actor is not None and has_permission(actor, "memory:write:own")),
+                "readonly": not (actor is not None and has_permission(actor, "memories:write")),
             },
         }
     )
@@ -509,7 +508,7 @@ async def delete_memory_record(
         raise ValueError("memory_id is required")
 
     db = get_async_agno_postgres_db()
-    scoped_user_id = _scoped_requested_user_id(actor, user_id, "memory:write:any")
+    scoped_user_id = _scoped_requested_user_id(actor, user_id)
     raw_memory = await db.get_user_memory(
         safe_memory_id,
         user_id=scoped_user_id,
@@ -550,7 +549,7 @@ async def update_memory_record(
     if not safe_memory:
         raise ValueError("memory is required")
 
-    scoped_user_id = _scoped_requested_user_id(actor, user_id, "memory:write:any")
+    scoped_user_id = _scoped_requested_user_id(actor, user_id)
     db = get_async_agno_postgres_db()
     raw_memory = await db.get_user_memory(
         safe_memory_id,
@@ -596,9 +595,9 @@ async def update_memory_record(
 
 async def get_metrics_payload(actor: Any | None = None) -> OsPayload:
     db = get_async_agno_postgres_db()
-    trace_user_id = _owner_user_id(actor, "trace:read:any")
-    session_user_id = _owner_user_id(actor, "session:read:any")
-    memory_user_id = _owner_user_id(actor, "memory:read:any")
+    trace_user_id = _owner_user_id(actor)
+    session_user_id = _owner_user_id(actor)
+    memory_user_id = _owner_user_id(actor)
 
     traces, trace_count = await db.get_traces(
         user_id=trace_user_id,
@@ -701,7 +700,7 @@ async def get_approvals_payload(actor: Any | None = None) -> OsPayload:
 
 
 async def get_knowledge_payload(actor: Any | None = None) -> OsPayload:
-    status = await knowledge_status_async(owner_user_id=_owner_user_id(actor, "knowledge:read:any"))
+    status = await knowledge_status_async(owner_user_id=_owner_user_id(actor))
     docs = int(status.get("documents") or 0)
     chunks = int(status.get("chunks") or 0)
     records = [

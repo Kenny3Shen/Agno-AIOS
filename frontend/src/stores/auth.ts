@@ -10,7 +10,7 @@ export const useAuthStore = defineStore("auth", () => {
   const userMenuOpen = ref(false)
 
   const role = computed<UserRole>(() => userRole(currentUser.value))
-  const canWrite = computed(() => hasUserPermission(currentUser.value, "session:write:own"))
+  const canWrite = computed(() => hasUserPermission(currentUser.value, "sessions:write"))
   const canAdmin = computed(() => role.value === "admin")
   const hasPermission = (permission: string) => hasUserPermission(currentUser.value, permission)
 

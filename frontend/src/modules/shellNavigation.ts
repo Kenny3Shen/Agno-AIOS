@@ -70,20 +70,20 @@ export type WorkspaceSignal = {
 }
 
 export const navPermissions: Partial<Record<ModuleNavId, string>> = {
-  chat: "session:write:own",
+  chat: "sessions:write",
   skills: "skill:read",
   mcp: "mcp:read",
   knowledge: "knowledge:read",
-  trace: "trace:read:own",
+  trace: "traces:read",
   workflow: "mcp:read",
-  sessions: "session:read:own",
-  memory: "memory:read:own",
-  evaluation: "agent_eval:read",
-  approvals: "admin:read",
+  sessions: "sessions:read",
+  memory: "memories:read",
+  evaluation: "evals:read",
+  approvals: "approvals:read",
   scheduler: "schedules:read",
   cve: "cve:read",
   collect: "collect:write",
-  settings: "settings:read",
+  settings: "config:read",
 }
 
 export const fullCanvasTabs = new Set<ModuleNavId>([

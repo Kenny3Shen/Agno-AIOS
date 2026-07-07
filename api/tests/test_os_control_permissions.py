@@ -317,16 +317,16 @@ async def test_admin_session_payload_can_read_all_users():
 
 
 def test_metrics_user_scope_uses_current_user():
-    assert os_control_service._owner_user_id(actor("u1"), "trace:read:any") == "u1"
+    assert os_control_service._owner_user_id(actor("u1")) == "u1"
 
 
 def test_metrics_admin_scope_reads_all_users():
-    assert os_control_service._owner_user_id(actor("admin", "admin"), "trace:read:any") is None
+    assert os_control_service._owner_user_id(actor("admin", "admin")) is None
 
 
 def test_memory_write_permission_is_not_granted_to_guest():
-    assert has_permission(actor("u1", "user"), "memory:write:own")
-    assert not has_permission(actor("guest", "guest"), "memory:write:own")
+    assert has_permission(actor("u1", "user"), "memories:write")
+    assert not has_permission(actor("guest", "guest"), "memories:write")
 
 
 @pytest.mark.asyncio

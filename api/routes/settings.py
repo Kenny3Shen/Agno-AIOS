@@ -200,7 +200,7 @@ async def run_model_connectivity_test(
 
 @router.get("/settings")
 def read_settings(
-    _user: User = Depends(require_permission("settings:read")),
+    _user: User = Depends(require_permission("config:read")),
     settings: Settings = Depends(get_app_settings),
 ) -> SettingsResponse:
     """获取当前可配置项（敏感值已脱敏）"""
@@ -212,7 +212,7 @@ def read_settings(
 
 
 @router.get("/models")
-def get_models(_user: User = Depends(require_permission("settings:read"))) -> dict:
+def get_models(_user: User = Depends(require_permission("config:read"))) -> dict:
     """获取可选模型配置（敏感值已脱敏）"""
     return public_model_config()
 
@@ -221,7 +221,7 @@ def get_models(_user: User = Depends(require_permission("settings:read"))) -> di
 async def update_models(
     request: Request,
     body: ModelConfigUpdate,
-    user: User = Depends(require_permission("settings:write")),
+    user: User = Depends(require_permission("config:write")),
 ) -> dict:
     """保存模型配置和默认选择"""
     logger.info("模型配置已更新")
@@ -246,7 +246,7 @@ async def update_models(
 async def test_model_connectivity(
     request: Request,
     body: ModelConfig,
-    user: User = Depends(require_permission("settings:write")),
+    user: User = Depends(require_permission("config:write")),
 ) -> ModelConnectivityTestResponse:
     """测试 OpenAI-compatible 模型配置连通性。"""
     result = await run_model_connectivity_test(body)
@@ -269,7 +269,7 @@ async def test_model_connectivity(
 async def update_settings(
     request: Request,
     body: SettingsUpdate,
-    user: User = Depends(require_permission("settings:write")),
+    user: User = Depends(require_permission("config:write")),
 ) -> SettingsResponse:
     """更新配置项（运行时生效，写入 os.environ）"""
     updated: dict[str, str] = {}
