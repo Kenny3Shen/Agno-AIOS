@@ -44,6 +44,10 @@ export default defineConfig({
         target: apiProxyTarget,
         changeOrigin: true,
       },
+      '/schedules': {
+        target: apiProxyTarget,
+        changeOrigin: true,
+      },
     },
     watch: {
       ignored: ['**/node_modules/**', '**/logs/**', '**/.git/**', '**/dist/**', '**/frontend/.cache/**'],

@@ -101,7 +101,7 @@ const memoryRowCopy = memoryControl.match(
   /<span class="memory-row-copy">([\s\S]*?)<\/span>\s*<span class="memory-row-facts">/,
 )?.[1] || ""
 const memoryRowActions = memoryControl.match(
-  /<span v-if="canWriteMemory" class="memory-row-actions">([\s\S]*?)<\/span>\s*<\/article>/,
+  /<span v-if="canWriteMemory \|\| canDeleteMemory" class="memory-row-actions">([\s\S]*?)<\/span>\s*<\/article>/,
 )?.[1] || ""
 const memoryDetailMetadata = memoryControl.match(
   /<section class="memory-metadata-panel">([\s\S]*?)<\/section>/,
@@ -127,14 +127,14 @@ assert.doesNotMatch(
 
 assert.match(
   memoryRowActions,
-  /:aria-label="t\('agentOS\.memory\.editMemory'\)"/,
-  "Memory row edit action must keep an accessible name while rendering as an icon button",
+  /v-if="canWriteMemory"[\s\S]*:aria-label="t\('agentOS\.memory\.editMemory'\)"/,
+  "Memory row edit action must require memories:write and keep an accessible name while rendering as an icon button",
 )
 
 assert.match(
   memoryRowActions,
-  /:aria-label="t\('agentOS\.memory\.deleteMemory'\)"/,
-  "Memory row delete action must keep an accessible name while rendering as an icon button",
+  /v-if="canDeleteMemory"[\s\S]*:aria-label="t\('agentOS\.memory\.deleteMemory'\)"/,
+  "Memory row delete action must require memories:delete and keep an accessible name while rendering as an icon button",
 )
 
 assert.doesNotMatch(

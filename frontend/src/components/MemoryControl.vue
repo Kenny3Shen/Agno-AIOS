@@ -184,8 +184,9 @@
                 </span>
               </span>
             </button>
-            <span v-if="canWriteMemory" class="memory-row-actions">
+            <span v-if="canWriteMemory || canDeleteMemory" class="memory-row-actions">
               <el-button
+                v-if="canWriteMemory"
                 size="small"
                 plain
                 circle
@@ -198,6 +199,7 @@
                 <el-icon><EditPen /></el-icon>
               </el-button>
               <el-button
+                v-if="canDeleteMemory"
                 size="small"
                 type="danger"
                 plain
@@ -460,6 +462,7 @@ const thresholds = computed(() => payload.value?.memory_thresholds)
 const memoryMode = computed(() => payload.value?.memory_mode)
 const modeBadges = computed(() => memoryModeBadges(memoryMode.value || defaultMemoryPayload().memory_mode))
 const canWriteMemory = computed(() => authStore.hasScope("memories:write"))
+const canDeleteMemory = computed(() => authStore.hasScope("memories:delete"))
 const riskUserCount = computed(() => userOptions.value.filter((user) => user.status === "risk").length)
 const reviewUserCount = computed(() => userOptions.value.filter((user) => user.status === "review").length)
 const healthyUserCount = computed(() => userOptions.value.filter((user) => user.status === "healthy" || user.status === "stored").length)
@@ -697,7 +700,7 @@ const saveMemoryUpdate = async () => {
 
 const deleteSelectedMemory = async (memory?: MemoryItem) => {
   const targetMemory = memory || selectedMemory.value
-  if (!canWriteMemory.value || !targetMemory) return
+  if (!canDeleteMemory.value || !targetMemory) return
   selectedMemoryId.value = targetMemory.id
   try {
     await ElMessageBox.confirm(

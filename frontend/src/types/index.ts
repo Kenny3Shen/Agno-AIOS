@@ -138,6 +138,7 @@ export type OsControlModule =
   | "memory"
   | "metrics"
   | "evaluation"
+  | "knowledge"
   | "approvals"
   | "scheduler"
 

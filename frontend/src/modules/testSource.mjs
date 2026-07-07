@@ -48,6 +48,7 @@ export const useSettingsApiSource = readOptionalSource("composables/useSettingsA
 export const useTraceApiSource = readOptionalSource("composables/useTraceApi.ts")
 export const useAgentEvalsApiSource = readOptionalSource("composables/useAgentEvalsApi.ts")
 export const apiClient = readOptionalSource("lib/apiClient.ts")
+export const viteConfig = readSource("../vite.config.ts")
 export const clipboard = readOptionalSource("lib/clipboard.ts")
 export const authStoreSource = readOptionalSource("stores/auth.ts")
 export const scopes = readOptionalSource("lib/scopes.ts")

@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import {
   existsSync,
   sourcePath,
+  typesSource,
   useAgentEvalsApiSource,
   useApprovalsApiSource,
   useApi,
@@ -15,6 +16,7 @@ import {
   useSecurityDataApiSource,
   useSettingsApiSource,
   useTraceApiSource,
+  viteConfig,
 } from "./testSource.mjs"
 
 const expectedComposableFiles = [
@@ -108,4 +110,22 @@ assert.doesNotMatch(
   useControlPlaneApiSource + useMemoryControlApiSource + useApprovalsApiSource + useSchedulerApiSource,
   /export function useOsControlApi\(/,
   "OS control frontend API must be split into functional composables",
+)
+
+assert.match(
+  typesSource,
+  /export type OsControlModule =[\s\S]*\| "knowledge"/,
+  "OS control module typing must include the read-only knowledge payload route",
+)
+
+assert.match(
+  useControlPlaneApiSource,
+  /export type ControlPlanePayloadModule = Exclude<OsControlModule, 'memory' \| 'approvals' \| 'scheduler'>/,
+  "control-plane payload API must allow sessions, metrics, evaluation, and knowledge while excluding owned functional composables",
+)
+
+assert.match(
+  viteConfig,
+  /'\/schedules':\s*\{[\s\S]*target:\s*apiProxyTarget[\s\S]*changeOrigin:\s*true/,
+  "Vite dev proxy must forward direct AgentOS scheduler routes instead of serving index.html",
 )

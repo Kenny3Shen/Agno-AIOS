@@ -10,7 +10,14 @@ import pytest
 from starlette.requests import Request
 
 from api.auth.claims import has_scope
-from api.routes import os_approvals_control, os_memory_control, os_sessions_control
+from api.routes import (
+    os_approvals_control,
+    os_evaluation_control,
+    os_knowledge_control,
+    os_memory_control,
+    os_metrics_control,
+    os_sessions_control,
+)
 from api.services import os_control_identity, os_memory_control as memory_control
 from api.services import os_sessions_control as sessions_control
 from api.services.security_policy import require_control_module_access
@@ -29,6 +36,16 @@ def route_dependency(router, endpoint_name: str):
         if isinstance(route, APIRoute) and getattr(route.endpoint, "__name__", "") == endpoint_name:
             return route.dependant.dependencies[0].call
     raise AssertionError(f"missing route for {endpoint_name}")
+
+
+def route_dependency_scope(router, endpoint_name: str) -> str:
+    dependency = route_dependency(router, endpoint_name)
+    freevars = getattr(getattr(dependency, "__code__", None), "co_freevars", ())
+    closure = getattr(dependency, "__closure__", None) or ()
+    for name, cell in zip(freevars, closure, strict=False):
+        if name == "scope":
+            return str(cell.cell_contents)
+    raise AssertionError(f"missing scope dependency for {endpoint_name}")
 
 
 class FakeMemoryDb:
@@ -167,10 +184,32 @@ def test_aggregate_os_control_service_is_removed():
     assert find_spec("api.services.os_control_service") is None
 
 
-def test_approvals_read_route_rejects_non_admin_user():
-    with pytest.raises(HTTPException) as context:
-        route_dependency(os_approvals_control.router, "list_os_approvals")(user=actor("u1"))
-    assert context.value.status_code == 403
+@pytest.mark.parametrize(
+    ("router", "endpoint_name", "scope"),
+    [
+        (os_sessions_control.router, "get_os_sessions", "sessions:read"),
+        (os_memory_control.router, "get_os_memory", "memories:read"),
+        (os_metrics_control.router, "get_os_metrics", "metrics:read"),
+        (os_evaluation_control.router, "get_os_evaluation", "evals:read"),
+        (os_knowledge_control.router, "get_os_knowledge", "knowledge:read"),
+        (os_approvals_control.router, "list_os_approvals", "approvals:read"),
+        (os_approvals_control.router, "get_os_approval", "approvals:read"),
+        (os_approvals_control.router, "resolve_os_approval", "approvals:write"),
+    ],
+)
+def test_os_control_routes_require_expected_scopes(router, endpoint_name: str, scope: str):
+    assert route_dependency_scope(router, endpoint_name) == scope
+
+
+@pytest.mark.parametrize(
+    ("endpoint_name", "dependency"),
+    [
+        ("update_os_memory", os_memory_control.require_memory_write_permission),
+        ("delete_os_memory", os_memory_control.require_memory_delete_permission),
+    ],
+)
+def test_memory_mutation_routes_use_explicit_permission_helpers(endpoint_name: str, dependency):
+    assert route_dependency(os_memory_control.router, endpoint_name) is dependency
 
 
 @pytest.mark.asyncio
