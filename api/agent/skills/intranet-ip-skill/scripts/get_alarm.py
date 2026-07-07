@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 from typing import Any
+
+from pydantic import TypeAdapter
 
 from base import post_jsonrpc
 
@@ -85,7 +86,7 @@ async def _main_async() -> int:
     args = _build_parser().parse_args()
     try:
         data = await get_alarm_by_doc_id(args.doc_id)
-        print(json.dumps(data, ensure_ascii=False))
+        print(TypeAdapter(Any).dump_json(data).decode("utf-8"))
         return 0
     except Exception as exc:
         print(f"获取告警失败: {exc}")

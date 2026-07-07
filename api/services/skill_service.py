@@ -1,4 +1,3 @@
-import json
 import os
 import re
 import shutil
@@ -19,6 +18,7 @@ from api.auth.visibility import (
 )
 from api.config import get_settings
 from api.services.runtime_paths import CONFIG_DIR, PROJECT_ROOT, resolve_project_path
+from api.utils.json import dumps, loads
 
 DEFAULT_SKILLS_DIR = PROJECT_ROOT / "api" / "agent" / "skills"
 DEFAULT_SKILLS_CONFIG_FILE = CONFIG_DIR / "skills_config.json"
@@ -68,7 +68,7 @@ def load_skills_config() -> dict[str, bool]:
     if not config_file.exists():
         return {}
     try:
-        return json.loads(config_file.read_text(encoding="utf-8"))
+        return loads(config_file.read_text(encoding="utf-8"))
     except Exception:
         return {}
 
@@ -76,9 +76,7 @@ def load_skills_config() -> dict[str, bool]:
 def save_skills_config(cfg: dict[str, bool]) -> None:
     config_file = get_skills_config_file()
     config_file.parent.mkdir(parents=True, exist_ok=True)
-    config_file.write_text(
-        json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    config_file.write_text(dumps(cfg, indent=True), encoding="utf-8")
 
 
 def iter_skill_dirs() -> list[Path]:

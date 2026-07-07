@@ -3,11 +3,12 @@ from typing import Any
 
 from fastmcp import FastMCP
 from loguru import logger
-from starlette.responses import JSONResponse
+from starlette.responses import Response
 
 from api.mcp.config import SERVICE_IDS, enabled_service_ids, ensure_bootstrap_token, is_valid_token
 from api.mcp.tools.basic import basic_mcp
 from api.mcp.tools.playbook import playbook_mcp
+from api.utils.json import dumps_bytes
 
 
 def _extract_header(scope: dict, name: str) -> str:
@@ -35,8 +36,11 @@ class AuthenticatedMcpApp:
         if scope["type"] in {"http", "websocket"} and not await is_valid_token(
             _extract_token(scope)
         ):
-            response = JSONResponse(
-                {"code": 401, "msg": "Unauthorized: invalid_token"},
+            response = Response(
+                content=dumps_bytes(
+                    {"code": 401, "msg": "Unauthorized: invalid_token"}
+                ),
+                media_type="application/json",
                 status_code=401,
             )
             await response(scope, receive, send)

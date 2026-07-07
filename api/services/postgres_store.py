@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 from functools import lru_cache
 from typing import Any
 
 from agno.db.postgres import AsyncPostgresDb
 
 from api.config import get_settings
+from api.utils.json import loads
 
 
 def postgres_host() -> str:
@@ -97,7 +97,7 @@ def coerce_json_value(value: Any) -> Any:
         if not isinstance(current, str):
             return current
         try:
-            current = json.loads(current)
+            current = loads(current)
         except Exception:
             return current
     return current

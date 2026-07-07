@@ -5,7 +5,6 @@ description = "AI security operations control plane powered by FastAPI, Vue, Agn
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "aiomysql>=0.3.2",
     "loguru>=0.7.3",
     "httpx>=0.24.0",
     "fastapi[standard]>=0.109.0",

@@ -1,5 +1,4 @@
 import asyncio
-import json
 from datetime import datetime
 from typing import Any
 
@@ -8,6 +7,7 @@ from fastapi.encoders import jsonable_encoder
 
 from api.auth.ownership import assert_owned_resource
 from api.services.postgres_store import get_async_agno_postgres_db
+from api.utils.json import JSONDecodeError, dumps, loads
 
 # Keep a single DB wrapper instance.
 _trace_db = get_async_agno_postgres_db()
@@ -51,7 +51,7 @@ def _json_or_text(value: Any) -> dict[str, Any]:
     if isinstance(value, dict | list):
         return {
             "format": "json",
-            "text": json.dumps(value, ensure_ascii=False, indent=2),
+            "text": dumps(value, indent=True),
             "data": value,
         }
 
@@ -61,13 +61,13 @@ def _json_or_text(value: Any) -> dict[str, Any]:
         return {"format": "empty", "text": "", "data": None}
     if stripped[0:1] in {"{", "["}:
         try:
-            data = json.loads(stripped)
+            data = loads(stripped)
             return {
                 "format": "json",
-                "text": json.dumps(data, ensure_ascii=False, indent=2),
+                "text": dumps(data, indent=True),
                 "data": data,
             }
-        except json.JSONDecodeError:
+        except JSONDecodeError:
             pass
 
     markdown_markers = ("# ", "## ", "- ", "* ", "```", "|", "> ")

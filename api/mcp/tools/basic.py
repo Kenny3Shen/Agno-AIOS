@@ -1,7 +1,8 @@
 from fastmcp import FastMCP
 import httpx
-import json
 import asyncio
+
+from api.utils.json import dumps_bytes
 
 basic_mcp = FastMCP("Basic")
 
@@ -40,9 +41,7 @@ async def send_feishu_notify(
 
     def _payload_size(content: str) -> int:
         try:
-            return len(
-                json.dumps(_make_payload(content), ensure_ascii=False).encode("utf-8")
-            )
+            return len(dumps_bytes(_make_payload(content)))
         except Exception:
             return 10**9
 
@@ -61,7 +60,7 @@ async def send_feishu_notify(
                 r = await client.post(
                     feishu_webhook_url,
                     headers=headers,
-                    content=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                    content=dumps_bytes(payload),
                 )
 
             resp_json: dict = {}

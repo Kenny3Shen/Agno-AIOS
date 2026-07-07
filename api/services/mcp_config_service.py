@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-import json
 from typing import Annotated, Any
 
 from fastapi import HTTPException
@@ -12,6 +11,7 @@ from api.mcp.config import (
     read_mcp_config,
     write_mcp_config,
 )
+from api.utils.json import JSONDecodeError, loads
 
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -80,8 +80,8 @@ def _parse_mcp_manifest(raw: str) -> tuple[str, dict[str, Any]]:
     if not text:
         raise HTTPException(status_code=400, detail="manifest 不能为空")
     try:
-        manifest = json.loads(text)
-    except json.JSONDecodeError as exc:
+        manifest = loads(text)
+    except JSONDecodeError as exc:
         raise HTTPException(status_code=400, detail="manifest must be valid JSON") from exc
     if not isinstance(manifest, dict):
         raise HTTPException(status_code=400, detail="manifest must be a JSON object")

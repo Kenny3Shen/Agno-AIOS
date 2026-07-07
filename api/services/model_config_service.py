@@ -1,4 +1,3 @@
-import json
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any, Self
@@ -7,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from api.config import get_settings
 from api.services.runtime_paths import CONFIG_DIR, resolve_project_path
+from api.utils.json import dumps, loads
 
 
 class ModelConfig(BaseModel):
@@ -205,7 +205,7 @@ def load_model_config_store() -> ModelConfigStore:
     if not config_file.exists():
         return ModelConfigStore.default()
     try:
-        raw = json.loads(config_file.read_text(encoding="utf-8"))
+        raw = loads(config_file.read_text(encoding="utf-8"))
     except Exception:
         return ModelConfigStore.default()
     return ModelConfigStore.from_raw(raw)
@@ -231,7 +231,7 @@ def save_model_config(
     config_file = model_config_file()
     config_file.parent.mkdir(parents=True, exist_ok=True)
     config_file.write_text(
-        json.dumps(store.to_storage_dict(), ensure_ascii=False, indent=2),
+        dumps(store.to_storage_dict(), indent=True),
         encoding="utf-8",
     )
     return store.to_public_dict()

@@ -1,6 +1,5 @@
 import secrets
 import time
-import json
 from typing import Any
 
 from api.auth.visibility import normalize_visibility
@@ -13,6 +12,7 @@ from api.persistence.mcp import (
 )
 from api.services.runtime_paths import CONFIG_DIR
 from api.services.postgres_store import mcp_schema, postgres_label
+from api.utils.json import dumps, loads
 
 SERVICE_IDS = ("playbook", "basic")
 MCP_DATA_DIR = CONFIG_DIR / "mcp"
@@ -77,7 +77,7 @@ def read_mcp_config() -> dict[str, Any]:
     if not MCP_CONFIG_FILE.exists():
         return _default_config()
     try:
-        data = json.loads(MCP_CONFIG_FILE.read_text(encoding="utf-8"))
+        data = loads(MCP_CONFIG_FILE.read_text(encoding="utf-8"))
     except Exception:
         return _default_config()
     if not isinstance(data, dict):
@@ -89,7 +89,7 @@ def write_mcp_config(data: dict[str, Any]) -> None:
     MCP_DATA_DIR.mkdir(parents=True, exist_ok=True)
     normalized = _normalize_mcp_config(data)
     MCP_CONFIG_FILE.write_text(
-        json.dumps(normalized, ensure_ascii=False, indent=2) + "\n",
+        dumps(normalized, indent=True, append_newline=True),
         encoding="utf-8",
     )
 
