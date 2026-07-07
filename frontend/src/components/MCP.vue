@@ -31,15 +31,7 @@
             <el-input v-model="uploadForm.description" :placeholder="t('mcp.upload.descriptionPlaceholder')" />
             <label class="mcp-visibility-field">
               <span>{{ t('visibility.label') }}</span>
-              <el-radio-group v-model="uploadForm.visibility" size="small">
-                <el-radio-button
-                  v-for="option in resourceVisibilityOptions"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ t(option.labelKey) }}
-                </el-radio-button>
-              </el-radio-group>
+              <ResourceVisibilityTabs v-model="uploadForm.visibility" />
             </label>
             <el-input v-model="uploadForm.manifest" type="textarea" :rows="4" :placeholder="t('mcp.upload.manifestPlaceholder')" />
           </div>
@@ -99,22 +91,16 @@
                       <strong>{{ server.name }}</strong>
                       <em>{{ server.description || server.kind }}</em>
                     </div>
-                    <span class="status-pill" :class="server.visibility === 'public' ? 'ok' : 'off'">
-                      {{ t(`visibility.${server.visibility}`) }}
-                    </span>
                   </div>
                   <div class="mt-4 flex items-center justify-between gap-2 text-xs">
                     <span class="mcp-muted font-mono">{{ server.kind }}</span>
-                    <el-button
-                      class="visibility-toggle"
-                      size="small"
-                      plain
+                    <ResourceVisibilityTabs
+                      :model-value="server.visibility"
+                      :aria-label="t('mcp.visibilityLabel', { name: server.name })"
                       :disabled="!canWriteMcp || !server.can_manage"
                       :loading="serverToggling === server.name"
-                      @click="toggleMcpServerVisibility(server)"
-                    >
-                      {{ t(`visibility.${nextResourceVisibility(server.visibility)}`) }}
-                    </el-button>
+                      @update:model-value="(visibility) => updateMcpServerVisibilityTab(server, visibility)"
+                    />
                   </div>
                 </section>
               </div>
@@ -224,9 +210,9 @@ import {
 } from "@element-plus/icons-vue"
 import { useMcpApi } from "../composables/useApi"
 import { copyToClipboard } from "../lib/clipboard"
-import { nextResourceVisibility, resourceVisibilityOptions } from "../modules/resourceVisibility"
 import { useAuthStore } from "../stores/auth"
 import type { McpServerInfo, McpServiceId, McpTokenInfo, ResourceVisibility } from "../types"
+import ResourceVisibilityTabs from "./common/ResourceVisibilityTabs.vue"
 
 type TabId = "services" | "servers" | "tokens"
 
@@ -411,12 +397,12 @@ const submitMcpUpload = async () => {
   }
 }
 
-const toggleMcpServerVisibility = async (server: McpServerInfo) => {
+const updateMcpServerVisibilityTab = async (server: McpServerInfo, visibility: ResourceVisibility) => {
   if (!canWriteMcp.value || !server.can_manage) return
-  const nextVisibility = nextResourceVisibility(server.visibility)
+  if (visibility === server.visibility) return
   serverToggling.value = server.name
   try {
-    const result = await updateMcpServerVisibility(server.name, nextVisibility)
+    const result = await updateMcpServerVisibility(server.name, visibility)
     server.visibility = result.visibility
     ElMessage.success(t("visibility.updated"))
   } catch (err) {

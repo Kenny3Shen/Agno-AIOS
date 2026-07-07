@@ -1,29 +1,55 @@
+from typing import cast
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from api.auth.models import User
 from api.auth.claims import actor_id, scope_user_id
+from api.auth.models import User
 from api.auth.scopes import require_scope
 from api.auth.visibility import can_manage_resource
 from api.services.audit_service import audit_request_context, record_audit_event_async
-from api.services.knowledge_service import get_knowledge_base_lifecycle
+from api.services.knowledge_document_service import KnowledgeDocumentPayload
+from api.services.knowledge_service import (
+    get_knowledge_base_lifecycle,
+    update_rag_settings_async,
+)
 
 router = APIRouter(prefix="/api/knowledge", tags=["Knowledge"])
+
+
+class KnowledgeDocumentResponsePayload(KnowledgeDocumentPayload):
+    can_manage: bool
 
 
 def effective_knowledge_user_filter(user: User) -> str | None:
     return scope_user_id(user, None)
 
 
-def with_manage_flags(documents: list[dict], user: User) -> list[dict]:
-    flagged: list[dict] = []
+def with_manage_flag(document: KnowledgeDocumentPayload, user: User) -> KnowledgeDocumentResponsePayload:
+    flagged = cast(
+        KnowledgeDocumentResponsePayload,
+        {
+            **document,
+            "can_manage": can_manage_resource(
+                user,
+                {
+                    **document["metadata"],
+                    "visibility": document["visibility"],
+                    "owner_user_id": document["owner_user_id"],
+                },
+            ),
+        },
+    )
+    return flagged
+
+
+def with_manage_flags(
+    documents: list[KnowledgeDocumentPayload],
+    user: User,
+) -> list[KnowledgeDocumentResponsePayload]:
+    flagged: list[KnowledgeDocumentResponsePayload] = []
     for document in documents:
-        metadata = {
-            **(document.get("metadata") or {}),
-            "visibility": document.get("visibility"),
-            "owner_user_id": document.get("owner_user_id"),
-        }
-        flagged.append({**document, "can_manage": can_manage_resource(user, metadata)})
+        flagged.append(with_manage_flag(document, user))
     return flagged
 
 
@@ -54,6 +80,26 @@ class KnowledgeSearchRequest(BaseModel):
     )
 
 
+class KnowledgeRagSettingsRequest(BaseModel):
+    embedding_model: str | None = None
+    embedding_dimensions: int | None = Field(default=None, ge=1)
+    rerank_model: str | None = None
+    query_prompt: str | None = None
+    top_k: int | None = Field(default=None, ge=1)
+    chunk_size: int | None = Field(default=None, ge=200)
+    chunk_overlap: int | None = Field(default=None, ge=0)
+    code_chunk_size: int | None = Field(default=None, ge=256)
+    semantic_threshold: float | None = Field(default=None, ge=0, le=1)
+    vector_score_weight: float | None = Field(default=None, ge=0, le=1)
+    content_language: str | None = None
+    prefix_match: bool | None = None
+    rerank_enabled: bool | None = None
+    rerank_candidate_multiplier: int | None = Field(default=None, ge=1)
+    rerank_min_candidates: int | None = Field(default=None, ge=1)
+    device: str | None = None
+    search_type: str | None = None
+
+
 @router.get("")
 async def get_knowledge_status(user: User = Depends(require_scope("knowledge:read"))) -> dict:
     owner_user_id = effective_knowledge_user_filter(user)
@@ -73,7 +119,7 @@ async def create_text_document(
     request_ctx: Request,
     request: KnowledgeTextRequest,
     user: User = Depends(require_scope("knowledge:write")),
-) -> dict:
+) -> KnowledgeDocumentResponsePayload:
     try:
         result = await get_knowledge_base_lifecycle().add_text_document_async(
             title=request.title,
@@ -83,7 +129,7 @@ async def create_text_document(
             owner_user_id=actor_id(user),
             visibility=request.visibility,
         )
-        result["can_manage"] = True
+        response = cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
         await record_audit_event_async(
             user,
             action="knowledge.create",
@@ -92,7 +138,7 @@ async def create_text_document(
             metadata={"source": request.source},
             **audit_request_context(request_ctx),
         )
-        return result
+        return response
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -102,7 +148,7 @@ async def create_file_document(
     request_ctx: Request,
     request: KnowledgeFileRequest,
     user: User = Depends(require_scope("knowledge:write")),
-) -> dict:
+) -> KnowledgeDocumentResponsePayload:
     try:
         result = await get_knowledge_base_lifecycle().add_file_document_async(
             path=request.path,
@@ -110,7 +156,7 @@ async def create_file_document(
             owner_user_id=actor_id(user),
             visibility=request.visibility,
         )
-        result["can_manage"] = True
+        response = cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
         await record_audit_event_async(
             user,
             action="knowledge.create",
@@ -119,7 +165,7 @@ async def create_file_document(
             metadata={"path": request.path},
             **audit_request_context(request_ctx),
         )
-        return result
+        return response
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -146,13 +192,40 @@ async def remove_document(
     return {"success": True}
 
 
+@router.post("/documents/{doc_id}/rebuild")
+async def rebuild_document(
+    request_ctx: Request,
+    doc_id: str,
+    user: User = Depends(require_scope("knowledge:write")),
+) -> KnowledgeDocumentResponsePayload:
+    try:
+        updated = await get_knowledge_base_lifecycle().rebuild_document_async(
+            doc_id,
+            owner_user_id=effective_knowledge_user_filter(user),
+            user=user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if updated is None:
+        raise HTTPException(status_code=404, detail="知识文档不存在")
+    response = cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
+    await record_audit_event_async(
+        user,
+        action="knowledge.rebuild",
+        resource_type="knowledge_document",
+        resource_id=doc_id,
+        **audit_request_context(request_ctx),
+    )
+    return response
+
+
 @router.put("/documents/{doc_id}/visibility")
 async def update_document_visibility(
     request_ctx: Request,
     doc_id: str,
     request: KnowledgeVisibilityRequest,
     user: User = Depends(require_scope("knowledge:write")),
-) -> dict:
+) -> KnowledgeDocumentResponsePayload:
     try:
         updated = await get_knowledge_base_lifecycle().update_document_visibility_async(
             doc_id,
@@ -163,7 +236,7 @@ async def update_document_visibility(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if updated is None:
         raise HTTPException(status_code=404, detail="知识文档不存在")
-    updated["can_manage"] = True
+    response = cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
     await record_audit_event_async(
         user,
         action="knowledge.visibility_update",
@@ -172,7 +245,7 @@ async def update_document_visibility(
         metadata={"visibility": request.visibility},
         **audit_request_context(request_ctx),
     )
-    return updated
+    return response
 
 
 @router.post("/search")
@@ -191,6 +264,31 @@ async def search_knowledge(
         }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.patch("/settings/rag")
+async def update_rag_settings(
+    request_ctx: Request,
+    request: KnowledgeRagSettingsRequest,
+    user: User = Depends(require_scope("config:write")),
+) -> dict:
+    try:
+        settings = await update_rag_settings_async(request.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await record_audit_event_async(
+        user,
+        action="knowledge.rag_settings_update",
+        resource_type="knowledge",
+        metadata={"settings": settings},
+        **audit_request_context(request_ctx),
+    )
+    return {
+        "settings": settings,
+        "status": await get_knowledge_base_lifecycle().knowledge_status_async(
+            owner_user_id=effective_knowledge_user_filter(user),
+        ),
+    }
 
 
 @router.delete("")

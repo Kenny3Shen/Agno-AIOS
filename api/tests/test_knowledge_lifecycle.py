@@ -1,0 +1,554 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import pytest
+from agno.knowledge.content import FileData
+from fastapi import HTTPException
+from fastapi.routing import APIRoute
+
+from api.auth.claims import has_scope
+from api.routes import knowledge as knowledge_route
+from api.services import knowledge_service
+from api.tests.knowledge_fakes import StrictAsyncKnowledge
+
+
+def route_dependency(endpoint_name: str):
+    for route in knowledge_route.router.routes:
+        if isinstance(route, APIRoute) and getattr(route.endpoint, "__name__", "") == endpoint_name:
+            return route.dependant.dependencies[0].call
+    raise AssertionError(f"missing route for {endpoint_name}")
+
+
+def test_rag_settings_route_requires_config_write_scope() -> None:
+    ordinary_user = SimpleNamespace(id="u1", role="user", is_superuser=False)
+    admin = SimpleNamespace(id="admin", role="admin", is_superuser=False)
+    dependency = route_dependency("update_rag_settings")
+
+    assert has_scope(ordinary_user, "knowledge:write")
+    assert not has_scope(ordinary_user, "config:write")
+    with pytest.raises(HTTPException) as exc:
+        dependency(user=ordinary_user)
+    assert exc.value.status_code == 403
+    assert dependency(user=admin) is admin
+
+
+@pytest.mark.asyncio
+async def test_search_documents_merges_public_and_owner_private_filters() -> None:
+    calls: list[dict[str, object]] = []
+
+    async def noop() -> None:
+        return None
+
+    async def hydrate_noop(_documents) -> None:
+        return None
+
+    async def get_knowledge_async(_search_type=None):
+        return knowledge
+
+    async def search(*args, **kwargs):
+        calls.append(
+            {
+                "filters": kwargs.get("filters"),
+                "max_results": kwargs.get("max_results"),
+                "search_type": kwargs.get("search_type"),
+            }
+        )
+        return []
+
+    knowledge = StrictAsyncKnowledge(search_callback=search)
+
+    with (
+        patch.object(knowledge_service, "_ensure_knowledge_storage_async", noop),
+        patch.object(knowledge_service, "_get_async_knowledge_base_async", get_knowledge_async),
+        patch.object(knowledge_service, "_hydrate_content_ids_async", hydrate_noop),
+    ):
+        results = await knowledge_service.search_documents_async(
+            "policy", owner_user_id="u1"
+        )
+    assert results == []
+    assert [call["filters"] for call in calls] == [
+        {"visibility": "public"},
+        {"user_id": "u1"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_search_uses_public_and_private_owner_filters() -> None:
+    calls: list[dict[str, object]] = []
+
+    async def search(*args, **kwargs):
+        calls.append(
+            {
+                "query": args[0],
+                "filters": kwargs.get("filters"),
+                "max_results": kwargs.get("max_results"),
+                "search_type": kwargs.get("search_type"),
+            }
+        )
+        return []
+
+    knowledge = StrictAsyncKnowledge(search_callback=search)
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_storage_async=lambda: None,
+            hydrate_content_ids_async=lambda _documents: None,
+        )
+    )
+    results = await lifecycle.search_documents_async(
+        "policy", search_type="hybrid", owner_user_id="u1"
+    )
+    assert results == []
+    assert [call["query"] for call in calls] == ["policy", "policy"]
+    assert [call["filters"] for call in calls] == [
+        {"visibility": "public"},
+        {"user_id": "u1"},
+    ]
+    assert [call["search_type"] for call in calls] == ["hybrid", "hybrid"]
+
+
+@pytest.mark.asyncio
+async def test_add_text_document_uses_async_insert_and_reload() -> None:
+    content_row = SimpleNamespace(
+        id="content-1",
+        name="Runbook",
+        metadata={"user_id": "u1", "source": "manual", "chunks": 1},
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(contents=[content_row])
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_storage_async=lambda: None,
+        )
+    )
+
+    with patch.object(knowledge_service, "reader_for_profile", return_value=object()):
+        result = await lifecycle.add_text_document_async(
+            "Runbook",
+            "  content  ",
+            owner_user_id="u1",
+        )
+
+    assert result["id"] == "content-1"
+    assert result["title"] == "Runbook"
+    assert knowledge.calls[0][0] == "ainsert"
+    assert knowledge.calls[1][0] == "aget_content"
+
+
+@pytest.mark.asyncio
+async def test_add_file_document_uses_async_insert_and_reload(tmp_path) -> None:
+    file_path = tmp_path / "runbook.md"
+    file_path.write_text("# runbook\n", encoding="utf-8")
+    content_row = SimpleNamespace(
+        id="content-2",
+        name="Runbook",
+        metadata={"user_id": "u1", "source": str(file_path), "chunks": 1},
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(contents=[content_row])
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_storage_async=lambda: None,
+        )
+    )
+
+    with patch.object(knowledge_service, "reader_for_profile", return_value=object()):
+        result = await lifecycle.add_file_document_async(
+            str(file_path),
+            title="Runbook",
+            owner_user_id="u1",
+        )
+
+    assert result["id"] == "content-2"
+    assert result["title"] == "Runbook"
+    assert knowledge.calls[0][0] == "ainsert"
+    assert knowledge.calls[1][0] == "aget_content"
+
+
+@pytest.mark.asyncio
+async def test_update_document_visibility_uses_agno_patch_content() -> None:
+    content_row = SimpleNamespace(
+        id="content-visibility",
+        name="Runbook",
+        metadata={"user_id": "u1", "visibility": "private", "source": "manual"},
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(content_by_id={"content-visibility": content_row})
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_by_id_async=lambda _content_id: content_row,
+        )
+    )
+
+    result = await lifecycle.update_document_visibility_async(
+        "content-visibility",
+        "public",
+        SimpleNamespace(id="u1", role="user", is_superuser=False),
+    )
+
+    assert result is not None
+    assert result["visibility"] == "public"
+    assert content_row.metadata["visibility"] == "public"
+    assert knowledge.calls[-1][0] == "apatch_content"
+
+
+@pytest.mark.asyncio
+async def test_rebuild_document_reloads_content_without_pre_delete() -> None:
+    content_row = SimpleNamespace(
+        id="content-rebuild",
+        name="Runbook",
+        description="manual",
+        path=None,
+        url=None,
+        file_data=FileData(content="runbook body", type="Text", filename="runbook.txt"),
+        metadata={
+            "user_id": "u1",
+            "visibility": "private",
+            "source": "manual",
+            "file_name": "runbook.txt",
+        },
+        topics=None,
+        remote_content=None,
+        reader=None,
+        size=12,
+        file_type=".txt",
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(
+        content_by_id={"content-rebuild": content_row},
+    )
+    deleted: list[str] = []
+
+    async def content_by_id(content_id: str):
+        return knowledge._content_by_id.get(content_id)
+
+    async def delete_content_async(_knowledge, content_id: str) -> None:
+        deleted.append(content_id)
+        knowledge._content_by_id.pop(content_id, None)
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_storage_async=lambda: None,
+            knowledge_content_by_id_async=content_by_id,
+            delete_content_async=delete_content_async,
+        )
+    )
+
+    with patch.object(knowledge_service, "reader_for_filename", return_value=object()):
+        result = await lifecycle.rebuild_document_async(
+            "content-rebuild",
+            owner_user_id="u1",
+        )
+
+    assert result is not None
+    assert result["id"] == "content-rebuild"
+    assert deleted == []
+    load_calls = [call for call in knowledge.calls if call[0] == "_aload_content"]
+    assert len(load_calls) == 1
+    _, rebuilt_content, upsert, skip_if_exists, include, exclude = load_calls[0]
+    assert rebuilt_content.id == "content-rebuild"
+    assert rebuilt_content.file_data.content == "runbook body"
+    assert rebuilt_content.metadata["user_id"] == "u1"
+    assert upsert is True
+    assert skip_if_exists is False
+    assert include is None
+    assert exclude is None
+
+
+@pytest.mark.asyncio
+async def test_rebuild_document_preserves_existing_content_when_reload_fails() -> None:
+    content_row = SimpleNamespace(
+        id="content-rebuild",
+        name="Runbook",
+        description="manual",
+        path=None,
+        url=None,
+        file_data=FileData(content="runbook body", type="Text", filename="runbook.txt"),
+        metadata={"user_id": "u1", "visibility": "private", "source": "manual"},
+        topics=None,
+        remote_content=None,
+        reader=None,
+        size=12,
+        file_type=".txt",
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(
+        content_by_id={"content-rebuild": content_row},
+    )
+    deleted: list[str] = []
+
+    async def content_by_id(content_id: str):
+        return knowledge._content_by_id.get(content_id)
+
+    async def delete_content_async(_knowledge, content_id: str) -> None:
+        deleted.append(content_id)
+        knowledge._content_by_id.pop(content_id, None)
+
+    async def fail_reload(_knowledge, _content) -> None:
+        raise RuntimeError("reload failed")
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_storage_async=lambda: None,
+            knowledge_content_by_id_async=content_by_id,
+            delete_content_async=delete_content_async,
+        )
+    )
+
+    with (
+        patch.object(knowledge_service, "reader_for_filename", return_value=object()),
+        patch.object(knowledge_service, "_aload_rebuild_content_async", fail_reload),
+        pytest.raises(RuntimeError, match="reload failed"),
+    ):
+        await lifecycle.rebuild_document_async(
+            "content-rebuild",
+            owner_user_id="u1",
+        )
+
+    assert deleted == []
+    assert knowledge._content_by_id["content-rebuild"] is content_row
+
+
+@pytest.mark.asyncio
+async def test_rebuild_document_rejects_public_foreign_non_manager() -> None:
+    content_row = SimpleNamespace(
+        id="content-public",
+        name="Shared",
+        metadata={"user_id": "u2", "visibility": "public"},
+        file_data=FileData(content="body", type="Text", filename="shared.txt"),
+        created_at=0,
+    )
+
+    def fail_runtime(_search_type=None):
+        raise AssertionError("unauthorized rebuild must not load Knowledge runtime")
+
+    def fail_storage():
+        raise AssertionError("unauthorized rebuild must not initialize vector storage")
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=fail_runtime,
+            ensure_storage_async=fail_storage,
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_by_id_async=lambda _content_id: content_row,
+        )
+    )
+
+    result = await lifecycle.rebuild_document_async(
+        "content-public",
+        owner_user_id="u1",
+        user=SimpleNamespace(id="u1", role="user", is_superuser=False),
+    )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_list_documents_uses_contents_db_without_runtime() -> None:
+    content_row = SimpleNamespace(
+        id="content-3",
+        name="Runbook",
+        metadata={"user_id": "u1", "source": "/kb/runbook.md", "chunks": 1},
+        created_at=0,
+    )
+    content_calls: list[dict[str, object]] = []
+
+    async def content_rows_async(**kwargs: object):
+        content_calls.append(kwargs)
+        return [content_row], 1
+
+    def fail_runtime(_search_type=None):
+        raise AssertionError("status/list must not load Knowledge runtime")
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=fail_runtime,
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_rows_async=content_rows_async,
+            chunk_counts_by_content_id_async=lambda _owner_user_id=None: {
+                "content-3": 4
+            },
+        )
+    )
+
+    documents = await lifecycle.list_documents_async(owner_user_id="u1")
+
+    assert documents == [
+        {
+            "id": "content-3",
+            "title": "Runbook",
+            "source": "/kb/runbook.md",
+            "chunks": 4,
+            "created_at": "1970-01-01T00:00:00+00:00",
+            "status": "",
+            "status_message": "",
+            "type": "",
+            "size": None,
+            "visibility": "private",
+            "owner_user_id": "u1",
+            "metadata": {
+                "user_id": "u1",
+                "source": "/kb/runbook.md",
+                "chunks": "1",
+            },
+        }
+    ]
+    assert content_calls == [
+        {"limit": 500, "page": 1, "sort_by": "updated_at", "sort_order": "desc"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_list_documents_treats_completed_markdown_as_ready_when_count_missing() -> None:
+    content_row = SimpleNamespace(
+        id="content-ready",
+        name="Runbook",
+        status="completed",
+        status_message="",
+        type=".md",
+        size=256,
+        metadata={"user_id": "u1", "source": "/kb/runbook.md", "file_type": ".md"},
+        created_at=0,
+    )
+
+    def fail_runtime(_search_type=None):
+        raise AssertionError("list must not load Knowledge runtime")
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=fail_runtime,
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_rows_async=lambda **_kwargs: ([content_row], 1),
+            chunk_counts_by_content_id_async=lambda _owner_user_id=None: {},
+        )
+    )
+
+    documents = await lifecycle.list_documents_async(owner_user_id="u1")
+
+    assert documents[0]["chunks"] == 1
+    assert documents[0]["status"] == "completed"
+    assert documents[0]["type"] == ".md"
+    assert documents[0]["size"] == 256
+
+
+@pytest.mark.asyncio
+async def test_knowledge_status_uses_prefetched_documents_without_runtime() -> None:
+    def fail_runtime(_search_type=None):
+        raise AssertionError("status must not load Knowledge runtime")
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=fail_runtime,
+            chunk_count_async=lambda _owner_user_id=None: 7,
+        )
+    )
+
+    status = await lifecycle.knowledge_status_async(
+        owner_user_id="u1",
+        documents=[{"id": "content-1"}],
+    )
+
+    assert status["documents"] == 1
+    assert status["chunks"] == 7
+    assert status["rag_settings"]["top_k"] == knowledge_service.knowledge_settings().top_k
+    assert "runtime_loaded" in status
+
+
+@pytest.mark.asyncio
+async def test_delete_document_rejects_foreign_owner() -> None:
+    lookups: list[str] = []
+
+    async def noop() -> None:
+        return None
+
+    async def content_by_id(content_id: str):
+        lookups.append(content_id)
+        return SimpleNamespace(id="doc-1", metadata={"user_id": "u2"})
+
+    def fail_runtime(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("delete authorization must not load Knowledge runtime")
+
+    with (
+        patch.object(knowledge_service, "_ensure_knowledge_contents_storage_async", noop),
+        patch.object(knowledge_service, "_knowledge_content_by_id_async", content_by_id),
+        patch.object(knowledge_service, "get_async_knowledge_base", fail_runtime),
+    ):
+        result = await knowledge_service.delete_document_async(
+            "doc-1", owner_user_id="u1"
+        )
+    assert not result
+    assert lookups == ["doc-1"]
+
+
+@pytest.mark.asyncio
+async def test_delete_document_uses_async_delete_dependency_for_owned_content() -> None:
+    deleted: list[str] = []
+
+    async def delete_content_async(_knowledge, content_id: str) -> None:
+        deleted.append(content_id)
+
+    async def content_by_id(content_id: str):
+        assert content_id == "doc-1"
+        return SimpleNamespace(id="doc-1", metadata={"user_id": "u1"})
+
+    def fail_runtime(_search_type=None):
+        raise AssertionError("delete must not load Knowledge runtime")
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=fail_runtime,
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_by_id_async=content_by_id,
+            delete_content_async=delete_content_async,
+        )
+    )
+
+    result = await lifecycle.delete_document_async("doc-1", owner_user_id="u1")
+
+    assert result
+    assert deleted == ["doc-1"]
+
+
+@pytest.mark.asyncio
+async def test_clear_knowledge_base_deletes_all_visible_content_with_async_dependency() -> None:
+    deleted: list[str] = []
+    contents = [
+        SimpleNamespace(id="doc-1", metadata={"user_id": "u1"}),
+        SimpleNamespace(id="doc-2", metadata={"user_id": "u1"}),
+        SimpleNamespace(id="doc-3", metadata={"user_id": "u2"}),
+    ]
+
+    async def delete_content_async(_knowledge, content_id: str) -> None:
+        deleted.append(content_id)
+
+    async def content_rows_async(**_kwargs: object):
+        return contents, len(contents)
+
+    def fail_runtime(_search_type=None):
+        raise AssertionError("clear must not load Knowledge runtime")
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=fail_runtime,
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_rows_async=content_rows_async,
+            delete_content_async=delete_content_async,
+        )
+    )
+
+    result = await lifecycle.clear_knowledge_base_async(owner_user_id="u1")
+
+    assert result == {"documents": 0, "chunks": 0}
+    assert deleted == ["doc-1", "doc-2"]

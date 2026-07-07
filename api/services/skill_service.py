@@ -32,6 +32,7 @@ class SkillInfoData(TypedDict):
     enabled: bool
     has_scripts: bool
     scripts: list[str]
+    skill_markdown: str
     visibility: str
     owner_user_id: str
     can_manage: bool
@@ -154,6 +155,13 @@ def list_skill_scripts(skill_dir: Path) -> list[str]:
     return scripts
 
 
+def read_skill_markdown(skill_dir: Path) -> str:
+    md_path = skill_dir / "SKILL.md"
+    if not md_path.exists():
+        return ""
+    return md_path.read_text(encoding="utf-8")
+
+
 def _skill_enabled_from_config(
     cfg: dict[str, bool], skill_dir: Path, skill_name: str
 ) -> bool:
@@ -187,6 +195,7 @@ def list_skill_infos(user: Any | None = None) -> list[SkillInfoData]:
                 "enabled": _skill_enabled_from_config(cfg, skill_dir, metadata.name),
                 "has_scripts": len(scripts) > 0,
                 "scripts": scripts,
+                "skill_markdown": read_skill_markdown(skill_dir),
                 "visibility": metadata.visibility,
                 "owner_user_id": metadata.owner_user_id,
                 "can_manage": user is None or can_manage_resource(user, visibility_info),

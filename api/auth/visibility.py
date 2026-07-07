@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Literal, cast
+from typing import Literal, cast
 
-from api.auth.claims import ADMIN_SCOPE, actor_id, has_scope
+from api.auth.claims import ADMIN_SCOPE, ActorLike, actor_id, has_scope
 
 ResourceVisibility = Literal["private", "public"]
 VALID_VISIBILITIES: set[str] = {"private", "public"}
@@ -36,19 +36,19 @@ def visibility_metadata(
     return metadata
 
 
-def metadata_visibility(metadata: Mapping[str, Any]) -> ResourceVisibility:
+def metadata_visibility(metadata: Mapping[str, object]) -> ResourceVisibility:
     return normalize_visibility(str(metadata.get("visibility") or ""))
 
 
-def metadata_owner_user_id(metadata: Mapping[str, Any]) -> str:
+def metadata_owner_user_id(metadata: Mapping[str, object]) -> str:
     return str(metadata.get("owner_user_id") or metadata.get("user_id") or "").strip()
 
 
-def _is_admin(user: Any) -> bool:
+def _is_admin(user: ActorLike | None) -> bool:
     return bool(user is not None and has_scope(user, ADMIN_SCOPE))
 
 
-def can_read_resource(user: Any, metadata: Mapping[str, Any]) -> bool:
+def can_read_resource(user: ActorLike | None, metadata: Mapping[str, object]) -> bool:
     if _is_admin(user):
         return True
     if metadata_visibility(metadata) == "public":
@@ -56,7 +56,7 @@ def can_read_resource(user: Any, metadata: Mapping[str, Any]) -> bool:
     return bool(user is not None and metadata_owner_user_id(metadata) == actor_id(user))
 
 
-def can_manage_resource(user: Any, metadata: Mapping[str, Any]) -> bool:
+def can_manage_resource(user: ActorLike | None, metadata: Mapping[str, object]) -> bool:
     if _is_admin(user):
         return True
     return bool(user is not None and metadata_owner_user_id(metadata) == actor_id(user))

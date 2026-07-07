@@ -203,11 +203,13 @@ Agno 文档推荐生产存储使用 Postgres storage，并在多数 AgentOS 部�
 
 ### `knowledge.agno_knowledge`
 
-归属：Agno `PostgresDb` contents catalog for `Knowledge`。
+归属：Agno `AsyncPostgresDb` contents catalog for `Knowledge`。
 
-用途：存储 Knowledge content catalog。
+用途：存储 Knowledge content catalog。AIOS 不重新定义 contents table schema；控制面通过 Agno content metadata 记录 `owner_id`、`visibility`、source path/name、chunk count 和 ingest metadata，并在 service 层执行 owner/private/public visibility checks。
 
 关键列：`id`、`name`、`description`、`metadata`、`type`、`size`、`linked_to`、`access_count`、`status`、`status_message`、`created_at`、`updated_at`、`external_id`。
+
+可变更行为：visibility 通过 `PUT /api/knowledge/documents/{doc_id}/visibility` 更新 content metadata，不直接更新 PgVector rows；rebuild/metadata patch 同样保持在 Agno contents catalog + service boundary 内。
 
 ### `knowledge.security_knowledge_vectors`
 
@@ -217,7 +219,7 @@ Agno 文档推荐生产存储使用 Postgres storage，并在多数 AgentOS 部�
 
 关键列：`id`、`name`、`meta_data`、`filters`、`content`、`embedding`、`usage`、`created_at`、`updated_at`、`content_hash`、`content_id`。
 
-`id`、`name`、`content_hash` 和 `content_id` 的索引由 Agno/PgVector 生成。Vector index 细节由 Agno `PgVector` 配置控制。AIOS 对该表的直接访问限于 async API gap projection：vector-row delete/clear、chunk-count dashboard projection 和 content-id hydration。
+`id`、`name`、`content_hash` 和 `content_id` 的索引由 Agno/PgVector 生成。Vector index 细节由 Agno `PgVector` 配置控制。AIOS 对该表的直接访问限于 async API gap projection：vector-row delete/clear、chunk-count dashboard projection、content-id hydration 和 private/public search payload shaping。
 
 ## Agno-owned 替代候选
 
@@ -231,7 +233,7 @@ Agno 文档推荐生产存储使用 Postgres storage，并在多数 AgentOS 部�
 | `app.os_approvals` | Agno AIOS | Agno approval APIs / async Postgres DB methods | paused runs、approval lifecycle 和 audit approvals 优先使用 Agno approvals。只有非 Agno operator workflow requests 才保留 app-owned table。 |
 | Scheduler records | Agno | AgentOS `/schedules` API 和 Agno `agno_schedules` / `agno_schedule_runs` | 已与 Agno-owned storage 和 API 对齐；前端直接使用 AgentOS schedules API，旧 `/api/os/scheduler*` facade 和 `api.services.scheduler_service` 已删除，避免重新引入 `app.os_schedules`。 |
 | Metrics | Agno | Agno metrics APIs / async Postgres DB methods | AgentOS runtime metrics 优先使用 Agno metrics。AIOS-specific dashboard projections 不写入 Agno tables。 |
-| `knowledge.agno_knowledge` 和 vector rows | Agno / PgVector | Agno `Knowledge`、`AsyncPostgresDb` contents DB、`PgVector` | 保持 Agno-owned。默认 runtime 使用 Agno `PgVector` + Knowledge async APIs；AIOS 通过 metadata 和 service-level checks 执行 ownership 与 presentation，不重新定义这些 tables。直接 projection 仅限 vector-row delete/clear、chunk-count dashboard projection 和 content-id hydration。 |
+| `knowledge.agno_knowledge` 和 vector rows | Agno / PgVector | Agno `Knowledge`、`AsyncPostgresDb` contents DB、`PgVector` | 保持 Agno-owned。默认 runtime 使用 Agno `PgVector` + Knowledge async APIs；AIOS 通过 contents metadata 和 service-level checks 执行 owner/private/public visibility 与 presentation，不重新定义这些 tables。直接 projection 仅限 vector-row delete/clear、chunk-count dashboard projection、content-id hydration 和 private/public search payload shaping。 |
 
 仍然明确属于 app-owned 的 tables：`app.audit_logs`、`app.cves` 和 `mcp.mcp_tokens`。它们表示 AIOS security control-plane behavior 或 integrated MCP access，而不是 Agno runtime state。
 
@@ -249,7 +251,7 @@ Agno 文档推荐生产存储使用 Postgres storage，并在多数 AgentOS 部�
 - `app.audit_logs`：runtime 写入和读取已迁移到 `api.persistence.audit_logs` 的 async SQLAlchemy helpers。
 - Chat session facade：list、history、owner check 和 soft archive 已迁移到 Agno `AsyncPostgresDb`。`app.chat_session_archives` 保留为 legacy 文档项，不应重新引入 runtime 读写。
 - `api.services.os_control_service`：控制面 payload 入口已改为 awaitable API；sessions/memory/metrics/knowledge 状态优先使用 Agno async APIs，Memory 更新和删除也通过 Agno memory APIs 完成；Agno API 尚不覆盖的 dashboard 聚合仅通过集中 Async SQLAlchemy projection 读取，AIOS control table 读写统一使用 Async SQLAlchemy，避免 FastAPI route 中执行同步 DB I/O。Scheduler 已从该 service 移除，由前端直接调用 AgentOS `/schedules` API。这些窄范围读取是 AgentOS control payload 的 async product view/API gap，不改变 Agno table ownership。
-- `api.services.knowledge_service`：Knowledge route 已改为 async lifecycle；写入、搜索和 content list 使用 Agno `Knowledge.ainsert()`、`Knowledge.asearch()`、`Knowledge.aget_content()` 和 contents catalog `AsyncPostgresDb`。PgVector table contract 保持 Agno-owned，默认 vector runtime 使用 Agno `PgVector`、`SentenceTransformerEmbedder` 和 `SentenceTransformerReranker`。删除和清空使用 async SQLAlchemy 删除 vector rows，再通过 async contents DB 删除 catalog row；chunk count 和 content-id hydration 使用 async SQLAlchemy projection 读取 PgVector table 的 `id`、`content_id` 和 `meta_data` 列，不重新定义 PgVector schema。
+- `api.services.knowledge_service`：Knowledge route 已改为 async lifecycle；写入、搜索和 content list 使用 Agno `Knowledge.ainsert()`、`Knowledge.asearch()`、`Knowledge.aget_content()` 和 contents catalog `AsyncPostgresDb`。PgVector table contract 保持 Agno-owned，默认 vector runtime 使用 Agno `PgVector`、`SentenceTransformerEmbedder` 和 `SentenceTransformerReranker`。删除和清空使用 async SQLAlchemy 删除 vector rows，再通过 async contents DB 删除 catalog row；owner/private/public visibility 写入 Agno content metadata，搜索合并 public 和当前用户 private results。chunk count、content-id hydration 和 private/public result shaping 使用 async SQLAlchemy projection 读取 PgVector table 的 `id`、`content_id` 和 `meta_data` 列，不重新定义 PgVector schema。
 - `api.auth.database`：FastAPI Users auth engine 使用 `postgresql+psycopg_async` async SQLAlchemy URL；auth bootstrap SQL 只在 startup lifecycle 中通过 async engine 执行。
 - `api.services.url2md_service`：URL collection 已从 `requests` 迁移到 `httpx.AsyncClient`，避免 `/api/url2md/parse` 阻塞事件循环。
 - Runtime file-backed config：model config、MCP TOML config、`.env` lazy loading、MCP tool runtime env loading、Skill metadata/list/toggle、Knowledge local path checks、Agent prompt reads 和 API file logging setup 已使用 awaitable file API 或线程隔离；`api.services.model_config_service` 和 `api.services.mcp_config_service` 不再导出同步 facade；Skill zip install 保留在线程隔离中执行，避免 async route 直接执行批量 filesystem operations。

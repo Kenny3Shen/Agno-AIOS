@@ -37,6 +37,8 @@ MCP_SERVER_URL=http://127.0.0.1:8000/mcp/
 MCP_TOKEN=replace-with-mcp-token
 ```
 
+Knowledge RAG 参数可通过控制面临时调整，但 `/api/knowledge/settings/rag` 只更新当前 API process 的 environment overrides 并清理 runtime caches。需要跨重启保留时，把对应 `AGNO_KNOWLEDGE_*` 环境变量写入部署配置或 `.env`，不要依赖该 API 作为持久配置存储。
+
 可选 bootstrap admin 只由显式环境变量控制：
 
 ```bash
@@ -118,6 +120,18 @@ cd frontend
 http://localhost:5173
 ```
 
+阶段性验证使用预发端口 `8001`，避免和本地默认开发 API 冲突：
+
+```bash
+uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
+```
+
+如果前端开发服务需要连接 `8001`，设置：
+
+```bash
+VITE_API_PROXY_TARGET=http://127.0.0.1:8001 /home/shenss/.bun/bin/bun run dev
+```
+
 ## 生产式静态资源托管
 
 构建前端资源：
@@ -143,7 +157,7 @@ http://localhost:8000
 
 ## 数据更新
 
-Console scripts 定义在 `pyproject.toml`：
+Console scripts 定义在 `pyproject.toml`。当前运维脚本只包含 CVE 数据更新：
 
 ```bash
 uv run update-cve
@@ -179,6 +193,12 @@ Cron 示例：
 
 ```bash
 curl http://127.0.0.1:8000/api/health
+```
+
+预发端口检查：
+
+```bash
+curl http://127.0.0.1:8001/api/health
 ```
 
 MCP endpoint 需要有效 token：

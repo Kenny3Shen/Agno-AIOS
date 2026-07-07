@@ -75,7 +75,7 @@
           </div>
 
           <div class="trace-session-list">
-            <el-skeleton v-if="loadingSessions && !sessions.length" :rows="5" animated />
+            <el-skeleton v-if="loadingSessions && !sessions.length" :rows="SESSION_PAGE_SIZE" animated />
             <template v-else>
               <button
                 v-for="session in pagedSessions"
@@ -533,7 +533,7 @@ const apiError = computed(() => error.value)
 let filterRefreshTimer: ReturnType<typeof window.setTimeout> | null = null
 
 type PayloadViewMode = "text" | "json" | "markdown"
-const SESSION_PAGE_SIZE = 8
+const SESSION_PAGE_SIZE = 10
 
 const filteredSessions = computed(() => filterTraceSessions(sessions.value, sessionFilters))
 const pagedSessions = computed(() => {

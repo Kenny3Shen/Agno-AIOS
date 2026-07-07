@@ -1,12 +1,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal, Protocol
 
 from agno.os.scopes import AgentOSScope, has_required_scopes
 
 Role = Literal["admin", "user", "guest"]
 ADMIN_SCOPE = AgentOSScope.ADMIN.value
+
+
+class ActorLike(Protocol):
+    @property
+    def id(self) -> object: ...
+
+    @property
+    def role(self) -> object: ...
+
+    @property
+    def is_superuser(self) -> bool: ...
 
 ROLE_SCOPES: dict[Role, set[str]] = {
     "admin": {ADMIN_SCOPE},
@@ -45,11 +56,11 @@ class ScopeClaims:
     scopes: list[str]
 
 
-def actor_id(user: Any) -> str:
+def actor_id(user: ActorLike) -> str:
     return str(getattr(user, "id", "") or "")
 
 
-def actor_role(user: Any) -> Role:
+def actor_role(user: ActorLike) -> Role:
     if bool(getattr(user, "is_superuser", False)):
         return "admin"
     role = str(getattr(user, "role", "user") or "user").lower()
@@ -60,13 +71,13 @@ def actor_role(user: Any) -> Role:
     return "user"
 
 
-def actor_scopes(user: Any) -> list[str]:
+def actor_scopes(user: ActorLike) -> list[str]:
     scopes = set(ROLE_SCOPES[actor_role(user)])
     return sorted(scopes)
 
 
 def has_scope(
-    user: Any,
+    user: ActorLike,
     scope: str,
     *,
     resource_type: str | None = None,
@@ -81,7 +92,7 @@ def has_scope(
     )
 
 
-def scope_claims(user: Any) -> ScopeClaims:
+def scope_claims(user: ActorLike) -> ScopeClaims:
     role = actor_role(user)
     return ScopeClaims(
         role=role,
@@ -90,7 +101,7 @@ def scope_claims(user: Any) -> ScopeClaims:
 
 
 def scope_user_id(
-    actor: Any | None,
+    actor: ActorLike | None,
     requested_user_id: str | None,
 ) -> str | None:
     requested = (requested_user_id or "").strip() or None

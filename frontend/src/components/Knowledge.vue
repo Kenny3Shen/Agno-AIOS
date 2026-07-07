@@ -7,13 +7,6 @@
           <span class="status-badge" :class="ingestTask.status">{{ ingestStatusLabel }}</span>
         </div>
 
-        <div class="knowledge-runtime-summary" :aria-label="t('knowledge.stats.ariaLabel')">
-          <div v-for="card in statisticsCards" :key="card.label" class="knowledge-runtime-chip">
-            <span>{{ card.label }}</span>
-            <strong :title="card.value">{{ card.value }}</strong>
-          </div>
-        </div>
-
         <div
           v-if="ingestTask.status === 'running' || ingestTask.status === 'error'"
           class="knowledge-upload-pipeline"
@@ -71,15 +64,7 @@
                 </label>
                 <label class="knowledge-field">
                   <span>{{ t('visibility.label') }}</span>
-                  <el-radio-group v-model="browserForm.visibility" size="small">
-                    <el-radio-button
-                      v-for="option in resourceVisibilityOptions"
-                      :key="option.value"
-                      :value="option.value"
-                    >
-                      {{ t(option.labelKey) }}
-                    </el-radio-button>
-                  </el-radio-group>
+                  <ResourceVisibilityTabs v-model="browserForm.visibility" />
                 </label>
                 <div class="reader-auto-note">
                   <strong>{{ t('knowledge.labels.reader') }}</strong>
@@ -111,15 +96,7 @@
               </label>
               <label class="knowledge-field">
                 <span>{{ t('visibility.label') }}</span>
-                <el-radio-group v-model="textForm.visibility" size="small">
-                  <el-radio-button
-                    v-for="option in resourceVisibilityOptions"
-                    :key="option.value"
-                    :value="option.value"
-                  >
-                    {{ t(option.labelKey) }}
-                  </el-radio-button>
-                </el-radio-group>
+                <ResourceVisibilityTabs v-model="textForm.visibility" />
               </label>
               <label class="knowledge-field text-import-content">
                 <span>{{ t('knowledge.upload.contentLabel') }}</span>
@@ -157,15 +134,7 @@
               </label>
               <label class="knowledge-field">
                 <span>{{ t('visibility.label') }}</span>
-                <el-radio-group v-model="pathForm.visibility" size="small">
-                  <el-radio-button
-                    v-for="option in resourceVisibilityOptions"
-                    :key="option.value"
-                    :value="option.value"
-                  >
-                    {{ t(option.labelKey) }}
-                  </el-radio-button>
-                </el-radio-group>
+                <ResourceVisibilityTabs v-model="pathForm.visibility" />
               </label>
               <div class="form-action-row path-action">
                 <el-button
@@ -332,7 +301,6 @@
           <div class="document-cell document-main" role="cell">
             <div class="document-primary">
               <span class="doc-title" :title="row.title">{{ row.title }}</span>
-              <span class="doc-id" :title="row.id">{{ shortId(row.id) }}</span>
             </div>
           </div>
           <div class="document-cell" role="cell" :data-label="t('knowledge.documents.columns.type')">
@@ -350,21 +318,13 @@
             <span class="source-text" :title="row.source">{{ row.source || t('knowledge.labels.manualSource') }}</span>
           </div>
           <div class="document-cell document-visibility-cell" role="cell" :data-label="t('knowledge.documents.columns.visibility')">
-            <el-select
+            <ResourceVisibilityTabs
               :model-value="row.visibility || 'private'"
-              size="small"
-              class="document-visibility-select"
+              class="document-visibility-tabs"
               :disabled="!row.can_manage"
               :aria-label="t('knowledge.documents.visibilityLabel', { title: row.title })"
-              @change="(value: ResourceVisibility) => updateDocumentVisibility(row, value)"
-            >
-              <el-option
-                v-for="option in resourceVisibilityOptions"
-                :key="option.value"
-                :label="t(option.labelKey)"
-                :value="option.value"
-              />
-            </el-select>
+              @update:model-value="(value) => updateDocumentVisibility(row, value)"
+            />
           </div>
           <div class="document-actions" role="cell" :data-label="t('knowledge.documents.columns.actions')">
             <div class="document-action-buttons">
@@ -373,8 +333,15 @@
                   <el-icon><View /></el-icon>
                 </el-button>
               </el-tooltip>
-              <el-tooltip :content="t('knowledge.documents.rebuildPending')" placement="top">
-                <el-button text disabled :aria-label="t('knowledge.documents.reEmbeddingLabel', { title: row.title })">
+              <el-tooltip :content="t('knowledge.documents.rebuild')" placement="top">
+                <el-button
+                  text
+                  class="cursor-pointer"
+                  :disabled="!row.can_manage || rebuildingDocId === row.id"
+                  :loading="rebuildingDocId === row.id"
+                  :aria-label="t('knowledge.documents.reEmbeddingLabel', { title: row.title })"
+                  @click="rebuildDocument(row)"
+                >
                   <el-icon><RefreshRight /></el-icon>
                 </el-button>
               </el-tooltip>
@@ -418,16 +385,17 @@
                 <el-icon><Document /></el-icon>
                 {{ t('knowledge.advanced.readerChunkStrategy') }}
               </div>
-              <div class="reader-auto-note roomy">
-                <strong>{{ t('knowledge.labels.reader') }}</strong>
-                <span>{{ t('knowledge.advanced.readerAuto') }}</span>
-              </div>
-              <div class="knowledge-strategy-grid">
-                <article v-for="profile in chunkProfiles" :key="profile.strategy" class="strategy-card">
-                  <div>
+              <div class="reader-strategy-console">
+                <div class="reader-auto-note roomy">
+                  <strong>{{ t('knowledge.labels.reader') }}</strong>
+                  <span>{{ t('knowledge.advanced.readerAuto') }}</span>
+                </div>
+                <article v-for="profile in chunkProfiles" :key="profile.strategy" class="strategy-row">
+                  <div class="strategy-name">
                     <strong>{{ profile.label }}</strong>
-                    <span>{{ profile.reader }}</span>
+                    <span>{{ profile.strategy }}</span>
                   </div>
+                  <span class="strategy-reader">{{ profile.reader }}</span>
                   <p>{{ profile.description }}</p>
                   <em>{{ profile.suffixes.join(" ") }}</em>
                 </article>
@@ -435,59 +403,111 @@
             </section>
 
             <section class="advanced-card">
-              <div class="panel-title">
-                <el-icon><Operation /></el-icon>
-                {{ t('knowledge.advanced.ragParameters') }}
+              <div class="panel-title panel-title-actions">
+                <span>
+                  <el-icon><Operation /></el-icon>
+                  {{ t('knowledge.advanced.ragParameters') }}
+                </span>
+                <span class="panel-button-row">
+                  <el-button size="small" class="cursor-pointer" :disabled="!ragSettingsDirty || ragSaving" @click="resetRagSettings">
+                    <el-icon><RefreshLeft /></el-icon>
+                    {{ t('knowledge.actions.reset') }}
+                  </el-button>
+                  <el-button
+                    type="primary"
+                    size="small"
+                    class="cursor-pointer"
+                    :disabled="ragSaveDisabled"
+                    :loading="ragSaving"
+                    :title="canWriteRagSettings ? undefined : t('knowledge.messages.configPermissionRequired')"
+                    @click="saveRagSettings"
+                  >
+                    <el-icon><Check /></el-icon>
+                    {{ t('knowledge.actions.save') }}
+                  </el-button>
+                </span>
               </div>
               <div class="rag-settings-grid">
                 <label class="knowledge-field">
                   <span>{{ t('knowledge.labels.searchType') }}</span>
-                  <el-select v-model="ragSettings.searchType" disabled>
+                  <el-select v-model="ragSettings.searchType">
                     <el-option :label="t('knowledge.labels.hybrid')" value="hybrid" />
                     <el-option :label="t('knowledge.labels.vector')" value="vector" />
                     <el-option :label="t('knowledge.labels.keyword')" value="keyword" />
                   </el-select>
                 </label>
                 <label class="knowledge-field">
-                  <span>{{ t('knowledge.labels.topK') }}</span>
-                  <el-slider v-model="ragSettings.agentTopK" :min="1" :max="20" disabled />
+                  <span>{{ t('knowledge.labels.embeddingModel') }}</span>
+                  <el-input v-model="ragSettings.embeddingModel" clearable />
                 </label>
                 <label class="knowledge-field">
-                  <span>{{ t('knowledge.labels.candidate') }}</span>
-                  <el-slider v-model="ragSettings.candidates" :min="1" :max="50" disabled />
+                  <span>{{ t('knowledge.labels.embeddingDimensions') }}</span>
+                  <el-input-number v-model="ragSettings.embeddingDimensions" :min="1" :max="4096" class="!w-full" />
+                </label>
+                <label class="knowledge-field">
+                  <span>{{ t('knowledge.labels.rerankModel') }}</span>
+                  <el-input v-model="ragSettings.rerankModel" clearable :disabled="!ragSettings.reranker" />
+                </label>
+                <label class="knowledge-field rag-wide-field">
+                  <span>{{ t('knowledge.labels.queryPrompt') }}</span>
+                  <el-input v-model="ragSettings.queryPrompt" type="textarea" :rows="2" />
+                </label>
+                <label class="knowledge-field">
+                  <span>{{ t('knowledge.labels.topK') }}</span>
+                  <el-input-number v-model="ragSettings.topK" :min="1" :max="20" class="!w-full" />
+                </label>
+                <label class="knowledge-field">
+                  <span>{{ t('knowledge.labels.candidateMultiplier') }}</span>
+                  <el-input-number v-model="ragSettings.candidateMultiplier" :min="1" :max="10" class="!w-full" />
+                </label>
+                <label class="knowledge-field">
+                  <span>{{ t('knowledge.labels.minCandidates') }}</span>
+                  <el-input-number v-model="ragSettings.minCandidates" :min="1" :max="100" class="!w-full" />
+                </label>
+                <div class="rag-static-metric">
+                  <span>{{ t('knowledge.labels.effectiveCandidates') }}</span>
+                  <strong>{{ effectiveCandidates }}</strong>
+                </div>
+                <label class="knowledge-field">
+                  <span>{{ t('knowledge.labels.contentLanguage') }}</span>
+                  <el-input v-model="ragSettings.contentLanguage" clearable />
                 </label>
                 <label class="knowledge-field">
                   <span>{{ t('knowledge.labels.chunkSize') }}</span>
-                  <el-slider v-model="ragSettings.chunkSize" :min="200" :max="4000" :step="100" disabled />
+                  <el-input-number v-model="ragSettings.chunkSize" :min="200" :max="4000" :step="100" class="!w-full" />
                 </label>
                 <label class="knowledge-field">
                   <span>{{ t('knowledge.labels.overlap') }}</span>
-                  <el-slider v-model="ragSettings.chunkOverlap" :min="0" :max="800" :step="20" disabled />
+                  <el-input-number v-model="ragSettings.chunkOverlap" :min="0" :max="800" :step="20" class="!w-full" />
+                </label>
+                <label class="knowledge-field">
+                  <span>{{ t('knowledge.labels.codeChunkSize') }}</span>
+                  <el-input-number v-model="ragSettings.codeChunkSize" :min="256" :max="6000" :step="100" class="!w-full" />
                 </label>
                 <label class="knowledge-field">
                   <span>{{ t('knowledge.labels.threshold') }}</span>
-                  <el-slider v-model="ragSettings.semanticThreshold" :min="0.1" :max="0.9" :step="0.01" disabled />
+                  <el-slider v-model="ragSettings.semanticThreshold" :min="0" :max="1" :step="0.01" />
                 </label>
                 <label class="knowledge-field">
                   <span>{{ t('knowledge.labels.vectorWeight') }}</span>
-                  <el-slider v-model="ragSettings.vectorWeight" :min="0" :max="1" :step="0.05" disabled />
+                  <el-slider v-model="ragSettings.vectorWeight" :min="0" :max="1" :step="0.05" />
                 </label>
-                <label class="knowledge-field">
+                <div class="rag-static-metric">
                   <span>{{ t('knowledge.labels.bm25Weight') }}</span>
-                  <el-slider v-model="ragSettings.bm25Weight" :min="0" :max="1" :step="0.05" disabled />
-                </label>
-                <div class="toggle-row">
-                  <span>{{ t('knowledge.labels.hybrid') }}</span>
-                  <el-switch v-model="ragSettings.hybrid" disabled />
+                  <strong>{{ ragBm25Weight.toFixed(2) }}</strong>
                 </div>
                 <div class="toggle-row">
-                  <span>MMR</span>
-                  <el-switch v-model="ragSettings.mmr" disabled />
+                  <span>{{ t('knowledge.labels.prefixMatch') }}</span>
+                  <el-switch v-model="ragSettings.prefixMatch" />
                 </div>
                 <div class="toggle-row">
                   <span>{{ t('knowledge.labels.reranker') }}</span>
-                  <el-switch v-model="ragSettings.reranker" disabled />
+                  <el-switch v-model="ragSettings.reranker" />
                 </div>
+                <label class="knowledge-field">
+                  <span>{{ t('knowledge.labels.device') }}</span>
+                  <el-input v-model="ragSettings.device" clearable />
+                </label>
               </div>
             </section>
 
@@ -495,6 +515,12 @@
               <div class="panel-title">
                 <el-icon><InfoFilled /></el-icon>
                 {{ t('knowledge.advanced.parserOcrMetadata') }}
+              </div>
+              <div class="knowledge-runtime-summary metadata-summary" :aria-label="t('knowledge.stats.ariaLabel')">
+                <div v-for="card in statisticsCards" :key="card.label" class="knowledge-runtime-chip">
+                  <span>{{ card.label }}</span>
+                  <strong :title="card.value">{{ card.value }}</strong>
+                </div>
               </div>
               <div class="advanced-info-list">
                 <div class="context-row">
@@ -584,6 +610,7 @@ import { useI18n } from "vue-i18n"
 import { ElMessage, ElMessageBox } from "element-plus"
 import type { UploadFile, UploadFiles, UploadInstance, UploadUserFile } from "element-plus"
 import {
+  Check,
   DataLine,
   Delete,
   Document,
@@ -593,6 +620,7 @@ import {
   Loading,
   Operation,
   Refresh,
+  RefreshLeft,
   RefreshRight,
   Search,
   Setting,
@@ -601,14 +629,16 @@ import {
   View,
 } from "@element-plus/icons-vue"
 import { useKnowledgeApi } from "../composables/useApi"
-import { resourceVisibilityOptions } from "../modules/resourceVisibility"
-import type { KnowledgeDocument, KnowledgeSearchResult, KnowledgeStatus, ResourceVisibility } from "../types"
+import { useAuthStore } from "../stores/auth"
+import type { KnowledgeDocument, KnowledgeRagSettings, KnowledgeSearchResult, KnowledgeStatus, ResourceVisibility } from "../types"
+import ResourceVisibilityTabs from "./common/ResourceVisibilityTabs.vue"
 
 type IngestTab = "upload" | "text" | "path"
 type IngestStage = "uploading" | "parsing" | "chunking" | "embedding" | "completed"
 type IngestStatus = "idle" | "running" | "success" | "error"
 
 const { t, locale } = useI18n()
+const authStore = useAuthStore()
 
 const activeIngestTab = ref<IngestTab>("upload")
 const status = ref<KnowledgeStatus | null>(null)
@@ -623,8 +653,10 @@ const savingText = ref(false)
 const savingPath = ref(false)
 const uploadingBrowserFile = ref(false)
 const deletingDocId = ref<string | null>(null)
+const rebuildingDocId = ref<string | null>(null)
 const clearing = ref(false)
 const searching = ref(false)
+const ragSaving = ref(false)
 const searched = ref(false)
 const searchResults = ref<KnowledgeSearchResult[]>([])
 const advancedSections = ref<string[]>([])
@@ -670,20 +702,25 @@ const searchForm = reactive({
 })
 
 const ragSettings = reactive({
-  agentTopK: 5,
-  candidates: 15,
+  topK: 5,
+  candidateMultiplier: 3,
+  minCandidates: 10,
   chunkSize: 1200,
   chunkOverlap: 160,
   codeChunkSize: 1800,
   semanticThreshold: 0.52,
-  vectorWeight: 0.7,
-  bm25Weight: 0.3,
-  embeddingProvider: "BAAI/bge-small-zh-v1.5",
+  vectorWeight: 0.55,
+  embeddingModel: "BAAI/bge-small-zh-v1.5",
+  embeddingDimensions: 512,
+  rerankModel: "BAAI/bge-reranker-base",
+  queryPrompt: "为这个句子生成表示以用于检索相关文章：",
   reranker: true,
-  hybrid: true,
-  mmr: false,
+  prefixMatch: false,
+  contentLanguage: "english",
+  device: "auto",
   searchType: "hybrid",
 })
+const ragSettingsSnapshot = ref("")
 
 const {
   loading,
@@ -691,6 +728,8 @@ const {
   addTextDocument,
   addFileDocument,
   updateKnowledgeDocumentVisibility,
+  rebuildKnowledgeDocument,
+  updateKnowledgeRagSettings,
   deleteKnowledgeDocument,
   clearKnowledge,
   searchKnowledge,
@@ -704,6 +743,40 @@ const statisticsCards = computed(() => [
   { label: t("knowledge.stats.embeddingModel"), value: status.value?.embedding || "unknown", hint: status.value?.embedding_dimensions ? `${status.value.embedding_dimensions} dimensions` : t("knowledge.stats.modelRuntime") },
   { label: t("knowledge.stats.vectorDatabase"), value: status.value?.collection || "-", hint: status.value?.search_type || "hybrid" },
 ])
+
+const ragBm25Weight = computed(() => Number((1 - Number(ragSettings.vectorWeight || 0)).toFixed(2)))
+const canWriteRagSettings = computed(() => authStore.hasScope("config:write"))
+
+const effectiveCandidates = computed(() => {
+  if (!ragSettings.reranker) return ragSettings.topK
+  return Math.max(ragSettings.topK * ragSettings.candidateMultiplier, ragSettings.minCandidates)
+})
+
+const ragPayload = (): KnowledgeRagSettings => ({
+  embedding_model: ragSettings.embeddingModel.trim(),
+  embedding_dimensions: ragSettings.embeddingDimensions,
+  rerank_model: ragSettings.rerankModel.trim(),
+  query_prompt: ragSettings.queryPrompt,
+  top_k: ragSettings.topK,
+  chunk_size: ragSettings.chunkSize,
+  chunk_overlap: ragSettings.chunkOverlap,
+  code_chunk_size: ragSettings.codeChunkSize,
+  semantic_threshold: ragSettings.semanticThreshold,
+  vector_score_weight: ragSettings.vectorWeight,
+  content_language: ragSettings.contentLanguage.trim() || "english",
+  prefix_match: ragSettings.prefixMatch,
+  rerank_enabled: ragSettings.reranker,
+  rerank_candidate_multiplier: ragSettings.candidateMultiplier,
+  rerank_min_candidates: ragSettings.minCandidates,
+  device: ragSettings.device.trim() || "auto",
+  search_type: ragSettings.searchType,
+})
+
+const ragSettingsDirty = computed(() => JSON.stringify(ragPayload()) !== ragSettingsSnapshot.value)
+
+const ragSaveDisabled = computed(() => {
+  return !canWriteRagSettings.value || ragSaving.value || !ragSettingsDirty.value || !ragSettings.embeddingModel.trim() || !ragSettings.rerankModel.trim()
+})
 
 const ingestStatusLabel = computed(() => {
   if (ingestTask.status === "running") {
@@ -835,42 +908,55 @@ const retrievalReferences = computed(() => {
     .join(" / ")
 })
 
+const syncRagSettingsFromStatus = (nextStatus: KnowledgeStatus) => {
+  const next = nextStatus.rag_settings || {}
+  ragSettings.embeddingModel = next.embedding_model || nextStatus.embedding || ragSettings.embeddingModel
+  ragSettings.embeddingDimensions = next.embedding_dimensions || nextStatus.embedding_dimensions || ragSettings.embeddingDimensions
+  ragSettings.rerankModel = next.rerank_model || nextStatus.rerank || ragSettings.rerankModel
+  ragSettings.queryPrompt = next.query_prompt ?? ragSettings.queryPrompt
+  ragSettings.topK = next.top_k || nextStatus.top_k || ragSettings.topK
+  ragSettings.candidateMultiplier = next.rerank_candidate_multiplier || nextStatus.rerank_candidate_multiplier || ragSettings.candidateMultiplier
+  ragSettings.minCandidates = next.rerank_min_candidates || nextStatus.rerank_min_candidates || ragSettings.minCandidates
+  ragSettings.chunkSize = next.chunk_size || nextStatus.chunk_size || ragSettings.chunkSize
+  if (typeof next.chunk_overlap === "number") {
+    ragSettings.chunkOverlap = next.chunk_overlap
+  } else if (typeof nextStatus.chunk_overlap === "number") {
+    ragSettings.chunkOverlap = nextStatus.chunk_overlap
+  }
+  ragSettings.codeChunkSize = next.code_chunk_size || nextStatus.code_chunk_size || ragSettings.codeChunkSize
+  if (typeof next.semantic_threshold === "number") {
+    ragSettings.semanticThreshold = next.semantic_threshold
+  } else if (typeof nextStatus.semantic_threshold === "number") {
+    ragSettings.semanticThreshold = nextStatus.semantic_threshold
+  }
+  if (typeof next.vector_score_weight === "number") {
+    ragSettings.vectorWeight = next.vector_score_weight
+  } else if (typeof nextStatus.vector_score_weight === "number") {
+    ragSettings.vectorWeight = nextStatus.vector_score_weight
+  }
+  ragSettings.contentLanguage = next.content_language || nextStatus.content_language || ragSettings.contentLanguage
+  if (typeof next.prefix_match === "boolean") {
+    ragSettings.prefixMatch = next.prefix_match
+  } else if (typeof nextStatus.prefix_match === "boolean") {
+    ragSettings.prefixMatch = nextStatus.prefix_match
+  }
+  if (typeof next.rerank_enabled === "boolean") {
+    ragSettings.reranker = next.rerank_enabled
+  } else {
+    ragSettings.reranker = nextStatus.rerank_enabled
+  }
+  ragSettings.device = next.device || nextStatus.device || ragSettings.device
+  ragSettings.searchType = next.search_type || nextStatus.search_type || ragSettings.searchType
+  searchForm.searchType = ragSettings.searchType
+  ragSettingsSnapshot.value = JSON.stringify(ragPayload())
+}
+
 const loadKnowledge = async () => {
   try {
     const data = await fetchKnowledge()
     status.value = data.status
     documents.value = data.documents
-    if (data.status.embedding) {
-      ragSettings.embeddingProvider = data.status.embedding
-    }
-    ragSettings.reranker = data.status.rerank_enabled
-    ragSettings.hybrid = (data.status.search_type || "hybrid") === "hybrid"
-    if (data.status.chunk_size) {
-      ragSettings.chunkSize = data.status.chunk_size
-    }
-    if (typeof data.status.chunk_overlap === "number") {
-      ragSettings.chunkOverlap = data.status.chunk_overlap
-    }
-    if (data.status.top_k) {
-      ragSettings.agentTopK = data.status.top_k
-    }
-    if (data.status.retrieval_candidates) {
-      ragSettings.candidates = data.status.retrieval_candidates
-    }
-    if (typeof data.status.vector_score_weight === "number") {
-      ragSettings.vectorWeight = data.status.vector_score_weight
-      ragSettings.bm25Weight = Number((1 - data.status.vector_score_weight).toFixed(2))
-    }
-    if (data.status.search_type) {
-      ragSettings.searchType = data.status.search_type
-      searchForm.searchType = data.status.search_type
-    }
-    if (data.status.code_chunk_size) {
-      ragSettings.codeChunkSize = data.status.code_chunk_size
-    }
-    if (typeof data.status.semantic_threshold === "number") {
-      ragSettings.semanticThreshold = data.status.semantic_threshold
-    }
+    syncRagSettingsFromStatus(data.status)
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : t("knowledge.messages.loadFailed"))
   }
@@ -1054,6 +1140,24 @@ const updateDocumentVisibility = async (doc: KnowledgeDocument, visibility: Reso
   }
 }
 
+const rebuildDocument = async (doc: KnowledgeDocument) => {
+  if (!doc.can_manage || rebuildingDocId.value) return
+  rebuildingDocId.value = doc.id
+  try {
+    const updated = await rebuildKnowledgeDocument(doc.id)
+    const index = documents.value.findIndex((item) => item.id === doc.id)
+    if (index >= 0) {
+      documents.value[index] = { ...documents.value[index], ...updated }
+    }
+    await loadKnowledge()
+    ElMessage.success(t("knowledge.messages.rebuilt"))
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : t("knowledge.messages.rebuildFailed"))
+  } finally {
+    rebuildingDocId.value = null
+  }
+}
+
 const deleteDocument = async (doc: KnowledgeDocument) => {
   try {
     await ElMessageBox.confirm(t("knowledge.confirm.deleteMessage", { title: doc.title }), t("knowledge.confirm.deleteTitle"), {
@@ -1072,6 +1176,33 @@ const deleteDocument = async (doc: KnowledgeDocument) => {
     }
   } finally {
     deletingDocId.value = null
+  }
+}
+
+const resetRagSettings = () => {
+  if (!status.value) return
+  syncRagSettingsFromStatus(status.value)
+}
+
+const saveRagSettings = async () => {
+  if (!canWriteRagSettings.value) {
+    ElMessage.error(t("knowledge.messages.configPermissionRequired"))
+    return
+  }
+  if (ragSettings.chunkOverlap >= ragSettings.chunkSize) {
+    ElMessage.error(t("knowledge.messages.chunkOverlapInvalid"))
+    return
+  }
+  ragSaving.value = true
+  try {
+    const data = await updateKnowledgeRagSettings(ragPayload())
+    status.value = data.status
+    syncRagSettingsFromStatus(data.status)
+    ElMessage.success(t("knowledge.messages.settingsSaved"))
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : t("knowledge.messages.settingsSaveFailed"))
+  } finally {
+    ragSaving.value = false
   }
 }
 
@@ -1136,7 +1267,7 @@ const metadataValue = (doc: KnowledgeDocument, ...keys: string[]) => {
 }
 
 const documentType = (doc: KnowledgeDocument) => {
-  const metaType = metadataValue(doc, "file_type", "mime_type")
+  const metaType = String(doc.type || metadataValue(doc, "file_type", "mime_type") || "")
   if (metaType) return metaType.replace(/^\./, "").toUpperCase()
   const text = `${doc.title} ${doc.source} ${metadataValue(doc, "file_name")}`
   const suffix = text.match(/\.([a-z0-9]+)(?:\s|$)/i)?.[1]
@@ -1144,7 +1275,7 @@ const documentType = (doc: KnowledgeDocument) => {
 }
 
 const documentSize = (doc: KnowledgeDocument) => {
-  const size = Number(metadataValue(doc, "file_size"))
+  const size = Number(doc.size ?? metadataValue(doc, "file_size"))
   if (!Number.isFinite(size) || size <= 0) return "-"
   if (size < 1024) return `${size} B`
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
@@ -1152,8 +1283,11 @@ const documentSize = (doc: KnowledgeDocument) => {
 }
 
 const documentStatus = (doc: KnowledgeDocument) => {
-  const raw = metadataValue(doc, "status", "embedding_status").toLowerCase()
+  const raw = String(doc.status || metadataValue(doc, "status", "embedding_status")).toLowerCase()
   if (raw.includes("fail") || raw.includes("error")) return { label: t("knowledge.status.failed"), value: "failed", tone: "failed" }
+  if (["completed", "complete", "ready", "done", "success", "succeeded"].some((item) => raw.includes(item))) {
+    return { label: t("knowledge.status.ready"), value: "ready", tone: "ready" }
+  }
   if (Number(doc.chunks || 0) > 0) return { label: t("knowledge.status.ready"), value: "ready", tone: "ready" }
   return { label: t("knowledge.status.parsing"), value: "parsing", tone: "parsing" }
 }
@@ -1297,6 +1431,10 @@ onMounted(() => {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.metadata-summary {
+  margin-top: 12px;
 }
 
 .knowledge-runtime-chip {
@@ -1507,8 +1645,7 @@ onMounted(() => {
 .hit-meta span,
 .score-badge,
 .type-badge,
-.status-badge,
-.doc-id {
+.status-badge {
   display: inline-flex;
   max-width: 100%;
   align-items: center;
@@ -1650,6 +1787,8 @@ onMounted(() => {
 }
 
 .document-table {
+  --document-table-font-size: 11px;
+
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--kn-border);
@@ -1660,16 +1799,17 @@ onMounted(() => {
 .document-row {
   display: grid;
   grid-template-columns:
-    minmax(0, 1.45fr)
-    minmax(64px, 0.38fr)
-    minmax(68px, 0.38fr)
-    minmax(56px, 0.32fr)
-    minmax(96px, 0.54fr)
-    minmax(112px, 0.62fr)
-    minmax(0, 0.8fr)
-    minmax(112px, 0.5fr)
-    132px;
+    minmax(160px, 1.35fr)
+    minmax(46px, 0.28fr)
+    minmax(58px, 0.32fr)
+    minmax(44px, 0.24fr)
+    minmax(82px, 0.42fr)
+    minmax(98px, 0.5fr)
+    minmax(72px, 0.52fr)
+    minmax(88px, 0.44fr)
+    112px;
   min-width: 0;
+  font-size: var(--document-table-font-size);
 }
 
 .document-table-head {
@@ -1684,7 +1824,7 @@ onMounted(() => {
 .document-cell,
 .document-actions {
   min-width: 0;
-  padding: 10px 8px;
+  padding: 8px 7px;
 }
 
 .document-table-head > span {
@@ -1722,17 +1862,12 @@ onMounted(() => {
   min-width: 0;
   overflow: hidden;
   color: var(--kn-heading);
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 760;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.doc-id {
-  width: max-content;
-}
-
-.doc-id,
 .document-number,
 .source-text,
 .context-row dd,
@@ -1742,8 +1877,8 @@ onMounted(() => {
 
 .document-number {
   color: var(--kn-heading);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--document-table-font-size);
+  font-weight: 760;
 }
 
 .document-time,
@@ -1752,7 +1887,7 @@ onMounted(() => {
   min-width: 0;
   overflow: hidden;
   color: var(--kn-muted);
-  font-size: 11px;
+  font-size: var(--document-table-font-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1767,8 +1902,13 @@ onMounted(() => {
   align-items: center;
 }
 
-.document-visibility-select {
-  width: 112px;
+.document-visibility-tabs {
+  --visibility-tab-font-size: 10px;
+  --visibility-tab-height: 24px;
+  --visibility-tab-min-width: 44px;
+  --visibility-tab-padding: 3px 6px;
+
+  width: max-content;
   max-width: 100%;
 }
 
@@ -1784,13 +1924,13 @@ onMounted(() => {
   min-width: 0;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: 2px;
   max-width: 100%;
 }
 
 .document-action-buttons :deep(.el-button) {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   margin-left: 0;
   padding: 0;
 }
@@ -1826,32 +1966,6 @@ onMounted(() => {
   padding: 14px;
 }
 
-.knowledge-strategy-grid {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-}
-
-.strategy-card {
-  display: grid;
-  min-height: 112px;
-  gap: 8px;
-  align-content: start;
-  border: 1px solid var(--kn-border);
-  border-radius: 10px;
-  background: var(--kn-panel-soft);
-  padding: 10px;
-}
-
-.strategy-card > div {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.strategy-card strong,
 .panel-title {
   min-width: 0;
   color: var(--kn-heading);
@@ -1865,6 +1979,28 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   font-size: 13px;
+}
+
+.panel-title-actions {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel-title-actions > span:first-child,
+.panel-button-row {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-button-row {
+  flex: 0 0 auto;
+}
+
+.panel-button-row :deep(.el-button) {
+  margin-left: 0;
 }
 
 .strategy-card p {
@@ -1893,6 +2029,77 @@ onMounted(() => {
   white-space: normal;
 }
 
+.reader-strategy-console {
+  display: grid;
+  gap: 8px;
+}
+
+.strategy-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 0.8fr) minmax(120px, 0.9fr) minmax(0, 1.3fr) minmax(96px, 0.9fr);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--kn-border);
+  border-radius: 8px;
+  background: var(--kn-panel-soft);
+  padding: 10px;
+}
+
+.strategy-name {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.strategy-name strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--kn-heading);
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strategy-name span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--kn-muted);
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strategy-reader,
+.strategy-row em {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--kn-border);
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: var(--kn-muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 750;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strategy-row p {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--kn-muted);
+  font-size: 11px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rag-settings-grid {
   display: grid;
   gap: 12px;
@@ -1900,12 +2107,44 @@ onMounted(() => {
   margin-top: 12px;
 }
 
+.rag-wide-field {
+  grid-column: 1 / -1;
+}
+
+.rag-static-metric {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--kn-border);
+  border-radius: 8px;
+  background: var(--kn-panel-soft);
+  padding: 9px 10px;
+}
+
+.rag-static-metric span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--kn-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rag-static-metric strong {
+  color: var(--kn-heading);
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  font-size: 12px;
+}
+
 .toggle-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   border: 1px solid var(--kn-border);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--kn-panel-soft);
   padding: 9px 10px;
   color: var(--kn-muted);
@@ -2050,6 +2289,7 @@ onMounted(() => {
   .path-import-grid,
   .knowledge-upload-pipeline,
   .rag-settings-grid,
+  .strategy-row,
   .document-row {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2057,6 +2297,7 @@ onMounted(() => {
   .knowledge-section-head,
   .document-management-bar,
   .document-management-controls,
+  .panel-title-actions,
   .playground-controls {
     flex-direction: column;
   }
@@ -2066,7 +2307,8 @@ onMounted(() => {
   .document-filter-group,
   .document-filter,
   .document-select,
-  .document-visibility-select {
+  .panel-button-row,
+  .document-visibility-tabs {
     width: 100%;
   }
 

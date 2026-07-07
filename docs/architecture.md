@@ -30,7 +30,7 @@ PostgreSQL + pgvector
   +-- knowledge  knowledge contents 和 vector tables
 ```
 
-FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth tables、bootstrap 可选 admin、创建共享数据库连接池、启动集成 MCP runtime、include 各 API routers、挂载 `/mcp`，并从 `source/` 或 `frontend/dist` 托管前端静态资源。AgentOS 注册 fallback agent 时使用 async `AgentFactory`，避免在 module import 阶段同步读取 prompt 或 model config。
+FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth tables、bootstrap 可选 admin、创建共享数据库连接池、启动集成 MCP runtime、include 各 API routers、把 AgentOS 注册到当前 FastAPI base app、挂载 `/mcp`，并从 `source/` 或 `frontend/dist` 托管前端静态资源。AgentOS 注册 fallback agent 时使用 async `AgentFactory`，避免在 module import 阶段同步读取 prompt 或 model config。
 
 ## 后端模块
 
@@ -58,9 +58,9 @@ FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth table
 
 `api/services/` 负责业务逻辑和持久化辅助层。`postgres_store.py` 集中管理 PostgreSQL 连接设置、schema 名称、Agno `AsyncPostgresDb` 构造和应用表创建。`security_run_runtime.py` 承担安全运营助手 Run runtime，集中 model、MCP、Skill、Knowledge、fallback 和流式事件编排；模型配置、prompt 文件和 Skill metadata/list/toggle 使用 awaitable file API，Skill zip install 这类批量 filesystem operation 通过线程隔离，避免阻塞 Chat stream 的事件循环。`chat_session_service.py` 负责 Chat Session persistence、session history、owner filtering 和 archive。`knowledge_service.py` 提供 async Knowledge Base lifecycle interface，runtime route 走 Agno async Knowledge APIs 和 async contents DB，内部集中 PgVector、reader、owner/visibility filtering、CRUD、search 和 status。`mcp_config_service.py` 集中 MCP service toggle、MCP upload 和 custom MCP server visibility mutation，route 层用 `to_thread.run_sync` 隔离本地 JSON 文件 I/O。`security_policy.py` 只保留控制面 module scope map 和 policy audit event 记录；具体 route 写权限直接使用 `require_scope(...)`。`url2md_service.py` 使用 async HTTP client 执行 URL collection。`tracing_service.py` 显式初始化 Agno tracing，并读取 Agno traces 与 spans，整理成前端需要的结构。
 
-`api/mcp/` 负责集成 MCP runtime。`server.py` 构建主 FastMCP instance、挂载已启用的内置服务、用 token validation 包装 ASGI app，并支持 runtime refresh。`config.py` 读取和写入底层 MCP config，并存储 MCP tokens；上层配置 mutation 由 `api/services/mcp_config_service.py` 提供 module interface。
+`api/mcp/` 负责集成 MCP runtime。`server.py` 构建主 FastMCP instance、挂载已启用的内置服务、用 token validation 包装 ASGI app，并支持 runtime refresh。FastMCP 的 ASGI app lifespan 由 `IntegratedMcpRuntime.startup()` / `shutdown()` 在 FastAPI lifespan 中显式进入和退出，refresh 时也会先启动新 lifespan 再关闭旧实例。`config.py` 读取和写入底层 MCP config，并存储 MCP tokens；上层配置 mutation 由 `api/services/mcp_config_service.py` 提供 module interface。
 
-`api/tasks/` 负责运维脚本，包括 CVE update、MySQL-to-Postgres migration 和 scheduler execution。
+`api/tasks/` 负责 CVE 数据源和更新脚本；当前只有 `cve_sources.py` 与 `update_cve.py`。Scheduler 已迁移到 AgentOS native routes，不再由本仓库 task 执行器调度。
 
 ## 前端模块
 
@@ -112,15 +112,15 @@ User memories 存储在 Agno-owned `agno.agno_memories` 中。Chat runtime 在 r
 
 ## Knowledge
 
-Knowledge documents 通过 metadata 做 user scope。Chat runtime 在存在当前用户时传入 `knowledge_filters` user filter。Knowledge route 使用 Agno `Knowledge.ainsert()`、`asearch()` 和 `aget_content()`；document contents 存在 `knowledge` schema 中的 Agno `AsyncPostgresDb`，vector chunks 由 Agno `PgVector` 管理。删除和清空不调用 Agno PgVector 的同步 delete helper，而是先通过 async SQLAlchemy 删除 vector rows，再通过 async contents DB 删除 catalog row。
+Knowledge documents 通过 metadata 做 owner 和 `private` / `public` visibility scope。Chat runtime 在存在当前用户时传入 `knowledge_filters` user filter。Knowledge route 使用 Agno `Knowledge.ainsert()`、`asearch()`、`aget_content()` 和 `apatch_content()`；document contents 存在 `knowledge` schema 中的 Agno `AsyncPostgresDb`，vector chunks 由 Agno `PgVector` 管理。删除和清空不调用 Agno PgVector 的同步 delete helper，而是先通过 async SQLAlchemy 删除 vector rows，再通过 async contents DB 删除 catalog row。
 
 PgVector 入口按 Agno 文档推荐的 async Knowledge API 使用：runtime 构造 Agno `PgVector`，业务代码只调用 `Knowledge.ainsert()`、`Knowledge.asearch()` 等 async methods。AIOS 不再把本地 vector adapter 作为默认 runtime path；新的 Agno-owned persistence 访问必须优先使用 Agno async API。
 
 Agno API gap projections 是窄范围 async product views，不改变 table ownership：Knowledge delete/clear 使用 async SQLAlchemy 删除 vector rows 后通过 async contents DB 删除 catalog row；Knowledge dashboard 的 chunk-count 和 search result 的 content-id hydration 只读取 PgVector table 的 `id`、`content_id`、`meta_data`；Trace UI 和 dashboard 通过 Agno tracing API 读取 trace/span 后整理前端 payload，缺少聚合 API 时用 Async SQLAlchemy 做轻量统计；AgentOS control payload 在 sessions/memory/metrics/knowledge 状态上优先使用 Agno async APIs，AIOS control tables 使用 Async SQLAlchemy。Scheduler 已退出 `/api/os` facade，前端直接消费 AgentOS `/schedules` API。
 
-Embedding 和 rerank 模型计算不属于 async DB I/O。默认 Knowledge runtime 使用 Agno `SentenceTransformerEmbedder` 和 `SentenceTransformerReranker` 接入 `PgVector`，AIOS 不再维护自定义本地模型 adapter；如需调整模型行为，应优先沿用 Agno 提供的 embedder/reranker 扩展点。
+Embedding 和 rerank 模型计算不属于 async DB I/O。默认 Knowledge runtime 使用 Agno `SentenceTransformerEmbedder` 和 `SentenceTransformerReranker` 接入 `PgVector`，AIOS 不再维护自定义本地模型 adapter；如需调整模型行为，应优先沿用 Agno 提供的 embedder/reranker 扩展点。`/api/knowledge/settings/rag` 只更新当前 API process 的 RAG environment overrides 并清理 runtime caches，因此要求 `config:write`；跨重启持久化仍应通过部署环境变量或配置管理完成。
 
-当前写入路径包括后端 text input、后端 server-side file path input，以及前端把 browser file upload 读取成 text 后走文本写入。Search 会返回匹配内容和 metadata，供控制面和助手使用。
+当前写入路径包括后端 text input、后端 server-side file path input，以及前端把 browser file upload 读取成 text 后走文本写入。Search 对登录用户合并 public documents 和 owner private documents，返回匹配内容和 metadata，供控制面和助手使用。Visibility update 通过 `PUT /api/knowledge/documents/{doc_id}/visibility` 写回 Agno content metadata。
 
 ## MCP
 
@@ -147,6 +147,8 @@ Schema 分域是运行时边界，不是独立服务边界。见 [ADR 0001](./ad
 
 - Agno run 使用 `user_id` 和 `session_id` 支持 multi-user sessions。
 - Agno traces 包含 trace records 和层级 spans，带 `run_id`、`session_id`、`user_id` 和组件 ID。
+- Agno 文档支持把 AgentOS 绑定到 custom FastAPI `base_app`，并用 scopes/RBAC 表达 AgentOS authorization；AIOS 当前先在自身 FastAPI route 处理权限。
 - Agno 文档推荐 Postgres storage 用于生产式 relational persistence，并用 PgVector 在 PostgreSQL 上做 vector search；AIOS runtime 使用 Agno `AsyncPostgresDb`。
+- Agno Knowledge/PgVector 文档提供 `Knowledge.ainsert()` 和 `Knowledge.asearch()` 等 async API；AIOS 默认沿用这些 API。
 - Agno AgentOS factories 支持 async callable，并会在请求时 await；AIOS 用它延迟构造 fallback agent。
-- FastMCP 可以作为 ASGI app 挂载到 FastAPI。
+- FastMCP 文档要求把 MCP ASGI app 挂载到 FastAPI 时处理 MCP lifespan；AIOS 在 FastAPI lifespan 中显式管理集成 MCP runtime。

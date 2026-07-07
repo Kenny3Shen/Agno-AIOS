@@ -36,6 +36,7 @@ API 使用 FastAPI Users 和 JWT bearer 认证。登录接口位于 `/api/auth/j
 | `cve:read` | 是 | 是 | 是 |
 | `knowledge:read` | 是 | 是 | 是 |
 | `knowledge:write` | 是 | 是 | 否 |
+| `knowledge:delete` | 是 | 是 | 否 |
 | `mcp:read` | 是 | 是 | 否 |
 | `skill:read` | 是 | 是 | 否 |
 | `config:read` | 是 | 是 | 否 |
@@ -52,7 +53,9 @@ Admin-only 操作用只有 admin 能通过 `agent_os:admin` 满足的 scopes 表
 - Chat session 读取和归档会检查存储的 session owner。
 - Trace list 和 trace detail 会把非 admin 用户限制在自己的 `user_id` 下。
 - Memory 读取、更新和删除会把非 admin 用户限制在自己的 `user_id` 下；admin 可以跨用户筛选并处理 memories。
-- Knowledge 写入会附加 owner metadata；Chat 检索在有当前用户时使用该用户作为 knowledge filter。
+- Knowledge 写入会附加 owner metadata 和 `private` / `public` visibility；Chat 检索在有当前用户时使用该用户作为 knowledge filter，控制面 search 合并 public documents 和当前用户 private documents。
+- Skill、MCP custom server 和 Knowledge document 的 visibility mutation 必须经过 manage predicate；普通用户只能管理自己的资源，admin 可管理全部。
+- Knowledge RAG 参数是 process-wide runtime configuration；`/api/knowledge/settings/rag` 要求 `config:write`，不由普通 `knowledge:write` 授权。
 - Admin 用户可以跨用户查看 sessions、traces 和 audit records。
 
 `session_id` 不是 secret，不能当作授权凭据。
@@ -71,7 +74,7 @@ Admin-only 操作用只有 admin 能通过 `agent_os:admin` 满足的 scopes 表
 - Session archive。
 - Memory update 和 delete。
 - CVE database update 尝试和结果。
-- Knowledge document 写入、删除和 clear。
+- Knowledge document 写入、visibility update、rebuild、删除、clear，以及 Knowledge RAG settings update。
 - MCP config 变更、token issue/delete 和 MCP upload。
 - Skill toggle 和 upload。
 - Model 和 settings updates。

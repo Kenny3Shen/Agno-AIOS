@@ -25,12 +25,12 @@ Scheduler 导航权限使用 AgentOS scope `schedules:read`，不再依赖 AIOS 
 
 ### AgentOS Authorization / RBAC
 
-Agno 文档的推荐做法是 `AgentOS(authorization=True, authorization_config=AuthorizationConfig(...))`，JWT claims 使用 `scopes`，例如 `schedules:read`、`schedules:write`、`schedules:delete`，管理员使用 `agent_os:admin`。
+Agno 文档支持 AgentOS scope/RBAC authorization，JWT claims 使用 `scopes`，例如 `schedules:read`、`schedules:write`、`schedules:delete`，管理员使用 `agent_os:admin`。AIOS 当前已经把 AgentOS 注册到现有 FastAPI base app，但 AgentOS native authorization 尚未整体启用。
 
 当前暂缓原因：
 
 - 本项目现有 `/api/auth/*`、前端静态资源、MCP endpoint 和 AIOS APIs 与 AgentOS routes 运行在同一个 FastAPI app 上。
-- 本地 Agno `AuthorizationConfig` 不公开按 route 排除参数；直接在 `AgentOS(base_app=app, authorization=True)` 上启用会把 JWT middleware 加到整个 app。
+- 直接在现有 base app 上整体启用 AgentOS authorization 会影响 `/api/auth/*`、静态资源和 AIOS 自定义 APIs；需要先设计 route 排除、sub-app 隔离或统一 JWT middleware。
 - 当前 FastAPI Users token 还没有按 AgentOS `scopes` / `agent_os:admin` 设计签发和验证契约。
 
 下一步：
@@ -57,7 +57,7 @@ Agno 文档的推荐做法是 `AgentOS(authorization=True, authorization_config=
 
 ### Knowledge
 
-保留 `/api/knowledge`。当前 AIOS 提供 browser text ingestion、owner metadata、document lifecycle、vector-row delete/clear 和 search result hydration。迁移前需要明确 AgentOS Knowledge API 对 ownership、文件上传和删除语义的覆盖范围。
+保留 `/api/knowledge`。当前 AIOS 提供 browser text ingestion、owner/visibility metadata、document lifecycle、visibility mutation、rebuild、vector-row delete/clear 和 search result hydration。迁移前需要明确 AgentOS Knowledge API 对 ownership、public/private visibility、文件上传、metadata patch、rebuild 和删除语义的覆盖范围。
 
 ### Agent Evals
 

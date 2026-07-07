@@ -29,6 +29,8 @@ import type {
   CveSearchResponse,
   KnowledgeDocument,
   KnowledgeFileRequest,
+  KnowledgeRagSettings,
+  KnowledgeRagSettingsResponse,
   KnowledgeSearchResponse,
   KnowledgeStatusResponse,
   KnowledgeTextRequest,
@@ -1008,9 +1010,18 @@ export function useKnowledgeApi() {
     method: 'DELETE'
   }, apiMessage('knowledgeDeleteFailed'))
 
+  const rebuildKnowledgeDocument = (docId: string) => request<KnowledgeDocument>(`/documents/${encodeURIComponent(docId)}/rebuild`, {
+    method: 'POST'
+  }, apiMessage('knowledgeRequestFailed'))
+
   const updateKnowledgeDocumentVisibility = (docId: string, visibility: ResourceVisibility) => request<KnowledgeDocument>(`/documents/${encodeURIComponent(docId)}/visibility`, {
     method: 'PUT',
     body: JSON.stringify({ visibility })
+  }, apiMessage('knowledgeRequestFailed'))
+
+  const updateKnowledgeRagSettings = (payload: KnowledgeRagSettings) => request<KnowledgeRagSettingsResponse>('/settings/rag', {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
   }, apiMessage('knowledgeRequestFailed'))
 
   const clearKnowledge = () => request<{ documents: number; chunks: number }>('', {
@@ -1029,6 +1040,8 @@ export function useKnowledgeApi() {
     addTextDocument,
     addFileDocument,
     updateKnowledgeDocumentVisibility,
+    rebuildKnowledgeDocument,
+    updateKnowledgeRagSettings,
     deleteKnowledgeDocument,
     clearKnowledge,
     searchKnowledge

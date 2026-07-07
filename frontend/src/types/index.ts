@@ -41,6 +41,7 @@ export interface SkillInfo {
   enabled: boolean
   has_scripts: boolean
   scripts: string[]
+  skill_markdown: string
   visibility: ResourceVisibility
   owner_user_id: string
   can_manage: boolean
@@ -642,18 +643,43 @@ export interface KnowledgeStatus {
   rerank_enabled: boolean
   top_k?: number
   retrieval_candidates?: number
+  rerank_candidate_multiplier?: number
+  rerank_min_candidates?: number
   search_type?: "vector" | "keyword" | "hybrid" | string
   vector_score_weight?: number
+  bm25_score_weight?: number
   prefix_match?: boolean
   content_language?: string
   chunk_size?: number
   chunk_overlap?: number
   code_chunk_size?: number
   semantic_threshold?: number
+  rag_settings?: KnowledgeRagSettings
   supported_suffixes?: string[]
   chunk_profiles?: KnowledgeChunkProfile[]
   cold_start_note?: string
   torch_runtime_ok?: boolean
+}
+
+export interface KnowledgeRagSettings {
+  embedding_model?: string
+  embedding_dimensions?: number
+  rerank_model?: string
+  query_prompt?: string
+  top_k?: number
+  chunk_size?: number
+  chunk_overlap?: number
+  code_chunk_size?: number
+  semantic_threshold?: number
+  vector_score_weight?: number
+  bm25_score_weight?: number
+  content_language?: string
+  prefix_match?: boolean
+  rerank_enabled?: boolean
+  rerank_candidate_multiplier?: number
+  rerank_min_candidates?: number
+  device?: string
+  search_type?: "vector" | "keyword" | "hybrid" | string
 }
 
 export interface KnowledgeChunkProfile {
@@ -670,6 +696,10 @@ export interface KnowledgeDocument {
   source: string
   chunks: number
   created_at: string
+  status?: string
+  status_message?: string
+  type?: string | null
+  size?: number | string | null
   visibility?: ResourceVisibility
   owner_user_id?: string
   can_manage?: boolean
@@ -708,6 +738,11 @@ export interface KnowledgeSearchResult {
 
 export interface KnowledgeSearchResponse {
   results: KnowledgeSearchResult[]
+}
+
+export interface KnowledgeRagSettingsResponse {
+  settings: KnowledgeRagSettings
+  status: KnowledgeStatus
 }
 
 // Tracing 相关类型（Agno Tracing）

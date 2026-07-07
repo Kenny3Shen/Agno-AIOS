@@ -1,6 +1,6 @@
 # 开发工作流
 
-本文描述当前仓库的开发流程。
+本文描述当前仓库在 WSL2 Ubuntu 24.04 或 Linux 环境中的开发流程。
 
 ## 工具链
 
@@ -45,7 +45,7 @@ codegraph explore "chat route agent service session ownership"
 后端 package 是 `api`。主入口：
 
 ```bash
-uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
 ```
 
 重要边界：
@@ -70,8 +70,15 @@ uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 - `frontend/src/composables/` 和 `frontend/src/lib/` 负责 API 和 utility helpers。
 - `frontend/src/i18n/` 负责展示文案。
 - `frontend/src/styles/` 负责 design tokens。
+- `frontend/src/modules/*.test.mjs` 放前端纯逻辑和 source-contract tests；`frontend/src/uiShell.test.mjs` 只作为 shell 测试入口，避免继续膨胀。
 
 前端 scope checks 只用于可见性。任何新的受保护能力都必须单独更新后端 scope checks。
+
+前端开发服务默认代理到 `http://127.0.0.1:8000`。如果按阶段验证命令把 API 启动在 `8001`，启动前端时显式设置：
+
+```bash
+VITE_API_PROXY_TARGET=http://127.0.0.1:8001 /home/shenss/.bun/bin/bun run dev
+```
 
 ## 测试与检查
 
@@ -81,6 +88,7 @@ uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 uv run ruff check .
 uv run ty check .
 uv run pytest api/tests
+uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
 
 cd frontend
 /home/shenss/.bun/bin/bun run test:shell
@@ -91,12 +99,14 @@ cd frontend
 浏览器 smoke test：启动 API 后用 Playwright 检查托管页面。
 
 ```bash
-uv run uvicorn api.main:app --host 127.0.0.1 --port 8000
-playwright-cli open http://127.0.0.1:8000
+uv run uvicorn api.main:app --host 127.0.0.1 --port 8001
+playwright-cli open http://127.0.0.1:8001
 playwright-cli console
 playwright-cli snapshot
 playwright-cli close
 ```
+
+涉及 UI/UX 的改动必须截图检查相应页面；窄屏或 mobile layout 有风险时同时截图窄屏视口。
 
 ## 文档规则
 

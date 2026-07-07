@@ -33,6 +33,7 @@ class SkillInfo(BaseModel):
     enabled: bool
     has_scripts: bool
     scripts: list[str]
+    skill_markdown: str
     visibility: str
     owner_user_id: str
     can_manage: bool

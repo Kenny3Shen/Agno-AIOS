@@ -18,8 +18,8 @@ T.A.I.S 是一个 AI-powered SDLC security automation 项目，围绕 Discover�
 
 - 前端：Vue 3、TypeScript、Vite/Rolldown、Element Plus、Pinia、vue-i18n、markdown-it、highlight.js、Mermaid、Bun。
 - 后端：FastAPI、FastAPI Users、SQLAlchemy Async、Pydantic Settings、Uvicorn、psycopg、httpx、Polars、loguru。
-- Agent Runtime：OpenAI-compatible models、PostgresDb、Tracing、PgVector Knowledge、LocalSkills、MCPTools。
-- MCP：FastMCP，同进程挂载到 FastAPI 的 `/mcp/`。
+- Agent Runtime：OpenAI-compatible models、AsyncPostgresDb、Tracing、PgVector Knowledge、LocalSkills、MCPTools。
+- MCP：FastMCP，同进程挂载到 FastAPI 的 `/mcp/`，由应用 lifespan 启停运行时。
 - 数据库：PostgreSQL + pgvector，按应用、运行时、MCP、知识库 schema 分域。
 - 工具链：uv、ruff、ty、Bun、Playwright。
 
@@ -41,7 +41,7 @@ cd frontend
 启动 API：
 
 ```bash
-uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
 ```
 
 启动前端开发服务：
@@ -57,6 +57,12 @@ cd frontend
 http://localhost:5173
 ```
 
+如果 API 不在默认 `8000`，启动前端开发服务时设置：
+
+```bash
+VITE_API_PROXY_TARGET=http://127.0.0.1:8001 /home/shenss/.bun/bin/bun run dev
+```
+
 PostgreSQL 初始化、环境变量、生产式静态资源托管和数据更新任务见 [运行说明](./docs/operations.md)。
 
 ## 常用命令
@@ -67,6 +73,7 @@ Python 检查：
 uv run ruff check .
 uv run ty check .
 uv run pytest api/tests
+uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
 ```
 
 前端检查：

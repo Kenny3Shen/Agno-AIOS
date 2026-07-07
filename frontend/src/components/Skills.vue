@@ -21,8 +21,8 @@
     <main class="skills-main">
       <section class="skills-body">
         <section v-if="uploadPanelOpen" class="skill-upload-panel ag-content-panel">
-          <div class="skill-card-head">
-            <span class="skill-card-copy">
+          <div class="skill-upload-head">
+            <span class="skill-upload-copy">
               <strong>{{ t('skills.upload.title') }}</strong>
               <em>{{ t('skills.upload.description') }}</em>
             </span>
@@ -31,15 +31,7 @@
             <el-input v-model="uploadForm.name" :placeholder="t('skills.upload.namePlaceholder')" />
             <label class="skill-visibility-field">
               <span>{{ t('visibility.label') }}</span>
-              <el-radio-group v-model="uploadForm.visibility" size="small">
-                <el-radio-button
-                  v-for="option in resourceVisibilityOptions"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ t(option.labelKey) }}
-                </el-radio-button>
-              </el-radio-group>
+              <ResourceVisibilityTabs v-model="uploadForm.visibility" />
             </label>
             <el-upload
               ref="skillUploadRef"
@@ -85,82 +77,114 @@
           </span>
         </div>
 
-        <div v-else class="skills-grid">
-          <article
-            v-for="skill in skills"
-            :key="skill.name"
-            class="skill-card"
-            :class="{ 'is-disabled': !skill.enabled, 'is-enabled': skill.enabled }"
-          >
-            <div class="skill-card-head">
-              <div class="skill-card-main">
-                <span class="skill-card-copy">
+        <section
+          v-else
+          class="skill-workbench"
+          :class="{ 'is-resizing': isResizingSkillList }"
+          :style="skillWorkbenchStyle"
+        >
+          <aside class="skill-list-panel ag-content-panel" :aria-label="t('skills.list.title')">
+            <div class="skill-list-head">
+              <span>{{ t('skills.list.title') }}</span>
+              <strong>{{ skills.length }}</strong>
+            </div>
+            <div class="skill-list">
+              <button
+                v-for="skill in skills"
+                :key="skill.name"
+                type="button"
+                class="skill-list-item"
+                :class="{ 'is-selected': selectedSkillName === skill.name, 'is-disabled': !skill.enabled }"
+                :aria-pressed="selectedSkillName === skill.name"
+                @click="selectedSkillName = skill.name"
+              >
+                <span class="skill-list-copy">
                   <strong :title="skill.name">{{ skill.name }}</strong>
                   <em>{{ skill.description || t('skills.empty.description') }}</em>
                 </span>
-              </div>
-              <span class="status-pill" :class="skill.enabled ? 'ok' : 'off'">
-                {{ skill.enabled ? t('common.state.enabled') : t('common.state.disabled') }}
-              </span>
-              <span class="status-pill" :class="skill.visibility === 'public' ? 'ok' : 'off'">
-                {{ t(`visibility.${skill.visibility}`) }}
-              </span>
-            </div>
-
-            <div class="skill-card-foot">
-              <button
-                v-if="skill.has_scripts"
-                type="button"
-                class="skill-script-toggle"
-                :aria-expanded="expandedSkills.has(skill.name)"
-                :aria-label="
-                  expandedSkills.has(skill.name)
-                    ? t('skills.scripts.collapse')
-                    : t('skills.scripts.expand', { count: skill.scripts.length })
-                "
-                @click="toggleExpand(skill.name)"
-              >
-                <span>{{ t('skills.scripts.count', { count: skill.scripts.length }) }}</span>
-                <el-icon>
-                  <ArrowUp v-if="expandedSkills.has(skill.name)" />
-                  <ArrowDown v-else />
-                </el-icon>
-              </button>
-              <span v-else class="skill-script-empty">{{ t('skills.scripts.count', { count: 0 }) }}</span>
-
-              <el-switch
-                :model-value="skill.enabled"
-                :loading="togglingSkill === skill.name"
-                :disabled="!canWriteSkills || !skill.can_manage"
-                active-color="var(--ag-blue)"
-                @change="(val: string | number | boolean) => handleToggle(skill.name, Boolean(val))"
-              />
-              <el-button
-                class="visibility-toggle"
-                size="small"
-                plain
-                :disabled="!canWriteSkills || !skill.can_manage"
-                :loading="togglingSkill === skill.name"
-                @click="handleVisibilityToggle(skill)"
-              >
-                {{ t(`visibility.${nextResourceVisibility(skill.visibility)}`) }}
-              </el-button>
-            </div>
-
-            <div v-if="skill.has_scripts && expandedSkills.has(skill.name)" class="skill-script-list">
-              <div>
-                <span
-                  v-for="script in skill.scripts"
-                  :key="script"
-                  class="skill-script-pill"
-                >
-                  <el-icon><Document /></el-icon>
-                  {{ script }}
+                <span class="skill-list-meta">
+                  <span class="skill-state-pill" :class="skill.enabled ? 'ok' : 'off'">
+                    {{ skill.enabled ? t('common.state.enabled') : t('common.state.disabled') }}
+                  </span>
+                  <span class="skill-script-count">{{ t('skills.scripts.count', { count: skill.scripts.length }) }}</span>
                 </span>
-              </div>
+              </button>
             </div>
-          </article>
-        </div>
+          </aside>
+
+          <button
+            type="button"
+            class="skill-resize-handle"
+            :aria-label="t('skills.resize.label')"
+            @pointerdown="startSkillResize"
+            @keydown.left.prevent="adjustSkillListWidth(-2)"
+            @keydown.right.prevent="adjustSkillListWidth(2)"
+          >
+            <span></span>
+          </button>
+
+          <section v-if="selectedSkill" class="skill-detail-panel ag-content-panel">
+            <header class="skill-detail-header">
+              <div class="skill-detail-title">
+                <span>{{ t('skills.detail.fileLabel') }}</span>
+                <h2 :title="selectedSkill.name">{{ selectedSkill.name }}</h2>
+              </div>
+              <div class="skill-detail-actions">
+                <el-switch
+                  :model-value="selectedSkill.enabled"
+                  :loading="togglingSkill === selectedSkill.name"
+                  :disabled="!canWriteSkills || !selectedSkill.can_manage"
+                  active-color="var(--ag-blue)"
+                  @change="(val: string | number | boolean) => handleToggle(selectedSkill.name, Boolean(val))"
+                />
+                <ResourceVisibilityTabs
+                  :model-value="selectedSkill.visibility"
+                  :aria-label="t('skills.visibilityLabel', { name: selectedSkill.name })"
+                  :disabled="!canWriteSkills || !selectedSkill.can_manage"
+                  :loading="togglingSkill === selectedSkill.name"
+                  @update:model-value="(visibility) => handleVisibilityChange(selectedSkill, visibility)"
+                />
+              </div>
+            </header>
+
+            <p class="skill-detail-description">
+              {{ selectedSkill.description || t('skills.empty.description') }}
+            </p>
+
+            <el-tabs v-model="activeSkillDetailTab" class="skill-detail-tabs">
+              <el-tab-pane :label="t('skills.tabs.metadata')" name="metadata">
+                <div class="skill-metadata-shell">
+                  <span class="skill-frontmatter-marker">---</span>
+                  <dl class="skill-metadata-grid">
+                    <div v-for="item in selectedSkillMetadata" :key="item.label" class="skill-metadata-row">
+                      <dt>{{ item.label }}</dt>
+                      <dd>{{ item.value }}</dd>
+                    </div>
+                  </dl>
+                  <span class="skill-frontmatter-marker">---</span>
+                </div>
+
+                <div class="skill-script-list">
+                  <span class="skill-section-label">{{ t('skills.scripts.title') }}</span>
+                  <span
+                    v-for="script in selectedSkill.scripts"
+                    :key="script"
+                    class="skill-script-pill"
+                  >
+                    <el-icon><Document /></el-icon>
+                    {{ script }}
+                  </span>
+                  <span v-if="selectedSkill.scripts.length === 0" class="skill-script-empty">
+                    {{ t('skills.scripts.none') }}
+                  </span>
+                </div>
+              </el-tab-pane>
+              <el-tab-pane :label="t('skills.tabs.detail')" name="detail">
+                <div class="skill-detail-source" v-html="renderSelectedSkillMarkdown()"></div>
+              </el-tab-pane>
+            </el-tabs>
+          </section>
+        </section>
       </section>
     </main>
   </div>
@@ -169,13 +193,14 @@
 <script setup lang="ts">
 import { computed, ref, reactive, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ArrowDown, ArrowUp, Loading, FolderOpened, Document, UploadFilled } from '@element-plus/icons-vue'
+import { Loading, FolderOpened, Document, UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import MarkdownIt from "markdown-it"
 import type { UploadFile, UploadFiles, UploadInstance, UploadUserFile } from 'element-plus'
 import { useSkillsApi } from '../composables/useApi'
-import { nextResourceVisibility, resourceVisibilityOptions } from '../modules/resourceVisibility'
 import { useAuthStore } from '../stores/auth'
 import type { ResourceVisibility, SkillInfo } from '../types'
+import ResourceVisibilityTabs from "./common/ResourceVisibilityTabs.vue"
 
 const {
   loading,
@@ -186,10 +211,18 @@ const {
 } = useSkillsApi()
 const { t } = useI18n()
 const authStore = useAuthStore()
+const skillMarkdownRenderer = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true,
+})
 
 const skills = ref<SkillInfo[]>([])
+const selectedSkillName = ref("")
+const activeSkillDetailTab = ref<"metadata" | "detail">("metadata")
+const skillListWidth = ref(20)
+const isResizingSkillList = ref(false)
 const togglingSkill = ref<string | null>(null)
-const expandedSkills = reactive(new Set<string>())
 const uploadPanelOpen = ref(false)
 const submittingUpload = ref(false)
 const skillUploadRef = ref<UploadInstance>()
@@ -207,11 +240,81 @@ const summaryMetrics = computed(() => [
   { label: t('skills.summary.enabled'), value: enabledSkills.value },
   { label: t('skills.summary.scripts'), value: totalScripts.value },
 ])
+const skillWorkbenchStyle = computed(() => ({
+  "--skill-list-width": `${skillListWidth.value}%`,
+}))
+const selectedSkill = computed(() => skills.value.find((skill) => skill.name === selectedSkillName.value) ?? skills.value[0] ?? null)
+const selectedSkillMetadata = computed(() => {
+  const skill = selectedSkill.value
+  if (!skill) return []
+  return [
+    { label: t("skills.metadata.name"), value: skill.name },
+    { label: t("skills.metadata.description"), value: skill.description || t("skills.empty.description") },
+    { label: t("skills.metadata.enabled"), value: skill.enabled ? t("common.state.enabled") : t("common.state.disabled") },
+    { label: t("skills.metadata.visibility"), value: t(`visibility.${skill.visibility}`) },
+    { label: t("skills.metadata.owner"), value: skill.owner_user_id || "-" },
+    { label: t("skills.metadata.manageable"), value: skill.can_manage ? t("common.state.enabled") : t("common.state.disabled") },
+    { label: t("skills.metadata.scripts"), value: String(skill.scripts.length) },
+  ]
+})
+
+const formatSkillMarkdownForRender = (markdown: string) => {
+  const normalized = markdown.trim()
+  if (!/^---\r?\n/.test(normalized)) return normalized
+
+  const lines = normalized.split(/\r?\n/)
+  const closingIndex = lines.findIndex((line, index) => index > 0 && line.trim() === "---")
+  if (closingIndex === -1) return normalized
+
+  const frontmatter = lines.slice(1, closingIndex).join("\n").trim()
+  const body = lines.slice(closingIndex + 1).join("\n").trim()
+  return ["```yaml", frontmatter, "```", body].filter(Boolean).join("\n\n")
+}
+
+const renderSelectedSkillMarkdown = () => {
+  const markdown = selectedSkill.value?.skill_markdown?.trim() || t("skills.detail.empty")
+  return skillMarkdownRenderer.render(formatSkillMarkdownForRender(markdown))
+}
+
+const clampSkillListWidth = (value: number) => Math.min(42, Math.max(16, value))
+
+const adjustSkillListWidth = (delta: number) => {
+  skillListWidth.value = clampSkillListWidth(skillListWidth.value + delta)
+}
+
+const startSkillResize = (event: PointerEvent) => {
+  if (window.matchMedia("(max-width: 760px)").matches) return
+  const workbench = (event.currentTarget as HTMLElement).closest(".skill-workbench")
+  if (!(workbench instanceof HTMLElement)) return
+  const rect = workbench.getBoundingClientRect()
+  if (rect.width <= 0) return
+
+  const updateWidth = (clientX: number) => {
+    skillListWidth.value = clampSkillListWidth(((clientX - rect.left) / rect.width) * 100)
+  }
+  const handleMove = (moveEvent: PointerEvent) => updateWidth(moveEvent.clientX)
+  const stopResize = () => {
+    isResizingSkillList.value = false
+    window.removeEventListener("pointermove", handleMove)
+    window.removeEventListener("pointerup", stopResize)
+    window.removeEventListener("pointercancel", stopResize)
+  }
+
+  isResizingSkillList.value = true
+  updateWidth(event.clientX)
+  window.addEventListener("pointermove", handleMove)
+  window.addEventListener("pointerup", stopResize, { once: true })
+  window.addEventListener("pointercancel", stopResize, { once: true })
+  event.preventDefault()
+}
 
 const loadSkills = async () => {
   try {
     const data = await apiFetchSkills()
     skills.value = data.skills
+    if (!skills.value.some((skill) => skill.name === selectedSkillName.value)) {
+      selectedSkillName.value = skills.value[0]?.name ?? ""
+    }
   } catch {
     ElMessage.error(t('skills.messages.loadFailed'))
   }
@@ -232,14 +335,6 @@ const handleToggle = async (name: string, enabled: boolean) => {
     ElMessage.error(t('skills.messages.toggleFailed'))
   } finally {
     togglingSkill.value = null
-  }
-}
-
-const toggleExpand = (name: string) => {
-  if (expandedSkills.has(name)) {
-    expandedSkills.delete(name)
-  } else {
-    expandedSkills.add(name)
   }
 }
 
@@ -301,13 +396,14 @@ const submitSkillUpload = async () => {
   }
 }
 
-const handleVisibilityToggle = async (skill: SkillInfo) => {
+const handleVisibilityChange = async (skill: SkillInfo, visibility: ResourceVisibility) => {
   if (!canWriteSkills.value || !skill.can_manage) return
-  const nextVisibility = nextResourceVisibility(skill.visibility)
+  if (visibility === skill.visibility) return
   togglingSkill.value = skill.name
   try {
-    const result = await updateSkillVisibility(skill.name, nextVisibility)
+    const result = await updateSkillVisibility(skill.name, visibility)
     skill.visibility = result.visibility
+    await loadSkills()
     ElMessage.success(t("visibility.updated"))
   } catch {
     ElMessage.error(t("visibility.updateFailed"))
@@ -396,6 +492,40 @@ onMounted(() => {
   gap: 12px;
 }
 
+.skill-upload-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.skill-upload-copy {
+  min-width: 0;
+}
+
+.skill-upload-copy strong {
+  display: block;
+  overflow: hidden;
+  color: var(--ag-heading);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-upload-copy em {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--ag-muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .skill-upload-grid {
   display: grid;
   gap: 10px;
@@ -423,87 +553,197 @@ onMounted(() => {
   justify-content: flex-end;
 }
 
-.skills-grid {
+.skill-workbench {
   display: grid;
+  min-height: 520px;
+  gap: 8px;
+  grid-template-columns: minmax(180px, var(--skill-list-width, 20%)) 8px minmax(0, 1fr);
+}
+
+.skill-workbench.is-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.skill-list-panel,
+.skill-detail-panel {
+  min-height: 0;
+}
+
+.skill-list-panel {
+  display: grid;
+  align-content: start;
   gap: 10px;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  padding: 10px;
 }
 
-.skill-card {
-  border: 1px solid var(--ag-border);
-  border-radius: var(--ag-radius-panel);
-  background: var(--ag-panel);
-  padding: 12px;
+.skill-resize-handle {
+  display: grid;
+  width: 8px;
+  min-height: 100%;
+  place-items: center;
+  border: 0;
+  border-radius: var(--ag-radius-control);
+  background: transparent;
+  cursor: col-resize;
+}
+
+.skill-resize-handle span {
+  display: block;
+  width: 2px;
+  height: 64px;
+  border-radius: var(--ag-radius-control);
+  background: color-mix(in srgb, var(--ag-border) 72%, transparent);
   transition:
-    border-color 0.18s ease,
-    background 0.18s ease;
+    background 0.18s ease,
+    height 0.18s ease;
 }
 
-.skill-card.is-disabled {
-  opacity: 0.72;
+.skill-resize-handle:hover span,
+.skill-resize-handle:focus-visible span,
+.skill-workbench.is-resizing .skill-resize-handle span {
+  height: 88px;
+  background: color-mix(in srgb, var(--ag-blue) 64%, var(--ag-border));
 }
 
-.skill-card-head,
-.skill-card-foot,
-.skill-card-main,
-.skill-script-toggle,
-.skill-script-empty,
-.skill-script-pill {
+.skill-resize-handle:focus-visible {
+  outline: 2px solid var(--ag-blue);
+  outline-offset: 2px;
+}
+
+.skill-list-head,
+.skill-list-item,
+.skill-list-meta,
+.skill-detail-header,
+.skill-detail-actions,
+.skill-state-pill,
+.skill-script-pill,
+.skill-script-empty {
   display: flex;
   align-items: center;
 }
 
-.skill-card-head {
+.skill-list-head {
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
+  padding: 2px 2px 6px;
+  color: var(--ag-muted);
+  font-size: 11px;
+  font-weight: 760;
+  text-transform: uppercase;
 }
 
-.skill-card-main {
+.skill-list-head strong {
+  color: var(--ag-heading);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+}
+
+.skill-list {
+  display: grid;
+  gap: 6px;
+  max-height: min(62vh, 620px);
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.skill-list-item {
+  width: 100%;
+  min-height: 78px;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid transparent;
+  border-radius: var(--ag-radius-control);
+  background: transparent;
+  padding: 10px;
+  text-align: left;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    transform 0.18s ease;
+}
+
+.skill-list-item:hover,
+.skill-list-item:focus-visible {
+  border-color: color-mix(in srgb, var(--ag-blue) 42%, var(--ag-border));
+  background: var(--ag-panel-soft);
+}
+
+.skill-list-item:focus-visible {
+  outline: 2px solid var(--ag-blue);
+  outline-offset: 2px;
+}
+
+.skill-list-item.is-selected {
+  border-color: color-mix(in srgb, var(--ag-blue) 58%, var(--ag-border));
+  background: color-mix(in srgb, var(--ag-blue) 9%, var(--ag-panel));
+}
+
+.skill-list-item.is-disabled {
+  opacity: 0.72;
+}
+
+.skill-list-copy {
   min-width: 0;
-  align-items: flex-start;
+  flex: 1 1 auto;
 }
 
-.skill-card-copy {
-  min-width: 0;
-}
-
-.skill-card-copy strong {
-  display: block;
+.skill-list-copy strong {
+  display: -webkit-box;
   overflow: hidden;
   color: var(--ag-heading);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 760;
   line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
 }
 
-.skill-card-copy em {
+.skill-list-copy em {
   display: -webkit-box;
-  margin-top: 3px;
+  margin-top: 4px;
   overflow: hidden;
   color: var(--ag-muted);
-  font-size: 12px;
+  font-size: 11px;
   font-style: normal;
   line-height: 1.45;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
-.status-pill {
+.skill-list-meta {
   flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
 }
 
-.skill-card-foot {
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 12px;
+.skill-state-pill {
+  width: 44px;
+  min-height: 24px;
+  justify-content: center;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-control);
+  background: var(--ag-panel-soft);
+  color: var(--ag-muted-strong);
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1;
+  white-space: nowrap;
 }
 
-.skill-script-toggle,
+.skill-state-pill.ok {
+  border-color: color-mix(in srgb, var(--ag-blue) 42%, var(--ag-border));
+  color: var(--ag-heading);
+}
+
+.skill-state-pill.off {
+  color: var(--ag-muted);
+}
+
+.skill-script-count,
 .skill-script-empty {
   min-height: 24px;
-  gap: 6px;
   border: 1px solid var(--ag-border);
   border-radius: var(--ag-radius-control);
   background: var(--ag-panel-soft);
@@ -514,15 +754,227 @@ onMounted(() => {
   font-weight: 700;
 }
 
-.skill-script-toggle:hover,
-.skill-script-toggle:focus-visible {
-  border-color: color-mix(in srgb, var(--ag-blue) 42%, var(--ag-border));
+.skill-detail-panel {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  padding: 16px;
+}
+
+.skill-detail-header {
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--ag-border);
+  padding-bottom: 14px;
+}
+
+.skill-detail-title {
+  min-width: 0;
+}
+
+.skill-detail-title span {
+  display: block;
+  color: var(--ag-muted);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.skill-section-label {
+  display: block;
+  color: var(--ag-muted);
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.skill-detail-title h2 {
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: var(--ag-heading);
+  font-size: clamp(18px, 2vw, 26px);
+  font-weight: 780;
+  line-height: 1.16;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-detail-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.skill-detail-description {
+  margin: 0;
+  max-width: 820px;
+  color: var(--ag-muted-strong);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.skill-detail-tabs {
+  min-width: 0;
+}
+
+.skill-detail-tabs :deep(.el-tabs__header) {
+  margin-bottom: 14px;
+}
+
+.skill-detail-tabs :deep(.el-tabs__item) {
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.skill-metadata-shell {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-panel);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--ag-blue) 12%, transparent), transparent 26%),
+    var(--ag-panel-soft);
+  padding: 14px;
+}
+
+.skill-frontmatter-marker {
+  color: var(--ag-muted);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.skill-metadata-grid {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-control);
+  background: var(--ag-border);
+}
+
+.skill-metadata-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.34fr) minmax(0, 0.66fr);
+  gap: 12px;
+  background: var(--ag-panel);
+  padding: 9px 11px;
+}
+
+.skill-metadata-row dt,
+.skill-metadata-row dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.skill-metadata-row dt {
+  color: var(--ag-muted);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.skill-metadata-row dd {
+  overflow-wrap: anywhere;
+  color: var(--ag-heading);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.skill-detail-source {
+  max-height: min(58vh, 640px);
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-panel);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--ag-green) 8%, transparent), transparent 32%),
+    var(--ag-panel-soft);
+  padding: 14px;
+  color: var(--ag-muted-strong);
+  font-size: 13px;
+  font-weight: 560;
+  line-height: 1.62;
+}
+
+.skill-detail-source :deep(*) {
+  min-width: 0;
+}
+
+.skill-detail-source :deep(p),
+.skill-detail-source :deep(ul),
+.skill-detail-source :deep(ol),
+.skill-detail-source :deep(pre),
+.skill-detail-source :deep(blockquote) {
+  margin: 0 0 10px;
+}
+
+.skill-detail-source :deep(h1),
+.skill-detail-source :deep(h2),
+.skill-detail-source :deep(h3) {
+  margin: 14px 0 8px;
+  color: var(--ag-heading);
+  font-weight: 780;
+  line-height: 1.25;
+}
+
+.skill-detail-source :deep(h1) {
+  font-size: 18px;
+}
+
+.skill-detail-source :deep(h2) {
+  font-size: 15px;
+}
+
+.skill-detail-source :deep(h3) {
+  font-size: 13px;
+}
+
+.skill-detail-source :deep(ul),
+.skill-detail-source :deep(ol) {
+  padding-left: 20px;
+}
+
+.skill-detail-source :deep(li + li) {
+  margin-top: 4px;
+}
+
+.skill-detail-source :deep(code) {
+  border: 1px solid var(--ag-border);
+  border-radius: 5px;
+  background: var(--ag-panel);
+  padding: 1px 5px;
+  color: var(--ag-heading);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+}
+
+.skill-detail-source :deep(pre) {
+  overflow: auto;
+  border: 1px solid var(--ag-border);
+  border-radius: var(--ag-radius-control);
+  background: var(--ag-panel);
+  padding: 10px;
+}
+
+.skill-detail-source :deep(pre code) {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.skill-detail-source :deep(a) {
   color: var(--ag-blue);
 }
 
-.skill-script-toggle:focus-visible {
-  outline: 2px solid var(--ag-blue);
-  outline-offset: 2px;
+.skill-detail-source :deep(blockquote) {
+  border-left: 3px solid var(--ag-border);
+  padding-left: 10px;
+  color: var(--ag-muted);
 }
 
 .skills-console :deep(.el-switch) {
@@ -534,6 +986,8 @@ onMounted(() => {
 }
 
 .skill-script-pill,
+.skill-script-count,
+.skill-script-empty,
 .skill-code {
   border: 1px solid var(--ag-border);
   border-radius: var(--ag-radius-control);
@@ -542,15 +996,11 @@ onMounted(() => {
 }
 
 .skill-script-list {
-  margin-top: 12px;
-  border-top: 1px solid var(--ag-border);
-  padding-top: 12px;
-}
-
-.skill-script-list > div {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  border-top: 1px solid var(--ag-border);
+  padding-top: 14px;
 }
 
 .skill-script-pill {
@@ -562,6 +1012,15 @@ onMounted(() => {
   font-size: 10px;
   font-weight: 650;
   line-height: 1.35;
+}
+
+.skill-script-empty {
+  gap: 4px;
+}
+
+.skill-section-label {
+  width: 100%;
+  margin-bottom: 2px;
 }
 
 .skill-code {
@@ -610,12 +1069,39 @@ onMounted(() => {
     display: grid;
   }
 
-  .skills-grid {
+  .skill-upload-grid,
+  .skill-workbench {
     grid-template-columns: 1fr;
   }
 
-  .skill-card-head {
+  .skill-workbench {
+    min-height: 0;
+  }
+
+  .skill-resize-handle {
+    display: none;
+  }
+
+  .skill-list {
+    max-height: 360px;
+  }
+
+  .skill-detail-header,
+  .skill-detail-actions {
     align-items: flex-start;
+  }
+
+  .skill-detail-header {
+    display: grid;
+  }
+
+  .skill-detail-actions {
+    justify-content: flex-start;
+  }
+
+  .skill-metadata-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 }
 </style>

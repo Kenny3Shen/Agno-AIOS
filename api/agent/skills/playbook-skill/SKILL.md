@@ -1,8 +1,8 @@
 ---
 name: playbook-skill
 description: 使用安全自动化剧本完成处置、排查与验证任务。
+visibility: public
 ---
-
 # 基本能力
 
   1. `playbook_list_workflows(platform)` 获取候选剧本
