@@ -585,6 +585,14 @@ def _text_source_snapshot(
     }
 
 
+def _safe_public_metadata(metadata: Mapping[str, object]) -> dict[str, object]:
+    return {
+        key: value
+        for key, value in metadata.items()
+        if not key.startswith("_") and value is not None
+    }
+
+
 def _path_source_snapshot(
     *,
     name: str,
@@ -682,6 +690,32 @@ async def _ainsert_source_snapshot_async(
     else:
         raise ValueError("当前知识记录缺少可重建的原始 source 快照")
     await knowledge.ainsert(**kwargs)
+
+
+async def _latest_inserted_content_async(
+    knowledge: Any,
+    *,
+    title: str,
+    source: str,
+    source_ref: Mapping[str, object],
+) -> Any | None:
+    contents, _ = await knowledge.aget_content(
+        limit=20,
+        page=1,
+        sort_by="updated_at",
+        sort_order="desc",
+    )
+    expected_digest = source_ref.get("digest")
+    for content in contents:
+        metadata = _safe_metadata(getattr(content, "metadata", None))
+        ref = metadata.get(SOURCE_METADATA_KEY)
+        if isinstance(ref, Mapping) and ref.get("digest") == expected_digest:
+            return content
+    for content in contents:
+        metadata = _safe_metadata(getattr(content, "metadata", None))
+        if getattr(content, "name", None) == title and metadata.get("source") == source:
+            return content
+    return None
 
 
 async def _document_status_async(content_id: str) -> KnowledgeDocumentPayload | None:
@@ -1039,6 +1073,113 @@ class KnowledgeBaseLifecycle:
             raise RuntimeError("知识重建完成但未能读取内容登记记录")
         return _content_to_document(refreshed)
 
+    async def replace_document_source_async(
+        self,
+        doc_id: str,
+        *,
+        content: str,
+        file_name: str,
+        title: str | None = None,
+        source: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        owner_user_id: str | None = None,
+        user: ActorLike | None = None,
+    ) -> KnowledgeDocumentPayload | None:
+        await self._ensure_contents_storage_async()
+        current = await self._knowledge_content_by_id_async(doc_id)
+        if current is None:
+            return None
+        current_metadata = _safe_metadata(getattr(current, "metadata", None))
+        if user is not None:
+            if not can_manage_resource(user, current_metadata):
+                return None
+        elif not _content_visible_to_owner(current, owner_user_id):
+            return None
+
+        clean_content = content.strip()
+        if not clean_content:
+            raise ValueError("知识内容不能为空")
+        clean_file_name = Path(file_name.strip()).name
+        if not clean_file_name:
+            raise ValueError("source 文件名不能为空")
+        suffix = Path(clean_file_name).suffix.lower()
+        if suffix not in SUPPORTED_FILE_SUFFIXES:
+            supported = ", ".join(SUPPORTED_FILE_SUFFIXES)
+            raise ValueError(f"当前知识库支持的文件后缀: {supported}")
+
+        clean_title = (
+            title
+            or getattr(current, "name", None)
+            or current_metadata.get("title")
+            or Path(clean_file_name).stem
+        )
+        clean_title = str(clean_title).strip() or Path(clean_file_name).stem
+        clean_source = (
+            source
+            or current_metadata.get("source")
+            or f"upload:{clean_file_name}"
+        )
+        clean_source = str(clean_source).strip() or f"upload:{clean_file_name}"
+        owner = str(
+            current_metadata.get("owner_user_id")
+            or current_metadata.get("user_id")
+            or owner_user_id
+            or ""
+        ).strip()
+        visibility = normalize_visibility(str(current_metadata.get("visibility") or "private"))
+        profile = knowledge_profile_for_filename(clean_file_name)
+        source_ref = _source_ref("text", _source_digest(clean_content, clean_file_name))
+        safe_metadata = {
+            **_safe_public_metadata(current_metadata),
+            **_safe_metadata(metadata),
+            **_owner_metadata(owner, visibility),
+            "title": clean_title,
+            "source": clean_source,
+            "file_name": clean_file_name,
+            "file_type": suffix or "text",
+            "chunk_strategy": profile.strategy,
+            "reader": profile.reader,
+            "input_mode": "replacement",
+            "upload_mode": "browser",
+        }
+        safe_metadata = _metadata_with_source_ref(safe_metadata, source_ref)
+        source_snapshot = _text_source_snapshot(
+            name=clean_title,
+            description=clean_source,
+            text_content=clean_content,
+            metadata=safe_metadata,
+            filename=clean_file_name,
+        )
+        knowledge = await self._async_knowledge_async()
+        async with _knowledge_async_lock:
+            await self._ensure_storage_async()
+            await knowledge.ainsert(
+                name=clean_title,
+                description=clean_source,
+                text_content=clean_content,
+                metadata=safe_metadata,
+                reader=reader_for_profile(profile, clean_file_name),
+                upsert=True,
+                skip_if_exists=False,
+            )
+            inserted = await _latest_inserted_content_async(
+                knowledge,
+                title=clean_title,
+                source=clean_source,
+                source_ref=source_ref,
+            )
+            if inserted is None or not getattr(inserted, "id", None):
+                raise RuntimeError("source 新版本写入完成但未能读取内容登记记录")
+            inserted_id = str(inserted.id)
+            await self._store_source_async(inserted_id, source_snapshot)
+            if inserted_id != doc_id:
+                await self._delete_content_async(knowledge, doc_id)
+
+        refreshed = await self._knowledge_content_by_id_async(inserted_id)
+        if refreshed is None:
+            raise RuntimeError("source 新版本写入完成但未能读取内容登记记录")
+        return _content_to_document(refreshed)
+
     async def update_document_visibility_async(
         self,
         doc_id: str,
@@ -1239,6 +1380,29 @@ async def rebuild_document_async(
 ) -> KnowledgeDocumentPayload | None:
     return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.rebuild_document_async(
         doc_id,
+        owner_user_id=owner_user_id,
+        user=user,
+    )
+
+
+async def replace_document_source_async(
+    doc_id: str,
+    *,
+    content: str,
+    file_name: str,
+    title: str | None = None,
+    source: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    owner_user_id: str | None = None,
+    user: ActorLike | None = None,
+) -> KnowledgeDocumentPayload | None:
+    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.replace_document_source_async(
+        doc_id,
+        content=content,
+        file_name=file_name,
+        title=title,
+        source=source,
+        metadata=metadata,
         owner_user_id=owner_user_id,
         user=user,
     )

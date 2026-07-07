@@ -399,6 +399,123 @@ async def test_rebuild_document_rejects_public_foreign_non_manager() -> None:
 
 
 @pytest.mark.asyncio
+async def test_replace_document_source_uploads_new_version_and_deletes_old_content() -> None:
+    old_metadata = {
+        "user_id": "u1",
+        "visibility": "private",
+        "source": "upload:runbook.md",
+        "title": "Runbook",
+        "file_name": "runbook.md",
+        "file_type": ".md",
+        "_tais_source": {"kind": "text", "digest": "old", "version": 1},
+    }
+    new_metadata = {
+        **old_metadata,
+        "source": "upload:runbook-v2.md",
+        "file_name": "runbook-v2.md",
+        "file_size": "27",
+    }
+    old_row = SimpleNamespace(
+        id="content-old",
+        name="Runbook",
+        description="upload:runbook.md",
+        metadata=old_metadata,
+        created_at=0,
+    )
+    new_row = SimpleNamespace(
+        id="content-new",
+        name="Runbook",
+        description="upload:runbook-v2.md",
+        metadata=new_metadata,
+        created_at=1,
+    )
+    knowledge = StrictAsyncKnowledge(
+        contents=[new_row],
+        content_by_id={"content-old": old_row, "content-new": new_row},
+    )
+    deleted: list[str] = []
+    stored_sources: dict[str, dict[str, object]] = {}
+
+    async def content_by_id(content_id: str):
+        return knowledge._content_by_id.get(content_id)
+
+    async def delete_content_async(_knowledge, content_id: str) -> None:
+        deleted.append(content_id)
+        knowledge._content_by_id.pop(content_id, None)
+
+    async def store_source_async(content_id: str, source: Mapping[str, object]) -> None:
+        stored_sources[content_id] = dict(source)
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_contents_storage_async=lambda: None,
+            ensure_storage_async=lambda: None,
+            knowledge_content_by_id_async=content_by_id,
+            delete_content_async=delete_content_async,
+            store_source_async=store_source_async,
+        )
+    )
+
+    with patch.object(knowledge_service, "reader_for_profile", return_value=object()):
+        result = await lifecycle.replace_document_source_async(
+            "content-old",
+            content="  # v2\nnew body  ",
+            file_name="runbook-v2.md",
+            source="upload:runbook-v2.md",
+            metadata={"file_size": "27"},
+            user=SimpleNamespace(id="u1", role="user", is_superuser=False),
+        )
+
+    assert result is not None
+    assert result["id"] == "content-new"
+    assert deleted == ["content-old"]
+    insert_calls = [call for call in knowledge.calls if call[0] == "ainsert"]
+    assert len(insert_calls) == 1
+    insert_kwargs = insert_calls[0][2]
+    assert insert_kwargs["name"] == "Runbook"
+    assert insert_kwargs["description"] == "upload:runbook-v2.md"
+    assert insert_kwargs["text_content"] == "# v2\nnew body"
+    assert insert_kwargs["metadata"]["visibility"] == "private"
+    assert insert_kwargs["metadata"]["user_id"] == "u1"
+    assert insert_kwargs["metadata"]["file_name"] == "runbook-v2.md"
+    assert insert_kwargs["metadata"]["_tais_source"]["kind"] == "text"
+    assert insert_kwargs["metadata"]["_tais_source"]["digest"] != "old"
+    assert stored_sources["content-new"]["text_content"] == "# v2\nnew body"
+    assert stored_sources["content-new"]["metadata"] == insert_kwargs["metadata"]
+
+
+@pytest.mark.asyncio
+async def test_replace_document_source_rejects_public_foreign_non_manager() -> None:
+    content_row = SimpleNamespace(
+        id="content-public",
+        name="Shared",
+        metadata={"user_id": "u2", "visibility": "public"},
+        created_at=0,
+    )
+
+    def fail_runtime(_search_type=None):
+        raise AssertionError("unauthorized source replacement must not load Knowledge runtime")
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=fail_runtime,
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_by_id_async=lambda _content_id: content_row,
+        )
+    )
+
+    result = await lifecycle.replace_document_source_async(
+        "content-public",
+        content="new body",
+        file_name="shared.md",
+        user=SimpleNamespace(id="u1", role="user", is_superuser=False),
+    )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
 async def test_list_documents_uses_contents_db_without_runtime() -> None:
     content_row = SimpleNamespace(
         id="content-3",

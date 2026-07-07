@@ -7,6 +7,7 @@ import type {
   KnowledgeRagSettings,
   KnowledgeRagSettingsResponse,
   KnowledgeSearchResponse,
+  KnowledgeSourceReplacementRequest,
   KnowledgeStatusResponse,
   KnowledgeTextRequest,
   ResourceVisibility
@@ -64,6 +65,11 @@ export function useKnowledgeApi() {
     method: 'POST'
   }, apiMessage('knowledgeRequestFailed'))
 
+  const replaceKnowledgeDocumentSource = (docId: string, payload: KnowledgeSourceReplacementRequest) => request<KnowledgeDocument>(`/documents/${encodeURIComponent(docId)}/source`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }, apiMessage('knowledgeRequestFailed'))
+
   const updateKnowledgeDocumentVisibility = (docId: string, visibility: ResourceVisibility) => request<KnowledgeDocument>(`/documents/${encodeURIComponent(docId)}/visibility`, {
     method: 'PUT',
     body: JSON.stringify({ visibility })
@@ -91,6 +97,7 @@ export function useKnowledgeApi() {
     addFileDocument,
     updateKnowledgeDocumentVisibility,
     rebuildKnowledgeDocument,
+    replaceKnowledgeDocumentSource,
     updateKnowledgeRagSettings,
     deleteKnowledgeDocument,
     clearKnowledge,

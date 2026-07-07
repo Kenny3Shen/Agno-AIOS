@@ -345,6 +345,18 @@
                   <el-icon><RefreshRight /></el-icon>
                 </el-button>
               </el-tooltip>
+              <el-tooltip :content="t('knowledge.documents.replaceSource')" placement="top">
+                <el-button
+                  text
+                  class="cursor-pointer"
+                  :disabled="!row.can_manage || replacingSourceDocId === row.id"
+                  :loading="replacingSourceDocId === row.id"
+                  :aria-label="t('knowledge.documents.replaceSourceLabel', { title: row.title })"
+                  @click="openSourceReplacement(row)"
+                >
+                  <el-icon><UploadFilled /></el-icon>
+                </el-button>
+              </el-tooltip>
               <el-tooltip :content="t('knowledge.documents.metadata')" placement="top">
                 <el-button text class="cursor-pointer" :aria-label="t('knowledge.documents.metadataLabel', { title: row.title })" @click="openMetadata(row)">
                   <el-icon><Tickets /></el-icon>
@@ -601,6 +613,63 @@
     <el-dialog v-model="metadataDialogOpen" :title="t('knowledge.drawer.metadataTitle')" width="560px">
       <pre class="metadata-json">{{ prettyJson(metadataDocument?.metadata || {}) }}</pre>
     </el-dialog>
+
+    <el-dialog
+      v-model="sourceReplacementDialogOpen"
+      class="source-replacement-dialog"
+      :title="t('knowledge.documents.replaceSource')"
+      width="min(560px, calc(100vw - 24px))"
+      @closed="resetSourceReplacement"
+    >
+      <template v-if="sourceReplacementDocument">
+        <div class="source-replacement-form">
+          <div class="source-replacement-target">
+            <span>{{ t('knowledge.documents.currentSource') }}</span>
+            <strong>{{ sourceReplacementDocument.title }}</strong>
+            <em :title="sourceReplacementDocument.source">{{ sourceReplacementDocument.source || t('knowledge.labels.manualSource') }}</em>
+          </div>
+          <el-upload
+            ref="sourceReplacementUploadRef"
+            v-model:file-list="sourceReplacementFileList"
+            drag
+            :auto-upload="false"
+            :limit="1"
+            :accept="browserAccept"
+            class="source-replacement-upload"
+            :on-change="handleSourceReplacementFileChange"
+            :on-remove="handleSourceReplacementFileRemove"
+            :on-exceed="handleSourceReplacementFileExceed"
+          >
+            <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+            <div class="el-upload__text">
+              {{ t('knowledge.upload.dropText') }} <em>{{ t('knowledge.upload.chooseFile') }}</em>
+            </div>
+            <template #tip>
+              <div class="el-upload__tip">{{ t('knowledge.upload.supportedTypes') }}</div>
+            </template>
+          </el-upload>
+          <label class="knowledge-field">
+            <span>{{ t('knowledge.upload.sourceLabel') }}</span>
+            <el-input v-model="sourceReplacementForm.source" :placeholder="sourceReplacementSourcePlaceholder" clearable />
+          </label>
+        </div>
+      </template>
+      <template #footer>
+        <span class="source-replacement-footer">
+          <el-button class="cursor-pointer" @click="sourceReplacementDialogOpen = false">{{ t('knowledge.actions.cancel') }}</el-button>
+          <el-button
+            type="primary"
+            class="cursor-pointer"
+            :disabled="!canSubmitSourceReplacement"
+            :loading="replacingSourceDocId === sourceReplacementDocument?.id"
+            @click="submitSourceReplacement"
+          >
+            <el-icon><UploadFilled /></el-icon>
+            {{ t('knowledge.actions.replaceSource') }}
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -662,8 +731,14 @@ const searchResults = ref<KnowledgeSearchResult[]>([])
 const advancedSections = ref<string[]>([])
 const previewDrawerOpen = ref(false)
 const metadataDialogOpen = ref(false)
+const sourceReplacementDialogOpen = ref(false)
 const previewDocument = ref<KnowledgeDocument | null>(null)
 const metadataDocument = ref<KnowledgeDocument | null>(null)
+const sourceReplacementDocument = ref<KnowledgeDocument | null>(null)
+const sourceReplacementUploadRef = ref<UploadInstance>()
+const sourceReplacementFileList = ref<UploadUserFile[]>([])
+const selectedSourceReplacementFile = ref<File | null>(null)
+const replacingSourceDocId = ref<string | null>(null)
 const lastIngestRetry = ref<null | (() => Promise<void>)>(null)
 
 const ingestTask = reactive<{
@@ -693,6 +768,10 @@ const pathForm = reactive({
   path: "",
   title: "",
   visibility: "private" as ResourceVisibility,
+})
+
+const sourceReplacementForm = reactive({
+  source: "",
 })
 
 const searchForm = reactive({
@@ -729,6 +808,7 @@ const {
   addFileDocument,
   updateKnowledgeDocumentVisibility,
   rebuildKnowledgeDocument,
+  replaceKnowledgeDocumentSource,
   updateKnowledgeRagSettings,
   deleteKnowledgeDocument,
   clearKnowledge,
@@ -974,6 +1054,18 @@ const canSubmitBrowserUpload = computed(() => {
 })
 const canSubmitTextDocument = computed(() => Boolean(textForm.title.trim() && textForm.content.trim() && !savingText.value))
 const canSubmitPathDocument = computed(() => Boolean(pathForm.path.trim() && !savingPath.value))
+const canSubmitSourceReplacement = computed(() => {
+  const doc = sourceReplacementDocument.value
+  const file = selectedSourceReplacementFile.value
+  return Boolean(doc?.can_manage && file && isSupportedTextFile(file) && replacingSourceDocId.value !== doc.id)
+})
+
+const sourceReplacementSourcePlaceholder = computed(() => {
+  const doc = sourceReplacementDocument.value
+  if (!doc) return "upload"
+  const fileName = selectedSourceReplacementFile.value?.name || doc.metadata?.file_name || doc.title
+  return `upload:${fileName}`
+})
 
 const handleBrowserFileChange = (uploadFile: UploadFile, uploadFiles: UploadFiles) => {
   browserFileList.value = uploadFiles.slice(-1)
@@ -994,6 +1086,22 @@ const handleBrowserFileExceed = () => {
   ElMessage.warning(t("knowledge.messages.singleFileOnly"))
 }
 
+const handleSourceReplacementFileChange = (uploadFile: UploadFile, uploadFiles: UploadFiles) => {
+  sourceReplacementFileList.value = uploadFiles.slice(-1)
+  selectedSourceReplacementFile.value = uploadFile.raw ?? null
+  if (uploadFile.name) {
+    sourceReplacementForm.source = `upload:${uploadFile.name}`
+  }
+}
+
+const handleSourceReplacementFileRemove = () => {
+  selectedSourceReplacementFile.value = null
+}
+
+const handleSourceReplacementFileExceed = () => {
+  ElMessage.warning(t("knowledge.messages.singleFileOnly"))
+}
+
 const resetBrowserUpload = () => {
   browserForm.title = ""
   browserForm.source = "upload"
@@ -1001,6 +1109,14 @@ const resetBrowserUpload = () => {
   selectedBrowserFile.value = null
   browserFileList.value = []
   browserUploadRef.value?.clearFiles()
+}
+
+const resetSourceReplacement = () => {
+  sourceReplacementDocument.value = null
+  sourceReplacementForm.source = ""
+  selectedSourceReplacementFile.value = null
+  sourceReplacementFileList.value = []
+  sourceReplacementUploadRef.value?.clearFiles()
 }
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
@@ -1123,6 +1239,64 @@ const submitPathDocument = async () => {
     }, retry)
   } finally {
     savingPath.value = false
+  }
+}
+
+const openSourceReplacement = (doc: KnowledgeDocument) => {
+  if (!doc.can_manage || replacingSourceDocId.value === doc.id) return
+  sourceReplacementDocument.value = doc
+  sourceReplacementForm.source = doc.source || `upload:${doc.metadata?.file_name || doc.title}`
+  selectedSourceReplacementFile.value = null
+  sourceReplacementFileList.value = []
+  sourceReplacementUploadRef.value?.clearFiles()
+  sourceReplacementDialogOpen.value = true
+}
+
+const submitSourceReplacement = async () => {
+  const doc = sourceReplacementDocument.value
+  const file = selectedSourceReplacementFile.value
+  if (!doc || !doc.can_manage) return
+  if (!file) {
+    ElMessage.warning(t("knowledge.messages.selectFile"))
+    return
+  }
+  if (!isSupportedTextFile(file)) {
+    ElMessage.warning(t("knowledge.messages.selectTextFile"))
+    return
+  }
+
+  replacingSourceDocId.value = doc.id
+  try {
+    const content = (await file.text()).trim()
+    if (!content) {
+      throw new Error(t("knowledge.upload.emptyFile"))
+    }
+    const updated = await replaceKnowledgeDocumentSource(doc.id, {
+      title: doc.title,
+      content,
+      file_name: file.name,
+      source: sourceReplacementForm.source.trim() || `upload:${file.name}`,
+      metadata: {
+        file_name: file.name,
+        upload_mode: "browser",
+        file_size: String(file.size),
+        file_type: file.name.match(/\.[^.]+$/)?.[0]?.toLowerCase() || "text",
+        mime_type: file.type || "text/plain",
+      },
+    })
+    const index = documents.value.findIndex((item) => item.id === doc.id || item.id === updated.id)
+    if (index >= 0) {
+      documents.value[index] = { ...documents.value[index], ...updated }
+    } else {
+      documents.value.unshift(updated)
+    }
+    await loadKnowledge()
+    sourceReplacementDialogOpen.value = false
+    ElMessage.success(t("knowledge.messages.sourceReplaced"))
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : t("knowledge.messages.sourceReplaceFailed"))
+  } finally {
+    replacingSourceDocId.value = null
   }
 }
 
@@ -1807,7 +1981,7 @@ onMounted(() => {
     minmax(98px, 0.5fr)
     minmax(72px, 0.52fr)
     minmax(88px, 0.44fr)
-    112px;
+    132px;
   min-width: 0;
   font-size: var(--document-table-font-size);
 }
@@ -1933,6 +2107,76 @@ onMounted(() => {
   height: 24px;
   margin-left: 0;
   padding: 0;
+}
+
+.source-replacement-form {
+  display: grid;
+  gap: 12px;
+}
+
+.source-replacement-target {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  border: 1px solid var(--kn-border);
+  border-radius: var(--ag-radius-control);
+  background: var(--kn-panel-soft);
+  padding: 10px 12px;
+}
+
+.source-replacement-target span {
+  color: var(--kn-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.source-replacement-target strong,
+.source-replacement-target em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-replacement-target strong {
+  color: var(--kn-heading);
+  font-size: 13px;
+  font-weight: 820;
+}
+
+.source-replacement-target em {
+  color: var(--kn-muted);
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.source-replacement-upload {
+  width: 100%;
+}
+
+.source-replacement-upload :deep(.el-upload),
+.source-replacement-upload :deep(.el-upload-dragger) {
+  width: 100%;
+}
+
+.source-replacement-upload :deep(.el-upload-dragger) {
+  min-height: 138px;
+  border-radius: var(--ag-radius-control);
+  background: var(--kn-panel-soft);
+}
+
+.source-replacement-footer {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.source-replacement-footer :deep(.el-button) {
+  margin-left: 0;
 }
 
 .advanced-configuration {

@@ -71,6 +71,14 @@ class KnowledgeVisibilityRequest(BaseModel):
     visibility: str
 
 
+class KnowledgeSourceReplacementRequest(BaseModel):
+    content: str = Field(..., min_length=1)
+    file_name: str = Field(..., min_length=1)
+    title: str | None = None
+    source: str | None = None
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
 class KnowledgeSearchRequest(BaseModel):
     query: str = Field(..., min_length=1)
     limit: int = Field(5, ge=1, le=20)
@@ -214,6 +222,40 @@ async def rebuild_document(
         action="knowledge.rebuild",
         resource_type="knowledge_document",
         resource_id=doc_id,
+        **audit_request_context(request_ctx),
+    )
+    return response
+
+
+@router.post("/documents/{doc_id}/source")
+async def replace_document_source(
+    request_ctx: Request,
+    doc_id: str,
+    request: KnowledgeSourceReplacementRequest,
+    user: User = Depends(require_scope("knowledge:write")),
+) -> KnowledgeDocumentResponsePayload:
+    try:
+        updated = await get_knowledge_base_lifecycle().replace_document_source_async(
+            doc_id,
+            content=request.content,
+            file_name=request.file_name,
+            title=request.title,
+            source=request.source,
+            metadata=request.metadata,
+            owner_user_id=effective_knowledge_user_filter(user),
+            user=user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if updated is None:
+        raise HTTPException(status_code=404, detail="知识文档不存在")
+    response = cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
+    await record_audit_event_async(
+        user,
+        action="knowledge.source_replace",
+        resource_type="knowledge_document",
+        resource_id=str(updated.get("id") or doc_id),
+        metadata={"previous_id": doc_id, "file_name": request.file_name},
         **audit_request_context(request_ctx),
     )
     return response

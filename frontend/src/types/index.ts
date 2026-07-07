@@ -725,6 +725,14 @@ export interface KnowledgeFileRequest {
   visibility?: ResourceVisibility
 }
 
+export interface KnowledgeSourceReplacementRequest {
+  content: string
+  file_name: string
+  title?: string | null
+  source?: string | null
+  metadata?: Record<string, string>
+}
+
 export interface KnowledgeSearchResult {
   content: string
   score: number

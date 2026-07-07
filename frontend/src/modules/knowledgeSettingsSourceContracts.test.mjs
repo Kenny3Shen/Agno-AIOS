@@ -126,6 +126,30 @@ assert.match(
 
 assert.match(
   knowledge,
+  /openSourceReplacement/,
+  "Knowledge document rows must provide an action for uploading a new source version",
+)
+
+assert.match(
+  knowledge,
+  /source-replacement-dialog/,
+  "Knowledge page must use a bounded dialog for source version replacement",
+)
+
+assert.match(
+  knowledge,
+  /source-replacement-dialog[\s\S]{0,180}width="min\(560px,\s*calc\(100vw - 24px\)\)"/,
+  "Knowledge source replacement dialog must use a viewport-aware width on mobile",
+)
+
+assert.match(
+  knowledge,
+  /replaceKnowledgeDocumentSource/,
+  "Knowledge page must call the source replacement API from the row action",
+)
+
+assert.match(
+  knowledge,
   /document-management-bar/,
   "Knowledge document management controls must live in a structured toolbar",
 )
@@ -162,7 +186,7 @@ assert.match(
 
 assert.match(
   knowledge,
-  /grid-template-columns:[\s\S]*minmax\(160px,\s*1\.35fr\)[\s\S]*minmax\(88px,\s*0\.44fr\)[\s\S]*112px/,
+  /grid-template-columns:[\s\S]*minmax\(160px,\s*1\.35fr\)[\s\S]*minmax\(88px,\s*0\.44fr\)[\s\S]*132px/,
   "Knowledge document table columns must use compact bounded tracks",
 )
 
@@ -171,6 +195,7 @@ for (const locale of ["zh-CN", "en-US"]) {
   const visibleCountLabel = i18n.global.t("knowledge.documents.visibleCount", { count: 1, total: 3 })
   const visibilityColumn = i18n.global.t("knowledge.documents.columns.visibility")
   const visibilityLabel = i18n.global.t("knowledge.documents.visibilityLabel", { title: "sample.md" })
+  const replaceSourceLabel = i18n.global.t("knowledge.documents.replaceSourceLabel", { title: "sample.md" })
   const ragPermissionLabel = i18n.global.t("knowledge.messages.configPermissionRequired")
   assert.notEqual(
     visibleCountLabel,
@@ -189,6 +214,10 @@ for (const locale of ["zh-CN", "en-US"]) {
   assert.ok(
     visibilityLabel.includes("sample.md"),
     `Knowledge document visibility tabs label must include the document title in ${locale}`,
+  )
+  assert.ok(
+    replaceSourceLabel.includes("sample.md"),
+    `Knowledge document source replacement label must include the document title in ${locale}`,
   )
   assert.notEqual(
     ragPermissionLabel,
@@ -247,6 +276,7 @@ for (const hardcodedKnowledgeCopy of [
   "知识库已更新",
   "请选择文件",
   "删除知识文档",
+  "上传新版本",
   "清空知识库",
   "检索问题不能为空",
 ]) {
