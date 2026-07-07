@@ -27,6 +27,7 @@ DOCUMENT_METADATA_KEYS = (
     "upload_mode",
     "chunks",
 )
+INTERNAL_METADATA_PREFIXES = ("_",)
 DOCUMENT_METADATA_MAX_ITEMS = 12
 DOCUMENT_METADATA_VALUE_MAX_LENGTH = 160
 COMPLETED_STATUSES = {"completed", "complete", "ready", "done", "success", "succeeded"}
@@ -119,6 +120,8 @@ def float_value(value: object, default: float = 0.0) -> float:
 def document_metadata(metadata: Mapping[str, object]) -> dict[str, str]:
     compact_metadata: dict[str, str] = {}
     for key in DOCUMENT_METADATA_KEYS:
+        if key.startswith(INTERNAL_METADATA_PREFIXES):
+            continue
         value = metadata.get(key)
         if value is not None:
             compact_metadata[key] = compact_metadata_value(value)
@@ -126,6 +129,8 @@ def document_metadata(metadata: Mapping[str, object]) -> dict[str, str]:
     for key, value in metadata.items():
         if len(compact_metadata) >= DOCUMENT_METADATA_MAX_ITEMS:
             break
+        if key.startswith(INTERNAL_METADATA_PREFIXES):
+            continue
         if key not in compact_metadata:
             compact_metadata[key] = compact_metadata_value(value)
 

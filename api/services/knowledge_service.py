@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 from importlib.util import find_spec
 from dataclasses import dataclass
@@ -23,6 +24,10 @@ from api.auth.claims import ActorLike
 from api.auth.visibility import can_manage_resource, normalize_visibility
 from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
+from api.persistence.knowledge_sources import (
+    get_knowledge_source_async as _get_knowledge_source_async,
+    upsert_knowledge_source_async as _upsert_knowledge_source_async,
+)
 from api.services.postgres_store import (
     get_async_knowledge_postgres_db,
     postgres_label,
@@ -119,6 +124,8 @@ COLD_START_NOTE = (
     "首次触发知识写入、向量检索或重排时会在线程中加载/下载本地模型，"
     "当前操作可能等待 30-120 秒，但不会阻塞其它页面请求。"
 )
+SOURCE_METADATA_KEY = "_tais_source"
+SOURCE_METADATA_VERSION = 1
 _knowledge_async_lock = asyncio.Lock()
 _knowledge_runtime_async_lock = asyncio.Lock()
 
@@ -526,6 +533,109 @@ async def _delete_content_async(knowledge: Any, content_id: str) -> None:
     await _delete_knowledge_content_row_async(knowledge, content_id)
 
 
+def _source_digest(*values: object) -> str:
+    hasher = hashlib.sha256()
+    for value in values:
+        hasher.update(str(value or "").encode("utf-8"))
+        hasher.update(b"\0")
+    return hasher.hexdigest()
+
+
+def _source_ref(kind: str, digest: str) -> dict[str, object]:
+    return {
+        "kind": kind,
+        "digest": digest,
+        "version": SOURCE_METADATA_VERSION,
+    }
+
+
+def _metadata_with_source_ref(
+    metadata: Mapping[str, object],
+    source_ref: Mapping[str, object],
+) -> dict[str, object]:
+    return {**dict(metadata), SOURCE_METADATA_KEY: dict(source_ref)}
+
+
+def _mapping_metadata(value: object) -> dict[str, object]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {
+        key: item
+        for key, item in value.items()
+        if isinstance(key, str) and item is not None
+    }
+
+
+def _text_source_snapshot(
+    *,
+    name: str,
+    description: str,
+    text_content: str,
+    metadata: Mapping[str, object],
+    filename: str,
+) -> dict[str, object]:
+    return {
+        "kind": "text",
+        "name": name,
+        "description": description,
+        "text_content": text_content,
+        "metadata": dict(metadata),
+        "filename": filename,
+        "version": SOURCE_METADATA_VERSION,
+    }
+
+
+def _path_source_snapshot(
+    *,
+    name: str,
+    description: str,
+    path: str,
+    metadata: Mapping[str, object],
+    filename: str,
+) -> dict[str, object]:
+    return {
+        "kind": "path",
+        "name": name,
+        "description": description,
+        "path": path,
+        "metadata": dict(metadata),
+        "filename": filename,
+        "version": SOURCE_METADATA_VERSION,
+    }
+
+
+def _legacy_source_snapshot(content: Any) -> dict[str, object] | None:
+    metadata = _safe_metadata(getattr(content, "metadata", None))
+    name = str(getattr(content, "name", "") or metadata.get("title") or "")
+    description = str(getattr(content, "description", "") or metadata.get("source") or "")
+    filename = _filename_for_content(content) or name
+    path = (
+        getattr(content, "path", None)
+        or metadata.get("file_path")
+        or metadata.get("source")
+    )
+    if isinstance(path, str) and path.strip() and Path(path).expanduser().is_absolute():
+        return _path_source_snapshot(
+            name=name,
+            description=description,
+            path=path,
+            metadata=metadata,
+            filename=filename,
+        )
+
+    file_data = getattr(content, "file_data", None)
+    text_content = getattr(file_data, "content", None)
+    if isinstance(text_content, str) and text_content.strip():
+        return _text_source_snapshot(
+            name=name,
+            description=description or "manual",
+            text_content=text_content,
+            metadata=metadata,
+            filename=filename,
+        )
+    return None
+
+
 def _filename_for_content(content: Any) -> str | None:
     metadata = _safe_metadata(getattr(content, "metadata", None))
     for value in (
@@ -540,58 +650,38 @@ def _filename_for_content(content: Any) -> str | None:
     return None
 
 
-async def _rebuild_content_from_row_async(content: Any, knowledge: Any) -> Content:
-    path = getattr(content, "path", None)
-    file_data = getattr(content, "file_data", None)
-    url = getattr(content, "url", None)
-    topics = getattr(content, "topics", None)
-    remote_content = getattr(content, "remote_content", None)
-
-    if path:
-        resolved_path = Path(str(path)).expanduser().resolve()
-        if not await AsyncPath(resolved_path).exists():
-            raise ValueError(f"原始文件不存在，无法重建: {path}")
-        path = str(resolved_path)
-
-    if not any([path, file_data, url, topics, remote_content]):
-        raise ValueError("当前知识记录缺少可重建的原始输入")
-
-    filename = _filename_for_content(content)
-    reader = getattr(content, "reader", None)
-    if reader is None and (path or file_data):
-        reader = reader_for_filename(filename)
-
-    rebuild_content = Content(
-        id=getattr(content, "id", None),
-        name=getattr(content, "name", None),
-        description=getattr(content, "description", None),
-        path=path,
-        url=url,
-        auth=getattr(content, "auth", None),
-        file_data=file_data,
-        metadata=_safe_metadata(getattr(content, "metadata", None)),
-        topics=topics,
-        remote_content=remote_content,
-        reader=reader,
-        size=getattr(content, "size", None),
-        file_type=getattr(content, "file_type", None),
-        external_id=getattr(content, "external_id", None),
-    )
-    build_content_hash = getattr(knowledge, "_build_content_hash", None)
-    if callable(build_content_hash):
-        rebuild_content.content_hash = build_content_hash(rebuild_content)
+async def _ainsert_source_snapshot_async(
+    knowledge: Any,
+    source: Mapping[str, object],
+) -> None:
+    kind = str(source.get("kind") or "").strip().lower()
+    metadata = _mapping_metadata(source.get("metadata"))
+    name = str(source.get("name") or metadata.get("title") or "").strip() or None
+    description = str(source.get("description") or metadata.get("source") or "").strip() or None
+    filename = str(source.get("filename") or metadata.get("file_name") or name or "").strip()
+    reader = reader_for_filename(filename)
+    kwargs: dict[str, object] = {
+        "name": name,
+        "description": description,
+        "metadata": metadata,
+        "reader": reader,
+        "upsert": True,
+        "skip_if_exists": False,
+    }
+    if kind == "text":
+        text_content = source.get("text_content")
+        if not isinstance(text_content, str) or not text_content.strip():
+            raise ValueError("当前知识记录缺少可重建的文本 source 快照")
+        kwargs["text_content"] = text_content
+    elif kind == "path":
+        path = str(source.get("path") or metadata.get("file_path") or "").strip()
+        if not path:
+            raise ValueError("当前知识记录缺少可重建的文件路径 source 快照")
+        resolved_path = await _resolve_existing_file_async(path)
+        kwargs["path"] = str(resolved_path)
     else:
-        rebuild_content.content_hash = getattr(content, "content_hash", None)
-    return rebuild_content
-
-
-async def _aload_rebuild_content_async(knowledge: Any, content: Content) -> None:
-    load_content = getattr(knowledge, "_aload_content", None)
-    if load_content is None:
-        raise RuntimeError("Knowledge runtime does not support content rebuild")
-    result = load_content(content, upsert=True, skip_if_exists=False)
-    if hasattr(result, "__await__"):
-        await result
+        raise ValueError("当前知识记录缺少可重建的原始 source 快照")
+    await knowledge.ainsert(**kwargs)
 
 
 async def _document_status_async(content_id: str) -> KnowledgeDocumentPayload | None:
@@ -609,6 +699,8 @@ class KnowledgeBaseLifecycleDependencies:
     ensure_contents_storage_async: Callable[[], Any] | None = None
     knowledge_content_rows_async: Callable[..., Any] | None = None
     knowledge_content_by_id_async: Callable[[str], Any] | None = None
+    store_source_async: Callable[[str, Mapping[str, object]], Any] | None = None
+    get_source_async: Callable[[str], Any] | None = None
     chunk_counts_by_content_id_async: Callable[[str | None], Any] | None = None
     chunk_count_async: Callable[[str | None], Any] | None = None
     hydrate_content_ids_async: Callable[[list[Document]], Any] | None = None
@@ -691,6 +783,26 @@ class KnowledgeBaseLifecycle:
             return result
         return await _knowledge_content_by_id_async(content_id)
 
+    async def _store_source_async(
+        self,
+        content_id: str,
+        source: Mapping[str, object],
+    ) -> None:
+        if self.dependencies.store_source_async is not None:
+            result = self.dependencies.store_source_async(content_id, source)
+            if hasattr(result, "__await__"):
+                await result
+            return
+        await _upsert_knowledge_source_async(content_id, source)
+
+    async def _get_source_async(self, content_id: str) -> dict[str, Any] | None:
+        if self.dependencies.get_source_async is not None:
+            result = self.dependencies.get_source_async(content_id)
+            if hasattr(result, "__await__"):
+                result = await result
+            return dict(result) if isinstance(result, Mapping) else None
+        return await _get_knowledge_source_async(content_id)
+
     async def _chunk_counts_by_content_id_async(self, owner_user_id: str | None) -> dict[str, int]:
         if self.dependencies.chunk_counts_by_content_id_async is not None:
             result = self.dependencies.chunk_counts_by_content_id_async(owner_user_id)
@@ -752,22 +864,34 @@ class KnowledgeBaseLifecycle:
         base_metadata = _safe_metadata(metadata)
         filename = str(base_metadata.get("file_name") or clean_title)
         profile = knowledge_profile_for_filename(filename)
+        clean_source = source.strip() or "manual"
         safe_metadata = {
             **base_metadata,
             **_owner_metadata(owner_user_id, normalized_visibility),
             "title": clean_title,
-            "source": source.strip() or "manual",
+            "source": clean_source,
             "file_type": Path(filename).suffix.lower() or "text",
             "chunk_strategy": profile.strategy,
             "reader": profile.reader,
             "input_mode": base_metadata.get("input_mode", "manual"),
         }
+        safe_metadata = _metadata_with_source_ref(
+            safe_metadata,
+            _source_ref("text", _source_digest(clean_content)),
+        )
+        source_snapshot = _text_source_snapshot(
+            name=clean_title,
+            description=clean_source,
+            text_content=clean_content,
+            metadata=safe_metadata,
+            filename=filename,
+        )
         knowledge = await self._async_knowledge_async()
         async with _knowledge_async_lock:
             await self._ensure_storage_async()
             await knowledge.ainsert(
                 name=clean_title,
-                description=source.strip() or "manual",
+                description=clean_source,
                 text_content=clean_content,
                 metadata=safe_metadata,
                 reader=reader_for_profile(profile, filename),
@@ -782,6 +906,7 @@ class KnowledgeBaseLifecycle:
         )
         for content_row in contents:
             if content_row.name == clean_title:
+                await self._store_source_async(str(content_row.id), source_snapshot)
                 return _content_to_document(content_row)
         raise RuntimeError("知识写入完成但未能读取内容登记记录")
 
@@ -811,6 +936,17 @@ class KnowledgeBaseLifecycle:
             "reader": profile.reader,
             "input_mode": "path",
         }
+        metadata = _metadata_with_source_ref(
+            metadata,
+            _source_ref("path", _source_digest(str(file_path))),
+        )
+        source_snapshot = _path_source_snapshot(
+            name=clean_title,
+            description=str(file_path),
+            path=str(file_path),
+            metadata=metadata,
+            filename=file_path.name,
+        )
         reader = reader_for_profile(profile, file_path.name)
         knowledge = await self._async_knowledge_async()
         async with _knowledge_async_lock:
@@ -832,6 +968,7 @@ class KnowledgeBaseLifecycle:
         )
         for content_row in contents:
             if content_row.name == clean_title:
+                await self._store_source_async(str(content_row.id), source_snapshot)
                 return _content_to_document(content_row)
         raise RuntimeError("知识写入完成但未能读取内容登记记录")
 
@@ -881,10 +1018,22 @@ class KnowledgeBaseLifecycle:
         elif not _content_visible_to_owner(content, owner_user_id):
             return None
         knowledge = await self._async_knowledge_async()
-        rebuild_content = await _rebuild_content_from_row_async(content, knowledge)
+        source_snapshot = await self._get_source_async(doc_id)
+        if source_snapshot is None:
+            source_snapshot = _legacy_source_snapshot(content)
+        if source_snapshot is None:
+            raise ValueError("当前知识记录缺少可重建的原始 source 快照，请重新导入后再重建")
+        current_metadata = _safe_metadata(getattr(content, "metadata", None))
         async with _knowledge_async_lock:
             await self._ensure_storage_async()
-            await _aload_rebuild_content_async(knowledge, rebuild_content)
+            await _ainsert_source_snapshot_async(knowledge, source_snapshot)
+            source_metadata = _mapping_metadata(source_snapshot.get("metadata"))
+            if current_metadata and current_metadata != source_metadata:
+                patched = await knowledge.apatch_content(
+                    Content(id=doc_id, metadata=current_metadata)
+                )
+                if patched is None:
+                    raise RuntimeError("知识重建完成但未能恢复当前 Metadata")
         refreshed = await self._knowledge_content_by_id_async(doc_id)
         if refreshed is None:
             raise RuntimeError("知识重建完成但未能读取内容登记记录")

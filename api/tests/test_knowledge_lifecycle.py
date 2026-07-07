@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -119,11 +120,16 @@ async def test_add_text_document_uses_async_insert_and_reload() -> None:
         created_at=0,
     )
     knowledge = StrictAsyncKnowledge(contents=[content_row])
+    stored_sources: dict[str, dict[str, object]] = {}
+
+    async def store_source_async(content_id: str, source: Mapping[str, object]) -> None:
+        stored_sources[content_id] = dict(source)
 
     lifecycle = knowledge_service.KnowledgeBaseLifecycle(
         knowledge_service.KnowledgeBaseLifecycleDependencies(
             get_async_knowledge_base=lambda _search_type=None: knowledge,
             ensure_storage_async=lambda: None,
+            store_source_async=store_source_async,
         )
     )
 
@@ -138,6 +144,12 @@ async def test_add_text_document_uses_async_insert_and_reload() -> None:
     assert result["title"] == "Runbook"
     assert knowledge.calls[0][0] == "ainsert"
     assert knowledge.calls[1][0] == "aget_content"
+    insert_kwargs = knowledge.calls[0][2]
+    assert insert_kwargs["metadata"]["_tais_source"]["kind"] == "text"
+    assert "text_content" not in insert_kwargs["metadata"]["_tais_source"]
+    assert stored_sources["content-1"]["kind"] == "text"
+    assert stored_sources["content-1"]["text_content"] == "content"
+    assert stored_sources["content-1"]["metadata"] == insert_kwargs["metadata"]
 
 
 @pytest.mark.asyncio
@@ -151,11 +163,16 @@ async def test_add_file_document_uses_async_insert_and_reload(tmp_path) -> None:
         created_at=0,
     )
     knowledge = StrictAsyncKnowledge(contents=[content_row])
+    stored_sources: dict[str, dict[str, object]] = {}
+
+    async def store_source_async(content_id: str, source: Mapping[str, object]) -> None:
+        stored_sources[content_id] = dict(source)
 
     lifecycle = knowledge_service.KnowledgeBaseLifecycle(
         knowledge_service.KnowledgeBaseLifecycleDependencies(
             get_async_knowledge_base=lambda _search_type=None: knowledge,
             ensure_storage_async=lambda: None,
+            store_source_async=store_source_async,
         )
     )
 
@@ -170,6 +187,12 @@ async def test_add_file_document_uses_async_insert_and_reload(tmp_path) -> None:
     assert result["title"] == "Runbook"
     assert knowledge.calls[0][0] == "ainsert"
     assert knowledge.calls[1][0] == "aget_content"
+    insert_kwargs = knowledge.calls[0][2]
+    assert insert_kwargs["metadata"]["_tais_source"]["kind"] == "path"
+    assert "text_content" not in insert_kwargs["metadata"]["_tais_source"]
+    assert stored_sources["content-2"]["kind"] == "path"
+    assert stored_sources["content-2"]["path"] == str(file_path)
+    assert stored_sources["content-2"]["metadata"] == insert_kwargs["metadata"]
 
 
 @pytest.mark.asyncio
@@ -203,23 +226,19 @@ async def test_update_document_visibility_uses_agno_patch_content() -> None:
 
 
 @pytest.mark.asyncio
-async def test_rebuild_document_reloads_content_without_pre_delete() -> None:
+async def test_rebuild_document_reloads_content_with_public_ainsert() -> None:
+    source_metadata = {
+        "user_id": "u1",
+        "visibility": "private",
+        "source": "manual",
+        "file_name": "runbook.txt",
+        "_tais_source": {"kind": "text", "digest": "digest-1", "version": 1},
+    }
     content_row = SimpleNamespace(
         id="content-rebuild",
         name="Runbook",
         description="manual",
-        path=None,
-        url=None,
-        file_data=FileData(content="runbook body", type="Text", filename="runbook.txt"),
-        metadata={
-            "user_id": "u1",
-            "visibility": "private",
-            "source": "manual",
-            "file_name": "runbook.txt",
-        },
-        topics=None,
-        remote_content=None,
-        reader=None,
+        metadata=source_metadata,
         size=12,
         file_type=".txt",
         created_at=0,
@@ -236,12 +255,24 @@ async def test_rebuild_document_reloads_content_without_pre_delete() -> None:
         deleted.append(content_id)
         knowledge._content_by_id.pop(content_id, None)
 
+    async def get_source_async(content_id: str) -> dict[str, object] | None:
+        assert content_id == "content-rebuild"
+        return {
+            "kind": "text",
+            "name": "Runbook",
+            "description": "manual",
+            "text_content": "runbook body",
+            "metadata": source_metadata,
+            "filename": "runbook.txt",
+        }
+
     lifecycle = knowledge_service.KnowledgeBaseLifecycle(
         knowledge_service.KnowledgeBaseLifecycleDependencies(
             get_async_knowledge_base=lambda _search_type=None: knowledge,
             ensure_storage_async=lambda: None,
             knowledge_content_by_id_async=content_by_id,
             delete_content_async=delete_content_async,
+            get_source_async=get_source_async,
         )
     )
 
@@ -254,16 +285,16 @@ async def test_rebuild_document_reloads_content_without_pre_delete() -> None:
     assert result is not None
     assert result["id"] == "content-rebuild"
     assert deleted == []
-    load_calls = [call for call in knowledge.calls if call[0] == "_aload_content"]
-    assert len(load_calls) == 1
-    _, rebuilt_content, upsert, skip_if_exists, include, exclude = load_calls[0]
-    assert rebuilt_content.id == "content-rebuild"
-    assert rebuilt_content.file_data.content == "runbook body"
-    assert rebuilt_content.metadata["user_id"] == "u1"
-    assert upsert is True
-    assert skip_if_exists is False
-    assert include is None
-    assert exclude is None
+    assert [call for call in knowledge.calls if call[0] == "_aload_content"] == []
+    insert_calls = [call for call in knowledge.calls if call[0] == "ainsert"]
+    assert len(insert_calls) == 1
+    insert_kwargs = insert_calls[0][2]
+    assert insert_kwargs["name"] == "Runbook"
+    assert insert_kwargs["description"] == "manual"
+    assert insert_kwargs["text_content"] == "runbook body"
+    assert insert_kwargs["metadata"] == source_metadata
+    assert insert_kwargs["upsert"] is True
+    assert insert_kwargs["skip_if_exists"] is False
 
 
 @pytest.mark.asyncio
@@ -295,7 +326,18 @@ async def test_rebuild_document_preserves_existing_content_when_reload_fails() -
         deleted.append(content_id)
         knowledge._content_by_id.pop(content_id, None)
 
-    async def fail_reload(_knowledge, _content) -> None:
+    async def get_source_async(content_id: str) -> dict[str, object] | None:
+        assert content_id == "content-rebuild"
+        return {
+            "kind": "text",
+            "name": "Runbook",
+            "description": "manual",
+            "text_content": "runbook body",
+            "metadata": content_row.metadata,
+            "filename": "runbook.txt",
+        }
+
+    async def fail_reload(*_args, **_kwargs) -> None:
         raise RuntimeError("reload failed")
 
     lifecycle = knowledge_service.KnowledgeBaseLifecycle(
@@ -304,12 +346,13 @@ async def test_rebuild_document_preserves_existing_content_when_reload_fails() -
             ensure_storage_async=lambda: None,
             knowledge_content_by_id_async=content_by_id,
             delete_content_async=delete_content_async,
+            get_source_async=get_source_async,
         )
     )
 
     with (
+        patch.object(knowledge, "ainsert", fail_reload),
         patch.object(knowledge_service, "reader_for_filename", return_value=object()),
-        patch.object(knowledge_service, "_aload_rebuild_content_async", fail_reload),
         pytest.raises(RuntimeError, match="reload failed"),
     ):
         await lifecycle.rebuild_document_async(

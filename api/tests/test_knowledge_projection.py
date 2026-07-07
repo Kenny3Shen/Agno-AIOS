@@ -48,6 +48,23 @@ def test_document_projection_compacts_metadata_and_formats_timestamps() -> None:
     assert len(document["metadata"]["custom"]) == 160
 
 
+def test_document_projection_hides_internal_source_metadata() -> None:
+    content = SimpleNamespace(
+        id="doc-1",
+        name="Policy",
+        created_at=0,
+        metadata={
+            "user_id": "u1",
+            "source": "manual",
+            "_tais_source": {"kind": "text", "digest": "digest-1", "version": 1},
+        },
+    )
+
+    document = knowledge_document_service.content_to_document(content)
+
+    assert "_tais_source" not in document["metadata"]
+
+
 def test_completed_document_projection_has_minimum_chunk_count() -> None:
     content = SimpleNamespace(
         id="doc-ready",
