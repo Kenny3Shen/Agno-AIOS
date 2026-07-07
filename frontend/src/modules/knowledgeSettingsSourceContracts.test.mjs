@@ -33,6 +33,8 @@ import {
   trace,
   typesSource,
   useApi,
+  useSecurityDataApiSource,
+  useSettingsApiSource,
   userRole,
   visibilityTabs,
   workflow,
@@ -437,7 +439,7 @@ assert.doesNotMatch(
 )
 
 assert.doesNotMatch(
-  useApi,
+  [useApi, useSecurityDataApiSource, useSettingsApiSource].join("\n"),
   /useAssetApi|\/asset\/search|AssetSearch/,
   "Asset search API client must be removed from the frontend",
 )
@@ -525,13 +527,13 @@ assert.match(
 )
 
 assert.match(
-  useApi,
+  useSettingsApiSource,
   /\/models\/test/,
   "Settings API must call the model connectivity test endpoint",
 )
 
 assert.match(
-  useApi,
+  useSettingsApiSource,
   /modelsTestFailed/,
   "Settings API must expose a localized model connectivity fallback",
 )

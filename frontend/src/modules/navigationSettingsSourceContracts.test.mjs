@@ -33,6 +33,10 @@ import {
   trace,
   typesSource,
   useApi,
+  useApiCore,
+  useChatApiSource,
+  useControlPlaneApiSource,
+  useTraceApiSource,
   userRole,
   visibilityTabs,
   workflow,
@@ -242,37 +246,37 @@ assert.match(
 )
 
 assert.match(
-  useApi,
+  useChatApiSource,
   /archiveSession/,
   "Chat history API must expose archiveSession instead of permanent deletion for sidebar delete",
 )
 
 assert.match(
-  useApi,
+  useControlPlaneApiSource,
   /deleteMemory\s*=\s*async/,
   "Memory API must expose deleteMemory for Agno user memories",
 )
 
 assert.match(
-  useApi,
+  useControlPlaneApiSource,
   /apiFetch\(`\/os\/memory\/\$\{encodeURIComponent\(memoryId\)\}/,
   "deleteMemory must call the authenticated Memory delete endpoint",
 )
 
 assert.match(
-  useApi,
+  useControlPlaneApiSource,
   /updateMemory\s*=\s*async/,
   "Memory API must expose updateMemory for Agno user memories",
 )
 
 assert.match(
-  useApi,
+  useControlPlaneApiSource,
   /method:\s*'PATCH'/,
   "updateMemory must patch the authenticated Memory endpoint",
 )
 
 assert.doesNotMatch(
-  useApi,
+  useControlPlaneApiSource,
   /pruneMemory|\/os\/memory\/prune/,
   "Memory pruning API must not remain exposed after pruning removal",
 )
@@ -284,20 +288,20 @@ assert.match(
 )
 
 assert.equal(
-  /user_id:\s*userId/.test(useApi),
+  /user_id:\s*userId/.test(useChatApiSource),
   false,
   "Chat API must not send frontend-provided user_id",
 )
 
 assert.equal(
-  /archiveSession\s*=\s*async\s*\([^)]*userId/.test(useApi),
+  /archiveSession\s*=\s*async\s*\([^)]*userId/.test(useChatApiSource),
   false,
   "archiveSession must not accept frontend-provided user id",
 )
 
 for (const traceParam of ["session_id", "run_id", "agent_id", "team_id", "workflow_id", "user_id"]) {
   assert.match(
-    useApi,
+    useTraceApiSource,
     new RegExp(`qs\\.set\\('${traceParam}'`),
     `Trace API must preserve ${traceParam} query parameter when provided`,
   )
@@ -320,19 +324,19 @@ for (const traceInteraction of ["@keyup.enter=\"refresh\"", "@click=\"refresh\""
 }
 
 assert.match(
-  useApi,
-  /const cleanParam =/,
+  useApiCore,
+  /export const cleanParam =/,
   "Trace API must normalize query parameters before appending them to URLSearchParams",
 )
 
 assert.equal(
-  /\p{Script=Han}/u.test(useApi),
+  /\p{Script=Han}/u.test([useApi, useApiCore, useChatApiSource, useControlPlaneApiSource, useTraceApiSource].join("\n")),
   false,
   "API composables must not hardcode localized Chinese fallback copy",
 )
 
 assert.match(
-  useApi,
+  useTraceApiSource,
   /cleanParam\(params\.session_id\)/,
   "Trace API must trim session_id before querying",
 )

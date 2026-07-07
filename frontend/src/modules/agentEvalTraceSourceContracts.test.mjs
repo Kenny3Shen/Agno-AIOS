@@ -33,19 +33,21 @@ import {
   trace,
   typesSource,
   useApi,
+  useAgentEvalsApiSource,
+  useApiCore,
   userRole,
   visibilityTabs,
   workflow,
 } from "./testSource.mjs"
 
 assert.match(
-  useApi,
+  useApiCore,
   /agentEvalsRequestFailed/,
   "Agent Eval API composable must expose a fallback key",
 )
 
 assert.match(
-  useApi,
+  useAgentEvalsApiSource,
   /function useAgentEvalsApi\(\)/,
   "Agent Eval API composable must expose useAgentEvalsApi",
 )
@@ -106,7 +108,7 @@ for (const methodName of [
   "listFailures",
 ]) {
   assert.match(
-    useApi,
+    useAgentEvalsApiSource,
     new RegExp(`\\b${methodName}\\b`),
     `Agent Eval API composable must expose ${methodName}`,
   )
@@ -120,7 +122,7 @@ for (const apiPath of [
   "/agent-evals/failures",
 ]) {
   assert.match(
-    useApi,
+    useAgentEvalsApiSource,
     new RegExp(apiPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
     `Agent Eval API composable must call ${apiPath}`,
   )
