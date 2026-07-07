@@ -6,7 +6,7 @@ from typing import Any
 from agno.tracing import setup_tracing
 from fastapi.encoders import jsonable_encoder
 
-from api.auth.permissions import assert_owned_resource
+from api.auth.ownership import assert_owned_resource
 from api.services.postgres_store import get_async_agno_postgres_db
 
 # Keep a single DB wrapper instance.

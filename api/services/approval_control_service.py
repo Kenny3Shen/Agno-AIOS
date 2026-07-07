@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from api.auth.permissions import scope_user_id
+from api.auth.claims import scope_user_id
 from api.services.postgres_store import get_async_agno_postgres_db
 
 ApprovalRecord = dict[str, Any]

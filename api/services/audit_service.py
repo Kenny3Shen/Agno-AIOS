@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 from fastapi import Request
 from loguru import logger
 
-from api.auth.actors import actor_id, actor_role
+from api.auth.claims import actor_id, actor_role
 from api.persistence.audit_logs import (
     ensure_audit_logs_table_async,
     insert_audit_log_async,

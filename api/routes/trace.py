@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
 
 from api.auth.models import User
-from api.auth.permissions import require_permission, scope_user_id
+from api.auth.claims import scope_user_id
+from api.auth.permissions import require_permission
 from api.services.tracing_service import list_traces, get_trace_detail
 
 

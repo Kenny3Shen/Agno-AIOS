@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from api.auth.permissions import actor_id
+from api.auth.claims import actor_id
 from api.persistence.agent_evals import (
     create_case_row_async,
     create_case_run_row_async,

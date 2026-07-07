@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.auth.models import User
-from api.auth.permissions import actor_id, require_permission, scope_user_id
+from api.auth.claims import actor_id, scope_user_id
+from api.auth.permissions import require_permission
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.knowledge_service import get_knowledge_base_lifecycle
 

@@ -34,7 +34,12 @@ FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth table
 
 ## 后端模块
 
-`api/auth/` 负责 FastAPI Users 集成、JWT auth、role 推导、permission 检查和资源归属检查。
+`api/auth/` 负责 FastAPI Users 集成、JWT auth、permission claims 和资源归属检查。当前分工：
+
+- `claims.py`：无 FastAPI dependency 的 role 推导、permission matrix、claims 展开和用户 scope helper，可被 schema、service 和测试直接导入。
+- `ownership.py`：资源归属检查，返回 HTTP 404 隐藏非本人资源。
+- `permissions.py`：FastAPI route dependency 边界，提供 `require_permission(...)` 并兼容导出 claims/ownership helper。
+- `users.py`、`router.py`、`schemas.py`、`database.py`、`models.py`：FastAPI Users manager、routers、Pydantic schemas、SQLAlchemy models 和 auth table bootstrap。
 
 `api/routes/` 负责 HTTP route 边界：
 
@@ -49,7 +54,7 @@ FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth table
 - `/api/audit/logs`：admin audit review。
 - `/api/os/*`：AgentOS control modules。
 
-`api/services/` 负责业务逻辑和持久化辅助层。`postgres_store.py` 集中管理 PostgreSQL 连接设置、schema 名称、Agno `AsyncPostgresDb` 构造和应用表创建。`security_run_runtime.py` 承担安全运营助手 Run runtime，集中 model、MCP、Skill、Knowledge、fallback 和流式事件编排；模型配置、prompt 文件、MCP TOML 读取和 Skill metadata/list/toggle 使用 awaitable file API，Skill zip install 这类批量 filesystem operation 通过线程隔离，避免阻塞 Chat stream 的事件循环。`chat_session_service.py` 负责 Chat Session persistence、session history、owner filtering 和 archive。`knowledge_service.py` 提供 async Knowledge Base lifecycle interface，runtime route 走 Agno async Knowledge APIs 和 async contents DB，内部集中 PgVector、reader、owner filtering、CRUD、search 和 status。`mcp_config_service.py` 集中 MCP service toggle 和 MCP upload 配置写入，只暴露 async mutation facade，TOML 文件读写使用 awaitable file API。`security_policy.py` 集中控制面 module permission、Scheduler 写权限和 policy audit event 记录。`url2md_service.py` 使用 async HTTP client 执行 URL collection。`tracing_service.py` 显式初始化 Agno tracing，并读取 Agno traces 与 spans，整理成前端需要的结构。
+`api/services/` 负责业务逻辑和持久化辅助层。`postgres_store.py` 集中管理 PostgreSQL 连接设置、schema 名称、Agno `AsyncPostgresDb` 构造和应用表创建。`security_run_runtime.py` 承担安全运营助手 Run runtime，集中 model、MCP、Skill、Knowledge、fallback 和流式事件编排；模型配置、prompt 文件和 Skill metadata/list/toggle 使用 awaitable file API，Skill zip install 这类批量 filesystem operation 通过线程隔离，避免阻塞 Chat stream 的事件循环。`chat_session_service.py` 负责 Chat Session persistence、session history、owner filtering 和 archive。`knowledge_service.py` 提供 async Knowledge Base lifecycle interface，runtime route 走 Agno async Knowledge APIs 和 async contents DB，内部集中 PgVector、reader、owner filtering、CRUD、search 和 status。`mcp_config_service.py` 集中 MCP service toggle 和 MCP upload 的同步配置 mutation，route 层用 `to_thread.run_sync` 隔离本地 JSON 文件 I/O。`security_policy.py` 只保留控制面 module permission map 和 policy audit event 记录；具体 route 写权限直接使用 `require_permission(...)`。`url2md_service.py` 使用 async HTTP client 执行 URL collection。`tracing_service.py` 显式初始化 Agno tracing，并读取 Agno traces 与 spans，整理成前端需要的结构。
 
 `api/mcp/` 负责集成 MCP runtime。`server.py` 构建主 FastMCP instance、挂载已启用的内置服务、用 token validation 包装 ASGI app，并支持 runtime refresh。`config.py` 读取和写入底层 MCP config，并存储 MCP tokens；上层配置 mutation 由 `api/services/mcp_config_service.py` 提供 module interface。
 
@@ -57,7 +62,7 @@ FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth table
 
 ## 前端模块
 
-前端入口是 `frontend/src/App.vue`。它负责 shell、认证布局、导航、sidebar 状态、当前模型展示、基于 role 的导航过滤和模块挂载。
+前端入口是 `frontend/src/App.vue`。它负责 shell、认证布局、导航、sidebar 状态、当前模型展示、基于后端 permission claims 的导航过滤和模块挂载；旧响应缺少 claims 时才回退到 role permission matrix。
 
 主要组件位于 `frontend/src/components/`：
 
@@ -70,7 +75,7 @@ FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth table
 - `Settings.vue`：runtime settings、model configuration 和 navigation tags。
 - `AgentOSControl.vue` 以及 dashboard/workflow components：控制面视图。
 
-状态和 API helpers 位于 `frontend/src/stores/`、`frontend/src/composables/` 和 `frontend/src/lib/`。前端 permission checks 只用于导航和控件可见性，不是安全边界。
+状态和 API helpers 位于 `frontend/src/stores/`、`frontend/src/composables/` 和 `frontend/src/lib/`。`frontend/src/lib/permissions.ts` 优先使用 `/api/auth/users/me` 返回的 `permissions` claims，只有后端旧响应缺少 claims 时才按 role fallback。前端 permission checks 只用于导航和控件可见性，不是安全边界。
 
 ## Chat 与 Agent Runtime
 

@@ -4,7 +4,8 @@ from typing import Any, cast
 from agno.session.agent import AgentSession
 from agno.session.team import TeamSession
 from agno.session.workflow import WorkflowSession
-from api.auth.permissions import actor_id, assert_owned_resource
+from api.auth.claims import actor_id
+from api.auth.ownership import assert_owned_resource
 from api.services.audit_service import record_audit_event_async
 from api.services.postgres_store import (
     coerce_json_value,

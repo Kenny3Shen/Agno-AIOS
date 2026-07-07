@@ -10,7 +10,7 @@ from agno.eval.agent_as_judge import AgentAsJudgeEval
 from agno.eval.performance import PerformanceEval
 from agno.eval.reliability import ReliabilityEval
 
-from api.auth.permissions import actor_id
+from api.auth.claims import actor_id
 from api.services import agent_eval_case_store as case_store
 from api.services.postgres_store import get_async_agno_postgres_db
 from api.services.security_run_runtime import (

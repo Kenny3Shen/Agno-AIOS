@@ -1,5 +1,9 @@
+import subprocess
+import sys
 from types import SimpleNamespace
-from api.auth.permissions import actor_role, has_permission, permission_claims, scope_user_id
+
+from api.auth.claims import actor_role, has_permission, permission_claims, scope_user_id
+import pytest
 
 
 def user(role: str = "user", is_superuser: bool = False):
@@ -87,3 +91,55 @@ def test_scope_user_id_allows_admin_requested_user_or_all_users():
 
     assert scope_user_id(admin, "u2", "session:read:any") == "u2"
     assert scope_user_id(admin, None, "session:read:any") is None
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    [
+        "api.auth.claims",
+        "api.auth.ownership",
+        "api.auth.schemas",
+        "api.services.agent_eval_case_store",
+        "api.services.agent_eval_runner",
+        "api.services.approval_control_service",
+        "api.services.audit_service",
+        "api.services.chat_session_service",
+        "api.services.os_control_service",
+        "api.services.security_policy",
+        "api.services.tracing_service",
+    ],
+)
+def test_claims_and_service_modules_do_not_import_fastapi_user_dependencies(module_name):
+    script = (
+        "import sys\n"
+        f"import {module_name}\n"
+        "print('api.auth.users' in sys.modules)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.strip() == "False"
+
+
+def test_permissions_module_keeps_compatibility_exports():
+    from api.auth.permissions import (
+        assert_owned_resource,
+        actor_id,
+        actor_role,
+        has_permission,
+        permission_claims,
+        scope_user_id,
+    )
+
+    actor = SimpleNamespace(id="u1", role="user", is_superuser=False)
+
+    assert actor_id(actor) == "u1"
+    assert actor_role(actor) == "user"
+    assert has_permission(actor, "session:read:own")
+    assert permission_claims(actor).role == "user"
+    assert scope_user_id(actor, "other", "session:read:any") == "u1"
+    assert_owned_resource(actor, owner_user_id="u1", resource_name="Session")

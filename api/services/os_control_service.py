@@ -12,7 +12,7 @@ from sqlalchemy import Column, DateTime, Float, MetaData, Table, Text, desc, fun
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.schema import CreateSchema
 
-from api.auth.permissions import actor_id, has_permission, scope_user_id
+from api.auth.claims import actor_id, has_permission, scope_user_id
 from api.services.approval_control_service import list_approvals_payload
 from api.services.chat_session_service import get_all_sessions_async
 from api.persistence.database import get_async_control_plane_engine

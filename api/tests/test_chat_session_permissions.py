@@ -1,8 +1,10 @@
+import subprocess
+import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
-from api.auth.permissions import assert_owned_resource
+from api.auth.ownership import assert_owned_resource
 from api.routes import chat
 from api.services import chat_session_service, security_run_runtime
 import pytest
@@ -33,6 +35,22 @@ def test_chat_request_does_not_accept_authoritative_user_id():
 
 def test_session_list_service_accepts_owner_filter():
     assert "owner_user_id" in chat_session_service.get_all_sessions_async.__annotations__ | {}
+
+
+def test_chat_session_service_does_not_import_fastapi_user_dependencies():
+    script = (
+        "import sys\n"
+        "import api.services.chat_session_service\n"
+        "print('api.auth.users' in sys.modules)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.strip() == "False"
 
 
 @pytest.mark.asyncio

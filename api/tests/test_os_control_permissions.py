@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
 from starlette.requests import Request
-from api.auth.permissions import has_permission
+from api.auth.claims import has_permission
 from api.routes import os_control
 from api.services import os_control_service
 import pytest

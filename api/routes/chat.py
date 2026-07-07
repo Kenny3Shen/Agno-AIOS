@@ -3,7 +3,9 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from api.auth.models import User
-from api.auth.permissions import actor_id, assert_owned_resource, has_permission, require_permission
+from api.auth.claims import actor_id, has_permission
+from api.auth.ownership import assert_owned_resource
+from api.auth.permissions import require_permission
 from api.services.chat_session_service import (
     archive_session,
     get_all_sessions_async,

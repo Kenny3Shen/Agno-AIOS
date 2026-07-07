@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy.dialects import postgresql
 
 from api.persistence import agent_evals as persistence
-from api.auth.permissions import has_permission
+from api.auth.claims import has_permission
 from api.persistence.agent_evals import (
     agent_eval_case_runs_table,
     agent_eval_cases_table,

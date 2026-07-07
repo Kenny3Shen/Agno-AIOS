@@ -2,7 +2,7 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
 import pytest
-from api.auth.permissions import has_permission
+from api.auth.claims import has_permission
 from api.routes import collect, cve, skills
 
 

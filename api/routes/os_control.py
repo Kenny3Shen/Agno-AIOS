@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from api.auth.permissions import actor_id, has_permission, require_permission
+from api.auth.claims import actor_id, has_permission
+from api.auth.permissions import require_permission
 from api.auth.models import User
 from api.auth.users import current_active_user
 from api.services.approval_control_service import (

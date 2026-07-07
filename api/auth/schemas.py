@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi_users import schemas
 from pydantic import computed_field
 
-from api.auth.permissions import permission_claims
+from api.auth.claims import permission_claims
 
 
 class UserRead(schemas.BaseUser[UUID]):

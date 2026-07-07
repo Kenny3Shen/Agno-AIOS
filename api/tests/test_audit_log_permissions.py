@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
 from starlette.requests import Request
-from api.auth.permissions import has_permission
+from api.auth.claims import has_permission
 from api.auth import router as auth_router
 from api.routes import audit
 from api.services import audit_service

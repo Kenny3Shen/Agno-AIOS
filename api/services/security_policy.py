@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import HTTPException, Request, status
 
-from api.auth.permissions import has_permission
+from api.auth.claims import has_permission
 from api.services.audit_service import audit_request_context, record_audit_event_async
 
 CONTROL_MODULE_PERMISSIONS = {
