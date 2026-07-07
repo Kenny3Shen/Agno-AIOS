@@ -5,13 +5,14 @@ import { fileURLToPath } from "node:url"
 import { createI18n } from "vue-i18n"
 import { enUS } from "./i18n/locales/en-US.ts"
 import { zhCN } from "./i18n/locales/zh-CN.ts"
-import { hasRolePermission, hasUserPermission, userRole } from "./lib/permissions.ts"
+import { hasRoleScope, hasUserScope, userRole } from "./lib/scopes.ts"
 import "./modules/shellNavigation.test.mjs"
 import "./modules/agentEvalsWorkbench.test.mjs"
 import "./modules/memoryControl.test.mjs"
 import "./modules/traceWorkbench.test.mjs"
 import "./modules/workflowBuilder.test.mjs"
 import "./modules/schedulerAgentOsApi.test.mjs"
+import "./modules/resourceVisibility.test.mjs"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const sourcePath = (relativePath) => join(root, relativePath)
@@ -43,7 +44,7 @@ const useApi = readSource("composables/useApi.ts")
 const apiClient = readOptionalSource("lib/apiClient.ts")
 const clipboard = readOptionalSource("lib/clipboard.ts")
 const authStoreSource = readOptionalSource("stores/auth.ts")
-const permissions = readOptionalSource("lib/permissions.ts")
+const scopes = readOptionalSource("lib/scopes.ts")
 const shellNavigation = readOptionalSource("modules/shellNavigation.ts")
 const shellBrand = readOptionalSource("modules/shellBrand.ts")
 
@@ -300,8 +301,8 @@ assert.match(
 
 assert.match(
   authStoreSource,
-  /hasUserPermission/,
-  "auth store must use server-issued permission claims through the shared helper",
+  /hasUserScope/,
+  "auth store must use server-issued scope claims through the shared helper",
 )
 
 assert.equal(
@@ -312,60 +313,66 @@ assert.equal(
 
 assert.match(
   authStoreSource,
-  /hasPermission = \(permission: string\)/,
-  "auth store must expose a reusable permission helper",
+  /hasScope = \(scope: string\)/,
+  "auth store must expose a reusable scope helper",
 )
 
 assert.match(
-  permissions,
+  scopes,
   /ROLE_SCOPES/,
   "frontend RBAC helper must keep a role scope fallback for unauthenticated shell state",
 )
 
 assert.equal(
-  hasUserPermission({ role: "guest", permissions: ["memories:write"] }, "memories:write"),
+  hasUserScope({ role: "guest", scopes: ["memories:write"] }, "memories:write"),
   true,
-  "permission claims from the backend must take precedence over the role fallback",
+  "scope claims from the backend must take precedence over the role fallback",
 )
 
 assert.equal(
-  hasUserPermission({ role: "user", permissions: ["sessions:read"] }, "memories:write"),
+  hasUserScope({ role: "user", scopes: ["sessions:read"] }, "memories:write"),
   false,
-  "missing permission claims must not be re-expanded from the user's role",
+  "missing scope claims must not be re-expanded from the user's role",
+)
+
+assert.equal(
+  hasUserScope({ role: "guest", permissions: ["agent_os:admin"] }, "config:write"),
+  false,
+  "legacy permissions compatibility claims must not grant frontend access",
 )
 
 assert.match(
-  permissions,
+  scopes,
   /"collect:write"/,
   "frontend RBAC helper must reflect write-only modules such as Collect",
 )
 
 assert.match(
-  permissions,
+  scopes,
   /evals:read/,
-  "frontend permissions must include AgentOS eval read scope",
+  "frontend scopes must include AgentOS eval read scope",
 )
 
 assert.match(
-  permissions,
+  scopes,
   /evals:write/,
-  "frontend permissions must include AgentOS eval write scope",
+  "frontend scopes must include AgentOS eval write scope",
 )
 
 assert.match(
-  permissions,
+  scopes,
   /evals:delete/,
-  "frontend permissions must include AgentOS eval delete scope for admin fallback",
+  "frontend scopes must include AgentOS eval delete scope for admin fallback",
 )
 
 assert.equal(
-  hasRolePermission("user", "memories:write"),
+  hasRoleScope("user", "memories:write"),
   true,
   "ordinary users must be able to update and delete their own memories",
 )
 
 assert.equal(
-  hasRolePermission("guest", "memories:write"),
+  hasRoleScope("guest", "memories:write"),
   false,
   "guest users must not be able to mutate memories",
 )
@@ -518,7 +525,7 @@ assert.match(
 assert.match(
   app,
   /canAccess:\s*canAccessNav/,
-  "App shell must pass permission filtering into persisted navigation group building",
+  "App shell must pass scope filtering into persisted navigation group building",
 )
 
 assertTextOrder(
@@ -1056,8 +1063,8 @@ assert.match(
 
 assert.match(
   skills,
-  /hasPermission\("skill:write"\)/,
-  "Skills page must check write permission before allowing skill toggles",
+  /hasScope\("skill:write"\)/,
+  "Skills page must check write scope before allowing skill toggles",
 )
 
 assert.match(
@@ -1074,8 +1081,8 @@ assert.match(
 
 assert.match(
   mcp,
-  /hasPermission\("mcp:write"\)/,
-  "MCP page must check write permission before allowing mutating actions",
+  /hasScope\("mcp:write"\)/,
+  "MCP page must check write scope before allowing mutating actions",
 )
 
 assert.match(
@@ -1086,8 +1093,8 @@ assert.match(
 
 assert.match(
   memoryControl,
-  /hasPermission\("memories:write"\)/,
-  "Memory page must check write permission before exposing memory mutations",
+  /hasScope\("memories:write"\)/,
+  "Memory page must check write scope before exposing memory mutations",
 )
 
 assert.match(
@@ -2428,8 +2435,8 @@ assert.match(
 
 assert.match(
   settings,
-  /hasPermission\("config:write"\)/,
-  "Settings page must check write permission before allowing configuration changes",
+  /hasScope\("config:write"\)/,
+  "Settings page must check write scope before allowing configuration changes",
 )
 
 assert.match(

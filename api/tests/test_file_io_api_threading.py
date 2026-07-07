@@ -113,7 +113,7 @@ async def test_skill_toggle_runs_file_io_off_event_loop() -> None:
         thread_calls.append(func.__name__)
         return func(*args)
 
-    def fake_set_skill_enabled(_skill_name: str, _enabled: bool) -> str:
+    def fake_set_skill_enabled(_skill_name: str, _enabled: bool, _user) -> str:
         return "triage"
 
     fake_set_skill_enabled.__name__ = "set_skill_enabled"

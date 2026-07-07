@@ -12,7 +12,7 @@ from sqlalchemy import Column, DateTime, Float, MetaData, Table, Text, desc, fun
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.schema import CreateSchema
 
-from api.auth.claims import has_permission, scope_user_id
+from api.auth.claims import has_scope, scope_user_id
 from api.services.approval_control_service import list_approvals_payload
 from api.services.chat_session_service import get_all_sessions_async
 from api.persistence.database import get_async_control_plane_engine
@@ -490,7 +490,7 @@ async def get_memory_payload(
                 "update_memory_on_run": True,
                 "enable_agentic_memory": False,
                 "enable_session_summaries": True,
-                "readonly": not (actor is not None and has_permission(actor, "memories:write")),
+                "readonly": not (actor is not None and has_scope(actor, "memories:write")),
             },
         }
     )

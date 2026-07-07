@@ -29,6 +29,18 @@
           </div>
           <div class="skill-upload-grid">
             <el-input v-model="uploadForm.name" :placeholder="t('skills.upload.namePlaceholder')" />
+            <label class="skill-visibility-field">
+              <span>{{ t('visibility.label') }}</span>
+              <el-radio-group v-model="uploadForm.visibility" size="small">
+                <el-radio-button
+                  v-for="option in resourceVisibilityOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ t(option.labelKey) }}
+                </el-radio-button>
+              </el-radio-group>
+            </label>
             <el-upload
               ref="skillUploadRef"
               v-model:file-list="skillFileList"
@@ -90,6 +102,9 @@
               <span class="status-pill" :class="skill.enabled ? 'ok' : 'off'">
                 {{ skill.enabled ? t('common.state.enabled') : t('common.state.disabled') }}
               </span>
+              <span class="status-pill" :class="skill.visibility === 'public' ? 'ok' : 'off'">
+                {{ t(`visibility.${skill.visibility}`) }}
+              </span>
             </div>
 
             <div class="skill-card-foot">
@@ -116,10 +131,20 @@
               <el-switch
                 :model-value="skill.enabled"
                 :loading="togglingSkill === skill.name"
-                :disabled="!canWriteSkills"
+                :disabled="!canWriteSkills || !skill.can_manage"
                 active-color="var(--ag-blue)"
                 @change="(val: string | number | boolean) => handleToggle(skill.name, Boolean(val))"
               />
+              <el-button
+                class="visibility-toggle"
+                size="small"
+                plain
+                :disabled="!canWriteSkills || !skill.can_manage"
+                :loading="togglingSkill === skill.name"
+                @click="handleVisibilityToggle(skill)"
+              >
+                {{ t(`visibility.${nextResourceVisibility(skill.visibility)}`) }}
+              </el-button>
             </div>
 
             <div v-if="skill.has_scripts && expandedSkills.has(skill.name)" class="skill-script-list">
@@ -148,14 +173,16 @@ import { ArrowDown, ArrowUp, Loading, FolderOpened, Document, UploadFilled } fro
 import { ElMessage } from 'element-plus'
 import type { UploadFile, UploadFiles, UploadInstance, UploadUserFile } from 'element-plus'
 import { useSkillsApi } from '../composables/useApi'
+import { nextResourceVisibility, resourceVisibilityOptions } from '../modules/resourceVisibility'
 import { useAuthStore } from '../stores/auth'
-import type { SkillInfo } from '../types'
+import type { ResourceVisibility, SkillInfo } from '../types'
 
 const {
   loading,
   fetchSkills: apiFetchSkills,
   toggleSkill: apiToggleSkill,
   uploadSkill,
+  updateSkillVisibility,
 } = useSkillsApi()
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -170,8 +197,9 @@ const skillFileList = ref<UploadUserFile[]>([])
 const selectedSkillArchive = ref<File | null>(null)
 const uploadForm = reactive({
   name: "",
+  visibility: "private" as ResourceVisibility,
 })
-const canWriteSkills = computed(() => authStore.hasPermission("skill:write"))
+const canWriteSkills = computed(() => authStore.hasScope("skill:write"))
 const enabledSkills = computed(() => skills.value.filter((skill) => skill.enabled).length)
 const totalScripts = computed(() => skills.value.reduce((sum, skill) => sum + skill.scripts.length, 0))
 const summaryMetrics = computed(() => [
@@ -235,6 +263,7 @@ const handleSkillFileExceed = () => {
 
 const resetSkillUpload = () => {
   uploadForm.name = ""
+  uploadForm.visibility = "private"
   selectedSkillArchive.value = null
   skillFileList.value = []
   skillUploadRef.value?.clearFiles()
@@ -258,6 +287,7 @@ const submitSkillUpload = async () => {
   try {
     await uploadSkill({
       name: uploadForm.name.trim(),
+      visibility: uploadForm.visibility,
       file: selectedSkillArchive.value,
     })
     resetSkillUpload()
@@ -268,6 +298,21 @@ const submitSkillUpload = async () => {
     ElMessage.error(t("skills.messages.uploadFailed"))
   } finally {
     submittingUpload.value = false
+  }
+}
+
+const handleVisibilityToggle = async (skill: SkillInfo) => {
+  if (!canWriteSkills.value || !skill.can_manage) return
+  const nextVisibility = nextResourceVisibility(skill.visibility)
+  togglingSkill.value = skill.name
+  try {
+    const result = await updateSkillVisibility(skill.name, nextVisibility)
+    skill.visibility = result.visibility
+    ElMessage.success(t("visibility.updated"))
+  } catch {
+    ElMessage.error(t("visibility.updateFailed"))
+  } finally {
+    togglingSkill.value = null
   }
 }
 
@@ -355,6 +400,18 @@ onMounted(() => {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.skill-visibility-field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.skill-visibility-field > span {
+  color: var(--ag-muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .skill-upload-grid :deep(.el-textarea) {

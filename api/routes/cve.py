@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Request
 
 from api.auth.claims import ADMIN_SCOPE
 from api.auth.models import User
-from api.auth.permissions import require_permission
+from api.auth.scopes import require_scope
 from api.models.schemas import CveSearchRequest
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.cve_service import search_cves
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/cve", tags=["CVE"])
 @router.post("/search")
 async def search_cve(
     request: CveSearchRequest,
-    _user: User = Depends(require_permission("cve:read")),
+    _user: User = Depends(require_scope("cve:read")),
 ) -> dict:
     """Search CVEs by ID and/or keyword with pagination"""
     try:
@@ -40,7 +40,7 @@ async def search_cve(
 @router.post("/update")
 async def update_cve_database(
     request: Request,
-    user: User = Depends(require_permission(ADMIN_SCOPE)),
+    user: User = Depends(require_scope(ADMIN_SCOPE)),
 ):
     """更新 CVE 数据库"""
     try:

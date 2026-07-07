@@ -40,13 +40,9 @@ ROLE_SCOPES: dict[Role, set[str]] = {
 
 
 @dataclass(frozen=True)
-class PermissionClaims:
+class ScopeClaims:
     role: Role
     scopes: list[str]
-
-    @property
-    def permissions(self) -> list[str]:
-        return list(self.scopes)
 
 
 def actor_id(user: Any) -> str:
@@ -69,7 +65,7 @@ def actor_scopes(user: Any) -> list[str]:
     return sorted(scopes)
 
 
-def has_permission(
+def has_scope(
     user: Any,
     scope: str,
     *,
@@ -85,9 +81,9 @@ def has_permission(
     )
 
 
-def permission_claims(user: Any) -> PermissionClaims:
+def scope_claims(user: Any) -> ScopeClaims:
     role = actor_role(user)
-    return PermissionClaims(
+    return ScopeClaims(
         role=role,
         scopes=actor_scopes(user),
     )
@@ -98,6 +94,6 @@ def scope_user_id(
     requested_user_id: str | None,
 ) -> str | None:
     requested = (requested_user_id or "").strip() or None
-    if actor is not None and has_permission(actor, ADMIN_SCOPE):
+    if actor is not None and has_scope(actor, ADMIN_SCOPE):
         return requested
     return actor_id(actor) if actor is not None else ""

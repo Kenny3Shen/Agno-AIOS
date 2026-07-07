@@ -2,7 +2,7 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
 import pytest
-from api.auth.claims import has_permission
+from api.auth.claims import has_scope
 from api.routes import collect, cve, skills
 
 
@@ -12,13 +12,13 @@ def user(role: str = "user"):
 
 def test_readonly_security_data_permissions_are_available_to_guest():
     guest = user("guest")
-    assert has_permission(guest, "cve:read")
-    assert not has_permission(guest, "collect:write")
+    assert has_scope(guest, "cve:read")
+    assert not has_scope(guest, "collect:write")
 
 
 def test_user_can_run_collect_but_guest_cannot():
-    assert has_permission(user("user"), "collect:write")
-    assert not has_permission(user("guest"), "collect:write")
+    assert has_scope(user("user"), "collect:write")
+    assert not has_scope(user("guest"), "collect:write")
 
 
 def route_dependency(router, endpoint_name: str):

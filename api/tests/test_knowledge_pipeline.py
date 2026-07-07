@@ -91,6 +91,14 @@ class StrictAsyncKnowledge:
             return result
         return self._search_results
 
+    async def apatch_content(self, content: Any):
+        self.calls.append(("apatch_content", content))
+        existing = self._content_by_id.get(content.id)
+        if existing is None:
+            return None
+        existing.metadata = {**getattr(existing, "metadata", {}), **(content.metadata or {})}
+        return {"id": content.id, "metadata": existing.metadata}
+
 
 @pytest.mark.parametrize(
     ("filename", "expected_strategy", "expected_reader"),
@@ -300,11 +308,13 @@ def test_status_exposes_supported_suffixes_and_search_type() -> None:
 
 
 def test_owner_visibility_hides_foreign_knowledge_content() -> None:
-    owned = SimpleNamespace(metadata={"user_id": "u1"})
-    foreign = SimpleNamespace(metadata={"user_id": "u2"})
+    owned = SimpleNamespace(metadata={"user_id": "u1", "visibility": "private"})
+    foreign = SimpleNamespace(metadata={"user_id": "u2", "visibility": "private"})
+    public = SimpleNamespace(metadata={"user_id": "u2", "visibility": "public"})
     legacy = SimpleNamespace(metadata={})
     assert knowledge_document_service.content_visible_to_owner(owned, "u1")
     assert not knowledge_document_service.content_visible_to_owner(foreign, "u1")
+    assert knowledge_document_service.content_visible_to_owner(public, "u1")
     assert not knowledge_document_service.content_visible_to_owner(legacy, "u1")
     assert knowledge_document_service.content_visible_to_owner(foreign, None)
 
@@ -350,8 +360,8 @@ def test_result_projection_uses_rerank_score_and_source_metadata() -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_documents_passes_owner_filter_to_vector_search() -> None:
-    captured: dict[str, object] = {}
+async def test_search_documents_merges_public_and_owner_private_filters() -> None:
+    calls: list[dict[str, object]] = []
 
     async def noop() -> None:
         return None
@@ -360,9 +370,13 @@ async def test_search_documents_passes_owner_filter_to_vector_search() -> None:
         return None
 
     async def search(*args, **kwargs):
-        captured["filters"] = kwargs.get("filters")
-        captured["max_results"] = kwargs.get("max_results")
-        captured["search_type"] = kwargs.get("search_type")
+        calls.append(
+            {
+                "filters": kwargs.get("filters"),
+                "max_results": kwargs.get("max_results"),
+                "search_type": kwargs.get("search_type"),
+            }
+        )
         return []
 
     knowledge = StrictAsyncKnowledge(search_callback=search)
@@ -376,29 +390,25 @@ async def test_search_documents_passes_owner_filter_to_vector_search() -> None:
             "policy", owner_user_id="u1"
         )
     assert results == []
-    assert captured["filters"] == {"user_id": "u1"}
-    assert knowledge.calls == [
-        (
-            "asearch",
-            ("policy",),
-            {
-                "filters": {"user_id": "u1"},
-                "max_results": captured["max_results"],
-                "search_type": captured["search_type"],
-            },
-        )
+    assert [call["filters"] for call in calls] == [
+        {"visibility": "public"},
+        {"user_id": "u1"},
     ]
 
 
 @pytest.mark.asyncio
-async def test_lifecycle_search_uses_one_interface_for_owner_filter() -> None:
-    captured: dict[str, object] = {}
+async def test_lifecycle_search_uses_public_and_private_owner_filters() -> None:
+    calls: list[dict[str, object]] = []
 
     async def search(*args, **kwargs):
-        captured["query"] = args[0]
-        captured["filters"] = kwargs.get("filters")
-        captured["max_results"] = kwargs.get("max_results")
-        captured["search_type"] = kwargs.get("search_type")
+        calls.append(
+            {
+                "query": args[0],
+                "filters": kwargs.get("filters"),
+                "max_results": kwargs.get("max_results"),
+                "search_type": kwargs.get("search_type"),
+            }
+        )
         return []
 
     knowledge = StrictAsyncKnowledge(search_callback=search)
@@ -414,20 +424,12 @@ async def test_lifecycle_search_uses_one_interface_for_owner_filter() -> None:
         "policy", search_type="hybrid", owner_user_id="u1"
     )
     assert results == []
-    assert captured["query"] == "policy"
-    assert captured["filters"] == {"user_id": "u1"}
-    assert captured["search_type"] == "hybrid"
-    assert knowledge.calls == [
-        (
-            "asearch",
-            ("policy",),
-            {
-                "filters": {"user_id": "u1"},
-                "max_results": captured["max_results"],
-                "search_type": "hybrid",
-            },
-        )
+    assert [call["query"] for call in calls] == ["policy", "policy"]
+    assert [call["filters"] for call in calls] == [
+        {"visibility": "public"},
+        {"user_id": "u1"},
     ]
+    assert [call["search_type"] for call in calls] == ["hybrid", "hybrid"]
 
 
 @pytest.mark.asyncio
@@ -493,6 +495,36 @@ async def test_add_file_document_uses_async_insert_and_reload(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_update_document_visibility_uses_agno_patch_content() -> None:
+    content_row = SimpleNamespace(
+        id="content-visibility",
+        name="Runbook",
+        metadata={"user_id": "u1", "visibility": "private", "source": "manual"},
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(content_by_id={"content-visibility": content_row})
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_by_id_async=lambda _content_id: content_row,
+        )
+    )
+
+    result = await lifecycle.update_document_visibility_async(
+        "content-visibility",
+        "public",
+        SimpleNamespace(id="u1", role="user", is_superuser=False),
+    )
+
+    assert result is not None
+    assert result["visibility"] == "public"
+    assert content_row.metadata["visibility"] == "public"
+    assert knowledge.calls[-1][0] == "apatch_content"
+
+
+@pytest.mark.asyncio
 async def test_list_documents_uses_contents_db_without_runtime() -> None:
     content_row = SimpleNamespace(
         id="content-3",
@@ -529,6 +561,8 @@ async def test_list_documents_uses_contents_db_without_runtime() -> None:
             "source": "/kb/runbook.md",
             "chunks": 4,
             "created_at": "1970-01-01T00:00:00+00:00",
+            "visibility": "private",
+            "owner_user_id": "u1",
             "metadata": {
                 "user_id": "u1",
                 "source": "/kb/runbook.md",

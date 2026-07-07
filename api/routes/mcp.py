@@ -5,15 +5,18 @@ from anyio import to_thread
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from api.auth.claims import actor_id
 from api.auth.models import User
-from api.auth.permissions import require_permission
+from api.auth.scopes import require_scope
 from api.services.audit_service import (
     audit_request_context,
     record_audit_event_async,
 )
 from api.services.mcp_config_service import (
+    apply_mcp_server_visibility,
     apply_mcp_upload,
     apply_service_toggle,
+    visible_mcp_servers,
 )
 from api.mcp.config import (
     MCP_CONFIG_FILE,
@@ -48,20 +51,27 @@ class McpUploadRequest(BaseModel):
     description: str = ""
     manifest: str = ""
     enabled: bool = True
+    visibility: str = "private"
 
 
 class McpUploadResponse(BaseModel):
     success: bool
     name: str
     kind: str
+    visibility: str = "private"
     restart_required: bool = True
 
 
+class McpVisibilityRequest(BaseModel):
+    visibility: str
+
+
 @router.get("/config")
-def get_config(_user: User = Depends(require_permission("mcp:read"))) -> dict[str, Any]:
+def get_config(user: User = Depends(require_scope("mcp:read"))) -> dict[str, Any]:
     data = read_mcp_config()
     return {
         "services": services_from_config(data),
+        "mcp_servers": visible_mcp_servers(data.get("mcp_servers", []), user),
         "control_mode": "integrated",
         "fastmcp": "in-process",
         "mcp_url": "/mcp/",
@@ -74,7 +84,7 @@ def get_config(_user: User = Depends(require_permission("mcp:read"))) -> dict[st
 async def update_config(
     request: Request,
     body: ServiceToggle,
-    user: User = Depends(require_permission("mcp:write")),
+    user: User = Depends(require_scope("mcp:write")),
 ):
     change = await to_thread.run_sync(apply_service_toggle, body.id, body.enabled)
     await record_audit_event_async(
@@ -89,7 +99,7 @@ async def update_config(
 
 
 @router.get("/tokens")
-async def get_tokens(_user: User = Depends(require_permission("mcp:read"))):
+async def get_tokens(_user: User = Depends(require_scope("mcp:read"))):
     return await list_tokens()
 
 
@@ -97,7 +107,7 @@ async def get_tokens(_user: User = Depends(require_permission("mcp:read"))):
 async def issue_token(
     request: Request,
     body: TokenIssue,
-    user: User = Depends(require_permission("mcp:write")),
+    user: User = Depends(require_scope("mcp:write")),
 ):
     expires_in = int(body.expires_in)
     if expires_in < 0:
@@ -124,7 +134,7 @@ async def issue_token(
 async def remove_token(
     request: Request,
     body: TokenDelete,
-    user: User = Depends(require_permission("mcp:write")),
+    user: User = Depends(require_scope("mcp:write")),
 ):
     deleted = await delete_token(body.id, body.token)
     if not deleted:
@@ -143,7 +153,7 @@ async def remove_token(
 async def upload_mcp(
     request: Request,
     body: McpUploadRequest,
-    user: User = Depends(require_permission("mcp:write")),
+    user: User = Depends(require_scope("mcp:write")),
 ):
     """上传 MCP manifest。"""
     change = await to_thread.run_sync(
@@ -153,6 +163,8 @@ async def upload_mcp(
             description=body.description,
             manifest=body.manifest,
             enabled=body.enabled,
+            visibility=body.visibility,
+            owner_user_id=actor_id(user),
         )
     )
     await record_audit_event_async(
@@ -164,3 +176,29 @@ async def upload_mcp(
         **audit_request_context(request),
     )
     return McpUploadResponse(**change.response)
+
+
+@router.put("/servers/{server_name}/visibility")
+async def update_mcp_server_visibility(
+    request: Request,
+    server_name: str,
+    body: McpVisibilityRequest,
+    user: User = Depends(require_scope("mcp:write")),
+):
+    change = await to_thread.run_sync(
+        partial(
+            apply_mcp_server_visibility,
+            server_name,
+            body.visibility,
+            user,
+        )
+    )
+    await record_audit_event_async(
+        user,
+        action=change.action,
+        resource_type=change.resource_type,
+        resource_id=change.resource_id,
+        metadata=change.metadata,
+        **audit_request_context(request),
+    )
+    return change.response

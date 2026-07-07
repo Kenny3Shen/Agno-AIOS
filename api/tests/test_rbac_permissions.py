@@ -10,8 +10,8 @@ from agno.os.middleware.jwt import JWTMiddleware
 from api.auth import claims
 from api.auth.claims import (
     actor_role,
-    has_permission,
-    permission_claims,
+    has_scope,
+    scope_claims,
     scope_user_id,
 )
 
@@ -26,16 +26,15 @@ def test_superuser_is_admin():
     actor = user("guest", is_superuser=True)
 
     assert actor_role(actor) == "admin"
-    assert has_permission(actor, ADMIN_SCOPE)
-    assert has_permission(actor, "traces:read")
+    assert has_scope(actor, ADMIN_SCOPE)
+    assert has_scope(actor, "traces:read")
 
 
 def test_admin_claims_use_agentos_admin_scope():
-    claims = permission_claims(user("guest", is_superuser=True))
+    claims = scope_claims(user("guest", is_superuser=True))
 
     assert claims.role == "admin"
     assert claims.scopes == [ADMIN_SCOPE]
-    assert claims.permissions == [ADMIN_SCOPE]
 
 
 def test_user_scopes_use_agentos_resource_names():
@@ -58,7 +57,7 @@ def test_user_scopes_use_agentos_resource_names():
         "config:read",
         "evals:read",
     ):
-        assert has_permission(actor, scope), scope
+        assert has_scope(actor, scope), scope
 
     for scope in (
         "session:read:own",
@@ -70,22 +69,22 @@ def test_user_scopes_use_agentos_resource_names():
         "mcp:write",
         ADMIN_SCOPE,
     ):
-        assert not has_permission(actor, scope), scope
+        assert not has_scope(actor, scope), scope
 
 
 def test_guest_scopes_are_read_only():
     actor = user("guest")
 
-    assert has_permission(actor, "sessions:read")
-    assert has_permission(actor, "traces:read")
-    assert has_permission(actor, "memories:read")
-    assert has_permission(actor, "metrics:read")
-    assert has_permission(actor, "cve:read")
-    assert has_permission(actor, "knowledge:read")
-    assert not has_permission(actor, "sessions:write")
-    assert not has_permission(actor, "memories:write")
-    assert not has_permission(actor, "knowledge:write")
-    assert not has_permission(actor, "evals:read")
+    assert has_scope(actor, "sessions:read")
+    assert has_scope(actor, "traces:read")
+    assert has_scope(actor, "memories:read")
+    assert has_scope(actor, "metrics:read")
+    assert has_scope(actor, "cve:read")
+    assert has_scope(actor, "knowledge:read")
+    assert not has_scope(actor, "sessions:write")
+    assert not has_scope(actor, "memories:write")
+    assert not has_scope(actor, "knowledge:write")
+    assert not has_scope(actor, "evals:read")
 
 
 def test_evals_permissions_are_role_scoped():
@@ -93,26 +92,27 @@ def test_evals_permissions_are_role_scoped():
     normal_user = user("user")
     guest = user("guest")
 
-    assert has_permission(admin, "evals:read")
-    assert has_permission(admin, "evals:write")
-    assert has_permission(admin, "evals:delete")
-    assert has_permission(normal_user, "evals:read")
-    assert not has_permission(normal_user, "evals:write")
-    assert not has_permission(normal_user, "evals:delete")
-    assert not has_permission(guest, "evals:read")
+    assert has_scope(admin, "evals:read")
+    assert has_scope(admin, "evals:write")
+    assert has_scope(admin, "evals:delete")
+    assert has_scope(normal_user, "evals:read")
+    assert not has_scope(normal_user, "evals:write")
+    assert not has_scope(normal_user, "evals:delete")
+    assert not has_scope(guest, "evals:read")
 
 
-def test_permission_claims_are_expanded_for_frontend_consumers():
-    claims = permission_claims(user("user"))
+def test_scope_claims_are_expanded_as_agentos_scopes():
+    user_claims = scope_claims(user("user"))
 
-    assert claims.role == "user"
-    assert "sessions:read" in claims.permissions
-    assert "evals:read" in claims.permissions
-    assert "session:read:own" not in claims.permissions
-    assert "agent_eval:read" not in claims.permissions
+    assert user_claims.role == "user"
+    assert "sessions:read" in user_claims.scopes
+    assert "evals:read" in user_claims.scopes
+    assert "session:read:own" not in user_claims.scopes
+    assert "agent_eval:read" not in user_claims.scopes
+    assert not hasattr(user_claims, "permissions")
 
 
-def test_user_read_serializes_scope_claims_without_recursion():
+def test_user_read_serializes_scopes_without_permissions_alias():
     from api.auth.schemas import UserRead
 
     payload = UserRead(
@@ -125,7 +125,7 @@ def test_user_read_serializes_scope_claims_without_recursion():
     ).model_dump()
 
     assert payload["scopes"] == [ADMIN_SCOPE]
-    assert payload["permissions"] == [ADMIN_SCOPE]
+    assert "permissions" not in payload
 
 
 def test_scope_user_id_uses_actor_for_ordinary_users():

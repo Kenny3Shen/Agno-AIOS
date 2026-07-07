@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Request
 
 from api.auth.models import User
-from api.auth.permissions import require_permission
+from api.auth.scopes import require_scope
 from api.models.schemas import Url2MdRequest
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.url2md_service import fetch_and_parse_url
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/url2md", tags=["URL2MD"])
 async def parse_url_to_markdown(
     request_ctx: Request,
     request: Url2MdRequest,
-    user: User = Depends(require_permission("collect:write")),
+    user: User = Depends(require_scope("collect:write")),
 ) -> dict:
     """Parse the content of a given URL and convert it to Markdown format."""
     try:

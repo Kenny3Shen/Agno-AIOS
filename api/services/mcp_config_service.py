@@ -5,6 +5,7 @@ from typing import Annotated, Any
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
+from api.auth.visibility import can_manage_resource, can_read_resource, normalize_visibility
 from api.mcp.config import (
     SERVICE_IDS,
     normalize_mcp_servers,
@@ -105,12 +106,19 @@ def apply_mcp_upload(
     description: str = "",
     manifest: str = "",
     enabled: bool = True,
+    visibility: str = "private",
+    owner_user_id: str | None = None,
 ) -> McpConfigChange:
     normalized_name = name.strip()
     if not normalized_name:
         raise HTTPException(status_code=400, detail="name 不能为空")
     normalized_description = description.strip()
+    try:
+        normalized_visibility = normalize_visibility(visibility, strict=True)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     kind, normalized_manifest = _parse_mcp_manifest(manifest)
+    normalized_owner = (owner_user_id or "").strip()
 
     data = read_mcp_config()
     servers = normalize_mcp_servers(data.get("mcp_servers", []))
@@ -122,6 +130,8 @@ def apply_mcp_upload(
             "description": normalized_description,
             "kind": kind,
             "enabled": enabled,
+            "visibility": normalized_visibility,
+            "owner_user_id": normalized_owner,
             "manifest": normalized_manifest,
         }
     )
@@ -133,6 +143,7 @@ def apply_mcp_upload(
             "success": True,
             "name": normalized_name,
             "kind": kind,
+            "visibility": normalized_visibility,
             "restart_required": True,
         },
         action="mcp.upload",
@@ -141,5 +152,57 @@ def apply_mcp_upload(
         metadata={
             "kind": kind,
             "has_manifest": bool(normalized_manifest),
+            "visibility": normalized_visibility,
         },
     )
+
+
+def visible_mcp_servers(entries: Any, user: Any) -> list[dict[str, Any]]:
+    visible_servers: list[dict[str, Any]] = []
+    for entry in normalize_mcp_servers(entries):
+        if not can_read_resource(user, entry):
+            continue
+        visible_servers.append(
+            {
+                **entry,
+                "can_manage": can_manage_resource(user, entry),
+            }
+        )
+    return visible_servers
+
+
+def apply_mcp_server_visibility(
+    name: str,
+    visibility: str,
+    user: Any,
+) -> McpConfigChange:
+    normalized_name = name.strip()
+    if not normalized_name:
+        raise HTTPException(status_code=400, detail="name 不能为空")
+    try:
+        normalized_visibility = normalize_visibility(visibility, strict=True)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    data = read_mcp_config()
+    servers = normalize_mcp_servers(data.get("mcp_servers", []))
+    for entry in servers:
+        if entry["name"] != normalized_name:
+            continue
+        if not can_manage_resource(user, entry):
+            raise HTTPException(status_code=403, detail="MCP server is not manageable")
+        entry["visibility"] = normalized_visibility
+        data["mcp_servers"] = servers
+        write_mcp_config(data)
+        return McpConfigChange(
+            response={
+                "success": True,
+                "name": normalized_name,
+                "visibility": normalized_visibility,
+            },
+            action="mcp.visibility_update",
+            resource_type="mcp",
+            resource_id=normalized_name,
+            metadata={"visibility": normalized_visibility},
+        )
+    raise HTTPException(status_code=404, detail="MCP server not found")

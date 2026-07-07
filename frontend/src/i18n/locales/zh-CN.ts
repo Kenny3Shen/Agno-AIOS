@@ -115,6 +115,13 @@ export const zhCN = {
       ready: "Ready",
     },
   },
+  visibility: {
+    label: "可见性",
+    private: "私有",
+    public: "公开",
+    updated: "可见性已更新",
+    updateFailed: "可见性更新失败",
+  },
   auth: {
     entryAria: "T.A.I.S auth entry",
     briefAria: "Platform entry information",
@@ -491,7 +498,11 @@ export const zhCN = {
     },
     tabs: {
       services: "服务能力",
+      servers: "自定义服务",
       tokens: "访问 Token",
+    },
+    servers: {
+      empty: "暂无自定义 MCP 服务",
     },
     loading: "加载中...",
     count: "{count} 个",

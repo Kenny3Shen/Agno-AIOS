@@ -328,8 +328,8 @@ const filters = reactive({
 const loading = ref(false)
 const error = ref<string | null>(null)
 
-const canWrite = computed(() => authStore.hasPermission("evals:write"))
-const canRun = computed(() => authStore.hasPermission("evals:write"))
+const canWrite = computed(() => authStore.hasScope("evals:write"))
+const canRun = computed(() => authStore.hasScope("evals:write"))
 const selectedSuiteId = computed(() => filters.suiteId !== "all" ? filters.suiteId : "")
 const suiteNameById = computed(() => new Map(suites.value.map((suite) => [suite.id, suite.name])))
 

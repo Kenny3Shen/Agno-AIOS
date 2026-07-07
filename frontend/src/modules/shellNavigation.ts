@@ -69,7 +69,7 @@ export type WorkspaceSignal = {
   value: string | number
 }
 
-export const navPermissions: Partial<Record<ModuleNavId, string>> = {
+export const navScopes: Partial<Record<ModuleNavId, string>> = {
   chat: "sessions:write",
   skills: "skill:read",
   mcp: "mcp:read",
@@ -104,12 +104,12 @@ export const securityDataNavIds = new Set<NavId>(["cve", "collect"])
 export const canAccessShellNav = (
   id: NavId,
   availableNavIds: Set<NavId>,
-  hasPermission: (permission: string) => boolean,
+  hasScope: (scope: string) => boolean,
 ) => {
   if (!availableNavIds.has(id)) return false
   if (id === "home" || id === "dashboard") return true
-  const permission = navPermissions[id]
-  return permission ? hasPermission(permission) : true
+  const scope = navScopes[id]
+  return scope ? hasScope(scope) : true
 }
 
 export const splitPrimaryShellNavItems = (items: NavItem[]) => {

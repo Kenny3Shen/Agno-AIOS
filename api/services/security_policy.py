@@ -5,10 +5,10 @@ from typing import Any
 
 from fastapi import HTTPException, Request, status
 
-from api.auth.claims import has_permission
+from api.auth.claims import has_scope
 from api.services.audit_service import audit_request_context, record_audit_event_async
 
-CONTROL_MODULE_PERMISSIONS = {
+CONTROL_MODULE_SCOPES = {
     "sessions": "sessions:read",
     "memory": "memories:read",
     "metrics": "metrics:read",
@@ -29,11 +29,11 @@ class PolicyAuditEvent:
 
 def require_control_module_access(module: str, actor: Any) -> None:
     try:
-        permission = CONTROL_MODULE_PERMISSIONS[module]
+        scope = CONTROL_MODULE_SCOPES[module]
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Unsupported control module: {module}") from exc
 
-    if not has_permission(actor, permission):
+    if not has_scope(actor, scope):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="权限不足")
 
 

@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
 from starlette.requests import Request
-from api.auth.claims import has_permission
+from api.auth.claims import has_scope
 from api.auth import router as auth_router
 from api.routes import audit
 from api.services import audit_service
@@ -29,8 +29,8 @@ def test_audit_route_rejects_non_admin_reader():
 
 
 def test_non_admin_cannot_read_audit_logs():
-    assert not has_permission(actor("u1"), "audit:read")
-    assert not has_permission(actor("g1", "guest"), "audit:read")
+    assert not has_scope(actor("u1"), "audit:read")
+    assert not has_scope(actor("g1", "guest"), "audit:read")
 
 
 def test_request_context_helper_extracts_ip_and_user_agent():

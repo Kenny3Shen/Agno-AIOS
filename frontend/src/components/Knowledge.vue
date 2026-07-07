@@ -69,6 +69,18 @@
                   <span>{{ t('knowledge.upload.sourceLabel') }}</span>
                   <el-input v-model="browserForm.source" placeholder="upload" clearable />
                 </label>
+                <label class="knowledge-field">
+                  <span>{{ t('visibility.label') }}</span>
+                  <el-radio-group v-model="browserForm.visibility" size="small">
+                    <el-radio-button
+                      v-for="option in resourceVisibilityOptions"
+                      :key="option.value"
+                      :value="option.value"
+                    >
+                      {{ t(option.labelKey) }}
+                    </el-radio-button>
+                  </el-radio-group>
+                </label>
                 <div class="reader-auto-note">
                   <strong>{{ t('knowledge.labels.reader') }}</strong>
                   <span>{{ detectedReaderLabel }}</span>
@@ -96,6 +108,18 @@
               <label class="knowledge-field">
                 <span>{{ t('knowledge.upload.sourceLabel') }}</span>
                 <el-input v-model="textForm.source" :placeholder="t('knowledge.upload.sourceManualPlaceholder')" clearable />
+              </label>
+              <label class="knowledge-field">
+                <span>{{ t('visibility.label') }}</span>
+                <el-radio-group v-model="textForm.visibility" size="small">
+                  <el-radio-button
+                    v-for="option in resourceVisibilityOptions"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ t(option.labelKey) }}
+                  </el-radio-button>
+                </el-radio-group>
               </label>
               <label class="knowledge-field text-import-content">
                 <span>{{ t('knowledge.upload.contentLabel') }}</span>
@@ -130,6 +154,18 @@
               <label class="knowledge-field">
                 <span>{{ t('knowledge.upload.titleLabel') }}</span>
                 <el-input v-model="pathForm.title" :placeholder="t('knowledge.upload.optionalPlaceholder')" clearable />
+              </label>
+              <label class="knowledge-field">
+                <span>{{ t('visibility.label') }}</span>
+                <el-radio-group v-model="pathForm.visibility" size="small">
+                  <el-radio-button
+                    v-for="option in resourceVisibilityOptions"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ t(option.labelKey) }}
+                  </el-radio-button>
+                </el-radio-group>
               </label>
               <div class="form-action-row path-action">
                 <el-button
@@ -300,6 +336,9 @@
           </div>
           <div class="document-cell" role="cell" :data-label="t('knowledge.documents.columns.source')">
             <span class="source-text" :title="row.source">{{ row.source || t('knowledge.labels.manualSource') }}</span>
+            <span class="status-badge" :class="row.visibility === 'public' ? 'ready' : 'parsing'">
+              {{ t(`visibility.${row.visibility || 'private'}`) }}
+            </span>
           </div>
           <div class="document-actions" role="cell" :data-label="t('knowledge.documents.columns.actions')">
             <div class="document-action-buttons">
@@ -316,6 +355,17 @@
               <el-tooltip :content="t('knowledge.documents.metadata')" placement="top">
                 <el-button text class="cursor-pointer" :aria-label="t('knowledge.documents.metadataLabel', { title: row.title })" @click="openMetadata(row)">
                   <el-icon><Tickets /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip :content="t('visibility.label')" placement="top">
+                <el-button
+                  text
+                  class="cursor-pointer visibility-toggle"
+                  :disabled="!row.can_manage"
+                  :aria-label="t('visibility.label')"
+                  @click="toggleDocumentVisibility(row)"
+                >
+                  {{ t(`visibility.${nextResourceVisibility(row.visibility || 'private')}`) }}
                 </el-button>
               </el-tooltip>
               <el-tooltip :content="t('knowledge.documents.delete')" placement="top">
@@ -536,7 +586,8 @@ import {
   View,
 } from "@element-plus/icons-vue"
 import { useKnowledgeApi } from "../composables/useApi"
-import type { KnowledgeDocument, KnowledgeSearchResult, KnowledgeStatus } from "../types"
+import { nextResourceVisibility, resourceVisibilityOptions } from "../modules/resourceVisibility"
+import type { KnowledgeDocument, KnowledgeSearchResult, KnowledgeStatus, ResourceVisibility } from "../types"
 
 type IngestTab = "upload" | "text" | "path"
 type IngestStage = "uploading" | "parsing" | "chunking" | "embedding" | "completed"
@@ -581,17 +632,20 @@ const ingestTask = reactive<{
 const browserForm = reactive({
   title: "",
   source: "upload",
+  visibility: "private" as ResourceVisibility,
 })
 
 const textForm = reactive({
   title: "",
   source: "manual",
   content: "",
+  visibility: "private" as ResourceVisibility,
 })
 
 const pathForm = reactive({
   path: "",
   title: "",
+  visibility: "private" as ResourceVisibility,
 })
 
 const searchForm = reactive({
@@ -621,6 +675,7 @@ const {
   fetchKnowledge,
   addTextDocument,
   addFileDocument,
+  updateKnowledgeDocumentVisibility,
   deleteKnowledgeDocument,
   clearKnowledge,
   searchKnowledge,
@@ -841,6 +896,7 @@ const handleBrowserFileExceed = () => {
 const resetBrowserUpload = () => {
   browserForm.title = ""
   browserForm.source = "upload"
+  browserForm.visibility = "private"
   selectedBrowserFile.value = null
   browserFileList.value = []
   browserUploadRef.value?.clearFiles()
@@ -904,6 +960,7 @@ const submitBrowserUpload = async () => {
         title: browserForm.title.trim() || stripExtension(file.name),
         content,
         source: browserForm.source.trim() || `upload:${file.name}`,
+        visibility: browserForm.visibility,
         metadata: {
           file_name: file.name,
           upload_mode: "browser",
@@ -932,11 +989,13 @@ const submitTextDocument = async () => {
         title: textForm.title.trim(),
         content: textForm.content.trim(),
         source: textForm.source.trim() || "manual",
+        visibility: textForm.visibility,
         metadata: { input_mode: "manual" },
       })
       textForm.title = ""
       textForm.source = "manual"
       textForm.content = ""
+      textForm.visibility = "private"
     }, retry)
   } finally {
     savingText.value = false
@@ -955,12 +1014,28 @@ const submitPathDocument = async () => {
       await addFileDocument({
         path: pathForm.path.trim(),
         title: pathForm.title.trim() || null,
+        visibility: pathForm.visibility,
       })
       pathForm.path = ""
       pathForm.title = ""
+      pathForm.visibility = "private"
     }, retry)
   } finally {
     savingPath.value = false
+  }
+}
+
+const toggleDocumentVisibility = async (doc: KnowledgeDocument) => {
+  if (!doc.can_manage) return
+  const currentVisibility = doc.visibility || "private"
+  const nextVisibility = nextResourceVisibility(currentVisibility)
+  try {
+    const updated = await updateKnowledgeDocumentVisibility(doc.id, nextVisibility)
+    doc.visibility = updated.visibility || nextVisibility
+    doc.metadata = updated.metadata || doc.metadata
+    ElMessage.success(t("visibility.updated"))
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : t("visibility.updateFailed"))
   }
 }
 

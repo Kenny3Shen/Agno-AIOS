@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, cast
 
 from anyio import Path as AsyncPath
+from agno.knowledge.content import Content
 from agno.knowledge.document import Document
 from agno.knowledge.embedder.sentence_transformer import SentenceTransformerEmbedder
 from agno.knowledge.knowledge import Knowledge
@@ -16,6 +17,7 @@ from agno.vectordb.search import SearchType
 from sqlalchemy import Column, MetaData, Table, Text, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 
+from api.auth.visibility import can_manage_resource, normalize_visibility
 from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
 from api.services.postgres_store import (
@@ -513,18 +515,20 @@ class KnowledgeBaseLifecycle:
         source: str = "manual",
         metadata: dict[str, Any] | None = None,
         owner_user_id: str | None = None,
+        visibility: str = "private",
     ) -> dict[str, Any]:
         clean_title = title.strip() or "未命名知识"
         clean_content = content.strip()
         if not clean_content:
             raise ValueError("知识内容不能为空")
+        normalized_visibility = normalize_visibility(visibility, strict=True)
 
         base_metadata = _safe_metadata(metadata)
         filename = str(base_metadata.get("file_name") or clean_title)
         profile = knowledge_profile_for_filename(filename)
         safe_metadata = {
             **base_metadata,
-            **_owner_metadata(owner_user_id),
+            **_owner_metadata(owner_user_id, normalized_visibility),
             "title": clean_title,
             "source": source.strip() or "manual",
             "file_type": Path(filename).suffix.lower() or "text",
@@ -560,16 +564,18 @@ class KnowledgeBaseLifecycle:
         path: str,
         title: str | None = None,
         owner_user_id: str | None = None,
+        visibility: str = "private",
     ) -> dict[str, Any]:
         file_path = await _resolve_existing_file_async(path)
         if file_path.suffix.lower() not in SUPPORTED_FILE_SUFFIXES:
             supported = ", ".join(SUPPORTED_FILE_SUFFIXES)
             raise ValueError(f"当前知识库支持的文件后缀: {supported}")
+        normalized_visibility = normalize_visibility(visibility, strict=True)
 
         clean_title = (title or file_path.stem).strip() or file_path.stem
         profile = knowledge_profile_for_filename(file_path.name)
         metadata = {
-            **_owner_metadata(owner_user_id),
+            **_owner_metadata(owner_user_id, normalized_visibility),
             "title": clean_title,
             "source": str(file_path),
             "file_path": str(file_path),
@@ -633,6 +639,29 @@ class KnowledgeBaseLifecycle:
         await self._delete_content_async(None, doc_id)
         return True
 
+    async def update_document_visibility_async(
+        self,
+        doc_id: str,
+        visibility: str,
+        user: Any,
+    ) -> dict[str, Any] | None:
+        await self._ensure_contents_storage_async()
+        content = await self._knowledge_content_by_id_async(doc_id)
+        if content is None:
+            return None
+        metadata = _safe_metadata(getattr(content, "metadata", None))
+        if not can_manage_resource(user, metadata):
+            return None
+        normalized_visibility = normalize_visibility(visibility, strict=True)
+        knowledge = await self._async_knowledge_async()
+        patched = await knowledge.apatch_content(
+            Content(id=doc_id, metadata={"visibility": normalized_visibility})
+        )
+        if patched is None:
+            return None
+        content.metadata = {**metadata, "visibility": normalized_visibility}
+        return _content_to_document(content)
+
     async def clear_knowledge_base_async(
         self,
         owner_user_id: str | None = None,
@@ -665,14 +694,45 @@ class KnowledgeBaseLifecycle:
             rerank_candidate_multiplier=settings.rerank_candidate_multiplier,
             rerank_min_candidates=settings.rerank_min_candidates,
         )
-        documents = await knowledge.asearch(
-            clean_query,
-            max_results=retrieval_limit,
-            filters=_owner_metadata(owner_user_id) or None,
-            search_type=effective_search_type.value,
-        )
+        clean_owner = (owner_user_id or "").strip()
+        if (owner_user_id or "").strip():
+            documents = []
+            for filters in (
+                {"visibility": "public"},
+                {"user_id": clean_owner},
+            ):
+                documents.extend(
+                    await knowledge.asearch(
+                        clean_query,
+                        max_results=retrieval_limit,
+                        filters=filters,
+                        search_type=effective_search_type.value,
+                    )
+                )
+        else:
+            documents = await knowledge.asearch(
+                clean_query,
+                max_results=retrieval_limit,
+                filters=None,
+                search_type=effective_search_type.value,
+            )
         await self._hydrate_content_ids_async(documents)
-        return [_result_from_document(document) for document in documents[:limit]]
+        results: list[dict[str, Any]] = []
+        seen: set[tuple[str, str, str, int]] = set()
+        for document in documents:
+            result = _result_from_document(document)
+            key = (
+                result["doc_id"],
+                result["title"],
+                result["content"],
+                result["chunk_index"],
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            results.append(result)
+        results.sort(key=lambda item: float(item.get("score") or 0.0), reverse=True)
+        return results[:limit]
 
     async def knowledge_status_async(
         self,
@@ -729,6 +789,7 @@ async def add_text_document_async(
     source: str = "manual",
     metadata: dict[str, Any] | None = None,
     owner_user_id: str | None = None,
+    visibility: str = "private",
 ) -> dict[str, Any]:
     return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.add_text_document_async(
         title,
@@ -736,6 +797,7 @@ async def add_text_document_async(
         source=source,
         metadata=metadata,
         owner_user_id=owner_user_id,
+        visibility=visibility,
     )
 
 
@@ -743,11 +805,13 @@ async def add_file_document_async(
     path: str,
     title: str | None = None,
     owner_user_id: str | None = None,
+    visibility: str = "private",
 ) -> dict[str, Any]:
     return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.add_file_document_async(
         path,
         title=title,
         owner_user_id=owner_user_id,
+        visibility=visibility,
     )
 
 
@@ -761,6 +825,18 @@ async def delete_document_async(doc_id: str, owner_user_id: str | None = None) -
     return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.delete_document_async(
         doc_id,
         owner_user_id=owner_user_id,
+    )
+
+
+async def update_document_visibility_async(
+    doc_id: str,
+    visibility: str,
+    user: Any,
+) -> dict[str, Any] | None:
+    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.update_document_visibility_async(
+        doc_id,
+        visibility,
+        user,
     )
 
 

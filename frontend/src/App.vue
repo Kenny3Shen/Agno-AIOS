@@ -535,7 +535,7 @@ const componentMap: Record<ModuleNavId, Component> = {
 
 const availableNavIds = computed(() => new Set<NavId>(["home", "dashboard", ...navItems.value.map((item) => item.id)]))
 const canAccessNav = (id: NavId) => {
-  return canAccessShellNav(id, availableNavIds.value, (permission) => authStore.hasPermission(permission))
+  return canAccessShellNav(id, availableNavIds.value, (scope) => authStore.hasScope(scope))
 }
 const visibleNavItems = computed<NavItem[]>(() => navItems.value.filter((item) => canAccessNav(item.id)))
 const visibleModuleNavItems = computed<NavItem[]>(() => [dashboardItem.value, ...visibleNavItems.value.filter((item) => item.id !== "dashboard")])
@@ -552,9 +552,9 @@ const SIDEBAR_EXPANDED_WIDTH = 264
 const SIDEBAR_COMPACT_WIDTH = 76
 const isMobileViewport = () => typeof window !== "undefined" && window.innerWidth < 1024
 const defaultSidebarNavGroupIds: Array<{ key: SidebarNavGroupKey; ids: NavId[] }> = [
-  { key: "operations", ids: ["home", "dashboard", "chat", "trace", "workflow"] },
+  { key: "operations", ids: ["home", "dashboard", "chat", "workflow"] },
   { key: "knowledge", ids: ["skills", "mcp", "knowledge", "memory"] },
-  { key: "governance", ids: ["evaluation", "approvals", "scheduler"] },
+  { key: "governance", ids: ["trace", "evaluation", "approvals", "scheduler"] },
   { key: "securityData", ids: ["cve", "collect"] },
   { key: "settings", ids: ["settings"] },
 ]
@@ -710,7 +710,7 @@ const parseStoredNavigationLayout = (raw: string): SidebarStoredNavGroup[] => {
 }
 
 const loadNavigationLayout = async () => {
-  if (!authStore.hasPermission("config:read")) {
+  if (!authStore.hasScope("config:read")) {
     storedNavigationGroups.value = []
     return
   }
@@ -723,7 +723,7 @@ const loadNavigationLayout = async () => {
 }
 
 const handleNavigationLayoutChange = (event: Event) => {
-  if (!authStore.hasPermission("config:read")) return
+  if (!authStore.hasScope("config:read")) return
   const detail = (event as CustomEvent<{ raw?: string }>).detail
   if (typeof detail?.raw === "string") {
     storedNavigationGroups.value = parseStoredNavigationLayout(detail.raw)
@@ -766,7 +766,7 @@ const formatSessionTime = (timestamp: number) => {
 }
 
 const loadSidebarChatSessions = async () => {
-  if (!authStore.hasPermission("sessions:read")) {
+  if (!authStore.hasScope("sessions:read")) {
     chatSessions.value = []
     return
   }
@@ -789,7 +789,7 @@ const dispatchChatEvent = (name: string, detail?: Record<string, unknown>) => {
 }
 
 const toggleChatSessions = () => {
-  if (!authStore.hasPermission("sessions:read")) return
+  if (!authStore.hasScope("sessions:read")) return
   chatSessionsExpanded.value = !chatSessionsExpanded.value
   if (chatSessionsExpanded.value) void loadSidebarChatSessions()
 }
@@ -914,7 +914,7 @@ const toggleTheme = () => {
 const handleAuthenticated = (user: AuthUser) => {
   currentUser.value = user
   void loadNavigationLayout()
-  if (authStore.hasPermission("sessions:read")) void loadSidebarChatSessions()
+  if (authStore.hasScope("sessions:read")) void loadSidebarChatSessions()
 }
 
 const restoreSession = async () => {
@@ -927,7 +927,7 @@ const restoreSession = async () => {
   try {
     currentUser.value = await fetchCurrentUser(token, { fallbacks: authClientFallbacks.value })
     void loadNavigationLayout()
-    if (authStore.hasPermission("sessions:read")) void loadSidebarChatSessions()
+    if (authStore.hasScope("sessions:read")) void loadSidebarChatSessions()
   } catch {
     clearStoredAuthToken()
     currentUser.value = null

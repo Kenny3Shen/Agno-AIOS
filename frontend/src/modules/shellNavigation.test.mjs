@@ -11,7 +11,7 @@ import {
   shellContentClass,
   splitPrimaryShellNavItems,
 } from "./shellNavigation.ts"
-import { hasRolePermission, hasUserPermission } from "../lib/permissions.ts"
+import { hasRoleScope, hasUserScope } from "../lib/scopes.ts"
 
 const icon = {}
 const item = (id) => ({
@@ -61,71 +61,77 @@ const components = {
 assert.equal(
   canAccessShellNav("home", available, () => false),
   true,
-  "home must stay available without permissions",
+  "home must stay available without scopes",
 )
 
 assert.equal(
   canAccessShellNav("dashboard", available, () => false),
   true,
-  "dashboard must stay available without permissions",
+  "dashboard must stay available without scopes",
 )
 
 assert.equal(
-  canAccessShellNav("mcp", available, (permission) => permission === "mcp:read"),
+  canAccessShellNav("mcp", available, (scope) => scope === "mcp:read"),
   true,
-  "permissioned nav items must be visible when the matching permission is present",
+  "scoped nav items must be visible when the matching scope is present",
 )
 
 assert.equal(
   canAccessShellNav("settings", available, () => false),
   false,
-  "permissioned nav items must be hidden without their permission",
+  "scoped nav items must be hidden without their scope",
 )
 
 assert.equal(
-  canAccessShellNav("evaluation", available, (permission) => hasRolePermission("user", permission)),
+  canAccessShellNav("evaluation", available, (scope) => hasRoleScope("user", scope)),
   true,
-  "evaluation must be available to users with the agent eval read permission",
+  "evaluation must be available to users with the agent eval read scope",
 )
 
 assert.equal(
-  canAccessShellNav("scheduler", available, (permission) => permission === "schedules:read"),
+  canAccessShellNav("scheduler", available, (scope) => scope === "schedules:read"),
   true,
   "scheduler must use the native AgentOS schedules read scope",
 )
 
 assert.equal(
-  canAccessShellNav("scheduler", available, (permission) => permission === "agent_os:admin"),
+  canAccessShellNav("scheduler", available, (scope) => scope === "agent_os:admin"),
   false,
   "scheduler nav must not depend on the removed AIOS admin scheduler facade",
 )
 
 assert.equal(
-  hasUserPermission({ role: "guest", permissions: ["evals:read"] }, "evals:read"),
+  hasUserScope({ role: "guest", scopes: ["evals:read"] }, "evals:read"),
   true,
-  "frontend permission checks must prefer server-issued permission claims",
+  "frontend scope checks must use server-issued scope claims",
 )
 
 assert.equal(
-  hasUserPermission({ role: "user", permissions: ["sessions:read"] }, "evals:read"),
+  hasUserScope({ role: "user", scopes: ["sessions:read"] }, "evals:read"),
   false,
-  "frontend permission checks must not re-grant missing permissions when claims are present",
+  "frontend scope checks must not re-grant missing scopes when claims are present",
 )
 
 assert.equal(
-  hasUserPermission({ role: "guest", permissions: ["agent_os:admin"] }, "config:write"),
+  hasUserScope({ role: "guest", scopes: ["agent_os:admin"] }, "config:write"),
   true,
-  "frontend permission checks must honor AgentOS admin scope claims",
+  "frontend scope checks must honor AgentOS admin scope claims",
 )
 
 assert.equal(
-  canAccessShellNav("evaluation", available, (permission) => permission === "mcp:read"),
+  hasUserScope({ role: "guest", permissions: ["agent_os:admin"] }, "config:write"),
   false,
-  "evaluation must stay hidden when only unrelated permissions are present",
+  "frontend scope checks must ignore the removed permissions compatibility field",
 )
 
 assert.equal(
-  canAccessShellNav("evaluation", available, (permission) => hasRolePermission("guest", permission)),
+  canAccessShellNav("evaluation", available, (scope) => scope === "mcp:read"),
+  false,
+  "evaluation must stay hidden when only unrelated scopes are present",
+)
+
+assert.equal(
+  canAccessShellNav("evaluation", available, (scope) => hasRoleScope("guest", scope)),
   false,
   "evaluation must stay hidden from guests",
 )
@@ -133,7 +139,7 @@ assert.equal(
 assert.equal(
   canAccessShellNav("chat", new Set(["home"]), () => true),
   false,
-  "unknown or unavailable nav ids must be hidden even if the permission would pass",
+  "unknown or unavailable nav ids must be hidden even if the scope would pass",
 )
 
 assert.deepEqual(
@@ -177,9 +183,9 @@ assert.deepEqual(
 assert.deepEqual(
   buildSidebarNavGroups({
     defaultGroups: [
-      { key: "operations", ids: ["home", "dashboard", "chat", "trace", "workflow"] },
+      { key: "operations", ids: ["home", "dashboard", "chat", "workflow"] },
       { key: "knowledge", ids: ["skills", "mcp", "knowledge", "memory"] },
-      { key: "governance", ids: ["evaluation", "approvals", "scheduler"] },
+      { key: "governance", ids: ["trace", "evaluation", "approvals", "scheduler"] },
       { key: "securityData", ids: ["cve", "collect"] },
       { key: "settings", ids: ["settings"] },
     ],

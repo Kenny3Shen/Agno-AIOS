@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import HTTPException
@@ -6,6 +7,10 @@ import pytest
 
 from api.mcp import config as mcp_config
 from api.services import mcp_config_service
+
+
+def actor(actor_id: str, role: str = "user", is_superuser: bool = False):
+    return SimpleNamespace(id=actor_id, role=role, is_superuser=is_superuser)
 
 
 def test_apply_service_toggle_updates_config_and_returns_audit_shape():
@@ -65,6 +70,8 @@ def test_apply_mcp_upload_normalizes_standard_mcp_manifest():
             "description": "",
             "kind": "mcp-json",
             "enabled": True,
+            "visibility": "private",
+            "owner_user_id": "",
             "manifest": {
                 "mcpServers": {
                     "filesystem": {
@@ -77,7 +84,69 @@ def test_apply_mcp_upload_normalizes_standard_mcp_manifest():
         }
     ]
     assert change.response["kind"] == "mcp-json"
-    assert change.metadata == {"kind": "mcp-json", "has_manifest": True}
+    assert change.metadata == {
+        "kind": "mcp-json",
+        "has_manifest": True,
+        "visibility": "private",
+    }
+
+
+def test_apply_mcp_upload_persists_visibility_and_owner_metadata():
+    stored = {"mcp_servers": []}
+    writes: list[dict] = []
+    manifest = '{"mcpServers":{"tool":{"command":"python"}}}'
+    with (
+        patch.object(mcp_config_service, "read_mcp_config", return_value=stored),
+        patch.object(
+            mcp_config_service, "write_mcp_config", side_effect=writes.append
+        ),
+    ):
+        change = mcp_config_service.apply_mcp_upload(
+            name="Tool",
+            manifest=manifest,
+            visibility="public",
+            owner_user_id="u1",
+        )
+
+    assert writes[0]["mcp_servers"][0]["visibility"] == "public"
+    assert writes[0]["mcp_servers"][0]["owner_user_id"] == "u1"
+    assert change.metadata == {
+        "kind": "mcp-json",
+        "has_manifest": True,
+        "visibility": "public",
+    }
+
+
+def test_visible_mcp_servers_marks_manage_capability():
+    entries = [
+        {
+            "name": "Owned",
+            "kind": "mcp-json",
+            "visibility": "private",
+            "owner_user_id": "u1",
+            "manifest": {"mcpServers": {"owned": {"command": "python"}}},
+        },
+        {
+            "name": "Foreign",
+            "kind": "mcp-json",
+            "visibility": "private",
+            "owner_user_id": "u2",
+            "manifest": {"mcpServers": {"foreign": {"command": "python"}}},
+        },
+        {
+            "name": "Public",
+            "kind": "mcp-json",
+            "visibility": "public",
+            "owner_user_id": "u2",
+            "manifest": {"mcpServers": {"public": {"command": "python"}}},
+        },
+    ]
+
+    visible = mcp_config_service.visible_mcp_servers(entries, actor("u1"))
+
+    assert [item["name"] for item in visible] == ["Owned", "Public"]
+    assert visible[0]["can_manage"] is True
+    assert visible[1]["can_manage"] is False
 
 
 def test_apply_mcp_upload_rejects_non_mcp_project_manifest():
@@ -202,7 +271,7 @@ def test_mcp_config_read_write_json_and_drops_legacy_protocols(tmp_path, monkeyp
     assert mcp_config.read_mcp_config() == raw
 
 
-def test_mcp_config_migrates_legacy_toml_to_json(tmp_path, monkeypatch):
+def test_mcp_config_is_json_only_and_ignores_legacy_toml(tmp_path, monkeypatch):
     config_file = tmp_path / "mcp_config.json"
     legacy_file = tmp_path / "mcp_config.toml"
     legacy_file.write_text(
@@ -230,25 +299,8 @@ def test_mcp_config_migrates_legacy_toml_to_json(tmp_path, monkeypatch):
     monkeypatch.setattr(mcp_config, "MCP_DATA_DIR", tmp_path)
     monkeypatch.setattr(mcp_config, "MCP_CONFIG_FILE", config_file)
 
-    data = mcp_config.read_mcp_config()
-
-    assert data == {
-        "mcp": {"playbook": False, "basic": True},
-        "mcp_servers": [
-            {
-                "name": "Filesystem",
-                "description": "Local tools",
-                "kind": "mcp-json",
-                "enabled": True,
-                "manifest": {
-                    "mcpServers": {
-                        "filesystem": {
-                            "command": "python",
-                            "args": ["-m", "agent_tools"],
-                        }
-                    }
-                },
-            }
-        ],
+    assert mcp_config.read_mcp_config() == {
+        "mcp": {"playbook": True, "basic": True},
+        "mcp_servers": [],
     }
-    assert json.loads(config_file.read_text(encoding="utf-8")) == data
+    assert not config_file.exists()

@@ -1,14 +1,13 @@
 export type UserRole = "admin" | "user" | "guest"
-export type PermissionUser = {
+export type ScopeUser = {
   role?: UserRole
   is_superuser?: boolean
-  permissions?: readonly string[]
   scopes?: readonly string[]
 }
 
 export const ADMIN_SCOPE = "agent_os:admin"
 
-export const AGENT_EVAL_PERMISSIONS = [
+export const AGENT_EVAL_SCOPES = [
   "evals:read",
   "evals:write",
   "evals:delete",
@@ -44,23 +43,23 @@ const ROLE_SCOPES: Record<UserRole, readonly string[]> = {
   ],
 }
 
-export const hasRolePermission = (role: UserRole, permission: string) => {
-  const permissions = ROLE_SCOPES[role]
-  return permissions.includes(ADMIN_SCOPE) || permissions.includes(permission)
+export const hasRoleScope = (role: UserRole, scope: string) => {
+  const scopes = ROLE_SCOPES[role]
+  return scopes.includes(ADMIN_SCOPE) || scopes.includes(scope)
 }
 
-export const userRole = (user: PermissionUser | null | undefined): UserRole => {
+export const userRole = (user: ScopeUser | null | undefined): UserRole => {
   if (user?.is_superuser) return "admin"
   return user?.role ?? "guest"
 }
 
-export const hasUserPermission = (
-  user: PermissionUser | null | undefined,
-  permission: string,
+export const hasUserScope = (
+  user: ScopeUser | null | undefined,
+  scope: string,
 ) => {
-  const permissions = user?.scopes ?? user?.permissions
-  if (permissions) {
-    return permissions.includes(ADMIN_SCOPE) || permissions.includes(permission)
+  const scopes = user?.scopes
+  if (scopes) {
+    return scopes.includes(ADMIN_SCOPE) || scopes.includes(scope)
   }
-  return hasRolePermission(userRole(user), permission)
+  return hasRoleScope(userRole(user), scope)
 }

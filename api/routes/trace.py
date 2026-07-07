@@ -5,7 +5,7 @@ from loguru import logger
 
 from api.auth.models import User
 from api.auth.claims import scope_user_id
-from api.auth.permissions import require_permission
+from api.auth.scopes import require_scope
 from api.services.tracing_service import list_traces, get_trace_detail
 
 
@@ -33,7 +33,7 @@ async def api_list_traces(
     ),
     limit: int = Query(default=20, ge=1, le=200),
     page: int = Query(default=1, ge=1),
-    user: User = Depends(require_permission("traces:read")),
+    user: User = Depends(require_scope("traces:read")),
 ):
     """List traces from the tracing database."""
     try:
@@ -61,7 +61,7 @@ async def api_list_traces(
 @router.get("/traces/{trace_id}")
 async def api_get_trace(
     trace_id: str,
-    user: User = Depends(require_permission("traces:read")),
+    user: User = Depends(require_scope("traces:read")),
 ):
     """Get trace detail including spans and a span tree."""
     try:

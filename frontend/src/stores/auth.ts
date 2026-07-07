@@ -1,6 +1,6 @@
 import { computed, ref } from "vue"
 import { defineStore } from "pinia"
-import { hasUserPermission, userRole, type UserRole } from "../lib/permissions"
+import { hasUserScope, userRole, type UserRole } from "../lib/scopes"
 import type { AuthUser } from "../types"
 
 export const useAuthStore = defineStore("auth", () => {
@@ -10,9 +10,9 @@ export const useAuthStore = defineStore("auth", () => {
   const userMenuOpen = ref(false)
 
   const role = computed<UserRole>(() => userRole(currentUser.value))
-  const canWrite = computed(() => hasUserPermission(currentUser.value, "sessions:write"))
+  const canWrite = computed(() => hasUserScope(currentUser.value, "sessions:write"))
   const canAdmin = computed(() => role.value === "admin")
-  const hasPermission = (permission: string) => hasUserPermission(currentUser.value, permission)
+  const hasScope = (scope: string) => hasUserScope(currentUser.value, scope)
 
   const setCurrentUser = (user: AuthUser | null) => {
     currentUser.value = user
@@ -38,7 +38,7 @@ export const useAuthStore = defineStore("auth", () => {
     role,
     canWrite,
     canAdmin,
-    hasPermission,
+    hasScope,
     setCurrentUser,
     setAuthBooting,
     setLoggingOut,

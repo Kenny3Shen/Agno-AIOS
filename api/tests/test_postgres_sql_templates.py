@@ -166,9 +166,9 @@ def test_local_config_services_are_sync_first_without_blocking_event_loop_regres
     assert "load_model_config_async" not in settings_source
 
     skills_source = inspect.getsource(skills_route)
-    assert "list_skill_infos()" in skills_source
+    assert "list_skill_infos(user)" in skills_source
     assert "set_skill_enabled" in skills_source
-    assert "await to_thread.run_sync(set_skill_enabled" in skills_source
+    assert "await to_thread.run_sync(" in skills_source
     assert "install_skill_archive_async" not in skills_source
 
     mcp_server_source = inspect.getsource(mcp_server.IntegratedMcpRuntime)

@@ -10,38 +10,38 @@ API 使用 FastAPI Users 和 JWT bearer 认证。登录接口位于 `/api/auth/j
 
 可选 bootstrap admin 只有在同时配置 `AGNO_BOOTSTRAP_ADMIN_EMAIL` 和 `AGNO_BOOTSTRAP_ADMIN_PASSWORD` 时才会创建或提升。
 
-## 角色和权限
+## 角色和 Scopes
 
 后端识别三种角色：
 
 | 角色 | 含义 |
 | --- | --- |
-| `admin` | 通过通配 permission 访问所有权限。 |
+| `admin` | 通过 AgentOS admin scope 访问所有控制面能力。 |
 | `user` | 可读写自己的 sessions、knowledge 和 memories，读取自己的 traces，并使用部分安全数据视图。 |
 | `guest` | 可读取自己的 sessions、traces、部分 memory/metrics 数据、CVE 和 knowledge。 |
 
-当前后端权限定义在 `api/auth/permissions.py`。
+当前后端 role 到 scope 的映射定义在 `api/auth/claims.py`，route 依赖位于 `api/auth/scopes.py`。
 
-控制面 module permission、Scheduler 写权限和 policy audit event 的复用规则集中在 `api/services/security_policy.py`。Route 仍负责声明 FastAPI dependency，但共享 policy 的判断和 audit event 形状不应重复散落在 route implementation 中。
+控制面 module scope 和 policy audit event 的复用规则集中在 `api/services/security_policy.py`。Route 仍负责声明 FastAPI dependency，但共享 policy 的判断和 audit event 形状不应重复散落在 route implementation 中。
 
-| 权限 | Admin | User | Guest |
+| Scope | Admin | User | Guest |
 | --- | --- | --- | --- |
-| `session:read:own` | 是 | 是 | 是 |
-| `session:write:own` | 是 | 是 | 否 |
-| `trace:read:own` | 是 | 是 | 是 |
-| `memory:read:own` | 是 | 是 | 是 |
-| `memory:write:own` | 是 | 是 | 否 |
-| `metrics:read:own` | 是 | 是 | 是 |
+| `sessions:read` | 是 | 是 | 是 |
+| `sessions:write` | 是 | 是 | 否 |
+| `traces:read` | 是 | 是 | 是 |
+| `memories:read` | 是 | 是 | 是 |
+| `memories:write` | 是 | 是 | 否 |
+| `metrics:read` | 是 | 是 | 是 |
 | `collect:write` | 是 | 是 | 否 |
 | `cve:read` | 是 | 是 | 是 |
 | `knowledge:read` | 是 | 是 | 是 |
 | `knowledge:write` | 是 | 是 | 否 |
 | `mcp:read` | 是 | 是 | 否 |
 | `skill:read` | 是 | 是 | 否 |
-| `settings:read` | 是 | 是 | 否 |
-| 写入和 admin 权限 | 是 | 否 | 否 |
+| `config:read` | 是 | 是 | 否 |
+| 写入和 admin-only scopes | 是 | 否 | 否 |
 
-Admin-only 操作用只有 admin 能通过通配规则满足的 permission 表达，例如 `audit:read`、`mcp:write`、`skill:write`、`settings:write` 和 `admin:read`。
+Admin-only 操作用只有 admin 能通过 `agent_os:admin` 满足的 scopes 表达，例如 `audit:read`、`mcp:write`、`skill:write`、`config:write`。
 
 ## 资源归属
 
@@ -59,7 +59,7 @@ Admin-only 操作用只有 admin 能通过通配规则满足的 permission 表�
 
 ## 前端检查
 
-前端在 `frontend/src/lib/permissions.ts` 中镜像 permissions，并在 `frontend/src/App.vue` 中隐藏不可访问导航。这些检查只用于体验。用户可以直接调用 API，因此 API routes 必须继续执行后端 permission checks。
+前端在 `frontend/src/lib/scopes.ts` 中镜像 role scope fallback，并在 `frontend/src/App.vue` 中隐藏不可访问导航。这些检查只用于体验。用户可以直接调用 API，因此 API routes 必须继续执行后端 scope checks。
 
 见 [ADR 0003](./adr/0003-backend-permissions-are-the-security-boundary.md)。
 
@@ -78,7 +78,7 @@ Admin-only 操作用只有 admin 能通过通配规则满足的 permission 表�
 
 Audit logs 包含 actor identity、role、action、resource type、resource ID、status、request IP、user agent、metadata 和 timestamp。
 
-只有具备 `audit:read` 的 actor 能访问 `/api/audit/logs`；在当前 permission model 中这意味着 admin。
+只有具备 `audit:read` 的 actor 能访问 `/api/audit/logs`；在当前 scope model 中这意味着 admin。
 
 ## MCP 访问
 
@@ -99,8 +99,8 @@ MCP tokens 和用户 JWT 分离。MCP token 授权 MCP protocol calls，不授�
 
 ## 安全不变量
 
-- 每个受保护后端 route 都应要求 permission dependency 或 current-user dependency。
-- 非 admin 访问用户资源时应检查归属，而不仅是 route permission。
+- 每个受保护后端 route 都应要求 scope dependency 或 current-user dependency。
+- 非 admin 访问用户资源时应检查归属，而不仅是 route scope。
 - 前端隐藏导航不是充分保护。
 - MCP endpoint 必须独立于用户 JWT auth 验证 MCP tokens。
 - Chat fallback mode 不能声称访问了实际未使用的 tools、knowledge 或内部数据。

@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy.dialects import postgresql
 
 from api.persistence import agent_evals as persistence
-from api.auth.claims import has_permission
+from api.auth.claims import has_scope
 from api.persistence.agent_evals import (
     agent_eval_case_runs_table,
     agent_eval_cases_table,
@@ -32,7 +32,7 @@ from api.persistence.agent_evals import (
     update_suite_row_async,
     update_suite_run_row_async,
 )
-from api.services.security_policy import CONTROL_MODULE_PERMISSIONS
+from api.services.security_policy import CONTROL_MODULE_SCOPES
 
 
 class FakeBootstrapConnection:
@@ -79,8 +79,8 @@ def actor(role: str):
 
 
 def test_evaluation_control_module_uses_agent_eval_read_permission():
-    assert CONTROL_MODULE_PERMISSIONS["evaluation"] == "evals:read"
-    assert has_permission(actor("user"), CONTROL_MODULE_PERMISSIONS["evaluation"])
+    assert CONTROL_MODULE_SCOPES["evaluation"] == "evals:read"
+    assert has_scope(actor("user"), CONTROL_MODULE_SCOPES["evaluation"])
 
 
 def test_agent_eval_tables_use_jsonb_and_expected_names():

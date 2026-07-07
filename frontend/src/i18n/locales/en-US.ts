@@ -115,6 +115,13 @@ export const enUS = {
       ready: "Ready",
     },
   },
+  visibility: {
+    label: "Visibility",
+    private: "Private",
+    public: "Public",
+    updated: "Visibility updated",
+    updateFailed: "Failed to update visibility",
+  },
   auth: {
     entryAria: "T.A.I.S auth entry",
     briefAria: "Platform entry information",
@@ -493,7 +500,11 @@ export const enUS = {
     },
     tabs: {
       services: "Services",
+      servers: "Custom servers",
       tokens: "Access tokens",
+    },
+    servers: {
+      empty: "No custom MCP servers",
     },
     loading: "Loading...",
     count: "{count} total",

@@ -46,6 +46,7 @@ import type {
   ModelConnectivityTestResponse,
   ModelConfigResponse,
   OsControlModule,
+  ResourceVisibility,
   OsControlResponse,
   ScheduleCreateRequest,
   ScheduleCreateResponse,
@@ -913,11 +914,12 @@ export function useSkillsApi() {
     }
   }
 
-  const uploadSkill = async (payload: { name: string; file: File }): Promise<UploadResultResponse> => {
+  const uploadSkill = async (payload: { name: string; file: File; visibility: ResourceVisibility }): Promise<UploadResultResponse> => {
     loading.value = true
     error.value = null
     const form = new FormData()
     form.append('name', payload.name)
+    form.append('visibility', payload.visibility)
     form.append('file', payload.file)
     try {
       const response = await apiFetch('/skills/upload', {
@@ -934,13 +936,27 @@ export function useSkillsApi() {
     }
   }
 
+  const updateSkillVisibility = async (skillName: string, visibility: ResourceVisibility): Promise<{ name: string; visibility: ResourceVisibility }> => {
+    const response = await apiFetch(`/skills/${encodeURIComponent(skillName)}/visibility`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visibility })
+    })
+    if (!response.ok) {
+      const data: unknown = await response.json().catch(() => ({}))
+      throw new Error(messageFromResponse(data, apiMessage('skillToggleFailed')))
+    }
+    return await response.json()
+  }
+
   return {
     loading,
     error,
     toggling,
     fetchSkills,
     toggleSkill,
-    uploadSkill
+    uploadSkill,
+    updateSkillVisibility
   }
 }
 
@@ -992,6 +1008,11 @@ export function useKnowledgeApi() {
     method: 'DELETE'
   }, apiMessage('knowledgeDeleteFailed'))
 
+  const updateKnowledgeDocumentVisibility = (docId: string, visibility: ResourceVisibility) => request<KnowledgeDocument>(`/documents/${encodeURIComponent(docId)}/visibility`, {
+    method: 'PUT',
+    body: JSON.stringify({ visibility })
+  }, apiMessage('knowledgeRequestFailed'))
+
   const clearKnowledge = () => request<{ documents: number; chunks: number }>('', {
     method: 'DELETE'
   }, apiMessage('knowledgeClearFailed'))
@@ -1007,6 +1028,7 @@ export function useKnowledgeApi() {
     fetchKnowledge,
     addTextDocument,
     addFileDocument,
+    updateKnowledgeDocumentVisibility,
     deleteKnowledgeDocument,
     clearKnowledge,
     searchKnowledge
@@ -1064,9 +1086,14 @@ export function useMcpApi() {
     body: JSON.stringify({ id })
   }, apiMessage('mcpTokenDeleteFailed'))
 
-  const uploadMcp = (payload: { name: string; description?: string; manifest: string }) => request<UploadResultResponse>('/upload', {
+  const uploadMcp = (payload: { name: string; description?: string; manifest: string; visibility: ResourceVisibility }) => request<UploadResultResponse>('/upload', {
     method: 'POST',
     body: JSON.stringify(payload)
+  }, apiMessage('mcpRequestFailed'))
+
+  const updateMcpServerVisibility = (serverName: string, visibility: ResourceVisibility) => request<{ success: boolean; name: string; visibility: ResourceVisibility }>(`/servers/${encodeURIComponent(serverName)}/visibility`, {
+    method: 'PUT',
+    body: JSON.stringify({ visibility })
   }, apiMessage('mcpRequestFailed'))
 
   return {
@@ -1077,7 +1104,8 @@ export function useMcpApi() {
     listTokens,
     issueToken,
     deleteToken,
-    uploadMcp
+    uploadMcp,
+    updateMcpServerVisibility
   }
 }
 

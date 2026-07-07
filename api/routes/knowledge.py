@@ -3,7 +3,8 @@ from pydantic import BaseModel, Field
 
 from api.auth.models import User
 from api.auth.claims import actor_id, scope_user_id
-from api.auth.permissions import require_permission
+from api.auth.scopes import require_scope
+from api.auth.visibility import can_manage_resource
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.knowledge_service import get_knowledge_base_lifecycle
 
@@ -14,16 +15,34 @@ def effective_knowledge_user_filter(user: User) -> str | None:
     return scope_user_id(user, None)
 
 
+def with_manage_flags(documents: list[dict], user: User) -> list[dict]:
+    flagged: list[dict] = []
+    for document in documents:
+        metadata = {
+            **(document.get("metadata") or {}),
+            "visibility": document.get("visibility"),
+            "owner_user_id": document.get("owner_user_id"),
+        }
+        flagged.append({**document, "can_manage": can_manage_resource(user, metadata)})
+    return flagged
+
+
 class KnowledgeTextRequest(BaseModel):
     title: str = Field(..., min_length=1)
     content: str = Field(..., min_length=1)
     source: str = "manual"
     metadata: dict[str, str] = Field(default_factory=dict)
+    visibility: str = "private"
 
 
 class KnowledgeFileRequest(BaseModel):
     path: str = Field(..., min_length=1)
     title: str | None = None
+    visibility: str = "private"
+
+
+class KnowledgeVisibilityRequest(BaseModel):
+    visibility: str
 
 
 class KnowledgeSearchRequest(BaseModel):
@@ -36,7 +55,7 @@ class KnowledgeSearchRequest(BaseModel):
 
 
 @router.get("")
-async def get_knowledge_status(user: User = Depends(require_permission("knowledge:read"))) -> dict:
+async def get_knowledge_status(user: User = Depends(require_scope("knowledge:read"))) -> dict:
     owner_user_id = effective_knowledge_user_filter(user)
     knowledge_base = get_knowledge_base_lifecycle()
     documents = await knowledge_base.list_documents_async(owner_user_id=owner_user_id)
@@ -45,7 +64,7 @@ async def get_knowledge_status(user: User = Depends(require_permission("knowledg
             owner_user_id=owner_user_id,
             documents=documents,
         ),
-        "documents": documents,
+        "documents": with_manage_flags(documents, user),
     }
 
 
@@ -53,7 +72,7 @@ async def get_knowledge_status(user: User = Depends(require_permission("knowledg
 async def create_text_document(
     request_ctx: Request,
     request: KnowledgeTextRequest,
-    user: User = Depends(require_permission("knowledge:write")),
+    user: User = Depends(require_scope("knowledge:write")),
 ) -> dict:
     try:
         result = await get_knowledge_base_lifecycle().add_text_document_async(
@@ -62,7 +81,9 @@ async def create_text_document(
             source=request.source,
             metadata=request.metadata,
             owner_user_id=actor_id(user),
+            visibility=request.visibility,
         )
+        result["can_manage"] = True
         await record_audit_event_async(
             user,
             action="knowledge.create",
@@ -80,14 +101,16 @@ async def create_text_document(
 async def create_file_document(
     request_ctx: Request,
     request: KnowledgeFileRequest,
-    user: User = Depends(require_permission("knowledge:write")),
+    user: User = Depends(require_scope("knowledge:write")),
 ) -> dict:
     try:
         result = await get_knowledge_base_lifecycle().add_file_document_async(
             path=request.path,
             title=request.title,
             owner_user_id=actor_id(user),
+            visibility=request.visibility,
         )
+        result["can_manage"] = True
         await record_audit_event_async(
             user,
             action="knowledge.create",
@@ -105,7 +128,7 @@ async def create_file_document(
 async def remove_document(
     request_ctx: Request,
     doc_id: str,
-    user: User = Depends(require_permission("knowledge:delete")),
+    user: User = Depends(require_scope("knowledge:delete")),
 ) -> dict:
     deleted = await get_knowledge_base_lifecycle().delete_document_async(
         doc_id,
@@ -123,10 +146,39 @@ async def remove_document(
     return {"success": True}
 
 
+@router.put("/documents/{doc_id}/visibility")
+async def update_document_visibility(
+    request_ctx: Request,
+    doc_id: str,
+    request: KnowledgeVisibilityRequest,
+    user: User = Depends(require_scope("knowledge:write")),
+) -> dict:
+    try:
+        updated = await get_knowledge_base_lifecycle().update_document_visibility_async(
+            doc_id,
+            request.visibility,
+            user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if updated is None:
+        raise HTTPException(status_code=404, detail="知识文档不存在")
+    updated["can_manage"] = True
+    await record_audit_event_async(
+        user,
+        action="knowledge.visibility_update",
+        resource_type="knowledge_document",
+        resource_id=doc_id,
+        metadata={"visibility": request.visibility},
+        **audit_request_context(request_ctx),
+    )
+    return updated
+
+
 @router.post("/search")
 async def search_knowledge(
     request: KnowledgeSearchRequest,
-    user: User = Depends(require_permission("knowledge:read")),
+    user: User = Depends(require_scope("knowledge:read")),
 ) -> dict:
     try:
         return {
@@ -144,7 +196,7 @@ async def search_knowledge(
 @router.delete("")
 async def clear_knowledge(
     request_ctx: Request,
-    user: User = Depends(require_permission("knowledge:delete")),
+    user: User = Depends(require_scope("knowledge:delete")),
 ) -> dict:
     result = await get_knowledge_base_lifecycle().clear_knowledge_base_async(
         owner_user_id=effective_knowledge_user_filter(user),

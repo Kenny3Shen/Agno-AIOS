@@ -1,10 +1,9 @@
 import secrets
 import time
 import json
-import tomllib
-from pathlib import Path
 from typing import Any
 
+from api.auth.visibility import normalize_visibility
 from api.persistence.mcp import (
     ensure_mcp_tables,
     find_token_row,
@@ -48,6 +47,10 @@ def normalize_mcp_servers(entries: Any) -> list[dict[str, Any]]:
                 "description": str(entry.get("description") or "").strip(),
                 "kind": str(entry.get("kind") or "unknown").strip(),
                 "enabled": bool(entry.get("enabled", True)),
+                "visibility": normalize_visibility(str(entry.get("visibility") or "")),
+                "owner_user_id": str(
+                    entry.get("owner_user_id") or entry.get("user_id") or ""
+                ).strip(),
                 "manifest": manifest,
             }
         )
@@ -69,30 +72,10 @@ def _normalize_mcp_config(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _legacy_mcp_config_file() -> Path:
-    return MCP_DATA_DIR / "mcp_config.toml"
-
-
-def _read_legacy_mcp_config() -> dict[str, Any] | None:
-    legacy_file = _legacy_mcp_config_file()
-    if not legacy_file.exists():
-        return None
-    try:
-        data = tomllib.loads(legacy_file.read_text(encoding="utf-8"))
-    except Exception:
-        return _default_config()
-    if not isinstance(data, dict):
-        return _default_config()
-    normalized = _normalize_mcp_config(data)
-    write_mcp_config(normalized)
-    return normalized
-
-
 def read_mcp_config() -> dict[str, Any]:
     MCP_DATA_DIR.mkdir(parents=True, exist_ok=True)
     if not MCP_CONFIG_FILE.exists():
-        legacy_config = _read_legacy_mcp_config()
-        return legacy_config if legacy_config is not None else _default_config()
+        return _default_config()
     try:
         data = json.loads(MCP_CONFIG_FILE.read_text(encoding="utf-8"))
     except Exception:

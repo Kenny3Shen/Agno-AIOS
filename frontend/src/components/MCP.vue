@@ -29,6 +29,18 @@
           <div class="mt-4 grid gap-3 md:grid-cols-2">
             <el-input v-model="uploadForm.name" :placeholder="t('mcp.upload.namePlaceholder')" />
             <el-input v-model="uploadForm.description" :placeholder="t('mcp.upload.descriptionPlaceholder')" />
+            <label class="mcp-visibility-field">
+              <span>{{ t('visibility.label') }}</span>
+              <el-radio-group v-model="uploadForm.visibility" size="small">
+                <el-radio-button
+                  v-for="option in resourceVisibilityOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ t(option.labelKey) }}
+                </el-radio-button>
+              </el-radio-group>
+            </label>
             <el-input v-model="uploadForm.manifest" type="textarea" :rows="4" :placeholder="t('mcp.upload.manifestPlaceholder')" />
           </div>
           <div class="mt-3 flex justify-end gap-2">
@@ -73,6 +85,36 @@
                     <span class="status-pill" :class="service.enabled ? 'ok' : 'off'">
                       {{ service.enabled ? t('mcp.state.enabled') : t('mcp.state.disabled') }}
                     </span>
+                  </div>
+                </section>
+              </div>
+            </el-tab-pane>
+
+            <el-tab-pane :label="t('mcp.tabs.servers')" name="servers">
+              <div v-if="!mcpServers.length" class="empty-box">{{ t('mcp.servers.empty') }}</div>
+              <div v-else class="grid gap-3 lg:grid-cols-2">
+                <section v-for="server in mcpServers" :key="server.name" class="mcp-card">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <strong>{{ server.name }}</strong>
+                      <em>{{ server.description || server.kind }}</em>
+                    </div>
+                    <span class="status-pill" :class="server.visibility === 'public' ? 'ok' : 'off'">
+                      {{ t(`visibility.${server.visibility}`) }}
+                    </span>
+                  </div>
+                  <div class="mt-4 flex items-center justify-between gap-2 text-xs">
+                    <span class="mcp-muted font-mono">{{ server.kind }}</span>
+                    <el-button
+                      class="visibility-toggle"
+                      size="small"
+                      plain
+                      :disabled="!canWriteMcp || !server.can_manage"
+                      :loading="serverToggling === server.name"
+                      @click="toggleMcpServerVisibility(server)"
+                    >
+                      {{ t(`visibility.${nextResourceVisibility(server.visibility)}`) }}
+                    </el-button>
                   </div>
                 </section>
               </div>
@@ -182,10 +224,11 @@ import {
 } from "@element-plus/icons-vue"
 import { useMcpApi } from "../composables/useApi"
 import { copyToClipboard } from "../lib/clipboard"
+import { nextResourceVisibility, resourceVisibilityOptions } from "../modules/resourceVisibility"
 import { useAuthStore } from "../stores/auth"
-import type { McpServiceId, McpTokenInfo } from "../types"
+import type { McpServerInfo, McpServiceId, McpTokenInfo, ResourceVisibility } from "../types"
 
-type TabId = "services" | "tokens"
+type TabId = "services" | "servers" | "tokens"
 
 type ServiceItem = {
   id: McpServiceId
@@ -200,7 +243,9 @@ const activeTab = ref<TabId>("services")
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const serviceToggling = ref<McpServiceId | null>(null)
+const serverToggling = ref<string | null>(null)
 const tokens = ref<McpTokenInfo[]>([])
+const mcpServers = ref<McpServerInfo[]>([])
 const tokensLoading = ref(false)
 const issuingToken = ref(false)
 const uploadPanelOpen = ref(false)
@@ -222,6 +267,7 @@ const uploadForm = reactive({
   name: "",
   description: "",
   manifest: "",
+  visibility: "private" as ResourceVisibility,
 })
 
 const {
@@ -231,11 +277,12 @@ const {
   issueToken,
   deleteToken,
   uploadMcp,
+  updateMcpServerVisibility,
 } = useMcpApi()
 
 const enabledCount = computed(() => services.value.filter((service) => service.enabled).length)
 const activeTokenCount = computed(() => tokens.value.filter((token) => !isExpired(token.expires_at)).length)
-const canWriteMcp = computed(() => authStore.hasPermission("mcp:write"))
+const canWriteMcp = computed(() => authStore.hasScope("mcp:write"))
 
 const metrics = computed(() => [
   { label: t("mcp.metricLabels.services"), value: `${enabledCount.value}/${services.value.length}`, hint: t("mcp.metrics.enabledServices") },
@@ -250,6 +297,7 @@ const loadConfig = async () => {
     ...service,
     enabled: Boolean(data.services[service.id]),
   }))
+  mcpServers.value = data.mcp_servers || []
   mcpUrl.value = data.mcp_url || "/mcp/"
 }
 
@@ -327,6 +375,7 @@ const resetMcpUpload = () => {
   uploadForm.name = ""
   uploadForm.description = ""
   uploadForm.manifest = ""
+  uploadForm.visibility = "private"
 }
 
 const cancelMcpUpload = () => {
@@ -349,14 +398,31 @@ const submitMcpUpload = async () => {
       name: uploadForm.name.trim(),
       description: uploadForm.description.trim(),
       manifest: uploadForm.manifest,
+      visibility: uploadForm.visibility,
     })
     resetMcpUpload()
     uploadPanelOpen.value = false
+    await loadConfig()
     ElMessage.success(t("mcp.messages.uploadSubmitted"))
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : t("mcp.messages.uploadFailed"))
   } finally {
     submittingUpload.value = false
+  }
+}
+
+const toggleMcpServerVisibility = async (server: McpServerInfo) => {
+  if (!canWriteMcp.value || !server.can_manage) return
+  const nextVisibility = nextResourceVisibility(server.visibility)
+  serverToggling.value = server.name
+  try {
+    const result = await updateMcpServerVisibility(server.name, nextVisibility)
+    server.visibility = result.visibility
+    ElMessage.success(t("visibility.updated"))
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : t("visibility.updateFailed"))
+  } finally {
+    serverToggling.value = null
   }
 }
 
@@ -470,6 +536,18 @@ onMounted(() => {
 
 .mcp-body {
   display: block;
+}
+
+.mcp-visibility-field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.mcp-visibility-field > span {
+  color: var(--ag-muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .mcp-card,

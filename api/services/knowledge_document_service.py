@@ -1,7 +1,15 @@
 from datetime import UTC, datetime
 from typing import Any
 
+from api.auth.visibility import (
+    metadata_visibility,
+    normalize_visibility,
+    visibility_metadata,
+)
+
 DOCUMENT_METADATA_KEYS = (
+    "visibility",
+    "owner_user_id",
     "user_id",
     "title",
     "source",
@@ -59,13 +67,18 @@ def document_metadata(metadata: dict[str, Any]) -> dict[str, str]:
     return compact_metadata
 
 
-def owner_metadata(owner_user_id: str | None) -> dict[str, str]:
+def owner_metadata(
+    owner_user_id: str | None,
+    visibility: str = "private",
+) -> dict[str, str]:
     clean_owner = (owner_user_id or "").strip()
-    return {"user_id": clean_owner} if clean_owner else {}
+    if not clean_owner:
+        return {"visibility": normalize_visibility(visibility)}
+    return visibility_metadata(visibility, clean_owner)
 
 
 def metadata_owner_user_id(metadata: dict[str, Any]) -> str:
-    return str(metadata.get("user_id") or "").strip()
+    return str(metadata.get("owner_user_id") or metadata.get("user_id") or "").strip()
 
 
 def content_visible_to_owner(content: Any, owner_user_id: str | None) -> bool:
@@ -73,6 +86,8 @@ def content_visible_to_owner(content: Any, owner_user_id: str | None) -> bool:
     if not clean_owner:
         return True
     metadata = safe_metadata(getattr(content, "metadata", None))
+    if metadata_visibility(metadata) == "public":
+        return True
     return metadata_owner_user_id(metadata) == clean_owner
 
 
@@ -91,6 +106,8 @@ def content_to_document(content: Any) -> dict[str, Any]:
         "source": metadata_value(metadata, "source", "file_path", default="manual"),
         "chunks": int(metadata.get("chunks") or 0),
         "created_at": format_timestamp(created_at),
+        "visibility": metadata_visibility(metadata),
+        "owner_user_id": metadata_owner_user_id(metadata),
         "metadata": document_metadata(metadata),
     }
 

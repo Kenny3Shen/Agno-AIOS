@@ -9,7 +9,7 @@ from fastapi_users.jwt import generate_jwt
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from loguru import logger
 
-from api.auth.claims import permission_claims
+from api.auth.claims import scope_claims
 from api.auth.database import get_user_db
 from api.auth.models import User
 from api.config import get_settings
@@ -55,7 +55,7 @@ bearer_transport = BearerTransport(tokenUrl="/api/auth/jwt/login")
 
 class ScopedJWTStrategy(JWTStrategy[User, UUID]):
     async def write_token(self, user: User) -> str:
-        claims = permission_claims(user)
+        claims = scope_claims(user)
         data = {
             "sub": str(user.id),
             "aud": self.token_audience,

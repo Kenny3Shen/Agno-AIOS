@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from api.auth.claims import actor_id, has_permission
-from api.auth.permissions import require_permission
+from api.auth.claims import actor_id, has_scope
+from api.auth.scopes import require_scope
 from api.auth.models import User
 from api.auth.users import current_active_user
 from api.services.approval_control_service import (
@@ -53,7 +53,7 @@ def require_memory_write_permission(
     user: User = Depends(current_active_user),
 ) -> User:
     require_control_module_access("memory", user)
-    if not has_permission(user, "memories:write"):
+    if not has_scope(user, "memories:write"):
         raise HTTPException(status_code=403, detail="权限不足")
     return user
 
@@ -62,7 +62,7 @@ def require_memory_delete_permission(
     user: User = Depends(current_active_user),
 ) -> User:
     require_control_module_access("memory", user)
-    if not has_permission(user, "memories:delete"):
+    if not has_scope(user, "memories:delete"):
         raise HTTPException(status_code=403, detail="权限不足")
     return user
 
@@ -85,7 +85,7 @@ async def list_os_approvals(
     run_id: str | None = None,
     page: int = 1,
     limit: int = 50,
-    user: User = Depends(require_permission("approvals:read")),
+    user: User = Depends(require_scope("approvals:read")),
 ):
     try:
         return await list_approvals_payload(
@@ -113,7 +113,7 @@ async def list_os_approvals(
 @router.get("/approvals/{approval_id}")
 async def get_os_approval(
     approval_id: str,
-    user: User = Depends(require_permission("approvals:read")),
+    user: User = Depends(require_scope("approvals:read")),
 ):
     try:
         approval = await get_approval_record(approval_id)
@@ -130,7 +130,7 @@ async def resolve_os_approval(
     approval_id: str,
     body: ApprovalResolveRequest,
     request: Request,
-    user: User = Depends(require_permission("approvals:write")),
+    user: User = Depends(require_scope("approvals:write")),
 ):
     try:
         approval = await resolve_approval_record(

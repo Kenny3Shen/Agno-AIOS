@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
 from starlette.requests import Request
-from api.auth.claims import has_permission
+from api.auth.claims import has_scope
 from api.routes import os_control
 from api.services import os_control_service
 import pytest
@@ -325,8 +325,8 @@ def test_metrics_admin_scope_reads_all_users():
 
 
 def test_memory_write_permission_is_not_granted_to_guest():
-    assert has_permission(actor("u1", "user"), "memories:write")
-    assert not has_permission(actor("guest", "guest"), "memories:write")
+    assert has_scope(actor("u1", "user"), "memories:write")
+    assert not has_scope(actor("guest", "guest"), "memories:write")
 
 
 @pytest.mark.asyncio

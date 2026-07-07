@@ -33,12 +33,17 @@ export interface ChatRunMetrics {
 }
 
 // Skills 管理相关类型
+export type ResourceVisibility = "private" | "public"
+
 export interface SkillInfo {
   name: string
   description: string
   enabled: boolean
   has_scripts: boolean
   scripts: string[]
+  visibility: ResourceVisibility
+  owner_user_id: string
+  can_manage: boolean
 }
 
 export interface SkillListResponse {
@@ -56,6 +61,7 @@ export interface UploadResultResponse {
   description?: string
   path?: string
   kind?: string
+  visibility?: ResourceVisibility
   restart_required?: boolean
 }
 
@@ -64,11 +70,23 @@ export type McpServiceId = "playbook" | "basic"
 
 export interface McpServiceStatusResponse {
   services: Record<McpServiceId, boolean>
+  mcp_servers?: McpServerInfo[]
   control_mode?: string
   fastmcp?: string
   mcp_url?: string
   config_path?: string
   tokens_db_path?: string
+}
+
+export interface McpServerInfo {
+  name: string
+  description: string
+  kind: string
+  enabled: boolean
+  visibility: ResourceVisibility
+  owner_user_id: string
+  can_manage: boolean
+  manifest: Record<string, unknown>
 }
 
 export interface McpTokenInfo {
@@ -544,7 +562,6 @@ export interface AuthUser {
   id: string
   email: string
   role?: "admin" | "user" | "guest"
-  permissions?: string[]
   scopes?: string[]
   is_active: boolean
   is_superuser?: boolean
@@ -653,6 +670,9 @@ export interface KnowledgeDocument {
   source: string
   chunks: number
   created_at: string
+  visibility?: ResourceVisibility
+  owner_user_id?: string
+  can_manage?: boolean
   metadata?: Record<string, string>
 }
 
@@ -666,11 +686,13 @@ export interface KnowledgeTextRequest {
   content: string
   source?: string
   metadata?: Record<string, string>
+  visibility?: ResourceVisibility
 }
 
 export interface KnowledgeFileRequest {
   path: string
   title?: string | null
+  visibility?: ResourceVisibility
 }
 
 export interface KnowledgeSearchResult {

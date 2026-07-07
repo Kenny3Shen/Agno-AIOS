@@ -375,12 +375,12 @@ const testingModelId = ref<string | null>(null)
 const navigationLayout = ref<NavigationGroupConfig[]>([])
 const draggedNavigationItem = ref<NavigationDragState | null>(null)
 const originalNavigationTags = ref("")
-const canWriteSettings = computed(() => authStore.hasPermission("config:write"))
+const canWriteSettings = computed(() => authStore.hasScope("config:write"))
 
 const defaultNavigationGroups = computed<NavigationGroupConfig[]>(() => [
   {
     key: "operations",
-    items: ["Home", "Dashboard", "Chat", "Trace", "Workflow"].map((id) => ({ id, tag: "" })),
+    items: ["Home", "Dashboard", "Chat", "Workflow"].map((id) => ({ id, tag: "" })),
   },
   {
     key: "knowledge",
@@ -388,7 +388,7 @@ const defaultNavigationGroups = computed<NavigationGroupConfig[]>(() => [
   },
   {
     key: "governance",
-    items: ["Evaluation", "Approvals", "Scheduler"].map((id) => ({ id, tag: "" })),
+    items: ["Trace", "Evaluation", "Approvals", "Scheduler"].map((id) => ({ id, tag: "" })),
   },
   {
     key: "securityData",

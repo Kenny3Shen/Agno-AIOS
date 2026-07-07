@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
 
 from api.auth.models import User
-from api.auth.permissions import require_permission
+from api.auth.scopes import require_scope
 from api.services.audit_service import list_audit_events_async
 
 router = APIRouter(prefix="/api/audit", tags=["Audit"])
@@ -18,7 +18,7 @@ async def list_audit_logs(
     action: str | None = None,
     resource_type: str | None = None,
     status: str | None = None,
-    user: User = Depends(require_permission("audit:read")),
+    user: User = Depends(require_scope("audit:read")),
 ) -> dict[str, Any]:
     try:
         items, total = await list_audit_events_async(

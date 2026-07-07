@@ -4,12 +4,19 @@ import re
 import shutil
 import tempfile
 import zipfile
+from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path, PurePosixPath
-from typing import TypedDict
+from typing import Any, TypedDict
 
 import yaml
 
+from api.auth.visibility import (
+    can_manage_resource,
+    can_read_resource,
+    normalize_visibility,
+    visibility_metadata,
+)
 from api.config import get_settings
 from api.services.runtime_paths import CONFIG_DIR, PROJECT_ROOT, resolve_project_path
 
@@ -25,6 +32,24 @@ class SkillInfoData(TypedDict):
     enabled: bool
     has_scripts: bool
     scripts: list[str]
+    visibility: str
+    owner_user_id: str
+    can_manage: bool
+
+
+@dataclass(frozen=True)
+class SkillMetadata:
+    name: str
+    description: str
+    visibility: str
+    owner_user_id: str
+
+    def as_visibility_metadata(self) -> dict[str, str]:
+        metadata = {"visibility": self.visibility}
+        if self.owner_user_id:
+            metadata["owner_user_id"] = self.owner_user_id
+            metadata["user_id"] = self.owner_user_id
+        return metadata
 
 
 def get_skills_dir() -> Path:
@@ -68,26 +93,31 @@ def iter_skill_dirs() -> list[Path]:
     return sorted(entries)
 
 
-def parse_skill_metadata(skill_dir: Path) -> tuple[str, str]:
-    """从 SKILL.md 的 YAML front matter 中提取 name 和 description。"""
-    md_path = skill_dir / "SKILL.md"
-    name = skill_dir.name
-    description = ""
-    if not md_path.exists():
-        return name, description
-
-    raw = md_path.read_text(encoding="utf-8")
+def _split_skill_markdown(raw: str) -> tuple[dict[str, Any], str]:
     if not raw.startswith("---"):
-        return name, description
-
+        return {}, raw
     parts = raw.split("---", 2)
     if len(parts) < 3:
-        return name, description
-
+        return {}, raw
     try:
         meta = yaml.safe_load(parts[1])
     except Exception:
-        return name, description
+        meta = {}
+    return (meta if isinstance(meta, dict) else {}), parts[2].lstrip("\n")
+
+
+def parse_skill_metadata(skill_dir: Path) -> SkillMetadata:
+    """从 SKILL.md 的 YAML front matter 中提取 Skill 元数据。"""
+    md_path = skill_dir / "SKILL.md"
+    name = skill_dir.name
+    description = ""
+    visibility = "private"
+    owner_user_id = ""
+    if not md_path.exists():
+        return SkillMetadata(name, description, visibility, owner_user_id)
+
+    raw = md_path.read_text(encoding="utf-8")
+    meta, _body = _split_skill_markdown(raw)
 
     if isinstance(meta, dict):
         meta_name = meta.get("name")
@@ -96,7 +126,23 @@ def parse_skill_metadata(skill_dir: Path) -> tuple[str, str]:
             name = meta_name
         if isinstance(meta_description, str):
             description = meta_description
-    return name, description
+        visibility = normalize_visibility(str(meta.get("visibility") or ""))
+        owner_user_id = str(meta.get("owner_user_id") or meta.get("user_id") or "").strip()
+    return SkillMetadata(name, description, visibility, owner_user_id)
+
+
+def write_skill_metadata(skill_dir: Path, updates: dict[str, str]) -> None:
+    md_path = skill_dir / "SKILL.md"
+    raw = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
+    meta, body = _split_skill_markdown(raw)
+    meta.update(updates)
+    md_path.write_text(
+        "---\n"
+        + yaml.safe_dump(meta, sort_keys=False, allow_unicode=True)
+        + "---\n"
+        + body,
+        encoding="utf-8",
+    )
 
 
 def list_skill_scripts(skill_dir: Path) -> list[str]:
@@ -118,51 +164,74 @@ def _skill_enabled_from_config(
 
 def find_skill_dir(skill_name: str) -> Path | None:
     for skill_dir in iter_skill_dirs():
-        public_name, _ = parse_skill_metadata(skill_dir)
-        if skill_name in {skill_dir.name, public_name}:
+        metadata = parse_skill_metadata(skill_dir)
+        if skill_name in {skill_dir.name, metadata.name}:
             return skill_dir
     return None
 
 
-def list_skill_infos() -> list[SkillInfoData]:
+def list_skill_infos(user: Any | None = None) -> list[SkillInfoData]:
     if not get_skills_dir().is_dir():
         return []
 
     cfg = load_skills_config()
     skills: list[SkillInfoData] = []
     for skill_dir in iter_skill_dirs():
-        name, description = parse_skill_metadata(skill_dir)
+        metadata = parse_skill_metadata(skill_dir)
+        visibility_info = metadata.as_visibility_metadata()
+        if user is not None and not can_read_resource(user, visibility_info):
+            continue
         scripts = list_skill_scripts(skill_dir)
         skills.append(
             {
-                "name": name,
-                "description": description,
-                "enabled": _skill_enabled_from_config(cfg, skill_dir, name),
+                "name": metadata.name,
+                "description": metadata.description,
+                "enabled": _skill_enabled_from_config(cfg, skill_dir, metadata.name),
                 "has_scripts": len(scripts) > 0,
                 "scripts": scripts,
+                "visibility": metadata.visibility,
+                "owner_user_id": metadata.owner_user_id,
+                "can_manage": user is None or can_manage_resource(user, visibility_info),
             }
         )
     return skills
 
 
-def set_skill_enabled(skill_name: str, enabled: bool) -> str:
+def set_skill_enabled(skill_name: str, enabled: bool, user: Any | None = None) -> str:
     skill_dir = find_skill_dir(skill_name)
     if skill_dir is None:
         raise FileNotFoundError(skill_name)
 
-    public_name, _ = parse_skill_metadata(skill_dir)
+    metadata = parse_skill_metadata(skill_dir)
+    if user is not None and not can_manage_resource(
+        user, metadata.as_visibility_metadata()
+    ):
+        raise PermissionError(skill_name)
     cfg = load_skills_config()
-    cfg[public_name] = enabled
+    cfg[metadata.name] = enabled
     save_skills_config(cfg)
-    return public_name
+    return metadata.name
+
+
+def set_skill_visibility(skill_name: str, visibility: str, user: Any) -> tuple[str, str]:
+    skill_dir = find_skill_dir(skill_name)
+    if skill_dir is None:
+        raise FileNotFoundError(skill_name)
+
+    metadata = parse_skill_metadata(skill_dir)
+    if not can_manage_resource(user, metadata.as_visibility_metadata()):
+        raise PermissionError(skill_name)
+    normalized_visibility = normalize_visibility(visibility, strict=True)
+    write_skill_metadata(skill_dir, {"visibility": normalized_visibility})
+    return metadata.name, normalized_visibility
 
 
 def get_enabled_skill_dirs() -> list[Path]:
     cfg = load_skills_config()
     enabled_dirs: list[Path] = []
     for skill_dir in iter_skill_dirs():
-        public_name, _ = parse_skill_metadata(skill_dir)
-        if _skill_enabled_from_config(cfg, skill_dir, public_name):
+        metadata = parse_skill_metadata(skill_dir)
+        if _skill_enabled_from_config(cfg, skill_dir, metadata.name):
             enabled_dirs.append(skill_dir)
     return enabled_dirs
 
@@ -205,11 +274,14 @@ def install_skill_archive(
     archive: bytes,
     *,
     requested_name: str = "",
+    visibility: str = "private",
+    owner_user_id: str | None = None,
 ) -> tuple[str, str, Path]:
     if not archive:
         raise ValueError("Skill archive is required")
     if len(archive) > MAX_SKILL_ARCHIVE_BYTES:
         raise ValueError("Skill archive is too large")
+    normalized_visibility = normalize_visibility(visibility, strict=True)
 
     skills_dir = get_skills_dir()
     skills_dir.mkdir(parents=True, exist_ok=True)
@@ -228,8 +300,8 @@ def install_skill_archive(
             raise ValueError("Skill archive must be a valid zip file") from exc
 
         skill_root = _find_extracted_skill_root(extract_dir)
-        public_name, description = parse_skill_metadata(skill_root)
-        install_name = _safe_dir_name(requested_name or public_name or skill_root.name)
+        metadata = parse_skill_metadata(skill_root)
+        install_name = _safe_dir_name(requested_name or metadata.name or skill_root.name)
         dest = skills_dir / install_name
         if dest.exists():
             raise FileExistsError(install_name)
@@ -238,6 +310,10 @@ def install_skill_archive(
             _move_contents(skill_root, dest)
         else:
             shutil.move(str(skill_root), str(dest))
-        return public_name or install_name, description, dest
+        write_skill_metadata(
+            dest,
+            visibility_metadata(normalized_visibility, owner_user_id),
+        )
+        return metadata.name or install_name, metadata.description, dest
     finally:
         shutil.rmtree(temp_parent, ignore_errors=True)
