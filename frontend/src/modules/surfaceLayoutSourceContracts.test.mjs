@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import {
   agentEvals,
+  agentOSApprovalsWorkbench,
   agentOSControl,
+  agentOSControlStyle,
+  agentOSLedger,
+  agentOSSchedulerWorkbench,
   apiClient,
   app,
   appStyle,
@@ -39,6 +43,14 @@ import {
   visibilityTabs,
   workflow,
 } from "./testSource.mjs"
+
+const agentOSSurface = [
+  agentOSControl,
+  agentOSApprovalsWorkbench,
+  agentOSLedger,
+  agentOSSchedulerWorkbench,
+  agentOSControlStyle,
+].join("\n")
 
 assert.match(
   skills,
@@ -344,7 +356,7 @@ for (const [source, label] of [
   [skills, "Skills"],
   [knowledge, "Knowledge"],
   [memoryControl, "Memory"],
-  [agentOSControl, "AgentOS"],
+  [agentOSSurface, "AgentOS"],
   [agentEvals, "Evaluation"],
 ]) {
   assert.doesNotMatch(
@@ -389,8 +401,8 @@ for (const [source, pattern, label] of [
   [memoryControl, /memory-queue-panel ag-workspace-panel/, "Memory queue"],
   [memoryControl, /memory-list-panel ag-workspace-panel/, "Memory list"],
   [agentOSControl, /agentos-control ag-page-flow/, "AgentOS page"],
-  [agentOSControl, /agentos-panel ag-content-panel scheduler-list-panel/, "Scheduler list"],
-  [agentOSControl, /agentos-panel ag-content-panel/, "AgentOS ledger"],
+  [agentOSSchedulerWorkbench, /agentos-panel ag-content-panel scheduler-list-panel/, "Scheduler list"],
+  [agentOSLedger, /agentos-panel ag-content-panel/, "AgentOS ledger"],
   [cve, /cve-console ag-page-flow/, "CVE page"],
   [cve, /cve-query-panel ag-content-panel/, "CVE search"],
   [cve, /cve-results-panel ag-content-panel/, "CVE results"],
@@ -435,7 +447,7 @@ for (const [source, pattern, label] of [
   [workflow, /workflow-inspector workflow-panel ag-right-panel/, "Workflow inspector"],
   [trace, /trace-detail-panel ag-right-panel/, "Trace detail"],
   [memoryControl, /memory-detail-panel ag-right-panel/, "Memory detail"],
-  [agentOSControl, /agentos-panel scheduler-detail-panel ag-right-panel/, "Scheduler detail"],
+  [agentOSSchedulerWorkbench, /agentos-panel scheduler-detail-panel ag-right-panel/, "Scheduler detail"],
 ]) {
   assert.match(
     source,
@@ -529,7 +541,7 @@ assert.doesNotMatch(
 )
 
 assert.match(
-  agentOSControl,
+  agentOSSchedulerWorkbench,
   /class="scheduler-enabled-field"[\s\S]*?<el-switch/,
   "Scheduler create form enabled switch must use a stable field wrapper",
 )

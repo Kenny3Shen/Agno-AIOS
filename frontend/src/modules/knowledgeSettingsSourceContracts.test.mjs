@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import {
   agentEvals,
+  agentOSApprovalsWorkbench,
   agentOSControl,
+  agentOSLedger,
+  agentOSSchedulerWorkbench,
   apiClient,
   app,
   appStyle,
@@ -39,6 +42,13 @@ import {
   visibilityTabs,
   workflow,
 } from "./testSource.mjs"
+
+const agentOSCopySources = [
+  agentOSControl,
+  agentOSApprovalsWorkbench,
+  agentOSLedger,
+  agentOSSchedulerWorkbench,
+].join("\n")
 
 assert.match(
   memoryControl,
@@ -390,7 +400,7 @@ assert.match(
 )
 
 assert.match(
-  agentOSControl,
+  agentOSCopySources,
   /useI18n\(\)/,
   "AgentOS control pages must read user-facing copy from vue-i18n",
 )
@@ -401,7 +411,7 @@ for (const bulkyAgentOSHeaderClass of [
   "agentos-title",
 ]) {
   assert.equal(
-    agentOSControl.includes(bulkyAgentOSHeaderClass),
+    agentOSCopySources.includes(bulkyAgentOSHeaderClass),
     false,
     `AgentOS control pages must remove bulky top header element: ${bulkyAgentOSHeaderClass}`,
   )
@@ -417,7 +427,7 @@ for (const hardcodedAgentOSCopy of [
   "当前模块还没有可展示的运行记录。",
 ]) {
   assert.equal(
-    agentOSControl.includes(hardcodedAgentOSCopy),
+    agentOSCopySources.includes(hardcodedAgentOSCopy),
     false,
     `AgentOS control page must not hardcode copy: ${hardcodedAgentOSCopy}`,
   )

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import {
   agentEvals,
+  agentOSApprovalsWorkbench,
   agentOSControl,
+  agentOSControlStyle,
+  agentOSLedger,
+  agentOSSchedulerWorkbench,
   apiClient,
   app,
   appStyle,
@@ -130,31 +134,67 @@ for (const apiPath of [
 
 assert.match(
   agentOSControl,
+  /AgentOSSchedulerWorkbench/,
+  "AgentOS parent must delegate scheduler UI to a dedicated workbench component",
+)
+
+assert.match(
+  agentOSControl,
+  /AgentOSApprovalsWorkbench/,
+  "AgentOS parent must delegate approvals UI to a dedicated workbench component",
+)
+
+assert.match(
+  agentOSControl,
+  /AgentOSLedger/,
+  "AgentOS parent must delegate generic control-plane payloads to a dedicated ledger component",
+)
+
+assert.doesNotMatch(
+  agentOSControl,
+  /<main v-if="props\.osModule === 'scheduler'"|<main v-else-if="props\.osModule === 'approvals'"/,
+  "AgentOS parent must not keep scheduler or approvals workbench templates inline",
+)
+
+assert.match(
+  agentOSApprovalsWorkbench,
   /approvals-workbench/,
   "AgentOS approvals module must render a dedicated approvals workbench",
 )
 
 assert.match(
-  agentOSControl,
+  agentOSApprovalsWorkbench,
   /resolveSelectedApproval\("approved"\)/,
   "AgentOS approvals module must bind an approve action",
 )
 
 assert.match(
-  agentOSControl,
+  agentOSApprovalsWorkbench,
   /resolveSelectedApproval\("rejected"\)/,
   "AgentOS approvals module must bind a reject action",
 )
 
 assert.match(
-  agentOSControl,
+  agentOSSchedulerWorkbench,
+  /scheduler-workbench/,
+  "AgentOS scheduler module must render a dedicated scheduler workbench",
+)
+
+assert.match(
+  agentOSLedger,
+  /agentos-ledger/,
+  "AgentOS ledger module must render generic OS control records outside the parent component",
+)
+
+assert.match(
+  agentOSControlStyle,
   /\.scheduler-enabled-field\s*\{[^}]*min-width:\s*0[^}]*overflow:\s*hidden/s,
   "Scheduler enabled switch field must not overlap adjacent form controls",
 )
 
 assert.match(
-  agentOSControl,
-  /\.scheduler-enabled-field\s+:deep\(\.el-switch__core\)\s*\{[^}]*min-width:\s*40px/s,
+  agentOSControlStyle,
+  /\.scheduler-enabled-field\s+\.el-switch__core\s*\{[^}]*min-width:\s*40px/s,
   "Scheduler enabled switch core must preserve the Element Plus switch track width",
 )
 
