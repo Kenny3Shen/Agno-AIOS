@@ -1,4 +1,4 @@
-import type { ChatSession, ChatSessionRun, ParsedSpanDisplay, ParsedSpanEvent, ParsedSpanPayload, SpanItem, TraceItem } from "../types"
+import type { ChatSession, ChatSessionRun, ParsedSpanDisplay, ParsedSpanEvent, ParsedSpanPayload, SpanItem, SpanTreeNode, TraceItem } from "../types"
 
 export type SessionStatusFilter = "active" | "archived" | "all"
 export type RunStatusFilter = "" | "OK" | "ERROR" | "UNSET"
@@ -79,6 +79,20 @@ export interface TraceLogItem {
   message: string
 }
 
+export interface TraceSessionOpenRequest {
+  sessionId: string
+  userId?: string | null
+  userFilter?: string
+  runId: string
+}
+
+export interface TraceSessionSelectionResolution {
+  keepCurrent: boolean
+  nextSession: ChatSession | null
+  nextSessionId: string | null
+  shouldClearSelection: boolean
+}
+
 interface BuildTraceRunRowsParams {
   traces: TraceItem[]
   selectedSession: ChatSession | null
@@ -119,6 +133,19 @@ interface BuildTraceLogItemsParams {
 interface BuildTraceListParamsParams {
   session: ChatSession
   filters: TraceRunFilters
+}
+
+interface BuildTraceStoreFiltersParams {
+  session: ChatSession
+  runId: string
+  filters: TraceRunFilters
+}
+
+interface ResolveTraceSessionSelectionParams {
+  visibleSessions: ChatSession[]
+  selectedSessionId: string | null
+  selectedSession: ChatSession | null
+  requestedSessionId: string
 }
 
 const emptyParsedSpan: ParsedSpanDisplay = {
@@ -186,6 +213,70 @@ export const findExactTraceSession = (
   sessions: ChatSession[],
   sessionId: string,
 ) => sessions.find((session) => normalize(session.session_id) === normalize(sessionId)) || null
+
+export const resolveTraceSessionSelection = ({
+  visibleSessions,
+  selectedSessionId,
+  selectedSession,
+  requestedSessionId,
+}: ResolveTraceSessionSelectionParams): TraceSessionSelectionResolution => {
+  const currentStillVisible = visibleSessions.some((session) => session.session_id === selectedSessionId)
+  if (currentStillVisible && selectedSession) {
+    return {
+      keepCurrent: true,
+      nextSession: null,
+      nextSessionId: selectedSessionId,
+      shouldClearSelection: false,
+    }
+  }
+
+  const exactSession = findExactTraceSession(visibleSessions, requestedSessionId)
+  const nextSession = exactSession || (visibleSessions.length === 1 ? visibleSessions[0] : null)
+  return {
+    keepCurrent: false,
+    nextSession,
+    nextSessionId: nextSession?.session_id || null,
+    shouldClearSelection: true,
+  }
+}
+
+export const normalizeTraceSessionOpenRequest = (
+  sessionId: string,
+  userId?: string | null,
+  runId?: string | null,
+): TraceSessionOpenRequest | null => {
+  const normalizedSessionId = sessionId.trim()
+  if (!normalizedSessionId) return null
+  return {
+    sessionId: normalizedSessionId,
+    userId: userId ?? null,
+    userFilter: userId === undefined ? undefined : userId || "",
+    runId: (runId || "").trim(),
+  }
+}
+
+export const ensureTraceSession = (
+  sessions: ChatSession[],
+  request: TraceSessionOpenRequest,
+) => {
+  const session = sessions.find((item) => item.session_id === request.sessionId)
+  if (session) return { session, sessions }
+
+  const placeholderSession: ChatSession = {
+    session_id: request.sessionId,
+    user_id: request.userId || null,
+    preview: request.sessionId,
+    created_at: 0,
+    updated_at: 0,
+    archived: false,
+    archived_at: null,
+    runs: [],
+  }
+  return {
+    session: placeholderSession,
+    sessions: [placeholderSession, ...sessions],
+  }
+}
 
 export const buildTraceRunRows = ({
   traces,
@@ -264,6 +355,20 @@ export const buildTraceListParams = ({
   status: filters.status,
 })
 
+export const buildTraceStoreFilters = ({
+  session,
+  runId,
+  filters,
+}: BuildTraceStoreFiltersParams) => ({
+  session_id: session.session_id,
+  run_id: runId,
+  user_id: session.user_id || "",
+  agent_id: filters.agentId,
+  team_id: filters.teamId,
+  workflow_id: filters.workflowId,
+  status: filters.status,
+})
+
 export const mergePreferredTraceItem = (
   items: TraceItem[],
   preferredTrace: TraceItem | null | undefined,
@@ -274,6 +379,11 @@ export const mergePreferredTraceItem = (
     ...items.filter((trace) => trace.trace_id !== preferredTrace.trace_id),
   ]
 }
+
+export const findFirstTraceSpan = (
+  tree: SpanTreeNode[],
+  spans: SpanItem[],
+) => tree[0]?.span || spans[0] || null
 
 export const summarizeTraceItems = (
   items: TraceItem[],

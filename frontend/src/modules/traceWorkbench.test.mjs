@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import {
+  buildTraceStoreFilters,
   buildTraceListParams,
   buildTraceLogItems,
   buildTraceMetadataItems,
@@ -13,11 +14,15 @@ import {
   formatTracePayloadText,
   filterTraceRunRows,
   filterTraceSessions,
+  ensureTraceSession,
   findExactTraceSession,
+  findFirstTraceSpan,
   findTraceRunRow,
   isTraceJsonPayload,
   isTraceToolSpan,
   mergePreferredTraceItem,
+  normalizeTraceSessionOpenRequest,
+  resolveTraceSessionSelection,
   traceRunMetrics,
   traceDurationClass,
   tracePayloadTextForMode,
@@ -213,9 +218,117 @@ assert.deepEqual(
 )
 
 assert.deepEqual(
+  buildTraceStoreFilters({
+    session: sessionA,
+    runId: "run-1",
+    filters: {
+      runId: "",
+      agentId: "agent-1",
+      teamId: "",
+      workflowId: "workflow-1",
+      status: "ERROR",
+    },
+  }),
+  {
+    session_id: "session-alpha",
+    run_id: "run-1",
+    user_id: "user-1",
+    agent_id: "agent-1",
+    team_id: "",
+    workflow_id: "workflow-1",
+    status: "ERROR",
+  },
+  "trace store filters should preserve empty-string filter values used by the store",
+)
+
+assert.deepEqual(
   mergePreferredTraceItem([traceA, traceB], { ...traceB, name: "Preferred trace" }).map((trace) => trace.name),
   ["Preferred trace", ""],
   "preferred trace merge should place the exact match first and remove duplicate trace ids",
+)
+
+assert.deepEqual(
+  resolveTraceSessionSelection({
+    visibleSessions: [sessionA],
+    selectedSessionId: "session-alpha",
+    selectedSession: sessionA,
+    requestedSessionId: "",
+  }),
+  {
+    keepCurrent: true,
+    nextSession: null,
+    nextSessionId: "session-alpha",
+    shouldClearSelection: false,
+  },
+  "session reconcile should keep the current selected session when it is still visible",
+)
+
+assert.deepEqual(
+  resolveTraceSessionSelection({
+    visibleSessions: [sessionA],
+    selectedSessionId: "missing",
+    selectedSession: null,
+    requestedSessionId: " SESSION-ALPHA ",
+  }),
+  {
+    keepCurrent: false,
+    nextSession: sessionA,
+    nextSessionId: "session-alpha",
+    shouldClearSelection: true,
+  },
+  "session reconcile should prefer an exact requested session before singleton fallback",
+)
+
+assert.deepEqual(
+  normalizeTraceSessionOpenRequest(" session-new ", null, " run-9 "),
+  {
+    sessionId: "session-new",
+    userId: null,
+    userFilter: "",
+    runId: "run-9",
+  },
+  "external session open requests should normalize ids while preserving explicit empty user filters",
+)
+
+assert.equal(
+  normalizeTraceSessionOpenRequest("   ", undefined, "run-9"),
+  null,
+  "external session open requests should ignore empty session ids",
+)
+
+assert.deepEqual(
+  ensureTraceSession(sessions, {
+    sessionId: "session-new",
+    userId: "user-new",
+    userFilter: "user-new",
+    runId: "",
+  }),
+  {
+    session: {
+      session_id: "session-new",
+      user_id: "user-new",
+      preview: "session-new",
+      created_at: 0,
+      updated_at: 0,
+      archived: false,
+      archived_at: null,
+      runs: [],
+    },
+    sessions: [
+      {
+        session_id: "session-new",
+        user_id: "user-new",
+        preview: "session-new",
+        created_at: 0,
+        updated_at: 0,
+        archived: false,
+        archived_at: null,
+        runs: [],
+      },
+      ...sessions,
+    ],
+  },
+  "external session open should create a visible placeholder when the session is not in the latest list",
 )
 
 assert.deepEqual(
@@ -370,6 +483,12 @@ const selectedSpan = {
   kind: "internal",
   parsed: parsedSpan,
 }
+
+assert.equal(
+  findFirstTraceSpan([{ span: selectedSpan, children: [] }], []),
+  selectedSpan,
+  "first span selection should prefer the tree root span",
+)
 
 assert.deepEqual(
   buildTraceOverviewItems({

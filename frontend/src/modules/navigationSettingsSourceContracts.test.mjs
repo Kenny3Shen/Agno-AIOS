@@ -31,6 +31,7 @@ import {
   skills,
   sourcePath,
   trace,
+  traceWorkbenchSource,
   typesSource,
   useApiCore,
   useChatApiSource,
@@ -314,9 +315,9 @@ for (const traceParam of ["session_id", "run_id", "agent_id", "team_id", "workfl
 
 for (const sessionTraceParam of ["session_id", "user_id"]) {
   assert.match(
-    trace,
+    traceWorkbenchSource,
     new RegExp(`${sessionTraceParam}:\\s*session\\.${sessionTraceParam === "session_id" ? "session_id" : "user_id"}`),
-    `Trace page must pass selected session ${sessionTraceParam} into listTraces`,
+    `Trace workbench must pass selected session ${sessionTraceParam} into listTraces params`,
   )
 }
 

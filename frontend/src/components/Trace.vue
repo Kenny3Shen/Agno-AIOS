@@ -476,15 +476,19 @@ import {
   buildTraceMetadataItems,
   buildTraceOverviewItems,
   buildTraceRunRows,
+  buildTraceStoreFilters,
   buildTraceToolCallItems,
   compactTraceId,
+  ensureTraceSession,
   filterTraceRunRows,
   filterTraceSessions,
-  findExactTraceSession,
+  findFirstTraceSpan,
   findTraceRunRow,
   findTraceSession,
   formatTraceDuration,
   mergePreferredTraceItem,
+  normalizeTraceSessionOpenRequest,
+  resolveTraceSessionSelection,
   summarizeTraceItems,
   traceDurationClass,
   tracePayloadTextForMode,
@@ -730,15 +734,17 @@ const loadTraceSummary = async () => {
 }
 
 const reconcileSessionSelection = async () => {
-  const visibleSessions = filteredSessions.value
-  const currentStillVisible = visibleSessions.some((session) => session.session_id === selectedSessionId.value)
-  if (currentStillVisible && selectedSession.value) return
+  const selection = resolveTraceSessionSelection({
+    visibleSessions: filteredSessions.value,
+    selectedSessionId: selectedSessionId.value,
+    selectedSession: selectedSession.value,
+    requestedSessionId: sessionFilters.sessionId,
+  })
+  if (selection.keepCurrent) return
 
-  clearTraceSelection()
-  const exactSession = findExactTraceSession(visibleSessions, sessionFilters.sessionId)
-  const nextSession = exactSession || (visibleSessions.length === 1 ? visibleSessions[0] : null)
-  selectedSessionId.value = nextSession?.session_id || null
-  if (nextSession) await loadSessionTraces(nextSession)
+  if (selection.shouldClearSelection) clearTraceSelection()
+  selectedSessionId.value = selection.nextSessionId
+  if (selection.nextSession) await loadSessionTraces(selection.nextSession)
 }
 
 const selectSession = async (session: ChatSession) => {
@@ -749,48 +755,28 @@ const selectSession = async (session: ChatSession) => {
 }
 
 const selectSessionById = async (sessionId: string, userId?: string | null, runId?: string | null) => {
-  const normalizedSessionId = sessionId.trim()
-  if (!normalizedSessionId) return
+  const request = normalizeTraceSessionOpenRequest(sessionId, userId, runId)
+  if (!request) return
 
   clearPendingFilterRefresh()
-  sessionFilters.sessionId = normalizedSessionId
-  if (userId !== undefined) sessionFilters.userId = userId || ""
+  sessionFilters.sessionId = request.sessionId
+  if (request.userFilter !== undefined) sessionFilters.userId = request.userFilter
   sessionFilters.status = "all"
-  runFilters.runId = (runId || "").trim()
+  runFilters.runId = request.runId
 
   sessions.value = await listSessions({ includeRuns: true })
-  let session = sessions.value.find((item) => item.session_id === normalizedSessionId)
-  if (!session) {
-    session = {
-      session_id: normalizedSessionId,
-      user_id: userId || null,
-      preview: normalizedSessionId,
-      created_at: 0,
-      updated_at: 0,
-      archived: false,
-      archived_at: null,
-      runs: [],
-    }
-    sessions.value = [session, ...sessions.value]
-  }
+  const target = ensureTraceSession(sessions.value, request)
+  sessions.value = target.sessions
 
-  selectedSessionId.value = session.session_id
-  await loadSessionTraces(session, runFilters.runId)
+  selectedSessionId.value = target.session.session_id
+  await loadSessionTraces(target.session, runFilters.runId)
   scrollDetailIntoView()
 }
 
 const loadSessionTraces = async (session: ChatSession, preferredRunId?: string | null) => {
   const runId = (preferredRunId || "").trim()
   clearTraceSelection()
-  traceStore.setTraceFilters({
-    session_id: session.session_id,
-    run_id: runId,
-    user_id: session.user_id || "",
-    agent_id: runFilters.agentId,
-    team_id: runFilters.teamId,
-    workflow_id: runFilters.workflowId,
-    status: runFilters.status,
-  })
+  traceStore.setTraceFilters(buildTraceStoreFilters({ session, runId, filters: runFilters }))
   const baseParams = buildTraceListParams({ session, filters: runFilters })
   const resp = await listTraces(baseParams)
   let items = resp.items || []
@@ -820,7 +806,7 @@ const selectTraceById = async (traceId: string | null | undefined) => {
     selectedTrace.value = resp.trace
     spans.value = resp.spans || []
     tree.value = resp.tree || []
-    selectedSpan.value = firstAvailableSpan()
+    selectedSpan.value = findFirstTraceSpan(tree.value, spans.value)
     traceStore.setCurrentTraceId(resp.trace.trace_id)
     scrollDetailIntoView()
   } finally {
@@ -830,10 +816,6 @@ const selectTraceById = async (traceId: string | null | undefined) => {
 
 const openTraceDetail = async (traceId: string | null | undefined) => {
   await selectTraceById(traceId)
-}
-
-const firstAvailableSpan = () => {
-  return tree.value[0]?.span || spans.value[0] || null
 }
 
 const scrollDetailSectionIntoView = async (section: "overview" | "input" | "output" | "tools" | "logs" | "metadata") => {
