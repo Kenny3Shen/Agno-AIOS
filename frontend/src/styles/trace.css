@@ -108,32 +108,17 @@
 }
 
 .trace-session-panel {
-  display: flex;
-  min-height: 0;
-  flex-direction: column;
-  overflow: hidden;
   border-right: 1px solid var(--trace-border);
   background: var(--trace-panel);
 }
 
 .trace-session-toolbar {
-  display: grid;
-  gap: 12px;
   border-bottom: 1px solid var(--trace-border);
 }
 
 .trace-filter-actions {
   display: flex;
   gap: 8px;
-}
-
-.trace-session-list {
-  display: grid;
-  align-content: start;
-  gap: 10px;
-  min-height: 0;
-  overflow: auto;
-  padding: 12px;
 }
 
 .trace-session-pagination {
@@ -1384,11 +1369,6 @@ html.dark .trace-waterfall-row.active {
 .trace-session-toolbar,
 .trace-runs-toolbar {
   padding: 12px 14px;
-}
-
-.trace-session-list {
-  gap: 8px;
-  padding: 10px;
 }
 
 .trace-session-card {

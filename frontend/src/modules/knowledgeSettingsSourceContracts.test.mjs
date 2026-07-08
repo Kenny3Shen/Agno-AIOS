@@ -422,6 +422,18 @@ assert.doesNotMatch(
 
 assert.match(
   traceSessionPanel,
+  /trace-session-panel[\s\S]*flex-col[\s\S]*trace-session-list[\s\S]*content-start[\s\S]*gap-2[\s\S]*p-\[10px\]/,
+  "TraceSessionPanel must move simple session column layout to UnoCSS utilities",
+)
+
+assert.doesNotMatch(
+  traceStyle,
+  /\.trace-session-panel\s*\{[^}]*display:\s*flex|\.trace-session-list\s*\{[^}]*display:\s*grid/,
+  "Trace stylesheet must not keep simple session column layout after UnoCSS utility migration",
+)
+
+assert.match(
+  traceSessionPanel,
   /useI18n\(\)/,
   "TraceSessionPanel must read session panel copy from vue-i18n",
 )

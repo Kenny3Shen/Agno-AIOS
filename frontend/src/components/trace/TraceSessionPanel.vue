@@ -1,6 +1,6 @@
 <template>
-  <aside class="trace-session-panel">
-    <div class="trace-toolbar trace-session-toolbar">
+  <aside class="trace-session-panel flex min-h-0 flex-col overflow-hidden">
+    <div class="trace-toolbar trace-session-toolbar grid gap-3">
       <div class="trace-panel-header">
         <div>
           <p>{{ t('trace.sessions.title') }}</p>
@@ -9,7 +9,7 @@
       </div>
     </div>
 
-    <div class="trace-session-list">
+    <div class="trace-session-list grid min-h-0 content-start gap-2 overflow-auto p-[10px]">
       <el-skeleton v-if="loadingSessions && !sessions.length" :rows="sessionPageSize" animated />
       <template v-else>
         <button
