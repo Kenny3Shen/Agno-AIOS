@@ -3,6 +3,8 @@ import type { ChatSession, ChatSessionRun, ParsedSpanDisplay, ParsedSpanEvent, P
 export type SessionStatusFilter = "active" | "archived" | "all"
 export type RunStatusFilter = "" | "OK" | "ERROR" | "UNSET"
 export type TracePayloadViewMode = "text" | "json" | "markdown"
+export type TraceDetailTab = "info" | "metadata" | "overview"
+export type TraceDetailSection = "overview" | "input" | "output" | "tools" | "logs" | "metadata"
 
 export interface TraceSessionFilters {
   sessionId: string
@@ -148,7 +150,7 @@ interface ResolveTraceSessionSelectionParams {
   requestedSessionId: string
 }
 
-const emptyParsedSpan: ParsedSpanDisplay = {
+export const emptyTraceParsedSpan: ParsedSpanDisplay = {
   input: { format: "empty", text: "", data: null },
   output: { format: "empty", text: "", data: null },
   metadata: {
@@ -164,6 +166,8 @@ const emptyParsedSpan: ParsedSpanDisplay = {
   },
   events: [],
 }
+
+const emptyParsedSpan = emptyTraceParsedSpan
 
 const normalize = (value?: string | null) => (value || "").trim().toLowerCase()
 
@@ -192,6 +196,26 @@ const runsByRunId = (session: ChatSession | null) => {
     if (runId) map.set(runId, run)
   }
   return map
+}
+
+export const createTraceSessionFilters = (): TraceSessionFilters => ({
+  sessionId: "",
+  userId: "",
+  keyword: "",
+  status: "active",
+})
+
+export const createTraceRunFilters = (): TraceRunFilters => ({
+  runId: "",
+  agentId: "",
+  teamId: "",
+  workflowId: "",
+  status: "",
+})
+
+export const traceDetailTabForSection = (section: TraceDetailSection): TraceDetailTab => {
+  if (section === "metadata" || section === "overview") return section
+  return "info"
 }
 
 export const filterTraceSessions = (

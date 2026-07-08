@@ -480,6 +480,9 @@ import {
   buildTraceToolCallItems,
   clampTraceSessionPage,
   compactTraceId,
+  createTraceRunFilters,
+  createTraceSessionFilters,
+  emptyTraceParsedSpan,
   ensureTraceSession,
   filterTraceRunRows,
   filterTraceSessions,
@@ -496,13 +499,13 @@ import {
   resolveTraceSessionSelection,
   summarizeTraceItems,
   traceDurationClass,
+  traceDetailTabForSection,
   tracePayloadTextForMode,
   traceRunMetrics,
   traceStatusClass,
   traceStatusLabel,
   traceTagType,
-  type RunStatusFilter,
-  type SessionStatusFilter,
+  type TraceDetailTab,
   type TracePayloadViewMode,
   type TraceSummaryState,
 } from "../modules/traceWorkbench"
@@ -529,25 +532,14 @@ const traceSummary = ref<TraceSummaryState>({
   sampleSize: 0,
 })
 const selectedSessionId = ref<string | null>(null)
-const sessionFilters = reactive({
-  sessionId: "",
-  userId: "",
-  keyword: "",
-  status: "active" as SessionStatusFilter,
-})
-const runFilters = reactive({
-  runId: "",
-  agentId: "",
-  teamId: "",
-  workflowId: "",
-  status: "" as RunStatusFilter,
-})
+const sessionFilters = reactive(createTraceSessionFilters())
+const runFilters = reactive(createTraceRunFilters())
 
 const selectedTrace = ref<TraceItem | null>(null)
 const spans = ref<SpanItem[]>([])
 const tree = ref<SpanTreeNode[]>([])
 const selectedSpan = ref<SpanItem | null>(null)
-const activeDetailTab = ref<"info" | "metadata" | "overview">("info")
+const activeDetailTab = ref<TraceDetailTab>("info")
 const traceAdvancedFiltersOpen = ref(false)
 const sessionPage = ref(1)
 const inputViewMode = ref<PayloadViewMode>("text")
@@ -622,23 +614,7 @@ const logItems = computed(() => {
   })
 })
 
-const emptyParsedSpan = {
-  input: { format: "empty", text: "", data: null },
-  output: { format: "empty", text: "", data: null },
-  metadata: {
-    model: null,
-    provider: null,
-    tool: null,
-    operation: null,
-    tokens: {
-      prompt: null,
-      completion: null,
-      total: null,
-    },
-  },
-  events: [],
-}
-const parsedSpan = computed(() => selectedSpan.value?.parsed || emptyParsedSpan)
+const parsedSpan = computed(() => selectedSpan.value?.parsed || emptyTraceParsedSpan)
 const renderMarkdown = (value: string) => {
   return markdownRenderer.render(value || "")
 }
@@ -798,7 +774,7 @@ const scrollDetailSectionIntoView = async (section: "overview" | "input" | "outp
 
 const selectSpan = (span: SpanItem, section: "overview" | "input" | "output" | "tools" | "logs" | "metadata" = "input") => {
   selectedSpan.value = span
-  activeDetailTab.value = section === "metadata" || section === "overview" ? section : "info"
+  activeDetailTab.value = traceDetailTabForSection(section)
   void scrollDetailSectionIntoView(section)
 }
 
@@ -807,15 +783,8 @@ const onSpanNodeClick = (node: SpanTreeNode) => {
 }
 
 const resetAllFilters = async () => {
-  sessionFilters.sessionId = ""
-  sessionFilters.userId = ""
-  sessionFilters.keyword = ""
-  sessionFilters.status = "active"
-  runFilters.runId = ""
-  runFilters.agentId = ""
-  runFilters.teamId = ""
-  runFilters.workflowId = ""
-  runFilters.status = ""
+  Object.assign(sessionFilters, createTraceSessionFilters())
+  Object.assign(runFilters, createTraceRunFilters())
   selectedSessionId.value = null
   traceStore.resetTraceFilters()
   await refresh()

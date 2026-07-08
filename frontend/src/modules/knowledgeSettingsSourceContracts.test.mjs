@@ -358,9 +358,9 @@ assert.match(
 )
 
 assert.match(
-  trace,
-  /activeDetailTab\s*=\s*ref<"info" \| "metadata" \| "overview">/,
-  "Trace detail tabs must include the requested Overview tab",
+  traceWorkbenchSource,
+  /TraceDetailTab\s*=\s*"info" \| "metadata" \| "overview"[\s\S]*traceDetailTabForSection/,
+  "Trace workbench detail tab mapping must include the requested Overview tab",
 )
 
 assert.match(

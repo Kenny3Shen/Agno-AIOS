@@ -10,6 +10,9 @@ import {
   buildTraceToolCallItems,
   clampTraceSessionPage,
   compactTraceId,
+  createTraceRunFilters,
+  createTraceSessionFilters,
+  emptyTraceParsedSpan,
   formatTraceAnyDateTime,
   formatTraceCost,
   formatTraceDateTime,
@@ -34,6 +37,7 @@ import {
   traceStatusClass,
   traceStatusLabel,
   traceTagType,
+  traceDetailTabForSection,
   traceValueOrDash,
   prettyTraceJson,
   summarizeTraceItems,
@@ -108,6 +112,29 @@ assert.deepEqual(
   }).map((session) => session.session_id),
   ["session-alpha"],
   "session filters should combine archive status and keyword matching",
+)
+
+assert.deepEqual(
+  createTraceSessionFilters(),
+  {
+    sessionId: "",
+    userId: "",
+    keyword: "",
+    status: "active",
+  },
+  "session filter defaults should live outside the Vue component",
+)
+
+assert.deepEqual(
+  createTraceRunFilters(),
+  {
+    runId: "",
+    agentId: "",
+    teamId: "",
+    workflowId: "",
+    status: "",
+  },
+  "run filter defaults should live outside the Vue component",
 )
 
 assert.deepEqual(
@@ -398,6 +425,17 @@ assert.deepEqual(
 
 assert.deepEqual(
   [
+    traceDetailTabForSection("metadata"),
+    traceDetailTabForSection("overview"),
+    traceDetailTabForSection("logs"),
+    traceDetailTabForSection("input"),
+  ],
+  ["metadata", "overview", "info", "info"],
+  "detail section mapping should keep tab selection logic outside the Vue component",
+)
+
+assert.deepEqual(
+  [
     traceDurationClass(5),
     traceDurationClass(1500),
     traceDurationClass(15000),
@@ -519,6 +557,27 @@ const parsedSpan = {
   },
   events: [{ name: "parsed", message: "ready" }],
 }
+
+assert.deepEqual(
+  emptyTraceParsedSpan,
+  {
+    input: { format: "empty", text: "", data: null },
+    output: { format: "empty", text: "", data: null },
+    metadata: {
+      model: null,
+      provider: null,
+      tool: null,
+      operation: null,
+      tokens: {
+        prompt: null,
+        completion: null,
+        total: null,
+      },
+    },
+    events: [],
+  },
+  "empty parsed span shape should be shared by the workbench and Vue component",
+)
 
 const selectedSpan = {
   span_id: "span-1234567890abcdef",
