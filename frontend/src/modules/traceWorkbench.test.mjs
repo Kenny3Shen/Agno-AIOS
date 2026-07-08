@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import {
+  buildTraceListParams,
   buildTraceLogItems,
   buildTraceMetadataItems,
   buildTraceOverviewItems,
@@ -13,8 +14,11 @@ import {
   filterTraceRunRows,
   filterTraceSessions,
   findExactTraceSession,
+  findTraceRunRow,
   isTraceJsonPayload,
   isTraceToolSpan,
+  mergePreferredTraceItem,
+  traceRunMetrics,
   traceDurationClass,
   tracePayloadTextForMode,
   traceStatusClass,
@@ -158,6 +162,60 @@ assert.deepEqual(
   }).map((row) => row.key),
   ["trace-b"],
   "run filters should match merged Trace and Run fields",
+)
+
+assert.equal(
+  findTraceRunRow(rows, " trace-b ")?.key,
+  "trace-b",
+  "selected run row lookup should normalize external trace ids",
+)
+
+assert.equal(
+  findTraceRunRow(rows, null),
+  null,
+  "selected run row lookup should ignore empty trace ids",
+)
+
+assert.deepEqual(
+  traceRunMetrics(rows[0]),
+  { total_tokens: 42, cost: 0.003 },
+  "run metrics should expose only object metrics from the selected run row",
+)
+
+assert.deepEqual(
+  traceRunMetrics({ ...rows[0], run: { metrics: "not-object" } }),
+  {},
+  "run metrics should ignore non-object metric payloads",
+)
+
+assert.deepEqual(
+  buildTraceListParams({
+    session: sessionA,
+    filters: {
+      runId: "",
+      agentId: "agent-1",
+      teamId: "",
+      workflowId: "workflow-1",
+      status: "ERROR",
+    },
+  }),
+  {
+    page: 1,
+    limit: 50,
+    session_id: "session-alpha",
+    user_id: "user-1",
+    agent_id: "agent-1",
+    team_id: undefined,
+    workflow_id: "workflow-1",
+    status: "ERROR",
+  },
+  "trace list params should keep API filter construction outside the Vue component",
+)
+
+assert.deepEqual(
+  mergePreferredTraceItem([traceA, traceB], { ...traceB, name: "Preferred trace" }).map((trace) => trace.name),
+  ["Preferred trace", ""],
+  "preferred trace merge should place the exact match first and remove duplicate trace ids",
 )
 
 assert.deepEqual(

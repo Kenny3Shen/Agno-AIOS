@@ -471,6 +471,7 @@ import { useChatHistory } from "../composables/useChatApi"
 import { useTracingApi } from "../composables/useTraceApi"
 import { copyToClipboard } from "../lib/clipboard"
 import {
+  buildTraceListParams,
   buildTraceLogItems,
   buildTraceMetadataItems,
   buildTraceOverviewItems,
@@ -480,11 +481,14 @@ import {
   filterTraceRunRows,
   filterTraceSessions,
   findExactTraceSession,
+  findTraceRunRow,
   findTraceSession,
   formatTraceDuration,
+  mergePreferredTraceItem,
   summarizeTraceItems,
   traceDurationClass,
   tracePayloadTextForMode,
+  traceRunMetrics,
   traceStatusClass,
   traceStatusLabel,
   traceTagType,
@@ -576,16 +580,9 @@ const runRows = computed(() => buildTraceRunRows({
 
 const filteredRunRows = computed(() => filterTraceRunRows(runRows.value, runFilters))
 
-const selectedRunRow = computed(() => {
-  const traceId = selectedTrace.value?.trace_id
-  if (!traceId) return null
-  return filteredRunRows.value.find((row) => row.trace.trace_id === traceId) || null
-})
+const selectedRunRow = computed(() => findTraceRunRow(filteredRunRows.value, selectedTrace.value?.trace_id))
 
-const selectedRunMetrics = computed<Record<string, unknown>>(() => {
-  const metrics = selectedRunRow.value?.run?.metrics
-  return metrics && typeof metrics === "object" ? metrics as Record<string, unknown> : {}
-})
+const selectedRunMetrics = computed<Record<string, unknown>>(() => traceRunMetrics(selectedRunRow.value))
 
 const overviewItems = computed(() => {
   return buildTraceOverviewItems({
@@ -794,16 +791,7 @@ const loadSessionTraces = async (session: ChatSession, preferredRunId?: string |
     workflow_id: runFilters.workflowId,
     status: runFilters.status,
   })
-  const baseParams = {
-    page: 1,
-    limit: 50,
-    session_id: session.session_id,
-    user_id: session.user_id || undefined,
-    agent_id: runFilters.agentId || undefined,
-    team_id: runFilters.teamId || undefined,
-    workflow_id: runFilters.workflowId || undefined,
-    status: runFilters.status,
-  }
+  const baseParams = buildTraceListParams({ session, filters: runFilters })
   const resp = await listTraces(baseParams)
   let items = resp.items || []
   let traceToSelect = runId ? items.find((trace) => trace.run_id === runId) : null
@@ -815,10 +803,7 @@ const loadSessionTraces = async (session: ChatSession, preferredRunId?: string |
     })
     traceToSelect = exactResp.items?.[0] || null
     if (traceToSelect) {
-      items = [
-        traceToSelect,
-        ...items.filter((trace) => trace.trace_id !== traceToSelect?.trace_id),
-      ]
+      items = mergePreferredTraceItem(items, traceToSelect)
     }
   }
   sessionTraceItems.value = items

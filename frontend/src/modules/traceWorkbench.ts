@@ -116,6 +116,11 @@ interface BuildTraceLogItemsParams {
   rawEvents?: unknown[] | null
 }
 
+interface BuildTraceListParamsParams {
+  session: ChatSession
+  filters: TraceRunFilters
+}
+
 const emptyParsedSpan: ParsedSpanDisplay = {
   input: { format: "empty", text: "", data: null },
   output: { format: "empty", text: "", data: null },
@@ -229,6 +234,45 @@ export const filterTraceRunRows = (
     if (workflowId && !normalize(trace.workflow_id || run?.workflow_id).includes(workflowId)) return false
     return true
   })
+}
+
+export const findTraceRunRow = (
+  rows: TraceRunRow[],
+  traceId: string | null | undefined,
+) => {
+  const normalizedTraceId = (traceId || "").trim()
+  if (!normalizedTraceId) return null
+  return rows.find((row) => row.trace.trace_id === normalizedTraceId) || null
+}
+
+export const traceRunMetrics = (row?: TraceRunRow | null): Record<string, unknown> => {
+  const metrics = row?.run?.metrics
+  return metrics && typeof metrics === "object" ? metrics as Record<string, unknown> : {}
+}
+
+export const buildTraceListParams = ({
+  session,
+  filters,
+}: BuildTraceListParamsParams) => ({
+  page: 1,
+  limit: 50,
+  session_id: session.session_id,
+  user_id: session.user_id || undefined,
+  agent_id: filters.agentId || undefined,
+  team_id: filters.teamId || undefined,
+  workflow_id: filters.workflowId || undefined,
+  status: filters.status,
+})
+
+export const mergePreferredTraceItem = (
+  items: TraceItem[],
+  preferredTrace: TraceItem | null | undefined,
+) => {
+  if (!preferredTrace) return items
+  return [
+    preferredTrace,
+    ...items.filter((trace) => trace.trace_id !== preferredTrace.trace_id),
+  ]
 }
 
 export const summarizeTraceItems = (
