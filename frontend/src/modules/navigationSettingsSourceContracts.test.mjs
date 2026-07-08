@@ -36,6 +36,7 @@ import {
   useApiCore,
   useChatApiSource,
   useMemoryControlApiSource,
+  useTraceSessionControllerSource,
   useTraceApiSource,
   userRole,
   visibilityTabs,
@@ -326,6 +327,25 @@ for (const traceInteraction of ["@keyup.enter=\"refresh\"", "@click=\"refresh\""
     trace,
     new RegExp(traceInteraction.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
     `Trace filters must keep manual refresh interaction: ${traceInteraction}`,
+  )
+}
+
+assert.match(
+  trace,
+  /useTraceSessionController/,
+  "Trace page must delegate session and trace loading flows to a composable",
+)
+
+for (const traceControllerFlow of ["refresh", "loadSessionTraces", "selectTraceById", "refreshRuns"]) {
+  assert.match(
+    useTraceSessionControllerSource,
+    new RegExp(`const ${traceControllerFlow}\\s*=\\s*async`),
+    `Trace session controller must own async flow: ${traceControllerFlow}`,
+  )
+  assert.doesNotMatch(
+    trace,
+    new RegExp(`const ${traceControllerFlow}\\s*=\\s*async`),
+    `Trace page must not inline async flow: ${traceControllerFlow}`,
   )
 }
 

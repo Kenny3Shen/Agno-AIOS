@@ -469,35 +469,28 @@ import {
 } from "@element-plus/icons-vue"
 import { useChatHistory } from "../composables/useChatApi"
 import { useTracingApi } from "../composables/useTraceApi"
+import { useTraceSessionController } from "../composables/useTraceSessionController"
 import { copyToClipboard } from "../lib/clipboard"
 import {
-  buildTraceListParams,
   buildTraceLogItems,
   buildTraceMetadataItems,
   buildTraceOverviewItems,
   buildTraceRunRows,
-  buildTraceStoreFilters,
   buildTraceToolCallItems,
   clampTraceSessionPage,
   compactTraceId,
   createTraceRunFilters,
   createTraceSessionFilters,
   emptyTraceParsedSpan,
-  ensureTraceSession,
   filterTraceRunRows,
   filterTraceSessions,
-  findFirstTraceSpan,
   findTraceRunRow,
   findTraceSession,
   formatTraceAnyDateTime,
   formatTraceDateTime,
   formatTraceDuration,
   formatTraceSessionTime,
-  mergePreferredTraceItem,
-  normalizeTraceSessionOpenRequest,
   pageTraceSessions,
-  resolveTraceSessionSelection,
-  summarizeTraceItems,
   traceDurationClass,
   traceDetailTabForSection,
   tracePayloadTextForMode,
@@ -649,122 +642,42 @@ const scrollDetailIntoView = () => {
   })
 }
 
-const clearTraceSelection = () => {
-  selectedTrace.value = null
-  selectedSpan.value = null
-  spans.value = []
-  tree.value = []
-  sessionTraceItems.value = []
-}
-
-const refresh = async () => {
-  sessions.value = await listSessions({ includeRuns: true })
-  await loadTraceSummary()
-  const currentSession = sessions.value.find((session) => session.session_id === selectedSessionId.value)
-  if (currentSession) {
-    await loadSessionTraces(currentSession, runFilters.runId)
-    return
-  }
-  await reconcileSessionSelection()
-}
-
-const loadTraceSummary = async () => {
-  try {
-    const resp = await listTraces({ page: 1, limit: 100 })
-    const items = resp.items || []
-    traceSummary.value = summarizeTraceItems(items, resp.total_count)
-  } catch {
-    traceSummary.value = {
-      ...summarizeTraceItems(sessionTraceItems.value),
-      avgLatencyMs: 0,
-    }
+const clearPendingFilterRefresh = () => {
+  if (filterRefreshTimer !== null) {
+    window.clearTimeout(filterRefreshTimer)
+    filterRefreshTimer = null
   }
 }
 
-const reconcileSessionSelection = async () => {
-  const selection = resolveTraceSessionSelection({
-    visibleSessions: filteredSessions.value,
-    selectedSessionId: selectedSessionId.value,
-    selectedSession: selectedSession.value,
-    requestedSessionId: sessionFilters.sessionId,
-  })
-  if (selection.keepCurrent) return
-
-  if (selection.shouldClearSelection) clearTraceSelection()
-  selectedSessionId.value = selection.nextSessionId
-  if (selection.nextSession) await loadSessionTraces(selection.nextSession)
-}
-
-const selectSession = async (session: ChatSession) => {
-  if (selectedSessionId.value === session.session_id && sessionTraceItems.value.length) return
-  selectedSessionId.value = session.session_id
-  await loadSessionTraces(session)
-  scrollDetailIntoView()
-}
-
-const selectSessionById = async (sessionId: string, userId?: string | null, runId?: string | null) => {
-  const request = normalizeTraceSessionOpenRequest(sessionId, userId, runId)
-  if (!request) return
-
-  clearPendingFilterRefresh()
-  sessionFilters.sessionId = request.sessionId
-  if (request.userFilter !== undefined) sessionFilters.userId = request.userFilter
-  sessionFilters.status = "all"
-  runFilters.runId = request.runId
-
-  sessions.value = await listSessions({ includeRuns: true })
-  const target = ensureTraceSession(sessions.value, request)
-  sessions.value = target.sessions
-
-  selectedSessionId.value = target.session.session_id
-  await loadSessionTraces(target.session, runFilters.runId)
-  scrollDetailIntoView()
-}
-
-const loadSessionTraces = async (session: ChatSession, preferredRunId?: string | null) => {
-  const runId = (preferredRunId || "").trim()
-  clearTraceSelection()
-  traceStore.setTraceFilters(buildTraceStoreFilters({ session, runId, filters: runFilters }))
-  const baseParams = buildTraceListParams({ session, filters: runFilters })
-  const resp = await listTraces(baseParams)
-  let items = resp.items || []
-  let traceToSelect = runId ? items.find((trace) => trace.run_id === runId) : null
-  if (runId && !traceToSelect) {
-    const exactResp = await listTraces({
-      ...baseParams,
-      limit: 1,
-      run_id: runId,
-    })
-    traceToSelect = exactResp.items?.[0] || null
-    if (traceToSelect) {
-      items = mergePreferredTraceItem(items, traceToSelect)
-    }
-  }
-  sessionTraceItems.value = items
-  traceStore.setTraceItems(items)
-  if (traceToSelect) await openTraceDetail(traceToSelect.trace_id)
-}
-
-const selectTraceById = async (traceId: string | null | undefined) => {
-  const id = (traceId || "").trim()
-  if (!id || selectedTrace.value?.trace_id === id) return
-  loadingDetail.value = true
-  try {
-    const resp = await getTrace(id)
-    selectedTrace.value = resp.trace
-    spans.value = resp.spans || []
-    tree.value = resp.tree || []
-    selectedSpan.value = findFirstTraceSpan(tree.value, spans.value)
-    traceStore.setCurrentTraceId(resp.trace.trace_id)
-    scrollDetailIntoView()
-  } finally {
-    loadingDetail.value = false
-  }
-}
-
-const openTraceDetail = async (traceId: string | null | undefined) => {
-  await selectTraceById(traceId)
-}
+const {
+  refresh,
+  selectSession,
+  selectSessionById,
+  openTraceDetail,
+  resetAllFilters,
+  refreshAll,
+  refreshRuns,
+} = useTraceSessionController({
+  sessions,
+  filteredSessions,
+  selectedSession,
+  selectedSessionId,
+  sessionFilters,
+  runFilters,
+  sessionTraceItems,
+  traceSummary,
+  selectedTrace,
+  spans,
+  tree,
+  selectedSpan,
+  loadingDetail,
+  traceStore,
+  listSessions,
+  listTraces,
+  getTrace,
+  clearPendingFilterRefresh,
+  scrollDetailIntoView,
+})
 
 const scrollDetailSectionIntoView = async (section: "overview" | "input" | "output" | "tools" | "logs" | "metadata") => {
   await nextTick()
@@ -780,38 +693,6 @@ const selectSpan = (span: SpanItem, section: "overview" | "input" | "output" | "
 
 const onSpanNodeClick = (node: SpanTreeNode) => {
   selectSpan(node.span)
-}
-
-const resetAllFilters = async () => {
-  Object.assign(sessionFilters, createTraceSessionFilters())
-  Object.assign(runFilters, createTraceRunFilters())
-  selectedSessionId.value = null
-  traceStore.resetTraceFilters()
-  await refresh()
-}
-
-const refreshAll = async () => {
-  if (selectedSession.value) {
-    await refreshRuns()
-  } else {
-    await refresh()
-  }
-}
-
-const refreshRuns = async () => {
-  const session = selectedSession.value
-  if (!session) {
-    await refresh()
-    return
-  }
-  await loadSessionTraces(session, runFilters.runId)
-}
-
-const clearPendingFilterRefresh = () => {
-  if (filterRefreshTimer !== null) {
-    window.clearTimeout(filterRefreshTimer)
-    filterRefreshTimer = null
-  }
 }
 
 const scheduleSessionFilterRefresh = () => {
