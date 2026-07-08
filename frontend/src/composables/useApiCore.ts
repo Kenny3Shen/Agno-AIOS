@@ -5,7 +5,7 @@ export type ApiFallbackKey =
   | 'cveUpdateFailed'
   | 'chatHttpFailed'
   | 'chatSendFailed'
-  | 'osControlLoadFailed'
+  | 'pagePayloadLoadFailed'
   | 'chatSessionsLoadFailed'
   | 'chatHistoryLoadFailed'
   | 'chatArchiveFailed'

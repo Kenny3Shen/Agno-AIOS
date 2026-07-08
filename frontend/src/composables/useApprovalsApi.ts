@@ -2,21 +2,21 @@ import { ref } from 'vue'
 import { apiFetch } from '../lib/apiClient'
 import { useApiMessage, messageFromUnknown, messageFromResponse } from './useApiCore'
 import type {
-  ApprovalControlResponse,
+  ApprovalListResponse,
   ApprovalListParams,
   ApprovalRecord,
   ApprovalResolveRequest
 } from '../types'
 
 /**
- * Agno approvals control-plane API.
+ * Agno approvals page API.
  */
 export function useApprovalsApi() {
   const apiMessage = useApiMessage()
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  const listApprovals = async (params: ApprovalListParams = {}): Promise<ApprovalControlResponse> => {
+  const listApprovals = async (params: ApprovalListParams = {}): Promise<ApprovalListResponse> => {
     loading.value = true
     error.value = null
     const query = new URLSearchParams()
@@ -34,14 +34,14 @@ export function useApprovalsApi() {
     if (params.limit) query.set('limit', String(params.limit))
     try {
       const suffix = query.toString() ? `?${query.toString()}` : ''
-      const response = await apiFetch(`/os/approvals${suffix}`)
+      const response = await apiFetch(`/approvals${suffix}`)
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
-        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+        throw new Error(messageFromResponse(data, apiMessage('pagePayloadLoadFailed')))
       }
       return await response.json()
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      error.value = messageFromUnknown(err, apiMessage('pagePayloadLoadFailed'))
       throw err
     } finally {
       loading.value = false
@@ -52,14 +52,14 @@ export function useApprovalsApi() {
     loading.value = true
     error.value = null
     try {
-      const response = await apiFetch(`/os/approvals/${encodeURIComponent(id)}`)
+      const response = await apiFetch(`/approvals/${encodeURIComponent(id)}`)
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
-        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+        throw new Error(messageFromResponse(data, apiMessage('pagePayloadLoadFailed')))
       }
       return await response.json()
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      error.value = messageFromUnknown(err, apiMessage('pagePayloadLoadFailed'))
       throw err
     } finally {
       loading.value = false
@@ -70,18 +70,18 @@ export function useApprovalsApi() {
     loading.value = true
     error.value = null
     try {
-      const response = await apiFetch(`/os/approvals/${encodeURIComponent(id)}/resolve`, {
+      const response = await apiFetch(`/approvals/${encodeURIComponent(id)}/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
-        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+        throw new Error(messageFromResponse(data, apiMessage('pagePayloadLoadFailed')))
       }
       return await response.json()
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      error.value = messageFromUnknown(err, apiMessage('pagePayloadLoadFailed'))
       throw err
     } finally {
       loading.value = false

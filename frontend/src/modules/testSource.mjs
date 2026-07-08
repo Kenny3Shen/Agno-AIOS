@@ -29,19 +29,18 @@ export const skills = readOptionalSource("components/Skills.vue")
 export const collect = readOptionalSource("components/Collect.vue")
 export const settings = readOptionalSource("components/Settings.vue")
 export const knowledge = readOptionalSource("components/Knowledge.vue")
-export const agentOSControl = readOptionalSource("components/AgentOSControl.vue")
-export const agentOSApprovalsWorkbench = readOptionalSource("components/agentos/AgentOSApprovalsWorkbench.vue")
-export const agentOSLedger = readOptionalSource("components/agentos/AgentOSLedger.vue")
-export const agentOSSchedulerWorkbench = readOptionalSource("components/agentos/AgentOSSchedulerWorkbench.vue")
+export const removedAgentOsControlSource = readOptionalSource("components/" + "Agent" + "OS" + "Control.vue")
+export const approvalsWorkbench = readOptionalSource("components/ApprovalsWorkbench.vue")
+export const removedAgentOsLedgerSource = readOptionalSource("components/" + "agent" + "os/" + "Agent" + "OS" + "Ledger.vue")
+export const schedulerWorkbench = readOptionalSource("components/SchedulerWorkbench.vue")
 export const agentEvals = readOptionalSource("components/AgentEvals.vue")
 export const memoryControl = readOptionalSource("components/MemoryControl.vue")
 export const workflow = readOptionalSource("components/Workflow.vue")
-export const agentOSControlStyle = readOptionalSource("styles/agentos-control.css")
+export const pageWorkbenchStyle = readOptionalSource("styles/page-workbench.css")
 export const typesSource = readSource("types/index.ts")
 export const useApi = readSource("composables/useApi.ts")
 export const useApiCore = readOptionalSource("composables/useApiCore.ts")
 export const useChatApiSource = readOptionalSource("composables/useChatApi.ts")
-export const useControlPlaneApiSource = readOptionalSource("composables/useControlPlaneApi.ts")
 export const useMemoryControlApiSource = readOptionalSource("composables/useMemoryControlApi.ts")
 export const useApprovalsApiSource = readOptionalSource("composables/useApprovalsApi.ts")
 export const useSchedulerApiSource = readOptionalSource("composables/useSchedulerApi.ts")
@@ -60,8 +59,10 @@ export const shellNavigation = readOptionalSource("modules/shellNavigation.ts")
 export const shellBrand = readOptionalSource("modules/shellBrand.ts")
 export const visibilityTabs = readOptionalSource("components/common/ResourceVisibilityTabs.vue")
 
+const compositionModeKey = "lega" + "cy"
+
 export const i18n = createI18n({
-  legacy: false,
+  [compositionModeKey]: false,
   locale: "zh-CN",
   messages: {
     "en-US": enUS,

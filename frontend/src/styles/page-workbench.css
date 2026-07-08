@@ -1,60 +1,57 @@
-.agentos-control {
-  --os-bg: #eef3f7;
-  --os-panel: #ffffff;
-  --os-panel-soft: #f7fafc;
-  --os-border: #cfd9e3;
-  --os-text: #14202a;
-  --os-muted: #637484;
-  --os-blue: #147fa2;
-  --os-green: #28a66f;
-  --os-yellow: #c78624;
-  --os-red: #d34a42;
-  color: var(--os-text);
+.page-workbench {
+  --page-bg: #eef3f7;
+  --page-panel: #ffffff;
+  --page-panel-soft: #f7fafc;
+  --page-border: #cfd9e3;
+  --page-text: #14202a;
+  --page-muted: #637484;
+  --page-blue: #147fa2;
+  --page-green: #28a66f;
+  --page-yellow: #c78624;
+  --page-red: #d34a42;
+  color: var(--page-text);
 }
 
-.agentos-control :where(div, section, aside, main, article, p, span, strong, small, button, label) {
+.page-workbench :where(div, section, aside, main, article, p, span, strong, small, button, label) {
   min-width: 0;
 }
 
-.agentos-panel-actions,
-.agentos-record-main,
-.agentos-record-side,
+.page-panel-actions,
 .runs-head {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.agentos-panel-head p,
+.page-panel-head p,
 .runs-head p {
   margin: 0;
-  color: var(--os-muted);
+  color: var(--page-muted);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0;
   text-transform: uppercase;
 }
 
-.agentos-panel-head span,
+.page-panel-head span,
 .runs-head span {
   display: block;
   margin-top: 4px;
-  color: var(--os-muted);
+  color: var(--page-muted);
   font-size: 12px;
   line-height: 1.45;
 }
 
-.agentos-status,
-.agentos-chip,
-.agentos-meta span {
+.page-status,
+.page-chip {
   display: inline-flex;
   max-width: 100%;
   align-items: center;
-  border: 1px solid var(--os-border);
+  border: 1px solid var(--page-border);
   border-radius: 6px;
-  background: var(--os-panel-soft);
+  background: var(--page-panel-soft);
   padding: 3px 7px;
-  color: var(--os-muted);
+  color: var(--page-muted);
   font-family: "JetBrains Mono", "Fira Code", monospace;
   font-size: 10px;
   font-weight: 700;
@@ -62,41 +59,41 @@
   overflow-wrap: anywhere;
 }
 
-.agentos-dot.green {
-  background: var(--os-green);
+.page-dot.green {
+  background: var(--page-green);
 }
 
-.agentos-dot.yellow {
-  background: var(--os-yellow);
+.page-dot.yellow {
+  background: var(--page-yellow);
 }
 
-.agentos-dot.red {
-  background: var(--os-red);
+.page-dot.red {
+  background: var(--page-red);
 }
 
-.agentos-chip.green,
-.agentos-status.green {
+.page-chip.green,
+.page-status.green {
   border-color: rgba(40, 166, 111, 0.28);
   background: rgba(40, 166, 111, 0.12);
-  color: var(--os-green);
+  color: var(--page-green);
 }
 
-.agentos-chip.yellow,
-.agentos-status.yellow,
-.agentos-status.loading {
+.page-chip.yellow,
+.page-status.yellow,
+.page-status.loading {
   border-color: rgba(199, 134, 36, 0.3);
   background: rgba(199, 134, 36, 0.12);
-  color: var(--os-yellow);
+  color: var(--page-yellow);
 }
 
-.agentos-chip.red,
-.agentos-status.red {
+.page-chip.red,
+.page-status.red {
   border-color: rgba(211, 74, 66, 0.3);
   background: rgba(211, 74, 66, 0.12);
-  color: var(--os-red);
+  color: var(--page-red);
 }
 
-.agentos-alert {
+.page-alert {
   margin: 12px 16px 0;
 }
 
@@ -120,19 +117,11 @@
   overflow: hidden;
 }
 
-.agentos-ledger {
-  display: block;
-  flex: 0 0 auto;
-  min-height: 0;
-  overflow: visible;
-}
-
-.agentos-panel {
+.page-panel {
   min-height: 0;
   overflow: hidden;
 }
 
-.agentos-ledger > .agentos-panel,
 .scheduler-list-panel,
 .scheduler-detail-panel,
 .approvals-list-panel,
@@ -141,14 +130,7 @@
   flex-direction: column;
 }
 
-.agentos-ledger > .agentos-panel {
-  width: fit-content;
-  min-width: min(260px, 100%);
-  max-width: min(720px, 100%);
-  max-height: min(720px, calc(100dvh - 180px));
-}
-
-.agentos-panel-head,
+.page-panel-head,
 .runs-head {
   display: flex;
   flex: 0 0 auto;
@@ -161,18 +143,18 @@
 .scheduler-form {
   flex: 0 0 auto;
   margin-bottom: 10px;
-  border-bottom: 1px solid var(--os-border);
+  border-bottom: 1px solid var(--page-border);
   padding-bottom: 12px;
 }
 
-.agentos-scheduler-grid,
+.page-scheduler-grid,
 .scheduler-detail-grid {
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.agentos-scheduler-grid.compact {
+.page-scheduler-grid.compact {
   grid-template-columns: repeat(2, minmax(0, 180px));
 }
 
@@ -182,12 +164,12 @@
 }
 
 .scheduler-detail-grid label > span {
-  color: var(--os-muted);
+  color: var(--page-muted);
   font-size: 11px;
   font-weight: 700;
 }
 
-.agentos-number {
+.page-number {
   width: 100%;
 }
 
@@ -217,12 +199,12 @@
   white-space: nowrap;
 }
 
-.agentos-scheduler-input,
+.page-scheduler-input,
 .scheduler-advanced {
   margin-top: 8px;
 }
 
-.agentos-scheduler-actions {
+.page-scheduler-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -231,7 +213,6 @@
 
 .schedule-table,
 .approval-table,
-.agentos-records,
 .run-list {
   display: grid;
   min-height: 0;
@@ -248,9 +229,9 @@
   grid-template-columns: auto minmax(0, 1fr) minmax(120px, auto);
   align-items: center;
   gap: 10px;
-  border: 1px solid var(--os-border);
+  border: 1px solid var(--page-border);
   border-radius: 8px;
-  background: var(--os-panel-soft);
+  background: var(--page-panel-soft);
   padding: 10px;
   color: inherit;
   text-align: left;
@@ -263,9 +244,9 @@
   grid-template-columns: auto minmax(0, 1fr) minmax(116px, auto);
   align-items: center;
   gap: 10px;
-  border: 1px solid var(--os-border);
+  border: 1px solid var(--page-border);
   border-radius: 8px;
-  background: var(--os-panel-soft);
+  background: var(--page-panel-soft);
   padding: 10px;
   color: inherit;
   text-align: left;
@@ -273,20 +254,19 @@
 }
 
 .approval-row.selected {
-  border-color: color-mix(in srgb, var(--os-blue) 48%, var(--os-border));
-  background: color-mix(in srgb, var(--os-blue) 8%, var(--os-panel));
+  border-color: color-mix(in srgb, var(--page-blue) 48%, var(--page-border));
+  background: color-mix(in srgb, var(--page-blue) 8%, var(--page-panel));
 }
 
 .schedule-row.selected {
-  border-color: color-mix(in srgb, var(--os-blue) 48%, var(--os-border));
-  background: color-mix(in srgb, var(--os-blue) 8%, var(--os-panel));
+  border-color: color-mix(in srgb, var(--page-blue) 48%, var(--page-border));
+  background: color-mix(in srgb, var(--page-blue) 8%, var(--page-panel));
 }
 
 .schedule-main strong,
-.approval-main strong,
-.agentos-record-main strong {
+.approval-main strong {
   display: block;
-  color: var(--os-text);
+  color: var(--page-text);
   font-size: 13px;
   font-weight: 800;
   line-height: 1.35;
@@ -299,10 +279,9 @@
 .approval-main small,
 .schedule-side small,
 .approval-side small,
-.agentos-record-main p,
 .run-row small,
 .run-row p {
-  color: var(--os-muted);
+  color: var(--page-muted);
   font-size: 11px;
   line-height: 1.4;
   overflow-wrap: anywhere;
@@ -325,7 +304,7 @@
 }
 
 .approval-side b {
-  color: var(--os-text);
+  color: var(--page-text);
 }
 
 .approval-status-filter {
@@ -342,11 +321,11 @@
 .approval-detail-grid span {
   display: grid;
   gap: 3px;
-  border: 1px solid var(--os-border);
+  border: 1px solid var(--page-border);
   border-radius: 8px;
-  background: var(--os-panel-soft);
+  background: var(--page-panel-soft);
   padding: 8px;
-  color: var(--os-muted);
+  color: var(--page-muted);
   font-size: 11px;
   line-height: 1.4;
   overflow-wrap: anywhere;
@@ -354,7 +333,7 @@
 
 .approval-detail-grid b,
 .approval-json-block p {
-  color: var(--os-text);
+  color: var(--page-text);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0;
@@ -376,11 +355,11 @@
   max-height: 180px;
   margin: 0;
   overflow: auto;
-  border: 1px solid var(--os-border);
+  border: 1px solid var(--page-border);
   border-radius: 8px;
-  background: var(--os-panel-soft);
+  background: var(--page-panel-soft);
   padding: 10px;
-  color: var(--os-text);
+  color: var(--page-text);
   font-family: "JetBrains Mono", "Fira Code", monospace;
   font-size: 11px;
   line-height: 1.55;
@@ -389,70 +368,16 @@
 }
 
 .schedule-side b {
-  color: var(--os-text);
+  color: var(--page-text);
 }
 
-.agentos-record {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px 12px;
-  border: 1px solid var(--os-border);
-  border-radius: 8px;
-  background: var(--os-panel-soft);
-  padding: 11px;
-}
-
-.agentos-id-chip {
-  display: inline-flex;
-  max-width: 100%;
-  align-items: center;
-  border: 1px solid color-mix(in srgb, var(--os-blue) 28%, var(--os-border));
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--os-blue) 8%, var(--os-panel-soft));
-  padding: 2px 6px;
-  color: var(--os-text);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 10px;
-  font-weight: 750;
-  overflow-wrap: anywhere;
-}
-
-.agentos-dot {
+.page-dot {
   width: 9px;
   height: 9px;
   flex: 0 0 auto;
   border-radius: 999px;
-  background: var(--os-blue);
+  background: var(--page-blue);
   box-shadow: 0 0 0 3px rgba(20, 127, 162, 0.12);
-}
-
-.agentos-record-side {
-  align-items: flex-end;
-  flex-direction: column;
-}
-
-.agentos-record-side small {
-  color: var(--os-muted);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 10px;
-}
-
-.agentos-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  grid-column: 1 / -1;
-}
-
-.agentos-meta b {
-  margin-right: 4px;
-  color: var(--os-text);
-}
-
-.agentos-meta span.is-id {
-  border-color: color-mix(in srgb, var(--os-blue) 32%, var(--os-border));
-  background: color-mix(in srgb, var(--os-blue) 9%, var(--os-panel-soft));
-  color: var(--os-text);
 }
 
 .run-list {
@@ -465,9 +390,9 @@
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
-  border: 1px solid var(--os-border);
+  border: 1px solid var(--page-border);
   border-radius: 8px;
-  background: var(--os-panel-soft);
+  background: var(--page-panel-soft);
   padding: 9px;
 }
 
@@ -476,15 +401,15 @@
   margin: 0;
 }
 
-.agentos-empty {
+.page-empty {
   display: grid;
   width: min(360px, 100%);
   place-items: center;
   justify-self: center;
   margin: auto;
-  border: 1px dashed var(--os-border);
+  border: 1px dashed var(--page-border);
   border-radius: 8px;
-  background: var(--os-panel-soft);
+  background: var(--page-panel-soft);
   padding: 28px;
   text-align: center;
 }
@@ -494,35 +419,35 @@
   padding: 16px;
 }
 
-.agentos-empty .el-icon {
-  color: var(--os-blue);
+.page-empty .el-icon {
+  color: var(--page-blue);
   font-size: 26px;
 }
 
-.agentos-empty strong {
+.page-empty strong {
   margin-top: 12px;
-  color: var(--os-text);
+  color: var(--page-text);
   font-size: 14px;
 }
 
-.agentos-empty span {
+.page-empty span {
   margin-top: 6px;
-  color: var(--os-muted);
+  color: var(--page-muted);
   font-size: 12px;
   line-height: 1.55;
 }
 
-html.dark .agentos-control {
-  --os-bg: #15161b;
-  --os-panel: #1c1d22;
-  --os-panel-soft: #17181d;
-  --os-border: #34363d;
-  --os-text: #f1f1ec;
-  --os-muted: #9a9ba3;
-  --os-blue: #6da8ff;
-  --os-green: #55d989;
-  --os-yellow: #f0bd57;
-  --os-red: #ff6f63;
+html.dark .page-workbench {
+  --page-bg: #15161b;
+  --page-panel: #1c1d22;
+  --page-panel-soft: #17181d;
+  --page-border: #34363d;
+  --page-text: #f1f1ec;
+  --page-muted: #9a9ba3;
+  --page-blue: #6da8ff;
+  --page-green: #55d989;
+  --page-yellow: #f0bd57;
+  --page-red: #ff6f63;
 }
 
 @media (max-width: 1180px) {
@@ -534,22 +459,16 @@ html.dark .agentos-control {
 }
 
 @media (max-width: 760px) {
-  .agentos-control {
+  .page-workbench {
     overflow-y: auto;
   }
 
-  .agentos-scheduler-grid,
+  .page-scheduler-grid,
   .scheduler-detail-grid,
   .approval-detail-grid {
     grid-template-columns: 1fr;
   }
 
-  .agentos-ledger {
-    display: block;
-    overflow: visible;
-  }
-
-  .agentos-record,
   .schedule-row,
   .approval-row,
   .run-row {
@@ -557,8 +476,7 @@ html.dark .agentos-control {
   }
 
   .schedule-side,
-  .approval-side,
-  .agentos-record-side {
+  .approval-side {
     align-items: flex-start;
     justify-items: start;
   }

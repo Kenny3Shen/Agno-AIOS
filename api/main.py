@@ -20,18 +20,14 @@ from api.mcp.server import bootstrap_mcp_token, mcp_runtime
 from api.persistence.database import dispose_async_control_plane_engine
 from api.routes import (
     agent_evals,
+    approvals,
     audit,
     chat,
     collect,
     cve,
     knowledge,
+    memory,
     mcp as mcp_routes,
-    os_approvals_control,
-    os_evaluation_control,
-    os_knowledge_control,
-    os_memory_control,
-    os_metrics_control,
-    os_sessions_control,
     settings,
     skills,
     trace,
@@ -166,12 +162,8 @@ app.include_router(skills.router)
 app.include_router(mcp_routes.router)
 app.include_router(knowledge.router)
 app.include_router(agent_evals.router)
-app.include_router(os_sessions_control.router)
-app.include_router(os_memory_control.router)
-app.include_router(os_metrics_control.router)
-app.include_router(os_evaluation_control.router)
-app.include_router(os_knowledge_control.router)
-app.include_router(os_approvals_control.router)
+app.include_router(memory.router)
+app.include_router(approvals.router)
 
 if app_settings.scheduler_enabled:
     agentos_db = get_async_agno_postgres_db()

@@ -7,8 +7,8 @@ import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from api.routes import os_approvals_control
-from api.services.approval_control_service import (
+from api.routes import approvals
+from api.services.approvals_service import (
     ApprovalListParams,
     ApprovalResolveConflictError,
     get_approval_record,
@@ -31,7 +31,7 @@ def request() -> Request:
         {
             "type": "http",
             "method": "POST",
-            "path": "/api/os/approvals/approval-1/resolve",
+            "path": "/api/approvals/approval-1/resolve",
             "headers": [],
             "client": ("testclient", 50000),
             "server": ("testserver", 80),
@@ -136,7 +136,7 @@ async def test_list_approvals_payload_uses_agno_filters_and_metrics():
     )
 
     with patch(
-        "api.services.approval_control_service.get_async_agno_postgres_db",
+        "api.services.approvals_service.get_async_agno_postgres_db",
         return_value=db,
     ):
         payload = await list_approvals_payload(params=params, actor=actor())
@@ -169,7 +169,7 @@ async def test_list_approvals_payload_uses_agno_filters_and_metrics():
 async def test_get_approval_record_returns_none_for_missing_id():
     db = FakeApprovalDb()
     with patch(
-        "api.services.approval_control_service.get_async_agno_postgres_db",
+        "api.services.approvals_service.get_async_agno_postgres_db",
         return_value=db,
     ):
         assert await get_approval_record("missing") is None
@@ -179,7 +179,7 @@ async def test_get_approval_record_returns_none_for_missing_id():
 async def test_resolve_approval_record_uses_expected_pending_and_server_resolver():
     db = FakeApprovalDb()
     with patch(
-        "api.services.approval_control_service.get_async_agno_postgres_db",
+        "api.services.approvals_service.get_async_agno_postgres_db",
         return_value=db,
     ):
         resolved = await resolve_approval_record(
@@ -204,7 +204,7 @@ async def test_resolve_approval_record_maps_stale_pending_to_conflict():
     db = FakeApprovalDb()
     db.return_update = False
     with patch(
-        "api.services.approval_control_service.get_async_agno_postgres_db",
+        "api.services.approvals_service.get_async_agno_postgres_db",
         return_value=db,
     ):
         with pytest.raises(ApprovalResolveConflictError):
@@ -220,10 +220,10 @@ async def test_resolve_approval_record_maps_stale_pending_to_conflict():
 async def test_approvals_route_uses_agno_service():
     db = FakeApprovalDb()
     with patch(
-        "api.services.approval_control_service.get_async_agno_postgres_db",
+        "api.services.approvals_service.get_async_agno_postgres_db",
         return_value=db,
     ):
-        payload = await os_approvals_control.list_os_approvals(user=actor("admin-1"))
+        payload = await approvals.list_approvals(user=actor("admin-1"))
 
     assert payload["module"] == "approvals"
     assert payload["approvals"][0]["id"] == "approval-1"
@@ -242,12 +242,12 @@ async def test_resolve_route_derives_resolver_from_actor_and_records_audit():
     }
 
     with (
-        patch.object(os_approvals_control, "resolve_approval_record", new=AsyncMock(return_value=resolved)) as resolve_mock,
-        patch.object(os_approvals_control, "record_policy_event", new=AsyncMock()) as audit_mock,
+        patch.object(approvals, "resolve_approval_record", new=AsyncMock(return_value=resolved)) as resolve_mock,
+        patch.object(approvals, "record_policy_event", new=AsyncMock()) as audit_mock,
     ):
-        result = await os_approvals_control.resolve_os_approval(
+        result = await approvals.resolve_approval(
             "approval-1",
-            os_approvals_control.ApprovalResolveRequest(
+            approvals.ApprovalResolveRequest(
                 status="approved",
                 resolution_data={"client": "note"},
             ),
@@ -269,25 +269,25 @@ async def test_resolve_route_derives_resolver_from_actor_and_records_audit():
 async def test_resolve_route_maps_missing_and_conflict_to_http_errors():
     current_actor = actor("admin-1")
 
-    with patch.object(os_approvals_control, "resolve_approval_record", new=AsyncMock(return_value=None)):
+    with patch.object(approvals, "resolve_approval_record", new=AsyncMock(return_value=None)):
         with pytest.raises(HTTPException) as missing:
-            await os_approvals_control.resolve_os_approval(
+            await approvals.resolve_approval(
                 "missing",
-                os_approvals_control.ApprovalResolveRequest(status="approved"),
+                approvals.ApprovalResolveRequest(status="approved"),
                 request=request(),
                 user=current_actor,
             )
     assert missing.value.status_code == 404
 
     with patch.object(
-        os_approvals_control,
+        approvals,
         "resolve_approval_record",
         new=AsyncMock(side_effect=ApprovalResolveConflictError("not pending")),
     ):
         with pytest.raises(HTTPException) as conflict:
-            await os_approvals_control.resolve_os_approval(
+            await approvals.resolve_approval(
                 "approval-1",
-                os_approvals_control.ApprovalResolveRequest(status="rejected"),
+                approvals.ApprovalResolveRequest(status="rejected"),
                 request=request(),
                 user=current_actor,
             )

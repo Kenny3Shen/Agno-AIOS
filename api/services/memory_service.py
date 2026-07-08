@@ -1,17 +1,85 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import TypedDict
 
 from agno.memory import UserMemory
 
-from api.auth.claims import has_scope, scope_user_id
-from api.services.os_control_identity import scoped_requested_user_id
-from api.services.os_control_payloads import OsPayload, compact, iso, metric, now_utc, payload, record, row_dict
+from api.auth.claims import ActorLike, has_scope, scope_user_id
+from api.services.actor_scope import scoped_requested_user_id
+from api.services.page_payloads import (
+    PageMetric,
+    PageRecord,
+    compact,
+    iso,
+    metric,
+    now_utc,
+    record,
+    row_dict,
+)
 from api.services.postgres_store import coerce_json_value, get_async_agno_postgres_db
 
 MEMORY_OPTIMIZATION_REVIEW_THRESHOLD = 50
 MEMORY_ABNORMAL_GROWTH_THRESHOLD = 500
+
+
+class MemoryItemPayload(TypedDict):
+    id: str
+    memory: str
+    topics: list[str]
+    input: str
+    user_id: str
+    agent_id: str
+    team_id: str
+    feedback: str
+    created_at: str
+    updated_at: str
+    status: str
+
+
+class MemoryUserPayload(TypedDict):
+    user_id: str
+    total_memories: int
+    last_memory_updated_at: str
+    status: str
+
+
+class MemoryFiltersPayload(TypedDict):
+    user_id: str
+    topic: str
+    search: str
+    page: int
+    limit: int
+    total: int
+
+
+class MemoryThresholdsPayload(TypedDict):
+    optimization_review: int
+    abnormal_growth: int
+
+
+class MemoryModePayload(TypedDict):
+    type: str
+    update_memory_on_run: bool
+    enable_agentic_memory: bool
+    enable_session_summaries: bool
+    readonly: bool
+
+
+class MemoryPayloadResponse(TypedDict):
+    module: str
+    title: str
+    description: str
+    status: str
+    metrics: list[PageMetric]
+    records: list[PageRecord]
+    generated_at: str
+    memories: list[MemoryItemPayload]
+    memory_users: list[MemoryUserPayload]
+    memory_topics: list[str]
+    memory_filters: MemoryFiltersPayload
+    memory_thresholds: MemoryThresholdsPayload
+    memory_mode: MemoryModePayload
 
 
 class MemoryMutationNotFound(ValueError):
@@ -34,7 +102,7 @@ def _memory_status_for_count(count: int) -> str:
     return "healthy"
 
 
-def _memory_text(value: Any) -> str:
+def _memory_text(value: object) -> str:
     memory = coerce_json_value(value)
     if isinstance(memory, dict):
         return str(
@@ -46,18 +114,18 @@ def _memory_text(value: Any) -> str:
     return str(memory or "")
 
 
-def _memory_topics(value: Any) -> list[str]:
+def _memory_topics(value: object) -> list[str]:
     topics = coerce_json_value(value)
     if not isinstance(topics, list):
         return []
     return [str(topic) for topic in topics if str(topic).strip()]
 
 
-def _memory_row(raw_row: Any) -> dict[str, Any]:
+def _memory_row(raw_row: object) -> dict[str, object]:
     return row_dict(raw_row)
 
 
-def _memory_datetime(value: Any) -> datetime | None:
+def _memory_datetime(value: object) -> datetime | None:
     if value is None:
         return None
     if isinstance(value, datetime):
@@ -83,14 +151,14 @@ def _memory_datetime(value: Any) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
-def _memory_epoch(value: Any) -> int | None:
+def _memory_epoch(value: object) -> int | None:
     parsed = _memory_datetime(value)
     if parsed is None:
         return None
     return int(parsed.timestamp())
 
 
-def _memory_update_topics(value: Any) -> list[str]:
+def _memory_update_topics(value: object) -> list[str]:
     topics: list[str] = []
     seen: set[str] = set()
     for topic in _memory_topics(value):
@@ -103,14 +171,14 @@ def _memory_update_topics(value: Any) -> list[str]:
 
 
 async def get_memory_payload(
-    actor: Any | None = None,
+    actor: ActorLike | None = None,
     *,
     user_id: str | None = None,
     topic: str | None = None,
     search: str | None = None,
     page: int = 1,
     limit: int = 50,
-) -> OsPayload:
+) -> MemoryPayloadResponse:
     db = get_async_agno_postgres_db()
     safe_page = max(1, int(page or 1))
     safe_limit = min(100, max(1, int(limit or 50)))
@@ -143,7 +211,7 @@ async def get_memory_payload(
     )
     topics = sorted(await db.get_all_memory_topics(user_id=scoped_user_id))
 
-    memory_users = [
+    memory_users: list[MemoryUserPayload] = [
         {
             "user_id": str(row.get("user_id") or "default"),
             "total_memories": int(row.get("total_memories") or 0),
@@ -155,8 +223,8 @@ async def get_memory_payload(
     user_status_by_id: dict[str, str] = {
         str(row["user_id"]): str(row["status"]) for row in memory_users
     }
-    memories = []
-    records = []
+    memories: list[MemoryItemPayload] = []
+    records: list[PageRecord] = []
     for raw_row in raw_memories:
         row = _memory_row(raw_row)
         memory_id = row.get("memory_id") or row.get("id")
@@ -164,7 +232,7 @@ async def get_memory_payload(
         row_topics = _memory_topics(row.get("topics") or row.get("topic"))
         item_user_id = str(row.get("user_id") or "")
         item_status = user_status_by_id.get(item_user_id, "stored")
-        item = {
+        item: MemoryItemPayload = {
             "id": str(memory_id or memory or "memory"),
             "memory": memory,
             "topics": row_topics,
@@ -203,54 +271,51 @@ async def get_memory_payload(
         if int(row["total_memories"]) >= MEMORY_ABNORMAL_GROWTH_THRESHOLD
     )
 
-    result = payload(
-        module="memory",
-        title="Memory",
-        description="Agno 用户记忆库存、筛选与增长监测。",
-        metrics=[
+    return {
+        "module": "memory",
+        "title": "Memory",
+        "description": "Agno 用户记忆库存、筛选与增长监测。",
+        "status": "ready",
+        "metrics": [
             metric("Memories", total_memories, "当前筛选命中的 Agno user memories", "blue"),
             metric("Users", total_users, "当前权限范围内的 user_id", "green"),
             metric("Review", review_users, f"{MEMORY_OPTIMIZATION_REVIEW_THRESHOLD}+ memories", "yellow"),
             metric("Risk", risk_users, f"{MEMORY_ABNORMAL_GROWTH_THRESHOLD}+ memories", "red" if risk_users else "green"),
             metric("Mode", "Auto", "update_memory_on_run", "yellow"),
         ],
-        records=records,
-    )
-    result.update(
-        {
-            "memories": memories,
-            "memory_users": memory_users,
-            "memory_topics": topics,
-            "memory_filters": {
-                "user_id": scoped_user_id or "",
-                "topic": scoped_topic,
-                "search": scoped_search,
-                "page": safe_page,
-                "limit": safe_limit,
-                "total": total_memories,
-            },
-            "memory_thresholds": {
-                "optimization_review": MEMORY_OPTIMIZATION_REVIEW_THRESHOLD,
-                "abnormal_growth": MEMORY_ABNORMAL_GROWTH_THRESHOLD,
-            },
-            "memory_mode": {
-                "type": "automatic",
-                "update_memory_on_run": True,
-                "enable_agentic_memory": False,
-                "enable_session_summaries": True,
-                "readonly": not (actor is not None and has_scope(actor, "memories:write")),
-            },
-        }
-    )
-    return result
+        "records": records,
+        "generated_at": iso(now_utc()),
+        "memories": memories,
+        "memory_users": memory_users,
+        "memory_topics": topics,
+        "memory_filters": {
+            "user_id": scoped_user_id or "",
+            "topic": scoped_topic,
+            "search": scoped_search,
+            "page": safe_page,
+            "limit": safe_limit,
+            "total": total_memories,
+        },
+        "memory_thresholds": {
+            "optimization_review": MEMORY_OPTIMIZATION_REVIEW_THRESHOLD,
+            "abnormal_growth": MEMORY_ABNORMAL_GROWTH_THRESHOLD,
+        },
+        "memory_mode": {
+            "type": "automatic",
+            "update_memory_on_run": True,
+            "enable_agentic_memory": False,
+            "enable_session_summaries": True,
+            "readonly": not (actor is not None and has_scope(actor, "memories:write")),
+        },
+    }
 
 
 async def delete_memory_record(
-    actor: Any,
+    actor: ActorLike,
     *,
     memory_id: str,
     user_id: str | None = None,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     safe_memory_id = str(memory_id or "").strip()
     if not safe_memory_id:
         raise ValueError("memory_id is required")
@@ -283,13 +348,13 @@ async def delete_memory_record(
 
 
 async def update_memory_record(
-    actor: Any,
+    actor: ActorLike,
     *,
     memory_id: str,
     memory: str,
     topics: list[str] | None = None,
     user_id: str | None = None,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     safe_memory_id = str(memory_id or "").strip()
     if not safe_memory_id:
         raise ValueError("memory_id is required")

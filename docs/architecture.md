@@ -4,7 +4,7 @@
 
 ## 系统形态
 
-Agno AIOS 是一个面向安全运营的 FastAPI + Vue 应用。后端提供 JSON APIs、集成 MCP endpoint 和生产前端静态资源托管；前端是用于 Chat、Trace 检查、MCP 与 Skill 管理、Knowledge、安全数据、Settings 和 AgentOS 控制视图的 Vue 控制面。
+Agno AIOS 是一个面向安全运营的 FastAPI + Vue 应用。后端提供 JSON APIs、集成 MCP endpoint 和生产前端静态资源托管；前端是用于 Chat、Trace 检查、MCP 与 Skill 管理、Knowledge、安全数据、Settings 和运行工作台视图的 Vue 控制面。
 
 ```text
 Browser
@@ -19,7 +19,7 @@ FastAPI API
   +-- 安全运营助手
   +-- /mcp/ 上的集成 FastMCP Runtime
   +-- Knowledge 和安全数据 APIs
-  +-- Trace、session、audit 和 AgentOS 控制 APIs
+  +-- Trace、session、audit 和页面级 runtime APIs
   |
   v
 PostgreSQL + pgvector
@@ -53,10 +53,10 @@ FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth table
 - `/api/cve*`、`/api/url2md*`：安全数据 workflows。
 - `/api/settings` 和 `/api/models`：runtime settings 和 model configuration。
 - `/api/audit/logs`：admin audit review。
-- `/api/os/*`：AIOS 仍需 ownership、audit 或 UI-specific projection 的 AgentOS control modules。
+- `/api/memory`、`/api/approvals`：AIOS 仍需 ownership、audit 或 UI-specific projection 的页面级 AgentOS 数据入口。
 - AgentOS native root APIs：Scheduler 视图直接使用 `/schedules`、`/schedules/{id}`、`/schedules/{id}/runs` 等 Agno AgentOS routes；AIOS 不再提供 `/api/os/scheduler*` wrapper。
 
-`api/services/` 负责业务逻辑和持久化辅助层。`postgres_store.py` 集中管理 PostgreSQL 连接设置、schema 名称、Agno `AsyncPostgresDb` 构造和应用表创建。`security_run_runtime.py` 承担安全运营助手 Run runtime，集中 model、MCP、Skill、Knowledge、fallback 和流式事件编排；模型配置、prompt 文件和 Skill metadata/list/toggle 使用 awaitable file API，Skill zip install 这类批量 filesystem operation 通过线程隔离，避免阻塞 Chat stream 的事件循环。`chat_session_service.py` 负责 Chat Session persistence、session history、owner filtering 和 archive。`knowledge_service.py` 提供 async Knowledge Base lifecycle interface，runtime route 走 Agno async Knowledge APIs 和 async contents DB，内部集中 PgVector、reader、owner/visibility filtering、CRUD、search 和 status。`mcp_config_service.py` 集中 MCP service toggle、MCP upload 和 custom MCP server visibility mutation，route 层用 `to_thread.run_sync` 隔离本地 JSON 文件 I/O。`security_policy.py` 只保留控制面 module scope map 和 policy audit event 记录；具体 route 写权限直接使用 `require_scope(...)`。`url2md_service.py` 使用 async HTTP client 执行 URL collection。`tracing_service.py` 显式初始化 Agno tracing，并读取 Agno traces 与 spans，整理成前端需要的结构。
+`api/services/` 负责业务逻辑和持久化辅助层。`postgres_store.py` 集中管理 PostgreSQL 连接设置、schema 名称、Agno `AsyncPostgresDb` 构造和应用表创建。`security_run_runtime.py` 承担安全运营助手 Run runtime，集中 model、MCP、Skill、Knowledge、fallback 和流式事件编排；模型配置、prompt 文件和 Skill metadata/list/toggle 使用 awaitable file API，Skill zip install 这类批量 filesystem operation 通过线程隔离，避免阻塞 Chat stream 的事件循环。`chat_session_service.py` 负责 Chat Session persistence、session history、owner filtering 和 archive。`knowledge_service.py` 提供 async Knowledge Base lifecycle interface，runtime route 走 Agno async Knowledge APIs 和 async contents DB，内部集中 PgVector、reader、owner/visibility filtering、CRUD、search 和 status。`memory_service.py` 只服务 Memory 页面；`approvals_service.py` 只服务 Approvals 页面。`mcp_config_service.py` 集中 MCP service toggle、MCP upload 和 custom MCP server visibility mutation，route 层用 `to_thread.run_sync` 隔离本地 JSON 文件 I/O。`security_policy.py` 只保留 policy audit event 记录；具体 route 权限直接使用 `require_scope(...)` 或页面自己的 scope helper。`url2md_service.py` 使用 async HTTP client 执行 URL collection。`tracing_service.py` 显式初始化 Agno tracing，并读取 Agno traces 与 spans，整理成前端需要的结构。
 
 `api/mcp/` 负责集成 MCP runtime。`server.py` 构建主 FastMCP instance、挂载已启用的内置服务、用 token validation 包装 ASGI app，并支持 runtime refresh。FastMCP 的 ASGI app lifespan 由 `IntegratedMcpRuntime.startup()` / `shutdown()` 在 FastAPI lifespan 中显式进入和退出，refresh 时也会先启动新 lifespan 再关闭旧实例。`config.py` 读取和写入底层 MCP config，并存储 MCP tokens；上层配置 mutation 由 `api/services/mcp_config_service.py` 提供 module interface。
 
@@ -75,7 +75,7 @@ FastAPI app 在 `api/main.py` 中组装。启动生命周期会创建 auth table
 - `Knowledge.vue`：document ingestion、retrieval、preview 和 deletion。
 - `CVE.vue`、`Collect.vue`：安全数据 workflows。
 - `Settings.vue`：runtime settings、model configuration 和 navigation tags。
-- `AgentOSControl.vue` 以及 dashboard/workflow components：控制面视图。
+- `MemoryControl.vue`、`ApprovalsWorkbench.vue`、`SchedulerWorkbench.vue` 以及 dashboard/workflow components：页面级工作台视图。
 
 状态和 API helpers 位于 `frontend/src/stores/`、`frontend/src/composables/` 和 `frontend/src/lib/`。`frontend/src/lib/scopes.ts` 使用 `/api/auth/users/me` 返回的 `scopes` claims，并保留 role scope fallback 只服务于未认证 shell 状态。前端 scope checks 只用于导航和控件可见性，不是安全边界。
 
@@ -104,11 +104,11 @@ Chat session 不是授权 secret。后端把 `session_id` 当作标识符，并�
 
 Sessions 和 runs 通过 Agno `AsyncPostgresDb` 从 Agno-owned `agno_sessions` 读取。UI 删除 Chat session 是 soft archive：服务把 archive marker 写入 Agno session metadata，不再创建或读写 `app.chat_session_archives`，也不会删除 runs 或 traces。
 
-Traces 通过 Agno `AsyncPostgresDb` 读取；OS Control dashboard 只在 Agno API 尚不覆盖的聚合计数上保留窄范围 Async SQLAlchemy projection。Trace UI 使用 `session_id`、`run_id`、`trace_id`、`span_id`、`agent_id`、`team_id` 和 `workflow_id` 把用户会话和执行细节关联起来。
+Traces 通过 Agno `AsyncPostgresDb` 读取；Dashboard 只在 Agno API 尚不覆盖的聚合计数上保留窄范围 Async SQLAlchemy projection。Trace UI 使用 `session_id`、`run_id`、`trace_id`、`span_id`、`agent_id`、`team_id` 和 `workflow_id` 把用户会话和执行细节关联起来。
 
 ## Memory
 
-User memories 存储在 Agno-owned `agno.agno_memories` 中。Chat runtime 在 run 时传入 `user_id`，让 Agno Automatic Memory 按用户维度写入和召回。OS Control Memory 页面通过 Agno `AsyncPostgresDb` memory APIs 读取列表、统计、topic、单条 memory、更新和删除；更新使用 Agno AgentOS Memory API 的 replace 语义，替换整条 memory content 和 topics。普通用户只处理自己的 memories，admin 可以跨用户筛选；所有更新和删除都经过后端 RBAC 与 audit。AIOS 不保留自定义 pruning；后续如需 token 裁剪，应按 Agno `POST /optimize-memories` 独立设计。
+User memories 存储在 Agno-owned `agno.agno_memories` 中。Chat runtime 在 run 时传入 `user_id`，让 Agno Automatic Memory 按用户维度写入和召回。Memory 页面通过 Agno `AsyncPostgresDb` memory APIs 读取列表、统计、topic、单条 memory、更新和删除；更新使用 Agno AgentOS Memory API 的 replace 语义，替换整条 memory content 和 topics。普通用户只处理自己的 memories，admin 可以跨用户筛选；所有更新和删除都经过后端 RBAC 与 audit。AIOS 不保留自定义 pruning；后续如需 token 裁剪，应按 Agno `POST /optimize-memories` 独立设计。
 
 ## Knowledge
 
@@ -116,7 +116,7 @@ Knowledge documents 通过 metadata 做 owner 和 `private` / `public` visibilit
 
 PgVector 入口按 Agno 文档推荐的 async Knowledge API 使用：runtime 构造 Agno `PgVector`，业务代码只调用 `Knowledge.ainsert()`、`Knowledge.asearch()` 等 async methods。AIOS 不再把本地 vector adapter 作为默认 runtime path；新的 Agno-owned persistence 访问必须优先使用 Agno async API。
 
-Agno API gap projections 是窄范围 async product views，不改变 table ownership：Knowledge delete/clear 使用 async SQLAlchemy 删除 vector rows 后通过 async contents DB 删除 catalog row；Knowledge dashboard 的 chunk-count 和 search result 的 content-id hydration 只读取 PgVector table 的 `id`、`content_id`、`meta_data`；Trace UI 和 dashboard 通过 Agno tracing API 读取 trace/span 后整理前端 payload，缺少聚合 API 时用 Async SQLAlchemy 做轻量统计；AgentOS control payload 在 sessions/memory/metrics/knowledge 状态上优先使用 Agno async APIs，AIOS control tables 使用 Async SQLAlchemy。Scheduler 已退出 `/api/os` facade，前端直接消费 AgentOS `/schedules` API。
+Agno API gap projections 是窄范围 async product views，不改变 table ownership：Knowledge delete/clear 使用 async SQLAlchemy 删除 vector rows 后通过 async contents DB 删除 catalog row；Knowledge dashboard 的 chunk-count 和 search result 的 content-id hydration 只读取 PgVector table 的 `id`、`content_id`、`meta_data`；Trace UI 和 dashboard 通过 Agno tracing API 读取 trace/span 后整理前端 payload，缺少聚合 API 时用 Async SQLAlchemy 做轻量统计；Memory 页面通过 Agno memory APIs 读取、更新和删除 user memories；Approvals 页面通过 Agno approvals API 增加 UI projection 和 audit。Scheduler 已退出 `/api/os` facade，前端直接消费 AgentOS `/schedules` API。
 
 Embedding 和 rerank 模型计算不属于 async DB I/O。默认 Knowledge runtime 使用 Agno `SentenceTransformerEmbedder` 和 `SentenceTransformerReranker` 接入 `PgVector`，AIOS 不再维护自定义本地模型 adapter；如需调整模型行为，应优先沿用 Agno 提供的 embedder/reranker 扩展点。`/api/knowledge/settings/rag` 只更新当前 API process 的 RAG environment overrides 并清理 runtime caches，因此要求 `config:write`；跨重启持久化仍应通过部署环境变量或配置管理完成。
 
@@ -134,7 +134,7 @@ Embedding 和 rerank 模型计算不属于 async DB I/O。默认 Knowledge runti
 
 | Schema | 当前职责 |
 | --- | --- |
-| `app` | FastAPI Users auth tables、CVE records、audit logs、AgentOS control tables |
+| `app` | FastAPI Users auth tables、CVE records、audit logs |
 | `agno` | Agno sessions、memories、traces、spans、schema versions |
 | `mcp` | MCP tokens |
 | `knowledge` | Agno knowledge contents 和 PgVector tables |

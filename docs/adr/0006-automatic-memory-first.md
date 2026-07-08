@@ -8,4 +8,4 @@ Memory 页面以 Agno user memories 的 observability view 为主，提供 filte
 
 Memory 读取遵循现有 resource ownership model：普通用户只能看到自己的 `user_id` memories，admin 用户可以跨用户读取并按用户过滤。Growth signals 使用 Agno 生产建议作为默认值：memory 数量达到 50 条或以上的用户标记为需要 optimization review，达到 500 条或以上的用户标记为 abnormal growth risk。AIOS 不保留按更新时间批量删除的自定义 pruning；如果后续需要裁剪，应单独接入 Agno `POST /optimize-memories` 语义，并先设计 preview、apply、RBAC 与 audit。
 
-Vue shell 应在现有 `memory` navigation 和 `/api/os/memory` 后端 seam 下使用专用 Memory view，而不是拉伸通用 AgentOS ledger。后端读取和 mutation 应优先使用 Agno `AsyncPostgresDb` memory interface，例如 `get_user_memories()`、`get_user_memory_stats()`、`get_user_memory()`、`upsert_user_memory()` 和 `delete_user_memory()`；只有 Agno 没有暴露聚合信号时，才 fallback 到直接 SQL。
+Vue shell 应在现有 `memory` navigation 和 `/api/memory` 后端 seam 下使用专用 Memory view，而不是拉伸通用 AgentOS ledger。后端读取和 mutation 应优先使用 Agno `AsyncPostgresDb` memory interface，例如 `get_user_memories()`、`get_user_memory_stats()`、`get_user_memory()`、`upsert_user_memory()` 和 `delete_user_memory()`；只有 Agno 没有暴露聚合信号时，才 fallback 到直接 SQL。

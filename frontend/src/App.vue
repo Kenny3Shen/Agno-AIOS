@@ -468,8 +468,9 @@ type SidebarNavGroup = {
 }
 
 const { t } = useI18n()
-const AgentOSControl = defineAsyncComponent(() => import("./components/AgentOSControl.vue"))
 const MemoryControl = defineAsyncComponent(() => import("./components/MemoryControl.vue"))
+const ApprovalsWorkbench = defineAsyncComponent(() => import("./components/ApprovalsWorkbench.vue"))
+const SchedulerWorkbench = defineAsyncComponent(() => import("./components/SchedulerWorkbench.vue"))
 const AuthScreen = defineAsyncComponent(() => import("./components/AuthScreen.vue"))
 const CVE = defineAsyncComponent(() => import("./components/CVE.vue"))
 const Chat = defineAsyncComponent(() => import("./components/Chat.vue"))
@@ -525,11 +526,10 @@ const componentMap: Record<ModuleNavId, Component> = {
   cve: CVE,
   collect: Collect,
   skills: Skills,
-  sessions: AgentOSControl,
   memory: MemoryControl,
   evaluation: AgentEvals,
-  approvals: AgentOSControl,
-  scheduler: AgentOSControl,
+  approvals: ApprovalsWorkbench,
+  scheduler: SchedulerWorkbench,
   settings: Settings,
 }
 

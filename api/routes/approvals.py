@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from api.auth.claims import actor_id
 from api.auth.models import User
 from api.auth.scopes import require_scope
-from api.services.approval_control_service import (
+from api.services.approvals_service import (
     ApprovalListParams,
     ApprovalResolveConflictError,
     get_approval_record,
@@ -18,7 +18,7 @@ from api.services.approval_control_service import (
 )
 from api.services.security_policy import PolicyAuditEvent, record_policy_event
 
-router = APIRouter(prefix="/api/os/approvals", tags=["AgentOS Approvals Control"])
+router = APIRouter(prefix="/api/approvals", tags=["Approvals"])
 
 
 class ApprovalResolveRequest(BaseModel):
@@ -31,7 +31,7 @@ def _resolver_id(user: User) -> str:
 
 
 @router.get("")
-async def list_os_approvals(
+async def list_approvals(
     status: str | None = None,
     source_type: str | None = None,
     approval_type: str | None = None,
@@ -70,7 +70,7 @@ async def list_os_approvals(
 
 
 @router.get("/{approval_id}")
-async def get_os_approval(
+async def get_approval(
     approval_id: str,
     user: User = Depends(require_scope("approvals:read")),
 ):
@@ -86,7 +86,7 @@ async def get_os_approval(
 
 
 @router.post("/{approval_id}/resolve")
-async def resolve_os_approval(
+async def resolve_approval(
     approval_id: str,
     body: ApprovalResolveRequest,
     request: Request,

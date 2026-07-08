@@ -4,7 +4,7 @@
 
 **Goal:** Split `frontend/src/composables/useApi.ts` into real same-level domain modules without adding empty nesting.
 
-**Architecture:** Shared request/error helpers move to `useApiCore.ts`. Each domain composable file owns its current endpoint logic. The original `useApi.ts` remains a compatibility barrel of named re-exports.
+**Architecture:** Shared request/error helpers move to `useApiCore.ts`. Each domain composable file owns its current endpoint logic. `useApi.ts` remains the current API barrel of named re-exports.
 
 **Tech Stack:** Vue 3 Composition API, TypeScript, Vite, Bun source-contract tests.
 
@@ -25,7 +25,7 @@
 - Modify: `frontend/src/uiShell.test.mjs`
 
 **Interfaces:**
-- Produces: source-contract coverage for domain composable files and compatibility re-export entry.
+- Produces: source-contract coverage for domain composable files and the current API barrel entry.
 
 - [x] **Step 1: Write failing source-contract test**
 

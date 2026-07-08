@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { apiFetch } from '../lib/apiClient'
 import { useApiMessage, messageFromUnknown, messageFromResponse } from './useApiCore'
 import type {
-  MemoryControlResponse,
+  MemoryPayloadResponse,
   MemoryDeleteResponse,
   MemoryQueryParams,
   MemoryUpdateRequest,
@@ -10,14 +10,14 @@ import type {
 } from '../types'
 
 /**
- * Agno user memory control-plane API.
+ * Agno user memory page API.
  */
 export function useMemoryControlApi() {
   const apiMessage = useApiMessage()
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  const fetchMemory = async (params: MemoryQueryParams = {}): Promise<MemoryControlResponse> => {
+  const fetchMemory = async (params: MemoryQueryParams = {}): Promise<MemoryPayloadResponse> => {
     loading.value = true
     error.value = null
 
@@ -30,14 +30,14 @@ export function useMemoryControlApi() {
 
     try {
       const suffix = query.toString() ? `?${query.toString()}` : ''
-      const response = await apiFetch(`/os/memory${suffix}`)
+      const response = await apiFetch(`/memory${suffix}`)
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
-        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+        throw new Error(messageFromResponse(data, apiMessage('pagePayloadLoadFailed')))
       }
       return await response.json()
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      error.value = messageFromUnknown(err, apiMessage('pagePayloadLoadFailed'))
       throw err
     } finally {
       loading.value = false
@@ -51,16 +51,16 @@ export function useMemoryControlApi() {
     if (userId) query.set('user_id', userId)
     const suffix = query.toString() ? `?${query.toString()}` : ''
     try {
-      const response = await apiFetch(`/os/memory/${encodeURIComponent(memoryId)}${suffix}`, {
+      const response = await apiFetch(`/memory/${encodeURIComponent(memoryId)}${suffix}`, {
         method: 'DELETE',
       })
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
-        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+        throw new Error(messageFromResponse(data, apiMessage('pagePayloadLoadFailed')))
       }
       return await response.json()
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      error.value = messageFromUnknown(err, apiMessage('pagePayloadLoadFailed'))
       throw err
     } finally {
       loading.value = false
@@ -71,18 +71,18 @@ export function useMemoryControlApi() {
     loading.value = true
     error.value = null
     try {
-      const response = await apiFetch(`/os/memory/${encodeURIComponent(memoryId)}`, {
+      const response = await apiFetch(`/memory/${encodeURIComponent(memoryId)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
-        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+        throw new Error(messageFromResponse(data, apiMessage('pagePayloadLoadFailed')))
       }
       return await response.json()
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      error.value = messageFromUnknown(err, apiMessage('pagePayloadLoadFailed'))
       throw err
     } finally {
       loading.value = false

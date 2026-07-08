@@ -1260,7 +1260,7 @@ button:enabled {
 	background: var(--ag-frame);
 }
 
-/* Element and existing module compatibility */
+/* Element and module overrides */
 html:not(.dark) .security-page :where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner, .el-date-editor.el-input__wrapper),
 html:not(.dark) .auth-screen :where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner, .el-date-editor.el-input__wrapper) {
 	border: 1px solid var(--ag-border);

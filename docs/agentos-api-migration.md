@@ -25,27 +25,27 @@ Scheduler 导航权限使用 AgentOS scope `schedules:read`，不再依赖 AIOS 
 
 ### AgentOS Authorization / RBAC
 
-Agno 文档支持 AgentOS scope/RBAC authorization，JWT claims 使用 `scopes`，例如 `schedules:read`、`schedules:write`、`schedules:delete`，管理员使用 `agent_os:admin`。AIOS 当前已经把 AgentOS 注册到现有 FastAPI base app，但 AgentOS native authorization 尚未整体启用。
+Agno 文档支持 AgentOS scope/RBAC authorization，JWT claims 使用 `scopes`，例如 `schedules:read`、`schedules:write`、`schedules:delete`，管理员使用 `agent_os:admin`。AIOS 当前已在 `api.main` 的 FastAPI base app 上安装 Agno `JWTMiddleware(authorization=True)`，并通过 `AGENTOS_JWT_EXCLUDED_ROUTE_PATHS` 排除 `/api/auth/*`、静态资源、OpenAPI/health、MCP 等非 AgentOS 入口。
 
 当前暂缓原因：
 
-- 本项目现有 `/api/auth/*`、前端静态资源、MCP endpoint 和 AIOS APIs 与 AgentOS routes 运行在同一个 FastAPI app 上。
-- 直接在现有 base app 上整体启用 AgentOS authorization 会影响 `/api/auth/*`、静态资源和 AIOS 自定义 APIs；需要先设计 route 排除、sub-app 隔离或统一 JWT middleware。
-- 当前 FastAPI Users token 还没有按 AgentOS `scopes` / `agent_os:admin` 设计签发和验证契约。
+- AgentOS native authorization 已整体启用；后续迁移不应再假设 scheduler 处于无 RBAC 状态。
+- 本项目仍让 `/api/auth/*`、前端静态资源、MCP endpoint、AIOS APIs 与 AgentOS routes 运行在同一个 FastAPI app 上，route exclusion 契约需要随新增入口持续测试。
+- FastAPI Users token 已签发 AgentOS `scopes` / `agent_os:admin` claims；后续需要把每个 native route 的 scope 需求和前端导航权限持续对齐。
 
 下一步：
 
-- 选择一种结构：把 AgentOS 挂载到独立 sub-app 并只对 AgentOS routes 启用 Agno authorization，或调整 token 签发后整体启用 AgentOS JWT middleware。
-- 统一 JWT claims：`sub` 使用用户 ID，`scopes` 使用 AgentOS scopes，admin 映射到 `agent_os:admin`。
-- 用行为测试覆盖未认证访问 `/schedules` 返回 401、缺少 `schedules:read` 返回 403、admin token 可访问。
+- 继续用行为测试覆盖未认证访问 `/schedules` 返回 401、缺少 `schedules:read` 返回 403、admin token 可访问。
+- 对每个新增 AgentOS native route 记录所需 scope，并补齐前端导航、API 调用和后端 middleware 的契约测试。
+- 若未来拆成 sub-app，需要重新审计 `AGENTOS_JWT_EXCLUDED_ROUTE_PATHS`，避免同一路由被 base app 与 AgentOS authorization 双重处理。
 
 ### Approvals
 
-保留 `/api/os/approvals`。当前 AIOS route 增加了 pending count、filter normalization、resolver identity 和 audit event。迁移前需要确认 AgentOS approvals API 是否能覆盖这些 UI projection 和审计要求。
+保留页面级 `/api/approvals`。当前 AIOS route 增加了 pending count、filter normalization、resolver identity 和 audit event。迁移前需要确认 AgentOS approvals API 是否能覆盖这些 UI projection 和审计要求。
 
 ### Memory
 
-保留 `/api/os/memory`。当前 AIOS route 做了 user ownership scoping、growth signals、topic/user filters、update/delete audit，并把 Agno memory records 转成运营视图。可迁移项是只读列表和 detail；mutation 迁移需要先确认 AgentOS authorization 的 user isolation。
+保留页面级 `/api/memory`。当前 AIOS route 做了 user ownership scoping、growth signals、topic/user filters、update/delete audit，并把 Agno memory records 转成运营视图。可迁移项是只读列表和 detail；mutation 迁移需要先确认 AgentOS authorization 的 user isolation。
 
 ### Chat Sessions
 

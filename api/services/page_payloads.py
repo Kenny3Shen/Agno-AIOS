@@ -2,18 +2,30 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Any
+from typing import TypedDict
 
-OsMetric = dict[str, Any]
-OsRecord = dict[str, Any]
-OsPayload = dict[str, Any]
+
+class PageMetric(TypedDict):
+    label: str
+    value: str | int | float
+    hint: str
+    tone: str
+
+
+class PageRecord(TypedDict):
+    id: str
+    title: str
+    subtitle: str
+    status: str
+    meta: Mapping[str, object]
+    updated_at: str
 
 
 def now_utc() -> datetime:
     return datetime.now(UTC)
 
 
-def iso(value: Any) -> str:
+def iso(value: object) -> str:
     if value is None:
         return ""
     if isinstance(value, datetime):
@@ -28,26 +40,26 @@ def iso(value: Any) -> str:
     return str(value)
 
 
-def compact(value: Any, limit: int = 96) -> str:
+def compact(value: object, limit: int = 96) -> str:
     text = str(value or "").strip()
     if len(text) <= limit:
         return text
     return f"{text[: limit - 3]}..."
 
 
-def metric(label: str, value: Any, hint: str = "", tone: str = "blue") -> OsMetric:
+def metric(label: str, value: str | int | float, hint: str = "", tone: str = "blue") -> PageMetric:
     return {"label": label, "value": value, "hint": hint, "tone": tone}
 
 
 def record(
     *,
-    record_id: Any,
+    record_id: object,
     title: str,
     subtitle: str = "",
     status: str = "ready",
-    meta: dict[str, Any] | None = None,
-    updated_at: Any = "",
-) -> OsRecord:
+    meta: Mapping[str, object] | None = None,
+    updated_at: object = "",
+) -> PageRecord:
     return {
         "id": str(record_id or title),
         "title": title,
@@ -58,38 +70,18 @@ def record(
     }
 
 
-def payload(
-    *,
-    module: str,
-    title: str,
-    description: str,
-    metrics: list[OsMetric],
-    records: list[OsRecord],
-    status: str = "ready",
-) -> OsPayload:
-    return {
-        "module": module,
-        "title": title,
-        "description": description,
-        "status": status,
-        "metrics": metrics,
-        "records": records,
-        "generated_at": iso(now_utc()),
-    }
-
-
-def row_dict(raw_row: Any) -> dict[str, Any]:
+def row_dict(raw_row: object) -> dict[str, object]:
     if isinstance(raw_row, Mapping):
-        return dict(raw_row)
+        return {str(key): value for key, value in raw_row.items()}
     mapping = getattr(raw_row, "_mapping", None)
     if isinstance(mapping, Mapping):
-        return dict(mapping)
+        return {str(key): value for key, value in mapping.items()}
     model_dump = getattr(raw_row, "model_dump", None)
     if callable(model_dump):
         dumped = model_dump()
         if isinstance(dumped, Mapping):
-            return dict(dumped)
+            return {str(key): value for key, value in dumped.items()}
     try:
-        return dict(vars(raw_row))
+        return {str(key): value for key, value in vars(raw_row).items()}
     except TypeError:
         return {}

@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { agentOsFetch } from '../lib/apiClient'
 import {
   agentOsScheduleRunsToScheduleRunsResponse,
-  agentOsSchedulesToOsControlResponse,
+  agentOsSchedulesToSchedulerPayloadResponse,
   buildAgentOsScheduleCreateBody,
   buildAgentOsScheduleUpdateBody,
   normalizeAgentOsSchedule,
@@ -10,10 +10,10 @@ import {
 } from '../modules/schedulerAgentOsApi'
 import { useApiMessage, messageFromUnknown, messageFromResponse } from './useApiCore'
 import type {
-  OsControlResponse,
   ScheduleCreateRequest,
   ScheduleCreateResponse,
   ScheduleRunsResponse,
+  SchedulerPayloadResponse,
   ScheduleUpdateRequest,
   SchedulerRun,
   SchedulerSchedule
@@ -27,19 +27,19 @@ export function useSchedulerApi() {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  const fetchSchedules = async (): Promise<OsControlResponse> => {
+  const fetchSchedules = async (): Promise<SchedulerPayloadResponse> => {
     loading.value = true
     error.value = null
     try {
       const response = await agentOsFetch('/schedules?limit=100&page=1')
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
-        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+        throw new Error(messageFromResponse(data, apiMessage('pagePayloadLoadFailed')))
       }
       const data: unknown = await response.json()
-      return agentOsSchedulesToOsControlResponse(data)
+      return agentOsSchedulesToSchedulerPayloadResponse(data)
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      error.value = messageFromUnknown(err, apiMessage('pagePayloadLoadFailed'))
       throw err
     } finally {
       loading.value = false
@@ -57,20 +57,20 @@ export function useSchedulerApi() {
       })
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
-        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+        throw new Error(messageFromResponse(data, apiMessage('pagePayloadLoadFailed')))
       }
       let schedule = normalizeAgentOsSchedule(await response.json())
       if (payload.enabled === false && schedule.id) {
         const disabled = await agentOsFetch(`/schedules/${encodeURIComponent(schedule.id)}/disable`, { method: 'POST' })
         if (!disabled.ok) {
           const data: unknown = await disabled.json().catch(() => ({}))
-          throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+          throw new Error(messageFromResponse(data, apiMessage('pagePayloadLoadFailed')))
         }
         schedule = normalizeAgentOsSchedule({ ...schedule, ...(await disabled.json()) })
       }
       return schedule
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      error.value = messageFromUnknown(err, apiMessage('pagePayloadLoadFailed'))
       throw err
     } finally {
       loading.value = false
@@ -88,11 +88,11 @@ export function useSchedulerApi() {
       })
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
-        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+        throw new Error(messageFromResponse(data, apiMessage('pagePayloadLoadFailed')))
       }
       return normalizeAgentOsSchedule(await response.json())
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      error.value = messageFromUnknown(err, apiMessage('pagePayloadLoadFailed'))
       throw err
     } finally {
       loading.value = false
@@ -107,7 +107,7 @@ export function useSchedulerApi() {
       const response = await agentOsFetch(`/schedules/${encodeURIComponent(id)}/${action}`, { method: 'POST' })
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
-        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+        throw new Error(messageFromResponse(data, apiMessage('pagePayloadLoadFailed')))
       }
       const state = await response.json()
       const detail = await agentOsFetch(`/schedules/${encodeURIComponent(id)}`)
@@ -116,7 +116,7 @@ export function useSchedulerApi() {
       }
       return normalizeAgentOsSchedule(await detail.json())
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      error.value = messageFromUnknown(err, apiMessage('pagePayloadLoadFailed'))
       throw err
     } finally {
       loading.value = false
@@ -130,11 +130,11 @@ export function useSchedulerApi() {
       const response = await agentOsFetch(`/schedules/${encodeURIComponent(id)}/trigger`, { method: 'POST' })
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
-        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+        throw new Error(messageFromResponse(data, apiMessage('pagePayloadLoadFailed')))
       }
       return normalizeAgentOsScheduleRun(await response.json())
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      error.value = messageFromUnknown(err, apiMessage('pagePayloadLoadFailed'))
       throw err
     } finally {
       loading.value = false
@@ -148,10 +148,10 @@ export function useSchedulerApi() {
       const response = await agentOsFetch(`/schedules/${encodeURIComponent(id)}`, { method: 'DELETE' })
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
-        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+        throw new Error(messageFromResponse(data, apiMessage('pagePayloadLoadFailed')))
       }
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      error.value = messageFromUnknown(err, apiMessage('pagePayloadLoadFailed'))
       throw err
     } finally {
       loading.value = false
@@ -165,12 +165,12 @@ export function useSchedulerApi() {
       const response = await agentOsFetch(`/schedules/${encodeURIComponent(id)}/runs?limit=100&page=1`)
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => ({}))
-        throw new Error(messageFromResponse(data, apiMessage('osControlLoadFailed')))
+        throw new Error(messageFromResponse(data, apiMessage('pagePayloadLoadFailed')))
       }
       const data: unknown = await response.json()
       return agentOsScheduleRunsToScheduleRunsResponse(data)
     } catch (err: unknown) {
-      error.value = messageFromUnknown(err, apiMessage('osControlLoadFailed'))
+      error.value = messageFromUnknown(err, apiMessage('pagePayloadLoadFailed'))
       throw err
     } finally {
       loading.value = false

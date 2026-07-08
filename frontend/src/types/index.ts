@@ -133,43 +133,20 @@ export interface ChatSessionRun {
   [key: string]: unknown
 }
 
-export type OsControlModule =
-  | "sessions"
-  | "memory"
-  | "metrics"
-  | "evaluation"
-  | "knowledge"
-  | "approvals"
-  | "scheduler"
-
-export interface OsControlMetric {
+export interface WorkbenchMetric {
   label: string
   value: string | number
   hint?: string
   tone?: "red" | "blue" | "green" | "yellow" | string
 }
 
-export interface OsControlRecord {
+export interface WorkbenchRecord {
   id: string
   title: string
   subtitle?: string
   status: string
   meta?: Record<string, unknown>
   updated_at?: string
-}
-
-export interface OsControlResponse {
-  module: OsControlModule
-  title: string
-  description: string
-  status: string
-  metrics: OsControlMetric[]
-  records: OsControlRecord[]
-  generated_at: string
-  schedules?: SchedulerSchedule[]
-  approvals?: ApprovalRecord[]
-  approval_filters?: ApprovalFilters
-  approval_meta?: ApprovalMeta
 }
 
 export interface ApprovalRecord {
@@ -222,7 +199,14 @@ export interface ApprovalMeta {
   pending: number
 }
 
-export interface ApprovalControlResponse extends OsControlResponse {
+export interface ApprovalListResponse {
+  module: "approvals"
+  title: string
+  description: string
+  status: string
+  metrics: WorkbenchMetric[]
+  records: WorkbenchRecord[]
+  generated_at: string
   approvals: ApprovalRecord[]
   approval_filters: ApprovalFilters
   approval_meta: ApprovalMeta
@@ -291,7 +275,14 @@ export interface MemoryMode {
   readonly: boolean
 }
 
-export interface MemoryControlResponse extends OsControlResponse {
+export interface MemoryPayloadResponse {
+  module: "memory"
+  title: string
+  description: string
+  status: string
+  metrics: WorkbenchMetric[]
+  records: WorkbenchRecord[]
+  generated_at: string
   memories: MemoryItem[]
   memory_users: MemoryUserSummary[]
   memory_topics: string[]
@@ -356,6 +347,17 @@ export interface SchedulerSchedule {
   created_at_iso?: string
   updated_at?: number | null
   updated_at_iso?: string
+}
+
+export interface SchedulerPayloadResponse {
+  module: "scheduler"
+  title: string
+  description: string
+  status: string
+  metrics: WorkbenchMetric[]
+  records: WorkbenchRecord[]
+  generated_at: string
+  schedules: SchedulerSchedule[]
 }
 
 export interface SchedulerRun {

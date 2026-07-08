@@ -1,6 +1,5 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
-from fastapi import HTTPException
 from starlette.requests import Request
 from api.services import security_policy
 import pytest
@@ -8,16 +7,6 @@ import pytest
 
 def actor(user_id: str, role: str = "user"):
     return SimpleNamespace(id=user_id, role=role, is_superuser=False)
-
-
-def test_control_module_access_uses_declared_permission_map():
-    security_policy.require_control_module_access("sessions", actor("u1"))
-    with pytest.raises(HTTPException) as exc:
-        security_policy.require_control_module_access("studio", actor("guest", "guest"))
-    assert exc.value.status_code == 404
-    with pytest.raises(HTTPException) as exc:
-        security_policy.require_control_module_access("unknown", actor("u1"))
-    assert exc.value.status_code == 404
 
 
 @pytest.mark.asyncio

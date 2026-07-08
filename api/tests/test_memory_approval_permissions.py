@@ -1,9 +1,8 @@
 from datetime import UTC, datetime, timedelta
-from importlib.util import find_spec
 from types import SimpleNamespace
-from typing import Any
 from unittest.mock import AsyncMock, patch
 
+from agno.memory import UserMemory
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
 import pytest
@@ -11,16 +10,10 @@ from starlette.requests import Request
 
 from api.auth.claims import has_scope
 from api.routes import (
-    os_approvals_control,
-    os_evaluation_control,
-    os_knowledge_control,
-    os_memory_control,
-    os_metrics_control,
-    os_sessions_control,
+    approvals,
+    memory,
 )
-from api.services import os_control_identity, os_memory_control as memory_control
-from api.services import os_sessions_control as sessions_control
-from api.services.security_policy import require_control_module_access
+from api.services import memory_service
 
 
 def actor(user_id: str, role: str = "user"):
@@ -28,7 +21,7 @@ def actor(user_id: str, role: str = "user"):
 
 
 def request() -> Request:
-    return Request({"type": "http", "method": "POST", "path": "/api/os/memory", "headers": []})
+    return Request({"type": "http", "method": "POST", "path": "/api/memory", "headers": []})
 
 
 def route_dependency(router, endpoint_name: str):
@@ -98,7 +91,7 @@ class FakeMemoryMutationDb(FakeMemoryDb):
         self.deleted_ids: set[str] = set()
         self.delete_noop = False
         self.upsert_returns_none = False
-        self.upserted: list[Any] = []
+        self.upserted: list[UserMemory] = []
         self.now = datetime(2026, 7, 5, tzinfo=UTC)
 
     async def get_user_memory(self, memory_id, **kwargs):
@@ -149,80 +142,41 @@ class FakeMemoryMutationDb(FakeMemoryDb):
         if not self.delete_noop:
             self.deleted_ids.add(memory_id)
 
-    async def upsert_user_memory(self, memory, deserialize=True):
+    async def upsert_user_memory(self, memory: UserMemory, deserialize=True):
         self.upserted.append(memory)
         if self.upsert_returns_none:
             return None
         return memory
 
 
-def test_studio_control_module_is_removed():
-    with pytest.raises(HTTPException) as context:
-        require_control_module_access("studio", actor("g1", "guest"))
-    assert context.value.status_code == 404
-
-
-def test_unknown_module_is_rejected_before_payload_lookup():
-    with pytest.raises(HTTPException) as context:
-        require_control_module_access("unknown", actor("u1"))
-    assert context.value.status_code == 404
-
-
 def test_guest_cannot_mutate_memory():
     with pytest.raises(HTTPException) as context:
-        os_memory_control.require_memory_write_permission(user=actor("g1", "guest"))
+        memory.require_memory_write_permission(user=actor("g1", "guest"))
     assert context.value.status_code == 403
-
-
-def test_scheduler_control_module_is_removed():
-    with pytest.raises(HTTPException) as context:
-        require_control_module_access("scheduler", actor("u1", "admin"))
-    assert context.value.status_code == 404
-
-
-def test_aggregate_os_control_service_is_removed():
-    assert find_spec("api.services.os_control_service") is None
 
 
 @pytest.mark.parametrize(
     ("router", "endpoint_name", "scope"),
     [
-        (os_sessions_control.router, "get_os_sessions", "sessions:read"),
-        (os_memory_control.router, "get_os_memory", "memories:read"),
-        (os_metrics_control.router, "get_os_metrics", "metrics:read"),
-        (os_evaluation_control.router, "get_os_evaluation", "evals:read"),
-        (os_knowledge_control.router, "get_os_knowledge", "knowledge:read"),
-        (os_approvals_control.router, "list_os_approvals", "approvals:read"),
-        (os_approvals_control.router, "get_os_approval", "approvals:read"),
-        (os_approvals_control.router, "resolve_os_approval", "approvals:write"),
+        (memory.router, "get_memory", "memories:read"),
+        (approvals.router, "list_approvals", "approvals:read"),
+        (approvals.router, "get_approval", "approvals:read"),
+        (approvals.router, "resolve_approval", "approvals:write"),
     ],
 )
-def test_os_control_routes_require_expected_scopes(router, endpoint_name: str, scope: str):
+def test_page_routes_require_expected_scopes(router, endpoint_name: str, scope: str):
     assert route_dependency_scope(router, endpoint_name) == scope
 
 
 @pytest.mark.parametrize(
     ("endpoint_name", "dependency"),
     [
-        ("update_os_memory", os_memory_control.require_memory_write_permission),
-        ("delete_os_memory", os_memory_control.require_memory_delete_permission),
+        ("update_memory", memory.require_memory_write_permission),
+        ("delete_memory", memory.require_memory_delete_permission),
     ],
 )
 def test_memory_mutation_routes_use_explicit_permission_helpers(endpoint_name: str, dependency):
-    assert route_dependency(os_memory_control.router, endpoint_name) is dependency
-
-
-@pytest.mark.asyncio
-async def test_sessions_route_passes_actor_to_service():
-    current_actor = actor("u1")
-    with patch.object(
-        os_sessions_control,
-        "get_sessions_payload",
-        new=AsyncMock(return_value={"module": "sessions"}),
-    ) as mocked:
-        result = await os_sessions_control.get_os_sessions(user=current_actor)
-    assert result["module"] == "sessions"
-    mocked.assert_awaited_once_with(actor=current_actor)
+    assert route_dependency(memory.router, endpoint_name) is dependency
 
 
 @pytest.mark.asyncio
@@ -230,10 +184,10 @@ async def test_delete_memory_route_records_audit():
     current_actor = actor("u1")
     deleted = {"memory_id": "mem-1", "user_id": "u1", "deleted": True}
     with (
-        patch.object(os_memory_control, "delete_memory_record", new=AsyncMock(return_value=deleted)) as delete_mock,
-        patch.object(os_memory_control, "record_policy_event", new=AsyncMock()) as audit_mock,
+        patch.object(memory, "delete_memory_record", new=AsyncMock(return_value=deleted)) as delete_mock,
+        patch.object(memory, "record_policy_event", new=AsyncMock()) as audit_mock,
     ):
-        result = await os_memory_control.delete_os_memory(
+        result = await memory.delete_memory(
             "mem-1",
             request=request(),
             user_id="other-user",
@@ -256,12 +210,12 @@ async def test_delete_memory_route_records_audit():
 @pytest.mark.asyncio
 async def test_delete_memory_route_maps_missing_to_404():
     with patch.object(
-        os_memory_control,
+        memory,
         "delete_memory_record",
-        new=AsyncMock(side_effect=memory_control.MemoryMutationNotFound("missing")),
+        new=AsyncMock(side_effect=memory.MemoryMutationNotFound("missing")),
     ):
         with pytest.raises(HTTPException) as context:
-            await os_memory_control.delete_os_memory("missing", request=request(), user=actor("u1"))
+            await memory.delete_memory("missing", request=request(), user=actor("u1"))
     assert context.value.status_code == 404
 
 
@@ -274,16 +228,16 @@ async def test_update_memory_route_records_audit():
         "memory": "Updated memory",
         "topics": ["preference", "security"],
     }
-    body = os_memory_control.MemoryUpdateRequest(
+    body = memory.MemoryUpdateRequest(
         user_id="other-user",
         memory="Updated memory",
         topics=["preference", "security"],
     )
     with (
-        patch.object(os_memory_control, "update_memory_record", new=AsyncMock(return_value=payload)) as update_mock,
-        patch.object(os_memory_control, "record_policy_event", new=AsyncMock()) as audit_mock,
+        patch.object(memory, "update_memory_record", new=AsyncMock(return_value=payload)) as update_mock,
+        patch.object(memory, "record_policy_event", new=AsyncMock()) as audit_mock,
     ):
-        result = await os_memory_control.update_os_memory(
+        result = await memory.update_memory(
             "mem-1",
             body,
             request=request(),
@@ -305,46 +259,6 @@ async def test_update_memory_route_records_audit():
     assert event.metadata == {"user_id": "u1", "topics": 2}
 
 
-@pytest.mark.asyncio
-async def test_session_payload_filters_to_current_user():
-    captured: dict[str, object] = {}
-
-    async def fake_get_all_sessions(
-        *, owner_user_id: str | None, include_archived: bool = False
-    ):
-        captured["owner_user_id"] = owner_user_id
-        captured["include_archived"] = include_archived
-        return []
-
-    with patch.object(sessions_control, "get_all_sessions_async", fake_get_all_sessions):
-        await sessions_control.get_sessions_payload(actor("u1"))
-    assert captured["owner_user_id"] == "u1"
-    assert captured["include_archived"] is True
-
-
-@pytest.mark.asyncio
-async def test_admin_session_payload_can_read_all_users():
-    captured: dict[str, object] = {}
-
-    async def fake_get_all_sessions(
-        *, owner_user_id: str | None, include_archived: bool = False
-    ):
-        captured["owner_user_id"] = owner_user_id
-        return []
-
-    with patch.object(sessions_control, "get_all_sessions_async", fake_get_all_sessions):
-        await sessions_control.get_sessions_payload(actor("admin", "admin"))
-    assert captured["owner_user_id"] is None
-
-
-def test_metrics_user_scope_uses_current_user():
-    assert os_control_identity.owner_user_id(actor("u1")) == "u1"
-
-
-def test_metrics_admin_scope_reads_all_users():
-    assert os_control_identity.owner_user_id(actor("admin", "admin")) is None
-
-
 def test_memory_write_permission_is_not_granted_to_guest():
     assert has_scope(actor("u1", "user"), "memories:write")
     assert not has_scope(actor("guest", "guest"), "memories:write")
@@ -353,8 +267,8 @@ def test_memory_write_permission_is_not_granted_to_guest():
 @pytest.mark.asyncio
 async def test_memory_payload_uses_current_user_for_ordinary_actor():
     db = FakeMemoryDb()
-    with patch.object(memory_control, "get_async_agno_postgres_db", return_value=db):
-        payload = await memory_control.get_memory_payload(
+    with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
+        payload = await memory_service.get_memory_payload(
             actor("u1"), user_id="other-user", topic="preference", search="concise"
         )
     assert db.memory_kwargs["user_id"] == "u1"
@@ -371,8 +285,8 @@ async def test_memory_payload_uses_current_user_for_ordinary_actor():
 @pytest.mark.asyncio
 async def test_memory_payload_admin_can_filter_requested_user():
     db = FakeMemoryDb()
-    with patch.object(memory_control, "get_async_agno_postgres_db", return_value=db):
-        payload = await memory_control.get_memory_payload(
+    with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
+        payload = await memory_service.get_memory_payload(
             actor("admin", "admin"), user_id="u2"
         )
     assert db.memory_kwargs["user_id"] == "u2"
@@ -386,16 +300,16 @@ async def test_memory_payload_admin_can_filter_requested_user():
 @pytest.mark.asyncio
 async def test_memory_payload_without_actor_is_readonly():
     db = FakeMemoryDb()
-    with patch.object(memory_control, "get_async_agno_postgres_db", return_value=db):
-        payload = await memory_control.get_memory_payload(None)
+    with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
+        payload = await memory_service.get_memory_payload(None)
     assert payload["memory_mode"]["readonly"] is True
 
 
 @pytest.mark.asyncio
 async def test_memory_delete_scopes_ordinary_actor_to_own_user_id():
     db = FakeMemoryMutationDb()
-    with patch.object(memory_control, "get_async_agno_postgres_db", return_value=db):
-        result = await memory_control.delete_memory_record(
+    with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
+        result = await memory_service.delete_memory_record(
             actor("owner-1"),
             memory_id="mem-1",
             user_id="other-user",
@@ -411,9 +325,9 @@ async def test_memory_delete_scopes_ordinary_actor_to_own_user_id():
 @pytest.mark.asyncio
 async def test_memory_delete_returns_not_found_when_memory_not_in_scope():
     db = FakeMemoryMutationDb()
-    with patch.object(memory_control, "get_async_agno_postgres_db", return_value=db):
-        with pytest.raises(memory_control.MemoryMutationNotFound):
-            await memory_control.delete_memory_record(
+    with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
+        with pytest.raises(memory_service.MemoryMutationNotFound):
+            await memory_service.delete_memory_record(
                 actor("owner-1"),
                 memory_id="missing",
             )
@@ -425,9 +339,9 @@ async def test_memory_delete_returns_not_found_when_memory_not_in_scope():
 async def test_memory_delete_raises_when_delete_does_not_persist():
     db = FakeMemoryMutationDb()
     db.delete_noop = True
-    with patch.object(memory_control, "get_async_agno_postgres_db", return_value=db):
-        with pytest.raises(memory_control.MemoryMutationFailed):
-            await memory_control.delete_memory_record(
+    with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
+        with pytest.raises(memory_service.MemoryMutationFailed):
+            await memory_service.delete_memory_record(
                 actor("owner-1"),
                 memory_id="mem-1",
             )
@@ -440,10 +354,10 @@ async def test_memory_update_scopes_ordinary_actor_and_replaces_content():
     db = FakeMemoryMutationDb()
     now = datetime(2026, 7, 5, tzinfo=UTC)
     with (
-        patch.object(memory_control, "get_async_agno_postgres_db", return_value=db),
-        patch.object(memory_control, "_now", return_value=now),
+        patch.object(memory_service, "get_async_agno_postgres_db", return_value=db),
+        patch.object(memory_service, "_now", return_value=now),
     ):
-        result = await memory_control.update_memory_record(
+        result = await memory_service.update_memory_record(
             actor("owner-1"),
             memory_id="mem-1",
             user_id="other-user",
@@ -470,9 +384,9 @@ async def test_memory_update_scopes_ordinary_actor_and_replaces_content():
 async def test_memory_update_raises_when_upsert_fails():
     db = FakeMemoryMutationDb()
     db.upsert_returns_none = True
-    with patch.object(memory_control, "get_async_agno_postgres_db", return_value=db):
-        with pytest.raises(memory_control.MemoryMutationFailed):
-            await memory_control.update_memory_record(
+    with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
+        with pytest.raises(memory_service.MemoryMutationFailed):
+            await memory_service.update_memory_record(
                 actor("owner-1"),
                 memory_id="mem-1",
                 memory="Updated memory",
@@ -485,9 +399,9 @@ async def test_memory_update_raises_when_upsert_fails():
 @pytest.mark.asyncio
 async def test_memory_update_returns_not_found_when_memory_not_in_scope():
     db = FakeMemoryMutationDb()
-    with patch.object(memory_control, "get_async_agno_postgres_db", return_value=db):
-        with pytest.raises(memory_control.MemoryMutationNotFound):
-            await memory_control.update_memory_record(
+    with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
+        with pytest.raises(memory_service.MemoryMutationNotFound):
+            await memory_service.update_memory_record(
                 actor("owner-1"),
                 memory_id="missing",
                 memory="Updated memory",

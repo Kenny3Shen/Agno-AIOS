@@ -8,7 +8,7 @@ from api.auth.claims import has_scope
 from api.auth.models import User
 from api.auth.scopes import require_scope
 from api.auth.users import current_active_user
-from api.services.os_memory_control import (
+from api.services.memory_service import (
     MemoryMutationNotFound,
     delete_memory_record,
     get_memory_payload,
@@ -17,10 +17,9 @@ from api.services.os_memory_control import (
 from api.services.security_policy import (
     PolicyAuditEvent,
     record_policy_event,
-    require_control_module_access,
 )
 
-router = APIRouter(prefix="/api/os/memory", tags=["AgentOS Memory Control"])
+router = APIRouter(prefix="/api/memory", tags=["Memory"])
 
 
 class MemoryUpdateRequest(BaseModel):
@@ -32,7 +31,6 @@ class MemoryUpdateRequest(BaseModel):
 def require_memory_write_permission(
     user: User = Depends(current_active_user),
 ) -> User:
-    require_control_module_access("memory", user)
     if not has_scope(user, "memories:write"):
         raise HTTPException(status_code=403, detail="权限不足")
     return user
@@ -41,14 +39,13 @@ def require_memory_write_permission(
 def require_memory_delete_permission(
     user: User = Depends(current_active_user),
 ) -> User:
-    require_control_module_access("memory", user)
     if not has_scope(user, "memories:delete"):
         raise HTTPException(status_code=403, detail="权限不足")
     return user
 
 
 @router.get("")
-async def get_os_memory(
+async def get_memory(
     user_id: str | None = None,
     topic: str | None = None,
     search: str | None = None,
@@ -66,12 +63,12 @@ async def get_os_memory(
             limit=limit,
         )
     except Exception as exc:
-        logger.error(f"获取 Agno memory 控制面失败: {exc}")
+        logger.error(f"获取 Agno memory 失败: {exc}")
         raise HTTPException(status_code=500, detail="Failed to load memory") from exc
 
 
 @router.delete("/{memory_id}")
-async def delete_os_memory(
+async def delete_memory(
     memory_id: str,
     request: Request,
     user_id: str | None = None,
@@ -100,7 +97,7 @@ async def delete_os_memory(
 
 
 @router.patch("/{memory_id}")
-async def update_os_memory(
+async def update_memory(
     memory_id: str,
     body: MemoryUpdateRequest,
     request: Request,
@@ -121,6 +118,7 @@ async def update_os_memory(
     except Exception as exc:
         logger.error(f"更新 Agno memory 失败: {exc}")
         raise HTTPException(status_code=500, detail="Failed to update memory") from exc
+    result_topics = result.get("topics")
     await record_policy_event(
         user,
         PolicyAuditEvent(
@@ -129,7 +127,7 @@ async def update_os_memory(
             resource_id=memory_id,
             metadata={
                 "user_id": result.get("user_id", ""),
-                "topics": len(result.get("topics", [])),
+                "topics": len(result_topics) if isinstance(result_topics, list) else 0,
             },
         ),
         request,

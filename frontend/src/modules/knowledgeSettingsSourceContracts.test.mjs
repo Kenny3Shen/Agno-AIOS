@@ -1,10 +1,10 @@
 import assert from "node:assert/strict"
 import {
   agentEvals,
-  agentOSApprovalsWorkbench,
-  agentOSControl,
-  agentOSLedger,
-  agentOSSchedulerWorkbench,
+  approvalsWorkbench,
+  removedAgentOsControlSource,
+  removedAgentOsLedgerSource,
+  schedulerWorkbench,
   apiClient,
   app,
   appStyle,
@@ -43,11 +43,11 @@ import {
   workflow,
 } from "./testSource.mjs"
 
-const agentOSCopySources = [
-  agentOSControl,
-  agentOSApprovalsWorkbench,
-  agentOSLedger,
-  agentOSSchedulerWorkbench,
+const pageWorkbenchCopySources = [
+  removedAgentOsControlSource,
+  approvalsWorkbench,
+  removedAgentOsLedgerSource,
+  schedulerWorkbench,
 ].join("\n")
 
 assert.match(
@@ -300,7 +300,7 @@ for (const hardcodedKnowledgeCopy of [
 assert.match(
   trace,
   /trace-inspector-shell/,
-  "Trace page must use a two-pane AgentOS-style inspector shell",
+  "Trace page must use a two-pane runtime inspector shell",
 )
 
 assert.match(
@@ -400,24 +400,24 @@ assert.match(
 )
 
 assert.match(
-  agentOSCopySources,
+  pageWorkbenchCopySources,
   /useI18n\(\)/,
-  "AgentOS control pages must read user-facing copy from vue-i18n",
+  "page workbenches must read user-facing copy from vue-i18n",
 )
 
-for (const bulkyAgentOSHeaderClass of [
-  "agentos-head",
-  "agentos-mark",
-  "agentos-title",
+for (const bulkyWorkbenchHeaderClass of [
+  "page-head",
+  "page-mark",
+  "page-title",
 ]) {
   assert.equal(
-    agentOSCopySources.includes(bulkyAgentOSHeaderClass),
+    pageWorkbenchCopySources.includes(bulkyWorkbenchHeaderClass),
     false,
-    `AgentOS control pages must remove bulky top header element: ${bulkyAgentOSHeaderClass}`,
+    `page workbenches must remove bulky top header element: ${bulkyWorkbenchHeaderClass}`,
   )
 }
 
-for (const hardcodedAgentOSCopy of [
+for (const hardcodedWorkbenchCopy of [
   "加载控制面状态",
   "暂无记录",
   "Agno docs MCP 对齐状态",
@@ -427,9 +427,9 @@ for (const hardcodedAgentOSCopy of [
   "当前模块还没有可展示的运行记录。",
 ]) {
   assert.equal(
-    agentOSCopySources.includes(hardcodedAgentOSCopy),
+    pageWorkbenchCopySources.includes(hardcodedWorkbenchCopy),
     false,
-    `AgentOS control page must not hardcode copy: ${hardcodedAgentOSCopy}`,
+    `page workbench must not hardcode copy: ${hardcodedWorkbenchCopy}`,
   )
 }
 

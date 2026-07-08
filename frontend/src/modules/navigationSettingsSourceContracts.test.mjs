@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import {
   agentEvals,
-  agentOSControl,
+  removedAgentOsControlSource,
   apiClient,
   app,
   appStyle,
@@ -35,7 +35,6 @@ import {
   useApi,
   useApiCore,
   useChatApiSource,
-  useControlPlaneApiSource,
   useMemoryControlApiSource,
   useTraceApiSource,
   userRole,
@@ -44,15 +43,21 @@ import {
 } from "./testSource.mjs"
 
 assert.equal(
-  agentOSControl.includes("agentos-notes"),
-  false,
-  "AgentOS control pages must avoid the previous notes sidebar",
+  removedAgentOsControlSource,
+  "",
+  "removed aggregate parent must stay absent in favor of direct page components",
 )
 
 assert.equal(
-  agentOSControl.includes("agentos-note-strip"),
+  removedAgentOsControlSource.includes("page-notes"),
   false,
-  "AgentOS control pages must not render implementation note chips",
+  "page workbenches must avoid the previous notes sidebar",
+)
+
+assert.equal(
+  removedAgentOsControlSource.includes("page-note-strip"),
+  false,
+  "page workbenches must not render implementation note chips",
 )
 
 assert.match(
@@ -84,10 +89,10 @@ assertTextOrder(
     't("shell.nav.knowledge.label")',
     't("shell.nav.trace.label")',
   ],
-  "sidebar navigation order must match Agno OS control-plane priority",
+  "sidebar navigation order must keep the runtime pages grouped after core operations",
 )
 
-for (const controlPlaneLabel of [
+for (const runtimePageLabel of [
   't("shell.nav.memory.label")',
   't("shell.nav.evaluation.label")',
   't("shell.nav.approvals.label")',
@@ -95,8 +100,8 @@ for (const controlPlaneLabel of [
 ]) {
   assert.match(
     app,
-    new RegExp(controlPlaneLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-    `sidebar must include missing AgentOS control-plane page ${controlPlaneLabel}`,
+    new RegExp(runtimePageLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    `sidebar must include missing runtime page ${runtimePageLabel}`,
   )
 }
 
@@ -260,7 +265,7 @@ assert.match(
 
 assert.match(
   useMemoryControlApiSource,
-  /apiFetch\(`\/os\/memory\/\$\{encodeURIComponent\(memoryId\)\}/,
+  /apiFetch\(`\/memory\/\$\{encodeURIComponent\(memoryId\)\}/,
   "deleteMemory must call the authenticated Memory delete endpoint",
 )
 
@@ -331,7 +336,7 @@ assert.match(
 )
 
 assert.equal(
-  /\p{Script=Han}/u.test([useApi, useApiCore, useChatApiSource, useControlPlaneApiSource, useMemoryControlApiSource, useTraceApiSource].join("\n")),
+  /\p{Script=Han}/u.test([useApi, useApiCore, useChatApiSource, useMemoryControlApiSource, useTraceApiSource].join("\n")),
   false,
   "API composables must not hardcode localized Chinese fallback copy",
 )

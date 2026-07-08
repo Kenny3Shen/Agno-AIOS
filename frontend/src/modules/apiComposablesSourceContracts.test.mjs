@@ -8,7 +8,6 @@ import {
   useApi,
   useApiCore,
   useChatApiSource,
-  useControlPlaneApiSource,
   useKnowledgeApiSource,
   useMemoryControlApiSource,
   useRuntimeToolsApiSource,
@@ -22,7 +21,6 @@ import {
 const expectedComposableFiles = [
   "composables/useApiCore.ts",
   "composables/useChatApi.ts",
-  "composables/useControlPlaneApi.ts",
   "composables/useMemoryControlApi.ts",
   "composables/useApprovalsApi.ts",
   "composables/useSchedulerApi.ts",
@@ -56,7 +54,7 @@ assert.match(
 assert.doesNotMatch(
   useApi,
   /apiFetch\(|agentOsFetch\(|const loading = ref|export function use[A-Za-z]+Api\(/,
-  "composables/useApi.ts must stay a compatibility re-export entry, not retain request implementations",
+  "composables/useApi.ts must stay a barrel re-export entry, not retain request implementations",
 )
 
 for (const exportName of [
@@ -74,7 +72,7 @@ for (const exportName of [
   assert.match(
     useApi,
     new RegExp(`export \\{[^}]*\\b${exportName}\\b[^}]*\\} from '\\./`),
-    `compatibility entry must re-export ${exportName}`,
+    `API barrel must re-export ${exportName}`,
   )
 }
 
@@ -83,9 +81,8 @@ const domainExpectations = [
   [useSecurityDataApiSource, "useUrl2MdApi", "/url2md/parse"],
   [useChatApiSource, "useChatApi", "/chat"],
   [useChatApiSource, "useChatHistory", "/chat/sessions"],
-  [useControlPlaneApiSource, "useControlPlaneApi", "/os/"],
-  [useMemoryControlApiSource, "useMemoryControlApi", "/os/memory"],
-  [useApprovalsApiSource, "useApprovalsApi", "/os/approvals"],
+  [useMemoryControlApiSource, "useMemoryControlApi", "/memory"],
+  [useApprovalsApiSource, "useApprovalsApi", "/approvals"],
   [useSchedulerApiSource, "useSchedulerApi", "/schedules"],
   [useSettingsApiSource, "useSettingsApi", "/settings"],
   [useTraceApiSource, "useTracingApi", "/traces"],
@@ -103,25 +100,42 @@ for (const [source, hookName, endpoint] of domainExpectations) {
 assert.doesNotMatch(
   useApi,
   /useOsControlApi/,
-  "compatibility entry must not re-export the removed aggregate OS control composable",
+  "API barrel must not re-export the removed aggregate runtime composable",
 )
 
 assert.doesNotMatch(
-  useControlPlaneApiSource + useMemoryControlApiSource + useApprovalsApiSource + useSchedulerApiSource,
+  useMemoryControlApiSource + useApprovalsApiSource + useSchedulerApiSource,
   /export function useOsControlApi\(/,
-  "OS control frontend API must be split into functional composables",
+  "runtime frontend APIs must stay split into functional composables",
 )
+
+assert.doesNotMatch(
+  typesSource,
+  new RegExp("Page" + "PayloadBase|Page" + "PayloadResponse"),
+  "Page responses must not share a generic payload response type; only metric and record item types stay shared",
+)
+
+for (const [interfaceName, moduleName] of [
+  ["ApprovalListResponse", "approvals"],
+  ["MemoryPayloadResponse", "memory"],
+  ["SchedulerPayloadResponse", "scheduler"],
+]) {
+  assert.match(
+    typesSource,
+    new RegExp(`interface ${interfaceName} \\{[\\s\\S]*module: "${moduleName}"[\\s\\S]*metrics: WorkbenchMetric\\[\\][\\s\\S]*records: WorkbenchRecord\\[\\]`),
+    `${interfaceName} must own its response shape while reusing only metric and record item types`,
+  )
+}
 
 assert.match(
   typesSource,
-  /export type OsControlModule =[\s\S]*\| "knowledge"/,
-  "OS control module typing must include the read-only knowledge payload route",
+  /interface SchedulerPayloadResponse \{[\s\S]*module: "scheduler"[\s\S]*schedules: SchedulerSchedule\[\]/,
+  "Scheduler must expose its own payload response type instead of using a generic page payload response",
 )
 
-assert.match(
-  useControlPlaneApiSource,
-  /export type ControlPlanePayloadModule = Exclude<OsControlModule, 'memory' \| 'approvals' \| 'scheduler'>/,
-  "control-plane payload API must allow sessions, metrics, evaluation, and knowledge while excluding owned functional composables",
+assert.ok(
+  !existsSync(sourcePath("composables/" + "useControl" + "PlaneApi.ts")),
+  "the generic aggregate runtime composable must be removed",
 )
 
 assert.match(

@@ -1,5 +1,5 @@
 import type {
-  MemoryControlResponse,
+  MemoryPayloadResponse,
   MemoryItem,
   MemoryMode,
   MemoryUserSummary,
@@ -20,7 +20,7 @@ const asRecord = (value: unknown): Record<string, unknown> => {
   return value && typeof value === "object" ? value as Record<string, unknown> : {}
 }
 
-export const defaultMemoryPayload = ({ page, limit }: MemoryPayloadDefaults): MemoryControlResponse => ({
+export const defaultMemoryPayload = ({ page, limit }: MemoryPayloadDefaults): MemoryPayloadResponse => ({
   module: "memory",
   title: "Memory",
   description: "",
@@ -54,8 +54,8 @@ export const defaultMemoryPayload = ({ page, limit }: MemoryPayloadDefaults): Me
 
 export const normalizeMemoryPayload = (
   payload: unknown,
-  fallback: MemoryControlResponse,
-): MemoryControlResponse => {
+  fallback: MemoryPayloadResponse,
+): MemoryPayloadResponse => {
   const record = asRecord(payload)
   const filters = asRecord(record.memory_filters)
   return {
@@ -76,12 +76,12 @@ export const normalizeMemoryPayload = (
       ...fallback.memory_mode,
       ...asRecord(record.memory_mode),
     } as MemoryMode,
-  } as MemoryControlResponse
+  } as MemoryPayloadResponse
 }
 
 export const payloadAfterMemoryLoadFailure = (
-  currentPayload: MemoryControlResponse | null,
-  fallback: MemoryControlResponse,
+  currentPayload: MemoryPayloadResponse | null,
+  fallback: MemoryPayloadResponse,
 ) => currentPayload ?? fallback
 
 export const memoryDisplayStatus = (

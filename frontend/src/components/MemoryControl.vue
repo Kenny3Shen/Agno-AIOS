@@ -6,7 +6,7 @@
       <div class="memory-query-label">
         <el-icon><Search /></el-icon>
         <div>
-          <strong>{{ t("agentOS.memory.queryTitle") }}</strong>
+          <strong>{{ t("workbench.memory.queryTitle") }}</strong>
           <span>{{ activeFilterSummary }}</span>
         </div>
       </div>
@@ -29,7 +29,7 @@
           v-model="filters.search"
           class="memory-search"
           clearable
-          :placeholder="t('agentOS.memory.searchPlaceholder')"
+          :placeholder="t('workbench.memory.searchPlaceholder')"
           @keyup.enter="applyFilters"
         >
           <template #prefix>
@@ -41,7 +41,7 @@
           class="memory-filter"
           clearable
           filterable
-          :placeholder="t('agentOS.memory.userPlaceholder')"
+          :placeholder="t('workbench.memory.userPlaceholder')"
           @change="applyFilters"
         >
           <el-option
@@ -56,7 +56,7 @@
           class="memory-filter"
           clearable
           filterable
-          :placeholder="t('agentOS.memory.topicPlaceholder')"
+          :placeholder="t('workbench.memory.topicPlaceholder')"
           @change="applyFilters"
         >
           <el-option
@@ -70,11 +70,11 @@
 
       <div class="memory-query-actions">
         <el-button :disabled="!activeFilterCount" @click="clearFilters">
-          {{ t("agentOS.memory.clearFilters") }}
+          {{ t("workbench.memory.clearFilters") }}
         </el-button>
         <el-button type="primary" :loading="loading" @click="applyFilters">
           <el-icon><Search /></el-icon>
-          {{ t("agentOS.memory.apply") }}
+          {{ t("workbench.memory.apply") }}
         </el-button>
         <el-button :loading="loading" @click="loadMemory">
           <el-icon><Refresh /></el-icon>
@@ -86,7 +86,7 @@
       <aside class="memory-queue-panel ag-workspace-panel">
         <div class="memory-panel-head">
           <div>
-            <p>{{ t("agentOS.memory.queueTitle") }}</p>
+            <p>{{ t("workbench.memory.queueTitle") }}</p>
             <span>{{ userPanelSummary }}</span>
           </div>
           <span class="memory-threshold" :title="thresholdTitle">
@@ -96,15 +96,15 @@
 
         <div class="memory-status-board">
           <article class="tone-red">
-            <span>{{ t("agentOS.memory.statusRisk") }}</span>
+            <span>{{ t("workbench.memory.statusRisk") }}</span>
             <strong>{{ riskUserCount }}</strong>
           </article>
           <article class="tone-yellow">
-            <span>{{ t("agentOS.memory.statusReview") }}</span>
+            <span>{{ t("workbench.memory.statusReview") }}</span>
             <strong>{{ reviewUserCount }}</strong>
           </article>
           <article class="tone-green">
-            <span>{{ t("agentOS.memory.statusHealthy") }}</span>
+            <span>{{ t("workbench.memory.statusHealthy") }}</span>
             <strong>{{ healthyUserCount }}</strong>
           </article>
         </div>
@@ -136,20 +136,20 @@
         </div>
 
         <div v-else-if="!loading" class="memory-empty compact">
-          <strong>{{ t("agentOS.memory.noUsers") }}</strong>
+          <strong>{{ t("workbench.memory.noUsers") }}</strong>
         </div>
       </aside>
 
       <section class="memory-list-panel ag-workspace-panel">
         <div class="memory-panel-head">
           <div>
-            <p>{{ t("agentOS.memory.memoriesTitle") }}</p>
+            <p>{{ t("workbench.memory.memoriesTitle") }}</p>
             <span>{{ resultSummary }}</span>
           </div>
           <div class="memory-active-scope" :title="activeFilterSummary">
             <span v-if="filters.user_id">{{ filters.user_id }}</span>
             <span v-if="filters.topic">{{ filters.topic }}</span>
-            <span v-if="filters.search">{{ t("agentOS.memory.searchChip") }}</span>
+            <span v-if="filters.search">{{ t("workbench.memory.searchChip") }}</span>
           </div>
         </div>
 
@@ -168,11 +168,11 @@
               @click="selectMemory(memory.id)"
             >
               <span class="memory-row-copy">
-                <strong :title="memory.memory">{{ memory.memory || t("agentOS.memory.emptyMemory") }}</strong>
+                <strong :title="memory.memory">{{ memory.memory || t("workbench.memory.emptyMemory") }}</strong>
               </span>
               <span class="memory-row-facts">
                 <span v-if="!memory.topics.length" class="memory-chip">
-                  {{ t("agentOS.memory.noTopics") }}
+                  {{ t("workbench.memory.noTopics") }}
                 </span>
                 <span
                   v-for="topic in memory.topics"
@@ -191,8 +191,8 @@
                 plain
                 circle
                 class="memory-action-button"
-                :aria-label="t('agentOS.memory.editMemory')"
-                :title="t('agentOS.memory.editMemory')"
+                :aria-label="t('workbench.memory.editMemory')"
+                :title="t('workbench.memory.editMemory')"
                 :disabled="loading"
                 @click.stop="openEditMemoryDialog(memory)"
               >
@@ -205,8 +205,8 @@
                 plain
                 circle
                 class="memory-action-button"
-                :aria-label="t('agentOS.memory.deleteMemory')"
-                :title="t('agentOS.memory.deleteMemory')"
+                :aria-label="t('workbench.memory.deleteMemory')"
+                :title="t('workbench.memory.deleteMemory')"
                 :disabled="loading"
                 @click.stop="deleteSelectedMemory(memory)"
               >
@@ -218,8 +218,8 @@
 
         <div v-else-if="!loading" class="memory-empty">
           <el-icon><User /></el-icon>
-          <strong>{{ t("agentOS.memory.emptyTitle") }}</strong>
-          <span>{{ t("agentOS.memory.emptyDescription") }}</span>
+          <strong>{{ t("workbench.memory.emptyTitle") }}</strong>
+          <span>{{ t("workbench.memory.emptyDescription") }}</span>
         </div>
 
         <div v-if="total > filters.limit" class="memory-pagination">
@@ -237,7 +237,7 @@
         <template v-if="selectedMemory">
           <div class="memory-detail-head">
             <div>
-              <p>{{ t("agentOS.memory.detailTitle") }}</p>
+              <p>{{ t("workbench.memory.detailTitle") }}</p>
               <strong :title="selectedMemory.id">{{ selectedMemory.id }}</strong>
             </div>
             <span class="memory-status" :class="`tone-${selectedStatusTone}`">
@@ -258,35 +258,35 @@
 
           <section class="memory-metadata-panel">
             <div class="memory-section-head">
-              <span>{{ t("agentOS.memory.metadataLabel") }}</span>
+              <span>{{ t("workbench.memory.metadataLabel") }}</span>
             </div>
             <dl class="memory-metadata-list">
               <div>
-                <dt>{{ t("agentOS.memory.userLabel") }}</dt>
+                <dt>{{ t("workbench.memory.userLabel") }}</dt>
                 <dd :title="selectedMemory.user_id">{{ selectedMemory.user_id || "default" }}</dd>
               </div>
               <div>
-                <dt>{{ t("agentOS.memory.agentLabel") }}</dt>
+                <dt>{{ t("workbench.memory.agentLabel") }}</dt>
                 <dd :title="selectedMemory.agent_id">{{ selectedMemory.agent_id || "-" }}</dd>
               </div>
               <div>
-                <dt>{{ t("agentOS.memory.teamLabel") }}</dt>
+                <dt>{{ t("workbench.memory.teamLabel") }}</dt>
                 <dd :title="selectedMemory.team_id">{{ selectedMemory.team_id || "-" }}</dd>
               </div>
               <div>
-                <dt>{{ t("agentOS.memory.createdLabel") }}</dt>
+                <dt>{{ t("workbench.memory.createdLabel") }}</dt>
                 <dd :title="selectedMemory.created_at">{{ formatTime(selectedMemory.created_at) }}</dd>
               </div>
               <div>
-                <dt>{{ t("agentOS.memory.updatedLabel") }}</dt>
+                <dt>{{ t("workbench.memory.updatedLabel") }}</dt>
                 <dd :title="selectedMemory.updated_at">{{ formatTime(selectedMemory.updated_at) }}</dd>
               </div>
               <div>
-                <dt>{{ t("agentOS.memory.feedbackLabel") }}</dt>
+                <dt>{{ t("workbench.memory.feedbackLabel") }}</dt>
                 <dd :title="selectedMemory.feedback">{{ selectedMemory.feedback || "-" }}</dd>
               </div>
               <div class="memory-source-row">
-                <dt>{{ t("agentOS.memory.inputLabel") }}</dt>
+                <dt>{{ t("workbench.memory.inputLabel") }}</dt>
                 <dd class="memory-metadata-source" :title="selectedMemory.input">
                   <div
                     class="memory-source-viewer"
@@ -298,11 +298,11 @@
                           v-model="sourceInputViewMode"
                           size="small"
                           class="memory-source-mode-select"
-                          :aria-label="t('agentOS.memory.sourceModeLabel')"
+                          :aria-label="t('workbench.memory.sourceModeLabel')"
                         >
-                          <el-option :label="t('agentOS.memory.sourceModeText')" value="text" />
-                          <el-option :label="t('agentOS.memory.sourceModeJson')" value="json" />
-                          <el-option :label="t('agentOS.memory.sourceModeMarkdown')" value="markdown" />
+                          <el-option :label="t('workbench.memory.sourceModeText')" value="text" />
+                          <el-option :label="t('workbench.memory.sourceModeJson')" value="json" />
+                          <el-option :label="t('workbench.memory.sourceModeMarkdown')" value="markdown" />
                         </el-select>
                         <el-button
                           size="small"
@@ -311,10 +311,10 @@
                           :disabled="!selectedSourceInput.trim()"
                           @click="copySourceInput"
                         >
-                          {{ t("agentOS.memory.sourceCopy") }}
+                          {{ t("workbench.memory.sourceCopy") }}
                         </el-button>
                         <el-button size="small" plain class="cursor-pointer" @click="sourceInputExpanded = !sourceInputExpanded">
-                          {{ sourceInputExpanded ? t("agentOS.memory.sourceCollapse") : t("agentOS.memory.sourceExpand") }}
+                          {{ sourceInputExpanded ? t("workbench.memory.sourceCollapse") : t("workbench.memory.sourceExpand") }}
                         </el-button>
                       </div>
                     </div>
@@ -338,8 +338,8 @@
 
         <div v-else class="memory-empty">
           <el-icon><User /></el-icon>
-          <strong>{{ t("agentOS.memory.emptyTitle") }}</strong>
-          <span>{{ t("agentOS.memory.emptyDescription") }}</span>
+          <strong>{{ t("workbench.memory.emptyTitle") }}</strong>
+          <span>{{ t("workbench.memory.emptyDescription") }}</span>
         </div>
       </aside>
     </main>
@@ -347,20 +347,20 @@
     <el-dialog
       v-model="editDialogVisible"
       class="memory-edit-dialog"
-      :title="t('agentOS.memory.editMemoryTitle')"
+      :title="t('workbench.memory.editMemoryTitle')"
       width="min(560px, calc(100vw - 32px))"
       destroy-on-close
     >
       <el-form label-position="top">
-        <el-form-item :label="t('agentOS.memory.memoryLabel')">
+        <el-form-item :label="t('workbench.memory.memoryLabel')">
           <el-input
             v-model="editForm.memory"
             type="textarea"
             :autosize="{ minRows: 4, maxRows: 8 }"
-            :placeholder="t('agentOS.memory.editMemoryPlaceholder')"
+            :placeholder="t('workbench.memory.editMemoryPlaceholder')"
           />
         </el-form-item>
-        <el-form-item :label="t('agentOS.memory.topicsLabel')">
+        <el-form-item :label="t('workbench.memory.topicsLabel')">
           <el-select
             v-model="editForm.topics"
             class="memory-topic-editor"
@@ -368,7 +368,7 @@
             filterable
             allow-create
             default-first-option
-            :placeholder="t('agentOS.memory.editTopicsPlaceholder')"
+            :placeholder="t('workbench.memory.editTopicsPlaceholder')"
           >
             <el-option
               v-for="topic in topicOptions"
@@ -384,7 +384,7 @@
           {{ t("common.actions.cancel") }}
         </el-button>
         <el-button type="primary" :loading="loading" @click="saveMemoryUpdate">
-          {{ t("agentOS.memory.saveMemory") }}
+          {{ t("workbench.memory.saveMemory") }}
         </el-button>
       </template>
     </el-dialog>
@@ -414,7 +414,7 @@ import {
 } from "../modules/memoryControl"
 import { useAuthStore } from "../stores/auth"
 import type {
-  MemoryControlResponse,
+  MemoryPayloadResponse,
   MemoryItem,
   MemoryQueryParams,
   MemoryUserSummary,
@@ -428,7 +428,7 @@ const markdownRenderer = new MarkdownIt({
   linkify: true,
   breaks: true,
 })
-const payload = ref<MemoryControlResponse | null>(null)
+const payload = ref<MemoryPayloadResponse | null>(null)
 const selectedMemoryId = ref("")
 const editDialogVisible = ref(false)
 const sourceInputViewMode = ref<SourceInputViewMode>("text")
@@ -449,7 +449,7 @@ const editForm = reactive({
   topics: [] as string[],
 })
 
-const defaultMemoryPayload = (): MemoryControlResponse => buildDefaultMemoryPayload({
+const defaultMemoryPayload = (): MemoryPayloadResponse => buildDefaultMemoryPayload({
   page: filters.page,
   limit: filters.limit,
 })
@@ -491,45 +491,45 @@ const activeFilterCount = computed(() => {
 
 const activeFilterSummary = computed(() => {
   const parts: string[] = []
-  if (filters.search.trim()) parts.push(t("agentOS.memory.activeSearch", { value: filters.search.trim() }))
-  if (filters.user_id) parts.push(t("agentOS.memory.activeUser", { value: filters.user_id }))
-  if (filters.topic) parts.push(t("agentOS.memory.activeTopic", { value: filters.topic }))
-  return parts.length ? parts.join(" / ") : t("agentOS.memory.allMemoryScope")
+  if (filters.search.trim()) parts.push(t("workbench.memory.activeSearch", { value: filters.search.trim() }))
+  if (filters.user_id) parts.push(t("workbench.memory.activeUser", { value: filters.user_id }))
+  if (filters.topic) parts.push(t("workbench.memory.activeTopic", { value: filters.topic }))
+  return parts.length ? parts.join(" / ") : t("workbench.memory.allMemoryScope")
 })
 
 const priorityCards = computed(() => [
   {
     key: "risk",
-    label: t("agentOS.memory.statusRisk"),
+    label: t("workbench.memory.statusRisk"),
     value: riskUserCount.value,
-    hint: t("agentOS.memory.riskHint"),
+    hint: t("workbench.memory.riskHint"),
     tone: "red",
   },
   {
     key: "review",
-    label: t("agentOS.memory.statusReview"),
+    label: t("workbench.memory.statusReview"),
     value: reviewUserCount.value,
-    hint: t("agentOS.memory.reviewHint"),
+    hint: t("workbench.memory.reviewHint"),
     tone: "yellow",
   },
   {
     key: "stored",
-    label: t("agentOS.memory.storedMemories"),
+    label: t("workbench.memory.storedMemories"),
     value: total.value,
-    hint: t("agentOS.memory.storedHint", { count: userOptions.value.length }),
+    hint: t("workbench.memory.storedHint", { count: userOptions.value.length }),
     tone: "green",
   },
   {
     key: "mode",
-    label: t("agentOS.memory.modeLabel"),
+    label: t("workbench.memory.modeLabel"),
     value: memoryMode.value?.type || "auto",
-    hint: t("agentOS.memory.modeLabel"),
+    hint: t("workbench.memory.modeLabel"),
     tone: "blue",
   },
 ])
 
 const userPanelSummary = computed(() => {
-  return t("agentOS.memory.usersSummary", {
+  return t("workbench.memory.usersSummary", {
     count: userOptions.value.length,
     review: reviewUserCount.value,
     risk: riskUserCount.value,
@@ -539,19 +539,19 @@ const userPanelSummary = computed(() => {
 const resultSummary = computed(() => {
   const start = total.value === 0 ? 0 : (filters.page - 1) * filters.limit + 1
   const end = Math.min(total.value, filters.page * filters.limit)
-  return t("agentOS.memory.resultSummary", {
+  return t("workbench.memory.resultSummary", {
     start,
     end,
     total: total.value,
   })
 })
 
-const thresholdSummary = computed(() => t("agentOS.memory.thresholdSummary", {
+const thresholdSummary = computed(() => t("workbench.memory.thresholdSummary", {
   review: thresholds.value?.optimization_review ?? "-",
   risk: thresholds.value?.abnormal_growth ?? "-",
 }))
 
-const thresholdTitle = computed(() => t("agentOS.memory.thresholdTitle", {
+const thresholdTitle = computed(() => t("workbench.memory.thresholdTitle", {
   review: thresholds.value?.optimization_review ?? "-",
   risk: thresholds.value?.abnormal_growth ?? "-",
 }))
@@ -564,9 +564,9 @@ const statusTone = (status?: string) => {
 }
 
 const statusLabel = (status?: string) => {
-  if (status === "risk") return t("agentOS.memory.statusRisk")
-  if (status === "review") return t("agentOS.memory.statusReview")
-  if (status === "healthy" || status === "stored") return t("agentOS.memory.statusHealthy")
+  if (status === "risk") return t("workbench.memory.statusRisk")
+  if (status === "review") return t("workbench.memory.statusReview")
+  if (status === "healthy" || status === "stored") return t("workbench.memory.statusHealthy")
   return status || "-"
 }
 
@@ -589,7 +589,7 @@ const parseSourceInputJson = (text: string) => {
 
 const sourceInputTextForMode = (mode: SourceInputViewMode = sourceInputViewMode.value) => {
   const text = selectedSourceInput.value
-  if (!text.trim()) return t("agentOS.memory.sourceEmpty")
+  if (!text.trim()) return t("workbench.memory.sourceEmpty")
   if (mode !== "json") return text
   const parsed = parseSourceInputJson(text)
   if (!parsed.ok) return text
@@ -681,7 +681,7 @@ const saveMemoryUpdate = async () => {
   if (!canWriteMemory.value || !selectedMemory.value) return
   const nextMemory = editForm.memory.trim()
   if (!nextMemory) {
-    ElMessage.error(t("agentOS.memory.updateEmpty"))
+    ElMessage.error(t("workbench.memory.updateEmpty"))
     return
   }
   try {
@@ -692,9 +692,9 @@ const saveMemoryUpdate = async () => {
     })
     editDialogVisible.value = false
     await loadMemory()
-    ElMessage.success(t("agentOS.memory.updateSuccess"))
+    ElMessage.success(t("workbench.memory.updateSuccess"))
   } catch (err) {
-    ElMessage.error(err instanceof Error ? err.message : t("agentOS.memory.updateFailed"))
+    ElMessage.error(err instanceof Error ? err.message : t("workbench.memory.updateFailed"))
   }
 }
 
@@ -704,8 +704,8 @@ const deleteSelectedMemory = async (memory?: MemoryItem) => {
   selectedMemoryId.value = targetMemory.id
   try {
     await ElMessageBox.confirm(
-      t("agentOS.memory.deleteConfirmMessage"),
-      t("agentOS.memory.deleteConfirmTitle"),
+      t("workbench.memory.deleteConfirmMessage"),
+      t("workbench.memory.deleteConfirmTitle"),
       {
         confirmButtonText: t("common.actions.delete"),
         cancelButtonText: t("common.actions.cancel"),
@@ -714,10 +714,10 @@ const deleteSelectedMemory = async (memory?: MemoryItem) => {
     )
     await deleteMemory(targetMemory.id, currentMutationUserId(targetMemory))
     await loadMemory()
-    ElMessage.success(t("agentOS.memory.deleteSuccess"))
+    ElMessage.success(t("workbench.memory.deleteSuccess"))
   } catch (err) {
     if (err !== "cancel") {
-      ElMessage.error(err instanceof Error ? err.message : t("agentOS.memory.deleteFailed"))
+      ElMessage.error(err instanceof Error ? err.message : t("workbench.memory.deleteFailed"))
     }
   }
 }

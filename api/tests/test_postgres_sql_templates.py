@@ -21,7 +21,7 @@ from api.mcp import server as mcp_server
 from api.services import audit_service
 from api.services import mcp_config_service
 from api.services import model_config_service
-from api.services import os_evaluation_control, os_metrics_control, postgres_store, tracing_service
+from api.services import postgres_store, tracing_service
 from api.services import knowledge_service
 from api.services import security_run_runtime
 from api.services import skill_service
@@ -257,31 +257,6 @@ def test_tracing_uses_async_agno_postgres_db() -> None:
     assert "get_agno_postgres_db" not in source
     assert "load_dotenv" not in source
     assert "os.environ" not in source
-
-
-def test_os_control_agno_runtime_uses_agno_async_api() -> None:
-    source = inspect.getsource(os_metrics_control)
-    metrics_source = inspect.getsource(os_metrics_control.get_metrics_payload)
-    assert "get_async_agno_postgres_db" in source
-    assert "get_postgres_pool" not in source
-    assert "from psycopg import sql" not in source
-    assert "await db.get_traces" in metrics_source
-    assert "await db.get_trace_stats" in metrics_source
-    assert "await db.get_sessions" in metrics_source
-    assert "await db.get_user_memory_stats" in metrics_source
-    assert "agno_traces" not in metrics_source
-    assert "agno_sessions" not in metrics_source
-    assert "agno_memories" not in metrics_source
-
-
-def test_os_control_control_plane_tables_use_async_sqlalchemy() -> None:
-    source = inspect.getsource(os_evaluation_control)
-    assert "get_async_control_plane_engine" in source
-    assert "Table(" in source
-    assert "select(table)" in source
-    assert "os_approvals" not in source
-    assert "submit_approval_request" not in source
-    assert "CREATE TABLE IF NOT EXISTS" not in source
 
 
 def test_postgres_store_no_longer_exposes_psycopg_pool() -> None:

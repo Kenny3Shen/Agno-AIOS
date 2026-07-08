@@ -32,7 +32,6 @@ from api.persistence.agent_evals import (
     update_suite_row_async,
     update_suite_run_row_async,
 )
-from api.services.security_policy import CONTROL_MODULE_SCOPES
 
 
 class FakeBootstrapConnection:
@@ -78,9 +77,8 @@ def actor(role: str):
     return SimpleNamespace(role=role, is_superuser=False)
 
 
-def test_evaluation_control_module_uses_agent_eval_read_permission():
-    assert CONTROL_MODULE_SCOPES["evaluation"] == "evals:read"
-    assert has_scope(actor("user"), CONTROL_MODULE_SCOPES["evaluation"])
+def test_agent_eval_read_permission_is_role_scoped():
+    assert has_scope(actor("user"), "evals:read")
 
 
 def test_agent_eval_tables_use_jsonb_and_expected_names():

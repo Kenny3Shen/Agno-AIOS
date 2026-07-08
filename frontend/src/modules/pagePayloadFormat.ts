@@ -1,4 +1,4 @@
-import type { OsControlRecord } from "../../types"
+import type { WorkbenchRecord } from "../types"
 
 export const statusTone = (status: string) => {
   const text = status.toLowerCase()
@@ -47,7 +47,7 @@ export const isIdEntry = (key: string, value: unknown) => {
   return key.toLowerCase().endsWith("id") || key.toLowerCase().includes("_id")
 }
 
-export const metaEntries = (record: OsControlRecord) => {
+export const metaEntries = (record: WorkbenchRecord) => {
   return Object.entries(record.meta || {})
     .filter(([, value]) => value !== "" && value !== false && value != null)
     .slice(0, 6)

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import {
   agentOsScheduleRunsToScheduleRunsResponse,
-  agentOsSchedulesToOsControlResponse,
+  agentOsSchedulesToSchedulerPayloadResponse,
   buildAgentOsScheduleCreateBody,
   buildAgentOsScheduleUpdateBody,
 } from "./schedulerAgentOsApi.ts"
@@ -41,7 +41,7 @@ const scheduleList = {
   ],
 }
 
-const payload = agentOsSchedulesToOsControlResponse(scheduleList, "2026-01-01T00:00:00.000Z")
+const payload = agentOsSchedulesToSchedulerPayloadResponse(scheduleList, "2026-01-01T00:00:00.000Z")
 
 assert.equal(payload.module, "scheduler")
 assert.equal(payload.status, "ready")

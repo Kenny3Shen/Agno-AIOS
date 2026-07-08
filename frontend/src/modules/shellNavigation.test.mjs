@@ -46,15 +46,14 @@ const components = {
   trace: { name: "Trace" },
   workflow: { name: "Workflow" },
   memory: { name: "MemoryControl" },
-  evaluation: { name: "AgentOSControl" },
-  approvals: { name: "AgentOSControl" },
-  scheduler: { name: "AgentOSControl" },
+  evaluation: { name: "AgentEvals" },
+  approvals: { name: "ApprovalsWorkbench" },
+  scheduler: { name: "SchedulerWorkbench" },
   skills: { name: "Skills" },
   mcp: { name: "MCP" },
   knowledge: { name: "Knowledge" },
   cve: { name: "CVE" },
   collect: { name: "Collect" },
-  sessions: { name: "AgentOSControl" },
   settings: { name: "Settings" },
 }
 
@@ -121,7 +120,7 @@ assert.equal(
 assert.equal(
   hasUserScope({ role: "guest", permissions: ["agent_os:admin"] }, "config:write"),
   false,
-  "frontend scope checks must ignore the removed permissions compatibility field",
+  "frontend scope checks must ignore removed permissions fields",
 )
 
 assert.equal(
@@ -281,8 +280,8 @@ assert.deepEqual(
 
 assert.deepEqual(
   buildShellComponentProps("scheduler", "user-1", "OP"),
-  { currentUserId: "user-1", currentUserInitials: "OP", osModule: "scheduler" },
-  "AgentOS control tabs must receive their osModule prop",
+  { currentUserId: "user-1", currentUserInitials: "OP" },
+  "page workbenches should receive only shell user context props",
 )
 
 assert.deepEqual(

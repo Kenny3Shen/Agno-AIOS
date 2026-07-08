@@ -17,7 +17,7 @@ approvals, and scheduler calls live in dedicated composables.
 - Do not add nested API module directories for this step.
 - Do not create pass-through domain wrappers.
 - Each new file must own request logic for at least one real domain hook.
-- Keep `frontend/src/composables/useApi.ts` as a compatibility re-export entry so existing Vue imports do not churn.
+- Keep `frontend/src/composables/useApi.ts` as a barrel re-export entry for the current domain composables.
 - Keep behavior and endpoint payloads unchanged.
 
 ## Module Boundary

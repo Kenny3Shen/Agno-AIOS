@@ -1,5 +1,4 @@
 import type { Component } from "vue"
-import type { OsControlModule } from "../types"
 
 export type ModuleNavId =
   | "dashboard"
@@ -11,7 +10,6 @@ export type ModuleNavId =
   | "workflow"
   | "mcp"
   | "skills"
-  | "sessions"
   | "memory"
   | "evaluation"
   | "approvals"
@@ -20,7 +18,6 @@ export type ModuleNavId =
 
 export type NavId = "home" | ModuleNavId
 export type NavTone = "red" | "blue" | "green" | "yellow"
-export type ActiveOsControlModule = Exclude<OsControlModule, "metrics">
 
 export type NavItem = {
   id: NavId
@@ -61,7 +58,6 @@ export type HomeSectionTitles = Record<string, string>
 export type ShellComponentProps = {
   currentUserId: string | null
   currentUserInitials: string
-  osModule?: ActiveOsControlModule
 }
 
 export type WorkspaceSignal = {
@@ -76,7 +72,6 @@ export const navScopes: Partial<Record<ModuleNavId, string>> = {
   knowledge: "knowledge:read",
   trace: "traces:read",
   workflow: "mcp:read",
-  sessions: "sessions:read",
   memory: "memories:read",
   evaluation: "evals:read",
   approvals: "approvals:read",
@@ -93,7 +88,6 @@ export const fullCanvasTabs = new Set<ModuleNavId>([
   "workflow",
   "mcp",
   "evaluation",
-  "sessions",
   "memory",
   "approvals",
   "scheduler",
@@ -213,23 +207,12 @@ export const resolveShellMeta = (
 export const shellComponentKey = (tab: NavId, renderKey: number) => `${tab}-${renderKey}`
 
 export const buildShellComponentProps = (
-  tab: NavId,
+  _tab: NavId,
   currentUserId: string | null,
   currentUserInitials: string,
 ): ShellComponentProps => {
-  const baseProps = { currentUserId, currentUserInitials }
-  if (tab !== "home" && osControlTabs.has(tab as ActiveOsControlModule)) {
-    return { ...baseProps, osModule: tab as ActiveOsControlModule }
-  }
-  return baseProps
+  return { currentUserId, currentUserInitials }
 }
-
-export const osControlTabs = new Set<ActiveOsControlModule>([
-  "sessions",
-  "memory",
-  "approvals",
-  "scheduler",
-])
 
 export const buildWorkspaceSignals = (
   moduleCount: number,

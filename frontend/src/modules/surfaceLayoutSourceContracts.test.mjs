@@ -1,11 +1,11 @@
 import assert from "node:assert/strict"
 import {
   agentEvals,
-  agentOSApprovalsWorkbench,
-  agentOSControl,
-  agentOSControlStyle,
-  agentOSLedger,
-  agentOSSchedulerWorkbench,
+  approvalsWorkbench,
+  removedAgentOsControlSource,
+  pageWorkbenchStyle,
+  removedAgentOsLedgerSource,
+  schedulerWorkbench,
   apiClient,
   app,
   appStyle,
@@ -38,18 +38,17 @@ import {
   typesSource,
   useApi,
   useApprovalsApiSource,
-  useControlPlaneApiSource,
   userRole,
   visibilityTabs,
   workflow,
 } from "./testSource.mjs"
 
-const agentOSSurface = [
-  agentOSControl,
-  agentOSApprovalsWorkbench,
-  agentOSLedger,
-  agentOSSchedulerWorkbench,
-  agentOSControlStyle,
+const pageWorkbenchSurface = [
+  removedAgentOsControlSource,
+  approvalsWorkbench,
+  removedAgentOsLedgerSource,
+  schedulerWorkbench,
+  pageWorkbenchStyle,
 ].join("\n")
 
 assert.match(
@@ -139,19 +138,19 @@ assert.doesNotMatch(
 
 assert.match(
   memoryRowActions,
-  /v-if="canWriteMemory"[\s\S]*:aria-label="t\('agentOS\.memory\.editMemory'\)"/,
+  /v-if="canWriteMemory"[\s\S]*:aria-label="t\('workbench\.memory\.editMemory'\)"/,
   "Memory row edit action must require memories:write and keep an accessible name while rendering as an icon button",
 )
 
 assert.match(
   memoryRowActions,
-  /v-if="canDeleteMemory"[\s\S]*:aria-label="t\('agentOS\.memory\.deleteMemory'\)"/,
+  /v-if="canDeleteMemory"[\s\S]*:aria-label="t\('workbench\.memory\.deleteMemory'\)"/,
   "Memory row delete action must require memories:delete and keep an accessible name while rendering as an icon button",
 )
 
 assert.doesNotMatch(
   memoryRowActions,
-  /\{\{\s*t\("agentOS\.memory\.(editMemory|deleteMemory)"\)\s*\}\}/,
+  /\{\{\s*t\("workbench\.memory\.(editMemory|deleteMemory)"\)\s*\}\}/,
   "Memory row edit/delete actions must be icon-only buttons without visible text labels",
 )
 
@@ -219,7 +218,7 @@ assert.match(
 
 assert.doesNotMatch(
   memoryDetailMetadata,
-  /memory-source-toolbar">\s*<span>\{\{\s*t\("agentOS\.memory\.inputLabel"\)\s*\}\}<\/span>/,
+  /memory-source-toolbar">\s*<span>\{\{\s*t\("workbench\.memory\.inputLabel"\)\s*\}\}<\/span>/,
   "Memory source input viewer must not duplicate the source label inside the compact toolbar",
 )
 
@@ -257,6 +256,39 @@ assert.doesNotMatch(
   memoryControl,
   /memory-identity-strip|memory-meta-list|memory-topic-stack|detailFacts/,
   "Memory detail panel must not duplicate row metadata such as user, topics, and created timestamps",
+)
+
+for (const labelKey of [
+  "runLabel",
+  "sessionLabel",
+  "sourceLabel",
+  "userLabel",
+  "agentLabel",
+  "runStatusLabel",
+]) {
+  assert.match(
+    approvalsWorkbench,
+    new RegExp(`workbench\\.approvals\\.${labelKey}`),
+    `Approvals detail metadata label must use workbench.approvals.${labelKey}`,
+  )
+}
+
+assert.doesNotMatch(
+  approvalsWorkbench,
+  /<b>\s*(Run|Session|Source|User|Agent|Run Status)\s*<\/b>/,
+  "Approvals detail metadata labels must not hardcode English copy",
+)
+
+assert.match(
+  schedulerWorkbench,
+  /workbench\.scheduler\.cronLabel/,
+  "Scheduler detail cron label must use workbench.scheduler.cronLabel",
+)
+
+assert.doesNotMatch(
+  schedulerWorkbench,
+  /<span>\s*Cron\s*<\/span>/,
+  "Scheduler detail cron label must not hardcode English copy",
 )
 
 assert.doesNotMatch(
@@ -356,7 +388,7 @@ for (const [source, label] of [
   [skills, "Skills"],
   [knowledge, "Knowledge"],
   [memoryControl, "Memory"],
-  [agentOSSurface, "AgentOS"],
+  [pageWorkbenchSurface, "runtime workbench"],
   [agentEvals, "Evaluation"],
 ]) {
   assert.doesNotMatch(
@@ -400,9 +432,7 @@ for (const [source, pattern, label] of [
   [memoryControl, /memory-query-panel ag-content-panel/, "Memory filters"],
   [memoryControl, /memory-queue-panel ag-workspace-panel/, "Memory queue"],
   [memoryControl, /memory-list-panel ag-workspace-panel/, "Memory list"],
-  [agentOSControl, /agentos-control ag-page-flow/, "AgentOS page"],
-  [agentOSSchedulerWorkbench, /agentos-panel ag-content-panel scheduler-list-panel/, "Scheduler list"],
-  [agentOSLedger, /agentos-panel ag-content-panel/, "AgentOS ledger"],
+  [schedulerWorkbench, /page-panel ag-content-panel scheduler-list-panel/, "Scheduler list"],
   [cve, /cve-console ag-page-flow/, "CVE page"],
   [cve, /cve-query-panel ag-content-panel/, "CVE search"],
   [cve, /cve-results-panel ag-content-panel/, "CVE results"],
@@ -447,7 +477,7 @@ for (const [source, pattern, label] of [
   [workflow, /workflow-inspector workflow-panel ag-right-panel/, "Workflow inspector"],
   [trace, /trace-detail-panel ag-right-panel/, "Trace detail"],
   [memoryControl, /memory-detail-panel ag-right-panel/, "Memory detail"],
-  [agentOSSchedulerWorkbench, /agentos-panel scheduler-detail-panel ag-right-panel/, "Scheduler detail"],
+  [schedulerWorkbench, /page-panel scheduler-detail-panel ag-right-panel/, "Scheduler detail"],
 ]) {
   assert.match(
     source,
@@ -482,7 +512,7 @@ assert.doesNotMatch(
 
 assert.doesNotMatch(
   memoryControl,
-  /memory-command-copy|agentOS\.memory\.modeAutomatic|agentOS\.memory\.deskTitle|memoryModeDetails|agentOS\.memory\.updateOnRun|agentOS\.memory\.sessionSummaries|agentOS\.memory\.readonly/,
+  /memory-command-copy|workbench\.memory\.modeAutomatic|workbench\.memory\.deskTitle|memoryModeDetails|workbench\.memory\.updateOnRun|workbench\.memory\.sessionSummaries|workbench\.memory\.readonly/,
   "Memory page must not render the removed automatic-memory desk copy or mode-status sentence",
 )
 
@@ -541,7 +571,7 @@ assert.doesNotMatch(
 )
 
 assert.match(
-  agentOSSchedulerWorkbench,
+  schedulerWorkbench,
   /class="scheduler-enabled-field"[\s\S]*?<el-switch/,
   "Scheduler create form enabled switch must use a stable field wrapper",
 )
@@ -549,13 +579,13 @@ assert.match(
 assert.match(
   useApprovalsApiSource,
   /listApprovals/,
-  "AgentOS API composable must expose approval listing",
+  "Approvals API composable must expose approval listing",
 )
 
 assert.match(
   useApprovalsApiSource,
   /resolveApproval/,
-  "AgentOS API composable must expose approval resolve",
+  "Approvals API composable must expose approval resolve",
 )
 
 for (const typeName of [

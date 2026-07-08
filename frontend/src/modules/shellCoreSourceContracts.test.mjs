@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import {
   agentEvals,
-  agentOSControl,
+  removedAgentOsControlSource,
   apiClient,
   app,
   appStyle,
@@ -232,7 +232,7 @@ assert.match(
 assert.doesNotMatch(
   authScreen,
   />Agno<|>AIOS</,
-  "AuthScreen must use shared T.A.I.S brand constants instead of hardcoded legacy brand copy",
+  "AuthScreen must use shared T.A.I.S brand constants instead of hardcoded old brand copy",
 )
 
 assert.match(
@@ -298,7 +298,7 @@ assert.equal(
 assert.equal(
   hasUserScope({ role: "guest", permissions: ["agent_os:admin"] }, "config:write"),
   false,
-  "legacy permissions compatibility claims must not grant frontend access",
+  "removed permissions claims must not grant frontend access",
 )
 
 assert.match(

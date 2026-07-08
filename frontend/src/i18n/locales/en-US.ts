@@ -184,7 +184,7 @@ export const enUS = {
       cveUpdateFailed: "Update failed",
       chatHttpFailed: "Request failed: {status}",
       chatSendFailed: "Send failed",
-      osControlLoadFailed: "Failed to load control plane",
+      pagePayloadLoadFailed: "Failed to load page data",
       chatSessionsLoadFailed: "Failed to load sessions",
       chatHistoryLoadFailed: "Failed to load session history",
       chatArchiveFailed: "Failed to archive session",
@@ -829,9 +829,9 @@ export const enUS = {
       loadFailed: "Failed to load traces",
     },
   },
-  agentOS: {
-    title: "AGENTOS CONTROL",
-    loadingDescription: "Loading control-plane status",
+  workbench: {
+    title: "Runtime Workbench",
+    loadingDescription: "Loading page data",
     metricFallback: {
       label: "Status",
       value: "Loading",
@@ -848,8 +848,8 @@ export const enUS = {
     status: {
       loading: "Loading",
     },
-    ledger: {
-      title: "Runtime Ledger",
+    records: {
+      title: "Runtime Records",
       count: "{count} records · {time}",
     },
     empty: {
@@ -876,6 +876,12 @@ export const enUS = {
       contextTitle: "Context",
       requirementsTitle: "Requirements",
       resolutionTitle: "Resolution",
+      runLabel: "Run",
+      sessionLabel: "Session",
+      sourceLabel: "Source",
+      userLabel: "User",
+      agentLabel: "Agent",
+      runStatusLabel: "Run Status",
       selectTitle: "Select approval",
       selectDescription: "Tool arguments, context, and run/session metadata appear here.",
     },
@@ -964,6 +970,7 @@ export const enUS = {
       targetType: "Target type",
       descriptionPlaceholder: "Description, optional",
       inputPlaceholder: "Payload JSON object, optional",
+      cronLabel: "Cron",
       advanced: "Advanced execution options",
       timezone: "Timezone",
       timeout: "Timeout seconds",

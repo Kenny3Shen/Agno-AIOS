@@ -184,7 +184,7 @@ export const zhCN = {
       cveUpdateFailed: "更新失败",
       chatHttpFailed: "请求失败: {status}",
       chatSendFailed: "发送失败",
-      osControlLoadFailed: "加载控制面失败",
+      pagePayloadLoadFailed: "加载页面数据失败",
       chatSessionsLoadFailed: "获取会话列表失败",
       chatHistoryLoadFailed: "获取会话记录失败",
       chatArchiveFailed: "归档会话失败",
@@ -827,9 +827,9 @@ export const zhCN = {
       loadFailed: "加载 traces 失败",
     },
   },
-  agentOS: {
-    title: "AGENTOS CONTROL",
-    loadingDescription: "加载控制面状态",
+  workbench: {
+    title: "运行工作台",
+    loadingDescription: "加载页面数据",
     metricFallback: {
       label: "状态",
       value: "加载中",
@@ -846,8 +846,8 @@ export const zhCN = {
     status: {
       loading: "加载中",
     },
-    ledger: {
-      title: "Runtime Ledger",
+    records: {
+      title: "运行记录",
       count: "{count} 条记录 · {time}",
     },
     empty: {
@@ -874,6 +874,12 @@ export const zhCN = {
       contextTitle: "Context",
       requirementsTitle: "Requirements",
       resolutionTitle: "Resolution",
+      runLabel: "Run",
+      sessionLabel: "Session",
+      sourceLabel: "来源",
+      userLabel: "User",
+      agentLabel: "Agent",
+      runStatusLabel: "运行状态",
       selectTitle: "选择审批请求",
       selectDescription: "工具参数、上下文和 run/session 信息会显示在这里。",
     },
@@ -962,6 +968,7 @@ export const zhCN = {
       targetType: "目标类型",
       descriptionPlaceholder: "描述，可选",
       inputPlaceholder: "Payload JSON object，可选",
+      cronLabel: "Cron",
       advanced: "高级执行参数",
       timezone: "Timezone",
       timeout: "Timeout 秒",

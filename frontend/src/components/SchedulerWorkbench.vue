@@ -1,46 +1,46 @@
 <template>
-  <el-alert v-if="error" class="agentos-alert" type="error" :title="error" show-icon />
+  <el-alert v-if="error" class="page-alert" type="error" :title="error" show-icon />
 
-  <main class="scheduler-workbench">
-    <section class="agentos-panel ag-content-panel scheduler-list-panel">
-      <div class="agentos-panel-head">
+  <main :class="['page-workbench scheduler-workbench', attrs.class]">
+    <section class="page-panel ag-content-panel scheduler-list-panel">
+      <div class="page-panel-head">
         <div>
-          <p>{{ t("agentOS.scheduler.listTitle") }}</p>
-          <span>{{ t("agentOS.ledger.count", { count: schedules.length, time: generatedAt }) }}</span>
+          <p>{{ t("workbench.scheduler.listTitle") }}</p>
+          <span>{{ t("workbench.records.count", { count: schedules.length, time: generatedAt }) }}</span>
         </div>
-        <div class="agentos-panel-actions">
+        <div class="page-panel-actions">
           <el-button size="small" :loading="loading" @click="loadModule">
             <el-icon><Refresh /></el-icon>
           </el-button>
           <el-button size="small" type="primary" @click="showCreateForm = !showCreateForm">
             <el-icon><Plus /></el-icon>
-            {{ t("agentOS.scheduler.create") }}
+            {{ t("workbench.scheduler.create") }}
           </el-button>
         </div>
       </div>
 
       <section v-if="showCreateForm" class="scheduler-form">
-        <div class="agentos-scheduler-grid">
-          <el-input v-model="scheduleForm.name" :placeholder="t('agentOS.scheduler.namePlaceholder')" />
+        <div class="page-scheduler-grid">
+          <el-input v-model="scheduleForm.name" :placeholder="t('workbench.scheduler.namePlaceholder')" />
           <el-select v-model="scheduleForm.target_type">
-            <el-option :label="t('agentOS.scheduler.targets.agent')" value="agent" />
-            <el-option :label="t('agentOS.scheduler.targets.team')" value="team" />
-            <el-option :label="t('agentOS.scheduler.targets.workflow')" value="workflow" />
+            <el-option :label="t('workbench.scheduler.targets.agent')" value="agent" />
+            <el-option :label="t('workbench.scheduler.targets.team')" value="team" />
+            <el-option :label="t('workbench.scheduler.targets.workflow')" value="workflow" />
           </el-select>
           <el-input v-model="scheduleForm.target_id" :placeholder="targetPlaceholder" />
           <el-input v-model="scheduleForm.cron_expr" placeholder="*/30 * * * *" />
-          <el-input v-model="scheduleForm.description" :placeholder="t('agentOS.scheduler.descriptionPlaceholder')" />
+          <el-input v-model="scheduleForm.description" :placeholder="t('workbench.scheduler.descriptionPlaceholder')" />
           <el-input v-model="scheduleForm.timezone" placeholder="UTC" />
-          <el-input-number v-model="scheduleForm.timeout_seconds" :min="1" :max="86400" controls-position="right" class="agentos-number" />
+          <el-input-number v-model="scheduleForm.timeout_seconds" :min="1" :max="86400" controls-position="right" class="page-number" />
           <div class="scheduler-enabled-field">
-            <el-switch v-model="scheduleForm.enabled" :active-text="t('agentOS.scheduler.enabled')" />
+            <el-switch v-model="scheduleForm.enabled" :active-text="t('workbench.scheduler.enabled')" />
           </div>
         </div>
         <el-collapse class="scheduler-advanced">
-          <el-collapse-item :title="t('agentOS.scheduler.advanced')" name="advanced">
-            <div class="agentos-scheduler-grid compact">
-              <el-input-number v-model="scheduleForm.max_retries" :min="0" :max="10" controls-position="right" class="agentos-number" />
-              <el-input-number v-model="scheduleForm.retry_delay_seconds" :min="1" :max="3600" controls-position="right" class="agentos-number" />
+          <el-collapse-item :title="t('workbench.scheduler.advanced')" name="advanced">
+            <div class="page-scheduler-grid compact">
+              <el-input-number v-model="scheduleForm.max_retries" :min="0" :max="10" controls-position="right" class="page-number" />
+              <el-input-number v-model="scheduleForm.retry_delay_seconds" :min="1" :max="3600" controls-position="right" class="page-number" />
             </div>
           </el-collapse-item>
         </el-collapse>
@@ -48,14 +48,14 @@
           v-model="schedulePayloadJson"
           type="textarea"
           :rows="3"
-          class="agentos-scheduler-input"
-          :placeholder="t('agentOS.scheduler.inputPlaceholder')"
+          class="page-scheduler-input"
+          :placeholder="t('workbench.scheduler.inputPlaceholder')"
         />
-        <div class="agentos-scheduler-actions">
-          <el-button @click="resetCreateForm">{{ t("agentOS.scheduler.reset") }}</el-button>
+        <div class="page-scheduler-actions">
+          <el-button @click="resetCreateForm">{{ t("workbench.scheduler.reset") }}</el-button>
           <el-button type="primary" :loading="creatingSchedule" @click="submitSchedule">
             <el-icon><Plus /></el-icon>
-            {{ t("agentOS.scheduler.create") }}
+            {{ t("workbench.scheduler.create") }}
           </el-button>
         </div>
       </section>
@@ -69,7 +69,7 @@
           :class="{ selected: schedule.id === selectedScheduleId }"
           @click="selectSchedule(schedule.id)"
         >
-          <span class="agentos-dot" :class="statusTone(schedule.enabled ? 'enabled' : 'disabled')" />
+          <span class="page-dot" :class="statusTone(schedule.enabled ? 'enabled' : 'disabled')" />
           <span class="schedule-main">
             <strong :title="schedule.name">{{ schedule.name }}</strong>
             <small :title="schedule.endpoint">{{ schedule.endpoint }}</small>
@@ -81,23 +81,23 @@
         </button>
       </div>
 
-      <div v-else-if="!loading" class="agentos-empty">
+      <div v-else-if="!loading" class="page-empty">
         <el-icon><Aim /></el-icon>
-        <strong>{{ t("agentOS.empty.title") }}</strong>
-        <span>{{ t("agentOS.empty.scheduler") }}</span>
+        <strong>{{ t("workbench.empty.title") }}</strong>
+        <span>{{ t("workbench.empty.scheduler") }}</span>
       </div>
     </section>
 
-    <section class="agentos-panel scheduler-detail-panel ag-right-panel">
+    <section class="page-panel scheduler-detail-panel ag-right-panel">
       <template v-if="selectedSchedule">
-        <div class="agentos-panel-head">
+        <div class="page-panel-head">
           <div>
             <p>{{ selectedSchedule.name }}</p>
             <span>{{ selectedSchedule.endpoint }}</span>
           </div>
-          <div class="agentos-panel-actions">
-            <span class="agentos-status" :class="statusTone(selectedSchedule.enabled ? 'enabled' : 'disabled')">
-              {{ selectedSchedule.enabled ? t("agentOS.scheduler.enabled") : t("agentOS.scheduler.disabled") }}
+          <div class="page-panel-actions">
+            <span class="page-status" :class="statusTone(selectedSchedule.enabled ? 'enabled' : 'disabled')">
+              {{ selectedSchedule.enabled ? t("workbench.scheduler.enabled") : t("workbench.scheduler.disabled") }}
             </span>
             <el-button size="small" :loading="loading" @click="toggleSelectedSchedule">
               <el-icon><SwitchButton /></el-icon>
@@ -113,56 +113,56 @@
 
         <div class="scheduler-detail-grid">
           <label>
-            <span>{{ t("agentOS.scheduler.namePlaceholder") }}</span>
+            <span>{{ t("workbench.scheduler.namePlaceholder") }}</span>
             <el-input v-model="editForm.name" />
           </label>
           <label>
-            <span>{{ t("agentOS.scheduler.targetType") }}</span>
+            <span>{{ t("workbench.scheduler.targetType") }}</span>
             <el-select v-model="editForm.target_type">
-              <el-option :label="t('agentOS.scheduler.targets.agent')" value="agent" />
-              <el-option :label="t('agentOS.scheduler.targets.team')" value="team" />
-              <el-option :label="t('agentOS.scheduler.targets.workflow')" value="workflow" />
+              <el-option :label="t('workbench.scheduler.targets.agent')" value="agent" />
+              <el-option :label="t('workbench.scheduler.targets.team')" value="team" />
+              <el-option :label="t('workbench.scheduler.targets.workflow')" value="workflow" />
             </el-select>
           </label>
           <label>
-            <span>{{ t("agentOS.scheduler.targetPlaceholder") }}</span>
+            <span>{{ t("workbench.scheduler.targetPlaceholder") }}</span>
             <el-input v-model="editForm.target_id" />
           </label>
           <label>
-            <span>Cron</span>
+            <span>{{ t("workbench.scheduler.cronLabel") }}</span>
             <el-input v-model="editForm.cron_expr" />
           </label>
           <label>
-            <span>{{ t("agentOS.scheduler.timezone") }}</span>
+            <span>{{ t("workbench.scheduler.timezone") }}</span>
             <el-input v-model="editForm.timezone" />
           </label>
           <label>
-            <span>{{ t("agentOS.scheduler.timeout") }}</span>
-            <el-input-number v-model="editForm.timeout_seconds" :min="1" :max="86400" controls-position="right" class="agentos-number" />
+            <span>{{ t("workbench.scheduler.timeout") }}</span>
+            <el-input-number v-model="editForm.timeout_seconds" :min="1" :max="86400" controls-position="right" class="page-number" />
           </label>
           <label>
-            <span>{{ t("agentOS.scheduler.maxRetries") }}</span>
-            <el-input-number v-model="editForm.max_retries" :min="0" :max="10" controls-position="right" class="agentos-number" />
+            <span>{{ t("workbench.scheduler.maxRetries") }}</span>
+            <el-input-number v-model="editForm.max_retries" :min="0" :max="10" controls-position="right" class="page-number" />
           </label>
           <label>
-            <span>{{ t("agentOS.scheduler.retryDelay") }}</span>
-            <el-input-number v-model="editForm.retry_delay_seconds" :min="1" :max="3600" controls-position="right" class="agentos-number" />
+            <span>{{ t("workbench.scheduler.retryDelay") }}</span>
+            <el-input-number v-model="editForm.retry_delay_seconds" :min="1" :max="3600" controls-position="right" class="page-number" />
           </label>
         </div>
-        <el-input v-model="editForm.description" :placeholder="t('agentOS.scheduler.descriptionPlaceholder')" />
-        <el-input v-model="editPayloadJson" type="textarea" :rows="4" class="agentos-scheduler-input" />
-        <div class="agentos-scheduler-actions">
-          <el-button @click="loadSelectedIntoEdit">{{ t("agentOS.scheduler.reset") }}</el-button>
+        <el-input v-model="editForm.description" :placeholder="t('workbench.scheduler.descriptionPlaceholder')" />
+        <el-input v-model="editPayloadJson" type="textarea" :rows="4" class="page-scheduler-input" />
+        <div class="page-scheduler-actions">
+          <el-button @click="loadSelectedIntoEdit">{{ t("workbench.scheduler.reset") }}</el-button>
           <el-button type="primary" :loading="savingSchedule" @click="saveSelectedSchedule">
             <el-icon><Check /></el-icon>
-            {{ t("agentOS.scheduler.save") }}
+            {{ t("workbench.scheduler.save") }}
           </el-button>
         </div>
 
         <div class="runs-head">
           <div>
-            <p>{{ t("agentOS.scheduler.runsTitle") }}</p>
-            <span>{{ t("agentOS.scheduler.runsDescription") }}</span>
+            <p>{{ t("workbench.scheduler.runsTitle") }}</p>
+            <span>{{ t("workbench.scheduler.runsDescription") }}</span>
           </div>
           <el-button size="small" :loading="loadingRuns" @click="loadRuns(selectedSchedule.id)">
             <el-icon><Refresh /></el-icon>
@@ -170,28 +170,28 @@
         </div>
         <div v-if="runs.length" class="run-list">
           <article v-for="run in runs" :key="run.id" class="run-row">
-            <span class="agentos-chip" :class="statusTone(run.status)">{{ run.status }}</span>
-            <strong>{{ t("agentOS.scheduler.attempt", { attempt: run.attempt }) }}</strong>
+            <span class="page-chip" :class="statusTone(run.status)">{{ run.status }}</span>
+            <strong>{{ t("workbench.scheduler.attempt", { attempt: run.attempt }) }}</strong>
             <small>{{ formatTime(run.completed_at_iso || run.triggered_at_iso, locale) }}</small>
             <p v-if="run.error" :title="run.error">{{ run.error }}</p>
           </article>
         </div>
-        <div v-else class="agentos-empty compact-empty">
-          <strong>{{ t("agentOS.scheduler.noRuns") }}</strong>
+        <div v-else class="page-empty compact-empty">
+          <strong>{{ t("workbench.scheduler.noRuns") }}</strong>
         </div>
       </template>
 
-      <div v-else class="agentos-empty">
+      <div v-else class="page-empty">
         <el-icon><Aim /></el-icon>
-        <strong>{{ t("agentOS.scheduler.selectTitle") }}</strong>
-        <span>{{ t("agentOS.scheduler.selectDescription") }}</span>
+        <strong>{{ t("workbench.scheduler.selectTitle") }}</strong>
+        <span>{{ t("workbench.scheduler.selectDescription") }}</span>
       </div>
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue"
+import { computed, onMounted, reactive, ref, useAttrs } from "vue"
 import {
   Aim,
   Check,
@@ -203,15 +203,22 @@ import {
 } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
 import { useI18n } from "vue-i18n"
-import { useSchedulerApi } from "../../composables/useSchedulerApi"
+import { useSchedulerApi } from "../composables/useSchedulerApi"
 import type {
-  OsControlResponse,
   ScheduleTargetType,
+  SchedulerPayloadResponse,
   SchedulerRun,
   SchedulerSchedule,
-} from "../../types"
-import { formatTime, parsePayloadJson, statusTone } from "./agentosFormat"
+} from "../types"
+import { formatTime, parsePayloadJson, statusTone } from "../modules/pagePayloadFormat"
 
+defineOptions({ inheritAttrs: false })
+defineProps<{
+  currentUserId?: string | null
+  currentUserInitials?: string | null
+}>()
+
+const attrs = useAttrs()
 const { t, locale } = useI18n()
 const {
   loading,
@@ -225,7 +232,7 @@ const {
   listScheduleRuns,
 } = useSchedulerApi()
 
-const payload = ref<OsControlResponse | null>(null)
+const payload = ref<SchedulerPayloadResponse | null>(null)
 const creatingSchedule = ref(false)
 const savingSchedule = ref(false)
 const loadingRuns = ref(false)
@@ -264,9 +271,9 @@ const generatedAt = computed(() => formatTime(payload.value?.generated_at, local
 const schedules = computed<SchedulerSchedule[]>(() => payload.value?.schedules || [])
 const selectedSchedule = computed(() => schedules.value.find((schedule) => schedule.id === selectedScheduleId.value) || null)
 const targetPlaceholder = computed(() => {
-  if (scheduleForm.target_type === "agent") return t("agentOS.scheduler.agentPlaceholder")
-  if (scheduleForm.target_type === "team") return t("agentOS.scheduler.teamPlaceholder")
-  return t("agentOS.scheduler.workflowPlaceholder")
+  if (scheduleForm.target_type === "agent") return t("workbench.scheduler.agentPlaceholder")
+  if (scheduleForm.target_type === "team") return t("workbench.scheduler.teamPlaceholder")
+  return t("workbench.scheduler.workflowPlaceholder")
 })
 
 const loadModule = async () => {
@@ -300,14 +307,14 @@ const resetCreateForm = () => {
 
 const submitSchedule = async () => {
   if (!scheduleForm.name.trim() || !scheduleForm.target_id.trim() || !scheduleForm.cron_expr.trim()) {
-    ElMessage.warning(t("agentOS.scheduler.required"))
+    ElMessage.warning(t("workbench.scheduler.required"))
     return
   }
   let payloadJson: Record<string, unknown>
   try {
     payloadJson = parsePayloadJson(schedulePayloadJson.value)
   } catch {
-    ElMessage.warning(t("agentOS.scheduler.invalidInput"))
+    ElMessage.warning(t("workbench.scheduler.invalidInput"))
     return
   }
   creatingSchedule.value = true
@@ -329,9 +336,9 @@ const submitSchedule = async () => {
     resetCreateForm()
     showCreateForm.value = false
     await loadModule()
-    ElMessage.success(t("agentOS.scheduler.created"))
+    ElMessage.success(t("workbench.scheduler.created"))
   } catch (err) {
-    ElMessage.error(err instanceof Error ? err.message : t("agentOS.scheduler.createFailed"))
+    ElMessage.error(err instanceof Error ? err.message : t("workbench.scheduler.createFailed"))
   } finally {
     creatingSchedule.value = false
   }
@@ -365,7 +372,7 @@ const saveSelectedSchedule = async () => {
   try {
     payloadJson = parsePayloadJson(editPayloadJson.value)
   } catch {
-    ElMessage.warning(t("agentOS.scheduler.invalidInput"))
+    ElMessage.warning(t("workbench.scheduler.invalidInput"))
     return
   }
   savingSchedule.value = true
@@ -383,9 +390,9 @@ const saveSelectedSchedule = async () => {
       payload: payloadJson,
     })
     await loadModule()
-    ElMessage.success(t("agentOS.scheduler.saved"))
+    ElMessage.success(t("workbench.scheduler.saved"))
   } catch (err) {
-    ElMessage.error(err instanceof Error ? err.message : t("agentOS.scheduler.saveFailed"))
+    ElMessage.error(err instanceof Error ? err.message : t("workbench.scheduler.saveFailed"))
   } finally {
     savingSchedule.value = false
   }
@@ -404,9 +411,9 @@ const triggerSelectedSchedule = async () => {
   try {
     await triggerSchedule(schedule.id)
     await loadRuns(schedule.id)
-    ElMessage.success(t("agentOS.scheduler.triggered"))
+    ElMessage.success(t("workbench.scheduler.triggered"))
   } catch (err) {
-    ElMessage.error(err instanceof Error ? err.message : t("agentOS.scheduler.triggerFailed"))
+    ElMessage.error(err instanceof Error ? err.message : t("workbench.scheduler.triggerFailed"))
   }
 }
 
@@ -432,3 +439,5 @@ onMounted(() => {
   void loadModule()
 })
 </script>
+
+<style src="../styles/page-workbench.css"></style>

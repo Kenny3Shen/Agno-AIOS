@@ -1,9 +1,9 @@
 import type {
-  OsControlResponse,
   ScheduleCreateRequest,
   ScheduleRunsResponse,
   ScheduleTargetType,
   ScheduleUpdateRequest,
+  SchedulerPayloadResponse,
   SchedulerRun,
   SchedulerSchedule,
 } from '../types'
@@ -157,7 +157,7 @@ export const buildAgentOsScheduleUpdateBody = (payload: ScheduleUpdateRequest): 
 const schedulerPayloadFromSchedules = (
   schedules: SchedulerSchedule[],
   generatedAt: string,
-): OsControlResponse => {
+): SchedulerPayloadResponse => {
   const enabled = schedules.filter((schedule) => schedule.enabled).length
   const disabled = schedules.length - enabled
   return {
@@ -195,10 +195,10 @@ const schedulerPayloadFromSchedules = (
   }
 }
 
-export const agentOsSchedulesToOsControlResponse = (
+export const agentOsSchedulesToSchedulerPayloadResponse = (
   value: unknown,
   generatedAt = new Date().toISOString(),
-): OsControlResponse => {
+): SchedulerPayloadResponse => {
   return schedulerPayloadFromSchedules(paginatedData(value).map(normalizeAgentOsSchedule), generatedAt)
 }
 
