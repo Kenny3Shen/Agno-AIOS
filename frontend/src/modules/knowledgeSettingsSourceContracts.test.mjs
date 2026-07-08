@@ -40,6 +40,7 @@ import {
   useTraceFilterRefreshSchedulerSource,
   useTraceFilterWatchesSource,
   useTraceExternalSelectionEventsSource,
+  useTraceLifecycleSource,
   traceWorkbenchSource,
   typesSource,
   useSecurityDataApiSource,
@@ -489,6 +490,26 @@ assert.doesNotMatch(
   /agno-aios-trace-/,
   "Trace page must not own external trace event names",
 )
+
+assert.match(
+  trace,
+  /useTraceLifecycle[\s\S]*refresh[\s\S]*clearPendingFilterRefresh/,
+  "Trace page must delegate initial refresh and cleanup lifecycle",
+)
+
+assert.match(
+  useTraceLifecycleSource,
+  /onMounted[\s\S]*refresh\(\)[\s\S]*ElMessage\.error[\s\S]*onUnmounted[\s\S]*clearPendingFilterRefresh/,
+  "Trace lifecycle composable must own initial refresh error handling and cleanup",
+)
+
+for (const inlineLifecycleApi of ["onMounted", "onUnmounted", "ElMessage"]) {
+  assert.doesNotMatch(
+    trace,
+    new RegExp(inlineLifecycleApi),
+    `Trace page must not own lifecycle dependency: ${inlineLifecycleApi}`,
+  )
+}
 
 assert.match(
   traceWorkbenchSource,

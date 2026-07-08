@@ -456,8 +456,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from "vue"
-import { ElMessage } from "element-plus"
+import { computed, reactive, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import {
   Aim,
@@ -471,6 +470,7 @@ import { useTracingApi } from "../composables/useTraceApi"
 import { useTraceExternalSelectionEvents } from "../composables/useTraceExternalSelectionEvents"
 import { useTraceFilterRefreshScheduler } from "../composables/useTraceFilterRefreshScheduler"
 import { useTraceFilterWatches } from "../composables/useTraceFilterWatches"
+import { useTraceLifecycle } from "../composables/useTraceLifecycle"
 import { useTracePayloadControls } from "../composables/useTracePayloadControls"
 import { useTracePayloadRenderer } from "../composables/useTracePayloadRenderer"
 import { useTraceSessionController } from "../composables/useTraceSessionController"
@@ -691,16 +691,9 @@ useTraceFilterWatches({
   scheduleFilterRefresh,
 })
 
-onMounted(async () => {
-  try {
-    await refresh()
-  } catch (e: unknown) {
-    ElMessage.error(e instanceof Error ? e.message : t("trace.messages.loadFailed"))
-  }
-})
-
-onUnmounted(() => {
-  clearPendingFilterRefresh()
+useTraceLifecycle({
+  refresh,
+  clearPendingFilterRefresh,
 })
 </script>
 

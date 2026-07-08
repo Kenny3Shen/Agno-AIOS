@@ -57,6 +57,7 @@ export const useTraceSpanSelectionSource = readOptionalSource("composables/useTr
 export const useTraceFilterRefreshSchedulerSource = readOptionalSource("composables/useTraceFilterRefreshScheduler.ts")
 export const useTraceFilterWatchesSource = readOptionalSource("composables/useTraceFilterWatches.ts")
 export const useTraceExternalSelectionEventsSource = readOptionalSource("composables/useTraceExternalSelectionEvents.ts")
+export const useTraceLifecycleSource = readOptionalSource("composables/useTraceLifecycle.ts")
 export const useTraceSessionControllerSource = readOptionalSource("composables/useTraceSessionController.ts")
 export const useAgentEvalsApiSource = readOptionalSource("composables/useAgentEvalsApi.ts")
 export const apiClient = readOptionalSource("lib/apiClient.ts")
