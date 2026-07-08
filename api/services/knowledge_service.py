@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from importlib.util import find_spec
 from dataclasses import dataclass
 from functools import lru_cache
@@ -50,9 +49,18 @@ from api.services.knowledge_ingest_service import (
     KnowledgeIngestProfile,
     KnowledgeReader,
     KnowledgeReaderConfig,
-    pipeline_status as _ingest_pipeline_status,
     profile_for_filename as _profile_for_filename,
     reader_for_profile as _reader_for_profile,
+)
+from api.services.knowledge_rag_settings_service import (
+    COLD_START_NOTE,
+    current_rag_settings,
+    knowledge_settings,
+    model_device,
+    pipeline_status,
+    search_type_from_env,
+    search_type_from_name,
+    update_runtime_rag_settings as _update_runtime_rag_settings,
 )
 from api.services.knowledge_runtime_service import (
     KnowledgeRuntimeDependencies,
@@ -73,114 +81,8 @@ from api.services.knowledge_source_service import (
     text_source_snapshot,
 )
 
-@dataclass(frozen=True)
-class KnowledgeServiceSettings:
-    name: str
-    pgvector_table: str
-    postgres_schema: str
-    postgres_knowledge_table: str
-    embedding_model: str
-    embedding_dimensions: int
-    rerank_model: str
-    query_prompt: str
-    top_k: int
-    chunk_size: int
-    chunk_overlap: int
-    code_chunk_size: int
-    semantic_threshold: float
-    vector_score_weight: float
-    content_language: str
-    prefix_match: bool
-    rerank_enabled: bool
-    rerank_candidate_multiplier: int
-    rerank_min_candidates: int
-    model_device: str
-    search_type: str
-    rerank_use_fp16: bool
-
-
-def knowledge_settings() -> KnowledgeServiceSettings:
-    settings = get_settings()
-    return KnowledgeServiceSettings(
-        name=settings.agno_knowledge_name,
-        pgvector_table=settings.agno_knowledge_pgvector_table,
-        postgres_schema=settings.agno_knowledge_schema,
-        postgres_knowledge_table=settings.agno_postgres_knowledge_table,
-        embedding_model=settings.agno_knowledge_embedding_model,
-        embedding_dimensions=max(1, settings.agno_knowledge_embedding_dimensions),
-        rerank_model=settings.agno_knowledge_rerank_model,
-        query_prompt=settings.agno_knowledge_query_prompt,
-        top_k=max(1, settings.agno_knowledge_top_k),
-        chunk_size=max(200, settings.agno_knowledge_chunk_size),
-        chunk_overlap=max(0, settings.agno_knowledge_chunk_overlap),
-        code_chunk_size=max(256, settings.agno_knowledge_code_chunk_size),
-        semantic_threshold=settings.agno_knowledge_semantic_threshold,
-        vector_score_weight=settings.agno_knowledge_vector_score_weight,
-        content_language=settings.agno_knowledge_content_language,
-        prefix_match=settings.agno_knowledge_prefix_match,
-        rerank_enabled=settings.agno_knowledge_rerank_enabled,
-        rerank_candidate_multiplier=max(
-            1,
-            settings.agno_knowledge_rerank_candidate_multiplier,
-        ),
-        rerank_min_candidates=max(1, settings.agno_knowledge_rerank_min_candidates),
-        model_device=settings.agno_knowledge_device.strip().lower() or "auto",
-        search_type=settings.agno_knowledge_search_type,
-        rerank_use_fp16=settings.agno_knowledge_rerank_use_fp16,
-    )
-
-
-COLD_START_NOTE = (
-    "首次触发知识写入、向量检索或重排时会在线程中加载/下载本地模型，"
-    "当前操作可能等待 30-120 秒，但不会阻塞其它页面请求。"
-)
 _knowledge_async_lock = asyncio.Lock()
 _knowledge_runtime_async_lock = asyncio.Lock()
-
-RAG_SETTING_ENV_KEYS: dict[str, str] = {
-    "embedding_model": "AGNO_KNOWLEDGE_EMBEDDING_MODEL",
-    "embedding_dimensions": "AGNO_KNOWLEDGE_EMBEDDING_DIMENSIONS",
-    "rerank_model": "AGNO_KNOWLEDGE_RERANK_MODEL",
-    "query_prompt": "AGNO_KNOWLEDGE_QUERY_PROMPT",
-    "top_k": "AGNO_KNOWLEDGE_TOP_K",
-    "chunk_size": "AGNO_KNOWLEDGE_CHUNK_SIZE",
-    "chunk_overlap": "AGNO_KNOWLEDGE_CHUNK_OVERLAP",
-    "code_chunk_size": "AGNO_KNOWLEDGE_CODE_CHUNK_SIZE",
-    "semantic_threshold": "AGNO_KNOWLEDGE_SEMANTIC_THRESHOLD",
-    "vector_score_weight": "AGNO_KNOWLEDGE_VECTOR_SCORE_WEIGHT",
-    "content_language": "AGNO_KNOWLEDGE_CONTENT_LANGUAGE",
-    "prefix_match": "AGNO_KNOWLEDGE_PREFIX_MATCH",
-    "rerank_enabled": "AGNO_KNOWLEDGE_RERANK_ENABLED",
-    "rerank_candidate_multiplier": "AGNO_KNOWLEDGE_RERANK_CANDIDATE_MULTIPLIER",
-    "rerank_min_candidates": "AGNO_KNOWLEDGE_RERANK_MIN_CANDIDATES",
-    "device": "AGNO_KNOWLEDGE_DEVICE",
-    "search_type": "AGNO_KNOWLEDGE_SEARCH_TYPE",
-}
-
-RAG_BOOLEAN_FIELDS = {"prefix_match", "rerank_enabled"}
-RAG_INTEGER_FIELDS = {
-    "embedding_dimensions",
-    "top_k",
-    "chunk_size",
-    "chunk_overlap",
-    "code_chunk_size",
-    "rerank_candidate_multiplier",
-    "rerank_min_candidates",
-}
-RAG_FLOAT_FIELDS = {"semantic_threshold", "vector_score_weight"}
-RAG_STRING_FIELDS = {
-    "embedding_model",
-    "rerank_model",
-    "query_prompt",
-    "content_language",
-    "device",
-    "search_type",
-}
-
-
-def _model_device() -> str:
-    model_device = knowledge_settings().model_device
-    return "cpu" if model_device == "auto" else model_device
 
 
 @lru_cache(maxsize=1)
@@ -201,17 +103,6 @@ def _get_reranker() -> SentenceTransformerReranker | None:
     return SentenceTransformerReranker(model=knowledge_settings().rerank_model)
 
 
-def _search_type_from_name(value: str | None) -> SearchType:
-    clean_value = (value or "").strip().lower()
-    if not clean_value:
-        return SearchType.hybrid
-    try:
-        return SearchType(clean_value)
-    except ValueError as exc:
-        allowed = ", ".join(item.value for item in SearchType)
-        raise ValueError(f"不支持的 search_type: {value}. 可选值: {allowed}") from exc
-
-
 def _clear_knowledge_runtime_caches() -> None:
     get_settings.cache_clear()
     _get_embedder.cache_clear()
@@ -219,113 +110,11 @@ def _clear_knowledge_runtime_caches() -> None:
     get_async_knowledge_base.cache_clear()
 
 
-def _parse_rag_bool(value: Any, *, field: str) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        clean_value = value.strip().lower()
-        if clean_value in {"1", "true", "yes", "on"}:
-            return True
-        if clean_value in {"0", "false", "no", "off"}:
-            return False
-    raise ValueError(f"{field} 必须是布尔值")
-
-
-def _coerce_rag_setting_value(field: str, value: Any) -> str:
-    if field in RAG_BOOLEAN_FIELDS:
-        return "true" if _parse_rag_bool(value, field=field) else "false"
-
-    if field in RAG_INTEGER_FIELDS:
-        try:
-            parsed = int(value)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"{field} 必须是整数") from exc
-        if parsed < 1 and field != "chunk_overlap":
-            raise ValueError(f"{field} 必须大于 0")
-        if field == "chunk_overlap" and parsed < 0:
-            raise ValueError("chunk_overlap 必须大于等于 0")
-        return str(parsed)
-
-    if field in RAG_FLOAT_FIELDS:
-        try:
-            parsed = float(value)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"{field} 必须是数字") from exc
-        if field in {"semantic_threshold", "vector_score_weight"} and not 0 <= parsed <= 1:
-            raise ValueError(f"{field} 必须在 0 到 1 之间")
-        return str(parsed)
-
-    if field in RAG_STRING_FIELDS:
-        parsed = str(value or "").strip()
-        if field == "search_type":
-            return _search_type_from_name(parsed).value
-        if field in {"embedding_model", "rerank_model"} and not parsed:
-            raise ValueError(f"{field} 不能为空")
-        return parsed
-
-    raise ValueError(f"不支持的 RAG 参数: {field}")
-
-
-def current_rag_settings() -> dict[str, Any]:
-    settings = knowledge_settings()
-    return {
-        "embedding_model": settings.embedding_model,
-        "embedding_dimensions": settings.embedding_dimensions,
-        "rerank_model": settings.rerank_model,
-        "query_prompt": settings.query_prompt,
-        "top_k": settings.top_k,
-        "chunk_size": settings.chunk_size,
-        "chunk_overlap": settings.chunk_overlap,
-        "code_chunk_size": settings.code_chunk_size,
-        "semantic_threshold": settings.semantic_threshold,
-        "vector_score_weight": settings.vector_score_weight,
-        "bm25_score_weight": round(1 - settings.vector_score_weight, 4),
-        "content_language": settings.content_language,
-        "prefix_match": settings.prefix_match,
-        "rerank_enabled": settings.rerank_enabled,
-        "rerank_candidate_multiplier": settings.rerank_candidate_multiplier,
-        "rerank_min_candidates": settings.rerank_min_candidates,
-        "device": settings.model_device,
-        "search_type": _search_type_from_name(settings.search_type).value,
-    }
-
-
 def update_runtime_rag_settings(values: Mapping[str, Any]) -> dict[str, Any]:
-    updates: dict[str, str] = {}
-    for field, value in values.items():
-        if field not in RAG_SETTING_ENV_KEYS:
-            continue
-        updates[RAG_SETTING_ENV_KEYS[field]] = _coerce_rag_setting_value(field, value)
-
-    if not updates:
-        return current_rag_settings()
-
-    previous_values = {env_key: os.environ.get(env_key) for env_key in updates}
-    try:
-        for env_key, value in updates.items():
-            os.environ[env_key] = value
-
-        _clear_knowledge_runtime_caches()
-
-        settings = knowledge_settings()
-        if settings.chunk_overlap >= settings.chunk_size:
-            raise ValueError("chunk_overlap 必须小于 chunk_size")
-    except Exception:
-        for env_key, previous in previous_values.items():
-            if previous is None:
-                os.environ.pop(env_key, None)
-            else:
-                os.environ[env_key] = previous
-        _clear_knowledge_runtime_caches()
-        raise
-
-    return current_rag_settings()
-
-
-def search_type_from_env() -> SearchType:
-    return _search_type_from_name(knowledge_settings().search_type)
+    return _update_runtime_rag_settings(
+        values,
+        clear_runtime_caches=_clear_knowledge_runtime_caches,
+    )
 
 
 def _reader_config(needs_embedder: bool) -> KnowledgeReaderConfig:
@@ -362,18 +151,6 @@ def reader_for_filename(
         profile,
         _reader_config(needs_embedder=profile.strategy == "semantic"),
         filename,
-    )
-
-
-def pipeline_status() -> dict[str, Any]:
-    settings = knowledge_settings()
-    return _ingest_pipeline_status(
-        search_type=search_type_from_env().value,
-        vector_score_weight=settings.vector_score_weight,
-        prefix_match=settings.prefix_match,
-        content_language=settings.content_language,
-        semantic_threshold=settings.semantic_threshold,
-        code_chunk_size=settings.code_chunk_size,
     )
 
 
@@ -1068,7 +845,7 @@ class KnowledgeBaseLifecycle:
         if not clean_query:
             return []
         effective_search_type = (
-            _search_type_from_name(search_type) if search_type else search_type_from_env()
+            search_type_from_name(search_type) if search_type else search_type_from_env()
         )
         await self._ensure_storage_async()
         knowledge = await self._async_knowledge_async(effective_search_type)
@@ -1132,7 +909,7 @@ class KnowledgeBaseLifecycle:
         visible_chunk_count = sum(_int_value(document.get("chunks")) for document in docs)
         chunk_count = max(await self._chunk_count_async(owner_user_id), visible_chunk_count)
         settings = knowledge_settings()
-        device = _model_device()
+        device = model_device()
         return {
             **pipeline_status(),
             "collection": settings.pgvector_table,

@@ -40,3 +40,26 @@ def test_knowledge_source_snapshot_helpers_live_in_focused_service() -> None:
     ):
         assert hasattr(source_service, helper_name)
         assert not hasattr(knowledge_service, f"_{helper_name}")
+
+
+def test_knowledge_rag_settings_helpers_live_in_focused_service() -> None:
+    knowledge_service = importlib.import_module("api.services.knowledge_service")
+    settings_service = importlib.import_module("api.services.knowledge_rag_settings_service")
+
+    for helper_name in (
+        "KnowledgeServiceSettings",
+        "knowledge_settings",
+        "current_rag_settings",
+        "pipeline_status",
+        "search_type_from_env",
+        "update_runtime_rag_settings",
+    ):
+        assert hasattr(settings_service, helper_name)
+
+    for removed_name in (
+        "RAG_SETTING_ENV_KEYS",
+        "_coerce_rag_setting_value",
+        "_parse_rag_bool",
+        "_search_type_from_name",
+    ):
+        assert not hasattr(knowledge_service, removed_name)
