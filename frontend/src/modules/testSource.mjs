@@ -52,6 +52,7 @@ export const useSecurityDataApiSource = readOptionalSource("composables/useSecur
 export const useSettingsApiSource = readOptionalSource("composables/useSettingsApi.ts")
 export const useTraceApiSource = readOptionalSource("composables/useTraceApi.ts")
 export const useTracePayloadControlsSource = readOptionalSource("composables/useTracePayloadControls.ts")
+export const useTracePayloadRendererSource = readOptionalSource("composables/useTracePayloadRenderer.ts")
 export const useTraceSessionControllerSource = readOptionalSource("composables/useTraceSessionController.ts")
 export const useAgentEvalsApiSource = readOptionalSource("composables/useAgentEvalsApi.ts")
 export const apiClient = readOptionalSource("lib/apiClient.ts")

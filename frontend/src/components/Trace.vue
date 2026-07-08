@@ -458,7 +458,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue"
 import { ElMessage } from "element-plus"
-import MarkdownIt from "markdown-it"
 import { useI18n } from "vue-i18n"
 import {
   Aim,
@@ -470,6 +469,7 @@ import {
 import { useChatHistory } from "../composables/useChatApi"
 import { useTracingApi } from "../composables/useTraceApi"
 import { useTracePayloadControls } from "../composables/useTracePayloadControls"
+import { useTracePayloadRenderer } from "../composables/useTracePayloadRenderer"
 import { useTraceSessionController } from "../composables/useTraceSessionController"
 import {
   buildTraceLogItems,
@@ -493,7 +493,6 @@ import {
   pageTraceSessions,
   traceDurationClass,
   traceDetailTabForSection,
-  tracePayloadTextForMode,
   traceRunMetrics,
   traceStatusClass,
   traceStatusLabel,
@@ -503,16 +502,11 @@ import {
   type TraceSummaryState,
 } from "../modules/traceWorkbench"
 import { useTraceStore } from "../stores/traces"
-import type { ChatSession, ParsedSpanPayload, SpanItem, SpanTreeNode, TraceItem } from "../types"
+import type { ChatSession, SpanItem, SpanTreeNode, TraceItem } from "../types"
 
 const { t } = useI18n()
 const { loading, error, listTraces, getTrace } = useTracingApi()
 const { loadingSessions, listSessions } = useChatHistory()
-const markdownRenderer = new MarkdownIt({
-  html: false,
-  linkify: true,
-  breaks: true,
-})
 
 const traceStore = useTraceStore()
 const sessions = ref<ChatSession[]>([])
@@ -547,7 +541,6 @@ const SESSION_PAGE_SIZE = 10
 const compactId = compactTraceId
 const durationClass = traceDurationClass
 const formatDuration = formatTraceDuration
-const payloadTextForMode = tracePayloadTextForMode
 const statusClass = traceStatusClass
 const statusLabel = traceStatusLabel
 const tagType = traceTagType
@@ -607,9 +600,6 @@ const logItems = computed(() => {
 })
 
 const parsedSpan = computed(() => selectedSpan.value?.parsed || emptyTraceParsedSpan)
-const renderMarkdown = (value: string) => {
-  return markdownRenderer.render(value || "")
-}
 
 const formatDateTime = formatTraceDateTime
 const formatAnyDateTime = formatTraceAnyDateTime
@@ -622,11 +612,10 @@ const {
   togglePayloadExpanded,
 } = useTracePayloadControls()
 
-const renderPayloadMarkupForMode = (payload: ParsedSpanPayload, mode: PayloadViewMode, fallback: string) => {
-  const text = payloadTextForMode(payload, mode, fallback)
-  if (mode === "markdown") return renderMarkdown(text)
-  return renderMarkdown(markdownRenderer.utils.escapeHtml(text))
-}
+const {
+  payloadTextForMode,
+  renderPayloadMarkupForMode,
+} = useTracePayloadRenderer()
 
 const scrollDetailIntoView = () => {
   if (!window.matchMedia("(max-width: 980px)").matches) return

@@ -35,6 +35,7 @@ import {
   sourcePath,
   trace,
   useTracePayloadControlsSource,
+  useTracePayloadRendererSource,
   traceWorkbenchSource,
   typesSource,
   useSecurityDataApiSource,
@@ -348,8 +349,28 @@ assert.match(
 
 assert.match(
   trace,
-  /renderMarkdown/,
-  "Trace content detail must render markdown instead of displaying markdown as plain text",
+  /useTracePayloadRenderer[\s\S]*renderPayloadMarkupForMode/,
+  "Trace content detail must render markdown through the payload renderer composable",
+)
+
+assert.match(
+  useTracePayloadRendererSource,
+  /MarkdownIt[\s\S]*const renderPayloadMarkupForMode/,
+  "Trace payload renderer composable must own markdown payload rendering",
+)
+
+for (const inlinePayloadRenderFlow of ["renderMarkdown", "renderPayloadMarkupForMode"]) {
+  assert.doesNotMatch(
+    trace,
+    new RegExp(`const ${inlinePayloadRenderFlow}\\s*=`),
+    `Trace page must not inline payload render flow: ${inlinePayloadRenderFlow}`,
+  )
+}
+
+assert.doesNotMatch(
+  trace,
+  /MarkdownIt/,
+  "Trace page must not own the markdown renderer dependency",
 )
 
 assert.match(
