@@ -37,6 +37,7 @@ import {
   useTracePayloadControlsSource,
   useTracePayloadRendererSource,
   useTraceSpanSelectionSource,
+  useTraceFilterRefreshSchedulerSource,
   traceWorkbenchSource,
   typesSource,
   useSecurityDataApiSource,
@@ -398,6 +399,37 @@ assert.doesNotMatch(
   trace,
   /nextTick/,
   "Trace page must not own span detail scroll scheduling",
+)
+
+assert.match(
+  trace,
+  /useTraceFilterRefreshScheduler[\s\S]*clearPendingFilterRefresh[\s\S]*scheduleSessionFilterRefresh[\s\S]*scheduleFilterRefresh/,
+  "Trace filter watches must use the filter refresh scheduler composable",
+)
+
+assert.match(
+  useTraceFilterRefreshSchedulerSource,
+  /window\.setTimeout[\s\S]*const scheduleFilterRefresh\s*=/,
+  "Trace filter refresh scheduler composable must own debounced refresh routing",
+)
+
+for (const inlineFilterRefreshFlow of [
+  "clearPendingFilterRefresh",
+  "scheduleSessionFilterRefresh",
+  "scheduleRunFilterRefresh",
+  "scheduleFilterRefresh",
+]) {
+  assert.doesNotMatch(
+    trace,
+    new RegExp(`const ${inlineFilterRefreshFlow}\\s*=`),
+    `Trace page must not inline filter refresh flow: ${inlineFilterRefreshFlow}`,
+  )
+}
+
+assert.doesNotMatch(
+  trace,
+  /filterRefreshTimer/,
+  "Trace page must not own the filter refresh timer",
 )
 
 assert.match(

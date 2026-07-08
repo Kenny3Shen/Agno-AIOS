@@ -468,6 +468,7 @@ import {
 } from "@element-plus/icons-vue"
 import { useChatHistory } from "../composables/useChatApi"
 import { useTracingApi } from "../composables/useTraceApi"
+import { useTraceFilterRefreshScheduler } from "../composables/useTraceFilterRefreshScheduler"
 import { useTracePayloadControls } from "../composables/useTracePayloadControls"
 import { useTracePayloadRenderer } from "../composables/useTracePayloadRenderer"
 import { useTraceSessionController } from "../composables/useTraceSessionController"
@@ -532,7 +533,6 @@ const outputViewMode = ref<PayloadViewMode>("text")
 
 const loadingDetail = ref(false)
 const apiError = computed(() => error.value)
-let filterRefreshTimer: ReturnType<typeof window.setTimeout> | null = null
 
 type PayloadViewMode = TracePayloadViewMode
 const SESSION_PAGE_SIZE = 10
@@ -628,22 +628,20 @@ const scrollDetailIntoView = () => {
   })
 }
 
-const clearPendingFilterRefresh = () => {
-  if (filterRefreshTimer !== null) {
-    window.clearTimeout(filterRefreshTimer)
-    filterRefreshTimer = null
-  }
-}
+let refreshTraceView = async () => {}
+let refreshTraceRuns = async () => {}
 
 const {
-  refresh,
-  selectSession,
-  selectSessionById,
-  openTraceDetail,
-  resetAllFilters,
-  refreshAll,
-  refreshRuns,
-} = useTraceSessionController({
+  clearPendingFilterRefresh,
+  scheduleSessionFilterRefresh,
+  scheduleFilterRefresh,
+} = useTraceFilterRefreshScheduler({
+  selectedSession,
+  refresh: () => refreshTraceView(),
+  refreshRuns: () => refreshTraceRuns(),
+})
+
+const traceSessionController = useTraceSessionController({
   sessions,
   filteredSessions,
   selectedSession,
@@ -665,33 +663,17 @@ const {
   scrollDetailIntoView,
 })
 
-const scheduleSessionFilterRefresh = () => {
-  if (filterRefreshTimer !== null) {
-    window.clearTimeout(filterRefreshTimer)
-  }
-  filterRefreshTimer = window.setTimeout(() => {
-    filterRefreshTimer = null
-    void refresh()
-  }, 250)
-}
+refreshTraceView = traceSessionController.refresh
+refreshTraceRuns = traceSessionController.refreshRuns
 
-const scheduleRunFilterRefresh = () => {
-  if (filterRefreshTimer !== null) {
-    window.clearTimeout(filterRefreshTimer)
-  }
-  filterRefreshTimer = window.setTimeout(() => {
-    filterRefreshTimer = null
-    void refreshRuns()
-  }, 250)
-}
-
-const scheduleFilterRefresh = () => {
-  if (selectedSession.value) {
-    scheduleRunFilterRefresh()
-  } else {
-    scheduleSessionFilterRefresh()
-  }
-}
+const {
+  refresh,
+  selectSession,
+  selectSessionById,
+  openTraceDetail,
+  resetAllFilters,
+  refreshAll,
+} = traceSessionController
 
 watch(
   () => filteredSessions.value.length,
