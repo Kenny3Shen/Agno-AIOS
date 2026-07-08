@@ -469,8 +469,8 @@ import {
 } from "@element-plus/icons-vue"
 import { useChatHistory } from "../composables/useChatApi"
 import { useTracingApi } from "../composables/useTraceApi"
+import { useTracePayloadControls } from "../composables/useTracePayloadControls"
 import { useTraceSessionController } from "../composables/useTraceSessionController"
-import { copyToClipboard } from "../lib/clipboard"
 import {
   buildTraceLogItems,
   buildTraceMetadataItems,
@@ -537,7 +537,6 @@ const traceAdvancedFiltersOpen = ref(false)
 const sessionPage = ref(1)
 const inputViewMode = ref<PayloadViewMode>("text")
 const outputViewMode = ref<PayloadViewMode>("text")
-const expandedPayloads = reactive(new Set<"input" | "output">())
 
 const loadingDetail = ref(false)
 const apiError = computed(() => error.value)
@@ -616,23 +615,17 @@ const formatDateTime = formatTraceDateTime
 const formatAnyDateTime = formatTraceAnyDateTime
 const formatSessionTime = formatTraceSessionTime
 
+const {
+  expandedPayloads,
+  copyPayload,
+  copyMetadataValue,
+  togglePayloadExpanded,
+} = useTracePayloadControls()
 
 const renderPayloadMarkupForMode = (payload: ParsedSpanPayload, mode: PayloadViewMode, fallback: string) => {
   const text = payloadTextForMode(payload, mode, fallback)
   if (mode === "markdown") return renderMarkdown(text)
   return renderMarkdown(markdownRenderer.utils.escapeHtml(text))
-}
-
-const copyPayload = async (payload: ParsedSpanPayload, mode: PayloadViewMode) => {
-  await copyText(payloadTextForMode(payload, mode, ""))
-}
-
-const togglePayloadExpanded = (key: "input" | "output") => {
-  if (expandedPayloads.has(key)) {
-    expandedPayloads.delete(key)
-  } else {
-    expandedPayloads.add(key)
-  }
 }
 
 const scrollDetailIntoView = () => {
@@ -721,21 +714,6 @@ const scheduleFilterRefresh = () => {
   } else {
     scheduleSessionFilterRefresh()
   }
-}
-
-const copyText = async (text: string) => {
-  const trimmedText = (text || "").trim()
-  if (!trimmedText) return
-  if (await copyToClipboard(trimmedText)) {
-    ElMessage.success(t("common.clipboard.copied"))
-  } else {
-    ElMessage.warning(t("common.clipboard.failed"))
-  }
-}
-
-const copyMetadataValue = async (value: string) => {
-  if (!value || value === "-") return
-  await copyText(value)
 }
 
 watch(

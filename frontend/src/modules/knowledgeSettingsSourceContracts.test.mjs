@@ -34,6 +34,7 @@ import {
   skills,
   sourcePath,
   trace,
+  useTracePayloadControlsSource,
   traceWorkbenchSource,
   typesSource,
   useSecurityDataApiSource,
@@ -389,8 +390,30 @@ assert.match(
 
 assert.match(
   trace,
-  /copyMetadataValue/,
-  "Trace Metadata copy buttons must use the shared clipboard flow",
+  /useTracePayloadControls[\s\S]*copyMetadataValue/,
+  "Trace Metadata copy buttons must use the payload controls composable",
+)
+
+for (const payloadControlFlow of ["copyPayload", "copyMetadataValue", "togglePayloadExpanded"]) {
+  assert.match(
+    useTracePayloadControlsSource,
+    new RegExp(`const ${payloadControlFlow}\\s*=\\s*${payloadControlFlow === "togglePayloadExpanded" ? "\\(" : "async"}`),
+    `Trace payload controls composable must own ${payloadControlFlow}`,
+  )
+}
+
+for (const inlinePayloadFlow of ["copyText", "copyPayload", "copyMetadataValue", "togglePayloadExpanded"]) {
+  assert.doesNotMatch(
+    trace,
+    new RegExp(`const ${inlinePayloadFlow}\\s*=`),
+    `Trace page must not inline payload control flow: ${inlinePayloadFlow}`,
+  )
+}
+
+assert.match(
+  useTracePayloadControlsSource,
+  /copyToClipboard/,
+  "Trace payload controls composable must use the shared clipboard flow",
 )
 
 assert.match(
