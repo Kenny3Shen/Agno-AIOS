@@ -56,55 +56,13 @@
 
               <div class="trace-content-layout trace-inspector-grid">
                 <aside class="trace-inspector-primary">
-                    <div class="trace-span-hierarchy">
-                      <el-tree
-                        v-if="tree.length"
-                        :data="tree"
-                        node-key="span.span_id"
-                        :expand-on-click-node="false"
-                        default-expand-all
-                        class="trace-tree trace-hierarchy-tree"
-                        @node-click="onSpanNodeClick"
-                      >
-                        <template #default="{ data }">
-                          <button
-                            type="button"
-                            class="trace-tree-node trace-hierarchy-node"
-                            :class="{ active: selectedSpan?.span_id === data.span.span_id, error: data.span.status_code === 'ERROR' }"
-                            @click.stop="selectSpan(data.span, 'input')"
-                          >
-                            <span class="trace-status-dot" :class="statusClass(data.span.status_code)" />
-                            <span class="trace-hierarchy-node-copy">
-                              <strong :title="data.span.name">{{ data.span.name }}</strong>
-                              <small>{{ data.span.kind || 'span' }} · {{ formatDuration(data.span.duration_ms) }}</small>
-                            </span>
-                          </button>
-                        </template>
-                      </el-tree>
-
-                      <div v-else-if="spans.length" class="trace-hierarchy-fallback">
-                        <button
-                          v-for="span in spans"
-                          :key="span.span_id"
-                          type="button"
-                          class="trace-tree-node trace-hierarchy-node"
-                          :class="{ active: selectedSpan?.span_id === span.span_id, error: span.status_code === 'ERROR' }"
-                          @click="selectSpan(span, 'input')"
-                        >
-                          <span class="trace-status-dot" :class="statusClass(span.status_code)" />
-                          <span class="trace-hierarchy-node-copy">
-                            <strong :title="span.name">{{ span.name }}</strong>
-                            <small>{{ span.kind || 'span' }} · {{ formatDuration(span.duration_ms) }}</small>
-                          </span>
-                        </button>
-                      </div>
-
-                      <div v-else class="empty-observe">
-                        <el-icon><Connection /></el-icon>
-                        <strong>{{ t('trace.empty.noSpansTitle') }}</strong>
-                        <span>{{ t('trace.empty.noSpansDescription') }}</span>
-                      </div>
-                    </div>
+                  <TraceSpanHierarchy
+                    :tree="tree"
+                    :spans="spans"
+                    :selected-span="selectedSpan"
+                    @select-span="selectSpan"
+                    @node-click="onSpanNodeClick"
+                  />
                 </aside>
 
                 <section class="trace-content-detail trace-inspector-secondary" :data-active-detail-tab="activeDetailTab">
@@ -323,13 +281,13 @@ import { computed, reactive, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import {
   Aim,
-  Connection,
   CopyDocument,
   Cpu,
 } from "@element-plus/icons-vue"
 import TraceQueryToolbar from "./trace/TraceQueryToolbar.vue"
 import TraceRunsPanel from "./trace/TraceRunsPanel.vue"
 import TraceSessionPanel from "./trace/TraceSessionPanel.vue"
+import TraceSpanHierarchy from "./trace/TraceSpanHierarchy.vue"
 import { useChatHistory } from "../composables/useChatApi"
 import { useTracingApi } from "../composables/useTraceApi"
 import { useTraceDerivedPanels } from "../composables/useTraceDerivedPanels"

@@ -37,6 +37,7 @@ import {
   traceQueryToolbar,
   traceRunsPanel,
   traceSessionPanel,
+  traceSpanHierarchy,
   traceStyle,
   useTracePayloadControlsSource,
   useTracePayloadRendererSource,
@@ -463,8 +464,32 @@ assert.doesNotMatch(
 
 assert.match(
   trace,
-  /trace-span-hierarchy/,
-  "Trace content area must dedicate the left side to span hierarchy",
+  /<TraceSpanHierarchy[\s\S]*:tree="tree"[\s\S]*:spans="spans"[\s\S]*:selected-span="selectedSpan"[\s\S]*@select-span="selectSpan"[\s\S]*@node-click="onSpanNodeClick"/,
+  "Trace page must delegate the span hierarchy column to TraceSpanHierarchy",
+)
+
+assert.match(
+  traceSpanHierarchy,
+  /trace-span-hierarchy[\s\S]*trace-hierarchy-tree[\s\S]*trace-hierarchy-fallback[\s\S]*trace-hierarchy-node/,
+  "TraceSpanHierarchy must own the hierarchy tree and fallback markup",
+)
+
+assert.match(
+  traceSpanHierarchy,
+  /useI18n\(\)/,
+  "TraceSpanHierarchy must read hierarchy empty copy from vue-i18n",
+)
+
+assert.match(
+  traceSpanHierarchy,
+  /trace\.empty\.noSpansTitle[\s\S]*trace\.empty\.noSpansDescription/,
+  "TraceSpanHierarchy must own no-spans copy",
+)
+
+assert.doesNotMatch(
+  trace,
+  /trace-span-hierarchy|trace-hierarchy-tree|trace-hierarchy-fallback|trace\.empty\.noSpansTitle/,
+  "Trace page must not inline span hierarchy internals",
 )
 
 assert.match(
