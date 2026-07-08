@@ -414,6 +414,12 @@ assert.match(
   "TraceSessionPanel must own the session panel structure",
 )
 
+assert.doesNotMatch(
+  traceSessionPanel,
+  /<el-pagination[\s\S]*\ssmall(?:\s|>)/,
+  "TraceSessionPanel pagination must use Element Plus size API instead of deprecated boolean small",
+)
+
 assert.match(
   traceSessionPanel,
   /useI18n\(\)/,

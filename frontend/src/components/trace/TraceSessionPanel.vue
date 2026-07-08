@@ -38,7 +38,7 @@
         :pager-count="5"
         :total="filteredSessions.length"
         layout="prev, pager, next"
-        small
+        size="small"
         @update:current-page="emit('update:sessionPage', $event)"
       />
 
