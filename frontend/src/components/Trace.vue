@@ -1,67 +1,16 @@
 <template>
   <div class="trace-console ag-page-flow">
     <div class="trace-workbench trace-session-workbench">
-      <div class="trace-query-toolbar ag-content-panel">
-        <div class="trace-query-primary">
-          <el-input
-            v-model="sessionFilters.sessionId"
-            size="small"
-            clearable
-            :placeholder="t('trace.filters.searchSessionId')"
-            class="trace-filter-input wide"
-            @keyup.enter="refresh"
-          />
-          <el-input
-            v-model="runFilters.runId"
-            size="small"
-            clearable
-            :placeholder="t('trace.filters.searchRunId')"
-            class="trace-filter-input wide"
-            @keyup.enter="refreshAll"
-          />
-          <el-select
-            v-model="runFilters.status"
-            size="small"
-            clearable
-            :placeholder="t('trace.filters.status')"
-            class="trace-filter-select"
-          >
-            <el-option label="Success" value="OK" />
-            <el-option label="Error" value="ERROR" />
-            <el-option label="Running" value="UNSET" />
-          </el-select>
-          <el-button size="small" plain class="cursor-pointer" @click="traceAdvancedFiltersOpen = !traceAdvancedFiltersOpen">
-            {{ t('trace.filters.advanced') }}
-          </el-button>
-        </div>
-        <div class="trace-filter-actions">
-          <el-button size="small" plain class="cursor-pointer" :disabled="loading || loadingSessions" @click="resetAllFilters">
-            {{ t('trace.actions.reset') }}
-          </el-button>
-          <el-button
-            size="small"
-            type="primary"
-            :loading="loading || loadingSessions"
-            class="cursor-pointer"
-            :aria-label="t('trace.actions.refreshAll')"
-            @click="refresh"
-          >
-            <el-icon><Refresh /></el-icon>
-          </el-button>
-        </div>
-        <div v-if="traceAdvancedFiltersOpen" class="trace-advanced-filters">
-          <el-input v-model="sessionFilters.userId" size="small" clearable :placeholder="t('trace.filters.userId')" class="trace-filter-input" @keyup.enter="refreshAll" />
-          <el-input v-model="sessionFilters.keyword" size="small" clearable :placeholder="t('trace.filters.keyword')" class="trace-filter-input" @keyup.enter="refreshAll" />
-          <el-select v-model="sessionFilters.status" size="small" :placeholder="t('trace.filters.sessionStatus')" class="trace-filter-select">
-            <el-option :label="t('trace.filters.activeSessions')" value="active" />
-            <el-option :label="t('trace.filters.archivedSessions')" value="archived" />
-            <el-option :label="t('trace.filters.allSessions')" value="all" />
-          </el-select>
-          <el-input v-model="runFilters.agentId" size="small" clearable :placeholder="t('trace.filters.agentId')" class="trace-filter-input" @keyup.enter="refreshAll" />
-          <el-input v-model="runFilters.teamId" size="small" clearable :placeholder="t('trace.filters.teamId')" class="trace-filter-input" @keyup.enter="refreshAll" />
-          <el-input v-model="runFilters.workflowId" size="small" clearable :placeholder="t('trace.filters.workflowId')" class="trace-filter-input" @keyup.enter="refreshAll" />
-        </div>
-      </div>
+      <TraceQueryToolbar
+        v-model:advanced-filters-open="traceAdvancedFiltersOpen"
+        :session-filters="sessionFilters"
+        :run-filters="runFilters"
+        :loading="loading"
+        :loading-sessions="loadingSessions"
+        @refresh="refresh"
+        @refresh-all="refreshAll"
+        @reset-all-filters="resetAllFilters"
+      />
 
       <div class="trace-body-grid ag-workspace-panel">
         <aside class="trace-session-panel">
@@ -463,8 +412,8 @@ import {
   Connection,
   CopyDocument,
   Cpu,
-  Refresh,
 } from "@element-plus/icons-vue"
+import TraceQueryToolbar from "./trace/TraceQueryToolbar.vue"
 import { useChatHistory } from "../composables/useChatApi"
 import { useTracingApi } from "../composables/useTraceApi"
 import { useTraceDerivedPanels } from "../composables/useTraceDerivedPanels"

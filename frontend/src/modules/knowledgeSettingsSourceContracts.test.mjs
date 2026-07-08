@@ -34,6 +34,7 @@ import {
   skills,
   sourcePath,
   trace,
+  traceQueryToolbar,
   traceStyle,
   useTracePayloadControlsSource,
   useTracePayloadRendererSource,
@@ -360,6 +361,42 @@ assert.match(
   trace,
   /trace-toolbar/,
   "Trace page must expose a compact filter toolbar instead of a hero header",
+)
+
+assert.match(
+  trace,
+  /<TraceQueryToolbar[\s\S]*v-model:advanced-filters-open="traceAdvancedFiltersOpen"[\s\S]*@refresh="refresh"[\s\S]*@refresh-all="refreshAll"[\s\S]*@reset-all-filters="resetAllFilters"/,
+  "Trace page must delegate the query toolbar to TraceQueryToolbar",
+)
+
+assert.match(
+  traceQueryToolbar,
+  /trace-query-toolbar[\s\S]*trace-query-primary[\s\S]*trace-advanced-filters/,
+  "TraceQueryToolbar must own the Trace query and advanced filter markup",
+)
+
+assert.match(
+  traceQueryToolbar,
+  /useI18n\(\)/,
+  "TraceQueryToolbar must read toolbar copy from vue-i18n",
+)
+
+assert.match(
+  traceQueryToolbar,
+  /trace\.filters\.searchSessionId[\s\S]*trace\.filters\.workflowId/,
+  "TraceQueryToolbar must own toolbar filter labels",
+)
+
+assert.match(
+  traceQueryToolbar,
+  /Refresh/,
+  "TraceQueryToolbar must own the toolbar refresh icon",
+)
+
+assert.doesNotMatch(
+  trace,
+  /traceAdvancedFiltersOpen\s*=\s*!traceAdvancedFiltersOpen|trace-query-primary|trace-advanced-filters/,
+  "Trace page must not inline query toolbar internals",
 )
 
 assert.match(

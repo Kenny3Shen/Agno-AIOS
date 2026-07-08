@@ -31,6 +31,7 @@ import {
   skills,
   sourcePath,
   trace,
+  traceQueryToolbar,
   traceWorkbenchSource,
   typesSource,
   useApiCore,
@@ -322,9 +323,9 @@ for (const sessionTraceParam of ["session_id", "user_id"]) {
   )
 }
 
-for (const traceInteraction of ["@keyup.enter=\"refresh\"", "@click=\"refresh\""]) {
+for (const traceInteraction of ["@keyup.enter=\"emit('refresh')\"", "@click=\"emit('refresh')\""]) {
   assert.match(
-    trace,
+    traceQueryToolbar,
     new RegExp(traceInteraction.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
     `Trace filters must keep manual refresh interaction: ${traceInteraction}`,
   )
@@ -490,11 +491,20 @@ for (const hardcodedChatCopy of [
   )
 }
 
-for (const traceFilterHook of [
+for (const traceToolbarFilterField of [
   "sessionFilters.sessionId",
   "sessionFilters.userId",
   "sessionFilters.keyword",
   "sessionFilters.status",
+]) {
+  assert.match(
+    traceQueryToolbar,
+    new RegExp(traceToolbarFilterField.replace(".", "\\.")),
+    `Trace toolbar must expose filter field: ${traceToolbarFilterField}`,
+  )
+}
+
+for (const traceFilterHook of [
   "filteredSessions",
   "pagedSessions",
   "SESSION_PAGE_SIZE",
