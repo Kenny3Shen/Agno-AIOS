@@ -39,7 +39,7 @@
             class="trace-detail-panel ag-right-panel"
             aria-label="Selected run detail"
           >
-              <div class="trace-detail-shell trace-inspector-shell">
+              <div class="trace-detail-shell trace-inspector-shell flex h-full min-h-0 flex-1 flex-col overflow-hidden">
                 <div class="trace-run-header">
                   <div class="trace-run-title">
                   <div class="trace-run-heading">

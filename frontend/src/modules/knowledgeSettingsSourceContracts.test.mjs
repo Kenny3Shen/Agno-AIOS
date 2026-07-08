@@ -554,6 +554,18 @@ assert.match(
 
 assert.match(
   trace,
+  /trace-detail-shell trace-inspector-shell[\s\S]*flex-1[\s\S]*flex-col[\s\S]*overflow-hidden/,
+  "Trace detail shell must move simple container layout to UnoCSS utilities",
+)
+
+assert.doesNotMatch(
+  traceStyle,
+  /\.trace-detail-shell\s*\{[^}]*display:\s*flex/,
+  "Trace stylesheet must not keep simple detail shell flex layout after UnoCSS utility migration",
+)
+
+assert.match(
+  trace,
   /useTracePayloadRenderer[\s\S]*renderPayloadMarkupForMode/,
   "Trace content detail must render markdown through the payload renderer composable",
 )

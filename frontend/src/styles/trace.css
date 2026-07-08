@@ -394,15 +394,6 @@
   padding: 24px;
 }
 
-.trace-detail-shell {
-  display: flex;
-  flex: 1 1 auto;
-  height: 100%;
-  min-height: 0;
-  flex-direction: column;
-  overflow: hidden;
-}
-
 .trace-detail-main {
   display: flex;
   min-height: 0;
