@@ -221,7 +221,7 @@
 import { computed, onMounted, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { Connection, Cpu, DataAnalysis, DataBoard, Histogram, PieChart, Refresh, TrendCharts, Warning } from "@element-plus/icons-vue"
-import { useTracingApi } from "../composables/useApi"
+import { useTracingApi } from "../composables/useTraceApi"
 import type { SpanItem, TraceItem } from "../types"
 
 type TimeScope = "24h" | "7d" | "30d"

@@ -32,7 +32,6 @@ import {
   sourcePath,
   trace,
   typesSource,
-  useApi,
   userRole,
   visibilityTabs,
   workflow,

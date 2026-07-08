@@ -8,8 +8,8 @@ Split OS control into first-class functional modules without preserving the old 
 
 - Backend OS control payload modules: sessions, memory, metrics, evaluation, knowledge, approvals.
 - Backend OS control routes: one route module per functional area.
-- Frontend control-plane composables: one composable per functional area that calls the route it owns.
-- Existing external paths may stay stable when they are already module-specific, but code must not route through a generic `get_control_payload()` or `useOsControlApi()` aggregate.
+- Frontend composables: each workbench imports the domain composable that owns the route it calls.
+- Existing external paths may stay stable when they are already module-specific, but code must not route through generic payload dispatch or an aggregate frontend composable.
 
 ## Backend Boundaries
 
@@ -37,16 +37,16 @@ Unsupported module names are no longer handled by a catch-all route. Missing pat
 
 ## Frontend Boundaries
 
-- `useControlPlaneApi.ts`: generic non-memory control modules only.
 - `useMemoryControlApi.ts`: memory query/update/delete.
 - `useApprovalsApi.ts`: approval list/detail/resolve.
 - `useSchedulerApi.ts`: direct AgentOS schedule calls.
+- Existing domain composables such as `useTraceApi.ts`, `useAgentEvalsApi.ts`, and `useKnowledgeApi.ts`: page-specific payload reads for their domains.
 
-`useOsControlApi()` is removed from the implementation and from `useApi.ts` re-exports. Components import the functional composable they use directly.
+The aggregate runtime composable is removed from the implementation. Components import the functional composable they use directly.
 
 ## Testing
 
 - Backend tests assert route-level permissions for each route module and verify memory mutations remain user-scoped and audited.
 - Backend tests assert `api.services.os_control_service` is gone.
-- Frontend source contracts assert `useOsControlApi()` is gone and components import the new functional composables directly.
+- Frontend source contracts assert the aggregate runtime composable is gone and components import the new functional composables directly.
 - Existing shell/auth/build and focused backend tests must pass.

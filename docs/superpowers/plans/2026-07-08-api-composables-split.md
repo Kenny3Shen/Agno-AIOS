@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Split `frontend/src/composables/useApi.ts` into real same-level domain modules without adding empty nesting.
+**Goal:** Split the aggregate frontend API surface into real same-level domain modules without adding empty nesting.
 
-**Architecture:** Shared request/error helpers move to `useApiCore.ts`. Each domain composable file owns its current endpoint logic. `useApi.ts` remains the current API barrel of named re-exports.
+**Architecture:** Shared request/error helpers live in `useApiCore.ts`. Each domain composable file owns its current endpoint logic. Pages import the domain composable they use directly; there is no aggregate API barrel.
 
 **Tech Stack:** Vue 3 Composition API, TypeScript, Vite, Bun source-contract tests.
 
@@ -12,7 +12,7 @@
 
 - No nested API module directories in this step.
 - No pass-through domain wrapper files.
-- Existing component imports from `../composables/useApi` remain valid.
+- Components import domain composables directly.
 - Endpoint paths, payload shapes, loading/error refs, and fallback messages remain unchanged.
 
 ---
@@ -25,7 +25,7 @@
 - Modify: `frontend/src/uiShell.test.mjs`
 
 **Interfaces:**
-- Produces: source-contract coverage for domain composable files and the current API barrel entry.
+- Produces: source-contract coverage for domain composable files and direct page imports.
 
 - [x] **Step 1: Write failing source-contract test**
 
@@ -39,17 +39,19 @@ Expected: FAIL because `composables/useApiCore.ts` does not exist.
 - Create: `frontend/src/composables/useApiCore.ts`
 - Create: `frontend/src/composables/useSecurityDataApi.ts`
 - Create: `frontend/src/composables/useChatApi.ts`
-- Create: `frontend/src/composables/useControlPlaneApi.ts`
+- Create: `frontend/src/composables/useMemoryControlApi.ts`
+- Create: `frontend/src/composables/useApprovalsApi.ts`
+- Create: `frontend/src/composables/useSchedulerApi.ts`
 - Create: `frontend/src/composables/useSettingsApi.ts`
 - Create: `frontend/src/composables/useTraceApi.ts`
 - Create: `frontend/src/composables/useRuntimeToolsApi.ts`
 - Create: `frontend/src/composables/useKnowledgeApi.ts`
 - Create: `frontend/src/composables/useAgentEvalsApi.ts`
-- Modify: `frontend/src/composables/useApi.ts`
+- Delete: `frontend/src/composables/useApi.ts`
 
 **Interfaces:**
-- Consumes: existing hook signatures from `useApi.ts`.
-- Produces: same hook names exported from domain modules and re-exported by `useApi.ts`.
+- Consumes: existing hook signatures from the aggregate API file.
+- Produces: same hook names exported from domain modules and imported directly by pages.
 
 - [x] **Step 1: Move shared helpers**
 
@@ -59,9 +61,9 @@ Move `ApiFallbackKey`, `useApiMessage`, `messageFromUnknown`, `messageFromRespon
 
 Move each existing hook body into its domain file with only the imports it needs.
 
-- [x] **Step 3: Replace `useApi.ts`**
+- [x] **Step 3: Remove `useApi.ts`**
 
-Replace implementation with named re-exports for all existing hooks.
+Delete the aggregate API barrel and update pages to import the domain composable they use.
 
 - [x] **Step 4: Verify source contract passes**
 

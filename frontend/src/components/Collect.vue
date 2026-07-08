@@ -118,7 +118,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
-import { useUrl2MdApi } from '../composables/useApi'
+import { useUrl2MdApi } from '../composables/useSecurityDataApi'
 import { useSecurityDataStore } from '../stores/securityData'
 import { useShellStore } from '../stores/shell'
 import { copyToClipboard } from '../lib/clipboard'

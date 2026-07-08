@@ -295,7 +295,7 @@ import { computed, onMounted, reactive, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { ArrowDown, ArrowUp, Check, Connection, Delete, Loading, Plus, Rank } from "@element-plus/icons-vue"
 import { ElMessage, ElMessageBox } from "element-plus"
-import { useSettingsApi } from "../composables/useApi"
+import { useSettingsApi } from "../composables/useSettingsApi"
 import { useAuthStore } from "../stores/auth"
 import type { ModelConfig } from "../types"
 

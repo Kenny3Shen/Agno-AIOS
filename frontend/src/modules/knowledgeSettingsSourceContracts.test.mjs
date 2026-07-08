@@ -35,7 +35,6 @@ import {
   sourcePath,
   trace,
   typesSource,
-  useApi,
   useSecurityDataApiSource,
   useSettingsApiSource,
   userRole,
@@ -479,7 +478,7 @@ assert.doesNotMatch(
 )
 
 assert.doesNotMatch(
-  [useApi, useSecurityDataApiSource, useSettingsApiSource].join("\n"),
+  [useSecurityDataApiSource, useSettingsApiSource].join("\n"),
   /useAssetApi|\/asset\/search|AssetSearch/,
   "Asset search API client must be removed from the frontend",
 )

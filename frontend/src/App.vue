@@ -420,7 +420,8 @@ import {
   WarningFilled,
 } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
-import { useChatHistory, useSettingsApi } from "./composables/useApi"
+import { useChatHistory } from "./composables/useChatApi"
+import { useSettingsApi } from "./composables/useSettingsApi"
 import { setI18nLocale } from "./i18n"
 import { clearStoredAuthToken, fetchCurrentUser, getStoredAuthToken, logout as authLogout, type AuthClientFallbackKey } from "./lib/authClient"
 import { copyToClipboard } from "./lib/clipboard"

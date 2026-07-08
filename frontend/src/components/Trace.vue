@@ -467,7 +467,8 @@ import {
   Cpu,
   Refresh,
 } from "@element-plus/icons-vue"
-import { useChatHistory, useTracingApi } from "../composables/useApi"
+import { useChatHistory } from "../composables/useChatApi"
+import { useTracingApi } from "../composables/useTraceApi"
 import { copyToClipboard } from "../lib/clipboard"
 import {
   buildTraceRunRows,

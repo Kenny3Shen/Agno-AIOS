@@ -284,7 +284,7 @@ import {
   Search,
   VideoPlay,
 } from "@element-plus/icons-vue"
-import { useAgentEvalsApi } from "../composables/useApi"
+import { useAgentEvalsApi } from "../composables/useAgentEvalsApi"
 import { buildEvalSummaryCards, filterEvalCases, toolCallTone } from "../modules/agentEvalsWorkbench"
 import { useAuthStore } from "../stores/auth"
 import type {

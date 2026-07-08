@@ -4,13 +4,13 @@
 
 **Goal:** Split OS control into functional backend route/service modules and frontend composables without keeping the old aggregate compatibility layer.
 
-**Architecture:** Backend route modules own permission dependencies and call focused service modules. Shared payload formatting is isolated in a helper module. Frontend components import memory, approvals, scheduler, and generic control composables directly.
+**Architecture:** Backend route modules own permission dependencies and call focused service modules. Shared payload formatting is isolated in a helper module. Frontend components import memory, approvals, scheduler, and existing domain composables directly.
 
 **Tech Stack:** FastAPI, Agno AsyncPostgresDb, SQLAlchemy async, Vue 3 Composition API, TypeScript, Bun source-contract tests, pytest.
 
 ## Global Constraints
 
-- Do not preserve `api.services.os_control_service` or `useOsControlApi()` as compatibility aggregators.
+- Do not preserve the old backend service or frontend composable as compatibility aggregators.
 - Keep permission dependencies at route boundaries.
 - Keep memory mutation audit events and user scoping.
 - Keep scheduler calls on direct AgentOS `/schedules` APIs.
@@ -95,18 +95,18 @@ Remove `api/routes/os_control.py` and `api/services/os_control_service.py`.
 **Files:**
 - Modify: `frontend/src/modules/apiComposablesSourceContracts.test.mjs`
 - Modify: `frontend/src/modules/testSource.mjs`
-- Modify: frontend source-contract tests that reference `useControlPlaneApiSource`
+- Modify: frontend source-contract tests that reference removed aggregate API sources
 
 **Interfaces:**
 - Produces: source-contract expectations for direct functional composables.
 
 - [ ] **Step 1: Assert old aggregate is gone**
 
-Assert `useOsControlApi` is not exported by `useApi.ts` and does not appear in components.
+Assert the old aggregate frontend composable does not appear in API modules or components.
 
 - [ ] **Step 2: Assert new composables exist**
 
-Assert memory, approvals, scheduler, and control payload composables own their endpoints.
+Assert memory, approvals, scheduler, and existing domain composables own their endpoints.
 
 ### Task 4: Frontend Functional Split
 
@@ -114,14 +114,13 @@ Assert memory, approvals, scheduler, and control payload composables own their e
 - Create: `frontend/src/composables/useMemoryControlApi.ts`
 - Create: `frontend/src/composables/useApprovalsApi.ts`
 - Create: `frontend/src/composables/useSchedulerApi.ts`
-- Modify: `frontend/src/composables/useControlPlaneApi.ts`
-- Modify: `frontend/src/composables/useApi.ts`
+- Modify: frontend composable imports
 - Modify: `frontend/src/components/MemoryControl.vue`
-- Modify: `frontend/src/components/AgentOSControl.vue`
+- Modify: functional workbench components
 - Modify: `frontend/src/types/index.ts`
 
 **Interfaces:**
-- Produces: direct composable imports with no `useOsControlApi()`.
+- Produces: direct composable imports with no aggregate runtime API.
 
 - [ ] **Step 1: Move memory calls**
 
@@ -135,9 +134,9 @@ Move approval list/detail/resolve calls to `useApprovalsApi()`.
 
 Move direct AgentOS schedule calls to `useSchedulerApi()`.
 
-- [ ] **Step 4: Keep generic control payload calls**
+- [ ] **Step 4: Remove generic control payload calls**
 
-Keep `useControlPlaneApi()` for sessions, metrics, evaluation, and knowledge payload reads.
+Use existing focused composables for trace, evaluation, knowledge, and other page-specific payload reads.
 
 - [ ] **Step 5: Update component imports**
 

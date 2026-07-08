@@ -36,7 +36,6 @@ import {
   sourcePath,
   trace,
   typesSource,
-  useApi,
   useAgentEvalsApiSource,
   useApiCore,
   userRole,

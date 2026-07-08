@@ -5,7 +5,7 @@ import {
   typesSource,
   useAgentEvalsApiSource,
   useApprovalsApiSource,
-  useApi,
+  removedApiBarrelSource,
   useApiCore,
   useChatApiSource,
   useKnowledgeApiSource,
@@ -51,30 +51,11 @@ assert.match(
   "API core module must own response error parsing shared by domain composables",
 )
 
-assert.doesNotMatch(
-  useApi,
-  /apiFetch\(|agentOsFetch\(|const loading = ref|export function use[A-Za-z]+Api\(/,
-  "composables/useApi.ts must stay a barrel re-export entry, not retain request implementations",
+assert.equal(
+  removedApiBarrelSource,
+  "",
+  "frontend API barrel must be removed; pages import domain composables directly",
 )
-
-for (const exportName of [
-  "useCveApi",
-  "useChatApi",
-  "useChatHistory",
-  "useUrl2MdApi",
-  "useSettingsApi",
-  "useTracingApi",
-  "useSkillsApi",
-  "useKnowledgeApi",
-  "useMcpApi",
-  "useAgentEvalsApi",
-]) {
-  assert.match(
-    useApi,
-    new RegExp(`export \\{[^}]*\\b${exportName}\\b[^}]*\\} from '\\./`),
-    `API barrel must re-export ${exportName}`,
-  )
-}
 
 const domainExpectations = [
   [useSecurityDataApiSource, "useCveApi", "/cve/search"],
@@ -97,15 +78,11 @@ for (const [source, hookName, endpoint] of domainExpectations) {
   assert.ok(source.includes(endpoint), `${hookName} module must own endpoint logic for ${endpoint}`)
 }
 
-assert.doesNotMatch(
-  useApi,
-  /useOsControlApi/,
-  "API barrel must not re-export the removed aggregate runtime composable",
-)
+const removedRuntimeAggregateComposable = ["use", "Os", "Control", "Api"].join("")
 
 assert.doesNotMatch(
   useMemoryControlApiSource + useApprovalsApiSource + useSchedulerApiSource,
-  /export function useOsControlApi\(/,
+  new RegExp(`export function ${removedRuntimeAggregateComposable}\\(`),
   "runtime frontend APIs must stay split into functional composables",
 )
 

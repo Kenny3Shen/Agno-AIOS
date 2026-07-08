@@ -697,7 +697,7 @@ import {
   UploadFilled,
   View,
 } from "@element-plus/icons-vue"
-import { useKnowledgeApi } from "../composables/useApi"
+import { useKnowledgeApi } from "../composables/useKnowledgeApi"
 import { useAuthStore } from "../stores/auth"
 import type { KnowledgeDocument, KnowledgeRagSettings, KnowledgeSearchResult, KnowledgeStatus, ResourceVisibility } from "../types"
 import ResourceVisibilityTabs from "./common/ResourceVisibilityTabs.vue"

@@ -32,7 +32,6 @@ import {
   sourcePath,
   trace,
   typesSource,
-  useApi,
   useApiCore,
   useChatApiSource,
   useMemoryControlApiSource,
@@ -336,7 +335,7 @@ assert.match(
 )
 
 assert.equal(
-  /\p{Script=Han}/u.test([useApi, useApiCore, useChatApiSource, useMemoryControlApiSource, useTraceApiSource].join("\n")),
+  /\p{Script=Han}/u.test([useApiCore, useChatApiSource, useMemoryControlApiSource, useTraceApiSource].join("\n")),
   false,
   "API composables must not hardcode localized Chinese fallback copy",
 )
