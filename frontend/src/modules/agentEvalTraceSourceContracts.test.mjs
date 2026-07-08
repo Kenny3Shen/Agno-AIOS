@@ -35,6 +35,7 @@ import {
   skills,
   sourcePath,
   trace,
+  traceRunsPanel,
   traceSessionPanel,
   traceStyle,
   useTraceDetailViewportSource,
@@ -421,7 +422,7 @@ assert.match(
 )
 
 assert.match(
-  trace,
+  traceRunsPanel,
   /trace-waterfall-row/,
   "Trace waterfall rows must use the refactored layout-safe row class",
 )

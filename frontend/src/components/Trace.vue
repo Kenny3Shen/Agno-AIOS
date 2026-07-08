@@ -25,61 +25,14 @@
         />
 
         <main class="trace-canvas">
-          <section class="trace-runs-workbench">
-            <div class="trace-runs-toolbar trace-toolbar">
-              <div class="trace-panel-header">
-                <div>
-                  <p>{{ t('trace.runs.title') }}</p>
-                  <span v-if="selectedSession">{{ compactId(selectedSession.session_id) }}</span>
-                </div>
-                <strong>{{ filteredRunRows.length }}</strong>
-              </div>
-            </div>
-
-          <div v-if="!selectedSession" class="trace-empty-stage">
-            <div class="empty-observe">
-              <el-icon><Aim /></el-icon>
-              <strong>{{ t('trace.empty.selectSessionTitle') }}</strong>
-            </div>
-          </div>
-
-          <div v-else-if="!filteredRunRows.length && !loading" class="trace-empty-stage">
-            <div class="empty-observe">
-              <el-icon><Connection /></el-icon>
-              <strong>{{ t('trace.empty.noSessionTracesTitle') }}</strong>
-              <span>{{ t('trace.empty.noSessionTracesDescription') }}</span>
-            </div>
-          </div>
-
-          <div v-else class="trace-runs-list">
-            <button
-              v-for="row in filteredRunRows"
-              :key="row.key"
-              type="button"
-              class="trace-waterfall-row trace-run-row"
-              :class="{ active: selectedTrace?.trace_id === row.trace.trace_id, error: row.trace.status === 'ERROR' }"
-              @click="openTraceDetail(row.trace.trace_id)"
-            >
-              <span class="trace-span-name">
-                <div>
-                  <span class="trace-status-dot" :class="statusClass(row.trace.status)" />
-                  <strong :title="row.title">{{ row.title }}</strong>
-                </div>
-                <span :title="row.runId">{{ compactId(row.runId) }}</span>
-              </span>
-              <span class="trace-run-meta">
-                <el-tag :type="tagType(row.trace.status)" effect="light" size="small">{{ statusLabel(row.trace.status) }}</el-tag>
-                <span :title="row.ownerId">{{ compactId(row.ownerId) }}</span>
-              </span>
-              <span class="span-duration" :class="durationClass(row.trace.duration_ms)">
-                <strong>{{ formatDuration(row.trace.duration_ms) }}</strong>
-                <small>{{ formatDateTime(row.trace.created_at || row.trace.start_time) }}</small>
-              </span>
-            </button>
-          </div>
-
-          <el-alert v-if="apiError" class="trace-alert" type="error" :title="apiError" show-icon />
-        </section>
+          <TraceRunsPanel
+            :filtered-run-rows="filteredRunRows"
+            :selected-session="selectedSession"
+            :selected-trace="selectedTrace"
+            :loading="loading"
+            :api-error="apiError"
+            @open-trace-detail="openTraceDetail"
+          />
 
           <aside
             v-if="selectedTrace"
@@ -375,6 +328,7 @@ import {
   Cpu,
 } from "@element-plus/icons-vue"
 import TraceQueryToolbar from "./trace/TraceQueryToolbar.vue"
+import TraceRunsPanel from "./trace/TraceRunsPanel.vue"
 import TraceSessionPanel from "./trace/TraceSessionPanel.vue"
 import { useChatHistory } from "../composables/useChatApi"
 import { useTracingApi } from "../composables/useTraceApi"
@@ -390,11 +344,9 @@ import { useTraceSessionController } from "../composables/useTraceSessionControl
 import { useTraceSessionList } from "../composables/useTraceSessionList"
 import { useTraceSpanSelection } from "../composables/useTraceSpanSelection"
 import {
-  compactTraceId,
   createTraceRunFilters,
   createTraceSessionFilters,
   formatTraceAnyDateTime,
-  formatTraceDateTime,
   formatTraceDuration,
   traceDurationClass,
   traceStatusClass,
@@ -438,7 +390,6 @@ const apiError = computed(() => error.value)
 
 type PayloadViewMode = TracePayloadViewMode
 const SESSION_PAGE_SIZE = 10
-const compactId = compactTraceId
 const durationClass = traceDurationClass
 const formatDuration = formatTraceDuration
 const statusClass = traceStatusClass
@@ -457,7 +408,6 @@ const {
   sessionPageSize: SESSION_PAGE_SIZE,
 })
 
-const formatDateTime = formatTraceDateTime
 const formatAnyDateTime = formatTraceAnyDateTime
 
 const {

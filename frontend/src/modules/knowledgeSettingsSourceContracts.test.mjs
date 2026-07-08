@@ -35,6 +35,7 @@ import {
   sourcePath,
   trace,
   traceQueryToolbar,
+  traceRunsPanel,
   traceSessionPanel,
   traceStyle,
   useTracePayloadControlsSource,
@@ -359,8 +360,8 @@ assert.equal(
 )
 
 assert.match(
-  trace,
-  /trace-toolbar/,
+  traceQueryToolbar,
+  /trace-query-toolbar/,
   "Trace page must expose a compact filter toolbar instead of a hero header",
 )
 
@@ -428,6 +429,36 @@ assert.doesNotMatch(
   trace,
   /trace-session-list|trace-session-card|trace-session-pagination|trace-session-empty/,
   "Trace page must not inline session panel internals",
+)
+
+assert.match(
+  trace,
+  /<TraceRunsPanel[\s\S]*:filtered-run-rows="filteredRunRows"[\s\S]*:selected-session="selectedSession"[\s\S]*:api-error="apiError"[\s\S]*@open-trace-detail="openTraceDetail"/,
+  "Trace page must delegate the runs column to TraceRunsPanel",
+)
+
+assert.match(
+  traceRunsPanel,
+  /trace-runs-workbench[\s\S]*trace-runs-toolbar[\s\S]*trace-runs-list[\s\S]*trace-run-row[\s\S]*trace-alert/,
+  "TraceRunsPanel must own the runs panel structure",
+)
+
+assert.match(
+  traceRunsPanel,
+  /useI18n\(\)/,
+  "TraceRunsPanel must read runs panel copy from vue-i18n",
+)
+
+assert.match(
+  traceRunsPanel,
+  /trace\.runs\.title[\s\S]*trace\.empty\.selectSessionTitle[\s\S]*trace\.empty\.noSessionTracesDescription/,
+  "TraceRunsPanel must own runs panel copy",
+)
+
+assert.doesNotMatch(
+  trace,
+  /trace-runs-toolbar|trace-runs-list|trace-run-row|trace\.runs\.title/,
+  "Trace page must not inline runs panel internals",
 )
 
 assert.match(
