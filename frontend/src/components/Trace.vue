@@ -467,6 +467,7 @@ import {
 } from "@element-plus/icons-vue"
 import { useChatHistory } from "../composables/useChatApi"
 import { useTracingApi } from "../composables/useTraceApi"
+import { useTraceDetailViewport } from "../composables/useTraceDetailViewport"
 import { useTraceExternalSelectionEvents } from "../composables/useTraceExternalSelectionEvents"
 import { useTraceFilterRefreshScheduler } from "../composables/useTraceFilterRefreshScheduler"
 import { useTraceFilterWatches } from "../composables/useTraceFilterWatches"
@@ -622,12 +623,7 @@ const {
   onSpanNodeClick,
 } = useTraceSpanSelection({ selectedSpan })
 
-const scrollDetailIntoView = () => {
-  if (!window.matchMedia("(max-width: 980px)").matches) return
-  requestAnimationFrame(() => {
-    document.querySelector<HTMLElement>(".trace-detail-panel")?.scrollIntoView({ block: "start", behavior: "smooth" })
-  })
-}
+const { scrollDetailIntoView } = useTraceDetailViewport()
 
 let refreshTraceView = async () => {}
 let refreshTraceRuns = async () => {}

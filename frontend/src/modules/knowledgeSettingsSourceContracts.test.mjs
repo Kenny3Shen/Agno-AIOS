@@ -41,6 +41,7 @@ import {
   useTraceFilterWatchesSource,
   useTraceExternalSelectionEventsSource,
   useTraceLifecycleSource,
+  useTraceDetailViewportSource,
   traceWorkbenchSource,
   typesSource,
   useSecurityDataApiSource,
@@ -510,6 +511,30 @@ for (const inlineLifecycleApi of ["onMounted", "onUnmounted", "ElMessage"]) {
     `Trace page must not own lifecycle dependency: ${inlineLifecycleApi}`,
   )
 }
+
+assert.match(
+  trace,
+  /useTraceDetailViewport[\s\S]*scrollDetailIntoView/,
+  "Trace page must delegate detail viewport scrolling",
+)
+
+assert.match(
+  useTraceDetailViewportSource,
+  /matchMedia[\s\S]*querySelector[\s\S]*scrollDetailIntoView/,
+  "Trace detail viewport composable must own responsive detail panel scrolling",
+)
+
+assert.doesNotMatch(
+  trace,
+  /const scrollDetailIntoView\s*=/,
+  "Trace page must not inline detail viewport scrolling",
+)
+
+assert.doesNotMatch(
+  trace,
+  /window\.matchMedia|document\.querySelector/,
+  "Trace page must not own detail panel DOM queries",
+)
 
 assert.match(
   traceWorkbenchSource,

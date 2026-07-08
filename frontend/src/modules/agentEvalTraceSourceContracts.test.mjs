@@ -35,6 +35,7 @@ import {
   skills,
   sourcePath,
   trace,
+  useTraceDetailViewportSource,
   typesSource,
   useAgentEvalsApiSource,
   useApiCore,
@@ -465,9 +466,9 @@ for (const removedTraceDrawerBehavior of [
 }
 
 assert.match(
-  trace,
+  useTraceDetailViewportSource,
   /scrollIntoView\(\{ block: "start", behavior: "smooth" \}\)/,
-  "Trace mobile selection must scroll the fixed detail panel into view",
+  "Trace detail viewport composable must scroll the fixed detail panel into view",
 )
 
 assert.match(
