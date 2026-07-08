@@ -813,37 +813,12 @@
   content: "";
 }
 
-.trace-tree-node {
-  display: grid;
-  width: 100%;
-  grid-template-columns: 12px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 7px;
-}
-
 .trace-tree-node .trace-status-dot {
   margin-top: 0;
 }
 
-.trace-tree-node small {
-  color: var(--trace-muted);
-  font-size: 10px;
-}
-
-.trace-hierarchy-fallback {
-  display: grid;
-  gap: 8px;
-}
-
 .trace-hierarchy-node {
-  grid-template-columns: 12px minmax(0, 1fr);
   margin-bottom: 8px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  padding: 9px;
-  text-align: left;
-  transition: border-color 0.2s ease, background 0.2s ease;
 }
 
 .trace-hierarchy-node:hover,
@@ -854,29 +829,6 @@
 
 .trace-hierarchy-node.error {
   border-color: rgba(240, 93, 94, 0.3);
-}
-
-.trace-hierarchy-node-copy {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.trace-hierarchy-node-copy strong {
-  display: block;
-  overflow: hidden;
-  color: var(--trace-text);
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.trace-hierarchy-node-copy small {
-  color: var(--trace-muted);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 10px;
 }
 
 .trace-diagnostics {

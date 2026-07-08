@@ -486,6 +486,18 @@ assert.match(
   "TraceSpanHierarchy must own no-spans copy",
 )
 
+assert.match(
+  traceSpanHierarchy,
+  /grid-cols-\[12px_minmax\(0,1fr\)\][\s\S]*gap-\[3px\][\s\S]*text-\[var\(--trace-muted\)\]/,
+  "TraceSpanHierarchy must move simple hierarchy layout to UnoCSS utilities",
+)
+
+assert.doesNotMatch(
+  traceStyle,
+  /\.trace-hierarchy-fallback\s*\{[\s\S]*display:\s*grid|\.trace-hierarchy-node-copy\s*\{[\s\S]*display:\s*grid/,
+  "Trace stylesheet must not keep simple hierarchy grid layout after UnoCSS utility migration",
+)
+
 assert.doesNotMatch(
   trace,
   /trace-span-hierarchy|trace-hierarchy-tree|trace-hierarchy-fallback|trace\.empty\.noSpansTitle/,
