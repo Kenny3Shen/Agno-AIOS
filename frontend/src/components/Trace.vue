@@ -478,6 +478,7 @@ import {
   buildTraceRunRows,
   buildTraceStoreFilters,
   buildTraceToolCallItems,
+  clampTraceSessionPage,
   compactTraceId,
   ensureTraceSession,
   filterTraceRunRows,
@@ -485,9 +486,13 @@ import {
   findFirstTraceSpan,
   findTraceRunRow,
   findTraceSession,
+  formatTraceAnyDateTime,
+  formatTraceDateTime,
   formatTraceDuration,
+  formatTraceSessionTime,
   mergePreferredTraceItem,
   normalizeTraceSessionOpenRequest,
+  pageTraceSessions,
   resolveTraceSessionSelection,
   summarizeTraceItems,
   traceDurationClass,
@@ -565,8 +570,7 @@ const tagType = traceTagType
 
 const filteredSessions = computed(() => filterTraceSessions(sessions.value, sessionFilters))
 const pagedSessions = computed(() => {
-  const start = (sessionPage.value - 1) * SESSION_PAGE_SIZE
-  return filteredSessions.value.slice(start, start + SESSION_PAGE_SIZE)
+  return pageTraceSessions(filteredSessions.value, sessionPage.value, SESSION_PAGE_SIZE)
 })
 
 const selectedSession = computed(() => findTraceSession(sessions.value, selectedSessionId.value))
@@ -639,41 +643,9 @@ const renderMarkdown = (value: string) => {
   return markdownRenderer.render(value || "")
 }
 
-const formatDateTime = (value?: string | null) => {
-  if (!value) return "-"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-}
-
-const formatAnyDateTime = (value?: unknown) => {
-  if (value === null || value === undefined || value === "") return "-"
-  if (typeof value === "number") {
-    const timestamp = value > 1_000_000_000_000 ? value : value * 1000
-    return new Date(timestamp).toLocaleString("zh-CN", {
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  }
-  return formatDateTime(String(value))
-}
-
-const formatSessionTime = (timestamp?: number | null) => {
-  if (!timestamp) return "-"
-  return new Date(timestamp * 1000).toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-}
+const formatDateTime = formatTraceDateTime
+const formatAnyDateTime = formatTraceAnyDateTime
+const formatSessionTime = formatTraceSessionTime
 
 
 const renderPayloadMarkupForMode = (payload: ParsedSpanPayload, mode: PayloadViewMode, fallback: string) => {
@@ -919,8 +891,7 @@ const copyMetadataValue = async (value: string) => {
 watch(
   () => filteredSessions.value.length,
   (count) => {
-    const maxPage = Math.max(1, Math.ceil(count / SESSION_PAGE_SIZE))
-    if (sessionPage.value > maxPage) sessionPage.value = maxPage
+    sessionPage.value = clampTraceSessionPage(sessionPage.value, count, SESSION_PAGE_SIZE)
   },
 )
 

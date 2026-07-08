@@ -167,6 +167,13 @@ const emptyParsedSpan: ParsedSpanDisplay = {
 
 const normalize = (value?: string | null) => (value || "").trim().toLowerCase()
 
+const traceDateTimeOptions = {
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+} as const
+
 const sessionMatchesKeyword = (session: ChatSession, keyword: string) => {
   if (!keyword) return true
   const haystack = [
@@ -202,6 +209,24 @@ export const filterTraceSessions = (
     if (userId && !normalize(session.user_id).includes(userId)) return false
     return sessionMatchesKeyword(session, keyword)
   })
+}
+
+export const pageTraceSessions = (
+  sessions: ChatSession[],
+  page: number,
+  pageSize: number,
+) => {
+  const start = (page - 1) * pageSize
+  return sessions.slice(start, start + pageSize)
+}
+
+export const clampTraceSessionPage = (
+  page: number,
+  visibleSessionCount: number,
+  pageSize: number,
+) => {
+  const maxPage = Math.max(1, Math.ceil(visibleSessionCount / pageSize))
+  return page > maxPage ? maxPage : page
 }
 
 export const findTraceSession = (
@@ -522,6 +547,27 @@ export const formatTraceCost = (value: unknown) => {
   if (!Number.isFinite(n) || n <= 0) return "-"
   if (n < 0.01) return `$${n.toFixed(5)}`
   return `$${n.toFixed(2)}`
+}
+
+export const formatTraceDateTime = (value?: string | null) => {
+  if (!value) return "-"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString("zh-CN", traceDateTimeOptions)
+}
+
+export const formatTraceAnyDateTime = (value?: unknown) => {
+  if (value === null || value === undefined || value === "") return "-"
+  if (typeof value === "number") {
+    const timestamp = value > 1_000_000_000_000 ? value : value * 1000
+    return new Date(timestamp).toLocaleString("zh-CN", traceDateTimeOptions)
+  }
+  return formatTraceDateTime(String(value))
+}
+
+export const formatTraceSessionTime = (timestamp?: number | null) => {
+  if (!timestamp) return "-"
+  return new Date(timestamp * 1000).toLocaleString("zh-CN", traceDateTimeOptions)
 }
 
 export const formatTracePayloadText = (payload: ParsedSpanPayload, fallback: string) => {

@@ -8,10 +8,14 @@ import {
   buildTraceRunRows,
   buildTraceSummaryCards,
   buildTraceToolCallItems,
+  clampTraceSessionPage,
   compactTraceId,
+  formatTraceAnyDateTime,
   formatTraceCost,
+  formatTraceDateTime,
   formatTraceDuration,
   formatTracePayloadText,
+  formatTraceSessionTime,
   filterTraceRunRows,
   filterTraceSessions,
   ensureTraceSession,
@@ -22,6 +26,7 @@ import {
   isTraceToolSpan,
   mergePreferredTraceItem,
   normalizeTraceSessionOpenRequest,
+  pageTraceSessions,
   resolveTraceSessionSelection,
   traceRunMetrics,
   traceDurationClass,
@@ -114,6 +119,24 @@ assert.deepEqual(
   }),
   [],
   "session filters should ignore non-array responses instead of crashing the view",
+)
+
+assert.deepEqual(
+  pageTraceSessions(sessions, 2, 1).map((session) => session.session_id),
+  ["session-archived"],
+  "session pagination should keep slicing logic outside the Vue component",
+)
+
+assert.equal(
+  clampTraceSessionPage(3, 12, 5),
+  3,
+  "session pagination should keep the current page when it remains in range",
+)
+
+assert.equal(
+  clampTraceSessionPage(9, 12, 5),
+  3,
+  "session pagination should clamp pages that exceed the visible session count",
 )
 
 assert.equal(
@@ -417,6 +440,35 @@ assert.deepEqual(
     "{\n  \"ok\": true\n}",
   ],
   "general presentation helpers should stay pure and stable",
+)
+
+const zhDateTimeOptions = {
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+}
+
+assert.deepEqual(
+  [
+    formatTraceDateTime(null),
+    formatTraceDateTime("not-a-date"),
+    formatTraceDateTime("2026-01-01T00:00:00Z"),
+    formatTraceAnyDateTime(1_767_225_600),
+    formatTraceAnyDateTime(1_767_225_600_000),
+    formatTraceAnyDateTime(""),
+    formatTraceSessionTime(1_767_225_600),
+  ],
+  [
+    "-",
+    "not-a-date",
+    new Date("2026-01-01T00:00:00Z").toLocaleString("zh-CN", zhDateTimeOptions),
+    new Date(1_767_225_600_000).toLocaleString("zh-CN", zhDateTimeOptions),
+    new Date(1_767_225_600_000).toLocaleString("zh-CN", zhDateTimeOptions),
+    "-",
+    new Date(1_767_225_600_000).toLocaleString("zh-CN", zhDateTimeOptions),
+  ],
+  "trace date helpers should preserve existing zh-CN minute-level display behavior",
 )
 
 const jsonPayload = { format: "text", text: "{\"a\":1}", data: null }
