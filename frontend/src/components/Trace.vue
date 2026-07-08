@@ -476,18 +476,16 @@ import { useTraceLifecycle } from "../composables/useTraceLifecycle"
 import { useTracePayloadControls } from "../composables/useTracePayloadControls"
 import { useTracePayloadRenderer } from "../composables/useTracePayloadRenderer"
 import { useTraceSessionController } from "../composables/useTraceSessionController"
+import { useTraceSessionList } from "../composables/useTraceSessionList"
 import { useTraceSpanSelection } from "../composables/useTraceSpanSelection"
 import {
   compactTraceId,
   createTraceRunFilters,
   createTraceSessionFilters,
-  filterTraceSessions,
-  findTraceSession,
   formatTraceAnyDateTime,
   formatTraceDateTime,
   formatTraceDuration,
   formatTraceSessionTime,
-  pageTraceSessions,
   traceDurationClass,
   traceStatusClass,
   traceStatusLabel,
@@ -537,12 +535,17 @@ const statusClass = traceStatusClass
 const statusLabel = traceStatusLabel
 const tagType = traceTagType
 
-const filteredSessions = computed(() => filterTraceSessions(sessions.value, sessionFilters))
-const pagedSessions = computed(() => {
-  return pageTraceSessions(filteredSessions.value, sessionPage.value, SESSION_PAGE_SIZE)
+const {
+  filteredSessions,
+  pagedSessions,
+  selectedSession,
+} = useTraceSessionList({
+  sessions,
+  sessionFilters,
+  selectedSessionId,
+  sessionPage,
+  sessionPageSize: SESSION_PAGE_SIZE,
 })
-
-const selectedSession = computed(() => findTraceSession(sessions.value, selectedSessionId.value))
 
 const formatDateTime = formatTraceDateTime
 const formatAnyDateTime = formatTraceAnyDateTime

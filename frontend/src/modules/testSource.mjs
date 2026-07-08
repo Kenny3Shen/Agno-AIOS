@@ -61,6 +61,7 @@ export const useTraceLifecycleSource = readOptionalSource("composables/useTraceL
 export const useTraceDetailViewportSource = readOptionalSource("composables/useTraceDetailViewport.ts")
 export const useTraceSessionControllerSource = readOptionalSource("composables/useTraceSessionController.ts")
 export const useTraceDerivedPanelsSource = readOptionalSource("composables/useTraceDerivedPanels.ts")
+export const useTraceSessionListSource = readOptionalSource("composables/useTraceSessionList.ts")
 export const useAgentEvalsApiSource = readOptionalSource("composables/useAgentEvalsApi.ts")
 export const apiClient = readOptionalSource("lib/apiClient.ts")
 export const viteConfig = readSource("../vite.config.ts")

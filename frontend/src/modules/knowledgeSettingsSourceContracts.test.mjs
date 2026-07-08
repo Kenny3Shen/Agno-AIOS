@@ -43,6 +43,7 @@ import {
   useTraceLifecycleSource,
   useTraceDetailViewportSource,
   useTraceDerivedPanelsSource,
+  useTraceSessionListSource,
   traceWorkbenchSource,
   typesSource,
   useSecurityDataApiSource,
@@ -576,6 +577,41 @@ for (const inlineDerivedPanelFlow of [
     trace,
     new RegExp(`const ${inlineDerivedPanelFlow}\\s*=\\s*computed`),
     `Trace page must not inline derived panel state: ${inlineDerivedPanelFlow}`,
+  )
+}
+
+assert.match(
+  trace,
+  /useTraceSessionList[\s\S]*filteredSessions[\s\S]*pagedSessions[\s\S]*selectedSession/,
+  "Trace page must delegate derived session list state to a composable",
+)
+
+for (const sessionListFlow of [
+  "filterTraceSessions",
+  "pageTraceSessions",
+  "findTraceSession",
+]) {
+  assert.match(
+    useTraceSessionListSource,
+    new RegExp(sessionListFlow),
+    `Trace session list composable must own ${sessionListFlow}`,
+  )
+  assert.doesNotMatch(
+    trace,
+    new RegExp(sessionListFlow),
+    `Trace page must not own session list helper: ${sessionListFlow}`,
+  )
+}
+
+for (const inlineSessionListFlow of [
+  "filteredSessions",
+  "pagedSessions",
+  "selectedSession",
+]) {
+  assert.doesNotMatch(
+    trace,
+    new RegExp(`const ${inlineSessionListFlow}\\s*=\\s*computed`),
+    `Trace page must not inline session list state: ${inlineSessionListFlow}`,
   )
 }
 
