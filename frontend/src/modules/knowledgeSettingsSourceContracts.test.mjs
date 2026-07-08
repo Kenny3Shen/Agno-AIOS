@@ -36,6 +36,7 @@ import {
   trace,
   useTracePayloadControlsSource,
   useTracePayloadRendererSource,
+  useTraceSpanSelectionSource,
   traceWorkbenchSource,
   typesSource,
   useSecurityDataApiSource,
@@ -375,8 +376,28 @@ assert.doesNotMatch(
 
 assert.match(
   trace,
-  /activeDetailTab/,
-  "Trace span detail must expose Info, Metadata, and Overview tab state",
+  /useTraceSpanSelection[\s\S]*activeDetailTab[\s\S]*selectSpan[\s\S]*onSpanNodeClick/,
+  "Trace span detail must use the span selection composable",
+)
+
+assert.match(
+  useTraceSpanSelectionSource,
+  /traceDetailTabForSection[\s\S]*const selectSpan\s*=/,
+  "Trace span selection composable must own detail-tab mapping",
+)
+
+for (const inlineSpanSelectionFlow of ["scrollDetailSectionIntoView", "selectSpan", "onSpanNodeClick"]) {
+  assert.doesNotMatch(
+    trace,
+    new RegExp(`const ${inlineSpanSelectionFlow}\\s*=`),
+    `Trace page must not inline span selection flow: ${inlineSpanSelectionFlow}`,
+  )
+}
+
+assert.doesNotMatch(
+  trace,
+  /nextTick/,
+  "Trace page must not own span detail scroll scheduling",
 )
 
 assert.match(

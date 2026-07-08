@@ -456,7 +456,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue"
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue"
 import { ElMessage } from "element-plus"
 import { useI18n } from "vue-i18n"
 import {
@@ -471,6 +471,7 @@ import { useTracingApi } from "../composables/useTraceApi"
 import { useTracePayloadControls } from "../composables/useTracePayloadControls"
 import { useTracePayloadRenderer } from "../composables/useTracePayloadRenderer"
 import { useTraceSessionController } from "../composables/useTraceSessionController"
+import { useTraceSpanSelection } from "../composables/useTraceSpanSelection"
 import {
   buildTraceLogItems,
   buildTraceMetadataItems,
@@ -492,12 +493,10 @@ import {
   formatTraceSessionTime,
   pageTraceSessions,
   traceDurationClass,
-  traceDetailTabForSection,
   traceRunMetrics,
   traceStatusClass,
   traceStatusLabel,
   traceTagType,
-  type TraceDetailTab,
   type TracePayloadViewMode,
   type TraceSummaryState,
 } from "../modules/traceWorkbench"
@@ -526,7 +525,6 @@ const selectedTrace = ref<TraceItem | null>(null)
 const spans = ref<SpanItem[]>([])
 const tree = ref<SpanTreeNode[]>([])
 const selectedSpan = ref<SpanItem | null>(null)
-const activeDetailTab = ref<TraceDetailTab>("info")
 const traceAdvancedFiltersOpen = ref(false)
 const sessionPage = ref(1)
 const inputViewMode = ref<PayloadViewMode>("text")
@@ -617,6 +615,12 @@ const {
   renderPayloadMarkupForMode,
 } = useTracePayloadRenderer()
 
+const {
+  activeDetailTab,
+  selectSpan,
+  onSpanNodeClick,
+} = useTraceSpanSelection({ selectedSpan })
+
 const scrollDetailIntoView = () => {
   if (!window.matchMedia("(max-width: 980px)").matches) return
   requestAnimationFrame(() => {
@@ -660,22 +664,6 @@ const {
   clearPendingFilterRefresh,
   scrollDetailIntoView,
 })
-
-const scrollDetailSectionIntoView = async (section: "overview" | "input" | "output" | "tools" | "logs" | "metadata") => {
-  await nextTick()
-  const target = document.getElementById(`trace-detail-${section}`)
-  target?.scrollIntoView({ block: "start", behavior: "smooth" })
-}
-
-const selectSpan = (span: SpanItem, section: "overview" | "input" | "output" | "tools" | "logs" | "metadata" = "input") => {
-  selectedSpan.value = span
-  activeDetailTab.value = traceDetailTabForSection(section)
-  void scrollDetailSectionIntoView(section)
-}
-
-const onSpanNodeClick = (node: SpanTreeNode) => {
-  selectSpan(node.span)
-}
 
 const scheduleSessionFilterRefresh = () => {
   if (filterRefreshTimer !== null) {
