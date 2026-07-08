@@ -1,7 +1,8 @@
-import type { ChatSession, ChatSessionRun, TraceItem } from "../types"
+import type { ChatSession, ChatSessionRun, ParsedSpanPayload, SpanItem, TraceItem } from "../types"
 
 export type SessionStatusFilter = "active" | "archived" | "all"
 export type RunStatusFilter = "" | "OK" | "ERROR" | "UNSET"
+export type TracePayloadViewMode = "text" | "json" | "markdown"
 
 export interface TraceSessionFilters {
   sessionId: string
@@ -218,3 +219,125 @@ export const buildTraceSummaryCards = ({
     tone: latencyTone(summary.avgLatencyMs),
   },
 ]
+
+export const traceValueOrDash = (value: unknown) => {
+  if (value === null || value === undefined || value === "") return "-"
+  return String(value)
+}
+
+export const compactTraceId = (value?: string | null) => {
+  const text = (value || "").trim()
+  if (!text) return "-"
+  if (text.length <= 18) return text
+  return `${text.slice(0, 8)}...${text.slice(-4)}`
+}
+
+export const traceTagType = (status: string) => {
+  if (status === "OK") return "success"
+  if (status === "ERROR") return "danger"
+  if (status === "UNSET") return "info"
+  return "warning"
+}
+
+export const traceStatusClass = (status: string) => {
+  if (status === "OK") return "ok"
+  if (status === "ERROR") return "error"
+  if (status === "UNSET") return "unset"
+  return "other"
+}
+
+export const traceStatusLabel = (status: string) => {
+  if (status === "OK") return "Success"
+  if (status === "ERROR") return "Error"
+  if (status === "UNSET") return "Running"
+  if (!status) return "-"
+  return status
+}
+
+export const traceDurationClass = (durationMs: number | string | null | undefined) => {
+  const n = Number(durationMs)
+  if (!Number.isFinite(n) || n < 0) return "duration-muted"
+  if (n < 500) return "duration-fast"
+  if (n < 2000) return "duration-medium"
+  if (n < 10000) return "duration-slow"
+  return "duration-critical"
+}
+
+export const formatTraceDuration = (durationMs: number | string | null | undefined): string => {
+  const n = Number(durationMs)
+  if (!Number.isFinite(n) || n < 0) return "-"
+
+  if (n < 1000) {
+    if (n < 10) return `${n.toFixed(2)} ms`
+    if (n < 100) return `${n.toFixed(1)} ms`
+    return `${Math.round(n)} ms`
+  }
+
+  const sec = n / 1000
+  if (sec < 60) {
+    return sec < 10 ? `${sec.toFixed(2)} s` : `${sec.toFixed(1)} s`
+  }
+
+  const min = Math.floor(sec / 60)
+  const remSec = sec % 60
+  if (min < 60) return `${min}m ${remSec.toFixed(1)}s`
+
+  const hour = Math.floor(min / 60)
+  const remMin = min % 60
+  return `${hour}h ${remMin}m ${Math.round(remSec)}s`
+}
+
+export const prettyTraceJson = (obj: unknown) => {
+  try {
+    if (!obj) return "{}"
+    return JSON.stringify(obj, null, 2)
+  } catch {
+    return String(obj)
+  }
+}
+
+export const formatTraceCost = (value: unknown) => {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n <= 0) return "-"
+  if (n < 0.01) return `$${n.toFixed(5)}`
+  return `$${n.toFixed(2)}`
+}
+
+export const formatTracePayloadText = (payload: ParsedSpanPayload, fallback: string) => {
+  if (!payload.text) return fallback
+  if (payload.data !== null && payload.data !== undefined) return prettyTraceJson(payload.data)
+  try {
+    return JSON.stringify(JSON.parse(payload.text), null, 2)
+  } catch {
+    return payload.text
+  }
+}
+
+export const isTraceJsonPayload = (payload: ParsedSpanPayload) => {
+  if (payload.format === "json" || payload.data !== null && payload.data !== undefined) return true
+  const text = payload.text?.trim()
+  if (!text || !["{", "["].includes(text[0])) return false
+  try {
+    JSON.parse(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export const isTraceToolSpan = (span: SpanItem) => {
+  const metadata = span.parsed?.metadata
+  const haystack = [span.kind, span.name, metadata?.tool, metadata?.operation]
+    .map((value) => String(value || "").toLowerCase())
+    .join(" ")
+  return Boolean(metadata?.tool) || haystack.includes("tool") || haystack.includes("function")
+}
+
+export const tracePayloadTextForMode = (
+  payload: ParsedSpanPayload,
+  mode: TracePayloadViewMode,
+  fallback: string,
+) => {
+  if (mode === "json") return isTraceJsonPayload(payload) ? formatTracePayloadText(payload, fallback) : payload.text || fallback
+  return payload.text || fallback
+}

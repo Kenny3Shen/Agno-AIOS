@@ -34,6 +34,7 @@ import {
   skills,
   sourcePath,
   trace,
+  traceWorkbenchSource,
   typesSource,
   useSecurityDataApiSource,
   useSettingsApiSource,
@@ -363,9 +364,15 @@ assert.match(
 )
 
 assert.match(
+  traceWorkbenchSource,
+  /isTraceJsonPayload/,
+  "Trace JSON payload detection must live in the trace workbench module",
+)
+
+assert.match(
   trace,
-  /isJsonPayload/,
-  "Trace input and output sections must render JSON payloads as formatted code blocks",
+  /trace-json-payload[\s\S]*payloadTextForMode/,
+  "Trace input and output sections must render JSON payloads through the trace workbench formatter",
 )
 
 assert.match(

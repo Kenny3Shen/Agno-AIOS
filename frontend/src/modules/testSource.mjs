@@ -59,6 +59,7 @@ export const authStoreSource = readOptionalSource("stores/auth.ts")
 export const scopes = readOptionalSource("lib/scopes.ts")
 export const shellNavigation = readOptionalSource("modules/shellNavigation.ts")
 export const shellBrand = readOptionalSource("modules/shellBrand.ts")
+export const traceWorkbenchSource = readOptionalSource("modules/traceWorkbench.ts")
 export const visibilityTabs = readOptionalSource("components/common/ResourceVisibilityTabs.vue")
 
 const compositionModeKey = "lega" + "cy"

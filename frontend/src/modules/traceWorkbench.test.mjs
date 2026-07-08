@@ -2,9 +2,22 @@ import assert from "node:assert/strict"
 import {
   buildTraceRunRows,
   buildTraceSummaryCards,
+  compactTraceId,
+  formatTraceCost,
+  formatTraceDuration,
+  formatTracePayloadText,
   filterTraceRunRows,
   filterTraceSessions,
   findExactTraceSession,
+  isTraceJsonPayload,
+  isTraceToolSpan,
+  traceDurationClass,
+  tracePayloadTextForMode,
+  traceStatusClass,
+  traceStatusLabel,
+  traceTagType,
+  traceValueOrDash,
+  prettyTraceJson,
   summarizeTraceItems,
 } from "./traceWorkbench.ts"
 
@@ -171,4 +184,94 @@ assert.deepEqual(
     { label: "Avg Latency(s)", value: "0.75s", hint: "Average trace duration in sampled traces", tone: "yellow" },
   ],
   "summary cards should keep view copy and tone derivation behind one interface",
+)
+
+assert.deepEqual(
+  [
+    traceTagType("OK"),
+    traceTagType("ERROR"),
+    traceTagType("UNSET"),
+    traceStatusClass("UNSET"),
+    traceStatusLabel(""),
+  ],
+  ["success", "danger", "info", "unset", "-"],
+  "status presentation helpers should keep Element Plus tag types and labels consistent",
+)
+
+assert.deepEqual(
+  [
+    traceDurationClass(5),
+    traceDurationClass(1500),
+    traceDurationClass(15000),
+    formatTraceDuration(5),
+    formatTraceDuration(75),
+    formatTraceDuration(1200),
+    formatTraceDuration(65_500),
+    formatTraceDuration(-1),
+  ],
+  [
+    "duration-fast",
+    "duration-medium",
+    "duration-critical",
+    "5.00 ms",
+    "75.0 ms",
+    "1.20 s",
+    "1m 5.5s",
+    "-",
+  ],
+  "duration helpers should preserve trace latency display buckets",
+)
+
+assert.deepEqual(
+  [
+    compactTraceId("1234567890abcdef123456"),
+    compactTraceId(""),
+    traceValueOrDash(null),
+    traceValueOrDash("value"),
+    formatTraceCost(0.00321),
+    formatTraceCost(2.5),
+    prettyTraceJson({ ok: true }),
+  ],
+  [
+    "12345678...3456",
+    "-",
+    "-",
+    "value",
+    "$0.00321",
+    "$2.50",
+    "{\n  \"ok\": true\n}",
+  ],
+  "general presentation helpers should stay pure and stable",
+)
+
+const jsonPayload = { format: "text", text: "{\"a\":1}", data: null }
+const dataPayload = { format: "json", text: "raw fallback", data: { answer: 42 } }
+const plainPayload = { format: "text", text: "hello", data: null }
+
+assert.equal(isTraceJsonPayload(jsonPayload), true, "JSON-looking text payloads should be detected")
+assert.equal(isTraceJsonPayload(plainPayload), false, "plain text payloads should not be treated as JSON")
+assert.equal(
+  formatTracePayloadText(dataPayload, "fallback"),
+  "{\n  \"answer\": 42\n}",
+  "payload formatter should prefer structured data when present",
+)
+assert.equal(
+  tracePayloadTextForMode(plainPayload, "json", "fallback"),
+  "hello",
+  "JSON view should fall back to raw text for non-JSON payloads",
+)
+
+assert.equal(
+  isTraceToolSpan({
+    span_id: "span-tool",
+    name: "call_function",
+    kind: "internal",
+    status_code: "OK",
+    duration_ms: 10,
+    parsed: {
+      metadata: { tool: "", operation: "invoke" },
+    },
+  }),
+  true,
+  "tool span detection should use span metadata, kind and name",
 )

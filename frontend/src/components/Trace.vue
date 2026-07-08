@@ -472,13 +472,26 @@ import { useTracingApi } from "../composables/useTraceApi"
 import { copyToClipboard } from "../lib/clipboard"
 import {
   buildTraceRunRows,
+  compactTraceId,
   filterTraceRunRows,
   filterTraceSessions,
   findExactTraceSession,
   findTraceSession,
+  formatTraceCost,
+  formatTraceDuration,
+  formatTracePayloadText,
+  isTraceToolSpan,
+  prettyTraceJson,
   summarizeTraceItems,
+  traceDurationClass,
+  tracePayloadTextForMode,
+  traceStatusClass,
+  traceStatusLabel,
+  traceTagType,
+  traceValueOrDash,
   type RunStatusFilter,
   type SessionStatusFilter,
+  type TracePayloadViewMode,
   type TraceSummaryState,
 } from "../modules/traceWorkbench"
 import { useTraceStore } from "../stores/traces"
@@ -533,8 +546,20 @@ const loadingDetail = ref(false)
 const apiError = computed(() => error.value)
 let filterRefreshTimer: ReturnType<typeof window.setTimeout> | null = null
 
-type PayloadViewMode = "text" | "json" | "markdown"
+type PayloadViewMode = TracePayloadViewMode
 const SESSION_PAGE_SIZE = 10
+const compactId = compactTraceId
+const durationClass = traceDurationClass
+const formatCost = formatTraceCost
+const formatDuration = formatTraceDuration
+const formatPayloadText = formatTracePayloadText
+const isToolSpan = isTraceToolSpan
+const payloadTextForMode = tracePayloadTextForMode
+const prettyJson = prettyTraceJson
+const statusClass = traceStatusClass
+const statusLabel = traceStatusLabel
+const tagType = traceTagType
+const valueOrDash = traceValueOrDash
 
 const filteredSessions = computed(() => filterTraceSessions(sessions.value, sessionFilters))
 const pagedSessions = computed(() => {
@@ -669,41 +694,8 @@ const emptyParsedSpan = {
   events: [],
 }
 const parsedSpan = computed(() => selectedSpan.value?.parsed || emptyParsedSpan)
-const valueOrDash = (value: unknown) => {
-  if (value === null || value === undefined || value === "") return "-"
-  return String(value)
-}
 const renderMarkdown = (value: string) => {
   return markdownRenderer.render(value || "")
-}
-
-const formatPayloadText = (payload: ParsedSpanPayload, fallback: string) => {
-  if (!payload.text) return fallback
-  if (payload.data !== null && payload.data !== undefined) return prettyJson(payload.data)
-  try {
-    return JSON.stringify(JSON.parse(payload.text), null, 2)
-  } catch {
-    return payload.text
-  }
-}
-
-const isJsonPayload = (payload: ParsedSpanPayload) => {
-  if (payload.format === "json" || payload.data !== null && payload.data !== undefined) return true
-  const text = payload.text?.trim()
-  if (!text || !["{", "["].includes(text[0])) return false
-  try {
-    JSON.parse(text)
-    return true
-  } catch {
-    return false
-  }
-}
-
-const compactId = (value?: string | null) => {
-  const text = (value || "").trim()
-  if (!text) return "-"
-  if (text.length <= 18) return text
-  return `${text.slice(0, 8)}...${text.slice(-4)}`
 }
 
 const formatDateTime = (value?: string | null) => {
@@ -742,89 +734,6 @@ const formatSessionTime = (timestamp?: number | null) => {
   })
 }
 
-const tagType = (status: string) => {
-  if (status === "OK") return "success"
-  if (status === "ERROR") return "danger"
-  if (status === "UNSET") return "info"
-  return "warning"
-}
-
-const statusClass = (status: string) => {
-  if (status === "OK") return "ok"
-  if (status === "ERROR") return "error"
-  if (status === "UNSET") return "unset"
-  return "other"
-}
-
-const statusLabel = (status: string) => {
-  if (status === "OK") return "Success"
-  if (status === "ERROR") return "Error"
-  if (status === "UNSET") return "Running"
-  if (!status) return "-"
-  return status
-}
-
-const durationClass = (durationMs: number | string | null | undefined) => {
-  const n = Number(durationMs)
-  if (!Number.isFinite(n) || n < 0) return "duration-muted"
-  if (n < 500) return "duration-fast"
-  if (n < 2000) return "duration-medium"
-  if (n < 10000) return "duration-slow"
-  return "duration-critical"
-}
-
-const formatDuration = (durationMs: number | string | null | undefined): string => {
-  const n = Number(durationMs)
-  if (!Number.isFinite(n) || n < 0) return "-"
-
-  if (n < 1000) {
-    if (n < 10) return `${n.toFixed(2)} ms`
-    if (n < 100) return `${n.toFixed(1)} ms`
-    return `${Math.round(n)} ms`
-  }
-
-  const sec = n / 1000
-  if (sec < 60) {
-    return sec < 10 ? `${sec.toFixed(2)} s` : `${sec.toFixed(1)} s`
-  }
-
-  const min = Math.floor(sec / 60)
-  const remSec = sec % 60
-  if (min < 60) return `${min}m ${remSec.toFixed(1)}s`
-
-  const hour = Math.floor(min / 60)
-  const remMin = min % 60
-  return `${hour}h ${remMin}m ${Math.round(remSec)}s`
-}
-
-const prettyJson = (obj: unknown) => {
-  try {
-    if (!obj) return "{}"
-    return JSON.stringify(obj, null, 2)
-  } catch {
-    return String(obj)
-  }
-}
-
-const formatCost = (value: unknown) => {
-  const n = Number(value)
-  if (!Number.isFinite(n) || n <= 0) return "-"
-  if (n < 0.01) return `$${n.toFixed(5)}`
-  return `$${n.toFixed(2)}`
-}
-
-const isToolSpan = (span: SpanItem) => {
-  const metadata = span.parsed?.metadata
-  const haystack = [span.kind, span.name, metadata?.tool, metadata?.operation]
-    .map((value) => String(value || "").toLowerCase())
-    .join(" ")
-  return Boolean(metadata?.tool) || haystack.includes("tool") || haystack.includes("function")
-}
-
-const payloadTextForMode = (payload: ParsedSpanPayload, mode: PayloadViewMode, fallback: string) => {
-  if (mode === "json") return isJsonPayload(payload) ? formatPayloadText(payload, fallback) : payload.text || fallback
-  return payload.text || fallback
-}
 
 const renderPayloadMarkupForMode = (payload: ParsedSpanPayload, mode: PayloadViewMode, fallback: string) => {
   const text = payloadTextForMode(payload, mode, fallback)
