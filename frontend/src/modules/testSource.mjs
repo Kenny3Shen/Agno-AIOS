@@ -60,6 +60,7 @@ export const useTraceExternalSelectionEventsSource = readOptionalSource("composa
 export const useTraceLifecycleSource = readOptionalSource("composables/useTraceLifecycle.ts")
 export const useTraceDetailViewportSource = readOptionalSource("composables/useTraceDetailViewport.ts")
 export const useTraceSessionControllerSource = readOptionalSource("composables/useTraceSessionController.ts")
+export const useTraceDerivedPanelsSource = readOptionalSource("composables/useTraceDerivedPanels.ts")
 export const useAgentEvalsApiSource = readOptionalSource("composables/useAgentEvalsApi.ts")
 export const apiClient = readOptionalSource("lib/apiClient.ts")
 export const viteConfig = readSource("../vite.config.ts")

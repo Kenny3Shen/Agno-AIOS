@@ -42,6 +42,7 @@ import {
   useTraceExternalSelectionEventsSource,
   useTraceLifecycleSource,
   useTraceDetailViewportSource,
+  useTraceDerivedPanelsSource,
   traceWorkbenchSource,
   typesSource,
   useSecurityDataApiSource,
@@ -535,6 +536,48 @@ assert.doesNotMatch(
   /window\.matchMedia|document\.querySelector/,
   "Trace page must not own detail panel DOM queries",
 )
+
+assert.match(
+  trace,
+  /useTraceDerivedPanels[\s\S]*filteredRunRows[\s\S]*overviewItems[\s\S]*traceMetadataItems[\s\S]*toolCallItems[\s\S]*logItems[\s\S]*parsedSpan/,
+  "Trace page must delegate derived run and detail panel state to a composable",
+)
+
+for (const derivedPanelFlow of [
+  "buildTraceRunRows",
+  "filterTraceRunRows",
+  "findTraceRunRow",
+  "traceRunMetrics",
+  "buildTraceOverviewItems",
+  "buildTraceMetadataItems",
+  "buildTraceToolCallItems",
+  "buildTraceLogItems",
+  "emptyTraceParsedSpan",
+]) {
+  assert.match(
+    useTraceDerivedPanelsSource,
+    new RegExp(derivedPanelFlow),
+    `Trace derived panels composable must own ${derivedPanelFlow}`,
+  )
+}
+
+for (const inlineDerivedPanelFlow of [
+  "runRows",
+  "filteredRunRows",
+  "selectedRunRow",
+  "selectedRunMetrics",
+  "overviewItems",
+  "traceMetadataItems",
+  "toolCallItems",
+  "logItems",
+  "parsedSpan",
+]) {
+  assert.doesNotMatch(
+    trace,
+    new RegExp(`const ${inlineDerivedPanelFlow}\\s*=\\s*computed`),
+    `Trace page must not inline derived panel state: ${inlineDerivedPanelFlow}`,
+  )
+}
 
 assert.match(
   traceWorkbenchSource,

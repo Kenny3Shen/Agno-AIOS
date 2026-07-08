@@ -467,6 +467,7 @@ import {
 } from "@element-plus/icons-vue"
 import { useChatHistory } from "../composables/useChatApi"
 import { useTracingApi } from "../composables/useTraceApi"
+import { useTraceDerivedPanels } from "../composables/useTraceDerivedPanels"
 import { useTraceDetailViewport } from "../composables/useTraceDetailViewport"
 import { useTraceExternalSelectionEvents } from "../composables/useTraceExternalSelectionEvents"
 import { useTraceFilterRefreshScheduler } from "../composables/useTraceFilterRefreshScheduler"
@@ -477,18 +478,10 @@ import { useTracePayloadRenderer } from "../composables/useTracePayloadRenderer"
 import { useTraceSessionController } from "../composables/useTraceSessionController"
 import { useTraceSpanSelection } from "../composables/useTraceSpanSelection"
 import {
-  buildTraceLogItems,
-  buildTraceMetadataItems,
-  buildTraceOverviewItems,
-  buildTraceRunRows,
-  buildTraceToolCallItems,
   compactTraceId,
   createTraceRunFilters,
   createTraceSessionFilters,
-  emptyTraceParsedSpan,
-  filterTraceRunRows,
   filterTraceSessions,
-  findTraceRunRow,
   findTraceSession,
   formatTraceAnyDateTime,
   formatTraceDateTime,
@@ -496,7 +489,6 @@ import {
   formatTraceSessionTime,
   pageTraceSessions,
   traceDurationClass,
-  traceRunMetrics,
   traceStatusClass,
   traceStatusLabel,
   traceTagType,
@@ -552,58 +544,32 @@ const pagedSessions = computed(() => {
 
 const selectedSession = computed(() => findTraceSession(sessions.value, selectedSessionId.value))
 
-const runRows = computed(() => buildTraceRunRows({
-  traces: sessionTraceItems.value,
-  selectedSession: selectedSession.value,
-  selectedSessionId: selectedSessionId.value,
+const formatDateTime = formatTraceDateTime
+const formatAnyDateTime = formatTraceAnyDateTime
+const formatSessionTime = formatTraceSessionTime
+
+const {
+  filteredRunRows,
+  overviewItems,
+  traceMetadataItems,
+  toolCallItems,
+  logItems,
+  parsedSpan,
+} = useTraceDerivedPanels({
+  sessionTraceItems,
+  selectedSession,
+  selectedSessionId,
+  runFilters,
+  selectedTrace,
+  selectedSpan,
+  spans,
+  formatAnyDateTime,
   labels: {
     agentId: t("trace.filters.agentId"),
     teamId: t("trace.filters.teamId"),
     workflowId: t("trace.filters.workflowId"),
   },
-}))
-
-const filteredRunRows = computed(() => filterTraceRunRows(runRows.value, runFilters))
-
-const selectedRunRow = computed(() => findTraceRunRow(filteredRunRows.value, selectedTrace.value?.trace_id))
-
-const selectedRunMetrics = computed<Record<string, unknown>>(() => traceRunMetrics(selectedRunRow.value))
-
-const overviewItems = computed(() => {
-  return buildTraceOverviewItems({
-    trace: selectedTrace.value,
-    run: selectedRunRow.value?.run,
-    span: selectedSpan.value,
-    parsedSpan: parsedSpan.value,
-    metrics: selectedRunMetrics.value,
-  })
 })
-
-const traceMetadataItems = computed(() => {
-  return buildTraceMetadataItems({
-    trace: selectedTrace.value,
-    run: selectedRunRow.value?.run,
-    session: selectedSession.value,
-    row: selectedRunRow.value,
-    span: selectedSpan.value,
-    formatAnyDateTime,
-  })
-})
-
-const toolCallItems = computed(() => buildTraceToolCallItems(spans.value))
-
-const logItems = computed(() => {
-  return buildTraceLogItems({
-    parsedEvents: parsedSpan.value.events || [],
-    rawEvents: selectedSpan.value?.events || [],
-  })
-})
-
-const parsedSpan = computed(() => selectedSpan.value?.parsed || emptyTraceParsedSpan)
-
-const formatDateTime = formatTraceDateTime
-const formatAnyDateTime = formatTraceAnyDateTime
-const formatSessionTime = formatTraceSessionTime
 
 const {
   expandedPayloads,
