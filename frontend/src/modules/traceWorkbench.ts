@@ -1,4 +1,4 @@
-import type { ChatSession, ChatSessionRun, ParsedSpanPayload, SpanItem, TraceItem } from "../types"
+import type { ChatSession, ChatSessionRun, ParsedSpanDisplay, ParsedSpanEvent, ParsedSpanPayload, SpanItem, TraceItem } from "../types"
 
 export type SessionStatusFilter = "active" | "archived" | "all"
 export type RunStatusFilter = "" | "OK" | "ERROR" | "UNSET"
@@ -51,6 +51,34 @@ export interface TraceSummaryCard {
   tone: string
 }
 
+export interface TraceDetailMetricItem {
+  label: string
+  value: string
+  displayValue: string
+  tone: string
+}
+
+export interface TraceMetadataItem {
+  label: string
+  value: string
+  displayValue: string
+}
+
+export interface TraceToolCallItem {
+  id: string
+  name: string
+  status: string
+  durationMs: number
+  arguments: string
+  response: string
+  metadata: string
+}
+
+export interface TraceLogItem {
+  name: string
+  message: string
+}
+
 interface BuildTraceRunRowsParams {
   traces: TraceItem[]
   selectedSession: ChatSession | null
@@ -64,6 +92,45 @@ interface BuildTraceSummaryCardsParams {
   summary: TraceSummaryState
   formatLatencySeconds: (durationMs: number) => string
   latencyTone: (durationMs: number) => string
+}
+
+interface BuildTraceOverviewItemsParams {
+  trace: TraceItem | null
+  run?: ChatSessionRun | null
+  span?: SpanItem | null
+  parsedSpan: ParsedSpanDisplay
+  metrics: Record<string, unknown>
+}
+
+interface BuildTraceMetadataItemsParams {
+  trace: TraceItem | null
+  run?: ChatSessionRun | null
+  session: ChatSession | null
+  row?: TraceRunRow | null
+  span?: SpanItem | null
+  formatAnyDateTime: (value?: unknown) => string
+}
+
+interface BuildTraceLogItemsParams {
+  parsedEvents: ParsedSpanEvent[]
+  rawEvents?: unknown[] | null
+}
+
+const emptyParsedSpan: ParsedSpanDisplay = {
+  input: { format: "empty", text: "", data: null },
+  output: { format: "empty", text: "", data: null },
+  metadata: {
+    model: null,
+    provider: null,
+    tool: null,
+    operation: null,
+    tokens: {
+      prompt: null,
+      completion: null,
+      total: null,
+    },
+  },
+  events: [],
 }
 
 const normalize = (value?: string | null) => (value || "").trim().toLowerCase()
@@ -340,4 +407,95 @@ export const tracePayloadTextForMode = (
 ) => {
   if (mode === "json") return isTraceJsonPayload(payload) ? formatTracePayloadText(payload, fallback) : payload.text || fallback
   return payload.text || fallback
+}
+
+export const buildTraceOverviewItems = ({
+  trace,
+  run,
+  span,
+  parsedSpan,
+  metrics,
+}: BuildTraceOverviewItemsParams): TraceDetailMetricItem[] => {
+  const metadata = parsedSpan.metadata || emptyParsedSpan.metadata
+  const tokens = metadata.tokens || {}
+  const inputTokens = traceValueOrDash(metrics.input_tokens ?? metrics.prompt_tokens ?? tokens.prompt)
+  const outputTokens = traceValueOrDash(metrics.output_tokens ?? metrics.completion_tokens ?? tokens.completion)
+  const totalTokens = traceValueOrDash(metrics.total_tokens ?? tokens.total)
+  const model = traceValueOrDash(run?.model || metadata.model)
+  const provider = traceValueOrDash(run?.model_provider || metadata.provider)
+  const agent = traceValueOrDash(trace?.agent_id || run?.agent_id || run?.agent_name)
+  const workflow = traceValueOrDash(trace?.workflow_id || run?.workflow_id)
+  const team = traceValueOrDash(trace?.team_id || run?.team_id)
+  const errorText = span?.status_message || (trace?.status === "ERROR" ? trace.name : "")
+  return [
+    { label: "Status", value: traceValueOrDash(trace?.status), displayValue: traceStatusLabel(trace?.status || ""), tone: trace?.status === "ERROR" ? "error" : "" },
+    { label: "Duration", value: formatTraceDuration(trace?.duration_ms), displayValue: formatTraceDuration(trace?.duration_ms), tone: "" },
+    { label: "Input Tokens", value: inputTokens, displayValue: inputTokens, tone: "" },
+    { label: "Output Tokens", value: outputTokens, displayValue: outputTokens, tone: "" },
+    { label: "Tokens", value: totalTokens, displayValue: totalTokens, tone: "" },
+    { label: "Model", value: model, displayValue: model, tone: "" },
+    { label: "Provider", value: provider, displayValue: provider, tone: "" },
+    { label: "Agent", value: agent, displayValue: compactTraceId(agent), tone: "" },
+    { label: "Workflow", value: workflow, displayValue: compactTraceId(workflow), tone: "" },
+    { label: "Team", value: team, displayValue: compactTraceId(team), tone: "" },
+    { label: "Cost", value: formatTraceCost(metrics.cost), displayValue: formatTraceCost(metrics.cost), tone: "" },
+    { label: "Error", value: traceValueOrDash(errorText), displayValue: traceValueOrDash(errorText), tone: errorText ? "error" : "" },
+  ]
+}
+
+export const buildTraceMetadataItems = ({
+  trace,
+  run,
+  session,
+  row,
+  span,
+  formatAnyDateTime,
+}: BuildTraceMetadataItemsParams): TraceMetadataItem[] => [
+  { label: "Session ID", value: traceValueOrDash(trace?.session_id || row?.sessionId || session?.session_id), displayValue: compactTraceId(trace?.session_id || row?.sessionId || session?.session_id) },
+  { label: "User ID", value: traceValueOrDash(trace?.user_id || run?.user_id || session?.user_id), displayValue: compactTraceId(trace?.user_id || run?.user_id || session?.user_id) },
+  { label: "Run ID", value: traceValueOrDash(trace?.run_id || run?.run_id), displayValue: compactTraceId(trace?.run_id || run?.run_id) },
+  { label: "Trace ID", value: traceValueOrDash(trace?.trace_id), displayValue: compactTraceId(trace?.trace_id) },
+  { label: "Span ID", value: traceValueOrDash(span?.span_id), displayValue: compactTraceId(span?.span_id) },
+  { label: "Parent Span", value: traceValueOrDash(span?.parent_span_id), displayValue: compactTraceId(span?.parent_span_id) },
+  { label: "Created", value: traceValueOrDash(trace?.created_at || run?.created_at), displayValue: formatAnyDateTime(trace?.created_at || run?.created_at) },
+  { label: "Started", value: traceValueOrDash(trace?.start_time || span?.start_time), displayValue: formatAnyDateTime(trace?.start_time || span?.start_time) },
+  { label: "Ended", value: traceValueOrDash(trace?.end_time || span?.end_time), displayValue: formatAnyDateTime(trace?.end_time || span?.end_time) },
+  { label: "Run Updated", value: traceValueOrDash(run?.updated_at), displayValue: formatAnyDateTime(run?.updated_at) },
+]
+
+export const buildTraceToolCallItems = (spans: SpanItem[]): TraceToolCallItem[] => spans
+  .filter((span) => isTraceToolSpan(span))
+  .map((span) => {
+    const parsed = span.parsed || emptyParsedSpan
+    return {
+      id: span.span_id,
+      name: parsed.metadata?.tool || span.name || "Tool",
+      status: span.status_code,
+      durationMs: span.duration_ms,
+      arguments: formatTracePayloadText(parsed.input, "No arguments captured"),
+      response: formatTracePayloadText(parsed.output, "No response captured"),
+      metadata: prettyTraceJson({
+        span_id: span.span_id,
+        kind: span.kind,
+        operation: parsed.metadata?.operation,
+        attributes: span.attributes || {},
+      }),
+    }
+  })
+
+export const buildTraceLogItems = ({
+  parsedEvents,
+  rawEvents,
+}: BuildTraceLogItemsParams): TraceLogItem[] => {
+  const rawItems = (rawEvents || []).map((event, index) => {
+    if (event && typeof event === "object") {
+      const record = event as Record<string, unknown>
+      return {
+        name: traceValueOrDash(record.name || `event-${index + 1}`),
+        message: traceValueOrDash(record.message || record.body || record.attributes || event),
+      }
+    }
+    return { name: `event-${index + 1}`, message: traceValueOrDash(event) }
+  })
+  return parsedEvents.length ? parsedEvents : rawItems
 }

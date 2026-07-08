@@ -471,24 +471,23 @@ import { useChatHistory } from "../composables/useChatApi"
 import { useTracingApi } from "../composables/useTraceApi"
 import { copyToClipboard } from "../lib/clipboard"
 import {
+  buildTraceLogItems,
+  buildTraceMetadataItems,
+  buildTraceOverviewItems,
   buildTraceRunRows,
+  buildTraceToolCallItems,
   compactTraceId,
   filterTraceRunRows,
   filterTraceSessions,
   findExactTraceSession,
   findTraceSession,
-  formatTraceCost,
   formatTraceDuration,
-  formatTracePayloadText,
-  isTraceToolSpan,
-  prettyTraceJson,
   summarizeTraceItems,
   traceDurationClass,
   tracePayloadTextForMode,
   traceStatusClass,
   traceStatusLabel,
   traceTagType,
-  traceValueOrDash,
   type RunStatusFilter,
   type SessionStatusFilter,
   type TracePayloadViewMode,
@@ -550,16 +549,11 @@ type PayloadViewMode = TracePayloadViewMode
 const SESSION_PAGE_SIZE = 10
 const compactId = compactTraceId
 const durationClass = traceDurationClass
-const formatCost = formatTraceCost
 const formatDuration = formatTraceDuration
-const formatPayloadText = formatTracePayloadText
-const isToolSpan = isTraceToolSpan
 const payloadTextForMode = tracePayloadTextForMode
-const prettyJson = prettyTraceJson
 const statusClass = traceStatusClass
 const statusLabel = traceStatusLabel
 const tagType = traceTagType
-const valueOrDash = traceValueOrDash
 
 const filteredSessions = computed(() => filterTraceSessions(sessions.value, sessionFilters))
 const pagedSessions = computed(() => {
@@ -594,87 +588,33 @@ const selectedRunMetrics = computed<Record<string, unknown>>(() => {
 })
 
 const overviewItems = computed(() => {
-  const trace = selectedTrace.value
-  const run = selectedRunRow.value?.run
-  const metadata = parsedSpan.value.metadata || emptyParsedSpan.metadata
-  const tokens = metadata.tokens || {}
-  const inputTokens = valueOrDash(selectedRunMetrics.value.input_tokens ?? selectedRunMetrics.value.prompt_tokens ?? tokens.prompt)
-  const outputTokens = valueOrDash(selectedRunMetrics.value.output_tokens ?? selectedRunMetrics.value.completion_tokens ?? tokens.completion)
-  const totalTokens = valueOrDash(selectedRunMetrics.value.total_tokens ?? tokens.total)
-  const model = valueOrDash(run?.model || metadata.model)
-  const provider = valueOrDash(run?.model_provider || metadata.provider)
-  const agent = valueOrDash(trace?.agent_id || run?.agent_id || run?.agent_name)
-  const workflow = valueOrDash(trace?.workflow_id || run?.workflow_id)
-  const team = valueOrDash(trace?.team_id || run?.team_id)
-  const errorText = selectedSpan.value?.status_message || (trace?.status === "ERROR" ? trace.name : "")
-  return [
-    { label: "Status", value: valueOrDash(trace?.status), displayValue: statusLabel(trace?.status || ""), tone: trace?.status === "ERROR" ? "error" : "" },
-    { label: "Duration", value: formatDuration(trace?.duration_ms), displayValue: formatDuration(trace?.duration_ms), tone: "" },
-    { label: "Input Tokens", value: inputTokens, displayValue: inputTokens, tone: "" },
-    { label: "Output Tokens", value: outputTokens, displayValue: outputTokens, tone: "" },
-    { label: "Tokens", value: totalTokens, displayValue: totalTokens, tone: "" },
-    { label: "Model", value: model, displayValue: model, tone: "" },
-    { label: "Provider", value: provider, displayValue: provider, tone: "" },
-    { label: "Agent", value: agent, displayValue: compactId(agent), tone: "" },
-    { label: "Workflow", value: workflow, displayValue: compactId(workflow), tone: "" },
-    { label: "Team", value: team, displayValue: compactId(team), tone: "" },
-    { label: "Cost", value: formatCost(selectedRunMetrics.value.cost), displayValue: formatCost(selectedRunMetrics.value.cost), tone: "" },
-    { label: "Error", value: valueOrDash(errorText), displayValue: valueOrDash(errorText), tone: errorText ? "error" : "" },
-  ]
+  return buildTraceOverviewItems({
+    trace: selectedTrace.value,
+    run: selectedRunRow.value?.run,
+    span: selectedSpan.value,
+    parsedSpan: parsedSpan.value,
+    metrics: selectedRunMetrics.value,
+  })
 })
 
 const traceMetadataItems = computed(() => {
-  const trace = selectedTrace.value
-  const run = selectedRunRow.value?.run
-  const session = selectedSession.value
-  return [
-    { label: "Session ID", value: valueOrDash(trace?.session_id || selectedRunRow.value?.sessionId || session?.session_id), displayValue: compactId(trace?.session_id || selectedRunRow.value?.sessionId || session?.session_id) },
-    { label: "User ID", value: valueOrDash(trace?.user_id || run?.user_id || session?.user_id), displayValue: compactId(trace?.user_id || run?.user_id || session?.user_id) },
-    { label: "Run ID", value: valueOrDash(trace?.run_id || run?.run_id), displayValue: compactId(trace?.run_id || run?.run_id) },
-    { label: "Trace ID", value: valueOrDash(trace?.trace_id), displayValue: compactId(trace?.trace_id) },
-    { label: "Span ID", value: valueOrDash(selectedSpan.value?.span_id), displayValue: compactId(selectedSpan.value?.span_id) },
-    { label: "Parent Span", value: valueOrDash(selectedSpan.value?.parent_span_id), displayValue: compactId(selectedSpan.value?.parent_span_id) },
-    { label: "Created", value: valueOrDash(trace?.created_at || run?.created_at), displayValue: formatAnyDateTime(trace?.created_at || run?.created_at) },
-    { label: "Started", value: valueOrDash(trace?.start_time || selectedSpan.value?.start_time), displayValue: formatAnyDateTime(trace?.start_time || selectedSpan.value?.start_time) },
-    { label: "Ended", value: valueOrDash(trace?.end_time || selectedSpan.value?.end_time), displayValue: formatAnyDateTime(trace?.end_time || selectedSpan.value?.end_time) },
-    { label: "Run Updated", value: valueOrDash(run?.updated_at), displayValue: formatAnyDateTime(run?.updated_at) },
-  ]
+  return buildTraceMetadataItems({
+    trace: selectedTrace.value,
+    run: selectedRunRow.value?.run,
+    session: selectedSession.value,
+    row: selectedRunRow.value,
+    span: selectedSpan.value,
+    formatAnyDateTime,
+  })
 })
 
-const toolCallItems = computed(() => spans.value
-  .filter((span) => isToolSpan(span))
-  .map((span) => {
-    const parsed = span.parsed || emptyParsedSpan
-    return {
-      id: span.span_id,
-      name: parsed.metadata?.tool || span.name || "Tool",
-      status: span.status_code,
-      durationMs: span.duration_ms,
-      arguments: formatPayloadText(parsed.input, "No arguments captured"),
-      response: formatPayloadText(parsed.output, "No response captured"),
-      metadata: prettyJson({
-        span_id: span.span_id,
-        kind: span.kind,
-        operation: parsed.metadata?.operation,
-        attributes: span.attributes || {},
-      }),
-    }
-  }))
+const toolCallItems = computed(() => buildTraceToolCallItems(spans.value))
 
 const logItems = computed(() => {
-  const parsedEvents = parsedSpan.value.events || []
-  const rawEvents = (selectedSpan.value?.events || [])
-    .map((event, index) => {
-      if (event && typeof event === "object") {
-        const record = event as Record<string, unknown>
-        return {
-          name: valueOrDash(record.name || `event-${index + 1}`),
-          message: valueOrDash(record.message || record.body || record.attributes || event),
-        }
-      }
-      return { name: `event-${index + 1}`, message: valueOrDash(event) }
-    })
-  return parsedEvents.length ? parsedEvents : rawEvents
+  return buildTraceLogItems({
+    parsedEvents: parsedSpan.value.events || [],
+    rawEvents: selectedSpan.value?.events || [],
+  })
 })
 
 const emptyParsedSpan = {

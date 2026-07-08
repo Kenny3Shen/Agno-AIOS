@@ -394,15 +394,15 @@ assert.match(
 )
 
 assert.match(
-  trace,
+  traceWorkbenchSource,
   /Session ID[\s\S]*User ID[\s\S]*Run ID[\s\S]*Trace ID[\s\S]*Span ID/,
-  "Trace Metadata tab must include Session ID, User ID, Run ID, Trace ID, and Span ID",
+  "Trace Metadata workbench builder must include Session ID, User ID, Run ID, Trace ID, and Span ID",
 )
 
 assert.match(
-  trace,
+  traceWorkbenchSource,
   /Input Tokens[\s\S]*Output Tokens[\s\S]*Tokens[\s\S]*Model[\s\S]*Provider/,
-  "Trace Overview tab must summarize token counts, model, provider, status, duration, and cost",
+  "Trace Overview workbench builder must summarize token counts, model, provider, status, duration, and cost",
 )
 
 assert.match(

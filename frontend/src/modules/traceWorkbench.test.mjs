@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import {
+  buildTraceLogItems,
+  buildTraceMetadataItems,
+  buildTraceOverviewItems,
   buildTraceRunRows,
   buildTraceSummaryCards,
+  buildTraceToolCallItems,
   compactTraceId,
   formatTraceCost,
   formatTraceDuration,
@@ -274,4 +278,112 @@ assert.equal(
   }),
   true,
   "tool span detection should use span metadata, kind and name",
+)
+
+const parsedSpan = {
+  input: { format: "json", text: "{\"topic\":\"risk\"}", data: null },
+  output: { format: "json", text: "{\"ok\":true}", data: null },
+  metadata: {
+    model: "gpt-test",
+    provider: "openai",
+    tool: "risk_lookup",
+    operation: "invoke",
+    tokens: {
+      prompt: 9,
+      completion: 4,
+      total: 13,
+    },
+  },
+  events: [{ name: "parsed", message: "ready" }],
+}
+
+const selectedSpan = {
+  span_id: "span-1234567890abcdef",
+  trace_id: "trace-a",
+  parent_span_id: "span-parent-123456",
+  name: "call_function",
+  status_code: "ERROR",
+  status_message: "Tool failed",
+  duration_ms: 321,
+  start_time: "2026-01-01T00:00:00Z",
+  end_time: "2026-01-01T00:00:01Z",
+  attributes: { retry: false },
+  events: [{ name: "raw", message: "unused" }],
+  kind: "internal",
+  parsed: parsedSpan,
+}
+
+assert.deepEqual(
+  buildTraceOverviewItems({
+    trace: traceB,
+    run: rows[1].run,
+    span: selectedSpan,
+    parsedSpan,
+    metrics: { input_tokens: 10, output_tokens: 5, cost: 0.002 },
+  }).map((item) => [item.label, item.value, item.displayValue, item.tone]),
+  [
+    ["Status", "ERROR", "Error", "error"],
+    ["Duration", "300 ms", "300 ms", ""],
+    ["Input Tokens", "10", "10", ""],
+    ["Output Tokens", "5", "5", ""],
+    ["Tokens", "13", "13", ""],
+    ["Model", "gpt-test", "gpt-test", ""],
+    ["Provider", "openai", "openai", ""],
+    ["Agent", "Team Agent", "Team Agent", ""],
+    ["Workflow", "workflow-from-trace", "workflow...race", ""],
+    ["Team", "team-from-run", "team-from-run", ""],
+    ["Cost", "$0.00200", "$0.00200", ""],
+    ["Error", "Tool failed", "Tool failed", "error"],
+  ],
+  "overview builder should merge trace, run, span metadata and metrics for the details panel",
+)
+
+assert.deepEqual(
+  buildTraceMetadataItems({
+    trace: traceB,
+    run: rows[1].run,
+    session: sessionA,
+    row: rows[1],
+    span: selectedSpan,
+    formatAnyDateTime: (value) => `date:${value}`,
+  }).map((item) => [item.label, item.value, item.displayValue]),
+  [
+    ["Session ID", "session-alpha", "session-alpha"],
+    ["User ID", "user-1", "user-1"],
+    ["Run ID", "run-2", "run-2"],
+    ["Trace ID", "trace-b", "trace-b"],
+    ["Span ID", "span-1234567890abcdef", "span-123...cdef"],
+    ["Parent Span", "span-parent-123456", "span-parent-123456"],
+    ["Created", "-", "date:undefined"],
+    ["Started", "2026-01-01T00:01:00Z", "date:2026-01-01T00:01:00Z"],
+    ["Ended", "2026-01-01T00:01:01Z", "date:2026-01-01T00:01:01Z"],
+    ["Run Updated", "-", "date:undefined"],
+  ],
+  "metadata builder should keep detail identifiers and date display formatting in one module path",
+)
+
+assert.deepEqual(
+  buildTraceToolCallItems([selectedSpan])[0],
+  {
+    id: "span-1234567890abcdef",
+    name: "risk_lookup",
+    status: "ERROR",
+    durationMs: 321,
+    arguments: "{\n  \"topic\": \"risk\"\n}",
+    response: "{\n  \"ok\": true\n}",
+    metadata: "{\n  \"span_id\": \"span-1234567890abcdef\",\n  \"kind\": \"internal\",\n  \"operation\": \"invoke\",\n  \"attributes\": {\n    \"retry\": false\n  }\n}",
+  },
+  "tool call builder should format arguments, responses and span metadata consistently",
+)
+
+assert.deepEqual(
+  buildTraceLogItems({
+    parsedEvents: [],
+    rawEvents: [{ body: "raw body" }, "plain"],
+  }),
+  [
+    { name: "event-1", message: "raw body" },
+    { name: "event-2", message: "plain" },
+  ],
+  "log builder should fall back to raw span events when parsed events are unavailable",
 )
