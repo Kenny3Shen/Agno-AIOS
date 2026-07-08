@@ -462,6 +462,18 @@ assert.match(
   "TraceRunsPanel must own runs panel copy",
 )
 
+assert.match(
+  traceRunsPanel,
+  /trace-runs-workbench[\s\S]*flex-1[\s\S]*trace-runs-list[\s\S]*gap-\[10px\][\s\S]*p-\[14px\]/,
+  "TraceRunsPanel must move simple runs panel layout to UnoCSS utilities",
+)
+
+assert.doesNotMatch(
+  traceStyle,
+  /\.trace-runs-workbench\s*\{[^}]*display:\s*flex|\.trace-runs-list\s*\{[^}]*display:\s*grid/,
+  "Trace stylesheet must not keep simple runs panel layout after UnoCSS utility migration",
+)
+
 assert.doesNotMatch(
   trace,
   /trace-runs-toolbar|trace-runs-list|trace-run-row|trace\.runs\.title/,

@@ -1,6 +1,6 @@
 <template>
-  <section class="trace-runs-workbench">
-    <div class="trace-runs-toolbar trace-toolbar">
+  <section class="trace-runs-workbench relative flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div class="trace-runs-toolbar trace-toolbar grid gap-3">
       <div class="trace-panel-header">
         <div>
           <p>{{ t('trace.runs.title') }}</p>
@@ -25,7 +25,7 @@
       </div>
     </div>
 
-    <div v-else class="trace-runs-list">
+    <div v-else class="trace-runs-list grid min-h-0 content-start gap-[10px] overflow-auto p-[14px]">
       <button
         v-for="row in filteredRunRows"
         :key="row.key"

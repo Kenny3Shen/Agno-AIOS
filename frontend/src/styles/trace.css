@@ -1288,29 +1288,6 @@ html.dark .trace-waterfall-row.active {
 
 }
 
-.trace-runs-workbench {
-  position: relative;
-  display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.trace-runs-toolbar {
-  display: grid;
-  gap: 12px;
-}
-
-.trace-runs-list {
-  display: grid;
-  align-content: start;
-  gap: 10px;
-  min-height: 0;
-  overflow: auto;
-  padding: 14px;
-}
-
 .trace-run-row {
   grid-template-columns: minmax(240px, 1.3fr) minmax(220px, 1fr) 120px;
 }
