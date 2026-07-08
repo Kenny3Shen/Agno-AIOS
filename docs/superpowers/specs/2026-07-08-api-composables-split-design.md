@@ -29,7 +29,8 @@ the intermediate control-plane composable was removed with the old aggregate run
 - `useSchedulerApi.ts`: AgentOS scheduler adapter APIs.
 - `useSettingsApi.ts`: settings, model config, and model connectivity APIs.
 - `useTraceApi.ts`: trace list/detail APIs.
-- `useRuntimeToolsApi.ts`: Skills and MCP APIs.
+- `useSkillsApi.ts`: Skills list/toggle/upload/visibility APIs.
+- `useMcpApi.ts`: MCP service, token, upload, and visibility APIs.
 - `useKnowledgeApi.ts`: Knowledge document, search, visibility, rebuild, and RAG settings APIs.
 - `useAgentEvalsApi.ts`: Agent evaluation APIs.
 

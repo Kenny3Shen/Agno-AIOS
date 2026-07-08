@@ -208,7 +208,7 @@ import {
   Operation,
   Tools,
 } from "@element-plus/icons-vue"
-import { useMcpApi } from "../composables/useRuntimeToolsApi"
+import { useMcpApi } from "../composables/useMcpApi"
 import { copyToClipboard } from "../lib/clipboard"
 import { useAuthStore } from "../stores/auth"
 import type { McpServerInfo, McpServiceId, McpTokenInfo, ResourceVisibility } from "../types"

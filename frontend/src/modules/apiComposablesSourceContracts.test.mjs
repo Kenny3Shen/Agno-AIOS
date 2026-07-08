@@ -10,10 +10,12 @@ import {
   useChatApiSource,
   useKnowledgeApiSource,
   useMemoryControlApiSource,
-  useRuntimeToolsApiSource,
+  removedRuntimeAggregateApiSource,
+  useMcpApiSource,
   useSchedulerApiSource,
   useSecurityDataApiSource,
   useSettingsApiSource,
+  useSkillsApiSource,
   useTraceApiSource,
   viteConfig,
 } from "./testSource.mjs"
@@ -25,7 +27,8 @@ const expectedComposableFiles = [
   "composables/useApprovalsApi.ts",
   "composables/useSchedulerApi.ts",
   "composables/useKnowledgeApi.ts",
-  "composables/useRuntimeToolsApi.ts",
+  "composables/useSkillsApi.ts",
+  "composables/useMcpApi.ts",
   "composables/useSecurityDataApi.ts",
   "composables/useSettingsApi.ts",
   "composables/useTraceApi.ts",
@@ -57,6 +60,12 @@ assert.equal(
   "frontend API barrel must be removed; pages import domain composables directly",
 )
 
+assert.equal(
+  removedRuntimeAggregateApiSource,
+  "",
+  "runtime tools aggregate API must be removed; Skills and MCP import focused composables directly",
+)
+
 const domainExpectations = [
   [useSecurityDataApiSource, "useCveApi", "/cve/search"],
   [useSecurityDataApiSource, "useUrl2MdApi", "/url2md/parse"],
@@ -67,8 +76,8 @@ const domainExpectations = [
   [useSchedulerApiSource, "useSchedulerApi", "/schedules"],
   [useSettingsApiSource, "useSettingsApi", "/settings"],
   [useTraceApiSource, "useTracingApi", "/traces"],
-  [useRuntimeToolsApiSource, "useSkillsApi", "/skills"],
-  [useRuntimeToolsApiSource, "useMcpApi", "/mcp"],
+  [useSkillsApiSource, "useSkillsApi", "/skills"],
+  [useMcpApiSource, "useMcpApi", "/mcp"],
   [useKnowledgeApiSource, "useKnowledgeApi", "/knowledge"],
   [useAgentEvalsApiSource, "useAgentEvalsApi", "/agent-evals"],
 ]

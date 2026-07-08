@@ -197,7 +197,7 @@ import { Loading, FolderOpened, Document, UploadFilled } from '@element-plus/ico
 import { ElMessage } from 'element-plus'
 import MarkdownIt from "markdown-it"
 import type { UploadFile, UploadFiles, UploadInstance, UploadUserFile } from 'element-plus'
-import { useSkillsApi } from '../composables/useRuntimeToolsApi'
+import { useSkillsApi } from '../composables/useSkillsApi'
 import { useAuthStore } from '../stores/auth'
 import type { ResourceVisibility, SkillInfo } from '../types'
 import ResourceVisibilityTabs from "./common/ResourceVisibilityTabs.vue"

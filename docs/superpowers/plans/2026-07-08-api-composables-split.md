@@ -44,7 +44,8 @@ Expected: FAIL because `composables/useApiCore.ts` does not exist.
 - Create: `frontend/src/composables/useSchedulerApi.ts`
 - Create: `frontend/src/composables/useSettingsApi.ts`
 - Create: `frontend/src/composables/useTraceApi.ts`
-- Create: `frontend/src/composables/useRuntimeToolsApi.ts`
+- Create: `frontend/src/composables/useSkillsApi.ts`
+- Create: `frontend/src/composables/useMcpApi.ts`
 - Create: `frontend/src/composables/useKnowledgeApi.ts`
 - Create: `frontend/src/composables/useAgentEvalsApi.ts`
 - Delete: `frontend/src/composables/useApi.ts`
