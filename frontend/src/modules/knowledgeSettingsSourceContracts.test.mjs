@@ -38,6 +38,7 @@ import {
   useTracePayloadRendererSource,
   useTraceSpanSelectionSource,
   useTraceFilterRefreshSchedulerSource,
+  useTraceExternalSelectionEventsSource,
   traceWorkbenchSource,
   typesSource,
   useSecurityDataApiSource,
@@ -430,6 +431,38 @@ assert.doesNotMatch(
   trace,
   /filterRefreshTimer/,
   "Trace page must not own the filter refresh timer",
+)
+
+assert.match(
+  trace,
+  /useTraceExternalSelectionEvents[\s\S]*openTraceDetail[\s\S]*selectSessionById/,
+  "Trace page must delegate external selection events to a composable",
+)
+
+assert.match(
+  useTraceExternalSelectionEventsSource,
+  /agno-aios-trace-select[\s\S]*const handleExternalTraceSelect\s*=/,
+  "Trace external selection events composable must own trace selection listeners",
+)
+
+assert.match(
+  useTraceExternalSelectionEventsSource,
+  /agno-aios-trace-session-open[\s\S]*agno-aios-trace-session-select[\s\S]*const handleExternalSessionSelect\s*=/,
+  "Trace external selection events composable must own session selection listeners",
+)
+
+for (const inlineExternalSelectionFlow of ["handleExternalTraceSelect", "handleExternalSessionSelect"]) {
+  assert.doesNotMatch(
+    trace,
+    new RegExp(`const ${inlineExternalSelectionFlow}\\s*=`),
+    `Trace page must not inline external selection flow: ${inlineExternalSelectionFlow}`,
+  )
+}
+
+assert.doesNotMatch(
+  trace,
+  /agno-aios-trace-/,
+  "Trace page must not own external trace event names",
 )
 
 assert.match(

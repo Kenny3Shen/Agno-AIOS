@@ -468,6 +468,7 @@ import {
 } from "@element-plus/icons-vue"
 import { useChatHistory } from "../composables/useChatApi"
 import { useTracingApi } from "../composables/useTraceApi"
+import { useTraceExternalSelectionEvents } from "../composables/useTraceExternalSelectionEvents"
 import { useTraceFilterRefreshScheduler } from "../composables/useTraceFilterRefreshScheduler"
 import { useTracePayloadControls } from "../composables/useTracePayloadControls"
 import { useTracePayloadRenderer } from "../composables/useTracePayloadRenderer"
@@ -675,6 +676,11 @@ const {
   refreshAll,
 } = traceSessionController
 
+useTraceExternalSelectionEvents({
+  openTraceDetail,
+  selectSessionById,
+})
+
 watch(
   () => filteredSessions.value.length,
   (count) => {
@@ -697,20 +703,7 @@ watch(
   },
 )
 
-const handleExternalTraceSelect = (event: Event) => {
-  const detail = (event as CustomEvent<{ traceId?: string }>).detail
-  void openTraceDetail(detail?.traceId)
-}
-
-const handleExternalSessionSelect = (event: Event) => {
-  const detail = (event as CustomEvent<{ sessionId?: string; userId?: string | null; runId?: string | null }>).detail
-  if (detail?.sessionId) void selectSessionById(detail.sessionId, detail.userId, detail.runId)
-}
-
 onMounted(async () => {
-  window.addEventListener("agno-aios-trace-select", handleExternalTraceSelect)
-  window.addEventListener("agno-aios-trace-session-open", handleExternalSessionSelect)
-  window.addEventListener("agno-aios-trace-session-select", handleExternalSessionSelect)
   try {
     await refresh()
   } catch (e: unknown) {
@@ -719,9 +712,6 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  window.removeEventListener("agno-aios-trace-select", handleExternalTraceSelect)
-  window.removeEventListener("agno-aios-trace-session-open", handleExternalSessionSelect)
-  window.removeEventListener("agno-aios-trace-session-select", handleExternalSessionSelect)
   clearPendingFilterRefresh()
 })
 </script>
