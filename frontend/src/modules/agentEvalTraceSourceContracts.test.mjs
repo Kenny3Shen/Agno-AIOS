@@ -35,6 +35,7 @@ import {
   skills,
   sourcePath,
   trace,
+  traceStyle,
   useTraceDetailViewportSource,
   typesSource,
   useAgentEvalsApiSource,
@@ -413,7 +414,7 @@ for (const hardcodedDashboardCopy of [
 }
 
 assert.match(
-  trace,
+  traceStyle,
   /trace-id-line/,
   "Trace identifiers must render in a dedicated wrapping line",
 )
@@ -425,7 +426,7 @@ assert.match(
 )
 
 assert.match(
-  trace,
+  traceStyle,
   /overflow-wrap:\s*anywhere/,
   "Trace page CSS must allow long IDs and JSON-like values to wrap instead of overlapping",
 )
@@ -437,7 +438,7 @@ assert.match(
 )
 
 assert.match(
-  trace,
+  traceStyle,
   /\.trace-body-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*20%\)\s+minmax\(0,\s*20%\)\s+minmax\(0,\s*60%\)/s,
   "Trace workbench must use fixed 20/20/60 columns for sessions, runs, and details",
 )

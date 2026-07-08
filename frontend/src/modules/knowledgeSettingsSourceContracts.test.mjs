@@ -34,6 +34,7 @@ import {
   skills,
   sourcePath,
   trace,
+  traceStyle,
   useTracePayloadControlsSource,
   useTracePayloadRendererSource,
   useTraceSpanSelectionSource,
@@ -311,6 +312,24 @@ assert.match(
   trace,
   /trace-inspector-shell/,
   "Trace page must use a two-pane runtime inspector shell",
+)
+
+assert.match(
+  trace,
+  /<style\s+src="\.\.\/styles\/trace\.css"><\/style>/,
+  "Trace page must load its stylesheet from styles/trace.css",
+)
+
+assert.match(
+  traceStyle,
+  /\.trace-console[\s\S]*\.trace-session-card[\s\S]*\.trace-content-detail/,
+  "Trace stylesheet must own the Trace workbench CSS rules",
+)
+
+assert.doesNotMatch(
+  trace,
+  /<style>\s*\.trace-console/,
+  "Trace page must not inline its global stylesheet",
 )
 
 assert.match(
