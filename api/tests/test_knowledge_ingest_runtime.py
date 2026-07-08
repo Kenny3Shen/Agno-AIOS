@@ -46,7 +46,7 @@ def test_suffix_profile_chooses_agno_aligned_chunkers(
     assert reader.__class__.__name__ == expected_reader
 
 
-def test_knowledge_service_keeps_compatible_profile_interface() -> None:
+def test_knowledge_service_keeps_profile_interface() -> None:
     profile = knowledge_service.knowledge_profile_for_filename("runbook.md")
     assert profile.strategy == "markdown"
     assert (

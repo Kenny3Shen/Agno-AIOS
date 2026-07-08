@@ -298,6 +298,44 @@ async def test_rebuild_document_reloads_content_with_public_ainsert() -> None:
 
 
 @pytest.mark.asyncio
+async def test_rebuild_document_requires_stored_source_snapshot() -> None:
+    content_row = SimpleNamespace(
+        id="content-rebuild",
+        name="Runbook",
+        description="manual",
+        path=None,
+        file_data=FileData(content="runbook body", type="Text", filename="runbook.txt"),
+        metadata={"user_id": "u1", "visibility": "private", "source": "manual"},
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(content_by_id={"content-rebuild": content_row})
+
+    async def content_by_id(content_id: str):
+        return knowledge._content_by_id.get(content_id)
+
+    async def get_source_async(content_id: str) -> dict[str, object] | None:
+        assert content_id == "content-rebuild"
+        return None
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_storage_async=lambda: None,
+            knowledge_content_by_id_async=content_by_id,
+            get_source_async=get_source_async,
+        )
+    )
+
+    with pytest.raises(ValueError, match="source 快照"):
+        await lifecycle.rebuild_document_async(
+            "content-rebuild",
+            owner_user_id="u1",
+        )
+
+    assert [call for call in knowledge.calls if call[0] == "ainsert"] == []
+
+
+@pytest.mark.asyncio
 async def test_rebuild_document_preserves_existing_content_when_reload_fails() -> None:
     content_row = SimpleNamespace(
         id="content-rebuild",

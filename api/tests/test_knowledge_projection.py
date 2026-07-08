@@ -9,11 +9,11 @@ def test_owner_visibility_hides_foreign_knowledge_content() -> None:
     owned = SimpleNamespace(metadata={"user_id": "u1", "visibility": "private"})
     foreign = SimpleNamespace(metadata={"user_id": "u2", "visibility": "private"})
     public = SimpleNamespace(metadata={"user_id": "u2", "visibility": "public"})
-    legacy = SimpleNamespace(metadata={})
+    unowned = SimpleNamespace(metadata={})
     assert knowledge_document_service.content_visible_to_owner(owned, "u1")
     assert not knowledge_document_service.content_visible_to_owner(foreign, "u1")
     assert knowledge_document_service.content_visible_to_owner(public, "u1")
-    assert not knowledge_document_service.content_visible_to_owner(legacy, "u1")
+    assert not knowledge_document_service.content_visible_to_owner(unowned, "u1")
     assert knowledge_document_service.content_visible_to_owner(foreign, None)
 
 

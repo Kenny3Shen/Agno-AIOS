@@ -612,38 +612,6 @@ def _path_source_snapshot(
     }
 
 
-def _legacy_source_snapshot(content: Any) -> dict[str, object] | None:
-    metadata = _safe_metadata(getattr(content, "metadata", None))
-    name = str(getattr(content, "name", "") or metadata.get("title") or "")
-    description = str(getattr(content, "description", "") or metadata.get("source") or "")
-    filename = _filename_for_content(content) or name
-    path = (
-        getattr(content, "path", None)
-        or metadata.get("file_path")
-        or metadata.get("source")
-    )
-    if isinstance(path, str) and path.strip() and Path(path).expanduser().is_absolute():
-        return _path_source_snapshot(
-            name=name,
-            description=description,
-            path=path,
-            metadata=metadata,
-            filename=filename,
-        )
-
-    file_data = getattr(content, "file_data", None)
-    text_content = getattr(file_data, "content", None)
-    if isinstance(text_content, str) and text_content.strip():
-        return _text_source_snapshot(
-            name=name,
-            description=description or "manual",
-            text_content=text_content,
-            metadata=metadata,
-            filename=filename,
-        )
-    return None
-
-
 def _filename_for_content(content: Any) -> str | None:
     metadata = _safe_metadata(getattr(content, "metadata", None))
     for value in (
@@ -1053,8 +1021,6 @@ class KnowledgeBaseLifecycle:
             return None
         knowledge = await self._async_knowledge_async()
         source_snapshot = await self._get_source_async(doc_id)
-        if source_snapshot is None:
-            source_snapshot = _legacy_source_snapshot(content)
         if source_snapshot is None:
             raise ValueError("当前知识记录缺少可重建的原始 source 快照，请重新导入后再重建")
         current_metadata = _safe_metadata(getattr(content, "metadata", None))
