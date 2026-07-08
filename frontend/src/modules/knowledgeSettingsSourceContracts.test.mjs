@@ -38,6 +38,7 @@ import {
   useTracePayloadRendererSource,
   useTraceSpanSelectionSource,
   useTraceFilterRefreshSchedulerSource,
+  useTraceFilterWatchesSource,
   useTraceExternalSelectionEventsSource,
   traceWorkbenchSource,
   typesSource,
@@ -431,6 +432,30 @@ assert.doesNotMatch(
   trace,
   /filterRefreshTimer/,
   "Trace page must not own the filter refresh timer",
+)
+
+assert.match(
+  trace,
+  /useTraceFilterWatches[\s\S]*sessionPage[\s\S]*scheduleSessionFilterRefresh[\s\S]*scheduleFilterRefresh/,
+  "Trace page must delegate filter watchers to a composable",
+)
+
+assert.match(
+  useTraceFilterWatchesSource,
+  /watch[\s\S]*clampTraceSessionPage[\s\S]*scheduleSessionFilterRefresh[\s\S]*scheduleFilterRefresh/,
+  "Trace filter watches composable must own filter watchers and page clamping",
+)
+
+assert.doesNotMatch(
+  trace,
+  /watch\(/,
+  "Trace page must not inline filter watchers",
+)
+
+assert.doesNotMatch(
+  trace,
+  /clampTraceSessionPage/,
+  "Trace page must not own session page clamping",
 )
 
 assert.match(

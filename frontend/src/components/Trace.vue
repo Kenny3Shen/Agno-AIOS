@@ -456,7 +456,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue"
+import { computed, onMounted, onUnmounted, reactive, ref } from "vue"
 import { ElMessage } from "element-plus"
 import { useI18n } from "vue-i18n"
 import {
@@ -470,6 +470,7 @@ import { useChatHistory } from "../composables/useChatApi"
 import { useTracingApi } from "../composables/useTraceApi"
 import { useTraceExternalSelectionEvents } from "../composables/useTraceExternalSelectionEvents"
 import { useTraceFilterRefreshScheduler } from "../composables/useTraceFilterRefreshScheduler"
+import { useTraceFilterWatches } from "../composables/useTraceFilterWatches"
 import { useTracePayloadControls } from "../composables/useTracePayloadControls"
 import { useTracePayloadRenderer } from "../composables/useTracePayloadRenderer"
 import { useTraceSessionController } from "../composables/useTraceSessionController"
@@ -480,7 +481,6 @@ import {
   buildTraceOverviewItems,
   buildTraceRunRows,
   buildTraceToolCallItems,
-  clampTraceSessionPage,
   compactTraceId,
   createTraceRunFilters,
   createTraceSessionFilters,
@@ -681,27 +681,15 @@ useTraceExternalSelectionEvents({
   selectSessionById,
 })
 
-watch(
-  () => filteredSessions.value.length,
-  (count) => {
-    sessionPage.value = clampTraceSessionPage(sessionPage.value, count, SESSION_PAGE_SIZE)
-  },
-)
-
-watch(
-  () => [sessionFilters.sessionId, sessionFilters.userId, sessionFilters.keyword, sessionFilters.status],
-  () => {
-    sessionPage.value = 1
-    scheduleSessionFilterRefresh()
-  },
-)
-
-watch(
-  () => [runFilters.runId, runFilters.agentId, runFilters.teamId, runFilters.workflowId, runFilters.status],
-  () => {
-    scheduleFilterRefresh()
-  },
-)
+useTraceFilterWatches({
+  filteredSessions,
+  sessionPage,
+  sessionFilters,
+  runFilters,
+  sessionPageSize: SESSION_PAGE_SIZE,
+  scheduleSessionFilterRefresh,
+  scheduleFilterRefresh,
+})
 
 onMounted(async () => {
   try {
