@@ -23,6 +23,7 @@ from api.services import mcp_config_service
 from api.services import model_config_service
 from api.services import postgres_store, tracing_service
 from api.services import knowledge_service
+from api.services import knowledge_source_service
 from api.services import security_run_runtime
 from api.services import skill_service
 from api.core import logging as core_logging
@@ -291,9 +292,11 @@ def test_knowledge_async_lifecycle_uses_agno_async_api() -> None:
     assert "aremove_content_by_id" not in source
     assert "aremove_all_content" not in source
     assert "await self._delete_content_async" in source
-    assert "await _resolve_existing_file_async" in source
+    assert "await resolve_existing_file_async" in source
     assert ".exists()" not in source
     assert ".is_file()" not in source
+    source_service = inspect.getsource(knowledge_source_service)
+    assert "await AsyncPath(file_path).is_file()" in source_service
     assert "asyncio.to_thread" not in inspect.getsource(
         knowledge_service.KnowledgeBaseLifecycle.list_documents_async
     )

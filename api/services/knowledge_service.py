@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import os
 from importlib.util import find_spec
 from dataclasses import dataclass
@@ -10,7 +9,6 @@ from pathlib import Path
 from collections.abc import Sequence
 from typing import Any, Callable, Mapping, cast
 
-from anyio import Path as AsyncPath
 from agno.knowledge.content import Content
 from agno.knowledge.document import Document
 from agno.knowledge.embedder.sentence_transformer import SentenceTransformerEmbedder
@@ -61,6 +59,18 @@ from api.services.knowledge_runtime_service import (
     KnowledgeRuntimeSettings,
     build_knowledge_base,
     retrieval_candidate_limit,
+)
+from api.services.knowledge_source_service import (
+    SOURCE_METADATA_KEY,
+    ainsert_source_snapshot_async,
+    mapping_metadata,
+    metadata_with_source_ref,
+    path_source_snapshot,
+    resolve_existing_file_async,
+    safe_public_metadata,
+    source_digest,
+    source_ref as make_source_ref,
+    text_source_snapshot,
 )
 
 @dataclass(frozen=True)
@@ -124,8 +134,6 @@ COLD_START_NOTE = (
     "首次触发知识写入、向量检索或重排时会在线程中加载/下载本地模型，"
     "当前操作可能等待 30-120 秒，但不会阻塞其它页面请求。"
 )
-SOURCE_METADATA_KEY = "_tais_source"
-SOURCE_METADATA_VERSION = 1
 _knowledge_async_lock = asyncio.Lock()
 _knowledge_runtime_async_lock = asyncio.Lock()
 
@@ -168,13 +176,6 @@ RAG_STRING_FIELDS = {
     "device",
     "search_type",
 }
-
-
-async def _resolve_existing_file_async(path: str) -> Path:
-    file_path = Path(path).expanduser().resolve()
-    if not await AsyncPath(file_path).is_file():
-        raise FileNotFoundError(f"文件不存在: {path}")
-    return file_path
 
 
 def _model_device() -> str:
@@ -533,133 +534,6 @@ async def _delete_content_async(knowledge: Any, content_id: str) -> None:
     await _delete_knowledge_content_row_async(knowledge, content_id)
 
 
-def _source_digest(*values: object) -> str:
-    hasher = hashlib.sha256()
-    for value in values:
-        hasher.update(str(value or "").encode("utf-8"))
-        hasher.update(b"\0")
-    return hasher.hexdigest()
-
-
-def _source_ref(kind: str, digest: str) -> dict[str, object]:
-    return {
-        "kind": kind,
-        "digest": digest,
-        "version": SOURCE_METADATA_VERSION,
-    }
-
-
-def _metadata_with_source_ref(
-    metadata: Mapping[str, object],
-    source_ref: Mapping[str, object],
-) -> dict[str, object]:
-    return {**dict(metadata), SOURCE_METADATA_KEY: dict(source_ref)}
-
-
-def _mapping_metadata(value: object) -> dict[str, object]:
-    if not isinstance(value, Mapping):
-        return {}
-    return {
-        key: item
-        for key, item in value.items()
-        if isinstance(key, str) and item is not None
-    }
-
-
-def _text_source_snapshot(
-    *,
-    name: str,
-    description: str,
-    text_content: str,
-    metadata: Mapping[str, object],
-    filename: str,
-) -> dict[str, object]:
-    return {
-        "kind": "text",
-        "name": name,
-        "description": description,
-        "text_content": text_content,
-        "metadata": dict(metadata),
-        "filename": filename,
-        "version": SOURCE_METADATA_VERSION,
-    }
-
-
-def _safe_public_metadata(metadata: Mapping[str, object]) -> dict[str, object]:
-    return {
-        key: value
-        for key, value in metadata.items()
-        if not key.startswith("_") and value is not None
-    }
-
-
-def _path_source_snapshot(
-    *,
-    name: str,
-    description: str,
-    path: str,
-    metadata: Mapping[str, object],
-    filename: str,
-) -> dict[str, object]:
-    return {
-        "kind": "path",
-        "name": name,
-        "description": description,
-        "path": path,
-        "metadata": dict(metadata),
-        "filename": filename,
-        "version": SOURCE_METADATA_VERSION,
-    }
-
-
-def _filename_for_content(content: Any) -> str | None:
-    metadata = _safe_metadata(getattr(content, "metadata", None))
-    for value in (
-        metadata.get("file_name"),
-        metadata.get("file_path"),
-        metadata.get("source"),
-        getattr(content, "path", None),
-        getattr(content, "name", None),
-    ):
-        if isinstance(value, str) and value.strip():
-            return Path(value).name
-    return None
-
-
-async def _ainsert_source_snapshot_async(
-    knowledge: Any,
-    source: Mapping[str, object],
-) -> None:
-    kind = str(source.get("kind") or "").strip().lower()
-    metadata = _mapping_metadata(source.get("metadata"))
-    name = str(source.get("name") or metadata.get("title") or "").strip() or None
-    description = str(source.get("description") or metadata.get("source") or "").strip() or None
-    filename = str(source.get("filename") or metadata.get("file_name") or name or "").strip()
-    reader = reader_for_filename(filename)
-    kwargs: dict[str, object] = {
-        "name": name,
-        "description": description,
-        "metadata": metadata,
-        "reader": reader,
-        "upsert": True,
-        "skip_if_exists": False,
-    }
-    if kind == "text":
-        text_content = source.get("text_content")
-        if not isinstance(text_content, str) or not text_content.strip():
-            raise ValueError("当前知识记录缺少可重建的文本 source 快照")
-        kwargs["text_content"] = text_content
-    elif kind == "path":
-        path = str(source.get("path") or metadata.get("file_path") or "").strip()
-        if not path:
-            raise ValueError("当前知识记录缺少可重建的文件路径 source 快照")
-        resolved_path = await _resolve_existing_file_async(path)
-        kwargs["path"] = str(resolved_path)
-    else:
-        raise ValueError("当前知识记录缺少可重建的原始 source 快照")
-    await knowledge.ainsert(**kwargs)
-
-
 async def _latest_inserted_content_async(
     knowledge: Any,
     *,
@@ -877,11 +751,11 @@ class KnowledgeBaseLifecycle:
             "reader": profile.reader,
             "input_mode": base_metadata.get("input_mode", "manual"),
         }
-        safe_metadata = _metadata_with_source_ref(
+        safe_metadata = metadata_with_source_ref(
             safe_metadata,
-            _source_ref("text", _source_digest(clean_content)),
+            make_source_ref("text", source_digest(clean_content)),
         )
-        source_snapshot = _text_source_snapshot(
+        source_snapshot = text_source_snapshot(
             name=clean_title,
             description=clean_source,
             text_content=clean_content,
@@ -919,7 +793,7 @@ class KnowledgeBaseLifecycle:
         owner_user_id: str | None = None,
         visibility: str = "private",
     ) -> KnowledgeDocumentPayload:
-        file_path = await _resolve_existing_file_async(path)
+        file_path = await resolve_existing_file_async(path)
         if file_path.suffix.lower() not in SUPPORTED_FILE_SUFFIXES:
             supported = ", ".join(SUPPORTED_FILE_SUFFIXES)
             raise ValueError(f"当前知识库支持的文件后缀: {supported}")
@@ -938,11 +812,11 @@ class KnowledgeBaseLifecycle:
             "reader": profile.reader,
             "input_mode": "path",
         }
-        metadata = _metadata_with_source_ref(
+        metadata = metadata_with_source_ref(
             metadata,
-            _source_ref("path", _source_digest(str(file_path))),
+            make_source_ref("path", source_digest(str(file_path))),
         )
-        source_snapshot = _path_source_snapshot(
+        source_snapshot = path_source_snapshot(
             name=clean_title,
             description=str(file_path),
             path=str(file_path),
@@ -1026,8 +900,12 @@ class KnowledgeBaseLifecycle:
         current_metadata = _safe_metadata(getattr(content, "metadata", None))
         async with _knowledge_async_lock:
             await self._ensure_storage_async()
-            await _ainsert_source_snapshot_async(knowledge, source_snapshot)
-            source_metadata = _mapping_metadata(source_snapshot.get("metadata"))
+            await ainsert_source_snapshot_async(
+                knowledge,
+                source_snapshot,
+                reader_for_filename=reader_for_filename,
+            )
+            source_metadata = mapping_metadata(source_snapshot.get("metadata"))
             if current_metadata and current_metadata != source_metadata:
                 patched = await knowledge.apatch_content(
                     Content(id=doc_id, metadata=current_metadata)
@@ -1094,9 +972,9 @@ class KnowledgeBaseLifecycle:
         ).strip()
         visibility = normalize_visibility(str(current_metadata.get("visibility") or "private"))
         profile = knowledge_profile_for_filename(clean_file_name)
-        source_ref = _source_ref("text", _source_digest(clean_content, clean_file_name))
+        source_reference = make_source_ref("text", source_digest(clean_content, clean_file_name))
         safe_metadata = {
-            **_safe_public_metadata(current_metadata),
+            **safe_public_metadata(current_metadata),
             **_safe_metadata(metadata),
             **_owner_metadata(owner, visibility),
             "title": clean_title,
@@ -1108,8 +986,8 @@ class KnowledgeBaseLifecycle:
             "input_mode": "replacement",
             "upload_mode": "browser",
         }
-        safe_metadata = _metadata_with_source_ref(safe_metadata, source_ref)
-        source_snapshot = _text_source_snapshot(
+        safe_metadata = metadata_with_source_ref(safe_metadata, source_reference)
+        source_snapshot = text_source_snapshot(
             name=clean_title,
             description=clean_source,
             text_content=clean_content,
@@ -1132,7 +1010,7 @@ class KnowledgeBaseLifecycle:
                 knowledge,
                 title=clean_title,
                 source=clean_source,
-                source_ref=source_ref,
+                source_ref=source_reference,
             )
             if inserted is None or not getattr(inserted, "id", None):
                 raise RuntimeError("source 新版本写入完成但未能读取内容登记记录")
