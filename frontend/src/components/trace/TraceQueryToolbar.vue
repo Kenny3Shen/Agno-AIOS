@@ -1,6 +1,6 @@
 <template>
-  <div class="trace-query-toolbar ag-content-panel">
-    <div class="trace-query-primary">
+  <div class="trace-query-toolbar ag-content-panel grid flex-none grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-[10px]">
+    <div class="trace-query-primary flex min-w-0 flex-wrap items-center gap-2">
       <el-input
         v-model="sessionFilters.sessionId"
         size="small"
@@ -47,7 +47,7 @@
         <el-icon><Refresh /></el-icon>
       </el-button>
     </div>
-    <div v-if="advancedFiltersOpen" class="trace-advanced-filters">
+    <div v-if="advancedFiltersOpen" class="trace-advanced-filters col-span-full flex min-w-0 flex-wrap items-center gap-2">
       <el-input v-model="sessionFilters.userId" size="small" clearable :placeholder="t('trace.filters.userId')" class="trace-filter-input" @keyup.enter="emit('refreshAll')" />
       <el-input v-model="sessionFilters.keyword" size="small" clearable :placeholder="t('trace.filters.keyword')" class="trace-filter-input" @keyup.enter="emit('refreshAll')" />
       <el-select v-model="sessionFilters.status" size="small" :placeholder="t('trace.filters.sessionStatus')" class="trace-filter-select">

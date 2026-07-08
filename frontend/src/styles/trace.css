@@ -1322,24 +1322,7 @@ html.dark .trace-waterfall-row.active {
   flex-direction: column;
 }
 
-.trace-query-toolbar {
-  display: grid;
-  flex: 0 0 auto;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px 12px;
-}
-
-.trace-query-primary,
 .trace-advanced-filters {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.trace-advanced-filters {
-  grid-column: 1 / -1;
   border-top: 1px solid var(--trace-border);
   padding-top: 10px;
 }

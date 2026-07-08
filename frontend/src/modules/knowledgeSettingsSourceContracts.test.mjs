@@ -380,6 +380,18 @@ assert.match(
 
 assert.match(
   traceQueryToolbar,
+  /trace-query-toolbar[\s\S]*grid-cols-\[minmax\(0,1fr\)_auto\][\s\S]*trace-query-primary[\s\S]*flex-wrap[\s\S]*trace-advanced-filters[\s\S]*col-span-full/,
+  "TraceQueryToolbar must move simple toolbar layout to UnoCSS utilities",
+)
+
+assert.doesNotMatch(
+  traceStyle,
+  /\.trace-query-toolbar\s*\{[^}]*display:\s*grid|\.trace-query-primary,\s*\n\.trace-advanced-filters\s*\{[^}]*display:\s*flex/,
+  "Trace stylesheet must not keep simple query toolbar layout after UnoCSS utility migration",
+)
+
+assert.match(
+  traceQueryToolbar,
   /useI18n\(\)/,
   "TraceQueryToolbar must read toolbar copy from vue-i18n",
 )
