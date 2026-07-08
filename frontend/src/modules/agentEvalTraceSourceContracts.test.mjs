@@ -35,6 +35,7 @@ import {
   skills,
   sourcePath,
   trace,
+  traceSessionPanel,
   traceStyle,
   useTraceDetailViewportSource,
   typesSource,
@@ -297,7 +298,7 @@ assert.match(
 )
 
 assert.match(
-  trace,
+  traceSessionPanel,
   /trace-session-panel/,
   "Trace page must expose a session filtering panel",
 )

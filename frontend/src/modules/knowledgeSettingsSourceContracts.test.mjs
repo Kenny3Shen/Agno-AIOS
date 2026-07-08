@@ -35,6 +35,7 @@ import {
   sourcePath,
   trace,
   traceQueryToolbar,
+  traceSessionPanel,
   traceStyle,
   useTracePayloadControlsSource,
   useTracePayloadRendererSource,
@@ -397,6 +398,36 @@ assert.doesNotMatch(
   trace,
   /traceAdvancedFiltersOpen\s*=\s*!traceAdvancedFiltersOpen|trace-query-primary|trace-advanced-filters/,
   "Trace page must not inline query toolbar internals",
+)
+
+assert.match(
+  trace,
+  /<TraceSessionPanel[\s\S]*v-model:session-page="sessionPage"[\s\S]*:filtered-sessions="filteredSessions"[\s\S]*:paged-sessions="pagedSessions"[\s\S]*@select-session="selectSession"/,
+  "Trace page must delegate the session column to TraceSessionPanel",
+)
+
+assert.match(
+  traceSessionPanel,
+  /trace-session-panel[\s\S]*trace-session-list[\s\S]*trace-session-pagination[\s\S]*trace-session-empty/,
+  "TraceSessionPanel must own the session panel structure",
+)
+
+assert.match(
+  traceSessionPanel,
+  /useI18n\(\)/,
+  "TraceSessionPanel must read session panel copy from vue-i18n",
+)
+
+assert.match(
+  traceSessionPanel,
+  /trace\.sessions\.title[\s\S]*trace\.empty\.noSessionsDescription/,
+  "TraceSessionPanel must own session panel copy",
+)
+
+assert.doesNotMatch(
+  trace,
+  /trace-session-list|trace-session-card|trace-session-pagination|trace-session-empty/,
+  "Trace page must not inline session panel internals",
 )
 
 assert.match(

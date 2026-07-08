@@ -32,6 +32,7 @@ import {
   sourcePath,
   trace,
   traceQueryToolbar,
+  traceSessionPanel,
   traceWorkbenchSource,
   typesSource,
   useApiCore,
@@ -519,7 +520,7 @@ for (const traceFilterHook of [
 }
 
 assert.match(
-  trace,
+  traceSessionPanel,
   /v-for="session in pagedSessions"/,
   "Trace Sessions column must render paginated sessions instead of the full filtered list",
 )
@@ -531,13 +532,13 @@ assert.match(
 )
 
 assert.match(
-  trace,
-  /:rows="SESSION_PAGE_SIZE"/,
+  traceSessionPanel,
+  /:rows="sessionPageSize"/,
   "Trace Sessions loading skeleton must match the default session page size",
 )
 
 assert.match(
-  trace,
+  traceSessionPanel,
   /trace-session-pagination/,
   "Trace Sessions column must expose pagination controls",
 )

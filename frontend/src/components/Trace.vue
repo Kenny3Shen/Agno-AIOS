@@ -13,55 +13,16 @@
       />
 
       <div class="trace-body-grid ag-workspace-panel">
-        <aside class="trace-session-panel">
-          <div class="trace-toolbar trace-session-toolbar">
-            <div class="trace-panel-header">
-              <div>
-                <p>{{ t('trace.sessions.title') }}</p>
-              </div>
-              <strong>{{ filteredSessions.length }}</strong>
-            </div>
-          </div>
-
-          <div class="trace-session-list">
-            <el-skeleton v-if="loadingSessions && !sessions.length" :rows="SESSION_PAGE_SIZE" animated />
-            <template v-else>
-              <button
-                v-for="session in pagedSessions"
-                :key="session.session_id"
-                type="button"
-                class="trace-session-card"
-                :class="{ active: selectedSessionId === session.session_id }"
-                @click="selectSession(session)"
-              >
-                <span class="trace-session-card-head">
-                  <strong :title="session.preview || session.session_id">
-                    {{ session.preview || t('trace.sessions.untitled') }}
-                  </strong>
-                  <em>{{ formatSessionTime(session.updated_at || session.created_at) }}</em>
-                </span>
-                <span class="trace-session-id-line" :title="session.session_id">{{ compactId(session.session_id) }}</span>
-              </button>
-            </template>
-
-            <el-pagination
-              v-if="filteredSessions.length > SESSION_PAGE_SIZE"
-              v-model:current-page="sessionPage"
-              class="trace-session-pagination"
-              :page-size="SESSION_PAGE_SIZE"
-              :pager-count="5"
-              :total="filteredSessions.length"
-              layout="prev, pager, next"
-              small
-            />
-
-            <div v-if="!filteredSessions.length && !loadingSessions" class="empty-observe trace-session-empty">
-              <el-icon><Connection /></el-icon>
-              <strong>{{ t('trace.empty.noSessionsTitle') }}</strong>
-              <span>{{ t('trace.empty.noSessionsDescription') }}</span>
-            </div>
-          </div>
-        </aside>
+        <TraceSessionPanel
+          v-model:session-page="sessionPage"
+          :sessions="sessions"
+          :filtered-sessions="filteredSessions"
+          :paged-sessions="pagedSessions"
+          :selected-session-id="selectedSessionId"
+          :session-page-size="SESSION_PAGE_SIZE"
+          :loading-sessions="loadingSessions"
+          @select-session="selectSession"
+        />
 
         <main class="trace-canvas">
           <section class="trace-runs-workbench">
@@ -414,6 +375,7 @@ import {
   Cpu,
 } from "@element-plus/icons-vue"
 import TraceQueryToolbar from "./trace/TraceQueryToolbar.vue"
+import TraceSessionPanel from "./trace/TraceSessionPanel.vue"
 import { useChatHistory } from "../composables/useChatApi"
 import { useTracingApi } from "../composables/useTraceApi"
 import { useTraceDerivedPanels } from "../composables/useTraceDerivedPanels"
@@ -434,7 +396,6 @@ import {
   formatTraceAnyDateTime,
   formatTraceDateTime,
   formatTraceDuration,
-  formatTraceSessionTime,
   traceDurationClass,
   traceStatusClass,
   traceStatusLabel,
@@ -498,7 +459,6 @@ const {
 
 const formatDateTime = formatTraceDateTime
 const formatAnyDateTime = formatTraceAnyDateTime
-const formatSessionTime = formatTraceSessionTime
 
 const {
   filteredRunRows,
