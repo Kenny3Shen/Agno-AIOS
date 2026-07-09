@@ -211,6 +211,12 @@ assert.match(
 
 assert.match(
   knowledgeIngestDrawer,
+  /:size="drawerSize"[\s\S]*const drawerSize = "min\(460px, 100vw\)"/,
+  "Knowledge Drawer must use a viewport-bounded width on narrow screens",
+)
+
+assert.match(
+  knowledgeIngestDrawer,
   /advancedIngestOpen/,
   "Knowledge Drawer advanced ingest options must be collapsed by local state",
 )
@@ -249,6 +255,42 @@ assert.match(
   knowledgeIngestDrawer,
   /ingest_options/,
   "Knowledge Drawer must send per-request ingest options",
+)
+
+assert.match(
+  knowledgeIngestDrawer,
+  /const sourceForm = reactive[\s\S]{0,80}\(\{[\s\S]*file:[\s\S]*text:[\s\S]*path:[\s\S]*update:/,
+  "Knowledge Drawer must keep explicit source fields for each ingest mode",
+)
+
+assert.match(
+  knowledgeIngestDrawer,
+  /<label class="knowledge-field source-field"[\s\S]*knowledge\.drawer\.source[\s\S]*v-model="currentSource"/,
+  "Knowledge Drawer must render a visible source input bound to the active ingest mode",
+)
+
+assert.match(
+  knowledgeIngestDrawer,
+  /emit\("submit-file"[\s\S]*source: sourceValueFor\("file"\)/,
+  "Knowledge file upload payload must include the user-controlled source value",
+)
+
+assert.match(
+  knowledgeIngestDrawer,
+  /emit\("submit-path"[\s\S]*source: sourceValueFor\("path"\)/,
+  "Knowledge path import payload must include the user-controlled source value",
+)
+
+assert.match(
+  knowledge,
+  /source: payload\.source\.trim\(\) \|\| `upload:\$\{payload\.file\.name\}`/,
+  "Knowledge browser file upload must send the Drawer source value with the upload fallback",
+)
+
+assert.match(
+  knowledge,
+  /source: payload\.source\.trim\(\) \|\| payload\.path\.trim\(\)/,
+  "Knowledge server path import must send the Drawer source value with the path fallback",
 )
 
 assert.doesNotMatch(

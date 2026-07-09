@@ -4,7 +4,7 @@
     class="knowledge-ingest-drawer"
     :title="mode === 'update' ? t('knowledge.drawer.updateTitle') : t('knowledge.drawer.addTitle')"
     direction="rtl"
-    size="460px"
+    :size="drawerSize"
     :before-close="beforeClose"
     @update:model-value="(value: boolean) => emit('update:modelValue', value)"
   >
@@ -47,6 +47,11 @@
             <div>{{ t("knowledge.upload.dropText") }} {{ t("knowledge.upload.chooseFile") }}</div>
           </el-upload>
         </template>
+
+        <label class="knowledge-field source-field">
+          <span>{{ t("knowledge.drawer.source") }}</span>
+          <el-input v-model="currentSource" :placeholder="sourcePlaceholder" />
+        </label>
       </section>
 
       <section v-if="mode === 'add'" class="drawer-section drawer-visibility-section">
@@ -116,10 +121,12 @@ import SectionHeader from "../common/SectionHeader.vue"
 
 type DrawerMode = "add" | "update"
 type InputMode = "file" | "text" | "path"
+type SourceMode = InputMode | "update"
 
 interface FileSubmitPayload {
   file: File
   title: string
+  source: string
   visibility: ResourceVisibility
   ingest_options: KnowledgeIngestOptions | null
 }
@@ -136,6 +143,7 @@ interface TextSubmitPayload {
 interface PathSubmitPayload {
   path: string
   title: string
+  source: string
   visibility: ResourceVisibility
   ingest_options: KnowledgeIngestOptions | null
 }
@@ -166,12 +174,19 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const drawerSize = "min(460px, 100vw)"
 const inputMode = ref<InputMode>("file")
 const selectedFile = ref<File | null>(null)
 const visibility = ref<ResourceVisibility>("private")
 const advancedPanels = ref<string[]>([])
 const ingestOptions = reactive<KnowledgeIngestOptions>(createDefaultKnowledgeIngestOptions(props.status))
-const textForm = reactive({ title: "", content: "", source: "manual" })
+const sourceForm = reactive<Record<SourceMode, string>>({
+  file: "",
+  text: "manual",
+  path: "",
+  update: "",
+})
+const textForm = reactive({ title: "", content: "" })
 const pathForm = reactive({ path: "", title: "" })
 
 const advancedIngestOpen = computed(() => advancedPanels.value.includes("advanced"))
@@ -186,6 +201,14 @@ const selectedReaderLabel = computed(() => {
   const selected = ingestOptions.reader_strategy || "auto"
   return readerStrategyOptions.value.find((option) => option.value === selected)?.label || selected
 })
+const activeSourceMode = computed<SourceMode>(() => (props.mode === "update" ? "update" : inputMode.value))
+const currentSource = computed({
+  get: () => sourceForm[activeSourceMode.value],
+  set: (value: string) => {
+    sourceForm[activeSourceMode.value] = value
+  },
+})
+const sourcePlaceholder = computed(() => fallbackSourceFor(activeSourceMode.value) || t("knowledge.upload.sourceManualPlaceholder"))
 
 watch(
   () => props.modelValue,
@@ -195,9 +218,12 @@ watch(
     visibility.value = props.targetDocument?.visibility || "private"
     textForm.title = ""
     textForm.content = ""
-    textForm.source = "manual"
     pathForm.path = ""
     pathForm.title = ""
+    sourceForm.file = ""
+    sourceForm.text = "manual"
+    sourceForm.path = ""
+    sourceForm.update = props.targetDocument?.source || ""
     selectedFile.value = null
     advancedPanels.value = []
     inputMode.value = "file"
@@ -231,6 +257,14 @@ watch(inputMode, (mode) => {
 const syncReaderStrategy = (filename: string) => {
   ingestOptions.reader_strategy = readerStrategyForFilename(filename)
 }
+
+const fallbackSourceFor = (mode: SourceMode) => {
+  if (mode === "text") return "manual"
+  if (mode === "path") return pathForm.path.trim()
+  return selectedFile.value ? `upload:${selectedFile.value.name}` : ""
+}
+
+const sourceValueFor = (mode: SourceMode) => sourceForm[mode].trim() || fallbackSourceFor(mode)
 
 const ingestOptionsPayload = () => {
   if (!advancedIngestOpen.value) return null
@@ -267,7 +301,7 @@ const submit = () => {
       document: props.targetDocument,
       file: selectedFile.value,
       title: props.targetDocument.title,
-      source: `upload:${selectedFile.value.name}`,
+      source: sourceValueFor("update"),
       metadata: { file_name: selectedFile.value.name },
       ingest_options,
     })
@@ -277,6 +311,7 @@ const submit = () => {
     emit("submit-file", {
       file: selectedFile.value,
       title: selectedFile.value.name.replace(/\.[^.]+$/i, ""),
+      source: sourceValueFor("file"),
       visibility: visibility.value,
       ingest_options,
     })
@@ -286,7 +321,7 @@ const submit = () => {
     emit("submit-text", {
       title: textForm.title.trim(),
       content: textForm.content,
-      source: textForm.source.trim() || "manual",
+      source: sourceValueFor("text"),
       metadata: { input_mode: "manual" },
       visibility: visibility.value,
       ingest_options,
@@ -296,6 +331,7 @@ const submit = () => {
   emit("submit-path", {
     path: pathForm.path.trim(),
     title: pathForm.title.trim(),
+    source: sourceValueFor("path"),
     visibility: visibility.value,
     ingest_options,
   })

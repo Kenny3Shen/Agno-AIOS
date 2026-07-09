@@ -61,6 +61,7 @@ type IngestDrawerMode = "add" | "update"
 interface DrawerFilePayload {
   file: File
   title: string
+  source: string
   visibility: ResourceVisibility
   ingest_options: KnowledgeIngestOptions | null
 }
@@ -77,6 +78,7 @@ interface DrawerTextPayload {
 interface DrawerPathPayload {
   path: string
   title: string
+  source: string
   visibility: ResourceVisibility
   ingest_options: KnowledgeIngestOptions | null
 }
@@ -187,7 +189,7 @@ const submitDrawerFileUpload = async (payload: DrawerFilePayload) => {
     const created = await addTextDocument({
       title: payload.title.trim() || payload.file.name.replace(/\.[^.]+$/i, ""),
       content,
-      source: `upload:${payload.file.name}`,
+      source: payload.source.trim() || `upload:${payload.file.name}`,
       visibility: payload.visibility,
       metadata: fileMetadata(payload.file),
       ingest_options: payload.ingest_options,
@@ -239,6 +241,7 @@ const submitDrawerPathDocument = async (payload: DrawerPathPayload) => {
     const created = await addFileDocument({
       path: payload.path.trim(),
       title: payload.title.trim() || null,
+      source: payload.source.trim() || payload.path.trim(),
       visibility: payload.visibility,
       ingest_options: payload.ingest_options,
     })
@@ -262,7 +265,7 @@ const submitDrawerUpdateFile = async (payload: DrawerUpdatePayload) => {
       title: payload.title || doc.title,
       content,
       file_name: payload.file.name,
-      source: payload.source || `upload:${payload.file.name}`,
+      source: payload.source.trim() || `upload:${payload.file.name}`,
       metadata: {
         ...fileMetadata(payload.file),
         ...payload.metadata,

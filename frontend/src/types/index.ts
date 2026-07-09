@@ -734,6 +734,7 @@ export interface KnowledgeTextRequest {
 export interface KnowledgeFileRequest {
   path: string
   title?: string | null
+  source?: string | null
   visibility?: ResourceVisibility
   ingest_options?: KnowledgeIngestOptions | null
 }

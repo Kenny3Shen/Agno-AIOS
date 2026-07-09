@@ -638,6 +638,7 @@ class KnowledgeBaseLifecycle:
         self,
         path: str,
         title: str | None = None,
+        source: str | None = None,
         owner_user_id: str | None = None,
         visibility: str = "private",
         ingest_options: Mapping[str, object] | None = None,
@@ -649,6 +650,7 @@ class KnowledgeBaseLifecycle:
         normalized_visibility = normalize_visibility(visibility, strict=True)
 
         clean_title = (title or file_path.stem).strip() or file_path.stem
+        clean_source = (source or str(file_path)).strip() or str(file_path)
         ingest_overrides = _coerce_ingest_overrides(ingest_options)
         profile = knowledge_profile_for_filename_or_strategy(
             file_path.name,
@@ -658,7 +660,7 @@ class KnowledgeBaseLifecycle:
             **_metadata_ingest_options(ingest_overrides),
             **_owner_metadata(owner_user_id, normalized_visibility),
             "title": clean_title,
-            "source": str(file_path),
+            "source": clean_source,
             "file_path": str(file_path),
             "file_name": file_path.name,
             "file_type": file_path.suffix.lower(),
@@ -672,7 +674,7 @@ class KnowledgeBaseLifecycle:
         )
         source_snapshot = path_source_snapshot(
             name=clean_title,
-            description=str(file_path),
+            description=clean_source,
             path=str(file_path),
             metadata=metadata,
             filename=file_path.name,
@@ -683,7 +685,7 @@ class KnowledgeBaseLifecycle:
             await self._ensure_storage_async()
             await knowledge.ainsert(
                 name=clean_title,
-                description=str(file_path),
+                description=clean_source,
                 path=str(file_path),
                 metadata=metadata,
                 reader=reader,
@@ -1055,6 +1057,7 @@ async def add_text_document_async(
 async def add_file_document_async(
     path: str,
     title: str | None = None,
+    source: str | None = None,
     owner_user_id: str | None = None,
     visibility: str = "private",
     ingest_options: Mapping[str, object] | None = None,
@@ -1062,6 +1065,7 @@ async def add_file_document_async(
     return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.add_file_document_async(
         path,
         title=title,
+        source=source,
         owner_user_id=owner_user_id,
         visibility=visibility,
         ingest_options=ingest_options,

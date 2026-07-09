@@ -1256,7 +1256,7 @@ export const zhCN = {
       metadata: "Metadata",
       addDocument: "新增文档",
       updateDocument: "更新",
-      selectedMetadata: "选中文档 Metadata",
+      selectedMetadata: "Metadata",
       noSelection: "选择文档后查看 Metadata",
     },
     advanced: {

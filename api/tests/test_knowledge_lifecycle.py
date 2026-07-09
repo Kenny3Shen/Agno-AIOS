@@ -271,6 +271,7 @@ async def test_add_file_document_uses_async_insert_and_reload(tmp_path) -> None:
         result = await lifecycle.add_file_document_async(
             str(file_path),
             title="Runbook",
+            source="kb://runbooks/primary",
             owner_user_id="u1",
         )
 
@@ -279,9 +280,12 @@ async def test_add_file_document_uses_async_insert_and_reload(tmp_path) -> None:
     assert knowledge.calls[0][0] == "ainsert"
     assert knowledge.calls[1][0] == "aget_content"
     insert_kwargs = knowledge.calls[0][2]
+    assert insert_kwargs["description"] == "kb://runbooks/primary"
+    assert insert_kwargs["metadata"]["source"] == "kb://runbooks/primary"
     assert insert_kwargs["metadata"]["_tais_source"]["kind"] == "path"
     assert "text_content" not in insert_kwargs["metadata"]["_tais_source"]
     assert stored_sources["content-2"]["kind"] == "path"
+    assert stored_sources["content-2"]["description"] == "kb://runbooks/primary"
     assert stored_sources["content-2"]["path"] == str(file_path)
     assert stored_sources["content-2"]["metadata"] == insert_kwargs["metadata"]
 

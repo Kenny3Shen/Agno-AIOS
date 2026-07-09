@@ -73,6 +73,7 @@ class KnowledgeTextRequest(BaseModel):
 class KnowledgeFileRequest(BaseModel):
     path: str = Field(..., min_length=1)
     title: str | None = None
+    source: str | None = None
     visibility: str = "private"
     ingest_options: KnowledgeIngestOptionsRequest | None = None
 
@@ -177,6 +178,7 @@ async def create_file_document(
         result = await get_knowledge_base_lifecycle().add_file_document_async(
             path=request.path,
             title=request.title,
+            source=request.source,
             owner_user_id=actor_id(user),
             visibility=request.visibility,
             ingest_options=(
@@ -191,7 +193,7 @@ async def create_file_document(
             action="knowledge.create",
             resource_type="knowledge_document",
             resource_id=str(result.get("id") or request.title or request.path),
-            metadata={"path": request.path},
+            metadata={"path": request.path, "source": request.source or request.path},
             **audit_request_context(request_ctx),
         )
         return response

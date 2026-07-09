@@ -1258,7 +1258,7 @@ export const enUS = {
       metadata: "Metadata",
       addDocument: "Add document",
       updateDocument: "Update",
-      selectedMetadata: "Selected document metadata",
+      selectedMetadata: "Metadata",
       noSelection: "Select a document to inspect metadata",
     },
     advanced: {

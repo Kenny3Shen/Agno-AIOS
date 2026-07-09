@@ -29,16 +29,9 @@ dataset/
 openspec
 .worktrees
 .pytest_cache/
-
+.superpowers
 # Playwright
-.playwright-cli
-.playwright-mcp
-.playwright-check
-/test-results/
-/playwright-report/
-/blob-report/
-/playwright/.cache/
-/playwright/.auth/
-/frontend/dist-test/
+.playwright*
+
 
 /frontend-react
