@@ -437,6 +437,7 @@ export const enUS = {
       thinkingFallback: "The model output contains thinking-process markers.",
       modelLoadFailed: "Failed to load model configuration",
       modelUnavailable: "Model unavailable",
+      requestBlocked: "The request was blocked by the security policy. Adjust the prompt or open Trace for context.",
       requestFailed: "Sorry, the request failed. Try again later.",
     },
     prompts: {

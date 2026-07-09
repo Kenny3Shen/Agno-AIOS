@@ -241,6 +241,78 @@ assert.match(
   "Memory metadata row layout must only target direct rows so nested source viewer divs are not converted into metadata grids",
 )
 
+assert.match(
+  chat,
+  /chat-thread-frame/,
+  "Chat messages must render inside a centered desktop reading frame instead of spreading across the full workbench",
+)
+
+assert.match(
+  chat,
+  /\.chat-thread-frame\s*\{[\s\S]*max-width:\s*var\(--chat-readable-width\)/,
+  "Chat reading frame must cap desktop line length with --chat-readable-width",
+)
+
+assert.match(
+  chat,
+  /chat-composer-frame/,
+  "Chat composer controls must share the same centered frame as the message stream",
+)
+
+assert.match(
+  chat,
+  /\.chat-composer-frame\s*\{[\s\S]*max-width:\s*var\(--chat-readable-width\)/,
+  "Chat composer frame must match the message frame width on desktop",
+)
+
+assert.doesNotMatch(
+  chat,
+  /\.message-row\.is-user\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+34px/,
+  "User messages must not align against the full workbench width",
+)
+
+assert.match(
+  chat,
+  /assistantDisplayContent/,
+  "Chat must normalize persisted assistant content before rendering localized status messages",
+)
+
+assert.match(
+  chat,
+  /chat\.notices\.requestBlocked/,
+  "Blocked assistant responses must render through localized Chat copy",
+)
+
+assert.match(
+  app,
+  /ag-chat-session-scroll/,
+  "Sidebar Chat sessions must live in a dedicated scroll region so module navigation remains reachable",
+)
+
+assert.match(
+  appStyle,
+  /\.ag-chat-session-scroll\s*\{[\s\S]*overflow-y:\s*auto/,
+  "Sidebar Chat session scroll region must own overflow instead of pushing later nav groups behind the footer",
+)
+
+assert.match(
+  app,
+  /<el-icon><MoreFilled \/><\/el-icon>/,
+  "Sidebar Chat session actions must use the standard More icon instead of a text colon",
+)
+
+assert.doesNotMatch(
+  appStyle,
+  /\.ag-chat-session-menu\s*\{[^}]*position:\s*absolute/,
+  "Sidebar Chat session actions must expand inline so the scroll container cannot clip the menu",
+)
+
+assert.match(
+  appStyle,
+  /\.ag-chat-session-menu\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/,
+  "Sidebar Chat session action menu must occupy the full row width inside the session list",
+)
+
 assert.doesNotMatch(
   memoryDetailMetadata,
   /selectedMemory\.topics/,

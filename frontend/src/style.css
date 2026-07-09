@@ -508,13 +508,31 @@ button:enabled {
 	color: var(--ag-accent);
 }
 
-.ag-chat-session-panel,
+.ag-chat-session-panel {
+	display: grid;
+	grid-template-rows: auto auto minmax(0, 1fr);
+	gap: 7px;
+	min-height: 0;
+	max-height: min(420px, calc(100dvh - 342px));
+	margin: 0 0 4px 38px;
+	padding-left: 10px;
+	border-left: 1px solid var(--ag-sidebar-border);
+}
+
 .ag-trace-queue-panel {
 	display: grid;
 	gap: 7px;
 	margin: 0 0 4px 38px;
 	padding-left: 10px;
 	border-left: 1px solid var(--ag-sidebar-border);
+}
+
+.ag-chat-session-scroll {
+	display: grid;
+	gap: 7px;
+	min-height: 0;
+	overflow-y: auto;
+	padding-right: 2px;
 }
 
 .ag-chat-new-session,
@@ -575,7 +593,9 @@ button:enabled {
 }
 
 .ag-chat-session-row {
-	align-items: stretch;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 30px;
+	align-items: start;
 	gap: 6px;
 	border: 0;
 	padding: 0;
@@ -634,7 +654,6 @@ button:enabled {
 }
 
 .ag-chat-session-menu-wrap {
-	position: relative;
 	display: flex;
 	flex: 0 0 auto;
 }
@@ -653,10 +672,12 @@ button:enabled {
 		border-color 0.16s ease,
 		background 0.16s ease,
 		color 0.16s ease;
-	font-family: "JetBrains Mono", "Fira Code", monospace;
-	font-size: 17px;
 	font-weight: 800;
 	line-height: 1;
+}
+
+.ag-chat-session-menu-trigger .el-icon {
+	font-size: 16px;
 }
 
 .ag-chat-session-menu-trigger:hover,
@@ -667,12 +688,9 @@ button:enabled {
 }
 
 .ag-chat-session-menu {
-	position: absolute;
-	top: calc(100% + 4px);
-	right: 0;
-	z-index: 20;
+	grid-column: 1 / -1;
 	display: grid;
-	width: 172px;
+	width: 100%;
 	gap: 4px;
 	border: 1px solid var(--ag-sidebar-border);
 	border-radius: 8px;

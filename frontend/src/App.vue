@@ -121,37 +121,39 @@
                           <strong>{{ chatSessions.length }}</strong>
                         </div>
 
-                        <div
-                          v-for="session in chatSessions"
-                          :key="session.session_id"
-                          class="ag-chat-session-row"
-                          :class="{ active: currentChatSessionId === session.session_id }"
-                        >
-                          <button
-                            type="button"
-                            class="ag-chat-session-item"
-                            :title="session.preview || session.session_id"
-                            @click="selectChatSession(session.session_id)"
+                        <div class="ag-chat-session-scroll">
+                          <div
+                            v-for="session in chatSessions"
+                            :key="session.session_id"
+                            class="ag-chat-session-row"
+                            :class="{ active: currentChatSessionId === session.session_id }"
                           >
-                            <span class="ag-chat-session-icon">
-                              <el-icon><ChatDotRound /></el-icon>
-                            </span>
-                            <span class="ag-chat-session-copy">
-                              <strong>{{ session.preview || t("shell.actions.newChat") }}</strong>
-                              <em>{{ formatSessionTime(session.updated_at) }}</em>
-                            </span>
-                          </button>
-
-                          <div class="ag-chat-session-menu-wrap">
                             <button
                               type="button"
-                              class="ag-chat-session-menu-trigger"
-                              :aria-label="t('shell.sessions.actions')"
-                              :aria-expanded="openSessionMenuId === session.session_id"
-                              @click.stop="toggleSessionMenu(session.session_id)"
+                              class="ag-chat-session-item"
+                              :title="session.preview || session.session_id"
+                              @click="selectChatSession(session.session_id)"
                             >
-                              :
+                              <span class="ag-chat-session-icon">
+                                <el-icon><ChatDotRound /></el-icon>
+                              </span>
+                              <span class="ag-chat-session-copy">
+                                <strong>{{ session.preview || t("shell.actions.newChat") }}</strong>
+                                <em>{{ formatSessionTime(session.updated_at) }}</em>
+                              </span>
                             </button>
+
+                            <div class="ag-chat-session-menu-wrap">
+                              <button
+                                type="button"
+                                class="ag-chat-session-menu-trigger"
+                                :aria-label="t('shell.sessions.actions')"
+                                :aria-expanded="openSessionMenuId === session.session_id"
+                                @click.stop="toggleSessionMenu(session.session_id)"
+                              >
+                                <el-icon><MoreFilled /></el-icon>
+                              </button>
+                            </div>
 
                             <transition name="fade">
                               <div
@@ -174,10 +176,10 @@
                               </div>
                             </transition>
                           </div>
-                        </div>
 
-                        <div v-if="!chatSessions.length && !loadingSessions" class="ag-chat-session-empty">
-                          {{ t("shell.actions.noSessions") }}
+                          <div v-if="!chatSessions.length && !loadingSessions" class="ag-chat-session-empty">
+                            {{ t("shell.actions.noSessions") }}
+                          </div>
                         </div>
                       </div>
                     </transition>

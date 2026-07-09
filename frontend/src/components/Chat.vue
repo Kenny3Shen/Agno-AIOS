@@ -3,9 +3,10 @@
     <main class="flex h-full min-h-0 min-w-0 flex-col">
         <div
           ref="chatContainer"
-          class="agent-stream min-h-0 flex-1 overflow-y-auto p-4"
+          class="agent-stream min-h-0 flex-1 overflow-y-auto"
           @scroll="handleChatScroll"
         >
+          <div class="chat-thread-frame">
           <transition-group name="msg-fade">
             <div
               v-for="(msg, index) in messages"
@@ -60,29 +61,29 @@
                 <div
                   v-else-if="msg.role === 'assistant'"
                   class="markdown-body prose prose-sm max-w-none dark:prose-invert"
-                  v-html="renderMarkdown(parsedAssistantMessage(msg.content).body)"
+                  v-html="renderMarkdown(parsedAssistantMessage(assistantDisplayContent(msg)).body)"
                 ></div>
                 <p v-else class="whitespace-pre-wrap break-words text-sm leading-relaxed">{{ msg.content }}</p>
                 <span v-if="msg.role === 'assistant' && !msg.final" class="stream-cursor" aria-hidden="true" />
 
-                <div v-if="msg.role === 'assistant' && parsedAssistantMessage(msg.content).thinking" class="thinking-collapse">
+                <div v-if="msg.role === 'assistant' && parsedAssistantMessage(assistantDisplayContent(msg)).thinking" class="thinking-collapse">
                   <button type="button" @click="toggleCollapsed(collapsedThinking, index)">
                     {{ isCollapsed(collapsedThinking, index) ? t("chat.collapse.expandThinking") : t("chat.collapse.collapseThinking") }}
                   </button>
-                  <pre v-if="!isCollapsed(collapsedThinking, index)">{{ parsedAssistantMessage(msg.content).thinking }}</pre>
+                  <pre v-if="!isCollapsed(collapsedThinking, index)">{{ parsedAssistantMessage(assistantDisplayContent(msg)).thinking }}</pre>
                 </div>
 
-                <div v-if="msg.role === 'assistant' && parsedAssistantMessage(msg.content).sources.length" class="source-collapse">
+                <div v-if="msg.role === 'assistant' && parsedAssistantMessage(assistantDisplayContent(msg)).sources.length" class="source-collapse">
                   <button type="button" @click="toggleCollapsed(collapsedSources, index)">
                     {{ isCollapsed(collapsedSources, index) ? t("chat.collapse.expandSources") : t("chat.collapse.collapseSources") }}
                   </button>
                   <ul v-if="!isCollapsed(collapsedSources, index)">
-                    <li v-for="source in parsedAssistantMessage(msg.content).sources" :key="source">{{ source }}</li>
+                    <li v-for="source in parsedAssistantMessage(assistantDisplayContent(msg)).sources" :key="source">{{ source }}</li>
                   </ul>
                 </div>
 
-                <ol v-if="msg.role === 'assistant' && parsedAssistantMessage(msg.content).toolEvents.length" class="tool-timeline">
-                  <li v-for="event in parsedAssistantMessage(msg.content).toolEvents" :key="event">
+                <ol v-if="msg.role === 'assistant' && parsedAssistantMessage(assistantDisplayContent(msg)).toolEvents.length" class="tool-timeline">
+                  <li v-for="event in parsedAssistantMessage(assistantDisplayContent(msg)).toolEvents" :key="event">
                     <span class="tool-call-pulse" />
                     <span>{{ event }}</span>
                   </li>
@@ -184,6 +185,7 @@
               </button>
             </el-tooltip>
           </div>
+          </div>
         </div>
 
         <transition name="msg-fade">
@@ -199,79 +201,81 @@
         </transition>
 
         <footer class="agent-chat-footer p-3">
-          <div v-if="showQuickPrompts" class="mb-2 flex flex-wrap gap-2">
-            <button
-              v-for="prompt in quickPrompts"
-              :key="prompt"
-              type="button"
-              class="quick-prompt cursor-pointer px-2.5 py-1.5 text-xs transition-colors duration-200"
-              @click="inputMessage = prompt"
-            >
-              {{ prompt }}
-            </button>
-          </div>
-          <div
-            v-if="modelConfigNotice"
-            class="model-config-notice mb-2 px-3 py-2 text-xs"
-          >
-            {{ modelConfigNotice }}
-          </div>
-          <div class="chat-composer">
-            <div class="chat-composer-row">
-              <el-input
-                v-model="inputMessage"
-                :placeholder="t('chat.composer.placeholder')"
-                @keyup.enter.exact="sendMessage"
-                :disabled="loading"
-                :autosize="{ minRows: 1, maxRows: 4 }"
-                type="textarea"
-                class="chat-input"
-              />
-              <el-select
-                v-model="selectedModelId"
-                :loading="modelLoading"
-                :placeholder="t('chat.composer.modelPlaceholder')"
-                class="agent-model-select"
-                popper-class="agent-model-select-popper"
-                placement="top-start"
-                @change="persistSelectedModel"
+          <div class="chat-composer-frame">
+            <div v-if="showQuickPrompts" class="mb-2 flex flex-wrap gap-2">
+              <button
+                v-for="prompt in quickPrompts"
+                :key="prompt"
+                type="button"
+                class="quick-prompt cursor-pointer px-2.5 py-1.5 text-xs transition-colors duration-200"
+                @click="inputMessage = prompt"
               >
-                <el-option
-                  v-for="model in modelOptions"
-                  :key="model.id"
-                  :label="model.name"
-                  :value="model.id"
-                  :disabled="!model.enabled"
+                {{ prompt }}
+              </button>
+            </div>
+            <div
+              v-if="modelConfigNotice"
+              class="model-config-notice mb-2 px-3 py-2 text-xs"
+            >
+              {{ modelConfigNotice }}
+            </div>
+            <div class="chat-composer">
+              <div class="chat-composer-row">
+                <el-input
+                  v-model="inputMessage"
+                  :placeholder="t('chat.composer.placeholder')"
+                  @keyup.enter.exact="sendMessage"
+                  :disabled="loading"
+                  :autosize="{ minRows: 1, maxRows: 4 }"
+                  type="textarea"
+                  class="chat-input"
+                />
+                <el-select
+                  v-model="selectedModelId"
+                  :loading="modelLoading"
+                  :placeholder="t('chat.composer.modelPlaceholder')"
+                  class="agent-model-select"
+                  popper-class="agent-model-select-popper"
+                  placement="top-start"
+                  @change="persistSelectedModel"
                 >
-                  <div class="model-option">
-                    <span class="min-w-0">
-                      <span class="model-option-title">{{ model.name }}</span>
-                      <span class="model-option-subtitle">
-                        {{ model.model_id || t("chat.composer.missingModelId") }}
+                  <el-option
+                    v-for="model in modelOptions"
+                    :key="model.id"
+                    :label="model.name"
+                    :value="model.id"
+                    :disabled="!model.enabled"
+                  >
+                    <div class="model-option">
+                      <span class="min-w-0">
+                        <span class="model-option-title">{{ model.name }}</span>
+                        <span class="model-option-subtitle">
+                          {{ model.model_id || t("chat.composer.missingModelId") }}
+                        </span>
                       </span>
-                    </span>
-                    <span
-                      class="model-option-status"
-                      :class="model.configured
-                        ? 'is-ready'
-                        : 'is-pending'"
-                    >
-                      {{ model.configured ? 'Ready' : 'Config' }}
-                    </span>
-                  </div>
-                </el-option>
-              </el-select>
-              <el-tooltip :content="t('chat.composer.send')" placement="top">
-                <el-button
-                  type="primary"
-                  @click="sendMessage"
-                  :loading="loading"
-                  :disabled="!inputMessage.trim() || loading || !selectedModelReady"
-                  class="send-button cursor-pointer"
-                >
-                  <el-icon><Promotion /></el-icon>
-                </el-button>
-              </el-tooltip>
+                      <span
+                        class="model-option-status"
+                        :class="model.configured
+                          ? 'is-ready'
+                          : 'is-pending'"
+                      >
+                        {{ model.configured ? 'Ready' : 'Config' }}
+                      </span>
+                    </div>
+                  </el-option>
+                </el-select>
+                <el-tooltip :content="t('chat.composer.send')" placement="top">
+                  <el-button
+                    type="primary"
+                    @click="sendMessage"
+                    :loading="loading"
+                    :disabled="!inputMessage.trim() || loading || !selectedModelReady"
+                    class="send-button cursor-pointer"
+                  >
+                    <el-icon><Promotion /></el-icon>
+                  </el-button>
+                </el-tooltip>
+              </div>
             </div>
           </div>
         </footer>
@@ -502,7 +506,7 @@ const scrollToTop = async () => {
 }
 
 const copyMessage = async (index: number, message: ChatMessage) => {
-  const content = message.role === "assistant" ? parsedAssistantMessage(message.content).body : message.content
+  const content = message.role === "assistant" ? parsedAssistantMessage(assistantDisplayContent(message)).body : message.content
   if (!content.trim()) return
   if (await copyToClipboard(content.trim())) {
     markCopied(copySuccessIndex, index)
@@ -671,6 +675,16 @@ const toggleCollapsed = (set: Set<number>, index: number) => {
 }
 
 const isCollapsed = (set: Set<number>, index: number) => set.has(index)
+
+const blockedAssistantContentPattern = /^(your request was blocked\.?|request was blocked\.?)$/i
+
+const assistantDisplayContent = (message: ChatMessage) => {
+  const content = message.content || ""
+  if (message.role === "assistant" && blockedAssistantContentPattern.test(content.trim())) {
+    return t("chat.notices.requestBlocked")
+  }
+  return content
+}
 
 const parsedAssistantMessage = (content: string): ParsedAssistantMessage => {
   const sources: string[] = []
@@ -876,6 +890,9 @@ onUnmounted(() => {
 
 <style>
 .agent-chat {
+  --chat-readable-width: 1120px;
+  --chat-message-width: 860px;
+  --chat-user-message-width: 720px;
   background: var(--ag-frame);
   color: var(--ag-text);
   font-family: "Fira Sans", "Microsoft YaHei", sans-serif;
@@ -910,27 +927,38 @@ onUnmounted(() => {
 .agent-stream {
   position: relative;
   background: var(--ag-frame);
+  padding: 16px clamp(12px, 2.4vw, 28px) 10px;
+}
+
+.chat-thread-frame {
+  width: 100%;
+  max-width: var(--chat-readable-width);
+  margin-inline: auto;
+  min-height: 100%;
+}
+
+.chat-composer-frame {
+  width: 100%;
+  max-width: var(--chat-readable-width);
+  margin-inline: auto;
 }
 
 .message-row {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: 34px minmax(0, var(--chat-message-width)) 34px;
   gap: 10px;
+  justify-content: start;
   margin-bottom: 16px;
   animation: message-rise 0.24s ease both;
 }
 
-.message-row.is-user {
-  grid-template-columns: minmax(0, 1fr) 34px;
-}
-
 .message-row.is-user .message-rail {
-  grid-column: 2;
+  grid-column: 3;
   grid-row: 1;
 }
 
 .message-row.is-user .message-card {
-  grid-column: 1;
+  grid-column: 2;
   grid-row: 1;
   justify-self: end;
 }
@@ -994,7 +1022,7 @@ onUnmounted(() => {
 }
 
 .message-card.user {
-  width: min(720px, 100%);
+  width: min(var(--chat-user-message-width), 100%);
   background: var(--ag-user-message-bg);
   color: var(--ag-user-message-text);
 }
@@ -1487,6 +1515,7 @@ html.dark .chat-input .el-textarea__inner {
   .message-row,
   .message-row.is-user {
     grid-template-columns: 28px minmax(0, 1fr);
+    justify-content: stretch;
   }
 
   .message-row.is-user .message-rail {

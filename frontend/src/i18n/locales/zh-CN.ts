@@ -435,6 +435,7 @@ export const zhCN = {
       thinkingFallback: "模型输出包含思考过程标记。",
       modelLoadFailed: "模型配置加载失败",
       modelUnavailable: "模型不可用",
+      requestBlocked: "请求被安全策略拦截。请调整输入内容或查看 Trace 获取更多上下文。",
       requestFailed: "抱歉，处理请求时遇到错误。请稍后再试。",
     },
     prompts: {
