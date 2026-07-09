@@ -1,4 +1,4 @@
-import type { ChatSession, ChatSessionRun, ParsedSpanDisplay, ParsedSpanEvent, ParsedSpanPayload, SpanItem, SpanTreeNode, TraceItem } from "../types"
+import type { ChatSession, ChatSessionRun, ParsedSpanDisplay, ParsedSpanEvent, ParsedSpanPayload, SpanItem, SpanTreeNode, TraceDetailResponse, TraceItem } from "../types"
 
 export type SessionStatusFilter = "active" | "archived" | "all"
 export type RunStatusFilter = "" | "OK" | "ERROR" | "UNSET"
@@ -177,6 +177,172 @@ const traceDateTimeOptions = {
   hour: "2-digit",
   minute: "2-digit",
 } as const
+
+const CHAT_RUN_FALLBACK_TRACE_PREFIX = "chat-run:"
+
+const stringValue = (value: unknown) => typeof value === "string" ? value.trim() : ""
+
+const runMetricValue = (run: ChatSessionRun | null | undefined, ...keys: string[]) => {
+  const metrics = run?.metrics
+  if (!metrics || typeof metrics !== "object") return null
+  const record = metrics as Record<string, unknown>
+  for (const key of keys) {
+    const value = record[key]
+    const numberValue = Number(value)
+    if (Number.isFinite(numberValue)) return numberValue
+  }
+  return null
+}
+
+const traceTimeFromRunValue = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const timestamp = value > 1_000_000_000_000 ? value : value * 1000
+    return new Date(timestamp).toISOString()
+  }
+  if (typeof value === "string" && value.trim()) {
+    const timestamp = Number(value)
+    if (Number.isFinite(timestamp)) {
+      return traceTimeFromRunValue(timestamp)
+    }
+    const parsed = new Date(value)
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString()
+  }
+  return ""
+}
+
+const parsedPayloadFromValue = (value: unknown): ParsedSpanPayload => {
+  if (value === null || value === undefined || value === "") {
+    return { format: "empty", text: "", data: null }
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>
+    const inputContent = stringValue(record.input_content)
+    if (inputContent) {
+      return { format: "text", text: inputContent, data: null }
+    }
+    return { format: "json", text: JSON.stringify(value, null, 2), data: value }
+  }
+  const text = String(value).trim()
+  if (!text) return { format: "empty", text: "", data: null }
+  if (["{", "["].includes(text[0])) {
+    try {
+      const data = JSON.parse(text)
+      return { format: "json", text: JSON.stringify(data, null, 2), data }
+    } catch {
+      return { format: "text", text, data: null }
+    }
+  }
+  return { format: "text", text, data: null }
+}
+
+const normalizeRunTraceStatus = (run: ChatSessionRun) => {
+  const status = stringValue(run.status).toUpperCase()
+  if (status.includes("ERROR") || status.includes("FAIL")) return "ERROR"
+  if (status.includes("OK") || status.includes("SUCCESS") || status.includes("COMPLETE")) return "OK"
+  return run.content ? "OK" : "UNSET"
+}
+
+const chatRunFallbackTraceId = (runId: string) => `${CHAT_RUN_FALLBACK_TRACE_PREFIX}${runId}`
+
+export const isChatRunFallbackTrace = (trace: TraceItem | null | undefined): trace is TraceItem => (
+  typeof trace?.trace_id === "string" && trace.trace_id.startsWith(CHAT_RUN_FALLBACK_TRACE_PREFIX)
+)
+
+export const buildChatRunFallbackTrace = (
+  run: ChatSessionRun,
+  session: ChatSession,
+): TraceItem | null => {
+  const runId = stringValue(run.run_id)
+  if (!runId) return null
+  const createdAt = traceTimeFromRunValue(run.created_at || session.created_at)
+  const updatedAt = traceTimeFromRunValue(run.updated_at || session.updated_at || run.created_at || session.created_at)
+  return {
+    trace_id: chatRunFallbackTraceId(runId),
+    name: stringValue(run.agent_name) || runId,
+    status: normalizeRunTraceStatus(run),
+    duration_ms: runMetricValue(run, "duration_ms", "latency_ms", "elapsed_ms") || 0,
+    start_time: createdAt,
+    end_time: updatedAt || createdAt,
+    total_spans: 1,
+    error_count: normalizeRunTraceStatus(run) === "ERROR" ? 1 : 0,
+    run_id: runId,
+    session_id: stringValue(run.session_id) || session.session_id,
+    user_id: stringValue(run.user_id) || session.user_id || null,
+    agent_id: run.agent_id || null,
+    team_id: run.team_id || null,
+    workflow_id: run.workflow_id || null,
+    created_at: createdAt,
+  }
+}
+
+export const mergeChatRunFallbackTraces = (
+  traces: TraceItem[],
+  session: ChatSession | null,
+): TraceItem[] => {
+  if (!session) return traces
+  const runs = session.runs
+  if (!Array.isArray(runs) || !runs.length) return traces
+  const tracedRunIds = new Set(
+    traces
+      .map((trace) => stringValue(trace.run_id))
+      .filter(Boolean),
+  )
+  const fallbackTraces = runs
+    .filter((run) => {
+      const runId = stringValue(run.run_id)
+      return runId && !tracedRunIds.has(runId)
+    })
+    .map((run) => buildChatRunFallbackTrace(run, session))
+    .filter((trace): trace is TraceItem => Boolean(trace))
+  return [...traces, ...fallbackTraces]
+}
+
+export const buildChatRunFallbackDetail = (
+  trace: TraceItem,
+  run: ChatSessionRun | null | undefined,
+): TraceDetailResponse => {
+  const input = parsedPayloadFromValue(run?.input)
+  const output = parsedPayloadFromValue(run?.content)
+  const span: SpanItem = {
+    span_id: `${trace.trace_id}:run`,
+    trace_id: trace.trace_id,
+    parent_span_id: null,
+    name: stringValue(run?.agent_name) || trace.name || "Chat run",
+    status_code: trace.status,
+    status_message: trace.status === "ERROR" ? trace.name : null,
+    duration_ms: trace.duration_ms,
+    start_time: trace.start_time,
+    end_time: trace.end_time,
+    attributes: {
+      source: "chat_session_run",
+      run_id: trace.run_id,
+      session_id: trace.session_id,
+    },
+    events: [],
+    kind: "chat_run",
+    parsed: {
+      input,
+      output,
+      metadata: {
+        model: run?.model || null,
+        provider: run?.model_provider || null,
+        tool: null,
+        operation: "chat_run",
+        tokens: {
+          prompt: runMetricValue(run, "input_tokens", "prompt_tokens"),
+          completion: runMetricValue(run, "output_tokens", "completion_tokens"),
+          total: runMetricValue(run, "total_tokens"),
+        },
+      },
+      events: [],
+    },
+  }
+  return {
+    trace,
+    spans: [span],
+    tree: [{ span, children: [] }],
+  }
+}
 
 const sessionMatchesKeyword = (session: ChatSession, keyword: string) => {
   if (!keyword) return true

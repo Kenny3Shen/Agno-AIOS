@@ -6,6 +6,7 @@ import {
   buildTraceMetadataItems,
   buildTraceOverviewItems,
   buildTraceRunRows,
+  buildChatRunFallbackDetail,
   buildTraceSummaryCards,
   buildTraceToolCallItems,
   clampTraceSessionPage,
@@ -27,6 +28,8 @@ import {
   findTraceRunRow,
   isTraceJsonPayload,
   isTraceToolSpan,
+  isChatRunFallbackTrace,
+  mergeChatRunFallbackTraces,
   mergePreferredTraceItem,
   normalizeTraceSessionOpenRequest,
   pageTraceSessions,
@@ -205,6 +208,67 @@ assert.deepEqual(
     },
   ],
   "run rows should merge Trace and Chat Session Run ownership consistently",
+)
+
+const fallbackTraces = mergeChatRunFallbackTraces([traceA], sessionA)
+
+assert.deepEqual(
+  fallbackTraces.map((trace) => ({
+    trace_id: trace.trace_id,
+    run_id: trace.run_id,
+    name: trace.name,
+    total_spans: trace.total_spans,
+  })),
+  [
+    {
+      trace_id: "trace-a",
+      run_id: "run-1",
+      name: "",
+      total_spans: 3,
+    },
+    {
+      trace_id: "chat-run:run-2",
+      run_id: "run-2",
+      name: "Team Agent",
+      total_spans: 1,
+    },
+  ],
+  "trace list rows should include chat runs that do not have trace records",
+)
+
+assert.equal(
+  isChatRunFallbackTrace(fallbackTraces[1]),
+  true,
+  "fallback traces should be identifiable before opening detail",
+)
+
+const fallbackDetail = buildChatRunFallbackDetail(fallbackTraces[1], {
+  ...sessionA.runs[1],
+  input: { input_content: "show recent Log4j PoCs" },
+  content: "Found five Log4j PoCs.",
+  metrics: { input_tokens: 8, output_tokens: 5, total_tokens: 13, cost: 0.001 },
+})
+
+assert.deepEqual(
+  {
+    traceId: fallbackDetail.trace.trace_id,
+    spanCount: fallbackDetail.spans.length,
+    treeCount: fallbackDetail.tree.length,
+    spanName: fallbackDetail.spans[0].name,
+    inputText: fallbackDetail.spans[0].parsed.input.text,
+    outputText: fallbackDetail.spans[0].parsed.output.text,
+    totalTokens: fallbackDetail.spans[0].parsed.metadata.tokens.total,
+  },
+  {
+    traceId: "chat-run:run-2",
+    spanCount: 1,
+    treeCount: 1,
+    spanName: "Team Agent",
+    inputText: "show recent Log4j PoCs",
+    outputText: "Found five Log4j PoCs.",
+    totalTokens: 13,
+  },
+  "fallback detail should expose stored chat run input, output and metrics",
 )
 
 assert.deepEqual(

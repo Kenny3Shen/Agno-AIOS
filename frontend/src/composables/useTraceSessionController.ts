@@ -2,10 +2,13 @@ import type { ComputedRef, Ref } from "vue"
 import {
   buildTraceListParams,
   buildTraceStoreFilters,
+  buildChatRunFallbackDetail,
   createTraceRunFilters,
   createTraceSessionFilters,
   ensureTraceSession,
   findFirstTraceSpan,
+  isChatRunFallbackTrace,
+  mergeChatRunFallbackTraces,
   mergePreferredTraceItem,
   normalizeTraceSessionOpenRequest,
   resolveTraceSessionSelection,
@@ -16,6 +19,7 @@ import {
 } from "../modules/traceWorkbench"
 import type {
   ChatSession,
+  ChatSessionRun,
   SpanItem,
   SpanTreeNode,
   TraceDetailResponse,
@@ -112,6 +116,18 @@ export const useTraceSessionController = ({
   const selectTraceById = async (traceId: string | null | undefined) => {
     const id = (traceId || "").trim()
     if (!id || selectedTrace.value?.trace_id === id) return
+    const localTrace = sessionTraceItems.value.find((trace) => trace.trace_id === id)
+    if (isChatRunFallbackTrace(localTrace)) {
+      const run = selectedSession.value?.runs?.find((item: ChatSessionRun) => item.run_id === localTrace.run_id)
+      const resp = buildChatRunFallbackDetail(localTrace, run)
+      selectedTrace.value = resp.trace
+      spans.value = resp.spans || []
+      tree.value = resp.tree || []
+      selectedSpan.value = findFirstTraceSpan(tree.value, spans.value)
+      traceStore.setCurrentTraceId(resp.trace.trace_id)
+      scrollDetailIntoView()
+      return
+    }
     loadingDetail.value = true
     try {
       const resp = await getTrace(id)
@@ -136,7 +152,8 @@ export const useTraceSessionController = ({
     traceStore.setTraceFilters(buildTraceStoreFilters({ session, runId, filters: runFilters }))
     const baseParams = buildTraceListParams({ session, filters: runFilters })
     const resp = await listTraces(baseParams)
-    let items = resp.items || []
+    let realItems = resp.items || []
+    let items = mergeChatRunFallbackTraces(realItems, session)
     let traceToSelect = runId ? items.find((trace) => trace.run_id === runId) : null
     if (runId && !traceToSelect) {
       const exactResp = await listTraces({
@@ -146,7 +163,9 @@ export const useTraceSessionController = ({
       })
       traceToSelect = exactResp.items?.[0] || null
       if (traceToSelect) {
-        items = mergePreferredTraceItem(items, traceToSelect)
+        realItems = mergePreferredTraceItem(realItems, traceToSelect)
+        items = mergeChatRunFallbackTraces(realItems, session)
+        traceToSelect = items.find((trace) => trace.run_id === runId) || traceToSelect
       }
     }
     sessionTraceItems.value = items
