@@ -55,6 +55,20 @@ export default defineConfig({
       'border-[color-mix(in_srgb,var(--ag-red)_42%,var(--ag-border))] bg-[var(--ag-red-soft)] text-[var(--ag-red)]',
     'ag-status-muted':
       'border-[var(--ag-border)] bg-[var(--ag-panel-soft)] text-[var(--ag-muted)]',
+    'ag-data-chip':
+      'inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-[var(--ag-radius-control)] border border-[var(--ag-border)] bg-[var(--ag-panel-soft)] px-2 py-[5px] text-[11px] leading-none text-[var(--ag-muted-strong)]',
+    'ag-status-dot':
+      'inline-block size-2 shrink-0 rounded-full bg-[var(--ag-muted)] ring-2 ring-[var(--ag-panel)]',
+    'ag-section-header':
+      'flex min-w-0 items-start justify-between gap-3 border-b border-[var(--ag-border)] pb-2',
+    'ag-surface-row':
+      'min-w-0 rounded-[var(--ag-radius-panel)] border border-[var(--ag-border)] bg-[var(--ag-panel)] p-3 transition-colors hover:border-[color-mix(in_srgb,var(--ag-blue)_38%,var(--ag-border))] hover:bg-[var(--ag-blue-soft)]',
+    'ag-field-label':
+      'text-[11px] font-760 uppercase tracking-[0.08em] text-[var(--ag-muted)]',
+    'ag-code-panel':
+      'min-w-0 overflow-hidden rounded-[var(--ag-radius-panel)] border border-[var(--ag-border)] bg-[var(--ag-code-bg)] text-[var(--ag-code-text)]',
+    'ag-empty-compact':
+      'grid min-h-[88px] place-items-center rounded-[var(--ag-radius-panel)] border border-dashed border-[var(--ag-border)] bg-[var(--ag-panel-soft)] px-4 py-3 text-center text-xs text-[var(--ag-muted)]',
     'ag-empty-state':
       'grid min-h-[240px] place-items-center content-center gap-2.5 rounded-[var(--ag-radius-panel)] border border-dashed border-[var(--ag-border)] bg-[var(--ag-panel)] p-8 text-center text-xs text-[var(--ag-muted)]',
     'ag-empty-icon': 'text-[28px] text-[var(--ag-blue)]',
