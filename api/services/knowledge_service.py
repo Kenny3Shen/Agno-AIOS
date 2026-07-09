@@ -602,10 +602,8 @@ class KnowledgeBaseLifecycle:
             "reader": profile.reader,
             "input_mode": base_metadata.get("input_mode", "manual"),
         }
-        safe_metadata = metadata_with_source_ref(
-            safe_metadata,
-            make_source_ref("text", source_digest(clean_content)),
-        )
+        source_reference = make_source_ref("text", source_digest(clean_content))
+        safe_metadata = metadata_with_source_ref(safe_metadata, source_reference)
         source_snapshot = text_source_snapshot(
             name=clean_title,
             description=clean_source,
@@ -625,16 +623,15 @@ class KnowledgeBaseLifecycle:
                 upsert=True,
                 skip_if_exists=False,
             )
-        contents, _ = await knowledge.aget_content(
-            limit=1,
-            page=1,
-            sort_by="updated_at",
-            sort_order="desc",
+        inserted = await _latest_inserted_content_async(
+            knowledge,
+            title=clean_title,
+            source=clean_source,
+            source_ref=source_reference,
         )
-        for content_row in contents:
-            if content_row.name == clean_title:
-                await self._store_source_async(str(content_row.id), source_snapshot)
-                return _content_to_document(content_row)
+        if inserted is not None:
+            await self._store_source_async(str(inserted.id), source_snapshot)
+            return _content_to_document(inserted)
         raise RuntimeError("知识写入完成但未能读取内容登记记录")
 
     async def add_file_document_async(

@@ -12,6 +12,7 @@ from fastapi.routing import APIRoute
 from api.auth.claims import has_scope
 from api.routes import knowledge as knowledge_route
 from api.services import knowledge_service
+from api.services.knowledge_source_service import SOURCE_METADATA_KEY, source_digest
 from api.tests.knowledge_fakes import StrictAsyncKnowledge
 
 
@@ -191,6 +192,55 @@ async def test_add_text_document_records_per_request_ingest_options() -> None:
     assert insert_kwargs["metadata"]["semantic_threshold"] == "0.61"
     assert insert_kwargs["metadata"]["chunk_strategy"] == "markdown"
     assert insert_kwargs["metadata"]["reader"] == "MarkdownReader"
+
+
+@pytest.mark.asyncio
+async def test_add_text_document_resolves_inserted_content_by_source_digest() -> None:
+    content_row = SimpleNamespace(
+        id="content-json",
+        name="json chunk row",
+        metadata={
+            "user_id": "u1",
+            "source": "upload:alerts.json",
+            "chunks": 1,
+            SOURCE_METADATA_KEY: {
+                "kind": "text",
+                "digest": source_digest('{"alerts": []}'),
+            },
+        },
+        created_at=0,
+    )
+    latest_unrelated = SimpleNamespace(
+        id="other-content",
+        name="other",
+        metadata={"user_id": "u1", "source": "manual", "chunks": 1},
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(contents=[latest_unrelated, content_row])
+    stored_sources: dict[str, dict[str, object]] = {}
+
+    async def store_source_async(content_id: str, source: Mapping[str, object]) -> None:
+        stored_sources[content_id] = dict(source)
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_storage_async=lambda: None,
+            store_source_async=store_source_async,
+        )
+    )
+
+    result = await lifecycle.add_text_document_async(
+        "alerts",
+        '{"alerts": []}',
+        source="upload:alerts.json",
+        metadata={"file_name": "alerts.json"},
+        owner_user_id="u1",
+        ingest_options={"reader_strategy": "json"},
+    )
+
+    assert result["id"] == "content-json"
+    assert stored_sources["content-json"]["text_content"] == '{"alerts": []}'
 
 
 @pytest.mark.asyncio
