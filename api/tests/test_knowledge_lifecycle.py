@@ -513,6 +513,7 @@ async def test_replace_document_source_uploads_new_version_and_deletes_old_conte
         content_by_id={"content-old": old_row, "content-new": new_row},
     )
     deleted: list[str] = []
+    deleted_sources: list[str] = []
     stored_sources: dict[str, dict[str, object]] = {}
 
     async def content_by_id(content_id: str):
@@ -521,6 +522,9 @@ async def test_replace_document_source_uploads_new_version_and_deletes_old_conte
     async def delete_content_async(_knowledge, content_id: str) -> None:
         deleted.append(content_id)
         knowledge._content_by_id.pop(content_id, None)
+
+    async def delete_source_async(content_id: str) -> None:
+        deleted_sources.append(content_id)
 
     async def store_source_async(content_id: str, source: Mapping[str, object]) -> None:
         stored_sources[content_id] = dict(source)
@@ -532,6 +536,7 @@ async def test_replace_document_source_uploads_new_version_and_deletes_old_conte
             ensure_storage_async=lambda: None,
             knowledge_content_by_id_async=content_by_id,
             delete_content_async=delete_content_async,
+            delete_source_async=delete_source_async,
             store_source_async=store_source_async,
         )
     )
@@ -549,6 +554,7 @@ async def test_replace_document_source_uploads_new_version_and_deletes_old_conte
     assert result is not None
     assert result["id"] == "content-new"
     assert deleted == ["content-old"]
+    assert deleted_sources == ["content-old"]
     insert_calls = [call for call in knowledge.calls if call[0] == "ainsert"]
     assert len(insert_calls) == 1
     insert_kwargs = insert_calls[0][2]
@@ -592,6 +598,139 @@ async def test_replace_document_source_rejects_public_foreign_non_manager() -> N
     )
 
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_replace_document_source_reports_old_cleanup_failure() -> None:
+    old_row = SimpleNamespace(
+        id="content-old",
+        name="Runbook",
+        description="upload:runbook.md",
+        metadata={
+            "user_id": "u1",
+            "visibility": "private",
+            "source": "upload:runbook.md",
+            "title": "Runbook",
+            "file_name": "runbook.md",
+            "file_type": ".md",
+            "_tais_source": {"kind": "text", "digest": "old", "version": 1},
+        },
+        created_at=0,
+    )
+    new_row = SimpleNamespace(
+        id="content-new",
+        name="Runbook",
+        description="upload:runbook-v2.csv",
+        metadata={
+            "user_id": "u1",
+            "visibility": "private",
+            "source": "upload:runbook-v2.csv",
+            "title": "Runbook",
+            "file_name": "runbook-v2.csv",
+            "file_type": ".csv",
+            "_tais_source": {
+                "kind": "text",
+                "digest": knowledge_service.source_digest(
+                    "col\nvalue", "runbook-v2.csv"
+                ),
+                "version": 1,
+            },
+        },
+        created_at=1,
+    )
+    knowledge = StrictAsyncKnowledge(
+        contents=[new_row],
+        content_by_id={"content-old": old_row, "content-new": new_row},
+    )
+
+    async def content_by_id(content_id: str):
+        return knowledge._content_by_id.get(content_id)
+
+    async def delete_content_async(_knowledge, content_id: str) -> None:
+        assert content_id == "content-old"
+        raise RuntimeError("old cleanup failed")
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_contents_storage_async=lambda: None,
+            ensure_storage_async=lambda: None,
+            knowledge_content_by_id_async=content_by_id,
+            delete_content_async=delete_content_async,
+            store_source_async=lambda _content_id, _source: None,
+        )
+    )
+
+    with (
+        patch.object(knowledge_service, "reader_for_profile", return_value=object()),
+        pytest.raises(RuntimeError, match="old cleanup failed"),
+    ):
+        await lifecycle.replace_document_source_async(
+            "content-old",
+            content="col\nvalue\n",
+            file_name="runbook-v2.csv",
+            user=SimpleNamespace(id="u1", role="user", is_superuser=False),
+        )
+
+
+@pytest.mark.asyncio
+async def test_replace_document_source_cross_type_uses_new_reader_profile() -> None:
+    old_row = SimpleNamespace(
+        id="content-old-json",
+        name="Asset Policy",
+        description="upload:policy.json",
+        metadata={
+            "user_id": "u1",
+            "visibility": "private",
+            "source": "upload:policy.json",
+            "title": "Asset Policy",
+            "file_name": "policy.json",
+            "file_type": ".json",
+        },
+        created_at=0,
+    )
+    new_row = SimpleNamespace(
+        id="content-new-js",
+        name="Asset Policy",
+        description="upload:policy.js",
+        metadata={"user_id": "u1", "source": "upload:policy.js"},
+        created_at=1,
+    )
+    knowledge = StrictAsyncKnowledge(
+        contents=[new_row],
+        content_by_id={"content-old-json": old_row, "content-new-js": new_row},
+    )
+
+    async def content_by_id(content_id: str):
+        return knowledge._content_by_id.get(content_id)
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_contents_storage_async=lambda: None,
+            ensure_storage_async=lambda: None,
+            knowledge_content_by_id_async=content_by_id,
+            delete_content_async=lambda _knowledge, _content_id: None,
+            delete_source_async=lambda _content_id: None,
+            store_source_async=lambda _content_id, _source: None,
+        )
+    )
+
+    with patch.object(knowledge_service, "reader_for_profile", return_value=object()):
+        result = await lifecycle.replace_document_source_async(
+            "content-old-json",
+            content="console.log('policy')",
+            file_name="policy.js",
+            source="upload:policy.js",
+            user=SimpleNamespace(id="u1", role="user", is_superuser=False),
+        )
+
+    assert result is not None
+    insert_kwargs = knowledge.calls[0][2]
+    assert insert_kwargs["metadata"]["file_name"] == "policy.js"
+    assert insert_kwargs["metadata"]["file_type"] == ".js"
+    assert insert_kwargs["metadata"]["chunk_strategy"] == "code"
+    assert insert_kwargs["metadata"]["reader"] == "TextReader"
 
 
 @pytest.mark.asyncio

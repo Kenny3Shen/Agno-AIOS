@@ -22,6 +22,7 @@ from api.auth.visibility import can_manage_resource, normalize_visibility
 from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
 from api.persistence.knowledge_sources import (
+    delete_knowledge_source_async as _delete_knowledge_source_async,
     get_knowledge_source_async as _get_knowledge_source_async,
     upsert_knowledge_source_async as _upsert_knowledge_source_async,
 )
@@ -415,6 +416,7 @@ class KnowledgeBaseLifecycleDependencies:
     chunk_count_async: Callable[[str | None], Any] | None = None
     hydrate_content_ids_async: Callable[[list[Document]], Any] | None = None
     delete_content_async: Callable[[Any, str], Any] | None = None
+    delete_source_async: Callable[[str], Any] | None = None
 
 
 class KnowledgeBaseLifecycle:
@@ -542,8 +544,17 @@ class KnowledgeBaseLifecycle:
             result = self.dependencies.delete_content_async(knowledge, content_id)
             if hasattr(result, "__await__"):
                 await result
+        else:
+            await _delete_content_async(knowledge, content_id)
+        await self._delete_source_async(content_id)
+
+    async def _delete_source_async(self, content_id: str) -> None:
+        if self.dependencies.delete_source_async is not None:
+            result = self.dependencies.delete_source_async(content_id)
+            if hasattr(result, "__await__"):
+                await result
             return
-        await _delete_content_async(knowledge, content_id)
+        await _delete_knowledge_source_async(content_id)
 
     async def _deletable_content_ids_async(
         self,
