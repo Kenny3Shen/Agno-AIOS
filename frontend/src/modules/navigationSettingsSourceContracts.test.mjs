@@ -602,8 +602,8 @@ assert.match(
 
 assert.match(
   skills,
-  /skill-context-chip/,
-  "Skills summary items must render as local toolbar context chips",
+  /<MetricChip v-for="metric in summaryMetrics"/,
+  "Skills summary items must render through the shared metric chip primitive",
 )
 
 assert.match(
@@ -638,8 +638,8 @@ assert.match(
 
 assert.match(
   skills,
-  /skill-state-pill/,
-  "Skills page must use locally bounded compact state pill language",
+  /<StatusChip class="w-11"/,
+  "Skills page must use a compact shared status chip for enabled state",
 )
 
 assert.equal(

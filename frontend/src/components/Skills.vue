@@ -2,10 +2,7 @@
   <div class="skills-console ag-page-flow">
     <section class="skill-toolbar ag-content-panel">
       <div class="skill-context">
-        <span v-for="metric in summaryMetrics" :key="metric.label" class="skill-context-chip">
-          <small>{{ metric.label }}</small>
-          <strong>{{ metric.value }}</strong>
-        </span>
+        <MetricChip v-for="metric in summaryMetrics" :key="metric.label" :label="metric.label" :value="metric.value" />
       </div>
       <el-button
         :icon="Document"
@@ -21,12 +18,7 @@
     <main class="skills-main">
       <section class="skills-body">
         <section v-if="uploadPanelOpen" class="skill-upload-panel ag-content-panel">
-          <div class="skill-upload-head">
-            <span class="skill-upload-copy">
-              <strong>{{ t('skills.upload.title') }}</strong>
-              <em>{{ t('skills.upload.description') }}</em>
-            </span>
-          </div>
+          <PanelHeader :title="t('skills.upload.title')" :subtitle="t('skills.upload.description')" />
           <div class="skill-upload-grid">
             <el-input v-model="uploadForm.name" :placeholder="t('skills.upload.namePlaceholder')" />
             <label class="skill-visibility-field">
@@ -63,19 +55,17 @@
           </div>
         </section>
 
-        <div v-if="loading && skills.length === 0" class="skills-state">
-          <el-icon class="skill-loading is-loading"><Loading /></el-icon>
+        <EmptyState v-if="loading && skills.length === 0" :icon="Loading" loading>
           <span>{{ t('skills.loading') }}</span>
-        </div>
+        </EmptyState>
 
-        <div v-else-if="!loading && skills.length === 0" class="skills-state">
-          <el-icon><FolderOpened /></el-icon>
+        <EmptyState v-else-if="!loading && skills.length === 0" :icon="FolderOpened">
           <span>
             {{ t('skills.empty.noSkillsPrefix') }}
             <code class="skill-code">api/agent/skills/</code>
             {{ t('skills.empty.noSkillsSuffix') }}
           </span>
-        </div>
+        </EmptyState>
 
         <section
           v-else
@@ -103,9 +93,9 @@
                   <em>{{ skill.description || t('skills.empty.description') }}</em>
                 </span>
                 <span class="skill-list-meta">
-                  <span class="skill-state-pill" :class="skill.enabled ? 'ok' : 'off'">
+                  <StatusChip class="w-11" :tone="skill.enabled ? 'green' : 'muted'">
                     {{ skill.enabled ? t('common.state.enabled') : t('common.state.disabled') }}
-                  </span>
+                  </StatusChip>
                   <span class="skill-script-count">{{ t('skills.scripts.count', { count: skill.scripts.length }) }}</span>
                 </span>
               </button>
@@ -200,7 +190,11 @@ import type { UploadFile, UploadFiles, UploadInstance, UploadUserFile } from 'el
 import { useSkillsApi } from '../composables/useSkillsApi'
 import { useAuthStore } from '../stores/auth'
 import type { ResourceVisibility, SkillInfo } from '../types'
+import EmptyState from "./common/EmptyState.vue"
+import MetricChip from "./common/MetricChip.vue"
+import PanelHeader from "./common/PanelHeader.vue"
 import ResourceVisibilityTabs from "./common/ResourceVisibilityTabs.vue"
+import StatusChip from "./common/StatusChip.vue"
 
 const {
   loading,
@@ -446,38 +440,6 @@ onMounted(() => {
   gap: 8px;
 }
 
-.skill-context-chip {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  border: 1px solid var(--ag-border);
-  border-radius: var(--ag-radius-control);
-  background: var(--ag-panel-soft);
-  padding: 6px 9px;
-}
-
-.skill-context-chip small,
-.skill-context-chip strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.skill-context-chip small {
-  color: var(--ag-muted);
-  font-size: 11px;
-  font-weight: 720;
-}
-
-.skill-context-chip strong {
-  color: var(--ag-heading);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 11px;
-}
-
 .skill-toolbar-action {
   flex: 0 0 auto;
 }
@@ -490,40 +452,6 @@ onMounted(() => {
 .skill-upload-panel {
   display: grid;
   gap: 12px;
-}
-
-.skill-upload-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.skill-upload-copy {
-  min-width: 0;
-}
-
-.skill-upload-copy strong {
-  display: block;
-  overflow: hidden;
-  color: var(--ag-heading);
-  font-size: 13px;
-  font-weight: 760;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.skill-upload-copy em {
-  display: block;
-  margin-top: 3px;
-  overflow: hidden;
-  color: var(--ag-muted);
-  font-size: 12px;
-  font-style: normal;
-  line-height: 1.45;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .skill-upload-grid {
@@ -616,7 +544,6 @@ onMounted(() => {
 .skill-list-meta,
 .skill-detail-header,
 .skill-detail-actions,
-.skill-state-pill,
 .skill-script-pill,
 .skill-script-empty {
   display: flex;
@@ -716,29 +643,6 @@ onMounted(() => {
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
-}
-
-.skill-state-pill {
-  width: 44px;
-  min-height: 24px;
-  justify-content: center;
-  border: 1px solid var(--ag-border);
-  border-radius: var(--ag-radius-control);
-  background: var(--ag-panel-soft);
-  color: var(--ag-muted-strong);
-  font-size: 12px;
-  font-weight: 760;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.skill-state-pill.ok {
-  border-color: color-mix(in srgb, var(--ag-blue) 42%, var(--ag-border));
-  color: var(--ag-heading);
-}
-
-.skill-state-pill.off {
-  color: var(--ag-muted);
 }
 
 .skill-script-count,
@@ -1027,30 +931,6 @@ onMounted(() => {
   padding: 2px 6px;
   font-family: "Fira Code", "JetBrains Mono", monospace;
   font-size: 11px;
-}
-
-.skills-state {
-  display: grid;
-  min-height: 240px;
-  place-items: center;
-  align-content: center;
-  gap: 10px;
-  border: 1px dashed var(--ag-border);
-  border-radius: var(--ag-radius-panel);
-  background: var(--ag-panel);
-  padding: 32px;
-  color: var(--ag-muted);
-  font-size: 12px;
-  text-align: center;
-}
-
-.skills-state .el-icon {
-  color: var(--ag-blue);
-  font-size: 28px;
-}
-
-.skill-loading {
-  color: var(--ag-blue);
 }
 
 @media (max-width: 760px) {

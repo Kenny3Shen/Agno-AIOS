@@ -2,10 +2,7 @@
   <div class="workflow-console ag-page-flow">
     <header class="workflow-header ag-content-panel">
       <div class="workflow-context" :aria-label="t('workflow.stats.ariaLabel')">
-        <span v-for="stat in stats" :key="stat.label" class="workflow-context-chip">
-          <span>{{ stat.label }}</span>
-          <strong>{{ stat.value }}</strong>
-        </span>
+        <MetricChip v-for="stat in stats" :key="stat.label" :label="stat.label" :value="stat.value" />
       </div>
 
       <div class="workflow-actions">
@@ -80,17 +77,17 @@
       </aside>
 
       <main class="workflow-canvas workflow-panel">
-        <div class="workflow-canvas-head">
+        <div class="workflow-canvas-head ag-panel-header">
           <div>
             <span class="workflow-kicker">{{ t("workflow.canvas.kicker") }}</span>
             <h3>{{ workflowName || t("workflow.canvas.title") }}</h3>
             <p>{{ workflowDescription || t("workflow.canvas.description") }}</p>
           </div>
           <div class="workflow-canvas-actions">
-            <span class="workflow-runtime-chip">
+            <StatusChip tone="green">
               <el-icon><Connection /></el-icon>
               {{ t("workflow.canvas.runtime") }}
-            </span>
+            </StatusChip>
             <el-button size="small" type="primary" @click="runPreview">
               <el-icon><VideoPlay /></el-icon>
               {{ t("workflow.actions.runPreview") }}
@@ -271,6 +268,8 @@ import {
   WarningFilled,
 } from "@element-plus/icons-vue"
 import { useI18n } from "vue-i18n"
+import MetricChip from "./common/MetricChip.vue"
+import StatusChip from "./common/StatusChip.vue"
 import {
   buildWorkflowCode,
   constructorName,
@@ -572,42 +571,9 @@ function defaultExpression(kind: WorkflowStepKind) {
   gap: 8px;
 }
 
-.workflow-context-chip {
-  display: inline-flex;
-  min-width: 0;
-  max-width: 220px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  border: 1px solid var(--ag-border);
-  border-radius: var(--ag-radius-control);
-  background: var(--ag-panel-soft);
-  padding: 6px 9px;
-}
-
-.workflow-context-chip span,
-.workflow-context-chip strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.workflow-context-chip span {
-  color: var(--ag-muted);
-  font-size: 11px;
-  font-weight: 720;
-}
-
-.workflow-context-chip strong {
-  color: var(--ag-heading);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 11px;
-}
-
 .workflow-kicker,
 .workflow-section-head p,
-.workflow-canvas-head span:first-child {
+.workflow-canvas-head > div:first-child > span:first-child {
   color: var(--ag-blue);
   font-family: "JetBrains Mono", "Fira Code", monospace;
   font-size: 10px;
@@ -777,20 +743,6 @@ function defaultExpression(kind: WorkflowStepKind) {
 .workflow-canvas-head h3 {
   margin-top: 4px;
   font-size: 16px;
-}
-
-.workflow-runtime-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  border: 1px solid color-mix(in srgb, var(--ag-green) 42%, var(--ag-border));
-  border-radius: 8px;
-  background: var(--ag-green-soft);
-  padding: 7px 9px;
-  color: var(--ag-green);
-  font-size: 12px;
-  font-weight: 700;
 }
 
 .workflow-flow {

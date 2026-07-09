@@ -549,8 +549,8 @@ assert.doesNotMatch(
 
 assert.match(
   skills,
-  /skill-state-pill/,
-  "Skills list enabled/disabled state must use a locally bounded state pill",
+  /<StatusChip[\s\S]*skill\.enabled \? 'green' : 'muted'/,
+  "Skills list enabled/disabled state must use the shared status chip with bounded tones",
 )
 
 assert.match(
