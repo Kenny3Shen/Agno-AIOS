@@ -10,7 +10,7 @@
       <div class="playground-controls">
         <label class="knowledge-field">
           <span>{{ t("knowledge.labels.searchType") }}</span>
-          <el-select v-model="searchType" size="small">
+          <el-select v-model="searchType" class="retrieval-control-select">
             <el-option :label="t('knowledge.labels.hybrid')" value="hybrid" />
             <el-option :label="t('knowledge.labels.vector')" value="vector" />
             <el-option :label="t('knowledge.labels.keyword')" value="keyword" />
@@ -18,9 +18,9 @@
         </label>
         <label class="knowledge-field">
           <span>{{ t("knowledge.labels.topK") }}</span>
-          <el-input-number v-model="limit" :min="1" :max="20" size="small" class="!w-full" />
+          <el-input-number v-model="limit" :min="1" :max="20" class="retrieval-control-number" />
         </label>
-        <el-button type="primary" class="cursor-pointer" :disabled="searching || !query.trim()" :loading="searching" @click="emitSearch">
+        <el-button type="primary" class="retrieval-control-button cursor-pointer" :disabled="searching || !query.trim()" :loading="searching" @click="emitSearch">
           {{ t("knowledge.actions.search") }}
         </el-button>
       </div>
@@ -32,30 +32,32 @@
         <span>{{ t("knowledge.retrieval.resultCount", { count: searchResults.length }) }}</span>
       </div>
 
-      <div v-if="searching" class="empty-box">
-        <el-icon class="is-loading mr-1"><Loading /></el-icon>
-        {{ t("knowledge.retrieval.searching") }}
-      </div>
-      <div v-else-if="searched && searchResults.length === 0" class="empty-box">{{ t("knowledge.retrieval.noResults") }}</div>
-      <div v-else-if="!searched" class="empty-box">{{ t("knowledge.retrieval.idle") }}</div>
-
-      <article v-for="result in searchResults" :key="`${result.doc_id}:${result.chunk_index}`" class="retrieval-hit">
-        <div class="hit-toolbar">
-          <strong class="truncate">{{ result.title || result.doc_id || t("knowledge.labels.untitledChunk") }}</strong>
-          <span class="score-badge">{{ formatScore(result.score) }}</span>
+      <div class="retrieval-results-body">
+        <div v-if="searching" class="empty-box">
+          <el-icon class="is-loading mr-1"><Loading /></el-icon>
+          {{ t("knowledge.retrieval.searching") }}
         </div>
-        <p>{{ result.content }}</p>
-        <div class="hit-meta">
-          <span>{{ t("knowledge.labels.chunkIndex", { index: result.chunk_index }) }}</span>
-          <span :title="result.source">{{ t("knowledge.labels.sourceValue", { value: result.source || "-" }) }}</span>
-          <span :title="result.doc_id">{{ t("knowledge.labels.docValue", { value: shortId(result.doc_id) }) }}</span>
-        </div>
-      </article>
+        <div v-else-if="searched && searchResults.length === 0" class="empty-box">{{ t("knowledge.retrieval.noResults") }}</div>
+        <div v-else-if="!searched" class="empty-box">{{ t("knowledge.retrieval.idle") }}</div>
 
-      <div v-if="searchResults.length" class="answer-preview">
-        <span>{{ t("knowledge.retrieval.answer") }}</span>
-        <p>{{ retrievalAnswer }}</p>
-        <em>{{ t("knowledge.retrieval.reference", { value: retrievalReferences }) }}</em>
+        <article v-for="result in searchResults" :key="`${result.doc_id}:${result.chunk_index}`" class="retrieval-hit">
+          <div class="hit-toolbar">
+            <strong class="truncate">{{ result.title || result.doc_id || t("knowledge.labels.untitledChunk") }}</strong>
+            <span class="score-badge">{{ formatScore(result.score) }}</span>
+          </div>
+          <p>{{ result.content }}</p>
+          <div class="hit-meta">
+            <span>{{ t("knowledge.labels.chunkIndex", { index: result.chunk_index }) }}</span>
+            <span :title="result.source">{{ t("knowledge.labels.sourceValue", { value: result.source || "-" }) }}</span>
+            <span :title="result.doc_id">{{ t("knowledge.labels.docValue", { value: shortId(result.doc_id) }) }}</span>
+          </div>
+        </article>
+
+        <div v-if="searchResults.length" class="answer-preview">
+          <span>{{ t("knowledge.retrieval.answer") }}</span>
+          <p>{{ retrievalAnswer }}</p>
+          <em>{{ t("knowledge.retrieval.reference", { value: retrievalReferences }) }}</em>
+        </div>
       </div>
     </div>
   </section>
@@ -136,6 +138,8 @@ const shortId = (value: string) => value ? (value.length > 12 ? `${value.slice(0
 }
 
 .playground-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px) 96px;
   align-items: end;
 }
 
@@ -157,7 +161,28 @@ const shortId = (value: string) => value ? (value.length > 12 ? `${value.slice(0
 
 .result-head {
   display: flex;
+  align-items: center;
   justify-content: space-between;
+  font-size: 13px;
+}
+
+.retrieval-control-select,
+.retrieval-control-number,
+.retrieval-control-button {
+  width: 100%;
+  min-height: 36px;
+}
+
+.retrieval-control-select :deep(.el-select__wrapper),
+.retrieval-control-number :deep(.el-input__wrapper) {
+  min-height: 36px;
+  font-size: 13px;
+}
+
+.retrieval-results-body {
+  display: grid;
+  gap: 10px;
+  font-size: 13px;
 }
 
 .retrieval-hit,
@@ -179,7 +204,7 @@ const shortId = (value: string) => value ? (value.length > 12 ? `${value.slice(0
 .answer-preview p {
   margin: 8px 0 0;
   color: var(--kn-text);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.65;
 }
 
@@ -214,13 +239,13 @@ const shortId = (value: string) => value ? (value.length > 12 ? `${value.slice(0
 
 .empty-box {
   color: var(--kn-muted);
+  font-size: 13px;
   text-align: center;
 }
 
 @media (max-width: 760px) {
   .playground-controls {
-    flex-direction: column;
-    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

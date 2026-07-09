@@ -13,7 +13,6 @@
         @refresh="loadKnowledge"
         @clear="clearAllDocuments"
         @select="selectedDocumentId = $event"
-        @preview="openPreview"
         @update="openUpdateDrawer"
         @rebuild="rebuildDocument"
         @delete="deleteDocument"
@@ -42,32 +41,6 @@
       @submit-path="submitDrawerPathDocument"
       @submit-update-file="submitDrawerUpdateFile"
     />
-
-    <el-drawer
-      v-model="previewDrawerOpen"
-      class="document-preview-drawer"
-      :title="t('knowledge.drawer.previewTitle')"
-      direction="rtl"
-      size="420px"
-    >
-      <div v-if="previewDocument" class="drawer-stack">
-        <div class="knowledge-runtime-chip">
-          <span>{{ t("knowledge.drawer.documentName") }}</span>
-          <strong>{{ previewDocument.title }}</strong>
-        </div>
-        <div class="drawer-grid">
-          <div class="knowledge-runtime-chip">
-            <span>{{ t("knowledge.drawer.source") }}</span>
-            <strong>{{ previewDocument.source || t("knowledge.labels.manualSource") }}</strong>
-          </div>
-          <div class="knowledge-runtime-chip">
-            <span>{{ t("knowledge.drawer.chunks") }}</span>
-            <strong>{{ previewDocument.chunks }}</strong>
-          </div>
-        </div>
-        <pre class="metadata-json">{{ prettyJson(previewDocument.metadata || {}) }}</pre>
-      </div>
-    </el-drawer>
   </div>
 </template>
 
@@ -122,8 +95,6 @@ const { t } = useI18n()
 const status = ref<KnowledgeStatus | null>(null)
 const documents = ref<KnowledgeDocument[]>([])
 const selectedDocumentId = ref("")
-const previewDrawerOpen = ref(false)
-const previewDocument = ref<KnowledgeDocument | null>(null)
 const ingestDrawerOpen = ref(false)
 const ingestDrawerMode = ref<IngestDrawerMode>("add")
 const ingestTargetDocument = ref<KnowledgeDocument | null>(null)
@@ -417,17 +388,10 @@ const runSearch = async (query: string, limit: number, searchType: string) => {
   }
 }
 
-const openPreview = (doc: KnowledgeDocument) => {
-  previewDocument.value = doc
-  previewDrawerOpen.value = true
-}
-
 const shortId = (value: string) => {
   if (!value) return "-"
   return value.length > 14 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value
 }
-
-const prettyJson = (value: unknown) => JSON.stringify(value, null, 2)
 
 onMounted(() => {
   loadKnowledge()
@@ -457,68 +421,13 @@ onMounted(() => {
 
 .knowledge-document-workbench {
   display: grid;
-  grid-template-columns: minmax(420px, 0.98fr) minmax(360px, 1.02fr);
+  grid-template-columns: minmax(0, 7fr) minmax(320px, 3fr);
   gap: 14px;
   align-items: start;
 }
 
 .retrieval-playground {
   margin-top: 14px;
-}
-
-.drawer-stack {
-  display: grid;
-  gap: 12px;
-}
-
-.drawer-grid {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.knowledge-runtime-chip {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-  border: 1px solid var(--kn-border);
-  border-radius: var(--ag-radius-control);
-  background: var(--kn-panel-soft);
-  padding: 8px 10px;
-}
-
-.knowledge-runtime-chip span,
-.knowledge-runtime-chip strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.knowledge-runtime-chip span {
-  color: var(--kn-muted);
-  font-size: 11px;
-  font-weight: 760;
-}
-
-.knowledge-runtime-chip strong {
-  color: var(--kn-heading);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 12px;
-}
-
-.metadata-json {
-  max-height: 360px;
-  overflow: auto;
-  border: 1px solid var(--kn-border);
-  border-radius: 10px;
-  background: var(--kn-panel-soft);
-  padding: 12px;
-  color: var(--kn-heading);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 11px;
-  line-height: 1.6;
-  white-space: pre-wrap;
 }
 
 @media (max-width: 1120px) {
@@ -530,10 +439,6 @@ onMounted(() => {
 @media (max-width: 760px) {
   .knowledge-console {
     padding: 12px;
-  }
-
-  .drawer-grid {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

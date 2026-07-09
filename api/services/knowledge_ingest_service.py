@@ -55,6 +55,8 @@ JSON_SUFFIXES = (".json", ".jsonl")
 CODE_SUFFIXES = (
     ".py",
     ".js",
+    ".mjs",
+    ".cjs",
     ".jsx",
     ".ts",
     ".tsx",
@@ -137,6 +139,30 @@ INGEST_PROFILES = (
     PROFILE_TEXT,
 )
 
+CODE_LANGUAGE_BY_SUFFIX = {
+    ".py": "python",
+    ".js": "javascript",
+    ".mjs": "javascript",
+    ".cjs": "javascript",
+    ".jsx": "javascript",
+    ".ts": "typescript",
+    ".tsx": "tsx",
+    ".vue": "vue",
+    ".go": "go",
+    ".rs": "rust",
+    ".java": "java",
+    ".c": "c",
+    ".cc": "cpp",
+    ".cpp": "cpp",
+    ".h": "c",
+    ".hpp": "cpp",
+    ".cs": "c_sharp",
+    ".php": "php",
+    ".rb": "ruby",
+    ".sh": "bash",
+    ".sql": "sql",
+}
+
 
 def profile_for_filename(filename: str | None) -> KnowledgeIngestProfile:
     suffix = Path(filename or "").suffix.lower()
@@ -189,6 +215,10 @@ def profile_for_filename_or_strategy(
     return profile_for_strategy(strategy) or profile_for_filename(filename)
 
 
+def code_language_for_filename(filename: str | None) -> str | None:
+    return CODE_LANGUAGE_BY_SUFFIX.get(Path(filename or "").suffix.lower())
+
+
 def coerce_ingest_overrides(values: Mapping[str, object] | None) -> KnowledgeIngestOverrides:
     source = values or {}
     return KnowledgeIngestOverrides(
@@ -237,10 +267,13 @@ def reader_for_profile(
     if profile.strategy == "json":
         return JSONReader(chunking_strategy=_recursive_chunking(config))
     if profile.strategy == "code":
+        language = code_language_for_filename(filename)
+        if language is None:
+            return TextReader(chunking_strategy=_recursive_chunking(config))
         return TextReader(
             chunking_strategy=CodeChunking(
                 chunk_size=config.code_chunk_size,
-                language="auto",
+                language=language,
             )
         )
     if profile.strategy == "document":

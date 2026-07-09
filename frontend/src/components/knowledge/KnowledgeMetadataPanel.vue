@@ -7,7 +7,7 @@
 
     <div v-if="!document" class="empty-box">{{ t("knowledge.workbench.noSelection") }}</div>
     <template v-else>
-      <div class="knowledge-runtime-summary metadata-summary">
+      <div class="knowledge-runtime-summary metadata-primary">
         <div class="knowledge-runtime-chip">
           <span>{{ t("knowledge.drawer.documentName") }}</span>
           <strong :title="document.title">{{ document.title }}</strong>
@@ -25,29 +25,53 @@
           <strong>{{ formatDate(document.created_at) }}</strong>
         </div>
       </div>
-      <pre class="metadata-json">{{ prettyJson(document.metadata || {}) }}</pre>
+
+      <div class="metadata-secondary">
+        <div v-for="item in secondaryItems" :key="item.label" class="metadata-row">
+          <span>{{ item.label }}</span>
+          <strong :title="item.value">{{ item.value }}</strong>
+        </div>
+      </div>
     </template>
   </section>
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue"
 import { useI18n } from "vue-i18n"
 import type { KnowledgeDocument } from "../../types"
-import { knowledgeDocumentType } from "../../modules/knowledgeWorkbench"
+import { knowledgeDocumentSize, knowledgeDocumentType } from "../../modules/knowledgeWorkbench"
 
-defineProps<{ document: KnowledgeDocument | null }>()
+const props = defineProps<{ document: KnowledgeDocument | null }>()
 
 const { t, locale } = useI18n()
 const documentType = knowledgeDocumentType
 
 const shortId = (value: string) => value.length > 14 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value || "-"
-const prettyJson = (value: unknown) => JSON.stringify(value, null, 2)
 const formatDate = (value: string) => {
   if (!value) return "-"
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString(locale.value, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
 }
+const metadataValue = (key: string) => String(props.document?.metadata?.[key] || "").trim()
+const displayValue = (value: string | number | null | undefined) => {
+  const text = String(value || "").trim()
+  return text || "-"
+}
+
+const secondaryItems = computed(() => {
+  const doc = props.document
+  if (!doc) return []
+  return [
+    { label: t("knowledge.drawer.source"), value: displayValue(doc.source || metadataValue("source")) },
+    { label: t("knowledge.drawer.readerStrategy"), value: displayValue(metadataValue("reader") || metadataValue("chunk_strategy")) },
+    { label: t("knowledge.drawer.reference"), value: displayValue(metadataValue("file_name") || metadataValue("path")) },
+    { label: t("knowledge.drawer.size"), value: knowledgeDocumentSize(doc) },
+    { label: t("knowledge.documents.columns.visibility"), value: displayValue(doc.visibility || metadataValue("visibility")) },
+    { label: t("knowledge.drawer.mime"), value: displayValue(metadataValue("mime_type") || metadataValue("file_type")) },
+  ]
+})
 </script>
 
 <style scoped>
@@ -76,7 +100,7 @@ const formatDate = (value: string) => {
   font-size: 11px;
 }
 
-.knowledge-runtime-summary {
+.metadata-primary {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
@@ -113,18 +137,41 @@ const formatDate = (value: string) => {
   font-size: 12px;
 }
 
-.metadata-json {
-  max-height: 520px;
-  overflow: auto;
+.metadata-secondary {
+  display: grid;
+  gap: 8px;
+}
+
+.metadata-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 0.32fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
   border: 1px solid var(--kn-border);
-  border-radius: 10px;
+  border-radius: var(--ag-radius-control);
   background: var(--kn-panel-soft);
-  padding: 12px;
+  padding: 9px 10px;
+}
+
+.metadata-row span,
+.metadata-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metadata-row span {
+  color: var(--kn-muted);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.metadata-row strong {
   color: var(--kn-heading);
   font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 11px;
-  line-height: 1.6;
-  white-space: pre-wrap;
+  font-size: 12px;
+  font-weight: 760;
 }
 
 .empty-box {

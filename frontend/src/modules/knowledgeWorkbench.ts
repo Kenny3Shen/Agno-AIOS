@@ -18,6 +18,19 @@ export const createDefaultKnowledgeIngestOptions = (
   reader_strategy: "auto",
 })
 
+export const readerStrategyForFilename = (filename: string | null | undefined) => {
+  const suffix = (filename || "").trim().toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] || ""
+  if (["md", "markdown", "mdown", "mkd"].includes(suffix)) return "markdown"
+  if (["csv", "tsv"].includes(suffix)) return "csv_row"
+  if (["json", "jsonl"].includes(suffix)) return "json"
+  if (["py", "js", "mjs", "cjs", "jsx", "ts", "tsx", "vue", "go", "rs", "java", "c", "cc", "cpp", "h", "hpp", "cs", "php", "rb", "sh", "sql"].includes(suffix)) {
+    return "code"
+  }
+  if (["pdf", "docx"].includes(suffix)) return "document"
+  if (["txt", "log", "rst", "yaml", "yml", "toml"].includes(suffix)) return "semantic"
+  return "auto"
+}
+
 export const resolveSelectedKnowledgeDocumentId = (
   documents: KnowledgeDocument[],
   selectedId: string | null,

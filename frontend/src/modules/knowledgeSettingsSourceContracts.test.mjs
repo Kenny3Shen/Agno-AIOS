@@ -108,6 +108,12 @@ assert.match(
 
 assert.match(
   knowledge,
+  /grid-template-columns:\s*minmax\(0,\s*7fr\)\s+minmax\(320px,\s*3fr\)/,
+  "Knowledge workbench must allocate about 70% width to the document list and 30% to Metadata",
+)
+
+assert.match(
+  knowledge,
   /KnowledgeDocumentList/,
   "Knowledge page must delegate document list rendering",
 )
@@ -144,6 +150,18 @@ assert.match(
 
 assert.match(
   knowledgeIngestDrawer,
+  /readerStrategyForFilename/,
+  "Knowledge Drawer must auto-update the reader strategy from the selected file or path suffix",
+)
+
+assert.doesNotMatch(
+  knowledgeIngestDrawer,
+  /advancedIngestHint|默认折叠|仅影响本次新增或更新|collapsed by default|only affects/i,
+  "Knowledge Drawer advanced parameter title must not include the old explanatory suffix",
+)
+
+assert.match(
+  knowledgeIngestDrawer,
   /ingest_options/,
   "Knowledge Drawer must send per-request ingest options",
 )
@@ -167,6 +185,18 @@ assert.match(
 )
 
 assert.match(
+  knowledgeMetadataPanel,
+  /metadata-primary[\s\S]*metadata-secondary/,
+  "Knowledge Metadata panel must show selected content in primary and secondary groups",
+)
+
+assert.doesNotMatch(
+  knowledgeMetadataPanel,
+  /<pre|metadata-json|prettyJson|JSON\.stringify/,
+  "Knowledge Metadata panel must not dump raw JSON directly",
+)
+
+assert.match(
   knowledgeWorkbenchSource,
   /mergeUpdatedKnowledgeDocument/,
   "Knowledge update flow must merge returned new document IDs through a pure helper",
@@ -182,6 +212,18 @@ assert.match(
   knowledgeDocumentList,
   /document-action-buttons/,
   "Knowledge document actions must stay grouped in a bounded icon button row",
+)
+
+assert.doesNotMatch(
+  knowledgeDocumentList,
+  /previewLabel|knowledge\.documents\.preview|<View|View\s*\}/,
+  "Knowledge document list must not keep a separate preview action that duplicates selected Metadata",
+)
+
+assert.doesNotMatch(
+  knowledge,
+  /previewDrawerOpen|previewDocument|openPreview|document-preview-drawer/,
+  "Knowledge page must remove the preview Drawer because the right panel owns selected document details",
 )
 
 assert.match(
@@ -240,6 +282,7 @@ for (const locale of ["zh-CN", "en-US"]) {
   const replaceSourceAction = i18n.global.t("knowledge.documents.replaceSource")
   const replaceSourceLabel = i18n.global.t("knowledge.documents.replaceSourceLabel", { title: "sample.md" })
   const sourceReplacedMessage = i18n.global.t("knowledge.messages.sourceReplaced")
+  const advancedParametersLabel = i18n.global.t("knowledge.drawer.advancedIngest")
   const ragPermissionLabel = i18n.global.t("knowledge.messages.configPermissionRequired")
   assert.notEqual(
     visibleCountLabel,
@@ -267,6 +310,11 @@ for (const locale of ["zh-CN", "en-US"]) {
     [replaceSourceAction, replaceSourceLabel, sourceReplacedMessage].join("\n"),
     /上传新版本|new source version|new version/i,
     `Knowledge document update copy must not describe the action as uploading a new version in ${locale}`,
+  )
+  assert.match(
+    advancedParametersLabel,
+    /高级参数|Advanced parameters/,
+    `Knowledge Drawer advanced label must use concise advanced parameters copy in ${locale}`,
   )
   assert.notEqual(
     ragPermissionLabel,
