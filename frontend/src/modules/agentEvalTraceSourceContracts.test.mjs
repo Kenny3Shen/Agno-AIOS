@@ -490,6 +490,18 @@ assert.match(
 )
 
 assert.match(
+  knowledgeRetrievalPlayground,
+  /retrieval-control-select[\s\S]*retrieval-control-number[\s\S]*retrieval-results-body/,
+  "Knowledge retrieval controls and hit body must use explicit stable sizing hooks",
+)
+
+assert.match(
+  knowledgeRetrievalPlayground,
+  /\.retrieval-control-select[\s\S]*min-height:\s*36px[\s\S]*\.retrieval-results-body[\s\S]*font-size:\s*13px/,
+  "Knowledge retrieval select, numeric controls, and hit copy must use a consistent readable size",
+)
+
+assert.match(
   knowledge,
   /knowledge-workflow-shell/,
   "Knowledge page must be reorganized as an AI workspace workflow shell",
@@ -509,8 +521,8 @@ for (const bulkyKnowledgeHeaderClass of [
 
 assert.match(
   knowledgeMetadataPanel,
-  /knowledge-runtime-summary[\s\S]*metadata-summary/,
-  "Knowledge selected document status must live inside the Metadata panel",
+  /knowledge-runtime-summary[\s\S]*metadata-primary/,
+  "Knowledge selected document primary facts must live inside the Metadata panel",
 )
 
 assert.match(

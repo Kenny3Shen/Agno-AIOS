@@ -14,51 +14,59 @@
         <strong :title="targetDocument.title">{{ targetDocument.title }}</strong>
       </div>
 
-      <el-tabs v-if="mode === 'add'" v-model="inputMode">
-        <el-tab-pane :label="t('knowledge.upload.fileTab')" name="file">
+      <section class="drawer-section drawer-source-section">
+        <div class="drawer-section-head">
+          <span>{{ t("knowledge.drawer.sourceSection") }}</span>
+          <strong>{{ selectedReaderLabel }}</strong>
+        </div>
+
+        <el-tabs v-if="mode === 'add'" v-model="inputMode" class="drawer-source-tabs">
+          <el-tab-pane :label="t('knowledge.upload.fileTab')" name="file">
+            <el-upload drag :auto-upload="false" :limit="1" :on-change="onFileChange" :on-remove="clearSelectedFile">
+              <el-icon><UploadFilled /></el-icon>
+              <div>{{ t("knowledge.upload.dropText") }} {{ t("knowledge.upload.chooseFile") }}</div>
+            </el-upload>
+          </el-tab-pane>
+          <el-tab-pane :label="t('knowledge.upload.textTab')" name="text">
+            <div class="drawer-form-grid">
+              <el-input v-model="textForm.title" :placeholder="t('knowledge.drawer.documentName')" />
+              <el-input v-model="textForm.content" type="textarea" :rows="8" :placeholder="t('knowledge.upload.contentPlaceholder')" />
+            </div>
+          </el-tab-pane>
+          <el-tab-pane :label="t('knowledge.upload.pathTab')" name="path">
+            <div class="drawer-form-grid">
+              <el-input v-model="pathForm.path" :placeholder="t('knowledge.upload.pathLabel')" />
+              <el-input v-model="pathForm.title" :placeholder="t('knowledge.upload.optionalPlaceholder')" />
+            </div>
+          </el-tab-pane>
+        </el-tabs>
+
+        <template v-else>
           <el-upload drag :auto-upload="false" :limit="1" :on-change="onFileChange" :on-remove="clearSelectedFile">
             <el-icon><UploadFilled /></el-icon>
             <div>{{ t("knowledge.upload.dropText") }} {{ t("knowledge.upload.chooseFile") }}</div>
           </el-upload>
-        </el-tab-pane>
-        <el-tab-pane :label="t('knowledge.upload.textTab')" name="text">
-          <div class="drawer-form-grid">
-            <el-input v-model="textForm.title" :placeholder="t('knowledge.drawer.documentName')" />
-            <el-input v-model="textForm.content" type="textarea" :rows="8" :placeholder="t('knowledge.upload.contentPlaceholder')" />
-          </div>
-        </el-tab-pane>
-        <el-tab-pane :label="t('knowledge.upload.pathTab')" name="path">
-          <div class="drawer-form-grid">
-            <el-input v-model="pathForm.path" :placeholder="t('knowledge.upload.pathLabel')" />
-            <el-input v-model="pathForm.title" :placeholder="t('knowledge.upload.optionalPlaceholder')" />
-          </div>
-        </el-tab-pane>
-      </el-tabs>
+        </template>
+      </section>
 
-      <template v-else>
-        <el-upload drag :auto-upload="false" :limit="1" :on-change="onFileChange" :on-remove="clearSelectedFile">
-          <el-icon><UploadFilled /></el-icon>
-          <div>{{ t("knowledge.upload.dropText") }} {{ t("knowledge.upload.chooseFile") }}</div>
-        </el-upload>
-      </template>
-
-      <label v-if="mode === 'add'" class="knowledge-field">
-        <span>{{ t("knowledge.documents.columns.visibility") }}</span>
+      <section v-if="mode === 'add'" class="drawer-section drawer-visibility-section">
+        <div class="drawer-section-head">
+          <span>{{ t("knowledge.documents.columns.visibility") }}</span>
+        </div>
         <ResourceVisibilityTabs v-model="visibility" />
-      </label>
+      </section>
 
       <el-collapse v-model="advancedPanels" class="drawer-advanced-ingest">
         <el-collapse-item name="advanced">
           <template #title>
             <div class="advanced-title">
               <span>{{ t("knowledge.drawer.advancedIngest") }}</span>
-              <em>{{ t("knowledge.drawer.advancedIngestHint") }}</em>
             </div>
           </template>
           <div class="advanced-grid compact">
             <label class="knowledge-field">
               <span>{{ t("knowledge.drawer.readerStrategy") }}</span>
-              <el-select v-model="ingestOptions.reader_strategy">
+              <el-select v-model="ingestOptions.reader_strategy" class="reader-strategy-select">
                 <el-option v-for="option in readerStrategyOptions" :key="option.value" :label="option.label" :value="option.value" />
               </el-select>
             </label>
@@ -100,7 +108,7 @@ import { ElMessageBox, type UploadFile } from "element-plus"
 import { useI18n } from "vue-i18n"
 import { UploadFilled } from "@element-plus/icons-vue"
 import type { KnowledgeDocument, KnowledgeIngestOptions, KnowledgeStatus, ResourceVisibility } from "../../types"
-import { createDefaultKnowledgeIngestOptions } from "../../modules/knowledgeWorkbench"
+import { createDefaultKnowledgeIngestOptions, readerStrategyForFilename } from "../../modules/knowledgeWorkbench"
 import ResourceVisibilityTabs from "../common/ResourceVisibilityTabs.vue"
 
 type DrawerMode = "add" | "update"
@@ -171,6 +179,10 @@ const readerStrategyOptions = computed(() => [
     value: profile.strategy,
   })),
 ])
+const selectedReaderLabel = computed(() => {
+  const selected = ingestOptions.reader_strategy || "auto"
+  return readerStrategyOptions.value.find((option) => option.value === selected)?.label || selected
+})
 
 watch(
   () => props.modelValue,
@@ -186,15 +198,35 @@ watch(
     selectedFile.value = null
     advancedPanels.value = []
     inputMode.value = "file"
+    syncReaderStrategy(props.targetDocument?.metadata?.file_name || props.targetDocument?.title || "")
   },
 )
 
 const onFileChange = (file: UploadFile) => {
   selectedFile.value = file.raw || null
+  syncReaderStrategy(file.raw?.name || file.name || "")
 }
 
 const clearSelectedFile = () => {
   selectedFile.value = null
+  syncReaderStrategy(inputMode.value === "path" ? pathForm.path : "")
+}
+
+watch(
+  () => pathForm.path,
+  (path) => {
+    if (inputMode.value === "path") syncReaderStrategy(path)
+  },
+)
+
+watch(inputMode, (mode) => {
+  if (mode === "file") syncReaderStrategy(selectedFile.value?.name || "")
+  else if (mode === "path") syncReaderStrategy(pathForm.path)
+  else syncReaderStrategy("")
+})
+
+const syncReaderStrategy = (filename: string) => {
+  ingestOptions.reader_strategy = readerStrategyForFilename(filename)
 }
 
 const ingestOptionsPayload = () => {
@@ -275,6 +307,43 @@ const submit = () => {
   gap: 12px;
 }
 
+.drawer-section {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--kn-border);
+  border-radius: var(--ag-radius-control);
+  background: color-mix(in srgb, var(--kn-panel-soft) 70%, transparent);
+  padding: 12px;
+}
+
+.drawer-section-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.drawer-section-head span {
+  color: var(--kn-heading);
+  font-size: 13px;
+  font-weight: 820;
+}
+
+.drawer-section-head strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--kn-muted);
+  font-size: 11px;
+  font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawer-source-tabs {
+  min-width: 0;
+}
+
 .knowledge-field {
   display: grid;
   gap: 7px;
@@ -310,18 +379,13 @@ const submit = () => {
 .advanced-title {
   display: flex;
   min-width: 0;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
   color: var(--kn-heading);
   font-weight: 800;
 }
 
-.advanced-title em {
-  color: var(--kn-muted);
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 500;
+.reader-strategy-select {
+  width: 100%;
 }
 
 .drawer-footer-actions {

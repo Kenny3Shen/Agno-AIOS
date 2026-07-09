@@ -4,6 +4,7 @@ import {
   knowledgeDocumentStatus,
   knowledgeDocumentType,
   mergeUpdatedKnowledgeDocument,
+  readerStrategyForFilename,
   resolveSelectedKnowledgeDocumentId,
 } from "./knowledgeWorkbench.ts"
 
@@ -63,4 +64,52 @@ assert.deepEqual(
     reader_strategy: "auto",
   },
   "default ingest options should mirror status defaults",
+)
+
+assert.equal(
+  readerStrategyForFilename("runbook.md"),
+  "markdown",
+  "markdown files should infer the markdown reader strategy",
+)
+
+assert.equal(
+  readerStrategyForFilename("alerts.csv"),
+  "csv_row",
+  "csv files should infer the row-based CSV reader strategy",
+)
+
+assert.equal(
+  readerStrategyForFilename("payload.json"),
+  "json",
+  "json files should infer the JSON reader strategy",
+)
+
+assert.equal(
+  readerStrategyForFilename("rule.js"),
+  "code",
+  "javascript files should infer the code reader strategy",
+)
+
+assert.equal(
+  readerStrategyForFilename("module.mjs"),
+  "code",
+  "modern javascript modules should infer the code reader strategy",
+)
+
+assert.equal(
+  readerStrategyForFilename("notes.txt"),
+  "semantic",
+  "plain text files should infer the semantic reader strategy",
+)
+
+assert.equal(
+  readerStrategyForFilename("evidence.pdf"),
+  "document",
+  "structured document files should infer the document reader strategy",
+)
+
+assert.equal(
+  readerStrategyForFilename("playbook.yaml"),
+  "semantic",
+  "configuration text files should infer the semantic reader strategy",
 )

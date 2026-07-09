@@ -51,6 +51,24 @@ def test_suffix_profile_chooses_agno_aligned_chunkers(
     assert reader.__class__.__name__ == expected_reader
 
 
+def test_javascript_code_reader_uses_explicit_language_to_avoid_auto_detection() -> None:
+    reader = knowledge_ingest_service.reader_for_profile(
+        knowledge_ingest_service.PROFILE_CODE,
+        knowledge_ingest_service.KnowledgeReaderConfig(
+            embedder=FakeEmbedder(),
+            chunk_size=1200,
+            chunk_overlap=160,
+            code_chunk_size=1800,
+            semantic_threshold=0.52,
+        ),
+        "policy.js",
+    )
+
+    chunking_strategy = reader.chunking_strategy
+    assert chunking_strategy.__class__.__name__ == "CodeChunking"
+    assert getattr(chunking_strategy, "language", None) == "javascript"
+
+
 def test_knowledge_service_keeps_profile_interface() -> None:
     profile = knowledge_service.knowledge_profile_for_filename("runbook.md")
     assert profile.strategy == "markdown"

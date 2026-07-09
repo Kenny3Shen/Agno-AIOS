@@ -1274,7 +1274,8 @@ export const zhCN = {
     drawer: {
       addTitle: "新增知识文档",
       updateTitle: "更新知识文档",
-      advancedIngest: "高级摄取参数",
+      sourceSection: "内容来源",
+      advancedIngest: "高级参数",
       advancedIngestHint: "默认折叠，仅影响本次新增或更新。",
       readerStrategy: "Reader 策略",
       automaticReader: "自动识别",
@@ -1291,6 +1292,7 @@ export const zhCN = {
       type: "类型",
       chunks: "切片",
       size: "大小",
+      mime: "MIME",
       updated: "更新时间",
       reference: "引用",
     },

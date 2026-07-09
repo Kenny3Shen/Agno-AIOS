@@ -1276,7 +1276,8 @@ export const enUS = {
     drawer: {
       addTitle: "Add knowledge document",
       updateTitle: "Update knowledge document",
-      advancedIngest: "Advanced ingest options",
+      sourceSection: "Content source",
+      advancedIngest: "Advanced parameters",
       advancedIngestHint: "Collapsed by default. Overrides apply only to this request.",
       readerStrategy: "Reader strategy",
       automaticReader: "Automatic",
@@ -1293,6 +1294,7 @@ export const enUS = {
       type: "Type",
       chunks: "Chunks",
       size: "Size",
+      mime: "MIME",
       updated: "Updated",
       reference: "Reference",
     },

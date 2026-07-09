@@ -71,11 +71,6 @@
         </div>
         <div class="document-actions" role="cell" :data-label="t('knowledge.documents.columns.actions')" @click.stop>
           <div class="document-action-buttons">
-            <el-tooltip :content="t('knowledge.documents.preview')" placement="top">
-              <el-button text class="cursor-pointer" :aria-label="t('knowledge.documents.previewLabel', { title: row.title })" @click="$emit('preview', row)">
-                <el-icon><View /></el-icon>
-              </el-button>
-            </el-tooltip>
             <el-tooltip :content="t('knowledge.workbench.updateDocument')" placement="top">
               <el-button text class="cursor-pointer" :disabled="!row.can_manage || updatingDocId === row.id" :loading="updatingDocId === row.id" :aria-label="t('knowledge.documents.replaceSourceLabel', { title: row.title })" @click="$emit('update', row)">
                 <el-icon><UploadFilled /></el-icon>
@@ -101,7 +96,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { Delete, DocumentAdd, Loading, Refresh, RefreshRight, Search, UploadFilled, View } from "@element-plus/icons-vue"
+import { Delete, DocumentAdd, Loading, Refresh, RefreshRight, Search, UploadFilled } from "@element-plus/icons-vue"
 import type { KnowledgeDocument, ResourceVisibility } from "../../types"
 import { knowledgeDocumentStatus, knowledgeDocumentType } from "../../modules/knowledgeWorkbench"
 import ResourceVisibilityTabs from "../common/ResourceVisibilityTabs.vue"
@@ -121,7 +116,6 @@ const emit = defineEmits<{
   refresh: []
   clear: []
   select: [documentId: string]
-  preview: [document: KnowledgeDocument]
   update: [document: KnowledgeDocument]
   rebuild: [document: KnowledgeDocument]
   delete: [document: KnowledgeDocument]
