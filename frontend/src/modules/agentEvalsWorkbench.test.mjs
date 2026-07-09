@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import {
   buildEvalSummaryCards,
+  evalTypeLabel,
   filterEvalCases,
+  replayCaseRunId,
+  scoreLabel,
+  statusTone,
   toolCallTone,
 } from "./agentEvalsWorkbench.ts"
 
@@ -18,6 +22,15 @@ assert.deepEqual(
 
 assert.equal(toolCallTone("missing"), "red", "missing expected tools should be red")
 assert.equal(toolCallTone("called"), "green", "called expected tools should be green")
+assert.equal(evalTypeLabel("performance"), "PerformanceEval", "performance dimension should stay visible as historical copy")
+assert.equal(statusTone("queued"), "yellow", "queued samples should format as in-progress status")
+assert.equal(scoreLabel(0.925), "0.93", "fractional scores should be rounded to two decimals")
+assert.equal(scoreLabel(null), "-", "missing scores should render as an empty dash")
+assert.equal(
+  replayCaseRunId({ data: { caseRunId: " case-run-1 " }, eval_input: {} }),
+  "case-run-1",
+  "failure replay id should be extracted from camelCase run data",
+)
 
 assert.deepEqual(
   buildEvalSummaryCards({ suiteCount: 1, caseCount: 2, passed: 1, failed: 1, latestRun: "2026-07-06", performanceSamples: 0 }),

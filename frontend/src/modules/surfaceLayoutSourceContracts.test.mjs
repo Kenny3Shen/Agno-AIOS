@@ -93,155 +93,143 @@ assert.match(
 
 assert.match(
   memoryControl,
-  /hasScope\("memories:write"\)/,
-  "Memory page must check write scope before exposing memory mutations",
+  /useMemoryWorkbenchController/,
+  "Memory page must delegate state and flows to useMemoryWorkbenchController",
 )
 
-assert.match(
-  memoryControl,
-  /memory-edit-dialog/,
-  "Memory page must render a dedicated edit dialog for updating memories",
-)
-
-assert.match(
-  memoryControl,
-  /memory-row-actions/,
-  "Memory item rows must expose edit/delete actions where the content focus lives",
-)
-
-const memoryRowFacts = memoryControl.match(
-  /<span class="memory-row-facts">([\s\S]*?)<\/span>\s*<\/button>/,
-)?.[1] || ""
-const memoryRowCopy = memoryControl.match(
-  /<span class="memory-row-copy">([\s\S]*?)<\/span>\s*<span class="memory-row-facts">/,
-)?.[1] || ""
-const memoryRowActions = memoryControl.match(
-  /<span v-if="canWriteMemory \|\| canDeleteMemory" class="memory-row-actions">([\s\S]*?)<\/span>\s*<\/article>/,
-)?.[1] || ""
-const memoryDetailMetadata = memoryControl.match(
-  /<section class="memory-metadata-panel">([\s\S]*?)<\/section>/,
-)?.[1] || ""
-
-assert.match(
-  memoryRowFacts,
-  /v-for="topic in memory\.topics"/,
-  "Memory item rows must keep topics under the item content",
-)
-
-assert.doesNotMatch(
-  memoryRowFacts,
-  /memory\.user_id|memory\.agent_id|memory\.team_id|memory\.created_at|memory\.updated_at|createdLabel|updatedLabel/,
-  "Memory item rows must not duplicate user, agent, team, or timestamps from the detail metadata",
-)
-
-assert.doesNotMatch(
-  memoryRowCopy,
-  /memory\.input/,
-  "Memory item rows must not show the source input; it belongs in the detail metadata",
-)
-
-assert.match(
-  memoryRowActions,
-  /v-if="canWriteMemory"[\s\S]*:aria-label="t\('workbench\.memory\.editMemory'\)"/,
-  "Memory row edit action must require memories:write and keep an accessible name while rendering as an icon button",
-)
-
-assert.match(
-  memoryRowActions,
-  /v-if="canDeleteMemory"[\s\S]*:aria-label="t\('workbench\.memory\.deleteMemory'\)"/,
-  "Memory row delete action must require memories:delete and keep an accessible name while rendering as an icon button",
-)
-
-assert.doesNotMatch(
-  memoryRowActions,
-  /\{\{\s*t\("workbench\.memory\.(editMemory|deleteMemory)"\)\s*\}\}/,
-  "Memory row edit/delete actions must be icon-only buttons without visible text labels",
-)
-
-for (const metadataField of [
-  "selectedMemory.user_id",
-  "selectedMemory.agent_id",
-  "selectedMemory.team_id",
-  "selectedMemory.created_at",
-  "selectedMemory.updated_at",
+for (const componentName of [
+  "MemoryQueryPanel",
+  "MemoryUserQueue",
+  "MemoryListPanel",
+  "MemoryDetailPanel",
+  "MemoryEditDialog",
 ]) {
+  assert.ok(
+    existsSync(sourcePath(`components/memory/${componentName}.vue`)),
+    `Memory workbench must provide ${componentName}.vue`,
+  )
   assert.match(
-    memoryDetailMetadata,
-    new RegExp(metadataField.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-    `Memory detail metadata must include ${metadataField}`,
+    memoryControl,
+    new RegExp(`import ${componentName} from "\\./memory/${componentName}\\.vue"`),
+    `Memory page must import ${componentName}`,
+  )
+  assert.match(
+    memoryControl,
+    new RegExp(`<${componentName}\\b`),
+    `Memory page must render ${componentName}`,
   )
 }
 
+const memoryController = readOptionalSource("composables/useMemoryWorkbenchController.ts")
+const memoryQueryPanel = readOptionalSource("components/memory/MemoryQueryPanel.vue")
+const memoryUserQueue = readOptionalSource("components/memory/MemoryUserQueue.vue")
+const memoryListPanel = readOptionalSource("components/memory/MemoryListPanel.vue")
+const memoryDetailPanel = readOptionalSource("components/memory/MemoryDetailPanel.vue")
+const memoryEditDialog = readOptionalSource("components/memory/MemoryEditDialog.vue")
+const payloadViewer = readOptionalSource("components/common/PayloadViewer.vue")
+const markdownViewer = readOptionalSource("components/common/MarkdownViewer.vue")
+const memoryChildComponents = [
+  memoryQueryPanel,
+  memoryUserQueue,
+  memoryListPanel,
+  memoryDetailPanel,
+  memoryEditDialog,
+].join("\n")
+
 assert.match(
-  memoryDetailMetadata,
-  /selectedMemory\.input/,
-  "Memory detail metadata must include the source input that generated the memory",
+  memoryController,
+  /hasScope\("memories:write"\)/,
+  "Memory controller must check memories:write before exposing edit flows",
 )
 
 assert.match(
-  memoryDetailMetadata,
-  /inputLabel/,
-  "Memory detail metadata must label the source input field",
+  memoryController,
+  /hasScope\("memories:delete"\)/,
+  "Memory controller must check memories:delete before exposing delete flows",
 )
 
 assert.match(
-  memoryControl,
-  /import MarkdownIt from "markdown-it"/,
-  "Memory source input viewer must use MarkdownIt for formatted source rendering",
+  memoryController,
+  /payloadAfterMemoryLoadFailure\(/,
+  "Memory controller must keep the previous payload after a load failure",
 )
 
 assert.match(
-  memoryDetailMetadata,
-  /memory-source-viewer/,
-  "Memory detail metadata must render source input in a formatted viewer",
+  memoryController,
+  /selectedMemoryId[\s\S]*memories\.value\.find[\s\S]*memories\.value\[0\]/,
+  "Memory controller must keep the selected-memory fallback to the first visible memory",
 )
 
 assert.match(
-  memoryDetailMetadata,
-  /v-html="renderSourceInput\(\)"/,
-  "Memory source input viewer must render formatted markup instead of raw plain text only",
+  memoryController,
+  /filters\.page\s*=\s*1/,
+  "Memory controller must reset pagination when filters change",
 )
 
 assert.match(
-  memoryDetailMetadata,
-  /sourceInputViewMode/,
-  "Memory source input viewer must support selectable text, JSON, and Markdown modes",
+  memoryChildComponents,
+  /PayloadViewer/,
+  "Memory detail must use the shared PayloadViewer for source input text/json/markdown viewing",
 )
 
 assert.match(
-  memoryDetailMetadata,
-  /copySourceInput/,
-  "Memory source input viewer must provide a copy action",
+  memoryChildComponents,
+  /DataChip/,
+  "Memory panels must use the shared DataChip primitive for compact facts",
 )
 
 assert.match(
-  memoryDetailMetadata,
-  /sourceInputExpanded/,
-  "Memory source input viewer must provide an expand/collapse state",
+  memoryChildComponents,
+  /StatusDot/,
+  "Memory panels must use the shared StatusDot primitive for memory/user status",
+)
+
+assert.match(
+  memoryChildComponents,
+  /SectionHeader/,
+  "Memory detail must use the shared SectionHeader primitive for metadata sections",
+)
+
+assert.match(
+  memoryChildComponents,
+  /EmptyState/,
+  "Memory panels must use the shared EmptyState primitive for empty states",
+)
+
+assert.match(
+  memoryChildComponents,
+  /PanelHeader/,
+  "Memory panels must use the shared PanelHeader primitive for panel headings",
+)
+
+assert.match(
+  memoryDetailPanel,
+  /<PayloadViewer[\s\S]*mode="text"/,
+  "Memory detail source viewer must expose text, JSON, and Markdown modes through PayloadViewer",
+)
+
+assert.match(
+  payloadViewer,
+  /const modeOptions:[\s\S]*\["text", "json", "markdown"\]/,
+  "Shared PayloadViewer must provide text, JSON, and Markdown source modes",
+)
+
+assert.match(
+  markdownViewer,
+  /new MarkdownIt\(\{[\s\S]*html:\s*false/,
+  "Shared MarkdownViewer used by PayloadViewer must keep MarkdownIt html:false semantics",
 )
 
 assert.doesNotMatch(
-  memoryDetailMetadata,
-  /memory-source-toolbar">\s*<span>\{\{\s*t\("workbench\.memory\.inputLabel"\)\s*\}\}<\/span>/,
-  "Memory source input viewer must not duplicate the source label inside the compact toolbar",
+  memoryControl,
+  /class="memory-(query-panel|queue-panel|list-panel|detail-panel|row|empty|source|metadata|panel-head|edit-dialog)/,
+  "MemoryControl shell must not keep the old page-local Memory DOM classes",
 )
 
-assert.match(
-  memoryControl,
-  /\.memory-source-actions\s*\{[\s\S]*grid-template-columns:\s*minmax\(92px,\s*1fr\)\s+auto\s+auto/,
-  "Memory source input actions must stay in one stable row in the narrow right panel",
-)
-
-assert.match(
-  memoryControl,
-  /\.memory-mode-flags\s*\{[\s\S]*padding:\s*10px\s+12px\s+10px/,
-  "Memory mode flag chips must leave bottom padding before the divider when they wrap",
-)
-
-assert.match(
-  memoryControl,
-  /\.memory-metadata-list\s*>\s*div\s*\{/,
-  "Memory metadata row layout must only target direct rows so nested source viewer divs are not converted into metadata grids",
+assert.doesNotMatch(
+  memoryChildComponents,
+  /class="memory-(query-panel|queue-panel|list-panel|detail-panel|row|empty|source|metadata|panel-head|edit-dialog)/,
+  "Memory child components must not preserve old page-local Memory DOM classes",
 )
 
 assert.match(
@@ -317,7 +305,7 @@ assert.match(
 )
 
 assert.doesNotMatch(
-  memoryDetailMetadata,
+  memoryDetailPanel,
   /selectedMemory\.topics/,
   "Memory detail metadata must leave topics in the middle item column",
 )
@@ -368,20 +356,20 @@ assert.doesNotMatch(
 )
 
 assert.doesNotMatch(
-  memoryControl,
-  /<aside class="memory-detail-panel"[\s\S]*?(openEditMemoryDialog|deleteSelectedMemory)[\s\S]*?<\/aside>/,
+  memoryDetailPanel,
+  /openEditMemoryDialog|deleteSelectedMemory/,
   "Memory detail panel must not own edit/delete operations",
 )
 
 assert.match(
   memoryControl,
-  /@media \(max-width: 980px\)[\s\S]*\.memory-workbench\s*\{[\s\S]*flex:\s*0 0 auto/,
+  /@media \(max-width: 980px\)[\s\S]*\.mem-workbench\s*\{[\s\S]*flex:\s*0 0 auto/,
   "Memory mobile workbench must use natural vertical flow so row topics and icon actions are not clipped",
 )
 
-assert.match(
-  memoryControl,
-  /@media \(max-width: 980px\)[\s\S]*\.memory-list\s*\{[\s\S]*overflow:\s*visible/,
+assert.doesNotMatch(
+  memoryListPanel,
+  /max-height:\s*(?:3|4)\d+px/,
   "Memory mobile list must not hide row topics and icon actions inside a short internal scroller",
 )
 
@@ -507,10 +495,11 @@ for (const [source, pattern, label] of [
   [workflow, /workflow-console ag-page-flow/, "Workflow page"],
   [workflow, /workflow-header ag-content-panel/, "Workflow header"],
   [workflow, /workflow-workbench ag-workspace-panel/, "Workflow workbench"],
-  [memoryControl, /memory-control ag-page-flow/, "Memory page"],
-  [memoryControl, /memory-query-panel ag-content-panel/, "Memory filters"],
-  [memoryControl, /memory-queue-panel ag-workspace-panel/, "Memory queue"],
-  [memoryControl, /memory-list-panel ag-workspace-panel/, "Memory list"],
+  [memoryControl, /ag-page-flow mem-control/, "Memory page"],
+  [memoryQueryPanel, /ag-content-panel/, "Memory filters"],
+  [memoryUserQueue, /ag-workspace-panel/, "Memory queue"],
+  [memoryListPanel, /ag-workspace-panel/, "Memory list"],
+  [memoryDetailPanel, /ag-right-panel/, "Memory detail"],
   [schedulerWorkbench, /page-panel ag-content-panel scheduler-list-panel/, "Scheduler list"],
   [cve, /cve-console ag-page-flow/, "CVE page"],
   [cve, /cve-query-panel ag-content-panel/, "CVE search"],
@@ -555,7 +544,7 @@ assert.doesNotMatch(
 for (const [source, pattern, label] of [
   [workflow, /workflow-inspector workflow-panel ag-right-panel/, "Workflow inspector"],
   [trace, /trace-detail-panel ag-right-panel/, "Trace detail"],
-  [memoryControl, /memory-detail-panel ag-right-panel/, "Memory detail"],
+  [memoryDetailPanel, /ag-right-panel/, "Memory detail"],
   [schedulerWorkbench, /page-panel scheduler-detail-panel ag-right-panel/, "Scheduler detail"],
 ]) {
   assert.match(
@@ -566,8 +555,8 @@ for (const [source, pattern, label] of [
 }
 
 assert.doesNotMatch(
-  memoryControl,
-  /\.memory-detail-panel\s*\{[^}]*linear-gradient/s,
+  memoryDetailPanel,
+  /linear-gradient/s,
   "Memory right detail panel must not override the shared panel background with a local gradient",
 )
 

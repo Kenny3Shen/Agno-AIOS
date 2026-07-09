@@ -1,11 +1,15 @@
 <template>
-  <div class="workflow-console ag-page-flow">
-    <header class="workflow-header ag-content-panel">
-      <div class="workflow-context" :aria-label="t('workflow.stats.ariaLabel')">
+  <div class="workflow-console ag-page-flow text-[var(--ag-text)]">
+    <header class="workflow-header ag-content-panel grid items-center gap-4 xl:grid-cols-[minmax(0,1fr)_auto]">
+      <div class="workflow-context flex min-w-0 flex-wrap gap-2" :aria-label="t('workflow.stats.ariaLabel')">
         <MetricChip v-for="stat in stats" :key="stat.label" :label="stat.label" :value="stat.value" />
+        <StatusChip tone="green">
+          <el-icon><Connection /></el-icon>
+          {{ t("workflow.canvas.runtime") }}
+        </StatusChip>
       </div>
 
-      <div class="workflow-actions">
+      <div class="workflow-actions flex flex-wrap items-center gap-2 xl:justify-end">
         <el-button size="small" plain @click="validateWorkflow">
           <el-icon><Check /></el-icon>
           {{ t("workflow.actions.validate") }}
@@ -21,234 +25,52 @@
       </div>
     </header>
 
-    <div class="workflow-workbench ag-workspace-panel">
-      <aside class="workflow-palette workflow-panel" :aria-label="t('workflow.palette.title')">
-        <section class="workflow-config">
-          <div class="workflow-section-head">
-            <p>{{ t("workflow.config.title") }}</p>
-            <span>{{ t("workflow.config.description") }}</span>
-          </div>
-          <el-input v-model="workflowName" size="small" :placeholder="t('workflow.config.namePlaceholder')" />
-          <el-input v-model="workflowDescription" size="small" type="textarea" :rows="3" :placeholder="t('workflow.config.descriptionPlaceholder')" />
-          <el-input v-model="runInput" size="small" type="textarea" :rows="4" :placeholder="t('workflow.config.inputPlaceholder')" />
-          <el-input v-model="sessionId" size="small" :placeholder="t('workflow.config.sessionPlaceholder')" />
-        </section>
+    <div class="workflow-workbench ag-workspace-panel grid min-h-0 flex-1 overflow-hidden xl:grid-cols-[320px_minmax(0,1fr)_380px] lg:grid-cols-[280px_minmax(0,1fr)] max-lg:overflow-visible max-lg:grid-cols-1">
+      <WorkflowPalette
+        v-model:workflow-name="workflowName"
+        v-model:workflow-description="workflowDescription"
+        v-model:run-input="runInput"
+        v-model:session-id="sessionId"
+        class="workflow-palette workflow-panel hidden min-h-0 overflow-auto border-r border-[var(--ag-border)] bg-[var(--ag-panel)] p-3.5 lg:block"
+        :step-types="stepTypes"
+        :executor-types="executorTypes"
+        @add-step="addStep"
+        @apply-executor="applyExecutor"
+      />
 
-        <section class="workflow-palette-section">
-          <div class="workflow-section-head">
-            <p>{{ t("workflow.palette.stepTypesTitle") }}</p>
-            <span>{{ t("workflow.palette.stepTypesDescription") }}</span>
-          </div>
-          <button
-            v-for="stepType in stepTypes"
-            :key="stepType.type"
-            type="button"
-            class="workflow-library-item workflow-step-type soc-focus"
-            @click="addStep(stepType.type)"
-          >
-            <span class="workflow-badge">{{ stepType.badge }}</span>
-            <span class="workflow-library-copy">
-              <strong>{{ stepType.label }}</strong>
-              <em>{{ stepType.description }}</em>
-            </span>
-            <el-icon><Plus /></el-icon>
-          </button>
-        </section>
+      <WorkflowCanvas
+        class="workflow-canvas workflow-panel min-h-0 overflow-hidden border-r border-[var(--ag-border)] bg-[var(--ag-frame)]"
+        :workflow-name="workflowName"
+        :workflow-description="workflowDescription"
+        :steps="workflowSteps"
+        :selected-step-id="selectedStepId"
+        :output-items="outputItems"
+        :step-count="workflowSteps.length"
+        :step-types="stepTypes"
+        :executor-types="executorTypes"
+        @run-preview="runPreview"
+        @select-step="selectStep"
+        @move-step="moveStep"
+        @remove-step="removeStep"
+      />
 
-        <section class="workflow-palette-section">
-          <div class="workflow-section-head">
-            <p>{{ t("workflow.palette.executorsTitle") }}</p>
-            <span>{{ t("workflow.palette.executorsDescription") }}</span>
-          </div>
-          <button
-            v-for="executor in executorTypes"
-            :key="executor.type"
-            type="button"
-            class="workflow-library-item soc-focus"
-            @click="applyExecutor(executor.type)"
-          >
-            <span class="workflow-badge">{{ executor.badge }}</span>
-            <span class="workflow-library-copy">
-              <strong>{{ executor.label }}</strong>
-              <em>{{ executor.description }}</em>
-            </span>
-          </button>
-        </section>
-      </aside>
-
-      <main class="workflow-canvas workflow-panel">
-        <div class="workflow-canvas-head ag-panel-header">
-          <div>
-            <span class="workflow-kicker">{{ t("workflow.canvas.kicker") }}</span>
-            <h3>{{ workflowName || t("workflow.canvas.title") }}</h3>
-            <p>{{ workflowDescription || t("workflow.canvas.description") }}</p>
-          </div>
-          <div class="workflow-canvas-actions">
-            <StatusChip tone="green">
-              <el-icon><Connection /></el-icon>
-              {{ t("workflow.canvas.runtime") }}
-            </StatusChip>
-            <el-button size="small" type="primary" @click="runPreview">
-              <el-icon><VideoPlay /></el-icon>
-              {{ t("workflow.actions.runPreview") }}
-            </el-button>
-          </div>
-        </div>
-
-        <section class="workflow-flow" :aria-label="t('workflow.canvas.flowAriaLabel')">
-          <article
-            v-for="(step, index) in workflowSteps"
-            :key="step.id"
-            class="workflow-board-step soc-focus"
-            :class="[`tone-${step.tone}`, { 'is-selected': selectedStepId === step.id }]"
-            tabindex="0"
-            @click="selectStep(step.id)"
-            @keydown.enter="selectStep(step.id)"
-          >
-            <span v-if="index > 0" class="workflow-connector" aria-hidden="true" />
-            <div class="workflow-step-index">{{ index + 1 }}</div>
-            <div class="workflow-step-copy">
-              <span>{{ stepLabel(step.kind) }}</span>
-              <strong>{{ step.name || t("workflow.editor.untitled") }}</strong>
-              <p>{{ step.description || t("workflow.editor.emptyDescription") }}</p>
-              <div class="workflow-step-meta">
-                <em>{{ executorLabel(step.executor) }}</em>
-                <em>{{ stepMeta(step) }}</em>
-                <em v-if="step.branches > 1">{{ t("workflow.editor.branchesValue", { count: step.branches }) }}</em>
-              </div>
-              <div v-if="branchLabels(step).length" class="workflow-branch-rail" :aria-label="t('workflow.editor.branches')">
-                <span v-for="branch in branchLabels(step)" :key="branch">{{ branch }}</span>
-              </div>
-            </div>
-            <div class="workflow-step-actions">
-              <el-button :aria-label="t('workflow.actions.moveUp')" size="small" text :disabled="index === 0" @click.stop="moveStep(index, -1)">
-                <el-icon><ArrowUp /></el-icon>
-              </el-button>
-              <el-button :aria-label="t('workflow.actions.moveDown')" size="small" text :disabled="index === workflowSteps.length - 1" @click.stop="moveStep(index, 1)">
-                <el-icon><ArrowDown /></el-icon>
-              </el-button>
-              <el-button :aria-label="t('workflow.actions.remove')" size="small" text @click.stop="removeStep(step.id)">
-                <el-icon><Delete /></el-icon>
-              </el-button>
-            </div>
-          </article>
-        </section>
-
-        <section class="workflow-result-strip" :aria-label="t('workflow.canvas.outputsAriaLabel')">
-          <article v-for="output in outputItems" :key="output.label" class="workflow-output">
-            <span>{{ output.label }}</span>
-            <strong>{{ output.value }}</strong>
-          </article>
-        </section>
-      </main>
-
-      <aside class="workflow-inspector workflow-panel ag-right-panel" :aria-label="t('workflow.inspector.title')">
-        <div class="workflow-section-head">
-          <p>{{ t("workflow.inspector.title") }}</p>
-          <span>{{ t("workflow.inspector.description") }}</span>
-        </div>
-
-        <el-tabs v-model="activeInspectorTab" class="workflow-tabs">
-          <el-tab-pane :label="t('workflow.inspector.editTab')" name="edit">
-            <section v-if="selectedStep" class="workflow-inspector-section workflow-editor">
-              <h4>{{ t("workflow.editor.title") }}</h4>
-              <label>
-                <span>{{ t("workflow.editor.name") }}</span>
-                <el-input v-model="selectedStep.name" size="small" />
-              </label>
-              <label>
-                <span>{{ t("workflow.editor.symbol") }}</span>
-                <el-input v-model="selectedStep.symbol" size="small" />
-              </label>
-              <label>
-                <span>{{ t("workflow.editor.description") }}</span>
-                <el-input v-model="selectedStep.description" size="small" type="textarea" :rows="3" />
-              </label>
-              <label>
-                <span>{{ t("workflow.editor.stepType") }}</span>
-                <el-select v-model="selectedStep.kind" size="small">
-                  <el-option v-for="option in stepTypes" :key="option.type" :label="option.label" :value="option.type" />
-                </el-select>
-              </label>
-              <label>
-                <span>{{ t("workflow.editor.executor") }}</span>
-                <el-select v-model="selectedStep.executor" size="small">
-                  <el-option v-for="option in executorTypes" :key="option.type" :label="option.label" :value="option.type" />
-                </el-select>
-              </label>
-              <label v-if="selectedStep.kind !== 'step'">
-                <span>{{ t("workflow.editor.expression") }}</span>
-                <el-input v-model="selectedStep.expression" size="small" type="textarea" :rows="3" />
-              </label>
-              <div class="workflow-editor-grid">
-                <label v-if="selectedStep.kind === 'loop'">
-                  <span>{{ t("workflow.editor.maxIterations") }}</span>
-                  <el-input-number v-model="selectedStep.maxIterations" size="small" :min="1" :max="12" controls-position="right" />
-                </label>
-                <label v-if="selectedStep.kind === 'parallel' || selectedStep.kind === 'router' || selectedStep.kind === 'condition' || selectedStep.kind === 'steps'">
-                  <span>{{ t("workflow.editor.branches") }}</span>
-                  <el-input-number v-model="selectedStep.branches" size="small" :min="1" :max="6" controls-position="right" />
-                </label>
-              </div>
-            </section>
-            <section v-else class="workflow-inspector-section">
-              <h4>{{ t("workflow.editor.noSelectionTitle") }}</h4>
-              <p class="workflow-muted">{{ t("workflow.editor.noSelectionDescription") }}</p>
-            </section>
-          </el-tab-pane>
-
-          <el-tab-pane :label="t('workflow.inspector.validateTab')" name="validate">
-            <section class="workflow-inspector-section">
-              <h4>{{ validationTitle }}</h4>
-              <ul class="workflow-check-list">
-                <li v-for="item in validationItems" :key="item.message" :class="`is-${item.level}`">
-                  <el-icon>
-                    <Check v-if="item.level === 'ok'" />
-                    <WarningFilled v-else />
-                  </el-icon>
-                  <span>{{ item.message }}</span>
-                </li>
-              </ul>
-            </section>
-            <section class="workflow-inspector-section">
-              <h4>{{ t("workflow.inspector.sessionTitle") }}</h4>
-              <ul class="workflow-check-list">
-                <li v-for="item in sessionItems" :key="item" class="is-ok">
-                  <el-icon><Check /></el-icon>
-                  <span>{{ item }}</span>
-                </li>
-              </ul>
-            </section>
-            <section class="workflow-inspector-section workflow-run-options">
-              <h4>{{ t("workflow.inspector.executionTitle") }}</h4>
-              <label class="workflow-option-field">
-                <span>{{ t("workflow.inspector.userId") }}</span>
-                <el-input v-model="userId" size="small" />
-              </label>
-              <label class="workflow-option-field">
-                <span>{{ t("workflow.inspector.numHistoryRuns") }}</span>
-                <el-input-number v-model="numHistoryRuns" size="small" :min="1" :max="12" controls-position="right" />
-              </label>
-              <el-checkbox v-model="streamEvents">{{ t("workflow.inspector.streamEvents") }}</el-checkbox>
-              <el-checkbox v-model="storeEvents">{{ t("workflow.inspector.storeEvents") }}</el-checkbox>
-              <el-checkbox v-model="addWorkflowHistoryToSteps">{{ t("workflow.inspector.workflowHistory") }}</el-checkbox>
-            </section>
-          </el-tab-pane>
-
-          <el-tab-pane :label="t('workflow.inspector.previewTab')" name="preview">
-            <section class="workflow-inspector-section workflow-code-panel">
-              <div class="workflow-code-head">
-                <h4>{{ t("workflow.inspector.logicTitle") }}</h4>
-                <el-button size="small" text @click="copyCode">
-                  <el-icon><CopyDocument /></el-icon>
-                  {{ t("workflow.actions.copyCode") }}
-                </el-button>
-              </div>
-              <pre><code>{{ generatedCode }}</code></pre>
-            </section>
-          </el-tab-pane>
-        </el-tabs>
-      </aside>
+      <WorkflowInspector
+        v-model:active-tab="activeInspectorTab"
+        v-model:user-id="userId"
+        v-model:num-history-runs="numHistoryRuns"
+        v-model:stream-events="streamEvents"
+        v-model:store-events="storeEvents"
+        v-model:add-workflow-history-to-steps="addWorkflowHistoryToSteps"
+        class="workflow-inspector workflow-panel ag-right-panel min-h-0 overflow-auto border-l border-[var(--ag-border)] bg-[var(--ag-panel)] p-3.5 lg:col-span-2 lg:mx-3 lg:mb-3 lg:border-l-0 xl:col-span-1 xl:my-3 xl:ml-0 xl:mr-3 xl:border-l"
+        :selected-step="selectedStep"
+        :step-types="stepTypes"
+        :executor-types="executorTypes"
+        :validation-title="validationTitle"
+        :validation-items="validationItems"
+        :session-items="sessionItems"
+        :generated-code="generatedCode"
+        @copy-code="copyCode"
+      />
     </div>
   </div>
 </template>
@@ -256,23 +78,19 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import {
-  ArrowDown,
-  ArrowUp,
   Check,
   Connection,
   CopyDocument,
-  Delete,
   DocumentChecked,
-  Plus,
-  VideoPlay,
-  WarningFilled,
 } from "@element-plus/icons-vue"
 import { useI18n } from "vue-i18n"
 import MetricChip from "./common/MetricChip.vue"
 import StatusChip from "./common/StatusChip.vue"
+import WorkflowCanvas from "./workflow/WorkflowCanvas.vue"
+import WorkflowInspector from "./workflow/WorkflowInspector.vue"
+import WorkflowPalette from "./workflow/WorkflowPalette.vue"
 import {
   buildWorkflowCode,
-  constructorName,
   workflowNameSymbol,
   workflowStepSymbol,
   type WorkflowCodeOptions,
@@ -525,23 +343,6 @@ function stepLabel(kind: WorkflowStepKind) {
   return stepTypes.value.find((stepType) => stepType.type === kind)?.label || kind
 }
 
-function executorLabel(executor: WorkflowExecutorType) {
-  return executorTypes.value.find((executorType) => executorType.type === executor)?.label || executor
-}
-
-function stepMeta(step: WorkflowStep) {
-  if (step.kind === "loop") return t("workflow.editor.iterationsValue", { count: step.maxIterations })
-  if (step.kind === "router" || step.kind === "condition") return step.expression || t("workflow.editor.needsExpression")
-  if (step.kind === "parallel") return t("workflow.editor.parallelValue", { count: step.branches })
-  if (step.kind === "steps") return t("workflow.editor.sequenceValue", { count: step.branches })
-  return workflowStepSymbol(step)
-}
-
-function branchLabels(step: WorkflowStep) {
-  if (step.kind !== "parallel" && step.kind !== "router" && step.kind !== "condition" && step.kind !== "steps") return []
-  return Array.from({ length: step.branches }, (_, index) => `${constructorName(step.kind)} ${index + 1}`)
-}
-
 function defaultExpression(kind: WorkflowStepKind) {
   if (kind === "condition") return "last_step_content.contains('critical')"
   if (kind === "loop") return "last_step_content.contains('APPROVED')"
@@ -550,512 +351,5 @@ function defaultExpression(kind: WorkflowStepKind) {
   if (kind === "steps") return "ordered_steps"
   return ""
 }
+
 </script>
-
-<style scoped>
-.workflow-console {
-  color: var(--ag-text);
-}
-
-.workflow-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 16px;
-}
-
-.workflow-context {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.workflow-kicker,
-.workflow-section-head p,
-.workflow-canvas-head > div:first-child > span:first-child {
-  color: var(--ag-blue);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.workflow-canvas-head h3,
-.workflow-inspector-section h4 {
-  margin: 0;
-  color: var(--ag-heading);
-}
-
-.workflow-canvas-head p,
-.workflow-section-head span,
-.workflow-muted {
-  margin: 4px 0 0;
-  color: var(--ag-muted);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.workflow-actions,
-.workflow-canvas-actions,
-.workflow-code-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.workflow-workbench {
-  display: grid;
-  min-height: 0;
-  flex: 1 1 auto;
-  grid-template-columns: 320px minmax(0, 1fr) 380px;
-  overflow: hidden;
-}
-
-.workflow-panel {
-  min-height: 0;
-  overflow: auto;
-  border-right: 1px solid var(--ag-border);
-  background: var(--ag-panel);
-}
-
-.workflow-palette,
-.workflow-inspector {
-  padding: 14px;
-}
-
-.workflow-inspector {
-  border-right: 0;
-  border-left: 1px solid var(--ag-border);
-}
-
-.workflow-inspector.ag-right-panel {
-  margin: 12px 12px 12px 0;
-}
-
-.workflow-config,
-.workflow-palette-section + .workflow-palette-section,
-.workflow-config + .workflow-palette-section {
-  margin-top: 18px;
-}
-
-.workflow-config {
-  display: grid;
-  gap: 10px;
-  margin-top: 0;
-}
-
-.workflow-library-item {
-  display: grid;
-  width: 100%;
-  grid-template-columns: 34px minmax(0, 1fr) 18px;
-  align-items: start;
-  gap: 10px;
-  margin-top: 10px;
-  border: 1px solid var(--ag-border);
-  border-radius: 8px;
-  background: var(--ag-panel-soft);
-  padding: 10px;
-  color: inherit;
-  text-align: left;
-  transition:
-    border-color 0.18s ease,
-    background 0.18s ease,
-    transform 0.18s ease;
-}
-
-.workflow-library-item:hover {
-  border-color: color-mix(in srgb, var(--ag-blue) 42%, var(--ag-border));
-  background: var(--ag-blue-soft);
-  transform: translateY(-1px);
-}
-
-.workflow-step-type:hover {
-  border-color: color-mix(in srgb, var(--ag-green) 42%, var(--ag-border));
-  background: var(--ag-green-soft);
-}
-
-.workflow-badge,
-.workflow-step-index {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  border: 1px solid var(--ag-border);
-  border-radius: 8px;
-  background: var(--ag-panel);
-  color: var(--ag-blue);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.workflow-library-copy,
-.workflow-step-copy {
-  min-width: 0;
-}
-
-.workflow-library-copy strong,
-.workflow-step-copy strong,
-.workflow-output strong,
-.workflow-inspector-section dd {
-  display: block;
-  color: var(--ag-heading);
-  font-size: 13px;
-  line-height: 1.35;
-}
-
-.workflow-library-copy em,
-.workflow-step-copy p,
-.workflow-output span,
-.workflow-inspector-section dt,
-.workflow-check-list span,
-.workflow-editor label > span {
-  color: var(--ag-muted);
-  font-size: 12px;
-  font-style: normal;
-  line-height: 1.45;
-}
-
-.workflow-canvas {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  overflow: hidden;
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--ag-border) 26%, transparent) 1px, transparent 1px),
-    linear-gradient(180deg, color-mix(in srgb, var(--ag-border) 20%, transparent) 1px, transparent 1px),
-    var(--ag-frame);
-  background-size: 28px 28px;
-}
-
-.workflow-canvas-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  border-bottom: 1px solid var(--ag-border);
-  background: color-mix(in srgb, var(--ag-panel) 92%, transparent);
-  padding: 14px;
-}
-
-.workflow-canvas-head h3 {
-  margin-top: 4px;
-  font-size: 16px;
-}
-
-.workflow-flow {
-  display: grid;
-  align-content: start;
-  gap: 12px;
-  min-height: 0;
-  overflow: auto;
-  padding: 18px;
-}
-
-.workflow-board-step {
-  position: relative;
-  display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
-  gap: 12px;
-  width: min(820px, 100%);
-  border: 1px solid var(--ag-border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--ag-panel) 92%, transparent);
-  padding: 14px;
-  box-shadow: var(--ag-shadow-panel);
-  cursor: pointer;
-}
-
-.workflow-board-step.is-selected {
-  border-color: var(--step-tone);
-  background: color-mix(in srgb, var(--step-tone) 10%, var(--ag-panel));
-}
-
-.workflow-connector {
-  position: absolute;
-  top: -13px;
-  left: 31px;
-  width: 1px;
-  height: 12px;
-  background: var(--ag-border-strong);
-}
-
-.workflow-step-copy > span {
-  color: var(--step-tone);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.workflow-step-copy strong {
-  margin-top: 4px;
-}
-
-.workflow-step-copy p {
-  margin: 4px 0 0;
-}
-
-.workflow-step-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.workflow-branch-rail {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
-  gap: 6px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid color-mix(in srgb, var(--step-tone) 28%, var(--ag-border));
-}
-
-.workflow-branch-rail span {
-  min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--step-tone) 34%, var(--ag-border));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--step-tone) 8%, var(--ag-panel-soft));
-  padding: 5px 7px;
-  overflow-wrap: anywhere;
-  color: var(--ag-muted-strong);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.workflow-step-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.workflow-step-meta em,
-.workflow-output {
-  border: 1px solid var(--ag-border);
-  border-radius: 8px;
-  background: var(--ag-panel-soft);
-}
-
-.workflow-step-meta em {
-  max-width: 100%;
-  padding: 4px 7px;
-  overflow-wrap: anywhere;
-  color: var(--ag-muted-strong);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 10px;
-  font-style: normal;
-  font-weight: 700;
-}
-
-.tone-blue {
-  --step-tone: var(--ag-blue);
-  border-color: color-mix(in srgb, var(--ag-blue) 32%, var(--ag-border));
-}
-
-.tone-green {
-  --step-tone: var(--ag-green);
-  border-color: color-mix(in srgb, var(--ag-green) 32%, var(--ag-border));
-}
-
-.tone-yellow {
-  --step-tone: var(--ag-yellow);
-  border-color: color-mix(in srgb, var(--ag-yellow) 38%, var(--ag-border));
-}
-
-.tone-red {
-  --step-tone: var(--ag-red);
-  border-color: color-mix(in srgb, var(--ag-red) 32%, var(--ag-border));
-}
-
-.tone-purple {
-  --step-tone: var(--ag-purple);
-  border-color: color-mix(in srgb, var(--ag-purple) 34%, var(--ag-border));
-}
-
-.workflow-result-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  border-top: 1px solid var(--ag-border);
-  background: color-mix(in srgb, var(--ag-panel) 90%, transparent);
-  padding: 12px 14px;
-}
-
-.workflow-output {
-  min-width: 0;
-  padding: 10px;
-}
-
-.workflow-output strong {
-  margin-top: 4px;
-  overflow-wrap: anywhere;
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 12px;
-}
-
-.workflow-tabs {
-  margin-top: 12px;
-}
-
-.workflow-inspector-section {
-  margin-top: 14px;
-  border: 1px solid var(--ag-border);
-  border-radius: 8px;
-  background: var(--ag-panel-soft);
-  padding: 12px;
-}
-
-.workflow-inspector-section h4 {
-  font-size: 13px;
-}
-
-.workflow-editor,
-.workflow-editor label {
-  display: grid;
-  gap: 10px;
-}
-
-.workflow-editor label {
-  gap: 5px;
-}
-
-.workflow-editor-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.workflow-run-options {
-  display: grid;
-  gap: 8px;
-}
-
-.workflow-option-field {
-  display: grid;
-  gap: 5px;
-}
-
-.workflow-check-list {
-  display: grid;
-  gap: 9px;
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.workflow-check-list li {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  gap: 8px;
-  align-items: start;
-}
-
-.workflow-check-list .el-icon {
-  margin-top: 2px;
-}
-
-.workflow-check-list .is-ok .el-icon {
-  color: var(--ag-green);
-}
-
-.workflow-check-list .is-warning .el-icon {
-  color: var(--ag-yellow);
-}
-
-.workflow-code-head {
-  justify-content: space-between;
-}
-
-.workflow-code-panel pre {
-  max-height: 520px;
-  margin: 12px 0 0;
-  overflow: auto;
-}
-
-.workflow-code-panel code {
-  display: block;
-  border: 1px solid var(--ag-border);
-  border-radius: 8px;
-  background: var(--ag-code-bg);
-  padding: 10px;
-  color: var(--ag-code-text);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 11px;
-  line-height: 1.5;
-  white-space: pre;
-}
-
-@media (max-width: 1280px) {
-  .workflow-header {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .workflow-actions {
-    justify-content: flex-start;
-  }
-
-  .workflow-workbench {
-    grid-template-columns: 280px minmax(0, 1fr);
-    grid-auto-rows: minmax(0, auto);
-  }
-
-  .workflow-inspector {
-    grid-column: 1 / -1;
-    border-left: 0;
-  }
-
-  .workflow-inspector.ag-right-panel {
-    margin: 0 12px 12px;
-  }
-}
-
-@media (max-width: 860px) {
-  .workflow-console {
-    overflow: auto;
-  }
-
-  .workflow-workbench {
-    grid-template-columns: minmax(0, 1fr);
-    overflow: visible;
-  }
-
-  .workflow-palette {
-    display: none;
-  }
-
-  .workflow-inspector {
-    border-left: 0;
-  }
-
-  .workflow-inspector.ag-right-panel {
-    margin: 0;
-  }
-
-  .workflow-canvas {
-    min-height: 0;
-    overflow: visible;
-  }
-
-  .workflow-result-strip,
-  .workflow-editor-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .workflow-canvas-head {
-    display: grid;
-  }
-
-  .workflow-board-step {
-    grid-template-columns: 36px minmax(0, 1fr);
-  }
-
-  .workflow-step-actions {
-    grid-column: 1 / -1;
-    flex-direction: row;
-  }
-}
-</style>

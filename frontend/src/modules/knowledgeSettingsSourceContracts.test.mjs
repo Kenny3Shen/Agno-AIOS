@@ -70,34 +70,47 @@ const pageWorkbenchCopySources = [
   schedulerWorkbench,
 ].join("\n")
 
-assert.match(
-  memoryControl,
-  /memory-priority-inline/,
-  "Memory priority metrics must live inside the query business panel",
-)
+const settingsRuntimePanel = readOptionalSource("components/settings/SettingsRuntimePanel.vue")
+const settingsModelPanel = readOptionalSource("components/settings/SettingsModelPanel.vue")
+const settingsNavigationPanel = readOptionalSource("components/settings/SettingsNavigationPanel.vue")
+const memoryQueryPanel = readOptionalSource("components/memory/MemoryQueryPanel.vue")
+const useSettingsNavigationLayoutSource = readOptionalSource("composables/useSettingsNavigationLayout.ts")
+const settingsModularSource = [
+  settings,
+  settingsRuntimePanel,
+  settingsModelPanel,
+  settingsNavigationPanel,
+  useSettingsNavigationLayoutSource,
+].join("\n")
 
 assert.match(
   memoryControl,
-  /class="memory-priority-inline-card"/,
-  "Memory priority metrics must use local inline context chips",
+  /MemoryQueryPanel/,
+  "Memory priority metrics must live in the extracted query panel",
+)
+
+assert.match(
+  memoryQueryPanel,
+  /<DataChip[\s\S]*v-for="card in priorityCards"/,
+  "Memory query panel must render priority cards with the shared DataChip primitive",
 )
 
 assert.doesNotMatch(
-  memoryControl,
-  /memory-priority-strip|memory-priority-card|ag-stat-strip|ag-stat-chip/,
-  "Memory must not use the global stat-strip pattern",
+  [memoryControl, memoryQueryPanel].join("\n"),
+  /memory-priority-inline|memory-priority-strip|memory-priority-card|ag-stat-strip|ag-stat-chip/,
+  "Memory must not use old priority class names or the global stat-strip pattern",
 )
 
 assert.doesNotMatch(
-  memoryControl,
-  /\.memory-priority-inline-card\s*\{[^}]*border-radius:\s*999px/s,
-  "Memory priority context chips must not use pill styling",
+  memoryQueryPanel,
+  /\.memory-priority-inline-card\s*\{/,
+  "Memory priority context chips must not keep old local CSS",
 )
 
 assert.doesNotMatch(
-  memoryControl,
+  memoryQueryPanel,
   /\.memory-priority-inline-card::before/s,
-  "Memory priority context chips must not add local tone bars",
+  "Memory priority context chips must not add old local tone bars",
 )
 
 assert.match(
@@ -1170,7 +1183,7 @@ for (const hardcodedCveCopy of [
 }
 
 assert.match(
-  settings,
+  settingsModularSource,
   /useI18n\(\)/,
   "Settings page must read user-facing copy from vue-i18n",
 )
@@ -1182,25 +1195,25 @@ assert.match(
 )
 
 assert.match(
-  settings,
+  settingsModularSource,
   /:disabled="!canWriteSettings/,
   "Settings page must disable configuration controls for read-only users",
 )
 
 assert.match(
-  settings,
+  settingsModularSource,
   /required-mark/,
   "Settings page must visibly mark required model and runtime parameters",
 )
 
 assert.match(
-  settings,
+  settingsModularSource,
   /testModelConnection/,
   "Settings page must expose a model connectivity test action",
 )
 
 assert.match(
-  settings,
+  settingsModularSource,
   /settings\.actions\.testConnection/,
   "Settings model connectivity test button must use i18n copy",
 )
@@ -1261,7 +1274,7 @@ for (const hardcodedSettingsCopy of [
   "sk-...",
 ]) {
   assert.equal(
-    settings.includes(hardcodedSettingsCopy),
+    settingsModularSource.includes(hardcodedSettingsCopy),
     false,
     `Settings page must not hardcode copy: ${hardcodedSettingsCopy}`,
   )

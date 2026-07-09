@@ -80,26 +80,88 @@ assert.doesNotMatch(
   "Evaluation must map as a direct shell page, not a grouped runtime tab",
 )
 
+const useAgentEvalsWorkbenchSource = readOptionalSource("composables/useAgentEvalsWorkbench.ts")
+const agentEvalChildSources = {
+  AgentEvalsCommandBar: readOptionalSource("components/evals/AgentEvalsCommandBar.vue"),
+  EvalCasesTab: readOptionalSource("components/evals/EvalCasesTab.vue"),
+  EvalRunsTab: readOptionalSource("components/evals/EvalRunsTab.vue"),
+  EvalFailuresTab: readOptionalSource("components/evals/EvalFailuresTab.vue"),
+  EvalTrendsPanel: readOptionalSource("components/evals/EvalTrendsPanel.vue"),
+  AgentEvalDetailPanel: readOptionalSource("components/evals/AgentEvalDetailPanel.vue"),
+}
+const agentEvalRenderedSource = `${agentEvals}\n${Object.values(agentEvalChildSources).join("\n")}`
+
 assert.match(
-  agentEvals,
+  agentEvalRenderedSource,
   /PerformanceEval/,
   "AgentEvals should display the PerformanceEval dimension",
 )
 
 assert.match(
-  agentEvals,
+  agentEvalRenderedSource,
   /t\("agentEvals\.performance\.hiddenRun"\)/,
   "AgentEvals must render visible text for the disabled PerformanceEval run state",
 )
 
 assert.doesNotMatch(
-  agentEvals,
+  agentEvalRenderedSource,
   /runPerformance|performanceRunButton|@click="[^"]*performance/i,
   "AgentEvals must not expose a manual PerformanceEval run action",
 )
 
 assert.match(
   agentEvals,
+  /useAgentEvalsWorkbench/,
+  "AgentEvals shell must delegate state and behavior to useAgentEvalsWorkbench",
+)
+
+assert.notEqual(
+  useAgentEvalsWorkbenchSource,
+  "",
+  "AgentEvals workbench state must live in composables/useAgentEvalsWorkbench.ts",
+)
+
+for (const [componentName, source] of Object.entries(agentEvalChildSources)) {
+  assert.notEqual(
+    source,
+    "",
+    `AgentEvals must be split into child component ${componentName}`,
+  )
+  assert.match(
+    agentEvals,
+    new RegExp(`<${componentName}\\b`),
+    `AgentEvals shell must render ${componentName}`,
+  )
+}
+
+for (const primitive of ["MetricChip", "DataChip", "StatusDot", "SectionHeader", "StatusChip", "PayloadViewer"]) {
+  assert.match(
+    Object.values(agentEvalChildSources).join("\n"),
+    new RegExp(`\\b${primitive}\\b`),
+    `AgentEvals child components must reuse shared ${primitive}`,
+  )
+}
+
+assert.doesNotMatch(
+  agentEvals,
+  /agent-evals-/,
+  "AgentEvals shell must not keep old page-local agent-evals-* DOM classes",
+)
+
+assert.doesNotMatch(
+  Object.values(agentEvalChildSources).join("\n"),
+  /agent-evals-/,
+  "AgentEvals child components must not keep old page-local agent-evals-* DOM classes",
+)
+
+assert.doesNotMatch(
+  agentEvals,
+  /<style\b/,
+  "AgentEvals shell must use Atomic CSS/shared primitives instead of local duplicate styles",
+)
+
+assert.match(
+  `${agentEvals}\n${useAgentEvalsWorkbenchSource}`,
   /filters\.suiteId !== "all"\s*\?\s*filters\.suiteId\s*:\s*""/,
   "Run suite action must require an explicit suite selection instead of using the first suite",
 )

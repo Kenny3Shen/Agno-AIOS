@@ -1,284 +1,54 @@
 <template>
   <div class="agent-chat h-full min-h-0 overflow-hidden">
     <main class="flex h-full min-h-0 min-w-0 flex-col">
-        <div
-          ref="chatContainer"
-          class="agent-stream min-h-0 flex-1 overflow-y-auto"
-          @scroll="handleChatScroll"
-        >
-          <div class="chat-thread-frame">
-          <transition-group name="msg-fade">
-            <div
-              v-for="(msg, index) in messages"
-              :key="index"
-              :class="[
-                'message-row',
-                msg.role === 'user' ? 'is-user' : 'is-agent',
-              ]"
-            >
-              <div class="message-rail">
-                <div :class="['message-avatar', msg.role === 'user' ? 'user' : 'agent']">
-                  <el-icon v-if="msg.role === 'assistant'"><Cpu /></el-icon>
-                  <span v-else>{{ userAvatarLabel }}</span>
-                </div>
-                <span v-if="msg.role === 'assistant'" class="rail-line" />
-              </div>
+      <ChatMessageList
+        ref="messageListRef"
+        :messages="messages"
+        :loading="loading"
+        :user-avatar-label="userAvatarLabel"
+        :copy-success-index="copySuccessIndex"
+        :copy-run-success-index="copyRunSuccessIndex"
+        :pending-new-messages="pendingNewMessages"
+        :show-scroll-to-bottom="showScrollToBottom"
+        :show-back-to-top="showBackToTop"
+        :assistant-display-content="assistantDisplayContent"
+        :parse-assistant-message="parseAssistantMessage"
+        :run-meta-line="runMetaLine"
+        :has-user-prompt-before="hasUserPromptBefore"
+        @scroll="handleChatScroll"
+        @scroll-to-top="scrollToTop"
+        @scroll-to-bottom="scrollToBottomAndClear"
+        @copy-message="copyMessage"
+        @copy-run="copyRun"
+        @open-trace="openTraceForSession"
+        @retry-answer="retryAnswer"
+      />
 
-              <article :class="['message-card', msg.role === 'user' ? 'user' : 'agent']">
-                <div class="message-card-head mb-2 flex items-center justify-between gap-3">
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs font-semibold">
-                      {{ msg.role === 'user' ? t("chat.roles.operator") : t("chat.roles.agent") }}
-                    </span>
-                    <span v-if="msg.role === 'assistant' && !msg.final" class="agent-pill">{{ t("chat.roles.streaming") }}</span>
-                  </div>
-                  <div class="message-actions">
-                    <span class="message-index font-mono text-[10px]">#{{ index + 1 }}</span>
-                    <el-tooltip v-if="msg.role === 'user'" :content="copySuccessIndex === index ? t('chat.actions.copied') : t('chat.actions.copyMessage')" placement="top">
-                      <button
-                        type="button"
-                        class="message-action-button"
-                        :aria-label="t('chat.actions.copyMessage')"
-                        @click="copyMessage(index, msg)"
-                      >
-                        <el-icon>
-                          <Check v-if="copySuccessIndex === index" />
-                          <CopyDocument v-else />
-                        </el-icon>
-                      </button>
-                    </el-tooltip>
-                  </div>
-                </div>
-                <div
-                  v-if="msg.role === 'assistant' && (!msg.content && !msg.final)"
-                  class="markdown-skeleton"
-                  :aria-label="t('chat.loading.markdown')"
-                >
-                  <span />
-                  <span />
-                  <span />
-                </div>
-                <div
-                  v-else-if="msg.role === 'assistant'"
-                  class="markdown-body prose prose-sm max-w-none dark:prose-invert"
-                  v-html="renderMarkdown(parsedAssistantMessage(assistantDisplayContent(msg)).body)"
-                ></div>
-                <p v-else class="whitespace-pre-wrap break-words text-sm leading-relaxed">{{ msg.content }}</p>
-                <span v-if="msg.role === 'assistant' && !msg.final" class="stream-cursor" aria-hidden="true" />
+      <transition name="msg-fade">
+        <el-alert
+          v-if="error"
+          type="error"
+          :title="error"
+          show-icon
+          class="mx-4 mb-2 flex-shrink-0"
+          closable
+          @close="clearError"
+        />
+      </transition>
 
-                <div v-if="msg.role === 'assistant' && parsedAssistantMessage(assistantDisplayContent(msg)).thinking" class="thinking-collapse">
-                  <button type="button" @click="toggleCollapsed(collapsedThinking, index)">
-                    {{ isCollapsed(collapsedThinking, index) ? t("chat.collapse.expandThinking") : t("chat.collapse.collapseThinking") }}
-                  </button>
-                  <pre v-if="!isCollapsed(collapsedThinking, index)">{{ parsedAssistantMessage(assistantDisplayContent(msg)).thinking }}</pre>
-                </div>
-
-                <div v-if="msg.role === 'assistant' && parsedAssistantMessage(assistantDisplayContent(msg)).sources.length" class="source-collapse">
-                  <button type="button" @click="toggleCollapsed(collapsedSources, index)">
-                    {{ isCollapsed(collapsedSources, index) ? t("chat.collapse.expandSources") : t("chat.collapse.collapseSources") }}
-                  </button>
-                  <ul v-if="!isCollapsed(collapsedSources, index)">
-                    <li v-for="source in parsedAssistantMessage(assistantDisplayContent(msg)).sources" :key="source">{{ source }}</li>
-                  </ul>
-                </div>
-
-                <ol v-if="msg.role === 'assistant' && parsedAssistantMessage(assistantDisplayContent(msg)).toolEvents.length" class="tool-timeline">
-                  <li v-for="event in parsedAssistantMessage(assistantDisplayContent(msg)).toolEvents" :key="event">
-                    <span class="tool-call-pulse" />
-                    <span>{{ event }}</span>
-                  </li>
-                </ol>
-
-                <div v-if="msg.role === 'assistant' && runMetaLine(msg)" class="message-run-strip">
-                  <span class="message-run-line">{{ runMetaLine(msg) }}</span>
-                </div>
-
-                <div v-if="msg.role === 'assistant'" class="message-result-actions">
-                  <el-tooltip :content="copySuccessIndex === index ? t('chat.actions.copied') : t('chat.actions.copyMessage')" placement="top">
-                    <button
-                      type="button"
-                      class="message-action-button"
-                      :aria-label="t('chat.actions.copyMessage')"
-                      @click="copyMessage(index, msg)"
-                    >
-                      <el-icon>
-                        <Check v-if="copySuccessIndex === index" />
-                        <CopyDocument v-else />
-                      </el-icon>
-                    </button>
-                  </el-tooltip>
-                  <el-tooltip v-if="msg.raw_run" :content="copyRunSuccessIndex === index ? t('chat.actions.copied') : t('chat.actions.copyRun')" placement="top">
-                    <button
-                      type="button"
-                      class="message-action-button"
-                      :aria-label="t('chat.actions.copyRun')"
-                      @click="copyRun(index, msg)"
-                    >
-                      <el-icon>
-                        <Check v-if="copyRunSuccessIndex === index" />
-                        <CopyDocument v-else />
-                      </el-icon>
-                    </button>
-                  </el-tooltip>
-                  <el-tooltip v-if="messageSessionId(msg)" :content="t('chat.actions.viewTrace')" placement="top">
-                    <button
-                      type="button"
-                      class="message-action-button"
-                      :aria-label="t('chat.actions.viewTrace')"
-                      @click="openTraceForSession(msg)"
-                    >
-                      <el-icon><DataAnalysis /></el-icon>
-                    </button>
-                  </el-tooltip>
-                  <el-tooltip v-if="msg.final && hasUserPromptBefore(index)" :content="t('chat.actions.retryAnswer')" placement="top">
-                    <button
-                      type="button"
-                      class="message-action-button"
-                      :aria-label="t('chat.actions.retryAnswer')"
-                      :disabled="loading"
-                      @click="retryAnswer(index)"
-                    >
-                      <el-icon><RefreshRight /></el-icon>
-                    </button>
-                  </el-tooltip>
-                </div>
-              </article>
-            </div>
-          </transition-group>
-
-          <transition name="msg-fade">
-            <div v-if="loading" class="message-row is-agent">
-              <div class="message-rail">
-                <div class="message-avatar agent">
-                  <el-icon class="is-loading"><Loading /></el-icon>
-                </div>
-              </div>
-              <article class="message-card agent">
-                <div class="flex items-center gap-2 text-sm font-semibold">
-                  <span class="agent-pulse" />
-                  {{ t("chat.loading.planning") }}
-                </div>
-              </article>
-            </div>
-          </transition>
-
-          <div class="chat-scroll-actions" aria-live="polite">
-            <el-tooltip v-if="showBackToTop" :content="t('chat.actions.backToTop')" placement="left">
-              <button
-                type="button"
-                class="chat-scroll-button"
-                :aria-label="t('chat.actions.backToTop')"
-                @click="scrollToTop"
-              >
-                <el-icon><Top /></el-icon>
-              </button>
-            </el-tooltip>
-            <el-tooltip v-if="showScrollToBottom" :content="pendingNewMessages ? t('chat.actions.newMessages', { count: pendingNewMessages }) : t('chat.actions.scrollToBottom')" placement="left">
-              <button
-                type="button"
-                class="chat-scroll-button is-bottom"
-                :aria-label="t('chat.actions.scrollToBottom')"
-                @click="scrollToBottomAndClear"
-              >
-                <span v-if="pendingNewMessages" class="new-message-count">{{ pendingNewMessages }}</span>
-                <el-icon><Bottom /></el-icon>
-              </button>
-            </el-tooltip>
-          </div>
-          </div>
-        </div>
-
-        <transition name="msg-fade">
-          <el-alert
-            v-if="error"
-            type="error"
-            :title="error"
-            show-icon
-            class="mx-4 mb-2 flex-shrink-0"
-            closable
-            @close="clearError"
-          />
-        </transition>
-
-        <footer class="agent-chat-footer p-3">
-          <div class="chat-composer-frame">
-            <div v-if="showQuickPrompts" class="mb-2 flex flex-wrap gap-2">
-              <button
-                v-for="prompt in quickPrompts"
-                :key="prompt"
-                type="button"
-                class="quick-prompt cursor-pointer px-2.5 py-1.5 text-xs transition-colors duration-200"
-                @click="inputMessage = prompt"
-              >
-                {{ prompt }}
-              </button>
-            </div>
-            <div
-              v-if="modelConfigNotice"
-              class="model-config-notice mb-2 px-3 py-2 text-xs"
-            >
-              {{ modelConfigNotice }}
-            </div>
-            <div class="chat-composer">
-              <div class="chat-composer-row">
-                <el-input
-                  v-model="inputMessage"
-                  :placeholder="t('chat.composer.placeholder')"
-                  @keyup.enter.exact="sendMessage"
-                  :disabled="loading"
-                  :autosize="{ minRows: 1, maxRows: 4 }"
-                  type="textarea"
-                  class="chat-input"
-                />
-                <el-select
-                  v-model="selectedModelId"
-                  :loading="modelLoading"
-                  :placeholder="t('chat.composer.modelPlaceholder')"
-                  class="agent-model-select"
-                  popper-class="agent-model-select-popper"
-                  placement="top-start"
-                  @change="persistSelectedModel"
-                >
-                  <el-option
-                    v-for="model in modelOptions"
-                    :key="model.id"
-                    :label="model.name"
-                    :value="model.id"
-                    :disabled="!model.enabled"
-                  >
-                    <div class="model-option">
-                      <span class="min-w-0">
-                        <span class="model-option-title">{{ model.name }}</span>
-                        <span class="model-option-subtitle">
-                          {{ model.model_id || t("chat.composer.missingModelId") }}
-                        </span>
-                      </span>
-                      <span
-                        class="model-option-status"
-                        :class="model.configured
-                          ? 'is-ready'
-                          : 'is-pending'"
-                      >
-                        {{ model.configured ? 'Ready' : 'Config' }}
-                      </span>
-                    </div>
-                  </el-option>
-                </el-select>
-                <el-tooltip :content="t('chat.composer.send')" placement="top">
-                  <el-button
-                    type="primary"
-                    @click="sendMessage"
-                    :loading="loading"
-                    :disabled="!inputMessage.trim() || loading || !selectedModelReady"
-                    class="send-button cursor-pointer"
-                  >
-                    <el-icon><Promotion /></el-icon>
-                  </el-button>
-                </el-tooltip>
-              </div>
-            </div>
-          </div>
-        </footer>
+      <ChatComposer
+        v-model="inputMessage"
+        v-model:selected-model-id="selectedModelId"
+        :model-loading="modelLoading"
+        :model-options="modelOptions"
+        :selected-model-ready="selectedModelReady"
+        :loading="loading"
+        :quick-prompts="quickPrompts"
+        :show-quick-prompts="showQuickPrompts"
+        :model-config-notice="modelConfigNotice"
+        @model-change="persistSelectedModel"
+        @send="sendMessage"
+      />
     </main>
 
     <button v-if="zoomedImage" type="button" class="image-zoom-backdrop" @click="zoomedImage = null">
@@ -288,111 +58,67 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, nextTick, onMounted, onUnmounted, watch } from "vue"
+import { computed, onMounted, onUnmounted, ref, watch } from "vue"
 import { storeToRefs } from "pinia"
-import MarkdownIt from "markdown-it"
-import hljs from "highlight.js"
+import { ElMessage } from "element-plus"
+import { useI18n } from "vue-i18n"
+import ChatComposer from "./chat/ChatComposer.vue"
+import ChatMessageList from "./chat/ChatMessageList.vue"
 import { useChatApi, useChatHistory } from "../composables/useChatApi"
+import { useChatMarkdownRenderer } from "../composables/useChatMarkdownRenderer"
+import { useChatScrollState } from "../composables/useChatScrollState"
 import { useSettingsApi } from "../composables/useSettingsApi"
 import { copyToClipboard } from "../lib/clipboard"
 import { useSessionStore } from "../stores/sessions"
 import type { ChatRunMetrics, Message, ModelConfig } from "../types"
-import { useI18n } from "vue-i18n"
-import {
-  Bottom,
-  Check,
-  CopyDocument,
-  Cpu,
-  DataAnalysis,
-  Loading,
-  Promotion,
-  RefreshRight,
-  Top,
-} from "@element-plus/icons-vue"
-import { ElMessage } from "element-plus"
-
-// ── Markdown ──────────────────────────────────────────────────────
-const md: MarkdownIt = new MarkdownIt({
-  html: false,
-  breaks: true,
-  linkify: true,
-  typographer: true,
-  highlight: (str: string, lang: string): string => {
-    const safeLang = md.utils.escapeHtml(lang || "")
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        return `<pre class="hljs" data-lang="${safeLang}"><code class="language-${safeLang}">` +
-               hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
-               '</code></pre>'
-      } catch {}
-    }
-    return `<pre class="hljs" data-lang="${safeLang}"><code class="language-${safeLang}">` + md.utils.escapeHtml(str) + '</code></pre>'
-  }
-})
-
-const buildTableSeparator = (headerLine: string) => {
-  const cols = headerLine.split("|").map(c => c.trim()).filter(c => c.length > 0)
-  return cols.length ? `| ${cols.map(() => "---").join(" | ")} |` : ""
-}
-
-const normalizeInlineTable = (content: string) => {
-  if (!content.includes("||")) return content
-  const normalized = content.replace(/\|\|/g, "|\n|")
-  const lines = normalized.split("\n")
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (!line || !line.trim().startsWith("|")) continue
-    const nextLine = lines[i + 1] ?? ""
-    if (!/^\s*\|?\s*:?[-]+:?\s*(\|\s*:?[-]+:?\s*)+\|?\s*$/.test(nextLine)) {
-      const sep = buildTableSeparator(line)
-      if (sep) lines.splice(i + 1, 0, sep)
-    }
-    break
-  }
-  return lines.join("\n")
-}
-
-const renderMarkdown = (content: string) => md.render(normalizeInlineTable(content))
 
 const props = defineProps<{
   currentUserId?: string | null
   currentUserInitials?: string | null
 }>()
 
-// ── State ─────────────────────────────────────────────────────────
 const { t } = useI18n()
-const inputMessage = ref("")
 const MODEL_STORAGE_KEY = "agno-aios-chat-model-id"
 
 interface ChatMessage extends Message {}
 
-interface ParsedAssistantMessage {
-  body: string
-  thinking: string
-  sources: string[]
-  toolEvents: string[]
-}
-
 const createWelcomeMessage = (): ChatMessage => ({ role: "assistant", content: t("chat.welcome"), final: true })
+
+const inputMessage = ref("")
 const messages = ref<ChatMessage[]>([createWelcomeMessage()])
-const chatContainer = ref<HTMLElement | null>(null)
-const zoomedImage = ref<string | null>(null)
+const messageListRef = ref<{ chatContainer: HTMLElement | null } | null>(null)
+const chatContainer = computed(() => messageListRef.value?.chatContainer ?? null)
 const copySuccessIndex = ref<number | null>(null)
 const copyRunSuccessIndex = ref<number | null>(null)
-const pendingNewMessages = ref(0)
-const showScrollToBottom = ref(false)
-const showBackToTop = ref(false)
-const collapsedSources = reactive(new Set<number>())
-const collapsedThinking = reactive(new Set<number>())
-const sessionStore = useSessionStore()
-const { currentChatSessionId: currentSessionId } = storeToRefs(sessionStore)
 const modelLoading = ref(false)
 const modelOptions = ref<ModelConfig[]>([])
 const selectedModelId = ref<string | null>(null)
 
+const sessionStore = useSessionStore()
+const { currentChatSessionId: currentSessionId } = storeToRefs(sessionStore)
 const { loading, error, sendMessageStream } = useChatApi()
 const { getSessionHistory } = useChatHistory()
 const { fetchModels } = useSettingsApi()
+
+const {
+  pendingNewMessages,
+  showScrollToBottom,
+  showBackToTop,
+  isNearBottom,
+  updateScrollState,
+  scrollToBottom,
+  scrollToBottomAndClear,
+  scrollToTop,
+  handleChatScroll,
+  followStreamPosition,
+} = useChatScrollState(chatContainer)
+
+const {
+  zoomedImage,
+  assistantDisplayContent,
+  parseAssistantMessage,
+  enhanceRenderedMarkdown,
+} = useChatMarkdownRenderer({ t, isNearBottom, scrollToBottom, blockedContentKey: "chat.notices.requestBlocked" })
 
 const userAvatarLabel = computed(() => (props.currentUserInitials || "AI").slice(0, 2).toUpperCase())
 
@@ -461,52 +187,15 @@ const loadModels = async () => {
   }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────
-const scrollToBottom = async () => {
-  await nextTick()
-  if (chatContainer.value) {
-    chatContainer.value.scrollTop = chatContainer.value.scrollHeight
-  }
-  pendingNewMessages.value = 0
-  updateScrollState()
-}
-
-const isNearBottom = () => {
-  const container = chatContainer.value
-  if (!container) return true
-  return container.scrollHeight - container.clientHeight - container.scrollTop < 120
-}
-
-const updateScrollState = () => {
-  const container = chatContainer.value
-  if (!container) {
-    showScrollToBottom.value = false
-    showBackToTop.value = false
-    return
-  }
-  showScrollToBottom.value = !isNearBottom()
-  showBackToTop.value = container.scrollTop > 360
-  if (isNearBottom()) pendingNewMessages.value = 0
-}
-
-const handleChatScroll = () => {
-  updateScrollState()
-}
-
-const scrollToBottomAndClear = () => {
-  void scrollToBottom()
-}
-
-const scrollToTop = async () => {
-  await nextTick()
-  if (chatContainer.value) {
-    chatContainer.value.scrollTo({ top: 0, behavior: "smooth" })
-  }
-  updateScrollState()
+const markCopied = (target: typeof copySuccessIndex, index: number) => {
+  target.value = index
+  window.setTimeout(() => {
+    if (target.value === index) target.value = null
+  }, 1400)
 }
 
 const copyMessage = async (index: number, message: ChatMessage) => {
-  const content = message.role === "assistant" ? parsedAssistantMessage(assistantDisplayContent(message)).body : message.content
+  const content = message.role === "assistant" ? parseAssistantMessage(assistantDisplayContent(message)).body : message.content
   if (!content.trim()) return
   if (await copyToClipboard(content.trim())) {
     markCopied(copySuccessIndex, index)
@@ -514,13 +203,6 @@ const copyMessage = async (index: number, message: ChatMessage) => {
   } else {
     ElMessage.warning(t("common.clipboard.failed"))
   }
-}
-
-const markCopied = (target: typeof copySuccessIndex, index: number) => {
-  target.value = index
-  window.setTimeout(() => {
-    if (target.value === index) target.value = null
-  }, 1400)
 }
 
 const copyRun = async (index: number, message: ChatMessage) => {
@@ -577,6 +259,13 @@ const messageRunId = (message: ChatMessage) => {
   return message.run_id || rawStringField(message, "run_id")
 }
 
+const compactId = (value?: string | null) => {
+  const text = (value || "").trim()
+  if (!text) return "-"
+  if (text.length <= 18) return text
+  return `${text.slice(0, 8)}...${text.slice(-4)}`
+}
+
 const runMetaLine = (message: ChatMessage) => {
   const metrics: ChatRunMetrics = message.metrics || {}
   const parts: string[] = []
@@ -595,13 +284,6 @@ const runMetaLine = (message: ChatMessage) => {
   const runId = messageRunId(message)
   if (runId) parts.push(t("chat.metrics.runValue", { value: compactId(runId) }))
   return parts.join(" · ")
-}
-
-const compactId = (value?: string | null) => {
-  const text = (value || "").trim()
-  if (!text) return "-"
-  if (text.length <= 18) return text
-  return `${text.slice(0, 8)}...${text.slice(-4)}`
 }
 
 const openTraceForSession = (message: ChatMessage) => {
@@ -655,112 +337,8 @@ const mergeAssistantRunMetadata = async (sessionId: string, assistantIndex: numb
   }
 }
 
-const followStreamPosition = (shouldStick: boolean) => {
-  if (shouldStick) {
-    void scrollToBottom()
-  } else {
-    pendingNewMessages.value = Math.max(1, pendingNewMessages.value)
-    updateScrollState()
-  }
-}
-
 const generateSessionId = () => crypto.randomUUID()
 
-const toggleCollapsed = (set: Set<number>, index: number) => {
-  if (set.has(index)) {
-    set.delete(index)
-  } else {
-    set.add(index)
-  }
-}
-
-const isCollapsed = (set: Set<number>, index: number) => set.has(index)
-
-const blockedAssistantContentPattern = /^(your request was blocked\.?|request was blocked\.?)$/i
-
-const assistantDisplayContent = (message: ChatMessage) => {
-  const content = message.content || ""
-  if (message.role === "assistant" && blockedAssistantContentPattern.test(content.trim())) {
-    return t("chat.notices.requestBlocked")
-  }
-  return content
-}
-
-const parsedAssistantMessage = (content: string): ParsedAssistantMessage => {
-  const sources: string[] = []
-  const toolEvents: string[] = []
-  let thinking = ""
-  let body = content
-
-  body = body.replace(/<think>([\s\S]*?)(?:<\/think>|$)/gi, (_match, value: string) => {
-    thinking = [thinking, value.trim()].filter(Boolean).join("\n\n")
-    return ""
-  })
-
-  const bodyLines: string[] = []
-  for (const rawLine of body.split("\n")) {
-    const line = rawLine.trim()
-    if (/^(思考过程|Thinking)\s*[:：]/i.test(line)) {
-      thinking = [thinking, line.replace(/^(思考过程|Thinking)\s*[:：]\s*/i, "").trim() || t("chat.notices.thinkingFallback")]
-        .filter(Boolean)
-        .join("\n\n")
-      continue
-    }
-    if (/^(来源|Source|Sources|References|引用)\s*[:：]/i.test(line)) {
-      sources.push(line)
-      continue
-    }
-    if (/^(tool|工具调用|MCP|function call)\b/i.test(line) || /\b(tool|MCP|function call)\b/i.test(line)) {
-      toolEvents.push(line)
-      continue
-    }
-    bodyLines.push(rawLine)
-  }
-
-  return {
-    body: bodyLines.join("\n").trim(),
-    thinking,
-    sources,
-    toolEvents: toolEvents.slice(0, 8),
-  }
-}
-
-const enhanceRenderedMarkdown = async () => {
-  await nextTick()
-  const stickToBottom = isNearBottom()
-  document.querySelectorAll<HTMLElement>(".agent-chat pre").forEach((pre) => {
-    if (pre.querySelector(".code-copy")) return
-    const code = pre.querySelector("code")
-    if (!code) return
-    const button = document.createElement("button")
-    button.type = "button"
-    button.className = "code-copy"
-    button.textContent = t("chat.code.copy")
-    button.addEventListener("click", async () => {
-      if (await copyToClipboard(code.textContent || "")) {
-        ElMessage.success(t("common.clipboard.copied"))
-      } else {
-        ElMessage.warning(t("common.clipboard.failed"))
-      }
-    })
-    pre.appendChild(button)
-  })
-
-  document.querySelectorAll<HTMLImageElement>(".agent-chat .markdown-body img").forEach((image) => {
-    if (image.dataset.zoomBound === "true") return
-    image.dataset.zoomBound = "true"
-    image.addEventListener("click", () => {
-      zoomedImage.value = image.currentSrc || image.src
-    })
-    image.addEventListener("load", () => {
-      if (stickToBottom) void scrollToBottom()
-    }, { once: true })
-  })
-
-  if (stickToBottom) void scrollToBottom()
-}
-
-// ── Sessions ──────────────────────────────────────────────────────
 const notifySessionChange = () => {
   window.dispatchEvent(new CustomEvent("agno-aios-chat-sessions-change", {
     detail: { sessionId: currentSessionId.value },
@@ -781,7 +359,7 @@ const selectSession = async (sessionId: string) => {
   try {
     const history: Message[] = await getSessionHistory(sessionId)
     if (history.length > 0) {
-      messages.value = history.map(m => ({ ...m, final: true }))
+      messages.value = history.map((message) => ({ ...message, final: true }))
     } else {
       messages.value = [createWelcomeMessage()]
     }
@@ -800,7 +378,6 @@ const createNewChat = () => {
   void scrollToBottom()
 }
 
-// ── Chat ──────────────────────────────────────────────────────────
 const submitPrompt = async (userMsg: string, options: { appendUser: boolean }) => {
   if (!userMsg.trim() || loading.value) return
   if (!selectedModelReady.value) {
@@ -821,24 +398,23 @@ const submitPrompt = async (userMsg: string, options: { appendUser: boolean }) =
   }
 
   try {
-    const idx = messages.value.push({ role: "assistant", content: "", final: false, session_id: sessionId, user_id: props.currentUserId || null }) - 1
+    const assistantIndex = messages.value.push({ role: "assistant", content: "", final: false, session_id: sessionId, user_id: props.currentUserId || null }) - 1
     const shouldStickToBottom = isNearBottom()
 
     await sendMessageStream(userMsg, sessionId, selectedModelId.value, (chunk) => {
-      const m = messages.value[idx]
-      if (m) m.content += chunk
+      const message = messages.value[assistantIndex]
+      if (message) message.content += chunk
       followStreamPosition(shouldStickToBottom)
       void enhanceRenderedMarkdown()
     })
 
-    const m = messages.value[idx]
-    if (m) {
-      m.final = true
-      m.session_id = m.session_id || sessionId
-      await mergeAssistantRunMetadata(sessionId, idx, m.content)
+    const message = messages.value[assistantIndex]
+    if (message) {
+      message.final = true
+      message.session_id = message.session_id || sessionId
+      await mergeAssistantRunMetadata(sessionId, assistantIndex, message.content)
     }
     void enhanceRenderedMarkdown()
-
     notifySessionChange()
   } catch {
     messages.value.push({ role: "assistant", content: t("chat.notices.requestFailed"), final: true, session_id: sessionId })
@@ -861,7 +437,9 @@ const retryAnswer = async (index: number) => {
   await submitPrompt(prompt, { appendUser: false })
 }
 
-const clearError = () => { if (error.value) error.value = null }
+const clearError = () => {
+  if (error.value) error.value = null
+}
 
 watch(currentModelName, notifyModelChange)
 watch(

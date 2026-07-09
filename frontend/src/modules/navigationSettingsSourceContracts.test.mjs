@@ -45,6 +45,33 @@ import {
   workflow,
 } from "./testSource.mjs"
 
+const settingsRuntimePanel = readOptionalSource("components/settings/SettingsRuntimePanel.vue")
+const settingsModelPanel = readOptionalSource("components/settings/SettingsModelPanel.vue")
+const settingsNavigationPanel = readOptionalSource("components/settings/SettingsNavigationPanel.vue")
+const useSettingsNavigationLayoutSource = readOptionalSource("composables/useSettingsNavigationLayout.ts")
+const settingsModularSource = [
+  settings,
+  settingsRuntimePanel,
+  settingsModelPanel,
+  settingsNavigationPanel,
+  useSettingsNavigationLayoutSource,
+].join("\n")
+const chatMessageList = readOptionalSource("components/chat/ChatMessageList.vue")
+const chatMessageCard = readOptionalSource("components/chat/ChatMessageCard.vue")
+const chatComposer = readOptionalSource("components/chat/ChatComposer.vue")
+const chatModelSelect = readOptionalSource("components/chat/ChatModelSelect.vue")
+const useChatScrollStateSource = readOptionalSource("composables/useChatScrollState.ts")
+const useChatMarkdownRendererSource = readOptionalSource("composables/useChatMarkdownRenderer.ts")
+const chatModularSource = [
+  chat,
+  chatMessageList,
+  chatMessageCard,
+  chatComposer,
+  chatModelSelect,
+  useChatScrollStateSource,
+  useChatMarkdownRendererSource,
+].join("\n")
+
 assert.equal(
   removedAgentOsControlSource,
   "",
@@ -108,22 +135,180 @@ for (const runtimePageLabel of [
   )
 }
 
+assert.equal(
+  existsSync(sourcePath("components/Chat.vue")),
+  true,
+  "Chat component file must align with the Chat nav label",
+)
+
+for (const expectedChatModule of [
+  "components/chat/ChatMessageList.vue",
+  "components/chat/ChatMessageCard.vue",
+  "components/chat/ChatComposer.vue",
+  "components/chat/ChatModelSelect.vue",
+  "composables/useChatScrollState.ts",
+  "composables/useChatMarkdownRenderer.ts",
+]) {
+  assert.equal(
+    existsSync(sourcePath(expectedChatModule)),
+    true,
+    `Chat modularization must provide ${expectedChatModule}`,
+  )
+}
+
+for (const chatShellDependency of [
+  "ChatMessageList",
+  "ChatComposer",
+  "useChatScrollState",
+  "useChatMarkdownRenderer",
+]) {
+  assert.match(
+    chat,
+    new RegExp(chatShellDependency),
+    `Chat.vue must orchestrate through ${chatShellDependency}`,
+  )
+}
+
+assert.doesNotMatch(
+  chat,
+  /import\s+MarkdownIt\s+from\s+["']markdown-it["']|from\s+["']highlight\.js["']/,
+  "Chat.vue must not own MarkdownIt/highlight setup after moving assistant rendering to child/composable contracts",
+)
+
+assert.doesNotMatch(
+  chat,
+  /const\s+(pendingNewMessages|showScrollToBottom|showBackToTop)\s*=\s*ref\(/,
+  "Chat.vue must delegate scroll visibility and new-message counters to useChatScrollState",
+)
+
+assert.match(
+  chatMessageList,
+  /ChatMessageCard/,
+  "ChatMessageList must render messages through ChatMessageCard",
+)
+
+assert.match(
+  chatMessageCard,
+  /MarkdownViewer/,
+  "ChatMessageCard must render assistant Markdown through the shared MarkdownViewer primitive",
+)
+
+assert.match(
+  chatComposer,
+  /ChatModelSelect/,
+  "ChatComposer must delegate model choice to ChatModelSelect",
+)
+
+assert.match(
+  useChatMarkdownRendererSource,
+  /parseAssistantMessage/,
+  "useChatMarkdownRenderer must own assistant thinking/source/tool extraction",
+)
+
+assert.match(
+  useChatMarkdownRendererSource,
+  /enhanceRenderedMarkdown/,
+  "useChatMarkdownRenderer must own code-copy and image-zoom enhancement hooks",
+)
+
+for (const chatHook of [
+  "markdown-skeleton",
+  "stream-cursor",
+  "code-copy",
+  "zoomedImage",
+  "source-collapse",
+  "thinking-collapse",
+  "tool-timeline",
+]) {
+  assert.match(
+    chatModularSource,
+    new RegExp(chatHook),
+    `Chat modular components/composables must expose ${chatHook} interaction support`,
+  )
+}
+
 assert.match(
   settings,
+  /SettingsRuntimePanel/,
+  "Settings shell must delegate runtime parameter rendering to SettingsRuntimePanel",
+)
+
+assert.match(
+  settings,
+  /SettingsModelPanel/,
+  "Settings shell must delegate model routing rendering to SettingsModelPanel",
+)
+
+assert.match(
+  settings,
+  /SettingsNavigationPanel/,
+  "Settings shell must delegate navigation editing rendering to SettingsNavigationPanel",
+)
+
+assert.match(
+  settings,
+  /useSettingsNavigationLayout/,
+  "Settings shell must use the navigation layout composable instead of owning drag/drop internals",
+)
+
+assert.match(
+  settingsRuntimePanel,
+  /SectionHeader/,
+  "SettingsRuntimePanel must use the shared SectionHeader primitive",
+)
+
+assert.match(
+  settingsModelPanel,
+  /SectionHeader/,
+  "SettingsModelPanel must use the shared SectionHeader primitive",
+)
+
+assert.match(
+  settingsModelPanel,
+  /DataChip|StatusDot/,
+  "SettingsModelPanel must use shared chip/status primitives for model metadata",
+)
+
+assert.match(
+  settingsNavigationPanel,
+  /SectionHeader/,
+  "SettingsNavigationPanel must use the shared SectionHeader primitive",
+)
+
+assert.match(
+  settingsNavigationPanel,
+  /DataChip/,
+  "SettingsNavigationPanel must use the shared DataChip primitive for group counts",
+)
+
+assert.match(
+  settingsModularSource,
   /navigationLayout/,
   "Settings navigation editor must persist user-controlled layout, not only tags",
 )
 
 assert.match(
-  settings,
+  settingsNavigationPanel,
   /:draggable="canWriteSettings"/,
   "Settings navigation items must be draggable when the user can write settings",
 )
 
 assert.match(
-  settings,
+  useSettingsNavigationLayoutSource,
   /moveNavigationItem/,
-  "Settings navigation editor must expose keyboard/button movement controls",
+  "Settings navigation editor must expose keyboard/button movement controls through the composable",
+)
+
+assert.match(
+  useSettingsNavigationLayoutSource,
+  /items:\s*\["home",\s*"dashboard",\s*"chat",\s*"workflow"\]/,
+  "Settings navigation defaults must serialize real shell nav ids instead of display labels",
+)
+
+assert.doesNotMatch(
+  useSettingsNavigationLayoutSource,
+  /items:\s*\["Home",\s*"Dashboard",\s*"Chat",\s*"Workflow"\]/,
+  "Settings navigation defaults must not persist old display labels as ids",
 )
 
 assert.doesNotMatch(
@@ -140,13 +325,13 @@ assert.doesNotMatch(
 
 assert.match(
   settings,
-  /settings-tabs-head/,
+  /ag-settings-tabs-head/,
   "Settings save action must live beside the tab switcher as the page-level commit action",
 )
 
 assert.match(
-  settings,
-  /model-route-actions/,
+  settingsModelPanel,
+  /ag-settings-model-actions/,
   "Settings add-model action must live in the model routing section header",
 )
 
@@ -169,7 +354,7 @@ assert.match(
 )
 
 assert.match(
-  settings,
+  settingsModularSource,
   /agno-aios-navigation-layout-change/,
   "Settings must notify the app shell after saving navigation layout changes",
 )
@@ -187,16 +372,32 @@ assert.match(
 )
 
 assert.match(
-  settings,
+  useSettingsNavigationLayoutSource,
   /beforeItemId === draggedNavigationItem\.value\.itemId/,
   "Settings drag sorting must ignore dropping an item onto itself",
 )
 
 assert.match(
-  settings,
+  useSettingsNavigationLayoutSource,
   /targetIndex -= 1/,
   "Settings drag sorting must keep the intended insertion point when moving down inside one group",
 )
+
+for (const oldSettingsSelector of [
+  "settings-section",
+  "settings-section-head",
+  "model-card",
+  "runtime-card",
+  "model-badge",
+  "navigation-group-card",
+  "navigation-order-item",
+]) {
+  assert.equal(
+    settings.includes(oldSettingsSelector),
+    false,
+    `Settings shell must not keep old page-local selector ${oldSettingsSelector}`,
+  )
+}
 
 assert.equal(
   settings.includes("settings.navigation.note"),
@@ -410,28 +611,6 @@ assert.equal(
   false,
   "sidebar footer must not render visible settings/logout action buttons",
 )
-
-assert.equal(
-  existsSync(sourcePath("components/Chat.vue")),
-  true,
-  "Chat component file must align with the Chat nav label",
-)
-
-for (const chatHook of [
-  "markdown-skeleton",
-  "stream-cursor",
-  "code-copy",
-  "zoomedImage",
-  "source-collapse",
-  "thinking-collapse",
-  "tool-timeline",
-]) {
-  assert.match(
-    chat,
-    new RegExp(chatHook),
-    `Chat must expose ${chatHook} interaction support`,
-  )
-}
 
 assert.doesNotMatch(
   chat,

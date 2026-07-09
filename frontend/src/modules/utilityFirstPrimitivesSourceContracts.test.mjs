@@ -1,8 +1,10 @@
 import assert from "node:assert/strict"
 import {
+  existsSync,
   readOptionalSource,
   readSource,
   skills,
+  sourcePath,
   workflow,
 } from "./testSource.mjs"
 
@@ -16,6 +18,16 @@ const statusDot = readOptionalSource("components/common/StatusDot.vue")
 const sectionHeader = readOptionalSource("components/common/SectionHeader.vue")
 const markdownViewer = readOptionalSource("components/common/MarkdownViewer.vue")
 const payloadViewer = readOptionalSource("components/common/PayloadViewer.vue")
+const workflowPalette = readOptionalSource("components/workflow/WorkflowPalette.vue")
+const workflowCanvas = readOptionalSource("components/workflow/WorkflowCanvas.vue")
+const workflowInspector = readOptionalSource("components/workflow/WorkflowInspector.vue")
+const workflowStepCard = readOptionalSource("components/workflow/WorkflowStepCard.vue")
+const workflowChildren = [
+  workflowPalette,
+  workflowCanvas,
+  workflowInspector,
+  workflowStepCard,
+].join("\n")
 
 for (const shortcut of [
   "ag-metric-chip",
@@ -82,5 +94,85 @@ assert.doesNotMatch(skills, /\.skills-state\s*\{/, "Skills page must not keep du
 
 assert.match(workflow, /import MetricChip from "\.\/common\/MetricChip\.vue"/, "Workflow page must consume MetricChip")
 assert.match(workflow, /import StatusChip from "\.\/common\/StatusChip\.vue"/, "Workflow page must consume StatusChip")
-assert.match(workflow, /ag-panel-header/, "Workflow page must use shared panel header utilities")
+assert.match(workflowChildren, /ag-panel-header/, "Workflow page must use shared panel header utilities")
 assert.doesNotMatch(workflow, /\.workflow-context-chip\s*\{/, "Workflow page must not keep duplicated metric chip CSS")
+
+for (const componentName of [
+  "WorkflowPalette",
+  "WorkflowCanvas",
+  "WorkflowInspector",
+]) {
+  assert.ok(
+    existsSync(sourcePath(`components/workflow/${componentName}.vue`)),
+    `Workflow page must provide components/workflow/${componentName}.vue`,
+  )
+  assert.match(
+    workflow,
+    new RegExp(`import ${componentName} from "\\./workflow/${componentName}\\.vue"`),
+    `Workflow shell must import ${componentName}`,
+  )
+  assert.match(
+    workflow,
+    new RegExp(`<${componentName}\\b`),
+    `Workflow shell must render ${componentName}`,
+  )
+}
+
+assert.ok(
+  existsSync(sourcePath("components/workflow/WorkflowStepCard.vue")),
+  "Workflow page must provide components/workflow/WorkflowStepCard.vue",
+)
+
+assert.match(
+  workflowCanvas,
+  /import WorkflowStepCard from "\.\/WorkflowStepCard\.vue"/,
+  "WorkflowCanvas must import WorkflowStepCard",
+)
+
+assert.match(
+  workflowCanvas,
+  /<WorkflowStepCard\b/,
+  "WorkflowCanvas must render WorkflowStepCard",
+)
+
+assert.match(
+  workflowChildren,
+  /DataChip/,
+  "Workflow child components must use DataChip for compact workflow facts",
+)
+
+assert.match(
+  workflowChildren,
+  /StatusDot/,
+  "Workflow child components must use StatusDot for validation and runtime status",
+)
+
+assert.match(
+  workflowChildren,
+  /SectionHeader/,
+  "Workflow child components must use SectionHeader for panel headings",
+)
+
+assert.match(
+  workflowChildren,
+  /PayloadViewer/,
+  "Workflow inspector must use PayloadViewer for generated workflow code",
+)
+
+assert.doesNotMatch(
+  workflow,
+  /<aside class="workflow-palette|<main class="workflow-canvas|<article[\s\S]*workflow-board-step|<el-tabs[\s\S]*workflow-tabs/,
+  "Workflow shell must delegate palette, canvas, step cards, and inspector tabs to child components",
+)
+
+assert.doesNotMatch(
+  workflow,
+  /\.(workflow-(config|palette-section|library-item|badge|canvas-head|flow|board-step|connector|step-copy|step-meta|branch-rail|step-actions|result-strip|output|tabs|inspector-section|editor|editor-grid|run-options|option-field|check-list|code-panel|code-head|muted))\s*\{/,
+  "Workflow shell must not keep old page-local duplicate Workflow styles",
+)
+
+assert.doesNotMatch(
+  workflowChildren,
+  /\.(workflow-(config|palette-section|library-item|badge|canvas-head|flow|board-step|connector|step-copy|step-meta|branch-rail|step-actions|result-strip|output|tabs|inspector-section|editor|editor-grid|run-options|option-field|check-list|code-panel|code-head|muted))\s*\{/,
+  "Workflow child components must use Atomic CSS/shared primitives instead of old duplicate Workflow style blocks",
+)
