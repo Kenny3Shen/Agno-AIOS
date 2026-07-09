@@ -237,7 +237,9 @@ for (const locale of ["zh-CN", "en-US"]) {
   const visibleCountLabel = i18n.global.t("knowledge.documents.visibleCount", { count: 1, total: 3 })
   const visibilityColumn = i18n.global.t("knowledge.documents.columns.visibility")
   const visibilityLabel = i18n.global.t("knowledge.documents.visibilityLabel", { title: "sample.md" })
+  const replaceSourceAction = i18n.global.t("knowledge.documents.replaceSource")
   const replaceSourceLabel = i18n.global.t("knowledge.documents.replaceSourceLabel", { title: "sample.md" })
+  const sourceReplacedMessage = i18n.global.t("knowledge.messages.sourceReplaced")
   const ragPermissionLabel = i18n.global.t("knowledge.messages.configPermissionRequired")
   assert.notEqual(
     visibleCountLabel,
@@ -259,7 +261,12 @@ for (const locale of ["zh-CN", "en-US"]) {
   )
   assert.ok(
     replaceSourceLabel.includes("sample.md"),
-    `Knowledge document source replacement label must include the document title in ${locale}`,
+    `Knowledge document update label must include the document title in ${locale}`,
+  )
+  assert.doesNotMatch(
+    [replaceSourceAction, replaceSourceLabel, sourceReplacedMessage].join("\n"),
+    /上传新版本|new source version|new version/i,
+    `Knowledge document update copy must not describe the action as uploading a new version in ${locale}`,
   )
   assert.notEqual(
     ragPermissionLabel,
