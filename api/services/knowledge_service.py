@@ -46,10 +46,13 @@ from api.services.knowledge_ingest_service import (
     PROFILE_MARKDOWN as _PROFILE_MARKDOWN,
     PROFILE_TEXT as _PROFILE_TEXT,
     SUPPORTED_FILE_SUFFIXES,
+    KnowledgeIngestOverrides,
     KnowledgeIngestProfile,
     KnowledgeReader,
     KnowledgeReaderConfig,
+    coerce_ingest_overrides as _coerce_ingest_overrides,
     profile_for_filename as _profile_for_filename,
+    profile_for_filename_or_strategy as _profile_for_filename_or_strategy,
     reader_for_profile as _reader_for_profile,
 )
 from api.services.knowledge_rag_settings_service import (
@@ -117,14 +120,30 @@ def update_runtime_rag_settings(values: Mapping[str, Any]) -> dict[str, Any]:
     )
 
 
-def _reader_config(needs_embedder: bool) -> KnowledgeReaderConfig:
+def _reader_config(
+    needs_embedder: bool,
+    overrides: KnowledgeIngestOverrides | None = None,
+) -> KnowledgeReaderConfig:
     settings = knowledge_settings()
+    options = overrides or KnowledgeIngestOverrides()
+    chunk_size = options.chunk_size or settings.chunk_size
+    chunk_overlap = (
+        options.chunk_overlap
+        if options.chunk_overlap is not None
+        else settings.chunk_overlap
+    )
+    if chunk_overlap >= chunk_size:
+        raise ValueError("chunk_overlap must be smaller than chunk_size")
     return KnowledgeReaderConfig(
         embedder=_get_embedder() if needs_embedder else None,
-        chunk_size=settings.chunk_size,
-        chunk_overlap=settings.chunk_overlap,
-        code_chunk_size=settings.code_chunk_size,
-        semantic_threshold=settings.semantic_threshold,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        code_chunk_size=options.code_chunk_size or settings.code_chunk_size,
+        semantic_threshold=(
+            options.semantic_threshold
+            if options.semantic_threshold is not None
+            else settings.semantic_threshold
+        ),
     )
 
 
@@ -132,24 +151,62 @@ def knowledge_profile_for_filename(filename: str | None) -> KnowledgeIngestProfi
     return _profile_for_filename(filename)
 
 
+def knowledge_profile_for_filename_or_strategy(
+    filename: str | None,
+    strategy: str | None,
+) -> KnowledgeIngestProfile:
+    return _profile_for_filename_or_strategy(filename, strategy)
+
+
+def _metadata_ingest_options(overrides: KnowledgeIngestOverrides) -> dict[str, str]:
+    metadata: dict[str, str] = {}
+    if overrides.chunk_size is not None:
+        metadata["chunk_size"] = str(overrides.chunk_size)
+    if overrides.chunk_overlap is not None:
+        metadata["chunk_overlap"] = str(overrides.chunk_overlap)
+    if overrides.code_chunk_size is not None:
+        metadata["code_chunk_size"] = str(overrides.code_chunk_size)
+    if overrides.semantic_threshold is not None:
+        metadata["semantic_threshold"] = str(overrides.semantic_threshold)
+    if overrides.reader_strategy is not None:
+        metadata["reader_strategy"] = overrides.reader_strategy
+    return metadata
+
+
 def reader_for_profile(
     profile: KnowledgeIngestProfile,
     filename: str | None = None,
+    overrides: KnowledgeIngestOverrides | None = None,
 ) -> KnowledgeReader:
     return _reader_for_profile(
         profile,
-        _reader_config(needs_embedder=profile.strategy == "semantic"),
+        _reader_config(
+            needs_embedder=profile.strategy == "semantic",
+            overrides=overrides,
+        ),
         filename,
     )
 
 
 def reader_for_filename(
     filename: str | None,
+    overrides: Mapping[str, object] | KnowledgeIngestOverrides | None = None,
 ) -> KnowledgeReader:
-    profile = knowledge_profile_for_filename(filename)
+    ingest_overrides = (
+        overrides
+        if isinstance(overrides, KnowledgeIngestOverrides)
+        else _coerce_ingest_overrides(overrides)
+    )
+    profile = knowledge_profile_for_filename_or_strategy(
+        filename,
+        ingest_overrides.reader_strategy,
+    )
     return _reader_for_profile(
         profile,
-        _reader_config(needs_embedder=profile.strategy == "semantic"),
+        _reader_config(
+            needs_embedder=profile.strategy == "semantic",
+            overrides=ingest_overrides,
+        ),
         filename,
     )
 
@@ -507,6 +564,7 @@ class KnowledgeBaseLifecycle:
         metadata: dict[str, Any] | None = None,
         owner_user_id: str | None = None,
         visibility: str = "private",
+        ingest_options: Mapping[str, object] | None = None,
     ) -> KnowledgeDocumentPayload:
         clean_title = title.strip() or "未命名知识"
         clean_content = content.strip()
@@ -516,10 +574,15 @@ class KnowledgeBaseLifecycle:
 
         base_metadata = _safe_metadata(metadata)
         filename = str(base_metadata.get("file_name") or clean_title)
-        profile = knowledge_profile_for_filename(filename)
+        ingest_overrides = _coerce_ingest_overrides(ingest_options)
+        profile = knowledge_profile_for_filename_or_strategy(
+            filename,
+            ingest_overrides.reader_strategy,
+        )
         clean_source = source.strip() or "manual"
         safe_metadata = {
             **base_metadata,
+            **_metadata_ingest_options(ingest_overrides),
             **_owner_metadata(owner_user_id, normalized_visibility),
             "title": clean_title,
             "source": clean_source,
@@ -547,7 +610,7 @@ class KnowledgeBaseLifecycle:
                 description=clean_source,
                 text_content=clean_content,
                 metadata=safe_metadata,
-                reader=reader_for_profile(profile, filename),
+                reader=reader_for_profile(profile, filename, ingest_overrides),
                 upsert=True,
                 skip_if_exists=False,
             )
@@ -569,6 +632,7 @@ class KnowledgeBaseLifecycle:
         title: str | None = None,
         owner_user_id: str | None = None,
         visibility: str = "private",
+        ingest_options: Mapping[str, object] | None = None,
     ) -> KnowledgeDocumentPayload:
         file_path = await resolve_existing_file_async(path)
         if file_path.suffix.lower() not in SUPPORTED_FILE_SUFFIXES:
@@ -577,8 +641,13 @@ class KnowledgeBaseLifecycle:
         normalized_visibility = normalize_visibility(visibility, strict=True)
 
         clean_title = (title or file_path.stem).strip() or file_path.stem
-        profile = knowledge_profile_for_filename(file_path.name)
+        ingest_overrides = _coerce_ingest_overrides(ingest_options)
+        profile = knowledge_profile_for_filename_or_strategy(
+            file_path.name,
+            ingest_overrides.reader_strategy,
+        )
         metadata = {
+            **_metadata_ingest_options(ingest_overrides),
             **_owner_metadata(owner_user_id, normalized_visibility),
             "title": clean_title,
             "source": str(file_path),
@@ -600,7 +669,7 @@ class KnowledgeBaseLifecycle:
             metadata=metadata,
             filename=file_path.name,
         )
-        reader = reader_for_profile(profile, file_path.name)
+        reader = reader_for_profile(profile, file_path.name, ingest_overrides)
         knowledge = await self._async_knowledge_async()
         async with _knowledge_async_lock:
             await self._ensure_storage_async()
@@ -705,6 +774,7 @@ class KnowledgeBaseLifecycle:
         metadata: dict[str, Any] | None = None,
         owner_user_id: str | None = None,
         user: ActorLike | None = None,
+        ingest_options: Mapping[str, object] | None = None,
     ) -> KnowledgeDocumentPayload | None:
         await self._ensure_contents_storage_async()
         current = await self._knowledge_content_by_id_async(doc_id)
@@ -748,11 +818,16 @@ class KnowledgeBaseLifecycle:
             or ""
         ).strip()
         visibility = normalize_visibility(str(current_metadata.get("visibility") or "private"))
-        profile = knowledge_profile_for_filename(clean_file_name)
+        ingest_overrides = _coerce_ingest_overrides(ingest_options)
+        profile = knowledge_profile_for_filename_or_strategy(
+            clean_file_name,
+            ingest_overrides.reader_strategy,
+        )
         source_reference = make_source_ref("text", source_digest(clean_content, clean_file_name))
         safe_metadata = {
             **safe_public_metadata(current_metadata),
             **_safe_metadata(metadata),
+            **_metadata_ingest_options(ingest_overrides),
             **_owner_metadata(owner, visibility),
             "title": clean_title,
             "source": clean_source,
@@ -779,7 +854,7 @@ class KnowledgeBaseLifecycle:
                 description=clean_source,
                 text_content=clean_content,
                 metadata=safe_metadata,
-                reader=reader_for_profile(profile, clean_file_name),
+                reader=reader_for_profile(profile, clean_file_name, ingest_overrides),
                 upsert=True,
                 skip_if_exists=False,
             )
@@ -956,6 +1031,7 @@ async def add_text_document_async(
     metadata: dict[str, Any] | None = None,
     owner_user_id: str | None = None,
     visibility: str = "private",
+    ingest_options: Mapping[str, object] | None = None,
 ) -> KnowledgeDocumentPayload:
     return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.add_text_document_async(
         title,
@@ -964,6 +1040,7 @@ async def add_text_document_async(
         metadata=metadata,
         owner_user_id=owner_user_id,
         visibility=visibility,
+        ingest_options=ingest_options,
     )
 
 
@@ -972,12 +1049,14 @@ async def add_file_document_async(
     title: str | None = None,
     owner_user_id: str | None = None,
     visibility: str = "private",
+    ingest_options: Mapping[str, object] | None = None,
 ) -> KnowledgeDocumentPayload:
     return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.add_file_document_async(
         path,
         title=title,
         owner_user_id=owner_user_id,
         visibility=visibility,
+        ingest_options=ingest_options,
     )
 
 
@@ -1016,6 +1095,7 @@ async def replace_document_source_async(
     metadata: dict[str, Any] | None = None,
     owner_user_id: str | None = None,
     user: ActorLike | None = None,
+    ingest_options: Mapping[str, object] | None = None,
 ) -> KnowledgeDocumentPayload | None:
     return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.replace_document_source_async(
         doc_id,
@@ -1026,6 +1106,7 @@ async def replace_document_source_async(
         metadata=metadata,
         owner_user_id=owner_user_id,
         user=user,
+        ingest_options=ingest_options,
     )
 
 

@@ -12,6 +12,11 @@ from agno.vectordb.search import SearchType
 from api.services import knowledge_ingest_service
 from api.services import knowledge_runtime_service
 from api.services import knowledge_service
+from api.services.knowledge_ingest_service import (
+    coerce_ingest_overrides,
+    profile_for_filename_or_strategy,
+    profile_for_strategy,
+)
 from api.tests.knowledge_fakes import FakeEmbedder
 
 
@@ -251,3 +256,36 @@ def test_update_runtime_rag_settings_updates_env_and_rolls_back_invalid_overlap(
         assert os.environ["AGNO_KNOWLEDGE_CHUNK_OVERLAP"] == "160"
     finally:
         knowledge_service._clear_knowledge_runtime_caches()
+
+
+def test_profile_for_strategy_resolves_known_reader_strategy() -> None:
+    profile = profile_for_strategy("csv_row")
+
+    assert profile is not None
+    assert profile.strategy == "csv_row"
+    assert profile.reader == "CSVReader"
+
+
+def test_profile_for_filename_or_strategy_prefers_explicit_strategy() -> None:
+    profile = profile_for_filename_or_strategy("alerts.json", "code")
+
+    assert profile.strategy == "code"
+    assert profile.reader == "TextReader"
+
+
+def test_coerce_ingest_overrides_normalizes_numeric_values() -> None:
+    overrides = coerce_ingest_overrides(
+        {
+            "chunk_size": "1500",
+            "chunk_overlap": 120,
+            "code_chunk_size": "2200",
+            "semantic_threshold": "0.61",
+            "reader_strategy": "markdown",
+        }
+    )
+
+    assert overrides.chunk_size == 1500
+    assert overrides.chunk_overlap == 120
+    assert overrides.code_chunk_size == 2200
+    assert overrides.semantic_threshold == 0.61
+    assert overrides.reader_strategy == "markdown"

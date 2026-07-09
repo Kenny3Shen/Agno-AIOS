@@ -153,6 +153,47 @@ async def test_add_text_document_uses_async_insert_and_reload() -> None:
 
 
 @pytest.mark.asyncio
+async def test_add_text_document_records_per_request_ingest_options() -> None:
+    content_row = SimpleNamespace(
+        id="content-options",
+        name="Runbook",
+        metadata={"user_id": "u1", "source": "manual", "chunks": 1},
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(contents=[content_row])
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_storage_async=lambda: None,
+            store_source_async=lambda _content_id, _source: None,
+        )
+    )
+
+    result = await lifecycle.add_text_document_async(
+        "Runbook",
+        "body",
+        owner_user_id="u1",
+        ingest_options={
+            "chunk_size": 1500,
+            "chunk_overlap": 120,
+            "code_chunk_size": 2200,
+            "semantic_threshold": 0.61,
+            "reader_strategy": "markdown",
+        },
+    )
+
+    assert result["id"] == "content-options"
+    insert_kwargs = knowledge.calls[0][2]
+    assert insert_kwargs["metadata"]["chunk_size"] == "1500"
+    assert insert_kwargs["metadata"]["chunk_overlap"] == "120"
+    assert insert_kwargs["metadata"]["code_chunk_size"] == "2200"
+    assert insert_kwargs["metadata"]["semantic_threshold"] == "0.61"
+    assert insert_kwargs["metadata"]["chunk_strategy"] == "markdown"
+    assert insert_kwargs["metadata"]["reader"] == "MarkdownReader"
+
+
+@pytest.mark.asyncio
 async def test_add_file_document_uses_async_insert_and_reload(tmp_path) -> None:
     file_path = tmp_path / "runbook.md"
     file_path.write_text("# runbook\n", encoding="utf-8")

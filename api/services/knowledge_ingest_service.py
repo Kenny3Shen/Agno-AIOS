@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -35,6 +36,15 @@ class KnowledgeReaderConfig:
     chunk_overlap: int
     code_chunk_size: int
     semantic_threshold: float
+
+
+@dataclass(frozen=True)
+class KnowledgeIngestOverrides:
+    chunk_size: int | None = None
+    chunk_overlap: int | None = None
+    code_chunk_size: int | None = None
+    semantic_threshold: float | None = None
+    reader_strategy: str | None = None
 
 
 KnowledgeReader = TextReader | MarkdownReader | CSVReader | JSONReader | PDFReader | DocxReader
@@ -134,6 +144,60 @@ def profile_for_filename(filename: str | None) -> KnowledgeIngestProfile:
         if suffix in profile.suffixes:
             return profile
     return PROFILE_TEXT
+
+
+def _optional_int(value: object) -> int | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    if not isinstance(value, str | int | float):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_float(value: object) -> float | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return float(value)
+    if not isinstance(value, str | int | float):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def profile_for_strategy(strategy: str | None) -> KnowledgeIngestProfile | None:
+    clean_strategy = (strategy or "").strip().lower()
+    if not clean_strategy:
+        return None
+    for profile in INGEST_PROFILES:
+        if profile.strategy == clean_strategy:
+            return profile
+    return None
+
+
+def profile_for_filename_or_strategy(
+    filename: str | None,
+    strategy: str | None,
+) -> KnowledgeIngestProfile:
+    return profile_for_strategy(strategy) or profile_for_filename(filename)
+
+
+def coerce_ingest_overrides(values: Mapping[str, object] | None) -> KnowledgeIngestOverrides:
+    source = values or {}
+    return KnowledgeIngestOverrides(
+        chunk_size=_optional_int(source.get("chunk_size")),
+        chunk_overlap=_optional_int(source.get("chunk_overlap")),
+        code_chunk_size=_optional_int(source.get("code_chunk_size")),
+        semantic_threshold=_optional_float(source.get("semantic_threshold")),
+        reader_strategy=str(source.get("reader_strategy") or "").strip().lower() or None,
+    )
 
 
 def _semantic_chunking(config: KnowledgeReaderConfig) -> SemanticChunking:
