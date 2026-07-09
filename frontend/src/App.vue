@@ -556,8 +556,8 @@ const SIDEBAR_COMPACT_WIDTH = 76
 const isMobileViewport = () => typeof window !== "undefined" && window.innerWidth < 1024
 const defaultSidebarNavGroupIds: Array<{ key: SidebarNavGroupKey; ids: NavId[] }> = [
   { key: "operations", ids: ["home", "dashboard", "chat", "workflow"] },
-  { key: "knowledge", ids: ["skills", "mcp", "knowledge", "memory"] },
-  { key: "governance", ids: ["trace", "evaluation", "approvals", "scheduler"] },
+  { key: "knowledge", ids: ["skills", "mcp", "knowledge"] },
+  { key: "governance", ids: ["trace", "memory", "evaluation", "approvals", "scheduler"] },
   { key: "securityData", ids: ["cve", "collect"] },
   { key: "settings", ids: ["settings"] },
 ]

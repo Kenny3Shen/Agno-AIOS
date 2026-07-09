@@ -24,6 +24,9 @@ import {
   hasUserScope,
   i18n,
   knowledge,
+  knowledgeIngestDrawer,
+  knowledgeMetadataPanel,
+  knowledgeRetrievalPlayground,
   mcp,
   memoryControl,
   readOptionalSource,
@@ -475,15 +478,15 @@ assert.match(
 )
 
 assert.match(
-  readOptionalSource("components/Knowledge.vue"),
-  /reader-strategy-console[\s\S]*strategy-row/,
-  "Knowledge page must expose suffix-aware chunking strategy guidance",
+  knowledgeIngestDrawer,
+  /drawer-advanced-ingest[\s\S]*readerStrategy/,
+  "Knowledge Drawer must expose suffix-aware chunking strategy guidance",
 )
 
 assert.match(
-  readOptionalSource("components/Knowledge.vue"),
+  knowledgeRetrievalPlayground,
   /searchType/,
-  "Knowledge page must expose configurable search_type controls",
+  "Knowledge retrieval playground must expose configurable search_type controls",
 )
 
 assert.match(
@@ -505,28 +508,27 @@ for (const bulkyKnowledgeHeaderClass of [
 }
 
 assert.match(
-  knowledge,
-  /advanced-configuration[\s\S]*knowledge-runtime-summary/,
-  "Knowledge runtime status must live inside Advanced Configuration",
+  knowledgeMetadataPanel,
+  /knowledge-runtime-summary[\s\S]*metadata-summary/,
+  "Knowledge selected document status must live inside the Metadata panel",
 )
 
 assert.match(
-  knowledge,
+  knowledgeMetadataPanel,
   /knowledge-runtime-chip/,
-  "Knowledge status items must use local runtime context chips",
+  "Knowledge metadata status items must use local runtime context chips",
 )
 
 assert.match(
-  knowledge,
-  /<div v-for="card in statisticsCards"[^>]*class="knowledge-runtime-chip"/,
-  "Knowledge status metrics must render as compact runtime values",
+  knowledgeMetadataPanel,
+  /knowledge-runtime-chip/g,
+  "Knowledge selected document context must render as compact runtime values",
 )
 
-const knowledgeStatisticsCardsBlock = knowledge.match(/const statisticsCards = computed\(\(\) => \[([\s\S]*?)\]\)/)?.[1] ?? ""
 assert.equal(
-  [...knowledgeStatisticsCardsBlock.matchAll(/label:\s*t\("knowledge\.stats\./g)].length,
+  [...knowledgeMetadataPanel.matchAll(/class="knowledge-runtime-chip"/g)].length,
   4,
-  "Knowledge status strip must show only the four primary statistics",
+  "Knowledge metadata summary must show only the four primary document facts",
 )
 
 assert.equal(
@@ -536,7 +538,7 @@ assert.equal(
 )
 
 assertNoPillStatChip(
-  knowledge,
+  knowledgeMetadataPanel,
   "knowledge-runtime-chip",
   "Knowledge runtime chips must use the 8px rectangular chip shape, not pill styling",
 )
@@ -554,7 +556,7 @@ assert.doesNotMatch(
 )
 
 assert.match(
-  knowledge,
-  /knowledge-upload-pipeline/,
-  "Knowledge upload area must show the RAG ingestion pipeline",
+  knowledgeIngestDrawer,
+  /drawer-ingest-flow[\s\S]*drawer-advanced-ingest/,
+  "Knowledge Drawer must show the RAG ingestion pipeline",
 )

@@ -78,3 +78,10 @@ async def get_knowledge_source_async(content_id: str) -> dict[str, Any] | None:
         return None
     source = coerce_json_value(row.source)
     return dict(source) if isinstance(source, Mapping) else None
+
+
+async def delete_knowledge_source_async(content_id: str) -> None:
+    await ensure_knowledge_sources_table_async()
+    table = knowledge_sources_table()
+    async with get_async_control_plane_engine().begin() as conn:
+        await conn.execute(table.delete().where(table.c.content_id == content_id))

@@ -53,18 +53,28 @@ def with_manage_flags(
     return flagged
 
 
+class KnowledgeIngestOptionsRequest(BaseModel):
+    chunk_size: int | None = Field(default=None, ge=200)
+    chunk_overlap: int | None = Field(default=None, ge=0)
+    code_chunk_size: int | None = Field(default=None, ge=256)
+    semantic_threshold: float | None = Field(default=None, ge=0, le=1)
+    reader_strategy: str | None = None
+
+
 class KnowledgeTextRequest(BaseModel):
     title: str = Field(..., min_length=1)
     content: str = Field(..., min_length=1)
     source: str = "manual"
     metadata: dict[str, str] = Field(default_factory=dict)
     visibility: str = "private"
+    ingest_options: KnowledgeIngestOptionsRequest | None = None
 
 
 class KnowledgeFileRequest(BaseModel):
     path: str = Field(..., min_length=1)
     title: str | None = None
     visibility: str = "private"
+    ingest_options: KnowledgeIngestOptionsRequest | None = None
 
 
 class KnowledgeVisibilityRequest(BaseModel):
@@ -77,6 +87,7 @@ class KnowledgeSourceReplacementRequest(BaseModel):
     title: str | None = None
     source: str | None = None
     metadata: dict[str, str] = Field(default_factory=dict)
+    ingest_options: KnowledgeIngestOptionsRequest | None = None
 
 
 class KnowledgeSearchRequest(BaseModel):
@@ -136,6 +147,11 @@ async def create_text_document(
             metadata=request.metadata,
             owner_user_id=actor_id(user),
             visibility=request.visibility,
+            ingest_options=(
+                request.ingest_options.model_dump(exclude_none=True)
+                if request.ingest_options is not None
+                else None
+            ),
         )
         response = cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
         await record_audit_event_async(
@@ -163,6 +179,11 @@ async def create_file_document(
             title=request.title,
             owner_user_id=actor_id(user),
             visibility=request.visibility,
+            ingest_options=(
+                request.ingest_options.model_dump(exclude_none=True)
+                if request.ingest_options is not None
+                else None
+            ),
         )
         response = cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
         await record_audit_event_async(
@@ -244,6 +265,11 @@ async def replace_document_source(
             metadata=request.metadata,
             owner_user_id=effective_knowledge_user_filter(user),
             user=user,
+            ingest_options=(
+                request.ingest_options.model_dump(exclude_none=True)
+                if request.ingest_options is not None
+                else None
+            ),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -1,4 +1,5 @@
 import "./modules/shellNavigation.test.mjs"
+import "./modules/knowledgeWorkbench.test.mjs"
 import "./modules/agentEvalsWorkbench.test.mjs"
 import "./modules/memoryControl.test.mjs"
 import "./modules/traceWorkbench.test.mjs"

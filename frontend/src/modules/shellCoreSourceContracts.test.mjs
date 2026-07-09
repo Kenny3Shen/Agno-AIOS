@@ -20,6 +20,8 @@ import {
   hasUserScope,
   i18n,
   knowledge,
+  knowledgeDocumentList,
+  knowledgeIngestDrawer,
   mcp,
   memoryControl,
   readOptionalSource,
@@ -580,7 +582,7 @@ assert.match(
 for (const visibilityConsumer of [
   ["Skills", skills],
   ["MCP", mcp],
-  ["Knowledge", knowledge],
+  ["Knowledge", [knowledge, knowledgeDocumentList, knowledgeIngestDrawer].join("\n")],
 ]) {
   assert.match(
     visibilityConsumer[1],

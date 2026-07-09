@@ -714,18 +714,28 @@ export interface KnowledgeStatusResponse {
   documents: KnowledgeDocument[]
 }
 
+export interface KnowledgeIngestOptions {
+  chunk_size?: number | null
+  chunk_overlap?: number | null
+  code_chunk_size?: number | null
+  semantic_threshold?: number | null
+  reader_strategy?: string | null
+}
+
 export interface KnowledgeTextRequest {
   title: string
   content: string
   source?: string
   metadata?: Record<string, string>
   visibility?: ResourceVisibility
+  ingest_options?: KnowledgeIngestOptions | null
 }
 
 export interface KnowledgeFileRequest {
   path: string
   title?: string | null
   visibility?: ResourceVisibility
+  ingest_options?: KnowledgeIngestOptions | null
 }
 
 export interface KnowledgeSourceReplacementRequest {
@@ -734,6 +744,7 @@ export interface KnowledgeSourceReplacementRequest {
   title?: string | null
   source?: string | null
   metadata?: Record<string, string>
+  ingest_options?: KnowledgeIngestOptions | null
 }
 
 export interface KnowledgeSearchResult {
