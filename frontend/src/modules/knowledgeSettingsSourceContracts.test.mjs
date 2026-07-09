@@ -23,6 +23,11 @@ import {
   hasUserScope,
   i18n,
   knowledge,
+  knowledgeDocumentList,
+  knowledgeIngestDrawer,
+  knowledgeMetadataPanel,
+  knowledgeRetrievalPlayground,
+  knowledgeWorkbenchSource,
   mcp,
   memoryControl,
   readOptionalSource,
@@ -97,74 +102,86 @@ assert.doesNotMatch(
 
 assert.match(
   knowledge,
+  /knowledge-document-workbench/,
+  "Knowledge page must use the document-first workbench shell",
+)
+
+assert.match(
+  knowledge,
+  /KnowledgeDocumentList/,
+  "Knowledge page must delegate document list rendering",
+)
+
+assert.match(
+  knowledge,
+  /KnowledgeMetadataPanel/,
+  "Knowledge page must delegate selected metadata rendering",
+)
+
+assert.match(
+  knowledge,
+  /KnowledgeIngestDrawer/,
+  "Knowledge page must use the shared Add and Update Drawer",
+)
+
+assert.match(
+  knowledgeRetrievalPlayground,
   /retrieval-playground/,
-  "Knowledge page must expose a Retrieval Playground section",
+  "Knowledge retrieval playground must remain available",
 )
 
 assert.match(
-  knowledge,
-  /advanced-configuration/,
-  "Knowledge page must collapse reader and RAG tuning details into Advanced Configuration",
+  knowledgeIngestDrawer,
+  /knowledge-ingest-drawer/,
+  "Knowledge Add and Update must share one Drawer surface",
 )
 
 assert.match(
-  knowledge,
-  /useAuthStore\(\)/,
-  "Knowledge page must use auth scopes before allowing global RAG configuration changes",
+  knowledgeIngestDrawer,
+  /advancedIngestOpen/,
+  "Knowledge Drawer advanced ingest options must be collapsed by local state",
 )
 
 assert.match(
-  knowledge,
-  /hasScope\("config:write"\)/,
-  "Knowledge RAG settings must require config write scope in the frontend",
-)
-
-assert.match(
-  knowledge,
-  /ragSaveDisabled[\s\S]*!canWriteRagSettings\.value/,
-  "Knowledge RAG save action must be disabled for users without config write scope",
-)
-
-assert.match(
-  knowledge,
-  /document-preview-drawer/,
-  "Knowledge document management must provide a preview drawer without requiring backend changes",
+  knowledgeIngestDrawer,
+  /ingest_options/,
+  "Knowledge Drawer must send per-request ingest options",
 )
 
 assert.doesNotMatch(
   knowledge,
-  /<el-table[\s\S]*fixed=/,
-  "Knowledge document management must not use fixed Element Plus table columns that overflow narrow shells",
+  /advanced-configuration/,
+  "Knowledge page must not keep global RAG editing in the bottom page area",
+)
+
+assert.doesNotMatch(
+  knowledge,
+  /metadataDialogOpen|sourceReplacementDialogOpen|source-replacement-dialog/,
+  "Knowledge page must replace metadata and source replacement dialogs with the new panel and Drawer",
 )
 
 assert.match(
-  knowledge,
+  knowledgeMetadataPanel,
+  /knowledge-metadata-panel/,
+  "Knowledge metadata panel must render selected document metadata",
+)
+
+assert.match(
+  knowledgeWorkbenchSource,
+  /mergeUpdatedKnowledgeDocument/,
+  "Knowledge update flow must merge returned new document IDs through a pure helper",
+)
+
+assert.match(
+  knowledgeDocumentList,
   /document-table.*role="table"/,
   "Knowledge document management must use the custom responsive document table surface",
 )
 
 assert.match(
-  knowledge,
+  knowledgeDocumentList,
   /document-action-buttons/,
   "Knowledge document actions must stay grouped in a bounded icon button row",
-)
-
-assert.match(
-  knowledge,
-  /openSourceReplacement/,
-  "Knowledge document rows must provide an action for uploading a new source version",
-)
-
-assert.match(
-  knowledge,
-  /source-replacement-dialog/,
-  "Knowledge page must use a bounded dialog for source version replacement",
-)
-
-assert.match(
-  knowledge,
-  /source-replacement-dialog[\s\S]{0,180}width="min\(560px,\s*calc\(100vw - 24px\)\)"/,
-  "Knowledge source replacement dialog must use a viewport-aware width on mobile",
 )
 
 assert.match(
@@ -174,7 +191,7 @@ assert.match(
 )
 
 assert.match(
-  knowledge,
+  knowledgeDocumentList,
   /document-management-bar/,
   "Knowledge document management controls must live in a structured toolbar",
 )
@@ -186,32 +203,32 @@ assert.doesNotMatch(
 )
 
 assert.match(
-  knowledge,
+  knowledgeDocumentList,
   /knowledge\.documents\.columns\.visibility/,
   "Knowledge document table must expose visibility as its own column",
 )
 
 assert.match(
-  knowledge,
+  knowledgeDocumentList,
   /document-visibility-tabs[\s\S]*updateDocumentVisibility/,
   "Knowledge document visibility must be changed with the shared visibility tabs",
 )
 
 assert.match(
-  knowledge,
+  knowledgeDocumentList,
   /--document-table-font-size:\s*11px/,
   "Knowledge document table must use one compact font scale to avoid mixed row sizing",
 )
 
 assert.match(
-  knowledge,
+  knowledgeDocumentList,
   /--visibility-tab-min-width:\s*44px/,
   "Knowledge document visibility tabs must use the compact table density",
 )
 
 assert.match(
-  knowledge,
-  /grid-template-columns:[\s\S]*minmax\(160px,\s*1\.35fr\)[\s\S]*minmax\(88px,\s*0\.44fr\)[\s\S]*132px/,
+  knowledgeDocumentList,
+  /grid-template-columns:[\s\S]*minmax\(180px,\s*1fr\)[\s\S]*minmax\(96px,\s*0\.38fr\)[\s\S]*132px/,
   "Knowledge document table columns must use compact bounded tracks",
 )
 
@@ -258,7 +275,7 @@ assert.doesNotMatch(
 )
 
 assert.match(
-  knowledge,
+  knowledgeDocumentList,
   /@media\s*\(max-width:\s*1120px\)[\s\S]*\.document-row\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/,
   "Knowledge document rows must collapse into a responsive card grid before they can overflow the shell",
 )
