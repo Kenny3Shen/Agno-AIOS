@@ -433,12 +433,12 @@ button:enabled {
 .ag-nav-item {
 	display: flex;
 	width: 100%;
-	min-height: 42px;
+	min-height: 36px;
 	align-items: center;
-	gap: 10px;
+	gap: 8px;
 	border: 1px solid transparent;
 	border-radius: 8px;
-	padding: 7px 9px;
+	padding: 5px 8px;
 	color: var(--ag-sidebar-text);
 	text-align: left;
 	transition:
@@ -448,7 +448,7 @@ button:enabled {
 }
 
 .ag-nav-item + .ag-nav-item {
-	margin-top: 4px;
+	margin-top: 2px;
 }
 
 .ag-nav-list .ag-nav-item + .ag-nav-item {
@@ -473,7 +473,7 @@ button:enabled {
 .ag-nav-chat-block,
 .ag-nav-trace-block {
 	display: grid;
-	gap: 7px;
+	gap: 5px;
 }
 
 .ag-nav-chat-row {

@@ -384,11 +384,11 @@ const defaultNavigationGroups = computed<NavigationGroupConfig[]>(() => [
   },
   {
     key: "knowledge",
-    items: ["Skills", "MCP", "Knowledge", "Memory"].map((id) => ({ id, tag: "" })),
+    items: ["Skills", "MCP", "Knowledge"].map((id) => ({ id, tag: "" })),
   },
   {
     key: "governance",
-    items: ["Trace", "Evaluation", "Approvals", "Scheduler"].map((id) => ({ id, tag: "" })),
+    items: ["Trace", "Memory", "Evaluation", "Approvals", "Scheduler"].map((id) => ({ id, tag: "" })),
   },
   {
     key: "securityData",

@@ -12,6 +12,7 @@ import {
   splitPrimaryShellNavItems,
 } from "./shellNavigation.ts"
 import { hasRoleScope, hasUserScope } from "../lib/scopes.ts"
+import { app, appStyle, settings } from "./testSource.mjs"
 
 const icon = {}
 const item = (id) => ({
@@ -161,8 +162,8 @@ assert.deepEqual(
     },
     [
       { key: "operations", items: [item("home"), item("dashboard"), item("chat"), item("workflow")] },
-      { key: "knowledge", items: [item("skills"), item("mcp"), item("knowledge"), item("memory")] },
-      { key: "governance", items: [item("trace"), item("evaluation"), item("approvals"), item("scheduler")] },
+      { key: "knowledge", items: [item("skills"), item("mcp"), item("knowledge")] },
+      { key: "governance", items: [item("trace"), item("memory"), item("evaluation"), item("approvals"), item("scheduler")] },
       { key: "securityData", items: [item("cve"), item("collect")] },
       { key: "settings", items: [item("settings")] },
     ],
@@ -172,8 +173,8 @@ assert.deepEqual(
   })),
   [
     { title: "Operations", items: ["dashboard", "chat", "workflow"] },
-    { title: "Knowledge", items: ["skills", "mcp", "knowledge", "memory"] },
-    { title: "Governance", items: ["trace", "evaluation", "approvals", "scheduler"] },
+    { title: "Knowledge", items: ["skills", "mcp", "knowledge"] },
+    { title: "Governance", items: ["trace", "memory", "evaluation", "approvals", "scheduler"] },
     { title: "Security Data", items: ["cve", "collect"] },
   ],
   "home sections must mirror sidebar groups while excluding Home and Settings",
@@ -183,14 +184,14 @@ assert.deepEqual(
   buildSidebarNavGroups({
     defaultGroups: [
       { key: "operations", ids: ["home", "dashboard", "chat", "workflow"] },
-      { key: "knowledge", ids: ["skills", "mcp", "knowledge", "memory"] },
-      { key: "governance", ids: ["trace", "evaluation", "approvals", "scheduler"] },
+      { key: "knowledge", ids: ["skills", "mcp", "knowledge"] },
+      { key: "governance", ids: ["trace", "memory", "evaluation", "approvals", "scheduler"] },
       { key: "securityData", ids: ["cve", "collect"] },
       { key: "settings", ids: ["settings"] },
     ],
     storedGroups: [
       { key: "operations", items: [{ id: "home", tag: "" }, { id: "dashboard", tag: "" }, { id: "chat", tag: "" }, { id: "workflow", tag: "" }] },
-      { key: "knowledge", items: [{ id: "trace", tag: "Trace moved" }, { id: "skills", tag: "" }, { id: "mcp", tag: "" }, { id: "knowledge", tag: "" }, { id: "memory", tag: "" }] },
+      { key: "knowledge", items: [{ id: "trace", tag: "Trace moved" }, { id: "skills", tag: "" }, { id: "mcp", tag: "" }, { id: "knowledge", tag: "" }] },
       { key: "governance", items: [{ id: "evaluation", tag: "" }, { id: "approvals", tag: "" }, { id: "scheduler", tag: "" }] },
       { key: "securityData", items: [{ id: "cve", tag: "" }, { id: "collect", tag: "" }] },
       { key: "settings", items: [{ id: "settings", tag: "" }] },
@@ -204,12 +205,42 @@ assert.deepEqual(
   })),
   [
     { key: "operations", items: ["home", "dashboard", "chat", "workflow"] },
-    { key: "knowledge", items: ["Trace moved", "skills", "mcp", "knowledge", "memory"] },
-    { key: "governance", items: ["evaluation", "approvals", "scheduler"] },
+    { key: "knowledge", items: ["Trace moved", "skills", "mcp", "knowledge"] },
+    { key: "governance", items: ["evaluation", "approvals", "scheduler", "memory"] },
     { key: "securityData", items: ["cve", "collect"] },
     { key: "settings", items: ["settings"] },
   ],
   "sidebar groups must honor user cross-group layout instead of restoring moved items to default groups",
+)
+
+assert.match(
+  app,
+  /key:\s*"knowledge",\s*ids:\s*\["skills",\s*"mcp",\s*"knowledge"\]/,
+  "App default sidebar Knowledge group must no longer include Memory",
+)
+
+assert.match(
+  app,
+  /key:\s*"governance",\s*ids:\s*\["trace",\s*"memory",\s*"evaluation",\s*"approvals",\s*"scheduler"\]/,
+  "App default sidebar Governance group must place Memory directly below Trace",
+)
+
+assert.match(
+  settings,
+  /key:\s*"knowledge",[\s\S]*items:\s*\["Skills",\s*"MCP",\s*"Knowledge"\]/,
+  "Settings default navigation Knowledge group must no longer include Memory",
+)
+
+assert.match(
+  settings,
+  /key:\s*"governance",[\s\S]*items:\s*\["Trace",\s*"Memory",\s*"Evaluation",\s*"Approvals",\s*"Scheduler"\]/,
+  "Settings default navigation Governance group must place Memory directly below Trace",
+)
+
+assert.match(
+  appStyle,
+  /\.ag-nav-item\s*\{[^}]*min-height:\s*36px[^}]*gap:\s*8px[^}]*padding:\s*5px 8px/s,
+  "Sidebar nav labels must use a tighter compact rhythm",
 )
 
 assert.equal(
