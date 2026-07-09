@@ -2,15 +2,14 @@
   <div class="mcp-console ag-page-flow">
     <section class="mcp-toolbar ag-content-panel">
       <div class="mcp-context">
-        <div v-for="metric in metrics" :key="metric.label" class="mcp-context-chip">
-          <span>{{ metric.label }}</span>
-          <strong :title="metric.hint">{{ metric.value }}</strong>
-        </div>
-
-        <div class="mcp-context-chip mcp-context-url">
-          <span>{{ t('mcp.context.clientUrl') }}</span>
-          <strong :title="clientUrl">{{ clientUrl }}</strong>
-        </div>
+        <DataChip
+          v-for="metric in metrics"
+          :key="metric.label"
+          :label="metric.label"
+          :value="metric.value"
+          :title="metric.hint"
+        />
+        <DataChip class="max-w-[360px]" :label="t('mcp.context.clientUrl')" :value="clientUrl" :title="clientUrl" />
       </div>
 
       <el-button type="primary" :icon="Plus" class="mcp-toolbar-action" :disabled="!canWriteMcp" @click="uploadPanelOpen = !uploadPanelOpen">
@@ -21,11 +20,7 @@
     <main class="mcp-main">
       <section class="mcp-body ag-content-panel">
         <section v-if="uploadPanelOpen" class="mcp-panel mb-3">
-          <div class="panel-title">
-            <el-icon><SetUp /></el-icon>
-            {{ t('mcp.upload.title') }}
-          </div>
-          <p class="mcp-muted mt-1 text-xs">{{ t('mcp.upload.description') }}</p>
+          <PanelHeader :title="t('mcp.upload.title')" :subtitle="t('mcp.upload.description')" />
           <div class="mt-4 grid gap-3 md:grid-cols-2">
             <el-input v-model="uploadForm.name" :placeholder="t('mcp.upload.namePlaceholder')" />
             <el-input v-model="uploadForm.description" :placeholder="t('mcp.upload.descriptionPlaceholder')" />
@@ -74,16 +69,16 @@
                   </div>
                   <div class="mt-4 flex items-center justify-between text-xs">
                     <span class="mcp-muted font-mono">{{ service.namespace }}</span>
-                    <span class="status-pill" :class="service.enabled ? 'ok' : 'off'">
+                    <StatusChip :tone="service.enabled ? 'green' : 'muted'">
                       {{ service.enabled ? t('mcp.state.enabled') : t('mcp.state.disabled') }}
-                    </span>
+                    </StatusChip>
                   </div>
                 </section>
               </div>
             </el-tab-pane>
 
             <el-tab-pane :label="t('mcp.tabs.servers')" name="servers">
-              <div v-if="!mcpServers.length" class="empty-box">{{ t('mcp.servers.empty') }}</div>
+              <EmptyState v-if="!mcpServers.length" class="min-h-[120px]">{{ t('mcp.servers.empty') }}</EmptyState>
               <div v-else class="grid gap-3 lg:grid-cols-2">
                 <section v-for="server in mcpServers" :key="server.name" class="mcp-card">
                   <div class="flex items-start justify-between gap-3">
@@ -109,10 +104,7 @@
             <el-tab-pane :label="t('mcp.tabs.tokens')" name="tokens">
               <div class="grid gap-3 xl:grid-cols-[360px_minmax(0,1fr)]">
                 <section class="mcp-panel">
-                  <div class="panel-title">
-                    <el-icon><Key /></el-icon>
-                    {{ t('mcp.tokens.issueTitle') }}
-                  </div>
+                  <PanelHeader :title="t('mcp.tokens.issueTitle')" />
                   <div class="mt-4 space-y-3">
                     <el-input
                       v-model="tokenForm.name"
@@ -150,24 +142,22 @@
                 </section>
 
                 <section class="mcp-panel min-w-0">
-                  <div class="mb-3 flex items-center justify-between">
-                    <div class="panel-title">
-                      <el-icon><Tickets /></el-icon>
-                      {{ t('mcp.tokens.issuedTitle') }}
-                    </div>
-                    <span class="mcp-muted text-xs">{{ t('mcp.count', { count: tokens.length }) }}</span>
-                  </div>
+                  <PanelHeader class="mb-3 w-full" :title="t('mcp.tokens.issuedTitle')">
+                    <template #actions>
+                      <span class="mcp-muted text-xs">{{ t('mcp.count', { count: tokens.length }) }}</span>
+                    </template>
+                  </PanelHeader>
 
                   <div v-if="tokensLoading" class="mcp-muted py-10 text-center text-xs">{{ t('mcp.loading') }}</div>
-                  <div v-else-if="!tokens.length" class="empty-box">{{ t('mcp.tokens.empty') }}</div>
+                  <EmptyState v-else-if="!tokens.length" class="min-h-[120px]">{{ t('mcp.tokens.empty') }}</EmptyState>
                   <div v-else class="space-y-2">
                     <div v-for="token in tokens" :key="token.id" class="token-row">
                       <div class="min-w-0">
                         <div class="flex items-center gap-2">
                           <strong class="truncate">{{ token.name }}</strong>
-                          <span class="status-pill" :class="isExpired(token.expires_at) ? 'bad' : 'ok'">
+                          <StatusChip :tone="isExpired(token.expires_at) ? 'red' : 'green'">
                             {{ isExpired(token.expires_at) ? t('mcp.state.expired') : t('mcp.state.active') }}
-                          </span>
+                          </StatusChip>
                         </div>
                         <div class="mcp-muted mt-1 grid gap-1 text-[11px] sm:grid-cols-2">
                           <span>{{ t('mcp.tokens.createdAt', { value: formatDate(token.created_at) }) }}</span>
@@ -201,10 +191,7 @@ import { useI18n } from "vue-i18n"
 import {
   CopyDocument,
   Delete,
-  Key,
   Plus,
-  SetUp,
-  Tickets,
   Operation,
   Tools,
 } from "@element-plus/icons-vue"
@@ -212,7 +199,11 @@ import { useMcpApi } from "../composables/useMcpApi"
 import { copyToClipboard } from "../lib/clipboard"
 import { useAuthStore } from "../stores/auth"
 import type { McpServerInfo, McpServiceId, McpTokenInfo, ResourceVisibility } from "../types"
+import DataChip from "./common/DataChip.vue"
+import EmptyState from "./common/EmptyState.vue"
+import PanelHeader from "./common/PanelHeader.vue"
 import ResourceVisibilityTabs from "./common/ResourceVisibilityTabs.vue"
+import StatusChip from "./common/StatusChip.vue"
 
 type TabId = "services" | "servers" | "tokens"
 
@@ -464,43 +455,6 @@ onMounted(() => {
   gap: 8px;
 }
 
-.mcp-context-chip {
-  display: inline-flex;
-  min-width: 0;
-  max-width: 260px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  border: 1px solid var(--ag-border);
-  border-radius: var(--ag-radius-control);
-  background: var(--ag-panel-soft);
-  padding: 6px 9px;
-}
-
-.mcp-context-url {
-  max-width: 360px;
-}
-
-.mcp-context-chip span,
-.mcp-context-chip strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mcp-context-chip span {
-  color: var(--ag-muted);
-  font-size: 11px;
-  font-weight: 720;
-}
-
-.mcp-context-chip strong {
-  color: var(--ag-heading);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-size: 11px;
-}
-
 .mcp-toolbar-action {
   flex: 0 0 auto;
 }
@@ -556,8 +510,7 @@ onMounted(() => {
 
 .mcp-card strong,
 .token-row strong,
-.agent-row strong,
-.panel-title {
+.agent-row strong {
   color: var(--ag-heading);
   font-size: 13px;
   font-weight: 700;
@@ -583,12 +536,6 @@ onMounted(() => {
   color: var(--ag-yellow);
 }
 
-.panel-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .token-reveal {
   border: 1px solid var(--ag-yellow);
   border-radius: var(--ag-radius-panel);
@@ -603,40 +550,6 @@ onMounted(() => {
   justify-content: space-between;
   gap: 12px;
   padding: 12px;
-}
-
-.status-pill {
-  display: inline-flex;
-  border: 1px solid var(--ag-border);
-  border-radius: 999px;
-  padding: 1px 7px;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.status-pill.ok {
-  border-color: rgba(84, 211, 138, 0.35);
-  background: rgba(84, 211, 138, 0.1);
-  color: var(--ag-green);
-}
-
-.status-pill.off {
-  color: var(--ag-muted);
-}
-
-.status-pill.bad {
-  border-color: rgba(240, 106, 106, 0.35);
-  background: rgba(240, 106, 106, 0.1);
-  color: var(--ag-red);
-}
-
-.empty-box {
-  border: 1px dashed var(--ag-border);
-  border-radius: var(--ag-radius-panel);
-  padding: 36px;
-  color: var(--ag-muted);
-  font-size: 12px;
-  text-align: center;
 }
 
 .line-clamp-2 {

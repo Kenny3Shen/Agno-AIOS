@@ -1,29 +1,21 @@
 <template>
   <section class="knowledge-metadata-panel knowledge-panel ag-content-panel">
-    <div class="knowledge-section-head">
-      <h4>{{ t("knowledge.workbench.selectedMetadata") }}</h4>
-      <span v-if="document">{{ shortId(document.id) }}</span>
-    </div>
+    <SectionHeader
+      :title="t('knowledge.workbench.selectedMetadata')"
+      :status-label="document ? shortId(document.id) : undefined"
+      status-tone="blue"
+    />
 
-    <div v-if="!document" class="empty-box">{{ t("knowledge.workbench.noSelection") }}</div>
+    <EmptyState v-if="!document" class="mt-3 min-h-[120px]">{{ t("knowledge.workbench.noSelection") }}</EmptyState>
     <template v-else>
-      <div class="knowledge-runtime-summary metadata-primary">
-        <div class="knowledge-runtime-chip">
-          <span>{{ t("knowledge.drawer.documentName") }}</span>
-          <strong :title="document.title">{{ document.title }}</strong>
-        </div>
-        <div class="knowledge-runtime-chip">
-          <span>{{ t("knowledge.drawer.type") }}</span>
-          <strong>{{ documentType(document) }}</strong>
-        </div>
-        <div class="knowledge-runtime-chip">
-          <span>{{ t("knowledge.drawer.chunks") }}</span>
-          <strong>{{ document.chunks }}</strong>
-        </div>
-        <div class="knowledge-runtime-chip">
-          <span>{{ t("knowledge.drawer.updated") }}</span>
-          <strong>{{ formatDate(document.created_at) }}</strong>
-        </div>
+      <div class="knowledge-runtime-summary metadata-primary mt-3">
+        <DataChip
+          v-for="item in primaryItems"
+          :key="item.label"
+          :label="item.label"
+          :value="item.value"
+          :title="item.value"
+        />
       </div>
 
       <div class="metadata-secondary">
@@ -41,6 +33,9 @@ import { computed } from "vue"
 import { useI18n } from "vue-i18n"
 import type { KnowledgeDocument } from "../../types"
 import { knowledgeDocumentSize, knowledgeDocumentType } from "../../modules/knowledgeWorkbench"
+import DataChip from "../common/DataChip.vue"
+import EmptyState from "../common/EmptyState.vue"
+import SectionHeader from "../common/SectionHeader.vue"
 
 const props = defineProps<{ document: KnowledgeDocument | null }>()
 
@@ -59,6 +54,17 @@ const displayValue = (value: string | number | null | undefined) => {
   const text = String(value || "").trim()
   return text || "-"
 }
+
+const primaryItems = computed(() => {
+  const doc = props.document
+  if (!doc) return []
+  return [
+    { label: t("knowledge.drawer.documentName"), value: displayValue(doc.title) },
+    { label: t("knowledge.drawer.type"), value: documentType(doc) },
+    { label: t("knowledge.drawer.chunks"), value: String(doc.chunks) },
+    { label: t("knowledge.drawer.updated"), value: formatDate(doc.created_at) },
+  ]
+})
 
 const secondaryItems = computed(() => {
   const doc = props.document
@@ -79,62 +85,11 @@ const secondaryItems = computed(() => {
   min-width: 0;
 }
 
-.knowledge-section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.knowledge-section-head h4 {
-  margin: 0;
-  color: var(--kn-heading);
-  font-size: 15px;
-  font-weight: 820;
-}
-
-.knowledge-section-head span {
-  color: var(--kn-muted);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 11px;
-}
-
 .metadata-primary {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 12px;
-}
-
-.knowledge-runtime-chip {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-  border: 1px solid var(--kn-border);
-  border-radius: var(--ag-radius-control);
-  background: var(--kn-panel-soft);
-  padding: 8px 10px;
-}
-
-.knowledge-runtime-chip span,
-.knowledge-runtime-chip strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.knowledge-runtime-chip span {
-  color: var(--kn-muted);
-  font-size: 11px;
-  font-weight: 760;
-}
-
-.knowledge-runtime-chip strong {
-  color: var(--kn-heading);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 12px;
 }
 
 .metadata-secondary {
@@ -174,13 +129,4 @@ const secondaryItems = computed(() => {
   font-weight: 760;
 }
 
-.empty-box {
-  border: 1px solid var(--kn-border);
-  border-radius: 12px;
-  background: var(--kn-panel-soft);
-  padding: 28px 16px;
-  color: var(--kn-muted);
-  font-size: 12px;
-  text-align: center;
-}
 </style>

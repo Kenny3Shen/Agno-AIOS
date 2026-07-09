@@ -443,8 +443,8 @@ assert.match(
 
 assert.match(
   mcp,
-  /mcp-context-chip/,
-  "MCP toolbar must keep service metrics as local context chips",
+  /DataChip/,
+  "MCP toolbar must keep service metrics in shared DataChip primitives",
 )
 
 assert.doesNotMatch(

@@ -589,19 +589,19 @@ assert.match(
 
 assert.match(
   knowledgeMetadataPanel,
-  /knowledge-runtime-chip/,
-  "Knowledge metadata status items must use local runtime context chips",
+  /DataChip/,
+  "Knowledge metadata status items must use shared DataChip primitives",
 )
 
 assert.match(
   knowledgeMetadataPanel,
-  /knowledge-runtime-chip/g,
-  "Knowledge selected document context must render as compact runtime values",
+  /v-for="item in primaryItems"/,
+  "Knowledge selected document context must render from a compact primary fact list",
 )
 
 assert.equal(
-  [...knowledgeMetadataPanel.matchAll(/class="knowledge-runtime-chip"/g)].length,
-  4,
+  /primaryItems[\s\S]*knowledge\.drawer\.documentName[\s\S]*knowledge\.drawer\.type[\s\S]*knowledge\.drawer\.chunks[\s\S]*knowledge\.drawer\.updated/.test(knowledgeMetadataPanel),
+  true,
   "Knowledge metadata summary must show only the four primary document facts",
 )
 
@@ -611,10 +611,10 @@ assert.equal(
   "Knowledge page must not use a separate statistics dashboard pattern for Stat Chips",
 )
 
-assertNoPillStatChip(
+assert.doesNotMatch(
   knowledgeMetadataPanel,
-  "knowledge-runtime-chip",
-  "Knowledge runtime chips must use the 8px rectangular chip shape, not pill styling",
+  /\.knowledge-runtime-chip\s*\{/,
+  "Knowledge runtime chips must not keep old local chip CSS",
 )
 
 assert.doesNotMatch(

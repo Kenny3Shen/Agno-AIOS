@@ -55,6 +55,15 @@ const pageWorkbenchSurface = [
   pageWorkbenchStyle,
 ].join("\n")
 
+for (const locale of ["zh-CN", "en-US"]) {
+  i18n.global.locale.value = locale
+  assert.notEqual(
+    i18n.global.t("common.actions.refresh"),
+    "common.actions.refresh",
+    `Common refresh action must be translated in ${locale}`,
+  )
+}
+
 assert.match(
   skills,
   /useI18n\(\)/,
@@ -386,14 +395,14 @@ for (const bulkyMcpMetric of [
 
 assert.match(
   mcp,
-  /mcp-context-chip/,
-  "MCP summary items must use local context chips",
+  /DataChip[\s\S]*v-for="metric in metrics"/,
+  "MCP summary items must use shared DataChip context primitives",
 )
 
-assertNoPillStatChip(
+assert.doesNotMatch(
   mcp,
-  "mcp-context-chip",
-  "MCP context chips must use the 8px rectangular shape, not pill styling",
+  /\.mcp-context-chip\s*\{/,
+  "MCP context chips must not keep old local chip CSS",
 )
 
 assert.doesNotMatch(

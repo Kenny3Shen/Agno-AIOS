@@ -175,8 +175,14 @@ assert.match(
 
 assert.match(
   knowledgeRetrievalPlayground,
-  /\.knowledge-field\s*>\s*span,\s*\.result-head,\s*\.answer-preview em,\s*\.answer-preview span\s*\{[\s\S]*font-size:\s*12px;/,
-  "Knowledge retrieval labels and secondary copy must share a 12px supporting scale",
+  /<PanelHeader[\s\S]*knowledge\.retrieval\.resultTitle/,
+  "Knowledge retrieval result heading must use the shared PanelHeader primitive",
+)
+
+assert.match(
+  knowledgeRetrievalPlayground,
+  /\.knowledge-field\s*>\s*span,\s*\.answer-preview em,\s*\.answer-preview span\s*\{[\s\S]*font-size:\s*12px;/,
+  "Knowledge retrieval labels and answer secondary copy must share a 12px supporting scale",
 )
 
 assert.match(
@@ -187,8 +193,14 @@ assert.match(
 
 assert.match(
   knowledgeRetrievalPlayground,
-  /\.hit-meta span,\s*\.score-badge,\s*\.status-badge\s*\{[\s\S]*font-size:\s*11px;/,
-  "Knowledge retrieval badges must use a shared 11px compact scale",
+  /<DataChip[\s\S]*:value="formatScore\(result\.score\)"[\s\S]*<div class="hit-meta">[\s\S]*<DataChip/,
+  "Knowledge retrieval metadata badges must use the shared DataChip primitive while status uses StatusChip",
+)
+
+assert.doesNotMatch(
+  knowledgeRetrievalPlayground,
+  /\.hit-meta span,\s*\.score-badge\s*\{/,
+  "Knowledge retrieval metadata badges must not keep duplicate local chip CSS",
 )
 
 assert.match(
@@ -211,8 +223,8 @@ assert.match(
 
 assert.match(
   knowledgeIngestDrawer,
-  /drawer-section-head drawer-inline-visibility/,
-  "Knowledge Drawer visibility title and tabs must share one inline row",
+  /<SectionHeader[\s\S]*knowledge\.documents\.columns\.visibility[\s\S]*#actions[\s\S]*<ResourceVisibilityTabs v-model="visibility"/,
+  "Knowledge Drawer visibility title and tabs must share one SectionHeader actions row",
 )
 
 assert.match(
@@ -369,11 +381,24 @@ for (const locale of ["zh-CN", "en-US"]) {
   const sourceReplacedMessage = i18n.global.t("knowledge.messages.sourceReplaced")
   const advancedParametersLabel = i18n.global.t("knowledge.drawer.advancedIngest")
   const ragPermissionLabel = i18n.global.t("knowledge.messages.configPermissionRequired")
+  const retrievalChipLabels = [
+    i18n.global.t("knowledge.labels.score"),
+    i18n.global.t("knowledge.labels.chunk"),
+    i18n.global.t("knowledge.labels.source"),
+    i18n.global.t("knowledge.labels.document"),
+  ]
   assert.notEqual(
     visibleCountLabel,
     "knowledge.documents.visibleCount",
     `Knowledge document visible count label must be translated in ${locale}`,
   )
+  for (const [index, label] of retrievalChipLabels.entries()) {
+    assert.notEqual(
+      label,
+      ["knowledge.labels.score", "knowledge.labels.chunk", "knowledge.labels.source", "knowledge.labels.document"][index],
+      `Knowledge retrieval chip label ${index} must be translated in ${locale}`,
+    )
+  }
   assert.ok(
     visibleCountLabel.includes("1") && visibleCountLabel.includes("3"),
     `Knowledge document visible count label must include count and total in ${locale}`,
@@ -416,8 +441,8 @@ assert.doesNotMatch(
 
 assert.match(
   knowledgeDocumentList,
-  /@media\s*\(max-width:\s*1120px\)[\s\S]*\.document-row\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/,
-  "Knowledge document rows must collapse into a responsive card grid before they can overflow the shell",
+  /@media\s*\(max-width:\s*1120px\)[\s\S]*\.document-row\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/,
+  "Knowledge document rows must collapse into a single-column card before controls can overflow the shell",
 )
 
 assert.match(

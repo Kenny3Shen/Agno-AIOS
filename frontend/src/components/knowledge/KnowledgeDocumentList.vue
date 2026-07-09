@@ -1,10 +1,11 @@
 <template>
   <section class="knowledge-document-list">
     <div class="document-management-bar">
-      <div class="document-management-title">
-        <h4>{{ t("knowledge.workbench.documents") }}</h4>
-        <span>{{ t("knowledge.documents.visibleCount", { count: filteredDocuments.length, total: documents.length }) }}</span>
-      </div>
+      <SectionHeader
+        class="min-w-[min(220px,100%)] flex-1 border-b-0 pb-0"
+        :title="t('knowledge.workbench.documents')"
+        :subtitle="t('knowledge.documents.visibleCount', { count: filteredDocuments.length, total: documents.length })"
+      />
       <div class="document-management-controls">
         <div class="document-command-group">
           <el-tooltip :content="t('shell.actions.refresh')" placement="top">
@@ -29,10 +30,9 @@
       </div>
     </div>
 
-    <div v-if="loading && documents.length === 0" class="document-loading">
-      <el-icon class="is-loading"><Loading /></el-icon>
+    <EmptyState v-if="loading && documents.length === 0" class="min-h-[120px]" :icon="Loading" loading>
       {{ t("knowledge.documents.loading") }}
-    </div>
+    </EmptyState>
 
     <div v-else class="document-table document-list-compact" role="table" :aria-label="t('knowledge.documents.ariaLabel')">
       <div class="document-table-head" role="row">
@@ -42,7 +42,7 @@
         <span role="columnheader" class="document-actions-head">{{ t("knowledge.documents.columns.actions") }}</span>
       </div>
 
-      <div v-if="filteredDocuments.length === 0" class="empty-box">{{ t("knowledge.documents.empty") }}</div>
+      <EmptyState v-if="filteredDocuments.length === 0" class="min-h-[120px]">{{ t("knowledge.documents.empty") }}</EmptyState>
 
       <article
         v-for="row in filteredDocuments"
@@ -57,7 +57,9 @@
           <em>{{ documentType(row) }} · {{ row.chunks }} chunks</em>
         </div>
         <div class="document-cell" role="cell" :data-label="t('knowledge.documents.columns.embeddingStatus')">
-          <span class="status-badge" :class="documentStatus(row).tone">{{ t(documentStatus(row).labelKey) }}</span>
+          <StatusChip :tone="documentStatusTone(documentStatus(row).tone)">
+            {{ t(documentStatus(row).labelKey) }}
+          </StatusChip>
         </div>
         <div class="document-cell document-visibility-cell" role="cell" :data-label="t('knowledge.documents.columns.visibility')">
           <ResourceVisibilityTabs
@@ -99,7 +101,10 @@ import { useI18n } from "vue-i18n"
 import { Delete, DocumentAdd, Loading, Refresh, RefreshRight, Search, UploadFilled } from "@element-plus/icons-vue"
 import type { KnowledgeDocument, ResourceVisibility } from "../../types"
 import { knowledgeDocumentStatus, knowledgeDocumentType } from "../../modules/knowledgeWorkbench"
+import EmptyState from "../common/EmptyState.vue"
 import ResourceVisibilityTabs from "../common/ResourceVisibilityTabs.vue"
+import SectionHeader from "../common/SectionHeader.vue"
+import StatusChip from "../common/StatusChip.vue"
 
 const props = defineProps<{
   documents: KnowledgeDocument[]
@@ -126,6 +131,12 @@ const { t } = useI18n()
 const query = ref("")
 const documentType = knowledgeDocumentType
 const documentStatus = knowledgeDocumentStatus
+const documentStatusTone = (tone: string) => {
+  if (tone === "ready") return "green"
+  if (tone === "parsing") return "yellow"
+  if (tone === "failed") return "red"
+  return "muted"
+}
 
 const filteredDocuments = computed(() => {
   const value = query.value.trim().toLowerCase()
@@ -159,24 +170,6 @@ const updateDocumentVisibility = (document: KnowledgeDocument, visibility: Resou
   padding: 12px;
 }
 
-.document-management-title {
-  display: grid;
-  min-width: min(220px, 100%);
-  gap: 4px;
-}
-
-.document-management-title h4 {
-  margin: 0;
-  color: var(--kn-heading);
-  font-size: 15px;
-  font-weight: 820;
-}
-
-.document-management-title span {
-  color: var(--kn-muted);
-  font-size: 12px;
-}
-
 .document-management-controls,
 .document-command-group {
   display: flex;
@@ -200,16 +193,6 @@ const updateDocumentVisibility = (document: KnowledgeDocument, visibility: Resou
 
 .document-filter {
   width: min(100%, 320px);
-}
-
-.document-loading,
-.empty-box {
-  display: grid;
-  min-height: 120px;
-  place-items: center;
-  color: var(--kn-muted);
-  font-size: 12px;
-  text-align: center;
 }
 
 .document-table {
@@ -321,36 +304,6 @@ const updateDocumentVisibility = (document: KnowledgeDocument, visibility: Resou
   padding: 0;
 }
 
-.status-badge {
-  display: inline-flex;
-  border: 1px solid var(--kn-border);
-  border-radius: 999px;
-  background: var(--kn-panel-soft);
-  color: var(--kn-muted);
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1.3;
-  padding: 3px 7px;
-}
-
-.status-badge.ready {
-  border-color: color-mix(in srgb, var(--kn-ready) 45%, var(--kn-border));
-  background: var(--kn-ready-soft);
-  color: var(--kn-ready);
-}
-
-.status-badge.parsing {
-  border-color: color-mix(in srgb, var(--kn-parsing) 45%, var(--kn-border));
-  background: var(--kn-parsing-soft);
-  color: var(--kn-parsing);
-}
-
-.status-badge.failed {
-  border-color: color-mix(in srgb, var(--kn-failed) 45%, var(--kn-border));
-  background: var(--kn-failed-soft);
-  color: var(--kn-failed);
-}
-
 @media (max-width: 1120px) {
   .document-table-head {
     display: none;
@@ -364,7 +317,7 @@ const updateDocumentVisibility = (document: KnowledgeDocument, visibility: Resou
   }
 
   .document-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     border: 1px solid var(--kn-border);
     border-radius: 12px;
   }

@@ -1,13 +1,14 @@
 <template>
   <section class="ag-content-panel grid gap-3">
     <SectionHeader
+      class="flex-wrap"
       :title="t('settings.models.sectionTitle')"
       :subtitle="t('settings.models.sectionDescription')"
       :count="models.length"
       :count-label="t('settings.models.sectionTitle')"
     >
       <template #actions>
-        <div class="ag-settings-model-actions flex flex-wrap justify-end gap-2">
+        <div class="ag-settings-model-actions flex w-full flex-col justify-end gap-2 sm:w-auto sm:flex-row">
           <el-select
             :model-value="activeModelId"
             class="w-[240px] max-w-full"
@@ -23,7 +24,7 @@
             />
           </el-select>
           <el-button
-            class="cursor-pointer"
+            class="w-[240px] max-w-full cursor-pointer sm:w-auto"
             :disabled="!canWriteSettings"
             :icon="Plus"
             @click="emit('addModel')"

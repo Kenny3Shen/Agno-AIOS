@@ -101,6 +101,7 @@ export const zhCN = {
     actions: {
       cancel: "取消",
       delete: "删除",
+      refresh: "刷新",
     },
     clipboard: {
       copied: "已复制",
@@ -1328,6 +1329,10 @@ export const zhCN = {
       vector: "向量检索",
       keyword: "关键词检索",
       topK: "TopK",
+      score: "分数",
+      chunk: "片段",
+      source: "来源",
+      document: "文档",
       untitledChunk: "未命名片段",
       chunkIndex: "片段 #{index}",
       sourceValue: "来源 {value}",

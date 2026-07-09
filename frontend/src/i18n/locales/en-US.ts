@@ -101,6 +101,7 @@ export const enUS = {
     actions: {
       cancel: "Cancel",
       delete: "Delete",
+      refresh: "Refresh",
     },
     clipboard: {
       copied: "Copied",
@@ -1330,6 +1331,10 @@ export const enUS = {
       vector: "Vector",
       keyword: "Keyword",
       topK: "TopK",
+      score: "Score",
+      chunk: "Chunk",
+      source: "Source",
+      document: "Doc",
       untitledChunk: "Untitled chunk",
       chunkIndex: "Chunk #{index}",
       sourceValue: "Source {value}",

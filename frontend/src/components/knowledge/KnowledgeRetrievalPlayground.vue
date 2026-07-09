@@ -1,9 +1,10 @@
 <template>
   <section class="knowledge-panel ag-content-panel retrieval-playground">
-    <div class="retrieval-workbench-head">
-      <h4>{{ t("knowledge.retrieval.title") }}</h4>
-      <span class="status-badge embedding">{{ searchType }}</span>
-    </div>
+    <SectionHeader :title="t('knowledge.retrieval.title')">
+      <template #actions>
+        <StatusChip tone="blue">{{ searchType }}</StatusChip>
+      </template>
+    </SectionHeader>
 
     <div class="retrieval-compare-shell">
       <aside class="retrieval-control-rail">
@@ -28,10 +29,10 @@
       </aside>
 
       <section class="retrieval-results-panel">
-        <div class="result-head">
-          <strong>{{ t("knowledge.retrieval.resultTitle") }}</strong>
-          <span>{{ t("knowledge.retrieval.resultCount", { count: searchResults.length }) }}</span>
-        </div>
+        <PanelHeader
+          :title="t('knowledge.retrieval.resultTitle')"
+          :subtitle="t('knowledge.retrieval.resultCount', { count: searchResults.length })"
+        />
 
         <div v-if="searchResults.length" class="answer-preview">
           <span>{{ t("knowledge.retrieval.answer") }}</span>
@@ -40,23 +41,33 @@
         </div>
 
         <div class="retrieval-results-body">
-          <div v-if="searching" class="empty-box">
-            <el-icon class="is-loading mr-1"><Loading /></el-icon>
+          <EmptyState v-if="searching" class="min-h-full" :icon="Loading" loading>
             {{ t("knowledge.retrieval.searching") }}
-          </div>
-          <div v-else-if="searched && searchResults.length === 0" class="empty-box">{{ t("knowledge.retrieval.noResults") }}</div>
-          <div v-else-if="!searched" class="empty-box">{{ t("knowledge.retrieval.idle") }}</div>
+          </EmptyState>
+          <EmptyState v-else-if="searched && searchResults.length === 0" class="min-h-full">{{ t("knowledge.retrieval.noResults") }}</EmptyState>
+          <EmptyState v-else-if="!searched" class="min-h-full">{{ t("knowledge.retrieval.idle") }}</EmptyState>
 
           <article v-for="result in searchResults" :key="`${result.doc_id}:${result.chunk_index}`" class="retrieval-hit">
             <div class="hit-toolbar">
               <strong class="truncate">{{ result.title || result.doc_id || t("knowledge.labels.untitledChunk") }}</strong>
-              <span class="score-badge">{{ formatScore(result.score) }}</span>
+              <DataChip
+                :label="t('knowledge.labels.score')"
+                :value="formatScore(result.score)"
+              />
             </div>
             <p>{{ result.content }}</p>
             <div class="hit-meta">
-              <span>{{ t("knowledge.labels.chunkIndex", { index: result.chunk_index }) }}</span>
-              <span :title="result.source">{{ t("knowledge.labels.sourceValue", { value: result.source || "-" }) }}</span>
-              <span :title="result.doc_id">{{ t("knowledge.labels.docValue", { value: shortId(result.doc_id) }) }}</span>
+              <DataChip :label="t('knowledge.labels.chunk')" :value="result.chunk_index" />
+              <DataChip
+                :label="t('knowledge.labels.source')"
+                :value="result.source || '-'"
+                :title="result.source || '-'"
+              />
+              <DataChip
+                :label="t('knowledge.labels.document')"
+                :value="shortId(result.doc_id)"
+                :title="result.doc_id || '-'"
+              />
             </div>
           </article>
         </div>
@@ -70,6 +81,11 @@ import { ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { Loading } from "@element-plus/icons-vue"
 import type { KnowledgeSearchResult } from "../../types"
+import DataChip from "../common/DataChip.vue"
+import EmptyState from "../common/EmptyState.vue"
+import PanelHeader from "../common/PanelHeader.vue"
+import SectionHeader from "../common/SectionHeader.vue"
+import StatusChip from "../common/StatusChip.vue"
 
 defineProps<{
   searching: boolean
@@ -109,7 +125,6 @@ const shortId = (value: string) => value ? (value.length > 12 ? `${value.slice(0
   padding: 0;
 }
 
-.retrieval-workbench-head,
 .retrieval-control-stack,
 .hit-toolbar,
 .hit-meta {
@@ -117,22 +132,9 @@ const shortId = (value: string) => value ? (value.length > 12 ? `${value.slice(0
   gap: 10px;
 }
 
-.retrieval-workbench-head,
 .hit-toolbar {
   align-items: center;
   justify-content: space-between;
-}
-
-.retrieval-workbench-head {
-  border-bottom: 1px solid var(--kn-border);
-  padding: 12px 14px;
-}
-
-.retrieval-workbench-head h4 {
-  margin: 0;
-  color: var(--kn-heading);
-  font-size: 15px;
-  font-weight: 820;
 }
 
 .retrieval-compare-shell {
@@ -170,7 +172,6 @@ const shortId = (value: string) => value ? (value.length > 12 ? `${value.slice(0
 }
 
 .knowledge-field > span,
-.result-head,
 .answer-preview em,
 .answer-preview span {
   color: var(--kn-muted);
@@ -183,16 +184,6 @@ const shortId = (value: string) => value ? (value.length > 12 ? `${value.slice(0
   gap: 10px;
   min-width: 0;
   padding: 12px;
-}
-
-.result-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.result-head strong {
-  font-size: inherit;
 }
 
 .retrieval-control-select,
@@ -222,8 +213,7 @@ const shortId = (value: string) => value ? (value.length > 12 ? `${value.slice(0
 }
 
 .retrieval-hit,
-.answer-preview,
-.empty-box {
+.answer-preview {
   border: 1px solid var(--kn-border);
   border-radius: var(--ag-radius-control);
   background: var(--kn-panel);
@@ -249,26 +239,6 @@ const shortId = (value: string) => value ? (value.length > 12 ? `${value.slice(0
   margin-top: 10px;
 }
 
-.hit-meta span,
-.score-badge,
-.status-badge {
-  display: inline-flex;
-  border: 1px solid var(--kn-border);
-  border-radius: 999px;
-  background: var(--kn-panel-soft);
-  color: var(--kn-muted);
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 1.3;
-  padding: 3px 7px;
-}
-
-.status-badge.embedding {
-  border-color: color-mix(in srgb, var(--kn-embedding) 45%, var(--kn-border));
-  background: var(--kn-embedding-soft);
-  color: var(--kn-embedding);
-}
-
 .answer-preview {
   display: grid;
   gap: 5px;
@@ -277,13 +247,6 @@ const shortId = (value: string) => value ? (value.length > 12 ? `${value.slice(0
 
 .answer-preview p {
   margin: 0;
-}
-
-.empty-box {
-  min-height: 100%;
-  color: var(--kn-muted);
-  font-size: 13px;
-  text-align: center;
 }
 
 @media (max-width: 980px) {

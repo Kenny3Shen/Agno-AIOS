@@ -3,6 +3,11 @@ import {
   existsSync,
   readOptionalSource,
   readSource,
+  mcp,
+  knowledgeDocumentList,
+  knowledgeIngestDrawer,
+  knowledgeMetadataPanel,
+  knowledgeRetrievalPlayground,
   skills,
   sourcePath,
   workflow,
@@ -158,6 +163,63 @@ assert.match(
   /PayloadViewer/,
   "Workflow inspector must use PayloadViewer for generated workflow code",
 )
+
+assert.match(mcp, /import DataChip from "\.\/common\/DataChip\.vue"/, "MCP page must use DataChip for context metrics")
+assert.match(mcp, /import StatusChip from "\.\/common\/StatusChip\.vue"/, "MCP page must use StatusChip for enabled/token status")
+assert.match(mcp, /import EmptyState from "\.\/common\/EmptyState\.vue"/, "MCP page must use EmptyState for empty panels")
+assert.match(mcp, /import PanelHeader from "\.\/common\/PanelHeader\.vue"/, "MCP page must use PanelHeader for inner panel titles")
+assert.match(mcp, /<DataChip[\s\S]*v-for="metric in metrics"/, "MCP page must render context metrics through DataChip")
+assert.match(mcp, /<StatusChip[\s\S]*service\.enabled/, "MCP page must render service state through StatusChip")
+assert.match(mcp, /<EmptyState\b/, "MCP page must render empty panels through EmptyState")
+assert.match(mcp, /<PanelHeader\b/, "MCP page must render panel titles through PanelHeader")
+assert.match(mcp, /<PanelHeader class="mb-3 w-full"[\s\S]*mcp\.tokens\.issuedTitle/, "MCP issued tokens header must let PanelHeader actions reach the panel edge")
+assert.doesNotMatch(mcp, /\.mcp-context-chip\s*\{/, "MCP page must not keep duplicated local context chip CSS")
+assert.doesNotMatch(mcp, /\.status-pill\s*\{/, "MCP page must not keep duplicated local status chip CSS")
+assert.doesNotMatch(mcp, /\.empty-box\s*\{/, "MCP page must not keep duplicated local empty state CSS")
+assert.doesNotMatch(mcp, /\.panel-title\s*\{/, "MCP page must not keep duplicated local panel title CSS")
+
+assert.match(knowledgeDocumentList, /import StatusChip from "\.\.\/common\/StatusChip\.vue"/, "Knowledge document list must use StatusChip for embedding state")
+assert.match(knowledgeDocumentList, /import EmptyState from "\.\.\/common\/EmptyState\.vue"/, "Knowledge document list must use EmptyState for empty/loading states")
+assert.match(knowledgeDocumentList, /import SectionHeader from "\.\.\/common\/SectionHeader\.vue"/, "Knowledge document list must use SectionHeader for document management heading")
+assert.match(knowledgeDocumentList, /<StatusChip[\s\S]*documentStatusTone/, "Knowledge document list must render embedding state through StatusChip")
+assert.match(knowledgeDocumentList, /<EmptyState\b/, "Knowledge document list must render empty/loading states through EmptyState")
+assert.match(knowledgeDocumentList, /<SectionHeader\b/, "Knowledge document list must render document management heading through SectionHeader")
+assert.doesNotMatch(knowledgeDocumentList, /\.status-badge\s*\{/, "Knowledge document list must not keep duplicated status badge CSS")
+assert.doesNotMatch(knowledgeDocumentList, /\.empty-box\s*\{/, "Knowledge document list must not keep duplicated empty box CSS")
+assert.doesNotMatch(knowledgeDocumentList, /\.document-management-title\s*\{/, "Knowledge document list must not keep duplicated local heading CSS")
+
+assert.match(knowledgeMetadataPanel, /import DataChip from "\.\.\/common\/DataChip\.vue"/, "Knowledge metadata panel must use DataChip for metadata facts")
+assert.match(knowledgeMetadataPanel, /import EmptyState from "\.\.\/common\/EmptyState\.vue"/, "Knowledge metadata panel must use EmptyState for no selection")
+assert.match(knowledgeMetadataPanel, /import SectionHeader from "\.\.\/common\/SectionHeader\.vue"/, "Knowledge metadata panel must use SectionHeader for panel heading")
+assert.match(knowledgeMetadataPanel, /<DataChip[\s\S]*v-for="item in primaryItems"/, "Knowledge metadata panel must render primary facts through DataChip")
+assert.match(knowledgeMetadataPanel, /<EmptyState\b/, "Knowledge metadata panel must render no selection through EmptyState")
+assert.match(knowledgeMetadataPanel, /<SectionHeader\b/, "Knowledge metadata panel must render panel heading through SectionHeader")
+assert.doesNotMatch(knowledgeMetadataPanel, /\.knowledge-runtime-chip\s*\{/, "Knowledge metadata panel must not keep duplicated runtime chip CSS")
+assert.doesNotMatch(knowledgeMetadataPanel, /\.knowledge-section-head\s*\{/, "Knowledge metadata panel must not keep duplicated section header CSS")
+assert.doesNotMatch(knowledgeMetadataPanel, /\.empty-box\s*\{/, "Knowledge metadata panel must not keep duplicated empty box CSS")
+
+assert.match(knowledgeIngestDrawer, /import DataChip from "\.\.\/common\/DataChip\.vue"/, "Knowledge ingest drawer must use DataChip for update target context")
+assert.match(knowledgeIngestDrawer, /import SectionHeader from "\.\.\/common\/SectionHeader\.vue"/, "Knowledge ingest drawer must use SectionHeader for drawer sections")
+assert.match(knowledgeIngestDrawer, /<DataChip[\s\S]*class="update-target"/, "Knowledge ingest drawer must render update target context through DataChip")
+assert.match(knowledgeIngestDrawer, /<SectionHeader\b/, "Knowledge ingest drawer must render drawer headings through SectionHeader")
+assert.doesNotMatch(knowledgeIngestDrawer, /\.knowledge-runtime-chip\s*\{/, "Knowledge ingest drawer must not keep duplicated runtime chip CSS")
+assert.doesNotMatch(knowledgeIngestDrawer, /\.drawer-section-head\s*\{/, "Knowledge ingest drawer must not keep duplicated local section heading CSS")
+
+assert.match(knowledgeRetrievalPlayground, /import DataChip from "\.\.\/common\/DataChip\.vue"/, "Knowledge retrieval playground must use DataChip for search hit facts")
+assert.match(knowledgeRetrievalPlayground, /import StatusChip from "\.\.\/common\/StatusChip\.vue"/, "Knowledge retrieval playground must use StatusChip for search type state")
+assert.match(knowledgeRetrievalPlayground, /import EmptyState from "\.\.\/common\/EmptyState\.vue"/, "Knowledge retrieval playground must use EmptyState for idle/searching/no result states")
+assert.match(knowledgeRetrievalPlayground, /import PanelHeader from "\.\.\/common\/PanelHeader\.vue"/, "Knowledge retrieval playground must use PanelHeader for result headings")
+assert.match(knowledgeRetrievalPlayground, /import SectionHeader from "\.\.\/common\/SectionHeader\.vue"/, "Knowledge retrieval playground must use SectionHeader for workbench heading")
+assert.match(knowledgeRetrievalPlayground, /<DataChip[\s\S]*:value="formatScore\(result\.score\)"/, "Knowledge retrieval playground must render hit score through DataChip")
+assert.match(knowledgeRetrievalPlayground, /<StatusChip\b/, "Knowledge retrieval playground must render search type state through StatusChip")
+assert.match(knowledgeRetrievalPlayground, /<EmptyState\b/, "Knowledge retrieval playground must render empty retrieval states through EmptyState")
+assert.match(knowledgeRetrievalPlayground, /<PanelHeader\b/, "Knowledge retrieval playground must render result headings through PanelHeader")
+assert.match(knowledgeRetrievalPlayground, /<SectionHeader\b/, "Knowledge retrieval playground must render heading through SectionHeader")
+assert.doesNotMatch(knowledgeRetrievalPlayground, /\.status-badge\s*\{/, "Knowledge retrieval playground must not keep duplicated status badge CSS")
+assert.doesNotMatch(knowledgeRetrievalPlayground, /\.empty-box\s*\{/, "Knowledge retrieval playground must not keep duplicated empty box CSS")
+assert.doesNotMatch(knowledgeRetrievalPlayground, /\.score-badge\s*\{/, "Knowledge retrieval playground must not keep duplicated score badge CSS")
+assert.doesNotMatch(knowledgeRetrievalPlayground, /\.hit-meta span\s*,\s*\.score-badge\s*\{/, "Knowledge retrieval playground must not keep duplicated hit metadata chip CSS")
+assert.doesNotMatch(knowledgeRetrievalPlayground, /\.result-head\s*\{/, "Knowledge retrieval playground must not keep duplicated local result heading CSS")
 
 assert.doesNotMatch(
   workflow,

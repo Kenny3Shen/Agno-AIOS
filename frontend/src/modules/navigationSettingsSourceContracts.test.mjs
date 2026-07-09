@@ -336,6 +336,30 @@ assert.match(
 )
 
 assert.match(
+  settingsModelPanel,
+  /<SectionHeader[\s\S]*class="flex-wrap"/,
+  "Settings model section header must wrap actions on narrow screens",
+)
+
+assert.match(
+  settingsModelPanel,
+  /ag-settings-model-actions flex w-full flex-col/,
+  "Settings model actions must stack controls on narrow screens before controls can overflow",
+)
+
+assert.match(
+  settingsModelPanel,
+  /class="w-\[240px\] max-w-full"/,
+  "Settings default model select must keep readable width on narrow screens",
+)
+
+assert.match(
+  settingsModelPanel,
+  /class="w-\[240px\] max-w-full cursor-pointer sm:w-auto"/,
+  "Settings add model button must keep readable width on narrow screens",
+)
+
+assert.match(
   app,
   /sidebarNavGroups/,
   "App shell sidebar must render from the normalized user navigation layout",

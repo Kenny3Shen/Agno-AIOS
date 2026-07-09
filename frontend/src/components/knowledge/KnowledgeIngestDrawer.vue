@@ -9,16 +9,16 @@
     @update:model-value="(value: boolean) => emit('update:modelValue', value)"
   >
     <div class="drawer-ingest-flow">
-      <div v-if="mode === 'update' && targetDocument" class="knowledge-runtime-chip update-target">
-        <span>{{ t("knowledge.drawer.updateTarget") }}</span>
-        <strong :title="targetDocument.title">{{ targetDocument.title }}</strong>
-      </div>
+      <DataChip
+        v-if="mode === 'update' && targetDocument"
+        class="update-target"
+        :label="t('knowledge.drawer.updateTarget')"
+        :value="targetDocument.title"
+        :title="targetDocument.title"
+      />
 
       <section class="drawer-section drawer-source-section">
-        <div class="drawer-section-head">
-          <span>{{ t("knowledge.drawer.sourceSection") }}</span>
-          <strong>{{ selectedReaderLabel }}</strong>
-        </div>
+        <SectionHeader class="border-b-0 pb-0" :title="t('knowledge.drawer.sourceSection')" :subtitle="selectedReaderLabel" />
 
         <el-tabs v-if="mode === 'add'" v-model="inputMode" class="drawer-source-tabs">
           <el-tab-pane :label="t('knowledge.upload.fileTab')" name="file">
@@ -50,10 +50,11 @@
       </section>
 
       <section v-if="mode === 'add'" class="drawer-section drawer-visibility-section">
-        <div class="drawer-section-head drawer-inline-visibility">
-          <span>{{ t("knowledge.documents.columns.visibility") }}</span>
+        <SectionHeader class="border-b-0 pb-0" :title="t('knowledge.documents.columns.visibility')">
+          <template #actions>
           <ResourceVisibilityTabs v-model="visibility" />
-        </div>
+          </template>
+        </SectionHeader>
       </section>
 
       <el-collapse v-model="advancedPanels" class="drawer-advanced-ingest">
@@ -109,7 +110,9 @@ import { useI18n } from "vue-i18n"
 import { UploadFilled } from "@element-plus/icons-vue"
 import type { KnowledgeDocument, KnowledgeIngestOptions, KnowledgeStatus, ResourceVisibility } from "../../types"
 import { createDefaultKnowledgeIngestOptions, readerStrategyForFilename } from "../../modules/knowledgeWorkbench"
+import DataChip from "../common/DataChip.vue"
 import ResourceVisibilityTabs from "../common/ResourceVisibilityTabs.vue"
+import SectionHeader from "../common/SectionHeader.vue"
 
 type DrawerMode = "add" | "update"
 type InputMode = "file" | "text" | "path"
@@ -316,34 +319,6 @@ const submit = () => {
   padding: 12px;
 }
 
-.drawer-section-head {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.drawer-inline-visibility {
-  flex-wrap: wrap;
-}
-
-.drawer-section-head span {
-  color: var(--kn-heading);
-  font-size: 13px;
-  font-weight: 820;
-}
-
-.drawer-section-head strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--kn-muted);
-  font-size: 11px;
-  font-weight: 760;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .drawer-source-tabs {
   min-width: 0;
 }
@@ -358,26 +333,6 @@ const submit = () => {
   color: var(--kn-muted);
   font-size: 12px;
   font-weight: 700;
-}
-
-.knowledge-runtime-chip {
-  display: grid;
-  gap: 4px;
-  border: 1px solid var(--kn-border);
-  border-radius: var(--ag-radius-control);
-  background: var(--kn-panel-soft);
-  padding: 8px 10px;
-}
-
-.knowledge-runtime-chip span {
-  color: var(--kn-muted);
-  font-size: 11px;
-  font-weight: 760;
-}
-
-.knowledge-runtime-chip strong {
-  color: var(--kn-heading);
-  font-size: 12px;
 }
 
 .advanced-title {
