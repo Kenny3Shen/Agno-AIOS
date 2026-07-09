@@ -1,64 +1,66 @@
 <template>
   <section class="knowledge-panel ag-content-panel retrieval-playground">
-    <div class="knowledge-section-head">
+    <div class="retrieval-workbench-head">
       <h4>{{ t("knowledge.retrieval.title") }}</h4>
       <span class="status-badge embedding">{{ searchType }}</span>
     </div>
 
-    <div class="playground-question">
-      <el-input v-model="query" type="textarea" :rows="4" :placeholder="t('knowledge.retrieval.queryPlaceholder')" />
-      <div class="playground-controls">
-        <label class="knowledge-field">
-          <span>{{ t("knowledge.labels.searchType") }}</span>
-          <el-select v-model="searchType" class="retrieval-control-select">
-            <el-option :label="t('knowledge.labels.hybrid')" value="hybrid" />
-            <el-option :label="t('knowledge.labels.vector')" value="vector" />
-            <el-option :label="t('knowledge.labels.keyword')" value="keyword" />
-          </el-select>
-        </label>
-        <label class="knowledge-field">
-          <span>{{ t("knowledge.labels.topK") }}</span>
-          <el-input-number v-model="limit" :min="1" :max="20" class="retrieval-control-number" />
-        </label>
-        <el-button type="primary" class="retrieval-control-button cursor-pointer" :disabled="searching || !query.trim()" :loading="searching" @click="emitSearch">
-          {{ t("knowledge.actions.search") }}
-        </el-button>
-      </div>
-    </div>
-
-    <div class="playground-results">
-      <div class="result-head">
-        <strong>{{ t("knowledge.retrieval.resultTitle") }}</strong>
-        <span>{{ t("knowledge.retrieval.resultCount", { count: searchResults.length }) }}</span>
-      </div>
-
-      <div class="retrieval-results-body">
-        <div v-if="searching" class="empty-box">
-          <el-icon class="is-loading mr-1"><Loading /></el-icon>
-          {{ t("knowledge.retrieval.searching") }}
+    <div class="retrieval-compare-shell">
+      <aside class="retrieval-control-rail">
+        <el-input v-model="query" class="retrieval-query-input" type="textarea" :rows="6" :placeholder="t('knowledge.retrieval.queryPlaceholder')" />
+        <div class="retrieval-control-stack">
+          <label class="knowledge-field">
+            <span>{{ t("knowledge.labels.searchType") }}</span>
+            <el-select v-model="searchType" class="retrieval-control-select">
+              <el-option :label="t('knowledge.labels.hybrid')" value="hybrid" />
+              <el-option :label="t('knowledge.labels.vector')" value="vector" />
+              <el-option :label="t('knowledge.labels.keyword')" value="keyword" />
+            </el-select>
+          </label>
+          <label class="knowledge-field">
+            <span>{{ t("knowledge.labels.topK") }}</span>
+            <el-input-number v-model="limit" :min="1" :max="20" class="retrieval-control-number" />
+          </label>
+          <el-button type="primary" class="retrieval-control-button cursor-pointer" :disabled="searching || !query.trim()" :loading="searching" @click="emitSearch">
+            {{ t("knowledge.actions.search") }}
+          </el-button>
         </div>
-        <div v-else-if="searched && searchResults.length === 0" class="empty-box">{{ t("knowledge.retrieval.noResults") }}</div>
-        <div v-else-if="!searched" class="empty-box">{{ t("knowledge.retrieval.idle") }}</div>
+      </aside>
 
-        <article v-for="result in searchResults" :key="`${result.doc_id}:${result.chunk_index}`" class="retrieval-hit">
-          <div class="hit-toolbar">
-            <strong class="truncate">{{ result.title || result.doc_id || t("knowledge.labels.untitledChunk") }}</strong>
-            <span class="score-badge">{{ formatScore(result.score) }}</span>
-          </div>
-          <p>{{ result.content }}</p>
-          <div class="hit-meta">
-            <span>{{ t("knowledge.labels.chunkIndex", { index: result.chunk_index }) }}</span>
-            <span :title="result.source">{{ t("knowledge.labels.sourceValue", { value: result.source || "-" }) }}</span>
-            <span :title="result.doc_id">{{ t("knowledge.labels.docValue", { value: shortId(result.doc_id) }) }}</span>
-          </div>
-        </article>
+      <section class="retrieval-results-panel">
+        <div class="result-head">
+          <strong>{{ t("knowledge.retrieval.resultTitle") }}</strong>
+          <span>{{ t("knowledge.retrieval.resultCount", { count: searchResults.length }) }}</span>
+        </div>
 
         <div v-if="searchResults.length" class="answer-preview">
           <span>{{ t("knowledge.retrieval.answer") }}</span>
           <p>{{ retrievalAnswer }}</p>
           <em>{{ t("knowledge.retrieval.reference", { value: retrievalReferences }) }}</em>
         </div>
-      </div>
+
+        <div class="retrieval-results-body">
+          <div v-if="searching" class="empty-box">
+            <el-icon class="is-loading mr-1"><Loading /></el-icon>
+            {{ t("knowledge.retrieval.searching") }}
+          </div>
+          <div v-else-if="searched && searchResults.length === 0" class="empty-box">{{ t("knowledge.retrieval.noResults") }}</div>
+          <div v-else-if="!searched" class="empty-box">{{ t("knowledge.retrieval.idle") }}</div>
+
+          <article v-for="result in searchResults" :key="`${result.doc_id}:${result.chunk_index}`" class="retrieval-hit">
+            <div class="hit-toolbar">
+              <strong class="truncate">{{ result.title || result.doc_id || t("knowledge.labels.untitledChunk") }}</strong>
+              <span class="score-badge">{{ formatScore(result.score) }}</span>
+            </div>
+            <p>{{ result.content }}</p>
+            <div class="hit-meta">
+              <span>{{ t("knowledge.labels.chunkIndex", { index: result.chunk_index }) }}</span>
+              <span :title="result.source">{{ t("knowledge.labels.sourceValue", { value: result.source || "-" }) }}</span>
+              <span :title="result.doc_id">{{ t("knowledge.labels.docValue", { value: shortId(result.doc_id) }) }}</span>
+            </div>
+          </article>
+        </div>
+      </section>
     </div>
   </section>
 </template>
@@ -104,43 +106,60 @@ const shortId = (value: string) => value ? (value.length > 12 ? `${value.slice(0
 <style scoped>
 .retrieval-playground {
   min-width: 0;
+  padding: 0;
 }
 
-.knowledge-section-head,
-.playground-controls,
+.retrieval-workbench-head,
+.retrieval-control-stack,
 .hit-toolbar,
 .hit-meta {
   display: flex;
-  gap: 12px;
+  gap: 10px;
 }
 
-.knowledge-section-head,
+.retrieval-workbench-head,
 .hit-toolbar {
   align-items: center;
   justify-content: space-between;
 }
 
-.knowledge-section-head {
-  margin-bottom: 12px;
+.retrieval-workbench-head {
+  border-bottom: 1px solid var(--kn-border);
+  padding: 12px 14px;
 }
 
-.knowledge-section-head h4 {
+.retrieval-workbench-head h4 {
   margin: 0;
   color: var(--kn-heading);
   font-size: 15px;
   font-weight: 820;
 }
 
-.playground-question,
-.playground-results {
+.retrieval-compare-shell {
   display: grid;
-  gap: 12px;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  min-height: 228px;
+  background: var(--kn-panel);
 }
 
-.playground-controls {
+.retrieval-control-rail {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px) 96px;
-  align-items: end;
+  align-content: start;
+  gap: 12px;
+  border-right: 1px solid var(--kn-border);
+  background: color-mix(in srgb, var(--kn-panel-soft) 72%, transparent);
+  padding: 12px;
+}
+
+.retrieval-query-input :deep(.el-textarea__inner) {
+  min-height: 118px;
+  resize: vertical;
+}
+
+.retrieval-control-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
 }
 
 .knowledge-field {
@@ -152,18 +171,28 @@ const shortId = (value: string) => value ? (value.length > 12 ? `${value.slice(0
 
 .knowledge-field > span,
 .result-head,
-.hit-meta,
 .answer-preview em,
 .answer-preview span {
   color: var(--kn-muted);
   font-size: 12px;
 }
 
+.retrieval-results-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+}
+
 .result-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 13px;
+}
+
+.result-head strong {
+  font-size: inherit;
 }
 
 .retrieval-control-select,
@@ -179,9 +208,16 @@ const shortId = (value: string) => value ? (value.length > 12 ? `${value.slice(0
   font-size: 13px;
 }
 
+.retrieval-control-number :deep(.el-input-number__decrease),
+.retrieval-control-number :deep(.el-input-number__increase) {
+  width: 34px;
+}
+
 .retrieval-results-body {
   display: grid;
+  flex: 1 1 auto;
   gap: 10px;
+  min-height: 0;
   font-size: 13px;
 }
 
@@ -189,7 +225,7 @@ const shortId = (value: string) => value ? (value.length > 12 ? `${value.slice(0
 .answer-preview,
 .empty-box {
   border: 1px solid var(--kn-border);
-  border-radius: 12px;
+  border-radius: var(--ag-radius-control);
   background: var(--kn-panel);
   padding: 12px;
 }
@@ -221,7 +257,7 @@ const shortId = (value: string) => value ? (value.length > 12 ? `${value.slice(0
   border-radius: 999px;
   background: var(--kn-panel-soft);
   color: var(--kn-muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1.3;
   padding: 3px 7px;
@@ -234,18 +270,30 @@ const shortId = (value: string) => value ? (value.length > 12 ? `${value.slice(0
 }
 
 .answer-preview {
-  background: var(--kn-panel-soft);
+  display: grid;
+  gap: 5px;
+  background: color-mix(in srgb, var(--kn-embedding-soft) 28%, var(--kn-panel-soft));
+}
+
+.answer-preview p {
+  margin: 0;
 }
 
 .empty-box {
+  min-height: 100%;
   color: var(--kn-muted);
   font-size: 13px;
   text-align: center;
 }
 
-@media (max-width: 760px) {
-  .playground-controls {
+@media (max-width: 980px) {
+  .retrieval-compare-shell {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .retrieval-control-rail {
+    border-right: 0;
+    border-bottom: 1px solid var(--kn-border);
   }
 }
 </style>

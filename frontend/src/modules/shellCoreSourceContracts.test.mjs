@@ -98,6 +98,24 @@ assert.doesNotMatch(
 )
 
 assert.match(
+  appStyle,
+  /html\.dark\s*:where\(\.el-tooltip\.el-popper:not\(\.el-select__popper\),\s*\.el-tooltip__popper\)[\s\S]*background:\s*var\(--ag-panel-raised\)\s*!important[\s\S]*color:\s*var\(--ag-text\)\s*!important/,
+  "dark mode tooltips must inherit the dark shell surface instead of Element Plus light tooltip styling",
+)
+
+assert.match(
+  appStyle,
+  /html:not\(\.dark\)\s*:where\(\.el-tooltip\.el-popper:not\(\.el-select__popper\),\s*\.el-tooltip__popper\)[\s\S]*background:\s*var\(--ag-panel-raised\)\s*!important[\s\S]*color:\s*var\(--ag-heading\)\s*!important/,
+  "light mode tooltips must inherit the light shell surface instead of forcing the dark-mode tooltip treatment",
+)
+
+assert.match(
+  appStyle,
+  /:where\(\.el-tooltip\.el-popper:not\(\.el-select__popper\),\s*\.el-tooltip__popper\)\s*:where\(\.el-popper__arrow\)\s*\{[\s\S]*display:\s*none\s*!important;/,
+  "tooltips must hide the Element Plus arrow diamond",
+)
+
+assert.match(
   shellBrand,
   /PRODUCT_SHORT_NAME = "T\.A\.I\.S"/,
   "shell brand constants must expose the T.A.I.S short name",

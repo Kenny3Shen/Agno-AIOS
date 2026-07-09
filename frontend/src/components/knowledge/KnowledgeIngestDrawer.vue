@@ -50,10 +50,10 @@
       </section>
 
       <section v-if="mode === 'add'" class="drawer-section drawer-visibility-section">
-        <div class="drawer-section-head">
+        <div class="drawer-section-head drawer-inline-visibility">
           <span>{{ t("knowledge.documents.columns.visibility") }}</span>
+          <ResourceVisibilityTabs v-model="visibility" />
         </div>
-        <ResourceVisibilityTabs v-model="visibility" />
       </section>
 
       <el-collapse v-model="advancedPanels" class="drawer-advanced-ingest">
@@ -324,6 +324,10 @@ const submit = () => {
   gap: 12px;
 }
 
+.drawer-inline-visibility {
+  flex-wrap: wrap;
+}
+
 .drawer-section-head span {
   color: var(--kn-heading);
   font-size: 13px;
@@ -382,6 +386,33 @@ const submit = () => {
   align-items: center;
   color: var(--kn-heading);
   font-weight: 800;
+}
+
+.drawer-advanced-ingest {
+  border-radius: var(--ag-radius-control);
+}
+
+.drawer-advanced-ingest :deep(.el-collapse-item__header) {
+  border: 1px solid var(--kn-border);
+  border-radius: var(--ag-radius-control);
+  background: color-mix(in srgb, var(--kn-panel-soft) 70%, transparent);
+  padding: 0 12px;
+}
+
+.drawer-advanced-ingest :deep(.el-collapse-item__wrap) {
+  margin-top: 8px;
+  border: 1px solid var(--kn-border);
+  border-radius: var(--ag-radius-control);
+  background: color-mix(in srgb, var(--kn-panel-soft) 70%, transparent);
+}
+
+.drawer-advanced-ingest :deep(.el-collapse-item__content) {
+  padding: 12px;
+}
+
+.drawer-advanced-ingest :deep(.el-input__wrapper),
+.drawer-advanced-ingest :deep(.el-select__wrapper) {
+  border-radius: var(--ag-radius-control);
 }
 
 .reader-strategy-select {

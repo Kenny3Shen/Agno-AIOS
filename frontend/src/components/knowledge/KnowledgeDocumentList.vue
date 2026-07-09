@@ -39,7 +39,7 @@
         <span role="columnheader">{{ t("knowledge.documents.columns.name") }}</span>
         <span role="columnheader">{{ t("knowledge.documents.columns.embeddingStatus") }}</span>
         <span role="columnheader">{{ t("knowledge.documents.columns.visibility") }}</span>
-        <span role="columnheader">{{ t("knowledge.documents.columns.actions") }}</span>
+        <span role="columnheader" class="document-actions-head">{{ t("knowledge.documents.columns.actions") }}</span>
       </div>
 
       <div v-if="filteredDocuments.length === 0" class="empty-box">{{ t("knowledge.documents.empty") }}</div>
@@ -244,6 +244,12 @@ const updateDocumentVisibility = (document: KnowledgeDocument, visibility: Resou
   padding: 8px 7px;
 }
 
+.document-actions-head,
+.document-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
 .document-row {
   background: var(--kn-panel);
   transition: background 0.18s ease;
@@ -304,7 +310,7 @@ const updateDocumentVisibility = (document: KnowledgeDocument, visibility: Resou
 .document-action-buttons {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 2px;
 }
 

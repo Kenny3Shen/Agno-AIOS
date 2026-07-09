@@ -1374,6 +1374,22 @@ html.dark :where(.el-card, .el-dialog, .el-message-box, .el-drawer, .el-popover,
 	color: var(--ag-text);
 }
 
+html.dark :where(.el-tooltip.el-popper:not(.el-select__popper), .el-tooltip__popper) {
+	border-color: var(--ag-border) !important;
+	background: var(--ag-panel-raised) !important;
+	color: var(--ag-text) !important;
+}
+
+html:not(.dark) :where(.el-tooltip.el-popper:not(.el-select__popper), .el-tooltip__popper) {
+	border-color: var(--ag-border-strong) !important;
+	background: var(--ag-panel-raised) !important;
+	color: var(--ag-heading) !important;
+}
+
+:where(.el-tooltip.el-popper:not(.el-select__popper), .el-tooltip__popper) :where(.el-popper__arrow) {
+	display: none !important;
+}
+
 html.dark :where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner, .el-date-editor.el-input__wrapper) {
 	border: 1px solid var(--ag-border);
 	background: #15161b;

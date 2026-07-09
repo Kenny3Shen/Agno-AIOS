@@ -137,6 +137,48 @@ assert.match(
 )
 
 assert.match(
+  knowledgeRetrievalPlayground,
+  /retrieval-compare-shell/,
+  "Knowledge retrieval must use the result-comparison shell",
+)
+
+assert.match(
+  knowledgeRetrievalPlayground,
+  /retrieval-control-rail[\s\S]*retrieval-results-panel/,
+  "Knowledge retrieval must separate query controls from result comparison",
+)
+
+assert.match(
+  knowledgeRetrievalPlayground,
+  /\.retrieval-compare-shell\s*\{[\s\S]*grid-template-columns:\s*minmax\(260px,\s*320px\)\s+minmax\(0,\s*1fr\)/,
+  "Knowledge retrieval desktop layout must use a left control rail and a primary result panel",
+)
+
+assert.match(
+  knowledgeRetrievalPlayground,
+  /<div v-if="searchResults\.length" class="answer-preview">[\s\S]*<div class="retrieval-results-body">/,
+  "Knowledge retrieval answer preview must stay compact above the hit list while hits remain the primary result area",
+)
+
+assert.match(
+  knowledgeRetrievalPlayground,
+  /\.knowledge-field\s*>\s*span,\s*\.result-head,\s*\.answer-preview em,\s*\.answer-preview span\s*\{[\s\S]*font-size:\s*12px;/,
+  "Knowledge retrieval labels and secondary copy must share a 12px supporting scale",
+)
+
+assert.match(
+  knowledgeRetrievalPlayground,
+  /\.retrieval-control-select\s*:deep\(\.el-select__wrapper\),\s*\.retrieval-control-number\s*:deep\(\.el-input__wrapper\)\s*\{[\s\S]*font-size:\s*13px;/,
+  "Knowledge retrieval form controls must use a consistent 13px body scale",
+)
+
+assert.match(
+  knowledgeRetrievalPlayground,
+  /\.hit-meta span,\s*\.score-badge,\s*\.status-badge\s*\{[\s\S]*font-size:\s*11px;/,
+  "Knowledge retrieval badges must use a shared 11px compact scale",
+)
+
+assert.match(
   knowledgeIngestDrawer,
   /knowledge-ingest-drawer/,
   "Knowledge Add and Update must share one Drawer surface",
@@ -152,6 +194,24 @@ assert.match(
   knowledgeIngestDrawer,
   /readerStrategyForFilename/,
   "Knowledge Drawer must auto-update the reader strategy from the selected file or path suffix",
+)
+
+assert.match(
+  knowledgeIngestDrawer,
+  /drawer-section-head drawer-inline-visibility/,
+  "Knowledge Drawer visibility title and tabs must share one inline row",
+)
+
+assert.match(
+  knowledgeIngestDrawer,
+  /\.drawer-advanced-ingest[\s\S]*:deep\(\.el-collapse-item__header\)[\s\S]*border-radius:\s*var\(--ag-radius-control\)/,
+  "Knowledge Drawer advanced parameter header must use the shared rounded control radius",
+)
+
+assert.match(
+  knowledgeIngestDrawer,
+  /\.drawer-advanced-ingest[\s\S]*:deep\(\.el-collapse-item__wrap\)[\s\S]*border-radius:\s*var\(--ag-radius-control\)/,
+  "Knowledge Drawer advanced parameter body must use the shared rounded control radius",
 )
 
 assert.doesNotMatch(
@@ -272,6 +332,18 @@ assert.match(
   knowledgeDocumentList,
   /grid-template-columns:[\s\S]*minmax\(180px,\s*1fr\)[\s\S]*minmax\(96px,\s*0\.38fr\)[\s\S]*132px/,
   "Knowledge document table columns must use compact bounded tracks",
+)
+
+assert.match(
+  knowledgeDocumentList,
+  /columnheader\"\s+class=\"document-actions-head\"/,
+  "Knowledge document action header must use a dedicated aligned column header class",
+)
+
+assert.match(
+  knowledgeDocumentList,
+  /\.document-actions-head,\s*\.document-actions\s*\{[\s\S]*justify-content:\s*flex-start;/,
+  "Knowledge document action header and row actions must align to the same left edge",
 )
 
 for (const locale of ["zh-CN", "en-US"]) {
