@@ -8,7 +8,7 @@
         :clearing="clearing"
         :deleting-doc-id="deletingDocId"
         :rebuilding-doc-id="rebuildingDocId"
-        :updating-doc-id="replacingSourceDocId"
+        :updating-doc-id="replacingSourceDocId || updatingMetadataDocId"
         @add="openAddDrawer"
         @refresh="loadKnowledge"
         @clear="clearAllDocuments"
@@ -40,6 +40,7 @@
       @submit-text="submitDrawerTextDocument"
       @submit-path="submitDrawerPathDocument"
       @submit-update-file="submitDrawerUpdateFile"
+      @submit-update-metadata="submitDrawerUpdateMetadata"
     />
   </div>
 </template>
@@ -49,7 +50,14 @@ import { computed, onMounted, ref } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useI18n } from "vue-i18n"
 import { useKnowledgeApi } from "../composables/useKnowledgeApi"
-import type { KnowledgeDocument, KnowledgeIngestOptions, KnowledgeSearchResult, KnowledgeStatus, ResourceVisibility } from "../types"
+import type {
+  KnowledgeDocument,
+  KnowledgeDocumentUpdateRequest,
+  KnowledgeIngestOptions,
+  KnowledgeSearchResult,
+  KnowledgeStatus,
+  ResourceVisibility,
+} from "../types"
 import { mergeUpdatedKnowledgeDocument, resolveSelectedKnowledgeDocumentId } from "../modules/knowledgeWorkbench"
 import KnowledgeDocumentList from "./knowledge/KnowledgeDocumentList.vue"
 import KnowledgeIngestDrawer from "./knowledge/KnowledgeIngestDrawer.vue"
@@ -88,8 +96,17 @@ interface DrawerUpdatePayload {
   file: File
   title: string
   source: string
+  visibility: ResourceVisibility
   metadata: Record<string, string>
   ingest_options: KnowledgeIngestOptions | null
+}
+
+interface DrawerUpdateMetadataPayload {
+  document: KnowledgeDocument
+  title: string
+  source: string
+  visibility: ResourceVisibility
+  metadata: Record<string, string>
 }
 
 const { t } = useI18n()
@@ -106,6 +123,7 @@ const uploadingBrowserFile = ref(false)
 const deletingDocId = ref<string | null>(null)
 const rebuildingDocId = ref<string | null>(null)
 const replacingSourceDocId = ref<string | null>(null)
+const updatingMetadataDocId = ref<string | null>(null)
 const clearing = ref(false)
 const searching = ref(false)
 const searched = ref(false)
@@ -116,6 +134,7 @@ const {
   fetchKnowledge,
   addTextDocument,
   addFileDocument,
+  updateKnowledgeDocumentMetadata,
   updateKnowledgeDocumentVisibility,
   rebuildKnowledgeDocument,
   replaceKnowledgeDocumentSource,
@@ -125,7 +144,15 @@ const {
 } = useKnowledgeApi()
 
 const selectedDocument = computed(() => documents.value.find((doc) => doc.id === selectedDocumentId.value) || null)
-const drawerMutating = computed(() => uploadingBrowserFile.value || savingText.value || savingPath.value || Boolean(replacingSourceDocId.value))
+const drawerMutating = computed(() => {
+  return (
+    uploadingBrowserFile.value ||
+    savingText.value ||
+    savingPath.value ||
+    Boolean(replacingSourceDocId.value) ||
+    Boolean(updatingMetadataDocId.value)
+  )
+})
 
 const retrievalAnswer = computed(() => {
   if (!searchResults.value.length) return t("knowledge.retrieval.answerFallback")
@@ -266,6 +293,7 @@ const submitDrawerUpdateFile = async (payload: DrawerUpdatePayload) => {
       content,
       file_name: payload.file.name,
       source: payload.source.trim() || `upload:${payload.file.name}`,
+      visibility: payload.visibility,
       metadata: {
         ...fileMetadata(payload.file),
         ...payload.metadata,
@@ -281,6 +309,39 @@ const submitDrawerUpdateFile = async (payload: DrawerUpdatePayload) => {
     ElMessage.error(err instanceof Error ? err.message : t("knowledge.messages.sourceReplaceFailed"))
   } finally {
     replacingSourceDocId.value = null
+  }
+}
+
+const submitDrawerUpdateMetadata = async (payload: DrawerUpdateMetadataPayload) => {
+  const doc = payload.document
+  const currentVisibility = doc.visibility || "private"
+  const updatePayload: KnowledgeDocumentUpdateRequest = {}
+  if (payload.title.trim() && payload.title.trim() !== doc.title) {
+    updatePayload.title = payload.title.trim()
+  }
+  if (payload.source.trim() && payload.source.trim() !== (doc.source || "").trim()) {
+    updatePayload.source = payload.source.trim()
+  }
+  if (payload.visibility !== currentVisibility) {
+    updatePayload.visibility = payload.visibility
+  }
+  if (Object.keys(payload.metadata).length) {
+    updatePayload.metadata = payload.metadata
+  }
+  if (!Object.keys(updatePayload).length) return
+
+  updatingMetadataDocId.value = doc.id
+  try {
+    const updated = await updateKnowledgeDocumentMetadata(doc.id, updatePayload)
+    documents.value = mergeUpdatedKnowledgeDocument(documents.value, doc.id, updated)
+    selectedDocumentId.value = updated.id
+    await loadKnowledge()
+    closeDrawerAfterMutation(updated.id)
+    ElMessage.success(t("knowledge.messages.updated"))
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : t("knowledge.messages.taskFailed", { title: doc.title }))
+  } finally {
+    updatingMetadataDocId.value = null
   }
 }
 

@@ -86,6 +86,10 @@ class StrictAsyncKnowledge:
         existing = self._content_by_id.get(content.id)
         if existing is None:
             return None
+        if getattr(content, "name", None) is not None:
+            existing.name = content.name
+        if getattr(content, "description", None) is not None:
+            existing.description = content.description
         existing.metadata = {**getattr(existing, "metadata", {}), **(content.metadata or {})}
         return {"id": content.id, "metadata": existing.metadata}
 

@@ -131,18 +131,17 @@ const {
   display: grid;
   flex: 1 1 auto;
   gap: 12px;
-  grid-template-columns: minmax(230px, 280px) minmax(300px, 1fr) minmax(280px, 340px);
+  grid-template-columns: minmax(260px, 280px) minmax(0, 1fr) minmax(320px, 360px);
   min-height: 0;
 }
 
 @media (max-width: 1120px) {
   .mem-workbench {
-    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+    grid-template-columns: minmax(260px, 280px) minmax(0, 1fr);
   }
 
-  .mem-workbench > :last-child {
+  .mem-workbench > :nth-child(3) {
     grid-column: 1 / -1;
-    max-height: 360px;
   }
 }
 
@@ -153,9 +152,9 @@ const {
     min-height: auto;
   }
 
-  .mem-workbench > :last-child {
+
+  .mem-workbench > :nth-child(3) {
     grid-column: auto;
-    max-height: none;
   }
 }
 </style>

@@ -744,8 +744,16 @@ export interface KnowledgeSourceReplacementRequest {
   file_name: string
   title?: string | null
   source?: string | null
+  visibility?: ResourceVisibility
   metadata?: Record<string, string>
   ingest_options?: KnowledgeIngestOptions | null
+}
+
+export interface KnowledgeDocumentUpdateRequest {
+  title?: string | null
+  source?: string | null
+  visibility?: ResourceVisibility
+  metadata?: Record<string, string>
 }
 
 export interface KnowledgeSearchResult {

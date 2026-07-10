@@ -1,6 +1,6 @@
 <template>
-  <aside class="ag-workspace-panel flex min-h-0 flex-col overflow-hidden">
-    <PanelHeader :title="t('workbench.memory.queueTitle')" :subtitle="userPanelSummary">
+  <aside class="ag-workspace-panel flex min-h-0 flex-col overflow-hidden border-transparent bg-[var(--ag-container-bg)] shadow-none">
+    <PanelHeader class="px-4 pb-3 pt-4 sm:px-5" :title="t('workbench.memory.queueTitle')" :subtitle="userPanelSummary">
       <template #actions>
         <DataChip
           :label="t('workbench.memory.statusReview')"
@@ -11,26 +11,28 @@
       </template>
     </PanelHeader>
 
-    <div class="grid flex-0 grid-cols-3 gap-2 border-b border-[var(--ag-border)] p-2">
+    <div class="grid flex-0 grid-cols-3 gap-2 px-4 pb-3 sm:px-5">
       <DataChip :label="t('workbench.memory.statusRisk')" :value="riskUserCount" tone="red" />
       <DataChip :label="t('workbench.memory.statusReview')" :value="reviewUserCount" tone="yellow" />
       <DataChip :label="t('workbench.memory.statusHealthy')" :value="healthyUserCount" tone="green" />
     </div>
 
-    <div v-if="userOptions.length" class="min-h-0 overflow-auto">
+    <div v-if="userOptions.length" class="min-h-0 overflow-auto px-2 pb-2 sm:px-3 sm:pb-3">
       <button
         v-for="user in userOptions"
         :key="user.user_id"
         type="button"
         :class="[
-          'grid w-full grid-cols-[8px_minmax(0,1fr)_auto] items-center gap-2 border-0 border-b border-[var(--ag-border)] bg-transparent px-3 py-2.5 text-left text-[var(--ag-text)] transition-colors hover:bg-[var(--ag-blue-soft)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ag-blue)]',
-          user.user_id === filters.user_id ? 'bg-[var(--ag-blue-soft)]' : '',
+          'grid w-full grid-cols-[10px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-transparent px-3 py-3 text-left text-[var(--ag-text)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ag-blue)] sm:px-4',
+          user.user_id === filters.user_id
+            ? 'bg-[var(--ag-blue-soft)] shadow-[inset_0_0_0_1px_var(--ag-border)]'
+            : 'bg-transparent hover:bg-[var(--ag-panel-soft)]',
         ]"
         :aria-pressed="user.user_id === filters.user_id"
         @click="$emit('filter-user', user.user_id)"
       >
-        <span class="mem-user-rail">
-          <span :class="railToneClass(user.status)" :style="userBarStyle(user)" />
+        <span class="block h-11 w-[10px] overflow-hidden rounded-full bg-[var(--ag-panel-soft)]">
+          <span class="block h-[var(--mem-user-size)] min-h-[10px] w-full rounded-full" :class="railToneClass(user.status)" :style="userBarStyle(user)" />
         </span>
         <span class="grid min-w-0 gap-1">
           <strong class="overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-850 text-[var(--ag-heading)]" :title="user.user_id">
@@ -44,14 +46,14 @@
           <StatusDot :label="statusLabel(user.status)" :tone="statusTone(user.status)">
             {{ statusLabel(user.status) }}
           </StatusDot>
-          <b class="rounded-[var(--ag-radius-control)] border border-[var(--ag-border)] bg-[var(--ag-panel-soft)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--ag-heading)]">
+          <b class="rounded-[var(--ag-radius-control)] bg-[var(--ag-panel-soft)] px-2 py-0.5 font-mono text-[11px] text-[var(--ag-heading)]">
             {{ user.total_memories }}
           </b>
         </span>
       </button>
     </div>
 
-    <EmptyState v-else-if="!loading" class="min-h-[140px]">
+    <EmptyState v-else-if="!loading" class="min-h-[140px] px-4 py-6">
       {{ t("workbench.memory.noUsers") }}
     </EmptyState>
   </aside>
@@ -98,22 +100,3 @@ const railToneClass = (status?: string) => {
   return "bg-[var(--ag-blue)]"
 }
 </script>
-
-<style scoped>
-.mem-user-rail {
-  display: block;
-  width: 8px;
-  height: 42px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--ag-panel-soft);
-}
-
-.mem-user-rail > span {
-  display: block;
-  width: 100%;
-  height: var(--mem-user-size);
-  min-height: 10px;
-  border-radius: inherit;
-}
-</style>

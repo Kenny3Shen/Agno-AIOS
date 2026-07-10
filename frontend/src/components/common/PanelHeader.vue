@@ -4,7 +4,7 @@
       <strong class="ag-panel-title">{{ title }}</strong>
       <em v-if="subtitle" class="ag-panel-subtitle">{{ subtitle }}</em>
     </span>
-    <span v-if="$slots.actions" class="flex flex-0 items-center gap-2">
+    <span v-if="$slots.actions" class="flex flex-none items-center gap-2">
       <slot name="actions" />
     </span>
   </div>

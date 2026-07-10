@@ -1,25 +1,12 @@
 <template>
-  <section class="ag-code-panel">
-    <header class="flex min-w-0 items-center justify-between gap-2 border-b border-[var(--ag-border)] bg-[var(--ag-panel-soft)] px-3 py-2">
-      <div class="flex min-w-0 items-center gap-2">
-        <button
-          v-for="option in modeOptions"
-          :key="option"
-          type="button"
-          :class="[
-            'rounded-[var(--ag-radius-control)] px-2 py-1 text-[11px] font-760 uppercase text-[var(--ag-muted)] transition-colors',
-            activeMode === option ? 'bg-[var(--ag-panel)] text-[var(--ag-heading)] shadow-[inset_0_0_0_1px_var(--ag-border)]' : 'hover:text-[var(--ag-blue)]',
-          ]"
-          :aria-pressed="activeMode === option"
-          @click="activeMode = option"
-        >
-          {{ option }}
-        </button>
-      </div>
+  <section class="ag-code-panel overflow-hidden rounded-xl border-0 bg-[var(--ag-panel-soft)] shadow-none">
+    <header class="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--ag-border)] px-3 py-2.5 sm:px-4">
+      <el-segmented v-model="activeMode" :options="modeOptions" size="small" />
       <div class="flex shrink-0 items-center gap-1">
-        <button
-          type="button"
-          class="ag-icon-button-compact"
+        <el-button
+          size="small"
+          plain
+          circle
           :aria-label="copyLabel"
           :title="copyLabel"
           @click="copyPayload"
@@ -28,10 +15,11 @@
             <Check v-if="copied" />
             <CopyDocument v-else />
           </el-icon>
-        </button>
-        <button
-          type="button"
-          class="ag-icon-button-compact"
+        </el-button>
+        <el-button
+          size="small"
+          plain
+          circle
           :aria-label="expanded ? collapseLabel : expandLabel"
           :title="expanded ? collapseLabel : expandLabel"
           @click="expanded = !expanded"
@@ -40,16 +28,16 @@
             <ArrowUp v-if="expanded" />
             <ArrowDown v-else />
           </el-icon>
-        </button>
+        </el-button>
       </div>
     </header>
 
-    <div v-if="!displayText.trim()" class="ag-empty-compact m-3">
+    <div v-if="!displayText.trim()" class="ag-empty-compact m-3 sm:m-4">
       {{ emptyText }}
     </div>
     <div
       v-else
-      class="overflow-auto p-3"
+      class="overflow-auto px-3 py-3 sm:px-4 sm:py-3.5"
       :style="expanded ? undefined : { maxHeight: `${maxCollapsedHeight}px` }"
     >
       <MarkdownViewer v-if="activeMode === 'markdown'" :content="displayText" />

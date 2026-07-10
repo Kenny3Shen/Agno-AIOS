@@ -321,6 +321,215 @@ async def test_update_document_visibility_uses_agno_patch_content() -> None:
 
 
 @pytest.mark.asyncio
+async def test_update_document_metadata_uses_agno_patch_content_and_updates_source_snapshot() -> None:
+    content_row = SimpleNamespace(
+        id="content-metadata",
+        name="Runbook",
+        description="manual",
+        metadata={
+            "user_id": "u1",
+            "visibility": "private",
+            "source": "manual",
+            "file_name": "runbook.md",
+        },
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(content_by_id={"content-metadata": content_row})
+    stored_sources: dict[str, dict[str, object]] = {
+        "content-metadata": {
+            "kind": "text",
+            "name": "Runbook",
+            "description": "manual",
+            "text_content": "# runbook",
+            "metadata": dict(content_row.metadata),
+            "filename": "runbook.md",
+        }
+    }
+
+    async def content_by_id(content_id: str):
+        return knowledge._content_by_id.get(content_id)
+
+    async def get_source_async(content_id: str) -> dict[str, object] | None:
+        return stored_sources.get(content_id)
+
+    async def store_source_async(content_id: str, source: Mapping[str, object]) -> None:
+        stored_sources[content_id] = dict(source)
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_by_id_async=content_by_id,
+            get_source_async=get_source_async,
+            store_source_async=store_source_async,
+        )
+    )
+
+    result = await lifecycle.update_document_metadata_async(
+        "content-metadata",
+        title="Runbook v2",
+        source="kb://runbooks/v2",
+        metadata={"reference": "tier1"},
+        user=SimpleNamespace(id="u1", role="user", is_superuser=False),
+    )
+
+    assert result is not None
+    assert result["title"] == "Runbook v2"
+    assert result["source"] == "kb://runbooks/v2"
+    assert result["metadata"]["reference"] == "tier1"
+    assert content_row.name == "Runbook v2"
+    assert content_row.description == "kb://runbooks/v2"
+    assert content_row.metadata["source"] == "kb://runbooks/v2"
+    assert content_row.metadata["reference"] == "tier1"
+    assert stored_sources["content-metadata"]["name"] == "Runbook v2"
+    assert stored_sources["content-metadata"]["description"] == "kb://runbooks/v2"
+    assert stored_sources["content-metadata"]["metadata"]["reference"] == "tier1"
+    assert knowledge.calls[-1][0] == "apatch_content"
+
+
+@pytest.mark.asyncio
+async def test_update_document_metadata_does_not_patch_content_when_source_snapshot_write_fails() -> None:
+    content_row = SimpleNamespace(
+        id="content-metadata",
+        name="Runbook",
+        description="manual",
+        metadata={"user_id": "u1", "visibility": "private", "source": "manual"},
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(content_by_id={"content-metadata": content_row})
+
+    async def store_source_async(_content_id: str, _source: Mapping[str, object]) -> None:
+        raise RuntimeError("snapshot unavailable")
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_by_id_async=lambda _content_id: content_row,
+            get_source_async=lambda _content_id: {
+                "kind": "text",
+                "name": "Runbook",
+                "description": "manual",
+                "metadata": dict(content_row.metadata),
+            },
+            store_source_async=store_source_async,
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="snapshot unavailable"):
+        await lifecycle.update_document_metadata_async(
+            "content-metadata",
+            source="kb://runbooks/v2",
+            user=SimpleNamespace(id="u1", role="user", is_superuser=False),
+        )
+
+    assert not any(call[0] == "apatch_content" for call in knowledge.calls)
+    assert content_row.description == "manual"
+    assert content_row.metadata["source"] == "manual"
+
+
+@pytest.mark.asyncio
+async def test_update_document_metadata_restores_source_snapshot_when_agno_patch_fails() -> None:
+    content_row = SimpleNamespace(
+        id="content-metadata",
+        name="Runbook",
+        description="manual",
+        metadata={"user_id": "u1", "visibility": "private", "source": "manual"},
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(content_by_id={"content-metadata": content_row})
+    original_snapshot = {
+        "kind": "text",
+        "name": "Runbook",
+        "description": "manual",
+        "metadata": dict(content_row.metadata),
+    }
+    stored_snapshots: list[dict[str, object]] = []
+
+    async def store_source_async(_content_id: str, source: Mapping[str, object]) -> None:
+        stored_snapshots.append(dict(source))
+
+    async def fail_patch(_content: object) -> None:
+        raise RuntimeError("agno patch failed")
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_by_id_async=lambda _content_id: content_row,
+            get_source_async=lambda _content_id: original_snapshot,
+            store_source_async=store_source_async,
+        )
+    )
+
+    with (
+        patch.object(knowledge, "apatch_content", fail_patch),
+        pytest.raises(RuntimeError, match="agno patch failed"),
+    ):
+        await lifecycle.update_document_metadata_async(
+            "content-metadata",
+            source="kb://runbooks/v2",
+            user=SimpleNamespace(id="u1", role="user", is_superuser=False),
+        )
+
+    assert stored_snapshots[0]["description"] == "kb://runbooks/v2"
+    assert stored_snapshots[-1] == original_snapshot
+
+
+@pytest.mark.asyncio
+async def test_update_document_metadata_rejects_public_foreign_non_manager() -> None:
+    content_row = SimpleNamespace(
+        id="content-public",
+        name="Runbook",
+        description="manual",
+        metadata={"user_id": "u1", "visibility": "public", "source": "manual"},
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(content_by_id={"content-public": content_row})
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_by_id_async=lambda _content_id: content_row,
+        )
+    )
+
+    result = await lifecycle.update_document_metadata_async(
+        "content-public",
+        source="kb://forbidden",
+        user=SimpleNamespace(id="u2", role="user", is_superuser=False),
+    )
+
+    assert result is None
+    assert not any(call[0] == "apatch_content" for call in knowledge.calls)
+
+
+@pytest.mark.asyncio
+async def test_update_document_metadata_rejects_empty_patch() -> None:
+    content_row = SimpleNamespace(
+        id="content-empty-patch",
+        name="Runbook",
+        metadata={"user_id": "u1", "visibility": "private", "source": "manual"},
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(content_by_id={"content-empty-patch": content_row})
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_by_id_async=lambda _content_id: content_row,
+        )
+    )
+
+    with pytest.raises(ValueError, match="至少提供一个可更新字段"):
+        await lifecycle.update_document_metadata_async(
+            "content-empty-patch",
+            user=SimpleNamespace(id="u1", role="user", is_superuser=False),
+        )
+
+
+@pytest.mark.asyncio
 async def test_rebuild_document_reloads_content_with_public_ainsert() -> None:
     source_metadata = {
         "user_id": "u1",
@@ -601,6 +810,7 @@ async def test_replace_document_source_uploads_new_version_and_deletes_old_conte
             content="  # v2\nnew body  ",
             file_name="runbook-v2.md",
             source="upload:runbook-v2.md",
+            visibility="public",
             metadata={"file_size": "27"},
             user=SimpleNamespace(id="u1", role="user", is_superuser=False),
         )
@@ -615,7 +825,7 @@ async def test_replace_document_source_uploads_new_version_and_deletes_old_conte
     assert insert_kwargs["name"] == "Runbook"
     assert insert_kwargs["description"] == "upload:runbook-v2.md"
     assert insert_kwargs["text_content"] == "# v2\nnew body"
-    assert insert_kwargs["metadata"]["visibility"] == "private"
+    assert insert_kwargs["metadata"]["visibility"] == "public"
     assert insert_kwargs["metadata"]["user_id"] == "u1"
     assert insert_kwargs["metadata"]["file_name"] == "runbook-v2.md"
     assert insert_kwargs["metadata"]["_tais_source"]["kind"] == "text"

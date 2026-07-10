@@ -82,11 +82,19 @@ class KnowledgeVisibilityRequest(BaseModel):
     visibility: str
 
 
+class KnowledgeDocumentUpdateRequest(BaseModel):
+    title: str | None = None
+    source: str | None = None
+    visibility: str | None = None
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
 class KnowledgeSourceReplacementRequest(BaseModel):
     content: str = Field(..., min_length=1)
     file_name: str = Field(..., min_length=1)
     title: str | None = None
     source: str | None = None
+    visibility: str | None = None
     metadata: dict[str, str] = Field(default_factory=dict)
     ingest_options: KnowledgeIngestOptionsRequest | None = None
 
@@ -145,9 +153,9 @@ async def create_text_document(
             title=request.title,
             content=request.content,
             source=request.source,
+            visibility=request.visibility,
             metadata=request.metadata,
             owner_user_id=actor_id(user),
-            visibility=request.visibility,
             ingest_options=(
                 request.ingest_options.model_dump(exclude_none=True)
                 if request.ingest_options is not None
@@ -264,6 +272,7 @@ async def replace_document_source(
             file_name=request.file_name,
             title=request.title,
             source=request.source,
+            visibility=request.visibility,
             metadata=request.metadata,
             owner_user_id=effective_knowledge_user_filter(user),
             user=user,
@@ -284,6 +293,48 @@ async def replace_document_source(
         resource_type="knowledge_document",
         resource_id=str(updated.get("id") or doc_id),
         metadata={"previous_id": doc_id, "file_name": request.file_name},
+        **audit_request_context(request_ctx),
+    )
+    return response
+
+
+@router.patch("/documents/{doc_id}")
+async def update_document_metadata(
+    request_ctx: Request,
+    doc_id: str,
+    request: KnowledgeDocumentUpdateRequest,
+    user: User = Depends(require_scope("knowledge:write")),
+) -> KnowledgeDocumentResponsePayload:
+    try:
+        updated = await get_knowledge_base_lifecycle().update_document_metadata_async(
+            doc_id,
+            title=request.title,
+            source=request.source,
+            visibility=request.visibility,
+            metadata=request.metadata,
+            user=user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if updated is None:
+        raise HTTPException(status_code=404, detail="知识文档不存在")
+    response = cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
+    changed_fields = [
+        field
+        for field, value in (
+            ("title", request.title),
+            ("source", request.source),
+            ("visibility", request.visibility),
+            ("metadata", request.metadata),
+        )
+        if value not in (None, {}, "")
+    ]
+    await record_audit_event_async(
+        user,
+        action="knowledge.metadata_update",
+        resource_type="knowledge_document",
+        resource_id=doc_id,
+        metadata={"fields": changed_fields},
         **audit_request_context(request_ctx),
     )
     return response

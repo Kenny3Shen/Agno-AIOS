@@ -42,6 +42,12 @@
         </el-tabs>
 
         <template v-else>
+          <div class="drawer-form-grid">
+            <label class="knowledge-field">
+              <span>{{ t("knowledge.drawer.documentName") }}</span>
+              <el-input v-model="updateForm.title" :placeholder="t('knowledge.drawer.documentName')" />
+            </label>
+          </div>
           <el-upload drag :auto-upload="false" :limit="1" :on-change="onFileChange" :on-remove="clearSelectedFile">
             <el-icon><UploadFilled /></el-icon>
             <div>{{ t("knowledge.upload.dropText") }} {{ t("knowledge.upload.chooseFile") }}</div>
@@ -54,7 +60,7 @@
         </label>
       </section>
 
-      <section v-if="mode === 'add'" class="drawer-section drawer-visibility-section">
+      <section class="drawer-section drawer-visibility-section">
         <SectionHeader class="border-b-0 pb-0" :title="t('knowledge.documents.columns.visibility')">
           <template #actions>
           <ResourceVisibilityTabs v-model="visibility" />
@@ -153,8 +159,17 @@ interface UpdateSubmitPayload {
   file: File
   title: string
   source: string
+  visibility: ResourceVisibility
   metadata: Record<string, string>
   ingest_options: KnowledgeIngestOptions | null
+}
+
+interface UpdateMetadataPayload {
+  document: KnowledgeDocument
+  title: string
+  source: string
+  visibility: ResourceVisibility
+  metadata: Record<string, string>
 }
 
 const props = defineProps<{
@@ -171,6 +186,7 @@ const emit = defineEmits<{
   "submit-text": [payload: TextSubmitPayload]
   "submit-path": [payload: PathSubmitPayload]
   "submit-update-file": [payload: UpdateSubmitPayload]
+  "submit-update-metadata": [payload: UpdateMetadataPayload]
 }>()
 
 const { t } = useI18n()
@@ -188,6 +204,7 @@ const sourceForm = reactive<Record<SourceMode, string>>({
 })
 const textForm = reactive({ title: "", content: "" })
 const pathForm = reactive({ path: "", title: "" })
+const updateForm = reactive({ title: "" })
 
 const advancedIngestOpen = computed(() => advancedPanels.value.includes("advanced"))
 const readerStrategyOptions = computed(() => [
@@ -209,6 +226,15 @@ const currentSource = computed({
   },
 })
 const sourcePlaceholder = computed(() => fallbackSourceFor(activeSourceMode.value) || t("knowledge.upload.sourceManualPlaceholder"))
+const hasMetadataChanges = computed(() => {
+  const doc = props.targetDocument
+  if (props.mode !== "update" || !doc) return false
+  return (
+    updateForm.title.trim() !== (doc.title || "").trim() ||
+    currentSource.value.trim() !== (doc.source || "").trim() ||
+    visibility.value !== (doc.visibility || "private")
+  )
+})
 
 watch(
   () => props.modelValue,
@@ -220,6 +246,7 @@ watch(
     textForm.content = ""
     pathForm.path = ""
     pathForm.title = ""
+    updateForm.title = props.targetDocument?.title || ""
     sourceForm.file = ""
     sourceForm.text = "manual"
     sourceForm.path = ""
@@ -279,7 +306,7 @@ const ingestOptionsPayload = () => {
 
 const canSubmit = computed(() => {
   if (props.loading) return false
-  if (props.mode === "update") return Boolean(props.targetDocument && selectedFile.value)
+  if (props.mode === "update") return Boolean(props.targetDocument && (selectedFile.value || hasMetadataChanges.value))
   if (inputMode.value === "file") return Boolean(selectedFile.value)
   if (inputMode.value === "text") return Boolean(textForm.title.trim() && textForm.content.trim())
   return Boolean(pathForm.path.trim())
@@ -296,14 +323,25 @@ const beforeClose = async (done: () => void) => {
 
 const submit = () => {
   const ingest_options = ingestOptionsPayload()
-  if (props.mode === "update" && props.targetDocument && selectedFile.value) {
-    emit("submit-update-file", {
+  if (props.mode === "update" && props.targetDocument) {
+    if (selectedFile.value) {
+      emit("submit-update-file", {
+        document: props.targetDocument,
+        file: selectedFile.value,
+        title: updateForm.title.trim() || props.targetDocument.title,
+        source: sourceValueFor("update"),
+        visibility: visibility.value,
+        metadata: { file_name: selectedFile.value.name },
+        ingest_options,
+      })
+      return
+    }
+    emit("submit-update-metadata", {
       document: props.targetDocument,
-      file: selectedFile.value,
-      title: props.targetDocument.title,
+      title: updateForm.title.trim() || props.targetDocument.title,
       source: sourceValueFor("update"),
-      metadata: { file_name: selectedFile.value.name },
-      ingest_options,
+      visibility: visibility.value,
+      metadata: {},
     })
     return
   }

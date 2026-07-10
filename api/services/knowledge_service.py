@@ -114,6 +114,24 @@ def _clear_knowledge_runtime_caches() -> None:
     get_async_knowledge_base.cache_clear()
 
 
+def _clean_optional_metadata_text(value: object | None, field: str) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        raise ValueError(f"{field}不能为空")
+    return text
+
+
+def _safe_metadata_patch(metadata: Mapping[str, object] | None) -> dict[str, object]:
+    blocked_keys = {"owner_user_id", "user_id", "visibility", "source", "title"}
+    return {
+        key: value
+        for key, value in _safe_metadata(metadata).items()
+        if not key.startswith("_") and key not in blocked_keys
+    }
+
+
 def update_runtime_rag_settings(values: Mapping[str, Any]) -> dict[str, Any]:
     return _update_runtime_rag_settings(
         values,
@@ -781,6 +799,7 @@ class KnowledgeBaseLifecycle:
         file_name: str,
         title: str | None = None,
         source: str | None = None,
+        visibility: str | None = None,
         metadata: dict[str, Any] | None = None,
         owner_user_id: str | None = None,
         user: ActorLike | None = None,
@@ -827,7 +846,12 @@ class KnowledgeBaseLifecycle:
             or owner_user_id
             or ""
         ).strip()
-        visibility = normalize_visibility(str(current_metadata.get("visibility") or "private"))
+        normalized_visibility = normalize_visibility(
+            visibility
+            if visibility is not None
+            else str(current_metadata.get("visibility") or "private"),
+            strict=visibility is not None,
+        )
         ingest_overrides = _coerce_ingest_overrides(ingest_options)
         profile = knowledge_profile_for_filename_or_strategy(
             clean_file_name,
@@ -838,7 +862,7 @@ class KnowledgeBaseLifecycle:
             **safe_public_metadata(current_metadata),
             **_safe_metadata(metadata),
             **_metadata_ingest_options(ingest_overrides),
-            **_owner_metadata(owner, visibility),
+            **_owner_metadata(owner, normalized_visibility),
             "title": clean_title,
             "source": clean_source,
             "file_name": clean_file_name,
@@ -892,21 +916,92 @@ class KnowledgeBaseLifecycle:
         visibility: str,
         user: ActorLike,
     ) -> KnowledgeDocumentPayload | None:
+        return await self.update_document_metadata_async(
+            doc_id,
+            visibility=visibility,
+            user=user,
+        )
+
+    async def update_document_metadata_async(
+        self,
+        doc_id: str,
+        *,
+        title: str | None = None,
+        source: str | None = None,
+        visibility: str | None = None,
+        metadata: Mapping[str, object] | None = None,
+        user: ActorLike,
+    ) -> KnowledgeDocumentPayload | None:
         await self._ensure_contents_storage_async()
         content = await self._knowledge_content_by_id_async(doc_id)
         if content is None:
             return None
-        metadata = _safe_metadata(getattr(content, "metadata", None))
-        if not can_manage_resource(user, metadata):
+        current_metadata = _safe_metadata(getattr(content, "metadata", None))
+        if not can_manage_resource(user, current_metadata):
             return None
-        normalized_visibility = normalize_visibility(visibility, strict=True)
-        knowledge = await self._async_knowledge_async()
-        patched = await knowledge.apatch_content(
-            Content(id=doc_id, metadata={"visibility": normalized_visibility})
+
+        next_title = _clean_optional_metadata_text(title, "文档标题")
+        next_source = _clean_optional_metadata_text(source, "来源")
+        next_visibility = (
+            normalize_visibility(visibility, strict=True)
+            if visibility is not None
+            else None
         )
+        metadata_patch = _safe_metadata_patch(metadata)
+        if (
+            next_title is None
+            and next_source is None
+            and next_visibility is None
+            and not metadata_patch
+        ):
+            raise ValueError("至少提供一个可更新字段")
+
+        patched_metadata = {
+            **current_metadata,
+            **metadata_patch,
+        }
+        if next_title is not None:
+            patched_metadata["title"] = next_title
+        if next_source is not None:
+            patched_metadata["source"] = next_source
+        if next_visibility is not None:
+            patched_metadata["visibility"] = next_visibility
+
+        source_snapshot = await self._get_source_async(doc_id)
+        if source_snapshot is not None:
+            updated_source_snapshot = dict(source_snapshot)
+            if next_title is not None:
+                updated_source_snapshot["name"] = next_title
+            if next_source is not None:
+                updated_source_snapshot["description"] = next_source
+            updated_source_snapshot["metadata"] = patched_metadata
+            await self._store_source_async(doc_id, updated_source_snapshot)
+
+        knowledge = await self._async_knowledge_async()
+        try:
+            patched = await knowledge.apatch_content(
+                Content(
+                    id=doc_id,
+                    name=next_title,
+                    description=next_source,
+                    metadata=patched_metadata,
+                )
+            )
+        except Exception:
+            if source_snapshot is not None:
+                await self._store_source_async(doc_id, source_snapshot)
+            raise
         if patched is None:
+            if source_snapshot is not None:
+                await self._store_source_async(doc_id, source_snapshot)
             return None
-        content.metadata = {**metadata, "visibility": normalized_visibility}
+
+        if next_title is not None:
+            content.name = next_title
+        if next_source is not None:
+            content.description = next_source
+        content.metadata = patched_metadata
+
         return _content_to_document(content)
 
     async def clear_knowledge_base_async(
@@ -1104,6 +1199,7 @@ async def replace_document_source_async(
     file_name: str,
     title: str | None = None,
     source: str | None = None,
+    visibility: str | None = None,
     metadata: dict[str, Any] | None = None,
     owner_user_id: str | None = None,
     user: ActorLike | None = None,
@@ -1115,6 +1211,7 @@ async def replace_document_source_async(
         file_name=file_name,
         title=title,
         source=source,
+        visibility=visibility,
         metadata=metadata,
         owner_user_id=owner_user_id,
         user=user,
@@ -1131,6 +1228,25 @@ async def update_document_visibility_async(
         doc_id,
         visibility,
         user,
+    )
+
+
+async def update_document_metadata_async(
+    doc_id: str,
+    *,
+    title: str | None = None,
+    source: str | None = None,
+    visibility: str | None = None,
+    metadata: Mapping[str, object] | None = None,
+    user: ActorLike,
+) -> KnowledgeDocumentPayload | None:
+    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.update_document_metadata_async(
+        doc_id,
+        title=title,
+        source=source,
+        visibility=visibility,
+        metadata=metadata,
+        user=user,
     )
 
 

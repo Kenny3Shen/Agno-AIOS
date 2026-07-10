@@ -44,6 +44,7 @@ export const removedAgentOsLedgerSource = readOptionalSource("components/" + "ag
 export const schedulerWorkbench = readOptionalSource("components/SchedulerWorkbench.vue")
 export const agentEvals = readOptionalSource("components/AgentEvals.vue")
 export const memoryControl = readOptionalSource("components/MemoryControl.vue")
+export const panelHeader = readOptionalSource("components/common/PanelHeader.vue")
 export const workflow = readOptionalSource("components/Workflow.vue")
 export const pageWorkbenchStyle = readOptionalSource("styles/page-workbench.css")
 export const traceStyle = readOptionalSource("styles/trace.css")

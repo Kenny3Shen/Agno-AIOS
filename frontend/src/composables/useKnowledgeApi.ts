@@ -3,6 +3,7 @@ import { apiFetch } from '../lib/apiClient'
 import { useApiMessage, messageFromUnknown, messageFromResponse } from './useApiCore'
 import type {
   KnowledgeDocument,
+  KnowledgeDocumentUpdateRequest,
   KnowledgeFileRequest,
   KnowledgeRagSettings,
   KnowledgeRagSettingsResponse,
@@ -70,6 +71,11 @@ export function useKnowledgeApi() {
     body: JSON.stringify(payload)
   }, apiMessage('knowledgeRequestFailed'))
 
+  const updateKnowledgeDocumentMetadata = (docId: string, payload: KnowledgeDocumentUpdateRequest) => request<KnowledgeDocument>(`/documents/${encodeURIComponent(docId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  }, apiMessage('knowledgeRequestFailed'))
+
   const updateKnowledgeDocumentVisibility = (docId: string, visibility: ResourceVisibility) => request<KnowledgeDocument>(`/documents/${encodeURIComponent(docId)}/visibility`, {
     method: 'PUT',
     body: JSON.stringify({ visibility })
@@ -95,6 +101,7 @@ export function useKnowledgeApi() {
     fetchKnowledge,
     addTextDocument,
     addFileDocument,
+    updateKnowledgeDocumentMetadata,
     updateKnowledgeDocumentVisibility,
     rebuildKnowledgeDocument,
     replaceKnowledgeDocumentSource,

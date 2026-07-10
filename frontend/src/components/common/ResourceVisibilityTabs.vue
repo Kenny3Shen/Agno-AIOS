@@ -1,24 +1,22 @@
 <template>
-  <div
+  <el-radio-group
+    :model-value="modelValue"
     class="resource-visibility-tabs"
     :class="{ 'is-disabled': disabled, 'is-loading': loading }"
-    role="tablist"
     :aria-label="ariaLabel || t('visibility.label')"
+    :disabled="disabled || loading"
+    size="small"
+    @update:model-value="selectVisibility"
   >
-    <button
+    <el-radio-button
       v-for="option in resourceVisibilityOptions"
       :key="option.value"
-      type="button"
       class="resource-visibility-tab"
-      :class="{ 'is-active': modelValue === option.value }"
-      role="tab"
-      :aria-selected="modelValue === option.value"
-      :disabled="disabled || loading"
-      @click="selectVisibility(option.value)"
+      :value="option.value"
     >
       {{ t(option.labelKey) }}
-    </button>
-  </div>
+    </el-radio-button>
+  </el-radio-group>
 </template>
 
 <script setup lang="ts">
@@ -40,57 +38,39 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-const selectVisibility = (value: ResourceVisibility) => {
-  if (props.disabled || props.loading || value === props.modelValue) return
-  emit("update:modelValue", value)
-  emit("change", value)
+const selectVisibility = (value: string | number | boolean) => {
+  const nextValue = String(value) as ResourceVisibility
+  if (props.disabled || props.loading || nextValue === props.modelValue) return
+  emit("update:modelValue", nextValue)
+  emit("change", nextValue)
 }
 </script>
 
 <style scoped>
 .resource-visibility-tabs {
-  display: inline-grid;
-  grid-auto-columns: minmax(var(--visibility-tab-min-width, 58px), 1fr);
-  grid-auto-flow: column;
-  gap: 2px;
-  width: fit-content;
   max-width: 100%;
-  border: 1px solid var(--ag-border);
-  border-radius: var(--ag-radius-control);
-  background: var(--ag-panel-soft);
-  padding: 2px;
 }
 
-.resource-visibility-tab {
+.resource-visibility-tabs :deep(.el-radio-button__inner) {
   min-height: var(--visibility-tab-height, 26px);
-  border: 0;
-  border-radius: calc(var(--ag-radius-control) - 2px);
-  background: transparent;
+  min-width: var(--visibility-tab-min-width, 58px);
+  border-radius: 0;
   padding: var(--visibility-tab-padding, 4px 9px);
-  color: var(--ag-muted);
   font-size: var(--visibility-tab-font-size, 11px);
   font-weight: 740;
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    background 0.18s ease,
-    color 0.18s ease,
-    box-shadow 0.18s ease;
 }
 
-.resource-visibility-tab:hover,
-.resource-visibility-tab:focus-visible {
-  color: var(--ag-heading);
+.resource-visibility-tabs :deep(.el-radio-button:first-child .el-radio-button__inner) {
+  border-radius: var(--ag-radius-control) 0 0 var(--ag-radius-control);
 }
 
-.resource-visibility-tab:focus-visible {
-  outline: 2px solid var(--ag-blue);
-  outline-offset: 2px;
+.resource-visibility-tabs :deep(.el-radio-button:last-child .el-radio-button__inner) {
+  border-radius: 0 var(--ag-radius-control) var(--ag-radius-control) 0;
 }
 
-.resource-visibility-tab.is-active {
+.resource-visibility-tabs :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
   background: color-mix(in srgb, var(--ag-blue) 18%, var(--ag-panel));
+  border-color: color-mix(in srgb, var(--ag-blue) 46%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ag-blue) 46%, transparent);
   color: var(--ag-heading);
 }
@@ -98,9 +78,5 @@ const selectVisibility = (value: ResourceVisibility) => {
 .resource-visibility-tabs.is-disabled,
 .resource-visibility-tabs.is-loading {
   opacity: 0.62;
-}
-
-.resource-visibility-tab:disabled {
-  cursor: not-allowed;
 }
 </style>

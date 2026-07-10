@@ -1,6 +1,6 @@
 <template>
-  <section class="ag-workspace-panel flex min-h-0 flex-col overflow-hidden">
-    <PanelHeader :title="t('workbench.memory.memoriesTitle')" :subtitle="resultSummary">
+  <section class="ag-workspace-panel flex min-h-0 flex-col overflow-hidden border-transparent bg-[var(--ag-container-bg)] shadow-none">
+    <PanelHeader class="px-4 pb-3 pt-4 sm:px-5" :title="t('workbench.memory.memoriesTitle')" :subtitle="resultSummary">
       <template #actions>
         <span class="flex max-w-[min(420px,50vw)] flex-wrap justify-end gap-1.5" :title="activeFilterSummary">
           <DataChip
@@ -25,13 +25,15 @@
       </template>
     </PanelHeader>
 
-    <div v-if="memories.length" class="min-h-0 overflow-auto">
+    <div v-if="memories.length" class="min-h-0 overflow-auto px-2 pb-2 sm:px-3 sm:pb-3">
       <article
         v-for="memory in memories"
         :key="memory.id"
         :class="[
-          'grid w-full grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-[var(--ag-border)] p-3 transition-colors hover:bg-[var(--ag-blue-soft)]',
-          memory.id === selectedMemory?.id ? 'bg-[var(--ag-blue-soft)]' : '',
+          'grid w-full grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-xl border border-transparent px-3 py-3 transition-colors sm:px-4',
+          memory.id === selectedMemory?.id
+            ? 'bg-[var(--ag-blue-soft)] shadow-[inset_0_0_0_1px_var(--ag-border)]'
+            : 'hover:bg-[var(--ag-panel-soft)]',
         ]"
       >
         <button
@@ -42,7 +44,7 @@
         >
           <span class="flex min-w-0 items-start gap-2">
             <StatusDot :label="statusLabelForMemory(memory)" :tone="memoryStatusTone(memory)" />
-            <strong class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-850 text-[var(--ag-heading)]" :title="memory.memory">
+            <strong class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-850 leading-5 text-[var(--ag-heading)]" :title="memory.memory">
               {{ memory.memory || t("workbench.memory.emptyMemory") }}
             </strong>
           </span>
@@ -64,7 +66,7 @@
           </span>
         </button>
 
-        <span v-if="canWriteMemory || canDeleteMemory" class="flex shrink-0 items-start gap-1.5">
+        <span v-if="canWriteMemory || canDeleteMemory" class="flex shrink-0 items-start gap-1.5 self-start pt-0.5">
           <el-button
             v-if="canWriteMemory"
             size="small"
@@ -94,7 +96,7 @@
       </article>
     </div>
 
-    <EmptyState v-else-if="!loading" class="min-h-[220px]" :icon="User">
+    <EmptyState v-else-if="!loading" class="min-h-[220px] px-4 py-6" :icon="User">
       <span class="grid justify-items-center gap-1">
         <strong class="text-[var(--ag-heading)]">{{ t("workbench.memory.emptyTitle") }}</strong>
         <span class="max-w-[360px] text-xs text-[var(--ag-muted)]">
@@ -103,7 +105,7 @@
       </span>
     </EmptyState>
 
-    <div v-if="total > filters.limit" class="flex flex-0 justify-end border-t border-[var(--ag-border)] px-3 py-2">
+    <div v-if="total > filters.limit" class="flex flex-0 justify-end border-t border-[var(--ag-border)] px-4 py-3 sm:px-5">
       <el-pagination
         :current-page="filters.page"
         :page-size="filters.limit"
