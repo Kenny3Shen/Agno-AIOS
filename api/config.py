@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     environment: str = "development"
 
     log_level: str = "INFO"
-    log_dir: Path = Path("logs")
+    log_dir: Path = Path(".logs")
     log_file: str = "poc.log"
 
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     agno_knowledge_name: str = "security_knowledge"
     agno_knowledge_pgvector_table: str = "security_knowledge_vectors"
     agno_knowledge_upload_dir: Path = Field(
-        default=Path("data/knowledge_uploads"),
+        default=Path(".config/knowledge_uploads"),
         validation_alias="AGNO_KNOWLEDGE_UPLOAD_DIR",
     )
     agno_knowledge_embedding_model: str = "BAAI/bge-small-zh-v1.5"
@@ -92,7 +92,7 @@ class Settings(BaseSettings):
         ),
     )
     cve_data_dir: Path = Field(
-        default=Path("data/cve"),
+        default=Path(".config/cve"),
         validation_alias=AliasChoices("AGNO_CVE_DATA_DIR", "CVE_DATA_DIR"),
     )
     cve_update_lock_path: Path = Field(

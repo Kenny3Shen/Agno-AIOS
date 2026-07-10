@@ -49,7 +49,7 @@ uv run update-cve
 uv run pytest api/tests
 ```
 
-CVE 更新缓存默认写入 `data/cve/`，该目录不纳入 Git 追踪；如需调整位置，可设置 `AGNO_CVE_DATA_DIR`，或在 `config.toml` 中覆盖数据源的 `local_cache` / `commit_cache`。
+运行时配置、CVE 缓存和上传文件默认写入 `.config/`，日志默认写入 `.logs/`；这两个目录不纳入 Git 追踪。CVE 缓存位置可通过 `AGNO_CVE_DATA_DIR` 调整，或在 `config.toml` 中覆盖数据源的 `local_cache` / `commit_cache`。
 
 前端 smoke：
 

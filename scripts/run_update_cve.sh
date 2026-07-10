@@ -9,7 +9,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR"
 
 # Ensure logs directory exists
-LOG_DIR="$PROJECT_DIR/logs"
+LOG_DIR="$PROJECT_DIR/.logs"
 RUNTIME_DIR="$PROJECT_DIR/tmp"
 mkdir -p "$LOG_DIR" "$RUNTIME_DIR"
 LOG_FILE="$LOG_DIR/cron_cve.log"

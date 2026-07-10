@@ -48,7 +48,7 @@ export default defineConfig({
       },
     },
     watch: {
-      ignored: ['**/node_modules/**', '**/logs/**', '**/.git/**', '**/dist/**', '**/frontend/.cache/**'],
+      ignored: ['**/node_modules/**', '**/logs/**', '**/.logs/**', '**/.git/**', '**/dist/**', '**/frontend/.cache/**'],
     },
   },
 })
