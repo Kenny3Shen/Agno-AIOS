@@ -9,6 +9,8 @@ wheels/
 .logs/
 logs/
 tmp/
+api/data/
+data/cve/
 data/config/*
 !data/config/.gitkeep
 data/knowledge_uploads/

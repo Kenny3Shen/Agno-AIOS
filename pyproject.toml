@@ -1,7 +1,7 @@
 [project]
 name = "agno-aios"
 version = "0.6.0"
-description = "AI security operations control plane powered by FastAPI, Vue, Agno, and FastMCP."
+description = "AI security operations workspace powered by FastAPI, React, Agno, and FastMCP."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

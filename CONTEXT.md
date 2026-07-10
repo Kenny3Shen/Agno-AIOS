@@ -1,12 +1,12 @@
 # Agno AIOS
 
-Agno AIOS 是面向安全运营的控制面，把 Agent 对话、可观测性、工具编排、本地技能、知识检索、安全数据和访问控制组合在一个操作员工作台中。
+Agno AIOS 是面向安全运营的工作台，把 Agent 对话、可观测性、工具编排、本地技能、知识检索、安全数据和访问控制组合在一个操作员工作台中。
 
 ## 语言
 
 ### 产品
 
-**控制面**:
+**工作台**:
 操作员访问 Chat、Trace、Skills、MCP 配置、Knowledge、安全数据和治理视图的工作台。
 _避免_: 门户、控制台
 
@@ -14,8 +14,8 @@ _避免_: 门户、控制台
 面向 Agent 的助手；在完整运行时可用时，它可以使用已启用的知识库、Skills 和 MCP 工具回答安全运营问题。
 _避免_: 聊天机器人、通用助手
 
-**AgentOS 控制视图**:
-围绕 Agent、Team、Workflow、Memory、Metrics、Evaluation、Approvals 和 Scheduler 数据构建的控制面视图。
+**AgentOS 数据视图**:
+围绕 Agent、Team、Workflow、Memory、Metrics、Evaluation、Approvals 和 Scheduler 数据构建的工作台视图。
 _避免_: AgentOS 后端
 
 ### 界面语言
@@ -36,7 +36,7 @@ _避免_: 把 Conversation 当作安全边界
 
 **Agent Prompt**:
 定义安全运营助手工作边界、任务路由和回答约束的运行时指令。
-_避免_: Code comment、UI copy、控制面配置
+_避免_: Code comment、UI copy、应用配置
 
 **Session History**:
 Chat Session 中保存的对话消息，用于维持同一会话内的上下文连续性。
@@ -63,7 +63,7 @@ _避免_: Event
 _避免_: 通用自动化、触发器链
 
 **Workflow Builder**:
-控制面中用于设计、校验和预览 Agno Workflow 的可视化工作区；它表达 Workflow 结构和运行参数，但不是 Workflow run 本身。
+工作台中用于设计、校验和预览 Agno Workflow 的可视化工作区；它表达 Workflow 结构和运行参数，但不是 Workflow run 本身。
 _避免_: Workflow Runtime、Trace 视图
 
 **Workflow Step**:
@@ -107,11 +107,11 @@ _避免_: Memory
 ### 数据归属
 
 **Agno Runtime Data**:
-由 Agno 运行时拥有的 Session、Memory、Trace、Span、Scheduler 和 AgentOS 运行记录。控制面可以读取和呈现这些记录，但不把它们当作应用业务数据重定义。
-_避免_: Control Plane Data、应用表
+由 Agno 运行时拥有的 Session、Memory、Trace、Span、Scheduler 和 AgentOS 运行记录。工作台可以读取和呈现这些记录，但不把它们当作应用业务数据重定义。
+_避免_: Application Data、应用表
 
-**Control Plane Data**:
-由 Agno AIOS 控制面拥有的安全运营、访问控制、审计、MCP 配置和操作员工作流记录。
+**Application Data**:
+由 Agno AIOS 应用拥有的安全运营、访问控制、审计、MCP 配置和操作员工作流记录。
 _避免_: Agno Runtime Data
 
 **Knowledge Storage**:
@@ -121,7 +121,7 @@ _避免_: Memory、Session History
 ### 安全数据
 
 **CVE Intelligence**:
-控制面中可检索的漏洞记录和 exploit 引用。
+工作台中可检索的漏洞记录和 exploit 引用。
 _避免_: 把 CVE database 当作授权来源
 
 **URL Collection**:

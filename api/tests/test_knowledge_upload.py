@@ -268,6 +268,11 @@ async def test_upload_route_ingests_persisted_path_with_browser_metadata(tmp_pat
             title="Runbook",
             source=None,
             visibility="private",
+            chunk_size=1500,
+            chunk_overlap=120,
+            code_chunk_size=None,
+            semantic_threshold=None,
+            reader_strategy="markdown",
             user=actor(),
         )
 
@@ -280,6 +285,11 @@ async def test_upload_route_ingests_persisted_path_with_browser_metadata(tmp_pat
         "metadata": stored.metadata(),
         "owner_user_id": "u1",
         "visibility": "private",
+        "ingest_options": {
+            "chunk_size": 1500,
+            "chunk_overlap": 120,
+            "reader_strategy": "markdown",
+        },
     }
 
 
@@ -318,6 +328,11 @@ async def test_upload_route_removes_file_when_ingest_fails(tmp_path: Path) -> No
             title=None,
             source=None,
             visibility="private",
+            chunk_size=None,
+            chunk_overlap=None,
+            code_chunk_size=None,
+            semantic_threshold=None,
+            reader_strategy=None,
             user=actor(),
         )
 
@@ -386,6 +401,11 @@ async def test_replacement_upload_route_replaces_selected_document_from_persiste
             title=None,
             source=None,
             visibility=None,
+            chunk_size=None,
+            chunk_overlap=None,
+            code_chunk_size=2200,
+            semantic_threshold=0.61,
+            reader_strategy=None,
             user=current_user,
         )
 
@@ -400,6 +420,10 @@ async def test_replacement_upload_route_replaces_selected_document_from_persiste
         "metadata": stored.metadata(),
         "owner_user_id": "u1",
         "user": current_user,
+        "ingest_options": {
+            "code_chunk_size": 2200,
+            "semantic_threshold": 0.61,
+        },
     }
 
 
@@ -445,6 +469,11 @@ async def test_replacement_upload_route_removes_file_when_document_is_missing(
             title=None,
             source=None,
             visibility=None,
+            chunk_size=None,
+            chunk_overlap=None,
+            code_chunk_size=None,
+            semantic_threshold=None,
+            reader_strategy=None,
             user=actor(),
         )
 

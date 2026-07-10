@@ -32,6 +32,7 @@ class SkillInfoData(TypedDict):
     enabled: bool
     has_scripts: bool
     scripts: list[str]
+    attachments: list[str]
     skill_markdown: str
     visibility: str
     owner_user_id: str
@@ -155,6 +156,19 @@ def list_skill_scripts(skill_dir: Path) -> list[str]:
     return scripts
 
 
+def list_skill_attachments(skill_dir: Path) -> list[str]:
+    """列出 protocol 相关的非脚本附件，例如 assets/ 与 references/。"""
+    attachments: list[str] = []
+    for dirname in ("assets", "references"):
+        root = skill_dir / dirname
+        if not root.is_dir():
+            continue
+        for entry in sorted(root.rglob("*")):
+            if entry.is_file():
+                attachments.append(entry.relative_to(skill_dir).as_posix())
+    return attachments
+
+
 def read_skill_markdown(skill_dir: Path) -> str:
     md_path = skill_dir / "SKILL.md"
     if not md_path.exists():
@@ -188,6 +202,7 @@ def list_skill_infos(user: Any | None = None) -> list[SkillInfoData]:
         if user is not None and not can_read_resource(user, visibility_info):
             continue
         scripts = list_skill_scripts(skill_dir)
+        attachments = list_skill_attachments(skill_dir)
         skills.append(
             {
                 "name": metadata.name,
@@ -195,6 +210,7 @@ def list_skill_infos(user: Any | None = None) -> list[SkillInfoData]:
                 "enabled": _skill_enabled_from_config(cfg, skill_dir, metadata.name),
                 "has_scripts": len(scripts) > 0,
                 "scripts": scripts,
+                "attachments": attachments,
                 "skill_markdown": read_skill_markdown(skill_dir),
                 "visibility": metadata.visibility,
                 "owner_user_id": metadata.owner_user_id,

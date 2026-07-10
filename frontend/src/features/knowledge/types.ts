@@ -4,12 +4,21 @@ export interface Document { id: string; title: string; source: string; chunks: n
 export interface KnowledgeResponse { status: JsonRecord; documents: Document[]; pagination: { page: number; limit: number; total: number } }
 export interface SearchResult { content: string; score: number; doc_id: string; title: string; source: string; chunk_index: number; metadata?: JsonRecord }
 
+export interface KnowledgeIngestOptions {
+  chunk_size?: number
+  chunk_overlap?: number
+  code_chunk_size?: number
+  semantic_threshold?: number
+  reader_strategy?: string
+}
+
 export interface AddTextPayload {
   title: string
   content: string
   source?: string
   visibility: ResourceVisibility
   metadata?: Record<string, string>
+  ingest_options?: KnowledgeIngestOptions
 }
 
 export interface AddPathPayload {
@@ -17,6 +26,7 @@ export interface AddPathPayload {
   title?: string
   source?: string
   visibility: ResourceVisibility
+  ingest_options?: KnowledgeIngestOptions
 }
 
 export interface UploadDocumentPayload {
@@ -24,6 +34,7 @@ export interface UploadDocumentPayload {
   title?: string
   source?: string
   visibility: ResourceVisibility
+  ingest_options?: KnowledgeIngestOptions
 }
 
 export interface UpdateDocumentPayload {
@@ -36,8 +47,13 @@ export interface UpdateDocumentPayload {
 export interface ReplaceSourcePayload {
   content: string
   file_name: string
+  ingest_options?: KnowledgeIngestOptions
 }
 
 export interface ReplaceSourceFilePayload {
   file: File
+  title?: string
+  source?: string
+  visibility?: ResourceVisibility
+  ingest_options?: KnowledgeIngestOptions
 }

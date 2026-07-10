@@ -91,6 +91,10 @@ class Settings(BaseSettings):
             "CONFIG_PATH",
         ),
     )
+    cve_data_dir: Path = Field(
+        default=Path("data/cve"),
+        validation_alias=AliasChoices("AGNO_CVE_DATA_DIR", "CVE_DATA_DIR"),
+    )
     cve_update_lock_path: Path = Field(
         default=Path("tmp/run_update_cve.lock"),
         validation_alias=AliasChoices("AGNO_CVE_UPDATE_LOCK_PATH", "CVE_UPDATE_LOCK_PATH"),

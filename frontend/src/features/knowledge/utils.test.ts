@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildMetadataUpdate, MAX_KNOWLEDGE_FILE_BYTES, replacementFileName, validateKnowledgeFile } from './utils'
+import { buildMetadataUpdate, cleanIngestOptions, MAX_KNOWLEDGE_FILE_BYTES, replacementFileName, validateKnowledgeFile } from './utils'
 import type { Document } from './types'
 
 const document: Document = {
@@ -31,5 +31,13 @@ describe('knowledge document updates', () => {
       visibility: 'public',
     })
     expect(buildMetadataUpdate(document, { title: 'Runbook', source: 'Papers', visibility: 'private' })).toEqual({})
+  })
+
+  it('keeps only configured ingest options', () => {
+    expect(cleanIngestOptions({ chunk_size: 1500, reader_strategy: ' markdown ' })).toEqual({
+      chunk_size: 1500,
+      reader_strategy: 'markdown',
+    })
+    expect(cleanIngestOptions({ reader_strategy: '   ' })).toBeUndefined()
   })
 })

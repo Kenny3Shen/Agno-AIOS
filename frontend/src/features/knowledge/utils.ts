@@ -1,6 +1,6 @@
 import type { UploadFile } from 'antd'
 import type { ResourceVisibility } from '@/shared/types/common'
-import type { Document, UpdateDocumentPayload } from './types'
+import type { Document, KnowledgeIngestOptions, UpdateDocumentPayload } from './types'
 
 export const KNOWLEDGE_FILE_ACCEPT = '.md,.markdown,.mdown,.mkd,.csv,.tsv,.json,.jsonl,.py,.js,.mjs,.cjs,.jsx,.ts,.tsx,.vue,.go,.rs,.java,.c,.cc,.cpp,.h,.hpp,.cs,.php,.rb,.sh,.sql,.pdf,.docx,.txt,.log,.rst,.yaml,.yml,.toml'
 export const MAX_KNOWLEDGE_FILE_BYTES = 50 * 1024 * 1024
@@ -54,3 +54,15 @@ export function buildMetadataUpdate(
 }
 
 export const hasMetadataUpdate = (payload: UpdateDocumentPayload) => Object.keys(payload).length > 0
+
+export function cleanIngestOptions(values?: Partial<KnowledgeIngestOptions>): KnowledgeIngestOptions | undefined {
+  if (!values) return undefined
+  const options: KnowledgeIngestOptions = {}
+  if (values.chunk_size != null) options.chunk_size = values.chunk_size
+  if (values.chunk_overlap != null) options.chunk_overlap = values.chunk_overlap
+  if (values.code_chunk_size != null) options.code_chunk_size = values.code_chunk_size
+  if (values.semantic_threshold != null) options.semantic_threshold = values.semantic_threshold
+  const readerStrategy = values.reader_strategy?.trim()
+  if (readerStrategy) options.reader_strategy = readerStrategy
+  return Object.keys(options).length > 0 ? options : undefined
+}

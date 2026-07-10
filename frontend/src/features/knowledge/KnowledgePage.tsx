@@ -63,7 +63,7 @@ export function KnowledgePage() {
   })
 
   return <main className="page knowledge-page">
-    <PageHeader title="Knowledge Control" description="管理 Agent 检索知识、入库状态和资源可见性" actions={<><Button icon={<ReloadOutlined />} onClick={() => void refresh()}>刷新</Button><Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>添加文档</Button></>} />
+    <PageHeader title="Knowledge" description="管理 Agent 检索知识、入库状态和资源可见性" actions={<><Button icon={<ReloadOutlined />} onClick={() => void refresh()}>刷新</Button><Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>添加文档</Button></>} />
     <Tabs className="knowledge-tabs" items={[
       { key: 'documents', label: 'Documents', children: <Splitter className="workbench-splitter knowledge-splitter" orientation={vertical ? 'vertical' : 'horizontal'}>
         <Splitter.Panel defaultSize="70%" min={vertical ? 260 : '45%'}>

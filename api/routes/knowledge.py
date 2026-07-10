@@ -133,6 +133,29 @@ class KnowledgeRagSettingsRequest(BaseModel):
     search_type: str | None = None
 
 
+def ingest_options_from_form(
+    *,
+    chunk_size: int | None = None,
+    chunk_overlap: int | None = None,
+    code_chunk_size: int | None = None,
+    semantic_threshold: float | None = None,
+    reader_strategy: str | None = None,
+) -> dict[str, object] | None:
+    options: dict[str, object] = {}
+    if chunk_size is not None:
+        options["chunk_size"] = chunk_size
+    if chunk_overlap is not None:
+        options["chunk_overlap"] = chunk_overlap
+    if code_chunk_size is not None:
+        options["code_chunk_size"] = code_chunk_size
+    if semantic_threshold is not None:
+        options["semantic_threshold"] = semantic_threshold
+    clean_strategy = (reader_strategy or "").strip()
+    if clean_strategy:
+        options["reader_strategy"] = clean_strategy
+    return options or None
+
+
 @router.get("")
 async def get_knowledge_status(
     query: str = Query(default="", max_length=200),
@@ -250,6 +273,11 @@ async def upload_document(
     title: str | None = Form(default=None),
     source: str | None = Form(default=None),
     visibility: str = Form(default="private"),
+    chunk_size: int | None = Form(default=None, ge=200),
+    chunk_overlap: int | None = Form(default=None, ge=0),
+    code_chunk_size: int | None = Form(default=None, ge=256),
+    semantic_threshold: float | None = Form(default=None, ge=0, le=1),
+    reader_strategy: str | None = Form(default=None),
     user: User = Depends(require_scope("knowledge:write")),
 ) -> KnowledgeDocumentResponsePayload:
     stored_upload = None
@@ -264,6 +292,13 @@ async def upload_document(
             metadata=stored_upload.metadata(),
             owner_user_id=actor_id(user),
             visibility=visibility,
+            ingest_options=ingest_options_from_form(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                code_chunk_size=code_chunk_size,
+                semantic_threshold=semantic_threshold,
+                reader_strategy=reader_strategy,
+            ),
         )
         response = cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
         await record_audit_event_async(
@@ -387,6 +422,11 @@ async def replace_document_source_upload(
     title: str | None = Form(default=None),
     source: str | None = Form(default=None),
     visibility: str | None = Form(default=None),
+    chunk_size: int | None = Form(default=None, ge=200),
+    chunk_overlap: int | None = Form(default=None, ge=0),
+    code_chunk_size: int | None = Form(default=None, ge=256),
+    semantic_threshold: float | None = Form(default=None, ge=0, le=1),
+    reader_strategy: str | None = Form(default=None),
     user: User = Depends(require_scope("knowledge:write")),
 ) -> KnowledgeDocumentResponsePayload:
     stored_upload = None
@@ -403,6 +443,13 @@ async def replace_document_source_upload(
             metadata=stored_upload.metadata(),
             owner_user_id=effective_knowledge_user_filter(user),
             user=user,
+            ingest_options=ingest_options_from_form(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                code_chunk_size=code_chunk_size,
+                semantic_threshold=semantic_threshold,
+                reader_strategy=reader_strategy,
+            ),
         )
     except KnowledgeUploadTooLargeError as exc:
         raise HTTPException(status_code=413, detail=str(exc)) from exc

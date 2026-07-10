@@ -12,9 +12,9 @@ T.A.I.S 是一个 AI-powered SDLC security automation 项目，围绕 Discover�
 - [安全模型](./docs/security.md)
 - [开发工作流](./docs/development.md)
 - [路线图](./docs/roadmap.md)
-- [架构决策记录](./docs/adr/0001-react-control-plane.md)
+- [架构决策记录](./docs/adr/0001-react-mainline.md)
 
-旧版 Vue + Element Plus 控制面已保留在 `vue` 分支；`master` 作为 React 19 + TanStack + Ant Design v6 新版主线。
+旧版 Vue + Element Plus 已保留在 `vue` 分支；`master` 作为 React 19 + TanStack + Ant Design v6 新版主线。
 
 ## 技术栈
 
@@ -98,7 +98,7 @@ uv run update-cve
 ```text
 .
 ├── api/                 # FastAPI app、routes、services、auth、MCP runtime、tasks、tests
-├── frontend/            # React 19 + TanStack + Ant Design 控制面
+├── frontend/            # React 19 + TanStack + Ant Design 工作台
 ├── source/              # FastAPI 托管的前端生产构建
 ├── scripts/             # 运维脚本
 ├── docs/                # 新版架构、运行、安全、开发、路线图、ADR

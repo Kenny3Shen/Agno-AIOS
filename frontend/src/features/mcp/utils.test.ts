@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getAvailableMcpServices } from './utils'
+import { getAvailableMcpServices, manifestServiceNames } from './utils'
 
 describe('available MCP services', () => {
   it('keeps enabled built-ins and expands enabled external manifests', () => {
@@ -13,5 +13,12 @@ describe('available MCP services', () => {
     })
 
     expect(services.map((service) => service.name)).toEqual(['basic', 'filesystem', 'browser'])
+  })
+
+  it('falls back to the server name when a manifest has no explicit service map', () => {
+    expect(manifestServiceNames({
+      name: 'uploaded-server',
+      manifest: {},
+    })).toEqual(['uploaded-server'])
   })
 })

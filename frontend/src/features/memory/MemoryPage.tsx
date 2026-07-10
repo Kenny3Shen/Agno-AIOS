@@ -44,7 +44,7 @@ export function MemoryPage() {
   ] : []
 
   return <main className="page">
-    <PageHeader title="Memory Control" description="审阅、修订和删除 Agent 用户记忆" />
+    <PageHeader title="Memory" description="审阅、修订和删除 Agent 用户记忆" />
     <Card className="workbench-card memory-toolbar"><Space>
       <Input value={search} onChange={(event) => setSearch(event.target.value)} onPressEnter={() => setApplied(search)} prefix={<SearchOutlined />} placeholder="搜索记忆、用户或主题" />
       <Button type="primary" onClick={() => setApplied(search)}>查询</Button>

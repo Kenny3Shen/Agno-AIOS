@@ -9,6 +9,7 @@ import re
 import tomllib
 from abc import ABC, abstractmethod
 from io import StringIO
+from pathlib import Path
 from typing import Any
 
 from anyio import Path as AsyncPath
@@ -18,6 +19,10 @@ from loguru import logger
 
 from api.config import get_settings
 from api.services.runtime_env import load_runtime_env_async
+
+
+def _cve_cache_file(filename: str) -> str:
+    return str(Path(get_settings().cve_data_dir) / filename)
 
 
 class CVEDataSource(ABC):
@@ -111,8 +116,8 @@ class GitHubPocExpSource(CVEDataSource):
             "remote_url",
             "https://raw.githubusercontent.com/ycdxsb/PocOrExp_in_Github/refs/heads/main/PocOrExp.md",
         )
-        self.local_path = cfg.get("local_cache", "./api/data/github_cve_cache.csv")
-        self.commit_cache = cfg.get("commit_cache", "./api/data/github_commit.txt")
+        self.local_path = cfg.get("local_cache", _cve_cache_file("github_cve_cache.csv"))
+        self.commit_cache = cfg.get("commit_cache", _cve_cache_file("github_commit.txt"))
         self.repo_api = cfg.get(
             "repo_api", "https://api.github.com/repos/ycdxsb/PocOrExp_in_Github/commits"
         )
@@ -241,8 +246,8 @@ class ExploitDBSource(CVEDataSource):
             "remote_url",
             "https://gitlab.com/exploit-database/exploitdb/-/raw/main/files_exploits.csv?ref_type=heads",
         )
-        self.local_path = cfg.get("local_cache", "./api/data/exploit_db.csv")
-        self.commit_cache = cfg.get("commit_cache", "./api/data/exploitdb_commit.txt")
+        self.local_path = cfg.get("local_cache", _cve_cache_file("exploit_db.csv"))
+        self.commit_cache = cfg.get("commit_cache", _cve_cache_file("exploitdb_commit.txt"))
         self.repo_api = cfg.get(
             "repo_api",
             "https://gitlab.com/api/v4/projects/exploit-database%2Fexploitdb/repository/commits",

@@ -26,6 +26,10 @@ describe('knowledge document API', () => {
       expect(body).toContain('Security runbook')
       expect(body).toContain('SOC')
       expect(body).toContain('public')
+      expect(body).toContain('name="chunk_size"')
+      expect(body).toContain('1500')
+      expect(body).toContain('name="reader_strategy"')
+      expect(body).toContain('markdown')
       return HttpResponse.json(document)
     }))
 
@@ -34,6 +38,7 @@ describe('knowledge document API', () => {
       title: ' Security runbook ',
       source: ' SOC ',
       visibility: 'public',
+      ingest_options: { chunk_size: 1500, reader_strategy: 'markdown' },
     })
 
     expect(result.id).toBe('doc-1')
@@ -56,11 +61,15 @@ describe('knowledge document API', () => {
   it('uses the source replacement endpoint when content must be revectorized', async () => {
     server.use(http.post('/api/knowledge/documents/:id/source', async ({ params, request }) => {
       expect(params.id).toBe('doc-1')
-      expect(await request.json()).toEqual({ file_name: 'runbook.md', content: '# New body' })
+      expect(await request.json()).toEqual({
+        file_name: 'runbook.md',
+        content: '# New body',
+        ingest_options: { chunk_overlap: 120 },
+      })
       return HttpResponse.json({ ...document, id: 'doc-2' })
     }))
 
-    const result = await replaceDocumentSource('doc-1', { file_name: 'runbook.md', content: '# New body' })
+    const result = await replaceDocumentSource('doc-1', { file_name: 'runbook.md', content: '# New body', ingest_options: { chunk_overlap: 120 } })
 
     expect(result.id).toBe('doc-2')
   })
@@ -72,11 +81,23 @@ describe('knowledge document API', () => {
       const body = await request.text()
       expect(body).toContain('name="file"')
       expect(body).toContain('Content-Type: text/markdown')
+      expect(body).toContain('name="title"')
+      expect(body).toContain('Uploaded runbook')
+      expect(body).toContain('name="source"')
+      expect(body).toContain('IR')
+      expect(body).toContain('name="visibility"')
+      expect(body).toContain('public')
+      expect(body).toContain('name="semantic_threshold"')
+      expect(body).toContain('0.61')
       return HttpResponse.json({ ...document, id: 'doc-2', chunks: 4 })
     }))
 
     const result = await replaceDocumentSourceFile('doc/1', {
       file: new File(['# Uploaded body'], 'uploaded.md', { type: 'text/markdown' }),
+      title: ' Uploaded runbook ',
+      source: ' IR ',
+      visibility: 'public',
+      ingest_options: { semantic_threshold: 0.61 },
     })
 
     expect(result.id).toBe('doc-2')

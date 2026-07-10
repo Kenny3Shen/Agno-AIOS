@@ -2,7 +2,7 @@
 
 ## 已完成方向
 
-- React 19 + TanStack + Ant Design v6 新版控制面。
+- React 19 + TanStack + Ant Design v6 新版工作台。
 - feature-first 前端目录。
 - Chat 使用 Ant Design X 与 XMarkdown。
 - Knowledge、Trace、Memory、Skills 等页面采用 Ant Design Splitter、Tabs、Table、Tree、Descriptions、Card 等组件。
