@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 import os
-from typing import get_type_hints
 from unittest.mock import patch
 
 import pytest
-from agno.knowledge.embedder.sentence_transformer import SentenceTransformerEmbedder
-from agno.knowledge.reranker.sentence_transformer import SentenceTransformerReranker
 from agno.vectordb.search import SearchType
 
 from api.services import knowledge_ingest_service
@@ -203,16 +200,6 @@ def test_knowledge_service_uses_agno_sentence_transformer_reranker() -> None:
     assert captured["reranker"] == {
         "model": knowledge_service.knowledge_settings().rerank_model,
     }
-
-
-def test_knowledge_service_no_longer_exposes_custom_model_adapters() -> None:
-    assert not hasattr(knowledge_service, "BGEKnowledgeEmbedder")
-    assert not hasattr(knowledge_service, "FlagEmbeddingReranker")
-    assert get_type_hints(knowledge_service._get_embedder)["return"] is SentenceTransformerEmbedder
-    assert (
-        get_type_hints(knowledge_service._get_reranker)["return"]
-        == SentenceTransformerReranker | None
-    )
 
 
 def test_status_exposes_supported_suffixes_and_search_type() -> None:

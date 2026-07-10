@@ -11,6 +11,7 @@ logs/
 tmp/
 data/config/*
 !data/config/.gitkeep
+data/knowledge_uploads/
 *.db
 .shared
 .run_update_cve.lock

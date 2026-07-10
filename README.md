@@ -12,11 +12,13 @@ T.A.I.S 是一个 AI-powered SDLC security automation 项目，围绕 Discover�
 - [安全模型](./docs/security.md)
 - [开发工作流](./docs/development.md)
 - [路线图](./docs/roadmap.md)
-- [架构决策记录](./docs/adr/)
+- [架构决策记录](./docs/adr/0001-react-control-plane.md)
+
+旧版 Vue + Element Plus 控制面已保留在 `vue` 分支；`master` 作为 React 19 + TanStack + Ant Design v6 新版主线。
 
 ## 技术栈
 
-- 前端：Vue 3、TypeScript、Vite/Rolldown、Element Plus、Pinia、vue-i18n、markdown-it、highlight.js、Mermaid、Bun。
+- 前端：React 19、TypeScript、Vite 8/Rolldown、TanStack Router/Query、Ant Design v6、Ant Design X、i18next、UnoCSS、Bun。
 - 后端：FastAPI、FastAPI Users、SQLAlchemy Async、Pydantic Settings、Uvicorn、psycopg、httpx、Polars、loguru。
 - Agent Runtime：OpenAI-compatible models、AsyncPostgresDb、Tracing、PgVector Knowledge、LocalSkills、MCPTools。
 - MCP：FastMCP，同进程挂载到 FastAPI 的 `/mcp/`，由应用 lifespan 启停运行时。
@@ -96,10 +98,10 @@ uv run update-cve
 ```text
 .
 ├── api/                 # FastAPI app、routes、services、auth、MCP runtime、tasks、tests
-├── frontend/            # Vue 控制面
+├── frontend/            # React 19 + TanStack + Ant Design 控制面
 ├── source/              # FastAPI 托管的前端生产构建
 ├── scripts/             # 运维脚本
-├── docs/                # 架构、运行、安全、开发、路线图、ADR
+├── docs/                # 新版架构、运行、安全、开发、路线图、ADR
 ├── CONTEXT.md           # 领域词汇表
 ├── README.md
 ├── pyproject.toml

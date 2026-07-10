@@ -57,6 +57,10 @@ class Settings(BaseSettings):
 
     agno_knowledge_name: str = "security_knowledge"
     agno_knowledge_pgvector_table: str = "security_knowledge_vectors"
+    agno_knowledge_upload_dir: Path = Field(
+        default=Path("data/knowledge_uploads"),
+        validation_alias="AGNO_KNOWLEDGE_UPLOAD_DIR",
+    )
     agno_knowledge_embedding_model: str = "BAAI/bge-small-zh-v1.5"
     agno_knowledge_embedding_dimensions: int = 512
     agno_knowledge_rerank_model: str = "BAAI/bge-reranker-base"

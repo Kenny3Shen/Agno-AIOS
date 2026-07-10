@@ -1,0 +1,20 @@
+export type ResourceVisibility = 'private' | 'public'
+
+export interface ModelConfig {
+  id: string
+  name: string
+  model_id: string
+  base_url: string
+  api_key: string
+  description: string
+  enabled: boolean
+  builtin: boolean
+  configured?: boolean
+}
+
+export interface ModelConfigResponse {
+  active_model_id: string
+  models: ModelConfig[]
+}
+
+export type JsonRecord = Record<string, unknown>

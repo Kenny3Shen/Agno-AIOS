@@ -1,6 +1,6 @@
 from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from api.auth.claims import actor_id, scope_user_id
@@ -12,6 +12,11 @@ from api.services.knowledge_document_service import KnowledgeDocumentPayload
 from api.services.knowledge_service import (
     get_knowledge_base_lifecycle,
     update_rag_settings_async,
+)
+from api.services.knowledge_upload_service import (
+    KnowledgeUploadTooLargeError,
+    remove_managed_upload_async,
+    store_knowledge_upload_async,
 )
 
 router = APIRouter(prefix="/api/knowledge", tags=["Knowledge"])
@@ -238,6 +243,52 @@ async def create_file_document(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post("/documents/upload")
+async def upload_document(
+    request_ctx: Request,
+    file: UploadFile = File(...),
+    title: str | None = Form(default=None),
+    source: str | None = Form(default=None),
+    visibility: str = Form(default="private"),
+    user: User = Depends(require_scope("knowledge:write")),
+) -> KnowledgeDocumentResponsePayload:
+    stored_upload = None
+    try:
+        stored_upload = await store_knowledge_upload_async(file)
+        clean_title = (title or "").strip() or None
+        clean_source = (source or "").strip() or f"upload:{stored_upload.file_name}"
+        result = await get_knowledge_base_lifecycle().add_file_document_async(
+            path=str(stored_upload.path),
+            title=clean_title,
+            source=clean_source,
+            metadata=stored_upload.metadata(),
+            owner_user_id=actor_id(user),
+            visibility=visibility,
+        )
+        response = cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
+        await record_audit_event_async(
+            user,
+            action="knowledge.create",
+            resource_type="knowledge_document",
+            resource_id=str(result.get("id") or stored_upload.file_name),
+            metadata={
+                "file_name": stored_upload.file_name,
+                "file_size": stored_upload.file_size,
+                "mime_type": stored_upload.mime_type,
+                "source": clean_source,
+                "upload_mode": "browser",
+            },
+            **audit_request_context(request_ctx),
+        )
+        return response
+    except KnowledgeUploadTooLargeError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except Exception as exc:
+        if stored_upload is not None:
+            await remove_managed_upload_async(stored_upload.metadata())
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.delete("/documents/{doc_id}")
 async def remove_document(
     request_ctx: Request,
@@ -323,6 +374,65 @@ async def replace_document_source(
         resource_type="knowledge_document",
         resource_id=str(updated.get("id") or doc_id),
         metadata={"previous_id": doc_id, "file_name": request.file_name},
+        **audit_request_context(request_ctx),
+    )
+    return response
+
+
+@router.post("/documents/{doc_id}/source/upload")
+async def replace_document_source_upload(
+    request_ctx: Request,
+    doc_id: str,
+    file: UploadFile = File(...),
+    title: str | None = Form(default=None),
+    source: str | None = Form(default=None),
+    visibility: str | None = Form(default=None),
+    user: User = Depends(require_scope("knowledge:write")),
+) -> KnowledgeDocumentResponsePayload:
+    stored_upload = None
+    try:
+        stored_upload = await store_knowledge_upload_async(file)
+        clean_title = (title or "").strip() or None
+        clean_source = (source or "").strip() or None
+        updated = await get_knowledge_base_lifecycle().replace_document_file_async(
+            doc_id,
+            path=str(stored_upload.path),
+            title=clean_title,
+            source=clean_source,
+            visibility=visibility,
+            metadata=stored_upload.metadata(),
+            owner_user_id=effective_knowledge_user_filter(user),
+            user=user,
+        )
+    except KnowledgeUploadTooLargeError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except ValueError as exc:
+        if stored_upload is not None:
+            await remove_managed_upload_async(stored_upload.metadata())
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        if stored_upload is not None:
+            await remove_managed_upload_async(stored_upload.metadata())
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if updated is None:
+        if stored_upload is not None:
+            await remove_managed_upload_async(stored_upload.metadata())
+        raise HTTPException(status_code=404, detail="知识文档不存在")
+
+    assert stored_upload is not None
+    response = cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
+    await record_audit_event_async(
+        user,
+        action="knowledge.source_replace",
+        resource_type="knowledge_document",
+        resource_id=str(updated.get("id") or doc_id),
+        metadata={
+            "previous_id": doc_id,
+            "file_name": stored_upload.file_name,
+            "file_size": stored_upload.file_size,
+            "mime_type": stored_upload.mime_type,
+            "upload_mode": "browser",
+        },
         **audit_request_context(request_ctx),
     )
     return response

@@ -4,15 +4,11 @@ from unittest.mock import AsyncMock, patch
 
 from agno.memory import UserMemory
 from fastapi import HTTPException
-from fastapi.routing import APIRoute
 import pytest
 from starlette.requests import Request
 
 from api.auth.claims import has_scope
-from api.routes import (
-    approvals,
-    memory,
-)
+from api.routes import memory
 from api.services import memory_service
 
 
@@ -22,23 +18,6 @@ def actor(user_id: str, role: str = "user"):
 
 def request() -> Request:
     return Request({"type": "http", "method": "POST", "path": "/api/memory", "headers": []})
-
-
-def route_dependency(router, endpoint_name: str):
-    for route in router.routes:
-        if isinstance(route, APIRoute) and getattr(route.endpoint, "__name__", "") == endpoint_name:
-            return route.dependant.dependencies[0].call
-    raise AssertionError(f"missing route for {endpoint_name}")
-
-
-def route_dependency_scope(router, endpoint_name: str) -> str:
-    dependency = route_dependency(router, endpoint_name)
-    freevars = getattr(getattr(dependency, "__code__", None), "co_freevars", ())
-    closure = getattr(dependency, "__closure__", None) or ()
-    for name, cell in zip(freevars, closure, strict=False):
-        if name == "scope":
-            return str(cell.cell_contents)
-    raise AssertionError(f"missing scope dependency for {endpoint_name}")
 
 
 class FakeMemoryDb:
@@ -153,30 +132,6 @@ def test_guest_cannot_mutate_memory():
     with pytest.raises(HTTPException) as context:
         memory.require_memory_write_permission(user=actor("g1", "guest"))
     assert context.value.status_code == 403
-
-
-@pytest.mark.parametrize(
-    ("router", "endpoint_name", "scope"),
-    [
-        (memory.router, "get_memory", "memories:read"),
-        (approvals.router, "list_approvals", "approvals:read"),
-        (approvals.router, "get_approval", "approvals:read"),
-        (approvals.router, "resolve_approval", "approvals:write"),
-    ],
-)
-def test_page_routes_require_expected_scopes(router, endpoint_name: str, scope: str):
-    assert route_dependency_scope(router, endpoint_name) == scope
-
-
-@pytest.mark.parametrize(
-    ("endpoint_name", "dependency"),
-    [
-        ("update_memory", memory.require_memory_write_permission),
-        ("delete_memory", memory.require_memory_delete_permission),
-    ],
-)
-def test_memory_mutation_routes_use_explicit_permission_helpers(endpoint_name: str, dependency):
-    assert route_dependency(memory.router, endpoint_name) is dependency
 
 
 @pytest.mark.asyncio

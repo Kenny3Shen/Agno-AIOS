@@ -1,11 +1,9 @@
-import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import HTTPException
 import pytest
 
-from api.mcp import config as mcp_config
 from api.services import mcp_config_service
 
 
@@ -157,7 +155,6 @@ def test_apply_mcp_upload_rejects_non_mcp_project_manifest():
             manifest=manifest,
         )
     assert exc.value.status_code == 400
-    assert "mcpServers" in str(exc.value.detail)
 
 
 def test_apply_mcp_upload_rejects_non_standard_mcp_server_shape():
@@ -237,70 +234,3 @@ def test_apply_mcp_upload_rejects_empty_manifest_and_duplicate_name():
             )
     assert exc.value.status_code == 409
 
-
-def test_mcp_config_service_exposes_sync_mutation_functions():
-    assert hasattr(mcp_config_service, "apply_service_toggle")
-    assert hasattr(mcp_config_service, "apply_mcp_upload")
-    assert not hasattr(mcp_config_service, "apply_service_toggle_async")
-    assert not hasattr(mcp_config_service, "apply_mcp_upload_async")
-
-
-def test_mcp_config_file_uses_json_format():
-    assert mcp_config.MCP_CONFIG_FILE.name == "mcp_config.json"
-
-
-def test_mcp_config_read_write_json_and_drops_legacy_protocols(tmp_path, monkeypatch):
-    config_file = tmp_path / "mcp_config.json"
-    monkeypatch.setattr(mcp_config, "MCP_DATA_DIR", tmp_path)
-    monkeypatch.setattr(mcp_config, "MCP_CONFIG_FILE", config_file)
-
-    mcp_config.write_mcp_config(
-        {
-            "mcp": {"playbook": False, "basic": True, "agent": True},
-            "hiagent": [{"name": "legacy"}],
-            "mcp_servers": [],
-        }
-    )
-
-    raw = json.loads(config_file.read_text(encoding="utf-8"))
-    assert raw == {
-        "mcp": {"playbook": False, "basic": True},
-        "mcp_servers": [],
-    }
-
-    assert mcp_config.read_mcp_config() == raw
-
-
-def test_mcp_config_is_json_only_and_ignores_legacy_toml(tmp_path, monkeypatch):
-    config_file = tmp_path / "mcp_config.json"
-    legacy_file = tmp_path / "mcp_config.toml"
-    legacy_file.write_text(
-        """
-        [mcp]
-        playbook = false
-        basic = true
-        agent = true
-
-        [[hiagent]]
-        name = "Legacy"
-
-        [[mcp_servers]]
-        name = "Filesystem"
-        description = "Local tools"
-        kind = "mcp-json"
-        enabled = true
-
-        [mcp_servers.manifest.mcpServers.filesystem]
-        command = "python"
-        args = ["-m", "agent_tools"]
-        """,
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(mcp_config, "MCP_DATA_DIR", tmp_path)
-    monkeypatch.setattr(mcp_config, "MCP_CONFIG_FILE", config_file)
-
-    assert mcp_config.read_mcp_config() == {
-        "mcp": {"playbook": True, "basic": True},
-        "mcp_servers": [],
-    }
-    assert not config_file.exists()

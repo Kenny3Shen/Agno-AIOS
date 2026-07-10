@@ -1,21 +1,22 @@
 # 路线图
 
-本文是 docs 中唯一放未来规划和未实现想法的位置。其他文档应只描述当前代码事实。
+## 已完成方向
 
-## 当前状态
+- React 19 + TanStack + Ant Design v6 新版控制面。
+- feature-first 前端目录。
+- Chat 使用 Ant Design X 与 XMarkdown。
+- Knowledge、Trace、Memory、Skills 等页面采用 Ant Design Splitter、Tabs、Table、Tree、Descriptions、Card 等组件。
+- 后端测试删减为业务行为保护，不再保护源码结构和文案。
 
-仓库中没有已承诺的产品 roadmap。下面条目只是候选工作，不代表已实现行为或交付承诺。
+## 近期重点
 
-## 候选工作
+- 完善真实工作流 Playwright 截图检查。
+- 扩展 Knowledge 上传、更新、重建与 Retrieval playground 的端到端验证。
+- 增强 Trace session/run/span 的定位、分页和归档筛选体验。
+- 梳理 MCP 服务列表、可用工具展示和上传校验。
+- 持续补齐 API mutation 后 Query invalidation 测试。
 
-- 增加显式数据库迁移，替代只依赖懒创建 tables 的方式。
-- 增加反向代理、TLS、进程托管、备份和恢复相关部署文档。
-- 增加 traces、spans、audit logs 和安全数据缓存的保留策略控制。
-- 增加登录、Chat、Trace、MCP、Knowledge 和 Settings 的自动化端到端 Playwright flows。
-- Scheduler 路径生产化后，增加 scheduler persistence 和 worker operations 文档。
-- 增加初始用户审批、role 变更和紧急访问恢复的 admin workflows。
-- 增加 PostgreSQL、vector tables 和 MCP configuration 的灾难恢复 runbooks。
+## 分支
 
-## 暂存区
-
-当条目变得可执行时，把具体实现任务移动到项目 issue tracker 或 `TODOs.md`。
+- `vue` 作为旧版冻结分支。
+- `master` 承载新版 React 主线与后续演进。

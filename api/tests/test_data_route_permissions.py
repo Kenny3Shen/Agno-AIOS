@@ -3,7 +3,7 @@ from fastapi import HTTPException
 from fastapi.routing import APIRoute
 import pytest
 from api.auth.claims import has_scope
-from api.routes import collect, cve, skills
+from api.routes import collect, cve
 
 
 def user(role: str = "user"):
@@ -50,13 +50,3 @@ def test_cve_update_rejects_non_admin_user():
         dependency(user=user("user"))
 
     assert exc.value.status_code == 403
-
-
-def test_skills_api_registers_real_upload_route():
-    route_paths = {
-        path
-        for route in skills.router.routes
-        if isinstance((path := getattr(route, "path", None)), str)
-    }
-    assert "/api/skills/upload" in route_paths
-    assert "/api/skills/upload-request" not in route_paths

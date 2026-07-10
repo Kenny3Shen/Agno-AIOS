@@ -1,94 +1,30 @@
 # 开发工作流
 
-本文描述当前仓库在 WSL2 Ubuntu 24.04 或 Linux 环境中的开发流程。
+## 前端目录
 
-## 工具链
-
-Python 使用 `uv`、`ruff` 和 `ty`。
-
-```bash
-uv run python <file.py>
-uv run ruff check .
-uv run ty check .
+```text
+frontend/src/
+├── app/       # Provider、Router、Shell、全局样式
+├── features/  # auth/chat/trace/knowledge/memory/mcp/skills 等页面与领域逻辑
+├── shared/    # API client、auth、i18n、types、通用 UI
+└── test/      # Vitest、MSW、React Testing Library 基础设施
 ```
 
-前端使用 Bun 和 `frontend/package.json` 中的 scripts。
+复杂 feature 使用 `api.ts`、`queries.ts`、`types.ts`、`utils.ts`、`useXxx.ts` 和职责型组件命名。feature 内部优先相对导入；跨 feature 通过公开 `index.ts`。
+
+## 测试策略
+
+- 前端测试关注业务行为、状态转换、API 契约和用户交互。
+- 后端测试关注权限、安全边界、生命周期、副作用、错误处理和数据合并。
+- 不测试源码字符串、import 结构、完整 DOM、CSS 类名、完整文案或内部 helper 是否存在。
+- i18n 相关业务测试应使用稳定 key 或行为断言，避免中文/英文措辞变化导致失败。
+
+## 常用命令
 
 ```bash
-cd frontend
-/home/shenss/.bun/bin/bun run test:shell
-/home/shenss/.bun/bin/bun run test:auth
-/home/shenss/.bun/bin/bun run build
-```
-
-不要用 npm 修改本仓库前端依赖。使用：
-
-```bash
-cd frontend
-/home/shenss/.bun/bin/bun install
-/home/shenss/.bun/bin/bun add <package>
-/home/shenss/.bun/bin/bun remove <package>
-```
-
-## CodeGraph
-
-本仓库存在 `.codegraph/` 目录。定位代码或理解行为时，先用 CodeGraph，再做大范围 grep/find：
-
-```bash
-codegraph explore "chat route agent service session ownership"
-```
-
-明确相关区域后，再用 `rg` 做直接文本搜索。
-
-## 后端开发
-
-后端 package 是 `api`。主入口：
-
-```bash
-uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
-```
-
-重要边界：
-
-- Routes 放在 `api/routes/`。
-- 业务逻辑放在 `api/services/`。跨 route 复用的 Run runtime、Knowledge lifecycle、MCP config mutation 和 security policy 应放在这里，route 只保留 HTTP 边界和依赖注入。
-- 认证和 scope 规则放在 `api/auth/`。
-- 集成 MCP runtime 代码放在 `api/mcp/`。
-- 运维脚本放在 `api/tasks/`。
-
-新增受保护 route 时，在 route 边界定义 scope check；涉及用户资源时增加 ownership check。新增安全相关 mutation 时记录 audit event。若同一类 scope、ownership 或 audit policy 被多个 route 复用，应优先通过 `api/services/security_policy.py` 集中表达。
-
-## 前端开发
-
-前端是 `frontend/` 下的 Vue 3 应用。
-
-重要边界：
-
-- `frontend/src/App.vue` 负责 shell navigation 和 module mounting。
-- `frontend/src/components/` 负责用户可见 views。
-- `frontend/src/stores/` 负责 Pinia state。
-- `frontend/src/composables/` 和 `frontend/src/lib/` 负责 API 和 utility helpers。
-- `frontend/src/i18n/` 负责展示文案。
-- `frontend/src/styles/` 负责 design tokens。
-- `frontend/src/modules/*.test.mjs` 放前端纯逻辑和 source-contract tests；`frontend/src/uiShell.test.mjs` 只作为 shell 测试入口，避免继续膨胀。
-
-前端 scope checks 只用于可见性。任何新的受保护能力都必须单独更新后端 scope checks。
-
-前端开发服务默认代理到 `http://127.0.0.1:8000`。如果按阶段验证命令把 API 启动在 `8001`，启动前端时显式设置：
-
-```bash
-VITE_API_PROXY_TARGET=http://127.0.0.1:8001 /home/shenss/.bun/bin/bun run dev
-```
-
-## 测试与检查
-
-阶段性工作后运行：
-
-```bash
-uv run ruff check .
-uv run ty check .
 uv run pytest api/tests
-uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
+uv run ruff check .
+uv run ty check .
 
 cd frontend
 /home/shenss/.bun/bin/bun run test:shell
@@ -96,22 +32,6 @@ cd frontend
 /home/shenss/.bun/bin/bun run build
 ```
 
-浏览器 smoke test：启动 API 后用 Playwright 检查托管页面。
+## 提交前检查
 
-```bash
-uv run uvicorn api.main:app --host 127.0.0.1 --port 8001
-playwright-cli open http://127.0.0.1:8001
-playwright-cli console
-playwright-cli snapshot
-playwright-cli close
-```
-
-涉及 UI/UX 的改动必须截图检查相应页面；窄屏或 mobile layout 有风险时同时截图窄屏视口。
-
-## 文档规则
-
-- `README.md` 是入口和快速启动索引。
-- `CONTEXT.md` 只放领域词汇表，不放实现细节。
-- `docs/architecture.md`、`docs/operations.md`、`docs/security.md` 和本文只描述当前代码事实。
-- `docs/roadmap.md` 是 docs 中唯一放未来工作或未提交计划的文件。
-- `docs/adr/` 中的 ADR 应该少而精，只记录难以反转且有真实取舍的决策。
+至少运行与改动相关的后端 pytest 或前端 Vitest。涉及前端布局、Splitter、Drawer、Tabs、Tree 或响应式行为时，用 Playwright 在宽屏和窄屏做一次真实工作流检查，并将截图保存在 `.tmp`。

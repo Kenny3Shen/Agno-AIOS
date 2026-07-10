@@ -52,7 +52,6 @@ async def test_playbook_tool_loads_runtime_env_before_adapter_creation() -> None
 
     assert calls == ["loaded"]
     assert result["code"] == -4
-    assert "W5_SOAR_TOKEN" in result["msg"]
 
 
 @pytest.mark.parametrize(

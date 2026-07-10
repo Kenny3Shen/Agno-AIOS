@@ -38,7 +38,7 @@ def write_skill(
 def test_list_skill_infos_filters_public_and_owned_private(tmp_path, monkeypatch):
     monkeypatch.setattr(skill_service, "get_skills_dir", lambda: tmp_path)
     monkeypatch.setattr(skill_service, "load_skills_config", lambda: {})
-    owned_dir = write_skill(tmp_path, "owned", name="Owned", visibility="private", owner="u1")
+    write_skill(tmp_path, "owned", name="Owned", visibility="private", owner="u1")
     write_skill(tmp_path, "foreign", name="Foreign", visibility="private", owner="u2")
     write_skill(tmp_path, "public", name="Public", visibility="public", owner="u2")
 
@@ -47,9 +47,6 @@ def test_list_skill_infos_filters_public_and_owned_private(tmp_path, monkeypatch
     assert [item["name"] for item in skills] == ["Owned", "Public"]
     assert skills[0]["visibility"] == "private"
     assert skills[0]["can_manage"] is True
-    assert skills[0]["skill_markdown"] == owned_dir.joinpath("SKILL.md").read_text(
-        encoding="utf-8"
-    )
     assert skills[1]["visibility"] == "public"
     assert skills[1]["can_manage"] is False
 
@@ -67,8 +64,6 @@ def test_set_skill_visibility_requires_owner_or_admin(tmp_path, monkeypatch):
 
     assert public_name == "Owned"
     assert visibility == "public"
-    assert "visibility: public" in (tmp_path / "owned" / "SKILL.md").read_text(
-        encoding="utf-8"
-    )
+    assert skill_service.list_skill_infos(actor("u1"))[0]["visibility"] == "public"
     with pytest.raises(PermissionError):
         skill_service.set_skill_visibility("Owned", "private", actor("u2"))

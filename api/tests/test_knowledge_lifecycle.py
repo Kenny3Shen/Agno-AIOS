@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -288,6 +289,66 @@ async def test_add_file_document_uses_async_insert_and_reload(tmp_path) -> None:
     assert stored_sources["content-2"]["description"] == "kb://runbooks/primary"
     assert stored_sources["content-2"]["path"] == str(file_path)
     assert stored_sources["content-2"]["metadata"] == insert_kwargs["metadata"]
+
+
+@pytest.mark.asyncio
+async def test_add_uploaded_file_preserves_browser_file_metadata(tmp_path) -> None:
+    file_path = tmp_path / "runbook.md"
+    file_path.write_text("# runbook\n", encoding="utf-8")
+    content_row = SimpleNamespace(
+        id="content-upload",
+        name="Runbook",
+        metadata={"user_id": "u1", "source": "upload:runbook.md", "chunks": 1},
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(contents=[content_row])
+    stored_sources: dict[str, dict[str, object]] = {}
+
+    async def store_source_async(content_id: str, source: Mapping[str, object]) -> None:
+        stored_sources[content_id] = dict(source)
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_storage_async=lambda: None,
+            store_source_async=store_source_async,
+        )
+    )
+    browser_metadata = {
+        "file_name": "runbook.md",
+        "file_size": 10,
+        "mime_type": "text/markdown",
+        "input_mode": "upload",
+        "upload_mode": "browser",
+        "_tais_managed_upload": {
+            "version": 1,
+            "upload_id": "a" * 32,
+            "file_name": "runbook.md",
+        },
+    }
+
+    with patch.object(knowledge_service, "reader_for_profile", return_value=object()):
+        result = await lifecycle.add_file_document_async(
+            str(file_path),
+            title="Runbook",
+            source="upload:runbook.md",
+            metadata=browser_metadata,
+            owner_user_id="u1",
+        )
+
+    assert result["id"] == "content-upload"
+    insert_metadata = knowledge.calls[0][2]["metadata"]
+    assert insert_metadata["file_name"] == "runbook.md"
+    assert insert_metadata["file_size"] == 10
+    assert insert_metadata["mime_type"] == "text/markdown"
+    assert insert_metadata["input_mode"] == "upload"
+    assert insert_metadata["upload_mode"] == "browser"
+    assert insert_metadata["_tais_managed_upload"] == browser_metadata[
+        "_tais_managed_upload"
+    ]
+    assert stored_sources["content-upload"]["kind"] == "path"
+    assert stored_sources["content-upload"]["path"] == str(file_path)
+    assert stored_sources["content-upload"]["metadata"] == insert_metadata
 
 
 @pytest.mark.asyncio
@@ -749,6 +810,7 @@ async def test_replace_document_source_uploads_new_version_and_deletes_old_conte
         "title": "Runbook",
         "file_name": "runbook.md",
         "file_type": ".md",
+        "file_path": "/managed/old/runbook.md",
         "_tais_source": {"kind": "text", "digest": "old", "version": 1},
     }
     new_metadata = {
@@ -828,9 +890,135 @@ async def test_replace_document_source_uploads_new_version_and_deletes_old_conte
     assert insert_kwargs["metadata"]["visibility"] == "public"
     assert insert_kwargs["metadata"]["user_id"] == "u1"
     assert insert_kwargs["metadata"]["file_name"] == "runbook-v2.md"
+    assert "file_path" not in insert_kwargs["metadata"]
     assert insert_kwargs["metadata"]["_tais_source"]["kind"] == "text"
     assert insert_kwargs["metadata"]["_tais_source"]["digest"] != "old"
     assert stored_sources["content-new"]["text_content"] == "# v2\nnew body"
+    assert stored_sources["content-new"]["metadata"] == insert_kwargs["metadata"]
+
+
+@pytest.mark.asyncio
+async def test_replace_document_file_uploads_new_version_and_cleans_old_upload(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "runbook-v2.md"
+    file_path.write_text("# v2\nnew body\n", encoding="utf-8")
+    old_metadata = {
+        "user_id": "u1",
+        "visibility": "private",
+        "source": "upload:runbook.md",
+        "title": "Runbook",
+        "file_name": "runbook.md",
+        "file_type": ".md",
+        "file_path": "/managed/old/runbook.md",
+        "_tais_managed_upload": {
+            "version": 1,
+            "upload_id": "a" * 32,
+            "file_name": "runbook.md",
+        },
+        "_tais_source": {"kind": "path", "digest": "old", "version": 1},
+    }
+    new_row = SimpleNamespace(
+        id="content-new",
+        name="Runbook",
+        description="upload:runbook.md",
+        metadata={
+            "user_id": "u1",
+            "visibility": "private",
+            "source": "upload:runbook.md",
+            "title": "Runbook",
+            "file_name": "runbook-v2.md",
+            "_tais_source": {
+                "kind": "path",
+                "digest": source_digest(str(file_path)),
+                "version": 1,
+            },
+        },
+        created_at=1,
+    )
+    old_row = SimpleNamespace(
+        id="content-old",
+        name="Runbook",
+        description="upload:runbook.md",
+        metadata=old_metadata,
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(
+        contents=[new_row],
+        content_by_id={"content-old": old_row, "content-new": new_row},
+    )
+    deleted: list[str] = []
+    cleanup_calls: list[Mapping[str, object]] = []
+    stored_sources: dict[str, dict[str, object]] = {}
+
+    async def content_by_id(content_id: str):
+        return knowledge._content_by_id.get(content_id)
+
+    async def delete_content_async(_knowledge, content_id: str) -> None:
+        deleted.append(content_id)
+        knowledge._content_by_id.pop(content_id, None)
+
+    async def store_source_async(content_id: str, source: Mapping[str, object]) -> None:
+        stored_sources[content_id] = dict(source)
+
+    async def remove_upload_async(metadata: Mapping[str, object]) -> bool:
+        cleanup_calls.append(metadata)
+        return True
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_contents_storage_async=lambda: None,
+            ensure_storage_async=lambda: None,
+            knowledge_content_by_id_async=content_by_id,
+            delete_content_async=delete_content_async,
+            delete_source_async=lambda _content_id: None,
+            store_source_async=store_source_async,
+        )
+    )
+    upload_metadata = {
+        "file_name": "runbook-v2.md",
+        "file_size": file_path.stat().st_size,
+        "mime_type": "text/markdown",
+        "input_mode": "upload",
+        "upload_mode": "browser",
+        "_tais_managed_upload": {
+            "version": 1,
+            "upload_id": "b" * 32,
+            "file_name": "runbook-v2.md",
+        },
+    }
+
+    with (
+        patch.object(knowledge_service, "reader_for_profile", return_value=object()),
+        patch.object(
+            knowledge_service,
+            "remove_managed_upload_async",
+            remove_upload_async,
+        ),
+    ):
+        result = await lifecycle.replace_document_file_async(
+            "content-old",
+            path=str(file_path),
+            metadata=upload_metadata,
+            user=SimpleNamespace(id="u1", role="user", is_superuser=False),
+        )
+
+    assert result is not None
+    assert result["id"] == "content-new"
+    assert deleted == ["content-old"]
+    assert cleanup_calls == [old_metadata]
+    insert_kwargs = [call for call in knowledge.calls if call[0] == "ainsert"][0][2]
+    assert insert_kwargs["path"] == str(file_path)
+    assert "text_content" not in insert_kwargs
+    assert insert_kwargs["metadata"]["file_name"] == "runbook-v2.md"
+    assert insert_kwargs["metadata"]["file_path"] == str(file_path)
+    assert insert_kwargs["metadata"]["file_size"] == file_path.stat().st_size
+    assert insert_kwargs["metadata"]["mime_type"] == "text/markdown"
+    assert insert_kwargs["metadata"]["input_mode"] == "replacement"
+    assert insert_kwargs["metadata"]["upload_mode"] == "browser"
+    assert insert_kwargs["metadata"]["_tais_source"]["kind"] == "path"
+    assert stored_sources["content-new"]["path"] == str(file_path)
     assert stored_sources["content-new"]["metadata"] == insert_kwargs["metadata"]
 
 

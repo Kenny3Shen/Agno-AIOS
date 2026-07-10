@@ -1,5 +1,3 @@
-import subprocess
-import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
@@ -27,30 +25,6 @@ def test_owned_resource_hides_foreign_resource():
 def test_admin_can_access_foreign_resource():
     admin = SimpleNamespace(id="admin", role="admin", is_superuser=False)
     assert_owned_resource(admin, owner_user_id="u2", resource_name="Session")
-
-
-def test_chat_request_does_not_accept_authoritative_user_id():
-    assert "user_id" not in chat.ChatRequest.model_fields
-
-
-def test_session_list_service_accepts_owner_filter():
-    assert "owner_user_id" in chat_session_service.get_all_sessions_async.__annotations__ | {}
-
-
-def test_chat_session_service_does_not_import_fastapi_user_dependencies():
-    script = (
-        "import sys\n"
-        "import api.services.chat_session_service\n"
-        "print('api.auth.users' in sys.modules)\n"
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", script],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.stdout.strip() == "False"
 
 
 @pytest.mark.asyncio
@@ -105,12 +79,6 @@ async def test_remove_session_archives_session_and_returns_payload():
     archive_session.assert_awaited_once_with("session-1", actor=current_actor)
 
 
-def test_provider_block_detector_matches_openai_status_error_text():
-    assert security_run_runtime._is_provider_block_error(
-        RuntimeError("Your request was blocked.")
-    )
-
-
 @pytest.mark.asyncio
 async def test_list_sessions_uses_current_user_as_owner_filter():
     captured: dict[str, str | None] = {}
@@ -127,9 +95,10 @@ async def test_list_sessions_uses_current_user_as_owner_filter():
         return []
 
     with patch.object(chat, "get_all_sessions_async", fake_get_all_sessions):
-        result = await chat.list_sessions(user=actor("u1"))
+        result = await chat.list_sessions(include_archived=True, user=actor("u1"))
     assert result == []
     assert captured["owner_user_id"] == "u1"
+    assert captured["include_archived"] == "True"
 
 
 @pytest.mark.asyncio

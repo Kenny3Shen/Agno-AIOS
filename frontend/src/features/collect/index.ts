@@ -1,0 +1,1 @@
+export { CollectPage } from './CollectPage'

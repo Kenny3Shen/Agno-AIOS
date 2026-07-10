@@ -44,6 +44,7 @@ AGENTOS_JWT_EXCLUDED_ROUTE_PATHS = [
     "/index.html",
     "/assets/*",
     "/favicon.ico",
+    "/favicon.svg",
     "/vite.svg",
     "/report",
     "/report/*",

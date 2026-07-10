@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import mimetypes
 from importlib.util import find_spec
 from dataclasses import dataclass
 from functools import lru_cache
@@ -85,6 +86,7 @@ from api.services.knowledge_source_service import (
     source_ref as make_source_ref,
     text_source_snapshot,
 )
+from api.services.knowledge_upload_service import remove_managed_upload_async
 
 _knowledge_async_lock = asyncio.Lock()
 _knowledge_runtime_async_lock = asyncio.Lock()
@@ -712,6 +714,7 @@ class KnowledgeBaseLifecycle:
         path: str,
         title: str | None = None,
         source: str | None = None,
+        metadata: Mapping[str, object] | None = None,
         owner_user_id: str | None = None,
         visibility: str = "private",
         ingest_options: Mapping[str, object] | None = None,
@@ -724,32 +727,35 @@ class KnowledgeBaseLifecycle:
 
         clean_title = (title or file_path.stem).strip() or file_path.stem
         clean_source = (source or str(file_path)).strip() or str(file_path)
+        base_metadata = _safe_metadata(metadata)
         ingest_overrides = _coerce_ingest_overrides(ingest_options)
         profile = knowledge_profile_for_filename_or_strategy(
             file_path.name,
             ingest_overrides.reader_strategy,
         )
-        metadata = {
+        safe_metadata = {
+            **base_metadata,
             **_metadata_ingest_options(ingest_overrides),
             **_owner_metadata(owner_user_id, normalized_visibility),
             "title": clean_title,
             "source": clean_source,
             "file_path": str(file_path),
-            "file_name": file_path.name,
+            "file_name": str(base_metadata.get("file_name") or file_path.name),
             "file_type": file_path.suffix.lower(),
+            "file_size": base_metadata.get("file_size", file_path.stat().st_size),
             "chunk_strategy": profile.strategy,
             "reader": profile.reader,
-            "input_mode": "path",
+            "input_mode": base_metadata.get("input_mode", "path"),
         }
-        metadata = metadata_with_source_ref(
-            metadata,
+        safe_metadata = metadata_with_source_ref(
+            safe_metadata,
             make_source_ref("path", source_digest(str(file_path))),
         )
         source_snapshot = path_source_snapshot(
             name=clean_title,
             description=clean_source,
             path=str(file_path),
-            metadata=metadata,
+            metadata=safe_metadata,
             filename=file_path.name,
         )
         reader = reader_for_profile(profile, file_path.name, ingest_overrides)
@@ -760,7 +766,7 @@ class KnowledgeBaseLifecycle:
                 name=clean_title,
                 description=clean_source,
                 path=str(file_path),
-                metadata=metadata,
+                metadata=safe_metadata,
                 reader=reader,
                 upsert=True,
                 skip_if_exists=False,
@@ -896,6 +902,7 @@ class KnowledgeBaseLifecycle:
             else None
         )
         await self._delete_content_async(knowledge, doc_id)
+        await remove_managed_upload_async(metadata)
         return True
 
     async def rebuild_document_async(
@@ -1004,15 +1011,22 @@ class KnowledgeBaseLifecycle:
             ingest_overrides.reader_strategy,
         )
         source_reference = make_source_ref("text", source_digest(clean_content, clean_file_name))
+        inherited_metadata = safe_public_metadata(current_metadata)
+        for stale_key in ("file_path", "file_size", "mime_type"):
+            inherited_metadata.pop(stale_key, None)
+        metadata_patch = _safe_metadata(metadata)
+        mime_type, _ = mimetypes.guess_type(clean_file_name)
         safe_metadata = {
-            **safe_public_metadata(current_metadata),
-            **_safe_metadata(metadata),
+            **inherited_metadata,
+            **metadata_patch,
             **_metadata_ingest_options(ingest_overrides),
             **_owner_metadata(owner, normalized_visibility),
             "title": clean_title,
             "source": clean_source,
             "file_name": clean_file_name,
             "file_type": suffix or "text",
+            "file_size": metadata_patch.get("file_size", len(clean_content.encode("utf-8"))),
+            "mime_type": metadata_patch.get("mime_type", mime_type or "text/plain"),
             "chunk_strategy": profile.strategy,
             "reader": profile.reader,
             "input_mode": "replacement",
@@ -1050,6 +1064,134 @@ class KnowledgeBaseLifecycle:
             await self._store_source_async(inserted_id, source_snapshot)
             if inserted_id != doc_id:
                 await self._delete_content_async(knowledge, doc_id)
+            await remove_managed_upload_async(current_metadata)
+
+        refreshed = await self._knowledge_content_by_id_async(inserted_id)
+        if refreshed is None:
+            raise RuntimeError("source 新版本写入完成但未能读取内容登记记录")
+        return _content_to_document(refreshed)
+
+    async def replace_document_file_async(
+        self,
+        doc_id: str,
+        *,
+        path: str,
+        title: str | None = None,
+        source: str | None = None,
+        visibility: str | None = None,
+        metadata: Mapping[str, object] | None = None,
+        owner_user_id: str | None = None,
+        user: ActorLike | None = None,
+        ingest_options: Mapping[str, object] | None = None,
+    ) -> KnowledgeDocumentPayload | None:
+        await self._ensure_contents_storage_async()
+        current = await self._knowledge_content_by_id_async(doc_id)
+        if current is None:
+            return None
+        current_metadata = _safe_metadata(getattr(current, "metadata", None))
+        if user is not None:
+            if not can_manage_resource(user, current_metadata):
+                return None
+        elif not _content_visible_to_owner(current, owner_user_id):
+            return None
+
+        file_path = await resolve_existing_file_async(path)
+        if file_path.suffix.lower() not in SUPPORTED_FILE_SUFFIXES:
+            supported = ", ".join(SUPPORTED_FILE_SUFFIXES)
+            raise ValueError(f"当前知识库支持的文件后缀: {supported}")
+
+        clean_title = (
+            title
+            or getattr(current, "name", None)
+            or current_metadata.get("title")
+            or file_path.stem
+        )
+        clean_title = str(clean_title).strip() or file_path.stem
+        clean_source = (
+            source
+            or current_metadata.get("source")
+            or f"upload:{file_path.name}"
+        )
+        clean_source = str(clean_source).strip() or f"upload:{file_path.name}"
+        owner = str(
+            current_metadata.get("owner_user_id")
+            or current_metadata.get("user_id")
+            or owner_user_id
+            or ""
+        ).strip()
+        normalized_visibility = normalize_visibility(
+            visibility
+            if visibility is not None
+            else str(current_metadata.get("visibility") or "private"),
+            strict=visibility is not None,
+        )
+        inherited_metadata = safe_public_metadata(current_metadata)
+        for stale_key in (
+            "file_path",
+            "file_size",
+            "mime_type",
+            "_tais_managed_upload",
+        ):
+            inherited_metadata.pop(stale_key, None)
+        metadata_patch = _safe_metadata(metadata)
+        ingest_overrides = _coerce_ingest_overrides(ingest_options)
+        profile = knowledge_profile_for_filename_or_strategy(
+            file_path.name,
+            ingest_overrides.reader_strategy,
+        )
+        mime_type, _ = mimetypes.guess_type(file_path.name)
+        safe_metadata = {
+            **inherited_metadata,
+            **metadata_patch,
+            **_metadata_ingest_options(ingest_overrides),
+            **_owner_metadata(owner, normalized_visibility),
+            "title": clean_title,
+            "source": clean_source,
+            "file_path": str(file_path),
+            "file_name": str(metadata_patch.get("file_name") or file_path.name),
+            "file_type": file_path.suffix.lower(),
+            "file_size": metadata_patch.get("file_size", file_path.stat().st_size),
+            "mime_type": metadata_patch.get("mime_type", mime_type or "application/octet-stream"),
+            "chunk_strategy": profile.strategy,
+            "reader": profile.reader,
+            "input_mode": "replacement",
+            "upload_mode": metadata_patch.get("upload_mode", "browser"),
+        }
+        source_reference = make_source_ref("path", source_digest(str(file_path)))
+        safe_metadata = metadata_with_source_ref(safe_metadata, source_reference)
+        source_snapshot = path_source_snapshot(
+            name=clean_title,
+            description=clean_source,
+            path=str(file_path),
+            metadata=safe_metadata,
+            filename=file_path.name,
+        )
+        reader = reader_for_profile(profile, file_path.name, ingest_overrides)
+        knowledge = await self._async_knowledge_async()
+        async with _knowledge_async_lock:
+            await self._ensure_storage_async()
+            await knowledge.ainsert(
+                name=clean_title,
+                description=clean_source,
+                path=str(file_path),
+                metadata=safe_metadata,
+                reader=reader,
+                upsert=True,
+                skip_if_exists=False,
+            )
+            inserted = await _latest_inserted_content_async(
+                knowledge,
+                title=clean_title,
+                source=clean_source,
+                source_ref=source_reference,
+            )
+            if inserted is None or not getattr(inserted, "id", None):
+                raise RuntimeError("source 新版本写入完成但未能读取内容登记记录")
+            inserted_id = str(inserted.id)
+            await self._store_source_async(inserted_id, source_snapshot)
+            if inserted_id != doc_id:
+                await self._delete_content_async(knowledge, doc_id)
+            await remove_managed_upload_async(current_metadata)
 
         refreshed = await self._knowledge_content_by_id_async(inserted_id)
         if refreshed is None:
@@ -1157,8 +1299,8 @@ class KnowledgeBaseLifecycle:
     ) -> dict[str, Any]:
         await self._ensure_contents_storage_async()
         contents, _ = await self._knowledge_content_rows_async()
-        content_ids = [
-            content.id
+        managed_contents = [
+            (content.id, _safe_metadata(getattr(content, "metadata", None)))
             for content in contents
             if content.id
             and (
@@ -1169,18 +1311,19 @@ class KnowledgeBaseLifecycle:
         ]
         knowledge = (
             await self._async_knowledge_async()
-            if content_ids and self.dependencies.delete_content_async is None
+            if managed_contents and self.dependencies.delete_content_async is None
             else None
         )
         deleted_ids: list[str] = []
         failed_ids: list[str] = []
-        for content_id in content_ids:
+        for content_id, metadata in managed_contents:
             try:
                 await self._delete_content_async(knowledge, content_id)
+                await remove_managed_upload_async(metadata)
                 deleted_ids.append(content_id)
             except Exception:
                 failed_ids.append(content_id)
-        remaining_documents = len(content_ids) - len(deleted_ids)
+        remaining_documents = len(managed_contents) - len(deleted_ids)
         return {
             "documents": remaining_documents,
             "chunks": 0 if remaining_documents == 0 else await self._chunk_count_async(owner_user_id),
@@ -1328,6 +1471,7 @@ async def add_file_document_async(
     path: str,
     title: str | None = None,
     source: str | None = None,
+    metadata: Mapping[str, object] | None = None,
     owner_user_id: str | None = None,
     visibility: str = "private",
     ingest_options: Mapping[str, object] | None = None,
@@ -1336,6 +1480,7 @@ async def add_file_document_async(
         path,
         title=title,
         source=source,
+        metadata=metadata,
         owner_user_id=owner_user_id,
         visibility=visibility,
         ingest_options=ingest_options,
@@ -1389,6 +1534,31 @@ async def replace_document_source_async(
         doc_id,
         content=content,
         file_name=file_name,
+        title=title,
+        source=source,
+        visibility=visibility,
+        metadata=metadata,
+        owner_user_id=owner_user_id,
+        user=user,
+        ingest_options=ingest_options,
+    )
+
+
+async def replace_document_file_async(
+    doc_id: str,
+    *,
+    path: str,
+    title: str | None = None,
+    source: str | None = None,
+    visibility: str | None = None,
+    metadata: Mapping[str, object] | None = None,
+    owner_user_id: str | None = None,
+    user: ActorLike | None = None,
+    ingest_options: Mapping[str, object] | None = None,
+) -> KnowledgeDocumentPayload | None:
+    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.replace_document_file_async(
+        doc_id,
+        path=path,
         title=title,
         source=source,
         visibility=visibility,

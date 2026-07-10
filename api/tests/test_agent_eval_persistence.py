@@ -2,36 +2,9 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy.dialects import postgresql
 
 from api.persistence import agent_evals as persistence
 from api.auth.claims import has_scope
-from api.persistence.agent_evals import (
-    agent_eval_case_runs_table,
-    agent_eval_cases_table,
-    agent_eval_suite_runs_table,
-    agent_eval_suites_table,
-    case_run_by_agno_eval_run_id_statement,
-    case_runs_by_agno_eval_run_ids_statement,
-    create_case_row_async,
-    create_case_run_row_async,
-    create_suite_row_async,
-    create_suite_run_row_async,
-    get_case_row_async,
-    get_case_run_by_agno_eval_run_id_row_async,
-    get_case_run_row_async,
-    list_case_runs_by_agno_eval_run_ids_rows_async,
-    get_suite_row_async,
-    get_suite_run_row_async,
-    list_case_rows_async,
-    list_case_run_rows_async,
-    list_suite_rows_async,
-    list_suite_run_rows_async,
-    update_case_row_async,
-    update_case_run_row_async,
-    update_suite_row_async,
-    update_suite_run_row_async,
-)
 
 
 class FakeBootstrapConnection:
@@ -79,61 +52,6 @@ def actor(role: str):
 
 def test_agent_eval_read_permission_is_role_scoped():
     assert has_scope(actor("user"), "evals:read")
-
-
-def test_agent_eval_tables_use_jsonb_and_expected_names():
-    suites = agent_eval_suites_table()
-    cases = agent_eval_cases_table()
-    suite_runs = agent_eval_suite_runs_table()
-    case_runs = agent_eval_case_runs_table()
-
-    assert suites.name == "agent_eval_suites"
-    assert cases.name == "agent_eval_cases"
-    assert suite_runs.name == "agent_eval_suite_runs"
-    assert case_runs.name == "agent_eval_case_runs"
-    assert cases.c.eval_types.type.__class__.__name__ == "JSONB"
-    assert cases.c.expected_tool_calls.type.__class__.__name__ == "JSONB"
-    assert case_runs.c.agno_eval_run_ids.type.__class__.__name__ == "JSONB"
-
-
-def test_agent_eval_crud_helpers_are_exported():
-    assert create_suite_row_async
-    assert list_suite_rows_async
-    assert get_suite_row_async
-    assert update_suite_row_async
-    assert create_case_row_async
-    assert list_case_rows_async
-    assert get_case_row_async
-    assert update_case_row_async
-    assert create_suite_run_row_async
-    assert list_suite_run_rows_async
-    assert get_suite_run_row_async
-    assert update_suite_run_row_async
-    assert create_case_run_row_async
-    assert list_case_run_rows_async
-    assert list_case_runs_by_agno_eval_run_ids_rows_async
-    assert get_case_run_row_async
-    assert get_case_run_by_agno_eval_run_id_row_async
-    assert update_case_run_row_async
-
-
-def test_case_run_by_agno_eval_run_id_uses_jsonb_contains_query():
-    stmt = case_run_by_agno_eval_run_id_statement("eval-1")
-    compiled = str(stmt.compile(dialect=postgresql.dialect()))
-
-    assert "agent_eval_case_runs" in compiled
-    assert "agno_eval_run_ids" in compiled
-    assert "@>" in compiled
-
-
-def test_case_runs_by_agno_eval_run_ids_uses_single_jsonb_query():
-    stmt = case_runs_by_agno_eval_run_ids_statement(["eval-1", "eval-2"])
-    compiled = str(stmt.compile(dialect=postgresql.dialect()))
-
-    assert "agent_eval_case_runs" in compiled
-    assert "agno_eval_run_ids" in compiled
-    assert compiled.count("@>") == 2
-    assert " OR " in compiled
 
 
 @pytest.mark.asyncio

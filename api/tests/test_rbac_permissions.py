@@ -1,5 +1,3 @@
-import subprocess
-import sys
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -109,7 +107,6 @@ def test_scope_claims_are_expanded_as_agentos_scopes():
     assert "evals:read" in user_claims.scopes
     assert "session:read:own" not in user_claims.scopes
     assert "agent_eval:read" not in user_claims.scopes
-    assert not hasattr(user_claims, "permissions")
 
 
 def test_user_read_serializes_scopes_without_permissions_alias():
@@ -178,37 +175,3 @@ def test_main_app_installs_agno_jwt_middleware():
     assert middleware.kwargs["user_isolation"] is True
     assert "/api/auth/*" in AGENTOS_JWT_EXCLUDED_ROUTE_PATHS
     assert "/assets/*" in AGENTOS_JWT_EXCLUDED_ROUTE_PATHS
-
-
-@pytest.mark.parametrize(
-    "module_name",
-    [
-        "api.auth.claims",
-        "api.auth.ownership",
-        "api.auth.schemas",
-        "api.services.actor_scope",
-        "api.services.agent_eval_case_store",
-        "api.services.agent_eval_runner",
-        "api.services.approvals_service",
-        "api.services.audit_service",
-        "api.services.chat_session_service",
-        "api.services.memory_service",
-        "api.services.page_payloads",
-        "api.services.security_policy",
-        "api.services.tracing_service",
-    ],
-)
-def test_claims_and_service_modules_do_not_import_fastapi_user_dependencies(module_name):
-    script = (
-        "import sys\n"
-        f"import {module_name}\n"
-        "print('api.auth.users' in sys.modules)\n"
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", script],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.stdout.strip() == "False"

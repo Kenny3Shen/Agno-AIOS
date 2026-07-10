@@ -1,38 +1,36 @@
-import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
+import { defineConfig } from 'vitest/config'
+import react from '@vitejs/plugin-react'
 import UnoCSS from 'unocss/vite'
+import { fileURLToPath, URL } from 'node:url'
 
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8000'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [vue(), UnoCSS()],
+  plugins: [react(), UnoCSS()],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
+    css: true,
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,
     chunkSizeWarningLimit: 3500,
-    rolldownOptions: {
-      onLog(level, log, handler) {
-        const code = typeof log === 'string' ? '' : log.code
-        const message = typeof log === 'string' ? log : log.message
-        const id = typeof log === 'string' ? '' : log.id
-        if (
-          code === 'INVALID_ANNOTATION' &&
-          id?.includes('/@vueuse/core/') &&
-          message.includes('#__PURE__')
-        ) {
-          return
-        }
-        handler(level, log)
-      },
-    },
     rollupOptions: {
       output: {
         manualChunks(id) {
           if (!id.includes('node_modules')) return
-          if (id.includes('/vue/') || id.includes('/pinia/') || id.includes('/vue-i18n/')) return 'vue'
-          if (id.includes('/element-plus/') || id.includes('/@element-plus/icons-vue/')) return 'element'
-          if (id.includes('/markdown-it/') || id.includes('/highlight.js/')) return 'markdown'
+          if (id.includes('/react/') || id.includes('/react-dom/')) return 'react'
+          if (id.includes('/@tanstack/')) return 'tanstack'
+          if (id.includes('/@ant-design/x-markdown/')) return 'x-markdown'
+          if (id.includes('/antd/') || id.includes('/@ant-design/icons/')) return 'antd'
+          if (id.includes('/i18next/') || id.includes('/react-i18next/')) return 'i18n'
           return 'vendor'
         },
       },
