@@ -51,6 +51,19 @@ uv run pytest api/tests
 
 运行时配置、CVE 缓存和上传文件默认写入 `.config/`，日志默认写入 `.logs/`；这两个目录不纳入 Git 追踪。CVE 缓存位置可通过 `AGNO_CVE_DATA_DIR` 调整，或在 `config.toml` 中覆盖数据源的 `local_cache` / `commit_cache`。
 
+## 审计查询
+
+管理员登录后可从侧边栏进入 `Audit` 页面。页面调用 `GET /api/audit/logs`，支持按 User ID、邮箱、动作、资源类型、资源 ID、状态、IP 和时间范围查询，并使用分页返回结果。
+
+API 示例：
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  "http://127.0.0.1:8001/api/audit/logs?page=1&limit=25&actor_user_id=<user-id>&action=auth.login"
+```
+
+审计数据保存在 PostgreSQL `audit_logs` 表，metadata 使用 JSONB 存储，仅用于详情展示。当前版本不提供导出、实时告警、保留策略或外部 SIEM streaming。
+
 前端 smoke：
 
 ```bash

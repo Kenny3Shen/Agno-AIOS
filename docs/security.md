@@ -19,6 +19,20 @@
 
 配置变更、Memory mutation、Approval resolution、策略事件等关键操作应记录 actor、action、resource、metadata、IP 和 user-agent。
 
+审计查询 API 为 `GET /api/audit/logs`，权限要求为 `audit:read`。当前版本只提供 admin-only 查询，不为普通用户开放 self audit。支持筛选：
+
+- `actor_user_id`
+- `actor_email`
+- `action`
+- `resource_type`
+- `resource_id`
+- `status`
+- `ip_address`
+- `created_from`
+- `created_to`
+
+审计日志是只读展示数据。页面不提供删除、编辑、重放或导出能力；metadata 仅用于详情展示，不作为 v1 主筛选条件。
+
 ## 前端约束
 
 - 不复制 Query 数据到全局状态作为授权依据。

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -15,9 +16,14 @@ async def list_audit_logs(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
     actor_user_id: str | None = None,
+    actor_email: str | None = None,
     action: str | None = None,
     resource_type: str | None = None,
+    resource_id: str | None = None,
     status: str | None = None,
+    ip_address: str | None = None,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
     user: User = Depends(require_scope("audit:read")),
 ) -> dict[str, Any]:
     try:
@@ -25,9 +31,14 @@ async def list_audit_logs(
             page=page,
             limit=limit,
             actor_user_id=actor_user_id,
+            actor_email=actor_email,
             action=action,
             resource_type=resource_type,
+            resource_id=resource_id,
             status=status,
+            ip_address=ip_address,
+            created_from=created_from,
+            created_to=created_to,
         )
         return {"items": items, "total": total, "page": page, "limit": limit}
     except Exception as exc:

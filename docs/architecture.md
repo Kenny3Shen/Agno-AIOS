@@ -10,6 +10,7 @@ T.A.I.S 是一个面向安全运营的 AI 工作台。后端提供认证、权�
 - Ant Design v6 与 Ant Design X 承担主要 UI；UnoCSS 只处理少量特殊布局。
 - Chat 使用 Ant Design X 的 `Bubble.List`、`Sender`、`Conversations`、`Welcome`、`Prompts` 和 XMarkdown，不引入 X SDK。
 - 目录采用 feature-first：`frontend/src/app`、`frontend/src/features`、`frontend/src/shared`、`frontend/src/test`。
+- Audit 页面位于 `features/audit`，使用筛选栏、分页 Table 和 Drawer 详情展示审计事件；metadata 使用 JSON 卡片，ID 类字段支持复制。
 
 ## 后端
 
@@ -18,6 +19,21 @@ T.A.I.S 是一个面向安全运营的 AI 工作台。后端提供认证、权�
 - SQLAlchemy Async 管理应用数据，Agno AsyncPostgresDb 管理运行时 session、memory、eval 与 trace 数据。
 - Knowledge 使用 Agno Knowledge + PgVector，支持文档上传、重建、替换、metadata 更新和检索 playground。
 - FastMCP 同进程挂载到 `/mcp/`，由应用 lifespan 启停。
+- 审计日志沿用 FastAPI + SQLAlchemy Async + PostgreSQL JSONB；`GET /api/audit/logs` 由 `audit:read` 保护，仅管理员查询，不引入外部 SIEM/搜索基础设施。
+
+## 审计数据模型
+
+审计事件写入应用 schema 下的 `audit_logs` 表。核心字段包括：
+
+- `actor_user_id`、`actor_email`、`actor_role`
+- `action`
+- `resource_type`、`resource_id`
+- `status`
+- `ip_address`、`user_agent`
+- `metadata`
+- `created_at`
+
+列表查询返回 `{ items, total, page, limit }`，支持按 actor、action、resource、status、IP 和时间范围筛选。常用筛选字段按 `created_at DESC` 建索引，默认按 `created_at DESC, id DESC` 返回最近事件。
 
 ## 数据流
 

@@ -5,7 +5,7 @@
 ```text
 frontend/src/
 ├── app/       # Provider、Router、Shell、全局样式
-├── features/  # auth/chat/trace/knowledge/memory/mcp/skills 等页面与领域逻辑
+├── features/  # auth/chat/trace/knowledge/memory/mcp/skills/audit 等页面与领域逻辑
 ├── shared/    # API client、auth、i18n、types、通用 UI
 └── test/      # Vitest、MSW、React Testing Library 基础设施
 ```
@@ -16,6 +16,7 @@ frontend/src/
 
 - 前端测试关注业务行为、状态转换、API 契约和用户交互。
 - 后端测试关注权限、安全边界、生命周期、副作用、错误处理和数据合并。
+- Audit 测试关注 `audit:read` 管理员权限、筛选参数传递、API query 构造、分页和详情交互。
 - 不测试源码字符串、import 结构、完整 DOM、CSS 类名、完整文案或内部 helper 是否存在。
 - i18n 相关业务测试应使用稳定 key 或行为断言，避免中文/英文措辞变化导致失败。
 

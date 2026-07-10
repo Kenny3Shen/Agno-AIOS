@@ -4,7 +4,7 @@ import { Link, useRouterState } from '@tanstack/react-router'
 import { Avatar, Button, Drawer, Dropdown, Grid, Layout, Menu, Space, Spin, Tooltip, Typography, type MenuProps } from 'antd'
 import {
   ApiOutlined, AuditOutlined, BookOutlined, BugOutlined, BulbOutlined, CalendarOutlined, CloudDownloadOutlined,
-  CodeOutlined, DashboardOutlined, DatabaseOutlined, ExperimentOutlined, GithubOutlined, HomeOutlined,
+  CodeOutlined, DashboardOutlined, DatabaseOutlined, ExperimentOutlined, FileSearchOutlined, GithubOutlined, HomeOutlined,
   MenuFoldOutlined, MenuOutlined, MenuUnfoldOutlined, MessageOutlined, MoonOutlined, NodeIndexOutlined, SafetyCertificateOutlined,
   SettingOutlined, SunOutlined, TranslationOutlined,
 } from '@ant-design/icons'
@@ -32,6 +32,7 @@ const nav = [
   { key: '/scheduler', icon: <CalendarOutlined />, labelKey: 'scheduler', scope: 'schedules:read' },
   { key: '/cve', icon: <BugOutlined />, labelKey: 'cve', scope: 'cve:read' },
   { key: '/collect', icon: <CloudDownloadOutlined />, labelKey: 'collect', scope: 'collect:write' },
+  { key: '/audit', icon: <FileSearchOutlined />, labelKey: 'audit', scope: 'audit:read' },
   { key: '/settings', icon: <SettingOutlined />, labelKey: 'settings', scope: 'config:read' },
 ]
 

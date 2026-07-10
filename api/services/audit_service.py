@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, TypedDict
 
 from fastapi import Request
@@ -62,15 +63,25 @@ async def list_audit_events_async(
     page: int = 1,
     limit: int = 50,
     actor_user_id: str | None = None,
+    actor_email: str | None = None,
     action: str | None = None,
     resource_type: str | None = None,
+    resource_id: str | None = None,
     status: str | None = None,
+    ip_address: str | None = None,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     return await list_audit_logs_async(
         page=page,
         limit=limit,
         actor_user_id=actor_user_id,
+        actor_email=actor_email,
         action=action,
         resource_type=resource_type,
+        resource_id=resource_id,
         status=status,
+        ip_address=ip_address,
+        created_from=created_from,
+        created_to=created_to,
     )

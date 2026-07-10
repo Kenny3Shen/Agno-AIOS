@@ -1,13 +1,16 @@
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
+
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
+import pytest
 from starlette.requests import Request
-from api.auth.claims import has_scope
+
 from api.auth import router as auth_router
+from api.auth.claims import has_scope
 from api.routes import audit
 from api.services import audit_service
-import pytest
 
 
 def actor(user_id: str, role: str = "user"):
@@ -76,6 +79,8 @@ async def test_record_audit_event_delegates_to_async_persistence():
 
 @pytest.mark.asyncio
 async def test_list_audit_events_delegates_to_async_persistence():
+    created_from = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    created_to = datetime(2026, 1, 2, tzinfo=timezone.utc)
     with patch.object(
         audit_service,
         "list_audit_logs_async",
@@ -86,18 +91,28 @@ async def test_list_audit_events_delegates_to_async_persistence():
             page=2,
             limit=25,
             actor_user_id="u1",
+            actor_email="u1@example.test",
             action="auth.login",
             resource_type="auth",
+            resource_id="session-1",
             status="success",
+            ip_address="10.0.0.8",
+            created_from=created_from,
+            created_to=created_to,
         )
     assert result == ([], 0)
     mocked.assert_awaited_once_with(
         page=2,
         limit=25,
         actor_user_id="u1",
+        actor_email="u1@example.test",
         action="auth.login",
         resource_type="auth",
+        resource_id="session-1",
         status="success",
+        ip_address="10.0.0.8",
+        created_from=created_from,
+        created_to=created_to,
     )
 
 
@@ -105,12 +120,41 @@ async def test_list_audit_events_delegates_to_async_persistence():
 async def test_admin_list_audit_logs_delegates_to_service():
     admin = actor("admin", "admin")
     rows = [{"id": 1, "action": "auth.login"}]
+    created_from = datetime(2026, 2, 1, tzinfo=timezone.utc)
+    created_to = datetime(2026, 2, 2, tzinfo=timezone.utc)
     with patch.object(audit, "list_audit_events_async", new_callable=AsyncMock) as mocked:
         mocked.return_value = (rows, 1)
-        result = await audit.list_audit_logs(user=admin)
+        result = await audit.list_audit_logs(
+            page=3,
+            limit=10,
+            actor_user_id="u1",
+            actor_email="u1@example.test",
+            action="knowledge.update",
+            resource_type="knowledge",
+            resource_id="doc-1",
+            status="success",
+            ip_address="10.0.0.8",
+            created_from=created_from,
+            created_to=created_to,
+            user=admin,
+        )
     assert result["items"] == rows
     assert result["total"] == 1
-    mocked.assert_awaited_once()
+    assert result["page"] == 3
+    assert result["limit"] == 10
+    mocked.assert_awaited_once_with(
+        page=3,
+        limit=10,
+        actor_user_id="u1",
+        actor_email="u1@example.test",
+        action="knowledge.update",
+        resource_type="knowledge",
+        resource_id="doc-1",
+        status="success",
+        ip_address="10.0.0.8",
+        created_from=created_from,
+        created_to=created_to,
+    )
 
 
 @pytest.mark.asyncio

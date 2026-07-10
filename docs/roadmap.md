@@ -6,6 +6,7 @@
 - feature-first 前端目录。
 - Chat 使用 Ant Design X 与 XMarkdown。
 - Knowledge、Trace、Memory、Skills 等页面采用 Ant Design Splitter、Tabs、Table、Tree、Descriptions、Card 等组件。
+- Audit 页面提供 admin-only 操作审计查询，支持 User ID、邮箱、动作、资源、状态、IP、时间范围和分页。
 - 后端测试删减为业务行为保护，不再保护源码结构和文案。
 
 ## 近期重点

@@ -13,6 +13,7 @@ const TracePage = lazy(() => import('@/features/trace').then((module) => ({ defa
 const MemoryPage = lazy(() => import('@/features/memory').then((module) => ({ default: module.MemoryPage })))
 const EvaluationsPage = lazy(() => import('@/features/evaluations').then((module) => ({ default: module.EvaluationsPage })))
 const ApprovalsPage = lazy(() => import('@/features/approvals').then((module) => ({ default: module.ApprovalsPage })))
+const AuditPage = lazy(() => import('@/features/audit').then((module) => ({ default: module.AuditPage })))
 const SchedulerPage = lazy(() => import('@/features/scheduler').then((module) => ({ default: module.SchedulerPage })))
 const CvePage = lazy(() => import('@/features/cve').then((module) => ({ default: module.CvePage })))
 const CollectPage = lazy(() => import('@/features/collect').then((module) => ({ default: module.CollectPage })))
@@ -23,7 +24,7 @@ const pages = [
   ['/', HomePage], ['/dashboard', DashboardPage], ['/chat', ChatPage], ['/workflow', WorkflowPage],
   ['/skills', SkillsPage], ['/mcp', McpPage], ['/knowledge', KnowledgePage], ['/trace', TracePage],
   ['/memory', MemoryPage], ['/evaluations', EvaluationsPage], ['/approvals', ApprovalsPage], ['/scheduler', SchedulerPage],
-  ['/cve', CvePage], ['/collect', CollectPage], ['/settings', SettingsPage],
+  ['/cve', CvePage], ['/collect', CollectPage], ['/audit', AuditPage], ['/settings', SettingsPage],
 ] as const
 const routeTree = rootRoute.addChildren(pages.map(([path, component]) => createRoute({ getParentRoute: () => rootRoute, path, component })))
 export const router = createRouter({ routeTree, history: createHashHistory() })

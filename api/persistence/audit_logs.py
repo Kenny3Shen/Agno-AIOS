@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
@@ -57,10 +58,36 @@ def audit_logs_table() -> Table:
         desc(table.c.created_at),
     )
     Index(
+        "idx_audit_logs_email_time",
+        table.c.actor_email,
+        desc(table.c.created_at),
+    )
+    Index(
         "idx_audit_logs_action_time",
         table.c.action,
         desc(table.c.created_at),
     )
+    Index(
+        "idx_audit_logs_resource_type_time",
+        table.c.resource_type,
+        desc(table.c.created_at),
+    )
+    Index(
+        "idx_audit_logs_resource_id_time",
+        table.c.resource_id,
+        desc(table.c.created_at),
+    )
+    Index(
+        "idx_audit_logs_status_time",
+        table.c.status,
+        desc(table.c.created_at),
+    )
+    Index(
+        "idx_audit_logs_ip_time",
+        table.c.ip_address,
+        desc(table.c.created_at),
+    )
+    Index("idx_audit_logs_created_time", desc(table.c.created_at))
     return table
 
 
@@ -110,9 +137,14 @@ async def list_audit_logs_async(
     page: int,
     limit: int,
     actor_user_id: str | None = None,
+    actor_email: str | None = None,
     action: str | None = None,
     resource_type: str | None = None,
+    resource_id: str | None = None,
     status: str | None = None,
+    ip_address: str | None = None,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     await ensure_audit_logs_table_async()
     safe_page = max(1, page)
@@ -123,13 +155,20 @@ async def list_audit_logs_async(
     filters = []
     for column, value in (
         (table.c.actor_user_id, actor_user_id),
+        (table.c.actor_email, actor_email),
         (table.c.action, action),
         (table.c.resource_type, resource_type),
+        (table.c.resource_id, resource_id),
         (table.c.status, status),
+        (table.c.ip_address, ip_address),
     ):
         text = (value or "").strip()
         if text:
             filters.append(column == text)
+    if created_from is not None:
+        filters.append(table.c.created_at >= created_from)
+    if created_to is not None:
+        filters.append(table.c.created_at <= created_to)
 
     where_clause = and_(*filters) if filters else None
     count_stmt = select(func.count()).select_from(table)

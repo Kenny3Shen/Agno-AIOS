@@ -4,6 +4,8 @@ T.A.I.S 是一个 AI-powered SDLC security automation 项目，围绕 Discover�
 
 系统把漏洞与暴露面发现、Agent 辅助处置、Trace 观测、MCP 工具、本地 Skills、知识库检索、CVE 情报、URL 采集、审计日志和运行配置收敛到一个需要认证的工作台中。
 
+新版工作台提供管理员审计页面，可按 User ID、邮箱、动作、资源、状态、IP 和时间范围查询用户操作记录，并通过详情 Drawer 查看 actor、resource、request context 与 metadata。
+
 ## 文档
 
 - [领域词汇表](./CONTEXT.md)
