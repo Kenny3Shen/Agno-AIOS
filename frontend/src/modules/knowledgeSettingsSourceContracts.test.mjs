@@ -313,8 +313,8 @@ assert.match(
 
 assert.match(
   knowledgeMetadataPanel,
-  /metadata-primary[\s\S]*metadata-secondary/,
-  "Knowledge Metadata panel must show selected content in primary and secondary groups",
+  /<el-descriptions[\s\S]*<el-descriptions-item/,
+  "Knowledge Metadata panel must show selected content as structured descriptions",
 )
 
 assert.doesNotMatch(
@@ -331,8 +331,8 @@ assert.match(
 
 assert.match(
   knowledgeDocumentList,
-  /document-table.*role="table"/,
-  "Knowledge document management must use the custom responsive document table surface",
+  /<el-table[\s\S]*:data="documents"[\s\S]*<el-table-column/,
+  "Knowledge document management must use the Element Plus table surface on desktop",
 )
 
 assert.match(
@@ -385,8 +385,8 @@ assert.match(
 
 assert.match(
   knowledgeDocumentList,
-  /--document-table-font-size:\s*11px/,
-  "Knowledge document table must use one compact font scale to avoid mixed row sizing",
+  /\.document-table :deep\(td\.el-table__cell\)[\s\S]*padding:\s*7px 0/,
+  "Knowledge document table must use compact Element Plus cell density",
 )
 
 assert.match(
@@ -397,20 +397,20 @@ assert.match(
 
 assert.match(
   knowledgeDocumentList,
-  /grid-template-columns:[\s\S]*minmax\(180px,\s*1fr\)[\s\S]*minmax\(96px,\s*0\.38fr\)[\s\S]*132px/,
-  "Knowledge document table columns must use compact bounded tracks",
+  /<el-table-column prop="title"[\s\S]*min-width="210"[\s\S]*<el-table-column prop="status"[\s\S]*width="116"/,
+  "Knowledge document table columns must use compact bounded widths",
 )
 
 assert.match(
   knowledgeDocumentList,
-  /columnheader\"\s+class=\"document-actions-head\"/,
-  "Knowledge document action header must use a dedicated aligned column header class",
+  /<el-table-column :label=\"t\('knowledge\.documents\.columns\.actions'\)\" width=\"132\" fixed=\"right\">/,
+  "Knowledge document actions must use a fixed bounded Element Plus column",
 )
 
 assert.match(
   knowledgeDocumentList,
-  /\.document-actions-head,\s*\.document-actions\s*\{[\s\S]*justify-content:\s*flex-start;/,
-  "Knowledge document action header and row actions must align to the same left edge",
+  /document-action-buttons[\s\S]*display:\s*inline-flex/,
+  "Knowledge document row actions must remain in one aligned compact group",
 )
 
 for (const locale of ["zh-CN", "en-US"]) {
@@ -483,8 +483,8 @@ assert.doesNotMatch(
 
 assert.match(
   knowledgeDocumentList,
-  /@media\s*\(max-width:\s*1120px\)[\s\S]*\.document-row\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/,
-  "Knowledge document rows must collapse into a single-column card before controls can overflow the shell",
+  /@media\s*\(max-width:\s*1120px\)[\s\S]*\.document-table-desktop\s*\{\s*display:\s*none[\s\S]*\.document-list-mobile\s*\{\s*display:\s*grid/,
+  "Knowledge documents must switch from the desktop table to mobile cards before controls overflow the shell",
 )
 
 assert.match(

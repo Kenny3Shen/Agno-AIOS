@@ -4,7 +4,7 @@
       <SectionHeader
         class="min-w-[min(220px,100%)] flex-1 border-b-0 pb-0"
         :title="t('knowledge.workbench.documents')"
-        :subtitle="t('knowledge.documents.visibleCount', { count: filteredDocuments.length, total: documents.length })"
+        :subtitle="t('knowledge.documents.visibleCount', { count: documents.length, total })"
       />
       <div class="document-management-controls">
         <div class="document-command-group">
@@ -14,7 +14,7 @@
             </el-button>
           </el-tooltip>
           <el-tooltip :content="t('knowledge.actions.clear')" placement="top">
-            <el-button type="danger" plain size="small" class="cursor-pointer" :disabled="documents.length === 0" :loading="clearing" @click="$emit('clear')">
+            <el-button type="danger" plain size="small" class="cursor-pointer" :disabled="total === 0" :loading="clearing" @click="$emit('clear')">
               <el-icon><Delete /></el-icon>
             </el-button>
           </el-tooltip>
@@ -30,38 +30,33 @@
       </div>
     </div>
 
-    <EmptyState v-if="loading && documents.length === 0" class="min-h-[120px]" :icon="Loading" loading>
-      {{ t("knowledge.documents.loading") }}
-    </EmptyState>
-
-    <div v-else class="document-table document-list-compact" role="table" :aria-label="t('knowledge.documents.ariaLabel')">
-      <div class="document-table-head" role="row">
-        <span role="columnheader">{{ t("knowledge.documents.columns.name") }}</span>
-        <span role="columnheader">{{ t("knowledge.documents.columns.embeddingStatus") }}</span>
-        <span role="columnheader">{{ t("knowledge.documents.columns.visibility") }}</span>
-        <span role="columnheader" class="document-actions-head">{{ t("knowledge.documents.columns.actions") }}</span>
-      </div>
-
-      <EmptyState v-if="filteredDocuments.length === 0" class="min-h-[120px]">{{ t("knowledge.documents.empty") }}</EmptyState>
-
-      <article
-        v-for="row in filteredDocuments"
-        :key="row.id"
-        class="document-row"
-        :class="{ selected: row.id === selectedDocumentId }"
-        role="row"
-        @click="$emit('select', row.id)"
-      >
-        <div class="document-cell document-main" role="cell">
-          <span class="doc-title" :title="row.title">{{ row.title }}</span>
-          <em>{{ documentType(row) }} · {{ row.chunks }} chunks</em>
-        </div>
-        <div class="document-cell" role="cell" :data-label="t('knowledge.documents.columns.embeddingStatus')">
+    <el-table
+      v-loading="loading"
+      class="document-table document-table-desktop"
+      :data="documents"
+      row-key="id"
+      :row-class-name="documentRowClass"
+      :empty-text="t('knowledge.documents.empty')"
+      @row-click="(row: KnowledgeDocument) => $emit('select', row.id)"
+      @sort-change="handleSortChange"
+    >
+      <el-table-column prop="title" :label="t('knowledge.documents.columns.name')" min-width="210" sortable="custom">
+        <template #default="{ row }: { row: KnowledgeDocument }">
+          <div class="document-main">
+            <span class="doc-title" :title="row.title">{{ row.title }}</span>
+            <span class="document-subline">{{ documentType(row) }} · {{ row.chunks }} chunks</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column prop="status" :label="t('knowledge.documents.columns.embeddingStatus')" width="116" sortable="custom">
+        <template #default="{ row }: { row: KnowledgeDocument }">
           <StatusChip :tone="documentStatusTone(documentStatus(row).tone)">
             {{ t(documentStatus(row).labelKey) }}
           </StatusChip>
-        </div>
-        <div class="document-cell document-visibility-cell" role="cell" :data-label="t('knowledge.documents.columns.visibility')">
+        </template>
+      </el-table-column>
+      <el-table-column :label="t('knowledge.documents.columns.visibility')" width="150">
+        <template #default="{ row }: { row: KnowledgeDocument }">
           <ResourceVisibilityTabs
             :model-value="row.visibility || 'private'"
             class="document-visibility-tabs"
@@ -70,36 +65,87 @@
             @click.stop
             @update:model-value="(value) => updateDocumentVisibility(row, value)"
           />
+        </template>
+      </el-table-column>
+      <el-table-column :label="t('knowledge.documents.columns.actions')" width="132" fixed="right">
+        <template #default="{ row }: { row: KnowledgeDocument }">
+          <DocumentActions
+            :row="row"
+            :deleting-doc-id="deletingDocId || undefined"
+            :rebuilding-doc-id="rebuildingDocId || undefined"
+            :updating-doc-id="updatingDocId || undefined"
+            @update="$emit('update', row)"
+            @rebuild="$emit('rebuild', row)"
+            @delete="$emit('delete', row)"
+          />
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <div v-loading="loading" class="document-list-mobile">
+      <EmptyState v-if="!documents.length && !loading" class="min-h-[120px]">{{ t("knowledge.documents.empty") }}</EmptyState>
+      <article
+        v-for="row in documents"
+        :key="row.id"
+        class="document-card"
+        :class="{ selected: row.id === selectedDocumentId }"
+        tabindex="0"
+        @click="$emit('select', row.id)"
+        @keydown.enter.prevent="$emit('select', row.id)"
+        @keydown.space.prevent="$emit('select', row.id)"
+      >
+        <div class="document-main">
+          <span class="doc-title" :title="row.title">{{ row.title }}</span>
+          <span class="document-subline">{{ documentType(row) }} · {{ row.chunks }} chunks</span>
         </div>
-        <div class="document-actions" role="cell" :data-label="t('knowledge.documents.columns.actions')" @click.stop>
-          <div class="document-action-buttons">
-            <el-tooltip :content="t('knowledge.workbench.updateDocument')" placement="top">
-              <el-button text class="cursor-pointer" :disabled="!row.can_manage || updatingDocId === row.id" :loading="updatingDocId === row.id" :aria-label="t('knowledge.documents.replaceSourceLabel', { title: row.title })" @click="$emit('update', row)">
-                <el-icon><UploadFilled /></el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip :content="t('knowledge.documents.rebuild')" placement="top">
-              <el-button text class="cursor-pointer" :disabled="!row.can_manage || rebuildingDocId === row.id" :loading="rebuildingDocId === row.id" :aria-label="t('knowledge.documents.reEmbeddingLabel', { title: row.title })" @click="$emit('rebuild', row)">
-                <el-icon><RefreshRight /></el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip :content="t('knowledge.documents.delete')" placement="top">
-              <el-button type="danger" text class="cursor-pointer" :loading="deletingDocId === row.id" :aria-label="t('knowledge.documents.deleteLabel', { title: row.title })" @click="$emit('delete', row)">
-                <el-icon><Delete /></el-icon>
-              </el-button>
-            </el-tooltip>
-          </div>
+        <div class="document-card-field">
+          <span>{{ t("knowledge.documents.columns.embeddingStatus") }}</span>
+          <StatusChip :tone="documentStatusTone(documentStatus(row).tone)">{{ t(documentStatus(row).labelKey) }}</StatusChip>
+        </div>
+        <div class="document-card-field" @click.stop>
+          <span>{{ t("knowledge.documents.columns.visibility") }}</span>
+          <ResourceVisibilityTabs
+            :model-value="row.visibility || 'private'"
+            class="document-visibility-tabs"
+            :disabled="!row.can_manage"
+            :aria-label="t('knowledge.documents.visibilityLabel', { title: row.title })"
+            @update:model-value="(value) => updateDocumentVisibility(row, value)"
+          />
+        </div>
+        <div class="document-card-actions" @click.stop>
+          <DocumentActions
+            :row="row"
+            :deleting-doc-id="deletingDocId || undefined"
+            :rebuilding-doc-id="rebuildingDocId || undefined"
+            :updating-doc-id="updatingDocId || undefined"
+            @update="$emit('update', row)"
+            @rebuild="$emit('rebuild', row)"
+            @delete="$emit('delete', row)"
+          />
         </div>
       </article>
+    </div>
+
+    <div v-if="total > pageSize" class="document-pagination">
+      <el-pagination
+        small
+        background
+        layout="prev, pager, next"
+        :current-page="page"
+        :page-size="pageSize"
+        :total="total"
+        @current-change="$emit('page-change', $event)"
+      />
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue"
+import { defineComponent, h } from "vue"
 import { useI18n } from "vue-i18n"
-import { Delete, DocumentAdd, Loading, Refresh, RefreshRight, Search, UploadFilled } from "@element-plus/icons-vue"
-import type { KnowledgeDocument, ResourceVisibility } from "../../types"
+import { Delete, DocumentAdd, Refresh, RefreshRight, Search, UploadFilled } from "@element-plus/icons-vue"
+import { ElButton, ElIcon, ElTooltip } from "element-plus"
+import type { KnowledgeDocument, KnowledgePagination, ResourceVisibility } from "../../types"
 import { knowledgeDocumentStatus, knowledgeDocumentType } from "../../modules/knowledgeWorkbench"
 import EmptyState from "../common/EmptyState.vue"
 import ResourceVisibilityTabs from "../common/ResourceVisibilityTabs.vue"
@@ -109,6 +155,9 @@ import StatusChip from "../common/StatusChip.vue"
 const props = defineProps<{
   documents: KnowledgeDocument[]
   selectedDocumentId: string
+  page: number
+  pageSize: number
+  total: number
   loading: boolean
   clearing: boolean
   deletingDocId: string | null
@@ -125,10 +174,12 @@ const emit = defineEmits<{
   rebuild: [document: KnowledgeDocument]
   delete: [document: KnowledgeDocument]
   visibility: [document: KnowledgeDocument, visibility: ResourceVisibility]
+  "page-change": [page: number]
+  "sort-change": [sort: { sortBy: KnowledgePagination["sort_by"]; sortOrder: KnowledgePagination["sort_order"] }]
 }>()
 
+const query = defineModel<string>("query", { default: "" })
 const { t } = useI18n()
-const query = ref("")
 const documentType = knowledgeDocumentType
 const documentStatus = knowledgeDocumentStatus
 const documentStatusTone = (tone: string) => {
@@ -138,25 +189,65 @@ const documentStatusTone = (tone: string) => {
   return "muted"
 }
 
-const filteredDocuments = computed(() => {
-  const value = query.value.trim().toLowerCase()
-  if (!value) return props.documents
-  return props.documents.filter((doc) => {
-    const metadataText = Object.values(doc.metadata || {}).join(" ")
-    return [doc.id, doc.title, doc.source, metadataText].some((text) => String(text || "").toLowerCase().includes(value))
+const documentRowClass = ({ row }: { row: KnowledgeDocument }) => row.id === props.selectedDocumentId ? "is-selected" : ""
+
+const handleSortChange = ({ prop, order }: { prop: string; order: string | null }) => {
+  if (!order) {
+    emit("sort-change", { sortBy: "updated_at", sortOrder: "desc" })
+    return
+  }
+  emit("sort-change", {
+    sortBy: prop === "title" ? "name" : "status",
+    sortOrder: order === "ascending" ? "asc" : "desc",
   })
-})
+}
 
 const updateDocumentVisibility = (document: KnowledgeDocument, visibility: ResourceVisibility) => {
   emit("visibility", document, visibility)
 }
+
+const DocumentActions = defineComponent({
+  props: {
+    row: { type: Object as () => KnowledgeDocument, required: true },
+    deletingDocId: { type: String, default: null },
+    rebuildingDocId: { type: String, default: null },
+    updatingDocId: { type: String, default: null },
+  },
+  emits: ["update", "rebuild", "delete"],
+  setup(actionProps, { emit: actionEmit }) {
+    const action = (label: string, icon: typeof UploadFilled, options: { danger?: boolean; loading?: boolean; disabled?: boolean }, event: "update" | "rebuild" | "delete") => h(
+      ElTooltip,
+      { content: label, placement: "top" },
+      { default: () => h(ElButton, {
+        text: true,
+        type: options.danger ? "danger" : undefined,
+        loading: options.loading,
+        disabled: options.disabled,
+        "aria-label": label,
+        onClick: () => actionEmit(event),
+      }, { default: () => h(ElIcon, null, { default: () => h(icon) }) }) },
+    )
+    return () => h("div", { class: "document-action-buttons" }, [
+      action(t("knowledge.workbench.updateDocument"), UploadFilled, {
+        loading: actionProps.updatingDocId === actionProps.row.id,
+        disabled: !actionProps.row.can_manage || actionProps.updatingDocId === actionProps.row.id,
+      }, "update"),
+      action(t("knowledge.documents.rebuild"), RefreshRight, {
+        loading: actionProps.rebuildingDocId === actionProps.row.id,
+        disabled: !actionProps.row.can_manage || actionProps.rebuildingDocId === actionProps.row.id,
+      }, "rebuild"),
+      action(t("knowledge.documents.delete"), Delete, {
+        danger: true,
+        loading: actionProps.deletingDocId === actionProps.row.id,
+        disabled: !actionProps.row.can_manage,
+      }, "delete"),
+    ])
+  },
+})
 </script>
 
 <style scoped>
-.knowledge-document-list {
-  min-width: 0;
-}
-
+.knowledge-document-list { min-width: 0; }
 .document-management-bar {
   display: flex;
   min-width: 0;
@@ -169,178 +260,41 @@ const updateDocumentVisibility = (document: KnowledgeDocument, visibility: Resou
   background: var(--kn-panel-soft);
   padding: 12px;
 }
-
-.document-management-controls,
-.document-command-group {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.document-management-controls {
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-}
-
-.document-command-group :deep(.el-button) {
-  width: 32px;
-  height: 32px;
-  margin-left: 0;
-  padding: 0;
-}
-
-.document-filter {
-  width: min(100%, 320px);
-}
-
-.document-table {
-  --document-table-font-size: 11px;
-
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--kn-border);
-  border-radius: 12px;
-}
-
-.document-table-head,
-.document-row {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(84px, 0.34fr) minmax(96px, 0.38fr) 132px;
-  min-width: 0;
-  font-size: var(--document-table-font-size);
-}
-
-.document-table-head {
-  border-bottom: 1px solid var(--kn-border);
-  background: var(--kn-panel-soft);
-  color: var(--kn-muted);
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.document-table-head > span,
-.document-cell,
-.document-actions {
-  min-width: 0;
-  padding: 8px 7px;
-}
-
-.document-actions-head,
-.document-actions {
-  display: flex;
-  justify-content: flex-start;
-}
-
-.document-row {
-  background: var(--kn-panel);
-  transition: background 0.18s ease;
-}
-
-.document-row.selected {
-  border-color: color-mix(in srgb, var(--kn-embedding) 56%, var(--kn-border));
-  background: color-mix(in srgb, var(--kn-embedding-soft) 44%, var(--kn-panel));
-  box-shadow: inset 3px 0 0 var(--kn-embedding);
-}
-
-.document-row + .document-row {
-  border-top: 1px solid var(--kn-border);
-}
-
-.document-main {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.document-main em,
-.doc-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.doc-title {
-  color: var(--kn-heading);
-  font-size: 12px;
-  font-weight: 760;
-}
-
-.document-main em {
-  color: var(--kn-muted);
-  font-size: 11px;
-  font-style: normal;
-}
-
-.document-visibility-cell {
-  display: flex;
-  align-items: center;
-}
-
-.document-visibility-tabs {
-  --visibility-tab-font-size: 10px;
-  --visibility-tab-height: 24px;
-  --visibility-tab-min-width: 44px;
-  --visibility-tab-padding: 3px 6px;
-
-  width: max-content;
-  max-width: 100%;
-}
-
-.document-actions,
-.document-action-buttons {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 2px;
-}
-
-.document-action-buttons :deep(.el-button) {
-  width: 24px;
-  height: 24px;
-  margin-left: 0;
-  padding: 0;
-}
+.document-management-controls, .document-command-group { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 8px; }
+.document-management-controls { flex: 1 1 auto; flex-wrap: wrap; }
+.document-command-group :deep(.el-button) { width: 32px; height: 32px; margin-left: 0; padding: 0; }
+.document-filter { width: min(100%, 320px); }
+.document-table { width: 100%; border: 1px solid var(--kn-border); border-radius: var(--ag-radius-panel); overflow: hidden; }
+.document-table :deep(th.el-table__cell) { background: var(--kn-panel-soft); color: var(--kn-muted); font-size: 10px; font-weight: 800; }
+.document-table :deep(td.el-table__cell) { background: var(--kn-panel); padding: 7px 0; }
+.document-table :deep(.el-table__row) { cursor: pointer; }
+.document-table :deep(.el-table__row:hover > td.el-table__cell) { background: var(--kn-embedding-soft); }
+.document-table :deep(.el-table__row.is-selected > td.el-table__cell) { background: color-mix(in srgb, var(--kn-embedding-soft) 52%, var(--kn-panel)); }
+.document-table :deep(.el-table__row.is-selected > td:first-child) { box-shadow: inset 3px 0 0 var(--kn-embedding); }
+.document-main { display: grid; min-width: 0; gap: 3px; }
+.doc-title, .document-subline { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-title { color: var(--kn-heading); font-size: 12px; font-weight: 760; }
+.document-subline { color: var(--kn-muted); font-size: 11px; }
+.document-visibility-tabs { --visibility-tab-font-size: 10px; --visibility-tab-height: 24px; --visibility-tab-min-width: 44px; --visibility-tab-padding: 3px 6px; width: max-content; max-width: 100%; }
+:deep(.document-action-buttons) { display: inline-flex; align-items: center; gap: 2px; }
+:deep(.document-action-buttons .el-button) { width: 24px; height: 24px; margin-left: 0; padding: 0; }
+.document-list-mobile { display: none; min-height: 120px; }
+.document-pagination { display: flex; justify-content: flex-end; padding-top: 12px; }
 
 @media (max-width: 1120px) {
-  .document-table-head {
-    display: none;
-  }
+  .document-table-desktop { display: none; }
+  .document-list-mobile { display: grid; gap: 10px; }
+  .document-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; border: 1px solid var(--kn-border); border-radius: var(--ag-radius-panel); background: var(--kn-panel); padding: 12px; outline: none; }
+  .document-card:hover, .document-card:focus-visible { border-color: color-mix(in srgb, var(--kn-embedding) 44%, var(--kn-border)); background: var(--kn-embedding-soft); }
+  .document-card.selected { box-shadow: inset 3px 0 0 var(--kn-embedding); }
+  .document-card-field { display: grid; grid-template-columns: minmax(84px, 110px) minmax(0, 1fr); align-items: center; gap: 8px; }
+  .document-card-field > span { color: var(--kn-muted); font-size: 10px; font-weight: 800; }
+  .document-card-actions { display: flex; justify-content: flex-end; }
+}
 
-  .document-table {
-    display: grid;
-    gap: 10px;
-    overflow: visible;
-    border: 0;
-  }
-
-  .document-row {
-    grid-template-columns: minmax(0, 1fr);
-    border: 1px solid var(--kn-border);
-    border-radius: 12px;
-  }
-
-  .document-main,
-  .document-actions {
-    grid-column: 1 / -1;
-  }
-
-  .document-cell:not(.document-main),
-  .document-actions {
-    display: grid;
-    grid-template-columns: minmax(72px, 96px) minmax(0, 1fr);
-    gap: 8px;
-    align-items: center;
-  }
-
-  .document-cell:not(.document-main)::before,
-  .document-actions::before {
-    content: attr(data-label);
-    color: var(--kn-muted);
-    font-size: 10px;
-    font-weight: 800;
-  }
+@media (max-width: 680px) {
+  .document-management-bar { align-items: stretch; flex-direction: column; }
+  .document-management-controls { justify-content: space-between; }
+  .document-filter { flex: 1 1 200px; }
 }
 </style>

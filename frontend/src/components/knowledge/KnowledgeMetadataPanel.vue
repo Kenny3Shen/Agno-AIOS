@@ -7,24 +7,11 @@
     />
 
     <EmptyState v-if="!document" class="mt-3 min-h-[120px]">{{ t("knowledge.workbench.noSelection") }}</EmptyState>
-    <template v-else>
-      <div class="knowledge-runtime-summary metadata-primary mt-3">
-        <DataChip
-          v-for="item in primaryItems"
-          :key="item.label"
-          :label="item.label"
-          :value="item.value"
-          :title="item.value"
-        />
-      </div>
-
-      <div class="metadata-secondary">
-        <div v-for="item in secondaryItems" :key="item.label" class="metadata-row">
-          <span>{{ item.label }}</span>
-          <strong :title="item.value">{{ item.value }}</strong>
-        </div>
-      </div>
-    </template>
+    <el-descriptions v-else class="metadata-descriptions mt-3" :column="1" border size="small">
+      <el-descriptions-item v-for="item in metadataItems" :key="item.label" :label="item.label">
+        <span class="metadata-value" :title="item.value">{{ item.value }}</span>
+      </el-descriptions-item>
+    </el-descriptions>
   </section>
 </template>
 
@@ -33,7 +20,6 @@ import { computed } from "vue"
 import { useI18n } from "vue-i18n"
 import type { KnowledgeDocument } from "../../types"
 import { knowledgeDocumentSize, knowledgeDocumentType } from "../../modules/knowledgeWorkbench"
-import DataChip from "../common/DataChip.vue"
 import EmptyState from "../common/EmptyState.vue"
 import SectionHeader from "../common/SectionHeader.vue"
 
@@ -55,21 +41,16 @@ const displayValue = (value: string | number | null | undefined) => {
   return text || "-"
 }
 
-const primaryItems = computed(() => {
+const metadataItems = computed(() => {
   const doc = props.document
   if (!doc) return []
-  return [
+  const primary = [
     { label: t("knowledge.drawer.documentName"), value: displayValue(doc.title) },
     { label: t("knowledge.drawer.type"), value: documentType(doc) },
     { label: t("knowledge.drawer.chunks"), value: String(doc.chunks) },
     { label: t("knowledge.drawer.updated"), value: formatDate(doc.created_at) },
   ]
-})
-
-const secondaryItems = computed(() => {
-  const doc = props.document
-  if (!doc) return []
-  return [
+  const secondary = [
     { label: t("knowledge.drawer.source"), value: displayValue(doc.source || metadataValue("source")) },
     { label: t("knowledge.drawer.readerStrategy"), value: displayValue(metadataValue("reader") || metadataValue("chunk_strategy")) },
     { label: t("knowledge.drawer.reference"), value: displayValue(metadataValue("file_name") || metadataValue("path")) },
@@ -77,6 +58,7 @@ const secondaryItems = computed(() => {
     { label: t("knowledge.documents.columns.visibility"), value: displayValue(doc.visibility || metadataValue("visibility")) },
     { label: t("knowledge.drawer.mime"), value: displayValue(metadataValue("mime_type") || metadataValue("file_type")) },
   ]
+  return [...primary, ...secondary]
 })
 </script>
 
@@ -85,44 +67,36 @@ const secondaryItems = computed(() => {
   min-width: 0;
 }
 
-.metadata-primary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.metadata-secondary {
-  display: grid;
-  gap: 8px;
-}
-
-.metadata-row {
-  display: grid;
-  grid-template-columns: minmax(72px, 0.32fr) minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-  border: 1px solid var(--kn-border);
-  border-radius: var(--ag-radius-control);
-  background: var(--kn-panel-soft);
-  padding: 9px 10px;
-}
-
-.metadata-row span,
-.metadata-row strong {
+.metadata-descriptions {
+  width: 100%;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.metadata-row span {
+.metadata-descriptions :deep(.el-descriptions__table) {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.metadata-descriptions :deep(.el-descriptions__label.el-descriptions__cell) {
+  width: 108px;
+  background: var(--kn-panel-soft);
   color: var(--kn-muted);
   font-size: 11px;
   font-weight: 760;
 }
 
-.metadata-row strong {
+.metadata-descriptions :deep(.el-descriptions__content.el-descriptions__cell) {
+  min-width: 0;
+  background: var(--kn-panel);
+}
+
+.metadata-value {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--kn-heading);
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 12px;

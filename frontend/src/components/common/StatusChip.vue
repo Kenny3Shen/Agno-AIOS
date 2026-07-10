@@ -1,7 +1,14 @@
 <template>
-  <span :class="['ag-status-chip', toneClass]" :title="title">
+  <el-tag
+    class="ag-status-chip"
+    :type="tagType"
+    effect="light"
+    size="small"
+    :title="title"
+    disable-transitions
+  >
     <slot />
-  </span>
+  </el-tag>
 </template>
 
 <script setup lang="ts">
@@ -14,13 +21,22 @@ const props = withDefaults(defineProps<{
   tone: "muted",
 })
 
-const toneClasses = {
-  blue: "ag-status-blue",
-  green: "ag-status-green",
-  yellow: "ag-status-yellow",
-  red: "ag-status-red",
-  muted: "ag-status-muted",
+const tagTypes = {
+  blue: "primary",
+  green: "success",
+  yellow: "warning",
+  red: "danger",
+  muted: "info",
 } as const
 
-const toneClass = computed(() => toneClasses[props.tone])
+const tagType = computed(() => tagTypes[props.tone])
 </script>
+
+<style scoped>
+.ag-status-chip {
+  --el-tag-border-radius: var(--ag-radius-control);
+
+  max-width: 100%;
+  font-weight: 760;
+}
+</style>

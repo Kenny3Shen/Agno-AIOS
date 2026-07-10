@@ -5,6 +5,7 @@ import type {
   KnowledgeDocument,
   KnowledgeDocumentUpdateRequest,
   KnowledgeFileRequest,
+  KnowledgePagination,
   KnowledgeRagSettings,
   KnowledgeRagSettingsResponse,
   KnowledgeSearchResponse,
@@ -46,7 +47,16 @@ export function useKnowledgeApi() {
     }
   }
 
-  const fetchKnowledge = () => request<KnowledgeStatusResponse>('', {}, apiMessage('knowledgeLoadFailed'))
+  const fetchKnowledge = (params?: Partial<Pick<KnowledgePagination, 'page' | 'limit' | 'query' | 'sort_by' | 'sort_order'>>) => {
+    const search = new URLSearchParams()
+    if (params?.page) search.set('page', String(params.page))
+    if (params?.limit) search.set('limit', String(params.limit))
+    if (params?.query) search.set('query', params.query)
+    if (params?.sort_by) search.set('sort_by', params.sort_by)
+    if (params?.sort_order) search.set('sort_order', params.sort_order)
+    const suffix = search.size ? `?${search.toString()}` : ''
+    return request<KnowledgeStatusResponse>(suffix, {}, apiMessage('knowledgeLoadFailed'))
+  }
 
   const addTextDocument = (payload: KnowledgeTextRequest) => request<KnowledgeDocument>('/documents/text', {
     method: 'POST',
@@ -86,7 +96,13 @@ export function useKnowledgeApi() {
     body: JSON.stringify(payload)
   }, apiMessage('knowledgeRequestFailed'))
 
-  const clearKnowledge = () => request<{ documents: number; chunks: number }>('', {
+  const clearKnowledge = () => request<{
+    documents: number
+    chunks: number
+    deleted_documents: number
+    deleted_ids: string[]
+    failed_ids: string[]
+  }>('', {
     method: 'DELETE'
   }, apiMessage('knowledgeClearFailed'))
 

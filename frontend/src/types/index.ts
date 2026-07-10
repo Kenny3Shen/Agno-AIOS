@@ -712,6 +712,16 @@ export interface KnowledgeDocument {
 export interface KnowledgeStatusResponse {
   status: KnowledgeStatus
   documents: KnowledgeDocument[]
+  pagination: KnowledgePagination
+}
+
+export interface KnowledgePagination {
+  page: number
+  limit: number
+  total: number
+  query: string
+  sort_by: "updated_at" | "created_at" | "name" | "status"
+  sort_order: "asc" | "desc"
 }
 
 export interface KnowledgeIngestOptions {

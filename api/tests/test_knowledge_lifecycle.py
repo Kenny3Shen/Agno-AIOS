@@ -1192,5 +1192,142 @@ async def test_clear_knowledge_base_deletes_all_visible_content_with_async_depen
 
     result = await lifecycle.clear_knowledge_base_async(owner_user_id="u1")
 
-    assert result == {"documents": 0, "chunks": 0}
+    assert result == {
+        "documents": 0,
+        "chunks": 0,
+        "deleted_documents": 2,
+        "deleted_ids": ["doc-1", "doc-2"],
+        "failed_ids": [],
+    }
     assert deleted == ["doc-1", "doc-2"]
+
+
+@pytest.mark.asyncio
+async def test_delete_document_rejects_public_content_owned_by_another_user() -> None:
+    content = SimpleNamespace(
+        id="public-doc",
+        metadata={"user_id": "u2", "visibility": "public"},
+    )
+    deleted: list[str] = []
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_by_id_async=lambda _content_id: content,
+            delete_content_async=lambda _knowledge, content_id: deleted.append(content_id),
+        )
+    )
+    user = SimpleNamespace(id="u1", role="user", is_superuser=False)
+
+    result = await lifecycle.delete_document_async("public-doc", user=user)
+
+    assert not result
+    assert deleted == []
+
+
+@pytest.mark.asyncio
+async def test_clear_knowledge_only_deletes_resources_managed_by_user() -> None:
+    contents = [
+        SimpleNamespace(id="own-private", metadata={"user_id": "u1"}),
+        SimpleNamespace(
+            id="other-public",
+            metadata={"user_id": "u2", "visibility": "public"},
+        ),
+        SimpleNamespace(id="other-private", metadata={"user_id": "u2"}),
+    ]
+    deleted: list[str] = []
+
+    async def content_rows_async(**_kwargs: object):
+        return contents, len(contents)
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_rows_async=content_rows_async,
+            delete_content_async=lambda _knowledge, content_id: deleted.append(content_id),
+        )
+    )
+    user = SimpleNamespace(id="u1", role="user", is_superuser=False)
+
+    result = await lifecycle.clear_knowledge_base_async(user=user)
+
+    assert result["deleted_ids"] == ["own-private"]
+    assert result["failed_ids"] == []
+    assert deleted == ["own-private"]
+
+
+@pytest.mark.asyncio
+async def test_delete_document_uses_agno_remove_and_cleans_source_snapshot() -> None:
+    calls: list[tuple[str, str]] = []
+    content = SimpleNamespace(id="doc-1", metadata={"user_id": "u1"})
+
+    class KnowledgeDeleteFake:
+        async def aremove_content_by_id(self, content_id: str) -> None:
+            calls.append(("agno", content_id))
+
+    async def delete_source_async(content_id: str) -> None:
+        calls.append(("source", content_id))
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: KnowledgeDeleteFake(),
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_by_id_async=lambda _content_id: content,
+            delete_source_async=delete_source_async,
+        )
+    )
+    user = SimpleNamespace(id="u1", role="user", is_superuser=False)
+
+    result = await lifecycle.delete_document_async("doc-1", user=user)
+
+    assert result
+    assert calls == [("agno", "doc-1"), ("source", "doc-1")]
+
+
+@pytest.mark.asyncio
+async def test_list_documents_page_filters_sorts_and_reports_total() -> None:
+    contents = [
+        SimpleNamespace(
+            id="doc-1",
+            name="Zulu Runbook",
+            description="manual",
+            metadata={"user_id": "u1", "source": "manual", "team": "blue"},
+            created_at=1,
+        ),
+        SimpleNamespace(
+            id="doc-2",
+            name="Alpha Policy",
+            description="manual",
+            metadata={"user_id": "u1", "source": "manual", "team": "blue"},
+            created_at=2,
+        ),
+        SimpleNamespace(
+            id="doc-3",
+            name="Other",
+            description="manual",
+            metadata={"user_id": "u1", "source": "manual", "team": "red"},
+            created_at=3,
+        ),
+    ]
+
+    async def content_rows_async(**_kwargs: object):
+        return contents, len(contents)
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_rows_async=content_rows_async,
+            chunk_counts_by_content_id_async=lambda _owner: {},
+        )
+    )
+
+    documents, total = await lifecycle.list_documents_page_async(
+        owner_user_id="u1",
+        query="blue",
+        page=1,
+        limit=1,
+        sort_by="name",
+        sort_order="asc",
+    )
+
+    assert total == 2
+    assert [document["id"] for document in documents] == ["doc-2"]

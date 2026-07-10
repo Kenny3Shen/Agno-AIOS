@@ -49,20 +49,20 @@
             </strong>
           </span>
           <span class="flex min-w-0 flex-wrap gap-1.5 pl-5">
-            <DataChip
+            <el-tag
               v-if="!memory.topics.length"
-              :label="t('workbench.memory.topicsLabel')"
-              :value="t('workbench.memory.noTopics')"
-              tone="muted"
-            />
-            <DataChip
+              type="info"
+              effect="plain"
+              size="small"
+            >{{ t("workbench.memory.noTopics") }}</el-tag>
+            <el-tag
               v-for="topic in memory.topics"
               :key="`${memory.id}-${topic}`"
-              :label="t('workbench.memory.topicsLabel')"
-              :value="topic"
-              tone="muted"
+              type="info"
+              effect="plain"
+              size="small"
               :title="topic"
-            />
+            >{{ topic }}</el-tag>
           </span>
         </button>
 

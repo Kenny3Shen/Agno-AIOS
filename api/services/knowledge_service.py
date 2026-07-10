@@ -9,12 +9,13 @@ from collections.abc import Sequence
 from typing import Any, Callable, Mapping, cast
 
 from agno.knowledge.content import Content
+from agno.db.schemas.knowledge import KnowledgeRow
 from agno.knowledge.document import Document
 from agno.knowledge.embedder.sentence_transformer import SentenceTransformerEmbedder
 from agno.knowledge.knowledge import Knowledge
 from agno.knowledge.reranker.sentence_transformer import SentenceTransformerReranker
 from agno.vectordb.search import SearchType
-from sqlalchemy import Column, MetaData, Table, Text, func, select
+from sqlalchemy import Column, Integer, MetaData, Table, Text, cast as sql_cast, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 
 from api.auth.claims import ActorLike
@@ -322,6 +323,86 @@ def _pgvector_projection_table() -> Table:
     )
 
 
+def _knowledge_contents_projection_table() -> Table:
+    settings = knowledge_settings()
+    return Table(
+        settings.postgres_knowledge_table,
+        MetaData(schema=settings.postgres_schema),
+        Column("id", Text),
+        Column("name", Text),
+        Column("description", Text),
+        Column("metadata", JSONB),
+        Column("type", Text),
+        Column("size", Integer),
+        Column("linked_to", Text),
+        Column("access_count", Integer),
+        Column("status", Text),
+        Column("status_message", Text),
+        Column("created_at", Integer),
+        Column("updated_at", Integer),
+        Column("external_id", Text),
+    )
+
+
+def _visible_metadata_clause(metadata_column: Any, owner_user_id: str | None) -> Any:
+    clean_owner = (owner_user_id or "").strip()
+    if not clean_owner:
+        return None
+    return or_(
+        metadata_column["visibility"].astext == "public",
+        metadata_column["owner_user_id"].astext == clean_owner,
+        metadata_column["user_id"].astext == clean_owner,
+    )
+
+
+async def _knowledge_document_page_rows_async(
+    *,
+    owner_user_id: str | None,
+    query: str | None,
+    page: int,
+    limit: int,
+    sort_by: str,
+    sort_order: str,
+) -> tuple[list[KnowledgeRow], int]:
+    table = _knowledge_contents_projection_table()
+    stmt = select(table).where(table.c.linked_to == knowledge_settings().name)
+    visibility_clause = _visible_metadata_clause(table.c.metadata, owner_user_id)
+    if visibility_clause is not None:
+        stmt = stmt.where(visibility_clause)
+    clean_query = (query or "").strip().casefold()
+    if clean_query:
+        search_value = f"%{clean_query}%"
+        stmt = stmt.where(
+            func.lower(
+                func.concat_ws(
+                    " ",
+                    table.c.id,
+                    table.c.name,
+                    table.c.description,
+                    sql_cast(table.c.metadata, Text),
+                )
+            ).like(search_value)
+        )
+
+    total_stmt = select(func.count()).select_from(stmt.subquery())
+    sort_columns = {
+        "created_at": table.c.created_at,
+        "name": func.lower(table.c.name),
+        "status": func.lower(table.c.status),
+        "updated_at": table.c.updated_at,
+    }
+    sort_column = sort_columns.get(sort_by, table.c.updated_at)
+    stmt = stmt.order_by(sort_column.asc() if sort_order.lower() == "asc" else sort_column.desc())
+    safe_page = max(1, page)
+    safe_limit = min(100, max(1, limit))
+    stmt = stmt.limit(safe_limit).offset((safe_page - 1) * safe_limit)
+
+    async with get_async_control_plane_engine().begin() as conn:
+        total = int((await conn.execute(total_stmt)).scalar() or 0)
+        rows = (await conn.execute(stmt)).mappings().all()
+    return [KnowledgeRow.model_validate(dict(row)) for row in rows], total
+
+
 async def _chunk_counts_by_content_id_async(owner_user_id: str | None = None) -> dict[str, int]:
     table = _pgvector_projection_table()
     stmt = select(table.c.content_id, func.count()).where(table.c.content_id.is_not(None))
@@ -337,9 +418,9 @@ async def _chunk_counts_by_content_id_async(owner_user_id: str | None = None) ->
 async def _chunk_count_async(owner_user_id: str | None = None) -> int:
     table = _pgvector_projection_table()
     stmt = select(func.count()).select_from(table)
-    owner_filter = _owner_metadata(owner_user_id)
-    if owner_filter:
-        stmt = stmt.where(table.c.meta_data.contains(owner_filter))
+    visibility_clause = _visible_metadata_clause(table.c.meta_data, owner_user_id)
+    if visibility_clause is not None:
+        stmt = stmt.where(visibility_clause)
     try:
         async with get_async_control_plane_engine().begin() as conn:
             count = (await conn.execute(stmt)).scalar()
@@ -366,25 +447,10 @@ async def _hydrate_content_ids_async(documents: list[Document]) -> None:
             document.meta_data["content_id"] = content_ids[document.id]
 
 
-async def _delete_vector_rows_by_content_id_async(content_id: str) -> None:
-    table = _pgvector_projection_table()
-    async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(table.delete().where(table.c.content_id == content_id))
-
-
-async def _delete_knowledge_content_row_async(knowledge: Any, content_id: str) -> None:
-    contents_db = getattr(knowledge, "contents_db", None) or get_async_knowledge_postgres_db()
-    delete_knowledge_content = getattr(contents_db, "delete_knowledge_content", None)
-    if delete_knowledge_content is None:
-        raise RuntimeError("Knowledge contents DB does not support async content deletion")
-    result = delete_knowledge_content(content_id)
-    if hasattr(result, "__await__"):
-        await result
-
-
 async def _delete_content_async(knowledge: Any, content_id: str) -> None:
-    await _delete_vector_rows_by_content_id_async(content_id)
-    await _delete_knowledge_content_row_async(knowledge, content_id)
+    if knowledge is None:
+        knowledge = await _get_async_knowledge_base_async()
+    await knowledge.aremove_content_by_id(content_id)
 
 
 async def _latest_inserted_content_async(
@@ -574,17 +640,6 @@ class KnowledgeBaseLifecycle:
             return
         await _delete_knowledge_source_async(content_id)
 
-    async def _deletable_content_ids_async(
-        self,
-        owner_user_id: str | None,
-    ) -> list[str]:
-        contents, _ = await self._knowledge_content_rows_async()
-        return [
-            content.id
-            for content in contents
-            if content.id and _content_visible_to_owner(content, owner_user_id)
-        ]
-
     async def add_text_document_async(
         self,
         title: str,
@@ -740,16 +795,107 @@ class KnowledgeBaseLifecycle:
             documents.append(document)
         return documents
 
+    async def list_documents_page_async(
+        self,
+        *,
+        owner_user_id: str | None = None,
+        query: str | None = None,
+        page: int = 1,
+        limit: int = 50,
+        sort_by: str = "updated_at",
+        sort_order: str = "desc",
+    ) -> tuple[list[KnowledgeDocumentPayload], int]:
+        if self.dependencies.knowledge_content_rows_async is None:
+            await self._ensure_contents_storage_async()
+            contents, total = await _knowledge_document_page_rows_async(
+                owner_user_id=owner_user_id,
+                query=query,
+                page=page,
+                limit=limit,
+                sort_by=sort_by,
+                sort_order=sort_order,
+            )
+            chunk_counts = await self._chunk_counts_by_content_id_async(owner_user_id)
+            documents: list[KnowledgeDocumentPayload] = []
+            for content in contents:
+                document = _content_to_document(content)
+                document["chunks"] = chunk_counts.get(document["id"], document["chunks"])
+                documents.append(document)
+            return documents, total
+
+        documents = await self.list_documents_async(owner_user_id=owner_user_id)
+        return self.paginate_documents(
+            documents,
+            query=query,
+            page=page,
+            limit=limit,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+
+    @staticmethod
+    def paginate_documents(
+        documents: list[KnowledgeDocumentPayload],
+        *,
+        query: str | None = None,
+        page: int = 1,
+        limit: int = 50,
+        sort_by: str = "updated_at",
+        sort_order: str = "desc",
+    ) -> tuple[list[KnowledgeDocumentPayload], int]:
+        documents = list(documents)
+        clean_query = (query or "").strip().casefold()
+        if clean_query:
+            documents = [
+                document
+                for document in documents
+                if clean_query
+                in " ".join(
+                    (
+                        document["id"],
+                        document["title"],
+                        document["source"],
+                        *document["metadata"].values(),
+                    )
+                ).casefold()
+            ]
+
+        sort_keys: dict[str, Callable[[KnowledgeDocumentPayload], str]] = {
+            "created_at": lambda document: document["created_at"],
+            "name": lambda document: document["title"].casefold(),
+            "status": lambda document: document["status"],
+            "updated_at": lambda document: document["created_at"],
+        }
+        key = sort_keys.get(sort_by, sort_keys["updated_at"])
+        documents.sort(key=key, reverse=sort_order.lower() != "asc")
+        total = len(documents)
+        safe_page = max(1, page)
+        safe_limit = min(100, max(1, limit))
+        start = (safe_page - 1) * safe_limit
+        return documents[start : start + safe_limit], total
+
     async def delete_document_async(
         self,
         doc_id: str,
         owner_user_id: str | None = None,
+        user: ActorLike | None = None,
     ) -> bool:
         await self._ensure_contents_storage_async()
         content = await self._knowledge_content_by_id_async(doc_id)
-        if content is None or not _content_visible_to_owner(content, owner_user_id):
+        if content is None:
             return False
-        await self._delete_content_async(None, doc_id)
+        metadata = _safe_metadata(getattr(content, "metadata", None))
+        if user is not None:
+            if not can_manage_resource(user, metadata):
+                return False
+        elif not _content_visible_to_owner(content, owner_user_id):
+            return False
+        knowledge = (
+            await self._async_knowledge_async()
+            if self.dependencies.delete_content_async is None
+            else None
+        )
+        await self._delete_content_async(knowledge, doc_id)
         return True
 
     async def rebuild_document_async(
@@ -1007,12 +1153,41 @@ class KnowledgeBaseLifecycle:
     async def clear_knowledge_base_async(
         self,
         owner_user_id: str | None = None,
+        user: ActorLike | None = None,
     ) -> dict[str, Any]:
         await self._ensure_contents_storage_async()
-        content_ids = await self._deletable_content_ids_async(owner_user_id)
+        contents, _ = await self._knowledge_content_rows_async()
+        content_ids = [
+            content.id
+            for content in contents
+            if content.id
+            and (
+                can_manage_resource(user, _safe_metadata(getattr(content, "metadata", None)))
+                if user is not None
+                else _content_visible_to_owner(content, owner_user_id)
+            )
+        ]
+        knowledge = (
+            await self._async_knowledge_async()
+            if content_ids and self.dependencies.delete_content_async is None
+            else None
+        )
+        deleted_ids: list[str] = []
+        failed_ids: list[str] = []
         for content_id in content_ids:
-            await self._delete_content_async(None, content_id)
-        return {"documents": 0, "chunks": 0}
+            try:
+                await self._delete_content_async(knowledge, content_id)
+                deleted_ids.append(content_id)
+            except Exception:
+                failed_ids.append(content_id)
+        remaining_documents = len(content_ids) - len(deleted_ids)
+        return {
+            "documents": remaining_documents,
+            "chunks": 0 if remaining_documents == 0 else await self._chunk_count_async(owner_user_id),
+            "deleted_documents": len(deleted_ids),
+            "deleted_ids": deleted_ids,
+            "failed_ids": failed_ids,
+        }
 
     async def search_documents_async(
         self,
@@ -1080,12 +1255,12 @@ class KnowledgeBaseLifecycle:
         self,
         owner_user_id: str | None = None,
         documents: Sequence[Mapping[str, object]] | None = None,
+        document_count: int | None = None,
     ) -> dict[str, Any]:
-        docs = (
-            documents
-            if documents is not None
-            else await self.list_documents_async(owner_user_id=owner_user_id)
-        )
+        docs = documents
+        if docs is None and document_count is None:
+            docs = await self.list_documents_async(owner_user_id=owner_user_id)
+        docs = docs or []
         visible_chunk_count = sum(_int_value(document.get("chunks")) for document in docs)
         chunk_count = max(await self._chunk_count_async(owner_user_id), visible_chunk_count)
         settings = knowledge_settings()
@@ -1097,7 +1272,7 @@ class KnowledgeBaseLifecycle:
             "database": postgres_label(settings.postgres_schema, settings.pgvector_table),
             "contents_db": postgres_label(settings.postgres_schema, settings.postgres_knowledge_table),
             "postgres_schema": settings.postgres_schema,
-            "documents": len(docs),
+            "documents": document_count if document_count is not None else len(docs),
             "chunks": chunk_count,
             "embedding": settings.embedding_model,
             "embedding_dimensions": settings.embedding_dimensions,
@@ -1173,10 +1348,15 @@ async def list_documents_async(owner_user_id: str | None = None) -> list[Knowled
     )
 
 
-async def delete_document_async(doc_id: str, owner_user_id: str | None = None) -> bool:
+async def delete_document_async(
+    doc_id: str,
+    owner_user_id: str | None = None,
+    user: ActorLike | None = None,
+) -> bool:
     return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.delete_document_async(
         doc_id,
         owner_user_id=owner_user_id,
+        user=user,
     )
 
 
@@ -1250,9 +1430,13 @@ async def update_document_metadata_async(
     )
 
 
-async def clear_knowledge_base_async(owner_user_id: str | None = None) -> dict[str, Any]:
+async def clear_knowledge_base_async(
+    owner_user_id: str | None = None,
+    user: ActorLike | None = None,
+) -> dict[str, Any]:
     return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.clear_knowledge_base_async(
         owner_user_id=owner_user_id,
+        user=user,
     )
 
 

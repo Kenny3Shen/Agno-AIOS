@@ -583,26 +583,26 @@ for (const bulkyKnowledgeHeaderClass of [
 
 assert.match(
   knowledgeMetadataPanel,
-  /knowledge-runtime-summary[\s\S]*metadata-primary/,
-  "Knowledge selected document primary facts must live inside the Metadata panel",
+  /<el-descriptions[\s\S]*v-for="item in metadataItems"/,
+  "Knowledge selected document facts must use the structured Metadata description panel",
 )
 
-assert.match(
+assert.doesNotMatch(
   knowledgeMetadataPanel,
   /DataChip/,
-  "Knowledge metadata status items must use shared DataChip primitives",
+  "Knowledge metadata must not use chips for ordinary label/value descriptions",
 )
 
 assert.match(
   knowledgeMetadataPanel,
-  /v-for="item in primaryItems"/,
-  "Knowledge selected document context must render from a compact primary fact list",
+  /v-for="item in metadataItems"/,
+  "Knowledge selected document context must render from one description list",
 )
 
 assert.equal(
-  /primaryItems[\s\S]*knowledge\.drawer\.documentName[\s\S]*knowledge\.drawer\.type[\s\S]*knowledge\.drawer\.chunks[\s\S]*knowledge\.drawer\.updated/.test(knowledgeMetadataPanel),
+  /metadataItems[\s\S]*knowledge\.drawer\.documentName[\s\S]*knowledge\.drawer\.type[\s\S]*knowledge\.drawer\.chunks[\s\S]*knowledge\.drawer\.updated/.test(knowledgeMetadataPanel),
   true,
-  "Knowledge metadata summary must show only the four primary document facts",
+  "Knowledge metadata descriptions must retain the primary document facts",
 )
 
 assert.equal(

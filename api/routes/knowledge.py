@@ -1,6 +1,6 @@
 from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from api.auth.claims import actor_id, scope_user_id
@@ -129,16 +129,45 @@ class KnowledgeRagSettingsRequest(BaseModel):
 
 
 @router.get("")
-async def get_knowledge_status(user: User = Depends(require_scope("knowledge:read"))) -> dict:
+async def get_knowledge_status(
+    query: str = Query(default="", max_length=200),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=100),
+    sort_by: str = Query(default="updated_at", pattern="^(updated_at|created_at|name|status)$"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    user: User = Depends(require_scope("knowledge:read")),
+) -> dict:
     owner_user_id = effective_knowledge_user_filter(user)
     knowledge_base = get_knowledge_base_lifecycle()
-    documents = await knowledge_base.list_documents_async(owner_user_id=owner_user_id)
+    page_documents, total = await knowledge_base.list_documents_page_async(
+        owner_user_id=owner_user_id,
+        query=query,
+        page=page,
+        limit=limit,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+    document_count = total
+    if query:
+        _, document_count = await knowledge_base.list_documents_page_async(
+            owner_user_id=owner_user_id,
+            page=1,
+            limit=1,
+        )
     return {
         "status": await knowledge_base.knowledge_status_async(
             owner_user_id=owner_user_id,
-            documents=documents,
+            document_count=document_count,
         ),
-        "documents": with_manage_flags(documents, user),
+        "documents": with_manage_flags(page_documents, user),
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "query": query,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+        },
     }
 
 
@@ -218,6 +247,7 @@ async def remove_document(
     deleted = await get_knowledge_base_lifecycle().delete_document_async(
         doc_id,
         owner_user_id=effective_knowledge_user_filter(user),
+        user=user,
     )
     if not deleted:
         raise HTTPException(status_code=404, detail="知识文档不存在")
@@ -419,6 +449,7 @@ async def clear_knowledge(
 ) -> dict:
     result = await get_knowledge_base_lifecycle().clear_knowledge_base_async(
         owner_user_id=effective_knowledge_user_filter(user),
+        user=user,
     )
     await record_audit_event_async(
         user,

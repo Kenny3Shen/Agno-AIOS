@@ -2,7 +2,11 @@
   <div class="knowledge-console knowledge-workflow-shell ag-page-flow">
     <section class="knowledge-document-workbench">
       <KnowledgeDocumentList
+        v-model:query="documentQuery"
         :documents="documents"
+        :page="documentPage"
+        :page-size="documentPageSize"
+        :total="documentTotal"
         :selected-document-id="selectedDocumentId"
         :loading="loading"
         :clearing="clearing"
@@ -11,6 +15,8 @@
         :updating-doc-id="replacingSourceDocId || updatingMetadataDocId"
         @add="openAddDrawer"
         @refresh="loadKnowledge"
+        @page-change="changeDocumentPage"
+        @sort-change="changeDocumentSort"
         @clear="clearAllDocuments"
         @select="selectedDocumentId = $event"
         @update="openUpdateDrawer"
@@ -46,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue"
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useI18n } from "vue-i18n"
 import { useKnowledgeApi } from "../composables/useKnowledgeApi"
@@ -54,6 +60,7 @@ import type {
   KnowledgeDocument,
   KnowledgeDocumentUpdateRequest,
   KnowledgeIngestOptions,
+  KnowledgePagination,
   KnowledgeSearchResult,
   KnowledgeStatus,
   ResourceVisibility,
@@ -113,6 +120,13 @@ const { t } = useI18n()
 
 const status = ref<KnowledgeStatus | null>(null)
 const documents = ref<KnowledgeDocument[]>([])
+const documentQuery = ref("")
+const documentPage = ref(1)
+const documentPageSize = 25
+const documentTotal = ref(0)
+const documentSortBy = ref<KnowledgePagination["sort_by"]>("updated_at")
+const documentSortOrder = ref<KnowledgePagination["sort_order"]>("desc")
+let documentQueryTimer: ReturnType<typeof setTimeout> | null = null
 const selectedDocumentId = ref("")
 const ingestDrawerOpen = ref(false)
 const ingestDrawerMode = ref<IngestDrawerMode>("add")
@@ -171,14 +185,51 @@ const retrievalReferences = computed(() => {
 const loadKnowledge = async () => {
   try {
     const previousSelection = selectedDocumentId.value
-    const data = await fetchKnowledge()
+    const data = await fetchKnowledge({
+      query: documentQuery.value.trim(),
+      page: documentPage.value,
+      limit: documentPageSize,
+      sort_by: documentSortBy.value,
+      sort_order: documentSortOrder.value,
+    })
+    if (!data.documents.length && data.pagination.total > 0 && documentPage.value > 1) {
+      documentPage.value = Math.ceil(data.pagination.total / documentPageSize)
+      await loadKnowledge()
+      return
+    }
     status.value = data.status
     documents.value = data.documents
+    documentTotal.value = data.pagination.total
+    documentPage.value = data.pagination.page
     selectedDocumentId.value = resolveSelectedKnowledgeDocumentId(documents.value, previousSelection)
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : t("knowledge.messages.loadFailed"))
   }
 }
+
+const changeDocumentPage = (page: number) => {
+  documentPage.value = page
+  void loadKnowledge()
+}
+
+const changeDocumentSort = (sort: { sortBy: KnowledgePagination["sort_by"]; sortOrder: KnowledgePagination["sort_order"] }) => {
+  documentSortBy.value = sort.sortBy
+  documentSortOrder.value = sort.sortOrder
+  documentPage.value = 1
+  void loadKnowledge()
+}
+
+watch(documentQuery, () => {
+  if (documentQueryTimer) clearTimeout(documentQueryTimer)
+  documentQueryTimer = setTimeout(() => {
+    documentPage.value = 1
+    void loadKnowledge()
+  }, 250)
+})
+
+onBeforeUnmount(() => {
+  if (documentQueryTimer) clearTimeout(documentQueryTimer)
+})
 
 const isSupportedTextFile = (file: File) => {
   return /\.(md|markdown|txt|log|csv|tsv|json|jsonl|ya?ml|toml|py|js|jsx|ts|tsx|vue|go|rs|java|c|cc|cpp|h|hpp|cs|php|rb|sh|sql)$/i.test(file.name)
@@ -419,13 +470,18 @@ const clearAllDocuments = async () => {
       type: "warning",
     })
     clearing.value = true
-    await clearKnowledge()
+    const result = await clearKnowledge()
     documents.value = []
     selectedDocumentId.value = ""
     searchResults.value = []
     searched.value = false
+    documentPage.value = 1
     await loadKnowledge()
-    ElMessage.success(t("knowledge.messages.cleared"))
+    if (result.failed_ids.length) {
+      ElMessage.warning(t("knowledge.messages.clearPartial", { count: result.failed_ids.length }))
+    } else {
+      ElMessage.success(t("knowledge.messages.cleared"))
+    }
   } catch (err) {
     if (err !== "cancel" && err !== "close") {
       ElMessage.error(err instanceof Error ? err.message : t("knowledge.messages.clearFailed"))
