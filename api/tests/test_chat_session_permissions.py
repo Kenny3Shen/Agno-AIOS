@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
+from starlette.requests import Request
 from api.auth.ownership import assert_owned_resource
 from api.routes import chat
 from api.services import chat_session_service, security_run_runtime
@@ -10,6 +11,10 @@ import pytest
 
 def actor(user_id: str, role: str = "user"):
     return SimpleNamespace(id=user_id, role=role, is_superuser=False)
+
+
+def raw_request() -> Request:
+    return Request({"type": "http", "method": "POST", "path": "/api/chat", "headers": [], "client": ("127.0.0.1", 1)})
 
 
 def test_owned_resource_allows_owner():
@@ -108,6 +113,7 @@ async def test_chat_rejects_foreign_existing_session_id():
         with pytest.raises(HTTPException) as exc:
             await chat.chat_agent(
                 chat.ChatRequest(message="hello", session_id="foreign-session"),
+                raw_request(),
                 user=actor("u1"),
             )
     assert exc.value.status_code == 404
@@ -119,6 +125,7 @@ async def test_chat_allows_owned_existing_session_id():
         mocked.return_value = "u1"
         response = await chat.chat_agent(
             chat.ChatRequest(message="hello", session_id="own-session"),
+            raw_request(),
             user=actor("u1"),
         )
     assert response.media_type == "text/event-stream"
@@ -146,3 +153,38 @@ async def test_event_generator_passes_knowledge_owner_filter():
     assert captured["message"] == "hello"
     assert captured["knowledge_owner_user_id"] == "u1"
     assert events == [{"data": "ok"}, {"data": "[DONE]"}]
+
+
+@pytest.mark.asyncio
+async def test_event_generator_records_successful_chat_audit():
+    async def fake_stream_security_run(_run_request):
+        yield "ok"
+
+    audit = AsyncMock()
+    request = security_run_runtime.SecurityRunRequest.from_chat_args(
+        "hello",
+        session_id="session-1",
+        model_id="model-1",
+        user_id="u1",
+    )
+    with (
+        patch.object(chat, "stream_security_run", fake_stream_security_run),
+        patch.object(chat, "record_audit_event_async", audit),
+    ):
+        _events = [
+            event
+            async for event in chat._event_generator(
+                request,
+                actor=actor("u1"),
+                request_context={"ip_address": "127.0.0.1", "user_agent": "pytest"},
+            )
+        ]
+    audit.assert_awaited_once()
+    assert audit.await_args is not None
+    assert audit.await_args.kwargs["resource_id"] == "session-1"
+    assert "status" not in audit.await_args.kwargs
+
+
+def test_exception_detail_unwraps_task_group():
+    error = ExceptionGroup("task group", [ValueError("invalid skill metadata")])
+    assert chat._exception_detail(error) == "ValueError: invalid skill metadata"

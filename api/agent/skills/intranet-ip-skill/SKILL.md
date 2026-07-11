@@ -1,7 +1,8 @@
 ---
 name: intranet-ip-skill
 description: 查询内网 IP 地址相关资产和受攻击信息，专注于处理内网 IP 资产数据库查询、NDR 数据查询和分析报告任务。
-visibility: public
+metadata:
+  visibility: public
 ---
 # 基本能力
 

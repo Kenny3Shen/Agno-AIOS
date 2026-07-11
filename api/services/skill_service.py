@@ -122,12 +122,23 @@ def parse_skill_metadata(skill_dir: Path) -> SkillMetadata:
     if isinstance(meta, dict):
         meta_name = meta.get("name")
         meta_description = meta.get("description")
+        project_metadata = meta.get("metadata")
+        if not isinstance(project_metadata, dict):
+            project_metadata = {}
         if isinstance(meta_name, str):
             name = meta_name
         if isinstance(meta_description, str):
             description = meta_description
-        visibility = normalize_visibility(str(meta.get("visibility") or ""))
-        owner_user_id = str(meta.get("owner_user_id") or meta.get("user_id") or "").strip()
+        visibility = normalize_visibility(
+            str(project_metadata.get("visibility") or meta.get("visibility") or "")
+        )
+        owner_user_id = str(
+            project_metadata.get("owner_user_id")
+            or project_metadata.get("user_id")
+            or meta.get("owner_user_id")
+            or meta.get("user_id")
+            or ""
+        ).strip()
     return SkillMetadata(name, description, visibility, owner_user_id)
 
 
@@ -135,7 +146,19 @@ def write_skill_metadata(skill_dir: Path, updates: dict[str, str]) -> None:
     md_path = skill_dir / "SKILL.md"
     raw = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
     meta, body = _split_skill_markdown(raw)
-    meta.update(updates)
+    project_metadata = meta.get("metadata")
+    if not isinstance(project_metadata, dict):
+        project_metadata = {}
+    for key, value in updates.items():
+        if key in {"visibility", "owner_user_id", "user_id"}:
+            project_metadata[key] = value
+        else:
+            meta[key] = value
+    meta.pop("visibility", None)
+    meta.pop("owner_user_id", None)
+    meta.pop("user_id", None)
+    if project_metadata:
+        meta["metadata"] = project_metadata
     md_path.write_text(
         "---\n"
         + yaml.safe_dump(meta, sort_keys=False, allow_unicode=True)

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
@@ -11,6 +11,11 @@ from api.services.chat_session_service import (
     get_all_sessions_async,
     get_session_messages_async,
     get_session_owner_async,
+)
+from api.services.audit_service import (
+    AuditRequestContext,
+    audit_request_context,
+    record_audit_event_async,
 )
 from api.services.security_run_runtime import SecurityRunRequest, stream_security_run
 from loguru import logger
@@ -26,20 +31,53 @@ class ChatRequest(BaseModel):
 
 async def _event_generator(
     run_request: SecurityRunRequest,
+    *,
+    actor: User | None = None,
+    request_context: AuditRequestContext | None = None,
 ):
     try:
         async for chunk in stream_security_run(run_request):
             if chunk:
                 yield {"data": chunk}
         yield {"data": "[DONE]"}
-    except Exception as e:
-        logger.error(f"处理聊天错误: {e}")
-        yield {"event": "error", "data": str(e)}
+        if actor is not None:
+            await record_audit_event_async(
+                actor,
+                action="chat.run",
+                resource_type="chat_session",
+                resource_id=run_request.session_id or "",
+                metadata={"model_id": run_request.model_id or "", "message_length": len(run_request.message)},
+                ip_address=request_context["ip_address"] if request_context else "",
+                user_agent=request_context["user_agent"] if request_context else "",
+            )
+    except Exception as exc:
+        detail = _exception_detail(exc)
+        logger.exception("处理聊天错误: {}", detail)
+        if actor is not None:
+            await record_audit_event_async(
+                actor,
+                action="chat.run",
+                resource_type="chat_session",
+                resource_id=run_request.session_id or "",
+                status="error",
+                metadata={"model_id": run_request.model_id or "", "error": detail},
+                ip_address=request_context["ip_address"] if request_context else "",
+                user_agent=request_context["user_agent"] if request_context else "",
+            )
+        yield {"event": "error", "data": detail}
+
+
+def _exception_detail(exc: BaseException) -> str:
+    current = exc
+    while isinstance(current, BaseExceptionGroup) and current.exceptions:
+        current = current.exceptions[0]
+    return f"{type(current).__name__}: {current}"
 
 
 @router.post("/chat")
 async def chat_agent(
     request: ChatRequest,
+    raw_request: Request,
     user: User = Depends(require_scope("sessions:write")),
 ):
     """使用 LLM 处理聊天消息（流式）"""
@@ -62,7 +100,11 @@ async def chat_agent(
             else actor_id(user),
         )
         return EventSourceResponse(
-            _event_generator(run_request),
+            _event_generator(
+                run_request,
+                actor=user,
+                request_context=audit_request_context(raw_request),
+            ),
             headers={"Cache-Control": "no-cache"},
             sep="\n",
         )

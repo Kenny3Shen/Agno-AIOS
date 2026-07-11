@@ -51,6 +51,24 @@ class FakeClient:
         return self.response
 
 
+class FakeModel:
+    def __init__(self, captured: dict, error: Exception | None = None) -> None:
+        self.captured = captured
+        self.error = error
+        self.timeout = None
+
+    async def aresponse(self, *, messages):
+        self.captured["messages"] = messages
+        self.captured["timeout"] = self.timeout
+        if self.error:
+            raise self.error
+        return SimpleNamespace(content="OK")
+
+
+class FakeApiError(RuntimeError):
+    status_code = 401
+
+
 class FakeGetSettings:
     __name__ = "get_settings"
 
@@ -136,19 +154,12 @@ async def test_success_posts_openai_compatible_probe():
         base_url="https://api.example.com/v1",
         api_key="secret-key",
     )
-    with patch.object(
-        settings.httpx,
-        "AsyncClient",
-        return_value=FakeClient(FakeResponse(200, payload={"id": "ok"}), captured),
-    ):
+    with patch.object(settings, "build_agno_model", return_value=FakeModel(captured)):
         result = await settings.run_model_connectivity_test(model)
     assert result.success
-    assert captured["url"] == "https://api.example.com/v1/chat/completions"
-    assert captured["headers"]["Authorization"] == "Bearer secret-key"
-    assert captured["json"]["model"] == "model-name"
-    assert len(captured["json"]["messages"]) == 2
-    assert all(message["content"] for message in captured["json"]["messages"])
-    assert not captured["json"]["stream"]
+    assert captured["timeout"] == 15
+    assert len(captured["messages"]) == 2
+    assert all(message.content for message in captured["messages"])
 
 
 @pytest.mark.asyncio
@@ -227,15 +238,11 @@ async def test_masked_api_key_uses_saved_secret():
             SimpleNamespace(run_sync=fake_run_sync),
             create=True,
         ),
-        patch.object(
-            settings.httpx,
-            "AsyncClient",
-            return_value=FakeClient(FakeResponse(200, payload={"id": "ok"}), captured),
-        ),
+        patch.object(settings, "build_agno_model", return_value=FakeModel(captured)) as factory,
     ):
         result = await settings.run_model_connectivity_test(model)
     assert result.success
-    assert captured["headers"]["Authorization"] == "Bearer saved-secret"
+    assert factory.call_args.args[0]["api_key"] == "saved-secret"
     assert thread_calls == ["load_model_config"]
 
 
@@ -338,12 +345,11 @@ async def test_upstream_error_returns_message_without_raising():
         base_url="https://api.example.com/v1",
         api_key="secret-key",
     )
+    error = FakeApiError("bad key")
     with patch.object(
-        settings.httpx,
-        "AsyncClient",
-        return_value=FakeClient(
-            FakeResponse(401, payload={"error": {"message": "bad key"}}), captured
-        ),
+        settings,
+        "build_agno_model",
+        return_value=FakeModel(captured, error),
     ):
         result = await settings.run_model_connectivity_test(model)
     assert not result.success

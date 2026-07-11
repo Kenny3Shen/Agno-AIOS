@@ -25,8 +25,9 @@ def write_skill(
             "---\n"
             f"name: {name}\n"
             "description: Test\n"
-            f"visibility: {visibility}\n"
-            f"owner_user_id: {owner}\n"
+            "metadata:\n"
+            f"  visibility: {visibility}\n"
+            f"  owner_user_id: {owner}\n"
             "---\n"
             "Body\n"
         ),
@@ -65,5 +66,7 @@ def test_set_skill_visibility_requires_owner_or_admin(tmp_path, monkeypatch):
     assert public_name == "Owned"
     assert visibility == "public"
     assert skill_service.list_skill_infos(actor("u1"))[0]["visibility"] == "public"
+    markdown = (tmp_path / "owned" / "SKILL.md").read_text(encoding="utf-8")
+    assert "metadata:\n  visibility: public" in markdown
     with pytest.raises(PermissionError):
         skill_service.set_skill_visibility("Owned", "private", actor("u2"))

@@ -5,8 +5,8 @@ from inspect import isawaitable, iscoroutinefunction
 from typing import Any, AsyncIterator, Callable, cast
 
 from agno.agent import Agent
-from agno.models.openai import OpenAILike
 from agno.run.agent import RunEvent
+from agno.session.summary import SessionSummaryManager
 from agno.skills import LocalSkills, Skills
 from agno.tools.mcp import MCPTools, StreamableHTTPClientParams
 from anyio import Path as AsyncPath
@@ -17,17 +17,13 @@ from api.config import get_settings
 from api.services.knowledge_service import get_async_knowledge_base_async
 
 from api.services.model_config_service import get_model_for_run
+from api.services.model_factory import build_agno_model
 from api.services.postgres_store import get_async_agno_postgres_db
 from api.services.skill_service import get_enabled_skill_dirs
 
 
-def _build_model(model_id: str | None = None) -> OpenAILike:
-    model = get_model_for_run(model_id)
-    return OpenAILike(
-        id=model["model_id"],
-        api_key=model["api_key"],
-        base_url=model["base_url"],
-    )
+def _build_model(model_id: str | None = None) -> Any:
+    return build_agno_model(get_model_for_run(model_id))
 
 
 def _build_mcp_url() -> str:
@@ -88,6 +84,24 @@ def _agent_dependencies() -> dict[str, str]:
 
 def _load_local_skills(enabled_dirs: list[str]) -> Skills:
     return Skills(loaders=[LocalSkills(path) for path in enabled_dirs])
+
+
+class CompatibleSessionSummaryManager(SessionSummaryManager):
+    def get_response_format(self, model: Any) -> Any:
+        return None
+
+
+def _session_summary_manager(model: Any) -> SessionSummaryManager:
+    metadata = getattr(model, "metadata", None) or {}
+    if metadata.get("agno_aios.structured_output_mode") == "none":
+        return CompatibleSessionSummaryManager(
+            model=model,
+            session_summary_prompt=(
+                "Summarize the conversation for future turns. Return only valid JSON "
+                'with this shape: {"summary": "concise summary", "topics": ["topic"]}.'
+            ),
+        )
+    return SessionSummaryManager(model=model)
 
 
 def _is_provider_block_error(error: Exception) -> bool:
@@ -188,16 +202,18 @@ class SecurityRunRuntime:
                 yield content
 
     async def build_fallback_agent(self, model_id: str | None = None) -> Agent:
+        model = await _run_sync_dependency(self.dependencies.build_model, model_id)
         return self.dependencies.agent_factory(
             id="security-operations",
             name="安全防御助手",
             role="安全防御运营助手",
             description="无工具模式下的安全防御运营助手。",
             instructions=[await _load_prompt_async(SAFE_FALLBACK_PROMPT)],
-            model=await _run_sync_dependency(self.dependencies.build_model, model_id),
+            model=model,
             db=self.dependencies.get_db(),
             update_memory_on_run=True,
             enable_session_summaries=True,
+            session_summary_manager=_session_summary_manager(model),
             add_datetime_to_context=True,
             markdown=True,
         )
@@ -207,16 +223,17 @@ class SecurityRunRuntime:
         mcp_tools: Any,
         request: SecurityRunRequest,
     ) -> Agent:
+        model = await _run_sync_dependency(
+            self.dependencies.build_model,
+            request.model_id,
+        )
         return self.dependencies.agent_factory(
             id="security-operations",
             name="安全运营助手",
             role="安全运营综合专家",
             description="集威胁情报分析与安全剧本执行于一体的安全运营助手，可完成情报检索、深度分析和自动化处置全流程。",
             instructions=[await _load_prompt_async(SECURITY_OPERATIONS_PROMPT)],
-            model=await _run_sync_dependency(
-                self.dependencies.build_model,
-                request.model_id,
-            ),
+            model=model,
             tools=[mcp_tools],
             knowledge=await _maybe_await(self.dependencies.get_async_knowledge_base()),
             knowledge_filters={"user_id": request.knowledge_owner_user_id}
@@ -231,6 +248,7 @@ class SecurityRunRuntime:
             add_history_to_context=True,
             update_memory_on_run=True,
             enable_session_summaries=True,
+            session_summary_manager=_session_summary_manager(model),
             num_history_runs=5,
             add_datetime_to_context=True,
             markdown=True,

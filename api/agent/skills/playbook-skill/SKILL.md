@@ -1,7 +1,8 @@
 ---
 name: playbook-skill
 description: 使用安全自动化剧本完成处置、排查与验证任务。
-visibility: public
+metadata:
+  visibility: public
 ---
 # 基本能力
 

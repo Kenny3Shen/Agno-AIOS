@@ -1,6 +1,6 @@
 from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -9,12 +9,20 @@ from api.services.runtime_paths import CONFIG_DIR, resolve_project_path
 from api.utils.json import dumps, loads
 
 
+ModelProvider = Literal["deepseek", "openai", "openai-compatible"]
+ModelApiProtocol = Literal["chat-completions", "responses"]
+StructuredOutputMode = Literal["native", "json", "none"]
+
+
 class ModelConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     id: str
     name: str = "自定义模型"
     model_id: str = ""
+    provider: ModelProvider = "openai-compatible"
+    api_protocol: ModelApiProtocol = "chat-completions"
+    structured_output_mode: StructuredOutputMode = "none"
     base_url: str = ""
     api_key: str = ""
     description: str = ""
@@ -25,11 +33,37 @@ class ModelConfig(BaseModel):
     def normalized(cls, entry: "ModelConfig | Mapping[Any, Any]", fallback_id: str) -> Self:
         raw = entry.model_dump() if isinstance(entry, ModelConfig) else dict(entry)
         model_id = str(raw.get("id") or fallback_id).strip() or fallback_id
+        configured_model_id = str(raw.get("model_id") or "").strip()
+        base_url = str(raw.get("base_url") or "").strip()
+        provider = str(raw.get("provider") or "").strip()
+        if not provider:
+            provider = (
+                "deepseek"
+                if configured_model_id.startswith("deepseek-")
+                or "api.deepseek.com" in base_url
+                else "openai-compatible"
+            )
         return cls(
             id=model_id,
             name=str(raw.get("name") or "自定义模型").strip(),
-            model_id=str(raw.get("model_id") or "").strip(),
-            base_url=str(raw.get("base_url") or "").strip(),
+            model_id=configured_model_id,
+            provider=cast(ModelProvider, provider),
+            api_protocol=cast(
+                ModelApiProtocol,
+                str(raw.get("api_protocol") or "chat-completions"),
+            ),
+            structured_output_mode=cast(
+                StructuredOutputMode,
+                raw.get("structured_output_mode")
+                or (
+                    "native"
+                    if raw.get("supports_native_structured_outputs", provider == "openai")
+                    else "json"
+                    if provider == "deepseek"
+                    else "none"
+                ),
+            ),
+            base_url=base_url,
             api_key=str(raw.get("api_key") or "").strip(),
             description=str(raw.get("description") or "").strip(),
             enabled=bool(raw.get("enabled", True)),
@@ -38,7 +72,11 @@ class ModelConfig(BaseModel):
 
     @property
     def configured(self) -> bool:
-        return bool(self.api_key and self.base_url and self.model_id)
+        return bool(
+            self.api_key
+            and self.model_id
+            and (self.base_url or self.provider != "openai-compatible")
+        )
 
     def to_public_dict(self) -> dict[str, Any]:
         data = self.model_dump()
@@ -57,6 +95,9 @@ DEFAULT_MODELS: tuple[ModelConfig, ...] = (
         id="deepseek-v4-flash",
         name="DeepSeek V4 Flash",
         model_id="deepseek-v4-flash",
+        provider="deepseek",
+        structured_output_mode="json",
+        base_url="https://api.deepseek.com",
         description="低延迟安全分析模型",
         builtin=True,
     ),
@@ -64,6 +105,9 @@ DEFAULT_MODELS: tuple[ModelConfig, ...] = (
         id="deepseek-v4-pro",
         name="DeepSeek V4 Pro",
         model_id="deepseek-v4-pro",
+        provider="deepseek",
+        structured_output_mode="json",
+        base_url="https://api.deepseek.com",
         description="复杂推理与深度研判模型",
         builtin=True,
     ),
@@ -162,15 +206,10 @@ class ModelConfigStore(BaseModel):
             raise ValueError("未找到可用模型配置")
         if not model.enabled:
             raise ValueError(f"模型已禁用: {model.name}")
-        missing = [
-            label
-            for label, key in (
-                ("API Key", "api_key"),
-                ("Base URL", "base_url"),
-                ("Model ID", "model_id"),
-            )
-            if not getattr(model, key)
-        ]
+        required = [("API Key", "api_key"), ("Model ID", "model_id")]
+        if model.provider == "openai-compatible":
+            required.append(("Base URL", "base_url"))
+        missing = [label for label, key in required if not getattr(model, key)]
         if missing:
             raise ValueError(
                 f"模型配置不完整: {model.name} 缺少 {', '.join(missing)}。请在系统配置中补全。"

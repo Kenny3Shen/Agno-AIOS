@@ -126,6 +126,10 @@ async def test_security_agent_loads_prompt_when_agent_is_built():
     assert created["search_knowledge"]
     assert created["update_memory_on_run"]
     assert created["enable_session_summaries"]
+    assert isinstance(
+        created["session_summary_manager"],
+        security_run_runtime.SessionSummaryManager,
+    )
 
 
 @pytest.mark.asyncio
@@ -170,6 +174,10 @@ async def test_fallback_agent_keeps_memory_and_summary():
     await runtime.build_fallback_agent(model_id="model-1")
     assert created["update_memory_on_run"]
     assert created["enable_session_summaries"]
+    assert isinstance(
+        created["session_summary_manager"],
+        security_run_runtime.SessionSummaryManager,
+    )
     assert "tools" not in created
     assert "knowledge" not in created
 

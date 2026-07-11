@@ -4,6 +4,9 @@ export interface ModelConfig {
   id: string
   name: string
   model_id: string
+  provider: 'deepseek' | 'openai' | 'openai-compatible'
+  api_protocol: 'chat-completions' | 'responses'
+  structured_output_mode: 'native' | 'json' | 'none'
   base_url: string
   api_key: string
   description: string

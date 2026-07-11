@@ -213,6 +213,8 @@ function SpanDetailTabs({ span }: { span: Span }) {
       </Splitter.Panel>
     </Splitter> },
     { key: 'metadata', label: 'Metadata', children: <MetadataDescriptions items={[
+      { key: 'session-id', label: 'Session ID', children: <CopyableValue value={span.session_id} /> },
+      { key: 'run-id', label: 'Run ID', children: <CopyableValue value={span.run_id} /> },
       { key: 'span-id', label: 'Span ID', children: <CopyableValue value={span.span_id} /> },
       { key: 'parent-span-id', label: 'Parent Span ID', children: <CopyableValue value={span.parent_span_id} /> },
       { key: 'operation', label: 'Operation', children: span.name || '-' },

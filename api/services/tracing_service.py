@@ -268,6 +268,8 @@ async def get_trace_detail(trace_id: str, actor: Any | None = None) -> dict[str,
 
     span_dicts = [jsonable_encoder(s.to_dict()) for s in spans]
     for span in span_dicts:
+        span["session_id"] = trace_dict.get("session_id")
+        span["run_id"] = trace_dict.get("run_id")
         span["parsed"] = parse_span_display(span)
     tree = _build_span_tree(span_dicts)
 

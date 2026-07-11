@@ -1,10 +1,10 @@
 from functools import partial
 import os
 from time import perf_counter
-from typing import Any
+from typing import Any, cast
 
 from anyio import to_thread
-import httpx
+from agno.models.message import Message
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from loguru import logger
 from pydantic import BaseModel
@@ -21,6 +21,7 @@ from api.services.model_config_service import (
     public_model_config,
     save_model_config,
 )
+from api.services.model_factory import build_agno_model
 
 router = APIRouter(prefix="/api", tags=["Settings"])
 
@@ -73,29 +74,6 @@ def _setting_value(settings: Settings, key: str) -> str:
     return ""
 
 
-def _model_chat_completions_url(base_url: str) -> str:
-    normalized = base_url.strip().rstrip("/")
-    if normalized.endswith("/chat/completions"):
-        return normalized
-    return f"{normalized}/chat/completions"
-
-
-def _extract_upstream_error(data: Any, fallback: str) -> str:
-    if isinstance(data, dict):
-        error = data.get("error")
-        if isinstance(error, dict):
-            message = error.get("message")
-            if isinstance(message, str) and message:
-                return message
-        detail = data.get("detail")
-        if isinstance(detail, str) and detail:
-            return detail
-        message = data.get("message")
-        if isinstance(message, str) and message:
-            return message
-    return fallback
-
-
 async def _resolve_model_secret(model: ModelConfig) -> dict[str, Any]:
     data = model.model_dump()
     if "*" not in data.get("api_key", ""):
@@ -111,15 +89,10 @@ async def _resolve_model_secret(model: ModelConfig) -> dict[str, Any]:
 
 
 def _validate_test_model(model: dict[str, Any]) -> None:
-    missing = [
-        label
-        for label, key in (
-            ("API Key", "api_key"),
-            ("Base URL", "base_url"),
-            ("Model ID", "model_id"),
-        )
-        if not str(model.get(key) or "").strip()
-    ]
+    required = [("API Key", "api_key"), ("Model ID", "model_id")]
+    if model.get("provider") == "openai-compatible":
+        required.append(("Base URL", "base_url"))
+    missing = [label for label, key in required if not str(model.get(key) or "").strip()]
     if missing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -134,67 +107,34 @@ async def run_model_connectivity_test(
     _validate_test_model(resolved)
 
     started = perf_counter()
-    url = _model_chat_completions_url(str(resolved["base_url"]))
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                url,
-                headers={
-                    "Authorization": f"Bearer {resolved['api_key']}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": resolved["model_id"],
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": "你是授权环境中的安全防御助手，只回答防御和排查问题。",
-                        },
-                        {
-                            "role": "user",
-                            "content": "请只回复 OK，用于验证 Chat 模型调用链路。",
-                        },
-                    ],
-                    "max_tokens": 8,
-                    "temperature": 0,
-                    "stream": False,
-                },
-            )
-    except httpx.TimeoutException:
-        return ModelConnectivityTestResponse(
-            success=False,
-            message="连接超时",
+        runtime_model = build_agno_model(resolved)
+        cast(Any, runtime_model).timeout = 15
+        await runtime_model.aresponse(
+            messages=[
+                Message(
+                    role="system",
+                    content="你是授权环境中的安全防御助手，只回答防御和排查问题。",
+                ),
+                Message(role="user", content="请只回复 OK，用于验证模型调用链路。"),
+            ]
         )
-    except httpx.RequestError as exc:
+    except Exception as exc:
+        status_code = getattr(exc, "status_code", None)
+        detail = str(getattr(exc, "message", None) or exc)
         return ModelConnectivityTestResponse(
             success=False,
-            message=f"连接失败: {exc}",
+            latency_ms=int((perf_counter() - started) * 1000),
+            message=detail,
+            status_code=status_code if isinstance(status_code, int) else None,
         )
 
     latency_ms = int((perf_counter() - started) * 1000)
-    if response.is_success:
-        return ModelConnectivityTestResponse(
-            success=True,
-            latency_ms=latency_ms,
-            message="模型连通性正常",
-            status_code=response.status_code,
-        )
-
-    fallback = f"模型服务返回 HTTP {response.status_code}"
-    data = None
-    if response.headers.get("content-type", "").startswith("application/json"):
-        try:
-            data = response.json()
-        except ValueError:
-            data = None
-    if data is None:
-        text = response.text.strip()
-        fallback = f"{fallback}: {text[:200]}" if text else fallback
     return ModelConnectivityTestResponse(
-        success=False,
+        success=True,
         latency_ms=latency_ms,
-        message=_extract_upstream_error(data, fallback),
-        status_code=response.status_code,
+        message="模型连通性正常",
+        status_code=200,
     )
 
 
