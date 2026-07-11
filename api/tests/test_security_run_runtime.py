@@ -2,13 +2,14 @@ from pathlib import Path
 import threading
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from agno.models.deepseek import DeepSeek
 import pytest
 from pydantic import SecretStr
 
 from api.services import runtime_env, security_run_runtime
+from api.services.chat_run_events import ChatRunEvent
 
 
 class FakeAgent:
@@ -17,6 +18,28 @@ class FakeAgent:
         yield {"event": "Other", "content": "ignored"}
         yield SimpleNamespace(event="RunContent", content="object chunk")
         yield SimpleNamespace(event="RunContent", content="")
+
+
+class EventAgent:
+    def __init__(self):
+        self.cancelled_run_ids: list[str] = []
+
+    def cancel_run(self, run_id: str) -> bool:
+        self.cancelled_run_ids.append(run_id)
+        return True
+
+    async def arun(self, *_args, **_kwargs):
+        yield {"event": "RunStarted", "run_id": "run-1", "session_id": "session-1", "model": "test-model", "model_provider": "test"}
+        yield {"event": "ToolCallStarted", "run_id": "run-1", "tool": {"tool_call_id": "tool-1", "tool_name": "cve_lookup", "arguments": {"token": "secret"}}}
+        yield {"event": "ToolCallCompleted", "run_id": "run-1", "tool": {"tool_call_id": "tool-1", "tool_name": "cve_lookup", "result": "sensitive output"}}
+        yield {"event": "RunCompleted", "run_id": "run-1", "session_id": "session-1", "metrics": {"total_tokens": 42, "total_time": 1.25}, "citations": [{"id": "cve", "title": "CVE advisory", "url": "https://example.test/cve", "content": "safe excerpt"}], "followups": ["Assess impact"]}
+
+
+class DetailedEventAgent:
+    async def arun(self, *_args, **_kwargs):
+        yield {"event": "ReasoningContentDelta", "run_id": "run-1", "content": "private chain"}
+        yield {"event": "ReasoningStep", "run_id": "run-1", "content": "safe summary"}
+        yield {"event": "ToolCallCompleted", "run_id": "run-1", "tool": {"tool_call_id": "tool-1", "tool_name": "lookup", "arguments": {"token": "secret"}, "result": "sensitive output"}}
 
 
 class BlockingAgent:
@@ -45,7 +68,7 @@ class BlockingRuntime(security_run_runtime.SecurityRunRuntime):
     def _build_security_agent(self, mcp_tools, request):
         return BlockingAgent()
 
-    def build_fallback_agent(self, model_id=None):
+    def build_fallback_agent(self, model_id=None, reasoning_effort=None, memory_enabled=True):
         return FallbackAgent()
 
 
@@ -185,6 +208,28 @@ async def test_fallback_agent_keeps_memory_and_summary():
     assert "knowledge" not in created
 
 
+@pytest.mark.asyncio
+async def test_security_agent_disables_long_term_memory_when_requested():
+    created: dict = {}
+    runtime = security_run_runtime.SecurityRunRuntime(
+        security_run_runtime.SecurityRunRuntimeDependencies(
+            build_model=lambda _model_id: object(),
+            get_db=lambda: object(),
+            get_async_knowledge_base=lambda: object(),
+            get_enabled_skill_dirs=lambda: [],
+            agent_factory=lambda **kwargs: created.update(kwargs) or SimpleNamespace(),
+        )
+    )
+    await runtime._build_security_agent(
+        FakeMcpTools(),
+        security_run_runtime.SecurityRunRequest.from_chat_args(
+            "hello", user_id="u1", memory_enabled=False
+        ),
+    )
+    assert created["update_memory_on_run"] is False
+    assert created["add_memories_to_context"] is False
+
+
 def test_deepseek_session_summary_uses_json_mode_response_format():
     model = DeepSeek(id="deepseek-v4-flash", api_key="secret")
     manager = security_run_runtime.SessionSummaryManager(model=model)
@@ -283,6 +328,50 @@ async def test_build_model_dependency_runs_off_event_loop():
 
 
 @pytest.mark.asyncio
+async def test_runtime_passes_reasoning_effort_override_to_model_builder():
+    captured: list[tuple[str | None, str | None]] = []
+
+    def build_model(model_id: str | None, reasoning_effort: str | None):
+        captured.append((model_id, reasoning_effort))
+        return object()
+
+    runtime = security_run_runtime.SecurityRunRuntime(
+        security_run_runtime.SecurityRunRuntimeDependencies(build_model=build_model)
+    )
+
+    await runtime._build_model("model-1", "high")
+
+    assert captured == [("model-1", "high")]
+
+
+@pytest.mark.asyncio
+async def test_fallback_agent_preserves_reasoning_effort_override():
+    captured: list[tuple[str | None, str | None]] = []
+
+    def build_model(model_id: str | None, reasoning_effort: str | None):
+        captured.append((model_id, reasoning_effort))
+        return object()
+
+    runtime = security_run_runtime.SecurityRunRuntime(
+        security_run_runtime.SecurityRunRuntimeDependencies(
+            build_model=build_model,
+            get_db=lambda: object(),
+            agent_factory=lambda **_kwargs: SimpleNamespace(),
+        )
+    )
+    with TemporaryDirectory() as temp_dir:
+        prompt_dir = Path(temp_dir)
+        (prompt_dir / security_run_runtime.SAFE_FALLBACK_PROMPT).write_text(
+            "降级提示词",
+            encoding="utf-8",
+        )
+        with patch.object(security_run_runtime, "PROMPT_DIR", prompt_dir):
+            await runtime.build_fallback_agent("model-1", "max")
+
+    assert captured == [("model-1", "max")]
+
+
+@pytest.mark.asyncio
 async def test_security_agent_context_builds_mcp_url_off_event_loop():
     event_loop_thread_id = threading.get_ident()
     get_mcp_url_thread_id: int | None = None
@@ -363,11 +452,11 @@ async def test_agent_dependencies_are_built_off_event_loop():
 
 
 @pytest.mark.asyncio
-async def test_stream_agent_content_filters_run_content_events():
+async def test_stream_agent_events_projects_only_safe_ui_events():
     runtime = security_run_runtime.SecurityRunRuntime()
-    chunks = [
-        chunk
-        async for chunk in runtime._stream_agent_content(
+    events = [
+        event
+        async for event in runtime._stream_agent_events(
             FakeAgent(),
             security_run_runtime.SecurityRunRequest.from_chat_args(
                 "hello",
@@ -376,7 +465,82 @@ async def test_stream_agent_content_filters_run_content_events():
             ),
         )
     ]
-    assert chunks == ["dict chunk", "object chunk"]
+    assert [event.event for event in events] == ["content.delta", "content.delta"]
+    assert [event.data["delta"] for event in events] == ["dict chunk", "object chunk"]
+
+
+@pytest.mark.asyncio
+async def test_stream_agent_events_projects_safe_tools_sources_and_metrics():
+    runtime = security_run_runtime.SecurityRunRuntime()
+    agent = EventAgent()
+    events = [
+        event
+        async for event in runtime._stream_agent_events(
+            agent,
+            security_run_runtime.SecurityRunRequest.from_chat_args("hello", user_id="u1"),
+        )
+    ]
+
+    tool_events = [event for event in events if event.event == "tool.update"]
+    assert [event.data["tool"] for event in tool_events] == [
+        {"id": "tool-1", "name": "cve_lookup", "status": "running"},
+        {"id": "tool-1", "name": "cve_lookup", "status": "completed"},
+    ]
+    assert all("arguments" not in event.data["tool"] for event in tool_events)
+    assert all("result" not in event.data["tool"] for event in tool_events)
+    assert next(event.data for event in events if event.event == "sources")["items"][0]["title"] == "CVE advisory"
+    completed = next(event.data for event in events if event.event == "run.completed")
+    assert completed["metrics"] == {"total_tokens": 42, "duration": 1.25}
+    assert completed["followups"] == ["Assess impact"]
+    assert not runtime.cancel_run(user_id="u1", run_id="run-1")
+
+
+@pytest.mark.asyncio
+async def test_stream_events_filter_raw_details_at_the_source():
+    runtime = security_run_runtime.SecurityRunRuntime()
+    request = security_run_runtime.SecurityRunRequest.from_chat_args("hello", user_id="u1")
+    hidden = [
+        event async for event in runtime._stream_agent_events(
+            DetailedEventAgent(), request,
+            SimpleNamespace(show_raw_reasoning=False, show_raw_tool_io=False, show_thought_chain=True),
+        )
+    ]
+    assert [event.event for event in hidden] == ["thought.update", "tool.update"]
+    assert "input" not in hidden[-1].data["tool"]
+    assert "output" not in hidden[-1].data["tool"]
+
+    visible = [
+        event async for event in runtime._stream_agent_events(
+            DetailedEventAgent(), request,
+            SimpleNamespace(show_raw_reasoning=True, show_raw_tool_io=True, show_thought_chain=True),
+        )
+    ]
+    assert visible[0].data["delta"] == "private chain"
+    assert visible[-1].data["tool"]["input"] == {"token": "secret"}
+    assert visible[-1].data["tool"]["output"] == "sensitive output"
+
+
+@pytest.mark.asyncio
+async def test_stream_events_omit_timeline_when_thought_chain_is_disabled():
+    runtime = security_run_runtime.SecurityRunRuntime()
+    events = [
+        event async for event in runtime._stream_agent_events(
+            DetailedEventAgent(),
+            security_run_runtime.SecurityRunRequest.from_chat_args("hello", user_id="u1"),
+            SimpleNamespace(show_raw_reasoning=False, show_raw_tool_io=True, show_thought_chain=False),
+        )
+    ]
+    assert events == []
+
+
+def test_runtime_cancellation_requires_the_matching_user_and_live_run():
+    runtime = security_run_runtime.SecurityRunRuntime()
+    agent = EventAgent()
+    runtime.register_run(user_id="u1", run_id="run-1", agent=agent)
+
+    assert not runtime.cancel_run(user_id="u2", run_id="run-1")
+    assert runtime.cancel_run(user_id="u1", run_id="run-1")
+    assert agent.cancelled_run_ids == ["run-1"]
 
 
 @pytest.mark.asyncio
@@ -407,18 +571,23 @@ async def test_security_run_request_drives_provider_block_fallback():
             mcp_tools_factory=FakeMcpTools,
         )
     )
-    chunks = [
-        chunk
-        async for chunk in security_run_runtime.stream_security_run(
-            security_run_runtime.SecurityRunRequest.from_chat_args(
-                "hello",
-                session_id="session-1",
-                model_id="model-1",
-                user_id="u1",
-                knowledge_owner_user_id="u1",
-            ),
-            runtime=runtime,
-        )
-    ]
-    assert chunks[0]
-    assert chunks[1] == "fallback chunk"
+    with patch.object(
+        security_run_runtime,
+        "get_chat_settings_async",
+        new=AsyncMock(return_value=SimpleNamespace()),
+    ):
+        chunks = [
+            chunk
+            async for chunk in security_run_runtime.stream_security_run(
+                security_run_runtime.SecurityRunRequest.from_chat_args(
+                    "hello",
+                    session_id="session-1",
+                    model_id="model-1",
+                    user_id="u1",
+                    knowledge_owner_user_id="u1",
+                ),
+                runtime=runtime,
+            )
+        ]
+    assert chunks[0].event == "content.delta"
+    assert chunks[1] == ChatRunEvent("content.delta", {"run_id": "", "delta": "fallback chunk"})

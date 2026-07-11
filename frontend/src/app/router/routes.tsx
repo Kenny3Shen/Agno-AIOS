@@ -1,7 +1,6 @@
 import { lazy } from 'react'
-import { createHashHistory, createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
+import { createHashHistory, createRootRoute, createRoute, createRouter, Outlet, redirect } from '@tanstack/react-router'
 import { AppFrame } from '@/app/shell/AppFrame'
-import { HomePage } from '@/features/home'
 
 const DashboardPage = lazy(() => import('@/features/dashboard').then((module) => ({ default: module.DashboardPage })))
 const ChatPage = lazy(() => import('@/features/chat').then((module) => ({ default: module.ChatPage })))
@@ -20,13 +19,14 @@ const CollectPage = lazy(() => import('@/features/collect').then((module) => ({ 
 const SettingsPage = lazy(() => import('@/features/settings').then((module) => ({ default: module.SettingsPage })))
 
 const rootRoute = createRootRoute({ component: () => <AppFrame><Outlet /></AppFrame> })
+const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', beforeLoad: () => { throw redirect({ to: '/dashboard', replace: true }) } })
 const pages = [
-  ['/', HomePage], ['/dashboard', DashboardPage], ['/chat', ChatPage], ['/workflow', WorkflowPage],
+  ['/dashboard', DashboardPage], ['/chat', ChatPage], ['/workflow', WorkflowPage],
   ['/skills', SkillsPage], ['/mcp', McpPage], ['/knowledge', KnowledgePage], ['/trace', TracePage],
   ['/memory', MemoryPage], ['/evaluations', EvaluationsPage], ['/approvals', ApprovalsPage], ['/scheduler', SchedulerPage],
   ['/cve', CvePage], ['/collect', CollectPage], ['/audit', AuditPage], ['/settings', SettingsPage],
 ] as const
-const routeTree = rootRoute.addChildren(pages.map(([path, component]) => createRoute({ getParentRoute: () => rootRoute, path, component })))
+const routeTree = rootRoute.addChildren([indexRoute, ...pages.map(([path, component]) => createRoute({ getParentRoute: () => rootRoute, path, component }))])
 export const router = createRouter({ routeTree, history: createHashHistory() })
 
 declare module '@tanstack/react-router' { interface Register { router: typeof router } }

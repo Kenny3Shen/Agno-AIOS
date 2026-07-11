@@ -30,6 +30,7 @@ from api.routes import (
     knowledge,
     memory,
     mcp as mcp_routes,
+    overview,
     settings,
     skills,
     trace,
@@ -156,6 +157,7 @@ app.include_router(chat.router)
 app.include_router(collect.router)
 app.include_router(settings.router)
 app.include_router(trace.router)
+app.include_router(overview.router)
 app.include_router(skills.router)
 app.include_router(mcp_routes.router)
 app.include_router(knowledge.router)

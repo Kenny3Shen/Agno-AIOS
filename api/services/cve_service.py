@@ -11,7 +11,7 @@ async def search_cves(
     page: int = 1,
     size: int = 10,
 ) -> tuple[list[dict[str, Any]], int]:
-    """Search CVEs by CVE ID or description."""
+    """Search CVEs, or return the most recently ingested entries when query is blank."""
     return await search_cve_rows(
         query=query,
         source=source,

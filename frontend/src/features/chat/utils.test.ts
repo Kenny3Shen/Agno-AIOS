@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chatReducer, consumeSse, initialChatState, parseMessage, previousPrompt } from './utils'
+import { chatReducer, consumeSse, initialChatState, previousPrompt } from './utils'
 import type { Message } from './types'
 
 describe('chat behavior', () => {
@@ -14,8 +14,8 @@ describe('chat behavior', () => {
   it('preserves a partial answer when a request fails', () => {
     const assistant: Message = { id: 'a', role: 'assistant', content: '', final: false }
     const started = chatReducer(initialChatState, { type: 'start', user: { id: 'u', role: 'user', content: 'prompt', final: true }, assistant, modelId: 'model' })
-    const streamed = chatReducer(started, { type: 'chunk', id: 'a', chunk: 'partial' })
-    const failed = chatReducer(streamed, { type: 'error', id: 'a', message: 'offline' })
+    const streamed = chatReducer(started, { type: 'event', id: 'a', event: { type: 'content.delta', delta: 'partial' } })
+    const failed = chatReducer(streamed, { type: 'event', id: 'a', event: { type: 'run.failed', code: 'NETWORK', message: 'offline', retryable: true } })
     expect(failed.messages[failed.messages.length - 1]?.content).toBe('partial')
     expect(failed.messages[failed.messages.length - 1]?.final).toBe(true)
   })
@@ -25,7 +25,17 @@ describe('chat behavior', () => {
     expect(previousPrompt(messages, 'a')).toBe('inspect')
   })
 
-  it('separates model-provided reasoning, sources and tools from the answer', () => {
-    expect(parseMessage('<think>checking</think>Answer\nSource: advisory\nTool call: search')).toEqual({ body: 'Answer', thinking: 'checking', sources: ['advisory'], tools: ['Tool call: search'] })
+  it('clears a temporary reasoning effort when changing the model or starting a new chat', () => {
+    const selected = chatReducer(initialChatState, { type: 'reasoning-effort', value: 'max' })
+    expect(chatReducer(selected, { type: 'model', value: 'model-2' }).reasoningEffort).toBeNull()
+    expect(chatReducer(selected, { type: 'reset' }).reasoningEffort).toBeNull()
+  })
+
+  it('keeps protocol metadata separate from markdown content', () => {
+    const assistant: Message = { id: 'a', role: 'assistant', content: '', final: false, status: 'streaming' }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    const withTool = chatReducer(started, { type: 'event', id: 'a', event: { type: 'tool.update', tool: { id: 'lookup', name: 'CVE lookup', status: 'loading' } } })
+    const completed = chatReducer(withTool, { type: 'event', id: 'a', event: { type: 'run.completed', runId: 'run-1', metrics: { total_tokens: 10 }, followups: ['Assess impact'] } })
+    expect(completed.messages[0]).toMatchObject({ content: '', run_id: 'run-1', status: 'completed', tool_steps: [{ id: 'lookup', name: 'CVE lookup', status: 'loading' }], followups: ['Assess impact'] })
   })
 })

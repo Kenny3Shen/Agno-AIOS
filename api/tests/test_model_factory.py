@@ -29,6 +29,21 @@ def test_builds_native_deepseek_with_correct_capabilities():
     assert model.supports_native_structured_outputs is False
 
 
+def test_builds_native_models_with_default_or_override_reasoning_effort():
+    deepseek = build_agno_model(
+        config(provider="deepseek", default_reasoning_effort="max")
+    )
+    openai = build_agno_model(
+        config(provider="openai", default_reasoning_effort="high"),
+        reasoning_effort="low",
+    )
+    compatible = build_agno_model(config(default_reasoning_effort="high"))
+
+    assert deepseek.reasoning_effort == "max"
+    assert openai.reasoning_effort == "low"
+    assert not hasattr(compatible, "reasoning_effort") or compatible.reasoning_effort is None
+
+
 def test_builds_openai_chat_and_responses_models():
     assert isinstance(
         build_agno_model(
@@ -61,6 +76,12 @@ def test_builds_openai_compatible_protocol_models():
     assert chat.supports_native_structured_outputs is False
     assert isinstance(responses, OpenAIResponses)
     assert responses.supports_native_structured_outputs is False
+
+
+def test_missing_protocol_defaults_to_chat_completions():
+    model = build_agno_model({key: value for key, value in config().items() if key != "api_protocol"})
+
+    assert isinstance(model, OpenAILike)
 
 
 def test_deepseek_forces_json_chat_capabilities():

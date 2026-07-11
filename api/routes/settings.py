@@ -9,6 +9,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from api.auth.models import User
+from api.auth.claims import ADMIN_SCOPE
 from api.auth.scopes import require_scope
 from api.config import Settings, get_settings
 from api.dependencies import get_app_settings
@@ -21,6 +22,7 @@ from api.services.model_config_service import (
     save_model_config,
 )
 from api.services.model_factory import build_agno_model
+from api.services.chat_settings_service import get_chat_settings, update_chat_settings
 
 router = APIRouter(prefix="/api", tags=["Settings"])
 
@@ -49,6 +51,13 @@ class SettingsResponse(BaseModel):
 
 class SettingsUpdate(BaseModel):
     settings: dict[str, str]
+
+
+class ChatSettingsUpdate(BaseModel):
+    show_raw_reasoning: bool | None = None
+    show_raw_tool_io: bool | None = None
+    show_thought_chain: bool | None = None
+    memory_enabled: bool | None = None
 
 
 class ModelConnectivityTestResponse(BaseModel):
@@ -148,6 +157,32 @@ def read_settings(
         raw = _setting_value(settings, key)
         result[key] = _mask_secret(key, raw)
     return SettingsResponse(settings=result)
+
+
+@router.get("/settings/chat")
+async def read_chat_settings(
+    _user: User = Depends(require_scope(ADMIN_SCOPE)),
+) -> dict[str, bool]:
+    """Read globally enforced chat privacy and memory settings."""
+    return await get_chat_settings()
+
+
+@router.patch("/settings/chat")
+async def patch_chat_settings(
+    request: Request,
+    body: ChatSettingsUpdate,
+    user: User = Depends(require_scope(ADMIN_SCOPE)),
+) -> dict[str, bool]:
+    values = body.model_dump(exclude_unset=True)
+    result = await update_chat_settings(values)
+    await record_audit_event_async(
+        user,
+        action="settings.chat.update",
+        resource_type="chat_settings",
+        metadata={"keys": sorted(values)},
+        **audit_request_context(request),
+    )
+    return result
 
 
 @router.get("/models")

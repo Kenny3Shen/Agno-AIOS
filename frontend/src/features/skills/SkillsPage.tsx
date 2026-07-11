@@ -17,26 +17,30 @@ export function SkillsPage() {
   const [selected, setSelected] = useState<Skill | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
   const refresh = () => client.invalidateQueries({ queryKey: ['skills'] })
-  const toggle = useMutation({ mutationFn: ({ skill, enabled }: { skill: Skill; enabled: boolean }) => toggleSkill(skill.name, enabled), onSuccess: refresh })
+  const toggle = useMutation({
+    mutationFn: ({ skill, enabled }: { skill: Skill; enabled: boolean }) => toggleSkill(skill.name, enabled),
+    onSuccess: async (_, { enabled }) => { message.success(enabled ? '技能已启用' : '技能已停用'); await refresh() },
+    onError: (error) => message.error(error instanceof Error ? error.message : '更新技能状态失败'),
+  })
   const body = selected ? getSkillBody(selected.skill_markdown) : ''
   const detailMetadata = selected ? getSkillDetailMetadata(selected) : null
 
   return <main className="page"><PageHeader title="Skills" description="管理 Agent 可调用技能、脚本与资源可见性" actions={<Button type="primary" icon={<UploadOutlined />} onClick={() => setUploadOpen(true)}>上传技能</Button>} />
     <Splitter className="workbench-splitter skills-splitter" orientation={vertical ? 'vertical' : 'horizontal'}>
       <Splitter.Panel defaultSize="70%" min={vertical ? 260 : '45%'}>
-        <Card className="workbench-card splitter-panel-card"><Table<Skill> rowKey="name" dataSource={query.data ?? []} loading={query.isLoading} scroll={{ x: 760 }} onRow={(row) => ({ onClick: () => setSelected(row) })} columns={[
+        <Card className="workbench-card splitter-panel-card"><Table<Skill> rowKey="name" dataSource={query.data ?? []} loading={query.isLoading} scroll={{ x: 760 }} rowClassName={(row) => row.name === selected?.name ? 'selected-table-row' : ''} onRow={(row) => ({ tabIndex: 0, role: 'button', 'aria-label': `查看技能 ${row.name}`, onClick: () => setSelected(row), onKeyDown: (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelected(row) } } })} columns={[
           { title: 'Skill', dataIndex: 'name', render: (value, row) => <Space><strong>{value}</strong>{row.has_scripts && <Tag>scripts</Tag>}</Space> },
           { title: 'Description', dataIndex: 'description', ellipsis: true },
           { title: 'Visibility', dataIndex: 'visibility', width: 150, render: (value, row) => <VisibilitySelect value={value} disabled={!row.can_manage} onClick={(event) => event.stopPropagation()} onChange={(visibility) => void setVisibility(row.name, visibility).then(refresh)} /> },
-          { title: 'Enabled', dataIndex: 'enabled', width: 100, render: (value, row) => <Switch checked={value} disabled={!row.can_manage} loading={toggle.isPending} onClick={(_, event) => event.stopPropagation()} onChange={(enabled) => toggle.mutate({ skill: row, enabled })} /> },
+          { title: 'Enabled', dataIndex: 'enabled', width: 100, render: (value, row) => { const pending = toggle.isPending && toggle.variables?.skill.name === row.name; return <Switch checked={value} disabled={!row.can_manage || pending} loading={pending} onClick={(_, event) => event.stopPropagation()} onChange={(enabled) => toggle.mutate({ skill: row, enabled })} /> } },
         ]} /></Card>
       </Splitter.Panel>
       <Splitter.Panel defaultSize="30%" min={vertical ? 180 : '20%'}>
         <Card className="workbench-card splitter-panel-card" title="Detail">
           {selected ? <Tabs destroyOnHidden items={[
-            { key: 'content', label: 'SKILL.md', children: body ? <XMarkdown content={body} openLinksInNewTab escapeRawHtml /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={false} /> },
+            { key: 'content', label: 'SKILL.md', children: body ? <XMarkdown content={body} openLinksInNewTab escapeRawHtml /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该技能没有 SKILL.md 内容" /> },
             { key: 'metadata', label: 'Metadata', children: <MetadataDescriptions value={detailMetadata} /> },
-          ]} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={false} />}
+          ]} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="选择一个技能查看详情" />}
         </Card>
       </Splitter.Panel>
     </Splitter>

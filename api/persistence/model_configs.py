@@ -14,6 +14,7 @@ from sqlalchemy import (
     delete,
     insert,
     select,
+    text,
 )
 from sqlalchemy.schema import CreateSchema
 
@@ -41,6 +42,7 @@ def model_configs_table(metadata: MetaData | None = None) -> Table:
         Column("provider", String(64), nullable=False),
         Column("api_protocol", String(64), nullable=False),
         Column("structured_output_mode", String(32), nullable=False),
+        Column("default_reasoning_effort", String(16), nullable=True),
         Column("base_url", Text, nullable=False, server_default=""),
         Column("api_key", Text, nullable=False, server_default=""),
         Column("description", Text, nullable=False, server_default=""),
@@ -61,6 +63,15 @@ async def ensure_model_configs_table_async() -> None:
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(CreateSchema(_app_schema(), if_not_exists=True))
         await conn.run_sync(table.create, checkfirst=True)
+        preparer = conn.dialect.identifier_preparer
+        schema = preparer.quote(_app_schema())
+        table_name = preparer.quote(MODEL_CONFIGS_TABLE)
+        await conn.execute(
+            text(
+                f"ALTER TABLE {schema}.{table_name} "
+                "ADD COLUMN IF NOT EXISTS default_reasoning_effort VARCHAR(16)"
+            )
+        )
         for index in table.indexes:
             await conn.run_sync(index.create, checkfirst=True)
 

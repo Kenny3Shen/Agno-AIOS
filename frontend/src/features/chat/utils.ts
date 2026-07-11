@@ -1,50 +1,87 @@
-import type { ChatAction, ChatState, Message, ParsedMessage } from './types'
+import type { ChatAction, ChatRunEvent, ChatSource, ChatState, Message, RunMetrics, ThoughtStep, ToolStatus, ToolStep } from './types'
 
-export const initialChatState: ChatState = { messages: [], input: '', requesting: false, error: null, selectedModelId: localStorage.getItem('agno-aios-chat-model-id') }
+export const initialChatState: ChatState = { messages: [], input: '', requesting: false, error: null, selectedModelId: localStorage.getItem('agno-aios-chat-model-id'), reasoningEffort: null }
+
+const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object'
+const asString = (value: unknown): string | undefined => typeof value === 'string' ? value : undefined
+const asMetrics = (value: unknown): RunMetrics | null => isRecord(value) ? value as RunMetrics : null
+
+const updateMessage = (messages: Message[], id: string, callback: (message: Message) => Message) => messages.map((message) => message.id === id ? callback(message) : message)
 
 export const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
   switch (action.type) {
     case 'history': return state.requesting ? state : { ...state, messages: action.messages }
     case 'input': return { ...state, input: action.value }
-    case 'model': return { ...state, selectedModelId: action.value }
+    case 'model': return { ...state, selectedModelId: action.value, reasoningEffort: null }
+    case 'reasoning-effort': return { ...state, reasoningEffort: action.value }
     case 'start': return { ...state, input: '', requesting: true, error: null, selectedModelId: action.modelId, messages: [...state.messages, ...(action.user ? [action.user] : []), action.assistant] }
-    case 'chunk': return { ...state, messages: state.messages.map((message) => message.id === action.id ? { ...message, content: message.content + action.chunk } : message) }
-    case 'finish': return { ...state, requesting: false, messages: state.messages.map((message) => message.id === action.id ? { ...message, final: true } : message) }
-    case 'error': return { ...state, requesting: false, error: action.message, messages: action.id ? state.messages.map((message) => message.id === action.id ? { ...message, final: true } : message) : state.messages }
-    case 'reset': return { ...state, messages: [], input: '', requesting: false, error: null }
+    case 'event': {
+      const event: ChatRunEvent = action.event
+      const terminal = event.type === 'run.completed' || event.type === 'run.cancelled' || event.type === 'run.failed'
+      const messages = updateMessage(state.messages, action.id, (message) => {
+        switch (event.type) {
+          case 'run.started': return { ...message, run_id: event.runId, session_id: event.sessionId ?? message.session_id, status: 'streaming' }
+          case 'content.delta': return { ...message, content: message.content + event.delta, status: 'streaming' }
+          case 'tool.update': {
+            const toolSteps = message.tool_steps ?? []
+            const index = toolSteps.findIndex((step) => step.id === event.tool.id)
+            const next = index < 0 ? [...toolSteps, event.tool] : toolSteps.map((step, stepIndex) => stepIndex === index ? event.tool : step)
+            return { ...message, tool_steps: next, status: 'streaming' }
+          }
+          case 'reasoning.delta': return { ...message, reasoning: (message.reasoning ?? '') + event.delta, status: 'streaming' }
+          case 'thought.update': {
+            const thoughts = message.thought_chain ?? []
+            const index = thoughts.findIndex((step) => step.id === event.thought.id)
+            return { ...message, thought_chain: index < 0 ? [...thoughts, event.thought] : thoughts.map((step, stepIndex) => stepIndex === index ? event.thought : step), status: 'streaming' }
+          }
+          case 'sources': return { ...message, sources: event.items }
+          case 'run.completed': return { ...message, run_id: event.runId ?? message.run_id, session_id: event.sessionId ?? message.session_id, metrics: event.metrics ?? message.metrics, followups: event.followups ?? [], status: 'completed', final: true }
+          case 'run.cancelled': return { ...message, run_id: event.runId ?? message.run_id, status: 'cancelled', final: true, error: event.reason ? { message: event.reason } : null, tool_steps: (message.tool_steps ?? []).map((step) => step.status === 'loading' ? { ...step, status: 'abort' } : step) }
+          case 'run.failed': return { ...message, run_id: event.runId ?? message.run_id, status: 'failed', final: true, error: { code: event.code, message: event.message, retryable: event.retryable }, tool_steps: (message.tool_steps ?? []).map((step) => step.status === 'loading' ? { ...step, status: 'error' } : step) }
+        }
+      })
+      return { ...state, requesting: terminal ? false : state.requesting, error: event.type === 'run.failed' ? event.message : state.error, messages }
+    }
+    case 'network-error': return { ...state, requesting: false, error: action.message, messages: updateMessage(state.messages, action.id, (message) => ({ ...message, final: true, status: 'failed', error: { message: action.message, retryable: true } })) }
+    case 'reset': return { ...state, messages: [], input: '', requesting: false, error: null, reasoningEffort: null }
   }
 }
 
-export const parseMessage = (content: string): ParsedMessage => {
-  let thinking = ''
-  const sources: string[] = []
-  const tools: string[] = []
-  let body = content.replace(/<think>([\s\S]*?)(?:<\/think>|$)/gi, (_match, value: string) => { thinking = value.trim(); return '' })
-  body = body.split('\n').filter((raw) => {
-    const line = raw.trim()
-    if (/^(来源|Source|Sources|References|引用)\s*[:：]/i.test(line)) { sources.push(line.replace(/^.*?[:：]\s*/, '')); return false }
-    if (/^(tool|工具调用|MCP|function call)\b/i.test(line)) { tools.push(line); return false }
-    return true
-  }).join('\n').trim()
-  return { body, thinking, sources, tools: tools.slice(0, 8) }
-}
+const normalizeToolStatus = (value: unknown): ToolStatus => value === 'completed' || value === 'success' ? 'success' : value === 'error' ? 'error' : value === 'abort' ? 'abort' : 'loading'
+const normalizeSources = (value: unknown): ChatSource[] => Array.isArray(value) ? value.flatMap((source, index) => {
+  if (typeof source === 'string') return [{ id: String(index), title: source }]
+  if (!isRecord(source)) return []
+  const title = asString(source.title) ?? asString(source.name) ?? asString(source.url)
+  return title ? [{ id: asString(source.id) ?? String(index), title, url: asString(source.url), snippet: asString(source.snippet) ?? asString(source.description) }] : []
+}) : []
+const normalizeTools = (value: unknown): ToolStep[] => Array.isArray(value) ? value.flatMap((tool, index) => {
+  if (!isRecord(tool)) return []
+  const name = asString(tool.name) ?? asString(tool.title)
+  return name ? [{ id: asString(tool.id) ?? String(index), name, status: normalizeToolStatus(tool.status), summary: asString(tool.summary), duration: typeof tool.duration === 'number' ? tool.duration : null, input: tool.input, output: tool.output }] : []
+}) : []
+const normalizeThoughts = (value: unknown): ThoughtStep[] => Array.isArray(value) ? value.flatMap((thought, index) => {
+  if (!isRecord(thought)) return []
+  const title = asString(thought.title) ?? asString(thought.name)
+  return title ? [{ id: asString(thought.id) ?? String(index), title, status: normalizeToolStatus(thought.status), summary: asString(thought.summary), duration: typeof thought.duration === 'number' ? thought.duration : null }] : []
+}) : []
 
 export const normalizeMessages = (value: unknown): Message[] => Array.isArray(value) ? value.map((item, index) => {
-  const source = item && typeof item === 'object' ? item as Record<string, unknown> : {}
+  const source = isRecord(item) ? item : {}
+  const status = source.status === 'streaming' || source.status === 'cancelled' || source.status === 'failed' ? source.status : 'completed'
   return {
-    ...source,
-    id: String(source.run_id ?? `${source.role ?? 'message'}-${index}`),
+    id: String(source.id ?? source.message_id ?? source.run_id ?? `${source.role ?? 'message'}-${index}`),
     role: source.role === 'user' || source.role === 'system' ? source.role : 'assistant',
     content: typeof source.content === 'string' ? source.content : JSON.stringify(source.content ?? ''),
-    final: true,
-  } as Message
+    final: status !== 'streaming', status, run_id: asString(source.run_id), session_id: asString(source.session_id),
+    metrics: asMetrics(source.metrics), sources: normalizeSources(source.sources ?? source.citations ?? source.references), tool_steps: normalizeTools(source.tool_steps ?? source.tools),
+    thought_chain: normalizeThoughts(source.thought_chain ?? source.timeline), reasoning: asString(source.reasoning),
+    followups: Array.isArray(source.followups) ? source.followups.filter((item): item is string => typeof item === 'string') : [],
+  }
 }) : []
 
 export interface SseEvent { event: string; data: string }
 export const consumeSse = async (stream: ReadableStream<Uint8Array>, onEvent: (event: SseEvent) => void) => {
-  const reader = stream.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
+  const reader = stream.getReader(); const decoder = new TextDecoder(); let buffer = ''
   const flush = (block: string) => {
     const lines = block.replace(/\r/g, '').split('\n')
     const event = lines.find((line) => line.startsWith('event:'))?.slice(6).trim() ?? 'message'
@@ -52,11 +89,8 @@ export const consumeSse = async (stream: ReadableStream<Uint8Array>, onEvent: (e
     if (data) onEvent({ event, data })
   }
   while (true) {
-    const { value, done } = await reader.read()
-    buffer += decoder.decode(value, { stream: !done })
-    const blocks = buffer.split(/\n\n|\r\n\r\n/)
-    buffer = blocks.pop() ?? ''
-    blocks.forEach(flush)
+    const { value, done } = await reader.read(); buffer += decoder.decode(value, { stream: !done })
+    const blocks = buffer.split(/\n\n|\r\n\r\n/); buffer = blocks.pop() ?? ''; blocks.forEach(flush)
     if (done) break
   }
   if (buffer.trim()) flush(buffer)

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from contextlib import asynccontextmanager
 from pathlib import Path
 from inspect import isawaitable, iscoroutinefunction
-from typing import Any, AsyncIterator, Callable, cast
+from typing import Any, AsyncIterator, Callable
 
 from agno.agent import Agent
 from agno.run.agent import RunEvent
@@ -20,10 +20,24 @@ from api.services.model_config_service import get_model_for_run
 from api.services.model_factory import build_agno_model
 from api.services.postgres_store import get_async_agno_postgres_db
 from api.services.skill_service import get_enabled_skill_dirs
+from api.services.chat_settings import get_chat_settings_async
+from api.services.chat_run_events import (
+    ChatRunEvent,
+    completed_payload,
+    event_value,
+    source_items,
+    tool_update,
+)
 
 
-async def _build_model(model_id: str | None = None) -> Any:
-    return build_agno_model(await get_model_for_run(model_id))
+async def _build_model(
+    model_id: str | None = None,
+    reasoning_effort: str | None = None,
+) -> Any:
+    config = await get_model_for_run(model_id)
+    if reasoning_effort is None:
+        return build_agno_model(config)
+    return build_agno_model(config, reasoning_effort=reasoning_effort)
 
 
 def _build_mcp_url() -> str:
@@ -102,8 +116,11 @@ class SecurityRunRequest:
     message: str
     session_id: str | None
     model_id: str | None
+    reasoning_effort: str | None
     user_id: str | None
     knowledge_owner_user_id: str | None
+    memory_enabled: bool = True
+    store_raw_tool_io: bool = False
 
     @classmethod
     def from_chat_args(
@@ -111,15 +128,21 @@ class SecurityRunRequest:
         message: str,
         session_id: str | None = None,
         model_id: str | None = None,
+        reasoning_effort: str | None = None,
         user_id: str | None = None,
         knowledge_owner_user_id: str | None = None,
+        memory_enabled: bool = True,
+        store_raw_tool_io: bool = False,
     ) -> "SecurityRunRequest":
         return cls(
             message=message,
             session_id=session_id,
             model_id=model_id,
+            reasoning_effort=reasoning_effort,
             user_id=user_id,
             knowledge_owner_user_id=knowledge_owner_user_id,
+            memory_enabled=memory_enabled,
+            store_raw_tool_io=store_raw_tool_io,
         )
 
     @property
@@ -129,7 +152,7 @@ class SecurityRunRequest:
 
 @dataclass(frozen=True)
 class SecurityRunRuntimeDependencies:
-    build_model: Callable[[str | None], Any] = _build_model
+    build_model: Callable[..., Any] = _build_model
     get_db: Callable[[], Any] = get_async_agno_postgres_db
     get_async_knowledge_base: Callable[[], Any] = get_async_knowledge_base_async
     get_enabled_skill_dirs: Callable[[], Any] = get_enabled_skill_dirs
@@ -147,6 +170,34 @@ class SecurityRunRuntime:
         dependencies: SecurityRunRuntimeDependencies | None = None,
     ) -> None:
         self.dependencies = dependencies or SecurityRunRuntimeDependencies()
+        self._active_agents: dict[tuple[str, str], Any] = {}
+
+    def register_run(self, *, user_id: str, run_id: str, agent: Any) -> None:
+        if run_id:
+            self._active_agents[(user_id, run_id)] = agent
+
+    def unregister_run(self, *, user_id: str, run_id: str) -> None:
+        if run_id:
+            self._active_agents.pop((user_id, run_id), None)
+
+    def cancel_run(self, *, user_id: str, run_id: str) -> bool:
+        agent = self._active_agents.get((user_id, run_id))
+        if agent is None:
+            return False
+        return bool(agent.cancel_run(run_id))
+
+    async def _build_model(
+        self,
+        model_id: str | None,
+        reasoning_effort: str | None,
+    ) -> Any:
+        if reasoning_effort is None:
+            return await _run_sync_dependency(self.dependencies.build_model, model_id)
+        return await _run_sync_dependency(
+            self.dependencies.build_model,
+            model_id,
+            reasoning_effort,
+        )
 
     async def _build_enabled_skills(self) -> Skills | None:
         enabled_dirs = [
@@ -159,36 +210,89 @@ class SecurityRunRuntime:
             return None
         return await to_thread.run_sync(_load_local_skills, enabled_dirs)
 
-    async def _stream_agent_content(
+    async def _stream_agent_events(
         self,
         agent: Any,
         request: SecurityRunRequest,
-    ) -> AsyncIterator[str]:
-        async for event in agent.arun(
-            request.message,
-            session_id=request.session_id,
-            user_id=request.agent_user_id,
-            stream=True,
-        ):
-            event_type: str | None = None
-            content: Any = None
-            if isinstance(event, dict):
-                event_dict = cast(dict[str, Any], event)
-                event_type = event_dict.get("event")
-                content = event_dict.get("content")
-            else:
-                event_type = getattr(event, "event", None)
-                content = getattr(event, "content", None)
-
-            if (
-                event_type == RunEvent.run_content.value
-                and isinstance(content, str)
-                and content
+        chat_settings: Any | None = None,
+    ) -> AsyncIterator[ChatRunEvent]:
+        show_raw_reasoning = bool(getattr(chat_settings, "show_raw_reasoning", False))
+        show_raw_tool_io = bool(getattr(chat_settings, "show_raw_tool_io", False))
+        show_thought_chain = bool(getattr(chat_settings, "show_thought_chain", True))
+        registered_run_ids: set[str] = set()
+        try:
+            async for event in agent.arun(
+                request.message,
+                session_id=request.session_id,
+                user_id=request.agent_user_id,
+                stream=True,
+                stream_events=True,
             ):
-                yield content
+                event_type = str(event_value(event, "event", ""))
+                run_id = str(event_value(event, "run_id", "") or "")
+                if event_type == RunEvent.run_started.value:
+                    if run_id:
+                        registered_run_ids.add(run_id)
+                    self.register_run(user_id=request.agent_user_id, run_id=run_id, agent=agent)
+                    yield ChatRunEvent("run.started", {
+                        "run_id": run_id,
+                        "session_id": str(event_value(event, "session_id", request.session_id or "") or ""),
+                        "model": str(event_value(event, "model", "") or ""),
+                        "provider": str(event_value(event, "model_provider", "") or ""),
+                    })
+                elif event_type == RunEvent.run_content.value:
+                    content = event_value(event, "content")
+                    if isinstance(content, str) and content:
+                        yield ChatRunEvent("content.delta", {"run_id": run_id, "delta": content})
+                elif event_type == RunEvent.reasoning_content_delta.value:
+                    if show_raw_reasoning:
+                        reasoning = event_value(event, "content", event_value(event, "reasoning", ""))
+                        if isinstance(reasoning, str) and reasoning:
+                            yield ChatRunEvent("reasoning.delta", {"run_id": run_id, "delta": reasoning})
+                elif event_type in {RunEvent.reasoning_started.value, RunEvent.reasoning_step.value, RunEvent.reasoning_completed.value}:
+                    if show_thought_chain:
+                        completed = event_type == RunEvent.reasoning_completed.value
+                        summary = event_value(event, "message", event_value(event, "content", ""))
+                        yield ChatRunEvent("thought.update", {"run_id": run_id, "thought": {
+                            "id": "reasoning", "type": "reasoning", "title": "模型推理",
+                            "status": "completed" if completed else "running",
+                            "summary": str(summary or "正在推理")[:280],
+                        }})
+                elif event_type == RunEvent.tool_call_started.value:
+                    if show_thought_chain:
+                        yield ChatRunEvent("tool.update", {"run_id": run_id, "tool": tool_update(event_value(event, "tool"), "running", include_raw_io=show_raw_tool_io)})
+                elif event_type == RunEvent.tool_call_completed.value:
+                    if show_thought_chain:
+                        yield ChatRunEvent("tool.update", {"run_id": run_id, "tool": tool_update(event_value(event, "tool"), "completed", include_raw_io=show_raw_tool_io)})
+                elif event_type == RunEvent.tool_call_error.value:
+                    if show_thought_chain:
+                        yield ChatRunEvent("tool.update", {"run_id": run_id, "tool": tool_update(event_value(event, "tool"), "error", include_raw_io=show_raw_tool_io)})
+                elif event_type == RunEvent.run_completed.value:
+                    sources = source_items(event_value(event, "citations")) or source_items(event_value(event, "references"))
+                    if sources:
+                        yield ChatRunEvent("sources", {"run_id": run_id, "items": sources})
+                    yield ChatRunEvent("run.completed", completed_payload(event))
+                    self.unregister_run(user_id=request.agent_user_id, run_id=run_id)
+                    registered_run_ids.discard(run_id)
+                elif event_type == RunEvent.run_cancelled.value:
+                    yield ChatRunEvent("run.cancelled", {"run_id": run_id, "reason": str(event_value(event, "reason", "已停止生成") or "已停止生成")})
+                    self.unregister_run(user_id=request.agent_user_id, run_id=run_id)
+                    registered_run_ids.discard(run_id)
+                elif event_type == RunEvent.run_error.value:
+                    yield ChatRunEvent("run.failed", {"run_id": run_id, "code": "AGENT_RUN_ERROR", "message": "安全分析运行失败", "retryable": True})
+                    self.unregister_run(user_id=request.agent_user_id, run_id=run_id)
+                    registered_run_ids.discard(run_id)
+        finally:
+            for run_id in registered_run_ids:
+                self.unregister_run(user_id=request.agent_user_id, run_id=run_id)
 
-    async def build_fallback_agent(self, model_id: str | None = None) -> Agent:
-        model = await _run_sync_dependency(self.dependencies.build_model, model_id)
+    async def build_fallback_agent(
+        self,
+        model_id: str | None = None,
+        reasoning_effort: str | None = None,
+        memory_enabled: bool = True,
+    ) -> Agent:
+        model = await self._build_model(model_id, reasoning_effort)
         return self.dependencies.agent_factory(
             id="security-operations",
             name="安全防御助手",
@@ -197,7 +301,9 @@ class SecurityRunRuntime:
             instructions=[await _load_prompt_async(SAFE_FALLBACK_PROMPT)],
             model=model,
             db=self.dependencies.get_db(),
-            update_memory_on_run=True,
+            update_memory_on_run=memory_enabled,
+            add_memories_to_context=memory_enabled,
+            store_tool_messages=False,
             enable_session_summaries=True,
             session_summary_manager=_session_summary_manager(model),
             add_datetime_to_context=True,
@@ -209,10 +315,7 @@ class SecurityRunRuntime:
         mcp_tools: Any,
         request: SecurityRunRequest,
     ) -> Agent:
-        model = await _run_sync_dependency(
-            self.dependencies.build_model,
-            request.model_id,
-        )
+        model = await self._build_model(request.model_id, request.reasoning_effort)
         return self.dependencies.agent_factory(
             id="security-operations",
             name="安全运营助手",
@@ -232,7 +335,9 @@ class SecurityRunRuntime:
             dependencies=await _run_sync_dependency(_agent_dependencies),
             add_dependencies_to_context=True,
             add_history_to_context=True,
-            update_memory_on_run=True,
+            update_memory_on_run=request.memory_enabled,
+            add_memories_to_context=request.memory_enabled,
+            store_tool_messages=request.store_raw_tool_io,
             enable_session_summaries=True,
             session_summary_manager=_session_summary_manager(model),
             num_history_runs=5,
@@ -261,25 +366,38 @@ class SecurityRunRuntime:
             )
             yield security_agent
 
-    async def stream(self, request: SecurityRunRequest) -> AsyncIterator[str]:
+    async def stream(self, request: SecurityRunRequest) -> AsyncIterator[ChatRunEvent]:
+        chat_settings = await get_chat_settings_async()
         try:
             async with self.security_agent_context(request) as security_agent:
-                async for chunk in self._stream_agent_content(
+                async for event in self._stream_agent_events(
                     security_agent,
                     request,
+                    chat_settings,
                 ):
-                    yield chunk
+                    yield event
         except Exception as exc:
             if not _is_provider_block_error(exc):
                 raise
             logger.warning("模型服务拦截完整 Agent 上下文，切换到无工具降级模式: {}", exc)
-            yield "模型服务拦截了完整 Agent 上下文，已切换到无工具安全模式。\n\n"
-            fallback_agent = await _maybe_await(self.build_fallback_agent(request.model_id))
-            async for chunk in self._stream_agent_content(
+            yield ChatRunEvent("content.delta", {"run_id": "", "delta": "模型服务拦截了完整 Agent 上下文，已切换到无工具安全模式。\n\n"})
+            fallback_agent = await _maybe_await(
+                self.build_fallback_agent(
+                    request.model_id, memory_enabled=request.memory_enabled
+                )
+                if request.reasoning_effort is None
+                else self.build_fallback_agent(
+                    request.model_id,
+                    request.reasoning_effort,
+                    memory_enabled=request.memory_enabled,
+                )
+            )
+            async for event in self._stream_agent_events(
                 fallback_agent,
                 request,
+                chat_settings,
             ):
-                yield chunk
+                yield event
 
 
 DEFAULT_SECURITY_RUN_RUNTIME = SecurityRunRuntime()
@@ -289,7 +407,11 @@ async def stream_security_run(
     request: SecurityRunRequest,
     *,
     runtime: SecurityRunRuntime | None = None,
-) -> AsyncIterator[str]:
+) -> AsyncIterator[ChatRunEvent]:
     active_runtime = runtime or DEFAULT_SECURITY_RUN_RUNTIME
-    async for chunk in active_runtime.stream(request):
-        yield chunk
+    async for event in active_runtime.stream(request):
+        yield event
+
+
+def cancel_security_run(*, user_id: str, run_id: str) -> bool:
+    return DEFAULT_SECURITY_RUN_RUNTIME.cancel_run(user_id=user_id, run_id=run_id)

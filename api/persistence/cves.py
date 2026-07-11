@@ -83,14 +83,17 @@ async def search_cve_rows(
     await ensure_cves_table()
     safe_page = max(1, int(page or 1))
     safe_size = min(200, max(1, int(size or 10)))
-    pattern = f"%{query}%"
+    normalized_query = query.strip()
     table = cves_table()
-    filters = [
-        or_(
-            table.c.cve_id.ilike(pattern),
-            table.c.description.ilike(pattern),
+    filters = []
+    if normalized_query:
+        pattern = f"%{normalized_query}%"
+        filters.append(
+            or_(
+                table.c.cve_id.ilike(pattern),
+                table.c.description.ilike(pattern),
+            )
         )
-    ]
     if source:
         filters.append(table.c.source == source)
 
@@ -105,7 +108,7 @@ async def search_cve_rows(
             table.c.create_time,
         )
         .where(*filters)
-        .order_by(desc(table.c.id))
+        .order_by(desc(table.c.created_at), desc(table.c.id))
         .limit(safe_size)
         .offset((safe_page - 1) * safe_size)
     )

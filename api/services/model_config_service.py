@@ -3,7 +3,7 @@ from pathlib import Path
 import time
 from typing import Any, Literal, Self, cast
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from api.config import get_settings
 from api.persistence.model_configs import list_model_config_rows, replace_model_config_rows
@@ -14,6 +14,15 @@ from api.utils.json import loads
 ModelProvider = Literal["deepseek", "openai", "openai-compatible"]
 ModelApiProtocol = Literal["chat-completions", "responses"]
 StructuredOutputMode = Literal["native", "json"]
+ReasoningEffort = Literal["minimal", "low", "medium", "high", "max"]
+
+
+def _provider_defaults(provider: str) -> tuple[str, str, str | None]:
+    if provider == "deepseek":
+        return "chat-completions", "json", "max"
+    if provider == "openai":
+        return "responses", "native", "high"
+    return "chat-completions", "json", None
 
 
 class ModelConfig(BaseModel):
@@ -23,8 +32,9 @@ class ModelConfig(BaseModel):
     name: str = "自定义模型"
     model_id: str = ""
     provider: ModelProvider = "openai-compatible"
-    api_protocol: ModelApiProtocol = "responses"
+    api_protocol: ModelApiProtocol = "chat-completions"
     structured_output_mode: StructuredOutputMode = "json"
+    default_reasoning_effort: ReasoningEffort | None = None
     base_url: str = ""
     api_key: str = ""
     description: str = ""
@@ -43,7 +53,50 @@ class ModelConfig(BaseModel):
     @classmethod
     def _normalize_api_protocol(cls, value: Any) -> str:
         protocol = str(value or "").strip().lower()
-        return protocol or "responses"
+        return protocol or "chat-completions"
+
+    @field_validator("default_reasoning_effort", mode="before")
+    @classmethod
+    def _normalize_reasoning_effort(cls, value: Any) -> str | None:
+        effort = str(value or "").strip().lower()
+        return effort or None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _apply_provider_defaults(cls, value: Any) -> Any:
+        if not isinstance(value, Mapping):
+            return value
+        raw = dict(value)
+        provider = str(raw.get("provider") or "openai-compatible").strip()
+        protocol, output_mode, reasoning_effort = _provider_defaults(provider)
+        if provider == "deepseek":
+            raw["api_protocol"] = protocol
+            raw["structured_output_mode"] = output_mode
+        else:
+            raw.setdefault("api_protocol", protocol)
+            raw.setdefault("structured_output_mode", output_mode)
+        raw.setdefault("default_reasoning_effort", reasoning_effort)
+        return raw
+
+    @model_validator(mode="after")
+    def _validate_reasoning_effort(self) -> Self:
+        effort = self.default_reasoning_effort
+        if self.provider == "openai-compatible":
+            if effort is not None:
+                raise ValueError("OpenAI-compatible 模型不支持 reasoning_effort")
+            return self
+        if self.provider == "deepseek":
+            if effort not in {"high", "max"}:
+                raise ValueError("DeepSeek reasoning_effort 仅支持 high 或 max")
+            return self
+        allowed = {"minimal", "low", "medium", "high"}
+        if self.api_protocol == "chat-completions":
+            allowed.remove("minimal")
+        if effort not in allowed:
+            raise ValueError(
+                f"OpenAI {self.api_protocol} reasoning_effort 必须为 {', '.join(sorted(allowed))}"
+            )
+        return self
 
     @classmethod
     def normalized(cls, entry: "ModelConfig | Mapping[Any, Any]", fallback_id: str) -> Self:
@@ -60,16 +113,16 @@ class ModelConfig(BaseModel):
                 else "openai-compatible"
             )
 
-        api_protocol = str(
-            raw.get("api_protocol")
-            or ("chat-completions" if provider == "deepseek" else "responses")
+        default_protocol, default_output_mode, default_reasoning_effort = _provider_defaults(provider)
+        api_protocol = str(raw.get("api_protocol") or default_protocol).strip()
+        structured_output_mode = str(
+            raw.get("structured_output_mode") or default_output_mode
         ).strip()
-        structured_output_mode = str(raw.get("structured_output_mode") or "").strip()
-        if structured_output_mode in {"", "none"}:
+        if structured_output_mode == "none":
             structured_output_mode = "json"
-        if provider == "deepseek":
-            api_protocol = "chat-completions"
-            structured_output_mode = "json"
+        configured_reasoning_effort = raw.get("default_reasoning_effort")
+        if configured_reasoning_effort is None:
+            configured_reasoning_effort = default_reasoning_effort
 
         return cls(
             id=config_id,
@@ -78,6 +131,7 @@ class ModelConfig(BaseModel):
             provider=cast(ModelProvider, provider),
             api_protocol=cast(ModelApiProtocol, api_protocol),
             structured_output_mode=cast(StructuredOutputMode, structured_output_mode),
+            default_reasoning_effort=cast(ReasoningEffort | None, configured_reasoning_effort),
             base_url=base_url,
             api_key=str(raw.get("api_key") or "").strip(),
             description=str(raw.get("description") or "").strip(),
@@ -113,6 +167,7 @@ DEFAULT_MODELS: tuple[ModelConfig, ...] = (
         provider="deepseek",
         api_protocol="chat-completions",
         structured_output_mode="json",
+        default_reasoning_effort="max",
         base_url="https://api.deepseek.com",
         description="低延迟安全分析模型",
         builtin=True,
@@ -124,6 +179,7 @@ DEFAULT_MODELS: tuple[ModelConfig, ...] = (
         provider="deepseek",
         api_protocol="chat-completions",
         structured_output_mode="json",
+        default_reasoning_effort="max",
         base_url="https://api.deepseek.com",
         description="复杂推理与深度研判模型",
         builtin=True,
@@ -307,6 +363,7 @@ def _store_to_rows(
                 "provider": model.provider,
                 "api_protocol": model.api_protocol,
                 "structured_output_mode": model.structured_output_mode,
+                "default_reasoning_effort": model.default_reasoning_effort,
                 "base_url": model.base_url,
                 "api_key": model.api_key,
                 "description": model.description,

@@ -94,7 +94,7 @@ async def test_save_model_config_writes_postgres_rows_and_preserves_masked_secre
     assert public_custom["api_key"] == "save****cret"
 
 
-def test_model_config_normalizes_new_compatible_models_to_responses_json():
+def test_model_config_normalizes_new_compatible_models_to_chat_completions_json():
     model = model_config_service.ModelConfig.normalized(
         {
             "id": "custom",
@@ -105,8 +105,51 @@ def test_model_config_normalizes_new_compatible_models_to_responses_json():
     )
 
     assert model.provider == "openai-compatible"
-    assert model.api_protocol == "responses"
+    assert model.api_protocol == "chat-completions"
     assert model.structured_output_mode == "json"
+    assert model.default_reasoning_effort is None
+
+
+def test_model_config_uses_native_provider_defaults_without_rewriting_explicit_values():
+    deepseek = model_config_service.ModelConfig.normalized(
+        {"id": "deepseek", "provider": "deepseek"}, "fallback"
+    )
+    openai = model_config_service.ModelConfig.normalized(
+        {"id": "openai", "provider": "openai"}, "fallback"
+    )
+    existing_openai = model_config_service.ModelConfig.normalized(
+        {
+            "id": "existing-openai",
+            "provider": "openai",
+            "api_protocol": "chat-completions",
+            "structured_output_mode": "json",
+            "default_reasoning_effort": "low",
+        },
+        "fallback",
+    )
+
+    assert (deepseek.api_protocol, deepseek.structured_output_mode, deepseek.default_reasoning_effort) == (
+        "chat-completions",
+        "json",
+        "max",
+    )
+    assert (openai.api_protocol, openai.structured_output_mode, openai.default_reasoning_effort) == (
+        "responses",
+        "native",
+        "high",
+    )
+    assert (existing_openai.api_protocol, existing_openai.structured_output_mode, existing_openai.default_reasoning_effort) == (
+        "chat-completions",
+        "json",
+        "low",
+    )
+
+
+def test_model_config_rejects_incompatible_reasoning_effort():
+    with pytest.raises(ValueError, match="OpenAI-compatible"):
+        model_config_service.ModelConfig(
+            id="compatible", default_reasoning_effort="high"
+        )
 
 
 @pytest.mark.asyncio

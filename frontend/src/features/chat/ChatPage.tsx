@@ -1,103 +1,115 @@
-import { useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
-import { Actions, Bubble, Conversations, Prompts, Sender, Sources, Think, ThoughtChain, Welcome } from '@ant-design/x'
+import { Actions, Bubble, Conversations, Prompts, Sender, Sources, ThoughtChain, Welcome } from '@ant-design/x'
 import XMarkdown from '@ant-design/x-markdown'
-import { Avatar, Select, Tag, message as toast } from 'antd'
-import { CopyOutlined, DeleteOutlined, ExperimentOutlined, PlusOutlined, ReloadOutlined, UserOutlined } from '@ant-design/icons'
-import { archiveSession } from './api'
+import { Avatar, Button, Form, Input, Modal, Select, Tag, Tooltip, message as toast } from 'antd'
+import { ArrowDownOutlined, CopyOutlined, DeleteOutlined, EditOutlined, ExperimentOutlined, PauseCircleOutlined, PlusOutlined, ReloadOutlined, SafetyCertificateOutlined, UserOutlined } from '@ant-design/icons'
+import { archiveSession, renameSession } from './api'
 import { chatKeys } from './queries'
-import { parseMessage } from './utils'
 import { useChat } from './useChat'
-import type { Message } from './types'
+import type { ChatSession, Message, ThoughtStep, ToolStep } from './types'
+import type { ModelConfig, ReasoningEffort } from '@/shared/types/common'
 import { copyToClipboard } from '@/shared/lib/clipboard'
-import { compactId } from '@/shared/lib/format'
 import './chat.css'
 
 const prompts = [
-  { key: 'cve', label: '分析最新 CVE 对现有资产的影响' },
-  { key: 'exposure', label: '生成外部暴露面排查计划' },
-  { key: 'runbook', label: '为当前告警编写处置 Runbook' },
+  { key: 'cve', label: '分析最新 CVE 对现有资产的影响', description: '关联漏洞情报和资产上下文' },
+  { key: 'exposure', label: '生成外部暴露面排查计划', description: '建立优先级明确的调查步骤' },
+  { key: 'runbook', label: '为当前告警编写处置 Runbook', description: '输出可执行的响应流程' },
 ]
 
+const statusText: Record<NonNullable<Message['status']>, string> = { streaming: '分析中', completed: '已完成', cancelled: '已停止', failed: '运行失败' }
+
+const reasoningOptions = (model: ModelConfig | null) => {
+  if (!model || model.provider === 'openai-compatible') return []
+  const values = model.provider === 'deepseek' ? ['high', 'max'] : model.api_protocol === 'responses' ? ['minimal', 'low', 'medium', 'high'] : ['low', 'medium', 'high']
+  const modelDefault = model.default_reasoning_effort ?? (model.provider === 'deepseek' ? 'max' : 'high')
+  return [{ value: '', label: `使用模型默认值（${modelDefault}）` }, ...values.map((value) => ({ value, label: value[0]?.toUpperCase() + value.slice(1) }))]
+}
+
+const renderRaw = (value: unknown) => typeof value === 'string' ? value : JSON.stringify(value, null, 2)
+function RawDetails({ label, value }: { label: string; value: unknown }) {
+  if (value === undefined || value === null || value === '') return null
+  const content = renderRaw(value)
+  return <details className="raw-details"><summary>{label}</summary><div><Button type="link" size="small" icon={<CopyOutlined />} onClick={() => void copyToClipboard(content)}>复制</Button><pre>{content}</pre></div></details>
+}
+function toolNode(tool: ToolStep) {
+  return {
+    key: `tool-${tool.id}`, title: tool.name, status: tool.status, blink: tool.status === 'loading', collapsible: true,
+    description: tool.summary ?? undefined,
+    footer: <>{tool.duration != null && <span>{tool.duration.toFixed(1)}s</span>}<RawDetails label="原始工具输入" value={tool.input} /><RawDetails label="原始工具输出" value={tool.output} /></>,
+  }
+}
+function thoughtNode(thought: ThoughtStep) {
+  return { key: `thought-${thought.id}`, title: thought.title, status: thought.status, blink: thought.status === 'loading', collapsible: true, description: thought.summary ?? undefined, footer: thought.duration != null ? `${thought.duration.toFixed(1)}s` : undefined }
+}
+
 function MessageBody({ message, retry, openTrace }: { message: Message; retry: () => void; openTrace: () => void }) {
-  const parsed = parseMessage(message.content)
   const actions = [
     { key: 'copy', label: '复制', icon: <CopyOutlined />, onItemClick: () => void copyToClipboard(message.content) },
-    ...(message.role === 'assistant' ? [
-      { key: 'retry', label: '重试', icon: <ReloadOutlined />, onItemClick: retry },
-      ...(message.session_id ? [{ key: 'trace', label: '查看 Trace', icon: <ExperimentOutlined />, onItemClick: openTrace }] : []),
-    ] : []),
+    ...(message.role === 'assistant' ? [{ key: 'retry', label: '重新生成', icon: <ReloadOutlined />, onItemClick: retry }, ...(message.run_id ? [{ key: 'trace', label: '查看 Trace', icon: <ExperimentOutlined />, onItemClick: openTrace }] : [])] : []),
   ]
-  return (
-    <div className="message-body">
-      {message.role === 'assistant' ? <XMarkdown content={parsed.body} streaming={{ hasNextChunk: !message.final, tail: !message.final }} openLinksInNewTab escapeRawHtml /> : <p>{message.content}</p>}
-      {parsed.thinking && <Think title="模型推理输出" loading={!message.final} defaultExpanded={false}><XMarkdown content={parsed.thinking} escapeRawHtml /></Think>}
-      {parsed.sources.length > 0 && <Sources title="来源" items={parsed.sources.map((source, index) => ({ key: index, title: source }))} />}
-      {parsed.tools.length > 0 && <ThoughtChain items={parsed.tools.map((tool, index) => ({ key: String(index), title: tool }))} />}
-      {message.role === 'assistant' && message.final && <div className="run-strip"><span>{message.metrics?.duration != null ? `${message.metrics.duration}s` : 'completed'}</span><span>{message.metrics?.total_tokens != null ? `${message.metrics.total_tokens} tokens` : compactId(message.run_id)}</span></div>}
-      {message.final && <Actions items={actions} />}
-    </div>
-  )
+  if (message.role !== 'assistant') return <div className="message-body"><p>{message.content}</p><Actions items={actions} /></div>
+  const chain = [...(message.thought_chain ?? []).map(thoughtNode), ...(message.tool_steps ?? []).map(toolNode)]
+  return <div className="message-body">
+    {message.content ? <XMarkdown content={message.content} streaming={{ hasNextChunk: !message.final, tail: !message.final }} openLinksInNewTab escapeRawHtml /> : <div className="response-pending">正在建立分析运行…</div>}
+    {chain.length > 0 && <ThoughtChain className="tool-chain" items={chain} defaultExpandedKeys={chain.filter((item) => item.status === 'loading').map((item) => item.key)} />}
+    <RawDetails label="原始 reasoning" value={message.reasoning} />
+    {(message.sources?.length ?? 0) > 0 && <Sources title="参考来源" items={message.sources?.map((source) => ({ key: source.id, title: source.title, url: source.url ?? undefined, description: source.snippet ?? undefined })) ?? []} />}
+    <div className={`run-strip run-${message.status ?? 'completed'}`}><span>{statusText[message.status ?? 'completed']}</span>{message.metrics?.duration != null && <span>{message.metrics.duration.toFixed(1)}s</span>}{message.metrics?.total_tokens != null && <span>{message.metrics.total_tokens} tokens</span>}</div>
+    {message.error && <div className="message-run-error" role="alert">{message.error.code ? `${message.error.code}: ` : ''}{message.error.message}</div>}
+    {message.final && <Actions items={actions} />}
+  </div>
 }
 
 export function ChatPage() {
   const chat = useChat()
   const queryClient = useQueryClient()
   const router = useRouter()
-  const conversations = useMemo(() => (chat.sessions.data ?? []).map((session) => ({ key: session.session_id, label: session.preview || compactId(session.session_id) })), [chat.sessions.data])
+  const [renameTarget, setRenameTarget] = useState<ChatSession | null>(null)
+  const [renameForm] = Form.useForm<{ title: string }>()
+  const [renaming, setRenaming] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [followLatest, setFollowLatest] = useState(true)
+  const conversations = useMemo(() => (chat.sessions.data ?? []).map((session) => ({ key: session.session_id, label: session.title || session.preview || '未命名会话', group: new Date(session.updated_at * 1000).toDateString() })), [chat.sessions.data])
+  const activeSession = useMemo(() => (chat.sessions.data ?? []).find((session) => session.session_id === chat.sessionId), [chat.sessionId, chat.sessions.data])
   const bubbles = chat.state.messages.filter((item) => item.content || item.role === 'assistant').map((item) => ({
-    key: item.id,
-    role: item.role === 'user' ? 'user' : 'ai',
-    content: item,
-    placement: item.role === 'user' ? 'end' as const : 'start' as const,
-    variant: item.role === 'user' ? 'filled' as const : 'outlined' as const,
-    streaming: !item.final,
+    key: item.id, role: item.role === 'user' ? 'user' : 'ai', content: item, placement: item.role === 'user' ? 'end' as const : 'start' as const,
+    variant: item.role === 'user' ? 'filled' as const : 'outlined' as const, streaming: item.status === 'streaming',
     avatar: item.role === 'user' ? <Avatar icon={<UserOutlined />} /> : <Avatar shape="square" className="agent-avatar">T</Avatar>,
     contentRender: (value: Message) => <MessageBody message={value} retry={() => chat.retry(value.id)} openTrace={() => void router.history.push(`/trace?session=${encodeURIComponent(value.session_id ?? '')}&run=${encodeURIComponent(value.run_id ?? '')}`)} />,
   }))
+  const activeRun = [...chat.state.messages].reverse().find((item) => item.role === 'assistant' && item.status === 'streaming')
+  const availableReasoningOptions = reasoningOptions(chat.selectedModel)
+  const scrollToLatest = useCallback(() => { const node = scrollRef.current; if (node) node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' }); setFollowLatest(true) }, [])
+  useEffect(() => { if (followLatest) requestAnimationFrame(scrollToLatest) }, [chat.sessionId, chat.state.messages, followLatest, scrollToLatest])
+  useEffect(() => { setFollowLatest(true) }, [chat.sessionId])
 
-  const archive = async (sessionId: string) => {
-    await archiveSession(sessionId)
-    if (chat.sessionId === sessionId) chat.newChat()
-    await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
-    toast.success('会话已归档')
+  const archive = async (sessionId: string) => { await archiveSession(sessionId); if (chat.sessionId === sessionId) chat.newChat(); await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists }); toast.success('会话已归档') }
+  const startRename = (session: ChatSession) => { renameForm.setFieldsValue({ title: session.title || session.preview || '' }); setRenameTarget(session) }
+  const confirmRename = async () => {
+    const { title } = await renameForm.validateFields(); if (!renameTarget) return
+    setRenaming(true)
+    try {
+      const updated = await renameSession(renameTarget.session_id, title.trim())
+      queryClient.setQueryData<ChatSession[]>(chatKeys.sessions(), (items) => (items ?? []).map((item) => item.session_id === renameTarget.session_id ? { ...item, ...updated, title: updated.title ?? title.trim() } : item))
+      toast.success('会话已重命名'); setRenameTarget(null)
+    } catch (error) { toast.error(error instanceof Error ? error.message : '重命名失败') } finally { setRenaming(false) }
   }
 
-  return (
-    <main className="chat-page">
-      <aside className="conversation-panel">
-        <div className="conversation-title"><strong>安全会话</strong><Tag>{conversations.length}</Tag></div>
-        <Conversations
-          items={conversations}
-          activeKey={chat.sessionId ?? undefined}
-          onActiveChange={(key) => chat.setSession(key)}
-          creation={{ icon: <PlusOutlined />, label: '新建会话', onClick: chat.newChat }}
-          menu={(item) => ({ items: [
-            { key: 'copy', icon: <CopyOutlined />, label: '复制 ID', onClick: () => void copyToClipboard(item.key) },
-            { key: 'archive', danger: true, icon: <DeleteOutlined />, label: '归档', onClick: () => void archive(item.key) },
-          ] })}
-        />
-      </aside>
-      <section className="chat-workspace">
-        <div className="bubble-scroll">
-          {!bubbles.length ? <div className="chat-welcome"><Welcome variant="borderless" icon={<Avatar shape="square" className="agent-avatar">T</Avatar>} title="T.A.I.S 安全分析 Agent" description="从漏洞、资产、知识和运行上下文开始一项分析。" /><Prompts items={prompts} wrap onItemClick={({ data }) => chat.dispatch({ type: 'input', value: String(data.label ?? '') })} /></div> : <Bubble.List items={bubbles} autoScroll />}
-          {chat.state.error && <div className="chat-error" role="alert">{chat.state.error}</div>}
-        </div>
-        <div className="sender-shell">
-          <Sender
-            value={chat.state.input}
-            onChange={(value) => chat.dispatch({ type: 'input', value })}
-            onSubmit={(value) => void chat.submit(value)}
-            onCancel={chat.cancel}
-            loading={chat.state.requesting}
-            disabled={!chat.selectedModel?.enabled || !chat.selectedModel.configured}
-            placeholder={chat.selectedModel?.configured ? '输入安全分析任务' : '请先在设置中配置可用模型'}
-            autoSize={{ minRows: 1, maxRows: 6 }}
-            prefix={<Select className="model-select" value={chat.state.selectedModelId} loading={chat.models.isLoading} onChange={chat.setModel} options={(chat.models.data?.models ?? []).map((model) => ({ value: model.id, label: model.name, disabled: !model.enabled }))} />}
-          />
-        </div>
-      </section>
-    </main>
-  )
+  return <main className="chat-page">
+    <aside className="conversation-panel"><div className="conversation-title"><div><strong>安全会话</strong><span>调查工作区</span></div><Tag>{conversations.length}</Tag></div><Conversations items={conversations} activeKey={chat.sessionId ?? undefined} onActiveChange={(key) => chat.setSession(key)} creation={{ icon: <PlusOutlined />, label: '新建分析', onClick: chat.newChat }} menu={(item) => ({ items: [{ key: 'rename', icon: <EditOutlined />, label: '重命名', onClick: () => { const session = (chat.sessions.data ?? []).find((value) => value.session_id === item.key); if (session) startRename(session) } }, { key: 'archive', danger: true, icon: <DeleteOutlined />, label: '归档', onClick: () => void archive(item.key) }] })} /></aside>
+    <section className="chat-workspace">
+      <header className="chat-context-bar"><div><SafetyCertificateOutlined /><span>{activeSession?.title || '安全分析'}</span><span className="context-divider" /><span>{chat.selectedModel?.name ?? '未选择模型'}</span></div><div className="context-status"><span className={activeRun ? 'status-dot active' : 'status-dot'} />{activeRun ? 'Agent 正在运行' : chat.sessionId ? '会话已就绪' : '新建分析'}</div></header>
+      <div className="bubble-scroll" ref={scrollRef} onScroll={(event) => { const node = event.currentTarget; setFollowLatest(node.scrollHeight - node.scrollTop - node.clientHeight < 48) }}>
+        {!bubbles.length ? <div className="chat-welcome"><Welcome variant="borderless" icon={<Avatar shape="square" className="agent-avatar">T</Avatar>} title="T.A.I.S 安全分析 Agent" description="基于漏洞、资产、知识和运行上下文发起一项可追溯的安全分析。" /><Prompts items={prompts} wrap onItemClick={({ data }) => chat.dispatch({ type: 'input', value: String(data.label ?? '') })} /></div> : <Bubble.List items={bubbles} autoScroll={false} />}
+        {chat.state.messages.at(-1)?.followups?.length ? <Prompts className="followup-prompts" title="继续分析" items={chat.state.messages.at(-1)?.followups?.map((label, index) => ({ key: String(index), label })) ?? []} onItemClick={({ data }) => void chat.submit(String(data.label ?? ''))} /> : null}
+        {chat.state.error && <div className="chat-error" role="alert">{chat.state.error}<Button type="link" size="small" onClick={() => chat.retry(chat.state.messages.at(-1)?.id ?? '')}>重试</Button></div>}
+      </div>
+      {!followLatest && <Button className="latest-button" shape="round" icon={<ArrowDownOutlined />} onClick={scrollToLatest}>返回最新消息</Button>}
+      <div className="sender-shell"><Sender value={chat.state.input} onChange={(value) => chat.dispatch({ type: 'input', value })} onSubmit={(value) => void chat.submit(value)} onCancel={() => void chat.cancel()} loading={chat.state.requesting} disabled={!chat.selectedModel?.enabled || !chat.selectedModel.configured} placeholder={chat.selectedModel?.configured ? '输入安全分析任务，Enter 发送' : '请先在设置中配置可用模型'} autoSize={{ minRows: 1, maxRows: 6 }} prefix={<><Select className="model-select" value={chat.state.selectedModelId} loading={chat.models.isLoading} onChange={chat.setModel} options={(chat.models.data?.models ?? []).map((model) => ({ value: model.id, label: model.name, disabled: !model.enabled || !model.configured }))} />{availableReasoningOptions.length > 0 && <Select aria-label="推理强度" className="model-select" value={chat.state.reasoningEffort ?? ''} onChange={(value) => chat.setReasoningEffort((value || null) as ReasoningEffort | null)} options={availableReasoningOptions} />}</>} footer={<div className="sender-hint"><span>Enter 发送 · Shift+Enter 换行</span>{chat.state.requesting && <Tooltip title="请求 Agent 停止当前运行"><Button type="text" size="small" icon={<PauseCircleOutlined />} onClick={() => void chat.cancel()}>停止生成</Button></Tooltip>}</div>} /></div>
+    </section>
+    <Modal title="重命名会话" open={Boolean(renameTarget)} confirmLoading={renaming} okText="保存" onOk={() => void confirmRename()} onCancel={() => setRenameTarget(null)}><Form form={renameForm} layout="vertical"><Form.Item name="title" label="会话标题" rules={[{ required: true, whitespace: true, message: '请输入会话标题' }, { max: 120, message: '标题不能超过 120 个字符' }]}><Input autoFocus maxLength={120} onPressEnter={() => void confirmRename()} /></Form.Item></Form></Modal>
+  </main>
 }

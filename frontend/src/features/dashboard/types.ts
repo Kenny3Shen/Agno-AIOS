@@ -1,0 +1,71 @@
+export type OverviewRange = '1h' | '24h' | '7d'
+
+export interface OverviewBucket {
+  timestamp: string
+  runs: number
+  failed_runs: number
+  p50_duration_ms: number | null
+  p95_duration_ms: number | null
+}
+
+export interface OverviewDimension {
+  name: string
+  value: number
+}
+
+export interface OverviewTrace {
+  trace_id: string
+  name: string
+  status: string
+  duration_ms: number
+  start_time: string
+  session_id?: string | null
+  run_id?: string | null
+  agent_id?: string | null
+  workflow_id?: string | null
+}
+
+export interface OverviewAuditEvent {
+  id: string | number
+  action: string
+  resource_type: string
+  resource_id: string
+  actor_email: string
+  status: string
+  created_at: string
+}
+
+export interface OverviewKpis {
+  total_runs: number
+  failed_runs: number
+  failure_rate: number
+  p50_duration_ms: number | null
+  p95_duration_ms: number | null
+  total_tokens: number | null
+}
+
+export interface OverviewEvaluation {
+  total: number
+  passed: number
+  failed: number
+  pass_rate: number | null
+}
+
+export interface OverviewAssets {
+  pending_approvals?: number | null
+  knowledge_documents?: number | null
+  memories?: number | null
+  evaluation?: OverviewEvaluation | null
+}
+
+export interface RuntimeOverview {
+  generated_at: string
+  range: OverviewRange
+  health: { status: string; environment?: string }
+  metrics: OverviewKpis
+  series: OverviewBucket[]
+  distributions: Record<string, OverviewDimension[]>
+  recent_failures: OverviewTrace[]
+  snapshots?: OverviewAssets | null
+  audit?: { recent: OverviewAuditEvent[] } | null
+}

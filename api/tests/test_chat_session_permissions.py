@@ -6,6 +6,7 @@ from starlette.requests import Request
 from api.auth.ownership import assert_owned_resource
 from api.routes import chat
 from api.services import chat_session_service, security_run_runtime
+from api.services.chat_run_events import ChatRunEvent
 import pytest
 
 
@@ -85,6 +86,64 @@ async def test_remove_session_archives_session_and_returns_payload():
 
 
 @pytest.mark.asyncio
+async def test_rename_session_uses_the_current_actor_and_returns_title():
+    current_actor = actor("u1")
+    payload = {"session_id": "session-1", "title": "事件调查", "preview": "hello"}
+    with patch.object(chat, "rename_session", new_callable=AsyncMock) as rename:
+        rename.return_value = payload
+        result = await chat.rename_chat_session(
+            "session-1",
+            chat.SessionRenameRequest(title="事件调查"),
+            user=current_actor,
+        )
+    assert result == payload
+    rename.assert_awaited_once_with("session-1", "事件调查", actor=current_actor)
+
+
+@pytest.mark.asyncio
+async def test_rename_session_maps_missing_or_invalid_title_to_http_errors():
+    with patch.object(chat, "rename_session", new_callable=AsyncMock) as rename:
+        rename.return_value = None
+        with pytest.raises(HTTPException) as missing:
+            await chat.rename_chat_session(
+                "missing", chat.SessionRenameRequest(title="Title"), user=actor("u1")
+            )
+    assert missing.value.status_code == 404
+
+    with patch.object(chat, "rename_session", new_callable=AsyncMock) as rename:
+        rename.side_effect = ValueError("会话标题不能为空")
+        with pytest.raises(HTTPException) as invalid:
+            await chat.rename_chat_session(
+                "session-1", chat.SessionRenameRequest(title=" "), user=actor("u1")
+            )
+    assert invalid.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_cancel_chat_run_requires_a_live_run_owned_by_the_actor():
+    current_actor = actor("u1")
+    with patch.object(chat, "cancel_security_run", return_value=False):
+        with pytest.raises(HTTPException) as exc:
+            await chat.cancel_chat_run("run-1", user=current_actor)
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_cancel_chat_run_records_audit_event():
+    current_actor = actor("u1")
+    audit = AsyncMock()
+    with (
+        patch.object(chat, "cancel_security_run", return_value=True) as cancel,
+        patch.object(chat, "record_audit_event_async", audit),
+    ):
+        result = await chat.cancel_chat_run("run-1", user=current_actor)
+    assert result == {"success": True, "run_id": "run-1"}
+    cancel.assert_called_once_with(user_id="u1", run_id="run-1")
+    assert audit.await_args is not None
+    assert audit.await_args.kwargs["action"] == "chat.run.cancel"
+
+
+@pytest.mark.asyncio
 async def test_list_sessions_uses_current_user_as_owner_filter():
     captured: dict[str, str | None] = {}
 
@@ -133,13 +192,74 @@ async def test_chat_allows_owned_existing_session_id():
 
 
 @pytest.mark.asyncio
+async def test_chat_passes_reasoning_effort_to_the_run_request():
+    captured: dict[str, object] = {}
+    original = security_run_runtime.SecurityRunRequest.from_chat_args
+
+    def capture_request(*args, **kwargs):
+        captured.update(kwargs)
+        return original(*args, **kwargs)
+
+    with (
+        patch.object(chat, "get_model_for_run", new_callable=AsyncMock) as get_model,
+        patch.object(
+            chat.SecurityRunRequest,
+            "from_chat_args",
+            side_effect=capture_request,
+        ),
+    ):
+        get_model.return_value = {
+            "provider": "deepseek",
+            "api_protocol": "chat-completions",
+        }
+        response = await chat.chat_agent(
+            chat.ChatRequest(
+                message="hello",
+                model_id="deepseek-1",
+                reasoning_effort="max",
+            ),
+            raw_request(),
+            user=actor("u1"),
+        )
+
+    assert response.media_type == "text/event-stream"
+    assert captured["reasoning_effort"] == "max"
+
+
+@pytest.mark.asyncio
+async def test_chat_rejects_reasoning_effort_for_incompatible_model():
+    with patch.object(chat, "get_model_for_run", new_callable=AsyncMock) as get_model:
+        get_model.return_value = {
+            "provider": "openai-compatible",
+            "api_protocol": "chat-completions",
+        }
+        with pytest.raises(HTTPException) as exc:
+            await chat.chat_agent(
+                chat.ChatRequest(message="hello", reasoning_effort="high"),
+                raw_request(),
+                user=actor("u1"),
+            )
+
+    assert exc.value.status_code == 422
+
+
+def test_chat_rejects_openai_chat_minimal_reasoning_effort():
+    with pytest.raises(HTTPException) as exc:
+        chat._validate_reasoning_effort(
+            "minimal",
+            {"provider": "openai", "api_protocol": "chat-completions"},
+        )
+    assert exc.value.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_event_generator_passes_knowledge_owner_filter():
     captured: dict[str, str | None] = {}
 
     async def fake_stream_security_run(run_request):
         captured["message"] = run_request.message
         captured["knowledge_owner_user_id"] = run_request.knowledge_owner_user_id
-        yield "ok"
+        yield ChatRunEvent("content.delta", {"run_id": "run-1", "delta": "ok"})
 
     with patch.object(chat, "stream_security_run", fake_stream_security_run):
         events = [
@@ -152,13 +272,13 @@ async def test_event_generator_passes_knowledge_owner_filter():
         ]
     assert captured["message"] == "hello"
     assert captured["knowledge_owner_user_id"] == "u1"
-    assert events == [{"data": "ok"}, {"data": "[DONE]"}]
+    assert events == [{"event": "content.delta", "data": '{"run_id": "run-1", "delta": "ok"}'}]
 
 
 @pytest.mark.asyncio
 async def test_event_generator_records_successful_chat_audit():
     async def fake_stream_security_run(_run_request):
-        yield "ok"
+        yield ChatRunEvent("run.completed", {"run_id": "run-1", "session_id": "session-1", "metrics": {}, "followups": []})
 
     audit = AsyncMock()
     request = security_run_runtime.SecurityRunRequest.from_chat_args(
@@ -181,8 +301,9 @@ async def test_event_generator_records_successful_chat_audit():
         ]
     audit.assert_awaited_once()
     assert audit.await_args is not None
-    assert audit.await_args.kwargs["resource_id"] == "session-1"
-    assert "status" not in audit.await_args.kwargs
+    assert audit.await_args.kwargs["resource_id"] == "run-1"
+    assert audit.await_args.kwargs["status"] == "success"
+    assert audit.await_args.kwargs["metadata"]["reasoning_effort"] == ""
 
 
 def test_exception_detail_unwraps_task_group():

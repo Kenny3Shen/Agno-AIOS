@@ -63,7 +63,7 @@ export function TracePage() {
   const [runInput, setRunInput] = useState(initial.get('run') ?? '')
   const [status, setStatus] = useState('')
   const [archiveFilter, setArchiveFilter] = useState<SessionArchiveFilter>('all')
-  const [filters, setFilters] = useState({ session_id: sessionInput, run_id: runInput, status, page: 1, limit: 100 })
+  const [filters, setFilters] = useState({ session_id: sessionInput, run_id: runInput, status, start_time: initial.get('start_time') ?? '', end_time: initial.get('end_time') ?? '', page: 1, limit: 100 })
   const [selectedSession, setSelectedSession] = useState(initial.get('session') ?? '')
   const [selectedRun, setSelectedRun] = useState(initial.get('run') ?? '')
   const [selectedSpanId, setSelectedSpanId] = useState('')
@@ -129,7 +129,7 @@ export function TracePage() {
     setExpandedTreeKeys(runInput ? [`run:${runInput}`] : [])
     setSessionPage(1)
     setRunPage(1)
-    setFilters({ session_id: sessionInput, run_id: runInput, status, page: 1, limit: 100 })
+    setFilters({ session_id: sessionInput, run_id: runInput, status, start_time: initial.get('start_time') ?? '', end_time: initial.get('end_time') ?? '', page: 1, limit: 100 })
   }
   const changeSessionPage = (page: number) => {
     setSessionPage(page)

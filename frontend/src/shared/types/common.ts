@@ -1,4 +1,5 @@
 export type ResourceVisibility = 'private' | 'public'
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'max'
 
 export interface ModelConfig {
   id: string
@@ -7,6 +8,7 @@ export interface ModelConfig {
   provider: 'deepseek' | 'openai' | 'openai-compatible'
   api_protocol: 'chat-completions' | 'responses'
   structured_output_mode: 'native' | 'json'
+  default_reasoning_effort?: ReasoningEffort | null
   base_url: string
   api_key: string
   description: string

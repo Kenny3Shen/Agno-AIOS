@@ -4,7 +4,7 @@ import { Link, useRouterState } from '@tanstack/react-router'
 import { Avatar, Button, Drawer, Dropdown, Grid, Layout, Menu, Space, Spin, Tooltip, Typography, type MenuProps } from 'antd'
 import {
   ApiOutlined, AuditOutlined, BookOutlined, BugOutlined, BulbOutlined, CalendarOutlined, CloudDownloadOutlined,
-  CodeOutlined, DashboardOutlined, DatabaseOutlined, ExperimentOutlined, FileSearchOutlined, GithubOutlined, HomeOutlined,
+  CodeOutlined, DashboardOutlined, DatabaseOutlined, ExperimentOutlined, FileSearchOutlined, GithubOutlined,
   MenuFoldOutlined, MenuOutlined, MenuUnfoldOutlined, MessageOutlined, MoonOutlined, NodeIndexOutlined, SafetyCertificateOutlined,
   SettingOutlined, SunOutlined, TranslationOutlined,
 } from '@ant-design/icons'
@@ -18,7 +18,6 @@ import { joinMenuGroups, splitNavigation } from './utils'
 const { Header, Sider, Content } = Layout
 
 const nav = [
-  { key: '/', icon: <HomeOutlined />, labelKey: 'home' },
   { key: '/dashboard', icon: <DashboardOutlined />, labelKey: 'dashboard' },
   { key: '/chat', icon: <MessageOutlined />, labelKey: 'chat', scope: 'sessions:write' },
   { key: '/workflow', icon: <NodeIndexOutlined />, labelKey: 'workflow', scope: 'mcp:read' },
@@ -80,7 +79,6 @@ export function AppFrame({ children }: { children: ReactNode }) {
           <Space>
             {mobile && <Button type="text" icon={<MenuOutlined />} onClick={() => setMobileOpen(true)} aria-label="Open navigation" />}
             {!mobile && <Button type="text" icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setCollapsed((value) => !value)} aria-label="Toggle navigation" />}
-            <span className="control-signal"><i />CONTROL PLANE <b>ONLINE</b></span>
           </Space>
           <Space>
             <Tooltip title={t('shell.language')}><Button type="text" icon={<TranslationOutlined />} onClick={preferences.toggleLocale} /></Tooltip>

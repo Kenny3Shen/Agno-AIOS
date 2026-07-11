@@ -30,6 +30,7 @@ export default defineConfig({
           if (id.includes('/@tanstack/')) return 'tanstack'
           if (id.includes('/@ant-design/x-markdown/')) return 'x-markdown'
           if (id.includes('/antd/') || id.includes('/@ant-design/icons/')) return 'antd'
+          if (id.includes('/echarts/') || id.includes('/echarts-for-react/')) return 'echarts'
           if (id.includes('/i18next/') || id.includes('/react-i18next/')) return 'i18n'
           return 'vendor'
         },

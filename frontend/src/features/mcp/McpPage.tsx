@@ -48,12 +48,12 @@ export function McpPage() {
 
   const toggleServer = useMutation({
     mutationFn: ({ server, enabled }: { server: McpServer; enabled: boolean }) => server.server_type === 'builtin' ? updateConfig(server.name, enabled) : setServerEnabled(server.id, enabled),
-    onSuccess: refresh,
+    onSuccess: async (_, { enabled }) => { message.success(enabled ? 'Server 已启用' : 'Server 已停用'); await refresh() },
     onError: (error) => message.error(error.message),
   })
   const toggleComponent = useMutation({
     mutationFn: ({ item, enabled }: { item: McpComponent; enabled: boolean }) => setComponentEnabled(item, enabled),
-    onSuccess: refresh,
+    onSuccess: async (_, { enabled }) => { message.success(enabled ? '组件已启用' : '组件已停用'); await refresh() },
     onError: (error) => message.error(error.message),
   })
 
@@ -111,7 +111,7 @@ export function McpPage() {
                   columns={[
                     { title: 'Server / Namespace', render: (_, row) => <Space><strong>{row.name}</strong><Typography.Text type="secondary">{row.namespace}</Typography.Text></Space> },
                     { title: 'Transport', dataIndex: 'transport', width: 150, render: (value) => <Tag>{value}</Tag> },
-                    { title: 'Enabled', width: 90, render: (_, row) => <Switch checked={row.enabled} loading={toggleServer.isPending} disabled={!row.can_manage} onClick={(_, event) => event.stopPropagation()} onChange={(enabled) => toggleServer.mutate({ server: row, enabled })} /> },
+                    { title: 'Enabled', width: 90, render: (_, row) => { const pending = toggleServer.isPending && toggleServer.variables?.server.id === row.id; return <Switch checked={row.enabled} loading={pending} disabled={!row.can_manage || pending} onClick={(_, event) => event.stopPropagation()} onChange={(enabled) => toggleServer.mutate({ server: row, enabled })} /> } },
                     { title: 'Visibility', width: 140, render: (_, row) => <VisibilitySelect value={row.visibility} disabled={!row.can_manage} onClick={(event) => event.stopPropagation()} onChange={(value) => void setServerVisibility(row.name, value).then(refresh)} /> },
                   ]}
                 />
@@ -124,7 +124,7 @@ export function McpPage() {
                     { title: 'Type', dataIndex: 'type', width: 100, render: (value) => <Tag color={value === 'tool' ? 'blue' : 'purple'}>{value}</Tag> },
                     { title: 'Tags', dataIndex: 'tags', render: (tags: string[]) => <Space wrap>{tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}</Space> },
                     { title: 'Risk', width: 190, render: (_, row) => riskTags(row) },
-                    { title: 'Enabled', width: 90, render: (_, row) => <Switch checked={row.enabled} disabled={!row.server_id} loading={toggleComponent.isPending} onClick={(_, event) => event.stopPropagation()} onChange={(enabled) => toggleComponent.mutate({ item: row, enabled })} /> },
+                    { title: 'Enabled', width: 90, render: (_, row) => { const pending = toggleComponent.isPending && toggleComponent.variables?.item.key === row.key; return <Switch checked={row.enabled} disabled={!row.server_id || pending} loading={pending} onClick={(_, event) => event.stopPropagation()} onChange={(enabled) => toggleComponent.mutate({ item: row, enabled })} /> } },
                   ]}
                 />
               </Space>

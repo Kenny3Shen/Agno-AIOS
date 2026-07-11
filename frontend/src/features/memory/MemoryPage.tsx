@@ -58,7 +58,18 @@ export function MemoryPage() {
             loading={query.isLoading}
             pagination={{ pageSize: 12 }}
             rowClassName={(row) => row.id === selected?.id ? 'selected-table-row' : ''}
-            onRow={(row) => ({ onClick: () => setSelected(row) })}
+            onRow={(row) => ({
+              tabIndex: 0,
+              role: 'button',
+              'aria-label': `查看记忆 ${row.id}`,
+              onClick: () => setSelected(row),
+              onKeyDown: (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  setSelected(row)
+                }
+              },
+            })}
             columns={[
               { title: 'Memory', dataIndex: 'memory', ellipsis: true },
               { title: 'Topics', dataIndex: 'topics', width: 220, render: (topics: string[]) => <Space wrap>{(topics ?? []).map((topic) => <Tag key={topic}>{topic}</Tag>)}</Space> },
@@ -91,7 +102,7 @@ export function MemoryPage() {
       </Splitter.Panel>
       <Splitter.Panel defaultSize="30%" min={vertical ? 220 : '20%'}>
         <Card className="workbench-card splitter-panel-card" title="Metadata">
-          {selected ? <MetadataDescriptions items={metadata} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={false} />}
+          {selected ? <MetadataDescriptions items={metadata} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="选择一条记忆查看详情" />}
         </Card>
       </Splitter.Panel>
     </Splitter>

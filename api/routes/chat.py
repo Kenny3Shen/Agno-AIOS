@@ -1,5 +1,8 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from typing import Literal
 from sse_starlette.sse import EventSourceResponse
 
 from api.auth.models import User
@@ -11,13 +14,20 @@ from api.services.chat_session_service import (
     get_all_sessions_async,
     get_session_messages_async,
     get_session_owner_async,
+    rename_session,
 )
 from api.services.audit_service import (
     AuditRequestContext,
     audit_request_context,
     record_audit_event_async,
 )
-from api.services.security_run_runtime import SecurityRunRequest, stream_security_run
+from api.services.security_run_runtime import (
+    SecurityRunRequest,
+    cancel_security_run,
+    stream_security_run,
+)
+from api.services.model_config_service import get_model_for_run
+from api.services.chat_settings_service import get_chat_settings
 from loguru import logger
 
 router = APIRouter(prefix="/api", tags=["Chat"])
@@ -27,6 +37,39 @@ class ChatRequest(BaseModel):
     message: str
     session_id: str | None = None
     model_id: str | None = None
+    reasoning_effort: Literal["minimal", "low", "medium", "high", "max"] | None = None
+
+
+class SessionRenameRequest(BaseModel):
+    title: str
+
+
+def _validate_reasoning_effort(
+    reasoning_effort: str,
+    model_config: dict[str, object],
+) -> None:
+    provider = str(model_config.get("provider") or "openai-compatible")
+    protocol = str(model_config.get("api_protocol") or "chat-completions")
+    allowed_efforts = {
+        "deepseek": {"high", "max"},
+        "openai": (
+            {"minimal", "low", "medium", "high"}
+            if protocol == "responses"
+            else {"low", "medium", "high"}
+        ),
+    }.get(provider)
+    if allowed_efforts is None:
+        raise HTTPException(
+            status_code=422,
+            detail="当前模型供应商不支持 reasoning_effort。",
+        )
+    if reasoning_effort not in allowed_efforts:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"当前 {provider} {protocol} 模型不支持 reasoning_effort={reasoning_effort}。"
+            ),
+        )
 
 
 async def _event_generator(
@@ -35,18 +78,30 @@ async def _event_generator(
     actor: User | None = None,
     request_context: AuditRequestContext | None = None,
 ):
+    terminal_status = "success"
+    resource_id = run_request.session_id or ""
     try:
-        async for chunk in stream_security_run(run_request):
-            if chunk:
-                yield {"data": chunk}
-        yield {"data": "[DONE]"}
+        async for event in stream_security_run(run_request):
+            run_id = str(event.data.get("run_id") or "")
+            if run_id:
+                resource_id = run_id
+            if event.event == "run.failed":
+                terminal_status = "error"
+            elif event.event == "run.cancelled":
+                terminal_status = "cancelled"
+            yield {"event": event.event, "data": json.dumps(event.data, ensure_ascii=False)}
         if actor is not None:
             await record_audit_event_async(
                 actor,
                 action="chat.run",
-                resource_type="chat_session",
-                resource_id=run_request.session_id or "",
-                metadata={"model_id": run_request.model_id or "", "message_length": len(run_request.message)},
+                resource_type="chat_run",
+                resource_id=resource_id,
+                status=terminal_status,
+                metadata={
+                    "model_id": run_request.model_id or "",
+                    "message_length": len(run_request.message),
+                    "reasoning_effort": run_request.reasoning_effort or "",
+                },
                 ip_address=request_context["ip_address"] if request_context else "",
                 user_agent=request_context["user_agent"] if request_context else "",
             )
@@ -60,11 +115,15 @@ async def _event_generator(
                 resource_type="chat_session",
                 resource_id=run_request.session_id or "",
                 status="error",
-                metadata={"model_id": run_request.model_id or "", "error": detail},
+                metadata={
+                    "model_id": run_request.model_id or "",
+                    "reasoning_effort": run_request.reasoning_effort or "",
+                    "error": detail,
+                },
                 ip_address=request_context["ip_address"] if request_context else "",
                 user_agent=request_context["user_agent"] if request_context else "",
             )
-        yield {"event": "error", "data": detail}
+        yield {"event": "run.failed", "data": json.dumps({"run_id": "", "code": "CHAT_STREAM_ERROR", "message": detail, "retryable": True}, ensure_ascii=False)}
 
 
 def _exception_detail(exc: BaseException) -> str:
@@ -90,14 +149,21 @@ async def chat_agent(
                     owner_user_id=owner_user_id,
                     resource_name="Session",
                 )
+        if request.reasoning_effort is not None:
+            model_config = await get_model_for_run(request.model_id)
+            _validate_reasoning_effort(request.reasoning_effort, model_config)
+        chat_settings = await get_chat_settings()
         run_request = SecurityRunRequest.from_chat_args(
             request.message,
             session_id=request.session_id,
             model_id=request.model_id,
+            reasoning_effort=request.reasoning_effort,
             user_id=actor_id(user),
             knowledge_owner_user_id=None
             if has_scope(user, ADMIN_SCOPE)
             else actor_id(user),
+            memory_enabled=chat_settings["memory_enabled"],
+            store_raw_tool_io=chat_settings["show_raw_tool_io"],
         )
         return EventSourceResponse(
             _event_generator(
@@ -113,6 +179,23 @@ async def chat_agent(
     except Exception as e:
         logger.error(f"处理聊天错误: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/chat/runs/{run_id}/cancel")
+async def cancel_chat_run(
+    run_id: str,
+    user: User = Depends(require_scope("sessions:write")),
+):
+    """Cancel a live Agno run owned by the current user."""
+    if not cancel_security_run(user_id=actor_id(user), run_id=run_id):
+        raise HTTPException(status_code=404, detail="运行不存在或已结束")
+    await record_audit_event_async(
+        user,
+        action="chat.run.cancel",
+        resource_type="chat_run",
+        resource_id=run_id,
+    )
+    return {"success": True, "run_id": run_id}
 
 
 @router.get("/chat/sessions")
@@ -147,6 +230,21 @@ async def get_session(
     except Exception as e:
         logger.error(f"获取会话记录失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/chat/sessions/{session_id}")
+async def rename_chat_session(
+    session_id: str,
+    body: SessionRenameRequest,
+    user: User = Depends(require_scope("sessions:write")),
+):
+    try:
+        result = await rename_session(session_id, body.title, actor=user)
+        if result is None:
+            raise HTTPException(status_code=404, detail="会话不存在")
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.delete("/chat/sessions/{session_id}")

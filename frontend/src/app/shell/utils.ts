@@ -1,4 +1,5 @@
-export const NAV_GROUP_SIZES = [4, 3, 5, 2, 1] as const
+// Dashboard/chat/workflow; skills/MCP/knowledge; operations; security; administration.
+export const NAV_GROUP_SIZES = [3, 3, 5, 2, 2] as const
 
 export function splitNavigation<T>(items: T[]) {
   let offset = 0
