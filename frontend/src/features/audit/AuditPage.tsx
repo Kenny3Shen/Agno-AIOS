@@ -55,14 +55,14 @@ function StatusTag({ status }: { status?: string }) {
 
 function ResourceCell({ row }: { row: AuditLog }) {
   const resourceType = row.resource_type || '-'
-  return <Space direction="vertical" size={0} className="audit-resource-cell">
+  return <Space orientation="vertical" size={0} className="audit-resource-cell">
     <Typography.Text>{resourceType}</Typography.Text>
     <Typography.Text type="secondary">{compactId(row.resource_id)}</Typography.Text>
   </Space>
 }
 
 function ActorCell({ row }: { row: AuditLog }) {
-  return <Space direction="vertical" size={0} className="audit-actor-cell">
+  return <Space orientation="vertical" size={0} className="audit-actor-cell">
     <Typography.Text ellipsis>{row.actor_email || '-'}</Typography.Text>
     <Typography.Text type="secondary">{compactId(row.actor_user_id)}</Typography.Text>
   </Space>

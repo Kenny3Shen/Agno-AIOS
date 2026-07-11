@@ -44,11 +44,11 @@ button, input, textarea { letter-spacing: 0; }
 .workbench-splitter { min-height: 0; }
 .knowledge-splitter { height: calc(100vh - 202px); min-height: 520px; }
 .knowledge-tabs > .ant-tabs-content-holder, .knowledge-tabs > .ant-tabs-content-holder > .ant-tabs-content, .knowledge-tabs > .ant-tabs-content-holder > .ant-tabs-content > .ant-tabs-tabpane { min-height: 0; }
-.knowledge-document-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; }
 .knowledge-form-note { margin-bottom: 16px; }
 .knowledge-advanced-options { margin-bottom: 16px; border: 1px solid var(--tais-border); border-radius: 6px; background: var(--tais-soft); }
 .knowledge-advanced-options .ant-collapse-header { padding: 10px 12px !important; }
 .knowledge-advanced-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
+.knowledge-option-help { color: var(--tais-muted); cursor: help; }
 .knowledge-upload-icon { margin-bottom: 8px !important; color: var(--tais-blue); font-size: 34px; }
 .retrieval-playground { min-height: 360px; }
 .skills-splitter { height: calc(100vh - 140px); min-height: 520px; }

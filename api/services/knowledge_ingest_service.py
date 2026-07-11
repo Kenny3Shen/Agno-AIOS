@@ -34,16 +34,32 @@ class KnowledgeReaderConfig:
     embedder: Embedder | None
     chunk_size: int
     chunk_overlap: int
+    markdown_split_on_headings: int | None
+    csv_skip_header: bool
+    csv_clean_rows: bool
     code_chunk_size: int
+    code_tokenizer: str
+    code_include_nodes: bool
     semantic_threshold: float
+    semantic_similarity_window: int | None
+    semantic_min_sentences_per_chunk: int | None
+    semantic_min_characters_per_sentence: int | None
 
 
 @dataclass(frozen=True)
 class KnowledgeIngestOverrides:
     chunk_size: int | None = None
     chunk_overlap: int | None = None
+    markdown_split_on_headings: int | None = None
+    csv_skip_header: bool | None = None
+    csv_clean_rows: bool | None = None
     code_chunk_size: int | None = None
+    code_tokenizer: str | None = None
+    code_include_nodes: bool | None = None
     semantic_threshold: float | None = None
+    semantic_similarity_window: int | None = None
+    semantic_min_sentences_per_chunk: int | None = None
+    semantic_min_characters_per_sentence: int | None = None
     reader_strategy: str | None = None
 
 
@@ -138,6 +154,8 @@ INGEST_PROFILES = (
     PROFILE_STRUCTURED,
     PROFILE_TEXT,
 )
+SUPPORTED_READER_STRATEGIES = tuple(profile.strategy for profile in INGEST_PROFILES)
+SUPPORTED_CODE_TOKENIZERS = ("character", "gpt2")
 
 CODE_LANGUAGE_BY_SUFFIX = {
     ".py": "python",
@@ -198,6 +216,32 @@ def _optional_float(value: object) -> float | None:
         return None
 
 
+def _optional_bool(value: object) -> bool | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int | float):
+        return bool(value)
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower()
+    if not normalized:
+        return None
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    return None
+
+
+def _optional_string(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    return text or None
+
+
 def profile_for_strategy(strategy: str | None) -> KnowledgeIngestProfile | None:
     clean_strategy = (strategy or "").strip().lower()
     if not clean_strategy:
@@ -221,12 +265,31 @@ def code_language_for_filename(filename: str | None) -> str | None:
 
 def coerce_ingest_overrides(values: Mapping[str, object] | None) -> KnowledgeIngestOverrides:
     source = values or {}
+    reader_strategy = _optional_string(source.get("reader_strategy"))
+    if reader_strategy is not None and reader_strategy not in SUPPORTED_READER_STRATEGIES:
+        allowed = ", ".join(SUPPORTED_READER_STRATEGIES)
+        raise ValueError(f"reader_strategy must be one of: {allowed}")
+    markdown_split_on_headings = _optional_int(source.get("markdown_split_on_headings"))
+    if markdown_split_on_headings is not None and not 0 <= markdown_split_on_headings <= 6:
+        raise ValueError("markdown_split_on_headings must be between 0 and 6")
+    code_tokenizer = _optional_string(source.get("code_tokenizer"))
+    if code_tokenizer is not None and code_tokenizer not in SUPPORTED_CODE_TOKENIZERS:
+        allowed = ", ".join(SUPPORTED_CODE_TOKENIZERS)
+        raise ValueError(f"code_tokenizer must be one of: {allowed}")
     return KnowledgeIngestOverrides(
         chunk_size=_optional_int(source.get("chunk_size")),
         chunk_overlap=_optional_int(source.get("chunk_overlap")),
+        markdown_split_on_headings=markdown_split_on_headings,
+        csv_skip_header=_optional_bool(source.get("csv_skip_header")),
+        csv_clean_rows=_optional_bool(source.get("csv_clean_rows")),
         code_chunk_size=_optional_int(source.get("code_chunk_size")),
+        code_tokenizer=code_tokenizer,
+        code_include_nodes=_optional_bool(source.get("code_include_nodes")),
         semantic_threshold=_optional_float(source.get("semantic_threshold")),
-        reader_strategy=str(source.get("reader_strategy") or "").strip().lower() or None,
+        semantic_similarity_window=_optional_int(source.get("semantic_similarity_window")),
+        semantic_min_sentences_per_chunk=_optional_int(source.get("semantic_min_sentences_per_chunk")),
+        semantic_min_characters_per_sentence=_optional_int(source.get("semantic_min_characters_per_sentence")),
+        reader_strategy=reader_strategy,
     )
 
 
@@ -237,14 +300,36 @@ def _semantic_chunking(config: KnowledgeReaderConfig) -> SemanticChunking:
         embedder=config.embedder,
         chunk_size=config.chunk_size,
         similarity_threshold=config.semantic_threshold,
+        similarity_window=(
+            config.semantic_similarity_window
+            if config.semantic_similarity_window is not None
+            else 3
+        ),
+        min_sentences_per_chunk=(
+            config.semantic_min_sentences_per_chunk
+            if config.semantic_min_sentences_per_chunk is not None
+            else 1
+        ),
+        min_characters_per_sentence=(
+            config.semantic_min_characters_per_sentence
+            if config.semantic_min_characters_per_sentence is not None
+            else 24
+        ),
     )
 
 
+def _validate_overlap(config: KnowledgeReaderConfig) -> None:
+    if config.chunk_overlap >= config.chunk_size:
+        raise ValueError("chunk_overlap must be smaller than chunk_size")
+
+
 def _document_chunking(config: KnowledgeReaderConfig) -> DocumentChunking:
+    _validate_overlap(config)
     return DocumentChunking(chunk_size=config.chunk_size, overlap=config.chunk_overlap)
 
 
 def _recursive_chunking(config: KnowledgeReaderConfig) -> RecursiveChunking:
+    _validate_overlap(config)
     return RecursiveChunking(chunk_size=config.chunk_size, overlap=config.chunk_overlap)
 
 
@@ -255,15 +340,28 @@ def reader_for_profile(
 ) -> KnowledgeReader:
     suffix = Path(filename or "").suffix.lower()
     if profile.strategy == "markdown":
+        _validate_overlap(config)
+        split_on_headings: bool | int = (
+            True
+            if config.markdown_split_on_headings is None
+            else config.markdown_split_on_headings
+        )
+        if split_on_headings == 0:
+            split_on_headings = False
         return MarkdownReader(
             chunking_strategy=MarkdownChunking(
                 chunk_size=config.chunk_size,
                 overlap=config.chunk_overlap,
-                split_on_headings=True,
+                split_on_headings=split_on_headings,
             )
         )
     if profile.strategy == "csv_row":
-        return CSVReader(chunking_strategy=RowChunking(skip_header=False))
+        return CSVReader(
+            chunking_strategy=RowChunking(
+                skip_header=config.csv_skip_header,
+                clean_rows=config.csv_clean_rows,
+            )
+        )
     if profile.strategy == "json":
         return JSONReader(chunking_strategy=_recursive_chunking(config))
     if profile.strategy == "code":
@@ -272,8 +370,10 @@ def reader_for_profile(
             return TextReader(chunking_strategy=_recursive_chunking(config))
         return TextReader(
             chunking_strategy=CodeChunking(
+                tokenizer=config.code_tokenizer,
                 chunk_size=config.code_chunk_size,
                 language=language,
+                include_nodes=config.code_include_nodes,
             )
         )
     if profile.strategy == "document":

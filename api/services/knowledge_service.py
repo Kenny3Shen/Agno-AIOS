@@ -154,18 +154,24 @@ def _reader_config(
         if options.chunk_overlap is not None
         else settings.chunk_overlap
     )
-    if chunk_overlap >= chunk_size:
-        raise ValueError("chunk_overlap must be smaller than chunk_size")
     return KnowledgeReaderConfig(
         embedder=_get_embedder() if needs_embedder else None,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
+        markdown_split_on_headings=options.markdown_split_on_headings,
+        csv_skip_header=options.csv_skip_header is True,
+        csv_clean_rows=True if options.csv_clean_rows is None else options.csv_clean_rows,
         code_chunk_size=options.code_chunk_size or settings.code_chunk_size,
+        code_tokenizer=options.code_tokenizer or "character",
+        code_include_nodes=options.code_include_nodes is True,
         semantic_threshold=(
             options.semantic_threshold
             if options.semantic_threshold is not None
             else settings.semantic_threshold
         ),
+        semantic_similarity_window=options.semantic_similarity_window,
+        semantic_min_sentences_per_chunk=options.semantic_min_sentences_per_chunk,
+        semantic_min_characters_per_sentence=options.semantic_min_characters_per_sentence,
     )
 
 
@@ -186,10 +192,26 @@ def _metadata_ingest_options(overrides: KnowledgeIngestOverrides) -> dict[str, s
         metadata["chunk_size"] = str(overrides.chunk_size)
     if overrides.chunk_overlap is not None:
         metadata["chunk_overlap"] = str(overrides.chunk_overlap)
+    if overrides.markdown_split_on_headings is not None:
+        metadata["markdown_split_on_headings"] = str(overrides.markdown_split_on_headings)
+    if overrides.csv_skip_header is not None:
+        metadata["csv_skip_header"] = str(overrides.csv_skip_header).lower()
+    if overrides.csv_clean_rows is not None:
+        metadata["csv_clean_rows"] = str(overrides.csv_clean_rows).lower()
     if overrides.code_chunk_size is not None:
         metadata["code_chunk_size"] = str(overrides.code_chunk_size)
+    if overrides.code_tokenizer is not None:
+        metadata["code_tokenizer"] = overrides.code_tokenizer
+    if overrides.code_include_nodes is not None:
+        metadata["code_include_nodes"] = str(overrides.code_include_nodes).lower()
     if overrides.semantic_threshold is not None:
         metadata["semantic_threshold"] = str(overrides.semantic_threshold)
+    if overrides.semantic_similarity_window is not None:
+        metadata["semantic_similarity_window"] = str(overrides.semantic_similarity_window)
+    if overrides.semantic_min_sentences_per_chunk is not None:
+        metadata["semantic_min_sentences_per_chunk"] = str(overrides.semantic_min_sentences_per_chunk)
+    if overrides.semantic_min_characters_per_sentence is not None:
+        metadata["semantic_min_characters_per_sentence"] = str(overrides.semantic_min_characters_per_sentence)
     if overrides.reader_strategy is not None:
         metadata["reader_strategy"] = overrides.reader_strategy
     return metadata
@@ -910,6 +932,11 @@ class KnowledgeBaseLifecycle:
         doc_id: str,
         owner_user_id: str | None = None,
         user: ActorLike | None = None,
+        title: str | None = None,
+        source: str | None = None,
+        visibility: str | None = None,
+        metadata: Mapping[str, object] | None = None,
+        ingest_options: Mapping[str, object] | None = None,
     ) -> KnowledgeDocumentPayload | None:
         await self._ensure_contents_storage_async()
         content = await self._knowledge_content_by_id_async(doc_id)
@@ -925,20 +952,79 @@ class KnowledgeBaseLifecycle:
         if source_snapshot is None:
             raise ValueError("当前知识记录缺少可重建的原始 source 快照，请重新导入后再重建")
         current_metadata = _safe_metadata(getattr(content, "metadata", None))
+        active_source_snapshot = dict(source_snapshot)
+        source_metadata = mapping_metadata(active_source_snapshot.get("metadata"))
+        restore_metadata = current_metadata or source_metadata
+        next_title = _clean_optional_metadata_text(title, "文档标题")
+        next_source = _clean_optional_metadata_text(source, "来源")
+        next_visibility = (
+            normalize_visibility(visibility, strict=True)
+            if visibility is not None
+            else None
+        )
+        metadata_patch = _safe_metadata_patch(metadata)
+        if next_title is not None:
+            active_source_snapshot["name"] = next_title
+            source_metadata["title"] = next_title
+            restore_metadata = {**restore_metadata, "title": next_title}
+        if next_source is not None:
+            active_source_snapshot["description"] = next_source
+            source_metadata["source"] = next_source
+            restore_metadata = {**restore_metadata, "source": next_source}
+        if next_visibility is not None:
+            source_metadata["visibility"] = next_visibility
+            restore_metadata = {**restore_metadata, "visibility": next_visibility}
+        if metadata_patch:
+            source_metadata = {**source_metadata, **metadata_patch}
+            restore_metadata = {**restore_metadata, **metadata_patch}
+        if ingest_options:
+            filename = str(
+                active_source_snapshot.get("filename")
+                or source_metadata.get("file_name")
+                or getattr(content, "name", "")
+            ).strip()
+            ingest_overrides = _coerce_ingest_overrides(ingest_options)
+            profile = knowledge_profile_for_filename_or_strategy(
+                filename,
+                ingest_overrides.reader_strategy,
+            )
+            override_metadata = {
+                **_metadata_ingest_options(ingest_overrides),
+                "chunk_strategy": profile.strategy,
+                "reader": profile.reader,
+            }
+            source_metadata = {**source_metadata, **override_metadata}
+            restore_metadata = {**restore_metadata, **override_metadata}
+        if (
+            metadata_patch
+            or next_title is not None
+            or next_source is not None
+            or next_visibility is not None
+            or ingest_options
+        ):
+            active_source_snapshot["metadata"] = source_metadata
         async with _knowledge_async_lock:
             await self._ensure_storage_async()
             await ainsert_source_snapshot_async(
                 knowledge,
-                source_snapshot,
+                active_source_snapshot,
                 reader_for_filename=reader_for_filename,
+                content_id=doc_id,
             )
-            source_metadata = mapping_metadata(source_snapshot.get("metadata"))
-            if current_metadata and current_metadata != source_metadata:
+            if restore_metadata and restore_metadata != source_metadata:
                 patched = await knowledge.apatch_content(
-                    Content(id=doc_id, metadata=current_metadata)
+                    Content(id=doc_id, metadata=restore_metadata)
                 )
                 if patched is None:
                     raise RuntimeError("知识重建完成但未能恢复当前 Metadata")
+            if (
+                metadata_patch
+                or next_title is not None
+                or next_source is not None
+                or next_visibility is not None
+                or ingest_options
+            ):
+                await self._store_source_async(doc_id, active_source_snapshot)
         refreshed = await self._knowledge_content_by_id_async(doc_id)
         if refreshed is None:
             raise RuntimeError("知识重建完成但未能读取内容登记记录")
@@ -1043,30 +1129,16 @@ class KnowledgeBaseLifecycle:
         knowledge = await self._async_knowledge_async()
         async with _knowledge_async_lock:
             await self._ensure_storage_async()
-            await knowledge.ainsert(
-                name=clean_title,
-                description=clean_source,
-                text_content=clean_content,
-                metadata=safe_metadata,
-                reader=reader_for_profile(profile, clean_file_name, ingest_overrides),
-                upsert=True,
-                skip_if_exists=False,
-            )
-            inserted = await _latest_inserted_content_async(
+            await ainsert_source_snapshot_async(
                 knowledge,
-                title=clean_title,
-                source=clean_source,
-                source_ref=source_reference,
+                source_snapshot,
+                reader_for_filename=reader_for_filename,
+                content_id=doc_id,
             )
-            if inserted is None or not getattr(inserted, "id", None):
-                raise RuntimeError("source 新版本写入完成但未能读取内容登记记录")
-            inserted_id = str(inserted.id)
-            await self._store_source_async(inserted_id, source_snapshot)
-            if inserted_id != doc_id:
-                await self._delete_content_async(knowledge, doc_id)
+            await self._store_source_async(doc_id, source_snapshot)
             await remove_managed_upload_async(current_metadata)
 
-        refreshed = await self._knowledge_content_by_id_async(inserted_id)
+        refreshed = await self._knowledge_content_by_id_async(doc_id)
         if refreshed is None:
             raise RuntimeError("source 新版本写入完成但未能读取内容登记记录")
         return _content_to_document(refreshed)
@@ -1166,34 +1238,19 @@ class KnowledgeBaseLifecycle:
             metadata=safe_metadata,
             filename=file_path.name,
         )
-        reader = reader_for_profile(profile, file_path.name, ingest_overrides)
         knowledge = await self._async_knowledge_async()
         async with _knowledge_async_lock:
             await self._ensure_storage_async()
-            await knowledge.ainsert(
-                name=clean_title,
-                description=clean_source,
-                path=str(file_path),
-                metadata=safe_metadata,
-                reader=reader,
-                upsert=True,
-                skip_if_exists=False,
-            )
-            inserted = await _latest_inserted_content_async(
+            await ainsert_source_snapshot_async(
                 knowledge,
-                title=clean_title,
-                source=clean_source,
-                source_ref=source_reference,
+                source_snapshot,
+                reader_for_filename=reader_for_filename,
+                content_id=doc_id,
             )
-            if inserted is None or not getattr(inserted, "id", None):
-                raise RuntimeError("source 新版本写入完成但未能读取内容登记记录")
-            inserted_id = str(inserted.id)
-            await self._store_source_async(inserted_id, source_snapshot)
-            if inserted_id != doc_id:
-                await self._delete_content_async(knowledge, doc_id)
+            await self._store_source_async(doc_id, source_snapshot)
             await remove_managed_upload_async(current_metadata)
 
-        refreshed = await self._knowledge_content_by_id_async(inserted_id)
+        refreshed = await self._knowledge_content_by_id_async(doc_id)
         if refreshed is None:
             raise RuntimeError("source 新版本写入完成但未能读取内容登记记录")
         return _content_to_document(refreshed)
@@ -1509,11 +1566,21 @@ async def rebuild_document_async(
     doc_id: str,
     owner_user_id: str | None = None,
     user: ActorLike | None = None,
+    title: str | None = None,
+    source: str | None = None,
+    visibility: str | None = None,
+    metadata: Mapping[str, object] | None = None,
+    ingest_options: Mapping[str, object] | None = None,
 ) -> KnowledgeDocumentPayload | None:
     return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.rebuild_document_async(
         doc_id,
         owner_user_id=owner_user_id,
         user=user,
+        title=title,
+        source=source,
+        visibility=visibility,
+        metadata=metadata,
+        ingest_options=ingest_options,
     )
 
 

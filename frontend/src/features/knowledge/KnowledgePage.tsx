@@ -5,7 +5,7 @@ import { PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import XMarkdown from '@ant-design/x-markdown'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import type { ResourceVisibility } from '@/shared/types/common'
-import { deleteDocument, getKnowledge, rebuildDocument, searchKnowledge, setVisibility } from './api'
+import { deleteDocument, getKnowledge, searchKnowledge, updateDocumentAction } from './api'
 import type { Document, KnowledgeResponse, SearchResult } from './types'
 import { DocumentsTable } from './components/DocumentsTable'
 import { MetadataPanel } from './components/MetadataPanel'
@@ -48,19 +48,15 @@ export function KnowledgePage() {
     },
     onError: (error) => message.error(error.message),
   })
-  const rebuild = useMutation({
-    mutationFn: rebuildDocument,
-    onSuccess: async (document) => {
-      await syncUpdatedDocument(document)
-      message.success('文档已重建')
-    },
-    onError: (error) => message.error(error.message),
-  })
   const visibility = useMutation({
-    mutationFn: ({ id, value }: { id: string; value: ResourceVisibility }) => setVisibility(id, value),
+    mutationFn: ({ id, value }: { id: string; value: ResourceVisibility }) => updateDocumentAction(id, { mode: 'metadata', metadata: { visibility: value } }),
     onSuccess: (document, variables) => syncUpdatedDocument(document, variables.id, selectedId === variables.id),
     onError: (error) => message.error(error.message),
   })
+  const openUpdate = (document: Document) => {
+    setSelectedId(document.id)
+    setUpdateOpen(true)
+  }
 
   return <main className="page knowledge-page">
     <PageHeader title="Knowledge" description="管理 Agent 检索知识、入库状态和资源可见性" actions={<><Button icon={<ReloadOutlined />} onClick={() => void refresh()}>刷新</Button><Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>添加文档</Button></>} />
@@ -75,18 +71,14 @@ export function KnowledgePage() {
             vertical={vertical}
             onFilterChange={setFilter}
             onSelect={(document) => setSelectedId(document.id)}
+            onUpdate={openUpdate}
+            onDelete={(document) => remove.mutate(document.id)}
             onVisibilityChange={(document, value) => visibility.mutate({ id: document.id, value })}
+            deletingId={remove.isPending ? remove.variables : undefined}
           />
         </Splitter.Panel>
         <Splitter.Panel defaultSize="30%" min={vertical ? 180 : '20%'}>
-          <MetadataPanel
-            document={selected}
-            rebuilding={rebuild.isPending}
-            deleting={remove.isPending}
-            onUpdate={() => setUpdateOpen(true)}
-            onRebuild={() => selected && rebuild.mutate(selected.id)}
-            onDelete={() => selected && remove.mutate(selected.id)}
-          />
+          <MetadataPanel document={selected} />
         </Splitter.Panel>
       </Splitter> },
       { key: 'retrieval', label: 'Retrieval playground', children: <Card className="workbench-card retrieval-playground">

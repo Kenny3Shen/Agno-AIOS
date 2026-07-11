@@ -1,16 +1,49 @@
 import type { UploadFile } from 'antd'
 import type { ResourceVisibility } from '@/shared/types/common'
-import type { Document, KnowledgeIngestOptions, UpdateDocumentPayload } from './types'
+import type { Document, KnowledgeIngestOptions, UpdateDocumentMetadataPayload } from './types'
 
 export const KNOWLEDGE_FILE_ACCEPT = '.md,.markdown,.mdown,.mkd,.csv,.tsv,.json,.jsonl,.py,.js,.mjs,.cjs,.jsx,.ts,.tsx,.vue,.go,.rs,.java,.c,.cc,.cpp,.h,.hpp,.cs,.php,.rb,.sh,.sql,.pdf,.docx,.txt,.log,.rst,.yaml,.yml,.toml'
 export const MAX_KNOWLEDGE_FILE_BYTES = 50 * 1024 * 1024
 
 const supportedSuffixes = new Set(KNOWLEDGE_FILE_ACCEPT.split(','))
 const structuredSuffixes = new Set(['.pdf', '.docx'])
+const markdownSuffixes = new Set(['.md', '.markdown', '.mdown', '.mkd'])
+const csvSuffixes = new Set(['.csv', '.tsv'])
+const jsonSuffixes = new Set(['.json', '.jsonl'])
+const codeSuffixes = new Set(['.py', '.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.vue', '.go', '.rs', '.java', '.c', '.cc', '.cpp', '.h', '.hpp', '.cs', '.php', '.rb', '.sh', '.sql'])
+
+export type KnowledgeReaderStrategy = 'markdown' | 'semantic' | 'code' | 'csv_row' | 'json' | 'document'
+
+export interface KnowledgeReaderProfile {
+  strategy: KnowledgeReaderStrategy
+  label: string
+  description: string
+}
+
+export const knowledgeReaderProfiles: Record<KnowledgeReaderStrategy, KnowledgeReaderProfile> = {
+  markdown: { strategy: 'markdown', label: 'Markdown', description: '按标题结构切分 Markdown 文档' },
+  semantic: { strategy: 'semantic', label: 'Semantic text', description: '按语义边界切分普通文本' },
+  code: { strategy: 'code', label: 'Code', description: '按代码结构切分源码和脚本' },
+  csv_row: { strategy: 'csv_row', label: 'CSV rows', description: '按表格行切分 CSV/TSV' },
+  json: { strategy: 'json', label: 'JSON', description: '按结构读取 JSON 后递归切分' },
+  document: { strategy: 'document', label: 'Document', description: '按文档结构切分 PDF/DOCX' },
+}
 
 export function fileSuffix(name: string) {
   const index = name.lastIndexOf('.')
   return index >= 0 ? name.slice(index).toLowerCase() : ''
+}
+
+export function inferKnowledgeReaderProfile(filename?: string, readerStrategy?: string): KnowledgeReaderProfile {
+  const strategy = readerStrategy?.trim() as KnowledgeReaderStrategy | undefined
+  if (strategy && strategy in knowledgeReaderProfiles) return knowledgeReaderProfiles[strategy]
+  const suffix = fileSuffix(filename ?? '')
+  if (markdownSuffixes.has(suffix)) return knowledgeReaderProfiles.markdown
+  if (csvSuffixes.has(suffix)) return knowledgeReaderProfiles.csv_row
+  if (jsonSuffixes.has(suffix)) return knowledgeReaderProfiles.json
+  if (codeSuffixes.has(suffix)) return knowledgeReaderProfiles.code
+  if (structuredSuffixes.has(suffix)) return knowledgeReaderProfiles.document
+  return knowledgeReaderProfiles.semantic
 }
 
 export function validateKnowledgeFile(file: Pick<File, 'name' | 'size'>): string | null {
@@ -43,25 +76,111 @@ export function replacementFileName(document: Document) {
 export function buildMetadataUpdate(
   document: Document,
   values: { title: string; source: string; visibility: ResourceVisibility },
-): UpdateDocumentPayload {
+): UpdateDocumentMetadataPayload {
   const title = values.title.trim()
   const source = values.source.trim()
-  const payload: UpdateDocumentPayload = {}
+  const payload: UpdateDocumentMetadataPayload = {}
   if (title !== document.title) payload.title = title
   if (source !== document.source) payload.source = source
   if (values.visibility !== (document.visibility ?? 'private')) payload.visibility = values.visibility
   return payload
 }
 
-export const hasMetadataUpdate = (payload: UpdateDocumentPayload) => Object.keys(payload).length > 0
+export const hasMetadataUpdate = (payload: UpdateDocumentMetadataPayload) => Object.keys(payload).length > 0
+
+export type KnowledgeUpdateDecision =
+  | { kind: 'noop' }
+  | { kind: 'metadata'; metadata: UpdateDocumentMetadataPayload }
+  | { kind: 'rebuild'; metadata?: UpdateDocumentMetadataPayload; ingest_options?: KnowledgeIngestOptions }
+  | { kind: 'upload'; metadata?: UpdateDocumentMetadataPayload; ingest_options?: KnowledgeIngestOptions }
+
+export function knowledgeIngestOptionsEqual(left?: KnowledgeIngestOptions, right?: KnowledgeIngestOptions) {
+  const leftOptions = cleanIngestOptions(left)
+  const rightOptions = cleanIngestOptions(right)
+  if (!leftOptions || !rightOptions) return leftOptions === rightOptions
+  const leftKeys = Object.keys(leftOptions) as Array<keyof KnowledgeIngestOptions>
+  const rightKeys = Object.keys(rightOptions) as Array<keyof KnowledgeIngestOptions>
+  if (leftKeys.length !== rightKeys.length) return false
+  return leftKeys.every((key) => leftOptions[key] === rightOptions[key])
+}
+
+export function decideKnowledgeUpdate({
+  metadata,
+  ingest_options,
+  ingestOptionsChanged,
+  hasFile,
+}: {
+  metadata: UpdateDocumentMetadataPayload
+  ingest_options?: KnowledgeIngestOptions
+  ingestOptionsChanged?: boolean
+  hasFile?: boolean
+}): KnowledgeUpdateDecision {
+  const metadataPayload = hasMetadataUpdate(metadata) ? metadata : undefined
+  if (hasFile) return { kind: 'upload', metadata: metadataPayload, ingest_options }
+  if (ingestOptionsChanged) return { kind: 'rebuild', metadata: metadataPayload, ingest_options }
+  if (metadataPayload) return { kind: 'metadata', metadata: metadataPayload }
+  return { kind: 'noop' }
+}
+
+const numberOptionKeys = [
+  'chunk_size',
+  'chunk_overlap',
+  'markdown_split_on_headings',
+  'code_chunk_size',
+  'semantic_threshold',
+  'semantic_similarity_window',
+  'semantic_min_sentences_per_chunk',
+  'semantic_min_characters_per_sentence',
+] as const
+
+const boolOptionKeys = ['csv_skip_header', 'csv_clean_rows', 'code_include_nodes'] as const
+
+function metadataNumber(value?: string) {
+  if (value === undefined || value.trim() === '') return undefined
+  const number = Number(value)
+  return Number.isFinite(number) ? number : undefined
+}
+
+function metadataBool(value?: string) {
+  if (value === undefined || value.trim() === '') return undefined
+  const normalized = value.trim().toLowerCase()
+  if (['true', '1', 'yes', 'on'].includes(normalized)) return true
+  if (['false', '0', 'no', 'off'].includes(normalized)) return false
+  return undefined
+}
+
+export function ingestOptionsFromMetadata(metadata?: Record<string, string>): KnowledgeIngestOptions | undefined {
+  if (!metadata) return undefined
+  const options: KnowledgeIngestOptions = {}
+  numberOptionKeys.forEach((key) => {
+    const value = metadataNumber(metadata[key])
+    if (value !== undefined) options[key] = value
+  })
+  boolOptionKeys.forEach((key) => {
+    const value = metadataBool(metadata[key])
+    if (value !== undefined) options[key] = value
+  })
+  if (metadata.code_tokenizer?.trim()) options.code_tokenizer = metadata.code_tokenizer.trim()
+  if (metadata.reader_strategy?.trim()) options.reader_strategy = metadata.reader_strategy.trim()
+  return Object.keys(options).length > 0 ? options : undefined
+}
 
 export function cleanIngestOptions(values?: Partial<KnowledgeIngestOptions>): KnowledgeIngestOptions | undefined {
   if (!values) return undefined
   const options: KnowledgeIngestOptions = {}
   if (values.chunk_size != null) options.chunk_size = values.chunk_size
   if (values.chunk_overlap != null) options.chunk_overlap = values.chunk_overlap
+  if (values.markdown_split_on_headings != null) options.markdown_split_on_headings = values.markdown_split_on_headings
+  if (values.csv_skip_header != null) options.csv_skip_header = values.csv_skip_header
+  if (values.csv_clean_rows != null) options.csv_clean_rows = values.csv_clean_rows
   if (values.code_chunk_size != null) options.code_chunk_size = values.code_chunk_size
+  const codeTokenizer = values.code_tokenizer?.trim()
+  if (codeTokenizer) options.code_tokenizer = codeTokenizer
+  if (values.code_include_nodes != null) options.code_include_nodes = values.code_include_nodes
   if (values.semantic_threshold != null) options.semantic_threshold = values.semantic_threshold
+  if (values.semantic_similarity_window != null) options.semantic_similarity_window = values.semantic_similarity_window
+  if (values.semantic_min_sentences_per_chunk != null) options.semantic_min_sentences_per_chunk = values.semantic_min_sentences_per_chunk
+  if (values.semantic_min_characters_per_sentence != null) options.semantic_min_characters_per_sentence = values.semantic_min_characters_per_sentence
   const readerStrategy = values.reader_strategy?.trim()
   if (readerStrategy) options.reader_strategy = readerStrategy
   return Object.keys(options).length > 0 ? options : undefined

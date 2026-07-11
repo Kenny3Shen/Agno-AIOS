@@ -179,8 +179,16 @@ async def test_add_text_document_records_per_request_ingest_options() -> None:
         ingest_options={
             "chunk_size": 1500,
             "chunk_overlap": 120,
+            "markdown_split_on_headings": 2,
+            "csv_skip_header": True,
+            "csv_clean_rows": False,
             "code_chunk_size": 2200,
+            "code_tokenizer": "gpt2",
+            "code_include_nodes": True,
             "semantic_threshold": 0.61,
+            "semantic_similarity_window": 4,
+            "semantic_min_sentences_per_chunk": 2,
+            "semantic_min_characters_per_sentence": 12,
             "reader_strategy": "markdown",
         },
     )
@@ -189,8 +197,16 @@ async def test_add_text_document_records_per_request_ingest_options() -> None:
     insert_kwargs = knowledge.calls[0][2]
     assert insert_kwargs["metadata"]["chunk_size"] == "1500"
     assert insert_kwargs["metadata"]["chunk_overlap"] == "120"
+    assert insert_kwargs["metadata"]["markdown_split_on_headings"] == "2"
+    assert insert_kwargs["metadata"]["csv_skip_header"] == "true"
+    assert insert_kwargs["metadata"]["csv_clean_rows"] == "false"
     assert insert_kwargs["metadata"]["code_chunk_size"] == "2200"
+    assert insert_kwargs["metadata"]["code_tokenizer"] == "gpt2"
+    assert insert_kwargs["metadata"]["code_include_nodes"] == "true"
     assert insert_kwargs["metadata"]["semantic_threshold"] == "0.61"
+    assert insert_kwargs["metadata"]["semantic_similarity_window"] == "4"
+    assert insert_kwargs["metadata"]["semantic_min_sentences_per_chunk"] == "2"
+    assert insert_kwargs["metadata"]["semantic_min_characters_per_sentence"] == "12"
     assert insert_kwargs["metadata"]["chunk_strategy"] == "markdown"
     assert insert_kwargs["metadata"]["reader"] == "MarkdownReader"
 
@@ -591,12 +607,14 @@ async def test_update_document_metadata_rejects_empty_patch() -> None:
 
 
 @pytest.mark.asyncio
-async def test_rebuild_document_reloads_content_with_public_ainsert() -> None:
+async def test_rebuild_document_reloads_content_in_place() -> None:
     source_metadata = {
         "user_id": "u1",
         "visibility": "private",
         "source": "manual",
         "file_name": "runbook.txt",
+        "semantic_similarity_window": "4",
+        "semantic_min_sentences_per_chunk": "2",
         "_tais_source": {"kind": "text", "digest": "digest-1", "version": 1},
     }
     content_row = SimpleNamespace(
@@ -610,6 +628,10 @@ async def test_rebuild_document_reloads_content_with_public_ainsert() -> None:
     )
     knowledge = StrictAsyncKnowledge(
         content_by_id={"content-rebuild": content_row},
+    )
+    deleted_vectors: list[str] = []
+    knowledge.vector_db = SimpleNamespace(
+        delete_by_content_id=lambda content_id: deleted_vectors.append(content_id)
     )
     deleted: list[str] = []
 
@@ -641,7 +663,7 @@ async def test_rebuild_document_reloads_content_with_public_ainsert() -> None:
         )
     )
 
-    with patch.object(knowledge_service, "reader_for_filename", return_value=object()):
+    with patch.object(knowledge_service, "reader_for_filename", return_value=object()) as reader_mock:
         result = await lifecycle.rebuild_document_async(
             "content-rebuild",
             owner_user_id="u1",
@@ -650,16 +672,109 @@ async def test_rebuild_document_reloads_content_with_public_ainsert() -> None:
     assert result is not None
     assert result["id"] == "content-rebuild"
     assert deleted == []
-    assert [call for call in knowledge.calls if call[0] == "_aload_content"] == []
-    insert_calls = [call for call in knowledge.calls if call[0] == "ainsert"]
-    assert len(insert_calls) == 1
-    insert_kwargs = insert_calls[0][2]
-    assert insert_kwargs["name"] == "Runbook"
-    assert insert_kwargs["description"] == "manual"
-    assert insert_kwargs["text_content"] == "runbook body"
-    assert insert_kwargs["metadata"] == source_metadata
-    assert insert_kwargs["upsert"] is True
-    assert insert_kwargs["skip_if_exists"] is False
+    assert deleted_vectors == ["content-rebuild"]
+    assert [call for call in knowledge.calls if call[0] == "ainsert"] == []
+    load_calls = [call for call in knowledge.calls if call[0] == "_aload_content"]
+    assert len(load_calls) == 1
+    loaded_content = load_calls[0][1]
+    assert loaded_content.id == "content-rebuild"
+    assert loaded_content.name == "Runbook"
+    assert loaded_content.description == "manual"
+    assert loaded_content.file_data.content == "runbook body"
+    assert loaded_content.file_data.filename == "runbook.txt"
+    assert loaded_content.metadata == source_metadata
+    assert load_calls[0][2] is True
+    assert load_calls[0][3] is False
+    reader_mock.assert_called_once_with("runbook.txt", source_metadata)
+
+
+@pytest.mark.asyncio
+async def test_rebuild_document_applies_advanced_ingest_options_to_snapshot() -> None:
+    source_metadata = {
+        "user_id": "u1",
+        "visibility": "private",
+        "source": "manual",
+        "file_name": "runbook.md",
+        "chunk_size": "1000",
+        "chunk_strategy": "markdown",
+        "reader": "MarkdownReader",
+        "_tais_source": {"kind": "text", "digest": "digest-1", "version": 1},
+    }
+    content_row = SimpleNamespace(
+        id="content-rebuild-options",
+        name="Runbook",
+        description="manual",
+        metadata=source_metadata,
+        size=12,
+        file_type=".md",
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(
+        content_by_id={"content-rebuild-options": content_row},
+    )
+    stored_sources: dict[str, dict[str, object]] = {}
+
+    async def content_by_id(content_id: str):
+        return knowledge._content_by_id.get(content_id)
+
+    async def get_source_async(content_id: str) -> dict[str, object] | None:
+        assert content_id == "content-rebuild-options"
+        return {
+            "kind": "text",
+            "name": "Runbook",
+            "description": "manual",
+            "text_content": "runbook body",
+            "metadata": source_metadata,
+            "filename": "runbook.md",
+        }
+
+    async def store_source_async(content_id: str, source: Mapping[str, object]) -> None:
+        stored_sources[content_id] = dict(source)
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_storage_async=lambda: None,
+            knowledge_content_by_id_async=content_by_id,
+            get_source_async=get_source_async,
+            store_source_async=store_source_async,
+        )
+    )
+
+    with patch.object(knowledge_service, "reader_for_filename", return_value=object()) as reader_mock:
+        result = await lifecycle.rebuild_document_async(
+            "content-rebuild-options",
+            owner_user_id="u1",
+            title="Updated Runbook",
+            source="IR",
+            visibility="public",
+            metadata={"category": "playbook"},
+            ingest_options={
+                "chunk_size": 1800,
+                "markdown_split_on_headings": 2,
+                "reader_strategy": "markdown",
+            },
+        )
+
+    assert result is not None
+    load_calls = [call for call in knowledge.calls if call[0] == "_aload_content"]
+    assert len(load_calls) == 1
+    loaded = load_calls[0][1]
+    assert loaded.id == "content-rebuild-options"
+    assert loaded.name == "Updated Runbook"
+    assert loaded.description == "IR"
+    insert_metadata = loaded.metadata
+    assert insert_metadata["title"] == "Updated Runbook"
+    assert insert_metadata["source"] == "IR"
+    assert insert_metadata["visibility"] == "public"
+    assert insert_metadata["category"] == "playbook"
+    assert insert_metadata["chunk_size"] == "1800"
+    assert insert_metadata["markdown_split_on_headings"] == "2"
+    assert insert_metadata["chunk_strategy"] == "markdown"
+    reader_mock.assert_called_once_with("runbook.md", insert_metadata)
+    assert stored_sources["content-rebuild-options"]["name"] == "Updated Runbook"
+    assert stored_sources["content-rebuild-options"]["description"] == "IR"
+    assert stored_sources["content-rebuild-options"]["metadata"] == insert_metadata
 
 
 @pytest.mark.asyncio
@@ -754,7 +869,7 @@ async def test_rebuild_document_preserves_existing_content_when_reload_fails() -
     )
 
     with (
-        patch.object(knowledge, "ainsert", fail_reload),
+        patch.object(knowledge, "_aload_content", fail_reload),
         patch.object(knowledge_service, "reader_for_filename", return_value=object()),
         pytest.raises(RuntimeError, match="reload failed"),
     ):
@@ -802,7 +917,7 @@ async def test_rebuild_document_rejects_public_foreign_non_manager() -> None:
 
 
 @pytest.mark.asyncio
-async def test_replace_document_source_uploads_new_version_and_deletes_old_content() -> None:
+async def test_replace_document_source_reloads_current_content_in_place() -> None:
     old_metadata = {
         "user_id": "u1",
         "visibility": "private",
@@ -813,12 +928,6 @@ async def test_replace_document_source_uploads_new_version_and_deletes_old_conte
         "file_path": "/managed/old/runbook.md",
         "_tais_source": {"kind": "text", "digest": "old", "version": 1},
     }
-    new_metadata = {
-        **old_metadata,
-        "source": "upload:runbook-v2.md",
-        "file_name": "runbook-v2.md",
-        "file_size": "27",
-    }
     old_row = SimpleNamespace(
         id="content-old",
         name="Runbook",
@@ -826,19 +935,10 @@ async def test_replace_document_source_uploads_new_version_and_deletes_old_conte
         metadata=old_metadata,
         created_at=0,
     )
-    new_row = SimpleNamespace(
-        id="content-new",
-        name="Runbook",
-        description="upload:runbook-v2.md",
-        metadata=new_metadata,
-        created_at=1,
-    )
     knowledge = StrictAsyncKnowledge(
-        contents=[new_row],
-        content_by_id={"content-old": old_row, "content-new": new_row},
+        content_by_id={"content-old": old_row},
     )
     deleted: list[str] = []
-    deleted_sources: list[str] = []
     stored_sources: dict[str, dict[str, object]] = {}
 
     async def content_by_id(content_id: str):
@@ -847,9 +947,6 @@ async def test_replace_document_source_uploads_new_version_and_deletes_old_conte
     async def delete_content_async(_knowledge, content_id: str) -> None:
         deleted.append(content_id)
         knowledge._content_by_id.pop(content_id, None)
-
-    async def delete_source_async(content_id: str) -> None:
-        deleted_sources.append(content_id)
 
     async def store_source_async(content_id: str, source: Mapping[str, object]) -> None:
         stored_sources[content_id] = dict(source)
@@ -861,12 +958,11 @@ async def test_replace_document_source_uploads_new_version_and_deletes_old_conte
             ensure_storage_async=lambda: None,
             knowledge_content_by_id_async=content_by_id,
             delete_content_async=delete_content_async,
-            delete_source_async=delete_source_async,
             store_source_async=store_source_async,
         )
     )
 
-    with patch.object(knowledge_service, "reader_for_profile", return_value=object()):
+    with patch.object(knowledge_service, "reader_for_filename", return_value=object()) as reader_mock:
         result = await lifecycle.replace_document_source_async(
             "content-old",
             content="  # v2\nnew body  ",
@@ -878,27 +974,30 @@ async def test_replace_document_source_uploads_new_version_and_deletes_old_conte
         )
 
     assert result is not None
-    assert result["id"] == "content-new"
-    assert deleted == ["content-old"]
-    assert deleted_sources == ["content-old"]
-    insert_calls = [call for call in knowledge.calls if call[0] == "ainsert"]
-    assert len(insert_calls) == 1
-    insert_kwargs = insert_calls[0][2]
-    assert insert_kwargs["name"] == "Runbook"
-    assert insert_kwargs["description"] == "upload:runbook-v2.md"
-    assert insert_kwargs["text_content"] == "# v2\nnew body"
-    assert insert_kwargs["metadata"]["visibility"] == "public"
-    assert insert_kwargs["metadata"]["user_id"] == "u1"
-    assert insert_kwargs["metadata"]["file_name"] == "runbook-v2.md"
-    assert "file_path" not in insert_kwargs["metadata"]
-    assert insert_kwargs["metadata"]["_tais_source"]["kind"] == "text"
-    assert insert_kwargs["metadata"]["_tais_source"]["digest"] != "old"
-    assert stored_sources["content-new"]["text_content"] == "# v2\nnew body"
-    assert stored_sources["content-new"]["metadata"] == insert_kwargs["metadata"]
+    assert result["id"] == "content-old"
+    assert deleted == []
+    assert [call for call in knowledge.calls if call[0] == "ainsert"] == []
+    load_calls = [call for call in knowledge.calls if call[0] == "_aload_content"]
+    assert len(load_calls) == 1
+    loaded = load_calls[0][1]
+    assert loaded.id == "content-old"
+    assert loaded.name == "Runbook"
+    assert loaded.description == "upload:runbook-v2.md"
+    assert loaded.file_data.content == "# v2\nnew body"
+    assert loaded.file_data.filename == "runbook-v2.md"
+    assert loaded.metadata["visibility"] == "public"
+    assert loaded.metadata["user_id"] == "u1"
+    assert loaded.metadata["file_name"] == "runbook-v2.md"
+    assert "file_path" not in loaded.metadata
+    assert loaded.metadata["_tais_source"]["kind"] == "text"
+    assert loaded.metadata["_tais_source"]["digest"] != "old"
+    assert stored_sources["content-old"]["text_content"] == "# v2\nnew body"
+    assert stored_sources["content-old"]["metadata"] == loaded.metadata
+    reader_mock.assert_called_once_with("runbook-v2.md", loaded.metadata)
 
 
 @pytest.mark.asyncio
-async def test_replace_document_file_uploads_new_version_and_cleans_old_upload(
+async def test_replace_document_file_reloads_current_content_and_cleans_old_upload(
     tmp_path: Path,
 ) -> None:
     file_path = tmp_path / "runbook-v2.md"
@@ -918,24 +1017,6 @@ async def test_replace_document_file_uploads_new_version_and_cleans_old_upload(
         },
         "_tais_source": {"kind": "path", "digest": "old", "version": 1},
     }
-    new_row = SimpleNamespace(
-        id="content-new",
-        name="Runbook",
-        description="upload:runbook.md",
-        metadata={
-            "user_id": "u1",
-            "visibility": "private",
-            "source": "upload:runbook.md",
-            "title": "Runbook",
-            "file_name": "runbook-v2.md",
-            "_tais_source": {
-                "kind": "path",
-                "digest": source_digest(str(file_path)),
-                "version": 1,
-            },
-        },
-        created_at=1,
-    )
     old_row = SimpleNamespace(
         id="content-old",
         name="Runbook",
@@ -944,8 +1025,7 @@ async def test_replace_document_file_uploads_new_version_and_cleans_old_upload(
         created_at=0,
     )
     knowledge = StrictAsyncKnowledge(
-        contents=[new_row],
-        content_by_id={"content-old": old_row, "content-new": new_row},
+        content_by_id={"content-old": old_row},
     )
     deleted: list[str] = []
     cleanup_calls: list[Mapping[str, object]] = []
@@ -990,7 +1070,7 @@ async def test_replace_document_file_uploads_new_version_and_cleans_old_upload(
     }
 
     with (
-        patch.object(knowledge_service, "reader_for_profile", return_value=object()),
+        patch.object(knowledge_service, "reader_for_filename", return_value=object()) as reader_mock,
         patch.object(
             knowledge_service,
             "remove_managed_upload_async",
@@ -1005,21 +1085,25 @@ async def test_replace_document_file_uploads_new_version_and_cleans_old_upload(
         )
 
     assert result is not None
-    assert result["id"] == "content-new"
-    assert deleted == ["content-old"]
+    assert result["id"] == "content-old"
+    assert deleted == []
     assert cleanup_calls == [old_metadata]
-    insert_kwargs = [call for call in knowledge.calls if call[0] == "ainsert"][0][2]
-    assert insert_kwargs["path"] == str(file_path)
-    assert "text_content" not in insert_kwargs
-    assert insert_kwargs["metadata"]["file_name"] == "runbook-v2.md"
-    assert insert_kwargs["metadata"]["file_path"] == str(file_path)
-    assert insert_kwargs["metadata"]["file_size"] == file_path.stat().st_size
-    assert insert_kwargs["metadata"]["mime_type"] == "text/markdown"
-    assert insert_kwargs["metadata"]["input_mode"] == "replacement"
-    assert insert_kwargs["metadata"]["upload_mode"] == "browser"
-    assert insert_kwargs["metadata"]["_tais_source"]["kind"] == "path"
-    assert stored_sources["content-new"]["path"] == str(file_path)
-    assert stored_sources["content-new"]["metadata"] == insert_kwargs["metadata"]
+    assert [call for call in knowledge.calls if call[0] == "ainsert"] == []
+    load_calls = [call for call in knowledge.calls if call[0] == "_aload_content"]
+    assert len(load_calls) == 1
+    loaded = load_calls[0][1]
+    assert loaded.id == "content-old"
+    assert loaded.path == str(file_path)
+    assert loaded.metadata["file_name"] == "runbook-v2.md"
+    assert loaded.metadata["file_path"] == str(file_path)
+    assert loaded.metadata["file_size"] == file_path.stat().st_size
+    assert loaded.metadata["mime_type"] == "text/markdown"
+    assert loaded.metadata["input_mode"] == "replacement"
+    assert loaded.metadata["upload_mode"] == "browser"
+    assert loaded.metadata["_tais_source"]["kind"] == "path"
+    assert stored_sources["content-old"]["path"] == str(file_path)
+    assert stored_sources["content-old"]["metadata"] == loaded.metadata
+    reader_mock.assert_called_once_with("runbook-v2.md", loaded.metadata)
 
 
 @pytest.mark.asyncio
@@ -1053,7 +1137,7 @@ async def test_replace_document_source_rejects_public_foreign_non_manager() -> N
 
 
 @pytest.mark.asyncio
-async def test_replace_document_source_reports_old_cleanup_failure() -> None:
+async def test_replace_document_source_does_not_delete_current_content() -> None:
     old_row = SimpleNamespace(
         id="content-old",
         name="Runbook",
@@ -1069,38 +1153,15 @@ async def test_replace_document_source_reports_old_cleanup_failure() -> None:
         },
         created_at=0,
     )
-    new_row = SimpleNamespace(
-        id="content-new",
-        name="Runbook",
-        description="upload:runbook-v2.csv",
-        metadata={
-            "user_id": "u1",
-            "visibility": "private",
-            "source": "upload:runbook-v2.csv",
-            "title": "Runbook",
-            "file_name": "runbook-v2.csv",
-            "file_type": ".csv",
-            "_tais_source": {
-                "kind": "text",
-                "digest": knowledge_service.source_digest(
-                    "col\nvalue", "runbook-v2.csv"
-                ),
-                "version": 1,
-            },
-        },
-        created_at=1,
-    )
     knowledge = StrictAsyncKnowledge(
-        contents=[new_row],
-        content_by_id={"content-old": old_row, "content-new": new_row},
+        content_by_id={"content-old": old_row},
     )
 
     async def content_by_id(content_id: str):
         return knowledge._content_by_id.get(content_id)
 
     async def delete_content_async(_knowledge, content_id: str) -> None:
-        assert content_id == "content-old"
-        raise RuntimeError("old cleanup failed")
+        raise AssertionError(f"source replacement must not delete current content: {content_id}")
 
     lifecycle = knowledge_service.KnowledgeBaseLifecycle(
         knowledge_service.KnowledgeBaseLifecycleDependencies(
@@ -1113,16 +1174,18 @@ async def test_replace_document_source_reports_old_cleanup_failure() -> None:
         )
     )
 
-    with (
-        patch.object(knowledge_service, "reader_for_profile", return_value=object()),
-        pytest.raises(RuntimeError, match="old cleanup failed"),
-    ):
-        await lifecycle.replace_document_source_async(
+    with patch.object(knowledge_service, "reader_for_filename", return_value=object()):
+        result = await lifecycle.replace_document_source_async(
             "content-old",
             content="col\nvalue\n",
             file_name="runbook-v2.csv",
             user=SimpleNamespace(id="u1", role="user", is_superuser=False),
         )
+
+    assert result is not None
+    assert result["id"] == "content-old"
+    load_calls = [call for call in knowledge.calls if call[0] == "_aload_content"]
+    assert len(load_calls) == 1
 
 
 @pytest.mark.asyncio
@@ -1141,16 +1204,8 @@ async def test_replace_document_source_cross_type_uses_new_reader_profile() -> N
         },
         created_at=0,
     )
-    new_row = SimpleNamespace(
-        id="content-new-js",
-        name="Asset Policy",
-        description="upload:policy.js",
-        metadata={"user_id": "u1", "source": "upload:policy.js"},
-        created_at=1,
-    )
     knowledge = StrictAsyncKnowledge(
-        contents=[new_row],
-        content_by_id={"content-old-json": old_row, "content-new-js": new_row},
+        content_by_id={"content-old-json": old_row},
     )
 
     async def content_by_id(content_id: str):
@@ -1162,13 +1217,11 @@ async def test_replace_document_source_cross_type_uses_new_reader_profile() -> N
             ensure_contents_storage_async=lambda: None,
             ensure_storage_async=lambda: None,
             knowledge_content_by_id_async=content_by_id,
-            delete_content_async=lambda _knowledge, _content_id: None,
-            delete_source_async=lambda _content_id: None,
             store_source_async=lambda _content_id, _source: None,
         )
     )
 
-    with patch.object(knowledge_service, "reader_for_profile", return_value=object()):
+    with patch.object(knowledge_service, "reader_for_filename", return_value=object()):
         result = await lifecycle.replace_document_source_async(
             "content-old-json",
             content="console.log('policy')",
@@ -1178,11 +1231,14 @@ async def test_replace_document_source_cross_type_uses_new_reader_profile() -> N
         )
 
     assert result is not None
-    insert_kwargs = knowledge.calls[0][2]
-    assert insert_kwargs["metadata"]["file_name"] == "policy.js"
-    assert insert_kwargs["metadata"]["file_type"] == ".js"
-    assert insert_kwargs["metadata"]["chunk_strategy"] == "code"
-    assert insert_kwargs["metadata"]["reader"] == "TextReader"
+    load_calls = [call for call in knowledge.calls if call[0] == "_aload_content"]
+    assert len(load_calls) == 1
+    loaded = load_calls[0][1]
+    assert loaded.id == "content-old-json"
+    assert loaded.metadata["file_name"] == "policy.js"
+    assert loaded.metadata["file_type"] == ".js"
+    assert loaded.metadata["chunk_strategy"] == "code"
+    assert loaded.metadata["reader"] == "TextReader"
 
 
 @pytest.mark.asyncio

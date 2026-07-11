@@ -1,4 +1,4 @@
-from typing import cast
+from typing import Literal, cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
@@ -61,9 +61,20 @@ def with_manage_flags(
 class KnowledgeIngestOptionsRequest(BaseModel):
     chunk_size: int | None = Field(default=None, ge=200)
     chunk_overlap: int | None = Field(default=None, ge=0)
+    markdown_split_on_headings: int | None = Field(default=None, ge=0, le=6)
+    csv_skip_header: bool | None = None
+    csv_clean_rows: bool | None = None
     code_chunk_size: int | None = Field(default=None, ge=256)
+    code_tokenizer: str | None = Field(default=None, pattern="^(character|gpt2)$")
+    code_include_nodes: bool | None = None
     semantic_threshold: float | None = Field(default=None, ge=0, le=1)
-    reader_strategy: str | None = None
+    semantic_similarity_window: int | None = Field(default=None, ge=1)
+    semantic_min_sentences_per_chunk: int | None = Field(default=None, ge=1)
+    semantic_min_characters_per_sentence: int | None = Field(default=None, ge=1)
+    reader_strategy: str | None = Field(
+        default=None,
+        pattern="^(markdown|semantic|code|csv_row|json|document)$",
+    )
 
 
 class KnowledgeTextRequest(BaseModel):
@@ -83,25 +94,19 @@ class KnowledgeFileRequest(BaseModel):
     ingest_options: KnowledgeIngestOptionsRequest | None = None
 
 
-class KnowledgeVisibilityRequest(BaseModel):
-    visibility: str
-
-
-class KnowledgeDocumentUpdateRequest(BaseModel):
+class KnowledgeDocumentMetadataUpdateRequest(BaseModel):
     title: str | None = None
     source: str | None = None
     visibility: str | None = None
     metadata: dict[str, str] = Field(default_factory=dict)
 
 
-class KnowledgeSourceReplacementRequest(BaseModel):
-    content: str = Field(..., min_length=1)
-    file_name: str = Field(..., min_length=1)
-    title: str | None = None
-    source: str | None = None
-    visibility: str | None = None
-    metadata: dict[str, str] = Field(default_factory=dict)
+class KnowledgeDocumentUpdateActionRequest(BaseModel):
+    mode: Literal["metadata", "rebuild", "replace_text"]
+    metadata: KnowledgeDocumentMetadataUpdateRequest | None = None
     ingest_options: KnowledgeIngestOptionsRequest | None = None
+    content: str | None = None
+    file_name: str | None = None
 
 
 class KnowledgeSearchRequest(BaseModel):
@@ -137,8 +142,16 @@ def ingest_options_from_form(
     *,
     chunk_size: int | None = None,
     chunk_overlap: int | None = None,
+    markdown_split_on_headings: int | None = None,
+    csv_skip_header: bool | None = None,
+    csv_clean_rows: bool | None = None,
     code_chunk_size: int | None = None,
+    code_tokenizer: str | None = None,
+    code_include_nodes: bool | None = None,
     semantic_threshold: float | None = None,
+    semantic_similarity_window: int | None = None,
+    semantic_min_sentences_per_chunk: int | None = None,
+    semantic_min_characters_per_sentence: int | None = None,
     reader_strategy: str | None = None,
 ) -> dict[str, object] | None:
     options: dict[str, object] = {}
@@ -146,10 +159,27 @@ def ingest_options_from_form(
         options["chunk_size"] = chunk_size
     if chunk_overlap is not None:
         options["chunk_overlap"] = chunk_overlap
+    if markdown_split_on_headings is not None:
+        options["markdown_split_on_headings"] = markdown_split_on_headings
+    if csv_skip_header is not None:
+        options["csv_skip_header"] = csv_skip_header
+    if csv_clean_rows is not None:
+        options["csv_clean_rows"] = csv_clean_rows
     if code_chunk_size is not None:
         options["code_chunk_size"] = code_chunk_size
+    clean_tokenizer = (code_tokenizer or "").strip()
+    if clean_tokenizer:
+        options["code_tokenizer"] = clean_tokenizer
+    if code_include_nodes is not None:
+        options["code_include_nodes"] = code_include_nodes
     if semantic_threshold is not None:
         options["semantic_threshold"] = semantic_threshold
+    if semantic_similarity_window is not None:
+        options["semantic_similarity_window"] = semantic_similarity_window
+    if semantic_min_sentences_per_chunk is not None:
+        options["semantic_min_sentences_per_chunk"] = semantic_min_sentences_per_chunk
+    if semantic_min_characters_per_sentence is not None:
+        options["semantic_min_characters_per_sentence"] = semantic_min_characters_per_sentence
     clean_strategy = (reader_strategy or "").strip()
     if clean_strategy:
         options["reader_strategy"] = clean_strategy
@@ -275,8 +305,16 @@ async def upload_document(
     visibility: str = Form(default="private"),
     chunk_size: int | None = Form(default=None, ge=200),
     chunk_overlap: int | None = Form(default=None, ge=0),
+    markdown_split_on_headings: int | None = Form(default=None, ge=0, le=6),
+    csv_skip_header: bool | None = Form(default=None),
+    csv_clean_rows: bool | None = Form(default=None),
     code_chunk_size: int | None = Form(default=None, ge=256),
+    code_tokenizer: str | None = Form(default=None, pattern="^(character|gpt2)$"),
+    code_include_nodes: bool | None = Form(default=None),
     semantic_threshold: float | None = Form(default=None, ge=0, le=1),
+    semantic_similarity_window: int | None = Form(default=None, ge=1),
+    semantic_min_sentences_per_chunk: int | None = Form(default=None, ge=1),
+    semantic_min_characters_per_sentence: int | None = Form(default=None, ge=1),
     reader_strategy: str | None = Form(default=None),
     user: User = Depends(require_scope("knowledge:write")),
 ) -> KnowledgeDocumentResponsePayload:
@@ -295,8 +333,16 @@ async def upload_document(
             ingest_options=ingest_options_from_form(
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
+                markdown_split_on_headings=markdown_split_on_headings,
+                csv_skip_header=csv_skip_header,
+                csv_clean_rows=csv_clean_rows,
                 code_chunk_size=code_chunk_size,
+                code_tokenizer=code_tokenizer,
+                code_include_nodes=code_include_nodes,
                 semantic_threshold=semantic_threshold,
+                semantic_similarity_window=semantic_similarity_window,
+                semantic_min_sentences_per_chunk=semantic_min_sentences_per_chunk,
+                semantic_min_characters_per_sentence=semantic_min_characters_per_sentence,
                 reader_strategy=reader_strategy,
             ),
         )
@@ -347,18 +393,82 @@ async def remove_document(
     return {"success": True}
 
 
-@router.post("/documents/{doc_id}/rebuild")
-async def rebuild_document(
+def changed_metadata_fields(metadata: KnowledgeDocumentMetadataUpdateRequest | None) -> list[str]:
+    if metadata is None:
+        return []
+    return [
+        field
+        for field, value in (
+            ("title", metadata.title),
+            ("source", metadata.source),
+            ("visibility", metadata.visibility),
+            ("metadata", metadata.metadata),
+        )
+        if value not in (None, {}, "")
+    ]
+
+
+@router.post("/documents/{doc_id}/update")
+async def update_document(
     request_ctx: Request,
     doc_id: str,
+    request: KnowledgeDocumentUpdateActionRequest,
     user: User = Depends(require_scope("knowledge:write")),
 ) -> KnowledgeDocumentResponsePayload:
+    metadata = request.metadata or KnowledgeDocumentMetadataUpdateRequest()
+    ingest_options = (
+        request.ingest_options.model_dump(exclude_none=True)
+        if request.ingest_options is not None
+        else None
+    )
     try:
-        updated = await get_knowledge_base_lifecycle().rebuild_document_async(
-            doc_id,
-            owner_user_id=effective_knowledge_user_filter(user),
-            user=user,
-        )
+        if request.mode == "metadata":
+            updated = await get_knowledge_base_lifecycle().update_document_metadata_async(
+                doc_id,
+                title=metadata.title,
+                source=metadata.source,
+                visibility=metadata.visibility,
+                metadata=metadata.metadata,
+                user=user,
+            )
+            audit_action = "knowledge.update"
+            audit_metadata = {"mode": request.mode, "fields": changed_metadata_fields(metadata)}
+        elif request.mode == "rebuild":
+            updated = await get_knowledge_base_lifecycle().rebuild_document_async(
+                doc_id,
+                owner_user_id=effective_knowledge_user_filter(user),
+                user=user,
+                title=metadata.title,
+                source=metadata.source,
+                visibility=metadata.visibility,
+                metadata=metadata.metadata,
+                ingest_options=ingest_options,
+            )
+            audit_action = "knowledge.rebuild"
+            audit_metadata = {"mode": request.mode, "fields": changed_metadata_fields(metadata)}
+        else:
+            clean_content = (request.content or "").strip()
+            clean_file_name = (request.file_name or "").strip()
+            if not clean_content or not clean_file_name:
+                raise ValueError("正文替换需要提供 content 和 file_name")
+            updated = await get_knowledge_base_lifecycle().replace_document_source_async(
+                doc_id,
+                content=clean_content,
+                file_name=clean_file_name,
+                title=metadata.title,
+                source=metadata.source,
+                visibility=metadata.visibility,
+                metadata=metadata.metadata,
+                owner_user_id=effective_knowledge_user_filter(user),
+                user=user,
+                ingest_options=ingest_options,
+            )
+            audit_action = "knowledge.source_replace"
+            audit_metadata = {
+                "mode": request.mode,
+                "fields": changed_metadata_fields(metadata),
+                "file_name": clean_file_name,
+            }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if updated is None:
@@ -366,56 +476,17 @@ async def rebuild_document(
     response = cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
     await record_audit_event_async(
         user,
-        action="knowledge.rebuild",
+        action=audit_action,
         resource_type="knowledge_document",
         resource_id=doc_id,
+        metadata=audit_metadata,
         **audit_request_context(request_ctx),
     )
     return response
 
 
-@router.post("/documents/{doc_id}/source")
-async def replace_document_source(
-    request_ctx: Request,
-    doc_id: str,
-    request: KnowledgeSourceReplacementRequest,
-    user: User = Depends(require_scope("knowledge:write")),
-) -> KnowledgeDocumentResponsePayload:
-    try:
-        updated = await get_knowledge_base_lifecycle().replace_document_source_async(
-            doc_id,
-            content=request.content,
-            file_name=request.file_name,
-            title=request.title,
-            source=request.source,
-            visibility=request.visibility,
-            metadata=request.metadata,
-            owner_user_id=effective_knowledge_user_filter(user),
-            user=user,
-            ingest_options=(
-                request.ingest_options.model_dump(exclude_none=True)
-                if request.ingest_options is not None
-                else None
-            ),
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if updated is None:
-        raise HTTPException(status_code=404, detail="知识文档不存在")
-    response = cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
-    await record_audit_event_async(
-        user,
-        action="knowledge.source_replace",
-        resource_type="knowledge_document",
-        resource_id=str(updated.get("id") or doc_id),
-        metadata={"previous_id": doc_id, "file_name": request.file_name},
-        **audit_request_context(request_ctx),
-    )
-    return response
-
-
-@router.post("/documents/{doc_id}/source/upload")
-async def replace_document_source_upload(
+@router.post("/documents/{doc_id}/update/upload")
+async def update_document_upload(
     request_ctx: Request,
     doc_id: str,
     file: UploadFile = File(...),
@@ -424,8 +495,16 @@ async def replace_document_source_upload(
     visibility: str | None = Form(default=None),
     chunk_size: int | None = Form(default=None, ge=200),
     chunk_overlap: int | None = Form(default=None, ge=0),
+    markdown_split_on_headings: int | None = Form(default=None, ge=0, le=6),
+    csv_skip_header: bool | None = Form(default=None),
+    csv_clean_rows: bool | None = Form(default=None),
     code_chunk_size: int | None = Form(default=None, ge=256),
+    code_tokenizer: str | None = Form(default=None, pattern="^(character|gpt2)$"),
+    code_include_nodes: bool | None = Form(default=None),
     semantic_threshold: float | None = Form(default=None, ge=0, le=1),
+    semantic_similarity_window: int | None = Form(default=None, ge=1),
+    semantic_min_sentences_per_chunk: int | None = Form(default=None, ge=1),
+    semantic_min_characters_per_sentence: int | None = Form(default=None, ge=1),
     reader_strategy: str | None = Form(default=None),
     user: User = Depends(require_scope("knowledge:write")),
 ) -> KnowledgeDocumentResponsePayload:
@@ -446,8 +525,16 @@ async def replace_document_source_upload(
             ingest_options=ingest_options_from_form(
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
+                markdown_split_on_headings=markdown_split_on_headings,
+                csv_skip_header=csv_skip_header,
+                csv_clean_rows=csv_clean_rows,
                 code_chunk_size=code_chunk_size,
+                code_tokenizer=code_tokenizer,
+                code_include_nodes=code_include_nodes,
                 semantic_threshold=semantic_threshold,
+                semantic_similarity_window=semantic_similarity_window,
+                semantic_min_sentences_per_chunk=semantic_min_sentences_per_chunk,
+                semantic_min_characters_per_sentence=semantic_min_characters_per_sentence,
                 reader_strategy=reader_strategy,
             ),
         )
@@ -472,85 +559,14 @@ async def replace_document_source_upload(
         user,
         action="knowledge.source_replace",
         resource_type="knowledge_document",
-        resource_id=str(updated.get("id") or doc_id),
+        resource_id=doc_id,
         metadata={
-            "previous_id": doc_id,
+            "mode": "upload",
             "file_name": stored_upload.file_name,
             "file_size": stored_upload.file_size,
             "mime_type": stored_upload.mime_type,
             "upload_mode": "browser",
         },
-        **audit_request_context(request_ctx),
-    )
-    return response
-
-
-@router.patch("/documents/{doc_id}")
-async def update_document_metadata(
-    request_ctx: Request,
-    doc_id: str,
-    request: KnowledgeDocumentUpdateRequest,
-    user: User = Depends(require_scope("knowledge:write")),
-) -> KnowledgeDocumentResponsePayload:
-    try:
-        updated = await get_knowledge_base_lifecycle().update_document_metadata_async(
-            doc_id,
-            title=request.title,
-            source=request.source,
-            visibility=request.visibility,
-            metadata=request.metadata,
-            user=user,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if updated is None:
-        raise HTTPException(status_code=404, detail="知识文档不存在")
-    response = cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
-    changed_fields = [
-        field
-        for field, value in (
-            ("title", request.title),
-            ("source", request.source),
-            ("visibility", request.visibility),
-            ("metadata", request.metadata),
-        )
-        if value not in (None, {}, "")
-    ]
-    await record_audit_event_async(
-        user,
-        action="knowledge.metadata_update",
-        resource_type="knowledge_document",
-        resource_id=doc_id,
-        metadata={"fields": changed_fields},
-        **audit_request_context(request_ctx),
-    )
-    return response
-
-
-@router.put("/documents/{doc_id}/visibility")
-async def update_document_visibility(
-    request_ctx: Request,
-    doc_id: str,
-    request: KnowledgeVisibilityRequest,
-    user: User = Depends(require_scope("knowledge:write")),
-) -> KnowledgeDocumentResponsePayload:
-    try:
-        updated = await get_knowledge_base_lifecycle().update_document_visibility_async(
-            doc_id,
-            request.visibility,
-            user,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if updated is None:
-        raise HTTPException(status_code=404, detail="知识文档不存在")
-    response = cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
-    await record_audit_event_async(
-        user,
-        action="knowledge.visibility_update",
-        resource_type="knowledge_document",
-        resource_id=doc_id,
-        metadata={"visibility": request.visibility},
         **audit_request_context(request_ctx),
     )
     return response

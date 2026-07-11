@@ -5,6 +5,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from agno.knowledge.content import Content, FileData
 from anyio import Path as AsyncPath
 
 
@@ -102,14 +103,28 @@ async def ainsert_source_snapshot_async(
     knowledge: Any,
     source: Mapping[str, object],
     *,
-    reader_for_filename: Callable[[str | None], object],
+    reader_for_filename: Callable[[str | None, Mapping[str, object] | None], object],
+    content_id: str | None = None,
 ) -> None:
     kind = str(source.get("kind") or "").strip().lower()
     metadata = mapping_metadata(source.get("metadata"))
     name = str(source.get("name") or metadata.get("title") or "").strip() or None
     description = str(source.get("description") or metadata.get("source") or "").strip() or None
     filename = str(source.get("filename") or metadata.get("file_name") or name or "").strip()
-    reader = reader_for_filename(filename)
+    reader = reader_for_filename(filename, metadata)
+    if content_id:
+        await _aload_source_snapshot_with_id_async(
+            knowledge,
+            source,
+            kind=kind,
+            metadata=metadata,
+            name=name,
+            description=description,
+            filename=filename,
+            reader=reader,
+            content_id=content_id,
+        )
+        return
     kwargs: dict[str, object] = {
         "name": name,
         "description": description,
@@ -132,3 +147,59 @@ async def ainsert_source_snapshot_async(
     else:
         raise ValueError("当前知识记录缺少可重建的原始 source 快照")
     await knowledge.ainsert(**kwargs)
+
+
+async def _aload_source_snapshot_with_id_async(
+    knowledge: Any,
+    source: Mapping[str, object],
+    *,
+    kind: str,
+    metadata: Mapping[str, object],
+    name: str | None,
+    description: str | None,
+    filename: str,
+    reader: Any,
+    content_id: str,
+) -> None:
+    content: Content
+    if kind == "text":
+        text_content = source.get("text_content")
+        if not isinstance(text_content, str) or not text_content.strip():
+            raise ValueError("当前知识记录缺少可重建的文本 source 快照")
+        content = Content(
+            id=content_id,
+            name=name,
+            description=description,
+            file_data=FileData(content=text_content, type="Text", filename=filename or None),
+            metadata=dict(metadata),
+            reader=reader,
+        )
+    elif kind == "path":
+        path = str(source.get("path") or metadata.get("file_path") or "").strip()
+        if not path:
+            raise ValueError("当前知识记录缺少可重建的文件路径 source 快照")
+        resolved_path = await resolve_existing_file_async(path)
+        content = Content(
+            id=content_id,
+            name=name,
+            description=description,
+            path=str(resolved_path),
+            metadata=dict(metadata),
+            reader=reader,
+        )
+    else:
+        raise ValueError("当前知识记录缺少可重建的原始 source 快照")
+
+    content.content_hash = knowledge._build_content_hash(content)
+    await _delete_vectors_by_content_id_async(knowledge, content_id)
+    await knowledge._aload_content(content, True, False, None, None)
+
+
+async def _delete_vectors_by_content_id_async(knowledge: Any, content_id: str) -> None:
+    vector_db = getattr(knowledge, "vector_db", None)
+    delete_by_content_id = getattr(vector_db, "delete_by_content_id", None)
+    if not callable(delete_by_content_id):
+        return
+    result = delete_by_content_id(content_id)
+    if hasattr(result, "__await__"):
+        await result

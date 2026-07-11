@@ -30,7 +30,7 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: () => Promise<v
       <section className="auth-signal" aria-hidden="true">
         <span>CONTROL PLANE</span><i /><span>IDENTITY GATE</span><i /><span>TAIS/01</span>
       </section>
-      <Card className="auth-card" bordered>
+      <Card className="auth-card" variant="outlined">
         <div className="brand-lockup"><span className="brand-mark">T</span><div><strong>T.A.I.S</strong><small>Trinity AI Security</small></div></div>
         <Typography.Title level={2}>{t('auth.title')}</Typography.Title>
         <Typography.Paragraph type="secondary">{t('auth.subtitle')}</Typography.Paragraph>
@@ -43,7 +43,7 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: () => Promise<v
           </Form.Item>
           <Button type="primary" htmlType="submit" loading={loading} block>{t('auth.signIn')}</Button>
         </Form>
-        <Space direction="vertical" className="oauth-list">
+        <Space orientation="vertical" className="oauth-list">
           {!providers.length && <Button type="text" onClick={() => void loadProviders()}>SSO providers</Button>}
           {providers.map((provider) => <Button key={provider} icon={<GithubOutlined />} onClick={async () => { window.location.assign(await getOAuthAuthorization(provider)) }}>{provider}</Button>)}
         </Space>

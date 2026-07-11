@@ -2,7 +2,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { server } from '@/test/server'
 import { AUTH_TOKEN_STORAGE_KEY } from '@/shared/auth/storage'
-import { replaceDocumentSource, replaceDocumentSourceFile, updateDocument, uploadDocument } from './api'
+import { updateDocumentAction, updateDocumentUpload, uploadDocument } from './api'
 import type { Document } from './types'
 
 const document: Document = {
@@ -28,6 +28,8 @@ describe('knowledge document API', () => {
       expect(body).toContain('public')
       expect(body).toContain('name="chunk_size"')
       expect(body).toContain('1500')
+      expect(body).toContain('name="markdown_split_on_headings"')
+      expect(body).toContain('2')
       expect(body).toContain('name="reader_strategy"')
       expect(body).toContain('markdown')
       return HttpResponse.json(document)
@@ -38,44 +40,72 @@ describe('knowledge document API', () => {
       title: ' Security runbook ',
       source: ' SOC ',
       visibility: 'public',
-      ingest_options: { chunk_size: 1500, reader_strategy: 'markdown' },
+      ingest_options: { chunk_size: 1500, markdown_split_on_headings: 2, reader_strategy: 'markdown' },
     })
 
     expect(result.id).toBe('doc-1')
   })
 
   it('updates metadata without sending document content', async () => {
-    server.use(http.patch('/api/knowledge/documents/:id', async ({ params, request }) => {
+    server.use(http.post('/api/knowledge/documents/:id/update', async ({ params, request }) => {
       expect(params.id).toBe('doc/1')
       const body = await request.json()
-      expect(body).toEqual({ title: 'Updated', source: 'Runbooks' })
+      expect(body).toEqual({ mode: 'metadata', metadata: { title: 'Updated', source: 'Runbooks' } })
       expect(body).not.toHaveProperty('content')
       return HttpResponse.json({ ...document, title: 'Updated', source: 'Runbooks' })
     }))
 
-    const result = await updateDocument('doc/1', { title: 'Updated', source: 'Runbooks' })
+    const result = await updateDocumentAction('doc/1', { mode: 'metadata', metadata: { title: 'Updated', source: 'Runbooks' } })
 
     expect(result.title).toBe('Updated')
   })
 
-  it('uses the source replacement endpoint when content must be revectorized', async () => {
-    server.use(http.post('/api/knowledge/documents/:id/source', async ({ params, request }) => {
+  it('uses update action when content must be revectorized', async () => {
+    server.use(http.post('/api/knowledge/documents/:id/update', async ({ params, request }) => {
       expect(params.id).toBe('doc-1')
       expect(await request.json()).toEqual({
+        mode: 'replace_text',
         file_name: 'runbook.md',
         content: '# New body',
-        ingest_options: { chunk_overlap: 120 },
+        ingest_options: { chunk_overlap: 120, code_tokenizer: 'gpt2' },
       })
-      return HttpResponse.json({ ...document, id: 'doc-2' })
+      return HttpResponse.json({ ...document, chunks: 4 })
     }))
 
-    const result = await replaceDocumentSource('doc-1', { file_name: 'runbook.md', content: '# New body', ingest_options: { chunk_overlap: 120 } })
+    const result = await updateDocumentAction('doc-1', { mode: 'replace_text', file_name: 'runbook.md', content: '# New body', ingest_options: { chunk_overlap: 120, code_tokenizer: 'gpt2' } })
 
-    expect(result.id).toBe('doc-2')
+    expect(result.id).toBe('doc-1')
+    expect(result.chunks).toBe(4)
+  })
+
+  it('sends rebuild ingest options only when advanced options are selected', async () => {
+    server.use(http.post('/api/knowledge/documents/:id/update', async ({ params, request }) => {
+      expect(params.id).toBe('doc-1')
+      expect(await request.json()).toEqual({
+        mode: 'rebuild',
+        ingest_options: {
+          chunk_size: 1800,
+          markdown_split_on_headings: 2,
+          reader_strategy: 'markdown',
+        },
+      })
+      return HttpResponse.json({ ...document, chunks: 4 })
+    }))
+
+    const result = await updateDocumentAction('doc-1', {
+      mode: 'rebuild',
+      ingest_options: {
+        chunk_size: 1800,
+        markdown_split_on_headings: 2,
+        reader_strategy: 'markdown',
+      },
+    })
+
+    expect(result.chunks).toBe(4)
   })
 
   it('uploads a replacement file through the selected document endpoint', async () => {
-    server.use(http.post('/api/knowledge/documents/:id/source/upload', async ({ params, request }) => {
+    server.use(http.post('/api/knowledge/documents/:id/update/upload', async ({ params, request }) => {
       expect(params.id).toBe('doc/1')
       expect(request.headers.get('content-type')).toContain('multipart/form-data')
       const body = await request.text()
@@ -89,18 +119,20 @@ describe('knowledge document API', () => {
       expect(body).toContain('public')
       expect(body).toContain('name="semantic_threshold"')
       expect(body).toContain('0.61')
-      return HttpResponse.json({ ...document, id: 'doc-2', chunks: 4 })
+      expect(body).toContain('name="csv_skip_header"')
+      expect(body).toContain('true')
+      return HttpResponse.json({ ...document, chunks: 4 })
     }))
 
-    const result = await replaceDocumentSourceFile('doc/1', {
+    const result = await updateDocumentUpload('doc/1', {
       file: new File(['# Uploaded body'], 'uploaded.md', { type: 'text/markdown' }),
       title: ' Uploaded runbook ',
       source: ' IR ',
       visibility: 'public',
-      ingest_options: { semantic_threshold: 0.61 },
+      ingest_options: { semantic_threshold: 0.61, csv_skip_header: true },
     })
 
-    expect(result.id).toBe('doc-2')
+    expect(result.id).toBe('doc-1')
     expect(result.chunks).toBe(4)
   })
 })

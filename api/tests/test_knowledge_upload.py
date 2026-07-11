@@ -24,6 +24,96 @@ from api.services.knowledge_upload_service import (
 )
 
 
+def test_json_ingest_options_accept_reader_specific_fields() -> None:
+    payload = knowledge_route.KnowledgeIngestOptionsRequest.model_validate(
+        {
+            "chunk_size": 1500,
+            "chunk_overlap": 120,
+            "markdown_split_on_headings": 2,
+            "csv_skip_header": True,
+            "csv_clean_rows": False,
+            "code_chunk_size": 2200,
+            "code_tokenizer": "gpt2",
+            "code_include_nodes": True,
+            "semantic_threshold": 0.61,
+            "semantic_similarity_window": 4,
+            "semantic_min_sentences_per_chunk": 2,
+            "semantic_min_characters_per_sentence": 12,
+            "reader_strategy": "markdown",
+        }
+    )
+
+    assert payload.model_dump(exclude_none=True)["code_tokenizer"] == "gpt2"
+
+
+@pytest.mark.asyncio
+async def test_update_route_passes_rebuild_metadata_and_ingest_options_to_lifecycle() -> None:
+    captured: dict[str, object] = {}
+    current_user = actor()
+
+    class Lifecycle:
+        async def rebuild_document_async(self, doc_id: str, **kwargs: object) -> dict[str, object]:
+            captured["doc_id"] = doc_id
+            captured.update(kwargs)
+            return {
+                "id": "doc-1",
+                "title": "Runbook",
+                "source": "manual",
+                "chunks": 3,
+                "created_at": "",
+                "status": "completed",
+                "status_message": "",
+                "type": ".md",
+                "size": 12,
+                "visibility": "private",
+                "owner_user_id": "u1",
+                "metadata": {},
+            }
+
+    with (
+        patch.object(
+            knowledge_route,
+            "get_knowledge_base_lifecycle",
+            return_value=Lifecycle(),
+        ),
+        patch.object(knowledge_route, "record_audit_event_async", new=AsyncMock()),
+    ):
+        result = await knowledge_route.update_document(
+            request("/api/knowledge/documents/doc-1/update"),
+            "doc-1",
+            request=knowledge_route.KnowledgeDocumentUpdateActionRequest(
+                mode="rebuild",
+                metadata=knowledge_route.KnowledgeDocumentMetadataUpdateRequest(
+                    title="Updated runbook",
+                    source="IR",
+                    visibility="public",
+                ),
+                ingest_options=knowledge_route.KnowledgeIngestOptionsRequest(
+                    chunk_size=1800,
+                    markdown_split_on_headings=2,
+                    reader_strategy="markdown",
+                )
+            ),
+            user=current_user,
+        )
+
+    assert result["can_manage"] is True
+    assert captured == {
+        "doc_id": "doc-1",
+        "owner_user_id": "u1",
+        "user": current_user,
+        "title": "Updated runbook",
+        "source": "IR",
+        "visibility": "public",
+        "metadata": {},
+        "ingest_options": {
+            "chunk_size": 1800,
+            "markdown_split_on_headings": 2,
+            "reader_strategy": "markdown",
+        },
+    }
+
+
 def upload_file(
     content: bytes,
     filename: str,
@@ -270,8 +360,16 @@ async def test_upload_route_ingests_persisted_path_with_browser_metadata(tmp_pat
             visibility="private",
             chunk_size=1500,
             chunk_overlap=120,
+            markdown_split_on_headings=2,
+            csv_skip_header=None,
+            csv_clean_rows=None,
             code_chunk_size=None,
+            code_tokenizer=None,
+            code_include_nodes=None,
             semantic_threshold=None,
+            semantic_similarity_window=None,
+            semantic_min_sentences_per_chunk=None,
+            semantic_min_characters_per_sentence=None,
             reader_strategy="markdown",
             user=actor(),
         )
@@ -288,6 +386,7 @@ async def test_upload_route_ingests_persisted_path_with_browser_metadata(tmp_pat
         "ingest_options": {
             "chunk_size": 1500,
             "chunk_overlap": 120,
+            "markdown_split_on_headings": 2,
             "reader_strategy": "markdown",
         },
     }
@@ -330,8 +429,16 @@ async def test_upload_route_removes_file_when_ingest_fails(tmp_path: Path) -> No
             visibility="private",
             chunk_size=None,
             chunk_overlap=None,
+            markdown_split_on_headings=None,
+            csv_skip_header=None,
+            csv_clean_rows=None,
             code_chunk_size=None,
+            code_tokenizer=None,
+            code_include_nodes=None,
             semantic_threshold=None,
+            semantic_similarity_window=None,
+            semantic_min_sentences_per_chunk=None,
+            semantic_min_characters_per_sentence=None,
             reader_strategy=None,
             user=actor(),
         )
@@ -341,7 +448,7 @@ async def test_upload_route_removes_file_when_ingest_fails(tmp_path: Path) -> No
 
 
 @pytest.mark.asyncio
-async def test_replacement_upload_route_replaces_selected_document_from_persisted_path(
+async def test_update_upload_route_replaces_selected_document_from_persisted_path(
     tmp_path: Path,
 ) -> None:
     stored = StoredKnowledgeUpload(
@@ -363,7 +470,7 @@ async def test_replacement_upload_route_replaces_selected_document_from_persiste
             captured["doc_id"] = doc_id
             captured.update(kwargs)
             return {
-                "id": "doc-2",
+                "id": "doc-1",
                 "title": "Runbook",
                 "source": "upload:runbook.md",
                 "chunks": 2,
@@ -394,8 +501,8 @@ async def test_replacement_upload_route_replaces_selected_document_from_persiste
             new=AsyncMock(),
         ),
     ):
-        result = await knowledge_route.replace_document_source_upload(
-            request("/api/knowledge/documents/doc-1/source/upload"),
+        result = await knowledge_route.update_document_upload(
+            request("/api/knowledge/documents/doc-1/update/upload"),
             "doc-1",
             upload_file(b"# Runbook v2\n", "runbook-v2.md"),
             title=None,
@@ -403,13 +510,21 @@ async def test_replacement_upload_route_replaces_selected_document_from_persiste
             visibility=None,
             chunk_size=None,
             chunk_overlap=None,
+            markdown_split_on_headings=None,
+            csv_skip_header=True,
+            csv_clean_rows=False,
             code_chunk_size=2200,
+            code_tokenizer="gpt2",
+            code_include_nodes=True,
             semantic_threshold=0.61,
+            semantic_similarity_window=4,
+            semantic_min_sentences_per_chunk=2,
+            semantic_min_characters_per_sentence=12,
             reader_strategy=None,
             user=current_user,
         )
 
-    assert result["id"] == "doc-2"
+    assert result["id"] == "doc-1"
     assert result["can_manage"] is True
     assert captured == {
         "doc_id": "doc-1",
@@ -421,14 +536,21 @@ async def test_replacement_upload_route_replaces_selected_document_from_persiste
         "owner_user_id": "u1",
         "user": current_user,
         "ingest_options": {
+            "csv_skip_header": True,
+            "csv_clean_rows": False,
             "code_chunk_size": 2200,
+            "code_tokenizer": "gpt2",
+            "code_include_nodes": True,
             "semantic_threshold": 0.61,
+            "semantic_similarity_window": 4,
+            "semantic_min_sentences_per_chunk": 2,
+            "semantic_min_characters_per_sentence": 12,
         },
     }
 
 
 @pytest.mark.asyncio
-async def test_replacement_upload_route_removes_file_when_document_is_missing(
+async def test_update_upload_route_removes_file_when_document_is_missing(
     tmp_path: Path,
 ) -> None:
     stored = StoredKnowledgeUpload(
@@ -462,8 +584,8 @@ async def test_replacement_upload_route_removes_file_when_document_is_missing(
         patch.object(knowledge_route, "remove_managed_upload_async", cleanup),
         pytest.raises(HTTPException) as exc,
     ):
-        await knowledge_route.replace_document_source_upload(
-            request("/api/knowledge/documents/doc-missing/source/upload"),
+        await knowledge_route.update_document_upload(
+            request("/api/knowledge/documents/doc-missing/update/upload"),
             "doc-missing",
             upload_file(b"# Runbook v2\n", "runbook-v2.md"),
             title=None,
@@ -471,8 +593,16 @@ async def test_replacement_upload_route_removes_file_when_document_is_missing(
             visibility=None,
             chunk_size=None,
             chunk_overlap=None,
+            markdown_split_on_headings=None,
+            csv_skip_header=None,
+            csv_clean_rows=None,
             code_chunk_size=None,
+            code_tokenizer=None,
+            code_include_nodes=None,
             semantic_threshold=None,
+            semantic_similarity_window=None,
+            semantic_min_sentences_per_chunk=None,
+            semantic_min_characters_per_sentence=None,
             reader_strategy=None,
             user=actor(),
         )

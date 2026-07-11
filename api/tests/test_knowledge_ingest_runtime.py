@@ -17,6 +17,26 @@ from api.services.knowledge_ingest_service import (
 from api.tests.knowledge_fakes import FakeEmbedder
 
 
+def reader_config(**overrides: object) -> knowledge_ingest_service.KnowledgeReaderConfig:
+    values = {
+        "embedder": FakeEmbedder(),
+        "chunk_size": 1200,
+        "chunk_overlap": 160,
+        "markdown_split_on_headings": None,
+        "csv_skip_header": False,
+        "csv_clean_rows": True,
+        "code_chunk_size": 1800,
+        "code_tokenizer": "character",
+        "code_include_nodes": False,
+        "semantic_threshold": 0.52,
+        "semantic_similarity_window": None,
+        "semantic_min_sentences_per_chunk": None,
+        "semantic_min_characters_per_sentence": None,
+    }
+    values.update(overrides)
+    return knowledge_ingest_service.KnowledgeReaderConfig(**values)
+
+
 @pytest.mark.parametrize(
     ("filename", "expected_strategy", "expected_reader"),
     [
@@ -36,13 +56,7 @@ def test_suffix_profile_chooses_agno_aligned_chunkers(
     assert profile.strategy == expected_strategy
     reader = knowledge_ingest_service.reader_for_profile(
         profile,
-        knowledge_ingest_service.KnowledgeReaderConfig(
-            embedder=FakeEmbedder(),
-            chunk_size=1200,
-            chunk_overlap=160,
-            code_chunk_size=1800,
-            semantic_threshold=0.52,
-        ),
+        reader_config(),
         filename,
     )
     assert reader.__class__.__name__ == expected_reader
@@ -51,19 +65,90 @@ def test_suffix_profile_chooses_agno_aligned_chunkers(
 def test_javascript_code_reader_uses_explicit_language_to_avoid_auto_detection() -> None:
     reader = knowledge_ingest_service.reader_for_profile(
         knowledge_ingest_service.PROFILE_CODE,
-        knowledge_ingest_service.KnowledgeReaderConfig(
-            embedder=FakeEmbedder(),
-            chunk_size=1200,
-            chunk_overlap=160,
-            code_chunk_size=1800,
-            semantic_threshold=0.52,
-        ),
+        reader_config(),
         "policy.js",
     )
 
     chunking_strategy = reader.chunking_strategy
     assert chunking_strategy.__class__.__name__ == "CodeChunking"
     assert getattr(chunking_strategy, "language", None) == "javascript"
+
+
+def test_markdown_heading_level_and_size_based_modes_configure_chunking() -> None:
+    heading_reader = knowledge_ingest_service.reader_for_profile(
+        knowledge_ingest_service.PROFILE_MARKDOWN,
+        reader_config(markdown_split_on_headings=2, chunk_size=1400),
+        "runbook.md",
+    )
+    size_reader = knowledge_ingest_service.reader_for_profile(
+        knowledge_ingest_service.PROFILE_MARKDOWN,
+        reader_config(markdown_split_on_headings=0, chunk_size=900),
+        "runbook.md",
+    )
+
+    assert heading_reader.chunking_strategy.split_on_headings == 2
+    assert heading_reader.chunking_strategy.chunk_size == 1400
+    assert size_reader.chunking_strategy.split_on_headings is False
+    assert size_reader.chunking_strategy.chunk_size == 900
+
+
+def test_csv_row_options_configure_row_chunking() -> None:
+    reader = knowledge_ingest_service.reader_for_profile(
+        knowledge_ingest_service.PROFILE_CSV,
+        reader_config(
+            chunk_size=500,
+            chunk_overlap=600,
+            csv_skip_header=True,
+            csv_clean_rows=False,
+        ),
+        "assets.csv",
+    )
+
+    assert reader.chunking_strategy.skip_header is True
+    assert reader.chunking_strategy.clean_rows is False
+
+
+def test_overlap_validation_only_applies_to_chunkers_that_use_overlap() -> None:
+    with pytest.raises(ValueError, match="chunk_overlap"):
+        knowledge_ingest_service.reader_for_profile(
+            knowledge_ingest_service.PROFILE_MARKDOWN,
+            reader_config(chunk_size=500, chunk_overlap=600),
+            "runbook.md",
+        )
+
+
+def test_code_tokenizer_and_nodes_configure_code_chunking() -> None:
+    reader = knowledge_ingest_service.reader_for_profile(
+        knowledge_ingest_service.PROFILE_CODE,
+        reader_config(
+            code_chunk_size=2400,
+            code_tokenizer="gpt2",
+            code_include_nodes=True,
+        ),
+        "agent.py",
+    )
+
+    assert reader.chunking_strategy.tokenizer == "gpt2"
+    assert reader.chunking_strategy.chunk_size == 2400
+    assert reader.chunking_strategy.include_nodes is True
+
+
+def test_semantic_advanced_options_configure_semantic_chunking() -> None:
+    reader = knowledge_ingest_service.reader_for_profile(
+        knowledge_ingest_service.PROFILE_TEXT,
+        reader_config(
+            semantic_threshold=0.64,
+            semantic_similarity_window=4,
+            semantic_min_sentences_per_chunk=2,
+            semantic_min_characters_per_sentence=12,
+        ),
+        "notes.txt",
+    )
+
+    assert reader.chunking_strategy.similarity_threshold == 0.64
+    assert reader.chunking_strategy.similarity_window == 4
+    assert reader.chunking_strategy.min_sentences_per_chunk == 2
+    assert reader.chunking_strategy.min_characters_per_sentence == 12
 
 
 def test_knowledge_service_keeps_profile_interface() -> None:
@@ -283,14 +368,39 @@ def test_coerce_ingest_overrides_normalizes_numeric_values() -> None:
         {
             "chunk_size": "1500",
             "chunk_overlap": 120,
+            "markdown_split_on_headings": "2",
+            "csv_skip_header": "true",
+            "csv_clean_rows": "false",
             "code_chunk_size": "2200",
+            "code_tokenizer": "gpt2",
+            "code_include_nodes": "true",
             "semantic_threshold": "0.61",
+            "semantic_similarity_window": "4",
+            "semantic_min_sentences_per_chunk": "2",
+            "semantic_min_characters_per_sentence": "12",
             "reader_strategy": "markdown",
         }
     )
 
     assert overrides.chunk_size == 1500
     assert overrides.chunk_overlap == 120
+    assert overrides.markdown_split_on_headings == 2
+    assert overrides.csv_skip_header is True
+    assert overrides.csv_clean_rows is False
     assert overrides.code_chunk_size == 2200
+    assert overrides.code_tokenizer == "gpt2"
+    assert overrides.code_include_nodes is True
     assert overrides.semantic_threshold == 0.61
+    assert overrides.semantic_similarity_window == 4
+    assert overrides.semantic_min_sentences_per_chunk == 2
+    assert overrides.semantic_min_characters_per_sentence == 12
     assert overrides.reader_strategy == "markdown"
+
+
+def test_coerce_ingest_overrides_rejects_invalid_strategy_values() -> None:
+    with pytest.raises(ValueError, match="markdown_split_on_headings"):
+        coerce_ingest_overrides({"markdown_split_on_headings": 7})
+    with pytest.raises(ValueError, match="code_tokenizer"):
+        coerce_ingest_overrides({"code_tokenizer": "words"})
+    with pytest.raises(ValueError, match="reader_strategy"):
+        coerce_ingest_overrides({"reader_strategy": "spreadsheet"})

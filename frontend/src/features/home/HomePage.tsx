@@ -13,7 +13,7 @@ export function HomePage() {
   return (
     <main className="home-page">
       <section className="home-command">
-        <div><Tag bordered={false}>TRINITY AI SECURITY</Tag><Typography.Title>T.A.I.S 工作台</Typography.Title><Typography.Paragraph>面向安全运营人员的 Agent 运行、知识、观测与治理工作台。</Typography.Paragraph></div>
+        <div><Tag variant="filled">TRINITY AI SECURITY</Tag><Typography.Title>T.A.I.S 工作台</Typography.Title><Typography.Paragraph>面向安全运营人员的 Agent 运行、知识、观测与治理工作台。</Typography.Paragraph></div>
         <div className="home-radar"><RadarChartOutlined /><span>14</span><small>ACTIVE MODULES</small></div>
       </section>
       <section className="signal-rail"><span><i className="green" />DATA PLANE READY</span><span><i className="blue" />RUNTIME CONNECTED</span><span><i className="orange" />POLICY ENFORCED</span></section>
