@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 
 from anyio import Lock, Path as AsyncPath
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -10,13 +10,15 @@ from agno.os import AgentOS
 from agno.os.middleware.jwt import JWTMiddleware
 from agno.factory import RequestContext
 from loguru import logger
+from fastmcp.utilities.lifespan import combine_lifespans
 
 from api.auth.claims import ADMIN_SCOPE
 from api.auth.database import bootstrap_admin_user, close_auth_engine, create_auth_tables
 from api.auth.router import router as auth_router
 from api.config import get_settings
 from api.core.logging import configure_logging_async
-from api.mcp.server import bootstrap_mcp_token, mcp_runtime
+from api.mcp.config import bootstrap_mcp_config
+from api.mcp.server import bootstrap_mcp_token, configure_main_mcp, main_mcp
 from api.persistence.database import dispose_async_control_plane_engine
 from api.routes import (
     agent_evals,
@@ -102,22 +104,24 @@ async def lifespan(app: FastAPI):
     await create_auth_tables()
     await bootstrap_admin_user(app_settings)
 
+    await bootstrap_mcp_config()
     await bootstrap_mcp_token(app_settings.mcp_token.get_secret_value())
-    await mcp_runtime.startup()
+    await configure_main_mcp()
 
     try:
         yield
     finally:
-        await mcp_runtime.shutdown()
         await close_auth_engine()
         await dispose_async_control_plane_engine()
         logger.info("关闭 {}", app_settings.app_name)
 
 
+mcp_app = main_mcp.http_app(path="/")
+
 app = FastAPI(
     title=app_settings.app_name,
     version=app_settings.app_version,
-    lifespan=lifespan,
+    lifespan=combine_lifespans(lifespan, mcp_app.lifespan),
 )
 
 app.add_middleware(
@@ -138,13 +142,6 @@ def health_check():
 @app.get("/report", include_in_schema=False)
 def report_redirect():
     return RedirectResponse(url="/report/")
-
-
-@app.api_route("/mcp", methods=["GET", "POST", "DELETE", "OPTIONS"], include_in_schema=False)
-def mcp_redirect(request: Request):
-    query = request.url.query
-    target = "/mcp/" + (f"?{query}" if query else "")
-    return RedirectResponse(url=target, status_code=307)
 
 
 async def _build_agentos_fallback_agent(_ctx: RequestContext):
@@ -190,6 +187,15 @@ if app_settings.scheduler_enabled:
     ).get_app()
     app.router.routes = [route for route in app.router.routes if getattr(route, "path", "") != "/"]
 
+# AgentOS installs a middleware that rewrites `/mcp/` to `/mcp`. Starlette mounts
+# require the trailing slash to route into the mounted ASGI app, so keep the MCP
+# transport path intact and let FastAPI handle ordinary slash redirects.
+app.user_middleware = [
+    middleware
+    for middleware in app.user_middleware
+    if getattr(middleware.cls, "__name__", "") != "TrailingSlashMiddleware"
+]
+
 app.state.cors_allowed_origins = app_settings.cors_origins
 app.add_middleware(
     JWTMiddleware,  # type: ignore[arg-type]
@@ -202,8 +208,8 @@ app.add_middleware(
 )
 
 # Integrated FastMCP protocol endpoint. Same process, same port:
-# http://<host>:8000/mcp?token=...
-app.mount("/mcp", mcp_runtime.asgi_app(), name="mcp")
+# http://<host>:8000/mcp/ with Authorization: Bearer <token>
+app.mount("/mcp", mcp_app, name="mcp")
 
 # Serve frontend static files. Production builds are written to frontend/dist.
 app.mount("/", LazyFrontendStaticFiles(), name="frontend")

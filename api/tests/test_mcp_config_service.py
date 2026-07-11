@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
 import pytest
@@ -11,226 +11,118 @@ def actor(actor_id: str, role: str = "user", is_superuser: bool = False):
     return SimpleNamespace(id=actor_id, role=role, is_superuser=is_superuser)
 
 
-def test_apply_service_toggle_updates_config_and_returns_audit_shape():
-    stored = {"mcp": {"playbook": True}}
-    writes: list[dict] = []
+@pytest.mark.asyncio
+async def test_apply_service_toggle_updates_postgres_row():
+    rows = [{"id": 1, "name": "playbook", "server_type": "builtin", "enabled": True}]
+    update = AsyncMock()
     with (
-        patch.object(mcp_config_service, "read_mcp_config", return_value=stored),
-        patch.object(
-            mcp_config_service, "write_mcp_config", side_effect=writes.append
-        ),
+        patch.object(mcp_config_service, "list_mcp_servers", AsyncMock(return_value=rows)),
+        patch.object(mcp_config_service, "update_server_row", update),
     ):
-        change = mcp_config_service.apply_service_toggle("playbook", False)
-    assert writes[0]["mcp"]["playbook"] is False
-    assert change.response == {
-        "success": True,
-        "control_mode": "integrated",
-        "restart_required": True,
-    }
-    assert change.action == "mcp.config_update"
-    assert change.resource_type == "mcp_service"
-    assert change.resource_id == "playbook"
+        change = await mcp_config_service.apply_service_toggle("playbook", False)
+    update.assert_awaited_once()
+    assert change.response["restart_required"] is True
     assert change.metadata == {"enabled": False}
 
 
-def test_apply_service_toggle_rejects_removed_agent_service():
-    with pytest.raises(HTTPException) as exc:
-        mcp_config_service.apply_service_toggle("agent", True)
+@pytest.mark.asyncio
+async def test_apply_service_toggle_rejects_unknown_service():
+    with patch.object(mcp_config_service, "list_mcp_servers", AsyncMock(return_value=[])):
+        with pytest.raises(HTTPException) as exc:
+            await mcp_config_service.apply_service_toggle("agent", True)
     assert exc.value.status_code == 400
 
 
-def test_apply_mcp_upload_normalizes_standard_mcp_manifest():
-    stored = {"mcp_servers": []}
-    writes: list[dict] = []
-    manifest = """
-        {
-          "mcpServers": {
-            "filesystem": {
-              "command": "python",
-              "args": ["-m", "agent_tools"],
-              "env": {"TOKEN": "secret"}
-            }
-          }
-        }
-        """
-    with (
-        patch.object(mcp_config_service, "read_mcp_config", return_value=stored),
-        patch.object(
-            mcp_config_service, "write_mcp_config", side_effect=writes.append
-        ),
-    ):
-        change = mcp_config_service.apply_mcp_upload(
-            name="Filesystem", manifest=manifest
-        )
-    assert writes[0]["mcp_servers"] == [
-        {
-            "name": "Filesystem",
-            "description": "",
-            "kind": "mcp-json",
-            "enabled": True,
-            "visibility": "private",
-            "owner_user_id": "",
-            "manifest": {
-                "mcpServers": {
-                    "filesystem": {
-                        "command": "python",
-                        "args": ["-m", "agent_tools"],
-                        "env": {"TOKEN": "secret"},
-                    }
-                }
-            },
-        }
-    ]
-    assert change.response["kind"] == "mcp-json"
-    assert change.metadata == {
-        "kind": "mcp-json",
-        "has_manifest": True,
-        "visibility": "private",
+def test_parse_manifest_supports_stdio_and_http():
+    transport, stdio = mcp_config_service.parse_mcp_manifest(
+        '{"mcpServers":{"filesystem":{"command":"python","args":["-m","tools"]}}}'
+    )
+    assert transport == "stdio"
+    assert stdio["mcpServers"]["filesystem"]["command"] == "python"
+
+    transport, http = mcp_config_service.parse_mcp_manifest(
+        '{"mcpServers":{"remote":{"url":"https://example.invalid/mcp","transport":"streamable-http"}}}'
+    )
+    assert transport == "streamable-http"
+    assert http["mcpServers"]["remote"]["url"] == "https://example.invalid/mcp"
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        "",
+        '{"source":{"path":"server.py"}}',
+        '{"mcpServers":{"bad":{"command":"python","url":"https://example.invalid/mcp"}}}',
+    ],
+)
+def test_parse_manifest_rejects_invalid_shapes(manifest: str):
+    with pytest.raises(HTTPException):
+        mcp_config_service.parse_mcp_manifest(manifest)
+
+
+@pytest.mark.asyncio
+async def test_apply_upload_inserts_postgres_server():
+    inserted = {
+        "id": 7,
+        "name": "Filesystem",
+        "namespace": "filesystem",
     }
-
-
-def test_apply_mcp_upload_persists_visibility_and_owner_metadata():
-    stored = {"mcp_servers": []}
-    writes: list[dict] = []
-    manifest = '{"mcpServers":{"tool":{"command":"python"}}}'
+    upsert = AsyncMock(return_value=inserted)
     with (
-        patch.object(mcp_config_service, "read_mcp_config", return_value=stored),
-        patch.object(
-            mcp_config_service, "write_mcp_config", side_effect=writes.append
-        ),
+        patch.object(mcp_config_service, "list_mcp_servers", AsyncMock(return_value=[])),
+        patch.object(mcp_config_service, "insert_server_row", upsert),
     ):
-        change = mcp_config_service.apply_mcp_upload(
-            name="Tool",
-            manifest=manifest,
+        change = await mcp_config_service.apply_mcp_upload(
+            name="Filesystem",
+            manifest='{"mcpServers":{"filesystem":{"command":"python","env":{"TOKEN":"secret"}}}}',
             visibility="public",
             owner_user_id="u1",
         )
-
-    assert writes[0]["mcp_servers"][0]["visibility"] == "public"
-    assert writes[0]["mcp_servers"][0]["owner_user_id"] == "u1"
-    assert change.metadata == {
-        "kind": "mcp-json",
-        "has_manifest": True,
-        "visibility": "public",
-    }
+    assert upsert.await_args is not None
+    record = upsert.await_args.args[0]
+    assert record["config"]["mcpServers"]["filesystem"]["env"] == {"TOKEN": "secret"}
+    assert record["owner_user_id"] == "u1"
+    assert change.response["namespace"] == "filesystem"
 
 
-def test_visible_mcp_servers_marks_manage_capability():
-    entries = [
-        {
-            "name": "Owned",
-            "kind": "mcp-json",
-            "visibility": "private",
-            "owner_user_id": "u1",
-            "manifest": {"mcpServers": {"owned": {"command": "python"}}},
-        },
-        {
-            "name": "Foreign",
-            "kind": "mcp-json",
-            "visibility": "private",
-            "owner_user_id": "u2",
-            "manifest": {"mcpServers": {"foreign": {"command": "python"}}},
-        },
-        {
-            "name": "Public",
-            "kind": "mcp-json",
-            "visibility": "public",
-            "owner_user_id": "u2",
-            "manifest": {"mcpServers": {"public": {"command": "python"}}},
-        },
-    ]
-
-    visible = mcp_config_service.visible_mcp_servers(entries, actor("u1"))
-
-    assert [item["name"] for item in visible] == ["Owned", "Public"]
-    assert visible[0]["can_manage"] is True
-    assert visible[1]["can_manage"] is False
-
-
-def test_apply_mcp_upload_rejects_non_mcp_project_manifest():
-    manifest = '{"source":{"path":"server.py"}}'
-    with pytest.raises(HTTPException) as exc:
-        mcp_config_service.apply_mcp_upload(
-            name="FastMCP Project",
-            manifest=manifest,
-        )
-    assert exc.value.status_code == 400
-
-
-def test_apply_mcp_upload_rejects_non_standard_mcp_server_shape():
-    manifest = """
-        {
-          "mcpServers": {
-            "filesystem": {
-              "command": "python",
-              "args": ["-m", "agent_tools"],
-              "env": {"TOKEN": "secret"},
-              "url": "https://example.invalid/mcp"
-            }
-          }
-        }
-        """
-    with pytest.raises(HTTPException) as exc:
-        mcp_config_service.apply_mcp_upload(
-            name="Filesystem",
-            manifest=manifest,
-        )
-    assert exc.value.status_code == 400
-
-
-def test_apply_mcp_upload_accepts_multi_server_manifest():
-    stored = {"mcp_servers": []}
-    writes: list[dict] = []
-    manifest = """
-        {
-          "mcpServers": {
-            "one": {"command": "python"},
-            "two": {"command": "node"}
-          }
-        }
-        """
-    with (
-        patch.object(mcp_config_service, "read_mcp_config", return_value=stored),
-        patch.object(
-            mcp_config_service, "write_mcp_config", side_effect=writes.append
-        ),
+@pytest.mark.asyncio
+async def test_apply_upload_rejects_duplicate_name():
+    with patch.object(
+        mcp_config_service,
+        "list_mcp_servers",
+        AsyncMock(return_value=[{"name": "Existing"}]),
     ):
-        change = mcp_config_service.apply_mcp_upload(
-            name="Multi",
-            manifest=manifest,
-        )
-
-    assert change.response["kind"] == "mcp-json"
-    assert writes[0]["mcp_servers"][0]["manifest"] == {
-        "mcpServers": {
-            "one": {"command": "python", "args": [], "env": {}},
-            "two": {"command": "node", "args": [], "env": {}},
-        }
-    }
-
-
-def test_apply_mcp_upload_rejects_empty_manifest_and_duplicate_name():
-    stored = {
-        "mcp_servers": [
-            {
-                "name": "Existing Server",
-                "description": "",
-                "kind": "mcp-json",
-                "enabled": True,
-                "manifest": {"mcpServers": {"existing": {"command": "python"}}},
-            }
-        ],
-    }
-    with patch.object(mcp_config_service, "read_mcp_config", return_value=stored):
         with pytest.raises(HTTPException) as exc:
-            mcp_config_service.apply_mcp_upload(name="New Agent")
-    assert exc.value.status_code == 400
-
-    manifest = '{"mcpServers":{"tool":{"command":"python"}}}'
-    with patch.object(mcp_config_service, "read_mcp_config", return_value=stored):
-        with pytest.raises(HTTPException) as exc:
-            mcp_config_service.apply_mcp_upload(
-                name="Existing Server", manifest=manifest
+            await mcp_config_service.apply_mcp_upload(
+                name="Existing",
+                manifest='{"mcpServers":{"tool":{"command":"python"}}}',
             )
     assert exc.value.status_code == 409
 
+
+@pytest.mark.asyncio
+async def test_visible_servers_redacts_secrets_and_marks_manage_capability():
+    rows = [
+        {
+            "id": 1,
+            "name": "Owned",
+            "server_type": "external",
+            "visibility": "private",
+            "owner_user_id": "u1",
+            "config": {"mcpServers": {"owned": {"command": "python", "env": {"TOKEN": "secret"}}}},
+        },
+        {
+            "id": 2,
+            "name": "Public",
+            "server_type": "external",
+            "visibility": "public",
+            "owner_user_id": "u2",
+            "config": {},
+        },
+    ]
+    with patch.object(mcp_config_service, "list_mcp_servers", AsyncMock(return_value=rows)):
+        visible = await mcp_config_service.visible_mcp_servers(actor("u1"))
+    assert [item["name"] for item in visible] == ["Owned", "Public"]
+    assert visible[0]["manifest"]["mcpServers"]["owned"]["env"]["TOKEN"] == "********"
+    assert visible[0]["can_manage"] is True
+    assert visible[1]["can_manage"] is False

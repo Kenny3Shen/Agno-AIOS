@@ -1,13 +1,24 @@
 from fastmcp import FastMCP
 import httpx
 import asyncio
+from mcp.types import ToolAnnotations
 
 from api.utils.json import dumps_bytes
 
 basic_mcp = FastMCP("Basic")
 
 
-@basic_mcp.tool()
+@basic_mcp.tool(
+    title="发送飞书通知",
+    tags={"notification", "feishu"},
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+    meta={"category": "notification"},
+)
 async def send_feishu_notify(
     feishu_webhook_url: str,
     title: str,

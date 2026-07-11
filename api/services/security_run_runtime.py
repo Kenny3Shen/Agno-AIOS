@@ -3,13 +3,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from inspect import isawaitable, iscoroutinefunction
 from typing import Any, AsyncIterator, Callable, cast
-from urllib.parse import urlencode
 
 from agno.agent import Agent
 from agno.models.openai import OpenAILike
 from agno.run.agent import RunEvent
 from agno.skills import LocalSkills, Skills
-from agno.tools.mcp import MCPTools
+from agno.tools.mcp import MCPTools, StreamableHTTPClientParams
 from anyio import Path as AsyncPath
 from anyio import to_thread
 from loguru import logger
@@ -33,13 +32,16 @@ def _build_model(model_id: str | None = None) -> OpenAILike:
 
 def _build_mcp_url() -> str:
     base_url = get_settings().mcp_server_url.strip()
-    token = get_settings().mcp_token.get_secret_value().strip()
     if not base_url:
         raise RuntimeError("MCP_SERVER_URL 未配置，请在 .env 或系统配置中设置 MCP 服务地址。")
+    return base_url
+
+
+def _build_mcp_token() -> str:
+    token = get_settings().mcp_token.get_secret_value().strip()
     if not token:
         raise RuntimeError("MCP_TOKEN 未配置，请在 .env 或系统配置中设置 MCP 访问 Token。")
-    separator = "&" if "?" in base_url else "?"
-    return f"{base_url}{separator}{urlencode({'token': token})}"
+    return token
 
 
 PROMPT_DIR = Path(__file__).resolve().parents[1] / "agent" / "prompts"
@@ -132,6 +134,7 @@ class SecurityRunRuntimeDependencies:
     get_async_knowledge_base: Callable[[], Any] = get_async_knowledge_base_async
     get_enabled_skill_dirs: Callable[[], Any] = get_enabled_skill_dirs
     get_mcp_url: Callable[[], str] = _build_mcp_url
+    get_mcp_token: Callable[[], str] = _build_mcp_token
     mcp_tools_factory: Callable[..., Any] = MCPTools
     agent_factory: Callable[..., Any] = Agent
 
@@ -235,9 +238,18 @@ class SecurityRunRuntime:
 
     @asynccontextmanager
     async def security_agent_context(self, request: SecurityRunRequest) -> AsyncIterator[Agent]:
-        async with self.dependencies.mcp_tools_factory(
-            transport="streamable-http",
+        server_params = StreamableHTTPClientParams(
             url=await _run_sync_dependency(self.dependencies.get_mcp_url),
+            headers={
+                "Authorization": "Bearer "
+                + await _run_sync_dependency(self.dependencies.get_mcp_token),
+                "X-Agno-User-ID": request.agent_user_id,
+                "X-Agno-Session-ID": request.session_id or "",
+            },
+        )
+        async with self.dependencies.mcp_tools_factory(
+            server_params=server_params,
+            transport="streamable-http",
             timeout_seconds=20,
         ) as mcp_tools:
             security_agent = await _maybe_await(

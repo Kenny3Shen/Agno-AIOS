@@ -1,33 +1,42 @@
+from __future__ import annotations
+
+import time
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, TypeAdapter, ValidationError
+from sqlalchemy.exc import IntegrityError
 
 from api.auth.visibility import can_manage_resource, can_read_resource, normalize_visibility
-from api.mcp.config import (
-    SERVICE_IDS,
-    normalize_mcp_servers,
-    read_mcp_config,
-    write_mcp_config,
-)
+from api.mcp.config import list_mcp_servers, normalize_namespace
+from api.persistence.mcp import delete_server_row, get_server_row, insert_server_row, update_server_row
 from api.utils.json import JSONDecodeError, loads
 
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
-class StandardMcpServer(BaseModel):
+class StdioMcpServer(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-
     command: NonEmptyString
     args: list[str] = Field(default_factory=list)
     env: dict[str, str] = Field(default_factory=dict)
 
 
+class HttpMcpServer(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    url: NonEmptyString
+    transport: Literal["http", "streamable-http"] = "http"
+    headers: dict[str, str] = Field(default_factory=dict)
+
+
+McpServerConfig = StdioMcpServer | HttpMcpServer
+SERVER_CONFIG_ADAPTER = TypeAdapter(dict[NonEmptyString, McpServerConfig])
+
+
 class StandardMcpManifest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-
-    mcpServers: dict[NonEmptyString, StandardMcpServer] = Field(min_length=1)
+    mcpServers: dict[str, Any] = Field(min_length=1)
 
 
 @dataclass(frozen=True)
@@ -45,37 +54,11 @@ def _manifest_validation_error(exc: ValidationError) -> HTTPException:
     if errors:
         first = errors[0]
         loc = ".".join(str(part) for part in first.get("loc", ()))
-        message = first.get("msg", "invalid value")
-        detail = f"{detail}: {loc} {message}" if loc else f"{detail}: {message}"
+        detail = f"{detail}: {loc} {first.get('msg', 'invalid value')}"
     return HTTPException(status_code=400, detail=detail)
 
 
-def apply_service_toggle(service_id: str, enabled: bool) -> McpConfigChange:
-    if service_id not in SERVICE_IDS:
-        raise HTTPException(status_code=400, detail="Invalid service ID")
-
-    data = read_mcp_config()
-    mcp_cfg = data.setdefault("mcp", {})
-    if not isinstance(mcp_cfg, dict):
-        data["mcp"] = {}
-        mcp_cfg = data["mcp"]
-
-    mcp_cfg[service_id] = enabled
-    write_mcp_config(data)
-    return McpConfigChange(
-        response={
-            "success": True,
-            "control_mode": "integrated",
-            "restart_required": True,
-        },
-        action="mcp.config_update",
-        resource_type="mcp_service",
-        resource_id=service_id,
-        metadata={"enabled": enabled},
-    )
-
-
-def _parse_mcp_manifest(raw: str) -> tuple[str, dict[str, Any]]:
+def parse_mcp_manifest(raw: str) -> tuple[str, dict[str, Any]]:
     text = raw.strip()
     if not text:
         raise HTTPException(status_code=400, detail="manifest 不能为空")
@@ -83,126 +66,131 @@ def _parse_mcp_manifest(raw: str) -> tuple[str, dict[str, Any]]:
         manifest = loads(text)
     except JSONDecodeError as exc:
         raise HTTPException(status_code=400, detail="manifest must be valid JSON") from exc
-    if not isinstance(manifest, dict):
-        raise HTTPException(status_code=400, detail="manifest must be a JSON object")
-
-    if "mcpServers" not in manifest:
-        raise HTTPException(
-            status_code=400,
-            detail="manifest must use standard MCP mcpServers format",
-        )
-
+    if not isinstance(manifest, dict) or "mcpServers" not in manifest:
+        raise HTTPException(status_code=400, detail="manifest must use standard MCP mcpServers format")
     try:
-        standard_manifest = StandardMcpManifest.model_validate(manifest)
+        wrapper = StandardMcpManifest.model_validate(manifest)
+        servers = SERVER_CONFIG_ADAPTER.validate_python(wrapper.mcpServers, strict=True)
     except ValidationError as exc:
         raise _manifest_validation_error(exc) from exc
+    normalized = {name: config.model_dump(mode="json") for name, config in servers.items()}
+    transports = {"stdio" if isinstance(config, StdioMcpServer) else "streamable-http" for config in servers.values()}
+    transport = transports.pop() if len(transports) == 1 else "mcp-config"
+    return transport, {"mcpServers": normalized}
 
-    return "mcp-json", standard_manifest.model_dump(mode="json")
+
+def _public_server(row: dict[str, Any], user: Any) -> dict[str, Any]:
+    config = row.get("config") if isinstance(row.get("config"), dict) else {}
+    redacted = _redact_config(config)
+    return {
+        **row,
+        "kind": row["server_type"],
+        "manifest": redacted,
+        "config": redacted,
+        "can_manage": can_manage_resource(user, row),
+    }
 
 
-def apply_mcp_upload(
-    *,
-    name: str,
-    description: str = "",
-    manifest: str = "",
-    enabled: bool = True,
-    visibility: str = "private",
-    owner_user_id: str | None = None,
-) -> McpConfigChange:
-    normalized_name = name.strip()
-    if not normalized_name:
-        raise HTTPException(status_code=400, detail="name 不能为空")
-    normalized_description = description.strip()
-    try:
-        normalized_visibility = normalize_visibility(visibility, strict=True)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    kind, normalized_manifest = _parse_mcp_manifest(manifest)
-    normalized_owner = (owner_user_id or "").strip()
+def _redact_config(value: Any, key: str = "") -> Any:
+    if key.lower() in {"env", "headers"} and isinstance(value, dict):
+        return {name: "********" for name in value}
+    if isinstance(value, dict):
+        return {name: _redact_config(child, name) for name, child in value.items()}
+    if isinstance(value, list):
+        return [_redact_config(child) for child in value]
+    return value
 
-    data = read_mcp_config()
-    servers = normalize_mcp_servers(data.get("mcp_servers", []))
-    if any(entry["name"] == normalized_name for entry in servers):
-        raise HTTPException(status_code=409, detail="该 MCP 名称已存在")
-    servers.append(
-        {
-            "name": normalized_name,
-            "description": normalized_description,
-            "kind": kind,
-            "enabled": enabled,
-            "visibility": normalized_visibility,
-            "owner_user_id": normalized_owner,
-            "manifest": normalized_manifest,
-        }
-    )
-    data["mcp_servers"] = servers
-    write_mcp_config(data)
 
+async def visible_mcp_servers(user: Any) -> list[dict[str, Any]]:
+    return [_public_server(row, user) for row in await list_mcp_servers() if can_read_resource(user, row)]
+
+
+async def apply_service_toggle(service_id: str, enabled: bool) -> McpConfigChange:
+    rows = await list_mcp_servers()
+    row = next((item for item in rows if item["server_type"] == "builtin" and item["name"] == service_id), None)
+    if row is None:
+        raise HTTPException(status_code=400, detail="Invalid service ID")
+    await update_server_row(row["id"], {"enabled": enabled, "updated_at": int(time.time())})
     return McpConfigChange(
-        response={
-            "success": True,
-            "name": normalized_name,
-            "kind": kind,
-            "visibility": normalized_visibility,
-            "restart_required": True,
-        },
-        action="mcp.upload",
-        resource_type="mcp",
-        resource_id=normalized_name,
-        metadata={
-            "kind": kind,
-            "has_manifest": bool(normalized_manifest),
-            "visibility": normalized_visibility,
-        },
+        response={"success": True, "control_mode": "integrated", "restart_required": True},
+        action="mcp.config_update", resource_type="mcp_service", resource_id=service_id,
+        metadata={"enabled": enabled},
     )
 
 
-def visible_mcp_servers(entries: Any, user: Any) -> list[dict[str, Any]]:
-    visible_servers: list[dict[str, Any]] = []
-    for entry in normalize_mcp_servers(entries):
-        if not can_read_resource(user, entry):
-            continue
-        visible_servers.append(
-            {
-                **entry,
-                "can_manage": can_manage_resource(user, entry),
-            }
-        )
-    return visible_servers
-
-
-def apply_mcp_server_visibility(
-    name: str,
-    visibility: str,
-    user: Any,
+async def apply_mcp_upload(
+    *, name: str, description: str = "", manifest: str = "", enabled: bool = True,
+    visibility: str = "private", owner_user_id: str | None = None,
 ) -> McpConfigChange:
     normalized_name = name.strip()
     if not normalized_name:
         raise HTTPException(status_code=400, detail="name 不能为空")
     try:
         normalized_visibility = normalize_visibility(visibility, strict=True)
+        namespace = normalize_namespace(normalized_name)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    transport, config = parse_mcp_manifest(manifest)
+    if any(row["name"] == normalized_name for row in await list_mcp_servers()):
+        raise HTTPException(status_code=409, detail="该 MCP 名称已存在")
+    now = int(time.time())
+    try:
+        row = await insert_server_row({
+            "name": normalized_name, "namespace": namespace, "description": description.strip(),
+            "server_type": "external", "transport": transport, "enabled": enabled,
+            "visibility": normalized_visibility, "owner_user_id": (owner_user_id or "").strip(),
+            "config": config, "created_at": now, "updated_at": now,
+        })
+    except IntegrityError as exc:
+        raise HTTPException(status_code=409, detail="该 MCP 名称或 namespace 已存在") from exc
+    return McpConfigChange(
+        response={"success": True, "id": row["id"], "name": normalized_name, "kind": "external", "namespace": namespace, "visibility": normalized_visibility, "restart_required": True},
+        action="mcp.upload", resource_type="mcp", resource_id=normalized_name,
+        metadata={"transport": transport, "visibility": normalized_visibility},
+    )
 
-    data = read_mcp_config()
-    servers = normalize_mcp_servers(data.get("mcp_servers", []))
-    for entry in servers:
-        if entry["name"] != normalized_name:
-            continue
-        if not can_manage_resource(user, entry):
-            raise HTTPException(status_code=403, detail="MCP server is not manageable")
-        entry["visibility"] = normalized_visibility
-        data["mcp_servers"] = servers
-        write_mcp_config(data)
-        return McpConfigChange(
-            response={
-                "success": True,
-                "name": normalized_name,
-                "visibility": normalized_visibility,
-            },
-            action="mcp.visibility_update",
-            resource_type="mcp",
-            resource_id=normalized_name,
-            metadata={"visibility": normalized_visibility},
-        )
-    raise HTTPException(status_code=404, detail="MCP server not found")
+
+async def apply_mcp_server_visibility(name: str, visibility: str, user: Any) -> McpConfigChange:
+    try:
+        normalized_visibility = normalize_visibility(visibility, strict=True)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    row = next((item for item in await list_mcp_servers() if item["name"] == name), None)
+    if row is None:
+        raise HTTPException(status_code=404, detail="MCP server not found")
+    if not can_manage_resource(user, row):
+        raise HTTPException(status_code=403, detail="MCP server is not manageable")
+    await update_server_row(row["id"], {"visibility": normalized_visibility, "updated_at": int(time.time())})
+    return McpConfigChange(
+        response={"success": True, "name": name, "visibility": normalized_visibility},
+        action="mcp.visibility_update", resource_type="mcp", resource_id=name,
+        metadata={"visibility": normalized_visibility},
+    )
+
+
+async def apply_mcp_server_toggle(server_id: int, enabled: bool, user: Any) -> McpConfigChange:
+    row = await get_server_row(server_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="MCP server not found")
+    if not can_manage_resource(user, row):
+        raise HTTPException(status_code=403, detail="MCP server is not manageable")
+    await update_server_row(server_id, {"enabled": enabled, "updated_at": int(time.time())})
+    return McpConfigChange(
+        response={"success": True, "enabled": enabled, "restart_required": True},
+        action="mcp.server_toggle", resource_type="mcp", resource_id=row["name"],
+        metadata={"enabled": enabled},
+    )
+
+
+async def remove_mcp_server(server_id: int, user: Any) -> McpConfigChange:
+    row = await get_server_row(server_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="MCP server not found")
+    if not can_manage_resource(user, row):
+        raise HTTPException(status_code=403, detail="MCP server is not manageable")
+    if row["server_type"] == "builtin" or not await delete_server_row(server_id):
+        raise HTTPException(status_code=400, detail="Built-in MCP server cannot be deleted")
+    return McpConfigChange(
+        response={"success": True, "restart_required": True}, action="mcp.delete",
+        resource_type="mcp", resource_id=row["name"],
+    )

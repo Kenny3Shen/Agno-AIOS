@@ -1,4 +1,4 @@
-import type { McpConfig, McpServer } from './api'
+import type { JsonRecord } from '@/shared/types/common'
 
 export interface AvailableMcpService {
   key: string
@@ -7,7 +7,7 @@ export interface AvailableMcpService {
   kind: 'built-in' | 'external'
 }
 
-export function manifestServiceNames(server: Pick<McpServer, 'manifest' | 'name'>): string[] {
+export function manifestServiceNames(server: { manifest: JsonRecord; name: string }): string[] {
   const manifestServers = server.manifest.mcpServers
   const names = manifestServers && typeof manifestServers === 'object' && !Array.isArray(manifestServers)
     ? Object.keys(manifestServers)
@@ -15,7 +15,19 @@ export function manifestServiceNames(server: Pick<McpServer, 'manifest' | 'name'
   return names.length > 0 ? names : [server.name]
 }
 
-export function getAvailableMcpServices(config?: McpConfig): AvailableMcpService[] {
+export function getAvailableMcpServices(config?: {
+  services: Record<string, boolean>
+  mcp_servers?: Array<{
+    name: string
+    enabled: boolean
+    manifest: JsonRecord
+    description?: string
+    kind?: string
+    visibility?: string
+    owner_user_id?: string
+    can_manage?: boolean
+  }>
+}): AvailableMcpService[] {
   if (!config) return []
 
   const builtIn = Object.entries(config.services)

@@ -1,6 +1,7 @@
 import asyncio
 from fastmcp import FastMCP
 import httpx
+from mcp.types import ToolAnnotations
 
 from api.config import get_settings
 from api.services.runtime_env import load_runtime_env_async
@@ -241,7 +242,11 @@ def err_platform() -> dict:
     return {"code": -3, "msg": "platform 不存在", "data": {}}
 
 
-@playbook_mcp.tool()
+@playbook_mcp.tool(
+    title="查询剧本列表",
+    tags={"playbook", "read"},
+    annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True),
+)
 async def list_workflows(platform: str) -> dict:
     """获取剧本列表"""
     adapter = await get_adapter(platform)
@@ -257,7 +262,11 @@ async def list_workflows(platform: str) -> dict:
         return {"code": -1, "msg": f"请求失败: {exc}"}
 
 
-@playbook_mcp.tool()
+@playbook_mcp.tool(
+    title="查询剧本参数",
+    tags={"playbook", "read"},
+    annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True),
+)
 async def get_method_params(platform: str, method_id: str) -> dict:
     """获取剧本所需参数"""
     if not method_id:
@@ -275,7 +284,11 @@ async def get_method_params(platform: str, method_id: str) -> dict:
         return {"code": -1, "msg": f"请求失败: {exc}"}
 
 
-@playbook_mcp.tool()
+@playbook_mcp.tool(
+    title="执行安全剧本",
+    tags={"playbook", "execute"},
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True),
+)
 async def invoke_method(
     platform: str, method_id: str, params: dict | None = None
 ) -> dict:
@@ -294,7 +307,11 @@ async def invoke_method(
         return {"code": -1, "msg": f"请求失败: {exc}"}
 
 
-@playbook_mcp.tool()
+@playbook_mcp.tool(
+    title="查询剧本执行结果",
+    tags={"playbook", "read"},
+    annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True),
+)
 async def get_exec_result(platform: str, exec_id: str) -> dict:
     """查询剧本执行结果"""
     if not exec_id:

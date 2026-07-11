@@ -20,7 +20,8 @@ async def test_security_runtime_exposes_agent_context_for_evals():
     runtime = SecurityRunRuntime()
     cast(Any, runtime).dependencies = SimpleNamespace(
         mcp_tools_factory=lambda **kwargs: FakeMcpTools(),
-        get_mcp_url=lambda: "http://127.0.0.1:8000/mcp/?token=test",
+        get_mcp_url=lambda: "http://127.0.0.1:8000/mcp/",
+        get_mcp_token=lambda: "test",
         build_model=lambda model_id: "model",
         get_async_knowledge_base=lambda: None,
         get_enabled_skill_dirs=lambda: [],

@@ -272,11 +272,12 @@ async def test_security_agent_context_builds_mcp_url_off_event_loop():
     def get_mcp_url():
         nonlocal get_mcp_url_thread_id
         get_mcp_url_thread_id = threading.get_ident()
-        return "http://127.0.0.1:8000/mcp?token=secret"
+        return "http://127.0.0.1:8000/mcp"
 
     runtime = security_run_runtime.SecurityRunRuntime(
         security_run_runtime.SecurityRunRuntimeDependencies(
             get_mcp_url=get_mcp_url,
+            get_mcp_token=lambda: "secret",
             mcp_tools_factory=FakeMcpTools,
             agent_factory=lambda **_kwargs: SimpleNamespace(),
         )
@@ -369,23 +370,22 @@ async def test_provider_block_detector_matches_openai_status_error_text():
 
 
 @pytest.mark.asyncio
-async def test_mcp_url_includes_runtime_token():
+async def test_mcp_url_and_token_are_kept_separate():
     fake_settings = SimpleNamespace(
         mcp_server_url="http://127.0.0.1:8000/mcp/?transport=stream",
         mcp_token=SecretStr("secret token"),
     )
     with patch.object(security_run_runtime, "get_settings", return_value=fake_settings):
-        assert (
-            security_run_runtime._build_mcp_url()
-            == "http://127.0.0.1:8000/mcp/?transport=stream&token=secret+token"
-        )
+        assert security_run_runtime._build_mcp_url() == "http://127.0.0.1:8000/mcp/?transport=stream"
+        assert security_run_runtime._build_mcp_token() == "secret token"
 
 
 @pytest.mark.asyncio
 async def test_security_run_request_drives_provider_block_fallback():
     runtime = BlockingRuntime(
         security_run_runtime.SecurityRunRuntimeDependencies(
-            get_mcp_url=lambda: "http://127.0.0.1:8000/mcp/?token=test",
+            get_mcp_url=lambda: "http://127.0.0.1:8000/mcp/",
+            get_mcp_token=lambda: "test",
             mcp_tools_factory=FakeMcpTools,
         )
     )

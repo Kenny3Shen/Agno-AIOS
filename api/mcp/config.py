@@ -1,153 +1,168 @@
+from __future__ import annotations
+
+import re
 import secrets
 import time
 from typing import Any
 
-from api.auth.visibility import normalize_visibility
+from anyio import Path as AsyncPath
+
 from api.persistence.mcp import (
+    delete_token_row,
     ensure_mcp_tables,
     find_token_row,
+    list_component_override_rows,
+    list_server_rows,
     list_token_rows,
+    upsert_component_override_row,
+    upsert_server_row,
     upsert_token_row,
-    delete_token_row,
 )
 from api.services.runtime_paths import CONFIG_DIR
-from api.services.postgres_store import mcp_schema, postgres_label
-from api.utils.json import dumps, loads
+from api.utils.json import loads
 
 SERVICE_IDS = ("playbook", "basic")
-MCP_DATA_DIR = CONFIG_DIR / "mcp"
-MCP_CONFIG_FILE = MCP_DATA_DIR / "mcp_config.json"
+MCP_CONFIG_FILE = CONFIG_DIR / "mcp" / "mcp_config.json"
 MCP_TOKENS_TABLE = "mcp_tokens"
-MCP_TOKENS_DB = postgres_label(mcp_schema(), MCP_TOKENS_TABLE)
 
 
-def _default_config() -> dict[str, Any]:
-    return {
-        "mcp": {service_id: True for service_id in SERVICE_IDS},
-        "mcp_servers": [],
-    }
-
-
-def normalize_mcp_servers(entries: Any) -> list[dict[str, Any]]:
-    if not isinstance(entries, list):
-        return []
-    normalized: list[dict[str, Any]] = []
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        name = str(entry.get("name") or "").strip()
-        if not name:
-            continue
-        manifest = entry.get("manifest")
-        if not isinstance(manifest, dict):
-            manifest = {}
-        normalized.append(
-            {
-                "name": name,
-                "description": str(entry.get("description") or "").strip(),
-                "kind": str(entry.get("kind") or "unknown").strip(),
-                "enabled": bool(entry.get("enabled", True)),
-                "visibility": normalize_visibility(str(entry.get("visibility") or "")),
-                "owner_user_id": str(
-                    entry.get("owner_user_id") or entry.get("user_id") or ""
-                ).strip(),
-                "manifest": manifest,
-            }
-        )
-    return normalized
-
-
-def _normalize_mcp_flags(value: Any) -> dict[str, bool]:
-    raw_mcp_cfg: dict[str, Any] = value if isinstance(value, dict) else {}
-    return {
-        service_id: bool(raw_mcp_cfg.get(service_id, True))
-        for service_id in SERVICE_IDS
-    }
-
-
-def _normalize_mcp_config(data: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "mcp": _normalize_mcp_flags(data.get("mcp")),
-        "mcp_servers": normalize_mcp_servers(data.get("mcp_servers", [])),
-    }
-
-
-def read_mcp_config() -> dict[str, Any]:
-    MCP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    if not MCP_CONFIG_FILE.exists():
-        return _default_config()
-    try:
-        data = loads(MCP_CONFIG_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return _default_config()
-    if not isinstance(data, dict):
-        return _default_config()
-    return _normalize_mcp_config(data)
-
-
-def write_mcp_config(data: dict[str, Any]) -> None:
-    MCP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    normalized = _normalize_mcp_config(data)
-    MCP_CONFIG_FILE.write_text(
-        dumps(normalized, indent=True, append_newline=True),
-        encoding="utf-8",
-    )
-
-
-def services_from_config(data: dict[str, Any] | None = None) -> dict[str, bool]:
-    cfg = read_mcp_config() if data is None else data
-    return _normalize_mcp_flags(cfg.get("mcp"))
-
-
-def enabled_service_ids() -> set[str]:
-    return {
-        service_id for service_id, enabled in services_from_config().items() if enabled
-    }
+def normalize_namespace(value: str) -> str:
+    namespace = re.sub(r"[^a-z0-9_-]+", "_", value.strip().lower()).strip("_")
+    if not namespace:
+        raise ValueError("namespace must contain letters or numbers")
+    return namespace
 
 
 async def init_mcp_postgres_tables() -> None:
     await ensure_mcp_tables()
 
 
-async def init_tokens_db() -> None:
-    await init_mcp_postgres_tables()
+async def bootstrap_mcp_config() -> None:
+    await ensure_mcp_tables()
+    now = int(time.time())
+    existing_names = {row["name"] for row in await list_server_rows()}
+    for service_id in SERVICE_IDS:
+        if service_id in existing_names:
+            continue
+        await upsert_server_row(
+            {
+                "name": service_id,
+                "namespace": service_id,
+                "description": f"Built-in {service_id} tools",
+                "server_type": "builtin",
+                "transport": "inprocess",
+                "enabled": True,
+                "visibility": "public",
+                "owner_user_id": "",
+                "config": {},
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+    await _migrate_legacy_file_if_needed()
+
+
+async def _migrate_legacy_file_if_needed() -> None:
+    rows = await list_server_rows()
+    if any(row["server_type"] == "external" for row in rows):
+        return
+    path = AsyncPath(MCP_CONFIG_FILE)
+    if not await path.exists():
+        return
+    try:
+        raw = loads(await path.read_text(encoding="utf-8"))
+    except Exception:
+        return
+    if not isinstance(raw, dict):
+        return
+    now = int(time.time())
+    flags = raw.get("mcp") if isinstance(raw.get("mcp"), dict) else {}
+    by_name = {row["name"]: row for row in rows}
+    for service_id in SERVICE_IDS:
+        row = by_name.get(service_id)
+        if row is not None and service_id in flags:
+            await upsert_server_row({**row, "enabled": bool(flags[service_id]), "updated_at": now})
+    entries = raw.get("mcp_servers") if isinstance(raw.get("mcp_servers"), list) else []
+    for entry in entries:
+        if not isinstance(entry, dict) or not str(entry.get("name") or "").strip():
+            continue
+        name = str(entry["name"]).strip()
+        try:
+            namespace = normalize_namespace(name)
+        except ValueError:
+            continue
+        await upsert_server_row(
+            {
+                "name": name,
+                "namespace": namespace,
+                "description": str(entry.get("description") or ""),
+                "server_type": "external",
+                "transport": "mcp-config",
+                "enabled": bool(entry.get("enabled", True)),
+                "visibility": str(entry.get("visibility") or "private"),
+                "owner_user_id": str(entry.get("owner_user_id") or ""),
+                "config": entry.get("manifest") if isinstance(entry.get("manifest"), dict) else {},
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+    migrated_path = AsyncPath(f"{MCP_CONFIG_FILE}.migrated")
+    if not await migrated_path.exists():
+        await path.rename(migrated_path)
+
+
+async def list_mcp_servers() -> list[dict[str, Any]]:
+    await bootstrap_mcp_config()
+    return await list_server_rows()
+
+
+async def enabled_mcp_servers() -> list[dict[str, Any]]:
+    return [row for row in await list_mcp_servers() if row["enabled"]]
+
+
+async def component_overrides() -> list[dict[str, Any]]:
+    return await list_component_override_rows()
+
+
+async def set_component_override(
+    server_id: int, component_type: str, component_name: str, enabled: bool
+) -> None:
+    await upsert_component_override_row(
+        {
+            "server_id": server_id,
+            "component_type": component_type,
+            "component_name": component_name,
+            "enabled": enabled,
+            "updated_at": int(time.time()),
+        }
+    )
 
 
 async def list_tokens() -> list[dict[str, Any]]:
-    await init_tokens_db()
     return await list_token_rows()
 
 
 async def insert_token(name: str, expires_in: int, token: str | None = None) -> str:
-    await init_tokens_db()
     now = int(time.time())
     token_value = token or secrets.token_urlsafe(32)
-    expires_at = 0 if expires_in == 0 else now + expires_in
     await upsert_token_row(
         {
             "id": None,
             "name": name,
             "token": token_value,
             "created_at": now,
-            "expires_at": expires_at,
+            "expires_at": 0 if expires_in == 0 else now + expires_in,
         }
     )
     return token_value
 
 
 async def delete_token(token_id: int | None, token_value: str | None) -> bool:
-    await init_tokens_db()
     return await delete_token_row(token_id, token_value)
 
 
 async def find_token(token: str) -> dict[str, Any] | None:
-    await init_tokens_db()
     return await find_token_row(token)
-
-
-async def upsert_token_record(record: dict[str, Any]) -> None:
-    await init_tokens_db()
-    await upsert_token_row(record)
 
 
 async def is_valid_token(token: str) -> bool:
