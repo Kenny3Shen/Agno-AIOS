@@ -1,6 +1,5 @@
 from agno.models.deepseek import DeepSeek
 from agno.models.openai import OpenAIChat, OpenAILike, OpenAIResponses
-import pytest
 
 from api.services.model_factory import build_agno_model
 from api.services.model_config_service import ModelConfigStore
@@ -9,11 +8,11 @@ from api.services.model_config_service import ModelConfigStore
 def config(**updates):
     return {
         "provider": "openai-compatible",
-        "api_protocol": "chat-completions",
+        "api_protocol": "responses",
         "model_id": "model-1",
         "api_key": "secret",
         "base_url": "https://api.example.com/v1",
-        "structured_output_mode": "none",
+        "structured_output_mode": "json",
         **updates,
     }
 
@@ -56,16 +55,36 @@ def test_builds_openai_chat_and_responses_models():
 
 
 def test_builds_openai_compatible_protocol_models():
-    chat = build_agno_model(config())
+    chat = build_agno_model(config(api_protocol="chat-completions"))
     responses = build_agno_model(config(api_protocol="responses"))
     assert isinstance(chat, OpenAILike)
     assert chat.supports_native_structured_outputs is False
     assert isinstance(responses, OpenAIResponses)
+    assert responses.supports_native_structured_outputs is False
 
 
-def test_rejects_unsupported_deepseek_protocol():
-    with pytest.raises(ValueError, match="chat-completions"):
-        build_agno_model(config(provider="deepseek", api_protocol="responses"))
+def test_deepseek_forces_json_chat_capabilities():
+    model = build_agno_model(
+        config(
+            provider="deepseek",
+            api_protocol="responses",
+            structured_output_mode="native",
+            base_url="https://api.deepseek.com",
+        )
+    )
+
+    assert isinstance(model, DeepSeek)
+    metadata = getattr(model, "metadata", None) or {}
+    assert metadata["agno_aios.structured_output_mode"] == "json"
+    assert model.supports_native_structured_outputs is False
+
+
+def test_none_output_mode_normalizes_to_json_mode():
+    model = build_agno_model(config(structured_output_mode="none"))
+    metadata = getattr(model, "metadata", None) or {}
+
+    assert metadata["agno_aios.structured_output_mode"] == "json"
+    assert model.supports_native_structured_outputs is False
 
 
 def test_native_provider_does_not_require_custom_base_url():

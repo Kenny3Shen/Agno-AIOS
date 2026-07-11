@@ -9,25 +9,28 @@ from agno.models.openai import OpenAIChat, OpenAILike, OpenAIResponses
 
 def build_agno_model(config: dict[str, Any]) -> Model:
     provider = str(config.get("provider") or "openai-compatible")
-    protocol = str(config.get("api_protocol") or "chat-completions")
+    protocol = str(config.get("api_protocol") or "responses")
     model_id = str(config.get("model_id") or "").strip()
     api_key = str(config.get("api_key") or "").strip() or None
     base_url = str(config.get("base_url") or "").strip() or None
-    output_mode = str(config.get("structured_output_mode") or "none")
+    output_mode = _output_mode(config.get("structured_output_mode"))
     native_outputs = output_mode == "native"
 
     if provider == "deepseek":
-        if protocol != "chat-completions":
-            raise ValueError("DeepSeek native model only supports chat-completions")
         kwargs: dict[str, Any] = {"id": model_id, "api_key": api_key}
         if base_url:
             kwargs["base_url"] = base_url
-        return _with_output_mode(DeepSeek(**kwargs), output_mode)
+        return _with_output_mode(DeepSeek(**kwargs), "json")
 
     if provider == "openai":
         model_class = OpenAIResponses if protocol == "responses" else OpenAIChat
         return _with_output_mode(
-            model_class(id=model_id, api_key=api_key, base_url=base_url),
+            model_class(
+                id=model_id,
+                api_key=api_key,
+                base_url=base_url,
+                supports_native_structured_outputs=native_outputs,
+            ),
             output_mode,
         )
 
@@ -55,6 +58,15 @@ def build_agno_model(config: dict[str, Any]) -> Model:
         )
 
     raise ValueError(f"Unsupported model provider: {provider}")
+
+
+def _output_mode(value: Any) -> str:
+    output_mode = str(value or "").strip().lower()
+    if output_mode in {"", "none"}:
+        return "json"
+    if output_mode not in {"native", "json"}:
+        return "json"
+    return output_mode
 
 
 def _with_output_mode(model: Model, output_mode: str) -> Model:

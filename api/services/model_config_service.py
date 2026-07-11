@@ -1,17 +1,19 @@
 from collections.abc import Iterable, Mapping
 from pathlib import Path
+import time
 from typing import Any, Literal, Self, cast
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.config import get_settings
+from api.persistence.model_configs import list_model_config_rows, replace_model_config_rows
 from api.services.runtime_paths import CONFIG_DIR, resolve_project_path
-from api.utils.json import dumps, loads
+from api.utils.json import loads
 
 
 ModelProvider = Literal["deepseek", "openai", "openai-compatible"]
 ModelApiProtocol = Literal["chat-completions", "responses"]
-StructuredOutputMode = Literal["native", "json", "none"]
+StructuredOutputMode = Literal["native", "json"]
 
 
 class ModelConfig(BaseModel):
@@ -21,18 +23,32 @@ class ModelConfig(BaseModel):
     name: str = "自定义模型"
     model_id: str = ""
     provider: ModelProvider = "openai-compatible"
-    api_protocol: ModelApiProtocol = "chat-completions"
-    structured_output_mode: StructuredOutputMode = "none"
+    api_protocol: ModelApiProtocol = "responses"
+    structured_output_mode: StructuredOutputMode = "json"
     base_url: str = ""
     api_key: str = ""
     description: str = ""
     enabled: bool = True
     builtin: bool = False
 
+    @field_validator("structured_output_mode", mode="before")
+    @classmethod
+    def _normalize_structured_output_mode(cls, value: Any) -> str:
+        mode = str(value or "").strip().lower()
+        if mode in {"", "none"}:
+            return "json"
+        return mode
+
+    @field_validator("api_protocol", mode="before")
+    @classmethod
+    def _normalize_api_protocol(cls, value: Any) -> str:
+        protocol = str(value or "").strip().lower()
+        return protocol or "responses"
+
     @classmethod
     def normalized(cls, entry: "ModelConfig | Mapping[Any, Any]", fallback_id: str) -> Self:
         raw = entry.model_dump() if isinstance(entry, ModelConfig) else dict(entry)
-        model_id = str(raw.get("id") or fallback_id).strip() or fallback_id
+        config_id = str(raw.get("id") or fallback_id).strip() or fallback_id
         configured_model_id = str(raw.get("model_id") or "").strip()
         base_url = str(raw.get("base_url") or "").strip()
         provider = str(raw.get("provider") or "").strip()
@@ -43,26 +59,25 @@ class ModelConfig(BaseModel):
                 or "api.deepseek.com" in base_url
                 else "openai-compatible"
             )
+
+        api_protocol = str(
+            raw.get("api_protocol")
+            or ("chat-completions" if provider == "deepseek" else "responses")
+        ).strip()
+        structured_output_mode = str(raw.get("structured_output_mode") or "").strip()
+        if structured_output_mode in {"", "none"}:
+            structured_output_mode = "json"
+        if provider == "deepseek":
+            api_protocol = "chat-completions"
+            structured_output_mode = "json"
+
         return cls(
-            id=model_id,
-            name=str(raw.get("name") or "自定义模型").strip(),
+            id=config_id,
+            name=str(raw.get("name") or configured_model_id or "自定义模型").strip(),
             model_id=configured_model_id,
             provider=cast(ModelProvider, provider),
-            api_protocol=cast(
-                ModelApiProtocol,
-                str(raw.get("api_protocol") or "chat-completions"),
-            ),
-            structured_output_mode=cast(
-                StructuredOutputMode,
-                raw.get("structured_output_mode")
-                or (
-                    "native"
-                    if raw.get("supports_native_structured_outputs", provider == "openai")
-                    else "json"
-                    if provider == "deepseek"
-                    else "none"
-                ),
-            ),
+            api_protocol=cast(ModelApiProtocol, api_protocol),
+            structured_output_mode=cast(StructuredOutputMode, structured_output_mode),
             base_url=base_url,
             api_key=str(raw.get("api_key") or "").strip(),
             description=str(raw.get("description") or "").strip(),
@@ -96,6 +111,7 @@ DEFAULT_MODELS: tuple[ModelConfig, ...] = (
         name="DeepSeek V4 Flash",
         model_id="deepseek-v4-flash",
         provider="deepseek",
+        api_protocol="chat-completions",
         structured_output_mode="json",
         base_url="https://api.deepseek.com",
         description="低延迟安全分析模型",
@@ -106,6 +122,7 @@ DEFAULT_MODELS: tuple[ModelConfig, ...] = (
         name="DeepSeek V4 Pro",
         model_id="deepseek-v4-pro",
         provider="deepseek",
+        api_protocol="chat-completions",
         structured_output_mode="json",
         base_url="https://api.deepseek.com",
         description="复杂推理与深度研判模型",
@@ -142,6 +159,16 @@ class ModelConfigStore(BaseModel):
             models=models,
         )
         return store.with_defaults().with_valid_active_model()
+
+    @classmethod
+    def from_rows(cls, rows: Iterable[Mapping[str, Any]]) -> Self:
+        models: list[ModelConfig] = []
+        active_model_id = ""
+        for index, row in enumerate(rows):
+            if row.get("active") and not active_model_id:
+                active_model_id = str(row.get("id") or "").strip()
+            models.append(ModelConfig.normalized(row, f"model-{index + 1}"))
+        return cls(active_model_id=active_model_id, models=models)
 
     @classmethod
     def from_submitted(
@@ -239,7 +266,7 @@ def _mask_secret(value: str) -> str:
     return value[:4] + "*" * (len(value) - 8) + value[-4:]
 
 
-def load_model_config_store() -> ModelConfigStore:
+def _load_legacy_or_default_store() -> ModelConfigStore:
     config_file = model_config_file()
     if not config_file.exists():
         return ModelConfigStore.default()
@@ -250,31 +277,85 @@ def load_model_config_store() -> ModelConfigStore:
     return ModelConfigStore.from_raw(raw)
 
 
-def load_model_config() -> dict[str, Any]:
-    return load_model_config_store().to_storage_dict()
+def _rows_need_persist(rows: Iterable[Mapping[str, Any]]) -> bool:
+    active_count = 0
+    invalid_output_mode = False
+    for row in rows:
+        if row.get("active"):
+            active_count += 1
+        if str(row.get("structured_output_mode") or "").strip() not in {"native", "json"}:
+            invalid_output_mode = True
+    return active_count != 1 or invalid_output_mode
 
 
-def public_model_config() -> dict[str, Any]:
-    return load_model_config_store().to_public_dict()
+def _store_to_rows(
+    store: ModelConfigStore,
+    existing_rows: Iterable[Mapping[str, Any]] = (),
+) -> list[dict[str, Any]]:
+    now = int(time.time())
+    created_at_by_id = {
+        str(row.get("id")): int(row.get("created_at") or now)
+        for row in existing_rows
+    }
+    rows: list[dict[str, Any]] = []
+    for index, model in enumerate(store.models):
+        rows.append(
+            {
+                "id": model.id,
+                "name": model.name,
+                "model_id": model.model_id,
+                "provider": model.provider,
+                "api_protocol": model.api_protocol,
+                "structured_output_mode": model.structured_output_mode,
+                "base_url": model.base_url,
+                "api_key": model.api_key,
+                "description": model.description,
+                "enabled": model.enabled,
+                "builtin": model.builtin,
+                "active": model.id == store.active_model_id,
+                "sort_order": index,
+                "created_at": created_at_by_id.get(model.id, now),
+                "updated_at": now,
+            }
+        )
+    return rows
 
 
-def save_model_config(
+async def load_model_config_store() -> ModelConfigStore:
+    rows = await list_model_config_rows()
+    if not rows:
+        store = _load_legacy_or_default_store()
+        await replace_model_config_rows(_store_to_rows(store))
+        return store
+
+    base_store = ModelConfigStore.from_rows(rows)
+    store = base_store.with_defaults().with_valid_active_model()
+    if store.to_storage_dict() != base_store.to_storage_dict() or _rows_need_persist(rows):
+        await replace_model_config_rows(_store_to_rows(store, rows))
+    return store
+
+
+async def load_model_config() -> dict[str, Any]:
+    return (await load_model_config_store()).to_storage_dict()
+
+
+async def public_model_config() -> dict[str, Any]:
+    return (await load_model_config_store()).to_public_dict()
+
+
+async def save_model_config(
     models: Iterable[ModelConfig | Mapping[Any, Any]], active_model_id: str | None
 ) -> dict[str, Any]:
-    existing = load_model_config_store()
+    existing = await load_model_config_store()
     store = ModelConfigStore.from_submitted(
         models,
         active_model_id=active_model_id,
         existing=existing,
     )
-    config_file = model_config_file()
-    config_file.parent.mkdir(parents=True, exist_ok=True)
-    config_file.write_text(
-        dumps(store.to_storage_dict(), indent=True),
-        encoding="utf-8",
-    )
+    existing_rows = await list_model_config_rows()
+    await replace_model_config_rows(_store_to_rows(store, existing_rows))
     return store.to_public_dict()
 
 
-def get_model_for_run(model_id: str | None = None) -> dict[str, Any]:
-    return load_model_config_store().model_for_run(model_id).model_dump()
+async def get_model_for_run(model_id: str | None = None) -> dict[str, Any]:
+    return (await load_model_config_store()).model_for_run(model_id).model_dump()

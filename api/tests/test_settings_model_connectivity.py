@@ -188,7 +188,11 @@ async def test_update_models_records_request_context_in_audit_log():
     )
 
     with (
-        patch.object(settings, "save_model_config", return_value={"ok": True}),
+        patch.object(
+            settings,
+            "save_model_config",
+            AsyncMock(return_value={"ok": True}),
+        ),
         patch.object(settings, "record_audit_event_async", new_callable=AsyncMock) as mocked,
     ):
         result = await settings.update_models(request, body, user=cast(User, current_actor))
@@ -207,11 +211,6 @@ async def test_update_models_records_request_context_in_audit_log():
 @pytest.mark.asyncio
 async def test_masked_api_key_uses_saved_secret():
     captured: dict = {}
-    thread_calls: list[str] = []
-
-    async def fake_run_sync(func, *args):
-        thread_calls.append(func.__name__)
-        return func(*args)
 
     model = settings.ModelConfig(
         id="m1",
@@ -221,10 +220,8 @@ async def test_masked_api_key_uses_saved_secret():
         api_key="real********mask",
     )
 
-    def fake_load_model_config():
+    async def fake_load_model_config():
         return {"models": [{"id": "m1", "api_key": "saved-secret"}]}
-
-    fake_load_model_config.__name__ = "load_model_config"
 
     with (
         patch.object(
@@ -232,23 +229,15 @@ async def test_masked_api_key_uses_saved_secret():
             "load_model_config",
             fake_load_model_config,
         ),
-        patch.object(
-            settings,
-            "to_thread",
-            SimpleNamespace(run_sync=fake_run_sync),
-            create=True,
-        ),
         patch.object(settings, "build_agno_model", return_value=FakeModel(captured)) as factory,
     ):
         result = await settings.run_model_connectivity_test(model)
     assert result.success
     assert factory.call_args.args[0]["api_key"] == "saved-secret"
-    assert thread_calls == ["load_model_config"]
 
 
 @pytest.mark.asyncio
-async def test_update_models_saves_model_config_off_event_loop():
-    thread_calls: list[str] = []
+async def test_update_models_awaits_model_config_save():
     body = settings.ModelConfigUpdate(
         active_model_id="m1",
         models=[
@@ -262,31 +251,18 @@ async def test_update_models_saves_model_config_off_event_loop():
         ],
     )
 
-    async def fake_run_sync(func, *args):
-        thread_calls.append(func.func.__name__ if hasattr(func, "func") else func.__name__)
-        return func(*args)
-
-    def fake_save_model_config(_models, _active_model_id):
-        return {"active_model_id": "m1", "models": []}
-
-    fake_save_model_config.__name__ = "save_model_config"
+    save = AsyncMock(return_value={"active_model_id": "m1", "models": []})
 
     with (
         patch.object(
             settings,
             "save_model_config",
-            fake_save_model_config,
+            save,
         ),
         patch.object(
             settings,
             "record_audit_event_async",
             async_noop,
-        ),
-        patch.object(
-            settings,
-            "to_thread",
-            SimpleNamespace(run_sync=fake_run_sync),
-            create=True,
         ),
     ):
         result = await settings.update_models(
@@ -296,7 +272,7 @@ async def test_update_models_saves_model_config_off_event_loop():
         )
 
     assert result["active_model_id"] == "m1"
-    assert thread_calls == ["save_model_config"]
+    save.assert_awaited_once()
 
 
 @pytest.mark.asyncio

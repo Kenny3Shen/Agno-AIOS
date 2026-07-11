@@ -22,8 +22,8 @@ from api.services.postgres_store import get_async_agno_postgres_db
 from api.services.skill_service import get_enabled_skill_dirs
 
 
-def _build_model(model_id: str | None = None) -> Any:
-    return build_agno_model(get_model_for_run(model_id))
+async def _build_model(model_id: str | None = None) -> Any:
+    return build_agno_model(await get_model_for_run(model_id))
 
 
 def _build_mcp_url() -> str:
@@ -86,21 +86,7 @@ def _load_local_skills(enabled_dirs: list[str]) -> Skills:
     return Skills(loaders=[LocalSkills(path) for path in enabled_dirs])
 
 
-class CompatibleSessionSummaryManager(SessionSummaryManager):
-    def get_response_format(self, model: Any) -> Any:
-        return None
-
-
 def _session_summary_manager(model: Any) -> SessionSummaryManager:
-    metadata = getattr(model, "metadata", None) or {}
-    if metadata.get("agno_aios.structured_output_mode") == "none":
-        return CompatibleSessionSummaryManager(
-            model=model,
-            session_summary_prompt=(
-                "Summarize the conversation for future turns. Return only valid JSON "
-                'with this shape: {"summary": "concise summary", "topics": ["topic"]}.'
-            ),
-        )
     return SessionSummaryManager(model=model)
 
 

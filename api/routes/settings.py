@@ -1,4 +1,3 @@
-from functools import partial
 import os
 from time import perf_counter
 from typing import Any, cast
@@ -80,7 +79,7 @@ async def _resolve_model_secret(model: ModelConfig) -> dict[str, Any]:
         return data
 
     data["api_key"] = ""
-    saved_config = await to_thread.run_sync(load_model_config)
+    saved_config = await load_model_config()
     for saved in saved_config.get("models", []):
         if isinstance(saved, dict) and saved.get("id") == model.id:
             data["api_key"] = str(saved.get("api_key") or "")
@@ -152,9 +151,9 @@ def read_settings(
 
 
 @router.get("/models")
-def get_models(_user: User = Depends(require_scope("config:read"))) -> dict:
+async def get_models(_user: User = Depends(require_scope("config:read"))) -> dict:
     """获取可选模型配置（敏感值已脱敏）"""
-    return public_model_config()
+    return await public_model_config()
 
 
 @router.put("/models")
@@ -165,13 +164,7 @@ async def update_models(
 ) -> dict:
     """保存模型配置和默认选择"""
     logger.info("模型配置已更新")
-    result = await to_thread.run_sync(
-        partial(
-            save_model_config,
-            body.models,
-            body.active_model_id,
-        )
-    )
+    result = await save_model_config(body.models, body.active_model_id)
     await record_audit_event_async(
         user,
         action="settings.update",

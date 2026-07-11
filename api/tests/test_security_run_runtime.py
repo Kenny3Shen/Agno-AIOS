@@ -3,9 +3,12 @@ import threading
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
-from api.services import runtime_env, security_run_runtime
+
+from agno.models.deepseek import DeepSeek
 import pytest
 from pydantic import SecretStr
+
+from api.services import runtime_env, security_run_runtime
 
 
 class FakeAgent:
@@ -180,6 +183,13 @@ async def test_fallback_agent_keeps_memory_and_summary():
     )
     assert "tools" not in created
     assert "knowledge" not in created
+
+
+def test_deepseek_session_summary_uses_json_mode_response_format():
+    model = DeepSeek(id="deepseek-v4-flash", api_key="secret")
+    manager = security_run_runtime.SessionSummaryManager(model=model)
+
+    assert manager.get_response_format(model) == {"type": "json_object"}
 
 
 @pytest.mark.asyncio
