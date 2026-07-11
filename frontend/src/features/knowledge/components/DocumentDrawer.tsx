@@ -5,10 +5,11 @@ import { VisibilitySelect } from '@/shared/ui/VisibilitySelect'
 import type { ResourceVisibility } from '@/shared/types/common'
 import { addText, uploadDocument } from '../api'
 import type { Document, KnowledgeIngestOptions } from '../types'
+import type { KnowledgeIngestDefaults } from '../utils'
 import { cleanIngestOptions, KNOWLEDGE_FILE_ACCEPT, knowledgeFileErrorMessage, normalizeUploadFiles, selectedUploadFile, validateKnowledgeFile } from '../utils'
 import { IngestOptionsFields } from './IngestOptionsFields'
 
-export function DocumentDrawer({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (document: Document) => Promise<void> }) {
+export function DocumentDrawer({ open, onClose, onCreated, ingestDefaults }: { open: boolean; onClose: () => void; onCreated: (document: Document) => Promise<void>; ingestDefaults?: KnowledgeIngestDefaults }) {
   const { message } = App.useApp()
   const [pending, setPending] = useState(false)
 
@@ -49,7 +50,7 @@ export function DocumentDrawer({ open, onClose, onCreated }: { open: boolean; on
         <Form.Item name="title" label="标题"><Input placeholder="默认使用文件名" /></Form.Item>
         <Form.Item name="source" label="来源"><Input placeholder="例如 Papers、Runbook" /></Form.Item>
         <Form.Item name="visibility" label="可见性"><VisibilitySelect style={{ width: '100%' }} /></Form.Item>
-        <IngestOptionsFields />
+        <IngestOptionsFields defaults={ingestDefaults} />
         <Button loading={pending} type="primary" htmlType="submit" icon={<FileAddOutlined />}>上传并入库</Button>
       </Form> },
       { key: 'text', label: 'Text', children: <Form layout="vertical" preserve={false} initialValues={{ visibility: 'private' }} onFinish={(values: { title: string; source?: string; content: string; visibility: ResourceVisibility; ingest_options?: KnowledgeIngestOptions }) => submit(() => addText({ ...values, ingest_options: cleanIngestOptions(values.ingest_options) }))}>
@@ -57,7 +58,7 @@ export function DocumentDrawer({ open, onClose, onCreated }: { open: boolean; on
         <Form.Item name="source" label="来源"><Input /></Form.Item>
         <Form.Item name="content" label="内容" rules={[{ required: true }]}><Input.TextArea rows={12} /></Form.Item>
         <Form.Item name="visibility" label="可见性"><VisibilitySelect style={{ width: '100%' }} /></Form.Item>
-        <IngestOptionsFields />
+        <IngestOptionsFields defaults={ingestDefaults} />
         <Button loading={pending} type="primary" htmlType="submit">入库</Button>
       </Form> },
     ]} />

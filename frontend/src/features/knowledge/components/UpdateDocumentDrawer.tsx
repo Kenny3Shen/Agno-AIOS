@@ -5,6 +5,7 @@ import { VisibilitySelect } from '@/shared/ui/VisibilitySelect'
 import type { ResourceVisibility } from '@/shared/types/common'
 import { updateDocumentAction, updateDocumentUpload } from '../api'
 import type { Document, KnowledgeIngestOptions } from '../types'
+import type { KnowledgeIngestDefaults } from '../utils'
 import { buildMetadataUpdate, cleanIngestOptions, decideKnowledgeUpdate, hasMetadataUpdate, ingestOptionsFromMetadata, knowledgeIngestOptionsEqual, KNOWLEDGE_FILE_ACCEPT, knowledgeFileErrorMessage, normalizeUploadFiles, replacementFileName, selectedUploadFile, validateKnowledgeFile } from '../utils'
 import { IngestOptionsFields } from './IngestOptionsFields'
 
@@ -27,7 +28,7 @@ interface TextTabValues {
   ingest_options?: KnowledgeIngestOptions
 }
 
-export function UpdateDocumentDrawer({ document, open, onClose, onUpdated }: { document: Document; open: boolean; onClose: () => void; onUpdated: (document: Document) => Promise<void> }) {
+export function UpdateDocumentDrawer({ document, open, onClose, onUpdated, ingestDefaults }: { document: Document; open: boolean; onClose: () => void; onUpdated: (document: Document) => Promise<void>; ingestDefaults?: KnowledgeIngestDefaults }) {
   const { message } = App.useApp()
   const [pending, setPending] = useState(false)
   const [activeTab, setActiveTab] = useState<KnowledgeUpdateTabKey>('update')
@@ -67,12 +68,14 @@ export function UpdateDocumentDrawer({ document, open, onClose, onUpdated }: { d
         form={updateForm}
         document={document}
         fileName={fileName}
+        ingestDefaults={ingestDefaults}
         onNoop={() => message.info('没有变化')}
         onSubmit={(update, success) => submit(update, success)}
       /> },
       { key: 'text', label: 'Text', children: <TextTab
         form={textForm}
         document={document}
+        ingestDefaults={ingestDefaults}
         onSubmit={(update, success) => submit(update, success)}
       /> },
     ]} />
@@ -83,12 +86,14 @@ function UpdateTab({
   form,
   document,
   fileName,
+  ingestDefaults,
   onNoop,
   onSubmit,
 }: {
   form: FormInstance<UpdateTabValues>
   document: Document
   fileName: string
+  ingestDefaults?: KnowledgeIngestDefaults
   onNoop: () => void
   onSubmit: (update: () => Promise<Document>, success: string) => void
 }) {
@@ -160,17 +165,19 @@ function UpdateTab({
         <p className="ant-upload-hint">未选择文件时不会使用上传表单；支持 Markdown、文本、代码、CSV、JSON、PDF 和 DOCX。</p>
       </Upload.Dragger>
     </Form.Item>
-    <IngestOptionsFields />
+    <IngestOptionsFields defaults={ingestDefaults} />
   </Form>
 }
 
 function TextTab({
   form,
   document,
+  ingestDefaults,
   onSubmit,
 }: {
   form: FormInstance<TextTabValues>
   document: Document
+  ingestDefaults?: KnowledgeIngestDefaults
   onSubmit: (update: () => Promise<Document>, success: string) => void
 }) {
   return <Form
@@ -194,6 +201,6 @@ function TextTab({
     <Form.Item name="visibility" label="Visibility"><VisibilitySelect style={{ width: '100%' }} /></Form.Item>
     <Form.Item name="file_name" label="文件名" tooltip="文件后缀决定 Reader 和分块策略" rules={[{ required: true, whitespace: true }]}><Input /></Form.Item>
     <Form.Item name="content" label="新正文" rules={[{ required: true, whitespace: true }]}><Input.TextArea rows={14} /></Form.Item>
-    <IngestOptionsFields />
+    <IngestOptionsFields defaults={ingestDefaults} />
   </Form>
 }

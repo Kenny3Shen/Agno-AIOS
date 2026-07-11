@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Empty, Form, Grid, Input, Modal, Popconfirm, Space, Splitter, Table, Tag, Typography, message } from 'antd'
+import { Button, Card, Empty, Form, Grid, Input, Modal, Popconfirm, Space, Splitter, Table, Tag, Tooltip, Typography, message } from 'antd'
 import { DeleteOutlined, EditOutlined, SearchOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { CopyableValue, MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
@@ -64,15 +64,33 @@ export function MemoryPage() {
               { title: 'Topics', dataIndex: 'topics', width: 220, render: (topics: string[]) => <Space wrap>{(topics ?? []).map((topic) => <Tag key={topic}>{topic}</Tag>)}</Space> },
               { title: 'User', dataIndex: 'user_id', width: 130, render: compactId },
               { title: 'Updated', dataIndex: 'updated_at', width: 170, render: formatDate },
+              {
+                title: 'Actions',
+                key: 'actions',
+                width: 88,
+                render: (_, row) => <Space size={2} onClick={(event) => event.stopPropagation()}>
+                  <Tooltip title="编辑">
+                    <Button aria-label={`编辑 ${row.id}`} type="text" size="small" icon={<EditOutlined />} onClick={(event) => {
+                      event.stopPropagation()
+                      setEditing(row)
+                    }} />
+                  </Tooltip>
+                  <Tooltip title="删除">
+                    <Popconfirm title="删除这条记忆？" onConfirm={(event) => {
+                      event?.stopPropagation()
+                      remove.mutate(row)
+                    }}>
+                      <Button aria-label={`删除 ${row.id}`} danger type="text" size="small" icon={<DeleteOutlined />} onClick={(event) => event.stopPropagation()} />
+                    </Popconfirm>
+                  </Tooltip>
+                </Space>,
+              },
             ]}
           />
         </Card>
       </Splitter.Panel>
       <Splitter.Panel defaultSize="30%" min={vertical ? 220 : '20%'}>
-        <Card className="workbench-card splitter-panel-card" title="Metadata" extra={selected && <Space>
-          <Button size="small" icon={<EditOutlined />} onClick={() => setEditing(selected)}>编辑</Button>
-          <Popconfirm title="删除这条记忆？" onConfirm={() => remove.mutate(selected)}><Button size="small" danger icon={<DeleteOutlined />} /></Popconfirm>
-        </Space>}>
+        <Card className="workbench-card splitter-panel-card" title="Metadata">
           {selected ? <MetadataDescriptions items={metadata} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={false} />}
         </Card>
       </Splitter.Panel>

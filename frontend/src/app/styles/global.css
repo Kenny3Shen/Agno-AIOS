@@ -51,6 +51,10 @@ button, input, textarea { letter-spacing: 0; }
 .knowledge-option-help { color: var(--tais-muted); cursor: help; }
 .knowledge-upload-icon { margin-bottom: 8px !important; color: var(--tais-blue); font-size: 34px; }
 .retrieval-playground { min-height: 360px; }
+.retrieval-toolbar { width: 100%; }
+.retrieval-toolbar .ant-form { flex: 1 1 640px; }
+.retrieval-result-meta { margin-bottom: 10px; }
+.retrieval-result-content { margin-bottom: 10px; }
 .skills-splitter { height: calc(100vh - 140px); min-height: 520px; }
 .mcp-splitter { height: calc(100vh - 140px); min-height: 520px; }
 .memory-toolbar { margin-bottom: 12px; }

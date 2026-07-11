@@ -154,7 +154,7 @@ export function McpPage() {
             }} /> },
             { key: 'manifest', label: 'Manifest', children: selectedResource.server
               ? <FormattedContentCard title="Manifest" value={selectedResource.server.manifest} />
-              : <Descriptions column={1} size="small" items={[{ key: 'builtin', label: 'Manifest', children: '内置服务由 T.A.I.S runtime 提供，无独立 manifest。' }]} /> },
+              : <Descriptions bordered column={1} size="small" items={[{ key: 'builtin', label: 'Manifest', children: '内置服务由 T.A.I.S runtime 提供，无独立 manifest。' }]} /> },
           ]} />}
           {selectedToken && <Tabs destroyOnHidden items={[
             { key: 'overview', label: 'Overview', icon: <KeyOutlined />, children: <MetadataDescriptions items={[

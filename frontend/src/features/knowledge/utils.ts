@@ -1,9 +1,42 @@
 import type { UploadFile } from 'antd'
 import type { ResourceVisibility } from '@/shared/types/common'
-import type { Document, KnowledgeIngestOptions, UpdateDocumentMetadataPayload } from './types'
+import type { Document, KnowledgeIngestOptions, KnowledgeRagSettings, KnowledgeSearchType, RetrievalRenderMode, SearchResult, UpdateDocumentMetadataPayload } from './types'
 
 export const KNOWLEDGE_FILE_ACCEPT = '.md,.markdown,.mdown,.mkd,.csv,.tsv,.json,.jsonl,.py,.js,.mjs,.cjs,.jsx,.ts,.tsx,.vue,.go,.rs,.java,.c,.cc,.cpp,.h,.hpp,.cs,.php,.rb,.sh,.sql,.pdf,.docx,.txt,.log,.rst,.yaml,.yml,.toml'
 export const MAX_KNOWLEDGE_FILE_BYTES = 50 * 1024 * 1024
+export const SEARCH_TYPE_OPTIONS: KnowledgeSearchType[] = ['hybrid', 'vector', 'keyword']
+
+export interface KnowledgeIngestDefaults {
+  chunk_size: number
+  chunk_overlap: number
+  markdown_split_on_headings: string
+  csv_skip_header: boolean
+  csv_clean_rows: boolean
+  code_chunk_size: number
+  code_tokenizer: string
+  code_include_nodes: boolean
+  semantic_threshold: number
+  semantic_similarity_window: number
+  semantic_min_sentences_per_chunk: number
+  semantic_min_characters_per_sentence: number
+  search_type: KnowledgeSearchType
+}
+
+export const AGNO_INGEST_DEFAULTS: KnowledgeIngestDefaults = {
+  chunk_size: 5000,
+  chunk_overlap: 0,
+  markdown_split_on_headings: '按全部标题切分',
+  csv_skip_header: false,
+  csv_clean_rows: true,
+  code_chunk_size: 2048,
+  code_tokenizer: 'character',
+  code_include_nodes: false,
+  semantic_threshold: 0.5,
+  semantic_similarity_window: 3,
+  semantic_min_sentences_per_chunk: 1,
+  semantic_min_characters_per_sentence: 24,
+  search_type: 'hybrid',
+}
 
 const supportedSuffixes = new Set(KNOWLEDGE_FILE_ACCEPT.split(','))
 const structuredSuffixes = new Set(['.pdf', '.docx'])
@@ -27,6 +60,59 @@ export const knowledgeReaderProfiles: Record<KnowledgeReaderStrategy, KnowledgeR
   csv_row: { strategy: 'csv_row', label: 'CSV rows', description: '按表格行切分 CSV/TSV' },
   json: { strategy: 'json', label: 'JSON', description: '按结构读取 JSON 后递归切分' },
   document: { strategy: 'document', label: 'Document', description: '按文档结构切分 PDF/DOCX' },
+}
+
+export function effectiveKnowledgeIngestDefaults(ragSettings?: KnowledgeRagSettings): KnowledgeIngestDefaults {
+  return {
+    ...AGNO_INGEST_DEFAULTS,
+    chunk_size: ragSettings?.chunk_size ?? 1200,
+    chunk_overlap: ragSettings?.chunk_overlap ?? 160,
+    code_chunk_size: ragSettings?.code_chunk_size ?? 1800,
+    semantic_threshold: ragSettings?.semantic_threshold ?? 0.52,
+    search_type: ragSettings?.search_type ?? 'hybrid',
+  }
+}
+
+export function buildKnowledgeSearchPayload(query: string, limit: number, searchType?: string) {
+  const payload: { query: string; limit: number; search_type?: KnowledgeSearchType } = {
+    query: query.trim(),
+    limit,
+  }
+  const normalized = searchType?.trim() as KnowledgeSearchType | undefined
+  if (normalized && SEARCH_TYPE_OPTIONS.includes(normalized)) payload.search_type = normalized
+  return payload
+}
+
+const parseJsonObjectOrArray = (value: string): unknown | undefined => {
+  const text = value.trim()
+  if (!(text.startsWith('{') || text.startsWith('['))) return undefined
+  try {
+    const parsed = JSON.parse(text)
+    return parsed && typeof parsed === 'object' ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const metadataSuggestsMarkdown = (metadata?: SearchResult['metadata']) => {
+  if (!metadata) return false
+  const values = ['format', 'content_type', 'mime_type', 'file_name', 'source'].map((key) => metadata[key])
+  return values.some((value) => typeof value === 'string' && /markdown|text\/md|\.md(?:$|\?)/i.test(value))
+}
+
+const looksLikeMarkdown = (value: string) => /(^|\n)#{1,6}\s|```|\*\*[^*]+\*\*|(^|\n)\s*[-*]\s+|(^|\n)>\s+/m.test(value)
+
+export function resolveRetrievalContent(
+  result: Pick<SearchResult, 'content' | 'metadata'>,
+  mode: RetrievalRenderMode,
+): { kind: Exclude<RetrievalRenderMode, 'auto'>; value: unknown } {
+  if (mode === 'json') return { kind: 'json', value: parseJsonObjectOrArray(result.content) ?? result.content }
+  if (mode === 'markdown') return { kind: 'markdown', value: result.content }
+  if (mode === 'text') return { kind: 'text', value: result.content }
+  const parsed = parseJsonObjectOrArray(result.content)
+  if (parsed !== undefined) return { kind: 'json', value: parsed }
+  if (metadataSuggestsMarkdown(result.metadata) || looksLikeMarkdown(result.content)) return { kind: 'markdown', value: result.content }
+  return { kind: 'text', value: result.content }
 }
 
 export function fileSuffix(name: string) {

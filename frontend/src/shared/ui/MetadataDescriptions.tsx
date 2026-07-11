@@ -59,5 +59,5 @@ export function MetadataDescriptions({
     label: entry.label,
     children: <MetadataValue value={entry.value} />,
   }))
-  return <Descriptions className="metadata-descriptions" column={1} size="small" items={[...items, ...metadataItems]} />
+  return <Descriptions className="metadata-descriptions" bordered column={1} size="small" items={[...items, ...metadataItems]} />
 }

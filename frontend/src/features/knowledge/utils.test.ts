@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildMetadataUpdate, cleanIngestOptions, decideKnowledgeUpdate, inferKnowledgeReaderProfile, ingestOptionsFromMetadata, knowledgeIngestOptionsEqual, MAX_KNOWLEDGE_FILE_BYTES, replacementFileName, validateKnowledgeFile } from './utils'
+import { buildKnowledgeSearchPayload, buildMetadataUpdate, cleanIngestOptions, decideKnowledgeUpdate, effectiveKnowledgeIngestDefaults, inferKnowledgeReaderProfile, ingestOptionsFromMetadata, knowledgeIngestOptionsEqual, MAX_KNOWLEDGE_FILE_BYTES, replacementFileName, resolveRetrievalContent, validateKnowledgeFile } from './utils'
 import type { Document } from './types'
 
 const document: Document = {
@@ -120,5 +120,28 @@ describe('knowledge document updates', () => {
     expect(knowledgeIngestOptionsEqual({ chunk_size: 1500, reader_strategy: ' markdown ' }, { chunk_size: 1500, reader_strategy: 'markdown' })).toBe(true)
     expect(knowledgeIngestOptionsEqual({ chunk_size: 1500 }, { chunk_size: 1600 })).toBe(false)
     expect(knowledgeIngestOptionsEqual(undefined, {})).toBe(true)
+  })
+
+  it('merges runtime ingest defaults with Agno fallback defaults', () => {
+    expect(effectiveKnowledgeIngestDefaults({ chunk_size: 1600, search_type: 'vector' })).toMatchObject({
+      chunk_size: 1600,
+      chunk_overlap: 160,
+      code_chunk_size: 1800,
+      semantic_threshold: 0.52,
+      semantic_similarity_window: 3,
+      search_type: 'vector',
+    })
+  })
+
+  it('cleans retrieval search payloads without accepting invalid methods', () => {
+    expect(buildKnowledgeSearchPayload(' policy ', 5, 'keyword')).toEqual({ query: 'policy', limit: 5, search_type: 'keyword' })
+    expect(buildKnowledgeSearchPayload('policy', 5, 'unknown')).toEqual({ query: 'policy', limit: 5 })
+  })
+
+  it('resolves retrieval result render mode from content and overrides', () => {
+    expect(resolveRetrievalContent({ content: '{"risk":"high"}' }, 'auto')).toEqual({ kind: 'json', value: { risk: 'high' } })
+    expect(resolveRetrievalContent({ content: '# Heading' }, 'auto')).toEqual({ kind: 'markdown', value: '# Heading' })
+    expect(resolveRetrievalContent({ content: 'plain answer' }, 'auto')).toEqual({ kind: 'text', value: 'plain answer' })
+    expect(resolveRetrievalContent({ content: '{"risk":"high"}' }, 'text')).toEqual({ kind: 'text', value: '{"risk":"high"}' })
   })
 })

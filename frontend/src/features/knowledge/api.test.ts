@@ -2,7 +2,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { server } from '@/test/server'
 import { AUTH_TOKEN_STORAGE_KEY } from '@/shared/auth/storage'
-import { updateDocumentAction, updateDocumentUpload, uploadDocument } from './api'
+import { searchKnowledge, updateDocumentAction, updateDocumentUpload, uploadDocument } from './api'
 import type { Document } from './types'
 
 const document: Document = {
@@ -134,5 +134,16 @@ describe('knowledge document API', () => {
 
     expect(result.id).toBe('doc-1')
     expect(result.chunks).toBe(4)
+  })
+
+  it('sends retrieval method in the search payload', async () => {
+    server.use(http.post('/api/knowledge/search', async ({ request }) => {
+      expect(await request.json()).toEqual({ query: 'policy', limit: 8, search_type: 'vector' })
+      return HttpResponse.json({ results: [{ content: '# Policy', score: 0.9, doc_id: 'doc-1', title: 'Policy', source: 'KB', chunk_index: 0 }] })
+    }))
+
+    const result = await searchKnowledge(' policy ', 8, 'vector')
+
+    expect(result[0].doc_id).toBe('doc-1')
   })
 })

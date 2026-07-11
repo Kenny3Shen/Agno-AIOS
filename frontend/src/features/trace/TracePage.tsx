@@ -205,10 +205,10 @@ function SpanDetailTabs({ span }: { span: Span }) {
   const metadata = Object.fromEntries(Object.entries({ metadata: span.parsed?.metadata, attributes: span.attributes, events: span.events }).filter(([, value]) => value != null && (!(Array.isArray(value)) || value.length > 0)))
   return <Tabs className="trace-detail-tabs" size="small" destroyOnHidden items={[
     { key: 'info', label: 'Info', children: <Splitter className="trace-info-splitter" orientation="vertical">
-      <Splitter.Panel defaultSize="30%" min="20%">
+      <Splitter.Panel defaultSize="50%" min="20%">
         <FormattedContentCard title="Input" value={span.parsed?.input} />
       </Splitter.Panel>
-      <Splitter.Panel defaultSize="70%" min="30%">
+      <Splitter.Panel defaultSize="50%" min="30%">
         <FormattedContentCard title="Output" value={span.parsed?.output} />
       </Splitter.Panel>
     </Splitter> },

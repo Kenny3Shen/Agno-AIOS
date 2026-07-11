@@ -21,7 +21,7 @@ const oldDocument: Document = {
 }
 
 const response = (document: Document): KnowledgeResponse => ({
-  status: {},
+  status: { rag_settings: { search_type: 'hybrid', chunk_size: 1200, chunk_overlap: 160, code_chunk_size: 1800, semantic_threshold: 0.52 } },
   documents: [document],
   pagination: { page: 1, limit: 100, total: 1 },
 })
@@ -163,5 +163,51 @@ describe('knowledge document workflow', () => {
     fireEvent.click(button)
 
     expect(updateCalls).toBe(0)
+  })
+
+  it('shows retrieval controls with runtime search defaults', async () => {
+    server.use(http.get('/api/knowledge', () => HttpResponse.json(response(oldDocument))))
+    renderWithQuery(<KnowledgePage />)
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Retrieval playground' }))
+
+    expect(screen.getByPlaceholderText('测试检索查询')).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Search type' })).toBeTruthy()
+    expect(screen.getByText('hybrid')).toBeTruthy()
+    expect(screen.queryByRole('combobox', { name: 'Result render mode' })).toBeNull()
+  })
+
+  it('shows render mode controls inside each retrieval result', async () => {
+    server.use(
+      http.get('/api/knowledge', () => HttpResponse.json(response(oldDocument))),
+      http.post('/api/knowledge/search', () => HttpResponse.json({
+        results: [
+          { content: '{"risk":"high"}', score: 0.91, doc_id: 'doc-json', title: 'JSON result', source: 'KB', chunk_index: 0 },
+          { content: '# Markdown result', score: 0.82, doc_id: 'doc-md', title: 'Markdown result', source: 'KB', chunk_index: 1 },
+        ],
+      })),
+    )
+    renderWithQuery(<KnowledgePage />)
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Retrieval playground' }))
+    fireEvent.change(screen.getByPlaceholderText('测试检索查询'), { target: { value: 'policy' } })
+    fireEvent.click(screen.getByRole('button', { name: /检\s*索/ }))
+
+    expect(await screen.findByRole('combobox', { name: 'Render JSON result' })).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Render Markdown result' })).toBeTruthy()
+    expect(screen.getByText(/risk/)).toBeTruthy()
+    expect(screen.getByText(/high/)).toBeTruthy()
+  })
+
+  it('shows concrete advanced chunking defaults from runtime settings', async () => {
+    const user = userEvent.setup()
+    server.use(http.get('/api/knowledge', () => HttpResponse.json(response(oldDocument))))
+    renderWithQuery(<KnowledgePage />)
+
+    await user.click(await screen.findByText('添加文档'))
+    await user.click(await screen.findByText('高级分块参数'))
+
+    expect(screen.getByPlaceholderText('1200')).toBeTruthy()
+    expect(screen.getByPlaceholderText('0.52')).toBeTruthy()
   })
 })

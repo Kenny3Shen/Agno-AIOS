@@ -1,5 +1,6 @@
 import { jsonInit, requestJson } from '@/shared/api/client'
-import type { AddPathPayload, AddTextPayload, Document, KnowledgeIngestOptions, KnowledgeResponse, SearchResult, UpdateDocumentActionPayload, UpdateDocumentUploadPayload, UploadDocumentPayload } from './types'
+import { buildKnowledgeSearchPayload } from './utils'
+import type { AddPathPayload, AddTextPayload, Document, KnowledgeIngestOptions, KnowledgeResponse, KnowledgeSearchType, SearchResult, UpdateDocumentActionPayload, UpdateDocumentUploadPayload, UploadDocumentPayload } from './types'
 
 export const getKnowledge = (query = '') => requestJson<KnowledgeResponse>(`/knowledge?limit=100${query ? `&query=${encodeURIComponent(query)}` : ''}`)
 export const addText = (payload: AddTextPayload) => requestJson<Document>('/knowledge/documents/text', jsonInit('POST', payload))
@@ -31,4 +32,6 @@ export const updateDocumentUpload = (id: string, { file, title, source, visibili
   return requestJson<Document>(`/knowledge/documents/${encodeURIComponent(id)}/update/upload`, { method: 'POST', body })
 }
 export const deleteDocument = (id: string) => requestJson(`/knowledge/documents/${encodeURIComponent(id)}`, { method: 'DELETE' })
-export const searchKnowledge = async (query: string, limit: number) => (await requestJson<{ results: SearchResult[] }>('/knowledge/search', jsonInit('POST', { query, limit }))).results
+export const searchKnowledge = async (query: string, limit: number, searchType?: KnowledgeSearchType) => (
+  await requestJson<{ results: SearchResult[] }>('/knowledge/search', jsonInit('POST', buildKnowledgeSearchPayload(query, limit, searchType)))
+).results

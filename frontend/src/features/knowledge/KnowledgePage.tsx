@@ -1,16 +1,61 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Card, Form, Grid, Input, InputNumber, Splitter, Tabs, Tag } from 'antd'
+import { App, Button, Card, Descriptions, Form, Grid, Input, InputNumber, Select, Space, Splitter, Tabs, Tag, Typography } from 'antd'
 import { PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import XMarkdown from '@ant-design/x-markdown'
 import { PageHeader } from '@/shared/ui/PageHeader'
+import { JsonValueCard } from '@/shared/ui/FormattedContentCard'
 import type { ResourceVisibility } from '@/shared/types/common'
 import { deleteDocument, getKnowledge, searchKnowledge, updateDocumentAction } from './api'
-import type { Document, KnowledgeResponse, SearchResult } from './types'
+import type { Document, KnowledgeResponse, KnowledgeSearchType, RetrievalRenderMode, SearchResult } from './types'
 import { DocumentsTable } from './components/DocumentsTable'
 import { MetadataPanel } from './components/MetadataPanel'
 import { DocumentDrawer } from './components/DocumentDrawer'
 import { UpdateDocumentDrawer } from './components/UpdateDocumentDrawer'
+import { effectiveKnowledgeIngestDefaults, resolveRetrievalContent, SEARCH_TYPE_OPTIONS } from './utils'
+
+const renderModeOptions: Array<{ value: RetrievalRenderMode; label: string }> = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'markdown', label: 'Markdown' },
+  { value: 'json', label: 'JSON' },
+  { value: 'text', label: 'Text' },
+]
+
+const searchTypeOptions = SEARCH_TYPE_OPTIONS.map((value) => ({ value, label: value }))
+
+function RetrievalResultCard({ result }: { result: SearchResult }) {
+  const [renderMode, setRenderMode] = useState<RetrievalRenderMode>('auto')
+  const content = resolveRetrievalContent(result, renderMode)
+  return <Card
+    size="small"
+    key={`${result.doc_id}-${result.chunk_index}`}
+    title={result.title}
+    extra={<Space size={6} wrap>
+      <Select aria-label={`Render ${result.title}`} size="small" value={renderMode} options={renderModeOptions} onChange={setRenderMode} style={{ width: 118 }} />
+      <Tag>{content.kind}</Tag>
+      <Tag>{result.score.toFixed(3)}</Tag>
+    </Space>}
+  >
+    <Descriptions
+      className="retrieval-result-meta"
+      bordered
+      size="small"
+      column={1}
+      items={[
+        { key: 'source', label: 'Source', children: result.source || '-' },
+        { key: 'chunk', label: 'Chunk', children: result.chunk_index },
+        { key: 'document', label: 'Document', children: <Typography.Text copyable={{ text: result.doc_id }}>{result.doc_id}</Typography.Text> },
+      ]}
+    />
+    <div className="retrieval-result-content">
+      {content.kind === 'json'
+        ? <JsonValueCard value={content.value} title="Content" />
+        : content.kind === 'markdown'
+          ? <XMarkdown content={String(content.value)} openLinksInNewTab escapeRawHtml />
+          : <Typography.Paragraph className="formatted-text">{String(content.value)}</Typography.Paragraph>}
+    </div>
+  </Card>
+}
 
 export function KnowledgePage() {
   const { message } = App.useApp()
@@ -24,6 +69,7 @@ export function KnowledgePage() {
   const [results, setResults] = useState<SearchResult[]>([])
   const query = useQuery({ queryKey: ['knowledge', filter], queryFn: () => getKnowledge(filter) })
   const documents = query.data?.documents ?? []
+  const ingestDefaults = useMemo(() => effectiveKnowledgeIngestDefaults(query.data?.status.rag_settings), [query.data?.status.rag_settings])
   const selected = documents.find((document) => document.id === selectedId) ?? null
   const refresh = () => client.invalidateQueries({ queryKey: ['knowledge'] })
 
@@ -82,15 +128,18 @@ export function KnowledgePage() {
         </Splitter.Panel>
       </Splitter> },
       { key: 'retrieval', label: 'Retrieval playground', children: <Card className="workbench-card retrieval-playground">
-        <Form layout="inline" onFinish={async ({ query: text, limit }: { query: string; limit: number }) => setResults(await searchKnowledge(text, limit))} initialValues={{ limit: 5 }}>
+        <Space className="retrieval-toolbar" align="start" wrap>
+        <Form key={ingestDefaults.search_type} layout="inline" onFinish={async ({ query: text, limit, search_type }: { query: string; limit: number; search_type: KnowledgeSearchType }) => setResults(await searchKnowledge(text, limit, search_type))} initialValues={{ limit: 5, search_type: ingestDefaults.search_type }}>
           <Form.Item name="query" rules={[{ required: true }]} style={{ flex: 1 }}><Input prefix={<SearchOutlined />} placeholder="测试检索查询" /></Form.Item>
+          <Form.Item name="search_type" label="Search type"><Select options={searchTypeOptions} style={{ width: 120 }} /></Form.Item>
           <Form.Item name="limit"><InputNumber min={1} max={20} /></Form.Item>
           <Button htmlType="submit" type="primary">检索</Button>
         </Form>
-        <div className="retrieval-results">{results.map((item) => <Card size="small" key={`${item.doc_id}-${item.chunk_index}`} title={item.title} extra={<Tag>{item.score.toFixed(3)}</Tag>}><XMarkdown content={item.content} escapeRawHtml /></Card>)}</div>
+        </Space>
+        <div className="retrieval-results">{results.map((item) => <RetrievalResultCard key={`${item.doc_id}-${item.chunk_index}`} result={item} />)}</div>
       </Card> },
     ]} />
-    <DocumentDrawer open={createOpen} onClose={() => setCreateOpen(false)} onCreated={(document) => syncUpdatedDocument(document, '')} />
-    {updateOpen && selected && <UpdateDocumentDrawer document={selected} open onClose={() => setUpdateOpen(false)} onUpdated={syncUpdatedDocument} />}
+    <DocumentDrawer open={createOpen} onClose={() => setCreateOpen(false)} onCreated={(document) => syncUpdatedDocument(document, '')} ingestDefaults={ingestDefaults} />
+    {updateOpen && selected && <UpdateDocumentDrawer document={selected} open onClose={() => setUpdateOpen(false)} onUpdated={syncUpdatedDocument} ingestDefaults={ingestDefaults} />}
   </main>
 }
