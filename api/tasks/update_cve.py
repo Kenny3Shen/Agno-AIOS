@@ -67,7 +67,7 @@ class CVEUpdateFileLock:
         await to_thread.run_sync(self._acquire)
         return self
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:
+    async def __aexit__(self, _exc_type, _exc, _tb) -> None:
         await to_thread.run_sync(self._release)
 
     def _acquire(self) -> None:

@@ -9,6 +9,7 @@ import pytest
 from agno.knowledge.content import FileData
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
+from sqlalchemy.dialects import postgresql
 
 from api.auth.claims import has_scope
 from api.routes import knowledge as knowledge_route
@@ -35,6 +36,21 @@ def test_rag_settings_route_requires_config_write_scope() -> None:
         dependency(user=ordinary_user)
     assert exc.value.status_code == 403
     assert dependency(user=admin) is admin
+
+
+def test_chunk_count_query_scopes_private_vectors_to_the_requested_owner() -> None:
+    statement = knowledge_service._chunk_counts_by_content_id_statement("u1")
+    query = str(
+        statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+
+    assert "'public'" in query
+    assert "'u1'" in query
+    assert "owner_user_id" in query
+    assert "user_id" in query
 
 
 @pytest.mark.asyncio
@@ -67,7 +83,7 @@ async def test_search_documents_merges_public_and_owner_private_filters() -> Non
         patch.object(knowledge_service, "_get_async_knowledge_base_async", get_knowledge_async),
         patch.object(knowledge_service, "_hydrate_content_ids_async", hydrate_noop),
     ):
-        results = await knowledge_service.search_documents_async(
+        results = await knowledge_service.get_knowledge_base_lifecycle().search_documents_async(
             "policy", owner_user_id="u1"
         )
     assert results == []
@@ -1371,7 +1387,7 @@ async def test_delete_document_rejects_foreign_owner() -> None:
         patch.object(knowledge_service, "_knowledge_content_by_id_async", content_by_id),
         patch.object(knowledge_service, "get_async_knowledge_base", fail_runtime),
     ):
-        result = await knowledge_service.delete_document_async(
+        result = await knowledge_service.get_knowledge_base_lifecycle().delete_document_async(
             "doc-1", owner_user_id="u1"
         )
     assert not result

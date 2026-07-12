@@ -312,9 +312,12 @@ async def _snapshots(actor: ActorLike) -> dict[str, Any]:
 
     if has_scope(actor, "knowledge:read"):
         try:
-            from api.services.knowledge_service import list_documents_async
+            from api.services.knowledge_service import get_knowledge_base_lifecycle
 
-            result["knowledge_documents"] = len(await list_documents_async(owner_user_id=user_id))
+            knowledge_base = get_knowledge_base_lifecycle()
+            result["knowledge_documents"] = len(
+                await knowledge_base.list_documents_async(owner_user_id=user_id)
+            )
         except Exception:
             pass
 

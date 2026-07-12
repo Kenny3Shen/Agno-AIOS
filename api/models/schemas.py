@@ -13,8 +13,3 @@ class CveSearchRequest(BaseModel):
 class Url2MdRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
     url: str
-
-
-class ChatRequest(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
-    message: str = Field(..., min_length=1)

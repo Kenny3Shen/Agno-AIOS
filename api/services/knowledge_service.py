@@ -427,10 +427,17 @@ async def _knowledge_document_page_rows_async(
     return [KnowledgeRow.model_validate(dict(row)) for row in rows], total
 
 
-async def _chunk_counts_by_content_id_async(owner_user_id: str | None = None) -> dict[str, int]:
+def _chunk_counts_by_content_id_statement(owner_user_id: str | None = None) -> Any:
     table = _pgvector_projection_table()
     stmt = select(table.c.content_id, func.count()).where(table.c.content_id.is_not(None))
-    stmt = stmt.group_by(table.c.content_id)
+    visibility_clause = _visible_metadata_clause(table.c.meta_data, owner_user_id)
+    if visibility_clause is not None:
+        stmt = stmt.where(visibility_clause)
+    return stmt.group_by(table.c.content_id)
+
+
+async def _chunk_counts_by_content_id_async(owner_user_id: str | None = None) -> dict[str, int]:
+    stmt = _chunk_counts_by_content_id_statement(owner_user_id)
     try:
         async with get_async_control_plane_engine().begin() as conn:
             rows = (await conn.execute(stmt)).all()
@@ -1502,203 +1509,6 @@ DEFAULT_KNOWLEDGE_BASE_LIFECYCLE = KnowledgeBaseLifecycle()
 
 def get_knowledge_base_lifecycle() -> KnowledgeBaseLifecycle:
     return DEFAULT_KNOWLEDGE_BASE_LIFECYCLE
-
-
-async def add_text_document_async(
-    title: str,
-    content: str,
-    source: str = "manual",
-    metadata: dict[str, Any] | None = None,
-    owner_user_id: str | None = None,
-    visibility: str = "private",
-    ingest_options: Mapping[str, object] | None = None,
-) -> KnowledgeDocumentPayload:
-    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.add_text_document_async(
-        title,
-        content,
-        source=source,
-        metadata=metadata,
-        owner_user_id=owner_user_id,
-        visibility=visibility,
-        ingest_options=ingest_options,
-    )
-
-
-async def add_file_document_async(
-    path: str,
-    title: str | None = None,
-    source: str | None = None,
-    metadata: Mapping[str, object] | None = None,
-    owner_user_id: str | None = None,
-    visibility: str = "private",
-    ingest_options: Mapping[str, object] | None = None,
-) -> KnowledgeDocumentPayload:
-    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.add_file_document_async(
-        path,
-        title=title,
-        source=source,
-        metadata=metadata,
-        owner_user_id=owner_user_id,
-        visibility=visibility,
-        ingest_options=ingest_options,
-    )
-
-
-async def list_documents_async(owner_user_id: str | None = None) -> list[KnowledgeDocumentPayload]:
-    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.list_documents_async(
-        owner_user_id=owner_user_id
-    )
-
-
-async def delete_document_async(
-    doc_id: str,
-    owner_user_id: str | None = None,
-    user: ActorLike | None = None,
-) -> bool:
-    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.delete_document_async(
-        doc_id,
-        owner_user_id=owner_user_id,
-        user=user,
-    )
-
-
-async def rebuild_document_async(
-    doc_id: str,
-    owner_user_id: str | None = None,
-    user: ActorLike | None = None,
-    title: str | None = None,
-    source: str | None = None,
-    visibility: str | None = None,
-    metadata: Mapping[str, object] | None = None,
-    ingest_options: Mapping[str, object] | None = None,
-) -> KnowledgeDocumentPayload | None:
-    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.rebuild_document_async(
-        doc_id,
-        owner_user_id=owner_user_id,
-        user=user,
-        title=title,
-        source=source,
-        visibility=visibility,
-        metadata=metadata,
-        ingest_options=ingest_options,
-    )
-
-
-async def replace_document_source_async(
-    doc_id: str,
-    *,
-    content: str,
-    file_name: str,
-    title: str | None = None,
-    source: str | None = None,
-    visibility: str | None = None,
-    metadata: dict[str, Any] | None = None,
-    owner_user_id: str | None = None,
-    user: ActorLike | None = None,
-    ingest_options: Mapping[str, object] | None = None,
-) -> KnowledgeDocumentPayload | None:
-    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.replace_document_source_async(
-        doc_id,
-        content=content,
-        file_name=file_name,
-        title=title,
-        source=source,
-        visibility=visibility,
-        metadata=metadata,
-        owner_user_id=owner_user_id,
-        user=user,
-        ingest_options=ingest_options,
-    )
-
-
-async def replace_document_file_async(
-    doc_id: str,
-    *,
-    path: str,
-    title: str | None = None,
-    source: str | None = None,
-    visibility: str | None = None,
-    metadata: Mapping[str, object] | None = None,
-    owner_user_id: str | None = None,
-    user: ActorLike | None = None,
-    ingest_options: Mapping[str, object] | None = None,
-) -> KnowledgeDocumentPayload | None:
-    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.replace_document_file_async(
-        doc_id,
-        path=path,
-        title=title,
-        source=source,
-        visibility=visibility,
-        metadata=metadata,
-        owner_user_id=owner_user_id,
-        user=user,
-        ingest_options=ingest_options,
-    )
-
-
-async def update_document_visibility_async(
-    doc_id: str,
-    visibility: str,
-    user: ActorLike,
-) -> KnowledgeDocumentPayload | None:
-    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.update_document_visibility_async(
-        doc_id,
-        visibility,
-        user,
-    )
-
-
-async def update_document_metadata_async(
-    doc_id: str,
-    *,
-    title: str | None = None,
-    source: str | None = None,
-    visibility: str | None = None,
-    metadata: Mapping[str, object] | None = None,
-    user: ActorLike,
-) -> KnowledgeDocumentPayload | None:
-    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.update_document_metadata_async(
-        doc_id,
-        title=title,
-        source=source,
-        visibility=visibility,
-        metadata=metadata,
-        user=user,
-    )
-
-
-async def clear_knowledge_base_async(
-    owner_user_id: str | None = None,
-    user: ActorLike | None = None,
-) -> dict[str, Any]:
-    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.clear_knowledge_base_async(
-        owner_user_id=owner_user_id,
-        user=user,
-    )
-
-
-async def search_documents_async(
-    query: str,
-    limit: int = 5,
-    search_type: str | None = None,
-    owner_user_id: str | None = None,
-) -> list[KnowledgeSearchResultPayload]:
-    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.search_documents_async(
-        query,
-        limit=limit,
-        search_type=search_type,
-        owner_user_id=owner_user_id,
-    )
-
-
-async def knowledge_status_async(
-    owner_user_id: str | None = None,
-    documents: Sequence[Mapping[str, object]] | None = None,
-) -> dict[str, Any]:
-    return await DEFAULT_KNOWLEDGE_BASE_LIFECYCLE.knowledge_status_async(
-        owner_user_id=owner_user_id,
-        documents=documents,
-    )
 
 
 async def update_rag_settings_async(values: Mapping[str, Any]) -> dict[str, Any]:
