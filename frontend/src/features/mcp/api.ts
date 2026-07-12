@@ -41,17 +41,33 @@ export interface McpComponent {
   enabled: boolean
 }
 
-export interface McpToken { id: number; name: string; created_at: number; expires_at: number }
+export interface McpToken {
+  id: number
+  name: string
+  created_at: number
+  expires_at: number
+}
 
 export const getConfig = () => requestJson<McpConfig>('/mcp/config')
-export const listComponents = (namespace?: string) => requestJson<McpComponent[]>(`/mcp/components${namespace ? `?namespace=${encodeURIComponent(namespace)}` : ''}`)
+export const listComponents = (namespace?: string) =>
+  requestJson<McpComponent[]>(`/mcp/components${namespace ? `?namespace=${encodeURIComponent(namespace)}` : ''}`)
 export const updateConfig = (id: string, enabled: boolean) => requestJson('/mcp/config', jsonInit('POST', { id, enabled }))
-export const setServerEnabled = (id: number, enabled: boolean) => requestJson(`/mcp/servers/${id}/enabled`, jsonInit('PUT', { server_id: id, enabled }))
-export const setComponentEnabled = (component: McpComponent, enabled: boolean) => requestJson(`/mcp/components/${component.type}/${encodeURIComponent(component.name)}/enabled`, jsonInit('PUT', { server_id: component.server_id, enabled }))
-export const callTool = (name: string, argumentsValue: JsonRecord) => requestJson(`/mcp/tools/${encodeURIComponent(name)}/call`, jsonInit('POST', { arguments: argumentsValue }))
+export const setServerEnabled = (id: number, enabled: boolean) =>
+  requestJson(`/mcp/servers/${id}/enabled`, jsonInit('PUT', { server_id: id, enabled }))
+export const setComponentEnabled = (component: McpComponent, enabled: boolean) =>
+  requestJson(
+    `/mcp/components/${component.type}/${encodeURIComponent(component.name)}/enabled`,
+    jsonInit('PUT', { server_id: component.server_id, enabled })
+  )
+export const callTool = (name: string, argumentsValue: JsonRecord) =>
+  requestJson(`/mcp/tools/${encodeURIComponent(name)}/call`, jsonInit('POST', { arguments: argumentsValue }))
 export const listTokens = () => requestJson<McpToken[]>('/mcp/tokens')
-export const issueToken = (name: string, expires_in: number) => requestJson<{ token: string }>('/mcp/tokens/issue', jsonInit('POST', { name, expires_in }))
+export const issueToken = (name: string, expires_in: number) =>
+  requestJson<{ token: string }>('/mcp/tokens/issue', jsonInit('POST', { name, expires_in }))
 export const deleteToken = (id: number) => requestJson('/mcp/tokens/delete', jsonInit('POST', { id }))
-export const uploadServer = (payload: { name: string; description: string; manifest: string; visibility: ResourceVisibility }) => requestJson('/mcp/upload', jsonInit('POST', payload))
-export const testServer = (payload: { name: string; description: string; manifest: string; visibility: ResourceVisibility }) => requestJson<{ success: boolean; tools: string[] }>('/mcp/servers/test', jsonInit('POST', payload))
-export const setServerVisibility = (name: string, visibility: ResourceVisibility) => requestJson(`/mcp/servers/${encodeURIComponent(name)}/visibility`, jsonInit('PUT', { visibility }))
+export const uploadServer = (payload: { name: string; description: string; manifest: string; visibility: ResourceVisibility }) =>
+  requestJson('/mcp/upload', jsonInit('POST', payload))
+export const testServer = (payload: { name: string; description: string; manifest: string; visibility: ResourceVisibility }) =>
+  requestJson<{ success: boolean; tools: string[] }>('/mcp/servers/test', jsonInit('POST', payload))
+export const setServerVisibility = (name: string, visibility: ResourceVisibility) =>
+  requestJson(`/mcp/servers/${encodeURIComponent(name)}/visibility`, jsonInit('PUT', { visibility }))

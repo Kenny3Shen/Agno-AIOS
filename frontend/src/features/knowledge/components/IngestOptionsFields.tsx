@@ -44,12 +44,14 @@ const tooltips = {
 } as const
 
 function HelpLabel({ label, tooltip }: { label: string; tooltip: string }) {
-  return <Space size={4}>
-    <span>{label}</span>
-    <Tooltip title={tooltip}>
-      <QuestionCircleOutlined aria-label={`${label} help`} className="knowledge-option-help" />
-    </Tooltip>
-  </Space>
+  return (
+    <Space size={4}>
+      <span>{label}</span>
+      <Tooltip title={tooltip}>
+        <QuestionCircleOutlined aria-label={`${label} help`} className="knowledge-option-help" />
+      </Tooltip>
+    </Space>
+  )
 }
 
 function NumberField({
@@ -69,15 +71,32 @@ function NumberField({
   max?: number
   step?: number
 }) {
-  return <Form.Item preserve={false} name={['ingest_options', name]} label={<HelpLabel label={label} tooltip={tooltip} />}>
-    <InputNumber min={min} max={max} step={step} precision={step && step < 1 ? 2 : 0} placeholder={placeholder ?? '默认'} style={{ width: '100%' }} />
-  </Form.Item>
+  return (
+    <Form.Item preserve={false} name={['ingest_options', name]} label={<HelpLabel label={label} tooltip={tooltip} />}>
+      <InputNumber
+        min={min}
+        max={max}
+        step={step}
+        precision={step && step < 1 ? 2 : 0}
+        placeholder={placeholder ?? '默认'}
+        style={{ width: '100%' }}
+      />
+    </Form.Item>
+  )
 }
 
 function SwitchField({ name, label, tooltip, defaultChecked }: { name: string; label: string; tooltip: string; defaultChecked?: boolean }) {
-  return <Form.Item preserve={false} initialValue={defaultChecked} name={['ingest_options', name]} label={<HelpLabel label={label} tooltip={tooltip} />} valuePropName="checked">
-    <Switch />
-  </Form.Item>
+  return (
+    <Form.Item
+      preserve={false}
+      initialValue={defaultChecked}
+      name={['ingest_options', name]}
+      label={<HelpLabel label={label} tooltip={tooltip} />}
+      valuePropName="checked"
+    >
+      <Switch />
+    </Form.Item>
+  )
 }
 
 export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDefaults }) {
@@ -92,44 +111,152 @@ export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDe
   const chunkLabel = profile.strategy === 'markdown' && markdownHeadingMode !== 0 ? 'Section max size' : 'Chunk size'
 
   const fields = [
-    <Form.Item key="reader_strategy" name={['ingest_options', 'reader_strategy']} label={<HelpLabel label="Reader strategy" tooltip={tooltips.reader_strategy} />}>
+    <Form.Item
+      key="reader_strategy"
+      name={['ingest_options', 'reader_strategy']}
+      label={<HelpLabel label="Reader strategy" tooltip={tooltips.reader_strategy} />}
+    >
       <Select allowClear placeholder="自动选择" options={readerStrategies} />
     </Form.Item>,
   ]
 
   if (profile.strategy === 'markdown') {
     fields.push(
-      <Form.Item key="markdown_split_on_headings" preserve={false} name={['ingest_options', 'markdown_split_on_headings']} label={<HelpLabel label="Markdown heading split" tooltip={tooltips.markdown_split_on_headings} />}>
-        <Select allowClear placeholder={`默认：${defaults?.markdown_split_on_headings ?? '按全部标题切分'}`} options={headingSplitOptions} />
+      <Form.Item
+        key="markdown_split_on_headings"
+        preserve={false}
+        name={['ingest_options', 'markdown_split_on_headings']}
+        label={<HelpLabel label="Markdown heading split" tooltip={tooltips.markdown_split_on_headings} />}
+      >
+        <Select
+          allowClear
+          placeholder={`默认：${defaults?.markdown_split_on_headings ?? '按全部标题切分'}`}
+          options={headingSplitOptions}
+        />
       </Form.Item>,
-      <NumberField key="chunk_size" name="chunk_size" label={chunkLabel} tooltip={tooltips.chunk_size} placeholder={defaults ? String(defaults.chunk_size) : '默认'} min={200} />,
-      <NumberField key="chunk_overlap" name="chunk_overlap" label="Overlap" tooltip={tooltips.chunk_overlap} placeholder={defaults ? String(defaults.chunk_overlap) : '默认'} min={0} />,
+      <NumberField
+        key="chunk_size"
+        name="chunk_size"
+        label={chunkLabel}
+        tooltip={tooltips.chunk_size}
+        placeholder={defaults ? String(defaults.chunk_size) : '默认'}
+        min={200}
+      />,
+      <NumberField
+        key="chunk_overlap"
+        name="chunk_overlap"
+        label="Overlap"
+        tooltip={tooltips.chunk_overlap}
+        placeholder={defaults ? String(defaults.chunk_overlap) : '默认'}
+        min={0}
+      />
     )
   } else if (profile.strategy === 'csv_row') {
     fields.push(
-      <SwitchField key="csv_skip_header" name="csv_skip_header" label="CSV skip header" tooltip={tooltips.csv_skip_header} defaultChecked={defaults?.csv_skip_header ? true : undefined} />,
-      <SwitchField key="csv_clean_rows" name="csv_clean_rows" label="CSV clean rows" tooltip={tooltips.csv_clean_rows} defaultChecked={defaults?.csv_clean_rows ?? true} />,
+      <SwitchField
+        key="csv_skip_header"
+        name="csv_skip_header"
+        label="CSV skip header"
+        tooltip={tooltips.csv_skip_header}
+        defaultChecked={defaults?.csv_skip_header ? true : undefined}
+      />,
+      <SwitchField
+        key="csv_clean_rows"
+        name="csv_clean_rows"
+        label="CSV clean rows"
+        tooltip={tooltips.csv_clean_rows}
+        defaultChecked={defaults?.csv_clean_rows ?? true}
+      />
     )
   } else if (profile.strategy === 'code') {
     fields.push(
-      <NumberField key="code_chunk_size" name="code_chunk_size" label="Code chunk size" tooltip={tooltips.code_chunk_size} placeholder={defaults ? String(defaults.code_chunk_size) : '默认'} min={256} />,
-      <Form.Item key="code_tokenizer" preserve={false} name={['ingest_options', 'code_tokenizer']} label={<HelpLabel label="Code tokenizer" tooltip={tooltips.code_tokenizer} />}>
+      <NumberField
+        key="code_chunk_size"
+        name="code_chunk_size"
+        label="Code chunk size"
+        tooltip={tooltips.code_chunk_size}
+        placeholder={defaults ? String(defaults.code_chunk_size) : '默认'}
+        min={256}
+      />,
+      <Form.Item
+        key="code_tokenizer"
+        preserve={false}
+        name={['ingest_options', 'code_tokenizer']}
+        label={<HelpLabel label="Code tokenizer" tooltip={tooltips.code_tokenizer} />}
+      >
         <Select allowClear placeholder={`默认：${defaults?.code_tokenizer ?? 'character'}`} options={tokenizerOptions} />
       </Form.Item>,
-      <SwitchField key="code_include_nodes" name="code_include_nodes" label="Include nodes" tooltip={tooltips.code_include_nodes} defaultChecked={defaults?.code_include_nodes ? true : undefined} />,
+      <SwitchField
+        key="code_include_nodes"
+        name="code_include_nodes"
+        label="Include nodes"
+        tooltip={tooltips.code_include_nodes}
+        defaultChecked={defaults?.code_include_nodes ? true : undefined}
+      />
     )
   } else if (profile.strategy === 'semantic') {
     fields.push(
-      <NumberField key="chunk_size" name="chunk_size" label="Chunk size" tooltip={tooltips.chunk_size} placeholder={defaults ? String(defaults.chunk_size) : '默认'} min={200} />,
-      <NumberField key="semantic_threshold" name="semantic_threshold" label="Semantic threshold" tooltip={tooltips.semantic_threshold} placeholder={defaults ? String(defaults.semantic_threshold) : '默认'} min={0} max={1} step={0.01} />,
-      <NumberField key="semantic_similarity_window" name="semantic_similarity_window" label="Semantic window" tooltip={tooltips.semantic_similarity_window} placeholder={defaults ? String(defaults.semantic_similarity_window) : '3'} min={1} />,
-      <NumberField key="semantic_min_sentences_per_chunk" name="semantic_min_sentences_per_chunk" label="Min sentences" tooltip={tooltips.semantic_min_sentences_per_chunk} placeholder={defaults ? String(defaults.semantic_min_sentences_per_chunk) : '1'} min={1} />,
-      <NumberField key="semantic_min_characters_per_sentence" name="semantic_min_characters_per_sentence" label="Min chars per sentence" tooltip={tooltips.semantic_min_characters_per_sentence} placeholder={defaults ? String(defaults.semantic_min_characters_per_sentence) : '24'} min={1} />,
+      <NumberField
+        key="chunk_size"
+        name="chunk_size"
+        label="Chunk size"
+        tooltip={tooltips.chunk_size}
+        placeholder={defaults ? String(defaults.chunk_size) : '默认'}
+        min={200}
+      />,
+      <NumberField
+        key="semantic_threshold"
+        name="semantic_threshold"
+        label="Semantic threshold"
+        tooltip={tooltips.semantic_threshold}
+        placeholder={defaults ? String(defaults.semantic_threshold) : '默认'}
+        min={0}
+        max={1}
+        step={0.01}
+      />,
+      <NumberField
+        key="semantic_similarity_window"
+        name="semantic_similarity_window"
+        label="Semantic window"
+        tooltip={tooltips.semantic_similarity_window}
+        placeholder={defaults ? String(defaults.semantic_similarity_window) : '3'}
+        min={1}
+      />,
+      <NumberField
+        key="semantic_min_sentences_per_chunk"
+        name="semantic_min_sentences_per_chunk"
+        label="Min sentences"
+        tooltip={tooltips.semantic_min_sentences_per_chunk}
+        placeholder={defaults ? String(defaults.semantic_min_sentences_per_chunk) : '1'}
+        min={1}
+      />,
+      <NumberField
+        key="semantic_min_characters_per_sentence"
+        name="semantic_min_characters_per_sentence"
+        label="Min chars per sentence"
+        tooltip={tooltips.semantic_min_characters_per_sentence}
+        placeholder={defaults ? String(defaults.semantic_min_characters_per_sentence) : '24'}
+        min={1}
+      />
     )
   } else {
     fields.push(
-      <NumberField key="chunk_size" name="chunk_size" label="Chunk size" tooltip={tooltips.chunk_size} placeholder={defaults ? String(defaults.chunk_size) : '默认'} min={200} />,
-      <NumberField key="chunk_overlap" name="chunk_overlap" label="Overlap" tooltip={tooltips.chunk_overlap} placeholder={defaults ? String(defaults.chunk_overlap) : '默认'} min={0} />,
+      <NumberField
+        key="chunk_size"
+        name="chunk_size"
+        label="Chunk size"
+        tooltip={tooltips.chunk_size}
+        placeholder={defaults ? String(defaults.chunk_size) : '默认'}
+        min={200}
+      />,
+      <NumberField
+        key="chunk_overlap"
+        name="chunk_overlap"
+        label="Overlap"
+        tooltip={tooltips.chunk_overlap}
+        placeholder={defaults ? String(defaults.chunk_overlap) : '默认'}
+        min={0}
+      />
     )
   }
 
@@ -137,11 +264,19 @@ export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDe
     <Collapse
       className="knowledge-advanced-options"
       ghost
-      items={[{
-        key: 'advanced',
-        label: <Space wrap><span>高级分块参数</span><Tag>{profile.label}</Tag><Typography.Text type="secondary">{profile.description}</Typography.Text></Space>,
-        children: <div className="knowledge-advanced-grid">{fields}</div>,
-      }]}
+      items={[
+        {
+          key: 'advanced',
+          label: (
+            <Space wrap>
+              <span>高级分块参数</span>
+              <Tag>{profile.label}</Tag>
+              <Typography.Text type="secondary">{profile.description}</Typography.Text>
+            </Space>
+          ),
+          children: <div className="knowledge-advanced-grid">{fields}</div>,
+        },
+      ]}
     />
   )
 }

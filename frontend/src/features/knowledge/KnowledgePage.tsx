@@ -26,35 +26,52 @@ const searchTypeOptions = SEARCH_TYPE_OPTIONS.map((value) => ({ value, label: va
 function RetrievalResultCard({ result }: { result: SearchResult }) {
   const [renderMode, setRenderMode] = useState<RetrievalRenderMode>('auto')
   const content = resolveRetrievalContent(result, renderMode)
-  return <Card
-    size="small"
-    key={`${result.doc_id}-${result.chunk_index}`}
-    title={result.title}
-    extra={<Space size={6} wrap>
-      <Select aria-label={`Render ${result.title}`} size="small" value={renderMode} options={renderModeOptions} onChange={setRenderMode} style={{ width: 118 }} />
-      <Tag>{content.kind}</Tag>
-      <Tag>{result.score.toFixed(3)}</Tag>
-    </Space>}
-  >
-    <Descriptions
-      className="retrieval-result-meta"
-      bordered
+  return (
+    <Card
       size="small"
-      column={1}
-      items={[
-        { key: 'source', label: 'Source', children: result.source || '-' },
-        { key: 'chunk', label: 'Chunk', children: result.chunk_index },
-        { key: 'document', label: 'Document', children: <Typography.Text copyable={{ text: result.doc_id }}>{result.doc_id}</Typography.Text> },
-      ]}
-    />
-    <div className="retrieval-result-content">
-      {content.kind === 'json'
-        ? <JsonValueCard value={content.value} title="Content" />
-        : content.kind === 'markdown'
-          ? <XMarkdown content={String(content.value)} openLinksInNewTab escapeRawHtml />
-          : <Typography.Paragraph className="formatted-text">{String(content.value)}</Typography.Paragraph>}
-    </div>
-  </Card>
+      key={`${result.doc_id}-${result.chunk_index}`}
+      title={result.title}
+      extra={
+        <Space size={6} wrap>
+          <Select
+            aria-label={`Render ${result.title}`}
+            size="small"
+            value={renderMode}
+            options={renderModeOptions}
+            onChange={setRenderMode}
+            style={{ width: 118 }}
+          />
+          <Tag>{content.kind}</Tag>
+          <Tag>{result.score.toFixed(3)}</Tag>
+        </Space>
+      }
+    >
+      <Descriptions
+        className="retrieval-result-meta"
+        bordered
+        size="small"
+        column={1}
+        items={[
+          { key: 'source', label: 'Source', children: result.source || '-' },
+          { key: 'chunk', label: 'Chunk', children: result.chunk_index },
+          {
+            key: 'document',
+            label: 'Document',
+            children: <Typography.Text copyable={{ text: result.doc_id }}>{result.doc_id}</Typography.Text>,
+          },
+        ]}
+      />
+      <div className="retrieval-result-content">
+        {content.kind === 'json' ? (
+          <JsonValueCard value={content.value} title="Content" />
+        ) : content.kind === 'markdown' ? (
+          <XMarkdown content={String(content.value)} openLinksInNewTab escapeRawHtml />
+        ) : (
+          <Typography.Paragraph className="formatted-text">{String(content.value)}</Typography.Paragraph>
+        )}
+      </div>
+    </Card>
+  )
 }
 
 export function KnowledgePage() {
@@ -75,12 +92,16 @@ export function KnowledgePage() {
 
   const syncUpdatedDocument = async (document: Document, previousId = selectedId, selectDocument = true) => {
     const currentKey = ['knowledge', filter]
-    client.setQueryData<KnowledgeResponse>(currentKey, (current) => current ? {
-      ...current,
-      documents: previousId
-        ? current.documents.map((item) => item.id === previousId ? document : item)
-        : [document, ...current.documents],
-    } : current)
+    client.setQueryData<KnowledgeResponse>(currentKey, (current) =>
+      current
+        ? {
+            ...current,
+            documents: previousId
+              ? current.documents.map((item) => (item.id === previousId ? document : item))
+              : [document, ...current.documents],
+          }
+        : current
+    )
     if (selectDocument) setSelectedId(document.id)
     await refresh()
   }
@@ -95,7 +116,8 @@ export function KnowledgePage() {
     onError: (error) => message.error(error.message),
   })
   const visibility = useMutation({
-    mutationFn: ({ id, value }: { id: string; value: ResourceVisibility }) => updateDocumentAction(id, { mode: 'metadata', metadata: { visibility: value } }),
+    mutationFn: ({ id, value }: { id: string; value: ResourceVisibility }) =>
+      updateDocumentAction(id, { mode: 'metadata', metadata: { visibility: value } }),
     onSuccess: (document, variables) => syncUpdatedDocument(document, variables.id, selectedId === variables.id),
     onError: (error) => message.error(error.message),
   })
@@ -104,42 +126,110 @@ export function KnowledgePage() {
     setUpdateOpen(true)
   }
 
-  return <main className="page knowledge-page">
-    <PageHeader title="Knowledge" description="管理 Agent 检索知识、入库状态和资源可见性" actions={<><Button icon={<ReloadOutlined />} onClick={() => void refresh()}>刷新</Button><Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>添加文档</Button></>} />
-    <Tabs className="knowledge-tabs" items={[
-      { key: 'documents', label: 'Documents', children: <Splitter className="workbench-splitter knowledge-splitter" orientation={vertical ? 'vertical' : 'horizontal'}>
-        <Splitter.Panel defaultSize="70%" min={vertical ? 260 : '45%'}>
-          <DocumentsTable
-            documents={documents}
-            filter={filter}
-            loading={query.isLoading}
-            selectedId={selectedId}
-            vertical={vertical}
-            onFilterChange={setFilter}
-            onSelect={(document) => setSelectedId(document.id)}
-            onUpdate={openUpdate}
-            onDelete={(document) => remove.mutate(document.id)}
-            onVisibilityChange={(document, value) => visibility.mutate({ id: document.id, value })}
-            deletingId={remove.isPending ? remove.variables : undefined}
-          />
-        </Splitter.Panel>
-        <Splitter.Panel defaultSize="30%" min={vertical ? 180 : '20%'}>
-          <MetadataPanel document={selected} />
-        </Splitter.Panel>
-      </Splitter> },
-      { key: 'retrieval', label: 'Retrieval playground', children: <Card className="workbench-card retrieval-playground">
-        <Space className="retrieval-toolbar" align="start" wrap>
-        <Form key={ingestDefaults.search_type} layout="inline" onFinish={async ({ query: text, limit, search_type }: { query: string; limit: number; search_type: KnowledgeSearchType }) => setResults(await searchKnowledge(text, limit, search_type))} initialValues={{ limit: 5, search_type: ingestDefaults.search_type }}>
-          <Form.Item name="query" rules={[{ required: true }]} style={{ flex: 1 }}><Input prefix={<SearchOutlined />} placeholder="测试检索查询" /></Form.Item>
-          <Form.Item name="search_type" label="Search type"><Select options={searchTypeOptions} style={{ width: 120 }} /></Form.Item>
-          <Form.Item name="limit"><InputNumber min={1} max={20} /></Form.Item>
-          <Button htmlType="submit" type="primary">检索</Button>
-        </Form>
-        </Space>
-        <div className="retrieval-results">{results.map((item) => <RetrievalResultCard key={`${item.doc_id}-${item.chunk_index}`} result={item} />)}</div>
-      </Card> },
-    ]} />
-    <DocumentDrawer open={createOpen} onClose={() => setCreateOpen(false)} onCreated={(document) => syncUpdatedDocument(document, '')} ingestDefaults={ingestDefaults} />
-    {updateOpen && selected && <UpdateDocumentDrawer document={selected} open onClose={() => setUpdateOpen(false)} onUpdated={syncUpdatedDocument} ingestDefaults={ingestDefaults} />}
-  </main>
+  return (
+    <main className="page knowledge-page">
+      <PageHeader
+        title="Knowledge"
+        description="管理 Agent 检索知识、入库状态和资源可见性"
+        actions={
+          <>
+            <Button icon={<ReloadOutlined />} onClick={() => void refresh()}>
+              刷新
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+              添加文档
+            </Button>
+          </>
+        }
+      />
+      <Tabs
+        className="knowledge-tabs"
+        items={[
+          {
+            key: 'documents',
+            label: 'Documents',
+            children: (
+              <Splitter className="workbench-splitter knowledge-splitter" orientation={vertical ? 'vertical' : 'horizontal'}>
+                <Splitter.Panel defaultSize="70%" min={vertical ? 260 : '45%'}>
+                  <DocumentsTable
+                    documents={documents}
+                    filter={filter}
+                    loading={query.isLoading}
+                    selectedId={selectedId}
+                    vertical={vertical}
+                    onFilterChange={setFilter}
+                    onSelect={(document) => setSelectedId(document.id)}
+                    onUpdate={openUpdate}
+                    onDelete={(document) => remove.mutate(document.id)}
+                    onVisibilityChange={(document, value) => visibility.mutate({ id: document.id, value })}
+                    deletingId={remove.isPending ? remove.variables : undefined}
+                  />
+                </Splitter.Panel>
+                <Splitter.Panel defaultSize="30%" min={vertical ? 180 : '20%'}>
+                  <MetadataPanel document={selected} />
+                </Splitter.Panel>
+              </Splitter>
+            ),
+          },
+          {
+            key: 'retrieval',
+            label: 'Retrieval playground',
+            children: (
+              <Card className="workbench-card retrieval-playground">
+                <Space className="retrieval-toolbar" align="start" wrap>
+                  <Form
+                    key={ingestDefaults.search_type}
+                    layout="inline"
+                    onFinish={async ({
+                      query: text,
+                      limit,
+                      search_type,
+                    }: {
+                      query: string
+                      limit: number
+                      search_type: KnowledgeSearchType
+                    }) => setResults(await searchKnowledge(text, limit, search_type))}
+                    initialValues={{ limit: 5, search_type: ingestDefaults.search_type }}
+                  >
+                    <Form.Item name="query" rules={[{ required: true }]} style={{ flex: 1 }}>
+                      <Input prefix={<SearchOutlined />} placeholder="测试检索查询" />
+                    </Form.Item>
+                    <Form.Item name="search_type" label="Search type">
+                      <Select options={searchTypeOptions} style={{ width: 120 }} />
+                    </Form.Item>
+                    <Form.Item name="limit">
+                      <InputNumber min={1} max={20} />
+                    </Form.Item>
+                    <Button htmlType="submit" type="primary">
+                      检索
+                    </Button>
+                  </Form>
+                </Space>
+                <div className="retrieval-results">
+                  {results.map((item) => (
+                    <RetrievalResultCard key={`${item.doc_id}-${item.chunk_index}`} result={item} />
+                  ))}
+                </div>
+              </Card>
+            ),
+          },
+        ]}
+      />
+      <DocumentDrawer
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(document) => syncUpdatedDocument(document, '')}
+        ingestDefaults={ingestDefaults}
+      />
+      {updateOpen && selected && (
+        <UpdateDocumentDrawer
+          document={selected}
+          open
+          onClose={() => setUpdateOpen(false)}
+          onUpdated={syncUpdatedDocument}
+          ingestDefaults={ingestDefaults}
+        />
+      )}
+    </main>
+  )
 }

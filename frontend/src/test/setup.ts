@@ -4,12 +4,25 @@ import { cleanup } from '@testing-library/react'
 import { server } from './server'
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
-afterEach(() => { cleanup(); server.resetHandlers(); localStorage.clear() })
+afterEach(() => {
+  cleanup()
+  server.resetHandlers()
+  localStorage.clear()
+})
 afterAll(() => server.close())
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
-  value: (query: string) => ({ matches: false, media: query, onchange: null, addListener: () => undefined, removeListener: () => undefined, addEventListener: () => undefined, removeEventListener: () => undefined, dispatchEvent: () => false }),
+  value: (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+  }),
 })
 
 Object.defineProperty(window, 'scrollTo', { writable: true, value: () => undefined })
@@ -20,5 +33,9 @@ Object.defineProperty(window, 'getComputedStyle', {
   value: (element: Element) => getComputedStyleWithoutPseudo(element),
 })
 
-class ResizeObserverMock { observe() {} unobserve() {} disconnect() {} }
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
 globalThis.ResizeObserver = ResizeObserverMock

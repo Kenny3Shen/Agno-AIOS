@@ -9,9 +9,8 @@ export interface AvailableMcpService {
 
 export function manifestServiceNames(server: { manifest: JsonRecord; name: string }): string[] {
   const manifestServers = server.manifest.mcpServers
-  const names = manifestServers && typeof manifestServers === 'object' && !Array.isArray(manifestServers)
-    ? Object.keys(manifestServers)
-    : []
+  const names =
+    manifestServers && typeof manifestServers === 'object' && !Array.isArray(manifestServers) ? Object.keys(manifestServers) : []
   return names.length > 0 ? names : [server.name]
 }
 

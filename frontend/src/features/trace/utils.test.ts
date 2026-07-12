@@ -1,11 +1,49 @@
 import { describe, expect, it } from 'vitest'
-import { buildTraceSearch, filterSessionsByArchive, firstSpanId, groupRuns, groupSessions, mergeTraceSessions, parseTraceSearch, previewSpanValue } from './utils'
+import {
+  buildTraceSearch,
+  filterSessionsByArchive,
+  firstSpanId,
+  groupRuns,
+  groupSessions,
+  mergeTraceSessions,
+  parseTraceSearch,
+  previewSpanValue,
+} from './utils'
 import type { Trace, TraceSessionSummary } from './types'
 
 const traces: Trace[] = [
-  { trace_id: 't1', session_id: 's1', run_id: 'r1', name: 'run', status: 'OK', duration_ms: 20, start_time: '2026-01-01T00:00:00Z', end_time: '', total_spans: 3 },
-  { trace_id: 't2', session_id: 's1', run_id: 'r1', name: 'model', status: 'ERROR', duration_ms: 8, start_time: '2026-01-01T00:00:01Z', end_time: '', total_spans: 1 },
-  { trace_id: 't3', session_id: 's2', run_id: 'r2', name: 'run', status: 'OK', duration_ms: 10, start_time: '2026-01-02T00:00:00Z', end_time: '' },
+  {
+    trace_id: 't1',
+    session_id: 's1',
+    run_id: 'r1',
+    name: 'run',
+    status: 'OK',
+    duration_ms: 20,
+    start_time: '2026-01-01T00:00:00Z',
+    end_time: '',
+    total_spans: 3,
+  },
+  {
+    trace_id: 't2',
+    session_id: 's1',
+    run_id: 'r1',
+    name: 'model',
+    status: 'ERROR',
+    duration_ms: 8,
+    start_time: '2026-01-01T00:00:01Z',
+    end_time: '',
+    total_spans: 1,
+  },
+  {
+    trace_id: 't3',
+    session_id: 's2',
+    run_id: 'r2',
+    name: 'run',
+    status: 'OK',
+    duration_ms: 10,
+    start_time: '2026-01-02T00:00:00Z',
+    end_time: '',
+  },
 ]
 
 describe('trace hierarchy', () => {
@@ -25,14 +63,19 @@ describe('trace hierarchy', () => {
   })
 
   it('builds selected session URLs without writing it as a filter', () => {
-    const query = new URLSearchParams(buildTraceSearch({
-      session_id: '',
-      run_id: '',
-      user_id: '',
-      status: '',
-      start_time: '',
-      end_time: '',
-    }, 'selected-session'))
+    const query = new URLSearchParams(
+      buildTraceSearch(
+        {
+          session_id: '',
+          run_id: '',
+          user_id: '',
+          status: '',
+          start_time: '',
+          end_time: '',
+        },
+        'selected-session'
+      )
+    )
 
     expect(query.get('selected_session')).toBe('selected-session')
     expect(query.has('session_id')).toBe(false)
@@ -68,11 +111,28 @@ describe('trace hierarchy', () => {
       { session_id: 'chat-only', preview: 'No trace yet', created_at: 1, updated_at: 2 },
       { session_id: 's1', preview: 'Chat title', title: 'Renamed session', archived: false, created_at: 1, updated_at: 3 },
     ]
-    const summaries: TraceSessionSummary[] = [{
-      session_id: 's1', name: 'run', latest_start_time: '2026-01-01T00:00:00Z', trace_count: 2, run_count: 1, error_count: 0, status: 'OK', user_id: 'u1',
-    }, {
-      session_id: 'legacy', name: 'legacy run', latest_start_time: '2026-01-02T00:00:00Z', trace_count: 1, run_count: 1, error_count: 0, status: 'OK', user_id: 'u1',
-    }]
+    const summaries: TraceSessionSummary[] = [
+      {
+        session_id: 's1',
+        name: 'run',
+        latest_start_time: '2026-01-01T00:00:00Z',
+        trace_count: 2,
+        run_count: 1,
+        error_count: 0,
+        status: 'OK',
+        user_id: 'u1',
+      },
+      {
+        session_id: 'legacy',
+        name: 'legacy run',
+        latest_start_time: '2026-01-02T00:00:00Z',
+        trace_count: 1,
+        run_count: 1,
+        error_count: 0,
+        status: 'OK',
+        user_id: 'u1',
+      },
+    ]
     const merged = mergeTraceSessions(chatSessions, summaries)
     expect(merged.map((session) => session.sessionId)).toEqual(['legacy', 's1'])
     expect(merged.find((session) => session.sessionId === 's1')).toMatchObject({ name: 'Renamed session', archived: false })
@@ -99,6 +159,8 @@ describe('trace hierarchy', () => {
   it('previews span content and selects the first tree node', () => {
     expect(previewSpanValue({ prompt: 'inspect target' })).toBe('JSON · 1 fields')
     expect(previewSpanValue({ format: 'text', text: 'Inspect the target', data: null })).toBe('Inspect the target')
-    expect(firstSpanId([{ span: { span_id: 'root', name: 'agent', status_code: 'OK', duration_ms: 1, start_time: '' }, children: [] }])).toBe('root')
+    expect(
+      firstSpanId([{ span: { span_id: 'root', name: 'agent', status_code: 'OK', duration_ms: 1, start_time: '' }, children: [] }])
+    ).toBe('root')
   })
 })

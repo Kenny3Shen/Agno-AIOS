@@ -10,8 +10,7 @@ export const formatDate = (value?: string | number | null, locale: unknown = 'zh
   return Number.isNaN(date.valueOf()) ? String(value) : date.toLocaleString(typeof locale === 'string' ? locale : 'zh-CN')
 }
 
-export const asRecord = (value: unknown): Record<string, unknown> => (
-  value && typeof value === 'object' ? value as Record<string, unknown> : {}
-)
+export const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
 
-export const asArray = <T = Record<string, unknown>>(value: unknown): T[] => Array.isArray(value) ? value as T[] : []
+export const asArray = <T = Record<string, unknown>>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : [])

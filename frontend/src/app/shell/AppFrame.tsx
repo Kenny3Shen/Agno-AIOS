@@ -1,15 +1,34 @@
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useRouter, useRouterState } from '@tanstack/react-router'
-import { Avatar, Button, Drawer, Dropdown, Grid, Layout, Menu, Space, Spin, Tooltip, Typography, type MenuProps } from 'antd'
+import { useRouter, useRouterState } from '@tanstack/react-router'
+import { Avatar, Button, Drawer, Dropdown, Grid, Layout, Menu, Space, Spin, Tooltip, type MenuProps } from 'antd'
 import {
-  ApiOutlined, AuditOutlined, BookOutlined, BugOutlined, BulbOutlined, CloudDownloadOutlined,
-  CodeOutlined, DashboardOutlined, DatabaseOutlined, ExperimentOutlined, FileSearchOutlined, GithubOutlined,
-  MenuFoldOutlined, MenuOutlined, MenuUnfoldOutlined, MessageOutlined, MoonOutlined, NodeIndexOutlined, SafetyCertificateOutlined,
-  SettingOutlined, SunOutlined, TranslationOutlined,
+  ApiOutlined,
+  AuditOutlined,
+  BookOutlined,
+  BugOutlined,
+  BulbOutlined,
+  CloudDownloadOutlined,
+  CodeOutlined,
+  DashboardOutlined,
+  DatabaseOutlined,
+  ExperimentOutlined,
+  FileSearchOutlined,
+  GithubOutlined,
+  MenuFoldOutlined,
+  MenuOutlined,
+  MenuUnfoldOutlined,
+  MessageOutlined,
+  MoonOutlined,
+  NodeIndexOutlined,
+  SafetyCertificateOutlined,
+  SettingOutlined,
+  SunOutlined,
+  TranslationOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { currentUserQuery, logout } from '@/features/auth'
+import { ChatTaskPanel } from '@/features/chat/ChatTaskPanel'
 import { loginPath, nextPathFromLocation } from '@/features/auth/routing'
 import { getToken } from '@/shared/auth/storage'
 import { hasScope } from '@/shared/auth/permissions'
@@ -34,6 +53,8 @@ const nav = [
   { key: '/audit', icon: <FileSearchOutlined />, labelKey: 'audit', scope: 'audit:read' },
   { key: '/settings', icon: <SettingOutlined />, labelKey: 'settings', scope: 'config:read' },
 ]
+const primaryNav = nav.filter((item) => item.key !== '/settings')
+const settingsNav = nav.filter((item) => item.key === '/settings')
 
 export function AppFrame({ children }: { children: ReactNode }) {
   const { t } = useTranslation()
@@ -51,15 +72,36 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const token = getToken()
   const userQuery = useQuery({ ...currentUserQuery(), enabled: Boolean(token), retry: false })
 
-  const items = useMemo<MenuProps['items']>(() => joinMenuGroups(
-    groupNavigation(nav).map((group) => group
-      .filter((item) => !item.scope || hasScope(userQuery.data, item.scope))
-      .map((item) => ({
-        key: item.key,
-        icon: item.icon,
-        label: <Link to={item.key}>{t(`shell.${item.labelKey}`)}</Link>,
-      }))),
-  ), [t, userQuery.data])
+  const items = useMemo<MenuProps['items']>(
+    () =>
+      joinMenuGroups(
+        groupNavigation(primaryNav).map((group) =>
+          group
+            .filter((item) => !item.scope || hasScope(userQuery.data, item.scope))
+            .map((item) => ({
+              key: item.key,
+              icon: item.icon,
+              label: t(`shell.${item.labelKey}`),
+            }))
+        )
+      ),
+    [t, userQuery.data]
+  )
+  const settingsItems = useMemo<MenuProps['items']>(
+    () =>
+      settingsNav
+        .filter((item) => !item.scope || hasScope(userQuery.data, item.scope))
+        .map((item) => ({
+          key: item.key,
+          icon: item.icon,
+          label: t(`shell.${item.labelKey}`),
+        })),
+    [t, userQuery.data]
+  )
+  const navigateFromMenu: MenuProps['onClick'] = ({ key }) => {
+    void router.history.push(key === '/chat' ? '/chat' : key)
+    setMobileOpen(false)
+  }
   useEffect(() => setMobileOpen(false), [path])
   useEffect(() => {
     if (currentNextPath) nextPathRef.current = currentNextPath
@@ -69,40 +111,121 @@ export function AppFrame({ children }: { children: ReactNode }) {
     router.history.replace(loginPath(nextPathRef.current))
   }, [router.history, token, userQuery.isError])
 
-  if (!token || userQuery.isError) return <div className="boot-screen"><Spin size="large" /></div>
-  if (userQuery.isLoading) return <div className="boot-screen"><Spin size="large" /></div>
+  if (!token || userQuery.isError)
+    return (
+      <div className="boot-screen">
+        <Spin size="large" />
+      </div>
+    )
+  if (userQuery.isLoading)
+    return (
+      <div className="boot-screen">
+        <Spin size="large" />
+      </div>
+    )
 
   const initials = userQuery.data?.email.slice(0, 2).toUpperCase() ?? 'AI'
   return (
     <Layout className="app-shell">
       <Sider width={264} collapsedWidth={76} collapsed={mobile ? true : collapsed} className="shell-sider" trigger={null}>
-        <div className="shell-brand"><span className="brand-mark">T</span><div className="shell-brand-copy"><strong>T.A.I.S</strong><small>Trinity AI Security</small></div></div>
-        <Menu mode="inline" selectedKeys={[path]} items={items} className="shell-menu" />
-        <div className="shell-identity"><Avatar shape="square">{initials}</Avatar><Typography.Text className="shell-identity-copy" ellipsis>{userQuery.data?.email}</Typography.Text></div>
+        <div className="shell-brand">
+          <span className="brand-mark">T</span>
+          <div className="shell-brand-copy">
+            <strong>T.A.I.S</strong>
+            <small>Trinity AI Security</small>
+          </div>
+        </div>
+        <div className="shell-sider-body">
+          <Menu
+            mode="inline"
+            selectedKeys={path === '/settings' ? [] : [path]}
+            items={items}
+            onClick={navigateFromMenu}
+            className="shell-menu shell-main-menu"
+          />
+          <ChatTaskPanel />
+          {settingsItems?.length ? (
+            <Menu
+              mode="inline"
+              selectedKeys={path === '/settings' ? [path] : []}
+              items={settingsItems}
+              onClick={navigateFromMenu}
+              className="shell-menu shell-bottom-menu"
+            />
+          ) : null}
+        </div>
       </Sider>
       <Layout>
         <Header className="shell-header">
           <Space>
             {mobile && <Button type="text" icon={<MenuOutlined />} onClick={() => setMobileOpen(true)} aria-label="Open navigation" />}
-            {!mobile && <Button type="text" icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setCollapsed((value) => !value)} aria-label="Toggle navigation" />}
+            {!mobile && (
+              <Button
+                type="text"
+                icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                onClick={() => setCollapsed((value) => !value)}
+                aria-label="Toggle navigation"
+              />
+            )}
           </Space>
           <Space>
-            <Tooltip title={t('shell.language')}><Button type="text" icon={<TranslationOutlined />} onClick={preferences.toggleLocale} /></Tooltip>
-            <Tooltip title={t('shell.theme')}><Button type="text" icon={preferences.dark ? <SunOutlined /> : <MoonOutlined />} onClick={preferences.toggleTheme} /></Tooltip>
-            <Tooltip title="GitHub"><Button type="text" icon={<GithubOutlined />} href="https://github.com/Kenny3Shen/Agno-AIOS" target="_blank" /></Tooltip>
-            <Dropdown menu={{ items: [{ key: 'logout', icon: <SafetyCertificateOutlined />, label: t('shell.logout'), onClick: async () => { await logout(); queryClient.clear(); window.location.reload() } }] }}>
-              <Button type="text"><Avatar size="small">{initials}</Avatar></Button>
+            <Tooltip title={t('shell.language')}>
+              <Button type="text" icon={<TranslationOutlined />} onClick={preferences.toggleLocale} />
+            </Tooltip>
+            <Tooltip title={t('shell.theme')}>
+              <Button type="text" icon={preferences.dark ? <SunOutlined /> : <MoonOutlined />} onClick={preferences.toggleTheme} />
+            </Tooltip>
+            <Tooltip title="GitHub">
+              <Button type="text" icon={<GithubOutlined />} href="https://github.com/Kenny3Shen/Agno-AIOS" target="_blank" />
+            </Tooltip>
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: 'logout',
+                    icon: <SafetyCertificateOutlined />,
+                    label: t('shell.logout'),
+                    onClick: async () => {
+                      await logout()
+                      queryClient.clear()
+                      window.location.reload()
+                    },
+                  },
+                ],
+              }}
+            >
+              <Button type="text">
+                <Avatar size="small">{initials}</Avatar>
+              </Button>
             </Dropdown>
           </Space>
         </Header>
         <Content className="shell-content">
-          <Suspense fallback={<div className="boot-screen"><Spin /></div>}>
-            <div key={path} className="shell-page-transition">{children}</div>
+          <Suspense
+            fallback={
+              <div className="boot-screen">
+                <Spin />
+              </div>
+            }
+          >
+            <div key={path} className="shell-page-transition">
+              {children}
+            </div>
           </Suspense>
         </Content>
       </Layout>
-      <Drawer placement="left" size="min(300px, calc(100vw - 32px))" open={mobileOpen} onClose={() => setMobileOpen(false)} title="T.A.I.S" styles={{ body: { padding: 8 } }}>
-        <Menu mode="inline" selectedKeys={[path]} onClick={() => setMobileOpen(false)} items={items} />
+      <Drawer
+        placement="left"
+        size="min(300px, calc(100vw - 32px))"
+        open={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        title="T.A.I.S"
+        styles={{ body: { padding: 8 } }}
+      >
+        <Menu mode="inline" selectedKeys={path === '/settings' ? [] : [path]} onClick={navigateFromMenu} items={items} />
+        {settingsItems?.length ? (
+          <Menu mode="inline" selectedKeys={path === '/settings' ? [path] : []} onClick={navigateFromMenu} items={settingsItems} />
+        ) : null}
       </Drawer>
     </Layout>
   )

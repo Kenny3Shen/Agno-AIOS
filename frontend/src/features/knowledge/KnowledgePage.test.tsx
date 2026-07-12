@@ -21,7 +21,9 @@ const oldDocument: Document = {
 }
 
 const response = (document: Document): KnowledgeResponse => ({
-  status: { rag_settings: { search_type: 'hybrid', chunk_size: 1200, chunk_overlap: 160, code_chunk_size: 1800, semantic_threshold: 0.52 } },
+  status: {
+    rag_settings: { search_type: 'hybrid', chunk_size: 1200, chunk_overlap: 160, code_chunk_size: 1800, semantic_threshold: 0.52 },
+  },
   documents: [document],
   pagination: { page: 1, limit: 100, total: 1 },
 })
@@ -43,7 +45,7 @@ describe('knowledge document workflow', () => {
         expect(await request.json()).toEqual({ mode: 'metadata', metadata: { source: 'Runbooks' } })
         saved = true
         return HttpResponse.json(updated)
-      }),
+      })
     )
     renderWithQuery(<KnowledgePage />)
 
@@ -67,7 +69,7 @@ describe('knowledge document workflow', () => {
         expect(await request.json()).toEqual({ mode: 'replace_text', file_name: 'runbook.md', content: '# Updated runbook' })
         replaced = true
         return HttpResponse.json(newDocument)
-      }),
+      })
     )
     renderWithQuery(<KnowledgePage />)
 
@@ -93,7 +95,7 @@ describe('knowledge document workflow', () => {
         expect(body).toContain('Content-Type: text/markdown')
         replaced = true
         return HttpResponse.json(newDocument)
-      }),
+      })
     )
     renderWithQuery(<KnowledgePage />)
 
@@ -118,7 +120,7 @@ describe('knowledge document workflow', () => {
         expect(await request.json()).toEqual({ mode: 'rebuild', ingest_options: { chunk_size: 1800 } })
         rebuiltDocument = true
         return HttpResponse.json(rebuilt)
-      }),
+      })
     )
     renderWithQuery(<KnowledgePage />)
 
@@ -177,7 +179,7 @@ describe('knowledge document workflow', () => {
       http.post('/api/knowledge/documents/doc-old/update', () => {
         updateCalls += 1
         return HttpResponse.json(oldDocument)
-      }),
+      })
     )
     renderWithQuery(<KnowledgePage />)
 
@@ -204,12 +206,14 @@ describe('knowledge document workflow', () => {
   it('shows render mode controls inside each retrieval result', async () => {
     server.use(
       http.get('/api/knowledge', () => HttpResponse.json(response(oldDocument))),
-      http.post('/api/knowledge/search', () => HttpResponse.json({
-        results: [
-          { content: '{"risk":"high"}', score: 0.91, doc_id: 'doc-json', title: 'JSON result', source: 'KB', chunk_index: 0 },
-          { content: '# Markdown result', score: 0.82, doc_id: 'doc-md', title: 'Markdown result', source: 'KB', chunk_index: 1 },
-        ],
-      })),
+      http.post('/api/knowledge/search', () =>
+        HttpResponse.json({
+          results: [
+            { content: '{"risk":"high"}', score: 0.91, doc_id: 'doc-json', title: 'JSON result', source: 'KB', chunk_index: 0 },
+            { content: '# Markdown result', score: 0.82, doc_id: 'doc-md', title: 'Markdown result', source: 'KB', chunk_index: 1 },
+          ],
+        })
+      )
     )
     renderWithQuery(<KnowledgePage />)
 

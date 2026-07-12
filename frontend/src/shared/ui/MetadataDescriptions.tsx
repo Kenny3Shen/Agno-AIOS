@@ -9,11 +9,15 @@ export interface MetadataEntry {
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 
-const metadataLabel = (path: string) => path.split(' / ').map((segment) => {
-  const words = segment.replaceAll('_', ' ')
-  const capitalized = words ? `${words[0]!.toUpperCase()}${words.slice(1)}` : words
-  return capitalized.replace(/\bid\b/gi, 'ID')
-}).join(' / ')
+const metadataLabel = (path: string) =>
+  path
+    .split(' / ')
+    .map((segment) => {
+      const words = segment.replaceAll('_', ' ')
+      const capitalized = words ? `${words[0]!.toUpperCase()}${words.slice(1)}` : words
+      return capitalized.replace(/\bid\b/gi, 'ID')
+    })
+    .join(' / ')
 
 export function flattenMetadata(value: unknown, prefix = ''): MetadataEntry[] {
   if (value === undefined && !prefix) return []
@@ -34,13 +38,24 @@ export function flattenMetadata(value: unknown, prefix = ''): MetadataEntry[] {
 
 export function CopyableValue({ value }: { value?: string | null }) {
   const text = value?.trim() || '-'
-  return <Typography.Text className="metadata-copyable" copyable={text === '-' ? false : { text }}>{text}</Typography.Text>
+  return (
+    <Typography.Text className="metadata-copyable" copyable={text === '-' ? false : { text }}>
+      {text}
+    </Typography.Text>
+  )
 }
 
 function MetadataValue({ value }: { value: unknown }) {
   if (value === undefined || value === null || value === '') return <>-</>
   if (typeof value === 'boolean') return <Tag color={value ? 'success' : 'default'}>{value ? 'true' : 'false'}</Tag>
-  if (Array.isArray(value) && value.every((item) => item == null || ['string', 'number', 'boolean'].includes(typeof item))) return <Space wrap>{value.map((item, index) => <Tag key={`${String(item)}-${index}`}>{String(item)}</Tag>)}</Space>
+  if (Array.isArray(value) && value.every((item) => item == null || ['string', 'number', 'boolean'].includes(typeof item)))
+    return (
+      <Space wrap>
+        {value.map((item, index) => (
+          <Tag key={`${String(item)}-${index}`}>{String(item)}</Tag>
+        ))}
+      </Space>
+    )
   if (Array.isArray(value) || isRecord(value)) return <JsonValueCard value={value} />
   return <Typography.Paragraph className="metadata-value">{String(value)}</Typography.Paragraph>
 }

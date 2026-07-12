@@ -16,23 +16,44 @@ const models = {
   active_model_id: 'first',
   models: [
     {
-      id: 'first', name: 'First model', model_id: 'deepseek-v4-flash', provider: 'deepseek',
-      api_protocol: 'chat-completions', structured_output_mode: 'json', default_reasoning_effort: 'max',
-      base_url: 'https://api.deepseek.com', api_key: 'masked', description: '', enabled: true, builtin: true, configured: true,
+      id: 'first',
+      name: 'First model',
+      model_id: 'deepseek-v4-flash',
+      provider: 'deepseek',
+      api_protocol: 'chat-completions',
+      structured_output_mode: 'json',
+      default_reasoning_effort: 'max',
+      base_url: 'https://api.deepseek.com',
+      api_key: 'masked',
+      description: '',
+      enabled: true,
+      builtin: true,
+      configured: true,
     },
     {
-      id: 'second', name: 'Second model', model_id: 'gpt-5-mini', provider: 'openai',
-      api_protocol: 'responses', structured_output_mode: 'native', default_reasoning_effort: 'high',
-      base_url: '', api_key: 'masked', description: '', enabled: true, builtin: false, configured: true,
+      id: 'second',
+      name: 'Second model',
+      model_id: 'gpt-5-mini',
+      provider: 'openai',
+      api_protocol: 'responses',
+      structured_output_mode: 'native',
+      default_reasoning_effort: 'high',
+      base_url: '',
+      api_key: 'masked',
+      description: '',
+      enabled: true,
+      builtin: false,
+      configured: true,
     },
   ],
 }
 
-const mockSettings = () => server.use(
-  http.get('/api/auth/users/me', () => HttpResponse.json(admin)),
-  http.get('/api/models', () => HttpResponse.json(models)),
-  http.get('/api/settings/chat', () => HttpResponse.json(chatSettings)),
-)
+const mockSettings = () =>
+  server.use(
+    http.get('/api/auth/users/me', () => HttpResponse.json(admin)),
+    http.get('/api/models', () => HttpResponse.json(models)),
+    http.get('/api/settings/chat', () => HttpResponse.json(chatSettings))
+  )
 
 describe('model settings editor', () => {
   it('separates model and chat operations into tabs', async () => {
@@ -64,6 +85,6 @@ describe('model settings editor', () => {
     fireEvent.click(cancelButton!)
 
     fireEvent.click(screen.getByLabelText('编辑 Second model'))
-    expect((await screen.findByLabelText('Name') as HTMLInputElement).value).toBe('Second model')
+    expect(((await screen.findByLabelText('Name')) as HTMLInputElement).value).toBe('Second model')
   })
 })

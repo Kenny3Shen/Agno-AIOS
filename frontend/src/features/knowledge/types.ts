@@ -1,6 +1,17 @@
 import type { JsonRecord, ResourceVisibility } from '@/shared/types/common'
 
-export interface Document { id: string; title: string; source: string; chunks: number; created_at: string; status?: string; visibility?: ResourceVisibility; owner_user_id?: string; can_manage?: boolean; metadata?: Record<string, string> }
+export interface Document {
+  id: string
+  title: string
+  source: string
+  chunks: number
+  created_at: string
+  status?: string
+  visibility?: ResourceVisibility
+  owner_user_id?: string
+  can_manage?: boolean
+  metadata?: Record<string, string>
+}
 export type KnowledgeSearchType = 'hybrid' | 'vector' | 'keyword'
 export type RetrievalRenderMode = 'auto' | 'markdown' | 'json' | 'text'
 export interface KnowledgeRagSettings {
@@ -13,8 +24,20 @@ export interface KnowledgeRagSettings {
 export interface KnowledgeStatus extends JsonRecord {
   rag_settings?: KnowledgeRagSettings
 }
-export interface KnowledgeResponse { status: KnowledgeStatus; documents: Document[]; pagination: { page: number; limit: number; total: number } }
-export interface SearchResult { content: string; score: number; doc_id: string; title: string; source: string; chunk_index: number; metadata?: JsonRecord }
+export interface KnowledgeResponse {
+  status: KnowledgeStatus
+  documents: Document[]
+  pagination: { page: number; limit: number; total: number }
+}
+export interface SearchResult {
+  content: string
+  score: number
+  doc_id: string
+  title: string
+  source: string
+  chunk_index: number
+  metadata?: JsonRecord
+}
 
 export interface KnowledgeIngestOptions {
   chunk_size?: number

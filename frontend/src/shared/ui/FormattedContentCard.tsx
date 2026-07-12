@@ -42,18 +42,36 @@ export function formatContent(value: unknown): FormattedContent {
 
 export function JsonValueCard({ value, title = 'JSON' }: { value: unknown; title?: string }) {
   const text = JSON.stringify(value, null, 2)
-  return <Card className="formatted-content-card json-value-card" size="small" title={title} extra={<Button type="text" size="small" aria-label={`Copy ${title}`} icon={<CopyOutlined />} onClick={() => void copyToClipboard(text)} />}>
-    <pre>{text}</pre>
-  </Card>
+  return (
+    <Card
+      className="formatted-content-card json-value-card"
+      size="small"
+      title={title}
+      extra={
+        <Button type="text" size="small" aria-label={`Copy ${title}`} icon={<CopyOutlined />} onClick={() => void copyToClipboard(text)} />
+      }
+    >
+      <pre>{text}</pre>
+    </Card>
+  )
 }
 
 export function FormattedContentCard({ value, title }: { value: unknown; title: string }) {
   const content = formatContent(value)
-  if (content.kind === 'empty') return <Card className="formatted-content-card" size="small" title={title}><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={false} /></Card>
+  if (content.kind === 'empty')
+    return (
+      <Card className="formatted-content-card" size="small" title={title}>
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={false} />
+      </Card>
+    )
   if (content.kind === 'json') return <JsonValueCard value={content.value} title={title} />
-  return <Card className="formatted-content-card" size="small" title={title} extra={<Tag>{content.format}</Tag>}>
-    {content.kind === 'markdown'
-      ? <XMarkdown content={String(content.value)} openLinksInNewTab escapeRawHtml />
-      : <Typography.Paragraph className="formatted-text">{String(content.value)}</Typography.Paragraph>}
-  </Card>
+  return (
+    <Card className="formatted-content-card" size="small" title={title} extra={<Tag>{content.format}</Tag>}>
+      {content.kind === 'markdown' ? (
+        <XMarkdown content={String(content.value)} openLinksInNewTab escapeRawHtml />
+      ) : (
+        <Typography.Paragraph className="formatted-text">{String(content.value)}</Typography.Paragraph>
+      )}
+    </Card>
+  )
 }

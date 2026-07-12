@@ -8,7 +8,9 @@ export function PayloadViewer({ value, markdown = false }: { value: unknown; mar
   if (!text) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} />
   return (
     <div className="payload-viewer">
-      <Space className="payload-actions"><Button type="text" icon={<CopyOutlined />} onClick={() => void copyToClipboard(text)} /></Space>
+      <Space className="payload-actions">
+        <Button type="text" icon={<CopyOutlined />} onClick={() => void copyToClipboard(text)} />
+      </Space>
       {markdown ? <XMarkdown content={text} openLinksInNewTab escapeRawHtml /> : <pre>{text}</pre>}
     </div>
   )

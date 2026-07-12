@@ -24,5 +24,9 @@ export const getOAuthAuthorization = async (provider: OAuthProvider) => {
 }
 
 export const logout = async () => {
-  try { await apiFetch('/auth/logout', { method: 'POST' }) } finally { clearToken() }
+  try {
+    await apiFetch('/auth/logout', { method: 'POST' })
+  } finally {
+    clearToken()
+  }
 }

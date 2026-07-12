@@ -19,8 +19,19 @@ export interface ToolStep {
   input?: unknown
   output?: unknown
 }
-export interface ThoughtStep { id: string; title: string; status: ToolStatus; summary?: string | null; duration?: number | null }
-export interface ChatSource { id: string; title: string; url?: string | null; snippet?: string | null }
+export interface ThoughtStep {
+  id: string
+  title: string
+  status: ToolStatus
+  summary?: string | null
+  duration?: number | null
+}
+export interface ChatSource {
+  id: string
+  title: string
+  url?: string | null
+  snippet?: string | null
+}
 
 export interface Message {
   id: string
@@ -42,7 +53,16 @@ export interface Message {
   tools?: unknown[] | null
 }
 
-export interface ChatSession { session_id: string; user_id?: string | null; preview: string; title?: string | null; created_at: number; updated_at: number; archived?: boolean; runs?: JsonRecord[] }
+export interface ChatSession {
+  session_id: string
+  user_id?: string | null
+  preview: string
+  title?: string | null
+  created_at: number
+  updated_at: number
+  archived?: boolean
+  runs?: JsonRecord[]
+}
 export interface ChatState {
   messages: Message[]
   input: string

@@ -19,21 +19,30 @@ export function useChat() {
   const history = useQuery(historyQuery(sessionId ?? ''))
   const models = useQuery(modelsQuery())
 
-  useEffect(() => { if (sessionId && history.data) dispatch({ type: 'history', messages: history.data }); else if (!sessionId) dispatch({ type: 'reset' }) }, [history.data, sessionId])
+  useEffect(() => {
+    if (sessionId && history.data) dispatch({ type: 'history', messages: history.data })
+    else if (!sessionId) dispatch({ type: 'reset' })
+  }, [history.data, sessionId])
   useEffect(() => {
     if (!models.data?.models.length) return
-    const selected = models.data.models.find((model) => model.id === state.selectedModelId)
-      ?? models.data.models.find((model) => model.id === models.data.active_model_id && model.enabled)
-      ?? models.data.models.find((model) => model.enabled)
-      ?? models.data.models[0]
+    const selected =
+      models.data.models.find((model) => model.id === state.selectedModelId) ??
+      models.data.models.find((model) => model.id === models.data.active_model_id && model.enabled) ??
+      models.data.models.find((model) => model.enabled) ??
+      models.data.models[0]
     if (!selected) return
     const effort = defaultReasoningEffort(selected)
     if (state.selectedModelId !== selected.id) dispatch({ type: 'model', value: selected.id, reasoningEffort: effort })
     else if (state.reasoningEffort === null && effort !== null) dispatch({ type: 'reasoning-effort', value: effort })
   }, [models.data, state.reasoningEffort, state.selectedModelId])
 
-  const selectedModel = useMemo(() => models.data?.models.find((model) => model.id === state.selectedModelId) ?? null, [models.data, state.selectedModelId])
-  const setSession = (value: string | null) => { void router.history.push(value ? `/chat?session=${encodeURIComponent(value)}` : '/chat') }
+  const selectedModel = useMemo(
+    () => models.data?.models.find((model) => model.id === state.selectedModelId) ?? null,
+    [models.data, state.selectedModelId]
+  )
+  const setSession = (value: string | null) => {
+    void router.history.push(value ? `/chat?session=${encodeURIComponent(value)}` : '/chat')
+  }
   const setModel = (value: string) => {
     localStorage.setItem('agno-aios-chat-model-id', value)
     const model = models.data?.models.find((item) => item.id === value) ?? null
@@ -47,36 +56,86 @@ export function useChat() {
     if (!sessionId) setSession(activeSession)
     const assistantId = crypto.randomUUID()
     const user: Message = { id: crypto.randomUUID(), role: 'user', content: text, final: true, session_id: activeSession }
-    const assistant: Message = { id: assistantId, role: 'assistant', content: '', final: false, status: 'streaming', session_id: activeSession, tool_steps: [], sources: [], followups: [] }
+    const assistant: Message = {
+      id: assistantId,
+      role: 'assistant',
+      content: '',
+      final: false,
+      status: 'streaming',
+      session_id: activeSession,
+      tool_steps: [],
+      sources: [],
+      followups: [],
+    }
     dispatch({ type: 'start', user: appendUser ? user : undefined, assistant, modelId: selectedModel.id })
-    const controller = new AbortController(); abortRef.current = controller; activeRunIdRef.current = null
+    const controller = new AbortController()
+    abortRef.current = controller
+    activeRunIdRef.current = null
     try {
-      await streamMessage({ message: text, session_id: activeSession, model_id: selectedModel.id, ...(state.reasoningEffort ? { reasoning_effort: state.reasoningEffort } : {}) }, (event: ChatRunEvent) => {
-        if (event.type === 'run.started') activeRunIdRef.current = event.runId
-        dispatch({ type: 'event', id: assistantId, event })
-      }, controller.signal)
+      await streamMessage(
+        {
+          message: text,
+          session_id: activeSession,
+          model_id: selectedModel.id,
+          ...(state.reasoningEffort ? { reasoning_effort: state.reasoningEffort } : {}),
+        },
+        (event: ChatRunEvent) => {
+          if (event.type === 'run.started') activeRunIdRef.current = event.runId
+          dispatch({ type: 'event', id: assistantId, event })
+        },
+        controller.signal
+      )
       await queryClient.invalidateQueries({ queryKey: chatKeys.history(activeSession) })
       await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
     } catch (error) {
-      if ((error as Error).name !== 'AbortError') dispatch({ type: 'network-error', id: assistantId, message: error instanceof Error ? error.message : 'Chat request failed' })
-    } finally { abortRef.current = null; activeRunIdRef.current = null }
+      if ((error as Error).name !== 'AbortError')
+        dispatch({ type: 'network-error', id: assistantId, message: error instanceof Error ? error.message : 'Chat request failed' })
+    } finally {
+      abortRef.current = null
+      activeRunIdRef.current = null
+    }
   }
 
   const retry = (assistantId: string) => {
     const prompt = previousPrompt(state.messages, assistantId)
     const index = state.messages.findIndex((message) => message.id === assistantId)
     if (!prompt || index < 0) return
-    const base = state.messages.slice(0, index); dispatch({ type: 'history', messages: base }); void submit(prompt, false)
+    const base = state.messages.slice(0, index)
+    dispatch({ type: 'history', messages: base })
+    void submit(prompt, false)
   }
   const cancel = async () => {
     const runId = activeRunIdRef.current
     if (!runId) return
-    try { await cancelRun(runId) } catch (error) { dispatch({ type: 'network-error', id: state.messages.at(-1)?.id ?? '', message: error instanceof Error ? error.message : 'Unable to cancel the active run' }) }
+    try {
+      await cancelRun(runId)
+    } catch (error) {
+      dispatch({
+        type: 'network-error',
+        id: state.messages.at(-1)?.id ?? '',
+        message: error instanceof Error ? error.message : 'Unable to cancel the active run',
+      })
+    }
   }
   const setReasoningEffort = (value: ReasoningEffort | null) => dispatch({ type: 'reasoning-effort', value })
   const newChat = () => {
     dispatch({ type: 'reasoning-effort', value: defaultReasoningEffort(selectedModel) })
     setSession(null)
   }
-  return { state, dispatch, sessionId, sessions, history, models, selectedModel, setSession, setModel, setReasoningEffort, submit, retry, newChat, cancel }
+  return {
+    state,
+    dispatch,
+    sessionId,
+    sessions,
+    history,
+    models,
+    selectedModel,
+    setSession,
+    setModel,
+    setReasoningEffort,
+    submit,
+    retry,
+    newChat,
+    cancel,
+  }
 }

@@ -8,9 +8,11 @@ import { IngestOptionsFields } from './IngestOptionsFields'
 function renderOptions(initialValues: Record<string, unknown>) {
   return renderWithQuery(
     <Form layout="vertical" initialValues={initialValues}>
-      <Form.Item name="file_name" label="File name"><Input /></Form.Item>
+      <Form.Item name="file_name" label="File name">
+        <Input />
+      </Form.Item>
       <IngestOptionsFields />
-    </Form>,
+    </Form>
   )
 }
 

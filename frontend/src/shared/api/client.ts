@@ -39,7 +39,7 @@ export const requestJson = async <T>(path: string, init: RequestInit = {}): Prom
     throw new ApiError(error.message, response.status, error.payload)
   }
   if (response.status === 204) return undefined as T
-  return await response.json() as T
+  return (await response.json()) as T
 }
 
 export const jsonInit = (method: string, body?: unknown): RequestInit => ({

@@ -10,22 +10,24 @@ const emptyResponse: AuditLogResponse = { items: [], total: 0, page: 2, limit: 2
 describe('audit log API', () => {
   it('sends authenticated audit filters as query parameters', async () => {
     localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, 'token')
-    server.use(http.get('/api/audit/logs', ({ request }) => {
-      const url = new URL(request.url)
-      expect(request.headers.get('authorization')).toBe('Bearer token')
-      expect(url.searchParams.get('page')).toBe('2')
-      expect(url.searchParams.get('limit')).toBe('25')
-      expect(url.searchParams.get('actor_user_id')).toBe('u1')
-      expect(url.searchParams.get('actor_email')).toBe('u1@example.test')
-      expect(url.searchParams.get('action')).toBe('auth.login')
-      expect(url.searchParams.get('resource_type')).toBe('auth')
-      expect(url.searchParams.get('resource_id')).toBe('session-1')
-      expect(url.searchParams.get('status')).toBe('success')
-      expect(url.searchParams.get('ip_address')).toBe('10.0.0.8')
-      expect(url.searchParams.get('created_from')).toBe('2026-01-01T00:00:00.000Z')
-      expect(url.searchParams.get('created_to')).toBe('2026-01-02T00:00:00.000Z')
-      return HttpResponse.json(emptyResponse)
-    }))
+    server.use(
+      http.get('/api/audit/logs', ({ request }) => {
+        const url = new URL(request.url)
+        expect(request.headers.get('authorization')).toBe('Bearer token')
+        expect(url.searchParams.get('page')).toBe('2')
+        expect(url.searchParams.get('limit')).toBe('25')
+        expect(url.searchParams.get('actor_user_id')).toBe('u1')
+        expect(url.searchParams.get('actor_email')).toBe('u1@example.test')
+        expect(url.searchParams.get('action')).toBe('auth.login')
+        expect(url.searchParams.get('resource_type')).toBe('auth')
+        expect(url.searchParams.get('resource_id')).toBe('session-1')
+        expect(url.searchParams.get('status')).toBe('success')
+        expect(url.searchParams.get('ip_address')).toBe('10.0.0.8')
+        expect(url.searchParams.get('created_from')).toBe('2026-01-01T00:00:00.000Z')
+        expect(url.searchParams.get('created_to')).toBe('2026-01-02T00:00:00.000Z')
+        return HttpResponse.json(emptyResponse)
+      })
+    )
 
     const result = await getAuditLogs({
       page: 2,

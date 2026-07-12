@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { buildKnowledgeSearchPayload, buildMetadataUpdate, cleanIngestOptions, decideKnowledgeUpdate, effectiveKnowledgeIngestDefaults, inferKnowledgeReaderProfile, ingestOptionsFromMetadata, knowledgeIngestOptionsEqual, MAX_KNOWLEDGE_FILE_BYTES, replacementFileName, resolveRetrievalContent, validateKnowledgeFile } from './utils'
+import {
+  buildKnowledgeSearchPayload,
+  buildMetadataUpdate,
+  cleanIngestOptions,
+  decideKnowledgeUpdate,
+  effectiveKnowledgeIngestDefaults,
+  inferKnowledgeReaderProfile,
+  ingestOptionsFromMetadata,
+  knowledgeIngestOptionsEqual,
+  MAX_KNOWLEDGE_FILE_BYTES,
+  replacementFileName,
+  resolveRetrievalContent,
+  validateKnowledgeFile,
+} from './utils'
 import type { Document } from './types'
 
 const document: Document = {
@@ -34,21 +47,23 @@ describe('knowledge document updates', () => {
   })
 
   it('keeps only configured ingest options', () => {
-    expect(cleanIngestOptions({
-      chunk_size: 1500,
-      chunk_overlap: 120,
-      markdown_split_on_headings: 0,
-      csv_skip_header: false,
-      csv_clean_rows: true,
-      code_chunk_size: 2200,
-      code_tokenizer: ' gpt2 ',
-      code_include_nodes: false,
-      semantic_threshold: 0.61,
-      semantic_similarity_window: 4,
-      semantic_min_sentences_per_chunk: 2,
-      semantic_min_characters_per_sentence: 12,
-      reader_strategy: ' markdown ',
-    })).toEqual({
+    expect(
+      cleanIngestOptions({
+        chunk_size: 1500,
+        chunk_overlap: 120,
+        markdown_split_on_headings: 0,
+        csv_skip_header: false,
+        csv_clean_rows: true,
+        code_chunk_size: 2200,
+        code_tokenizer: ' gpt2 ',
+        code_include_nodes: false,
+        semantic_threshold: 0.61,
+        semantic_similarity_window: 4,
+        semantic_min_sentences_per_chunk: 2,
+        semantic_min_characters_per_sentence: 12,
+        reader_strategy: ' markdown ',
+      })
+    ).toEqual({
       chunk_size: 1500,
       chunk_overlap: 120,
       markdown_split_on_headings: 0,
@@ -76,14 +91,16 @@ describe('knowledge document updates', () => {
   })
 
   it('restores stored ingest options from document metadata', () => {
-    expect(ingestOptionsFromMetadata({
-      chunk_size: '1800',
-      markdown_split_on_headings: '2',
-      csv_clean_rows: 'false',
-      code_tokenizer: 'gpt2',
-      code_include_nodes: 'true',
-      reader_strategy: 'markdown',
-    })).toEqual({
+    expect(
+      ingestOptionsFromMetadata({
+        chunk_size: '1800',
+        markdown_split_on_headings: '2',
+        csv_clean_rows: 'false',
+        code_tokenizer: 'gpt2',
+        code_include_nodes: 'true',
+        reader_strategy: 'markdown',
+      })
+    ).toEqual({
       chunk_size: 1800,
       markdown_split_on_headings: 2,
       csv_clean_rows: false,
@@ -94,8 +111,14 @@ describe('knowledge document updates', () => {
   })
 
   it('chooses the update transport from changed content', () => {
-    expect(decideKnowledgeUpdate({ metadata: {}, hasFile: true })).toEqual({ kind: 'upload', metadata: undefined, ingest_options: undefined })
-    expect(decideKnowledgeUpdate({ metadata: { title: 'Updated' }, ingest_options: { chunk_size: 1500 }, ingestOptionsChanged: true })).toEqual({
+    expect(decideKnowledgeUpdate({ metadata: {}, hasFile: true })).toEqual({
+      kind: 'upload',
+      metadata: undefined,
+      ingest_options: undefined,
+    })
+    expect(
+      decideKnowledgeUpdate({ metadata: { title: 'Updated' }, ingest_options: { chunk_size: 1500 }, ingestOptionsChanged: true })
+    ).toEqual({
       kind: 'rebuild',
       metadata: { title: 'Updated' },
       ingest_options: { chunk_size: 1500 },
@@ -105,7 +128,9 @@ describe('knowledge document updates', () => {
       metadata: undefined,
       ingest_options: { chunk_size: 1500 },
     })
-    expect(decideKnowledgeUpdate({ metadata: { source: 'Updated' }, ingest_options: { chunk_size: 1500 }, ingestOptionsChanged: false })).toEqual({
+    expect(
+      decideKnowledgeUpdate({ metadata: { source: 'Updated' }, ingest_options: { chunk_size: 1500 }, ingestOptionsChanged: false })
+    ).toEqual({
       kind: 'metadata',
       metadata: { source: 'Updated' },
     })
@@ -117,7 +142,9 @@ describe('knowledge document updates', () => {
   })
 
   it('compares cleaned ingest options without treating stored defaults as changes', () => {
-    expect(knowledgeIngestOptionsEqual({ chunk_size: 1500, reader_strategy: ' markdown ' }, { chunk_size: 1500, reader_strategy: 'markdown' })).toBe(true)
+    expect(
+      knowledgeIngestOptionsEqual({ chunk_size: 1500, reader_strategy: ' markdown ' }, { chunk_size: 1500, reader_strategy: 'markdown' })
+    ).toBe(true)
     expect(knowledgeIngestOptionsEqual({ chunk_size: 1500 }, { chunk_size: 1600 })).toBe(false)
     expect(knowledgeIngestOptionsEqual(undefined, {})).toBe(true)
   })

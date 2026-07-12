@@ -6,4 +6,10 @@ import '@/shared/i18n'
 import { App } from '@/app/App'
 import { AppProviders } from '@/app/providers/AppProviders'
 
-createRoot(document.getElementById('app')!).render(<StrictMode><AppProviders><App /></AppProviders></StrictMode>)
+createRoot(document.getElementById('app')!).render(
+  <StrictMode>
+    <AppProviders>
+      <App />
+    </AppProviders>
+  </StrictMode>
+)

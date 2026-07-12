@@ -7,22 +7,26 @@ import { hasScope, roleOf } from '@/shared/auth/permissions'
 
 describe('authentication behavior', () => {
   it('submits FastAPI Users credentials as form data', async () => {
-    server.use(http.post('/api/auth/jwt/login', async ({ request }) => {
-      expect(request.headers.get('content-type')).toContain('application/x-www-form-urlencoded')
-      const body = new URLSearchParams(await request.text())
-      expect(body.get('username')).toBe('admin@example.com')
-      expect(body.get('password')).toBe('secret')
-      return HttpResponse.json({ access_token: 'token', token_type: 'bearer' })
-    }))
+    server.use(
+      http.post('/api/auth/jwt/login', async ({ request }) => {
+        expect(request.headers.get('content-type')).toContain('application/x-www-form-urlencoded')
+        const body = new URLSearchParams(await request.text())
+        expect(body.get('username')).toBe('admin@example.com')
+        expect(body.get('password')).toBe('secret')
+        return HttpResponse.json({ access_token: 'token', token_type: 'bearer' })
+      })
+    )
     expect((await login('admin@example.com', 'secret')).access_token).toBe('token')
   })
 
   it('sends the stored bearer token when restoring the current user', async () => {
     localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, 'stored')
-    server.use(http.get('/api/auth/users/me', ({ request }) => {
-      expect(request.headers.get('authorization')).toBe('Bearer stored')
-      return HttpResponse.json({ id: 'u1', email: 'admin@example.com', is_active: true })
-    }))
+    server.use(
+      http.get('/api/auth/users/me', ({ request }) => {
+        expect(request.headers.get('authorization')).toBe('Bearer stored')
+        return HttpResponse.json({ id: 'u1', email: 'admin@example.com', is_active: true })
+      })
+    )
     expect((await getCurrentUser()).id).toBe('u1')
   })
 

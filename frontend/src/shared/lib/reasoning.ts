@@ -6,10 +6,7 @@ export const DEEPSEEK_REASONING_EFFORTS: ReasoningEffort[] = ['high', 'max']
 
 const titleCase = (value: string) => value[0]?.toUpperCase() + value.slice(1)
 
-export const openaiReasoningEfforts = (protocol: ModelConfig['api_protocol']) => (
-  protocol === 'responses'
-    ? OPENAI_RESPONSES_REASONING_EFFORTS
-    : OPENAI_CHAT_REASONING_EFFORTS
-)
+export const openaiReasoningEfforts = (protocol: ModelConfig['api_protocol']) =>
+  protocol === 'responses' ? OPENAI_RESPONSES_REASONING_EFFORTS : OPENAI_CHAT_REASONING_EFFORTS
 
 export const reasoningEffortLabel = (value: ReasoningEffort) => titleCase(value)

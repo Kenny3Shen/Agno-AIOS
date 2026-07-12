@@ -29,7 +29,11 @@ const overview = {
 
 const renderAppAt = (path: string) => {
   router.history.replace(path)
-  return render(<AppProviders><App /></AppProviders>)
+  return render(
+    <AppProviders>
+      <App />
+    </AppProviders>
+  )
 }
 
 describe('app authentication routing', () => {
@@ -65,7 +69,7 @@ describe('app authentication routing', () => {
     server.use(
       http.post('/api/auth/jwt/login', () => HttpResponse.json({ access_token: 'token' })),
       http.get('/api/auth/users/me', () => HttpResponse.json(user)),
-      http.get('/api/overview', () => HttpResponse.json(overview)),
+      http.get('/api/overview', () => HttpResponse.json(overview))
     )
 
     renderAppAt('/login?next=%2Fdashboard')
@@ -80,7 +84,7 @@ describe('app authentication routing', () => {
     server.use(
       http.post('/api/auth/jwt/login', () => HttpResponse.json({ access_token: 'token' })),
       http.get('/api/auth/users/me', () => HttpResponse.json(user)),
-      http.get('/api/overview', () => HttpResponse.json(overview)),
+      http.get('/api/overview', () => HttpResponse.json(overview))
     )
 
     renderAppAt('/login')

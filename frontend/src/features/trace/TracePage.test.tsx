@@ -11,9 +11,10 @@ import type { Trace, TraceSessionSummary } from './types'
 const routerMock = vi.hoisted(() => ({ push: vi.fn<(path: string) => void>(), searchStr: '' }))
 
 vi.mock('@tanstack/react-router', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@tanstack/react-router')>(),
+  ...(await importOriginal<typeof import('@tanstack/react-router')>()),
   useRouter: () => ({ history: { push: routerMock.push } }),
-  useRouterState: ({ select }: { select: (state: { location: { searchStr: string } }) => unknown }) => select({ location: { searchStr: routerMock.searchStr } }),
+  useRouterState: ({ select }: { select: (state: { location: { searchStr: string } }) => unknown }) =>
+    select({ location: { searchStr: routerMock.searchStr } }),
 }))
 
 const traceSessions: TraceSessionSummary[] = Array.from({ length: 9 }, (_, index) => ({
@@ -42,6 +43,28 @@ const tracesFor = (sessionId: string, page: number): Trace[] => {
   return items.slice((page - 1) * 6, page * 6)
 }
 
+const traceDetail = (traceId: string) => {
+  const runNumber = traceId.match(/-(\d+)$/)?.[1] ?? '1'
+  const root = {
+    span_id: `${traceId}-root`,
+    name: `Run ${runNumber}`,
+    status_code: 'OK',
+    duration_ms: 1000,
+    start_time: '2026-07-20T12:00:00Z',
+    parsed: { input: `root input ${runNumber}` },
+  }
+  const child = {
+    span_id: `${traceId}-child`,
+    parent_span_id: root.span_id,
+    name: `Child ${runNumber}`,
+    status_code: 'OK',
+    duration_ms: 100,
+    start_time: '2026-07-20T12:00:00Z',
+    parsed: { input: `child input ${runNumber}` },
+  }
+  return { trace: { trace_id: traceId }, spans: [root, child], tree: [{ span: root, children: [{ span: child, children: [] }] }] }
+}
+
 let traceRequests: URLSearchParams[] = []
 
 const cardByTitle = (title: string) => {
@@ -56,7 +79,14 @@ const clickPage = async (card: HTMLElement, page: number) => {
 
 const RouteHarness = () => {
   const [, setVersion] = useState(0)
-  return <><TracePage /><button type="button" onClick={() => setVersion((version) => version + 1)}>Sync route</button></>
+  return (
+    <>
+      <TracePage />
+      <button type="button" onClick={() => setVersion((version) => version + 1)}>
+        Sync route
+      </button>
+    </>
+  )
 }
 
 describe('TracePage interactions', () => {
@@ -65,9 +95,13 @@ describe('TracePage interactions', () => {
     routerMock.searchStr = ''
     traceRequests = []
     server.use(
-      http.get('/api/auth/users/me', () => HttpResponse.json({ id: 'user-1', email: 'user@example.com', role: 'user', scopes: ['traces:read'], is_active: true })),
+      http.get('/api/auth/users/me', () =>
+        HttpResponse.json({ id: 'user-1', email: 'user@example.com', role: 'user', scopes: ['traces:read'], is_active: true })
+      ),
       http.get('/api/chat/sessions', () => HttpResponse.json([])),
-      http.get('/api/traces/sessions', () => HttpResponse.json({ items: traceSessions, total_count: traceSessions.length, page: 1, limit: 200 })),
+      http.get('/api/traces/sessions', () =>
+        HttpResponse.json({ items: traceSessions, total_count: traceSessions.length, page: 1, limit: 200 })
+      ),
       http.get('/api/traces', ({ request }) => {
         const url = new URL(request.url)
         const params = new URLSearchParams(url.search)
@@ -75,6 +109,7 @@ describe('TracePage interactions', () => {
         const page = Number(params.get('page') ?? '1')
         return HttpResponse.json({ items: tracesFor(params.get('session_id') ?? '', page), total_count: 7, page, limit: 6 })
       }),
+      http.get('/api/traces/:traceId', ({ params }) => HttpResponse.json(traceDetail(String(params.traceId))))
     )
   })
 
@@ -88,6 +123,14 @@ describe('TracePage interactions', () => {
     expect(await screen.findByText('Session 9')).toBeTruthy()
     expect(sessionInput.value).toBe('')
     expect(routerMock.push).not.toHaveBeenCalled()
+  })
+
+  it('keeps Runs & Spans empty until a Session or Run ID is selected', async () => {
+    renderWithQuery(<TracePage />)
+
+    expect(await screen.findByText('Session 1')).toBeTruthy()
+    expect(within(cardByTitle('Runs & Spans')).queryByText(/Run 1/)).toBeNull()
+    expect(traceRequests).toHaveLength(0)
   })
 
   it('selects a Session through selected_session without filling the Session ID input', async () => {
@@ -126,7 +169,9 @@ describe('TracePage interactions', () => {
   it('changes the Run page without selecting a run or writing run_id', async () => {
     renderWithQuery(<TracePage />)
 
-    expect(await screen.findByText(/Run 1/)).toBeTruthy()
+    await userEvent.click(await screen.findByRole('button', { name: /Session 1/ }))
+    expect(await within(cardByTitle('Runs & Spans')).findByText(/Run 1/)).toBeTruthy()
+    routerMock.push.mockClear()
     await clickPage(cardByTitle('Runs & Spans'), 2)
 
     await waitFor(() => expect(traceRequests.some((params) => params.get('page') === '2')).toBe(true))
@@ -134,5 +179,26 @@ describe('TracePage interactions', () => {
     const pageTwoRequest = pageTwoRequests[pageTwoRequests.length - 1]
     expect(routerMock.push).not.toHaveBeenCalled()
     expect(pageTwoRequest?.has('run_id')).toBe(false)
+  })
+
+  it('renders root spans as the top-level Run summaries and preserves span detail selection', async () => {
+    const user = userEvent.setup()
+    renderWithQuery(<TracePage />)
+
+    await user.click(await screen.findByRole('button', { name: /Session 1/ }))
+    const runsCard = cardByTitle('Runs & Spans')
+    const root = await within(runsCard).findByText('Run root · Run 1')
+    expect(within(runsCard).queryByText('Run · Run 1')).toBeNull()
+    expect(root.parentElement?.textContent).toContain('1.00 s · OK')
+
+    await user.click(root)
+    expect(await screen.findByText('root input 1')).toBeTruthy()
+    const rootNode = root.closest('.ant-tree-treenode')
+    const switcher = rootNode?.querySelector('.ant-tree-switcher')
+    if (!switcher) throw new Error('Expected root span to be expandable')
+    await user.click(switcher)
+    const child = await within(runsCard).findByText('Span · Child 1')
+    await user.click(child)
+    expect(await within(cardByTitle('Detail')).findByText('child input 1')).toBeTruthy()
   })
 })

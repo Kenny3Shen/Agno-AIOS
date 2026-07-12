@@ -1,8 +1,17 @@
 import type { UploadFile } from 'antd'
 import type { ResourceVisibility } from '@/shared/types/common'
-import type { Document, KnowledgeIngestOptions, KnowledgeRagSettings, KnowledgeSearchType, RetrievalRenderMode, SearchResult, UpdateDocumentMetadataPayload } from './types'
+import type {
+  Document,
+  KnowledgeIngestOptions,
+  KnowledgeRagSettings,
+  KnowledgeSearchType,
+  RetrievalRenderMode,
+  SearchResult,
+  UpdateDocumentMetadataPayload,
+} from './types'
 
-export const KNOWLEDGE_FILE_ACCEPT = '.md,.markdown,.mdown,.mkd,.csv,.tsv,.json,.jsonl,.py,.js,.mjs,.cjs,.jsx,.ts,.tsx,.vue,.go,.rs,.java,.c,.cc,.cpp,.h,.hpp,.cs,.php,.rb,.sh,.sql,.pdf,.docx,.txt,.log,.rst,.yaml,.yml,.toml'
+export const KNOWLEDGE_FILE_ACCEPT =
+  '.md,.markdown,.mdown,.mkd,.csv,.tsv,.json,.jsonl,.py,.js,.mjs,.cjs,.jsx,.ts,.tsx,.vue,.go,.rs,.java,.c,.cc,.cpp,.h,.hpp,.cs,.php,.rb,.sh,.sql,.pdf,.docx,.txt,.log,.rst,.yaml,.yml,.toml'
 export const MAX_KNOWLEDGE_FILE_BYTES = 50 * 1024 * 1024
 export const SEARCH_TYPE_OPTIONS: KnowledgeSearchType[] = ['hybrid', 'vector', 'keyword']
 
@@ -43,7 +52,29 @@ const structuredSuffixes = new Set(['.pdf', '.docx'])
 const markdownSuffixes = new Set(['.md', '.markdown', '.mdown', '.mkd'])
 const csvSuffixes = new Set(['.csv', '.tsv'])
 const jsonSuffixes = new Set(['.json', '.jsonl'])
-const codeSuffixes = new Set(['.py', '.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.vue', '.go', '.rs', '.java', '.c', '.cc', '.cpp', '.h', '.hpp', '.cs', '.php', '.rb', '.sh', '.sql'])
+const codeSuffixes = new Set([
+  '.py',
+  '.js',
+  '.mjs',
+  '.cjs',
+  '.jsx',
+  '.ts',
+  '.tsx',
+  '.vue',
+  '.go',
+  '.rs',
+  '.java',
+  '.c',
+  '.cc',
+  '.cpp',
+  '.h',
+  '.hpp',
+  '.cs',
+  '.php',
+  '.rb',
+  '.sh',
+  '.sql',
+])
 
 export type KnowledgeReaderStrategy = 'markdown' | 'semantic' | 'code' | 'csv_row' | 'json' | 'document'
 
@@ -104,7 +135,7 @@ const looksLikeMarkdown = (value: string) => /(^|\n)#{1,6}\s|```|\*\*[^*]+\*\*|(
 
 export function resolveRetrievalContent(
   result: Pick<SearchResult, 'content' | 'metadata'>,
-  mode: RetrievalRenderMode,
+  mode: RetrievalRenderMode
 ): { kind: Exclude<RetrievalRenderMode, 'auto'>; value: unknown } {
   if (mode === 'json') return { kind: 'json', value: parseJsonObjectOrArray(result.content) ?? result.content }
   if (mode === 'markdown') return { kind: 'markdown', value: result.content }
@@ -139,7 +170,7 @@ export function validateKnowledgeFile(file: Pick<File, 'name' | 'size'>): string
   return null
 }
 
-export const normalizeUploadFiles = (event: { fileList?: UploadFile[] } | UploadFile[]) => Array.isArray(event) ? event : event?.fileList
+export const normalizeUploadFiles = (event: { fileList?: UploadFile[] } | UploadFile[]) => (Array.isArray(event) ? event : event?.fileList)
 
 export const selectedUploadFile = (fileList?: UploadFile[]) => {
   const item = fileList?.[0]
@@ -161,7 +192,7 @@ export function replacementFileName(document: Document) {
 
 export function buildMetadataUpdate(
   document: Document,
-  values: { title: string; source: string; visibility: ResourceVisibility },
+  values: { title: string; source: string; visibility: ResourceVisibility }
 ): UpdateDocumentMetadataPayload {
   const title = values.title.trim()
   const source = values.source.trim()
@@ -266,7 +297,8 @@ export function cleanIngestOptions(values?: Partial<KnowledgeIngestOptions>): Kn
   if (values.semantic_threshold != null) options.semantic_threshold = values.semantic_threshold
   if (values.semantic_similarity_window != null) options.semantic_similarity_window = values.semantic_similarity_window
   if (values.semantic_min_sentences_per_chunk != null) options.semantic_min_sentences_per_chunk = values.semantic_min_sentences_per_chunk
-  if (values.semantic_min_characters_per_sentence != null) options.semantic_min_characters_per_sentence = values.semantic_min_characters_per_sentence
+  if (values.semantic_min_characters_per_sentence != null)
+    options.semantic_min_characters_per_sentence = values.semantic_min_characters_per_sentence
   const readerStrategy = values.reader_strategy?.trim()
   if (readerStrategy) options.reader_strategy = readerStrategy
   return Object.keys(options).length > 0 ? options : undefined

@@ -9,39 +9,47 @@ import { McpPage } from './McpPage'
 describe('McpPage component permissions', () => {
   beforeEach(() => {
     server.use(
-      http.get('/api/mcp/config', () => HttpResponse.json({
-        services: {},
-        mcp_servers: [{
-          id: 1,
-          name: 'Shared MCP',
-          namespace: 'shared',
-          description: '',
-          server_type: 'external',
-          kind: 'external',
-          transport: 'stdio',
-          enabled: true,
-          visibility: 'public',
-          owner_user_id: 'owner-1',
-          can_manage: false,
-          manifest: {},
-        }],
-        mcp_url: '',
-        fastmcp: '',
-        config_store: 'postgresql',
-      })),
-      http.get('/api/mcp/components', () => HttpResponse.json([{
-        key: 'tool:shared.inspect',
-        type: 'tool',
-        name: 'shared.inspect',
-        title: 'Inspect',
-        namespace: 'shared',
-        server_id: 1,
-        tags: [],
-        icons: [],
-        meta: {},
-        enabled: true,
-      }])),
-      http.get('/api/mcp/tokens', () => HttpResponse.json([])),
+      http.get('/api/mcp/config', () =>
+        HttpResponse.json({
+          services: {},
+          mcp_servers: [
+            {
+              id: 1,
+              name: 'Shared MCP',
+              namespace: 'shared',
+              description: '',
+              server_type: 'external',
+              kind: 'external',
+              transport: 'stdio',
+              enabled: true,
+              visibility: 'public',
+              owner_user_id: 'owner-1',
+              can_manage: false,
+              manifest: {},
+            },
+          ],
+          mcp_url: '',
+          fastmcp: '',
+          config_store: 'postgresql',
+        })
+      ),
+      http.get('/api/mcp/components', () =>
+        HttpResponse.json([
+          {
+            key: 'tool:shared.inspect',
+            type: 'tool',
+            name: 'shared.inspect',
+            title: 'Inspect',
+            namespace: 'shared',
+            server_id: 1,
+            tags: [],
+            icons: [],
+            meta: {},
+            enabled: true,
+          },
+        ])
+      ),
+      http.get('/api/mcp/tokens', () => HttpResponse.json([]))
     )
   })
 

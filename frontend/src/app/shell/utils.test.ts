@@ -3,9 +3,20 @@ import { groupNavigation, joinMenuGroups } from './utils'
 
 describe('shell navigation groups', () => {
   const items = [
-    '/dashboard', '/chat', '/workflow', '/skills', '/mcp', '/knowledge',
-    '/trace', '/memory', '/evaluations', '/approvals', '/cve', '/collect',
-    '/audit', '/settings',
+    '/dashboard',
+    '/chat',
+    '/workflow',
+    '/skills',
+    '/mcp',
+    '/knowledge',
+    '/trace',
+    '/memory',
+    '/evaluations',
+    '/approvals',
+    '/cve',
+    '/collect',
+    '/audit',
+    '/settings',
   ].map((key) => ({ key }))
 
   it('groups navigation items by their fixed page membership', () => {

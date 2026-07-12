@@ -40,16 +40,34 @@ const protectedRoute = createRoute({
     if (getToken()) return
     throw redirect({ href: loginPath(nextPathFromLocation(location)), replace: true })
   },
-  component: () => <AppFrame><Outlet /></AppFrame>,
+  component: () => (
+    <AppFrame>
+      <Outlet />
+    </AppFrame>
+  ),
 })
 const pages = [
-  ['/dashboard', DashboardPage], ['/chat', ChatPage], ['/workflow', WorkflowPage],
-  ['/skills', SkillsPage], ['/mcp', McpPage], ['/knowledge', KnowledgePage], ['/trace', TracePage],
-  ['/memory', MemoryPage], ['/evaluations', EvaluationsPage], ['/approvals', ApprovalsPage],
-  ['/cve', CvePage], ['/collect', CollectPage], ['/audit', AuditPage], ['/settings', SettingsPage],
+  ['/dashboard', DashboardPage],
+  ['/chat', ChatPage],
+  ['/workflow', WorkflowPage],
+  ['/skills', SkillsPage],
+  ['/mcp', McpPage],
+  ['/knowledge', KnowledgePage],
+  ['/trace', TracePage],
+  ['/memory', MemoryPage],
+  ['/evaluations', EvaluationsPage],
+  ['/approvals', ApprovalsPage],
+  ['/cve', CvePage],
+  ['/collect', CollectPage],
+  ['/audit', AuditPage],
+  ['/settings', SettingsPage],
 ] as const
 const protectedPages = pages.map(([path, component]) => createRoute({ getParentRoute: () => protectedRoute, path, component }))
 const routeTree = rootRoute.addChildren([indexRoute, loginRoute, protectedRoute.addChildren(protectedPages)])
 export const router = createRouter({ routeTree, history: createHashHistory() })
 
-declare module '@tanstack/react-router' { interface Register { router: typeof router } }
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: typeof router
+  }
+}

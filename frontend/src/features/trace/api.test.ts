@@ -18,15 +18,18 @@ describe('trace API', () => {
   it('fetches all trace session pages for client-side archive filtering and pagination', async () => {
     const requestedPages: string[] = []
 
-    server.use(http.get('/api/traces/sessions', ({ request }) => {
-      const url = new URL(request.url)
-      requestedPages.push(`${url.searchParams.get('page')}:${url.searchParams.get('limit')}`)
-      const page = Number(url.searchParams.get('page') ?? '1')
-      const items = page === 1
-        ? Array.from({ length: 200 }, (_, index) => summary(index + 1))
-        : Array.from({ length: 5 }, (_, index) => summary(201 + index))
-      return HttpResponse.json({ items, total_count: 205, page, limit: 200 })
-    }))
+    server.use(
+      http.get('/api/traces/sessions', ({ request }) => {
+        const url = new URL(request.url)
+        requestedPages.push(`${url.searchParams.get('page')}:${url.searchParams.get('limit')}`)
+        const page = Number(url.searchParams.get('page') ?? '1')
+        const items =
+          page === 1
+            ? Array.from({ length: 200 }, (_, index) => summary(index + 1))
+            : Array.from({ length: 5 }, (_, index) => summary(201 + index))
+        return HttpResponse.json({ items, total_count: 205, page, limit: 200 })
+      })
+    )
 
     const result = await listTraceSessions({ status: 'OK' })
 

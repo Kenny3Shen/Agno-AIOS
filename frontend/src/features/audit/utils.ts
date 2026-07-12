@@ -12,7 +12,7 @@ const textKeys = [
   'created_to',
 ] as const
 
-const trimmed = (value: unknown) => typeof value === 'string' ? value.trim() : ''
+const trimmed = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
 
 export function cleanAuditQuery(query: AuditLogQuery): AuditLogQuery {
   const cleaned: AuditLogQuery = {}

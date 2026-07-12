@@ -33,13 +33,15 @@ describe('audit page workflow', () => {
   it('queries by user, paginates results and opens row details', async () => {
     const user = userEvent.setup()
     const requests: URL[] = []
-    server.use(http.get('/api/audit/logs', ({ request }) => {
-      const url = new URL(request.url)
-      requests.push(url)
-      const page = Number(url.searchParams.get('page') ?? 1)
-      const limit = Number(url.searchParams.get('limit') ?? 25)
-      return HttpResponse.json(response(page, limit))
-    }))
+    server.use(
+      http.get('/api/audit/logs', ({ request }) => {
+        const url = new URL(request.url)
+        requests.push(url)
+        const page = Number(url.searchParams.get('page') ?? 1)
+        const limit = Number(url.searchParams.get('limit') ?? 25)
+        return HttpResponse.json(response(page, limit))
+      })
+    )
 
     renderWithQuery(<AuditPage />)
 

@@ -12,11 +12,11 @@ export function groupNavigation<T extends { key: string }>(items: T[]) {
     keys.flatMap((key) => {
       const item = byKey.get(key)
       return item ? [item] : []
-    }),
+    })
   )
 }
 
 export function joinMenuGroups<T>(groups: T[][]) {
   const visible = groups.filter((group) => group.length > 0)
-  return visible.flatMap((group, index) => index === 0 ? group : [{ type: 'divider' as const, key: `divider-${index}` }, ...group])
+  return visible.flatMap((group, index) => (index === 0 ? group : [{ type: 'divider' as const, key: `divider-${index}` }, ...group]))
 }
