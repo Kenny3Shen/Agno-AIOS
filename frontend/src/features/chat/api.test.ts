@@ -40,7 +40,7 @@ describe('chat API', () => {
       { message: 'inspect', session_id: 's1', model_id: 'model' },
       () => undefined,
       new AbortController().signal,
-    )).rejects.toThrow()
+    )).rejects.toThrow('Chat stream ended before a terminal event')
   })
 
   it('parses named JSON run events and ignores unrecognised events', async () => {

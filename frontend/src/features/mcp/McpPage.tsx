@@ -28,8 +28,17 @@ import {
 
 const tokenTime = (value: number) => value ? new Date(value * 1000).toLocaleString() : '永不过期'
 
+const riskTags = (item: McpComponent) => {
+  const annotations = item.annotations ?? {}
+  return <Space wrap>
+    {annotations.readOnlyHint === true && <Tag color="blue">只读</Tag>}
+    {annotations.destructiveHint === true && <Tag color="red">破坏性</Tag>}
+    {annotations.openWorldHint === true && <Tag color="orange">外部系统</Tag>}
+  </Space>
+}
+
 export function McpPage() {
-  const { message } = App.useApp()
+  const { message, modal } = App.useApp()
   const screens = Grid.useBreakpoint()
   const client = useQueryClient()
   const [namespace, setNamespace] = useState<string>()
@@ -59,14 +68,6 @@ export function McpPage() {
 
   const servers = config.data?.mcp_servers ?? []
   const selectedServer = servers.find((server) => server.namespace === namespace)
-  const riskTags = (item: McpComponent) => {
-    const annotations = item.annotations ?? {}
-    return <Space wrap>
-      {annotations.readOnlyHint === true && <Tag color="blue">只读</Tag>}
-      {annotations.destructiveHint === true && <Tag color="red">破坏性</Tag>}
-      {annotations.openWorldHint === true && <Tag color="orange">外部系统</Tag>}
-    </Space>
-  }
 
   const executeTool = async () => {
     if (!component) return
@@ -81,7 +82,7 @@ export function McpPage() {
 
   const runTool = () => {
     if (component?.annotations?.destructiveHint === true) {
-      Modal.confirm({
+      modal.confirm({
         title: '确认调用破坏性工具',
         content: component.name,
         okText: '确认调用',
@@ -103,7 +104,7 @@ export function McpPage() {
         <Splitter className="workbench-splitter mcp-splitter" orientation={screens.md === false ? 'vertical' : 'horizontal'}>
           <Splitter.Panel defaultSize="68%" min={screens.md === false ? 320 : '48%'}>
             <Card className="workbench-card splitter-panel-card">
-              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
                 <Table<McpServer>
                   rowKey="id" size="small" loading={config.isLoading} dataSource={servers} pagination={false}
                   rowClassName={(row) => row.namespace === namespace ? 'ant-table-row-selected' : ''}
@@ -111,7 +112,7 @@ export function McpPage() {
                   columns={[
                     { title: 'Server / Namespace', render: (_, row) => <Space><strong>{row.name}</strong><Typography.Text type="secondary">{row.namespace}</Typography.Text></Space> },
                     { title: 'Transport', dataIndex: 'transport', width: 150, render: (value) => <Tag>{value}</Tag> },
-                    { title: 'Enabled', width: 90, render: (_, row) => { const pending = toggleServer.isPending && toggleServer.variables?.server.id === row.id; return <Switch checked={row.enabled} loading={pending} disabled={!row.can_manage || pending} onClick={(_, event) => event.stopPropagation()} onChange={(enabled) => toggleServer.mutate({ server: row, enabled })} /> } },
+                    { title: 'Enabled', width: 90, render: (_, row) => { const pending = toggleServer.isPending && toggleServer.variables?.server.id === row.id; return <Switch checked={row.enabled} loading={pending} disabled={!row.can_manage || pending} onClick={(_checked, event) => event.stopPropagation()} onChange={(enabled) => toggleServer.mutate({ server: row, enabled })} /> } },
                     { title: 'Visibility', width: 140, render: (_, row) => <VisibilitySelect value={row.visibility} disabled={!row.can_manage} onClick={(event) => event.stopPropagation()} onChange={(value) => void setServerVisibility(row.name, value).then(refresh)} /> },
                   ]}
                 />
@@ -120,11 +121,11 @@ export function McpPage() {
                   locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={namespace ? '该 namespace 没有可见组件' : '选择一个 Server 查看组件'} /> }}
                   onRow={(row) => ({ onClick: () => setComponent(row) })}
                   columns={[
-                    { title: 'Component', render: (_, row) => <Space direction="vertical" size={0}><strong>{row.title || row.name}</strong><Typography.Text code>{row.name}</Typography.Text></Space> },
+                    { title: 'Component', render: (_, row) => <Space orientation="vertical" size={0}><strong>{row.title || row.name}</strong><Typography.Text code>{row.name}</Typography.Text></Space> },
                     { title: 'Type', dataIndex: 'type', width: 100, render: (value) => <Tag color={value === 'tool' ? 'blue' : 'purple'}>{value}</Tag> },
                     { title: 'Tags', dataIndex: 'tags', render: (tags: string[]) => <Space wrap>{tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}</Space> },
                     { title: 'Risk', width: 190, render: (_, row) => riskTags(row) },
-                    { title: 'Enabled', width: 90, render: (_, row) => { const pending = toggleComponent.isPending && toggleComponent.variables?.item.key === row.key; return <Switch checked={row.enabled} disabled={!row.server_id || pending} loading={pending} onClick={(_, event) => event.stopPropagation()} onChange={(enabled) => toggleComponent.mutate({ item: row, enabled })} /> } },
+                    { title: 'Enabled', width: 90, render: (_, row) => { const pending = toggleComponent.isPending && toggleComponent.variables?.item.key === row.key; return <Switch checked={row.enabled} disabled={!row.server_id || pending} loading={pending} onClick={(_checked, event) => event.stopPropagation()} onChange={(enabled) => toggleComponent.mutate({ item: row, enabled })} /> } },
                   ]}
                 />
               </Space>

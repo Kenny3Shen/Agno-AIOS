@@ -172,7 +172,7 @@ export function AuditPage() {
       open={Boolean(selected)}
       onClose={() => setSelected(null)}
       title="Audit detail"
-      width={screens.lg ? 720 : 'calc(100vw - 32px)'}
+      size={screens.lg ? 720 : 'calc(100vw - 32px)'}
       destroyOnHidden
     >
       {selected ? <div className="audit-drawer-stack">

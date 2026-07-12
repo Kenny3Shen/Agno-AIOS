@@ -179,8 +179,11 @@ button, input, textarea { letter-spacing: 0; }
 .shell-menu .ant-menu-item-selected .anticon { transform: scale(1.08); }
 .shell-header { transition: background-color var(--motion-base) var(--motion-ease), border-color var(--motion-base) var(--motion-ease); }
 .shell-header .ant-btn, .shell-identity .ant-avatar { transition: color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease); }
-.shell-header .ant-btn:active, .auth-card .ant-btn:active { transform: translateY(1px) scale(.97); }
+.ant-btn:not(:disabled), .ant-switch, .ant-tag, .ant-tabs-tab, .ant-select-selector, .ant-input, .ant-input-affix-wrapper, .ant-picker { transition: border-color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease); }
+.ant-btn:not(:disabled):active, .auth-card .ant-btn:active { transform: translateY(1px) scale(.98); }
+.ant-switch:not(.ant-switch-disabled):active, .ant-tag:active { transform: translateY(1px); }
 .shell-page-transition { min-height: 100%; animation: page-enter var(--motion-base) var(--motion-enter-ease) both; }
+.ant-drawer-content, .ant-modal-content { animation: panel-enter var(--motion-base) var(--motion-enter-ease) both; }
 .auth-enter { animation: auth-enter var(--motion-slow) var(--motion-enter-ease) both; }
 .auth-enter-signal { animation-delay: 40ms; }
 .auth-enter-card { animation-delay: 90ms; }
@@ -189,11 +192,13 @@ button, input, textarea { letter-spacing: 0; }
 .auth-enter-form { animation: auth-enter var(--motion-base) var(--motion-enter-ease) 230ms both; }
 .auth-enter-brand .brand-mark { animation: auth-mark-scan 560ms var(--motion-enter-ease) 220ms both; }
 @keyframes page-enter { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes panel-enter { from { opacity: 0; transform: translateY(6px) scale(.992); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes auth-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes auth-mark-scan { 0% { box-shadow: inset -40px 0 0 color-mix(in srgb, white 0%, transparent); } 45% { box-shadow: inset 40px 0 0 color-mix(in srgb, white 38%, transparent), 0 0 18px color-mix(in srgb, var(--tais-orange) 42%, transparent); } 100% { box-shadow: inset 40px 0 0 color-mix(in srgb, white 0%, transparent); } }
-.workbench-card, .step-row, .trace-choice, .dashboard-trace-row > td { transition: border-color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease); }
+.workbench-card, .step-row, .trace-choice, .ant-table-row > td, .dashboard-trace-row > td { transition: border-color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease); }
 .workbench-card:hover { box-shadow: 0 3px 10px color-mix(in srgb, var(--tais-text) 5%, transparent) !important; }
 .step-row:active, .trace-choice:active { transform: translateY(1px); }
+.selected-table-row > td { animation: selected-row-settle var(--motion-slow) var(--motion-enter-ease) both; }
 .dashboard-data-ready .dashboard-motion-item { animation: dashboard-enter var(--motion-slow) var(--motion-enter-ease) both; }
 .dashboard-motion-group > .dashboard-motion-item:nth-child(2) { animation-delay: 40ms; }
 .dashboard-motion-group > .dashboard-motion-item:nth-child(3) { animation-delay: 80ms; }
@@ -203,4 +208,5 @@ button, input, textarea { letter-spacing: 0; }
 @keyframes dashboard-enter { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes dashboard-update { 0% { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--tais-blue) 8%, transparent); } 100% { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--tais-blue) 0%, transparent); } }
 @keyframes dashboard-signal-pulse { 50% { opacity: .55; transform: scale(.88); } }
+@keyframes selected-row-settle { 0% { box-shadow: inset 3px 0 0 var(--tais-blue); } 100% { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--tais-blue) 0%, transparent); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0ms !important; transition-delay: 0ms !important; animation-duration: 0ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; } }

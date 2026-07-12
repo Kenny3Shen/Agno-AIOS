@@ -7,7 +7,7 @@ import { server } from '@/test/server'
 import { TracePage } from './TracePage'
 import type { Trace, TraceSessionSummary } from './types'
 
-const routerMock = vi.hoisted(() => ({ push: vi.fn(), searchStr: '' }))
+const routerMock = vi.hoisted(() => ({ push: vi.fn<(path: string) => void>(), searchStr: '' }))
 
 vi.mock('@tanstack/react-router', async (importOriginal) => ({
   ...await importOriginal<typeof import('@tanstack/react-router')>(),

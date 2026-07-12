@@ -113,15 +113,7 @@ export function TracePage() {
     setExpandedSpanKeys([])
     setSessionPage(1)
     setRunPage(1)
-  }, [urlFilters.session_id, urlFilters.run_id, urlFilters.user_id, urlFilters.status, urlFilters.start_time, urlFilters.end_time])
-
-  useEffect(() => {
-    setSelectedSession(urlState.selectedSession)
-    setActiveTraceId(urlState.traceId)
-    setSelectedSpanId('')
-    setExpandedTraceIds(urlState.traceId ? [urlState.traceId] : [])
-    setExpandedSpanKeys([])
-  }, [urlState.selectedSession, urlState.traceId])
+  }, [urlFilters, urlState.selectedSession, urlState.traceId])
 
   useEffect(() => {
     if (!activeTraceId || selectedSpanId || !activeDetail) return

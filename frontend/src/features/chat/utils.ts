@@ -77,7 +77,7 @@ export const normalizeMessages = (value: unknown): Message[] => Array.isArray(va
     final: status !== 'streaming', status, run_id: asString(source.run_id), session_id: asString(source.session_id),
     metrics: asMetrics(source.metrics), sources: normalizeSources(source.sources ?? source.citations ?? source.references), tool_steps: normalizeTools(source.tool_steps ?? source.tools),
     thought_chain: normalizeThoughts(source.thought_chain ?? source.timeline), reasoning: asString(source.reasoning),
-    followups: Array.isArray(source.followups) ? source.followups.filter((item): item is string => typeof item === 'string') : [],
+    followups: Array.isArray(source.followups) ? source.followups.filter((followup): followup is string => typeof followup === 'string') : [],
   }
 }) : []
 

@@ -22,18 +22,25 @@ const chat = {
     },
   },
   selectedModel: { id: 'long', name: longModelName, model_id: 'security-model', provider: 'openai', api_protocol: 'responses', structured_output_mode: 'native', base_url: '', api_key: '', description: '', enabled: true, builtin: false, configured: true },
-  dispatch: vi.fn(), setSession: vi.fn(), setModel: vi.fn(), setReasoningEffort: vi.fn(), submit: vi.fn(), retry: vi.fn(), newChat: vi.fn(), cancel: vi.fn(),
+  dispatch: vi.fn<(action: unknown) => void>(),
+  setSession: vi.fn<(sessionId: string) => void>(),
+  setModel: vi.fn<(modelId: string) => void>(),
+  setReasoningEffort: vi.fn<(effort: string) => void>(),
+  submit: vi.fn<(value?: string) => void>(),
+  retry: vi.fn<(messageId: string) => void>(),
+  newChat: vi.fn<() => void>(),
+  cancel: vi.fn<() => void>(),
 }
 
 vi.mock('@tanstack/react-router', async (importOriginal) => ({
   ...await importOriginal<typeof import('@tanstack/react-router')>(),
-  useRouter: () => ({ history: { push: vi.fn() } }),
+  useRouter: () => ({ history: { push: vi.fn<(path: string) => void>() } }),
 }))
 vi.mock('./useChat', () => ({ useChat: () => chat }))
 
 describe('chat model selector', () => {
   beforeEach(() => {
-    HTMLElement.prototype.scrollTo = vi.fn()
+    HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
   })
 
   it('keeps the full selected model name available while preserving model selection', async () => {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Actions, Bubble, Conversations, Prompts, Sender, Sources, ThoughtChain, Welcome } from '@ant-design/x'
 import XMarkdown from '@ant-design/x-markdown'
-import { Avatar, Button, Form, Input, Modal, Select, Tag, Tooltip, message as toast } from 'antd'
+import { App, Avatar, Button, Form, Input, Modal, Select, Tag, Tooltip } from 'antd'
 import { ArrowDownOutlined, ArrowUpOutlined, CaretDownOutlined, CaretRightOutlined, CopyOutlined, DeleteOutlined, EditOutlined, PaperClipOutlined, PlusOutlined, ReloadOutlined, SafetyCertificateOutlined, StopOutlined, UserOutlined } from '@ant-design/icons'
 import { archiveSession, renameSession } from './api'
 import { chatKeys } from './queries'
@@ -49,6 +49,7 @@ function thoughtNode(thought: ThoughtStep) {
 }
 
 function MessageBody({ message, retry }: { message: Message; retry: () => void }) {
+  const { message: toast } = App.useApp()
   const [thoughtOpen, setThoughtOpen] = useState(message.status === 'streaming')
   const motionState = message.role === 'assistant' ? message.status ?? 'completed' : 'sent'
   const actions = [
@@ -77,6 +78,7 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
 }
 
 export function ChatPage() {
+  const { message: toast } = App.useApp()
   const chat = useChat()
   const queryClient = useQueryClient()
   const [renameTarget, setRenameTarget] = useState<ChatSession | null>(null)
@@ -125,6 +127,6 @@ export function ChatPage() {
       {!followLatest && <Button className="latest-button" shape="round" icon={<ArrowDownOutlined />} onClick={scrollToLatest}>返回最新消息</Button>}
       <div className="sender-shell"><Sender value={chat.state.input} onChange={(value) => chat.dispatch({ type: 'input', value })} onSubmit={(value) => void chat.submit(value)} loading={chat.state.requesting} disabled={inputDisabled} suffix={false} placeholder={chat.selectedModel?.configured ? '输入安全分析任务，例如：分析 CVE-2026-xxxx 对资产的影响…' : '请先在设置中配置可用模型'} autoSize={{ minRows: 1, maxRows: 5 }} footer={<div className="sender-controls"><Button className="sender-extension" type="text" icon={<PaperClipOutlined />} disabled aria-label="附件功能即将推出" /><div className="sender-actions"><Select aria-label="模型" className="model-select" value={chat.state.selectedModelId ?? undefined} loading={chat.models.isLoading} disabled={chat.state.requesting} onChange={chat.setModel} labelRender={renderModelLabel} options={(chat.models.data?.models ?? []).map((model) => ({ value: model.id, label: model.name, disabled: !model.enabled || !model.configured }))} />{availableReasoningOptions.length > 0 && <Select aria-label="推理强度" className="reasoning-select" value={chat.state.reasoningEffort ?? undefined} disabled={chat.state.requesting} onChange={chat.setReasoningEffort} options={availableReasoningOptions} />}<Button aria-label={chat.state.requesting ? '停止生成' : '发送消息'} title={chat.state.requesting ? '停止生成' : '发送消息'} type={chat.state.requesting ? 'default' : 'primary'} danger={chat.state.requesting} shape="circle" icon={chat.state.requesting ? <StopOutlined /> : <ArrowUpOutlined />} disabled={chat.state.requesting ? !activeRun : sendDisabled} onClick={() => { if (chat.state.requesting) void chat.cancel(); else void chat.submit(chat.state.input) }} /></div></div>} /></div>
     </section>
-    <Modal title="重命名会话" open={Boolean(renameTarget)} confirmLoading={renaming} okText="保存" onOk={() => void confirmRename()} onCancel={() => setRenameTarget(null)}><Form form={renameForm} layout="vertical"><Form.Item name="title" label="会话标题" rules={[{ required: true, whitespace: true, message: '请输入会话标题' }, { max: 120, message: '标题不能超过 120 个字符' }]}><Input autoFocus maxLength={120} onPressEnter={() => void confirmRename()} /></Form.Item></Form></Modal>
+    <Modal title="重命名会话" open={Boolean(renameTarget)} confirmLoading={renaming} okText="保存" onOk={() => void confirmRename()} onCancel={() => setRenameTarget(null)}><Form form={renameForm} layout="vertical"><Form.Item name="title" label="会话标题" rules={[{ required: true, whitespace: true, message: '请输入会话标题' }, { max: 120, message: '标题不能超过 120 个字符' }]}><Input maxLength={120} onPressEnter={() => void confirmRename()} /></Form.Item></Form></Modal>
   </main>
 }

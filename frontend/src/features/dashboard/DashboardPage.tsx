@@ -66,7 +66,7 @@ export function DashboardPage() {
     const [dimension, items] = Object.entries(source).find(([, values]) => values.length > 0) ?? ['agent', []]
     return { dimension, items }
   }, [data?.distributions])
-  const common = { textStyle: { color: token.colorTextSecondary }, backgroundColor: 'transparent' }
+  const common = useMemo(() => ({ textStyle: { color: token.colorTextSecondary }, backgroundColor: 'transparent' }), [token.colorTextSecondary])
 
   const volumeOption = useMemo<EChartsOption>(() => ({
     ...common,
@@ -188,7 +188,7 @@ export function DashboardPage() {
     </section>
     <Row gutter={[12, 12]} className="dashboard-kpis dashboard-motion-group">
       <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi"><Card className="workbench-card dashboard-kpi" loading={query.isLoading}><Statistic title="运行总量" value={data?.metrics.total_runs ?? 0} prefix={<CheckCircleOutlined />} /></Card></Col>
-      <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi"><Card className="workbench-card dashboard-kpi" loading={query.isLoading}><Statistic title="失败率" value={data?.metrics.failure_rate == null ? 0 : data.metrics.failure_rate * 100} precision={1} suffix="%" valueStyle={{ color: data?.metrics.failure_rate ? token.colorError : undefined }} prefix={<WarningOutlined />} /></Card></Col>
+      <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi"><Card className="workbench-card dashboard-kpi" loading={query.isLoading}><Statistic title="失败率" value={data?.metrics.failure_rate == null ? 0 : data.metrics.failure_rate * 100} precision={1} suffix="%" styles={{ content: { color: data?.metrics.failure_rate ? token.colorError : undefined } }} prefix={<WarningOutlined />} /></Card></Col>
       <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi"><Card className="workbench-card dashboard-kpi" loading={query.isLoading}><Statistic title="P95 时延" value={data?.metrics.p95_duration_ms ?? 0} suffix="ms" prefix={<ClockCircleOutlined />} /></Card></Col>
       <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi"><Card className="workbench-card dashboard-kpi" loading={query.isLoading}><Statistic title="输入 Token" value={data?.metrics.input_tokens ?? 0} prefix={<DatabaseOutlined />} /></Card></Col>
       <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi"><Card className="workbench-card dashboard-kpi" loading={query.isLoading}><Statistic title="输出 Token" value={data?.metrics.output_tokens ?? 0} prefix={<DatabaseOutlined />} /></Card></Col>

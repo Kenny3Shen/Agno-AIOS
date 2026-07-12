@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Collapse, Form, Input, Modal, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography, message } from 'antd'
+import { App, Button, Card, Collapse, Form, Input, Modal, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
 import { ApiOutlined, CheckCircleOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { currentUserQuery } from '@/features/auth'
@@ -36,6 +36,7 @@ const reasoningOptions = (provider: ModelConfig['provider'], protocol: ModelConf
 }
 
 export function SettingsPage() {
+  const { message } = App.useApp()
   const client = useQueryClient()
   const models = useQuery({ queryKey: ['settings', 'models'], queryFn: getModels })
   const currentUser = useQuery(currentUserQuery())
@@ -139,9 +140,11 @@ export function SettingsPage() {
     setTestingId(model.id)
     try {
       const result = await testModel(model)
-      result.success
-        ? message.success(`连接成功，${result.latency_ms ?? '-'} ms`)
-        : message.error(result.message)
+      if (result.success) {
+        message.success(`连接成功，${result.latency_ms ?? '-'} ms`)
+      } else {
+        message.error(result.message)
+      }
     } catch (error) {
       message.error(error instanceof Error ? error.message : '连接测试失败')
     } finally {
@@ -157,7 +160,7 @@ export function SettingsPage() {
     columns={[
       { title: 'Name', dataIndex: 'name', width: 220, ellipsis: true, render: (value, row) => <Space><strong>{value}</strong>{models.data?.active_model_id === row.id && <Tag color="blue">active</Tag>}</Space> },
       { title: 'Model ID', dataIndex: 'model_id', width: 190, ellipsis: true },
-      { title: 'Runtime', dataIndex: 'provider', width: 230, render: (value, row) => <Space direction="vertical" size={2}><Space size={[4, 4]} wrap><Tag>{value}</Tag><Tag color="blue">{row.api_protocol}</Tag></Space><Tag color={row.structured_output_mode === 'json' ? 'green' : 'purple'}>{row.structured_output_mode}</Tag></Space> },
+      { title: 'Runtime', dataIndex: 'provider', width: 230, render: (value, row) => <Space orientation="vertical" size={2}><Space size={[4, 4]} wrap><Tag>{value}</Tag><Tag color="blue">{row.api_protocol}</Tag></Space><Tag color={row.structured_output_mode === 'json' ? 'green' : 'purple'}>{row.structured_output_mode}</Tag></Space> },
       { title: 'Base URL', dataIndex: 'base_url', width: 260, ellipsis: { showTitle: false }, render: (value) => <Typography.Text ellipsis={{ tooltip: value }}>{value || '-'}</Typography.Text> },
       { title: 'Configured', dataIndex: 'configured', width: 130, render: (value) => <Tag color={value ? 'success' : 'warning'}>{value ? 'ready' : 'missing key'}</Tag> },
       { title: 'Enabled', dataIndex: 'enabled', width: 110, render: (value, row) => <Switch checked={value} loading={updatingId === row.id} onChange={(checked) => void setEnabled(row, checked)} aria-label={`${row.name} enabled`} /> },

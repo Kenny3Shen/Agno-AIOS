@@ -12,5 +12,13 @@ Object.defineProperty(window, 'matchMedia', {
   value: (query: string) => ({ matches: false, media: query, onchange: null, addListener: () => undefined, removeListener: () => undefined, addEventListener: () => undefined, removeEventListener: () => undefined, dispatchEvent: () => false }),
 })
 
+Object.defineProperty(window, 'scrollTo', { writable: true, value: () => undefined })
+
+const getComputedStyleWithoutPseudo = window.getComputedStyle.bind(window)
+Object.defineProperty(window, 'getComputedStyle', {
+  writable: true,
+  value: (element: Element) => getComputedStyleWithoutPseudo(element),
+})
+
 class ResizeObserverMock { observe() {} unobserve() {} disconnect() {} }
 globalThis.ResizeObserver = ResizeObserverMock

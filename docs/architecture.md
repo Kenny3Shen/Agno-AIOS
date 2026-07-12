@@ -8,9 +8,11 @@ T.A.I.S 是一个面向安全运营的 AI 工作台。后端提供认证、权�
 - TanStack Router 管理页面路由、可分享筛选和会话定位。
 - TanStack Query 管理服务端数据、缓存、刷新和 mutation 后失效。
 - Ant Design v6 与 Ant Design X 承担主要 UI；UnoCSS 只处理少量特殊布局。
+- Provider 栈为 QueryClientProvider → PreferencesContext → Ant Design X `XProvider` → Ant Design `App`。页面级通知和确认弹窗必须使用 `App.useApp()`，以继承主题、locale 和上下文。
 - Chat 使用 Ant Design X 的 `Bubble.List`、`Sender`、`Conversations`、`Welcome`、`Prompts` 和 XMarkdown，不引入 X SDK。
 - 目录采用 feature-first：`frontend/src/app`、`frontend/src/features`、`frontend/src/shared`、`frontend/src/test`。
 - Audit 页面位于 `features/audit`，使用筛选栏、分页 Table 和 Drawer 详情展示审计事件；metadata 使用 JSON 卡片，ID 类字段支持复制。
+- 全局动效集中在 CSS token `--motion-fast`、`--motion-base`、`--motion-slow` 和 easing 变量中，用于页面进入、表格选择、面板、Chat 流式反馈和控件微交互；`prefers-reduced-motion` 会关闭动画和过渡。
 
 ## 后端
 

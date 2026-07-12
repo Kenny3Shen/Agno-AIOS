@@ -29,7 +29,7 @@ describe('authentication behavior', () => {
   it('clears an invalid token after a 401 response', async () => {
     localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, 'expired')
     server.use(http.get('/api/auth/users/me', () => new HttpResponse(null, { status: 401 })))
-    await expect(getCurrentUser()).rejects.toThrow()
+    await expect(getCurrentUser()).rejects.toThrow('Request failed (401)')
     expect(localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull()
   })
 

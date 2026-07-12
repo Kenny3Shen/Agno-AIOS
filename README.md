@@ -25,7 +25,7 @@ T.A.I.S 是一个 AI-powered SDLC security automation 项目，围绕 Discover�
 - Agent Runtime：OpenAI-compatible models、AsyncPostgresDb、Tracing、PgVector Knowledge、LocalSkills、MCPTools。
 - MCP：FastMCP，同进程挂载到 FastAPI 的 `/mcp/`，由应用 lifespan 启停运行时。
 - 数据库：PostgreSQL + pgvector，按应用、运行时、MCP、知识库 schema 分域。
-- 工具链：uv、ruff、ty、Bun、Playwright。
+- 工具链：uv、ruff、ty、Bun、Oxlint、Oxfmt、Playwright。
 
 ## 快速启动
 
@@ -84,9 +84,13 @@ uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
 
 ```bash
 cd frontend
+/home/shenss/.bun/bin/bun run lint
+/home/shenss/.bun/bin/bun run typecheck
 /home/shenss/.bun/bin/bun run test:shell
 /home/shenss/.bun/bin/bun run test:auth
 /home/shenss/.bun/bin/bun run build
+/home/shenss/.bun/bin/bun run check
+/home/shenss/.bun/bin/bun run format
 ```
 
 数据更新脚本：

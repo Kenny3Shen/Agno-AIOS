@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Empty, Form, Grid, Input, Modal, Popconfirm, Space, Splitter, Table, Tag, Tooltip, Typography, message } from 'antd'
+import { App, Button, Card, Empty, Form, Grid, Input, Modal, Popconfirm, Space, Splitter, Table, Tag, Tooltip, Typography } from 'antd'
 import { DeleteOutlined, EditOutlined, SearchOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { CopyableValue, MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
@@ -10,6 +10,7 @@ import { compactId, formatDate } from '@/shared/lib/format'
 import { parseMemoryInput } from './utils'
 
 export function MemoryPage() {
+  const { message } = App.useApp()
   const client = useQueryClient()
   const screens = Grid.useBreakpoint()
   const vertical = screens.md === false

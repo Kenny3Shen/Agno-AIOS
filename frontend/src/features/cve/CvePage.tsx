@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Button, Card, Input, Select, Space, Table, Tag, message } from 'antd'
+import { App, Button, Card, Input, Select, Space, Table, Tag } from 'antd'
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { searchCves, updateCves, type Cve } from './api'
 import { formatDate } from '@/shared/lib/format'
 
 export function CvePage() {
+  const { message } = App.useApp()
   const [query, setQuery] = useState('')
   const [source, setSource] = useState<string>()
   const [pagination, setPagination] = useState({ page: 1, size: 20 })

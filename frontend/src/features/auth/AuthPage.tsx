@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { Button, Card, Form, Input, Space, Typography, message } from 'antd'
+import { App, Button, Card, Form, Input, Space, Typography } from 'antd'
 import { GithubOutlined, LockOutlined, MailOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { getOAuthAuthorization, getOAuthProviders, login } from './api'
 import { setToken } from '@/shared/auth/storage'
 
 export function AuthPage({ onAuthenticated }: { onAuthenticated: () => Promise<void> }) {
+  const { message } = App.useApp()
   const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [providers, setProviders] = useState<string[]>([])
@@ -45,7 +46,7 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: () => Promise<v
           </Form.Item>
           <Button type="primary" htmlType="submit" loading={loading} block>{t('auth.signIn')}</Button>
         </Form>
-        <Space direction="vertical" className="oauth-list">
+        <Space orientation="vertical" className="oauth-list">
           {!providers.length && <Button type="text" onClick={() => void loadProviders()}>SSO providers</Button>}
           {providers.map((provider) => <Button key={provider} icon={<GithubOutlined />} onClick={async () => { window.location.assign(await getOAuthAuthorization(provider)) }}>{provider}</Button>)}
         </Space>

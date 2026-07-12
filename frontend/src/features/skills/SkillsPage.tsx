@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Drawer, Empty, Form, Grid, Input, Space, Splitter, Switch, Table, Tabs, Tag, Upload, message } from 'antd'
+import { App, Button, Card, Drawer, Empty, Form, Grid, Input, Space, Splitter, Switch, Table, Tabs, Tag, Upload } from 'antd'
 import { InboxOutlined, UploadOutlined } from '@ant-design/icons'
 import XMarkdown from '@ant-design/x-markdown'
 import { PageHeader } from '@/shared/ui/PageHeader'
@@ -10,6 +10,7 @@ import { VisibilitySelect } from '@/shared/ui/VisibilitySelect'
 import { MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
 
 export function SkillsPage() {
+  const { message } = App.useApp()
   const screens = Grid.useBreakpoint()
   const vertical = screens.md === false
   const client = useQueryClient()
@@ -44,7 +45,7 @@ export function SkillsPage() {
         </Card>
       </Splitter.Panel>
     </Splitter>
-    <Drawer width={480} open={uploadOpen} onClose={() => setUploadOpen(false)} title="上传技能">
+    <Drawer size={480} open={uploadOpen} onClose={() => setUploadOpen(false)} title="上传技能">
       <Form
         layout="vertical"
         initialValues={{ visibility: 'private' }}
