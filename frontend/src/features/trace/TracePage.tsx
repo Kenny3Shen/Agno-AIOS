@@ -62,6 +62,7 @@ export function TracePage() {
   const searchStr = useRouterState({ select: (state) => state.location.searchStr })
   const urlState = useMemo(() => parseTraceSearch(searchStr), [searchStr])
   const urlFilters = urlState.filters
+  const { session_id: urlSessionId, run_id: urlRunId, user_id: urlUserId, status: urlStatus, start_time: urlStartTime, end_time: urlEndTime } = urlFilters
   const currentUser = useQuery(currentUserQuery())
   const isAdmin = roleOf(currentUser.data) === 'admin'
   const [sessionInput, setSessionInput] = useState(urlFilters.session_id)
@@ -100,20 +101,23 @@ export function TracePage() {
   const selectedSpan = activeDetail?.spans.find((span) => span.span_id === selectedSpanId) ?? null
 
   useEffect(() => {
-    setSessionInput(urlFilters.session_id)
-    setRunInput(urlFilters.run_id)
-    setUserInput(urlFilters.user_id)
-    setStatus(urlFilters.status)
-    setTimeRange(initialRange(urlFilters.start_time, urlFilters.end_time))
-    setFilters(urlFilters)
+    setSessionInput(urlSessionId)
+    setRunInput(urlRunId)
+    setUserInput(urlUserId)
+    setStatus(urlStatus)
+    setTimeRange(initialRange(urlStartTime, urlEndTime))
+    setFilters({ session_id: urlSessionId, run_id: urlRunId, user_id: urlUserId, status: urlStatus, start_time: urlStartTime, end_time: urlEndTime })
+    setSessionPage(1)
+  }, [urlSessionId, urlRunId, urlUserId, urlStatus, urlStartTime, urlEndTime])
+
+  useEffect(() => {
     setSelectedSession(urlState.selectedSession)
     setActiveTraceId(urlState.traceId)
     setSelectedSpanId('')
     setExpandedTraceIds(urlState.traceId ? [urlState.traceId] : [])
     setExpandedSpanKeys([])
-    setSessionPage(1)
     setRunPage(1)
-  }, [urlFilters, urlState.selectedSession, urlState.traceId])
+  }, [urlState.selectedSession, urlState.traceId])
 
   useEffect(() => {
     if (!activeTraceId || selectedSpanId || !activeDetail) return

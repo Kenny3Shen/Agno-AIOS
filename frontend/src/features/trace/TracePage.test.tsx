@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
@@ -53,6 +54,11 @@ const clickPage = async (card: HTMLElement, page: number) => {
   await userEvent.click(within(card).getByTitle(String(page)))
 }
 
+const RouteHarness = () => {
+  const [, setVersion] = useState(0)
+  return <><TracePage /><button type="button" onClick={() => setVersion((version) => version + 1)}>Sync route</button></>
+}
+
 describe('TracePage interactions', () => {
   beforeEach(() => {
     routerMock.push.mockReset()
@@ -85,7 +91,7 @@ describe('TracePage interactions', () => {
   })
 
   it('selects a Session through selected_session without filling the Session ID input', async () => {
-    renderWithQuery(<TracePage />)
+    renderWithQuery(<RouteHarness />)
 
     expect(await screen.findByText('Session 1')).toBeTruthy()
     const sessionInput = screen.getByPlaceholderText('Session ID') as HTMLInputElement
@@ -95,6 +101,12 @@ describe('TracePage interactions', () => {
     expect(sessionInput.value).toBe('')
     expect(routerMock.push).toHaveBeenLastCalledWith('/trace?selected_session=s9')
     await waitFor(() => expect(traceRequests.some((params) => params.get('session_id') === 's9')).toBe(true))
+
+    routerMock.searchStr = '?selected_session=s9'
+    await userEvent.click(screen.getByRole('button', { name: 'Sync route' }))
+
+    expect((await screen.findByRole('button', { name: /Session 9/ })).getAttribute('aria-pressed')).toBe('true')
+    expect(within(cardByTitle('Sessions')).queryByText('Session 1')).toBeNull()
   })
 
   it('submits Session ID searches as filters and clears selected_session', async () => {

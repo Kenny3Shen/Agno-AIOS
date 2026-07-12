@@ -125,7 +125,7 @@ export function McpPage() {
                     { title: 'Type', dataIndex: 'type', width: 100, render: (value) => <Tag color={value === 'tool' ? 'blue' : 'purple'}>{value}</Tag> },
                     { title: 'Tags', dataIndex: 'tags', render: (tags: string[]) => <Space wrap>{tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}</Space> },
                     { title: 'Risk', width: 190, render: (_, row) => riskTags(row) },
-                    { title: 'Enabled', width: 90, render: (_, row) => { const pending = toggleComponent.isPending && toggleComponent.variables?.item.key === row.key; return <Switch checked={row.enabled} disabled={!row.server_id || pending} loading={pending} onClick={(_checked, event) => event.stopPropagation()} onChange={(enabled) => toggleComponent.mutate({ item: row, enabled })} /> } },
+                    { title: 'Enabled', width: 90, render: (_, row) => { const pending = toggleComponent.isPending && toggleComponent.variables?.item.key === row.key; const server = servers.find((item) => item.id === row.server_id); return <Switch aria-label={`${row.name} enabled`} checked={row.enabled} disabled={!server?.can_manage || pending} loading={pending} onClick={(_checked, event) => event.stopPropagation()} onChange={(enabled) => toggleComponent.mutate({ item: row, enabled })} /> } },
                   ]}
                 />
               </Space>
