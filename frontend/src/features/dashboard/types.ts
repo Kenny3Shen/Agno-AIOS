@@ -1,4 +1,11 @@
 export type OverviewRange = '1h' | '24h' | '7d'
+export type OverviewResponseRange = OverviewRange | 'custom'
+
+export interface OverviewQuery {
+  range?: OverviewRange
+  startTime?: string
+  endTime?: string
+}
 
 export interface OverviewBucket {
   timestamp: string
@@ -6,6 +13,10 @@ export interface OverviewBucket {
   failed_runs: number
   p50_duration_ms: number | null
   p95_duration_ms: number | null
+  input_tokens?: number | null
+  output_tokens?: number | null
+  total_tokens?: number | null
+  bucket_end?: string
 }
 
 export interface OverviewDimension {
@@ -41,6 +52,8 @@ export interface OverviewKpis {
   failure_rate: number
   p50_duration_ms: number | null
   p95_duration_ms: number | null
+  input_tokens?: number | null
+  output_tokens?: number | null
   total_tokens: number | null
 }
 
@@ -60,7 +73,9 @@ export interface OverviewAssets {
 
 export interface RuntimeOverview {
   generated_at: string
-  range: OverviewRange
+  range: OverviewResponseRange
+  start_time?: string
+  end_time?: string
   health: { status: string; environment?: string }
   metrics: OverviewKpis
   series: OverviewBucket[]

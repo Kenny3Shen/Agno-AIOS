@@ -27,14 +27,16 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: () => Promise<v
 
   return (
     <main className="auth-page">
-      <section className="auth-signal" aria-hidden="true">
+      <section className="auth-signal auth-enter auth-enter-signal" aria-hidden="true">
         <span>CONTROL PLANE</span><i /><span>IDENTITY GATE</span><i /><span>TAIS/01</span>
       </section>
-      <Card className="auth-card" variant="outlined">
-        <div className="brand-lockup"><span className="brand-mark">T</span><div><strong>T.A.I.S</strong><small>Trinity AI Security</small></div></div>
-        <Typography.Title level={2}>{t('auth.title')}</Typography.Title>
-        <Typography.Paragraph type="secondary">{t('auth.subtitle')}</Typography.Paragraph>
-        <Form layout="vertical" onFinish={submit} requiredMark={false} initialValues={{ email: 'admin@example.com' }}>
+      <Card className="auth-card auth-enter auth-enter-card" variant="outlined">
+        <div className="brand-lockup auth-enter auth-enter-brand"><span className="brand-mark">T</span><div><strong>T.A.I.S</strong><small>Trinity AI Security</small></div></div>
+        <div className="auth-enter auth-enter-copy">
+          <Typography.Title level={2}>{t('auth.title')}</Typography.Title>
+          <Typography.Paragraph type="secondary">{t('auth.subtitle')}</Typography.Paragraph>
+        </div>
+        <Form className="auth-enter auth-enter-form" layout="vertical" onFinish={submit} requiredMark={false} initialValues={{ email: 'admin@example.com' }}>
           <Form.Item name="email" label={t('auth.email')} rules={[{ required: true }, { type: 'email' }]}>
             <Input prefix={<MailOutlined />} autoComplete="username" />
           </Form.Item>

@@ -70,9 +70,9 @@ export function AppFrame({ children }: { children: ReactNode }) {
   return (
     <Layout className="app-shell">
       <Sider width={264} collapsedWidth={76} collapsed={mobile ? true : collapsed} className="shell-sider" trigger={null}>
-        <div className="shell-brand"><span className="brand-mark">T</span>{!collapsed && !mobile && <div><strong>T.A.I.S</strong><small>Trinity AI Security</small></div>}</div>
+        <div className="shell-brand"><span className="brand-mark">T</span><div className="shell-brand-copy"><strong>T.A.I.S</strong><small>Trinity AI Security</small></div></div>
         <Menu mode="inline" selectedKeys={[path]} items={items} className="shell-menu" />
-        <div className="shell-identity"><Avatar shape="square">{initials}</Avatar>{!collapsed && !mobile && <Typography.Text ellipsis>{userQuery.data?.email}</Typography.Text>}</div>
+        <div className="shell-identity"><Avatar shape="square">{initials}</Avatar><Typography.Text className="shell-identity-copy" ellipsis>{userQuery.data?.email}</Typography.Text></div>
       </Sider>
       <Layout>
         <Header className="shell-header">
@@ -89,7 +89,11 @@ export function AppFrame({ children }: { children: ReactNode }) {
             </Dropdown>
           </Space>
         </Header>
-        <Content className="shell-content"><Suspense fallback={<div className="boot-screen"><Spin /></div>}>{children}</Suspense></Content>
+        <Content className="shell-content">
+          <Suspense fallback={<div className="boot-screen"><Spin /></div>}>
+            <div key={path} className="shell-page-transition">{children}</div>
+          </Suspense>
+        </Content>
       </Layout>
       <Drawer placement="left" size="min(300px, calc(100vw - 32px))" open={mobileOpen} onClose={() => setMobileOpen(false)} title="T.A.I.S" styles={{ body: { padding: 8 } }}>
         <Menu mode="inline" selectedKeys={[path]} onClick={() => setMobileOpen(false)} items={items} />

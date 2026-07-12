@@ -1,3 +1,6 @@
+Do not use the `shell_command` tool.
+Use Codex’s built-in terminal tools for local command and file operations
+
 测试账号
 
 ```bash

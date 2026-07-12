@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chatReducer, consumeSse, initialChatState, previousPrompt } from './utils'
+import { chatReducer, consumeSse, defaultReasoningEffort, initialChatState, previousPrompt, supportedReasoningEfforts } from './utils'
 import type { Message } from './types'
 
 describe('chat behavior', () => {
@@ -25,10 +25,21 @@ describe('chat behavior', () => {
     expect(previousPrompt(messages, 'a')).toBe('inspect')
   })
 
-  it('clears a temporary reasoning effort when changing the model or starting a new chat', () => {
+  it('updates the reasoning effort when changing the model or starting a new chat', () => {
     const selected = chatReducer(initialChatState, { type: 'reasoning-effort', value: 'max' })
-    expect(chatReducer(selected, { type: 'model', value: 'model-2' }).reasoningEffort).toBeNull()
+    expect(chatReducer(selected, { type: 'model', value: 'model-2', reasoningEffort: 'low' }).reasoningEffort).toBe('low')
     expect(chatReducer(selected, { type: 'reset' }).reasoningEffort).toBeNull()
+  })
+
+  it('uses only supported explicit reasoning strengths and selects the configured default', () => {
+    const model = {
+      id: 'openai', name: 'OpenAI', model_id: 'gpt', provider: 'openai' as const,
+      api_protocol: 'responses' as const, structured_output_mode: 'native' as const,
+      default_reasoning_effort: 'medium' as const, base_url: '', api_key: '', description: '', enabled: true, builtin: false,
+    }
+    expect(supportedReasoningEfforts(model)).toEqual(['minimal', 'low', 'medium', 'high'])
+    expect(defaultReasoningEffort(model)).toBe('medium')
+    expect(defaultReasoningEffort({ ...model, provider: 'openai-compatible' })).toBeNull()
   })
 
   it('keeps protocol metadata separate from markdown content', () => {

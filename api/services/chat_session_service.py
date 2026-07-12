@@ -249,7 +249,7 @@ async def get_session_messages_async(
             user_text = inp
         run_id = str(run.get("run_id") or f"history-{index}")
         if user_text.strip():
-            messages.append({"id": f"{run_id}:user", "role": "user", "content": user_text.strip(), "final": True})
+            messages.append({"id": f"{run_id}:user", "role": "user", "content": user_text.strip(), "final": True, "session_id": session_id})
 
         content = run.get("content", "")
         if isinstance(content, str) and content.strip():
@@ -273,6 +273,7 @@ async def get_session_messages_async(
                 "content": content.strip(),
                 "final": True,
                 "run_id": run_id,
+                "session_id": session_id,
                 "status": str(run.get("status") or "completed"),
                 "metrics": metric_values(run.get("metrics")),
                 "sources": source_items(run.get("citations")) or source_items(run.get("references")),

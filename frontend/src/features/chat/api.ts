@@ -3,8 +3,11 @@ import type { ModelConfigResponse, ReasoningEffort } from '@/shared/types/common
 import type { ChatRunEvent, ChatSession, Message } from './types'
 import { consumeSse, normalizeMessages } from './utils'
 
-export const listSessions = async (includeArchived = false) => {
-  const value = await requestJson<unknown>(`/chat/sessions${includeArchived ? '?include_archived=true' : ''}`)
+export const listSessions = async (includeArchived = false, userId?: string) => {
+  const search = new URLSearchParams()
+  if (includeArchived) search.set('include_archived', 'true')
+  if (userId) search.set('user_id', userId)
+  const value = await requestJson<unknown>(`/chat/sessions${search.size ? `?${search}` : ''}`)
   return Array.isArray(value) ? value as ChatSession[] : []
 }
 export const getHistory = async (sessionId: string) => normalizeMessages(await requestJson<unknown>(`/chat/sessions/${encodeURIComponent(sessionId)}`))

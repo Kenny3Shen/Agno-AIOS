@@ -1,9 +1,9 @@
-import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from agno.tracing import setup_tracing
 from fastapi.encoders import jsonable_encoder
+from loguru import logger
 
 from api.auth.ownership import assert_owned_resource
 from api.services.postgres_store import get_async_agno_postgres_db
@@ -32,6 +32,8 @@ OUTPUT_ATTRIBUTE_KEYS = (
     "tool.result",
     "function.response",
 )
+
+TRACE_STATUSES = frozenset({"OK", "ERROR", "UNSET"})
 
 
 def setup_agno_tracing() -> None:
@@ -157,11 +159,42 @@ def parse_span_display(span: dict[str, Any]) -> dict[str, Any]:
 def _parse_dt(value: str | None) -> datetime | None:
     if not value:
         return None
-    # Accept ISO8601 timestamps; allow trailing 'Z'.
+    # Accept ISO8601 timestamps; allow trailing 'Z'.  Requiring an explicit
+    # offset prevents a server-local timezone from changing query results.
     value = value.strip()
+    if not value:
+        return None
     if value.endswith("Z"):
         value = value[:-1] + "+00:00"
-    return datetime.fromisoformat(value)
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("start_time 和 end_time 必须是 ISO8601 时间") from exc
+    if parsed.tzinfo is None:
+        raise ValueError("start_time 和 end_time 必须包含时区")
+    return parsed.astimezone(UTC)
+
+
+def _normalize_trace_status(status: str | None) -> str | None:
+    if status is None:
+        return None
+    normalized = status.strip().upper()
+    if not normalized:
+        return None
+    if normalized not in TRACE_STATUSES:
+        allowed = ", ".join(sorted(TRACE_STATUSES))
+        raise ValueError(f"status 必须是以下值之一: {allowed}")
+    return normalized
+
+
+def _validate_trace_time_range(
+    start_time: str | None, end_time: str | None
+) -> tuple[datetime | None, datetime | None]:
+    start = _parse_dt(start_time)
+    end = _parse_dt(end_time)
+    if start is not None and end is not None and start > end:
+        raise ValueError("start_time 不能晚于 end_time")
+    return start, end
 
 
 async def list_traces(
@@ -189,8 +222,8 @@ async def list_traces(
     if page <= 0:
         page = 1
 
-    st = _parse_dt(start_time)
-    et = _parse_dt(end_time)
+    st, et = _validate_trace_time_range(start_time, end_time)
+    normalized_status = _normalize_trace_status(status)
 
     traces, total_count = await _trace_db.get_traces(
         run_id=run_id,
@@ -199,7 +232,7 @@ async def list_traces(
         agent_id=agent_id,
         team_id=team_id,
         workflow_id=workflow_id,
-        status=status,
+        status=normalized_status,
         start_time=st,
         end_time=et,
         limit=limit,
@@ -210,51 +243,192 @@ async def list_traces(
     return {"items": items, "total_count": total_count, "page": page, "limit": limit}
 
 
+async def list_trace_sessions(
+    *,
+    run_id: str | None = None,
+    session_id: str | None = None,
+    user_id: str | None = None,
+    agent_id: str | None = None,
+    team_id: str | None = None,
+    workflow_id: str | None = None,
+    status: str | None = None,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    limit: int = 20,
+    page: int = 1,
+) -> dict[str, Any]:
+    """Return trace sessions after applying filters, then paginate sessions.
+
+    ``AsyncPostgresDb.get_traces`` paginates individual trace rows.  Fetching
+    every matching row before grouping is deliberate: grouping only a single
+    trace page was the cause of sessions silently disappearing from the UI.
+    """
+    limit = min(max(limit, 1), 200)
+    page = max(page, 1)
+    st, et = _validate_trace_time_range(start_time, end_time)
+    normalized_status = _normalize_trace_status(status)
+
+    trace_page = 1
+    traces: list[Any] = []
+    while True:
+        batch, total_count = await _trace_db.get_traces(
+            run_id=run_id,
+            session_id=session_id,
+            user_id=user_id,
+            agent_id=agent_id,
+            team_id=team_id,
+            workflow_id=workflow_id,
+            status=normalized_status,
+            start_time=st,
+            end_time=et,
+            limit=200,
+            page=trace_page,
+        )
+        traces.extend(batch)
+        if len(traces) >= total_count or not batch:
+            break
+        trace_page += 1
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for trace in traces:
+        item = jsonable_encoder(trace.to_dict())
+        session_id = str(item.get("session_id") or "").strip()
+        if session_id:
+            grouped.setdefault(session_id, []).append(item)
+
+    def trace_time(item: dict[str, Any]) -> str:
+        return str(item.get("start_time") or item.get("created_at") or "")
+
+    sessions: list[dict[str, Any]] = []
+    for session_id, items in grouped.items():
+        latest = max(items, key=trace_time)
+        run_ids = {str(item.get("run_id")) for item in items if item.get("run_id")}
+        error_count = sum(
+            1
+            for item in items
+            if str(item.get("status") or "").upper() in {"ERROR", "FAILED", "FAILURE"}
+        )
+        sessions.append(
+            {
+                "session_id": session_id,
+                "name": latest.get("name") or latest.get("agent_id") or session_id,
+                "latest_trace_id": latest.get("trace_id"),
+                "latest_run_id": latest.get("run_id"),
+                "latest_start_time": latest.get("start_time"),
+                "latest_end_time": latest.get("end_time"),
+                "trace_count": len(items),
+                "run_count": len(run_ids),
+                "error_count": error_count,
+                "status": "ERROR" if error_count else str(latest.get("status") or "UNSET"),
+                "user_id": latest.get("user_id"),
+                "agent_id": latest.get("agent_id"),
+                "team_id": latest.get("team_id"),
+                "workflow_id": latest.get("workflow_id"),
+            }
+        )
+    sessions.sort(key=lambda item: str(item.get("latest_start_time") or ""), reverse=True)
+    offset = (page - 1) * limit
+    return {
+        "items": sessions[offset : offset + limit],
+        "total_count": len(sessions),
+        "page": page,
+        "limit": limit,
+    }
+
+
+async def mark_trace_error(run_id: str) -> bool:
+    """Best-effort status repair for a trace whose chat run failed."""
+    if not run_id:
+        return False
+    try:
+        trace = await _trace_db.get_trace(run_id=run_id)
+        if trace is None:
+            logger.debug("No trace found to mark failed for run {}", run_id)
+            return False
+        trace.status = "ERROR"
+        await _trace_db.upsert_trace(trace)
+        return True
+    except Exception:
+        logger.exception("Unable to mark trace as ERROR for run {}", run_id)
+        return False
+
+
 def _build_span_tree(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Build a hierarchical span tree.
 
-    Input spans are dicts with at least: span_id, parent_span_id.
+    Every valid input span is represented exactly once. Duplicate span IDs,
+    self-references, cycles, and references to absent parents are detached as
+    roots instead of making the response ambiguous or non-serializable.
     """
-    by_id: dict[str, dict[str, Any]] = {}
-
-    for s in spans:
-        span_id = str(s.get("span_id", ""))
+    nodes: list[tuple[str, dict[str, Any]]] = []
+    canonical: dict[str, dict[str, Any]] = {}
+    duplicate_nodes: list[dict[str, Any]] = []
+    for span in spans:
+        span_id = str(span.get("span_id") or "").strip()
         if not span_id:
+            # A span without an identity cannot participate in parent linkage,
+            # but remains visible to the caller as a detached item.
+            duplicate_nodes.append({"span": span, "children": []})
             continue
-        node = {"span": s, "children": []}
-        by_id[span_id] = node
+        node = {"span": span, "children": []}
+        nodes.append((span_id, node))
+        if span_id in canonical:
+            duplicate_nodes.append(node)
+            logger.warning("Duplicate span_id {} in trace response", span_id)
+        else:
+            canonical[span_id] = node
 
-    # attach children
-    for span_id, node in by_id.items():
-        parent_id = node["span"].get("parent_span_id")
-        if parent_id and parent_id in by_id:
-            by_id[parent_id]["children"].append(node)
+    parent_for: dict[str, str] = {}
+    for span_id, node in canonical.items():
+        parent_id = str(node["span"].get("parent_span_id") or "").strip()
+        if parent_id and parent_id != span_id and parent_id in canonical:
+            parent_for[span_id] = parent_id
 
-    # root nodes = parent_span_id is None or missing parent
-    roots: list[dict[str, Any]] = []
-    for span_id, node in by_id.items():
-        parent_id = node["span"].get("parent_span_id")
-        if not parent_id or parent_id not in by_id:
+    cycle_ids: set[str] = set()
+    for span_id in canonical:
+        path: list[str] = []
+        positions: dict[str, int] = {}
+        current = span_id
+        while current in parent_for:
+            if current in positions:
+                cycle_ids.update(path[positions[current] :])
+                break
+            positions[current] = len(path)
+            path.append(current)
+            current = parent_for[current]
+
+    roots = list(duplicate_nodes)
+    for span_id, node in nodes:
+        if canonical[span_id] is not node:
+            # Duplicate IDs deliberately stay detached. Linking one of them
+            # through the canonical ID would make the parent relationship
+            # depend on database row order.
+            continue
+        parent_id = parent_for.get(span_id)
+        if parent_id is None or span_id in cycle_ids:
             roots.append(node)
+        else:
+            canonical[parent_id]["children"].append(node)
 
-    # Sort roots/children by start_time if present.
-    def _key(n: dict[str, Any]):
-        st = n.get("span", {}).get("start_time")
-        return st or ""
+    def node_key(node: dict[str, Any]) -> tuple[str, str]:
+        span = node["span"]
+        return (str(span.get("start_time") or ""), str(span.get("span_id") or ""))
 
-    def _sort_rec(nodes: list[dict[str, Any]]):
-        nodes.sort(key=_key)
-        for n in nodes:
-            _sort_rec(n.get("children", []))
-
-    _sort_rec(roots)
+    # Sort iteratively so an unusually deep (but valid) trace cannot overflow
+    # Python's recursion limit while being rendered.
+    pending = [roots]
+    while pending:
+        siblings = pending.pop()
+        siblings.sort(key=node_key)
+        pending.extend(node["children"] for node in siblings)
     return roots
 
 
 async def get_trace_detail(trace_id: str, actor: Any | None = None) -> dict[str, Any] | None:
-    trace_task = _trace_db.get_trace(trace_id=trace_id)
-    spans_task = _trace_db.get_spans(trace_id=trace_id)
-    trace, spans = await asyncio.gather(trace_task, spans_task)
+    # Do not query spans until the trace itself has passed ownership checks.
+    # Besides avoiding unnecessary work, this prevents access patterns from
+    # revealing whether a protected trace has span data.
+    trace = await _trace_db.get_trace(trace_id=trace_id)
     if not trace:
         return None
 
@@ -266,6 +440,9 @@ async def get_trace_detail(trace_id: str, actor: Any | None = None) -> dict[str,
             resource_name="Trace",
         )
 
+    # Agno defaults this call to 1,000 rows. Passing None deliberately asks
+    # for the complete trace; expose that contract in the API response.
+    spans = await _trace_db.get_spans(trace_id=trace_id, limit=None)
     span_dicts = [jsonable_encoder(s.to_dict()) for s in spans]
     for span in span_dicts:
         span["session_id"] = trace_dict.get("session_id")
@@ -277,4 +454,6 @@ async def get_trace_detail(trace_id: str, actor: Any | None = None) -> dict[str,
         "trace": trace_dict,
         "spans": span_dicts,
         "tree": tree,
+        "spans_complete": True,
+        "span_count": len(span_dicts),
     }

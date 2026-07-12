@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 import { cancelRun, streamMessage } from './api'
 import { chatKeys, historyQuery, modelsQuery, sessionsQuery } from './queries'
-import { chatReducer, initialChatState, previousPrompt } from './utils'
+import { chatReducer, defaultReasoningEffort, initialChatState, previousPrompt } from './utils'
 import type { ChatRunEvent, Message } from './types'
 import type { ReasoningEffort } from '@/shared/types/common'
 
@@ -21,16 +21,23 @@ export function useChat() {
 
   useEffect(() => { if (sessionId && history.data) dispatch({ type: 'history', messages: history.data }); else if (!sessionId) dispatch({ type: 'reset' }) }, [history.data, sessionId])
   useEffect(() => {
-    if (!models.data?.models.length || state.selectedModelId) return
-    const selected = models.data.models.find((model) => model.id === models.data.active_model_id && model.enabled) ?? models.data.models.find((model) => model.enabled) ?? models.data.models[0]
-    if (selected) dispatch({ type: 'model', value: selected.id })
-  }, [models.data, state.selectedModelId])
+    if (!models.data?.models.length) return
+    const selected = models.data.models.find((model) => model.id === state.selectedModelId)
+      ?? models.data.models.find((model) => model.id === models.data.active_model_id && model.enabled)
+      ?? models.data.models.find((model) => model.enabled)
+      ?? models.data.models[0]
+    if (!selected) return
+    const effort = defaultReasoningEffort(selected)
+    if (state.selectedModelId !== selected.id) dispatch({ type: 'model', value: selected.id, reasoningEffort: effort })
+    else if (state.reasoningEffort === null && effort !== null) dispatch({ type: 'reasoning-effort', value: effort })
+  }, [models.data, state.reasoningEffort, state.selectedModelId])
 
   const selectedModel = useMemo(() => models.data?.models.find((model) => model.id === state.selectedModelId) ?? null, [models.data, state.selectedModelId])
   const setSession = (value: string | null) => { void router.history.push(value ? `/chat?session=${encodeURIComponent(value)}` : '/chat') }
   const setModel = (value: string) => {
     localStorage.setItem('agno-aios-chat-model-id', value)
-    dispatch({ type: 'model', value })
+    const model = models.data?.models.find((item) => item.id === value) ?? null
+    dispatch({ type: 'model', value, reasoningEffort: defaultReasoningEffort(model) })
   }
 
   const submit = async (prompt: string, appendUser = true) => {
@@ -67,6 +74,9 @@ export function useChat() {
     try { await cancelRun(runId) } catch (error) { dispatch({ type: 'network-error', id: state.messages.at(-1)?.id ?? '', message: error instanceof Error ? error.message : 'Unable to cancel the active run' }) }
   }
   const setReasoningEffort = (value: ReasoningEffort | null) => dispatch({ type: 'reasoning-effort', value })
-  const newChat = () => { dispatch({ type: 'reasoning-effort', value: null }); setSession(null) }
+  const newChat = () => {
+    dispatch({ type: 'reasoning-effort', value: defaultReasoningEffort(selectedModel) })
+    setSession(null)
+  }
   return { state, dispatch, sessionId, sessions, history, models, selectedModel, setSession, setModel, setReasoningEffort, submit, retry, newChat, cancel }
 }

@@ -134,3 +134,28 @@ async def test_archive_session_updates_agno_session_metadata():
     assert metadata["agno_aios_archived"] is True
     assert metadata["agno_aios_archived_by"] == "u1"
     assert metadata["agno_aios_archived_at"]
+
+
+@pytest.mark.asyncio
+async def test_session_history_messages_keep_their_session_id():
+    db = AsyncFakeAgnoDb(
+        rows=[],
+        session_row={
+            "session_id": "session-1",
+            "runs": [
+                {
+                    "run_id": "run-1",
+                    "input": {"input_content": "Investigate this alert"},
+                    "content": "Investigation complete",
+                    "status": "completed",
+                }
+            ],
+        },
+    )
+    with (
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
+    ):
+        messages = await chat_session_service.get_session_messages_async("session-1")
+
+    assert [message["session_id"] for message in messages] == ["session-1", "session-1"]

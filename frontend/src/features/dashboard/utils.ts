@@ -18,5 +18,9 @@ export function timelineChartData(items: OverviewBucket[]) {
     errorRate: failureRate(item.failed_runs, item.runs),
     p50: item.p50_duration_ms,
     p95: item.p95_duration_ms,
+    inputTokens: item.input_tokens ?? 0,
+    outputTokens: item.output_tokens ?? 0,
+    totalTokens: item.total_tokens ?? 0,
+    bucketEnd: item.bucket_end,
   }))
 }

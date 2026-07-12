@@ -7,7 +7,7 @@ from api.auth import claims
 from api.routes import trace
 from api.routes.trace import effective_trace_user_filter
 from api.services import tracing_service
-from api.services.tracing_service import parse_span_display
+from api.services.tracing_service import _build_span_tree, get_trace_detail, parse_span_display
 import pytest
 
 
@@ -25,7 +25,7 @@ def route_dependency(endpoint_name: str):
 def test_trace_routes_enforce_trace_permission(monkeypatch):
     monkeypatch.setitem(claims.ROLE_SCOPES, "guest", set())
 
-    for endpoint_name in ("api_list_traces", "api_get_trace"):
+    for endpoint_name in ("api_list_traces", "api_list_trace_sessions", "api_get_trace"):
         with pytest.raises(HTTPException) as exc:
             route_dependency(endpoint_name)(user=actor("g1", "guest"))
         assert exc.value.status_code == 403
@@ -112,6 +112,95 @@ async def test_trace_list_passes_all_filters_to_service():
 
 
 @pytest.mark.asyncio
+async def test_trace_session_list_forces_current_user_and_passes_filters():
+    captured: dict[str, object] = {}
+
+    async def fake_list_trace_sessions(**kwargs):
+        captured.update(kwargs)
+        return {"items": [], "total_count": 0, "page": kwargs["page"], "limit": kwargs["limit"]}
+
+    with patch.object(trace, "list_trace_sessions", fake_list_trace_sessions):
+        result = await trace.api_list_trace_sessions(
+            run_id="run-1",
+            session_id="session-1",
+            user_id="attacker-choice",
+            agent_id="agent-1",
+            status="ERROR",
+            start_time="2026-02-12T00:00:00Z",
+            end_time="2026-02-12T23:59:59Z",
+            limit=25,
+            page=2,
+            user=actor("u1"),
+        )
+    assert result["page"] == 2
+    assert captured["run_id"] == "run-1"
+    assert captured["session_id"] == "session-1"
+    assert captured["user_id"] == "u1"
+    assert captured["agent_id"] == "agent-1"
+    assert captured["status"] == "ERROR"
+    assert captured["start_time"] == "2026-02-12T00:00:00Z"
+    assert captured["end_time"] == "2026-02-12T23:59:59Z"
+
+
+@pytest.mark.asyncio
+async def test_trace_sessions_group_before_paginating_and_skip_empty_session_ids():
+    class FakeTrace:
+        def __init__(self, **data):
+            self.data = data
+
+        def to_dict(self):
+            return self.data
+
+    traces = [
+        FakeTrace(trace_id="empty", session_id=None, run_id="empty", start_time="2026-02-04T00:00:00Z"),
+        FakeTrace(trace_id="one-a", session_id="one", run_id="run-1", status="OK", start_time="2026-02-03T00:00:00Z"),
+        FakeTrace(trace_id="one-b", session_id="one", run_id="run-1", status="ERROR", start_time="2026-02-05T00:00:00Z"),
+        FakeTrace(trace_id="two", session_id="two", run_id="run-2", status="OK", start_time="2026-02-04T00:00:00Z"),
+    ]
+    captured: dict[str, object] = {}
+
+    async def fake_get_traces(**kwargs):
+        captured.update(kwargs)
+        return traces, len(traces)
+
+    with patch.object(tracing_service._trace_db, "get_traces", fake_get_traces):
+        result = await tracing_service.list_trace_sessions(
+            run_id="run-1", session_id="one", user_id="u1", status="ERROR", limit=1, page=1
+        )
+    assert result["total_count"] == 2
+    assert result["items"][0]["session_id"] == "one"
+    assert result["items"][0]["trace_count"] == 2
+    assert result["items"][0]["run_count"] == 1
+    assert result["items"][0]["status"] == "ERROR"
+    assert captured["user_id"] == "u1"
+    assert captured["run_id"] == "run-1"
+    assert captured["session_id"] == "one"
+    assert captured["status"] == "ERROR"
+    assert captured["limit"] == 200
+
+
+@pytest.mark.asyncio
+async def test_mark_trace_error_updates_matching_trace():
+    stored: list[object] = []
+    fake_trace = SimpleNamespace(status="OK")
+
+    async def fake_get_trace(*, run_id):
+        assert run_id == "run-1"
+        return fake_trace
+
+    async def fake_upsert_trace(value):
+        stored.append(value)
+
+    with (
+        patch.object(tracing_service._trace_db, "get_trace", fake_get_trace),
+        patch.object(tracing_service._trace_db, "upsert_trace", fake_upsert_trace),
+    ):
+        assert await tracing_service.mark_trace_error("run-1") is True
+    assert fake_trace.status == "ERROR"
+    assert stored == [fake_trace]
+
+
+@pytest.mark.asyncio
 async def test_trace_detail_passes_current_user_to_service():
     captured: dict[str, object] = {}
 
@@ -185,3 +274,88 @@ def test_parse_span_display_extracts_agentos_input_output_metadata() -> None:
     assert parsed["metadata"]["model"] == "gpt-5.2"
     assert parsed["metadata"]["tokens"]["prompt"] == 31
     assert parsed["events"]
+
+
+def test_span_tree_is_stable_and_degrades_duplicate_or_invalid_parent_links() -> None:
+    spans = [
+        {"span_id": "child", "parent_span_id": "root", "start_time": "2026-01-01T00:00:02Z"},
+        {"span_id": "root", "start_time": "2026-01-01T00:00:01Z"},
+        {"span_id": "duplicate", "start_time": "2026-01-01T00:00:05Z"},
+        {"span_id": "duplicate", "parent_span_id": "root", "start_time": "2026-01-01T00:00:04Z"},
+        {"span_id": "orphan", "parent_span_id": "missing", "start_time": "2026-01-01T00:00:03Z"},
+        {"span_id": "self", "parent_span_id": "self", "start_time": "2026-01-01T00:00:06Z"},
+        {"span_id": "a", "parent_span_id": "b", "start_time": "2026-01-01T00:00:08Z"},
+        {"span_id": "b", "parent_span_id": "a", "start_time": "2026-01-01T00:00:07Z"},
+    ]
+
+    tree = _build_span_tree(spans)
+    root_ids = [node["span"]["span_id"] for node in tree]
+    assert root_ids == ["root", "orphan", "duplicate", "duplicate", "self", "b", "a"]
+    assert [node["span"]["span_id"] for node in tree[0]["children"]] == ["child"]
+
+
+@pytest.mark.asyncio
+async def test_trace_detail_checks_ownership_before_querying_spans() -> None:
+    trace_record = SimpleNamespace(to_dict=lambda: {"trace_id": "trace-1", "user_id": "owner"})
+    span_queries = 0
+
+    async def fake_get_trace(**kwargs):
+        assert kwargs == {"trace_id": "trace-1"}
+        return trace_record
+
+    async def fake_get_spans(**kwargs):
+        nonlocal span_queries
+        span_queries += 1
+        return []
+
+    with (
+        patch.object(tracing_service._trace_db, "get_trace", fake_get_trace),
+        patch.object(tracing_service._trace_db, "get_spans", fake_get_spans),
+        pytest.raises(HTTPException) as exc,
+    ):
+        await get_trace_detail("trace-1", actor=actor("other"))
+
+    assert exc.value.status_code == 404
+    assert span_queries == 0
+
+
+@pytest.mark.asyncio
+async def test_trace_detail_requests_all_spans_and_marks_response_complete() -> None:
+    trace_record = SimpleNamespace(
+        to_dict=lambda: {"trace_id": "trace-1", "user_id": "owner", "session_id": "s", "run_id": "r"}
+    )
+    span_record = SimpleNamespace(
+        to_dict=lambda: {"span_id": "span-1", "name": "root", "attributes": {}}
+    )
+    captured: dict[str, object] = {}
+
+    async def fake_get_trace(**kwargs):
+        return trace_record
+
+    async def fake_get_spans(**kwargs):
+        captured.update(kwargs)
+        return [span_record]
+
+    with (
+        patch.object(tracing_service._trace_db, "get_trace", fake_get_trace),
+        patch.object(tracing_service._trace_db, "get_spans", fake_get_spans),
+    ):
+        result = await get_trace_detail("trace-1", actor=actor("owner"))
+
+    assert captured == {"trace_id": "trace-1", "limit": None}
+    assert result is not None
+    assert result["spans_complete"] is True
+    assert result["span_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_trace_list_rejects_invalid_status_or_time_range() -> None:
+    with pytest.raises(ValueError, match="status"):
+        await tracing_service.list_traces(status="BROKEN")
+    with pytest.raises(ValueError, match="时区"):
+        await tracing_service.list_traces(start_time="2026-02-12T00:00:00")
+    with pytest.raises(ValueError, match="不能晚于"):
+        await tracing_service.list_traces(
+            start_time="2026-02-13T00:00:00Z",
+            end_time="2026-02-12T00:00:00Z",
+        )

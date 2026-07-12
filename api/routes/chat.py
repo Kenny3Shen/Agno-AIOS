@@ -28,6 +28,7 @@ from api.services.security_run_runtime import (
 )
 from api.services.model_config_service import get_model_for_run
 from api.services.chat_settings_service import get_chat_settings
+from api.services.tracing_service import mark_trace_error
 from loguru import logger
 
 router = APIRouter(prefix="/api", tags=["Chat"])
@@ -35,7 +36,7 @@ router = APIRouter(prefix="/api", tags=["Chat"])
 
 class ChatRequest(BaseModel):
     message: str
-    session_id: str | None = None
+    session_id: str
     model_id: str | None = None
     reasoning_effort: Literal["minimal", "low", "medium", "high", "max"] | None = None
 
@@ -87,6 +88,8 @@ async def _event_generator(
                 resource_id = run_id
             if event.event == "run.failed":
                 terminal_status = "error"
+                if run_id:
+                    await mark_trace_error(run_id)
             elif event.event == "run.cancelled":
                 terminal_status = "cancelled"
             yield {"event": event.event, "data": json.dumps(event.data, ensure_ascii=False)}
@@ -202,11 +205,12 @@ async def cancel_chat_run(
 async def list_sessions(
     include_runs: bool = False,
     include_archived: bool = False,
+    user_id: str | None = None,
     user: User = Depends(require_scope("sessions:read")),
 ):
     """获取所有聊天会话列表"""
     try:
-        owner_user_id = scope_user_id(user, None)
+        owner_user_id = scope_user_id(user, user_id)
         return await get_all_sessions_async(
             owner_user_id=owner_user_id,
             include_runs=include_runs,

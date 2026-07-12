@@ -42,7 +42,7 @@ export interface Message {
   tools?: unknown[] | null
 }
 
-export interface ChatSession { session_id: string; preview: string; title?: string | null; created_at: number; updated_at: number; archived?: boolean; runs?: JsonRecord[] }
+export interface ChatSession { session_id: string; user_id?: string | null; preview: string; title?: string | null; created_at: number; updated_at: number; archived?: boolean; runs?: JsonRecord[] }
 export interface ChatState {
   messages: Message[]
   input: string
@@ -69,7 +69,7 @@ export type ChatAction =
   | { type: 'start'; user?: Message; assistant: Message; modelId: string | null }
   | { type: 'event'; id: string; event: ChatRunEvent }
   | { type: 'network-error'; id: string; message: string }
-  | { type: 'model'; value: string | null }
+  | { type: 'model'; value: string | null; reasoningEffort: ReasoningEffort | null }
   | { type: 'reasoning-effort'; value: ReasoningEffort | null }
   | { type: 'reset' }
 

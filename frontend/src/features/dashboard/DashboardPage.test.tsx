@@ -5,14 +5,18 @@ import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
 import { DashboardPage } from './DashboardPage'
 
-vi.mock('echarts-for-react', () => ({ default: () => <div data-testid="runtime-chart" /> }))
+vi.mock('echarts-for-react', () => ({
+  default: ({ option }: { option: { animationDuration?: number; animationDurationUpdate?: number } }) => (
+    <div data-testid="runtime-chart" data-animation-duration={option.animationDuration} data-update-animation-duration={option.animationDurationUpdate} />
+  ),
+}))
 
 const overview = (audit = false) => ({
   generated_at: '2026-07-12T12:00:00Z',
   range: '24h',
   health: { status: 'ready' },
-  metrics: { total_runs: 4, failed_runs: 1, failure_rate: 0.25, p50_duration_ms: 10, p95_duration_ms: 30, total_tokens: 12 },
-  series: [{ timestamp: '2026-07-12T11:00:00Z', runs: 4, failed_runs: 1, p50_duration_ms: 10, p95_duration_ms: 30 }],
+  metrics: { total_runs: 4, failed_runs: 1, failure_rate: 0.25, p50_duration_ms: 10, p95_duration_ms: 30, input_tokens: 7, output_tokens: 5, total_tokens: 12 },
+  series: [{ timestamp: '2026-07-12T11:00:00Z', runs: 4, failed_runs: 1, p50_duration_ms: 10, p95_duration_ms: 30, input_tokens: 7, output_tokens: 5, total_tokens: 12 }],
   distributions: { agent: [{ name: 'security-agent', value: 4 }], workflow: [], team: [] },
   recent_failures: [],
   snapshots: { evaluation: { total: 2, passed: 1, failed: 1, pass_rate: 0.5 } },
@@ -37,5 +41,28 @@ describe('runtime overview page', () => {
     renderWithQuery(<DashboardPage />)
     expect(await screen.findByText('近期审计活动')).toBeTruthy()
     expect(screen.getByText('chat.run')).toBeTruthy()
+  })
+
+  it('marks the first received data for staged entry and configures chart update animation', async () => {
+    server.use(http.get('/api/overview', () => HttpResponse.json(overview())))
+    const { container } = renderWithQuery(<DashboardPage />)
+
+    await waitFor(() => expect(container.querySelector('.dashboard-page')?.classList.contains('dashboard-data-ready')).toBe(true))
+    expect(screen.getAllByTestId('runtime-chart')).toHaveLength(4)
+    expect(screen.getAllByTestId('runtime-chart')[0].getAttribute('data-animation-duration')).toBe('260')
+    expect(screen.getAllByTestId('runtime-chart')[0].getAttribute('data-update-animation-duration')).toBe('260')
+    expect(container.querySelector('.dashboard-health-indicator')?.classList.contains('is-pulsing')).toBe(false)
+  })
+
+  it('shows token totals and an explicit empty state when the selected range has no token usage', async () => {
+    const response = overview()
+    response.metrics = { ...response.metrics, input_tokens: 0, output_tokens: 0, total_tokens: 0 }
+    response.series = response.series.map((item) => ({ ...item, input_tokens: 0, output_tokens: 0, total_tokens: 0 }))
+    server.use(http.get('/api/overview', () => HttpResponse.json(response)))
+    renderWithQuery(<DashboardPage />)
+
+    expect(await screen.findByText('输入 Token')).toBeTruthy()
+    expect(screen.getByText('输出 Token')).toBeTruthy()
+    expect(screen.getByText('当前窗口暂无 Token 使用记录')).toBeTruthy()
   })
 })

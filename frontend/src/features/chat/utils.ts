@@ -1,3 +1,4 @@
+import type { ModelConfig, ReasoningEffort } from '@/shared/types/common'
 import type { ChatAction, ChatRunEvent, ChatSource, ChatState, Message, RunMetrics, ThoughtStep, ToolStatus, ToolStep } from './types'
 
 export const initialChatState: ChatState = { messages: [], input: '', requesting: false, error: null, selectedModelId: localStorage.getItem('agno-aios-chat-model-id'), reasoningEffort: null }
@@ -12,7 +13,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
   switch (action.type) {
     case 'history': return state.requesting ? state : { ...state, messages: action.messages }
     case 'input': return { ...state, input: action.value }
-    case 'model': return { ...state, selectedModelId: action.value, reasoningEffort: null }
+    case 'model': return { ...state, selectedModelId: action.value, reasoningEffort: action.reasoningEffort }
     case 'reasoning-effort': return { ...state, reasoningEffort: action.value }
     case 'start': return { ...state, input: '', requesting: true, error: null, selectedModelId: action.modelId, messages: [...state.messages, ...(action.user ? [action.user] : []), action.assistant] }
     case 'event': {
@@ -100,4 +101,19 @@ export const previousPrompt = (messages: Message[], assistantId: string) => {
   const index = messages.findIndex((message) => message.id === assistantId)
   for (let cursor = index - 1; cursor >= 0; cursor -= 1) if (messages[cursor]?.role === 'user') return messages[cursor]?.content ?? ''
   return ''
+}
+
+export const supportedReasoningEfforts = (model: ModelConfig | null): ReasoningEffort[] => {
+  if (!model || model.provider === 'openai-compatible') return []
+  if (model.provider === 'deepseek') return ['high', 'max']
+  return model.api_protocol === 'responses'
+    ? ['minimal', 'low', 'medium', 'high']
+    : ['low', 'medium', 'high']
+}
+
+export const defaultReasoningEffort = (model: ModelConfig | null): ReasoningEffort | null => {
+  const available = supportedReasoningEfforts(model)
+  if (!available.length) return null
+  const configured = model?.default_reasoning_effort
+  return configured && available.includes(configured) ? configured : available.at(-1) ?? null
 }
