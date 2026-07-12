@@ -48,13 +48,13 @@ describe('runtime overview page', () => {
     const { container } = renderWithQuery(<DashboardPage />)
 
     await waitFor(() => expect(container.querySelector('.dashboard-page')?.classList.contains('dashboard-data-ready')).toBe(true))
-    expect(screen.getAllByTestId('runtime-chart')).toHaveLength(4)
+    expect(screen.getAllByTestId('runtime-chart')).toHaveLength(3)
     expect(screen.getAllByTestId('runtime-chart')[0].getAttribute('data-animation-duration')).toBe('260')
     expect(screen.getAllByTestId('runtime-chart')[0].getAttribute('data-update-animation-duration')).toBe('260')
     expect(container.querySelector('.dashboard-health-indicator')?.classList.contains('is-pulsing')).toBe(false)
   })
 
-  it('shows token totals and an explicit empty state when the selected range has no token usage', async () => {
+  it('keeps token totals in the combined runtime timeline when the selected range has no token usage', async () => {
     const response = overview()
     response.metrics = { ...response.metrics, input_tokens: 0, output_tokens: 0, total_tokens: 0 }
     response.series = response.series.map((item) => ({ ...item, input_tokens: 0, output_tokens: 0, total_tokens: 0 }))
@@ -63,6 +63,8 @@ describe('runtime overview page', () => {
 
     expect(await screen.findByText('输入 Token')).toBeTruthy()
     expect(screen.getByText('输出 Token')).toBeTruthy()
-    expect(screen.getByText('当前窗口暂无 Token 使用记录')).toBeTruthy()
+    expect(screen.getByText('运行时间轴与 Token 使用量')).toBeTruthy()
+    expect(screen.queryByText('点击时间桶查看 Trace')).toBeNull()
+    expect(screen.queryByText('当前窗口暂无 Token 使用记录')).toBeNull()
   })
 })

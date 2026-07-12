@@ -17,14 +17,6 @@ const percent = (value: number | null | undefined) => value == null ? '—' : `$
 const integer = (value: number | null | undefined) => value == null ? '—' : Intl.NumberFormat().format(value)
 const { RangePicker } = DatePicker
 
-function bucketEnd(value: string, range: OverviewRange) {
-  const date = new Date(value)
-  if (range === '1h') date.setMinutes(date.getMinutes() + 1)
-  if (range === '24h') date.setHours(date.getHours() + 1)
-  if (range === '7d') date.setDate(date.getDate() + 1)
-  return date.toISOString()
-}
-
 export function DashboardPage() {
   const router = useRouter()
   const { token } = theme.useToken()
@@ -75,16 +67,22 @@ export function DashboardPage() {
     animationDurationUpdate: 260,
     animationEasing: 'cubicOut',
     animationEasingUpdate: 'cubicOut',
-    color: [token.colorPrimary, token.colorError],
+    color: [token.colorPrimary, token.colorError, token.colorInfo, token.colorWarning],
     tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-    grid: { top: 24, right: 48, bottom: 26, left: 40 },
+    grid: { top: 24, right: 112, bottom: 26, left: 40 },
     xAxis: { type: 'category', data: timeline.map((item) => item.time), axisLabel: { formatter: (value: string) => formatDate(value) } },
-    yAxis: [{ type: 'value', name: 'Runs', minInterval: 1 }, { type: 'value', name: 'Error %', axisLabel: { formatter: '{value}%' } }],
-    series: [
-      { name: 'Runs', type: 'bar', data: timeline.map((item) => item.runs), barMaxWidth: 22, itemStyle: { borderRadius: [3, 3, 0, 0] } },
-      { name: 'Error rate', type: 'line', yAxisIndex: 1, data: timeline.map((item) => item.errorRate), smooth: true, symbol: 'none' },
+    yAxis: [
+      { type: 'value', name: 'Runs', minInterval: 1 },
+      { type: 'value', name: 'Error %', axisLabel: { formatter: '{value}%' } },
+      { type: 'value', name: 'Tokens', position: 'right', offset: 56, axisLabel: { formatter: (value: number) => integer(value) } },
     ],
-  }), [common, timeline, token.colorError, token.colorPrimary])
+    series: [
+      { name: 'Runs', type: 'line', data: timeline.map((item) => item.runs), symbol: 'circle', symbolSize: 6, lineStyle: { width: 2 } },
+      { name: 'Error rate', type: 'line', yAxisIndex: 1, data: timeline.map((item) => item.errorRate), smooth: true, symbol: 'none' },
+      { name: '输入 Token', type: 'bar', yAxisIndex: 2, stack: 'tokens', data: timeline.map((item) => item.inputTokens), barMaxWidth: 22 },
+      { name: '输出 Token', type: 'bar', yAxisIndex: 2, stack: 'tokens', data: timeline.map((item) => item.outputTokens), barMaxWidth: 22, itemStyle: { borderRadius: [3, 3, 0, 0] } },
+    ],
+  }), [common, timeline, token.colorError, token.colorInfo, token.colorPrimary, token.colorWarning])
 
   const latencyOption = useMemo<EChartsOption>(() => ({
     ...common,
@@ -103,35 +101,6 @@ export function DashboardPage() {
       { name: 'P95', type: 'line', data: timeline.map((item) => item.p95), smooth: true, symbol: 'none', lineStyle: { width: 3 } },
     ],
   }), [common, timeline, token.colorInfo, token.colorWarning])
-
-  const tokenUsageOption = useMemo<EChartsOption>(() => ({
-    ...common,
-    animation: true,
-    animationDuration: 260,
-    animationDurationUpdate: 260,
-    animationEasing: 'cubicOut',
-    animationEasingUpdate: 'cubicOut',
-    color: [token.colorPrimary, token.colorWarning],
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'shadow' },
-      formatter: (params: unknown) => {
-        const values = (Array.isArray(params) ? params : [params]).map((item) => {
-          const entry = item as { axisValueLabel?: string; seriesName?: string; value?: number | string }
-          return { label: entry.axisValueLabel ?? '', name: entry.seriesName ?? '', value: Number(entry.value ?? 0) }
-        })
-        const total = values.reduce((sum, item) => sum + item.value, 0)
-        return `${values[0]?.label ?? ''}<br />${values.map((item) => `${item.name}: ${integer(item.value)}`).join('<br />')}<br />合计: ${integer(total)}`
-      },
-    },
-    grid: { top: 24, right: 24, bottom: 26, left: 62 },
-    xAxis: { type: 'category', data: timeline.map((item) => item.time), axisLabel: { formatter: (value: string) => formatDate(value) } },
-    yAxis: { type: 'value', name: 'Tokens', axisLabel: { formatter: (value: number) => integer(value) } },
-    series: [
-      { name: '输入 Token', type: 'bar', stack: 'tokens', data: timeline.map((item) => item.inputTokens), barMaxWidth: 28, itemStyle: { borderRadius: [3, 3, 0, 0] } },
-      { name: '输出 Token', type: 'bar', stack: 'tokens', data: timeline.map((item) => item.outputTokens), barMaxWidth: 28, itemStyle: { borderRadius: [3, 3, 0, 0] } },
-    ],
-  }), [common, timeline, token.colorPrimary, token.colorWarning])
 
   const distributionOption = useMemo<EChartsOption>(() => ({
     ...common,
@@ -159,13 +128,7 @@ export function DashboardPage() {
     if (trace.run_id) search.set('run', trace.run_id)
     void router.history.push(`/trace${search.size ? `?${search}` : ''}`)
   }
-  const openBucket = (timestamp: string) => {
-    const bucket = timeline.find((item) => item.time === timestamp)
-    const search = new URLSearchParams({ start_time: timestamp, end_time: bucket?.bucketEnd ?? bucketEnd(timestamp, range) })
-    void router.history.push(`/trace?${search}`)
-  }
   const hasTimeline = timeline.some((item) => item.runs > 0)
-  const hasTokenUsage = timeline.some((item) => item.totalTokens > 0 || item.inputTokens > 0 || item.outputTokens > 0)
   const healthStatus = data?.health.status ?? 'checking'
   const isHealthy = healthStatus === 'ok' || healthStatus === 'ready'
   const healthClassName = `dashboard-health-indicator ${isHealthy ? 'healthy' : 'degraded'} ${isHealthy ? '' : 'is-pulsing'}`
@@ -195,8 +158,8 @@ export function DashboardPage() {
       <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi"><Card className="workbench-card dashboard-kpi" loading={query.isLoading}><Statistic title="已上报 Token" value={data?.metrics.total_tokens ?? 0} prefix={<DatabaseOutlined />} /></Card></Col>
     </Row>
     <section className="dashboard-grid dashboard-primary-grid dashboard-motion-group">
-      <Card className="workbench-card dashboard-chart-card dashboard-motion-item" title="运行时间轴" extra={<Typography.Text type="secondary">点击时间桶查看 Trace</Typography.Text>} loading={query.isLoading}>
-        {hasTimeline ? <ReactECharts option={volumeOption} style={{ height: 300 }} opts={{ renderer: 'canvas' }} onEvents={{ click: (params: { dataIndex?: number }) => { const item = timeline[params.dataIndex ?? -1]; if (item) openBucket(item.time) } }} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前窗口暂无运行记录" />}
+      <Card className="workbench-card dashboard-chart-card dashboard-motion-item" title="运行时间轴与 Token 使用量" loading={query.isLoading}>
+        {hasTimeline ? <ReactECharts option={volumeOption} style={{ height: 300 }} opts={{ renderer: 'canvas' }} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前窗口暂无运行记录" />}
       </Card>
       <Card className="workbench-card dashboard-chart-card dashboard-motion-item" title={`${distribution.dimension} 分布`} loading={query.isLoading}>
         {distribution.items.length > 0 ? <ReactECharts option={distributionOption} style={{ height: 300 }} opts={{ renderer: 'canvas' }} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可聚合主体" />}
@@ -205,11 +168,6 @@ export function DashboardPage() {
     <section className="dashboard-grid dashboard-secondary-grid dashboard-motion-group">
       <Card className="workbench-card dashboard-chart-card dashboard-motion-item" title="时延趋势" loading={query.isLoading}>
         {hasTimeline ? <ReactECharts option={latencyOption} style={{ height: 260 }} opts={{ renderer: 'canvas' }} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无时延数据" />}
-      </Card>
-    </section>
-    <section className="dashboard-grid dashboard-token-grid dashboard-motion-group">
-      <Card className="workbench-card dashboard-chart-card dashboard-motion-item" title="Token 使用量" loading={query.isLoading}>
-        {hasTokenUsage ? <ReactECharts option={tokenUsageOption} style={{ height: 260 }} opts={{ renderer: 'canvas' }} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前窗口暂无 Token 使用记录" />}
       </Card>
       <Card className="workbench-card dashboard-summary-card dashboard-motion-item" title="质量与治理" loading={query.isLoading}>
         <div className="dashboard-summary-list">
