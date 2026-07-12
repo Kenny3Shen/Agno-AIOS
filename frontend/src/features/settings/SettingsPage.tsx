@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Collapse, Form, Input, Modal, Select, Space, Switch, Table, Tag, Tooltip, Typography, message } from 'antd'
+import { Button, Card, Collapse, Form, Input, Modal, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography, message } from 'antd'
 import { ApiOutlined, CheckCircleOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { currentUserQuery } from '@/features/auth'
@@ -46,6 +46,7 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [testingId, setTestingId] = useState<string | null>(null)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState('models')
 
   const setChatSetting = async (key: keyof ChatSettings, value: boolean) => {
     try {
@@ -148,32 +149,30 @@ export function SettingsPage() {
     }
   }
 
-  return <main className="page">
-    <PageHeader title="Settings" description="配置模型连接" />
-    <Card className="workbench-card" extra={<Button type="primary" icon={<PlusOutlined />} onClick={addModel}>添加模型</Button>}>
-      <Table<ModelConfig>
-        rowKey="id"
-        dataSource={models.data?.models ?? []}
-        loading={models.isLoading}
-        scroll={{ x: 1240 }}
-        columns={[
-          { title: 'Name', dataIndex: 'name', width: 220, ellipsis: true, render: (value, row) => <Space><strong>{value}</strong>{models.data?.active_model_id === row.id && <Tag color="blue">active</Tag>}</Space> },
-          { title: 'Model ID', dataIndex: 'model_id', width: 190, ellipsis: true },
-          { title: 'Runtime', dataIndex: 'provider', width: 230, render: (value, row) => <Space direction="vertical" size={2}><Space size={[4, 4]} wrap><Tag>{value}</Tag><Tag color="blue">{row.api_protocol}</Tag></Space><Tag color={row.structured_output_mode === 'json' ? 'green' : 'purple'}>{row.structured_output_mode}</Tag></Space> },
-          { title: 'Base URL', dataIndex: 'base_url', width: 260, ellipsis: { showTitle: false }, render: (value) => <Typography.Text ellipsis={{ tooltip: value }}>{value || '-'}</Typography.Text> },
-          { title: 'Configured', dataIndex: 'configured', width: 130, render: (value) => <Tag color={value ? 'success' : 'warning'}>{value ? 'ready' : 'missing key'}</Tag> },
-          { title: 'Enabled', dataIndex: 'enabled', width: 110, render: (value, row) => <Switch checked={value} loading={updatingId === row.id} onChange={(checked) => void setEnabled(row, checked)} aria-label={`${row.name} enabled`} /> },
-          { title: 'Actions', width: 170, render: (_, row) => <Space>
-            <Tooltip title="测试连接"><Button icon={<ApiOutlined />} loading={testingId === row.id} aria-label={`测试 ${row.name} 的连接`} onClick={() => void runConnectivityTest(row)} /></Tooltip>
-            <Tooltip title="编辑模型"><Button icon={<EditOutlined />} aria-label={`编辑 ${row.name}`} onClick={() => openEditor(row)} /></Tooltip>
-            <Tooltip title={models.data?.active_model_id === row.id ? '当前模型' : '设为当前模型'}><Button icon={<CheckCircleOutlined />} disabled={models.data?.active_model_id === row.id} loading={updatingId === row.id} aria-label={`设 ${row.name} 为当前模型`} onClick={() => void setActiveModel(row)} /></Tooltip>
-          </Space> },
-        ]}
-      />
-    </Card>
-    {isAdmin && <Card className="workbench-card" title="Chat 设置" style={{ marginTop: 16 }} loading={chatSettings.isLoading}>
+  const modelConnections = <Table<ModelConfig>
+    rowKey="id"
+    dataSource={models.data?.models ?? []}
+    loading={models.isLoading}
+    scroll={{ x: 1240 }}
+    columns={[
+      { title: 'Name', dataIndex: 'name', width: 220, ellipsis: true, render: (value, row) => <Space><strong>{value}</strong>{models.data?.active_model_id === row.id && <Tag color="blue">active</Tag>}</Space> },
+      { title: 'Model ID', dataIndex: 'model_id', width: 190, ellipsis: true },
+      { title: 'Runtime', dataIndex: 'provider', width: 230, render: (value, row) => <Space direction="vertical" size={2}><Space size={[4, 4]} wrap><Tag>{value}</Tag><Tag color="blue">{row.api_protocol}</Tag></Space><Tag color={row.structured_output_mode === 'json' ? 'green' : 'purple'}>{row.structured_output_mode}</Tag></Space> },
+      { title: 'Base URL', dataIndex: 'base_url', width: 260, ellipsis: { showTitle: false }, render: (value) => <Typography.Text ellipsis={{ tooltip: value }}>{value || '-'}</Typography.Text> },
+      { title: 'Configured', dataIndex: 'configured', width: 130, render: (value) => <Tag color={value ? 'success' : 'warning'}>{value ? 'ready' : 'missing key'}</Tag> },
+      { title: 'Enabled', dataIndex: 'enabled', width: 110, render: (value, row) => <Switch checked={value} loading={updatingId === row.id} onChange={(checked) => void setEnabled(row, checked)} aria-label={`${row.name} enabled`} /> },
+      { title: 'Actions', width: 170, render: (_, row) => <Space>
+        <Tooltip title="测试连接"><Button icon={<ApiOutlined />} loading={testingId === row.id} aria-label={`测试 ${row.name} 的连接`} onClick={() => void runConnectivityTest(row)} /></Tooltip>
+        <Tooltip title="编辑模型"><Button icon={<EditOutlined />} aria-label={`编辑 ${row.name}`} onClick={() => openEditor(row)} /></Tooltip>
+        <Tooltip title={models.data?.active_model_id === row.id ? '当前模型' : '设为当前模型'}><Button icon={<CheckCircleOutlined />} disabled={models.data?.active_model_id === row.id} loading={updatingId === row.id} aria-label={`设 ${row.name} 为当前模型`} onClick={() => void setActiveModel(row)} /></Tooltip>
+      </Space> },
+    ]}
+  />
+
+  const chatControls = <div>
       <Table<ChatSettings>
         rowKey={(row) => Object.keys(row).join(':')}
+        loading={chatSettings.isLoading}
         pagination={false}
         dataSource={chatSettings.data ? [chatSettings.data] : []}
         columns={[
@@ -186,7 +185,22 @@ export function SettingsPage() {
       <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 12 }}>
         原始推理与工具输入/输出默认不发送给浏览器。关闭长期记忆不会删除既有记忆，也不影响当前会话历史与摘要。
       </Typography.Paragraph>
-    </Card>}
+    </div>
+
+  return <main className="page">
+    <PageHeader title="Settings" description="配置模型连接和 Chat 行为" />
+    <Card className="workbench-card">
+      <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
+        destroyOnHidden
+        tabBarExtraContent={activeTab === 'models' ? <Button type="primary" icon={<PlusOutlined />} onClick={addModel}>添加模型</Button> : null}
+        items={[
+          { key: 'models', label: '模型连接', children: modelConnections },
+          ...(isAdmin ? [{ key: 'chat', label: 'Chat 设置', children: chatControls }] : []),
+        ]}
+      />
+    </Card>
     <Modal
       width={560}
       open={Boolean(editing)}

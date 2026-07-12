@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
-import userEvent from '@testing-library/user-event'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
 import { SettingsPage } from './SettingsPage'
 
+const admin = { id: 'admin-1', email: 'admin@example.com', role: 'admin', scopes: [], is_active: true }
+const chatSettings = {
+  show_raw_reasoning: true,
+  show_raw_tool_io: true,
+  show_thought_chain: true,
+  memory_enabled: true,
+}
 const models = {
   active_model_id: 'first',
   models: [
@@ -22,17 +28,42 @@ const models = {
   ],
 }
 
+const mockSettings = () => server.use(
+  http.get('/api/auth/users/me', () => HttpResponse.json(admin)),
+  http.get('/api/models', () => HttpResponse.json(models)),
+  http.get('/api/settings/chat', () => HttpResponse.json(chatSettings)),
+)
+
 describe('model settings editor', () => {
-  it('loads the selected model after cancelling a previous edit', async () => {
-    const user = userEvent.setup()
-    server.use(http.get('/api/models', () => HttpResponse.json(models)))
+  it('separates model and chat operations into tabs', async () => {
+    mockSettings()
     renderWithQuery(<SettingsPage />)
 
-    await user.click(await screen.findByLabelText('编辑 First model'))
-    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('First model')
-    await user.click(screen.getByRole('button', { name: /取\s*消/ }))
+    const modelsTab = (await screen.findByText('模型连接')).closest('[role="tab"]')
+    expect(modelsTab?.getAttribute('aria-selected')).toBe('true')
+    expect(await screen.findByText('添加模型')).toBeTruthy()
+    expect(screen.queryByText('安全执行时间线')).toBeNull()
 
-    await user.click(screen.getByLabelText('编辑 Second model'))
+    const chatTab = (await screen.findByText('Chat 设置')).closest('[role="tab"]')
+    expect(chatTab).toBeTruthy()
+    fireEvent.click(chatTab!)
+
+    await waitFor(() => expect(chatTab?.getAttribute('aria-selected')).toBe('true'))
+    expect(await screen.findByText('安全执行时间线')).toBeTruthy()
+    expect(screen.queryByText('添加模型')).toBeNull()
+  })
+
+  it('loads the selected model after cancelling a previous edit', async () => {
+    mockSettings()
+    renderWithQuery(<SettingsPage />)
+
+    fireEvent.click(await screen.findByLabelText('编辑 First model'))
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('First model')
+    const cancelButton = document.querySelector<HTMLButtonElement>('.ant-modal-footer .ant-btn-default')
+    expect(cancelButton).toBeTruthy()
+    fireEvent.click(cancelButton!)
+
+    fireEvent.click(screen.getByLabelText('编辑 Second model'))
     expect((await screen.findByLabelText('Name') as HTMLInputElement).value).toBe('Second model')
   })
 })

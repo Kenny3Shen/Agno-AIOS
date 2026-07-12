@@ -1,6 +1,6 @@
-import { Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useRouterState } from '@tanstack/react-router'
+import { Link, useRouter, useRouterState } from '@tanstack/react-router'
 import { Avatar, Button, Drawer, Dropdown, Grid, Layout, Menu, Space, Spin, Tooltip, Typography, type MenuProps } from 'antd'
 import {
   ApiOutlined, AuditOutlined, BookOutlined, BugOutlined, BulbOutlined, CalendarOutlined, CloudDownloadOutlined,
@@ -9,7 +9,8 @@ import {
   SettingOutlined, SunOutlined, TranslationOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { AuthPage, authKeys, currentUserQuery, logout } from '@/features/auth'
+import { currentUserQuery, logout } from '@/features/auth'
+import { loginPath, nextPathFromLocation } from '@/features/auth/routing'
 import { getToken } from '@/shared/auth/storage'
 import { hasScope } from '@/shared/auth/permissions'
 import { usePreferences } from '@/app/providers/AppProviders'
@@ -37,6 +38,7 @@ const nav = [
 
 export function AppFrame({ children }: { children: ReactNode }) {
   const { t } = useTranslation()
+  const router = useRouter()
   const queryClient = useQueryClient()
   const preferences = usePreferences()
   const screens = Grid.useBreakpoint()
@@ -44,13 +46,11 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const path = useRouterState({ select: (state) => state.location.pathname })
+  const searchStr = useRouterState({ select: (state) => state.location.searchStr })
+  const currentNextPath = nextPathFromLocation({ pathname: path, searchStr })
+  const nextPathRef = useRef<string | null>(currentNextPath)
   const token = getToken()
   const userQuery = useQuery({ ...currentUserQuery(), enabled: Boolean(token), retry: false })
-
-  const authenticate = async () => {
-    await queryClient.invalidateQueries({ queryKey: authKeys.current })
-    await userQuery.refetch()
-  }
 
   const items = useMemo<MenuProps['items']>(() => joinMenuGroups(
     splitNavigation(nav).map((group) => group
@@ -62,8 +62,15 @@ export function AppFrame({ children }: { children: ReactNode }) {
       }))),
   ), [t, userQuery.data])
   useEffect(() => setMobileOpen(false), [path])
+  useEffect(() => {
+    if (currentNextPath) nextPathRef.current = currentNextPath
+  }, [currentNextPath])
+  useEffect(() => {
+    if (token && !userQuery.isError) return
+    router.history.replace(loginPath(nextPathRef.current))
+  }, [router.history, token, userQuery.isError])
 
-  if (!token || userQuery.isError) return <AuthPage onAuthenticated={authenticate} />
+  if (!token || userQuery.isError) return <div className="boot-screen"><Spin size="large" /></div>
   if (userQuery.isLoading) return <div className="boot-screen"><Spin size="large" /></div>
 
   const initials = userQuery.data?.email.slice(0, 2).toUpperCase() ?? 'AI'

@@ -45,7 +45,7 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: () => Promise<v
           </Form.Item>
           <Button type="primary" htmlType="submit" loading={loading} block>{t('auth.signIn')}</Button>
         </Form>
-        <Space orientation="vertical" className="oauth-list">
+        <Space direction="vertical" className="oauth-list">
           {!providers.length && <Button type="text" onClick={() => void loadProviders()}>SSO providers</Button>}
           {providers.map((provider) => <Button key={provider} icon={<GithubOutlined />} onClick={async () => { window.location.assign(await getOAuthAuthorization(provider)) }}>{provider}</Button>)}
         </Space>
