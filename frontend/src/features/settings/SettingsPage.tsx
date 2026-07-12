@@ -5,6 +5,7 @@ import { ApiOutlined, CheckCircleOutlined, EditOutlined, PlusOutlined } from '@a
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { currentUserQuery } from '@/features/auth'
 import { roleOf } from '@/shared/auth/permissions'
+import { DEEPSEEK_REASONING_EFFORTS, openaiReasoningEfforts, reasoningEffortLabel } from '@/shared/lib/reasoning'
 import { getChatSettings, getModels, saveChatSettings, saveModels, testModel, type ChatSettings } from './api'
 import type { ModelConfig, ModelConfigResponse } from '@/shared/types/common'
 
@@ -29,10 +30,8 @@ const outputModeOptions = [
 ]
 
 const reasoningOptions = (provider: ModelConfig['provider'], protocol: ModelConfig['api_protocol']) => {
-  if (provider === 'deepseek') return [{ value: 'high', label: 'High' }, { value: 'max', label: 'Max' }]
-  if (provider === 'openai') return (protocol === 'responses'
-    ? ['minimal', 'low', 'medium', 'high']
-    : ['low', 'medium', 'high']).map((value) => ({ value, label: value[0]?.toUpperCase() + value.slice(1) }))
+  if (provider === 'deepseek') return DEEPSEEK_REASONING_EFFORTS.map((value) => ({ value, label: reasoningEffortLabel(value) }))
+  if (provider === 'openai') return openaiReasoningEfforts(protocol).map((value) => ({ value, label: reasoningEffortLabel(value) }))
   return []
 }
 

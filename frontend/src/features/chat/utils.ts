@@ -1,4 +1,5 @@
 import type { ModelConfig, ReasoningEffort } from '@/shared/types/common'
+import { DEEPSEEK_REASONING_EFFORTS, openaiReasoningEfforts } from '@/shared/lib/reasoning'
 import type { ChatAction, ChatRunEvent, ChatSource, ChatState, Message, RunMetrics, ThoughtStep, ToolStatus, ToolStep } from './types'
 
 export const initialChatState: ChatState = { messages: [], input: '', requesting: false, error: null, selectedModelId: localStorage.getItem('agno-aios-chat-model-id'), reasoningEffort: null }
@@ -105,10 +106,8 @@ export const previousPrompt = (messages: Message[], assistantId: string) => {
 
 export const supportedReasoningEfforts = (model: ModelConfig | null): ReasoningEffort[] => {
   if (!model || model.provider === 'openai-compatible') return []
-  if (model.provider === 'deepseek') return ['high', 'max']
-  return model.api_protocol === 'responses'
-    ? ['minimal', 'low', 'medium', 'high']
-    : ['low', 'medium', 'high']
+  if (model.provider === 'deepseek') return DEEPSEEK_REASONING_EFFORTS
+  return openaiReasoningEfforts(model.api_protocol)
 }
 
 export const defaultReasoningEffort = (model: ModelConfig | null): ReasoningEffort | null => {

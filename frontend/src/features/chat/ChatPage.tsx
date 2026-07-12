@@ -10,6 +10,7 @@ import { useChat } from './useChat'
 import type { ChatSession, Message, ThoughtStep, ToolStep } from './types'
 import type { ModelConfig } from '@/shared/types/common'
 import { copyToClipboard } from '@/shared/lib/clipboard'
+import { reasoningEffortLabel } from '@/shared/lib/reasoning'
 import { supportedReasoningEfforts } from './utils'
 import './chat.css'
 
@@ -22,7 +23,7 @@ const prompts = [
 const statusText: Record<NonNullable<Message['status']>, string> = { streaming: '分析中', completed: '已完成', cancelled: '已停止', failed: '运行失败' }
 
 const reasoningOptions = (model: ModelConfig | null) => {
-  return supportedReasoningEfforts(model).map((value) => ({ value, label: value[0]?.toUpperCase() + value.slice(1) }))
+  return supportedReasoningEfforts(model).map((value) => ({ value, label: reasoningEffortLabel(value) }))
 }
 
 function renderModelLabel({ label, value }: { label?: unknown; value?: string | number }) {
