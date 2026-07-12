@@ -333,21 +333,28 @@ async def test_event_generator_records_successful_chat_audit():
 
 
 @pytest.mark.asyncio
-async def test_event_generator_marks_trace_error_before_recording_failed_audit():
-    async def fake_stream_security_run(_run_request):
-        yield ChatRunEvent("run.failed", {"run_id": "run-1", "message": "provider failed"})
+async def test_event_generator_marks_trace_error_after_failed_stream_finishes():
+    stream_finished = False
 
-    mark_error = AsyncMock(return_value=True)
+    async def fake_stream_security_run(_run_request):
+        nonlocal stream_finished
+        yield ChatRunEvent("run.failed", {"run_id": "run-1", "message": "provider failed"})
+        stream_finished = True
+
+    async def mark_error(_run_id: str):
+        assert stream_finished is True
+        return True
+
     audit = AsyncMock()
     request = security_run_runtime.SecurityRunRequest.from_chat_args("hello", user_id="u1")
     with (
         patch.object(chat, "stream_security_run", fake_stream_security_run),
-        patch.object(chat, "mark_trace_error", mark_error),
+        patch.object(chat, "mark_trace_error", AsyncMock(side_effect=mark_error)) as mark_mock,
         patch.object(chat, "record_audit_event_async", audit),
     ):
         events = [event async for event in chat._event_generator(request, actor=actor("u1"))]
     assert events[0]["event"] == "run.failed"
-    mark_error.assert_awaited_once_with("run-1")
+    mark_mock.assert_awaited_once_with("run-1")
     audit.assert_awaited_once()
     assert audit.await_args is not None
     assert audit.await_args.kwargs["status"] == "error"

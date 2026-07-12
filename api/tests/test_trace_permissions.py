@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
 from api.auth import claims
@@ -167,15 +167,14 @@ async def test_trace_sessions_group_before_paginating_and_skip_empty_session_ids
         result = await tracing_service.list_trace_sessions(
             run_id="run-1", session_id="one", user_id="u1", status="ERROR", limit=1, page=1
         )
-    assert result["total_count"] == 2
+    assert result["total_count"] == 1
     assert result["items"][0]["session_id"] == "one"
-    assert result["items"][0]["trace_count"] == 2
+    assert result["items"][0]["trace_count"] == 1
     assert result["items"][0]["run_count"] == 1
     assert result["items"][0]["status"] == "ERROR"
     assert captured["user_id"] == "u1"
     assert captured["run_id"] == "run-1"
     assert captured["session_id"] == "one"
-    assert captured["status"] == "ERROR"
     assert captured["limit"] == 200
 
 
@@ -245,13 +244,65 @@ async def test_list_traces_passes_all_filters_to_agno_db():
     assert captured["agent_id"] == "agent-1"
     assert captured["team_id"] == "team-1"
     assert captured["workflow_id"] == "workflow-1"
-    assert captured["status"] == "OK"
+    assert "status" not in captured
     assert captured["start_time"] == datetime(2026, 2, 12, 0, 0, tzinfo=timezone.utc)
     assert captured["end_time"] == datetime(
         2026, 2, 12, 23, 59, 59, tzinfo=timezone.utc
     )
-    assert captured["limit"] == 25
-    assert captured["page"] == 2
+    assert captured["limit"] == 200
+    assert captured["page"] == 1
+
+
+@pytest.mark.asyncio
+async def test_list_traces_filters_after_audit_status_reconciliation() -> None:
+    trace_record = SimpleNamespace(
+        to_dict=lambda: {
+            "trace_id": "trace-1",
+            "run_id": "run-failed",
+            "user_id": "u1",
+            "status": "OK",
+        }
+    )
+
+    async def fake_get_traces(**_kwargs):
+        return [trace_record], 1
+
+    async def fake_reconcile(items, **_kwargs):
+        return [{**items[0], "status": "ERROR"}]
+
+    with (
+        patch.object(tracing_service._trace_db, "get_traces", fake_get_traces),
+        patch.object(tracing_service, "reconcile_trace_statuses", fake_reconcile),
+    ):
+        result = await tracing_service.list_traces(user_id="u1", status="ERROR")
+
+    assert result["total_count"] == 1
+    assert result["items"][0]["status"] == "ERROR"
+
+
+@pytest.mark.asyncio
+async def test_trace_detail_uses_reconciled_terminal_status() -> None:
+    trace_record = SimpleNamespace(
+        to_dict=lambda: {
+            "trace_id": "trace-1",
+            "run_id": "run-failed",
+            "user_id": "owner",
+            "status": "OK",
+        }
+    )
+
+    async def fake_reconcile(items, **_kwargs):
+        return [{**items[0], "status": "ERROR"}]
+
+    with (
+        patch.object(tracing_service._trace_db, "get_trace", AsyncMock(return_value=trace_record)),
+        patch.object(tracing_service._trace_db, "get_spans", AsyncMock(return_value=[])),
+        patch.object(tracing_service, "reconcile_trace_statuses", fake_reconcile),
+    ):
+        result = await get_trace_detail("trace-1", actor=actor("owner"))
+
+    assert result is not None
+    assert result["trace"]["status"] == "ERROR"
 
 
 def test_parse_span_display_extracts_agentos_input_output_metadata() -> None:

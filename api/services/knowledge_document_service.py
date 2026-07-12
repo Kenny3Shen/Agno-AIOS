@@ -26,6 +26,21 @@ DOCUMENT_METADATA_KEYS = (
     "input_mode",
     "upload_mode",
     "chunks",
+    # Persisted ingest overrides are needed by the update form to restore the
+    # parameters that were used for the most recent indexing operation.
+    "chunk_size",
+    "chunk_overlap",
+    "markdown_split_on_headings",
+    "csv_skip_header",
+    "csv_clean_rows",
+    "code_chunk_size",
+    "code_tokenizer",
+    "code_include_nodes",
+    "semantic_threshold",
+    "semantic_similarity_window",
+    "semantic_min_sentences_per_chunk",
+    "semantic_min_characters_per_sentence",
+    "reader_strategy",
 )
 INTERNAL_METADATA_PREFIXES = ("_",)
 DOCUMENT_METADATA_MAX_ITEMS = 12

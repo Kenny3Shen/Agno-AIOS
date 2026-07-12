@@ -81,6 +81,7 @@ async def _event_generator(
 ):
     terminal_status = "success"
     resource_id = run_request.session_id or ""
+    failed_run_id = ""
     try:
         async for event in stream_security_run(run_request):
             run_id = str(event.data.get("run_id") or "")
@@ -89,10 +90,12 @@ async def _event_generator(
             if event.event == "run.failed":
                 terminal_status = "error"
                 if run_id:
-                    await mark_trace_error(run_id)
+                    failed_run_id = run_id
             elif event.event == "run.cancelled":
                 terminal_status = "cancelled"
             yield {"event": event.event, "data": json.dumps(event.data, ensure_ascii=False)}
+        if failed_run_id:
+            await mark_trace_error(failed_run_id)
         if actor is not None:
             await record_audit_event_async(
                 actor,

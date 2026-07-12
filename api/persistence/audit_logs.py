@@ -17,6 +17,7 @@ from sqlalchemy import (
     insert,
     select,
     text,
+    update,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.schema import CreateSchema
@@ -187,3 +188,85 @@ async def list_audit_logs_async(
         rows = [dict(row) for row in (await conn.execute(rows_stmt)).mappings().all()]
 
     return rows, total
+
+
+async def failed_chat_run_ids_async(
+    run_ids: set[str],
+    *,
+    actor_user_id: str | None = None,
+) -> set[str]:
+    """Return failed chat Run IDs from the audit terminal records."""
+    clean_run_ids = {run_id.strip() for run_id in run_ids if run_id.strip()}
+    if not clean_run_ids:
+        return set()
+    await ensure_audit_logs_table_async()
+    table = audit_logs_table()
+    filters = [
+        table.c.action == "chat.run",
+        table.c.resource_type == "chat_run",
+        table.c.status == "error",
+        table.c.resource_id.in_(clean_run_ids),
+    ]
+    if actor_user_id:
+        filters.append(table.c.actor_user_id == actor_user_id)
+    stmt = select(table.c.resource_id).distinct().where(and_(*filters))
+    async with get_async_control_plane_engine().begin() as conn:
+        rows = (await conn.execute(stmt)).scalars().all()
+    return {str(run_id) for run_id in rows if run_id}
+
+
+async def repair_failed_chat_trace_statuses_async(
+    traces_table: Table,
+    *,
+    apply: bool,
+) -> dict[str, int]:
+    """Reconcile persisted Trace status with failed chat audit terminals."""
+    await ensure_audit_logs_table_async()
+    audit_table = audit_logs_table()
+    failed_ids = (
+        select(audit_table.c.resource_id)
+        .distinct()
+        .where(
+            audit_table.c.action == "chat.run",
+            audit_table.c.resource_type == "chat_run",
+            audit_table.c.status == "error",
+            audit_table.c.resource_id != "",
+        )
+    )
+    candidate_filter = and_(
+        traces_table.c.run_id.in_(failed_ids),
+        func.upper(traces_table.c.status).in_(["OK", "UNSET"]),
+    )
+    matched_failed_ids = select(traces_table.c.run_id).where(
+        traces_table.c.run_id.in_(failed_ids)
+    )
+    async with get_async_control_plane_engine().begin() as conn:
+        failed_count = int(
+            (await conn.execute(select(func.count()).select_from(failed_ids.subquery()))).scalar_one()
+        )
+        matched_count = int(
+            (
+                await conn.execute(
+                    select(func.count()).select_from(matched_failed_ids.distinct().subquery())
+                )
+            ).scalar_one()
+        )
+        candidate_count = int(
+            (
+                await conn.execute(
+                    select(func.count()).select_from(traces_table).where(candidate_filter)
+                )
+            ).scalar_one()
+        )
+        updated_count = 0
+        if apply and candidate_count:
+            result = await conn.execute(
+                update(traces_table).where(candidate_filter).values(status="ERROR")
+            )
+            updated_count = int(result.rowcount or 0)
+    return {
+        "failed_audit_runs": failed_count,
+        "candidate_traces": candidate_count,
+        "updated_traces": updated_count,
+        "unmatched_audit_runs": max(0, failed_count - matched_count),
+    }

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from anyio import Lock, Path as AsyncPath
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from agno.agent import AgentFactory
 from agno.os import AgentOS
@@ -145,6 +145,13 @@ def report_redirect():
     return RedirectResponse(url="/report/")
 
 
+@app.get("/", include_in_schema=False)
+async def frontend_index() -> FileResponse:
+    """Serve the SPA entry point before AgentOS can register its API home route."""
+    directory = await frontend_static_dir()
+    return FileResponse(f"{directory}/index.html")
+
+
 async def _build_agentos_fallback_agent(_ctx: RequestContext):
     return await DEFAULT_SECURITY_RUN_RUNTIME.build_fallback_agent()
 
@@ -187,7 +194,6 @@ if app_settings.scheduler_enabled:
         internal_service_token=app_settings.scheduler_internal_service_token.get_secret_value() or None,
         telemetry=False,
     ).get_app()
-    app.router.routes = [route for route in app.router.routes if getattr(route, "path", "") != "/"]
 
 # AgentOS installs a middleware that rewrites `/mcp/` to `/mcp`. Starlette mounts
 # require the trailing slash to route into the mounted ASGI app, so keep the MCP

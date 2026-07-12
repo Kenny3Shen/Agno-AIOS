@@ -131,6 +131,30 @@ describe('knowledge document workflow', () => {
     await waitFor(() => expect(screen.getByText('6')).toBeTruthy())
   })
 
+  it('restores persisted advanced chunking parameters in the update drawer', async () => {
+    const user = userEvent.setup()
+    const configuredDocument = {
+      ...oldDocument,
+      metadata: {
+        file_name: 'runbook.md',
+        chunk_size: '1800',
+        chunk_overlap: '120',
+        markdown_split_on_headings: '2',
+        reader_strategy: 'markdown',
+      },
+    }
+    server.use(http.get('/api/knowledge', () => HttpResponse.json(response(configuredDocument))))
+    renderWithQuery(<KnowledgePage />)
+
+    await user.click(await screen.findByText('Runbook'))
+    await clickUpdateAction(user)
+    await user.click(await screen.findByText('高级分块参数'))
+
+    expect((screen.getByRole('spinbutton', { name: /Section max size/ }) as HTMLInputElement).value).toBe('1800')
+    expect((screen.getByRole('spinbutton', { name: 'Overlap' }) as HTMLInputElement).value).toBe('120')
+    expect(screen.getByText('H1-H2')).toBeTruthy()
+  })
+
   it('shows a single save action in the tab bar without an explicit rebuild switch', async () => {
     const user = userEvent.setup()
     server.use(http.get('/api/knowledge', () => HttpResponse.json(response(oldDocument))))

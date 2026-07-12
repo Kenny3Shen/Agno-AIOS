@@ -38,6 +38,7 @@ dependencies = [
 
 [project.scripts]
 update-cve = "api.tasks.update_cve:run"
+repair-trace-status = "api.tasks.repair_trace_status:run"
 
 [build-system]
 requires = ["hatchling"]

@@ -62,6 +62,34 @@ def test_document_projection_hides_internal_source_metadata() -> None:
     assert "_tais_source" not in document["metadata"]
 
 
+def test_document_projection_includes_persisted_ingest_options() -> None:
+    content = SimpleNamespace(
+        id="doc-options",
+        name="Runbook",
+        created_at=0,
+        metadata={
+            "file_name": "runbook.md",
+            "chunk_size": "1800",
+            "chunk_overlap": "120",
+            "markdown_split_on_headings": "2",
+            "csv_skip_header": "false",
+            "csv_clean_rows": "true",
+            "code_chunk_size": "2200",
+            "code_tokenizer": "gpt2",
+            "code_include_nodes": "true",
+            "semantic_threshold": "0.61",
+            "semantic_similarity_window": "4",
+            "semantic_min_sentences_per_chunk": "2",
+            "semantic_min_characters_per_sentence": "12",
+            "reader_strategy": "markdown",
+        },
+    )
+
+    document = knowledge_document_service.content_to_document(content)
+
+    assert document["metadata"] == content.metadata
+
+
 def test_completed_document_projection_has_minimum_chunk_count() -> None:
     content = SimpleNamespace(
         id="doc-ready",

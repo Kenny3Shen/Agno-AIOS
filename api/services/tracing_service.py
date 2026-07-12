@@ -7,6 +7,7 @@ from loguru import logger
 
 from api.auth.ownership import assert_owned_resource
 from api.services.postgres_store import get_async_agno_postgres_db
+from api.services.trace_status_service import reconcile_trace_statuses, trace_has_status
 from api.utils.json import JSONDecodeError, dumps, loads
 
 # Keep a single DB wrapper instance.
@@ -225,22 +226,80 @@ async def list_traces(
     st, et = _validate_trace_time_range(start_time, end_time)
     normalized_status = _normalize_trace_status(status)
 
-    traces, total_count = await _trace_db.get_traces(
+    if normalized_status is None:
+        traces, total_count = await _trace_db.get_traces(
+            run_id=run_id,
+            session_id=session_id,
+            user_id=user_id,
+            agent_id=agent_id,
+            team_id=team_id,
+            workflow_id=workflow_id,
+            start_time=st,
+            end_time=et,
+            limit=limit,
+            page=page,
+        )
+        items = await reconcile_trace_statuses(
+            [jsonable_encoder(trace.to_dict()) for trace in traces],
+            actor_user_id=user_id,
+        )
+        return {"items": items, "total_count": total_count, "page": page, "limit": limit}
+
+    items = await _all_trace_items(
         run_id=run_id,
         session_id=session_id,
         user_id=user_id,
         agent_id=agent_id,
         team_id=team_id,
         workflow_id=workflow_id,
-        status=normalized_status,
         start_time=st,
         end_time=et,
-        limit=limit,
-        page=page,
     )
+    items = await reconcile_trace_statuses(
+        items,
+        actor_user_id=user_id,
+    )
+    filtered = [item for item in items if trace_has_status(item, normalized_status)]
+    offset = (page - 1) * limit
+    return {
+        "items": filtered[offset : offset + limit],
+        "total_count": len(filtered),
+        "page": page,
+        "limit": limit,
+    }
 
-    items = [jsonable_encoder(t.to_dict()) for t in traces]
-    return {"items": items, "total_count": total_count, "page": page, "limit": limit}
+
+async def _all_trace_items(
+    *,
+    run_id: str | None,
+    session_id: str | None,
+    user_id: str | None,
+    agent_id: str | None,
+    team_id: str | None,
+    workflow_id: str | None,
+    start_time: datetime | None,
+    end_time: datetime | None,
+) -> list[dict[str, Any]]:
+    trace_page = 1
+    items: list[dict[str, Any]] = []
+    while True:
+        batch, total_count = await _trace_db.get_traces(
+            run_id=run_id,
+            session_id=session_id,
+            user_id=user_id,
+            agent_id=agent_id,
+            team_id=team_id,
+            workflow_id=workflow_id,
+            start_time=start_time,
+            end_time=end_time,
+            limit=200,
+            page=trace_page,
+        )
+        items.extend(jsonable_encoder(trace.to_dict()) for trace in batch)
+        if len(items) >= total_count or not batch:
+            break
+        trace_page += 1
+    return items
 
 
 async def list_trace_sessions(
@@ -268,30 +327,26 @@ async def list_trace_sessions(
     st, et = _validate_trace_time_range(start_time, end_time)
     normalized_status = _normalize_trace_status(status)
 
-    trace_page = 1
-    traces: list[Any] = []
-    while True:
-        batch, total_count = await _trace_db.get_traces(
-            run_id=run_id,
-            session_id=session_id,
-            user_id=user_id,
-            agent_id=agent_id,
-            team_id=team_id,
-            workflow_id=workflow_id,
-            status=normalized_status,
-            start_time=st,
-            end_time=et,
-            limit=200,
-            page=trace_page,
-        )
-        traces.extend(batch)
-        if len(traces) >= total_count or not batch:
-            break
-        trace_page += 1
+    trace_items = await _all_trace_items(
+        run_id=run_id,
+        session_id=session_id,
+        user_id=user_id,
+        agent_id=agent_id,
+        team_id=team_id,
+        workflow_id=workflow_id,
+        start_time=st,
+        end_time=et,
+    )
+    trace_items = await reconcile_trace_statuses(
+        trace_items,
+        actor_user_id=user_id,
+    )
+    trace_items = [
+        item for item in trace_items if trace_has_status(item, normalized_status)
+    ]
 
     grouped: dict[str, list[dict[str, Any]]] = {}
-    for trace in traces:
-        item = jsonable_encoder(trace.to_dict())
+    for item in trace_items:
         session_id = str(item.get("session_id") or "").strip()
         if session_id:
             grouped.setdefault(session_id, []).append(item)
@@ -439,6 +494,12 @@ async def get_trace_detail(trace_id: str, actor: Any | None = None) -> dict[str,
             owner_user_id=str(trace_dict.get("user_id") or ""),
             resource_name="Trace",
         )
+    trace_dict = (
+        await reconcile_trace_statuses(
+            [trace_dict],
+            actor_user_id=str(trace_dict.get("user_id") or "") or None,
+        )
+    )[0]
 
     # Agno defaults this call to 1,000 rows. Passing None deliberately asks
     # for the complete trace; expose that contract in the API response.

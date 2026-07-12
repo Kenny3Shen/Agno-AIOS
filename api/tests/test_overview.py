@@ -191,6 +191,33 @@ async def test_overview_reads_every_trace_page_inside_the_selected_window():
 
 
 @pytest.mark.asyncio
+async def test_overview_fetch_reconciles_audit_failures_before_metrics() -> None:
+    trace = SimpleNamespace(
+        to_dict=lambda: {"trace_id": "trace-1", "run_id": "run-1", "status": "OK"}
+    )
+
+    async def get_traces(**_kwargs):
+        return [trace], 1
+
+    reconcile = AsyncMock(
+        return_value=[{"trace_id": "trace-1", "run_id": "run-1", "status": "ERROR"}]
+    )
+    with (
+        patch.object(overview_service.get_async_agno_postgres_db(), "get_traces", get_traces),
+        patch.object(overview_service, "reconcile_trace_statuses", reconcile),
+    ):
+        traces = await overview_service._fetch_traces(
+            start=datetime(2026, 7, 12, 11, tzinfo=UTC),
+            end=datetime(2026, 7, 12, 12, tzinfo=UTC),
+            user_id="u1",
+        )
+
+    assert traces[0]["status"] == "ERROR"
+    assert reconcile.await_args is not None
+    assert reconcile.await_args.kwargs["actor_user_id"] == "u1"
+
+
+@pytest.mark.asyncio
 async def test_admin_overview_includes_audit_summary():
     with (
         patch.object(overview_service, "_fetch_traces", AsyncMock(return_value=[])),

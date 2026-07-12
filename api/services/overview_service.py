@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from api.auth.claims import ActorLike, has_scope, scope_user_id
 from api.services.postgres_store import get_async_agno_postgres_db
+from api.services.trace_status_service import reconcile_trace_statuses
 
 OverviewRange = Literal["1h", "24h", "7d"]
 OverviewQueryRange = OverviewRange | Literal["custom"]
@@ -288,7 +289,10 @@ async def _fetch_traces(
     for trace in rows:
         dumped = trace if isinstance(trace, dict) else trace.to_dict()
         result.append(jsonable_encoder(dumped))
-    return result
+    return await reconcile_trace_statuses(
+        result,
+        actor_user_id=user_id,
+    )
 
 
 async def _snapshots(actor: ActorLike) -> dict[str, Any]:
