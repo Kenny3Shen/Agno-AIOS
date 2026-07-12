@@ -1,22 +1,35 @@
 import { describe, expect, it } from 'vitest'
-import { joinMenuGroups, splitNavigation } from './utils'
+import { groupNavigation, joinMenuGroups } from './utils'
 
 describe('shell navigation groups', () => {
-  it('groups navigation items using the control-plane hierarchy', () => {
-    expect(splitNavigation(Array.from({ length: 15 }, (_, index) => index))).toEqual([
-      [0, 1, 2],
-      [3, 4, 5],
-      [6, 7, 8, 9, 10],
-      [11, 12],
-      [13, 14],
+  const items = [
+    '/dashboard', '/chat', '/workflow', '/skills', '/mcp', '/knowledge',
+    '/trace', '/memory', '/evaluations', '/approvals', '/cve', '/collect',
+    '/audit', '/settings',
+  ].map((key) => ({ key }))
+
+  it('groups navigation items by their fixed page membership', () => {
+    expect(groupNavigation(items).map((group) => group.map((item) => item.key))).toEqual([
+      ['/dashboard', '/chat', '/workflow'],
+      ['/skills', '/mcp', '/knowledge'],
+      ['/trace', '/memory', '/evaluations', '/approvals'],
+      ['/cve', '/collect'],
+      ['/audit', '/settings'],
     ])
   })
 
-  it('keeps new admin-only entries visible in the final navigation group', () => {
-    expect(splitNavigation(Array.from({ length: 16 }, (_, index) => index)).map((group) => group.length)).toEqual([3, 3, 5, 2, 3])
+  it('does not shift group boundaries when a page is absent', () => {
+    const visible = items.filter((item) => item.key !== '/approvals')
+    expect(groupNavigation(visible).map((group) => group.map((item) => item.key))).toEqual([
+      ['/dashboard', '/chat', '/workflow'],
+      ['/skills', '/mcp', '/knowledge'],
+      ['/trace', '/memory', '/evaluations'],
+      ['/cve', '/collect'],
+      ['/audit', '/settings'],
+    ])
   })
 
-  it('adds dividers only between visible groups', () => {
+  it('adds dividers only between visible groups after permission filtering', () => {
     expect(joinMenuGroups([['a'], [], ['b']])).toEqual(['a', { type: 'divider', key: 'divider-1' }, 'b'])
   })
 })

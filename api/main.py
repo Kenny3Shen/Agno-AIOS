@@ -3,12 +3,8 @@ from contextlib import asynccontextmanager
 from anyio import Lock, Path as AsyncPath
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from agno.agent import AgentFactory
-from agno.os import AgentOS
 from agno.os.middleware.jwt import JWTMiddleware
-from agno.factory import RequestContext
 from loguru import logger
 from fastmcp.utilities.lifespan import combine_lifespans
 
@@ -35,22 +31,18 @@ from api.routes import (
     skills,
     trace,
 )
-from api.services.postgres_store import get_async_agno_postgres_db
-from api.services.security_run_runtime import DEFAULT_SECURITY_RUN_RUNTIME
 from api.services.tracing_service import setup_agno_tracing
 from api.utils.db import initialize_database
 
 app_settings = get_settings()
 
-AGENTOS_JWT_EXCLUDED_ROUTE_PATHS = [
+JWT_EXCLUDED_ROUTE_PATHS = [
     "/",
     "/index.html",
     "/assets/*",
     "/favicon.ico",
     "/favicon.svg",
     "/vite.svg",
-    "/report",
-    "/report/*",
     "/api/auth/*",
     "/api/health",
     "/mcp",
@@ -66,9 +58,6 @@ async def frontend_static_dir() -> str:
     dist_dir = AsyncPath("frontend/dist")
     if await dist_dir.exists():
         return "frontend/dist"
-    source_dir = AsyncPath("source")
-    if await source_dir.exists():
-        return "source"
     return "frontend/dist"
 
 
@@ -82,17 +71,15 @@ class LazyFrontendStaticFiles:
             return self._app
         async with self._lock:
             if self._app is None:
-                directory = await frontend_static_dir()
                 self._app = StaticFiles(
-                    directory=directory,
+                    directory=await frontend_static_dir(),
                     html=True,
                     check_dir=False,
                 )
             return self._app
 
     async def __call__(self, scope, receive, send) -> None:
-        static_app = await self._get_app()
-        await static_app(scope, receive, send)
+        await (await self._get_app())(scope, receive, send)
 
 
 @asynccontextmanager
@@ -140,22 +127,6 @@ def health_check():
     return {"status": "ok", "environment": app_settings.environment}
 
 
-@app.get("/report", include_in_schema=False)
-def report_redirect():
-    return RedirectResponse(url="/report/")
-
-
-@app.get("/", include_in_schema=False)
-async def frontend_index() -> FileResponse:
-    """Serve the SPA entry point before AgentOS can register its API home route."""
-    directory = await frontend_static_dir()
-    return FileResponse(f"{directory}/index.html")
-
-
-async def _build_agentos_fallback_agent(_ctx: RequestContext):
-    return await DEFAULT_SECURITY_RUN_RUNTIME.build_fallback_agent()
-
-
 # Include routers
 app.include_router(auth_router)
 app.include_router(audit.router)
@@ -172,45 +143,13 @@ app.include_router(agent_evals.router)
 app.include_router(memory.router)
 app.include_router(approvals.router)
 
-if app_settings.scheduler_enabled:
-    agentos_db = get_async_agno_postgres_db()
-    AgentOS(
-        name="Trinity AI Security",
-        agents=[
-            AgentFactory(
-                id="security-operations",
-                name="安全防御助手",
-                description="无工具模式下的安全防御运营助手。",
-                db=agentos_db,
-                factory=_build_agentos_fallback_agent,
-            )
-        ],
-        db=agentos_db,
-        base_app=app,
-        on_route_conflict="preserve_base_app",
-        scheduler=True,
-        scheduler_poll_interval=app_settings.scheduler_poll_interval_seconds,
-        scheduler_base_url=app_settings.scheduler_base_url,
-        internal_service_token=app_settings.scheduler_internal_service_token.get_secret_value() or None,
-        telemetry=False,
-    ).get_app()
-
-# AgentOS installs a middleware that rewrites `/mcp/` to `/mcp`. Starlette mounts
-# require the trailing slash to route into the mounted ASGI app, so keep the MCP
-# transport path intact and let FastAPI handle ordinary slash redirects.
-app.user_middleware = [
-    middleware
-    for middleware in app.user_middleware
-    if getattr(middleware.cls, "__name__", "") != "TrailingSlashMiddleware"
-]
-
 app.state.cors_allowed_origins = app_settings.cors_origins
 app.add_middleware(
     JWTMiddleware,  # type: ignore[arg-type]
     verification_keys=[app_settings.auth_jwt_secret.get_secret_value()],
     algorithm="HS256",
     authorization=True,
-    excluded_route_paths=AGENTOS_JWT_EXCLUDED_ROUTE_PATHS,
+    excluded_route_paths=JWT_EXCLUDED_ROUTE_PATHS,
     admin_scope=ADMIN_SCOPE,
     user_isolation=True,
 )
@@ -219,7 +158,7 @@ app.add_middleware(
 # http://<host>:8000/mcp/ with Authorization: Bearer <token>
 app.mount("/mcp", mcp_app, name="mcp")
 
-# Serve frontend static files. Production builds are written to frontend/dist.
+# Serve the independently built frontend without AgentOS owning the root route.
 app.mount("/", LazyFrontendStaticFiles(), name="frontend")
 
 if __name__ == "__main__":

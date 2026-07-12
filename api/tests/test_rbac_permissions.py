@@ -159,8 +159,8 @@ async def test_fastapi_users_jwt_embeds_agentos_scopes():
     assert payload["scopes"] == [ADMIN_SCOPE]
 
 
-def test_main_app_installs_agno_jwt_middleware():
-    from api.main import AGENTOS_JWT_EXCLUDED_ROUTE_PATHS, app
+def test_main_app_installs_jwt_middleware():
+    from api.main import JWT_EXCLUDED_ROUTE_PATHS, app
 
     assert claims.ADMIN_SCOPE == ADMIN_SCOPE
     middleware = next(
@@ -173,5 +173,5 @@ def test_main_app_installs_agno_jwt_middleware():
     assert middleware.kwargs["authorization"] is True
     assert middleware.kwargs["admin_scope"] == ADMIN_SCOPE
     assert middleware.kwargs["user_isolation"] is True
-    assert "/api/auth/*" in AGENTOS_JWT_EXCLUDED_ROUTE_PATHS
-    assert "/assets/*" in AGENTOS_JWT_EXCLUDED_ROUTE_PATHS
+    assert "/api/auth/*" in JWT_EXCLUDED_ROUTE_PATHS
+    assert "/" in JWT_EXCLUDED_ROUTE_PATHS

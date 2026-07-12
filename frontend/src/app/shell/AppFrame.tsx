@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useRouter, useRouterState } from '@tanstack/react-router'
 import { Avatar, Button, Drawer, Dropdown, Grid, Layout, Menu, Space, Spin, Tooltip, Typography, type MenuProps } from 'antd'
 import {
-  ApiOutlined, AuditOutlined, BookOutlined, BugOutlined, BulbOutlined, CalendarOutlined, CloudDownloadOutlined,
+  ApiOutlined, AuditOutlined, BookOutlined, BugOutlined, BulbOutlined, CloudDownloadOutlined,
   CodeOutlined, DashboardOutlined, DatabaseOutlined, ExperimentOutlined, FileSearchOutlined, GithubOutlined,
   MenuFoldOutlined, MenuOutlined, MenuUnfoldOutlined, MessageOutlined, MoonOutlined, NodeIndexOutlined, SafetyCertificateOutlined,
   SettingOutlined, SunOutlined, TranslationOutlined,
@@ -14,7 +14,7 @@ import { loginPath, nextPathFromLocation } from '@/features/auth/routing'
 import { getToken } from '@/shared/auth/storage'
 import { hasScope } from '@/shared/auth/permissions'
 import { usePreferences } from '@/app/providers/AppProviders'
-import { joinMenuGroups, splitNavigation } from './utils'
+import { groupNavigation, joinMenuGroups } from './utils'
 
 const { Header, Sider, Content } = Layout
 
@@ -29,7 +29,6 @@ const nav = [
   { key: '/memory', icon: <DatabaseOutlined />, labelKey: 'memory', scope: 'memories:read' },
   { key: '/evaluations', icon: <ExperimentOutlined />, labelKey: 'evaluations', scope: 'evals:read' },
   { key: '/approvals', icon: <AuditOutlined />, labelKey: 'approvals', scope: 'approvals:read' },
-  { key: '/scheduler', icon: <CalendarOutlined />, labelKey: 'scheduler', scope: 'schedules:read' },
   { key: '/cve', icon: <BugOutlined />, labelKey: 'cve', scope: 'cve:read' },
   { key: '/collect', icon: <CloudDownloadOutlined />, labelKey: 'collect', scope: 'collect:write' },
   { key: '/audit', icon: <FileSearchOutlined />, labelKey: 'audit', scope: 'audit:read' },
@@ -53,7 +52,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const userQuery = useQuery({ ...currentUserQuery(), enabled: Boolean(token), retry: false })
 
   const items = useMemo<MenuProps['items']>(() => joinMenuGroups(
-    splitNavigation(nav).map((group) => group
+    groupNavigation(nav).map((group) => group
       .filter((item) => !item.scope || hasScope(userQuery.data, item.scope))
       .map((item) => ({
         key: item.key,

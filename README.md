@@ -55,7 +55,7 @@ AGNO_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
 cd frontend && /home/shenss/.bun/bin/bun run build
 ```
 
-构建结果由 FastAPI 静态托管。运行时配置、CVE 缓存和上传文件默认位于 `.config/`，日志位于 `.logs/`，均不纳入 Git。更新 CVE 数据：
+构建结果由 FastAPI 静态托管，且不依赖 AgentOS。运行时配置、CVE 缓存和上传文件默认位于 `.config/`，日志位于 `.logs/`，均不纳入 Git。更新 CVE 数据：
 
 ```bash
 uv run update-cve

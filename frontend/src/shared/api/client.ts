@@ -26,7 +26,7 @@ export const apiFetch = async (path: string, init: RequestInit = {}) => {
   const headers = new Headers(init.headers)
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
-  const url = path.startsWith('/api') || path.startsWith('/schedules') ? path : `/api${path.startsWith('/') ? path : `/${path}`}`
+  const url = path.startsWith('/api') ? path : `/api${path.startsWith('/') ? path : `/${path}`}`
   const response = await fetch(url, { ...init, headers })
   if (response.status === 401) clearToken()
   return response
