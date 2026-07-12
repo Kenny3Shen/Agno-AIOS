@@ -1,45 +1,22 @@
-# T.A.I.S (Trinity AI Security)
+# T.A.I.S
 
-T.A.I.S 是一个 AI-powered SDLC security automation 项目，围绕 Discover、Remediate、Close 三位一体的安全闭环构建。
+T.A.I.S（Trinity AI Security）是一个面向安全运营的 AI 工作台。它将 Agent 对话、可观测性、MCP 工具、本地 Skills、知识库检索、CVE 情报、URL 采集、审计和访问控制收敛到一个需要认证的工作台中。
 
-系统把漏洞与暴露面发现、Agent 辅助处置、Trace 观测、MCP 工具、本地 Skills、知识库检索、CVE 情报、URL 采集、审计日志和运行配置收敛到一个需要认证的工作台中。
-
-新版工作台提供管理员审计页面，可按 User ID、邮箱、动作、资源、状态、IP 和时间范围查询用户操作记录，并通过详情 Drawer 查看 actor、resource、request context 与 metadata。
-
-## 文档
-
-- [领域词汇表](./CONTEXT.md)
-- [架构说明](./docs/architecture.md)
-- [运行说明](./docs/operations.md)
-- [安全模型](./docs/security.md)
-- [开发工作流](./docs/development.md)
-- [路线图](./docs/roadmap.md)
-- [架构决策记录](./docs/adr/0001-react-mainline.md)
-
-旧版 Vue + Element Plus 已保留在 `vue` 分支；`master` 作为 React 19 + TanStack + Ant Design v6 新版主线。
+旧版 Vue + Element Plus 位于 `vue` 分支；`master` 是 React 主线。
 
 ## 技术栈
 
-- 前端：React 19、TypeScript、Vite 8/Rolldown、TanStack Router/Query、Ant Design v6、Ant Design X、i18next、UnoCSS、Bun。
-- 后端：FastAPI、FastAPI Users、SQLAlchemy Async、Pydantic Settings、Uvicorn、psycopg、httpx、Polars、loguru。
-- Agent Runtime：OpenAI-compatible models、AsyncPostgresDb、Tracing、PgVector Knowledge、LocalSkills、MCPTools。
-- MCP：FastMCP，同进程挂载到 FastAPI 的 `/mcp/`，由应用 lifespan 启停运行时。
-- 数据库：PostgreSQL + pgvector，按应用、运行时、MCP、知识库 schema 分域。
+- 前端：React 19、TypeScript、Vite、TanStack Router/Query、Ant Design、Ant Design X、UnoCSS、Bun。
+- 后端：FastAPI、FastAPI Users、SQLAlchemy Async、Agno、FastMCP、PostgreSQL + pgvector。
 - 工具链：uv、ruff、ty、Bun、Oxlint、Oxfmt、Playwright。
 
-## 快速启动
+## 快速开始
 
-安装后端依赖：
+安装依赖：
 
 ```bash
 uv sync
-```
-
-安装前端依赖：
-
-```bash
-cd frontend
-/home/shenss/.bun/bin/bun install
+cd frontend && /home/shenss/.bun/bin/bun install
 ```
 
 启动 API：
@@ -48,72 +25,89 @@ cd frontend
 uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
 ```
 
-启动前端开发服务：
+另开终端启动前端：
 
 ```bash
 cd frontend
-/home/shenss/.bun/bin/bun run dev
-```
-
-访问：
-
-```text
-http://localhost:5173
-```
-
-如果 API 不在默认 `8000`，启动前端开发服务时设置：
-
-```bash
 VITE_API_PROXY_TARGET=http://127.0.0.1:8001 /home/shenss/.bun/bin/bun run dev
 ```
 
-PostgreSQL 初始化、环境变量、生产式静态资源托管和数据更新任务见 [运行说明](./docs/operations.md)。
+访问 <http://localhost:5173>。
 
-## 常用命令
-
-Python 检查：
+可通过以下环境变量创建初始管理员：
 
 ```bash
-uv run ruff check .
-uv run ty check .
-uv run pytest api/tests
-uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
+AGNO_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+AGNO_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
 ```
 
-前端检查：
+## 配置与运维
+
+- `POSTGRES_*` / `POSTGRES_URL`：PostgreSQL 连接。
+- `AUTH_JWT_SECRET`：JWT 密钥；生产环境必须替换默认值。
+- `AGNO_BOOTSTRAP_ADMIN_EMAIL`、`AGNO_BOOTSTRAP_ADMIN_PASSWORD`：可选的初始管理员。
+- `AGNO_KNOWLEDGE_*`：Knowledge chunk、search、rerank 与 PgVector 配置。
+- `VITE_API_PROXY_TARGET`：前端开发代理地址。
+
+前端生产构建：
 
 ```bash
-cd frontend
-/home/shenss/.bun/bin/bun run lint
-/home/shenss/.bun/bin/bun run typecheck
-/home/shenss/.bun/bin/bun run test:shell
-/home/shenss/.bun/bin/bun run test:auth
-/home/shenss/.bun/bin/bun run build
-/home/shenss/.bun/bin/bun run check
-/home/shenss/.bun/bin/bun run format
+cd frontend && /home/shenss/.bun/bin/bun run build
 ```
 
-数据更新脚本：
+构建结果由 FastAPI 静态托管。运行时配置、CVE 缓存和上传文件默认位于 `.config/`，日志位于 `.logs/`，均不纳入 Git。更新 CVE 数据：
 
 ```bash
 uv run update-cve
 ```
 
-## 项目结构
+部署时还应配置生产级数据库、JWT 密钥、MCP token、模型配置和 CORS。
 
-```text
-.
-├── api/                 # FastAPI app、routes、services、auth、MCP runtime、tasks、tests
-├── frontend/            # React 19 + TanStack + Ant Design 工作台
-├── source/              # FastAPI 托管的前端生产构建
-├── scripts/             # 运维脚本
-├── docs/                # 新版架构、运行、安全、开发、路线图、ADR
-├── CONTEXT.md           # 领域词汇表
-├── README.md
-├── pyproject.toml
-└── uv.lock
+## 架构
+
+React 工作台通过共享 API client 携带 token 请求 FastAPI；后端检查权限和资源归属后，按模型、MCP、Skills、Knowledge 与 Memory 配置创建 Agno 运行时。Chat 通过 SSE 返回流式输出，Trace、Memory 和 Knowledge 等视图通过 Query 刷新读取最新数据。
+
+- `frontend/src/app`：Provider、Router、Shell 与全局样式。
+- `frontend/src/features`：按领域划分的页面和逻辑。
+- `frontend/src/shared`：API client、认证、i18n、类型与通用 UI。
+- `api/`：认证、路由、服务、MCP 运行时、任务与测试。
+- `scripts/`：运维脚本。
+
+前端使用 TanStack Router 管理路由状态、TanStack Query 管理服务端状态；Ant Design 与 Ant Design X 提供主要 UI。FastMCP 与 FastAPI 同进程运行并挂载在 `/mcp/`。应用数据由 SQLAlchemy Async 管理，Agno 运行时数据使用 `AsyncPostgresDb`，知识库使用 PgVector。
+
+## 安全与审计
+
+后端是唯一安全边界：前端的菜单隐藏、按钮禁用和路由保护只改善体验，不能作为授权依据。所有受保护 API 必须在后端检查 scope；用户资源必须校验 owner 或 admin 能力。普通用户只能修改自己的 private 资源，Guest 只能读取安全数据。
+
+登录使用 FastAPI Users/JWT，scope 写入 JWT claims。关键变更会记录 actor、action、resource、metadata、IP 和 user-agent。管理员可通过 `GET /api/audit/logs`（需要 `audit:read`）按用户、动作、资源、状态、IP 和时间范围分页查询审计事件；当前不提供导出、实时告警或外部 SIEM 集成。
+
+## 开发与验证
+
+Python：
+
+```bash
+uv run ruff check .
+uv run ty check .
+uv run pytest api/tests
 ```
 
-## 安全原则
+前端：
 
-后端是安全边界。前端权限检查只用于隐藏导航和控件，改善体验；所有受保护的 API 操作都必须在后端执行权限检查和资源归属检查。见 [安全模型](./docs/security.md)。
+```bash
+cd frontend && /home/shenss/.bun/bin/bun run check
+```
+
+功能测试以业务行为、权限边界、错误处理和 API 契约为主，避免依赖源码结构、文案、CSS 类名或完整 DOM。涉及前端布局和交互时，用 Playwright 在宽屏和窄屏完成真实流程验证，截图放入 `.tmp`。
+
+## 术语
+
+- **Chat Session**：归属于用户的一段连续对话历史；一次执行称为 **Run**。
+- **Trace / Span**：一次完整执行的可观测记录及其内部操作。
+- **Skill**：可按需启用并加载到运行时的本地能力包。
+- **MCP Service**：通过 MCP endpoint 暴露工具的服务；**MCP Token** 用于其访问授权。
+- **Knowledge Base**：可供 Agent 检索的内部文档集合，不等同于长期 **Memory**。
+- **Audit Log**：安全相关用户动作的追加式记录。
+
+## 当前计划
+
+待办与已知问题见 [TODOs.md](./TODOs.md)。
