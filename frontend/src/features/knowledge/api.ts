@@ -55,7 +55,7 @@ const consumeKnowledgeSse = async (
     }
     if (event === 'progress.failed' || payload.status === 'failed') {
       if (payload.stage === 'done' || event === 'progress.failed') {
-        failed = new Error(payload.error || payload.message || '文档处理失败')
+        failed = new Error(payload.error || payload.message || 'Document processing failed')
       }
     }
   }
@@ -70,7 +70,7 @@ const consumeKnowledgeSse = async (
   }
   if (buffer.trim()) flush(buffer)
   if (failed) throw failed
-  if (!document) throw new Error('处理流结束但未返回文档')
+  if (!document) throw new Error('Stream ended without a document')
   return document
 }
 
@@ -101,7 +101,7 @@ export const addText = (
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     })
     if (!response.ok) throw new Error(await readHttpError(response))
-    if (!response.body) throw new Error('进度流不可用')
+    if (!response.body) throw new Error('Progress stream unavailable')
     return consumeKnowledgeSse(response.body, options?.onProgress ?? (() => undefined))
   })()
 }
@@ -118,7 +118,7 @@ export const addFilePath = (
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     })
     if (!response.ok) throw new Error(await readHttpError(response))
-    if (!response.body) throw new Error('进度流不可用')
+    if (!response.body) throw new Error('Progress stream unavailable')
     return consumeKnowledgeSse(response.body, options?.onProgress ?? (() => undefined))
   })()
 }
@@ -150,7 +150,7 @@ export const uploadDocument = (
       headers: { Accept: 'text/event-stream' },
     })
     if (!response.ok) throw new Error(await readHttpError(response))
-    if (!response.body) throw new Error('进度流不可用')
+    if (!response.body) throw new Error('Progress stream unavailable')
     return consumeKnowledgeSse(response.body, options?.onProgress ?? (() => undefined))
   })()
 }
@@ -179,7 +179,7 @@ export const updateDocumentAction = (
       }
       throw new Error(message)
     }
-    if (!response.body) throw new Error('进度流不可用')
+    if (!response.body) throw new Error('Progress stream unavailable')
     return consumeKnowledgeSse(response.body, options?.onProgress ?? (() => undefined))
   })()
 }
@@ -215,7 +215,7 @@ export const updateDocumentUpload = (
       }
       throw new Error(message)
     }
-    if (!response.body) throw new Error('进度流不可用')
+    if (!response.body) throw new Error('Progress stream unavailable')
     return consumeKnowledgeSse(response.body, options?.onProgress ?? (() => undefined))
   })()
 }

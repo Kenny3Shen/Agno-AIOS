@@ -24,9 +24,9 @@ describe('knowledge ingest option fields', () => {
     expect(screen.getByText('Markdown')).toBeTruthy()
     await user.click(screen.getByText('高级分块参数'))
 
-    expect(screen.getByText('Markdown heading split')).toBeTruthy()
-    expect(screen.getByText('Section max size')).toBeTruthy()
-    await user.hover(screen.getByLabelText('Section max size help'))
+    expect(screen.getByText('Markdown 标题切分')).toBeTruthy()
+    expect(screen.getByText('章节上限')).toBeTruthy()
+    await user.hover(screen.getByLabelText('章节上限 help'))
     expect(await screen.findByText('单个 chunk 的目标/最大长度；越小检索越精确，越大上下文越完整。')).toBeTruthy()
   })
 
@@ -35,13 +35,13 @@ describe('knowledge ingest option fields', () => {
     renderOptions({ file_name: 'runbook.csv' })
 
     await user.click(screen.getByText('高级分块参数'))
-    expect(screen.getByText('CSV skip header')).toBeTruthy()
+    expect(screen.getByText('CSV 跳过表头')).toBeTruthy()
 
     await user.clear(screen.getByLabelText('File name'))
     await user.type(screen.getByLabelText('File name'), 'agent.ts')
 
-    expect(await screen.findByText('Code chunk size')).toBeTruthy()
-    expect(screen.getByText('Code tokenizer')).toBeTruthy()
+    expect(await screen.findByText('代码分块大小')).toBeTruthy()
+    expect(screen.getByText('代码分词器')).toBeTruthy()
   })
 
   it('uses semantic options for plain text and no suffix input', async () => {
@@ -50,8 +50,8 @@ describe('knowledge ingest option fields', () => {
 
     await user.click(screen.getByText('高级分块参数'))
 
-    expect(screen.getByText('Semantic threshold')).toBeTruthy()
-    expect(screen.getByText('Semantic window')).toBeTruthy()
-    expect(screen.getByText('Min sentences')).toBeTruthy()
+    expect(screen.getByText('语义阈值')).toBeTruthy()
+    expect(screen.getByText('语义窗口')).toBeTruthy()
+    expect(screen.getByText('最少句子数')).toBeTruthy()
   })
 })

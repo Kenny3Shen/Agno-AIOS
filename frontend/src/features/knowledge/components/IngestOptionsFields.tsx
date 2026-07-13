@@ -111,13 +111,13 @@ export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDe
   const selectedFileName = selectedUploadFile(fileList)?.name
   const effectiveName = selectedFileName || fileName || title || ''
   const profile = inferKnowledgeReaderProfile(effectiveName, readerStrategy)
-  const chunkLabel = profile.strategy === 'markdown' && markdownHeadingMode !== 0 ? 'Section max size' : 'Chunk size'
+  const chunkLabel = profile.strategy === 'markdown' && markdownHeadingMode !== 0 ? t('fields.sectionMaxSize') : t('fields.chunkSize')
 
   const fields = [
     <Form.Item
       key="reader_strategy"
       name={['ingest_options', 'reader_strategy']}
-      label={<HelpLabel label="Reader strategy" tooltip={tooltips.reader_strategy} />}
+      label={<HelpLabel label={t('fields.readerStrategy')} tooltip={tooltips.reader_strategy} />}
     >
       <Select allowClear placeholder={t('ingest.auto')} options={readerStrategies} />
     </Form.Item>,
@@ -129,7 +129,7 @@ export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDe
         key="markdown_split_on_headings"
         preserve={false}
         name={['ingest_options', 'markdown_split_on_headings']}
-        label={<HelpLabel label="Markdown heading split" tooltip={tooltips.markdown_split_on_headings} />}
+        label={<HelpLabel label={t('fields.headingSplit')} tooltip={tooltips.markdown_split_on_headings} />}
       >
         <Select
           allowClear
@@ -148,7 +148,7 @@ export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDe
       <NumberField
         key="chunk_overlap"
         name="chunk_overlap"
-        label="Overlap"
+        label={t('fields.overlap')}
         tooltip={tooltips.chunk_overlap}
         placeholder={defaults ? String(defaults.chunk_overlap) : t('ingest.default')}
         min={0}
@@ -159,14 +159,14 @@ export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDe
       <SwitchField
         key="csv_skip_header"
         name="csv_skip_header"
-        label="CSV skip header"
+        label={t('fields.csvSkipHeader')}
         tooltip={tooltips.csv_skip_header}
         defaultChecked={defaults?.csv_skip_header ? true : undefined}
       />,
       <SwitchField
         key="csv_clean_rows"
         name="csv_clean_rows"
-        label="CSV clean rows"
+        label={t('fields.csvCleanRows')}
         tooltip={tooltips.csv_clean_rows}
         defaultChecked={defaults?.csv_clean_rows ?? true}
       />
@@ -176,7 +176,7 @@ export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDe
       <NumberField
         key="code_chunk_size"
         name="code_chunk_size"
-        label="Code chunk size"
+        label={t('fields.codeChunkSize')}
         tooltip={tooltips.code_chunk_size}
         placeholder={defaults ? String(defaults.code_chunk_size) : t('ingest.default')}
         min={256}
@@ -185,14 +185,14 @@ export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDe
         key="code_tokenizer"
         preserve={false}
         name={['ingest_options', 'code_tokenizer']}
-        label={<HelpLabel label="Code tokenizer" tooltip={tooltips.code_tokenizer} />}
+        label={<HelpLabel label={t('fields.codeTokenizer')} tooltip={tooltips.code_tokenizer} />}
       >
         <Select allowClear placeholder={t('ingest.defaultValue', { value: defaults?.code_tokenizer ?? 'character' })} options={tokenizerOptions} />
       </Form.Item>,
       <SwitchField
         key="code_include_nodes"
         name="code_include_nodes"
-        label="Include nodes"
+        label={t('fields.includeNodes')}
         tooltip={tooltips.code_include_nodes}
         defaultChecked={defaults?.code_include_nodes ? true : undefined}
       />
@@ -202,7 +202,7 @@ export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDe
       <NumberField
         key="chunk_size"
         name="chunk_size"
-        label="Chunk size"
+        label={t('fields.chunkSize')}
         tooltip={tooltips.chunk_size}
         placeholder={defaults ? String(defaults.chunk_size) : t('ingest.default')}
         min={200}
@@ -210,7 +210,7 @@ export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDe
       <NumberField
         key="semantic_threshold"
         name="semantic_threshold"
-        label="Semantic threshold"
+        label={t('fields.semanticThreshold')}
         tooltip={tooltips.semantic_threshold}
         placeholder={defaults ? String(defaults.semantic_threshold) : t('ingest.default')}
         min={0}
@@ -220,7 +220,7 @@ export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDe
       <NumberField
         key="semantic_similarity_window"
         name="semantic_similarity_window"
-        label="Semantic window"
+        label={t('fields.semanticWindow')}
         tooltip={tooltips.semantic_similarity_window}
         placeholder={defaults ? String(defaults.semantic_similarity_window) : '3'}
         min={1}
@@ -228,7 +228,7 @@ export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDe
       <NumberField
         key="semantic_min_sentences_per_chunk"
         name="semantic_min_sentences_per_chunk"
-        label="Min sentences"
+        label={t('fields.minSentences')}
         tooltip={tooltips.semantic_min_sentences_per_chunk}
         placeholder={defaults ? String(defaults.semantic_min_sentences_per_chunk) : '1'}
         min={1}
@@ -236,7 +236,7 @@ export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDe
       <NumberField
         key="semantic_min_characters_per_sentence"
         name="semantic_min_characters_per_sentence"
-        label="Min chars per sentence"
+        label={t('fields.minSentenceLen')}
         tooltip={tooltips.semantic_min_characters_per_sentence}
         placeholder={defaults ? String(defaults.semantic_min_characters_per_sentence) : '24'}
         min={1}
@@ -247,7 +247,7 @@ export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDe
       <NumberField
         key="chunk_size"
         name="chunk_size"
-        label="Chunk size"
+        label={t('fields.chunkSize')}
         tooltip={tooltips.chunk_size}
         placeholder={defaults ? String(defaults.chunk_size) : t('ingest.default')}
         min={200}
@@ -255,7 +255,7 @@ export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDe
       <NumberField
         key="chunk_overlap"
         name="chunk_overlap"
-        label="Overlap"
+        label={t('fields.overlap')}
         tooltip={tooltips.chunk_overlap}
         placeholder={defaults ? String(defaults.chunk_overlap) : t('ingest.default')}
         min={0}
@@ -274,7 +274,7 @@ export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDe
             <Space wrap>
               <span>{t('advancedChunking')}</span>
               <Tag>{profile.label}</Tag>
-              <Typography.Text type="secondary">{profile.description}</Typography.Text>
+              <Typography.Text type="secondary">{t(profile.descriptionKey)}</Typography.Text>
             </Space>
           ),
           children: <div className="knowledge-advanced-grid">{fields}</div>,

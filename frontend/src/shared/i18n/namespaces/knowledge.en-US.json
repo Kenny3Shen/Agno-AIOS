@@ -70,5 +70,41 @@
   "retrieve": "Retrieve",
   "uploadIngest": "Upload & ingest",
   "selectDocMeta": "Select a document to view metadata",
-  "ingestAction": "Ingest"
+  "ingestAction": "Ingest",
+  "errors": {
+    "tooLarge": "File must be 50 MB or smaller",
+    "empty": "Empty files are not allowed",
+    "unsupported": "This file type is not supported",
+    "processFailed": "Document processing failed",
+    "streamEnded": "Stream ended without a document",
+    "streamUnavailable": "Progress stream unavailable"
+  },
+  "profiles": {
+    "markdown": "Split Markdown by heading structure",
+    "semantic": "Split plain text by semantic boundaries",
+    "code": "Split source code by structure",
+    "csv_row": "Split CSV/TSV by rows",
+    "json": "Read JSON structure then split recursively",
+    "document": "Split PDF/DOCX by document structure"
+  },
+  "fields": {
+    "readerStrategy": "Reader strategy",
+    "headingSplit": "Markdown heading split",
+    "chunkSize": "Chunk size",
+    "sectionMaxSize": "Section max size",
+    "overlap": "Overlap",
+    "csvSkipHeader": "CSV skip header",
+    "csvCleanRows": "CSV clean rows",
+    "codeChunkSize": "Code chunk size",
+    "codeTokenizer": "Code tokenizer",
+    "includeNodes": "Include nodes",
+    "semanticThreshold": "Semantic threshold",
+    "semanticWindow": "Semantic window",
+    "minSentences": "Min sentences",
+    "minSentenceLen": "Min chars per sentence"
+  },
+  "currentSourceFile": "Current source file",
+  "updateTab": "Update",
+  "textTab": "Text",
+  "uploadTab": "Upload"
 }

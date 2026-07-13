@@ -50,5 +50,16 @@
     "renamed": "会话已重命名",
     "renameFailed": "重命名失败"
   },
-  "noNotifications": "暂无通知"
+  "noNotifications": "暂无通知",
+  "markAllRead": "全部已读",
+  "unreadCount": "{{count}} 条未读",
+  "loadingNotifications": "正在加载通知",
+  "unread": "未读",
+  "relative": {
+    "justNow": "刚刚",
+    "minutesAgo": "{{count}} 分钟前",
+    "hoursAgo": "{{count}} 小时前",
+    "yesterday": "昨天",
+    "daysAgo": "{{count}} 天前"
+  }
 }

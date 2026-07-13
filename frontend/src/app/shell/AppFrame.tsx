@@ -113,13 +113,13 @@ const navigationGroups: NavigationGroup<NavigationItem>[] = [
 const settingsNav: NavigationItem[] = [{ key: '/settings', icon: <SettingOutlined />, labelKey: 'settings', scope: 'config:read' }]
 const defaultOpenNavigationGroups = defaultOpenNavigationGroupKeys(navigationGroups)
 
-const relativeTime = (timestamp: number) => {
+const relativeTime = (timestamp: number, t: (key: string, options?: Record<string, unknown>) => string) => {
   const seconds = Math.max(0, Math.floor(Date.now() / 1000) - timestamp)
-  if (seconds < 60) return 'Just now'
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)} hr ago`
-  if (seconds < 172800) return 'Yesterday'
-  return `${Math.floor(seconds / 86400)} days ago`
+  if (seconds < 60) return t('shell:relative.justNow')
+  if (seconds < 3600) return t('shell:relative.minutesAgo', { count: Math.floor(seconds / 60) })
+  if (seconds < 86400) return t('shell:relative.hoursAgo', { count: Math.floor(seconds / 3600) })
+  if (seconds < 172800) return t('shell:relative.yesterday')
+  return t('shell:relative.daysAgo', { count: Math.floor(seconds / 86400) })
 }
 
 const notificationKind = (notification: Notification) => {
@@ -332,9 +332,9 @@ export function AppFrame({ children }: { children: ReactNode }) {
                   <section className="notification-center" aria-label={t('shell:notifications')}>
                     <header className="notification-center-header">
                       <div>
-                        <Typography.Text strong>Notifications</Typography.Text>
+                        <Typography.Text strong>{t('shell:notifications')}</Typography.Text>
                         <Typography.Text type="secondary" className="notification-center-count">
-                          {notificationsQuery.data?.unread_count ?? 0} unread
+                          {t('shell:unreadCount', { count: notificationsQuery.data?.unread_count ?? 0 })}
                         </Typography.Text>
                       </div>
                       <Button
@@ -344,12 +344,12 @@ export function AppFrame({ children }: { children: ReactNode }) {
                         disabled={!notificationsQuery.data?.unread_count}
                         onClick={() => void markAllAsRead()}
                       >
-                        Mark all as read
+                        {t('shell:markAllRead')}
                       </Button>
                     </header>
                     <div className="notification-center-list">
                       {notificationsQuery.isLoading ? (
-                        <div className="notification-center-loading" aria-label="Loading notifications">
+                        <div className="notification-center-loading" aria-label={t('shell:loadingNotifications')}>
                           <Skeleton active title={{ width: '42%' }} paragraph={{ rows: 2 }} />
                           <Skeleton active title={{ width: '56%' }} paragraph={{ rows: 2 }} />
                         </div>
@@ -369,9 +369,9 @@ export function AppFrame({ children }: { children: ReactNode }) {
                                 <span className="notification-item-body" title={notification.body}>
                                   {notification.body}
                                 </span>
-                                <span className="notification-item-time">{relativeTime(notification.created_at)}</span>
+                                <span className="notification-item-time">{relativeTime(notification.created_at, t)}</span>
                               </span>
-                              {!notification.read && <span className="notification-item-unread-dot" aria-label="Unread" />}
+                              {!notification.read && <span className="notification-item-unread-dot" aria-label={t('shell:unread')} />}
                             </button>
                           )
                         })

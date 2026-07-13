@@ -34,7 +34,7 @@ export interface KnowledgeIngestDefaults {
 export const AGNO_INGEST_DEFAULTS: KnowledgeIngestDefaults = {
   chunk_size: 5000,
   chunk_overlap: 0,
-  markdown_split_on_headings: '按全部标题切分',
+  markdown_split_on_headings: '',
   csv_skip_header: false,
   csv_clean_rows: true,
   code_chunk_size: 2048,
@@ -81,16 +81,16 @@ export type KnowledgeReaderStrategy = 'markdown' | 'semantic' | 'code' | 'csv_ro
 export interface KnowledgeReaderProfile {
   strategy: KnowledgeReaderStrategy
   label: string
-  description: string
+  descriptionKey: string
 }
 
 export const knowledgeReaderProfiles: Record<KnowledgeReaderStrategy, KnowledgeReaderProfile> = {
-  markdown: { strategy: 'markdown', label: 'Markdown', description: '按标题结构切分 Markdown 文档' },
-  semantic: { strategy: 'semantic', label: 'Semantic text', description: '按语义边界切分普通文本' },
-  code: { strategy: 'code', label: 'Code', description: '按代码结构切分源码和脚本' },
-  csv_row: { strategy: 'csv_row', label: 'CSV rows', description: '按表格行切分 CSV/TSV' },
-  json: { strategy: 'json', label: 'JSON', description: '按结构读取 JSON 后递归切分' },
-  document: { strategy: 'document', label: 'Document', description: '按文档结构切分 PDF/DOCX' },
+  markdown: { strategy: 'markdown', label: 'Markdown', descriptionKey: 'profiles.markdown' },
+  semantic: { strategy: 'semantic', label: 'Semantic text', descriptionKey: 'profiles.semantic' },
+  code: { strategy: 'code', label: 'Code', descriptionKey: 'profiles.code' },
+  csv_row: { strategy: 'csv_row', label: 'CSV rows', descriptionKey: 'profiles.csv_row' },
+  json: { strategy: 'json', label: 'JSON', descriptionKey: 'profiles.json' },
+  document: { strategy: 'document', label: 'Document', descriptionKey: 'profiles.document' },
 }
 
 export function effectiveKnowledgeIngestDefaults(ragSettings?: KnowledgeRagSettings): KnowledgeIngestDefaults {
@@ -177,10 +177,12 @@ export const selectedUploadFile = (fileList?: UploadFile[]) => {
   return (item?.originFileObj ?? item) as File | undefined
 }
 
-export function knowledgeFileErrorMessage(issue: string) {
-  if (issue === 'too-large') return '文件不能超过 50 MB'
-  if (issue === 'empty') return '不能上传空文件'
-  return '暂不支持该文件类型'
+export type KnowledgeFileIssue = 'unsupported' | 'too-large' | 'empty'
+
+export function knowledgeFileErrorKey(issue: string): 'errors.tooLarge' | 'errors.empty' | 'errors.unsupported' {
+  if (issue === 'too-large') return 'errors.tooLarge'
+  if (issue === 'empty') return 'errors.empty'
+  return 'errors.unsupported'
 }
 
 export function replacementFileName(document: Document) {

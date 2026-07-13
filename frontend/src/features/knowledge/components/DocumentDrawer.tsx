@@ -9,7 +9,7 @@ import type { KnowledgeIngestDefaults } from '../utils'
 import {
   cleanIngestOptions,
   KNOWLEDGE_FILE_ACCEPT,
-  knowledgeFileErrorMessage,
+  knowledgeFileErrorKey,
   normalizeUploadFiles,
   selectedUploadFile,
   validateKnowledgeFile,
@@ -83,7 +83,7 @@ export function DocumentDrawer({
         items={[
           {
             key: 'upload',
-            label: 'Upload',
+            label: t('uploadTab'),
             children: (
               <Form
                 layout="vertical"
@@ -114,7 +114,7 @@ export function DocumentDrawer({
                   )
                 }}
               >
-                <Alert className="knowledge-form-note" type="info" showIcon title="{t('uploadHint')}" />
+                <Alert className="knowledge-form-note" type="info" showIcon title={t('uploadHint')} />
                 <Form.Item
                   name="fileList"
                   label={t('document')}
@@ -134,7 +134,7 @@ export function DocumentDrawer({
                     beforeUpload={(file) => {
                       const issue = validateKnowledgeFile(file)
                       if (!issue) return false
-                      message.error(knowledgeFileErrorMessage(issue))
+                      message.error(t(knowledgeFileErrorKey(issue)))
                       return Upload.LIST_IGNORE
                     }}
                   >
@@ -163,7 +163,7 @@ export function DocumentDrawer({
           },
           {
             key: 'text',
-            label: 'Text',
+            label: t('textTab'),
             children: (
               <Form
                 layout="vertical"

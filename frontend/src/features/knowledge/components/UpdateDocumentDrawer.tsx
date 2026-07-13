@@ -14,7 +14,7 @@ import {
   ingestOptionsFromMetadata,
   knowledgeIngestOptionsEqual,
   KNOWLEDGE_FILE_ACCEPT,
-  knowledgeFileErrorMessage,
+  knowledgeFileErrorKey,
   normalizeUploadFiles,
   replacementFileName,
   selectedUploadFile,
@@ -136,7 +136,7 @@ export function UpdateDocumentDrawer({
         items={[
           {
             key: 'update',
-            label: 'Update',
+            label: t('updateTab'),
             children: (
               <UpdateTab
                 form={updateForm}
@@ -152,7 +152,7 @@ export function UpdateDocumentDrawer({
           },
           {
             key: 'text',
-            label: 'Text',
+            label: t('textTab'),
             children: (
               <TextTab
                 form={textForm}
@@ -268,21 +268,21 @@ function UpdateTab({
         className="knowledge-form-note"
         type="info"
         showIcon
-        title="{t('updateHint')}"
+        title={t('updateHint')}
       />
-      <Form.Item name="title" label="Title" rules={[{ required: true, whitespace: true }]}>
+      <Form.Item name="title" label={t('titleField')} rules={[{ required: true, whitespace: true }]}>
         <Input />
       </Form.Item>
-      <Form.Item name="source" label="Source" rules={[{ required: true, whitespace: true }]}>
+      <Form.Item name="source" label={t('sourceField')} rules={[{ required: true, whitespace: true }]}>
         <Input />
       </Form.Item>
-      <Form.Item name="visibility" label="Visibility">
+      <Form.Item name="visibility" label={t('common:visibility')}>
         <VisibilitySelect style={{ width: '100%' }} />
       </Form.Item>
-      <Form.Item name="file_name" label="Current source file">
+      <Form.Item name="file_name" label={t('currentSourceFile')}>
         <Input disabled />
       </Form.Item>
-      <Form.Item name="fileList" label="{t('replaceFile')}" valuePropName="fileList" getValueFromEvent={normalizeUploadFiles}>
+      <Form.Item name="fileList" label={t('replaceFile')} valuePropName="fileList" getValueFromEvent={normalizeUploadFiles}>
         <Upload.Dragger
           accept={KNOWLEDGE_FILE_ACCEPT}
           maxCount={1}
@@ -290,7 +290,7 @@ function UpdateTab({
           beforeUpload={(file) => {
             const issue = validateKnowledgeFile(file)
             if (!issue) return false
-            message.error(knowledgeFileErrorMessage(issue))
+            message.error(t(knowledgeFileErrorKey(issue)))
             return Upload.LIST_IGNORE
           }}
         >
@@ -358,18 +358,18 @@ function TextTab({
         className="knowledge-form-note"
         type="warning"
         showIcon
-        title="{t('replaceTextHint')}"
+        title={t('replaceTextHint')}
       />
-      <Form.Item name="title" label="Title" rules={[{ required: true, whitespace: true }]}>
+      <Form.Item name="title" label={t('titleField')} rules={[{ required: true, whitespace: true }]}>
         <Input />
       </Form.Item>
-      <Form.Item name="source" label="Source" rules={[{ required: true, whitespace: true }]}>
+      <Form.Item name="source" label={t('sourceField')} rules={[{ required: true, whitespace: true }]}>
         <Input />
       </Form.Item>
-      <Form.Item name="visibility" label="Visibility">
+      <Form.Item name="visibility" label={t('common:visibility')}>
         <VisibilitySelect style={{ width: '100%' }} />
       </Form.Item>
-      <Form.Item name="file_name" label={t('fileName')} tooltip="{t('fileNameHint')}" rules={[{ required: true, whitespace: true }]}>
+      <Form.Item name="file_name" label={t('fileName')} tooltip={t('fileNameHint')} rules={[{ required: true, whitespace: true }]}>
         <Input />
       </Form.Item>
       <Form.Item name="content" label={t('newBody')} rules={[{ required: true, whitespace: true }]}>

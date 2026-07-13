@@ -51,7 +51,7 @@ describe('knowledge document workflow', () => {
 
     await user.click(await screen.findByText('Runbook'))
     await clickUpdateAction(user)
-    const source = await screen.findByLabelText('Source')
+    const source = await screen.findByLabelText('来源')
     await user.clear(source)
     await user.type(source, 'Runbooks')
     await user.click(screen.getByRole('button', { name: /保存/ }))
@@ -82,7 +82,7 @@ describe('knowledge document workflow', () => {
 
     await user.click(await screen.findByText('Runbook'))
     await clickUpdateAction(user)
-    await user.click(await screen.findByRole('tab', { name: 'Text' }))
+    await user.click(await screen.findByRole('tab', { name: '文本' }))
     fireEvent.change(screen.getByLabelText('新正文'), { target: { value: '# Updated runbook' } })
     await user.click(screen.getByRole('button', { name: /保存/ }))
 
@@ -192,7 +192,7 @@ describe('knowledge document workflow', () => {
 
     await user.click(await screen.findByText('Runbook'))
     await clickUpdateAction(user)
-    await user.click(await screen.findByRole('tab', { name: 'Text' }))
+    await user.click(await screen.findByRole('tab', { name: '文本' }))
     fireEvent.change(screen.getByLabelText('新正文'), { target: { value: '# Updated runbook' } })
     await user.click(screen.getByRole('button', { name: /保存/ }))
 
@@ -227,7 +227,7 @@ describe('knowledge document workflow', () => {
     await user.click(await screen.findByText('Runbook'))
     await clickUpdateAction(user)
     fireEvent.click(await screen.findByText('高级分块参数'))
-    await user.type(screen.getByRole('spinbutton', { name: /Section max size/ }), '1800')
+    await user.type(screen.getByRole('spinbutton', { name: /章节上限/ }), '1800')
     await user.click(screen.getByRole('button', { name: /保存/ }))
 
     await waitFor(() => expect(screen.getByText('6')).toBeTruthy())
@@ -241,8 +241,8 @@ describe('knowledge document workflow', () => {
     await user.click(await screen.findByText('Runbook'))
     await clickUpdateAction(user)
 
-    expect(screen.getByRole('tab', { name: 'Update' })).toBeTruthy()
-    expect(screen.getByRole('tab', { name: 'Text' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: '更新' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: '文本' })).toBeTruthy()
     expect(screen.getAllByRole('button', { name: /保存/ })).toHaveLength(1)
     expect(screen.queryByRole('switch', { name: /重新生成向量索引/ })).toBeNull()
   })
@@ -347,10 +347,10 @@ describe('knowledge document workflow', () => {
     await user.upload(input as HTMLInputElement, new File(['# New'], 'new.md', { type: 'text/markdown' }))
     await user.click(screen.getByRole('button', { name: /上传并入库/ }))
 
-    expect(await screen.findByText('上传')).toBeTruthy()
-    expect(screen.getByText('解析')).toBeTruthy()
+    expect(await screen.findByText('解析')).toBeTruthy()
     expect(screen.getByText('向量化')).toBeTruthy()
     expect(screen.getByText('清理')).toBeTruthy()
+    expect(screen.getAllByText('上传').length).toBeGreaterThan(0)
     release()
     await waitFor(() => expect(screen.queryByText('添加知识文档')).toBeNull())
   })

@@ -70,5 +70,41 @@
   "retrieve": "检索",
   "uploadIngest": "上传并入库",
   "selectDocMeta": "选择文档查看元数据",
-  "ingestAction": "入库"
+  "ingestAction": "入库",
+  "errors": {
+    "tooLarge": "文件不能超过 50 MB",
+    "empty": "不能上传空文件",
+    "unsupported": "暂不支持该文件类型",
+    "processFailed": "文档处理失败",
+    "streamEnded": "处理流结束但未返回文档",
+    "streamUnavailable": "进度流不可用"
+  },
+  "profiles": {
+    "markdown": "按标题结构切分 Markdown 文档",
+    "semantic": "按语义边界切分普通文本",
+    "code": "按代码结构切分源码和脚本",
+    "csv_row": "按表格行切分 CSV/TSV",
+    "json": "按结构读取 JSON 后递归切分",
+    "document": "按文档结构切分 PDF/DOCX"
+  },
+  "fields": {
+    "readerStrategy": "读取策略",
+    "headingSplit": "Markdown 标题切分",
+    "chunkSize": "分块大小",
+    "sectionMaxSize": "章节上限",
+    "overlap": "重叠",
+    "csvSkipHeader": "CSV 跳过表头",
+    "csvCleanRows": "CSV 清理空白",
+    "codeChunkSize": "代码分块大小",
+    "codeTokenizer": "代码分词器",
+    "includeNodes": "保留 AST 节点",
+    "semanticThreshold": "语义阈值",
+    "semanticWindow": "语义窗口",
+    "minSentences": "最少句子数",
+    "minSentenceLen": "最短句子长度"
+  },
+  "currentSourceFile": "当前源文件",
+  "updateTab": "更新",
+  "textTab": "文本",
+  "uploadTab": "上传"
 }
