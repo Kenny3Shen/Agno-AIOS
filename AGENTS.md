@@ -1,5 +1,3 @@
-
-
 开发环境为 WSL2 (Ubuntu 24.04)
 Python 开发使用 `uv + ruff + ty`：
 
@@ -21,7 +19,9 @@ MCP 框架为 FastMCP, 文档通过 fastmcp-docs mcp 查询
 
 前端验证使用 package scripts：
 
-- `cd frontend && bun run check`<scripts></scripts>
+- `cd frontend && bun run check`
+- `bun run build`
+  <scripts></scripts>
 
 测试账号
 

@@ -390,6 +390,7 @@ async def test_trace_detail_requests_all_spans_and_marks_response_complete() -> 
     with (
         patch.object(tracing_service._trace_db, "get_trace", fake_get_trace),
         patch.object(tracing_service._trace_db, "get_spans", fake_get_spans),
+        patch.object(tracing_service._trace_db, "get_session", AsyncMock(return_value=None)),
     ):
         result = await get_trace_detail("trace-1", actor=actor("owner"))
 
@@ -397,6 +398,44 @@ async def test_trace_detail_requests_all_spans_and_marks_response_complete() -> 
     assert result is not None
     assert result["spans_complete"] is True
     assert result["span_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_trace_detail_enriches_empty_agent_root_from_chat_run() -> None:
+    trace_record = SimpleNamespace(
+        to_dict=lambda: {
+            "trace_id": "trace-1",
+            "user_id": "owner",
+            "session_id": "session-1",
+            "run_id": "run-1",
+            "status": "OK",
+        }
+    )
+    root_span = SimpleNamespace(
+        to_dict=lambda: {
+            "span_id": "root",
+            "parent_span_id": None,
+            "status_code": "UNSET",
+            "attributes": {},
+        }
+    )
+    session = {"runs": [{"run_id": "run-1", "content": "final response"}]}
+
+    with (
+        patch.object(tracing_service._trace_db, "get_trace", AsyncMock(return_value=trace_record)),
+        patch.object(tracing_service._trace_db, "get_spans", AsyncMock(return_value=[root_span])),
+        patch.object(tracing_service._trace_db, "get_session", AsyncMock(return_value=session)),
+    ):
+        result = await get_trace_detail("trace-1", actor=actor("owner"))
+
+    assert result is not None
+    root = result["spans"][0]
+    assert root["status_code"] == "OK"
+    assert root["parsed"]["output"] == {
+        "format": "text",
+        "text": "final response",
+        "data": None,
+    }
 
 
 @pytest.mark.asyncio

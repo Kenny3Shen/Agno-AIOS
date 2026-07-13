@@ -6,7 +6,7 @@ from fastapi.encoders import jsonable_encoder
 from loguru import logger
 
 from api.auth.ownership import assert_owned_resource
-from api.services.postgres_store import get_async_agno_postgres_db
+from api.services.postgres_store import coerce_json_value, get_async_agno_postgres_db
 from api.services.trace_status_service import reconcile_trace_statuses, trace_has_status
 from api.utils.json import JSONDecodeError, dumps, loads
 
@@ -408,6 +408,52 @@ async def mark_trace_error(run_id: str) -> bool:
         return False
 
 
+async def _chat_run_output(session_id: str | None, run_id: str | None) -> str:
+    """Return the persisted assistant response for a traced chat run, if any."""
+    if not session_id or not run_id:
+        return ""
+    try:
+        session = await _trace_db.get_session(session_id, deserialize=False)
+    except Exception:
+        logger.exception("Unable to load chat run output for trace run {}", run_id)
+        return ""
+    if not isinstance(session, dict):
+        return ""
+    runs = coerce_json_value(session.get("runs"))
+    if not isinstance(runs, list):
+        return ""
+    for run in reversed(runs):
+        if not isinstance(run, dict) or str(run.get("run_id") or "") != run_id:
+            continue
+        content = run.get("content")
+        return content.strip() if isinstance(content, str) else ""
+    return ""
+
+
+def _enrich_root_spans(
+    spans: list[dict[str, Any]],
+    *,
+    trace_status: str | None,
+    chat_run_output: str,
+) -> None:
+    """Fill Agent root display fields absent from Agno's OpenTelemetry span."""
+    normalized_trace_status = str(trace_status or "").upper()
+    for span in spans:
+        if span.get("parent_span_id"):
+            continue
+        if (
+            str(span.get("status_code") or "").upper() == "UNSET"
+            and normalized_trace_status in {"OK", "ERROR"}
+        ):
+            span["status_code"] = normalized_trace_status
+        parsed = span.get("parsed")
+        if not isinstance(parsed, dict) or not chat_run_output:
+            continue
+        output = parsed.get("output")
+        if isinstance(output, dict) and output.get("format") == "empty":
+            parsed["output"] = _json_or_text(chat_run_output)
+
+
 def _build_span_tree(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Build a hierarchical span tree.
 
@@ -509,6 +555,25 @@ async def get_trace_detail(trace_id: str, actor: Any | None = None) -> dict[str,
         span["session_id"] = trace_dict.get("session_id")
         span["run_id"] = trace_dict.get("run_id")
         span["parsed"] = parse_span_display(span)
+    needs_root_output = any(
+        not span.get("parent_span_id")
+        and isinstance(span.get("parsed", {}).get("output"), dict)
+        and span["parsed"]["output"].get("format") == "empty"
+        for span in span_dicts
+    )
+    chat_run_output = (
+        await _chat_run_output(
+            str(trace_dict.get("session_id") or "") or None,
+            str(trace_dict.get("run_id") or "") or None,
+        )
+        if needs_root_output
+        else ""
+    )
+    _enrich_root_spans(
+        span_dicts,
+        trace_status=trace_dict.get("status"),
+        chat_run_output=chat_run_output,
+    )
     tree = _build_span_tree(span_dicts)
 
     return {

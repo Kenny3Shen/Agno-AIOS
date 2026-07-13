@@ -4,7 +4,7 @@ import { useRouter, useRouterState } from '@tanstack/react-router'
 import { cancelRun, streamMessage } from './api'
 import { chatKeys, historyQuery, modelsQuery, sessionsQuery } from './queries'
 import { chatReducer, defaultReasoningEffort, initialChatState, previousPrompt } from './utils'
-import type { ChatRunEvent, Message } from './types'
+import type { ChatRunEvent, ChatSession, Message } from './types'
 import type { ReasoningEffort } from '@/shared/types/common'
 
 export function useChat() {
@@ -54,6 +54,19 @@ export function useChat() {
     if (!text || state.requesting || !selectedModel?.enabled || !selectedModel.configured) return
     const activeSession = sessionId ?? crypto.randomUUID()
     if (!sessionId) setSession(activeSession)
+    if (!sessionId) {
+      const now = Date.now() / 1_000
+      const optimisticSession: ChatSession = {
+        session_id: activeSession,
+        preview: text,
+        created_at: now,
+        updated_at: now,
+      }
+      queryClient.setQueryData<ChatSession[]>(chatKeys.sessions(), (items) => [
+        optimisticSession,
+        ...(items ?? []).filter((item) => item.session_id !== activeSession),
+      ])
+    }
     const assistantId = crypto.randomUUID()
     const user: Message = { id: crypto.randomUUID(), role: 'user', content: text, final: true, session_id: activeSession }
     const assistant: Message = {
