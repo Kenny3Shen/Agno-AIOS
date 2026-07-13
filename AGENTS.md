@@ -17,11 +17,14 @@ MCP 框架为 FastMCP, 文档通过 fastmcp-docs mcp 查询
 
 - `bun install/add/ remove <package>`
 
-前端验证使用 package scripts：
+测试与构建使用 package scripts：
 
-- `cd frontend && bun run check` 测试
-- `bun run build` 构建
-  <scripts></scripts>
+`cd frontend && bun run check`
+
+`bun run build`
+
+提交commit时，需要更新 TODOS.md 和 README.md
+<scripts></scripts>
 
 测试账号
 

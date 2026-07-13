@@ -13,6 +13,14 @@
 - API：`POST /api/knowledge/documents/upload|text|file`、`/documents/{id}/update`、`/documents/{id}/update/upload`（`stream=true`）
 - 代码：`api/services/knowledge_progress.py`、`knowledge_source_service.py`、`frontend/src/features/knowledge/components/UpdateProgress.tsx`
 
+## 已完成：治理前端测试耗时
+
+- Vitest：`css: false`、`pool: 'forks'`、`maxWorkers: 4`、`testTimeout/hookTimeout: 8s`，去掉易超时的 `timeout 90s` 外壳。
+- 测试夹具：`ConfigProvider` 关闭 motion/hashed；QueryClient `retry: false` + `gcTime: 0`。
+- 交互：统一 `src/test/user.ts`（`delay: null`、`pointerEventsCheck: 0`），重型页面用 `setupUser()` / 共享 `user`。
+- 脚本：`bun run test`、`bun run test:profile`（verbose + 单 worker 便于定位慢用例）。
+- 全量 Vitest 墙钟约 20–30s 级（此前常见 60s+ 抖动），仍可继续拆 Knowledge 等整页套件或接 Playwright E2E。
+
 ## P0：补齐 Knowledge 更新验收矩阵
 
 实现层已支持原地替换、进度展示与失败保留旧内容。仍需用真实样例做端到端验收，关闭历史“跨类型假死/残留分块”风险。
@@ -57,17 +65,6 @@ Chat 历史来自会话存储，Trace 页面来自 tracing 数据库并通过 se
 
 测试应通过 API mock 或独立测试数据隔离运行，避免依赖开发数据库中已有的 Session 和文档。
 
-## P1：治理前端测试耗时
-
-当前 Vitest 在并发运行 DOM 重型页面测试时会出现超过默认 5 秒的抖动，因此临时将 `testTimeout` 调整为 10 秒。单 worker 下测试能够稳定通过，说明主要问题是资源竞争而不是功能失败。
-
-下一步：
-
-- 记录每个测试文件的耗时，优先拆分 Knowledge、Audit、Approvals 等重型页面测试。
-- 减少重复挂载完整 Ant Design 页面，能测试纯函数或局部组件时不启动整页。
-- 评估固定 `maxWorkers`、测试分组或 CI shard，选择总耗时和稳定性的平衡点。
-- 清理测试中的未匹配 MSW 请求和 React/Ant Design warning，避免真实错误被噪声淹没。
-
 ## P2：导航与治理能力补强
 
 - 深链进入 `/trace`、`/approvals`、`/cve` 等页面时，在默认两个分组之外自动展开当前路由所属分组。
@@ -76,7 +73,7 @@ Chat 历史来自会话存储，Trace 页面来自 tracing 数据库并通过 se
 
 ## 推荐实施顺序
 
-1. 先用 Knowledge 更新矩阵和 Trace 三个 Session 的数据对照，确认两个 P0 的剩余边界。
-2. 将复现路径固化为后端 fixture、前端单测和 Playwright E2E，防止修复再次回归。
-3. 再处理测试性能和导航深链体验，为后续治理功能提供稳定交付基线。
+1. 用 Knowledge 更新矩阵与 Trace 三个 Session 做数据对照，关闭剩余 P0 边界。
+2. 将复现路径固化为后端 fixture、前端单测和 Playwright E2E。
+3. 再处理导航深链体验；前端 Vitest 耗时治理已落地，后续按慢用例继续拆分即可。
 4. 最后设计审计外部集成，避免在核心数据一致性尚未稳定时扩大数据出口。

@@ -16,9 +16,16 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
-    css: true,
-    testTimeout: 10_000,
+    // Tests do not assert stylesheet rules; disabling CSS cuts jsdom parse cost.
+    css: false,
+    // DOM-heavy Ant Design suites thrash under high parallelism; keep a moderate worker cap.
+    fileParallelism: true,
+    maxWorkers: 4,
+    testTimeout: 8_000,
+    hookTimeout: 8_000,
+    pool: 'forks',
   },
+
   build: {
     outDir: 'dist',
     emptyOutDir: true,

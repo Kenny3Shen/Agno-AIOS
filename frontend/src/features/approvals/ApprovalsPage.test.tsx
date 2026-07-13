@@ -1,5 +1,5 @@
 import { screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { user } from '@/test/user'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { renderWithQuery } from '@/test/render'
@@ -61,7 +61,7 @@ describe('ApprovalsPage', () => {
     expect(screen.getAllByText('Approver').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Submitted at').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Resolved at').length).toBeGreaterThan(0)
-    await userEvent.click(screen.getByText('web-search'))
+    await user.click(screen.getByText('web-search'))
     expect(screen.getByText('Decision')).toBeTruthy()
     expect(screen.getByText('People')).toBeTruthy()
     expect(screen.getByText('Request data')).toBeTruthy()
@@ -71,11 +71,11 @@ describe('ApprovalsPage', () => {
     expect(screen.getAllByText('member@example.com').some((element) => element.classList.contains('metadata-copyable'))).toBe(true)
     expect(screen.getByText(/"name": "web-search"/)).toBeTruthy()
     expect((await screen.findAllByText('SKILL.md')).length).toBeGreaterThan(0)
-    await userEvent.click(screen.getAllByText('SKILL.md').at(-1)!)
+    await user.click(screen.getAllByText('SKILL.md').at(-1)!)
     expect(await screen.findByText('# Web search')).toBeTruthy()
-    await userEvent.click(screen.getByText('Markdown'))
+    await user.click(screen.getByText('Markdown'))
     expect(await screen.findByRole('heading', { name: 'Web search' })).toBeTruthy()
-    await userEvent.click(screen.getByRole('button', { name: /批准/ }))
+    await user.click(screen.getByRole('button', { name: /批准/ }))
     expect(await screen.findByText('审批已approved')).toBeTruthy()
     expect(screen.getByText('admin-1')).toBeTruthy()
     expect(screen.getAllByText('admin@example.com').length).toBeGreaterThan(0)
@@ -106,7 +106,7 @@ describe('ApprovalsPage', () => {
 
     renderWithQuery(<ApprovalsPage />)
 
-    await userEvent.click(await screen.findByText('approved-server'))
+    await user.click(await screen.findByText('approved-server'))
     expect(screen.getByText('已拒绝')).toBeTruthy()
     expect(screen.getAllByText('The server manifest is incomplete.').length).toBeGreaterThan(0)
     expect(screen.getAllByText('admin@example.com').length).toBeGreaterThan(0)

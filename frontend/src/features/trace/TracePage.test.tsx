@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { user } from '@/test/user'
 import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithQuery } from '@/test/render'
@@ -74,7 +74,7 @@ const cardByTitle = (title: string) => {
 }
 
 const clickPage = async (card: HTMLElement, page: number) => {
-  await userEvent.click(within(card).getByTitle(String(page)))
+  await user.click(within(card).getByTitle(String(page)))
 }
 
 const RouteHarness = () => {
@@ -139,21 +139,20 @@ describe('TracePage interactions', () => {
     expect(await screen.findByText('Session 1')).toBeTruthy()
     const sessionInput = screen.getByPlaceholderText('Session ID') as HTMLInputElement
     await clickPage(cardByTitle('Sessions'), 2)
-    await userEvent.click(await screen.findByRole('button', { name: /Session 9/ }))
+    await user.click(await screen.findByRole('button', { name: /Session 9/ }))
 
     expect(sessionInput.value).toBe('')
     expect(routerMock.push).toHaveBeenLastCalledWith('/trace?selected_session=s9')
     await waitFor(() => expect(traceRequests.some((params) => params.get('session_id') === 's9')).toBe(true))
 
     routerMock.searchStr = '?selected_session=s9'
-    await userEvent.click(screen.getByRole('button', { name: 'Sync route' }))
+    await user.click(screen.getByRole('button', { name: 'Sync route' }))
 
     expect((await screen.findByRole('button', { name: /Session 9/ })).getAttribute('aria-pressed')).toBe('true')
     expect(within(cardByTitle('Sessions')).queryByText('Session 1')).toBeNull()
   })
 
   it('submits Session ID searches as filters and clears selected_session', async () => {
-    const user = userEvent.setup()
     renderWithQuery(<TracePage />)
 
     const sessionInput = await screen.findByPlaceholderText('Session ID')
@@ -169,7 +168,7 @@ describe('TracePage interactions', () => {
   it('changes the Run page without selecting a run or writing run_id', async () => {
     renderWithQuery(<TracePage />)
 
-    await userEvent.click(await screen.findByRole('button', { name: /Session 1/ }))
+    await user.click(await screen.findByRole('button', { name: /Session 1/ }))
     expect(await within(cardByTitle('Runs & Spans')).findByText(/Run 1/)).toBeTruthy()
     routerMock.push.mockClear()
     await clickPage(cardByTitle('Runs & Spans'), 2)
@@ -182,7 +181,6 @@ describe('TracePage interactions', () => {
   })
 
   it('renders root spans as the top-level Run summaries and preserves span detail selection', async () => {
-    const user = userEvent.setup()
     renderWithQuery(<TracePage />)
 
     await user.click(await screen.findByRole('button', { name: /Session 1/ }))

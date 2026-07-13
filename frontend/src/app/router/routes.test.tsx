@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { setupUser } from '@/test/user'
 import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { App } from '@/app/App'
@@ -65,7 +65,7 @@ describe('app authentication routing', () => {
   })
 
   it('returns to a safe next route after successful login', async () => {
-    const client = userEvent.setup()
+    const client = setupUser()
     server.use(
       http.post('/api/auth/jwt/login', () => HttpResponse.json({ access_token: 'token' })),
       http.get('/api/auth/users/me', () => HttpResponse.json(user)),
@@ -80,7 +80,7 @@ describe('app authentication routing', () => {
   })
 
   it('uses dashboard as the default successful login target', async () => {
-    const client = userEvent.setup()
+    const client = setupUser()
     server.use(
       http.post('/api/auth/jwt/login', () => HttpResponse.json({ access_token: 'token' })),
       http.get('/api/auth/users/me', () => HttpResponse.json(user)),

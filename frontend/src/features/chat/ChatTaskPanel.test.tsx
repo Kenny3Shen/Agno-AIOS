@@ -1,6 +1,6 @@
 import dayjs from 'dayjs'
 import { screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { setupUser } from '@/test/user'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '@/shared/i18n'
 import { renderWithQuery } from '@/test/render'
@@ -71,7 +71,7 @@ describe('ChatTaskPanel', () => {
   })
 
   it('exposes a controlled expand toggle without rendering hidden content', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     const onExpandedChange = vi.fn<(expanded: boolean) => void>()
     renderWithQuery(<ChatTaskPanel expanded={false} onExpandedChange={onExpandedChange} variant="sider" />)
 
@@ -83,7 +83,7 @@ describe('ChatTaskPanel', () => {
   })
 
   it('opens conversations while notifying a mobile drawer to close', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     const onNavigate = vi.fn<() => void>()
     sessions.data = [
       {
@@ -105,7 +105,7 @@ describe('ChatTaskPanel', () => {
   })
 
   it('renders an empty state and retries a failed sessions query', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     const { unmount } = renderWithQuery(<ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} variant="sider" />)
     expect(screen.getByText('暂无对话')).toBeTruthy()
 

@@ -22,13 +22,6 @@ STAGE_LABELS: dict[KnowledgeProgressStage, str] = {
     "cleanup": "清理",
 }
 
-STAGE_DEFAULT_MESSAGES: dict[KnowledgeProgressStage, str] = {
-    "upload": "上传中",
-    "parse": "解析中",
-    "vectorize": "向量化中",
-    "cleanup": "清理中",
-}
-
 ProgressCallback = Callable[[Mapping[str, object]], Awaitable[None] | None]
 
 
@@ -45,7 +38,7 @@ def knowledge_progress_event(
         "stage": stage,
         "status": status,
         "label": STAGE_LABELS[stage],
-        "message": message or STAGE_DEFAULT_MESSAGES[stage],
+        "message": message or STAGE_LABELS[stage],
     }
     if document is not None:
         payload["document"] = dict(document)
@@ -75,7 +68,6 @@ def initial_progress_stages(
             knowledge_progress_event(
                 stage,
                 "pending",
-                message=STAGE_DEFAULT_MESSAGES[stage],
             )
         )
     return stages

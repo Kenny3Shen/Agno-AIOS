@@ -29,11 +29,12 @@
     "lint:fix": "oxlint src vite.config.ts uno.config.ts --fix",
     "format": "oxfmt --write --disable-nested-config",
     "format:check": "oxfmt --check --disable-nested-config",
-    "test": "timeout 90s vitest run",
+    "test": "vitest run",
     "test:auth": "vitest run src/features/auth",
     "test:shell": "bun run test",
     "test:related": "vitest related --run",
     "test:debug": "vitest run --reporter=verbose --maxWorkers=1",
+    "test:profile": "vitest run --reporter=verbose --maxWorkers=1",
     "check:fast": "bun run lint && bun run typecheck",
     "check": "bun run lint && bun run test && bun run build",
     "preview": "vite preview"

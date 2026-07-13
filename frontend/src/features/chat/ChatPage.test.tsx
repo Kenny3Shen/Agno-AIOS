@@ -1,5 +1,5 @@
 import { screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { setupUser } from '@/test/user'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithQuery } from '@/test/render'
 import { ChatPage } from './ChatPage'
@@ -90,7 +90,7 @@ describe('chat model settings', () => {
   })
 
   it('keeps the full selected model name available in the model settings menu', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     renderWithQuery(<ChatPage />)
 
     expect(document.querySelector('.model-select-value')?.getAttribute('title')).toBe(longModelName)
@@ -99,7 +99,7 @@ describe('chat model settings', () => {
   })
 
   it('keeps the model menu open after selecting a model', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     renderWithQuery(<ChatPage />)
 
     await user.click(screen.getByRole('button', { name: '模型与推理强度' }))
@@ -109,7 +109,7 @@ describe('chat model settings', () => {
   })
 
   it('changes reasoning effort from the cascader menu', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     renderWithQuery(<ChatPage />)
 
     await user.click(screen.getByRole('button', { name: '模型与推理强度' }))
@@ -119,7 +119,7 @@ describe('chat model settings', () => {
   })
 
   it('offers focused security investigation starters that populate the composer', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     renderWithQuery(<ChatPage />)
 
     await user.click(screen.getByRole('button', { name: /分析最新 CVE 对现有资产的影响/ }))

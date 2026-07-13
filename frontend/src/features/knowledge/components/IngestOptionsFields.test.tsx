@@ -1,6 +1,6 @@
 import { Form, Input } from 'antd'
 import { screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { setupUser } from '@/test/user'
 import { describe, expect, it } from 'vitest'
 import { renderWithQuery } from '@/test/render'
 import { IngestOptionsFields } from './IngestOptionsFields'
@@ -18,7 +18,7 @@ function renderOptions(initialValues: Record<string, unknown>) {
 
 describe('knowledge ingest option fields', () => {
   it('shows Markdown options and explains chunk size tradeoffs', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     renderOptions({ file_name: 'runbook.md' })
 
     expect(screen.getByText('Markdown')).toBeTruthy()
@@ -31,7 +31,7 @@ describe('knowledge ingest option fields', () => {
   })
 
   it('switches options when replacement filename changes', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     renderOptions({ file_name: 'runbook.csv' })
 
     await user.click(screen.getByText('高级分块参数'))
@@ -45,7 +45,7 @@ describe('knowledge ingest option fields', () => {
   })
 
   it('uses semantic options for plain text and no suffix input', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     renderOptions({ file_name: 'notes.txt' })
 
     await user.click(screen.getByText('高级分块参数'))

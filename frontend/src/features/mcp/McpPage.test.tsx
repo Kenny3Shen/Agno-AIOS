@@ -1,5 +1,5 @@
 import { screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { user } from '@/test/user'
 import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { renderWithQuery } from '@/test/render'
@@ -60,7 +60,7 @@ describe('McpPage component permissions', () => {
     const componentSwitch = await screen.findByRole('switch', { name: 'shared.inspect enabled' })
     expect((componentSwitch as HTMLButtonElement).disabled).toBe(true)
 
-    await userEvent.click(componentSwitch)
+    await user.click(componentSwitch)
     expect(componentSwitch.getAttribute('aria-checked')).toBe('true')
   })
 })

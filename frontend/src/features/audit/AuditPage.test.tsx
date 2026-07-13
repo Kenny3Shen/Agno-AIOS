@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { setupUser } from '@/test/user'
 import { describe, expect, it } from 'vitest'
 import { server } from '@/test/server'
 import { renderWithQuery } from '@/test/render'
@@ -31,7 +31,7 @@ const response = (page: number, limit: number): AuditLogResponse => ({
 
 describe('audit page workflow', () => {
   it('queries by user, paginates results and opens row details', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     const requests: URL[] = []
     server.use(
       http.get('/api/audit/logs', ({ request }) => {

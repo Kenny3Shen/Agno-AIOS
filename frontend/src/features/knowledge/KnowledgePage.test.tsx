@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { setupUser } from '@/test/user'
 import { describe, expect, it } from 'vitest'
 import { server } from '@/test/server'
 import { renderWithQuery } from '@/test/render'
@@ -28,7 +28,7 @@ const response = (document: Document): KnowledgeResponse => ({
   pagination: { page: 1, limit: 100, total: 1 },
 })
 
-async function clickUpdateAction(user: ReturnType<typeof userEvent.setup>) {
+async function clickUpdateAction(user: ReturnType<typeof setupUser>) {
   const button = document.querySelector('button[aria-label="更新 Runbook"]')
   expect(button).toBeTruthy()
   await user.click(button as HTMLButtonElement)
@@ -36,7 +36,7 @@ async function clickUpdateAction(user: ReturnType<typeof userEvent.setup>) {
 
 describe('knowledge document workflow', () => {
   it('submits metadata-only changes from the update tab', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     const updated = { ...oldDocument, source: 'Runbooks' }
     let saved = false
     server.use(
@@ -60,7 +60,7 @@ describe('knowledge document workflow', () => {
   })
 
   it('keeps the document selected when text replacement revectorizes in place', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     const newDocument = { ...oldDocument, chunks: 4 }
     let replaced = false
     server.use(
@@ -91,7 +91,7 @@ describe('knowledge document workflow', () => {
   })
 
   it('keeps the document selected when uploaded replacement revectorizes in place', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     const newDocument = { ...oldDocument, chunks: 5, metadata: { file_name: 'uploaded.md' } }
     let replaced = false
     let release!: () => void
@@ -151,7 +151,7 @@ describe('knowledge document workflow', () => {
   })
 
   it('shows four-stage progress while replacing text content', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     const newDocument = { ...oldDocument, chunks: 4 }
     let replaced = false
     let release!: () => void
@@ -204,7 +204,7 @@ describe('knowledge document workflow', () => {
   })
 
   it('submits rebuild advanced chunking options from the update tab', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     const rebuilt = { ...oldDocument, chunks: 6, metadata: { file_name: 'runbook.md', chunk_size: '1800' } }
     let rebuiltDocument = false
     server.use(
@@ -234,7 +234,7 @@ describe('knowledge document workflow', () => {
   })
 
   it('shows a single save action in the tab bar without an explicit rebuild switch', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     server.use(http.get('/api/knowledge', () => HttpResponse.json(response(oldDocument))))
     renderWithQuery(<KnowledgePage />)
 
@@ -248,7 +248,7 @@ describe('knowledge document workflow', () => {
   })
 
   it('does not call update when the update tab has no changes', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     let updateCalls = 0
     server.use(
       http.get('/api/knowledge', () => HttpResponse.json(response(oldDocument))),
@@ -304,7 +304,7 @@ describe('knowledge document workflow', () => {
   })
 
   it('shows four-stage progress while creating an upload', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     const created = { ...oldDocument, id: 'doc-new', chunks: 2 }
     let release!: () => void
     const gate = new Promise<void>((resolve) => {
@@ -356,7 +356,7 @@ describe('knowledge document workflow', () => {
   })
 
   it('shows concrete advanced chunking defaults from runtime settings', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     server.use(http.get('/api/knowledge', () => HttpResponse.json(response(oldDocument))))
     renderWithQuery(<KnowledgePage />)
 
