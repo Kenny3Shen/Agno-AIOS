@@ -61,5 +61,6 @@
     "hoursAgo": "{{count}} 小时前",
     "yesterday": "昨天",
     "daysAgo": "{{count}} 天前"
-  }
+  },
+  "deleteNotification": "删除通知"
 }

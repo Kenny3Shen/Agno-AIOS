@@ -61,5 +61,6 @@
     "hoursAgo": "{{count}} hr ago",
     "yesterday": "Yesterday",
     "daysAgo": "{{count}} days ago"
-  }
+  },
+  "deleteNotification": "Delete notification"
 }

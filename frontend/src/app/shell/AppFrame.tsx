@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 import {
@@ -30,6 +30,7 @@ import {
   CloseCircleOutlined,
   CodeOutlined,
   DatabaseOutlined,
+  DeleteOutlined,
   ExperimentOutlined,
   FileSearchOutlined,
   GithubOutlined,
@@ -48,7 +49,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { currentUserQuery, logout } from '@/features/auth'
 import { ChatTaskPanel } from '@/features/chat/ChatTaskPanel'
-import { getNotifications, markAllNotificationsRead, markNotificationRead, type Notification } from '@/features/notifications/api'
+import { deleteNotification, getNotifications, markAllNotificationsRead, markNotificationRead, type Notification } from '@/features/notifications/api'
 import { loginPath, nextPathFromLocation } from '@/features/auth/routing'
 import { getToken } from '@/shared/auth/storage'
 import { hasScope } from '@/shared/auth/permissions'
@@ -145,6 +146,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const [mobileRecentConversationsExpanded, setMobileRecentConversationsExpanded] = useState(false)
   const [notificationOpen, setNotificationOpen] = useState(false)
   const [markingAllNotifications, setMarkingAllNotifications] = useState(false)
+  const [deletingNotificationId, setDeletingNotificationId] = useState<number | null>(null)
   const path = useRouterState({ select: (state) => state.location.pathname })
   const searchStr = useRouterState({ select: (state) => state.location.searchStr })
   const currentNextPath = nextPathFromLocation({ pathname: path, searchStr })
@@ -239,6 +241,19 @@ export function AppFrame({ children }: { children: ReactNode }) {
       await queryClient.invalidateQueries({ queryKey: ['notifications'] })
     } finally {
       setMarkingAllNotifications(false)
+    }
+  }
+
+  const removeNotification = async (event: MouseEvent, notification: Notification) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!notification.read || deletingNotificationId != null) return
+    setDeletingNotificationId(notification.id)
+    try {
+      await deleteNotification(notification.id)
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    } finally {
+      setDeletingNotificationId(null)
     }
   }
   useEffect(() => {
@@ -357,22 +372,38 @@ export function AppFrame({ children }: { children: ReactNode }) {
                         notificationsQuery.data.notifications.slice(0, 6).map((notification) => {
                           const kind = notificationKind(notification)
                           return (
-                            <button
+                            <div
                               key={notification.id}
-                              type="button"
                               className={`notification-item ${notification.read ? 'notification-item-read' : 'notification-item-unread'}`}
-                              onClick={() => void openNotification(notification)}
                             >
-                              <span className={`notification-item-icon ${kind.className}`}>{kind.icon}</span>
-                              <span className="notification-item-content">
-                                <span className="notification-item-title">{notification.title}</span>
-                                <span className="notification-item-body" title={notification.body}>
-                                  {notification.body}
+                              <button
+                                type="button"
+                                className="notification-item-main"
+                                onClick={() => void openNotification(notification)}
+                              >
+                                <span className={`notification-item-icon ${kind.className}`}>{kind.icon}</span>
+                                <span className="notification-item-content">
+                                  <span className="notification-item-title">{notification.title}</span>
+                                  <span className="notification-item-body" title={notification.body}>
+                                    {notification.body}
+                                  </span>
+                                  <span className="notification-item-time">{relativeTime(notification.created_at, t)}</span>
                                 </span>
-                                <span className="notification-item-time">{relativeTime(notification.created_at, t)}</span>
-                              </span>
-                              {!notification.read && <span className="notification-item-unread-dot" aria-label={t('shell:unread')} />}
-                            </button>
+                                {!notification.read && <span className="notification-item-unread-dot" aria-label={t('shell:unread')} />}
+                              </button>
+                              {notification.read ? (
+                                <Button
+                                  type="text"
+                                  size="small"
+                                  danger
+                                  className="notification-item-delete"
+                                  icon={<DeleteOutlined />}
+                                  loading={deletingNotificationId === notification.id}
+                                  aria-label={t('shell:deleteNotification')}
+                                  onClick={(event) => void removeNotification(event, notification)}
+                                />
+                              ) : null}
+                            </div>
                           )
                         })
                       ) : (

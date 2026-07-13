@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from sqlalchemy import BigInteger, Boolean, Column, MetaData, String, Table, Text, func, select, update
+from sqlalchemy import BigInteger, Boolean, Column, MetaData, String, Table, Text, delete, func, select, update
 from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.schema import CreateSchema
 
@@ -68,3 +68,16 @@ async def mark_all_notifications_read(user_id: str) -> int:
             .values(read=True, read_at=int(time.time()))
         )
     return int(result.rowcount or 0)
+
+async def delete_notification(notification_id: int, user_id: str) -> bool:
+    """Delete one notification owned by the given user.
+
+    Only rows matching both id and user_id are removed so callers cannot delete
+    another account's notifications even with a guessed id.
+    """
+    await _ensure()
+    table = _table()
+    async with get_async_control_plane_engine().begin() as conn:
+        result = await conn.execute(delete(table).where(table.c.id == notification_id, table.c.user_id == user_id))
+    return bool(result.rowcount)
+

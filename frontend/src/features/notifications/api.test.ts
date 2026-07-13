@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { server } from '@/test/server'
-import { getNotifications, markAllNotificationsRead, markNotificationRead } from './api'
+import { deleteNotification, getNotifications, markAllNotificationsRead, markNotificationRead } from './api'
 
 describe('notifications API', () => {
   it('loads notifications and marks a notification as read', async () => {
@@ -21,3 +21,9 @@ describe('notifications API', () => {
     await expect(markAllNotificationsRead()).resolves.toEqual({ updated_count: 1 })
   })
 })
+
+  it('deletes a notification', async () => {
+    server.use(http.delete('/api/notifications/7', () => HttpResponse.json({ success: true })))
+    await expect(deleteNotification(7)).resolves.toEqual({ success: true })
+  })
+

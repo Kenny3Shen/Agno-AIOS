@@ -112,7 +112,7 @@ flowchart LR
     Retrieval --> PgVector["PgVector<br/>向量检索"]
 ```
 
-- `frontend/src/app`：Provider、Router、Shell 与全局样式。
+- `frontend/src/app`：Provider、Router、Shell（含通知中心已读删除）与全局样式。
 - `frontend/src/features`：按领域划分的页面和逻辑。
 - `frontend/src/shared`：API client、认证、i18n（`shared/i18n/namespaces/*` 按 feature 拆分 zh-CN/en-US）、类型与通用 UI。
 - `api/`：认证、路由、服务、MCP 运行时、任务与测试。

@@ -20,3 +20,5 @@ export const getNotifications = () => requestJson<NotificationsResponse>('/notif
 export const markNotificationRead = (id: number) =>
   requestJson<{ success: boolean }>(`/notifications/${encodeURIComponent(id)}/read`, jsonInit('POST'))
 export const markAllNotificationsRead = () => requestJson<{ updated_count: number }>('/notifications/read-all', jsonInit('POST'))
+export const deleteNotification = (id: number) =>
+  requestJson<{ success: boolean }>(`/notifications/${encodeURIComponent(id)}`, jsonInit('DELETE'))

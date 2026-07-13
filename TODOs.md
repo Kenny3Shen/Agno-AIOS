@@ -33,6 +33,7 @@
 - P0：Chat、Dashboard、通用按钮/空态/Toast 文案接入 `react-i18next`。
 - P1：Knowledge（含 Drawer/Progress/IngestOptions/文件校验与 Reader 说明）、Settings、MCP、Approvals。
 - P1 外壳：通知中心标题/未读数/全部已读/相对时间与 `shell` 命名空间对齐。
+- 通知中心：已读消息支持删除（`DELETE /api/notifications/{id}`，仅本人数据）。
 - P2：Trace、Audit、CVE、Collect、Memory、Skills、Evaluations、Workflow 页面标题与主操作。
 - 工程化：`formatDate`/`useFormatDate` 跟随当前 locale；测试 setup 初始化 i18n；语言切换仍由 `AppProviders` + Ant Design locale 驱动。
 - 已知边界：表格列名/部分运维字段仍可保留英文；后端 `detail` 与 SSE 进度原文尚未做后端 i18n。
