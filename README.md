@@ -37,16 +37,19 @@ VITE_API_PROXY_TARGET=http://127.0.0.1:8001 /home/shenss/.bun/bin/bun run dev
 可通过以下环境变量创建初始管理员：
 
 ```bash
-AGNO_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
-AGNO_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
+TAIS_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+TAIS_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
 ```
 
 ## 配置与运维
 
+- 版本号以 `pyproject.toml` 的 `[project].version` 为唯一来源；API `app_version` / OpenAPI `version` 默认从已安装包元数据读取，可用 `APP_VERSION` 覆盖。发版时同步 `frontend/package.json` 的 `version`。
+- 环境变量：应用配置使用 `TAIS_*` / 领域名（`POSTGRES_*`、`AUTH_*`、`MCP_*`）；`AGNO_*` 仅用于引擎耦合（如 `AGNO_DB_SCHEMA`）。
+- CVE 情报源配置为仓库根目录 `cve_sources.toml`（可用 `TAIS_CVE_SOURCE_CONFIG_PATH` 覆盖）。
 - `POSTGRES_*` / `POSTGRES_URL`：PostgreSQL 连接。
 - `AUTH_JWT_SECRET`：JWT 密钥；生产环境必须替换默认值。
-- `AGNO_BOOTSTRAP_ADMIN_EMAIL`、`AGNO_BOOTSTRAP_ADMIN_PASSWORD`：可选的初始管理员。
-- `AGNO_KNOWLEDGE_*`：Knowledge chunk、search、rerank 与 PgVector 配置。
+- `TAIS_BOOTSTRAP_ADMIN_EMAIL`、`TAIS_BOOTSTRAP_ADMIN_PASSWORD`：可选的初始管理员。
+- `TAIS_KNOWLEDGE_*`：Knowledge chunk、search、rerank 与 PgVector 配置。
 - `VITE_API_PROXY_TARGET`：前端开发代理地址。
 
 前端生产构建：

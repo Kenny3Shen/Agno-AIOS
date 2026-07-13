@@ -29,6 +29,6 @@ MCP 框架为 FastMCP, 文档通过 fastmcp-docs mcp 查询
 测试账号
 
 ```bash
-AGNO_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
-AGNO_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
+TAIS_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+TAIS_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
 ```

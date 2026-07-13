@@ -21,35 +21,11 @@
 - 脚本：`bun run test`、`bun run test:profile`（verbose + 单 worker 便于定位慢用例）。
 - 全量 Vitest 墙钟约 20–30s 级（此前常见 60s+ 抖动），仍可继续拆 Knowledge 等整页套件或接 Playwright E2E。
 
-## P0：补齐 Knowledge 更新验收矩阵
+## 已完成：环境变量命名分层
 
-实现层已支持原地替换、进度展示与失败保留旧内容。仍需用真实样例做端到端验收，关闭历史“跨类型假死/残留分块”风险。
-
-下一步：
-
-1. 建立 Markdown、TXT、JSON、CSV、Python/JavaScript、PDF/DOCX 的更新矩阵，覆盖同类型更新与跨类型更新。
-2. 每个样例记录文档 ID、旧/新 reader profile、向量分块数量、上传文件路径和最终检索结果。
-3. 对替换流程做失败注入（解析失败、向量化失败），确认旧文档仍可检索、无孤立 shadow 分块或临时上传文件。
-4. 使用 Playwright 覆盖 Drawer 提交、阶段进度、失败提示、选中文档保持和更新后检索。
-5. 若矩阵全部通过，关闭该 P0；若仍失败，定位到前端决策、API multipart、Agno reader 或生命周期清理中的具体一层。
-
-## P0：诊断 Trace 历史 Run 缺失
-
-已知 Session：
-
-- `23cc01e7-3479-4012-ba39-a05aec614131`
-- `1dbdb90c-9c0c-4673-857e-0a5d0ce7ab6a`
-- `5375db29-613c-4edf-bdeb-312d3835c151`
-
-Chat 历史来自会话存储，Trace 页面来自 tracing 数据库并通过 session、run、trace 三层映射展示，因此 Chat 有内容不代表 Trace 数据一定存在。
-
-下一步：
-
-1. 对三个 Session 分别导出 Chat runs、Trace session summary、trace 列表和 span detail，形成逐层对照。
-2. 检查 run ID、session ID、trace ID 是否在流式事件、Agno 持久化和 tracing exporter 之间发生丢失或格式变化。
-3. 区分三种结果：Trace 从未写入、Trace 已写入但查询过滤错误、Trace 存在但前端分组/根 Span 选择错误。
-4. 对可恢复数据提供后端回填或读取回退；对不可恢复数据在 UI 中显示原因，而不是空白详情。
-5. 将三个 Session 转换为脱敏回归 fixture，覆盖列表、分页、根 Span 和详情回退。
+- 应用配置使用 `TAIS_*` / 领域名（`POSTGRES_*`、`AUTH_*`、`MCP_*`）；`AGNO_*` 仅用于引擎耦合（如 `AGNO_DB_SCHEMA`）。
+- Settings、`.env.example`、Knowledge 运行时 RAG 键、CVE skill / update lock 使用 `TAIS_*`；不保留应用侧 `AGNO_*` / `APP_*` 别名。
+- 版本号仍以 `pyproject.toml` 为准；OpenAPI title / `APP_NAME` 对齐 `T.A.I.S API`；CVE 源配置文件为 `cve_sources.toml`。
 
 ## P1：建立关键流程 E2E
 

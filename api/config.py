@@ -1,23 +1,42 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from importlib.metadata import PackageNotFoundError, version as package_version
 from pathlib import Path
 from urllib.parse import quote_plus
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Single source: pyproject.toml [project].version (via importlib.metadata after install/uv sync).
+_PACKAGE_NAME = "agno-aios"
+
+
+def _default_app_version() -> str:
+    try:
+        return package_version(_PACKAGE_NAME)
+    except PackageNotFoundError:
+        return "0.0.0-dev"
+
 
 class Settings(BaseSettings):
+    """Runtime settings.
+
+    Env naming:
+    - TAIS_* / domain names (POSTGRES_*, AUTH_*, MCP_*): application config
+    - AGNO_*: Agno engine coupling only (e.g. AGNO_DB_SCHEMA)
+    """
+
     model_config = SettingsConfigDict(
         case_sensitive=False,
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
-    app_name: str = "Trinity AI Security API"
-    app_version: str = "0.5.0"
+    app_name: str = "T.A.I.S API"
+    app_version: str = Field(default_factory=_default_app_version)
     environment: str = "development"
 
     log_level: str = "INFO"
@@ -26,111 +45,155 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
 
-    postgres_host: str = Field(
-        default="localhost", validation_alias=AliasChoices("POSTGRES_HOST", "AGNO_POSTGRES_HOST")
-    )
-    postgres_port: int = Field(
-        default=5432, validation_alias=AliasChoices("POSTGRES_PORT", "AGNO_POSTGRES_PORT")
-    )
-    postgres_user: str = Field(
-        default="agno_aios", validation_alias=AliasChoices("POSTGRES_USER", "AGNO_POSTGRES_USER")
-    )
+    postgres_host: str = Field(default="localhost", validation_alias="POSTGRES_HOST")
+    postgres_port: int = Field(default=5432, validation_alias="POSTGRES_PORT")
+    postgres_user: str = Field(default="agno_aios", validation_alias="POSTGRES_USER")
     postgres_password: SecretStr = Field(
         default=SecretStr("agno_aios"),
-        validation_alias=AliasChoices("POSTGRES_PASSWORD", "AGNO_POSTGRES_PASSWORD"),
+        validation_alias="POSTGRES_PASSWORD",
     )
-    postgres_db: str = Field(
-        default="agno_aios", validation_alias=AliasChoices("POSTGRES_DB", "AGNO_POSTGRES_DB")
-    )
-    postgres_url: str | None = Field(
-        default=None, validation_alias=AliasChoices("AGNO_POSTGRES_URL", "POSTGRES_URL")
-    )
+    postgres_db: str = Field(default="agno_aios", validation_alias="POSTGRES_DB")
+    postgres_url: str | None = Field(default=None, validation_alias="POSTGRES_URL")
     postgres_sqlalchemy_url_override: str | None = Field(
-        default=None, validation_alias="AGNO_POSTGRES_SQLALCHEMY_URL"
+        default=None,
+        validation_alias="TAIS_POSTGRES_SQLALCHEMY_URL",
     )
 
-    agno_app_schema: str = "app"
-    agno_db_schema: str = "agno"
-    agno_mcp_schema: str = "mcp"
-    agno_knowledge_schema: str = "knowledge"
-    agno_postgres_knowledge_table: str = "agno_knowledge"
+    # App control-plane schema (business tables).
+    agno_app_schema: str = Field(default="app", validation_alias="TAIS_APP_SCHEMA")
+    # Agno engine persistence schema.
+    agno_db_schema: str = Field(default="agno", validation_alias="AGNO_DB_SCHEMA")
+    agno_mcp_schema: str = Field(default="mcp", validation_alias="TAIS_MCP_SCHEMA")
+    agno_knowledge_schema: str = Field(
+        default="knowledge",
+        validation_alias="TAIS_KNOWLEDGE_SCHEMA",
+    )
+    agno_postgres_knowledge_table: str = Field(
+        default="agno_knowledge",
+        validation_alias="TAIS_POSTGRES_KNOWLEDGE_TABLE",
+    )
 
-    agno_knowledge_name: str = "security_knowledge"
-    agno_knowledge_pgvector_table: str = "security_knowledge_vectors"
+    agno_knowledge_name: str = Field(
+        default="security_knowledge",
+        validation_alias="TAIS_KNOWLEDGE_NAME",
+    )
+    agno_knowledge_pgvector_table: str = Field(
+        default="security_knowledge_vectors",
+        validation_alias="TAIS_KNOWLEDGE_PGVECTOR_TABLE",
+    )
     agno_knowledge_upload_dir: Path = Field(
         default=Path(".config/knowledge_uploads"),
-        validation_alias="AGNO_KNOWLEDGE_UPLOAD_DIR",
+        validation_alias="TAIS_KNOWLEDGE_UPLOAD_DIR",
     )
-    agno_knowledge_embedding_model: str = "BAAI/bge-small-zh-v1.5"
-    agno_knowledge_embedding_dimensions: int = 512
-    agno_knowledge_rerank_model: str = "BAAI/bge-reranker-base"
-    agno_knowledge_query_prompt: str = "为这个句子生成表示以用于检索相关文章："
-    agno_knowledge_top_k: int = 5
-    agno_knowledge_chunk_size: int = 1200
-    agno_knowledge_chunk_overlap: int = 160
-    agno_knowledge_code_chunk_size: int = 1800
-    agno_knowledge_semantic_threshold: float = 0.52
-    agno_knowledge_vector_score_weight: float = 0.55
-    agno_knowledge_content_language: str = "english"
-    agno_knowledge_prefix_match: bool = False
-    agno_knowledge_rerank_enabled: bool = True
-    agno_knowledge_rerank_candidate_multiplier: int = 3
-    agno_knowledge_rerank_min_candidates: int = 10
-    agno_knowledge_device: str = "auto"
-    agno_knowledge_search_type: str = "hybrid"
-    agno_knowledge_rerank_use_fp16: bool = False
-    agno_model_config_file: str | None = None
-    agno_skills_dir: str | None = None
-    agno_skills_config_file: str | None = None
+    agno_knowledge_embedding_model: str = Field(
+        default="BAAI/bge-small-zh-v1.5",
+        validation_alias="TAIS_KNOWLEDGE_EMBEDDING_MODEL",
+    )
+    agno_knowledge_embedding_dimensions: int = Field(
+        default=512,
+        validation_alias="TAIS_KNOWLEDGE_EMBEDDING_DIMENSIONS",
+    )
+    agno_knowledge_rerank_model: str = Field(
+        default="BAAI/bge-reranker-base",
+        validation_alias="TAIS_KNOWLEDGE_RERANK_MODEL",
+    )
+    agno_knowledge_query_prompt: str = Field(
+        default="为这个句子生成表示以用于检索相关文章：",
+        validation_alias="TAIS_KNOWLEDGE_QUERY_PROMPT",
+    )
+    agno_knowledge_top_k: int = Field(default=5, validation_alias="TAIS_KNOWLEDGE_TOP_K")
+    agno_knowledge_chunk_size: int = Field(
+        default=1200,
+        validation_alias="TAIS_KNOWLEDGE_CHUNK_SIZE",
+    )
+    agno_knowledge_chunk_overlap: int = Field(
+        default=160,
+        validation_alias="TAIS_KNOWLEDGE_CHUNK_OVERLAP",
+    )
+    agno_knowledge_code_chunk_size: int = Field(
+        default=1800,
+        validation_alias="TAIS_KNOWLEDGE_CODE_CHUNK_SIZE",
+    )
+    agno_knowledge_semantic_threshold: float = Field(
+        default=0.52,
+        validation_alias="TAIS_KNOWLEDGE_SEMANTIC_THRESHOLD",
+    )
+    agno_knowledge_vector_score_weight: float = Field(
+        default=0.55,
+        validation_alias="TAIS_KNOWLEDGE_VECTOR_SCORE_WEIGHT",
+    )
+    agno_knowledge_content_language: str = Field(
+        default="english",
+        validation_alias="TAIS_KNOWLEDGE_CONTENT_LANGUAGE",
+    )
+    agno_knowledge_prefix_match: bool = Field(
+        default=False,
+        validation_alias="TAIS_KNOWLEDGE_PREFIX_MATCH",
+    )
+    agno_knowledge_rerank_enabled: bool = Field(
+        default=True,
+        validation_alias="TAIS_KNOWLEDGE_RERANK_ENABLED",
+    )
+    agno_knowledge_rerank_candidate_multiplier: int = Field(
+        default=3,
+        validation_alias="TAIS_KNOWLEDGE_RERANK_CANDIDATE_MULTIPLIER",
+    )
+    agno_knowledge_rerank_min_candidates: int = Field(
+        default=10,
+        validation_alias="TAIS_KNOWLEDGE_RERANK_MIN_CANDIDATES",
+    )
+    agno_knowledge_device: str = Field(
+        default="auto",
+        validation_alias="TAIS_KNOWLEDGE_DEVICE",
+    )
+    agno_knowledge_search_type: str = Field(
+        default="hybrid",
+        validation_alias="TAIS_KNOWLEDGE_SEARCH_TYPE",
+    )
+    agno_knowledge_rerank_use_fp16: bool = Field(
+        default=False,
+        validation_alias="TAIS_KNOWLEDGE_RERANK_USE_FP16",
+    )
+    agno_model_config_file: str | None = Field(
+        default=None,
+        validation_alias="TAIS_MODEL_CONFIG_FILE",
+    )
+    agno_skills_dir: str | None = Field(default=None, validation_alias="TAIS_SKILLS_DIR")
+    agno_skills_config_file: str | None = Field(
+        default=None,
+        validation_alias="TAIS_SKILLS_CONFIG_FILE",
+    )
     agno_upload_approval_dir: Path = Field(
         default=Path(".config/upload_approvals"),
-        validation_alias="AGNO_UPLOAD_APPROVAL_DIR",
+        validation_alias="TAIS_UPLOAD_APPROVAL_DIR",
     )
 
     cve_source_config_path: str = Field(
-        default="config.toml",
-        validation_alias=AliasChoices(
-            "AGNO_CVE_SOURCE_CONFIG_PATH",
-            "CVE_SOURCE_CONFIG_PATH",
-            "CONFIG_PATH",
-        ),
+        default="cve_sources.toml",
+        validation_alias="TAIS_CVE_SOURCE_CONFIG_PATH",
     )
     cve_data_dir: Path = Field(
         default=Path(".config/cve"),
-        validation_alias=AliasChoices("AGNO_CVE_DATA_DIR", "CVE_DATA_DIR"),
+        validation_alias="TAIS_CVE_DATA_DIR",
     )
     cve_update_lock_path: Path = Field(
         default=Path("tmp/run_update_cve.lock"),
-        validation_alias=AliasChoices("AGNO_CVE_UPDATE_LOCK_PATH", "CVE_UPDATE_LOCK_PATH"),
+        validation_alias="TAIS_CVE_UPDATE_LOCK_PATH",
     )
-    github_token: SecretStr = Field(
-        default=SecretStr(""),
-        validation_alias=AliasChoices("AGNO_GITHUB_TOKEN", "GITHUB_TOKEN"),
-    )
+    github_token: SecretStr = Field(default=SecretStr(""), validation_alias="GITHUB_TOKEN")
 
-    w5_soar_token: SecretStr = Field(
-        default=SecretStr(""),
-        validation_alias=AliasChoices("AGNO_W5_SOAR_TOKEN", "W5_SOAR_TOKEN"),
-    )
-    w5_api_base: str = Field(
-        default="",
-        validation_alias=AliasChoices("AGNO_W5_API_BASE", "W5_API_BASE"),
-    )
+    w5_soar_token: SecretStr = Field(default=SecretStr(""), validation_alias="W5_SOAR_TOKEN")
+    w5_api_base: str = Field(default="", validation_alias="W5_API_BASE")
     octomation_token: SecretStr = Field(
         default=SecretStr(""),
-        validation_alias=AliasChoices("AGNO_OCTOMATION_TOKEN", "OCTOMATION_TOKEN"),
+        validation_alias="OCTOMATION_TOKEN",
     )
-    octomation_api_base: str = Field(
-        default="",
-        validation_alias=AliasChoices(
-            "AGNO_OCTOMATION_API_BASE",
-            "OCTOMATION_API_BASE",
-        ),
-    )
+    octomation_api_base: str = Field(default="", validation_alias="OCTOMATION_API_BASE")
 
     mcp_server_url: str = "http://127.0.0.1:8000/mcp/"
     mcp_token: SecretStr = Field(
-        default=SecretStr(""), validation_alias=AliasChoices("MCP_TOKEN", "MCP_Token")
+        default=SecretStr(""),
+        validation_alias=AliasChoices("MCP_TOKEN", "MCP_Token"),
     )
     feishu_webhook_url: SecretStr = SecretStr("")
 
@@ -154,14 +217,11 @@ class Settings(BaseSettings):
     auth_cookie_secure: bool = False
     bootstrap_admin_email: str = Field(
         default="",
-        validation_alias=AliasChoices("AGNO_BOOTSTRAP_ADMIN_EMAIL", "BOOTSTRAP_ADMIN_EMAIL"),
+        validation_alias="TAIS_BOOTSTRAP_ADMIN_EMAIL",
     )
     bootstrap_admin_password: SecretStr = Field(
         default=SecretStr(""),
-        validation_alias=AliasChoices(
-            "AGNO_BOOTSTRAP_ADMIN_PASSWORD",
-            "BOOTSTRAP_ADMIN_PASSWORD",
-        ),
+        validation_alias="TAIS_BOOTSTRAP_ADMIN_PASSWORD",
     )
 
     oauth_associate_by_email: bool = True

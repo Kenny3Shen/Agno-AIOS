@@ -41,10 +41,10 @@ async def bootstrap_admin_user(app_settings: Settings | None = None) -> None:
         return
     if not admin_email or not admin_password:
         raise ValueError(
-            "AGNO_BOOTSTRAP_ADMIN_EMAIL and AGNO_BOOTSTRAP_ADMIN_PASSWORD must be set together."
+            "TAIS_BOOTSTRAP_ADMIN_EMAIL and TAIS_BOOTSTRAP_ADMIN_PASSWORD must be set together."
         )
     if len(admin_password) < 8:
-        raise ValueError("AGNO_BOOTSTRAP_ADMIN_PASSWORD must contain at least 8 characters.")
+        raise ValueError("TAIS_BOOTSTRAP_ADMIN_PASSWORD must contain at least 8 characters.")
 
     password_hash = PasswordHelper().hash(admin_password)
     async with auth_engine.begin() as conn:

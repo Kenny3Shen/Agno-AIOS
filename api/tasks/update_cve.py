@@ -95,7 +95,7 @@ class CVEUpdateFileLock:
 
 @asynccontextmanager
 async def _cve_update_lock(path: Path):
-    if environ.get("AGNO_CVE_UPDATE_LOCK_HELD") == "1":
+    if environ.get("TAIS_CVE_UPDATE_LOCK_HELD") == "1":
         yield
         return
     async with CVEUpdateFileLock(path):

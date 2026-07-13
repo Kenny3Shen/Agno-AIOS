@@ -60,7 +60,7 @@ echo "$(date -Iseconds) - Starting update-cve ($*)" >> "$LOG_FILE"
 # Run the update script. We pass any provided args through.
 # Redirect output to LOG_FILE. When executed by cron there's no interactive shell so avoid relying on shell defaults.
 echo "$(date -Iseconds) - Will run: ${RUN_CMD[*]} $*" >> "$LOG_FILE"
-export AGNO_CVE_UPDATE_LOCK_HELD=1
+export TAIS_CVE_UPDATE_LOCK_HELD=1
 "${RUN_CMD[@]}" "$@" >> "$LOG_FILE" 2>&1 || {
   echo "$(date -Iseconds) - update-cve exited with non-zero status" >> "$LOG_FILE"
   exit 1

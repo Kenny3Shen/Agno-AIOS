@@ -12,11 +12,11 @@ def test_bootstrap_admin_is_disabled_by_default() -> None:
     assert settings.bootstrap_admin_password.get_secret_value() == ""
 
 
-def test_bootstrap_admin_env_aliases_are_supported() -> None:
+def test_bootstrap_admin_env_names_are_supported() -> None:
     settings = Settings.model_validate(
         {
-            "AGNO_BOOTSTRAP_ADMIN_EMAIL": "admin@example.com",
-            "AGNO_BOOTSTRAP_ADMIN_PASSWORD": "AdminPass123!",
+            "TAIS_BOOTSTRAP_ADMIN_EMAIL": "admin@example.com",
+            "TAIS_BOOTSTRAP_ADMIN_PASSWORD": "AdminPass123!",
         }
     )
     assert settings.bootstrap_admin_email == "admin@example.com"
@@ -56,8 +56,8 @@ async def test_bootstrap_admin_writes_normalized_email_and_hashed_password(monke
     await database.bootstrap_admin_user(
         Settings.model_validate(
             {
-                "AGNO_BOOTSTRAP_ADMIN_EMAIL": " Admin@Example.COM ",
-                "AGNO_BOOTSTRAP_ADMIN_PASSWORD": "AdminPass123!",
+                "TAIS_BOOTSTRAP_ADMIN_EMAIL": " Admin@Example.COM ",
+                "TAIS_BOOTSTRAP_ADMIN_PASSWORD": "AdminPass123!",
             }
         )
     )

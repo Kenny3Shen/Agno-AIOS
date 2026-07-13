@@ -42,24 +42,25 @@ COLD_START_NOTE = (
     "当前操作可能等待 30-120 秒，但不会阻塞其它页面请求。"
 )
 
+# Runtime RAG keys use TAIS_KNOWLEDGE_* (application prefix).
 RAG_SETTING_ENV_KEYS: dict[str, str] = {
-    "embedding_model": "AGNO_KNOWLEDGE_EMBEDDING_MODEL",
-    "embedding_dimensions": "AGNO_KNOWLEDGE_EMBEDDING_DIMENSIONS",
-    "rerank_model": "AGNO_KNOWLEDGE_RERANK_MODEL",
-    "query_prompt": "AGNO_KNOWLEDGE_QUERY_PROMPT",
-    "top_k": "AGNO_KNOWLEDGE_TOP_K",
-    "chunk_size": "AGNO_KNOWLEDGE_CHUNK_SIZE",
-    "chunk_overlap": "AGNO_KNOWLEDGE_CHUNK_OVERLAP",
-    "code_chunk_size": "AGNO_KNOWLEDGE_CODE_CHUNK_SIZE",
-    "semantic_threshold": "AGNO_KNOWLEDGE_SEMANTIC_THRESHOLD",
-    "vector_score_weight": "AGNO_KNOWLEDGE_VECTOR_SCORE_WEIGHT",
-    "content_language": "AGNO_KNOWLEDGE_CONTENT_LANGUAGE",
-    "prefix_match": "AGNO_KNOWLEDGE_PREFIX_MATCH",
-    "rerank_enabled": "AGNO_KNOWLEDGE_RERANK_ENABLED",
-    "rerank_candidate_multiplier": "AGNO_KNOWLEDGE_RERANK_CANDIDATE_MULTIPLIER",
-    "rerank_min_candidates": "AGNO_KNOWLEDGE_RERANK_MIN_CANDIDATES",
-    "device": "AGNO_KNOWLEDGE_DEVICE",
-    "search_type": "AGNO_KNOWLEDGE_SEARCH_TYPE",
+    "embedding_model": "TAIS_KNOWLEDGE_EMBEDDING_MODEL",
+    "embedding_dimensions": "TAIS_KNOWLEDGE_EMBEDDING_DIMENSIONS",
+    "rerank_model": "TAIS_KNOWLEDGE_RERANK_MODEL",
+    "query_prompt": "TAIS_KNOWLEDGE_QUERY_PROMPT",
+    "top_k": "TAIS_KNOWLEDGE_TOP_K",
+    "chunk_size": "TAIS_KNOWLEDGE_CHUNK_SIZE",
+    "chunk_overlap": "TAIS_KNOWLEDGE_CHUNK_OVERLAP",
+    "code_chunk_size": "TAIS_KNOWLEDGE_CODE_CHUNK_SIZE",
+    "semantic_threshold": "TAIS_KNOWLEDGE_SEMANTIC_THRESHOLD",
+    "vector_score_weight": "TAIS_KNOWLEDGE_VECTOR_SCORE_WEIGHT",
+    "content_language": "TAIS_KNOWLEDGE_CONTENT_LANGUAGE",
+    "prefix_match": "TAIS_KNOWLEDGE_PREFIX_MATCH",
+    "rerank_enabled": "TAIS_KNOWLEDGE_RERANK_ENABLED",
+    "rerank_candidate_multiplier": "TAIS_KNOWLEDGE_RERANK_CANDIDATE_MULTIPLIER",
+    "rerank_min_candidates": "TAIS_KNOWLEDGE_RERANK_MIN_CANDIDATES",
+    "device": "TAIS_KNOWLEDGE_DEVICE",
+    "search_type": "TAIS_KNOWLEDGE_SEARCH_TYPE",
 }
 
 RAG_BOOLEAN_FIELDS = {"prefix_match", "rerank_enabled"}

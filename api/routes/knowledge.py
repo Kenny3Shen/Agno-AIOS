@@ -237,7 +237,7 @@ class KnowledgeSearchRequest(BaseModel):
     limit: int = Field(5, ge=1, le=20)
     search_type: str | None = Field(
         default=None,
-        description="vector / keyword / hybrid，默认使用 AGNO_KNOWLEDGE_SEARCH_TYPE",
+        description="vector / keyword / hybrid，默认使用 TAIS_KNOWLEDGE_SEARCH_TYPE",
     )
 
 

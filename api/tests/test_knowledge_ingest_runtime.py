@@ -288,15 +288,15 @@ def test_knowledge_service_uses_agno_sentence_transformer_reranker() -> None:
 
 
 def test_status_exposes_supported_suffixes_and_search_type() -> None:
-    original = os.environ.get("AGNO_KNOWLEDGE_SEARCH_TYPE")
-    os.environ["AGNO_KNOWLEDGE_SEARCH_TYPE"] = "hybrid"
+    original = os.environ.get("TAIS_KNOWLEDGE_SEARCH_TYPE")
+    os.environ["TAIS_KNOWLEDGE_SEARCH_TYPE"] = "hybrid"
     try:
         assert knowledge_service.search_type_from_env() == SearchType.hybrid
     finally:
         if original is None:
-            os.environ.pop("AGNO_KNOWLEDGE_SEARCH_TYPE", None)
+            os.environ.pop("TAIS_KNOWLEDGE_SEARCH_TYPE", None)
         else:
-            os.environ["AGNO_KNOWLEDGE_SEARCH_TYPE"] = original
+            os.environ["TAIS_KNOWLEDGE_SEARCH_TYPE"] = original
     status = knowledge_ingest_service.pipeline_status(
         search_type=knowledge_service.search_type_from_env().value,
         vector_score_weight=0.55,
@@ -318,10 +318,10 @@ def test_status_exposes_supported_suffixes_and_search_type() -> None:
 
 
 def test_update_runtime_rag_settings_updates_env_and_rolls_back_invalid_overlap(monkeypatch) -> None:
-    monkeypatch.setenv("AGNO_KNOWLEDGE_TOP_K", "5")
-    monkeypatch.setenv("AGNO_KNOWLEDGE_CHUNK_SIZE", "1200")
-    monkeypatch.setenv("AGNO_KNOWLEDGE_CHUNK_OVERLAP", "160")
-    monkeypatch.setenv("AGNO_KNOWLEDGE_SEARCH_TYPE", "hybrid")
+    monkeypatch.setenv("TAIS_KNOWLEDGE_TOP_K", "5")
+    monkeypatch.setenv("TAIS_KNOWLEDGE_CHUNK_SIZE", "1200")
+    monkeypatch.setenv("TAIS_KNOWLEDGE_CHUNK_OVERLAP", "160")
+    monkeypatch.setenv("TAIS_KNOWLEDGE_SEARCH_TYPE", "hybrid")
     knowledge_service._clear_knowledge_runtime_caches()
     try:
         settings = knowledge_service.update_runtime_rag_settings(
@@ -335,15 +335,15 @@ def test_update_runtime_rag_settings_updates_env_and_rolls_back_invalid_overlap(
         assert settings["top_k"] == 8
         assert settings["search_type"] == "vector"
         assert settings["prefix_match"] is True
-        assert os.environ["AGNO_KNOWLEDGE_TOP_K"] == "8"
-        assert os.environ["AGNO_KNOWLEDGE_SEARCH_TYPE"] == "vector"
+        assert os.environ["TAIS_KNOWLEDGE_TOP_K"] == "8"
+        assert os.environ["TAIS_KNOWLEDGE_SEARCH_TYPE"] == "vector"
 
         with pytest.raises(ValueError, match="chunk_overlap"):
             knowledge_service.update_runtime_rag_settings(
                 {"chunk_size": 500, "chunk_overlap": 500}
             )
-        assert os.environ["AGNO_KNOWLEDGE_CHUNK_SIZE"] == "1200"
-        assert os.environ["AGNO_KNOWLEDGE_CHUNK_OVERLAP"] == "160"
+        assert os.environ["TAIS_KNOWLEDGE_CHUNK_SIZE"] == "1200"
+        assert os.environ["TAIS_KNOWLEDGE_CHUNK_OVERLAP"] == "160"
     finally:
         knowledge_service._clear_knowledge_runtime_caches()
 
