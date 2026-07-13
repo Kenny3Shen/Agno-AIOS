@@ -104,3 +104,18 @@ export interface UpdateDocumentUploadPayload {
   visibility?: ResourceVisibility
   ingest_options?: KnowledgeIngestOptions
 }
+
+
+export type KnowledgeProgressStage = 'upload' | 'parse' | 'vectorize' | 'cleanup' | 'done'
+export type KnowledgeProgressStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
+
+export interface KnowledgeProgressEvent {
+  stage: KnowledgeProgressStage
+  status: KnowledgeProgressStatus
+  label?: string
+  message?: string
+  error?: string
+  code?: number
+  document?: Document
+  detail?: Record<string, unknown>
+}

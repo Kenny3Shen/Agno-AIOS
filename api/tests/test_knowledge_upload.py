@@ -111,6 +111,7 @@ async def test_update_route_passes_rebuild_metadata_and_ingest_options_to_lifecy
             "markdown_split_on_headings": 2,
             "reader_strategy": "markdown",
         },
+        "on_progress": None,
     }
 
 
@@ -389,6 +390,7 @@ async def test_upload_route_ingests_persisted_path_with_browser_metadata(tmp_pat
             "markdown_split_on_headings": 2,
             "reader_strategy": "markdown",
         },
+        "on_progress": None,
     }
 
 
@@ -546,6 +548,7 @@ async def test_update_upload_route_replaces_selected_document_from_persisted_pat
             "semantic_min_sentences_per_chunk": 2,
             "semantic_min_characters_per_sentence": 12,
         },
+        "on_progress": None,
     }
 
 

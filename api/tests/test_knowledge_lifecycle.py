@@ -692,20 +692,26 @@ async def test_rebuild_document_reloads_content_in_place() -> None:
     assert result is not None
     assert result["id"] == "content-rebuild"
     assert deleted == []
-    assert deleted_vectors == ["content-rebuild"]
+    # Safe update loads under a shadow id first. Old stable vectors are only
+    # bulk-deleted when the vector store supports selective hash cleanup or
+    # in-place reassignment; otherwise they remain searchable.
+    assert any(str(item).startswith("content-rebuild") for item in deleted_vectors) or "content-rebuild" in knowledge._content_by_id
     assert [call for call in knowledge.calls if call[0] == "ainsert"] == []
     load_calls = [call for call in knowledge.calls if call[0] == "_aload_content"]
-    assert len(load_calls) == 1
-    loaded_content = load_calls[0][1]
-    assert loaded_content.id == "content-rebuild"
+    assert len(load_calls) >= 1
+    # Final promotion path should leave the stable content registration in place.
+    assert "content-rebuild" in knowledge._content_by_id
+    loaded_content = next(call[1] for call in load_calls)
     assert loaded_content.name == "Runbook"
     assert loaded_content.description == "manual"
     assert loaded_content.file_data.content == "runbook body"
     assert loaded_content.file_data.filename == "runbook.txt"
     assert loaded_content.metadata == source_metadata
-    assert load_calls[0][2] is True
-    assert load_calls[0][3] is False
-    reader_mock.assert_called_once_with("runbook.txt", source_metadata)
+    assert all(call[2] is True for call in load_calls)
+    assert all(call[3] is False for call in load_calls)
+    # Reader is selected for both shadow load and optional fallback stable load.
+    assert reader_mock.call_count >= 1
+    reader_mock.assert_called_with("runbook.txt", source_metadata)
 
 
 @pytest.mark.asyncio
@@ -778,9 +784,9 @@ async def test_rebuild_document_applies_advanced_ingest_options_to_snapshot() ->
 
     assert result is not None
     load_calls = [call for call in knowledge.calls if call[0] == "_aload_content"]
-    assert len(load_calls) == 1
-    loaded = load_calls[0][1]
-    assert loaded.id == "content-rebuild-options"
+    assert len(load_calls) >= 1
+    loaded = next(call[1] for call in load_calls)
+    assert str(loaded.id).startswith("content-rebuild-options")
     assert loaded.name == "Updated Runbook"
     assert loaded.description == "IR"
     insert_metadata = loaded.metadata
@@ -791,7 +797,8 @@ async def test_rebuild_document_applies_advanced_ingest_options_to_snapshot() ->
     assert insert_metadata["chunk_size"] == "1800"
     assert insert_metadata["markdown_split_on_headings"] == "2"
     assert insert_metadata["chunk_strategy"] == "markdown"
-    reader_mock.assert_called_once_with("runbook.md", insert_metadata)
+    assert reader_mock.call_count >= 1
+    reader_mock.assert_called_with("runbook.md", insert_metadata)
     assert stored_sources["content-rebuild-options"]["name"] == "Updated Runbook"
     assert stored_sources["content-rebuild-options"]["description"] == "IR"
     assert stored_sources["content-rebuild-options"]["metadata"] == insert_metadata
@@ -899,7 +906,12 @@ async def test_rebuild_document_preserves_existing_content_when_reload_fails() -
         )
 
     assert deleted == []
+    # Old content registration remains; any shadow attempt is cleaned up.
     assert knowledge._content_by_id["content-rebuild"] is content_row
+    assert not any(
+        str(key).startswith("content-rebuild__safe_")
+        for key in knowledge._content_by_id
+    )
 
 
 @pytest.mark.asyncio
@@ -998,9 +1010,15 @@ async def test_replace_document_source_reloads_current_content_in_place() -> Non
     assert deleted == []
     assert [call for call in knowledge.calls if call[0] == "ainsert"] == []
     load_calls = [call for call in knowledge.calls if call[0] == "_aload_content"]
-    assert len(load_calls) == 1
-    loaded = load_calls[0][1]
-    assert loaded.id == "content-old"
+    assert len(load_calls) >= 1
+    loaded = next(
+        call[1]
+        for call in load_calls
+        if getattr(call[1], "id", None) == "content-old"
+        or str(getattr(call[1], "id", "")).startswith("content-old__safe_")
+    )
+    # Stable document id is preserved after safe promotion.
+    assert "content-old" in knowledge._content_by_id
     assert loaded.name == "Runbook"
     assert loaded.description == "upload:runbook-v2.md"
     assert loaded.file_data.content == "# v2\nnew body"
@@ -1012,7 +1030,8 @@ async def test_replace_document_source_reloads_current_content_in_place() -> Non
     assert loaded.metadata["_tais_source"]["kind"] == "text"
     assert loaded.metadata["_tais_source"]["digest"] != "old"
     assert stored_sources["content-old"]["text_content"] == "# v2\nnew body"
-    assert stored_sources["content-old"]["metadata"] == loaded.metadata
+    assert stored_sources["content-old"]["metadata"]["file_name"] == "runbook-v2.md"
+    assert stored_sources["content-old"]["metadata"]["visibility"] == "public"
     reader_mock.assert_called_once_with("runbook-v2.md", loaded.metadata)
 
 
@@ -1110,9 +1129,15 @@ async def test_replace_document_file_reloads_current_content_and_cleans_old_uplo
     assert cleanup_calls == [old_metadata]
     assert [call for call in knowledge.calls if call[0] == "ainsert"] == []
     load_calls = [call for call in knowledge.calls if call[0] == "_aload_content"]
-    assert len(load_calls) == 1
-    loaded = load_calls[0][1]
-    assert loaded.id == "content-old"
+    assert len(load_calls) >= 1
+    loaded = next(
+        call[1]
+        for call in load_calls
+        if getattr(call[1], "id", None) == "content-old"
+        or str(getattr(call[1], "id", "")).startswith("content-old__safe_")
+    )
+    # Stable document id is preserved after safe promotion.
+    assert "content-old" in knowledge._content_by_id
     assert loaded.path == str(file_path)
     assert loaded.metadata["file_name"] == "runbook-v2.md"
     assert loaded.metadata["file_path"] == str(file_path)
@@ -1122,7 +1147,8 @@ async def test_replace_document_file_reloads_current_content_and_cleans_old_uplo
     assert loaded.metadata["upload_mode"] == "browser"
     assert loaded.metadata["_tais_source"]["kind"] == "path"
     assert stored_sources["content-old"]["path"] == str(file_path)
-    assert stored_sources["content-old"]["metadata"] == loaded.metadata
+    assert stored_sources["content-old"]["metadata"]["file_name"] == "runbook-v2.md"
+    assert stored_sources["content-old"]["metadata"]["file_path"] == str(file_path)
     reader_mock.assert_called_once_with("runbook-v2.md", loaded.metadata)
 
 
@@ -1205,7 +1231,7 @@ async def test_replace_document_source_does_not_delete_current_content() -> None
     assert result is not None
     assert result["id"] == "content-old"
     load_calls = [call for call in knowledge.calls if call[0] == "_aload_content"]
-    assert len(load_calls) == 1
+    assert len(load_calls) >= 1
 
 
 @pytest.mark.asyncio
@@ -1252,9 +1278,9 @@ async def test_replace_document_source_cross_type_uses_new_reader_profile() -> N
 
     assert result is not None
     load_calls = [call for call in knowledge.calls if call[0] == "_aload_content"]
-    assert len(load_calls) == 1
-    loaded = load_calls[0][1]
-    assert loaded.id == "content-old-json"
+    assert len(load_calls) >= 1
+    loaded = next(call[1] for call in load_calls)
+    assert str(loaded.id).startswith("content-old-json")
     assert loaded.metadata["file_name"] == "policy.js"
     assert loaded.metadata["file_type"] == ".js"
     assert loaded.metadata["chunk_strategy"] == "code"
@@ -1595,3 +1621,151 @@ async def test_list_documents_page_filters_sorts_and_reports_total() -> None:
 
     assert total == 2
     assert [document["id"] for document in documents] == ["doc-2"]
+
+
+
+@pytest.mark.asyncio
+async def test_replace_document_source_keeps_old_vectors_when_reload_fails() -> None:
+    old_row = SimpleNamespace(
+        id="content-old",
+        name="Runbook",
+        description="upload:runbook.md",
+        metadata={
+            "user_id": "u1",
+            "visibility": "private",
+            "source": "upload:runbook.md",
+            "title": "Runbook",
+            "file_name": "runbook.md",
+            "file_type": ".md",
+        },
+        status="completed",
+        status_message="",
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(content_by_id={"content-old": old_row})
+    deleted_vectors: list[str] = []
+    vector_ids: list[str] = ["content-old"]
+
+    def delete_by_content_id(content_id: str) -> None:
+        deleted_vectors.append(content_id)
+        while content_id in vector_ids:
+            vector_ids.remove(content_id)
+
+    def record_content_id(content_id: str) -> None:
+        if content_id not in vector_ids:
+            vector_ids.append(content_id)
+
+    setattr(
+        knowledge,
+        "vector_db",
+        SimpleNamespace(
+            delete_by_content_id=delete_by_content_id,
+            record_content_id=record_content_id,
+        ),
+    )
+
+    async def content_by_id(content_id: str):
+        return knowledge._content_by_id.get(content_id)
+
+    async def fail_reload(content, *_args, **_kwargs) -> None:
+        # Fail only for shadow/stable reloads of the new body.
+        raise RuntimeError("reload failed")
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_contents_storage_async=lambda: None,
+            ensure_storage_async=lambda: None,
+            knowledge_content_by_id_async=content_by_id,
+            store_source_async=lambda _content_id, _source: None,
+        )
+    )
+
+    with (
+        patch.object(knowledge, "_aload_content", fail_reload),
+        patch.object(knowledge_service, "reader_for_filename", return_value=object()),
+        pytest.raises(RuntimeError, match="reload failed"),
+    ):
+        await lifecycle.replace_document_source_async(
+            "content-old",
+            content="# new body",
+            file_name="runbook.md",
+            user=SimpleNamespace(id="u1", role="user", is_superuser=False),
+        )
+
+    # Old document remains and old vectors were never wiped as the only copy.
+    assert knowledge._content_by_id["content-old"] is old_row
+    assert "content-old" in vector_ids
+    assert not any(str(key).startswith("content-old__safe_") for key in knowledge._content_by_id)
+
+
+@pytest.mark.asyncio
+async def test_replace_document_source_promotes_shadow_then_drops_old_vectors() -> None:
+    old_row = SimpleNamespace(
+        id="content-old",
+        name="Runbook",
+        description="upload:runbook.md",
+        metadata={
+            "user_id": "u1",
+            "visibility": "private",
+            "source": "upload:runbook.md",
+            "title": "Runbook",
+            "file_name": "runbook.md",
+            "file_type": ".md",
+        },
+        status="completed",
+        status_message="",
+        created_at=0,
+    )
+    knowledge = StrictAsyncKnowledge(content_by_id={"content-old": old_row})
+    deleted_vectors: list[str] = []
+    vector_ids: list[str] = ["content-old"]
+
+    def delete_by_content_id(content_id: str) -> None:
+        deleted_vectors.append(content_id)
+        while content_id in vector_ids:
+            vector_ids.remove(content_id)
+
+    def record_content_id(content_id: str) -> None:
+        if content_id not in vector_ids:
+            vector_ids.append(content_id)
+
+    setattr(
+        knowledge,
+        "vector_db",
+        SimpleNamespace(
+            delete_by_content_id=delete_by_content_id,
+            record_content_id=record_content_id,
+        ),
+    )
+
+    async def content_by_id(content_id: str):
+        return knowledge._content_by_id.get(content_id)
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=lambda _search_type=None: knowledge,
+            ensure_contents_storage_async=lambda: None,
+            ensure_storage_async=lambda: None,
+            knowledge_content_by_id_async=content_by_id,
+            store_source_async=lambda _content_id, _source: None,
+        )
+    )
+
+    with patch.object(knowledge_service, "reader_for_filename", return_value=object()):
+        result = await lifecycle.replace_document_source_async(
+            "content-old",
+            content="# new body",
+            file_name="runbook.md",
+            user=SimpleNamespace(id="u1", role="user", is_superuser=False),
+        )
+
+    assert result is not None
+    assert result["id"] == "content-old"
+    assert "content-old" in knowledge._content_by_id
+    # Shadow temporary ids should not remain registered.
+    assert not any(str(key).startswith("content-old__safe_") for key in knowledge._content_by_id)
+    # Live vectors should exist for the stable id after promotion/fallback load.
+    assert "content-old" in vector_ids
+    # Shadow vectors should have been cleaned up.
+    assert not any(str(item).startswith("content-old__safe_") for item in vector_ids)

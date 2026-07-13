@@ -4,7 +4,7 @@ import { InboxOutlined, SaveOutlined } from '@ant-design/icons'
 import { VisibilitySelect } from '@/shared/ui/VisibilitySelect'
 import type { ResourceVisibility } from '@/shared/types/common'
 import { updateDocumentAction, updateDocumentUpload } from '../api'
-import type { Document, KnowledgeIngestOptions } from '../types'
+import type { Document, KnowledgeIngestOptions, KnowledgeProgressEvent } from '../types'
 import type { KnowledgeIngestDefaults } from '../utils'
 import {
   buildMetadataUpdate,
@@ -21,6 +21,12 @@ import {
   validateKnowledgeFile,
 } from '../utils'
 import { IngestOptionsFields } from './IngestOptionsFields'
+import {
+  applyProgressEvent,
+  createInitialProgress,
+  type ProgressStageState,
+  UpdateProgress,
+} from './UpdateProgress'
 
 type KnowledgeUpdateTabKey = 'update' | 'text'
 
@@ -57,9 +63,12 @@ export function UpdateDocumentDrawer({
   const { message } = App.useApp()
   const [pending, setPending] = useState(false)
   const [activeTab, setActiveTab] = useState<KnowledgeUpdateTabKey>('update')
+  const [progressStages, setProgressStages] = useState<ProgressStageState[] | null>(null)
+  const [progressIncludesUpload, setProgressIncludesUpload] = useState(false)
   const [updateForm] = Form.useForm<UpdateTabValues>()
   const [textForm] = Form.useForm<TextTabValues>()
   const fileName = document.metadata?.file_name?.trim() || document.title
+
   const submitActiveTab = () => {
     if (activeTab === 'text') {
       textForm.submit()
@@ -68,12 +77,21 @@ export function UpdateDocumentDrawer({
     updateForm.submit()
   }
 
+  const trackProgress = (includeUpload: boolean) => {
+    setProgressIncludesUpload(includeUpload)
+    setProgressStages(createInitialProgress(includeUpload))
+    return (event: KnowledgeProgressEvent) => {
+      setProgressStages((current) => applyProgressEvent(current ?? createInitialProgress(includeUpload), event))
+    }
+  }
+
   const submit = async (update: () => Promise<Document>, success: string) => {
     setPending(true)
     try {
       const updated = await update()
       await onUpdated(updated)
       message.success(success)
+      setProgressStages(null)
       onClose()
     } catch (error) {
       message.error(error instanceof Error ? error.message : '文档更新失败')
@@ -83,11 +101,29 @@ export function UpdateDocumentDrawer({
   }
 
   return (
-    <Drawer size={560} open={open} onClose={onClose} destroyOnHidden title="更新文档">
+    <Drawer
+      size={560}
+      open={open}
+      onClose={() => {
+        if (pending) return
+        setProgressStages(null)
+        onClose()
+      }}
+      destroyOnHidden
+      title="更新文档"
+      maskClosable={!pending}
+      keyboard={!pending}
+    >
+      {progressStages ? (
+        <UpdateProgress stages={progressStages} includeUpload={progressIncludesUpload} />
+      ) : null}
       <Tabs
         activeKey={activeTab}
         destroyOnHidden
-        onChange={(key) => setActiveTab(key as KnowledgeUpdateTabKey)}
+        onChange={(key) => {
+          if (pending) return
+          setActiveTab(key as KnowledgeUpdateTabKey)
+        }}
         tabBarExtraContent={{
           right: (
             <Button loading={pending} type="primary" icon={<SaveOutlined />} onClick={submitActiveTab}>
@@ -105,8 +141,10 @@ export function UpdateDocumentDrawer({
                 document={document}
                 fileName={fileName}
                 ingestDefaults={ingestDefaults}
-                onNoop={() => message.info('没有变化')}
+                disabled={pending}
+                onNoop={() => message.info('没有需要保存的更改')}
                 onSubmit={(update, success) => submit(update, success)}
+                onTrackProgress={trackProgress}
               />
             ),
           },
@@ -118,7 +156,9 @@ export function UpdateDocumentDrawer({
                 form={textForm}
                 document={document}
                 ingestDefaults={ingestDefaults}
+                disabled={pending}
                 onSubmit={(update, success) => submit(update, success)}
+                onTrackProgress={trackProgress}
               />
             ),
           },
@@ -133,29 +173,33 @@ function UpdateTab({
   document,
   fileName,
   ingestDefaults,
+  disabled,
   onNoop,
   onSubmit,
+  onTrackProgress,
 }: {
   form: FormInstance<UpdateTabValues>
   document: Document
   fileName: string
   ingestDefaults?: KnowledgeIngestDefaults
+  disabled?: boolean
   onNoop: () => void
   onSubmit: (update: () => Promise<Document>, success: string) => void
+  onTrackProgress: (includeUpload: boolean) => (event: KnowledgeProgressEvent) => void
 }) {
   const { message } = App.useApp()
   const initialIngestOptions = useMemo(() => ingestOptionsFromMetadata(document.metadata), [document.metadata])
-
   return (
     <Form
       form={form}
       layout="vertical"
-      preserve={false}
+      disabled={disabled}
       initialValues={{
         title: document.title,
         source: document.source,
         visibility: document.visibility ?? 'private',
         file_name: fileName,
+        fileList: [],
         ingest_options: initialIngestOptions,
       }}
       onFinish={(values) => {
@@ -174,26 +218,36 @@ function UpdateTab({
         }
         if (decision.kind === 'upload') {
           if (!file) return
+          const onProgress = onTrackProgress(true)
           return onSubmit(
             () =>
-              updateDocumentUpload(document.id, {
-                file,
-                title: decision.metadata?.title,
-                source: decision.metadata?.source,
-                visibility: decision.metadata?.visibility,
-                ingest_options: decision.ingest_options,
-              }),
+              updateDocumentUpload(
+                document.id,
+                {
+                  file,
+                  title: decision.metadata?.title,
+                  source: decision.metadata?.source,
+                  visibility: decision.metadata?.visibility,
+                  ingest_options: decision.ingest_options,
+                },
+                { stream: true, onProgress }
+              ),
             '已保存并重新向量化'
           )
         }
         if (decision.kind === 'rebuild') {
+          const onProgress = onTrackProgress(false)
           return onSubmit(
             () =>
-              updateDocumentAction(document.id, {
-                mode: 'rebuild',
-                metadata: decision.metadata,
-                ingest_options: decision.ingest_options,
-              }),
+              updateDocumentAction(
+                document.id,
+                {
+                  mode: 'rebuild',
+                  metadata: decision.metadata,
+                  ingest_options: decision.ingest_options,
+                },
+                { stream: true, onProgress }
+              ),
             '已保存并重新向量化'
           )
         }
@@ -229,6 +283,7 @@ function UpdateTab({
         <Upload.Dragger
           accept={KNOWLEDGE_FILE_ACCEPT}
           maxCount={1}
+          disabled={disabled}
           beforeUpload={(file) => {
             const issue = validateKnowledgeFile(file)
             if (!issue) return false
@@ -252,17 +307,22 @@ function TextTab({
   form,
   document,
   ingestDefaults,
+  disabled,
   onSubmit,
+  onTrackProgress,
 }: {
   form: FormInstance<TextTabValues>
   document: Document
   ingestDefaults?: KnowledgeIngestDefaults
+  disabled?: boolean
   onSubmit: (update: () => Promise<Document>, success: string) => void
+  onTrackProgress: (includeUpload: boolean) => (event: KnowledgeProgressEvent) => void
 }) {
   return (
     <Form
       form={form}
       layout="vertical"
+      disabled={disabled}
       initialValues={{
         title: document.title,
         source: document.source,
@@ -272,15 +332,20 @@ function TextTab({
       }}
       onFinish={(values) => {
         const metadata = buildMetadataUpdate(document, values)
+        const onProgress = onTrackProgress(false)
         return onSubmit(
           () =>
-            updateDocumentAction(document.id, {
-              mode: 'replace_text',
-              metadata: hasMetadataUpdate(metadata) ? metadata : undefined,
-              file_name: values.file_name.trim(),
-              content: values.content,
-              ingest_options: cleanIngestOptions(values.ingest_options),
-            }),
+            updateDocumentAction(
+              document.id,
+              {
+                mode: 'replace_text',
+                metadata: hasMetadataUpdate(metadata) ? metadata : undefined,
+                file_name: values.file_name.trim(),
+                content: values.content,
+                ingest_options: cleanIngestOptions(values.ingest_options),
+              },
+              { stream: true, onProgress }
+            ),
           '已保存并重新向量化'
         )
       }}

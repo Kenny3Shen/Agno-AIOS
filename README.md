@@ -32,7 +32,7 @@ cd frontend
 VITE_API_PROXY_TARGET=http://127.0.0.1:8001 /home/shenss/.bun/bin/bun run dev
 ```
 
-访问 <http://localhost:5173>。
+访问 [http://localhost:5173](http://localhost:5173)。
 
 可通过以下环境变量创建初始管理员：
 
@@ -67,6 +67,47 @@ uv run update-cve
 
 React 工作台通过共享 API client 携带 token 请求 FastAPI；后端检查权限和资源归属后，按模型、MCP、Skills、Knowledge 与 Memory 配置创建 Agno 运行时。Chat 通过 SSE 返回流式输出，Trace、Memory 和 Knowledge 等视图通过 Query 刷新读取最新数据。
 
+```mermaid
+flowchart LR
+    Operator["安全运营人员"] --> Shell
+
+    subgraph Browser["React 工作台"]
+        Shell["AppFrame<br/>导航、主题、通知"]
+        ScopeFilter["Scope 过滤<br/>分组导航"]
+        Router["TanStack Router<br/>页面与 URL 状态"]
+        Query["TanStack Query<br/>服务端状态"]
+        Recents["最近对话<br/>Conversations"]
+        Features["领域页面<br/>Chat / Trace / Knowledge / Governance"]
+
+        Shell --> ScopeFilter
+        Shell --> Router
+        Shell --> Recents
+        Router --> Features
+        Recents --> Query
+        Features --> Query
+    end
+
+    Query -->|"JWT + JSON"| API["FastAPI<br/>认证、授权、业务路由"]
+    Features -->|"Chat SSE"| API
+
+    subgraph Runtime["Agent 运行时"]
+        Agno["Agno Agent"]
+        MCP["FastMCP 工具"]
+        Skills["Local Skills"]
+        Retrieval["Knowledge + Memory"]
+
+        Agno --> MCP
+        Agno --> Skills
+        Agno --> Retrieval
+    end
+
+    API --> Runtime
+    API --> Authz["JWT scopes<br/>owner / admin 校验"]
+    API --> Audit["Audit + Notifications"]
+    API --> Postgres["PostgreSQL<br/>业务与运行数据"]
+    Retrieval --> PgVector["PgVector<br/>向量检索"]
+```
+
 - `frontend/src/app`：Provider、Router、Shell 与全局样式。
 - `frontend/src/features`：按领域划分的页面和逻辑。
 - `frontend/src/shared`：API client、认证、i18n、类型与通用 UI。
@@ -74,6 +115,22 @@ React 工作台通过共享 API client 携带 token 请求 FastAPI；后端检�
 - `scripts/`：运维脚本。
 
 前端使用 TanStack Router 管理路由状态、TanStack Query 管理服务端状态；Ant Design 与 Ant Design X 提供主要 UI。FastMCP 与 FastAPI 同进程运行并挂载在 `/mcp/`。应用数据由 SQLAlchemy Async 管理，Agno 运行时数据使用 `AsyncPostgresDb`，知识库使用 PgVector。
+
+### 导航与会话外壳
+
+- Logo 是运行概览的唯一显式入口，点击后跳转 `/dashboard`；侧栏不重复展示“运行概览”。
+- 主导航按“工作台、能力与数据、运行治理、安全情报”分组，并在权限过滤后删除空分组；默认展开前两个分组。
+- “智能体”始终跳转 `/chat`，用于清除已有 `session` 参数并开始空白会话；具体历史会话通过最近对话列表进入。
+- 桌面侧栏展开时使用可折叠分组，收窄到 76px 后改为权限过滤后的扁平图标列表，并完全隐藏最近对话区域。
+- 最近对话按今天、昨天、更早分组；桌面展开状态保存在 `tais-shell-recent-expanded`，移动端抽屉每次打开时默认收起。
+- 菜单隐藏只负责体验优化，真实访问控制仍由 FastAPI 的 scope 与资源归属检查完成。
+
+### Knowledge 入库与更新
+
+- 浏览器上传、正文入库、路径导入与文档更新支持 SSE 四阶段进度：`上传 → 解析 → 向量化 → 清理`。
+- 更新采用安全切换：新内容先写入临时 shadow ID，成功后再切换到原文档 ID；失败时保留旧文档与旧向量，避免检索空窗。
+- 按文件后缀自动选择 Reader/分块策略，支持 Markdown、文本、JSON、CSV、代码、PDF、DOCX；创建/更新后保持文档 ID、可见性与当前选中状态。
+- 相关实现见 `api/services/knowledge_progress.py`、`knowledge_source_service.py` 与 `frontend/src/features/knowledge/`。
 
 ## 安全与审计
 
@@ -110,4 +167,4 @@ cd frontend && /home/shenss/.bun/bin/bun run check
 
 ## 当前计划
 
-待办与已知问题见 [TODOs.md](./TODOs.md)。
+已完成工作、下一阶段优先级、风险与验收标准见 [TODOs.md](./TODOs.md)。

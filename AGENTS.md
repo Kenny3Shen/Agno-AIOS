@@ -19,8 +19,8 @@ MCP 框架为 FastMCP, 文档通过 fastmcp-docs mcp 查询
 
 前端验证使用 package scripts：
 
-- `cd frontend && bun run check`
-- `bun run build`
+- `cd frontend && bun run check` 测试
+- `bun run build` 构建
   <scripts></scripts>
 
 测试账号

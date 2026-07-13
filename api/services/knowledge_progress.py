@@ -1,0 +1,125 @@
+"""Knowledge ingest/update stage progress protocol."""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from typing import Any, Literal
+
+KnowledgeProgressStage = Literal["upload", "parse", "vectorize", "cleanup"]
+KnowledgeProgressStatus = Literal["pending", "running", "completed", "failed", "skipped"]
+
+KNOWLEDGE_PROGRESS_STAGES: tuple[KnowledgeProgressStage, ...] = (
+    "upload",
+    "parse",
+    "vectorize",
+    "cleanup",
+)
+
+STAGE_LABELS: dict[KnowledgeProgressStage, str] = {
+    "upload": "上传",
+    "parse": "解析",
+    "vectorize": "向量化",
+    "cleanup": "清理",
+}
+
+STAGE_DEFAULT_MESSAGES: dict[KnowledgeProgressStage, str] = {
+    "upload": "上传中",
+    "parse": "解析中",
+    "vectorize": "向量化中",
+    "cleanup": "清理中",
+}
+
+ProgressCallback = Callable[[Mapping[str, object]], Awaitable[None] | None]
+
+
+def knowledge_progress_event(
+    stage: KnowledgeProgressStage,
+    status: KnowledgeProgressStatus,
+    *,
+    message: str | None = None,
+    document: Mapping[str, object] | None = None,
+    detail: Mapping[str, object] | None = None,
+    error: str | None = None,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "stage": stage,
+        "status": status,
+        "label": STAGE_LABELS[stage],
+        "message": message or STAGE_DEFAULT_MESSAGES[stage],
+    }
+    if document is not None:
+        payload["document"] = dict(document)
+    if detail is not None:
+        payload["detail"] = dict(detail)
+    if error is not None:
+        payload["error"] = error
+    return payload
+
+
+def initial_progress_stages(
+    *,
+    include_upload: bool,
+) -> list[dict[str, object]]:
+    stages: list[dict[str, object]] = []
+    for stage in KNOWLEDGE_PROGRESS_STAGES:
+        if stage == "upload" and not include_upload:
+            stages.append(
+                knowledge_progress_event(
+                    stage,
+                    "skipped",
+                    message="跳过",
+                )
+            )
+            continue
+        stages.append(
+            knowledge_progress_event(
+                stage,
+                "pending",
+                message=STAGE_DEFAULT_MESSAGES[stage],
+            )
+        )
+    return stages
+
+
+async def emit_progress(
+    callback: ProgressCallback | None,
+    stage: KnowledgeProgressStage,
+    status: KnowledgeProgressStatus,
+    *,
+    message: str | None = None,
+    document: Mapping[str, object] | None = None,
+    detail: Mapping[str, object] | None = None,
+    error: str | None = None,
+) -> None:
+    if callback is None:
+        return
+    event = knowledge_progress_event(
+        stage,
+        status,
+        message=message,
+        document=document,
+        detail=detail,
+        error=error,
+    )
+    result = callback(event)
+    if hasattr(result, "__await__"):
+        await result  # type: ignore[misc]
+
+
+def stage_index(stage: str) -> int:
+    try:
+        return KNOWLEDGE_PROGRESS_STAGES.index(stage)  # type: ignore[arg-type]
+    except ValueError:
+        return -1
+
+
+def active_stage_from_events(events: Sequence[Mapping[str, Any]]) -> str | None:
+    active: str | None = None
+    for event in events:
+        stage = str(event.get("stage") or "")
+        status = str(event.get("status") or "")
+        if status == "running":
+            active = stage
+        elif status == "completed" and stage_index(stage) >= 0:
+            active = stage
+    return active

@@ -4,7 +4,7 @@ import { FileAddOutlined, InboxOutlined } from '@ant-design/icons'
 import { VisibilitySelect } from '@/shared/ui/VisibilitySelect'
 import type { ResourceVisibility } from '@/shared/types/common'
 import { addText, uploadDocument } from '../api'
-import type { Document, KnowledgeIngestOptions } from '../types'
+import type { Document, KnowledgeIngestOptions, KnowledgeProgressEvent } from '../types'
 import type { KnowledgeIngestDefaults } from '../utils'
 import {
   cleanIngestOptions,
@@ -15,6 +15,12 @@ import {
   validateKnowledgeFile,
 } from '../utils'
 import { IngestOptionsFields } from './IngestOptionsFields'
+import {
+  applyProgressEvent,
+  createInitialProgress,
+  type ProgressStageState,
+  UpdateProgress,
+} from './UpdateProgress'
 
 export function DocumentDrawer({
   open,
@@ -29,6 +35,16 @@ export function DocumentDrawer({
 }) {
   const { message } = App.useApp()
   const [pending, setPending] = useState(false)
+  const [progressStages, setProgressStages] = useState<ProgressStageState[] | null>(null)
+  const [progressIncludesUpload, setProgressIncludesUpload] = useState(true)
+
+  const trackProgress = (includeUpload: boolean) => {
+    setProgressIncludesUpload(includeUpload)
+    setProgressStages(createInitialProgress(includeUpload))
+    return (event: KnowledgeProgressEvent) => {
+      setProgressStages((current) => applyProgressEvent(current ?? createInitialProgress(includeUpload), event))
+    }
+  }
 
   const submit = async (create: () => Promise<Document>) => {
     setPending(true)
@@ -36,6 +52,7 @@ export function DocumentDrawer({
       const document = await create()
       await onCreated(document)
       message.success('文档已添加')
+      setProgressStages(null)
       onClose()
     } catch (error) {
       message.error(error instanceof Error ? error.message : '文档添加失败')
@@ -45,7 +62,20 @@ export function DocumentDrawer({
   }
 
   return (
-    <Drawer size={560} open={open} onClose={onClose} destroyOnHidden title="添加知识文档">
+    <Drawer
+      size={560}
+      open={open}
+      onClose={() => {
+        if (pending) return
+        setProgressStages(null)
+        onClose()
+      }}
+      destroyOnHidden
+      title="添加知识文档"
+      maskClosable={!pending}
+      keyboard={!pending}
+    >
+      {progressStages ? <UpdateProgress stages={progressStages} includeUpload={progressIncludesUpload} /> : null}
       <Tabs
         destroyOnHidden
         items={[
@@ -56,6 +86,7 @@ export function DocumentDrawer({
               <Form
                 layout="vertical"
                 preserve={false}
+                disabled={pending}
                 initialValues={{ visibility: 'private' }}
                 onFinish={(values: {
                   fileList: UploadFile[]
@@ -66,14 +97,18 @@ export function DocumentDrawer({
                 }) => {
                   const file = selectedUploadFile(values.fileList)
                   if (!file) return
+                  const onProgress = trackProgress(true)
                   return submit(() =>
-                    uploadDocument({
-                      file,
-                      title: values.title,
-                      source: values.source,
-                      visibility: values.visibility,
-                      ingest_options: cleanIngestOptions(values.ingest_options),
-                    })
+                    uploadDocument(
+                      {
+                        file,
+                        title: values.title,
+                        source: values.source,
+                        visibility: values.visibility,
+                        ingest_options: cleanIngestOptions(values.ingest_options),
+                      },
+                      { stream: true, onProgress }
+                    )
                   )
                 }}
               >
@@ -93,6 +128,7 @@ export function DocumentDrawer({
                   <Upload.Dragger
                     accept={KNOWLEDGE_FILE_ACCEPT}
                     maxCount={1}
+                    disabled={pending}
                     beforeUpload={(file) => {
                       const issue = validateKnowledgeFile(file)
                       if (!issue) return false
@@ -130,6 +166,7 @@ export function DocumentDrawer({
               <Form
                 layout="vertical"
                 preserve={false}
+                disabled={pending}
                 initialValues={{ visibility: 'private' }}
                 onFinish={(values: {
                   title: string
@@ -137,7 +174,15 @@ export function DocumentDrawer({
                   content: string
                   visibility: ResourceVisibility
                   ingest_options?: KnowledgeIngestOptions
-                }) => submit(() => addText({ ...values, ingest_options: cleanIngestOptions(values.ingest_options) }))}
+                }) => {
+                  const onProgress = trackProgress(false)
+                  return submit(() =>
+                    addText(
+                      { ...values, ingest_options: cleanIngestOptions(values.ingest_options) },
+                      { stream: true, onProgress }
+                    )
+                  )
+                }}
               >
                 <Form.Item name="title" label="标题" rules={[{ required: true }]}>
                   <Input />

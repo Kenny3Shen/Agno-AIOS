@@ -1,7 +1,11 @@
-from typing import Literal, cast
+import asyncio
+import json
+from collections.abc import AsyncIterator, Mapping
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
+from sse_starlette.sse import EventSourceResponse
 
 from api.auth.claims import actor_id, scope_user_id
 from api.auth.models import User
@@ -9,6 +13,11 @@ from api.auth.scopes import require_scope
 from api.auth.visibility import can_manage_resource
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.knowledge_document_service import KnowledgeDocumentPayload
+from api.services.knowledge_progress import (
+    emit_progress,
+    initial_progress_stages,
+    knowledge_progress_event,
+)
 from api.services.knowledge_service import (
     get_knowledge_base_lifecycle,
     update_rag_settings_async,
@@ -56,6 +65,120 @@ def with_manage_flags(
     for document in documents:
         flagged.append(with_manage_flag(document, user))
     return flagged
+
+
+
+
+def _sse_payload(event: str, data: Mapping[str, object] | dict[str, object]) -> dict[str, str]:
+    return {
+        "event": event,
+        "data": json.dumps(data, ensure_ascii=False, default=str),
+    }
+
+
+async def _queue_progress(
+    queue: asyncio.Queue[dict[str, object] | None],
+    event: Mapping[str, object],
+) -> None:
+    await queue.put(dict(event))
+
+
+
+async def _run_progress_sse(
+    *,
+    include_upload: bool,
+    work,
+) -> EventSourceResponse:
+    """Run an async work(on_progress) coroutine and stream stage events."""
+    queue: asyncio.Queue[dict[str, object] | None] = asyncio.Queue()
+
+    async def on_progress(event: Mapping[str, object]) -> None:
+        await _queue_progress(queue, event)
+
+    async def worker() -> None:
+        try:
+            for stage_event in initial_progress_stages(include_upload=include_upload):
+                await queue.put(stage_event)
+            document = await work(on_progress)
+            await queue.put(
+                {
+                    "stage": "done",
+                    "status": "completed",
+                    "label": "完成",
+                    "message": "完成",
+                    "document": document,
+                }
+            )
+        except KnowledgeUploadTooLargeError as exc:
+            await queue.put(
+                knowledge_progress_event(
+                    "upload",
+                    "failed",
+                    message=str(exc),
+                    error=str(exc),
+                )
+            )
+            await queue.put(
+                {
+                    "stage": "done",
+                    "status": "failed",
+                    "label": "失败",
+                    "message": str(exc),
+                    "error": str(exc),
+                    "code": 413,
+                }
+            )
+        except LookupError as exc:
+            await queue.put(
+                {
+                    "stage": "done",
+                    "status": "failed",
+                    "label": "失败",
+                    "message": str(exc),
+                    "error": str(exc),
+                    "code": 404,
+                }
+            )
+        except Exception as exc:
+            await queue.put(
+                {
+                    "stage": "done",
+                    "status": "failed",
+                    "label": "失败",
+                    "message": str(exc),
+                    "error": str(exc),
+                    "code": 400,
+                }
+            )
+        finally:
+            await queue.put(None)
+
+    async def event_generator() -> AsyncIterator[dict[str, str]]:
+        task = asyncio.create_task(worker())
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                status = str(item.get("status") or "")
+                stage = str(item.get("stage") or "")
+                if stage == "done":
+                    yield _sse_payload(
+                        "progress.completed" if status == "completed" else "progress.failed",
+                        item,
+                    )
+                    break
+                event_name = "progress.failed" if status == "failed" else "progress"
+                yield _sse_payload(event_name, item)
+        finally:
+            if not task.done():
+                task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    return EventSourceResponse(event_generator())
 
 
 class KnowledgeIngestOptionsRequest(BaseModel):
@@ -229,13 +352,26 @@ async def get_knowledge_status(
     }
 
 
-@router.post("/documents/text")
+@router.post("/documents/text", response_model=None)
 async def create_text_document(
     request_ctx: Request,
     request: KnowledgeTextRequest,
+    stream: Annotated[bool, Query()] = False,
     user: User = Depends(require_scope("knowledge:write")),
-) -> KnowledgeDocumentResponsePayload:
-    try:
+) -> KnowledgeDocumentResponsePayload | EventSourceResponse:
+    ingest_options = (
+        request.ingest_options.model_dump(exclude_none=True)
+        if request.ingest_options is not None
+        else None
+    )
+
+    async def run_create(on_progress=None) -> KnowledgeDocumentResponsePayload:
+        await emit_progress(
+            on_progress,
+            "upload",
+            "skipped",
+            message="跳过",
+        )
         result = await get_knowledge_base_lifecycle().add_text_document_async(
             title=request.title,
             content=request.content,
@@ -243,11 +379,8 @@ async def create_text_document(
             visibility=request.visibility,
             metadata=request.metadata,
             owner_user_id=actor_id(user),
-            ingest_options=(
-                request.ingest_options.model_dump(exclude_none=True)
-                if request.ingest_options is not None
-                else None
-            ),
+            ingest_options=ingest_options,
+            on_progress=on_progress,
         )
         response = cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
         await record_audit_event_async(
@@ -259,28 +392,43 @@ async def create_text_document(
             **audit_request_context(request_ctx),
         )
         return response
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not stream:
+        try:
+            return await run_create()
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await _run_progress_sse(include_upload=False, work=run_create)
 
 
-@router.post("/documents/file")
+@router.post("/documents/file", response_model=None)
 async def create_file_document(
     request_ctx: Request,
     request: KnowledgeFileRequest,
+    stream: Annotated[bool, Query()] = False,
     user: User = Depends(require_scope("knowledge:write")),
-) -> KnowledgeDocumentResponsePayload:
-    try:
+) -> KnowledgeDocumentResponsePayload | EventSourceResponse:
+    ingest_options = (
+        request.ingest_options.model_dump(exclude_none=True)
+        if request.ingest_options is not None
+        else None
+    )
+
+    async def run_create(on_progress=None) -> KnowledgeDocumentResponsePayload:
+        await emit_progress(
+            on_progress,
+            "upload",
+            "skipped",
+            message="跳过",
+        )
         result = await get_knowledge_base_lifecycle().add_file_document_async(
             path=request.path,
             title=request.title,
             source=request.source,
             owner_user_id=actor_id(user),
             visibility=request.visibility,
-            ingest_options=(
-                request.ingest_options.model_dump(exclude_none=True)
-                if request.ingest_options is not None
-                else None
-            ),
+            ingest_options=ingest_options,
+            on_progress=on_progress,
         )
         response = cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
         await record_audit_event_async(
@@ -292,11 +440,16 @@ async def create_file_document(
             **audit_request_context(request_ctx),
         )
         return response
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not stream:
+        try:
+            return await run_create()
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await _run_progress_sse(include_upload=False, work=run_create)
 
 
-@router.post("/documents/upload")
+@router.post("/documents/upload", response_model=None)
 async def upload_document(
     request_ctx: Request,
     file: UploadFile = File(...),
@@ -316,36 +469,59 @@ async def upload_document(
     semantic_min_sentences_per_chunk: int | None = Form(default=None, ge=1),
     semantic_min_characters_per_sentence: int | None = Form(default=None, ge=1),
     reader_strategy: str | None = Form(default=None),
+    stream: Annotated[bool, Form()] = False,
     user: User = Depends(require_scope("knowledge:write")),
-) -> KnowledgeDocumentResponsePayload:
-    stored_upload = None
-    try:
-        stored_upload = await store_knowledge_upload_async(file)
-        clean_title = (title or "").strip() or None
-        clean_source = (source or "").strip() or f"upload:{stored_upload.file_name}"
-        result = await get_knowledge_base_lifecycle().add_file_document_async(
-            path=str(stored_upload.path),
-            title=clean_title,
-            source=clean_source,
-            metadata=stored_upload.metadata(),
-            owner_user_id=actor_id(user),
-            visibility=visibility,
-            ingest_options=ingest_options_from_form(
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                markdown_split_on_headings=markdown_split_on_headings,
-                csv_skip_header=csv_skip_header,
-                csv_clean_rows=csv_clean_rows,
-                code_chunk_size=code_chunk_size,
-                code_tokenizer=code_tokenizer,
-                code_include_nodes=code_include_nodes,
-                semantic_threshold=semantic_threshold,
-                semantic_similarity_window=semantic_similarity_window,
-                semantic_min_sentences_per_chunk=semantic_min_sentences_per_chunk,
-                semantic_min_characters_per_sentence=semantic_min_characters_per_sentence,
-                reader_strategy=reader_strategy,
-            ),
+) -> KnowledgeDocumentResponsePayload | EventSourceResponse:
+    ingest_options = ingest_options_from_form(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        markdown_split_on_headings=markdown_split_on_headings,
+        csv_skip_header=csv_skip_header,
+        csv_clean_rows=csv_clean_rows,
+        code_chunk_size=code_chunk_size,
+        code_tokenizer=code_tokenizer,
+        code_include_nodes=code_include_nodes,
+        semantic_threshold=semantic_threshold,
+        semantic_similarity_window=semantic_similarity_window,
+        semantic_min_sentences_per_chunk=semantic_min_sentences_per_chunk,
+        semantic_min_characters_per_sentence=semantic_min_characters_per_sentence,
+        reader_strategy=reader_strategy,
+    )
+    clean_title = (title or "").strip() or None
+
+    async def run_create(on_progress=None) -> KnowledgeDocumentResponsePayload:
+        await emit_progress(
+            on_progress,
+            "upload",
+            "running",
+            message="上传中",
         )
+        stored_upload = await store_knowledge_upload_async(file)
+        await emit_progress(
+            on_progress,
+            "upload",
+            "completed",
+            message="已上传",
+            detail={
+                "file_name": stored_upload.file_name,
+                "file_size": stored_upload.file_size,
+            },
+        )
+        clean_source = (source or "").strip() or f"upload:{stored_upload.file_name}"
+        try:
+            result = await get_knowledge_base_lifecycle().add_file_document_async(
+                path=str(stored_upload.path),
+                title=clean_title,
+                source=clean_source,
+                metadata=stored_upload.metadata(),
+                owner_user_id=actor_id(user),
+                visibility=visibility,
+                ingest_options=ingest_options,
+                on_progress=on_progress,
+            )
+        except Exception:
+            await remove_managed_upload_async(stored_upload.metadata())
+            raise
         response = cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
         await record_audit_event_async(
             user,
@@ -362,12 +538,15 @@ async def upload_document(
             **audit_request_context(request_ctx),
         )
         return response
-    except KnowledgeUploadTooLargeError as exc:
-        raise HTTPException(status_code=413, detail=str(exc)) from exc
-    except Exception as exc:
-        if stored_upload is not None:
-            await remove_managed_upload_async(stored_upload.metadata())
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not stream:
+        try:
+            return await run_create()
+        except KnowledgeUploadTooLargeError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await _run_progress_sse(include_upload=True, work=run_create)
 
 
 @router.delete("/documents/{doc_id}")
@@ -408,20 +587,23 @@ def changed_metadata_fields(metadata: KnowledgeDocumentMetadataUpdateRequest | N
     ]
 
 
-@router.post("/documents/{doc_id}/update")
+@router.post("/documents/{doc_id}/update", response_model=None)
 async def update_document(
     request_ctx: Request,
     doc_id: str,
     request: KnowledgeDocumentUpdateActionRequest,
+    stream: Annotated[bool, Query()] = False,
     user: User = Depends(require_scope("knowledge:write")),
-) -> KnowledgeDocumentResponsePayload:
+) -> KnowledgeDocumentResponsePayload | EventSourceResponse:
     metadata = request.metadata or KnowledgeDocumentMetadataUpdateRequest()
     ingest_options = (
         request.ingest_options.model_dump(exclude_none=True)
         if request.ingest_options is not None
         else None
     )
-    try:
+    wants_stream = stream and request.mode in {"rebuild", "replace_text"}
+
+    async def run_update(on_progress=None) -> KnowledgeDocumentResponsePayload:
         if request.mode == "metadata":
             updated = await get_knowledge_base_lifecycle().update_document_metadata_async(
                 doc_id,
@@ -434,6 +616,12 @@ async def update_document(
             audit_action = "knowledge.update"
             audit_metadata = {"mode": request.mode, "fields": changed_metadata_fields(metadata)}
         elif request.mode == "rebuild":
+            await emit_progress(
+                on_progress,
+                "upload",
+                "skipped",
+                message="跳过",
+            )
             updated = await get_knowledge_base_lifecycle().rebuild_document_async(
                 doc_id,
                 owner_user_id=effective_knowledge_user_filter(user),
@@ -443,6 +631,7 @@ async def update_document(
                 visibility=metadata.visibility,
                 metadata=metadata.metadata,
                 ingest_options=ingest_options,
+                on_progress=on_progress,
             )
             audit_action = "knowledge.rebuild"
             audit_metadata = {"mode": request.mode, "fields": changed_metadata_fields(metadata)}
@@ -451,6 +640,12 @@ async def update_document(
             clean_file_name = (request.file_name or "").strip()
             if not clean_content or not clean_file_name:
                 raise ValueError("正文替换需要提供 content 和 file_name")
+            await emit_progress(
+                on_progress,
+                "upload",
+                "skipped",
+                message="跳过",
+            )
             updated = await get_knowledge_base_lifecycle().replace_document_source_async(
                 doc_id,
                 content=clean_content,
@@ -462,6 +657,7 @@ async def update_document(
                 owner_user_id=effective_knowledge_user_filter(user),
                 user=user,
                 ingest_options=ingest_options,
+                on_progress=on_progress,
             )
             audit_action = "knowledge.source_replace"
             audit_metadata = {
@@ -469,23 +665,108 @@ async def update_document(
                 "fields": changed_metadata_fields(metadata),
                 "file_name": clean_file_name,
             }
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if updated is None:
-        raise HTTPException(status_code=404, detail="知识文档不存在")
-    response = cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
-    await record_audit_event_async(
-        user,
-        action=audit_action,
-        resource_type="knowledge_document",
-        resource_id=doc_id,
-        metadata=audit_metadata,
-        **audit_request_context(request_ctx),
-    )
-    return response
+        if updated is None:
+            raise LookupError("知识文档不存在")
+        response = cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
+        await record_audit_event_async(
+            user,
+            action=audit_action,
+            resource_type="knowledge_document",
+            resource_id=doc_id,
+            metadata=audit_metadata,
+            **audit_request_context(request_ctx),
+        )
+        return response
+
+    if not wants_stream:
+        try:
+            return await run_update()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    queue: asyncio.Queue[dict[str, object] | None] = asyncio.Queue()
+
+    async def on_progress(event: Mapping[str, object]) -> None:
+        await _queue_progress(queue, event)
+
+    async def worker() -> None:
+        try:
+            for stage_event in initial_progress_stages(include_upload=False):
+                await queue.put(stage_event)
+            document = await run_update(on_progress=on_progress)
+            await queue.put(
+                {
+                    "stage": "done",
+                    "status": "completed",
+                    "label": "完成",
+                    "message": "完成",
+                    "document": document,
+                }
+            )
+        except LookupError as exc:
+            await queue.put(
+                knowledge_progress_event(
+                    "cleanup",
+                    "failed",
+                    message=str(exc),
+                    error=str(exc),
+                )
+            )
+            await queue.put(
+                {
+                    "stage": "done",
+                    "status": "failed",
+                    "label": "失败",
+                    "message": str(exc),
+                    "error": str(exc),
+                    "code": 404,
+                }
+            )
+        except Exception as exc:
+            await queue.put(
+                {
+                    "stage": "done",
+                    "status": "failed",
+                    "label": "失败",
+                    "message": str(exc),
+                    "error": str(exc),
+                    "code": 400,
+                }
+            )
+        finally:
+            await queue.put(None)
+
+    async def event_generator() -> AsyncIterator[dict[str, str]]:
+        task = asyncio.create_task(worker())
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                status = str(item.get("status") or "")
+                stage = str(item.get("stage") or "")
+                if stage == "done":
+                    yield _sse_payload(
+                        "progress.completed" if status == "completed" else "progress.failed",
+                        item,
+                    )
+                    break
+                event_name = "progress.failed" if status == "failed" else "progress"
+                yield _sse_payload(event_name, item)
+        finally:
+            if not task.done():
+                task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    return EventSourceResponse(event_generator())
 
 
-@router.post("/documents/{doc_id}/update/upload")
+@router.post("/documents/{doc_id}/update/upload", response_model=None)
 async def update_document_upload(
     request_ctx: Request,
     doc_id: str,
@@ -506,70 +787,183 @@ async def update_document_upload(
     semantic_min_sentences_per_chunk: int | None = Form(default=None, ge=1),
     semantic_min_characters_per_sentence: int | None = Form(default=None, ge=1),
     reader_strategy: str | None = Form(default=None),
+    stream: Annotated[bool, Form()] = False,
     user: User = Depends(require_scope("knowledge:write")),
-) -> KnowledgeDocumentResponsePayload:
-    stored_upload = None
-    try:
-        stored_upload = await store_knowledge_upload_async(file)
-        clean_title = (title or "").strip() or None
-        clean_source = (source or "").strip() or None
-        updated = await get_knowledge_base_lifecycle().replace_document_file_async(
-            doc_id,
-            path=str(stored_upload.path),
-            title=clean_title,
-            source=clean_source,
-            visibility=visibility,
-            metadata=stored_upload.metadata(),
-            owner_user_id=effective_knowledge_user_filter(user),
-            user=user,
-            ingest_options=ingest_options_from_form(
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                markdown_split_on_headings=markdown_split_on_headings,
-                csv_skip_header=csv_skip_header,
-                csv_clean_rows=csv_clean_rows,
-                code_chunk_size=code_chunk_size,
-                code_tokenizer=code_tokenizer,
-                code_include_nodes=code_include_nodes,
-                semantic_threshold=semantic_threshold,
-                semantic_similarity_window=semantic_similarity_window,
-                semantic_min_sentences_per_chunk=semantic_min_sentences_per_chunk,
-                semantic_min_characters_per_sentence=semantic_min_characters_per_sentence,
-                reader_strategy=reader_strategy,
-            ),
-        )
-    except KnowledgeUploadTooLargeError as exc:
-        raise HTTPException(status_code=413, detail=str(exc)) from exc
-    except ValueError as exc:
-        if stored_upload is not None:
-            await remove_managed_upload_async(stored_upload.metadata())
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        if stored_upload is not None:
-            await remove_managed_upload_async(stored_upload.metadata())
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if updated is None:
-        if stored_upload is not None:
-            await remove_managed_upload_async(stored_upload.metadata())
-        raise HTTPException(status_code=404, detail="知识文档不存在")
-
-    assert stored_upload is not None
-    response = cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
-    await record_audit_event_async(
-        user,
-        action="knowledge.source_replace",
-        resource_type="knowledge_document",
-        resource_id=doc_id,
-        metadata={
-            "mode": "upload",
-            "file_name": stored_upload.file_name,
-            "file_size": stored_upload.file_size,
-            "mime_type": stored_upload.mime_type,
-            "upload_mode": "browser",
-        },
-        **audit_request_context(request_ctx),
+) -> KnowledgeDocumentResponsePayload | EventSourceResponse:
+    ingest_options = ingest_options_from_form(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        markdown_split_on_headings=markdown_split_on_headings,
+        csv_skip_header=csv_skip_header,
+        csv_clean_rows=csv_clean_rows,
+        code_chunk_size=code_chunk_size,
+        code_tokenizer=code_tokenizer,
+        code_include_nodes=code_include_nodes,
+        semantic_threshold=semantic_threshold,
+        semantic_similarity_window=semantic_similarity_window,
+        semantic_min_sentences_per_chunk=semantic_min_sentences_per_chunk,
+        semantic_min_characters_per_sentence=semantic_min_characters_per_sentence,
+        reader_strategy=reader_strategy,
     )
-    return response
+    clean_title = (title or "").strip() or None
+    clean_source = (source or "").strip() or None
+
+    async def run_upload(on_progress=None) -> tuple[KnowledgeDocumentResponsePayload, Any]:
+        await emit_progress(
+            on_progress,
+            "upload",
+            "running",
+            message="上传中",
+        )
+        stored_upload = await store_knowledge_upload_async(file)
+        await emit_progress(
+            on_progress,
+            "upload",
+            "completed",
+            message="已上传",
+            detail={
+                "file_name": stored_upload.file_name,
+                "file_size": stored_upload.file_size,
+            },
+        )
+        try:
+            updated = await get_knowledge_base_lifecycle().replace_document_file_async(
+                doc_id,
+                path=str(stored_upload.path),
+                title=clean_title,
+                source=clean_source,
+                visibility=visibility,
+                metadata=stored_upload.metadata(),
+                owner_user_id=effective_knowledge_user_filter(user),
+                user=user,
+                ingest_options=ingest_options,
+                on_progress=on_progress,
+            )
+        except Exception:
+            await remove_managed_upload_async(stored_upload.metadata())
+            raise
+        if updated is None:
+            await remove_managed_upload_async(stored_upload.metadata())
+            raise LookupError("知识文档不存在")
+        response = cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
+        await record_audit_event_async(
+            user,
+            action="knowledge.source_replace",
+            resource_type="knowledge_document",
+            resource_id=doc_id,
+            metadata={
+                "mode": "upload",
+                "file_name": stored_upload.file_name,
+                "file_size": stored_upload.file_size,
+                "mime_type": stored_upload.mime_type,
+                "upload_mode": "browser",
+            },
+            **audit_request_context(request_ctx),
+        )
+        return response, stored_upload
+
+    if not stream:
+        try:
+            response, _stored = await run_upload()
+            return response
+        except KnowledgeUploadTooLargeError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    queue: asyncio.Queue[dict[str, object] | None] = asyncio.Queue()
+
+    async def on_progress(event: Mapping[str, object]) -> None:
+        await _queue_progress(queue, event)
+
+    async def worker() -> None:
+        try:
+            for stage_event in initial_progress_stages(include_upload=True):
+                await queue.put(stage_event)
+            document, _stored = await run_upload(on_progress=on_progress)
+            await queue.put(
+                {
+                    "stage": "done",
+                    "status": "completed",
+                    "label": "完成",
+                    "message": "完成",
+                    "document": document,
+                }
+            )
+        except KnowledgeUploadTooLargeError as exc:
+            await queue.put(
+                knowledge_progress_event(
+                    "upload",
+                    "failed",
+                    message=str(exc),
+                    error=str(exc),
+                )
+            )
+            await queue.put(
+                {
+                    "stage": "done",
+                    "status": "failed",
+                    "label": "失败",
+                    "message": str(exc),
+                    "error": str(exc),
+                    "code": 413,
+                }
+            )
+        except LookupError as exc:
+            await queue.put(
+                {
+                    "stage": "done",
+                    "status": "failed",
+                    "label": "失败",
+                    "message": str(exc),
+                    "error": str(exc),
+                    "code": 404,
+                }
+            )
+        except Exception as exc:
+            await queue.put(
+                {
+                    "stage": "done",
+                    "status": "failed",
+                    "label": "失败",
+                    "message": str(exc),
+                    "error": str(exc),
+                    "code": 400,
+                }
+            )
+        finally:
+            await queue.put(None)
+
+    async def event_generator() -> AsyncIterator[dict[str, str]]:
+        task = asyncio.create_task(worker())
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                status = str(item.get("status") or "")
+                stage = str(item.get("stage") or "")
+                if stage == "done":
+                    yield _sse_payload(
+                        "progress.completed" if status == "completed" else "progress.failed",
+                        item,
+                    )
+                    break
+                event_name = "progress.failed" if status == "failed" else "progress"
+                yield _sse_payload(event_name, item)
+        finally:
+            if not task.done():
+                task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    return EventSourceResponse(event_generator())
 
 
 @router.post("/search")

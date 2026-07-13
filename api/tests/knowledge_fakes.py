@@ -97,6 +97,47 @@ class StrictAsyncKnowledge:
         self.calls.append(("_build_content_hash", content))
         return f"hash:{getattr(content, 'id', '')}:{getattr(content, 'name', '')}"
 
+    async def _ainsert_contents_db(self, content: Any) -> None:
+        self.calls.append(("_ainsert_contents_db", content))
+        self._content_by_id[content.id] = SimpleNamespace(
+            id=content.id,
+            name=content.name,
+            description=content.description,
+            path=getattr(content, "path", None),
+            file_data=getattr(content, "file_data", None),
+            metadata=getattr(content, "metadata", None) or {},
+            status=getattr(content, "status", "completed"),
+            status_message=getattr(content, "status_message", ""),
+            created_at=0,
+        )
+
+    async def _aupdate_content(self, content: Any) -> None:
+        self.calls.append(("_aupdate_content", content))
+        existing = self._content_by_id.get(content.id)
+        if existing is None:
+            await self._ainsert_contents_db(content)
+            return
+        if getattr(content, "name", None) is not None:
+            existing.name = content.name
+        if getattr(content, "description", None) is not None:
+            existing.description = content.description
+        if getattr(content, "metadata", None) is not None:
+            existing.metadata = content.metadata
+        if getattr(content, "status", None) is not None:
+            existing.status = content.status
+        if getattr(content, "status_message", None) is not None:
+            existing.status_message = content.status_message
+
+    async def aremove_content_by_id(self, content_id: str) -> None:
+        self.calls.append(("aremove_content_by_id", content_id))
+        self._content_by_id.pop(content_id, None)
+        vector_db = getattr(self, "vector_db", None)
+        delete = getattr(vector_db, "delete_by_content_id", None) if vector_db is not None else None
+        if callable(delete):
+            result = delete(content_id)
+            if hasattr(result, "__await__"):
+                await result
+
     async def _aload_content(
         self,
         content: Any,
@@ -113,5 +154,12 @@ class StrictAsyncKnowledge:
             path=content.path,
             file_data=content.file_data,
             metadata=content.metadata,
+            status="completed",
+            status_message="",
             created_at=0,
         )
+        # Simulate vector write under content.id
+        vector_db = getattr(self, "vector_db", None)
+        upsert_vec = getattr(vector_db, "record_content_id", None) if vector_db is not None else None
+        if callable(upsert_vec):
+            upsert_vec(content.id)
