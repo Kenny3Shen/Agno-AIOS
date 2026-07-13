@@ -6,9 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from loguru import logger
 from pydantic import BaseModel, Field, model_validator
 
-from api.auth.claims import actor_id
+from api.auth.claims import actor_id, actor_role
 from api.auth.models import User
 from api.auth.scopes import require_scope
+from api.auth.users import current_active_user
 from api.services.approvals_service import (
     ApprovalListParams,
     ApprovalResolveConflictError,
@@ -18,6 +19,7 @@ from api.services.approvals_service import (
 )
 from api.services.security_policy import PolicyAuditEvent, record_policy_event
 from api.services.upload_approval_service import (
+    can_view_submission_approval,
     list_submission_approvals,
     preview_skill_submission,
     resolve_submission_approval,
@@ -60,10 +62,11 @@ def _resolver_email(user: User) -> str:
 @router.get("/submissions")
 async def list_submission_approval_requests(
     status: Literal["pending", "approved", "rejected"] | None = None,
-    _user: User = Depends(require_scope("approvals:read")),
+    user: User = Depends(current_active_user),
 ):
-    """List staged Skill/MCP upload requests. Only administrators have this scope."""
-    return {"approvals": await list_submission_approvals(status)}
+    """List staged Skill/MCP uploads; non-admins can only see their own."""
+    submitted_by = None if actor_role(user) == "admin" else actor_id(user)
+    return {"approvals": await list_submission_approvals(status, submitted_by=submitted_by)}
 
 
 @router.post("/submissions/{approval_id}/resolve")
@@ -98,8 +101,12 @@ async def resolve_submission_approval_request(
 @router.get("/submissions/{approval_id}/skill-preview")
 async def preview_skill_submission_request(
     approval_id: str,
-    _user: User = Depends(require_scope("approvals:read")),
+    user: User = Depends(current_active_user),
 ):
+    if not await can_view_submission_approval(
+        approval_id, submitted_by=actor_id(user), is_admin=actor_role(user) == "admin"
+    ):
+        raise HTTPException(status_code=404, detail="Approval not found")
     try:
         return await preview_skill_submission(approval_id)
     except FileNotFoundError as exc:
@@ -152,13 +159,14 @@ async def get_approval(
     approval_id: str,
     user: User = Depends(require_scope("approvals:read")),
 ):
-    del user
     try:
         approval = await get_approval_record(approval_id)
     except Exception as exc:
         logger.error(f"获取 Agno 审批详情失败: {exc}")
         raise HTTPException(status_code=500, detail="Failed to load approval") from exc
     if approval is None:
+        raise HTTPException(status_code=404, detail="Approval not found")
+    if actor_role(user) != "admin" and approval.get("user_id") != actor_id(user):
         raise HTTPException(status_code=404, detail="Approval not found")
     return approval
 

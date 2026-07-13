@@ -38,6 +38,7 @@ ROLE_SCOPES: dict[Role, set[str]] = {
         "mcp:submit",
         "skill:read",
         "skill:submit",
+        "approvals:read",
         "config:read",
         "evals:read",
     },

@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, App, Button, Card, Collapse, Descriptions, Drawer, Input, Modal, Segmented, Select, Space, Table, Tag, Typography } from 'antd'
 import { CheckOutlined, CloseOutlined } from '@ant-design/icons'
 import XMarkdown from '@ant-design/x-markdown'
+import { currentUserQuery } from '@/features/auth'
+import { hasScope } from '@/shared/auth/permissions'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
 import {
@@ -36,15 +38,42 @@ const statusLabel = (status: string) => status ? `${status.slice(0, 1).toUpperCa
 const rejectionReason = (approval: Approval) =>
   approval.rejection_reason ?? (typeof approval.resolution_data?.rejection_reason === 'string' ? approval.resolution_data.rejection_reason : '')
 
+const locationSearch = () => {
+  const hashQueryIndex = window.location.hash.indexOf('?')
+  return hashQueryIndex >= 0 ? window.location.hash.slice(hashQueryIndex) : window.location.search
+}
+
 export function ApprovalsPage() {
   const { message } = App.useApp()
   const client = useQueryClient()
+  const [searchStr, setSearchStr] = useState(locationSearch)
+  const openedNotificationApprovalId = useRef<string | null>(null)
+  const currentUser = useQuery(currentUserQuery())
+  const canResolve = hasScope(currentUser.data, 'approvals:write')
   const [status, setStatus] = useState('')
   const [selected, setSelected] = useState<Approval | null>(null)
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [markdownPreviewModes, setMarkdownPreviewModes] = useState<Record<string, 'raw' | 'markdown'>>({})
   const query = useQuery({ queryKey: ['approvals', status], queryFn: () => getApprovals(status) })
+  const notificationApprovalId = new URLSearchParams(searchStr).get('approval_id')
+  useEffect(() => {
+    const updateSearch = () => setSearchStr(locationSearch())
+    window.addEventListener('hashchange', updateSearch)
+    window.addEventListener('popstate', updateSearch)
+    return () => {
+      window.removeEventListener('hashchange', updateSearch)
+      window.removeEventListener('popstate', updateSearch)
+    }
+  }, [])
+  useEffect(() => {
+    if (!notificationApprovalId || openedNotificationApprovalId.current === notificationApprovalId) return
+    const approval = query.data?.find((item) => item.id === notificationApprovalId)
+    if (approval) {
+      openedNotificationApprovalId.current = notificationApprovalId
+      setSelected(approval)
+    }
+  }, [notificationApprovalId, query.data])
   const skillPreview = useQuery({
     queryKey: ['approvals', 'skill-preview', selected?.id],
     queryFn: () => getSkillSubmissionPreview(selected?.id ?? ''),
@@ -64,7 +93,7 @@ export function ApprovalsPage() {
       await refresh()
     },
   })
-  const approvalActions = selected ? (
+  const approvalActions = selected && canResolve ? (
     <Space size={4}>
       <Button
         type="primary"
@@ -164,7 +193,7 @@ export function ApprovalsPage() {
               ]}
             />
             <PayloadViewer value={approvalPayload(selected)} />
-            {selected.resource_type === 'skill' && selected.status === 'pending' && (
+            {canResolve && selected.resource_type === 'skill' && selected.status === 'pending' && (
               <Card
                 size="small"
                 title="ZIP 内容预览"

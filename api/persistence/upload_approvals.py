@@ -62,12 +62,16 @@ async def get_upload_approval(approval_id: str) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
-async def list_upload_approvals(status: str | None = None) -> list[dict[str, Any]]:
+async def list_upload_approvals(
+    status: str | None = None, *, submitted_by: str | None = None
+) -> list[dict[str, Any]]:
     await ensure_upload_approvals_table()
     table = upload_approvals_table()
     stmt = select(table).order_by(table.c.created_at.desc())
     if status:
         stmt = stmt.where(table.c.status == status)
+    if submitted_by is not None:
+        stmt = stmt.where(table.c.submitted_by == submitted_by)
     async with get_async_control_plane_engine().begin() as conn:
         rows = (await conn.execute(stmt)).mappings().all()
     return [dict(row) for row in rows]

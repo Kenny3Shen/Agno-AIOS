@@ -144,3 +144,9 @@ async def test_read_skill_archive_rejects_uploads_over_limit():
 
     with pytest.raises(ValueError, match="too large"):
         await read_skill_archive(file)
+
+
+def test_uploaded_skill_name_defaults_to_archive_stem():
+    assert skills.uploaded_skill_name("my-skill.zip", "") == "my-skill"
+    assert skills.uploaded_skill_name(r"nested\\my-skill.zip", "  ") == "my-skill"
+    assert skills.uploaded_skill_name("my-skill.zip", "Custom name") == "Custom name"

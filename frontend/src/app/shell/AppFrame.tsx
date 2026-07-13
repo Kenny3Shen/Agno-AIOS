@@ -117,7 +117,15 @@ export function AppFrame({ children }: { children: ReactNode }) {
       await markNotificationRead(notification.id)
       await queryClient.invalidateQueries({ queryKey: ['notifications'] })
     } finally {
-      if (canReadApprovals) void router.history.push('/approvals')
+      const approvalId = typeof notification.data.approval_id === 'string' ? notification.data.approval_id : ''
+      const targetPath = typeof notification.data.path === 'string' && notification.data.path.startsWith('/') ? notification.data.path : ''
+      if (approvalId && canReadApprovals) {
+        void router.history.push(`/approvals?approval_id=${encodeURIComponent(approvalId)}`)
+      } else if (targetPath) {
+        void router.history.push(targetPath)
+      } else if (canReadApprovals) {
+        void router.history.push('/approvals')
+      }
     }
   }
   useEffect(() => setMobileOpen(false), [path])

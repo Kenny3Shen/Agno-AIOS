@@ -40,6 +40,16 @@ async def test_submit_skill_stages_archive_and_hides_staging_filename():
 
 
 @pytest.mark.asyncio
+async def test_list_submission_approvals_can_be_limited_to_submitter():
+    stored = [record(resource_type="skill")]
+    with patch.object(service, "list_upload_approvals", AsyncMock(return_value=stored)) as list_records:
+        approvals = await service.list_submission_approvals("pending", submitted_by="user-1")
+
+    list_records.assert_awaited_once_with("pending", submitted_by="user-1")
+    assert approvals[0]["submitted_by"] == {"id": "user-1", "email": ""}
+
+
+@pytest.mark.asyncio
 async def test_resolving_skill_approval_installs_then_removes_staged_archive(tmp_path: Path):
     staged = tmp_path / "approval-1.zip"
     staged.write_bytes(b"zip")

@@ -1,13 +1,17 @@
 import { useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { App, Button, Card, Input, Select, Space, Table, Tag } from 'antd'
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons'
+import { currentUserQuery } from '@/features/auth'
+import { roleOf } from '@/shared/auth/permissions'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { searchCves, updateCves, type Cve } from './api'
 import { formatDate } from '@/shared/lib/format'
 
 export function CvePage() {
   const { message } = App.useApp()
+  const currentUser = useQuery(currentUserQuery())
+  const canUpdateDatabase = roleOf(currentUser.data) === 'admin'
   const [query, setQuery] = useState('')
   const [source, setSource] = useState<string>()
   const [pagination, setPagination] = useState({ page: 1, size: 20 })
@@ -43,7 +47,7 @@ export function CvePage() {
               { value: 'exploit-db', label: 'Exploit-DB' },
             ]}
           />
-          <Button icon={<ReloadOutlined />} loading={update.isPending} onClick={() => update.mutate()}>
+          <Button icon={<ReloadOutlined />} loading={update.isPending} disabled={!canUpdateDatabase} onClick={() => update.mutate()}>
             更新数据库
           </Button>
         </Space>

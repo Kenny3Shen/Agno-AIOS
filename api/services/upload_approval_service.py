@@ -116,8 +116,25 @@ async def submit_mcp_upload(*, payload: dict[str, Any], submitted_by: str, submi
     return _public(record)
 
 
-async def list_submission_approvals(status: str | None = None) -> list[dict[str, Any]]:
-    return [_public(record) for record in await list_upload_approvals(status)]
+async def list_submission_approvals(
+    status: str | None = None, *, submitted_by: str | None = None
+) -> list[dict[str, Any]]:
+    """Return upload approvals, optionally limited to their submitter."""
+    return [_public(record) for record in await list_upload_approvals(status, submitted_by=submitted_by)]
+
+
+async def get_submission_approval(approval_id: str) -> dict[str, Any] | None:
+    """Load a public upload approval without exposing its staged payload."""
+    record = await get_upload_approval(approval_id)
+    return _public(record) if record is not None else None
+
+
+async def can_view_submission_approval(approval_id: str, *, submitted_by: str, is_admin: bool) -> bool:
+    """Whether an administrator or the submitting user can view an upload approval."""
+    if is_admin:
+        return (await get_upload_approval(approval_id)) is not None
+    record = await get_upload_approval(approval_id)
+    return record is not None and str(record.get("submitted_by") or "") == submitted_by
 
 
 async def resolve_submission_approval(

@@ -5,6 +5,7 @@ Skills 管理 API
 """
 
 from functools import partial
+from pathlib import PurePosixPath
 
 from anyio import to_thread
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -29,6 +30,13 @@ from api.services.notification_service import notify_admins_of_submission
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
 UPLOAD_READ_CHUNK_BYTES = 1024 * 1024
+
+
+def uploaded_skill_name(filename: str, requested_name: str) -> str:
+    """Use the archive filename when the upload form leaves the name blank."""
+    if requested_name.strip():
+        return requested_name.strip()
+    return PurePosixPath(filename.replace("\\", "/")).stem.strip()
 
 
 async def read_skill_archive(file: UploadFile) -> bytes:
@@ -147,10 +155,11 @@ async def upload_skill(
     try:
         archive = await read_skill_archive(file)
         normalized_visibility = normalize_visibility(visibility, strict=True)
+        requested_name = uploaded_skill_name(filename, name)
         if actor_role(user) != "admin":
             approval = await submit_skill_upload(
                 archive=archive,
-                requested_name=name.strip(),
+                requested_name=requested_name,
                 visibility=visibility,
                 submitted_by=actor_id(user),
                 submitted_by_email=str(getattr(user, "email", "") or ""),
@@ -173,7 +182,7 @@ async def upload_skill(
             partial(
                 install_skill_archive,
                 archive,
-                requested_name=name.strip(),
+                requested_name=requested_name,
                 visibility=visibility,
                 owner_user_id=actor_id(user),
             )

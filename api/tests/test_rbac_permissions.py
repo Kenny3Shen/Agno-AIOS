@@ -54,6 +54,7 @@ def test_user_scopes_use_agentos_resource_names():
         "mcp:submit",
         "skill:read",
         "skill:submit",
+        "approvals:read",
         "config:read",
         "evals:read",
     ):

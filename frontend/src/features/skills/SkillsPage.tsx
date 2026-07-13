@@ -179,8 +179,8 @@ export function SkillsPage() {
             }
           }}
         >
-          <Form.Item name="name" label="名称" rules={[{ required: true }]}>
-            <Input />
+          <Form.Item name="name" label="名称" extra="留空时将使用 ZIP 文件名">
+            <Input placeholder="例如：my-skill" />
           </Form.Item>
           <Form.Item name="visibility" label="可见性">
             <VisibilitySelect style={{ width: '100%' }} />

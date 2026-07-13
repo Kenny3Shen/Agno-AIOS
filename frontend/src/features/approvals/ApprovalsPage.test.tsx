@@ -9,6 +9,9 @@ import { ApprovalsPage } from './ApprovalsPage'
 describe('ApprovalsPage', () => {
   it('shows submitted skill uploads and lets an administrator approve them', async () => {
     server.use(
+      http.get('/api/auth/users/me', () =>
+        HttpResponse.json({ id: 'admin-1', email: 'admin@example.com', role: 'admin', scopes: ['admin'] })
+      ),
       http.get('/api/approvals', () =>
         HttpResponse.json({
           approvals: [],
@@ -67,5 +70,35 @@ describe('ApprovalsPage', () => {
     expect(await screen.findByText('审批已approved')).toBeTruthy()
     expect(screen.getByText('admin-1')).toBeTruthy()
     expect(screen.getByText('admin@example.com')).toBeTruthy()
+  })
+
+  it('lets a regular user view only their submitted approval without resolution controls', async () => {
+    server.use(
+      http.get('/api/auth/users/me', () =>
+        HttpResponse.json({ id: 'member-1', email: 'member@example.com', role: 'user', scopes: ['approvals:read'] })
+      ),
+      http.get('/api/approvals', () => HttpResponse.json({ approvals: [] })),
+      http.get('/api/approvals/submissions', () =>
+        HttpResponse.json({
+          approvals: [
+            {
+              id: 'upload-1',
+              status: 'approved',
+              resource_type: 'mcp',
+              submitted_by: { id: 'member-1', email: 'member@example.com' },
+              resolved_by: { id: 'admin-1', email: 'admin@example.com' },
+              payload: { name: 'approved-server' },
+            },
+          ],
+        })
+      )
+    )
+
+    renderWithQuery(<ApprovalsPage />)
+
+    await userEvent.click(await screen.findByText('MCP Server 上传'))
+    expect(screen.getByText('已批准')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /批准/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /拒绝/ })).toBeNull()
   })
 })
