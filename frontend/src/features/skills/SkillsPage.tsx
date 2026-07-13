@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Card, Drawer, Empty, Form, Grid, Input, Space, Splitter, Switch, Table, Tabs, Tag, Upload } from 'antd'
-import { InboxOutlined, UploadOutlined } from '@ant-design/icons'
+import { App, Button, Card, Drawer, Empty, Form, Grid, Input, Popconfirm, Space, Splitter, Switch, Table, Tabs, Tag, Upload } from 'antd'
+import { DeleteOutlined, InboxOutlined, UploadOutlined } from '@ant-design/icons'
 import XMarkdown from '@ant-design/x-markdown'
 import { PageHeader } from '@/shared/ui/PageHeader'
-import { listSkills, setVisibility, toggleSkill, uploadSkill, type Skill } from './api'
+import { deleteSkill, listSkills, setVisibility, toggleSkill, uploadSkill, type Skill } from './api'
 import { getSkillBody, getSkillDetailMetadata } from './utils'
 import { VisibilitySelect } from '@/shared/ui/VisibilitySelect'
 import { MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
@@ -25,6 +25,16 @@ export function SkillsPage() {
       message.success('可见性已更新')
     } catch (error) {
       message.error(error instanceof Error ? error.message : '更新技能可见性失败')
+    }
+  }
+  const removeSkill = async (skill: Skill) => {
+    try {
+      await deleteSkill(skill.name)
+      if (selected?.name === skill.name) setSelected(null)
+      message.success('技能已删除')
+      await refresh()
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '删除技能失败')
     }
   }
   const toggle = useMutation({
@@ -112,6 +122,16 @@ export function SkillsPage() {
                     )
                   },
                 },
+                {
+                  title: 'Actions',
+                  width: 88,
+                  render: (_, row) =>
+                    row.can_delete ? (
+                      <Popconfirm title={`删除技能 “${row.name}”？此操作不可恢复。`} okText="删除" okButtonProps={{ danger: true }} onConfirm={() => removeSkill(row)}>
+                        <Button danger type="text" icon={<DeleteOutlined />} aria-label={`删除技能 ${row.name}`} onClick={(event) => event.stopPropagation()} />
+                      </Popconfirm>
+                    ) : null,
+                },
               ]}
             />
           </Card>
@@ -145,10 +165,18 @@ export function SkillsPage() {
           layout="vertical"
           initialValues={{ visibility: 'private' }}
           onFinish={async (values: { name: string; visibility: 'private' | 'public'; file: { file: File } }) => {
-            await uploadSkill(values.name, values.visibility, values.file.file)
-            message.success('技能已上传')
-            setUploadOpen(false)
-            await refresh()
+            try {
+              const result = await uploadSkill(values.name, values.visibility, values.file.file)
+              if (result.status === 'pending') {
+                message.success('技能已提交，等待管理员审批')
+              } else {
+                message.success('技能已上传')
+                await refresh()
+              }
+              setUploadOpen(false)
+            } catch (error) {
+              message.error(error instanceof Error ? error.message : '上传技能失败')
+            }
           }}
         >
           <Form.Item name="name" label="名称" rules={[{ required: true }]}>

@@ -5,9 +5,10 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from api.auth.claims import actor_id
+from api.auth.claims import actor_id, actor_role
 from api.auth.models import User
 from api.auth.scopes import require_scope
+from api.auth.visibility import normalize_visibility
 from api.mcp.config import delete_token, insert_token, list_tokens
 from api.mcp.server import (
     call_tool,
@@ -25,6 +26,8 @@ from api.services.mcp_config_service import (
     remove_mcp_server,
     visible_mcp_servers,
 )
+from api.services.upload_approval_service import submit_mcp_upload
+from api.services.notification_service import notify_admins_of_submission
 
 router = APIRouter(prefix="/api/mcp", tags=["MCP"])
 
@@ -53,12 +56,14 @@ class McpUploadRequest(BaseModel):
 
 class McpUploadResponse(BaseModel):
     success: bool
-    id: int
+    id: int | None = None
     name: str
-    kind: str
-    namespace: str
+    kind: str = "external"
+    namespace: str = ""
     visibility: str
-    restart_required: bool
+    restart_required: bool = False
+    status: str = "approved"
+    approval_id: str | None = None
 
 
 class McpVisibilityRequest(BaseModel):
@@ -164,7 +169,28 @@ async def remove_token(request: Request, body: TokenDelete, user: User = Depends
 
 
 @router.post("/upload", response_model=McpUploadResponse)
-async def upload_mcp(request: Request, body: McpUploadRequest, user: User = Depends(require_scope("mcp:write"))):
+async def upload_mcp(request: Request, body: McpUploadRequest, user: User = Depends(require_scope("mcp:submit"))):
+    if actor_role(user) != "admin":
+        # Validate now, before persisting a request that can never be installed.
+        parse_mcp_manifest(body.manifest)
+        try:
+            normalized_visibility = normalize_visibility(body.visibility, strict=True)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        approval = await submit_mcp_upload(
+            payload=body.model_dump(), submitted_by=actor_id(user),
+            submitted_by_email=str(getattr(user, "email", "") or ""),
+        )
+        await notify_admins_of_submission(approval_id=str(approval["id"]), resource_type="mcp", submitter_email=str(getattr(user, "email", "") or ""))
+        await record_audit_event_async(
+            user, action="mcp.upload_submitted", resource_type="mcp_approval",
+            resource_id=str(approval["id"]), metadata={"name": body.name.strip()},
+            **audit_request_context(request),
+        )
+        return McpUploadResponse(
+            success=True, name=body.name.strip(), visibility=normalized_visibility,
+            status="pending", approval_id=str(approval["id"]),
+        )
     change = await apply_mcp_upload(
         name=body.name, description=body.description, manifest=body.manifest,
         enabled=body.enabled, visibility=body.visibility, owner_user_id=actor_id(user),

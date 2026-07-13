@@ -287,8 +287,41 @@ async def test_resolve_route_maps_missing_and_conflict_to_http_errors():
         with pytest.raises(HTTPException) as conflict:
             await approvals.resolve_approval(
                 "approval-1",
-                approvals.ApprovalResolveRequest(status="rejected"),
+                approvals.ApprovalResolveRequest(status="rejected", rejection_reason="Not allowed"),
                 request=request(),
                 user=current_actor,
             )
     assert conflict.value.status_code == 409
+
+
+def test_rejected_approval_request_requires_reason():
+    with pytest.raises(ValueError, match="rejection reason"):
+        approvals.ApprovalResolveRequest(status="rejected", rejection_reason=" ")
+
+
+def test_rejected_submission_request_requires_reason():
+    with pytest.raises(ValueError, match="rejection reason"):
+        approvals.SubmissionApprovalResolveRequest(status="rejected")
+
+
+@pytest.mark.asyncio
+async def test_rejected_approval_route_adds_reason_to_resolution_data():
+    current_actor = actor("admin-1")
+    resolved = {"id": "approval-1", "status": "rejected"}
+    with (
+        patch.object(approvals, "resolve_approval_record", new=AsyncMock(return_value=resolved)) as resolve_mock,
+        patch.object(approvals, "record_policy_event", new=AsyncMock()),
+    ):
+        await approvals.resolve_approval(
+            "approval-1",
+            approvals.ApprovalResolveRequest(
+                status="rejected", rejection_reason="Policy violation", resolution_data={"source": "review"}
+            ),
+            request=request(),
+            user=current_actor,
+        )
+    assert resolve_mock.await_args is not None
+    assert resolve_mock.await_args.kwargs["resolution_data"] == {
+        "source": "review",
+        "rejection_reason": "Policy violation",
+    }

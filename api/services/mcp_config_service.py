@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, TypeAdapter, ValidationError
 from sqlalchemy.exc import IntegrityError
 
+from api.auth.claims import actor_role
 from api.auth.visibility import can_manage_resource, can_read_resource, normalize_visibility
 from api.mcp.config import list_mcp_servers, normalize_namespace
 from api.persistence.mcp import delete_server_row, get_server_row, insert_server_row, update_server_row
@@ -88,6 +89,7 @@ def _public_server(row: dict[str, Any], user: Any) -> dict[str, Any]:
         "manifest": redacted,
         "config": redacted,
         "can_manage": can_manage_resource(user, row),
+        "can_delete": row["server_type"] != "builtin" and actor_role(user) == "admin",
     }
 
 
@@ -186,8 +188,8 @@ async def remove_mcp_server(server_id: int, user: Any) -> McpConfigChange:
     row = await get_server_row(server_id)
     if row is None:
         raise HTTPException(status_code=404, detail="MCP server not found")
-    if not can_manage_resource(user, row):
-        raise HTTPException(status_code=403, detail="MCP server is not manageable")
+    if actor_role(user) != "admin":
+        raise HTTPException(status_code=403, detail="Administrator permission required")
     if row["server_type"] == "builtin" or not await delete_server_row(server_id):
         raise HTTPException(status_code=400, detail="Built-in MCP server cannot be deleted")
     return McpConfigChange(

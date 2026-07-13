@@ -10,18 +10,21 @@ from anyio import to_thread
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
-from api.auth.claims import actor_id
+from api.auth.claims import ADMIN_SCOPE, actor_id, actor_role
 from api.auth.models import User
 from api.auth.scopes import require_scope
 from api.auth.visibility import normalize_visibility
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.skill_service import (
     MAX_SKILL_ARCHIVE_BYTES,
+    delete_skill,
     install_skill_archive,
     list_skill_infos,
     set_skill_enabled,
     set_skill_visibility,
 )
+from api.services.upload_approval_service import submit_skill_upload
+from api.services.notification_service import notify_admins_of_submission
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
@@ -53,6 +56,7 @@ class SkillInfo(BaseModel):
     visibility: str
     owner_user_id: str
     can_manage: bool
+    can_delete: bool
 
 
 class SkillListResponse(BaseModel):
@@ -74,11 +78,13 @@ class SkillVisibilityResponse(BaseModel):
 
 
 class SkillUploadResponse(BaseModel):
-    name: str
-    description: str
-    path: str
-    visibility: str
+    name: str = ""
+    description: str = ""
+    path: str = ""
+    visibility: str = "private"
     success: bool = True
+    status: str = "approved"
+    approval_id: str | None = None
 
 
 class SkillVisibilityRequest(BaseModel):
@@ -131,15 +137,38 @@ async def upload_skill(
     name: str = Form(""),
     visibility: str = Form("private"),
     file: UploadFile = File(...),
-    user: User = Depends(require_scope("skill:write")),
+    user: User = Depends(require_scope("skill:submit")),
 ):
-    """上传并安装 Skill zip 包。"""
+    """上传 Skill；非管理员提交会进入审批队列。"""
     filename = (file.filename or "").strip()
     if filename and not filename.lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="Skill archive must be a zip file")
 
     try:
         archive = await read_skill_archive(file)
+        normalized_visibility = normalize_visibility(visibility, strict=True)
+        if actor_role(user) != "admin":
+            approval = await submit_skill_upload(
+                archive=archive,
+                requested_name=name.strip(),
+                visibility=visibility,
+                submitted_by=actor_id(user),
+                submitted_by_email=str(getattr(user, "email", "") or ""),
+                filename=filename,
+            )
+            await notify_admins_of_submission(approval_id=str(approval["id"]), resource_type="skill", submitter_email=str(getattr(user, "email", "") or ""))
+            await record_audit_event_async(
+                user,
+                action="skill.upload_submitted",
+                resource_type="skill_approval",
+                resource_id=str(approval["id"]),
+                metadata={"filename": filename, "visibility": normalized_visibility},
+                **audit_request_context(request),
+            )
+            return SkillUploadResponse(
+                success=True, status="pending", approval_id=str(approval["id"]),
+                visibility=normalized_visibility,
+            )
         public_name, description, dest = await to_thread.run_sync(
             partial(
                 install_skill_archive,
@@ -154,7 +183,6 @@ async def upload_skill(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    normalized_visibility = normalize_visibility(visibility)
     await record_audit_event_async(
         user,
         action="skill.upload",
@@ -173,6 +201,33 @@ async def upload_skill(
         path=str(dest),
         visibility=normalized_visibility,
     )
+
+
+@router.delete("/{skill_name}")
+async def delete_skill_route(
+    request: Request,
+    skill_name: str,
+    user: User = Depends(require_scope(ADMIN_SCOPE)),
+):
+    """Permanently delete a Skill. This operation is restricted to admins."""
+    try:
+        public_name = await to_thread.run_sync(delete_skill, skill_name, user)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' 不存在")
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail="Administrator permission required") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await record_audit_event_async(
+        user,
+        action="skill.delete",
+        resource_type="skill",
+        resource_id=public_name,
+        metadata={"requested_name": skill_name},
+        **audit_request_context(request),
+    )
+    return {"success": True, "name": public_name}
 
 
 @router.put("/{skill_name}/visibility", response_model=SkillVisibilityResponse)

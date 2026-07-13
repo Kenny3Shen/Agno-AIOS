@@ -26,6 +26,7 @@ from api.routes import (
     knowledge,
     memory,
     mcp as mcp_routes,
+    notifications,
     overview,
     settings,
     skills,
@@ -142,6 +143,7 @@ app.include_router(knowledge.router)
 app.include_router(agent_evals.router)
 app.include_router(memory.router)
 app.include_router(approvals.router)
+app.include_router(notifications.router)
 
 app.state.cors_allowed_origins = app_settings.cors_origins
 app.add_middleware(

@@ -114,6 +114,7 @@ async def ensure_app_tables_async() -> None:
     from api.persistence.database import get_async_control_plane_engine
     from api.persistence.knowledge_sources import ensure_knowledge_sources_table_async
     from api.persistence.model_configs import ensure_model_configs_table_async
+    from api.persistence.upload_approvals import ensure_upload_approvals_table
 
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
@@ -125,4 +126,5 @@ async def ensure_app_tables_async() -> None:
     await ensure_chat_settings_table_async()
     await ensure_knowledge_sources_table_async()
     await ensure_model_configs_table_async()
+    await ensure_upload_approvals_table()
     await init_mcp_postgres_tables()

@@ -1,10 +1,11 @@
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
-import { Avatar, Button, Drawer, Dropdown, Grid, Layout, Menu, Space, Spin, Tooltip, type MenuProps } from 'antd'
+import { Avatar, Badge, Button, Drawer, Dropdown, Grid, Layout, Menu, Space, Spin, Tooltip, Typography, type MenuProps } from 'antd'
 import {
   ApiOutlined,
   AuditOutlined,
+  BellOutlined,
   BookOutlined,
   BugOutlined,
   BulbOutlined,
@@ -29,6 +30,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { currentUserQuery, logout } from '@/features/auth'
 import { ChatTaskPanel } from '@/features/chat/ChatTaskPanel'
+import { getNotifications, markNotificationRead, type Notification } from '@/features/notifications/api'
 import { loginPath, nextPathFromLocation } from '@/features/auth/routing'
 import { getToken } from '@/shared/auth/storage'
 import { hasScope } from '@/shared/auth/permissions'
@@ -71,6 +73,14 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const nextPathRef = useRef<string | null>(currentNextPath)
   const token = getToken()
   const userQuery = useQuery({ ...currentUserQuery(), enabled: Boolean(token), retry: false })
+  const canReadApprovals = hasScope(userQuery.data, 'approvals:read')
+  const canReadNotifications = hasScope(userQuery.data, 'sessions:read')
+  const notificationsQuery = useQuery({
+    queryKey: ['notifications'],
+    queryFn: getNotifications,
+    enabled: Boolean(token) && canReadNotifications,
+    refetchInterval: 30_000,
+  })
 
   const items = useMemo<MenuProps['items']>(
     () =>
@@ -101,6 +111,14 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const navigateFromMenu: MenuProps['onClick'] = ({ key }) => {
     void router.history.push(key === '/chat' ? '/chat' : key)
     setMobileOpen(false)
+  }
+  const openNotification = async (notification: Notification) => {
+    try {
+      await markNotificationRead(notification.id)
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    } finally {
+      if (canReadApprovals) void router.history.push('/approvals')
+    }
   }
   useEffect(() => setMobileOpen(false), [path])
   useEffect(() => {
@@ -169,6 +187,33 @@ export function AppFrame({ children }: { children: ReactNode }) {
             )}
           </Space>
           <Space>
+            {canReadNotifications && (
+              <Dropdown
+                trigger={['click']}
+                menu={{
+                  items:
+                    notificationsQuery.data?.notifications.slice(0, 6).map((notification) => ({
+                      key: String(notification.id),
+                      label: (
+                        <div style={{ maxWidth: 300 }}>
+                          <strong>{notification.title}</strong>
+                          <Typography.Text type="secondary" ellipsis style={{ display: 'block', maxWidth: 280 }}>
+                            {notification.body}
+                          </Typography.Text>
+                        </div>
+                      ),
+                    })) ?? [{ key: 'empty', label: '暂无通知', disabled: true }],
+                  onClick: ({ key }) => {
+                    const notification = notificationsQuery.data?.notifications.find((item) => item.id === Number(key))
+                    if (notification) void openNotification(notification)
+                  },
+                }}
+              >
+                <Tooltip title="通知">
+                  <Button type="text" aria-label="Approval notifications" icon={<Badge count={notificationsQuery.data?.unread_count ?? 0} size="small"><BellOutlined /></Badge>} />
+                </Tooltip>
+              </Dropdown>
+            )}
             <Tooltip title={t('shell.language')}>
               <Button type="text" icon={<TranslationOutlined />} onClick={preferences.toggleLocale} />
             </Tooltip>

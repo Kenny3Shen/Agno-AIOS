@@ -4,7 +4,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 from api.auth.claims import actor_id
 from api.auth.models import User
@@ -17,6 +17,11 @@ from api.services.approvals_service import (
     resolve_approval_record,
 )
 from api.services.security_policy import PolicyAuditEvent, record_policy_event
+from api.services.upload_approval_service import (
+    list_submission_approvals,
+    preview_skill_submission,
+    resolve_submission_approval,
+)
 
 router = APIRouter(prefix="/api/approvals", tags=["Approvals"])
 
@@ -24,10 +29,83 @@ router = APIRouter(prefix="/api/approvals", tags=["Approvals"])
 class ApprovalResolveRequest(BaseModel):
     status: Literal["approved", "rejected"]
     resolution_data: dict[str, object] | None = None
+    rejection_reason: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def require_rejection_reason(self) -> ApprovalResolveRequest:
+        if self.status == "rejected" and not (self.rejection_reason or "").strip():
+            raise ValueError("A rejection reason is required")
+        return self
+
+
+class SubmissionApprovalResolveRequest(BaseModel):
+    status: Literal["approved", "rejected"]
+    rejection_reason: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def require_rejection_reason(self) -> SubmissionApprovalResolveRequest:
+        if self.status == "rejected" and not (self.rejection_reason or "").strip():
+            raise ValueError("A rejection reason is required")
+        return self
 
 
 def _resolver_id(user: User) -> str:
     return str(getattr(user, "email", "") or actor_id(user) or "system")
+
+
+def _resolver_email(user: User) -> str:
+    return str(getattr(user, "email", "") or "")
+
+
+@router.get("/submissions")
+async def list_submission_approval_requests(
+    status: Literal["pending", "approved", "rejected"] | None = None,
+    _user: User = Depends(require_scope("approvals:read")),
+):
+    """List staged Skill/MCP upload requests. Only administrators have this scope."""
+    return {"approvals": await list_submission_approvals(status)}
+
+
+@router.post("/submissions/{approval_id}/resolve")
+async def resolve_submission_approval_request(
+    approval_id: str,
+    body: SubmissionApprovalResolveRequest,
+    request: Request,
+    user: User = Depends(require_scope("approvals:write")),
+):
+    approval = await resolve_submission_approval(
+        approval_id,
+        status=body.status,
+        resolved_by=actor_id(user) or "system",
+        resolved_by_email=_resolver_email(user),
+        rejection_reason=body.rejection_reason,
+    )
+    if approval is None:
+        raise HTTPException(status_code=404, detail="Approval not found")
+    await record_policy_event(
+        user,
+        PolicyAuditEvent(
+            action=f"upload_approval.{body.status}",
+            resource_type=str(approval["resource_type"]),
+            resource_id=approval_id,
+            metadata={"submitted_by": approval["submitted_by"], "rejection_reason": approval.get("rejection_reason")},
+        ),
+        request,
+    )
+    return approval
+
+
+@router.get("/submissions/{approval_id}/skill-preview")
+async def preview_skill_submission_request(
+    approval_id: str,
+    _user: User = Depends(require_scope("approvals:read")),
+):
+    try:
+        return await preview_skill_submission(approval_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("")
@@ -93,11 +171,14 @@ async def resolve_approval(
     user: User = Depends(require_scope("approvals:write")),
 ):
     try:
+        resolution_data = dict(body.resolution_data or {})
+        if body.status == "rejected":
+            resolution_data["rejection_reason"] = (body.rejection_reason or "").strip()
         approval = await resolve_approval_record(
             approval_id,
             status=body.status,
             resolved_by=_resolver_id(user),
-            resolution_data=body.resolution_data,
+            resolution_data=resolution_data or None,
         )
     except ApprovalResolveConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

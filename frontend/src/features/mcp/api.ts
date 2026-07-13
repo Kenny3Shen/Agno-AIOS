@@ -13,6 +13,7 @@ export interface McpServer {
   visibility: ResourceVisibility
   owner_user_id: string
   can_manage: boolean
+  can_delete?: boolean
   manifest: JsonRecord
 }
 
@@ -48,12 +49,21 @@ export interface McpToken {
   expires_at: number
 }
 
+/** The result of submitting an external MCP server for administrator review. */
+export interface UploadApprovalSubmission {
+  success?: boolean
+  approval_id?: string
+  id?: string
+  status?: string
+}
+
 export const getConfig = () => requestJson<McpConfig>('/mcp/config')
 export const listComponents = (namespace?: string) =>
   requestJson<McpComponent[]>(`/mcp/components${namespace ? `?namespace=${encodeURIComponent(namespace)}` : ''}`)
 export const updateConfig = (id: string, enabled: boolean) => requestJson('/mcp/config', jsonInit('POST', { id, enabled }))
 export const setServerEnabled = (id: number, enabled: boolean) =>
   requestJson(`/mcp/servers/${id}/enabled`, jsonInit('PUT', { server_id: id, enabled }))
+export const deleteServer = (id: number) => requestJson<{ success: boolean }>(`/mcp/servers/${id}`, { method: 'DELETE' })
 export const setComponentEnabled = (component: McpComponent, enabled: boolean) =>
   requestJson(
     `/mcp/components/${component.type}/${encodeURIComponent(component.name)}/enabled`,
@@ -66,7 +76,7 @@ export const issueToken = (name: string, expires_in: number) =>
   requestJson<{ token: string }>('/mcp/tokens/issue', jsonInit('POST', { name, expires_in }))
 export const deleteToken = (id: number) => requestJson('/mcp/tokens/delete', jsonInit('POST', { id }))
 export const uploadServer = (payload: { name: string; description: string; manifest: string; visibility: ResourceVisibility }) =>
-  requestJson('/mcp/upload', jsonInit('POST', payload))
+  requestJson<UploadApprovalSubmission>('/mcp/upload', jsonInit('POST', payload))
 export const testServer = (payload: { name: string; description: string; manifest: string; visibility: ResourceVisibility }) =>
   requestJson<{ success: boolean; tools: string[] }>('/mcp/servers/test', jsonInit('POST', payload))
 export const setServerVisibility = (name: string, visibility: ResourceVisibility) =>

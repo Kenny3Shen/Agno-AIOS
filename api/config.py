@@ -82,6 +82,10 @@ class Settings(BaseSettings):
     agno_model_config_file: str | None = None
     agno_skills_dir: str | None = None
     agno_skills_config_file: str | None = None
+    agno_upload_approval_dir: Path = Field(
+        default=Path(".config/upload_approvals"),
+        validation_alias="AGNO_UPLOAD_APPROVAL_DIR",
+    )
 
     cve_source_config_path: str = Field(
         default="config.toml",

@@ -19,7 +19,7 @@ import {
   Tag,
   Typography,
 } from 'antd'
-import { KeyOutlined, PlusOutlined, PlayCircleOutlined } from '@ant-design/icons'
+import { DeleteOutlined, KeyOutlined, PlusOutlined, PlayCircleOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { VisibilitySelect } from '@/shared/ui/VisibilitySelect'
 import { copyToClipboard } from '@/shared/lib/clipboard'
@@ -29,6 +29,7 @@ import type { JsonRecord, ResourceVisibility } from '@/shared/types/common'
 import {
   callTool,
   deleteToken,
+  deleteServer,
   getConfig,
   issueToken,
   listComponents,
@@ -81,6 +82,19 @@ export function McpPage() {
       message.success('Server 可见性已更新')
     } catch (error) {
       message.error(error instanceof Error ? error.message : '更新 Server 可见性失败')
+    }
+  }
+  const removeServer = async (server: McpServer) => {
+    try {
+      await deleteServer(server.id)
+      if (namespace === server.namespace) {
+        setNamespace(undefined)
+        setComponent(undefined)
+      }
+      message.success('Server 已删除')
+      await refresh()
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '删除 Server 失败')
     }
   }
 
@@ -207,6 +221,16 @@ export function McpPage() {
                                 onChange={(value) => void updateServerVisibility(row.name, value)}
                               />
                             ),
+                          },
+                          {
+                            title: 'Actions',
+                            width: 76,
+                            render: (_, row) =>
+                              row.can_delete ? (
+                                <Popconfirm title={`删除 Server “${row.name}”？此操作不可恢复。`} okText="删除" okButtonProps={{ danger: true }} onConfirm={() => removeServer(row)}>
+                                  <Button danger type="text" icon={<DeleteOutlined />} aria-label={`删除 Server ${row.name}`} onClick={(event) => event.stopPropagation()} />
+                                </Popconfirm>
+                              ) : null,
                           },
                         ]}
                       />
@@ -417,10 +441,18 @@ export function McpPage() {
           layout="vertical"
           initialValues={{ visibility: 'private', manifest: '{\n  "mcpServers": {}\n}' }}
           onFinish={async (values: { name: string; description: string; manifest: string; visibility: ResourceVisibility }) => {
-            await uploadServer(values)
-            message.success('Server 已保存，重启后加载')
-            setServerOpen(false)
-            await refresh()
+            try {
+              const result = await uploadServer(values)
+              if (result.status === 'pending') {
+                message.success('MCP Server 已提交，等待管理员审批')
+              } else {
+                message.success('Server 已保存，重启后加载')
+                await refresh()
+              }
+              setServerOpen(false)
+            } catch (error) {
+              message.error(error instanceof Error ? error.message : '提交 MCP Server 失败')
+            }
           }}
         >
           <Form.Item name="name" label="名称" rules={[{ required: true }]}>

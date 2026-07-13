@@ -51,7 +51,9 @@ def test_user_scopes_use_agentos_resource_names():
         "knowledge:read",
         "knowledge:write",
         "mcp:read",
+        "mcp:submit",
         "skill:read",
+        "skill:submit",
         "config:read",
         "evals:read",
     ):
@@ -65,6 +67,7 @@ def test_user_scopes_use_agentos_resource_names():
         "settings:read",
         "config:write",
         "mcp:write",
+        "skill:write",
         ADMIN_SCOPE,
     ):
         assert not has_scope(actor, scope), scope

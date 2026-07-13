@@ -10,6 +10,7 @@ from typing import Any, TypedDict
 
 import yaml
 
+from api.auth.claims import actor_role
 from api.auth.visibility import (
     can_manage_resource,
     can_read_resource,
@@ -37,6 +38,7 @@ class SkillInfoData(TypedDict):
     visibility: str
     owner_user_id: str
     can_manage: bool
+    can_delete: bool
 
 
 @dataclass(frozen=True)
@@ -238,6 +240,7 @@ def list_skill_infos(user: Any | None = None) -> list[SkillInfoData]:
                 "visibility": metadata.visibility,
                 "owner_user_id": metadata.owner_user_id,
                 "can_manage": user is None or can_manage_resource(user, visibility_info),
+                "can_delete": user is not None and actor_role(user) == "admin",
             }
         )
     return skills
@@ -270,6 +273,36 @@ def set_skill_visibility(skill_name: str, visibility: str, user: Any) -> tuple[s
     normalized_visibility = normalize_visibility(visibility, strict=True)
     write_skill_metadata(skill_dir, {"visibility": normalized_visibility})
     return metadata.name, normalized_visibility
+
+
+def delete_skill(skill_name: str, user: Any) -> str:
+    """Permanently remove a skill and its enabled-state configuration.
+
+    This is intentionally an administrator-only operation.  Unlike visibility
+    and enablement changes, a resource owner cannot delete a Skill: uploaded
+    Skills can contain executable code and removal affects the whole runtime.
+    """
+    if actor_role(user) != "admin":
+        raise PermissionError(skill_name)
+
+    skill_dir = find_skill_dir(skill_name)
+    if skill_dir is None:
+        raise FileNotFoundError(skill_name)
+
+    # ``iter_skill_dirs`` follows directory symlinks.  Never let deletion
+    # escape the configured skills directory if one was introduced manually.
+    skills_root = get_skills_dir().resolve()
+    if skill_dir.is_symlink() or skill_dir.parent.resolve() != skills_root:
+        raise ValueError("Skill path is unsafe")
+
+    metadata = parse_skill_metadata(skill_dir)
+    shutil.rmtree(skill_dir)
+
+    cfg = load_skills_config()
+    cfg.pop(metadata.name, None)
+    cfg.pop(skill_dir.name, None)
+    save_skills_config(cfg)
+    return metadata.name
 
 
 def get_enabled_skill_dirs() -> list[Path]:

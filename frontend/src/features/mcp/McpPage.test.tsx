@@ -25,6 +25,7 @@ describe('McpPage component permissions', () => {
               visibility: 'public',
               owner_user_id: 'owner-1',
               can_manage: false,
+              can_delete: false,
               manifest: {},
             },
           ],
