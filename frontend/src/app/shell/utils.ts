@@ -1,22 +1,28 @@
-export const NAVIGATION_GROUP_KEYS = [
-  ['/dashboard', '/chat', '/workflow'],
-  ['/skills', '/mcp', '/knowledge'],
-  ['/trace', '/memory', '/evaluations', '/approvals'],
-  ['/cve', '/collect'],
-  ['/audit', '/settings'],
-] as const
+export const RECENT_CONVERSATIONS_STORAGE_KEY = 'tais-shell-recent-expanded'
 
-export function groupNavigation<T extends { key: string }>(items: T[]) {
-  const byKey = new Map(items.map((item) => [item.key, item]))
-  return NAVIGATION_GROUP_KEYS.map((keys) =>
-    keys.flatMap((key) => {
-      const item = byKey.get(key)
-      return item ? [item] : []
-    })
-  )
+export interface NavigationGroup<T> {
+  key: string
+  labelKey: string
+  items: T[]
 }
 
-export function joinMenuGroups<T>(groups: T[][]) {
-  const visible = groups.filter((group) => group.length > 0)
-  return visible.flatMap((group, index) => (index === 0 ? group : [{ type: 'divider' as const, key: `divider-${index}` }, ...group]))
+export const navigationGroupMenuKey = (groupKey: string) => `navigation-group-${groupKey}`
+
+export function defaultOpenNavigationGroupKeys<T>(groups: NavigationGroup<T>[]) {
+  return groups.slice(0, 2).map((group) => navigationGroupMenuKey(group.key))
+}
+
+export function filterNavigationGroups<T extends { scope?: string }>(groups: NavigationGroup<T>[], canAccess: (scope: string) => boolean) {
+  return groups.flatMap((group) => {
+    const items = group.items.filter((item) => !item.scope || canAccess(item.scope))
+    return items.length ? [{ ...group, items }] : []
+  })
+}
+
+export function readRecentConversationsExpanded(storage: Pick<Storage, 'getItem'> = localStorage) {
+  return storage.getItem(RECENT_CONVERSATIONS_STORAGE_KEY) !== 'false'
+}
+
+export function writeRecentConversationsExpanded(expanded: boolean, storage: Pick<Storage, 'setItem'> = localStorage) {
+  storage.setItem(RECENT_CONVERSATIONS_STORAGE_KEY, String(expanded))
 }

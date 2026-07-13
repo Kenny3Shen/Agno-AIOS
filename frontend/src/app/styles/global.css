@@ -82,11 +82,23 @@ textarea {
 }
 .shell-brand {
   display: flex;
+  width: 100%;
   height: 68px;
+  flex: 0 0 68px;
   align-items: center;
   gap: 10px;
+  border: 0;
   padding: 0 18px;
   border-bottom: 1px solid var(--tais-border);
+  background: transparent;
+  color: var(--tais-text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.shell-brand:focus-visible {
+  outline: 2px solid var(--tais-blue);
+  outline-offset: -3px;
 }
 .brand-mark {
   display: grid;
@@ -117,43 +129,92 @@ textarea {
     monospace;
 }
 .shell-sider-body {
-  display: grid;
-  grid-template-rows: minmax(0, 7fr) minmax(0, 3fr) auto;
+  display: flex;
   height: calc(100vh - 68px);
   min-height: 0;
   flex: 0 0 calc(100vh - 68px);
+  flex-direction: column;
   overflow: hidden;
 }
 .shell-menu {
   min-height: 0;
-  overflow-y: auto;
   border-inline-end: 0 !important;
   background: transparent !important;
-  padding: 4px 6px;
+  padding: 4px 8px;
 }
 .shell-main-menu {
   min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .shell-bottom-menu {
   flex: 0 0 auto;
   border-top: 1px solid var(--tais-border) !important;
-  padding: 8px 6px;
+  padding: 8px;
 }
-.shell-menu .ant-menu-item-divider {
-  margin-block: 8px;
-  border-color: var(--tais-border);
+.shell-main-menu > .ant-menu-submenu > .ant-menu-submenu-title {
+  margin-top: 6px;
+  color: var(--tais-muted) !important;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.shell-main-menu > .ant-menu-submenu:first-child > .ant-menu-submenu-title {
+  margin-top: 0;
+}
+.shell-main-menu > .ant-menu-submenu-open > .ant-menu-submenu-title,
+.shell-main-menu > .ant-menu-submenu > .ant-menu-submenu-title:hover {
+  color: var(--tais-text) !important;
+}
+.shell-main-menu .ant-menu-sub.ant-menu-inline {
+  background: transparent !important;
 }
 .shell-menu .ant-menu-item,
 .shell-menu .ant-menu-submenu-title {
-  height: 32px;
-  margin-block: 4px;
-  padding-inline: 8px;
-  font-size: 16px;
-  line-height: 32px;
+  position: relative;
+  height: 38px;
+  margin-block: 2px;
+  padding-inline: 10px;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 38px;
 }
 .shell-menu .ant-menu-item .anticon,
 .shell-menu .ant-menu-submenu-title .anticon {
   font-size: 16px;
+}
+.shell-menu .ant-menu-item:hover {
+  background: color-mix(in srgb, var(--tais-blue) 9%, var(--tais-surface)) !important;
+}
+.shell-menu .ant-menu-item-selected {
+  background: color-mix(in srgb, var(--tais-blue) 25%, var(--tais-surface)) !important;
+  color: color-mix(in srgb, var(--tais-blue) 42%, var(--tais-text)) !important;
+  font-weight: 650;
+}
+html.dark .shell-menu .ant-menu-item-selected {
+  background: #1c3b5f !important;
+  color: #e7f1ff !important;
+}
+.shell-menu .ant-menu-item-selected::before {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 0;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--tais-blue);
+  content: '';
+}
+.shell-menu .ant-menu-item:focus-visible {
+  outline: 2px solid var(--tais-blue);
+  outline-offset: -2px;
+}
+.shell-sider.ant-layout-sider-collapsed .shell-menu {
+  padding-inline: 8px;
+}
+.shell-sider.ant-layout-sider-collapsed .shell-menu .ant-menu-item {
+  padding-inline: calc(50% - 8px);
 }
 .shell-identity {
   display: flex;
@@ -165,19 +226,57 @@ textarea {
 }
 .chat-task-panel {
   display: flex;
+  max-height: min(320px, 40vh);
   min-height: 0;
   overflow: hidden;
+  flex: 0 0 auto;
   flex-direction: column;
   border-top: 1px solid var(--tais-border);
-  padding: 8px;
+  background: var(--tais-surface);
+  transition: max-height var(--motion-base) var(--motion-ease);
 }
-.chat-task-panel-title {
-  flex: 0 0 auto;
-  padding: 0 4px 4px;
+.chat-task-panel-collapsed {
+  max-height: 40px;
+}
+.chat-task-panel-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  flex: 0 0 40px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  padding: 0 12px;
   color: var(--tais-muted);
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+.chat-task-panel-toggle:hover {
+  background: color-mix(in srgb, var(--tais-blue) 7%, transparent);
+  color: var(--tais-text);
+}
+.chat-task-panel-toggle:focus-visible {
+  outline: 2px solid var(--tais-blue);
+  outline-offset: -2px;
+}
+.chat-task-panel-toggle-label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+.chat-task-panel-content {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  flex-direction: column;
+  padding: 0 8px 8px;
 }
 .chat-task-panel .ant-conversations {
   min-height: 0;
@@ -187,13 +286,22 @@ textarea {
   padding: 0;
   overscroll-behavior: contain;
 }
+.chat-task-panel .ant-conversations-creation {
+  min-height: 34px;
+  margin-block-end: 4px;
+  border-color: color-mix(in srgb, var(--tais-blue) 26%, transparent);
+  font-size: 12px;
+}
 .chat-task-panel .ant-conversations-item {
-  min-height: 30px;
-  height: 30px;
+  min-height: 32px;
+  height: 32px;
   justify-content: flex-start;
-  padding-inline: 4px;
+  padding-inline: 6px;
 }
 .chat-task-panel .ant-conversations-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
   text-align: left;
 }
@@ -204,13 +312,42 @@ textarea {
   color: var(--tais-muted);
   font-size: 11px;
 }
-.shell-sider.ant-layout-sider-collapsed .chat-task-panel {
-  padding-inline: 8px;
+.chat-task-panel-loading {
+  padding: 8px 6px;
 }
-.shell-sider.ant-layout-sider-collapsed .chat-task-panel .ant-conversations-item-label,
-.shell-sider.ant-layout-sider-collapsed .chat-task-panel .ant-conversations-item-group,
-.shell-sider.ant-layout-sider-collapsed .chat-task-panel-title {
-  display: none;
+.chat-task-panel-state {
+  display: grid;
+  min-height: 96px;
+  place-items: center;
+  align-content: center;
+  gap: 4px;
+  padding: 12px;
+  color: var(--tais-muted);
+  font-size: 12px;
+  text-align: center;
+}
+.chat-task-panel-empty {
+  margin-block: 8px 0;
+}
+.chat-task-panel-empty .ant-empty-image {
+  height: 32px;
+}
+.chat-task-panel-empty .ant-empty-description {
+  color: var(--tais-muted);
+  font-size: 12px;
+}
+.shell-drawer-body {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+.shell-drawer-menu {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.chat-task-panel-drawer {
+  max-height: min(360px, 45vh);
 }
 .shell-header {
   position: sticky;
@@ -333,7 +470,9 @@ textarea {
 }
 .notification-item-time {
   color: var(--tais-muted);
-  font: 11px ui-monospace, monospace;
+  font:
+    11px ui-monospace,
+    monospace;
 }
 .notification-item-unread-dot {
   width: 6px;

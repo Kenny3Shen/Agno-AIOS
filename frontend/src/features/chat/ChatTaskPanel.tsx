@@ -1,18 +1,63 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Conversations } from '@ant-design/x'
-import { App, Flex, Form, Input, Modal } from 'antd'
-import { CopyOutlined, DeleteOutlined, EditOutlined, FieldTimeOutlined } from '@ant-design/icons'
+import { App, Button, Empty, Flex, Form, Input, Modal, Skeleton } from 'antd'
+import {
+  CopyOutlined,
+  DeleteOutlined,
+  DownOutlined,
+  EditOutlined,
+  FieldTimeOutlined,
+  HistoryOutlined,
+  ReloadOutlined,
+  RightOutlined,
+} from '@ant-design/icons'
+import dayjs from 'dayjs'
+import { useTranslation } from 'react-i18next'
 import { archiveSession, renameSession } from './api'
 import { chatKeys } from './queries'
 import { useChat } from './useChat'
 import type { ChatSession } from './types'
 import { copyToClipboard } from '@/shared/lib/clipboard'
 
-export function ChatTaskPanel() {
+export type ConversationGroupKey = 'today' | 'yesterday' | 'earlier'
+
+export interface ChatTaskPanelProps {
+  expanded: boolean
+  onExpandedChange: (expanded: boolean) => void
+  variant: 'sider' | 'drawer'
+  onNavigate?: () => void
+}
+
+export interface ConversationListItem {
+  key: string
+  label: string
+  group: ConversationGroupKey
+  title: string
+}
+
+export function buildConversationItems(sessions: ChatSession[], now = Date.now()): ConversationListItem[] {
+  const today = dayjs(now).startOf('day')
+  return [...sessions]
+    .sort((left, right) => right.updated_at - left.updated_at)
+    .map((session) => {
+      const daysAgo = today.diff(dayjs.unix(session.updated_at).startOf('day'), 'day')
+      const label = session.title || session.preview || ''
+      return {
+        key: session.session_id,
+        label,
+        group: daysAgo <= 0 ? 'today' : daysAgo === 1 ? 'yesterday' : 'earlier',
+        title: label,
+      }
+    })
+}
+
+export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate }: ChatTaskPanelProps) {
   const { message: toast } = App.useApp()
+  const { t } = useTranslation()
   const chat = useChat()
   const queryClient = useQueryClient()
+  const contentId = useId()
   const [renameTarget, setRenameTarget] = useState<ChatSession | null>(null)
   const [renameForm] = Form.useForm<{ title: string }>()
   const [renaming, setRenaming] = useState(false)
@@ -20,41 +65,38 @@ export function ChatTaskPanel() {
   const expandedGroupsInitialized = useRef(false)
   const conversations = useMemo(
     () =>
-      (chat.sessions.data ?? []).map((session) => {
-        const date = new Date(session.updated_at * 1000)
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        date.setHours(0, 0, 0, 0)
-        const daysAgo = Math.round((today.getTime() - date.getTime()) / 86_400_000)
-        return {
-          key: session.session_id,
-          label: session.title || session.preview || '未命名会话',
-          group: daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : 'Historical',
-        }
-      }),
-    [chat.sessions.data]
+      buildConversationItems(chat.sessions.data ?? []).map((item) => ({
+        ...item,
+        label: item.label || t('shell.conversations.unnamed'),
+        title: item.title || t('shell.conversations.unnamed'),
+      })),
+    [chat.sessions.data, t]
   )
   const conversationGroups = useMemo(() => Array.from(new Set(conversations.map((item) => item.group))), [conversations])
+
   useEffect(() => {
     if (expandedGroupsInitialized.current || !conversationGroups.length) return
-    setExpandedGroups([conversationGroups[0]])
+    setExpandedGroups([conversationGroups.includes('today') ? 'today' : conversationGroups[0]])
     expandedGroupsInitialized.current = true
   }, [conversationGroups])
+
   const startRename = (session: ChatSession) => {
     renameForm.setFieldsValue({ title: session.title || session.preview || '' })
     setRenameTarget(session)
   }
   const copySessionId = (sessionId: string) => {
-    void copyToClipboard(sessionId).then((copied) => (copied ? toast.success('Session ID 已复制') : toast.error('Session ID 复制失败')))
+    void copyToClipboard(sessionId).then((copied) =>
+      copied ? toast.success(t('shell.conversations.copied')) : toast.error(t('shell.conversations.copyFailed'))
+    )
   }
   const archive = async (sessionId: string) => {
     try {
       await archiveSession(sessionId)
       if (chat.sessionId === sessionId) chat.newChat()
       await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
-      toast.success('会话已归档')
+      toast.success(t('shell.conversations.archived'))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '归档会话失败')
+      toast.error(error instanceof Error ? error.message : t('shell.conversations.archiveFailed'))
     }
   }
   const confirmRename = async () => {
@@ -68,68 +110,131 @@ export function ChatTaskPanel() {
           item.session_id === renameTarget.session_id ? { ...item, ...updated, title: updated.title ?? title.trim() } : item
         )
       )
-      toast.success('会话已重命名')
+      toast.success(t('shell.conversations.renamed'))
       setRenameTarget(null)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '重命名失败')
+      toast.error(error instanceof Error ? error.message : t('shell.conversations.renameFailed'))
     } finally {
       setRenaming(false)
     }
   }
-
+  const openSession = (sessionId: string) => {
+    chat.setSession(sessionId)
+    onNavigate?.()
+  }
   return (
     <>
-      <section className="chat-task-panel" aria-label="对话任务">
-        <Conversations
-          items={conversations}
-          activeKey={chat.sessionId ?? undefined}
-          onActiveChange={(key) => chat.setSession(key)}
-          groupable={{
-            label: (group) => (
-              <Flex gap="small">
-                <FieldTimeOutlined />
-                {group}
-              </Flex>
-            ),
-            collapsible: (group) => group !== 'Today',
-            expandedKeys: expandedGroups,
-            onExpand: (keys) => {
-              expandedGroupsInitialized.current = true
-              setExpandedGroups(keys)
-            },
-          }}
-          menu={(item) => ({
-            items: [
-              {
-                key: 'rename',
-                icon: <EditOutlined />,
-                label: '重命名',
-                onClick: () => {
-                  const session = (chat.sessions.data ?? []).find((value) => value.session_id === item.key)
-                  if (session) startRename(session)
-                },
-              },
-              { key: 'copy-session-id', icon: <CopyOutlined />, label: '复制 Session ID', onClick: () => copySessionId(item.key) },
-              { key: 'archive', danger: true, icon: <DeleteOutlined />, label: '归档', onClick: () => void archive(item.key) },
-            ],
-          })}
-        />
+      <section
+        className={`chat-task-panel chat-task-panel-${variant} ${expanded ? 'chat-task-panel-expanded' : 'chat-task-panel-collapsed'}`}
+        aria-label={t('shell.conversations.title')}
+      >
+        <button
+          type="button"
+          className="chat-task-panel-toggle"
+          aria-expanded={expanded}
+          aria-controls={contentId}
+          aria-label={t('shell.conversations.title')}
+          onClick={() => onExpandedChange(!expanded)}
+        >
+          <span className="chat-task-panel-toggle-label">
+            <HistoryOutlined />
+            {t('shell.conversations.title')}
+          </span>
+          {expanded ? <DownOutlined /> : <RightOutlined />}
+        </button>
+        {expanded ? (
+          <div id={contentId} className="chat-task-panel-content">
+            {chat.sessions.isLoading ? (
+              <div className="chat-task-panel-loading" aria-label={t('common.loading')}>
+                <Skeleton active title={false} paragraph={{ rows: 3 }} />
+              </div>
+            ) : chat.sessions.isError ? (
+              <div className="chat-task-panel-state" role="alert">
+                <span>{t('shell.conversations.loadFailed')}</span>
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<ReloadOutlined />}
+                  aria-label={t('shell.conversations.retry')}
+                  onClick={() => void chat.sessions.refetch()}
+                >
+                  {t('shell.conversations.retry')}
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Conversations
+                  items={conversations}
+                  activeKey={chat.sessionId ?? undefined}
+                  onActiveChange={openSession}
+                  groupable={{
+                    label: (group) => (
+                      <Flex gap="small">
+                        <FieldTimeOutlined />
+                        {t(`shell.conversations.${group}`)}
+                      </Flex>
+                    ),
+                    collapsible: (group) => group !== 'today',
+                    expandedKeys: expandedGroups,
+                    onExpand: (keys) => {
+                      expandedGroupsInitialized.current = true
+                      setExpandedGroups(keys)
+                    },
+                  }}
+                  menu={(item) => ({
+                    items: [
+                      {
+                        key: 'rename',
+                        icon: <EditOutlined />,
+                        label: t('shell.conversations.rename'),
+                        onClick: () => {
+                          const session = (chat.sessions.data ?? []).find((value) => value.session_id === item.key)
+                          if (session) startRename(session)
+                        },
+                      },
+                      {
+                        key: 'copy-session-id',
+                        icon: <CopyOutlined />,
+                        label: t('shell.conversations.copySessionId'),
+                        onClick: () => copySessionId(item.key),
+                      },
+                      {
+                        key: 'archive',
+                        danger: true,
+                        icon: <DeleteOutlined />,
+                        label: t('shell.conversations.archive'),
+                        onClick: () => void archive(item.key),
+                      },
+                    ],
+                  })}
+                />
+                {!conversations.length ? (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description={t('shell.conversations.empty')}
+                    className="chat-task-panel-empty"
+                  />
+                ) : null}
+              </>
+            )}
+          </div>
+        ) : null}
       </section>
       <Modal
-        title="重命名会话"
+        title={t('shell.conversations.renameTitle')}
         open={Boolean(renameTarget)}
         confirmLoading={renaming}
-        okText="保存"
+        okText={t('common.save')}
         onOk={() => void confirmRename()}
         onCancel={() => setRenameTarget(null)}
       >
         <Form form={renameForm} layout="vertical">
           <Form.Item
             name="title"
-            label="会话标题"
+            label={t('shell.conversations.sessionTitle')}
             rules={[
-              { required: true, whitespace: true, message: '请输入会话标题' },
-              { max: 120, message: '标题不能超过 120 个字符' },
+              { required: true, whitespace: true, message: t('shell.conversations.titleRequired') },
+              { max: 120, message: t('shell.conversations.titleTooLong') },
             ]}
           >
             <Input maxLength={120} onPressEnter={() => void confirmRename()} />
