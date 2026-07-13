@@ -19,3 +19,4 @@ export interface NotificationsResponse {
 export const getNotifications = () => requestJson<NotificationsResponse>('/notifications')
 export const markNotificationRead = (id: number) =>
   requestJson<{ success: boolean }>(`/notifications/${encodeURIComponent(id)}/read`, jsonInit('POST'))
+export const markAllNotificationsRead = () => requestJson<{ updated_count: number }>('/notifications/read-all', jsonInit('POST'))

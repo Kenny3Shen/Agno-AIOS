@@ -51,3 +51,20 @@ async def mark_notification_read(notification_id: int, user_id: str) -> bool:
     async with get_async_control_plane_engine().begin() as conn:
         result = await conn.execute(update(table).where(table.c.id == notification_id, table.c.user_id == user_id).values(read=True, read_at=int(time.time())))
     return bool(result.rowcount)
+
+
+async def mark_all_notifications_read(user_id: str) -> int:
+    """Mark every unread notification for a user as read.
+
+    The user predicate is intentionally part of the update so this operation can
+    never affect notifications belonging to another account.
+    """
+    await _ensure()
+    table = _table()
+    async with get_async_control_plane_engine().begin() as conn:
+        result = await conn.execute(
+            update(table)
+            .where(table.c.user_id == user_id, table.c.read.is_(False))
+            .values(read=True, read_at=int(time.time()))
+        )
+    return int(result.rowcount or 0)

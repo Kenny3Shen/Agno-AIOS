@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
-import { Avatar, Badge, Button, Drawer, Dropdown, Grid, Layout, Menu, Space, Spin, Tooltip, Typography, type MenuProps } from 'antd'
+import { Avatar, Badge, Button, Drawer, Dropdown, Empty, Grid, Layout, Menu, Popover, Skeleton, Space, Spin, Tooltip, Typography, type MenuProps } from 'antd'
 import {
   ApiOutlined,
   AuditOutlined,
@@ -10,12 +10,14 @@ import {
   BugOutlined,
   BulbOutlined,
   CloudDownloadOutlined,
+  CloseCircleOutlined,
   CodeOutlined,
   DashboardOutlined,
   DatabaseOutlined,
   ExperimentOutlined,
   FileSearchOutlined,
   GithubOutlined,
+  InfoCircleOutlined,
   MenuFoldOutlined,
   MenuOutlined,
   MenuUnfoldOutlined,
@@ -30,7 +32,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { currentUserQuery, logout } from '@/features/auth'
 import { ChatTaskPanel } from '@/features/chat/ChatTaskPanel'
-import { getNotifications, markNotificationRead, type Notification } from '@/features/notifications/api'
+import { getNotifications, markAllNotificationsRead, markNotificationRead, type Notification } from '@/features/notifications/api'
 import { loginPath, nextPathFromLocation } from '@/features/auth/routing'
 import { getToken } from '@/shared/auth/storage'
 import { hasScope } from '@/shared/auth/permissions'
@@ -58,6 +60,24 @@ const nav = [
 const primaryNav = nav.filter((item) => item.key !== '/settings')
 const settingsNav = nav.filter((item) => item.key === '/settings')
 
+const relativeTime = (timestamp: number) => {
+  const seconds = Math.max(0, Math.floor(Date.now() / 1000) - timestamp)
+  if (seconds < 60) return 'Just now'
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} hr ago`
+  if (seconds < 172800) return 'Yesterday'
+  return `${Math.floor(seconds / 86400)} days ago`
+}
+
+const notificationKind = (notification: Notification) => {
+  const status = typeof notification.data.status === 'string' ? notification.data.status : ''
+  if (status === 'rejected' || notification.title.toLowerCase().includes('rejected'))
+    return { icon: <CloseCircleOutlined />, className: 'notification-kind-rejected' }
+  if (typeof notification.data.approval_id === 'string')
+    return { icon: <AuditOutlined />, className: 'notification-kind-approval' }
+  return { icon: <InfoCircleOutlined />, className: 'notification-kind-info' }
+}
+
 export function AppFrame({ children }: { children: ReactNode }) {
   const { t } = useTranslation()
   const router = useRouter()
@@ -67,6 +87,8 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const mobile = !screens.lg
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [notificationOpen, setNotificationOpen] = useState(false)
+  const [markingAllNotifications, setMarkingAllNotifications] = useState(false)
   const path = useRouterState({ select: (state) => state.location.pathname })
   const searchStr = useRouterState({ select: (state) => state.location.searchStr })
   const currentNextPath = nextPathFromLocation({ pathname: path, searchStr })
@@ -113,6 +135,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
     setMobileOpen(false)
   }
   const openNotification = async (notification: Notification) => {
+    setNotificationOpen(false)
     try {
       await markNotificationRead(notification.id)
       await queryClient.invalidateQueries({ queryKey: ['notifications'] })
@@ -126,6 +149,15 @@ export function AppFrame({ children }: { children: ReactNode }) {
       } else if (canReadApprovals) {
         void router.history.push('/approvals')
       }
+    }
+  }
+  const markAllAsRead = async () => {
+    setMarkingAllNotifications(true)
+    try {
+      await markAllNotificationsRead()
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    } finally {
+      setMarkingAllNotifications(false)
     }
   }
   useEffect(() => setMobileOpen(false), [path])
@@ -196,31 +228,73 @@ export function AppFrame({ children }: { children: ReactNode }) {
           </Space>
           <Space>
             {canReadNotifications && (
-              <Dropdown
-                trigger={['click']}
-                menu={{
-                  items:
-                    notificationsQuery.data?.notifications.slice(0, 6).map((notification) => ({
-                      key: String(notification.id),
-                      label: (
-                        <div style={{ maxWidth: 300 }}>
-                          <strong>{notification.title}</strong>
-                          <Typography.Text type="secondary" ellipsis style={{ display: 'block', maxWidth: 280 }}>
-                            {notification.body}
-                          </Typography.Text>
+              <Popover
+                trigger="click"
+                placement="bottomRight"
+                arrow={false}
+                open={notificationOpen}
+                onOpenChange={setNotificationOpen}
+                classNames={{ root: 'notification-popover' }}
+                content={
+                  <section className="notification-center" aria-label="Notifications">
+                    <header className="notification-center-header">
+                      <div>
+                        <Typography.Text strong>Notifications</Typography.Text>
+                        <Typography.Text type="secondary" className="notification-center-count">
+                          {notificationsQuery.data?.unread_count ?? 0} unread
+                        </Typography.Text>
+                      </div>
+                      <Button
+                        type="link"
+                        size="small"
+                        loading={markingAllNotifications}
+                        disabled={!notificationsQuery.data?.unread_count}
+                        onClick={() => void markAllAsRead()}
+                      >
+                        Mark all as read
+                      </Button>
+                    </header>
+                    <div className="notification-center-list">
+                      {notificationsQuery.isLoading ? (
+                        <div className="notification-center-loading" aria-label="Loading notifications">
+                          <Skeleton active title={{ width: '42%' }} paragraph={{ rows: 2 }} />
+                          <Skeleton active title={{ width: '56%' }} paragraph={{ rows: 2 }} />
                         </div>
-                      ),
-                    })) ?? [{ key: 'empty', label: '暂无通知', disabled: true }],
-                  onClick: ({ key }) => {
-                    const notification = notificationsQuery.data?.notifications.find((item) => item.id === Number(key))
-                    if (notification) void openNotification(notification)
-                  },
-                }}
+                      ) : notificationsQuery.data?.notifications.length ? (
+                        notificationsQuery.data.notifications.slice(0, 6).map((notification) => {
+                          const kind = notificationKind(notification)
+                          return (
+                            <button
+                              key={notification.id}
+                              type="button"
+                              className={`notification-item ${notification.read ? 'notification-item-read' : 'notification-item-unread'}`}
+                              onClick={() => void openNotification(notification)}
+                            >
+                              <span className={`notification-item-icon ${kind.className}`}>{kind.icon}</span>
+                              <span className="notification-item-content">
+                                <span className="notification-item-title">{notification.title}</span>
+                                <span className="notification-item-body" title={notification.body}>{notification.body}</span>
+                                <span className="notification-item-time">{relativeTime(notification.created_at)}</span>
+                              </span>
+                              {!notification.read && <span className="notification-item-unread-dot" aria-label="Unread" />}
+                            </button>
+                          )
+                        })
+                      ) : (
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无通知" className="notification-center-empty" />
+                      )}
+                    </div>
+                  </section>
+                }
               >
                 <Tooltip title="通知">
-                  <Button type="text" aria-label="Approval notifications" icon={<Badge count={notificationsQuery.data?.unread_count ?? 0} size="small"><BellOutlined /></Badge>} />
+                  <Button
+                    type="text"
+                    aria-label="Notifications"
+                    icon={<Badge count={notificationsQuery.data?.unread_count ?? 0} size="small"><BellOutlined /></Badge>}
+                  />
                 </Tooltip>
-              </Dropdown>
+              </Popover>
             )}
             <Tooltip title={t('shell.language')}>
               <Button type="text" icon={<TranslationOutlined />} onClick={preferences.toggleLocale} />
