@@ -18,6 +18,15 @@ export function SkillsPage() {
   const [selected, setSelected] = useState<Skill | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
   const refresh = () => client.invalidateQueries({ queryKey: ['skills'] })
+  const updateVisibility = async (name: string, visibility: 'private' | 'public') => {
+    try {
+      await setVisibility(name, visibility)
+      await refresh()
+      message.success('可见性已更新')
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '更新技能可见性失败')
+    }
+  }
   const toggle = useMutation({
     mutationFn: ({ skill, enabled }: { skill: Skill; enabled: boolean }) => toggleSkill(skill.name, enabled),
     onSuccess: async (_, { enabled }) => {
@@ -82,7 +91,7 @@ export function SkillsPage() {
                       value={value}
                       disabled={!row.can_manage}
                       onClick={(event) => event.stopPropagation()}
-                      onChange={(visibility) => void setVisibility(row.name, visibility).then(refresh)}
+                      onChange={(visibility) => void updateVisibility(row.name, visibility)}
                     />
                   ),
                 },

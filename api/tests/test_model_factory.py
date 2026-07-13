@@ -39,8 +39,8 @@ def test_builds_native_models_with_default_or_override_reasoning_effort():
     )
     compatible = build_agno_model(config(default_reasoning_effort="high"))
 
-    assert deepseek.reasoning_effort == "max"
-    assert openai.reasoning_effort == "low"
+    assert getattr(deepseek, "reasoning_effort", None) == "max"
+    assert getattr(openai, "reasoning_effort", None) == "low"
     assert not hasattr(compatible, "reasoning_effort") or compatible.reasoning_effort is None
 
 

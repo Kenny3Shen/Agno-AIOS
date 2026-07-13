@@ -1,8 +1,11 @@
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from fastapi import UploadFile
 
+from api.routes.skills import read_skill_archive
 from api.services import skill_service
 
 
@@ -70,3 +73,14 @@ def test_set_skill_visibility_requires_owner_or_admin(tmp_path, monkeypatch):
     assert "metadata:\n  visibility: public" in markdown
     with pytest.raises(PermissionError):
         skill_service.set_skill_visibility("Owned", "private", actor("u2"))
+
+
+@pytest.mark.asyncio
+async def test_read_skill_archive_rejects_uploads_over_limit():
+    file = UploadFile(
+        filename="oversized.zip",
+        file=BytesIO(b"x" * (skill_service.MAX_SKILL_ARCHIVE_BYTES + 1)),
+    )
+
+    with pytest.raises(ValueError, match="too large"):
+        await read_skill_archive(file)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from typing import cast
 
 from api.config import Settings
 
@@ -61,7 +62,7 @@ async def test_bootstrap_admin_writes_normalized_email_and_hashed_password(monke
         )
     )
 
-    params = captured["params"]
+    params = cast(dict[str, object], captured["params"])
     assert params["email"] == "admin@example.com"
     assert params["hashed_password"] == "hashed:AdminPass123!"
     assert captured["raw_password"] == "AdminPass123!"

@@ -646,8 +646,12 @@ async def test_rebuild_document_reloads_content_in_place() -> None:
         content_by_id={"content-rebuild": content_row},
     )
     deleted_vectors: list[str] = []
-    knowledge.vector_db = SimpleNamespace(
-        delete_by_content_id=lambda content_id: deleted_vectors.append(content_id)
+    setattr(
+        knowledge,
+        "vector_db",
+        SimpleNamespace(
+            delete_by_content_id=lambda content_id: deleted_vectors.append(content_id)
+        ),
     )
     deleted: list[str] = []
 

@@ -1,11 +1,76 @@
 import importlib
+import ipaddress
 import re
+import socket
+from urllib.parse import urljoin, urlsplit
 
+import anyio
 import httpx
 from bs4 import BeautifulSoup
 from api.utils.url2md_utils import domain_rules, title_suffixes
 
 USE_PLAYWRIGHT = False  # 是否使用 Playwright 绕过 WAF
+MAX_REDIRECTS = 5
+
+
+class UnsafeUrlError(ValueError):
+    """Raised when a URL could access a non-public network address."""
+
+
+async def _resolve_public_host(hostname: str, port: int | None) -> None:
+    """Require every address returned for *hostname* to be globally routable.
+
+    Checking every answer (rather than accepting one public answer) avoids a
+    hostname with mixed public/private DNS records selecting an internal
+    address.  It also rejects literal IP addresses before making a request.
+    """
+    try:
+        addresses = await anyio.getaddrinfo(
+            hostname,
+            port or 443,
+            type=socket.SOCK_STREAM,
+        )
+    except socket.gaierror as exc:
+        raise UnsafeUrlError("URL host cannot be resolved") from exc
+
+    if not addresses:
+        raise UnsafeUrlError("URL host cannot be resolved")
+    for _family, _type, _proto, _canonname, sockaddr in addresses:
+        address = ipaddress.ip_address(sockaddr[0])
+        if not address.is_global:
+            raise UnsafeUrlError("URL host must resolve only to public IP addresses")
+
+
+async def validate_public_http_url(url: str) -> str:
+    """Validate an outbound URL before each request, including redirects."""
+    parsed = urlsplit(url)
+    if parsed.scheme.lower() not in {"http", "https"}:
+        raise UnsafeUrlError("URL scheme must be http or https")
+    if parsed.username is not None or parsed.password is not None:
+        raise UnsafeUrlError("URL credentials are not allowed")
+    if not parsed.hostname:
+        raise UnsafeUrlError("URL must include a host")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise UnsafeUrlError("URL port is invalid") from exc
+    await _resolve_public_host(parsed.hostname, port)
+    return url
+
+
+async def _get_public_url(client: httpx.AsyncClient, url: str) -> httpx.Response:
+    """Fetch a URL without allowing httpx to follow unchecked redirects."""
+    current_url = await validate_public_http_url(url)
+    for _ in range(MAX_REDIRECTS + 1):
+        response = await client.get(current_url, follow_redirects=False)
+        if response.status_code not in {301, 302, 303, 307, 308}:
+            return response
+        location = response.headers.get("location")
+        if not location:
+            return response
+        await response.aclose()
+        current_url = await validate_public_http_url(urljoin(current_url, location))
+    raise UnsafeUrlError(f"URL exceeded the maximum of {MAX_REDIRECTS} redirects")
 
 
 def _get_title_text(soup: BeautifulSoup) -> str:
@@ -215,11 +280,12 @@ async def fetch_and_parse_url(urls: list[str]) -> list[str]:
     async with httpx.AsyncClient(
         headers=headers,
         timeout=30,
-        follow_redirects=True,
+        follow_redirects=False,
     ) as client:
         for url in urls:
             try:
-                resp = await client.get(url)
+                resp = await _get_public_url(client, url)
+                fetched_url = str(resp.url)
                 body = resp.text
                 waf_features = [
                     "aliyun_waf",
@@ -227,17 +293,17 @@ async def fetch_and_parse_url(urls: list[str]) -> list[str]:
                 waf_blocked = any(feature in body.lower() for feature in waf_features)
                 # 如果被 WAF 拦截，使用 patchright 获取
                 if waf_blocked and USE_PLAYWRIGHT:
-                    body = await _fetch_with_playwright(url)
+                    body = await _fetch_with_playwright(fetched_url)
 
                 # 检查状态码（WAF 绕过后不再检查原始状态码）
                 if not waf_blocked and resp.status_code != 200:
-                    results.append(f"HTTP error for {url}: status code {resp.status_code}")
+                    results.append(f"HTTP error for {fetched_url}: status code {resp.status_code}")
                     continue
 
                 soup = BeautifulSoup(body, "html.parser")
 
                 if len(soup.get_text()) < 500:
-                    results.append(f"Content too short for {url}: page may be inaccessible")
+                    results.append(f"Content too short for {fetched_url}: page may be inaccessible")
                     continue
 
                 tags_to_remove = [
@@ -264,11 +330,11 @@ async def fetch_and_parse_url(urls: list[str]) -> list[str]:
                 lowered = text.lower()
                 if any(marker in lowered for marker in restricted_markers):
                     results.append(
-                        f"Restricted access for {url}: page requires special permissions"
+                        f"Restricted access for {fetched_url}: page requires special permissions"
                     )
                     continue
 
-                markdown_text = get_markdown_text(soup, url)
+                markdown_text = get_markdown_text(soup, fetched_url)
 
                 results.append(markdown_text)
 

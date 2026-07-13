@@ -27,6 +27,9 @@ const tokenizerOptions = [
   { value: 'gpt2', label: 'gpt2' },
 ]
 
+const READER_STRATEGY_FIELD = ['ingest_options', 'reader_strategy']
+const MARKDOWN_HEADING_MODE_FIELD = ['ingest_options', 'markdown_split_on_headings']
+
 const tooltips = {
   reader_strategy: '覆盖后缀自动推断；通常保持自动即可。',
   chunk_size: '单个 chunk 的目标/最大长度；越小检索越精确，越大上下文越完整。',
@@ -103,8 +106,8 @@ export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDe
   const fileList = Form.useWatch('fileList') as UploadFile[] | undefined
   const fileName = Form.useWatch('file_name') as string | undefined
   const title = Form.useWatch('title') as string | undefined
-  const readerStrategy = Form.useWatch(['ingest_options', 'reader_strategy']) as string | undefined
-  const markdownHeadingMode = Form.useWatch(['ingest_options', 'markdown_split_on_headings']) as number | undefined
+  const readerStrategy = Form.useWatch(READER_STRATEGY_FIELD) as string | undefined
+  const markdownHeadingMode = Form.useWatch(MARKDOWN_HEADING_MODE_FIELD) as number | undefined
   const selectedFileName = selectedUploadFile(fileList)?.name
   const effectiveName = selectedFileName || fileName || title || ''
   const profile = inferKnowledgeReaderProfile(effectiveName, readerStrategy)

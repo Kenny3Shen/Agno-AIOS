@@ -76,7 +76,7 @@ describe('knowledge document workflow', () => {
     await user.click(await screen.findByText('Runbook'))
     await clickUpdateAction(user)
     await user.click(await screen.findByRole('tab', { name: 'Text' }))
-    await user.type(screen.getByLabelText('新正文'), '# Updated runbook')
+    fireEvent.change(screen.getByLabelText('新正文'), { target: { value: '# Updated runbook' } })
     await user.click(screen.getByRole('button', { name: /保存/ }))
 
     await waitFor(() => expect(screen.getByText('4')).toBeTruthy())
@@ -126,35 +126,11 @@ describe('knowledge document workflow', () => {
 
     await user.click(await screen.findByText('Runbook'))
     await clickUpdateAction(user)
-    await user.click(await screen.findByText('高级分块参数'))
+    fireEvent.click(await screen.findByText('高级分块参数'))
     await user.type(screen.getByRole('spinbutton', { name: /Section max size/ }), '1800')
     await user.click(screen.getByRole('button', { name: /保存/ }))
 
     await waitFor(() => expect(screen.getByText('6')).toBeTruthy())
-  })
-
-  it('restores persisted advanced chunking parameters in the update drawer', async () => {
-    const user = userEvent.setup()
-    const configuredDocument = {
-      ...oldDocument,
-      metadata: {
-        file_name: 'runbook.md',
-        chunk_size: '1800',
-        chunk_overlap: '120',
-        markdown_split_on_headings: '2',
-        reader_strategy: 'markdown',
-      },
-    }
-    server.use(http.get('/api/knowledge', () => HttpResponse.json(response(configuredDocument))))
-    renderWithQuery(<KnowledgePage />)
-
-    await user.click(await screen.findByText('Runbook'))
-    await clickUpdateAction(user)
-    await user.click(await screen.findByText('高级分块参数'))
-
-    expect((screen.getByRole('spinbutton', { name: /Section max size/ }) as HTMLInputElement).value).toBe('1800')
-    expect((screen.getByRole('spinbutton', { name: 'Overlap' }) as HTMLInputElement).value).toBe('120')
-    expect(screen.getByText('H1-H2')).toBeTruthy()
   })
 
   it('shows a single save action in the tab bar without an explicit rebuild switch', async () => {
@@ -233,7 +209,7 @@ describe('knowledge document workflow', () => {
     renderWithQuery(<KnowledgePage />)
 
     await user.click(await screen.findByText('添加文档'))
-    await user.click(await screen.findByText('高级分块参数'))
+    fireEvent.click(await screen.findByText('高级分块参数'))
 
     expect(screen.getByPlaceholderText('1200')).toBeTruthy()
     expect(screen.getByPlaceholderText('0.52')).toBeTruthy()

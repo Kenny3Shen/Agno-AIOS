@@ -86,10 +86,10 @@ def test_markdown_heading_level_and_size_based_modes_configure_chunking() -> Non
         "runbook.md",
     )
 
-    assert heading_reader.chunking_strategy.split_on_headings == 2
-    assert heading_reader.chunking_strategy.chunk_size == 1400
-    assert size_reader.chunking_strategy.split_on_headings is False
-    assert size_reader.chunking_strategy.chunk_size == 900
+    assert getattr(heading_reader.chunking_strategy, "split_on_headings", None) == 2
+    assert getattr(heading_reader.chunking_strategy, "chunk_size", None) == 1400
+    assert getattr(size_reader.chunking_strategy, "split_on_headings", None) is False
+    assert getattr(size_reader.chunking_strategy, "chunk_size", None) == 900
 
 
 def test_csv_row_options_configure_row_chunking() -> None:
@@ -104,8 +104,8 @@ def test_csv_row_options_configure_row_chunking() -> None:
         "assets.csv",
     )
 
-    assert reader.chunking_strategy.skip_header is True
-    assert reader.chunking_strategy.clean_rows is False
+    assert getattr(reader.chunking_strategy, "skip_header", None) is True
+    assert getattr(reader.chunking_strategy, "clean_rows", None) is False
 
 
 def test_overlap_validation_only_applies_to_chunkers_that_use_overlap() -> None:
@@ -128,9 +128,9 @@ def test_code_tokenizer_and_nodes_configure_code_chunking() -> None:
         "agent.py",
     )
 
-    assert reader.chunking_strategy.tokenizer == "gpt2"
-    assert reader.chunking_strategy.chunk_size == 2400
-    assert reader.chunking_strategy.include_nodes is True
+    assert getattr(reader.chunking_strategy, "tokenizer", None) == "gpt2"
+    assert getattr(reader.chunking_strategy, "chunk_size", None) == 2400
+    assert getattr(reader.chunking_strategy, "include_nodes", None) is True
 
 
 def test_semantic_advanced_options_configure_semantic_chunking() -> None:
@@ -145,10 +145,10 @@ def test_semantic_advanced_options_configure_semantic_chunking() -> None:
         "notes.txt",
     )
 
-    assert reader.chunking_strategy.similarity_threshold == 0.64
-    assert reader.chunking_strategy.similarity_window == 4
-    assert reader.chunking_strategy.min_sentences_per_chunk == 2
-    assert reader.chunking_strategy.min_characters_per_sentence == 12
+    assert getattr(reader.chunking_strategy, "similarity_threshold", None) == 0.64
+    assert getattr(reader.chunking_strategy, "similarity_window", None) == 4
+    assert getattr(reader.chunking_strategy, "min_sentences_per_chunk", None) == 2
+    assert getattr(reader.chunking_strategy, "min_characters_per_sentence", None) == 12
 
 
 def test_knowledge_service_keeps_profile_interface() -> None:

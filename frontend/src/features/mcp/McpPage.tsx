@@ -74,6 +74,15 @@ export function McpPage() {
   const components = useQuery({ queryKey: ['mcp', 'components', namespace], queryFn: () => listComponents(namespace) })
   const tokens = useQuery({ queryKey: ['mcp', 'tokens'], queryFn: listTokens })
   const refresh = () => client.invalidateQueries({ queryKey: ['mcp'] })
+  const updateServerVisibility = async (name: string, visibility: ResourceVisibility) => {
+    try {
+      await setServerVisibility(name, visibility)
+      await refresh()
+      message.success('Server 可见性已更新')
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '更新 Server 可见性失败')
+    }
+  }
 
   const toggleServer = useMutation({
     mutationFn: ({ server, enabled }: { server: McpServer; enabled: boolean }) =>
@@ -195,7 +204,7 @@ export function McpPage() {
                                 value={row.visibility}
                                 disabled={!row.can_manage}
                                 onClick={(event) => event.stopPropagation()}
-                                onChange={(value) => void setServerVisibility(row.name, value).then(refresh)}
+                                onChange={(value) => void updateServerVisibility(row.name, value)}
                               />
                             ),
                           },

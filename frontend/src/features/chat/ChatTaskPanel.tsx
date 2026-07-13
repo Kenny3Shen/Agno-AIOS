@@ -48,10 +48,14 @@ export function ChatTaskPanel() {
     void copyToClipboard(sessionId).then((copied) => (copied ? toast.success('Session ID 已复制') : toast.error('Session ID 复制失败')))
   }
   const archive = async (sessionId: string) => {
-    await archiveSession(sessionId)
-    if (chat.sessionId === sessionId) chat.newChat()
-    await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
-    toast.success('会话已归档')
+    try {
+      await archiveSession(sessionId)
+      if (chat.sessionId === sessionId) chat.newChat()
+      await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
+      toast.success('会话已归档')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '归档会话失败')
+    }
   }
   const confirmRename = async () => {
     const { title } = await renameForm.validateFields()

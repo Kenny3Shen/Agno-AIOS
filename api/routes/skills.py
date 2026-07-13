@@ -16,6 +16,7 @@ from api.auth.scopes import require_scope
 from api.auth.visibility import normalize_visibility
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.skill_service import (
+    MAX_SKILL_ARCHIVE_BYTES,
     install_skill_archive,
     list_skill_infos,
     set_skill_enabled,
@@ -23,6 +24,20 @@ from api.services.skill_service import (
 )
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
+
+UPLOAD_READ_CHUNK_BYTES = 1024 * 1024
+
+
+async def read_skill_archive(file: UploadFile) -> bytes:
+    """Read an uploaded archive with a hard limit before retaining it in memory."""
+    chunks: list[bytes] = []
+    total_size = 0
+    while chunk := await file.read(UPLOAD_READ_CHUNK_BYTES):
+        total_size += len(chunk)
+        if total_size > MAX_SKILL_ARCHIVE_BYTES:
+            raise ValueError("Skill archive is too large")
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 # ── Pydantic models ──────────────────────────────────────────
@@ -124,10 +139,11 @@ async def upload_skill(
         raise HTTPException(status_code=400, detail="Skill archive must be a zip file")
 
     try:
+        archive = await read_skill_archive(file)
         public_name, description, dest = await to_thread.run_sync(
             partial(
                 install_skill_archive,
-                await file.read(),
+                archive,
                 requested_name=name.strip(),
                 visibility=visibility,
                 owner_user_id=actor_id(user),
