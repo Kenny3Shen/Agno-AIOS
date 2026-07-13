@@ -23,6 +23,13 @@ export function useChat() {
     if (sessionId && history.data) dispatch({ type: 'history', messages: history.data })
     else if (!sessionId) dispatch({ type: 'reset' })
   }, [history.data, sessionId])
+  const hasPausedRun = state.messages.some((message) => message.role === 'assistant' && message.status === 'paused')
+  useEffect(() => {
+    if (!sessionId || !hasPausedRun) return
+    const refreshHistory = () => void queryClient.invalidateQueries({ queryKey: chatKeys.history(sessionId) })
+    const interval = window.setInterval(refreshHistory, 2_000)
+    return () => window.clearInterval(interval)
+  }, [hasPausedRun, queryClient, sessionId])
   useEffect(() => {
     if (!models.data?.models.length) return
     const selected =
@@ -51,7 +58,8 @@ export function useChat() {
 
   const submit = async (prompt: string, appendUser = true) => {
     const text = prompt.trim()
-    if (!text || state.requesting || !selectedModel?.enabled || !selectedModel.configured) return
+    const hasPendingApproval = state.messages.some((message) => message.role === 'assistant' && message.status === 'paused')
+    if (!text || state.requesting || hasPendingApproval || !selectedModel?.enabled || !selectedModel.configured) return
     const activeSession = sessionId ?? crypto.randomUUID()
     if (!sessionId) setSession(activeSession)
     if (!sessionId) {

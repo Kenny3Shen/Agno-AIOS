@@ -408,6 +408,118 @@ async def mark_trace_error(run_id: str) -> bool:
         return False
 
 
+_PAUSE_PLACEHOLDER_MARKERS = (
+    "i have tools to execute, but i need confirmation",
+    "i have tools to execute, but i need user input",
+    "i have tools to execute, but it needs external execution",
+)
+_WAITING_APPROVAL_MARKERS = (
+    "等待管理员审批",
+    "waiting for admin",
+    "awaiting approval",
+)
+
+
+def _text_has_marker(text: str, markers: tuple[str, ...]) -> bool:
+    lowered = text.casefold()
+    return any(marker in lowered for marker in markers)
+
+
+def _is_pause_placeholder(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    return _text_has_marker(stripped, _PAUSE_PLACEHOLDER_MARKERS)
+
+
+def _is_stale_waiting_content(text: str) -> bool:
+    return _is_pause_placeholder(text) or _text_has_marker(text, _WAITING_APPROVAL_MARKERS)
+
+
+def _format_tool_result(result: object) -> str:
+    if isinstance(result, dict):
+        return dumps(result, indent=True)
+    text_value = str(result).strip()
+    if text_value[:1] in {"{", "["}:
+        try:
+            return dumps(loads(text_value), indent=True)
+        except JSONDecodeError:
+            pass
+    return text_value
+
+
+def _project_run_output(run: dict[str, Any]) -> str:
+    """Prefer final assistant text, falling back to confirmed/rejected tool outcomes after HITL."""
+    content = run.get("content")
+    content_text = content.strip() if isinstance(content, str) else ""
+    tools_value = run.get("tools")
+    tools: list[Any] = tools_value if isinstance(tools_value, list) else []
+
+    confirmed_tools: list[dict[str, Any]] = []
+    rejected_tools: list[dict[str, Any]] = []
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        if tool.get("confirmed") is True and tool.get("result") not in (None, ""):
+            confirmed_tools.append(tool)
+        elif tool.get("confirmed") is False or tool.get("tool_call_error") is True:
+            rejected_tools.append(tool)
+
+    has_admin_reason = "Rejected by administrator" in content_text or "拒绝原因" in content_text
+    if rejected_tools and (not content_text or _is_stale_waiting_content(content_text) or not has_admin_reason):
+        notes = [
+            str(tool.get("confirmation_note") or "").strip()
+            for tool in rejected_tools
+            if str(tool.get("confirmation_note") or "").strip()
+        ]
+        if notes and not has_admin_reason:
+            lines = ["## 封禁请求未执行"]
+            for tool in rejected_tools:
+                name = str(tool.get("tool_name") or "tool")
+                note = str(tool.get("confirmation_note") or "Tool call was rejected").strip()
+                args = tool.get("tool_args") if isinstance(tool.get("tool_args"), dict) else {}
+                lines.append(f"- **工具**：`{name}`")
+                if isinstance(args, dict) and args.get("target"):
+                    lines.append(f"- **目标**：`{args.get('target')}`")
+                lines.append(f"- **拒绝原因**：{note}")
+            lines.append("")
+            lines.append("管理员已拒绝该 HITL 请求；模拟处置未执行，外部系统未发生实际变更。")
+            return chr(10).join(lines)
+
+    if confirmed_tools and (not content_text or _is_stale_waiting_content(content_text)):
+        lines = ["## HITL 工具已执行"]
+        for tool in confirmed_tools:
+            name = str(tool.get("tool_name") or "tool")
+            args = tool.get("tool_args") if isinstance(tool.get("tool_args"), dict) else {}
+            result_text = _format_tool_result(tool.get("result"))
+            lines.append(f"- **工具**：`{name}`")
+            if args:
+                lines.append(f"- **参数**：`{dumps(args)}`")
+            lines.append("- **结果**：")
+            lines.append("```json")
+            lines.append(result_text)
+            lines.append("```")
+        lines.append("")
+        lines.append("管理员审批已处理；以上结果来自审批恢复后的工具执行记录。")
+        return chr(10).join(lines)
+
+    if content_text:
+        return content_text
+
+    messages_value = run.get("messages")
+    messages: list[Any] = messages_value if isinstance(messages_value, list) else []
+    for message in reversed(messages):
+        if not isinstance(message, dict):
+            continue
+        if str(message.get("role") or "") != "assistant":
+            continue
+        text_value = message.get("content")
+        if isinstance(text_value, str) and text_value.strip() and not _is_pause_placeholder(text_value):
+            return text_value.strip()
+    return ""
+
+
+
 async def _chat_run_output(session_id: str | None, run_id: str | None) -> str:
     """Return the persisted assistant response for a traced chat run, if any."""
     if not session_id or not run_id:
@@ -425,9 +537,17 @@ async def _chat_run_output(session_id: str | None, run_id: str | None) -> str:
     for run in reversed(runs):
         if not isinstance(run, dict) or str(run.get("run_id") or "") != run_id:
             continue
-        content = run.get("content")
-        return content.strip() if isinstance(content, str) else ""
+        return _project_run_output({str(key): value for key, value in run.items()})
     return ""
+
+
+def _root_output_needs_enrichment(output: object) -> bool:
+    if not isinstance(output, dict):
+        return True
+    if output.get("format") == "empty":
+        return True
+    text_value = str(output.get("text") or "")
+    return _is_pause_placeholder(text_value)
 
 
 def _enrich_root_spans(
@@ -450,7 +570,7 @@ def _enrich_root_spans(
         if not isinstance(parsed, dict) or not chat_run_output:
             continue
         output = parsed.get("output")
-        if isinstance(output, dict) and output.get("format") == "empty":
+        if _root_output_needs_enrichment(output):
             parsed["output"] = _json_or_text(chat_run_output)
 
 
@@ -556,9 +676,7 @@ async def get_trace_detail(trace_id: str, actor: Any | None = None) -> dict[str,
         span["run_id"] = trace_dict.get("run_id")
         span["parsed"] = parse_span_display(span)
     needs_root_output = any(
-        not span.get("parent_span_id")
-        and isinstance(span.get("parsed", {}).get("output"), dict)
-        and span["parsed"]["output"].get("format") == "empty"
+        not span.get("parent_span_id") and _root_output_needs_enrichment(span.get("parsed", {}).get("output"))
         for span in span_dicts
     )
     chat_run_output = (

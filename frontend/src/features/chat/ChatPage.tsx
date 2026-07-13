@@ -257,7 +257,12 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
           escapeRawHtml
         />
       ) : (
-        <div className="response-pending">{t('establishingRun')}</div>
+        <div className="response-pending">{message.status === 'paused' ? t('awaitingApproval') : t('establishingRun')}</div>
+      )}
+      {message.status === 'paused' && (
+        <output className="message-run-paused" aria-live="polite">
+          {t('awaitingApproval')}
+        </output>
       )}
       {(message.sources?.length ?? 0) > 0 && (
         <Sources
@@ -273,7 +278,9 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
         />
       )}
       <div className={`run-strip run-${message.status ?? 'completed'}`}>
-        <span className="run-status">{({ streaming: t('status.streaming'), completed: t('status.completed'), cancelled: t('status.cancelled'), failed: t('status.failed') } as const)[message.status ?? 'completed']}</span>
+        <span className="run-status">
+          {({ streaming: t('status.streaming'), paused: t('status.paused'), completed: t('status.completed'), cancelled: t('status.cancelled'), failed: t('status.failed') } as const)[message.status ?? 'completed']}
+        </span>
         {message.metrics?.duration != null && (
           <span className="run-metric" title={t('duration')}>
             {message.metrics.duration.toFixed(1)}s
@@ -325,9 +332,10 @@ export function ChatPage() {
       contentRender: (value: Message) => <MessageBody message={value} retry={() => chat.retry(value.id)} />,
     }))
   const activeRun = [...chat.state.messages].reverse().find((item) => item.role === 'assistant' && item.status === 'streaming')
+  const pausedRun = [...chat.state.messages].reverse().find((item) => item.role === 'assistant' && item.status === 'paused')
   const availableReasoningOptions = reasoningOptions(chat.selectedModel)
   const inputDisabled = !chat.selectedModel?.enabled || !chat.selectedModel.configured
-  const sendDisabled = inputDisabled || !chat.state.input.trim()
+  const sendDisabled = inputDisabled || Boolean(pausedRun) || !chat.state.input.trim()
   const scrollToLatest = useCallback(() => {
     const node = scrollRef.current
     if (node) node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' })
@@ -352,7 +360,7 @@ export function ChatPage() {
           </div>
           <div className="context-status">
             <span className={activeRun ? 'status-dot active' : 'status-dot'} />
-            {activeRun ? t('agentRunning') : chat.sessionId ? t('sessionReady') : t('newAnalysis')}
+            {activeRun ? t('agentRunning') : pausedRun ? t('awaitingApproval') : chat.sessionId ? t('sessionReady') : t('newAnalysis')}
           </div>
         </header>
         <div
@@ -430,7 +438,7 @@ export function ChatPage() {
             onChange={(value) => chat.dispatch({ type: 'input', value })}
             onSubmit={(value) => void chat.submit(value)}
             loading={chat.state.requesting}
-            disabled={inputDisabled}
+            disabled={inputDisabled || Boolean(pausedRun)}
             suffix={false}
             placeholder={chat.selectedModel?.configured ? t('placeholderReady') : t('placeholderNoModel')}
             autoSize={{ minRows: 1, maxRows: 5 }}

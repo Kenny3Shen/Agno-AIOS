@@ -14,5 +14,12 @@
   "submittedAt": "Submitted at",
   "resolvedAt": "Resolved at",
   "zipPreviewFailed": "Unable to load ZIP preview.",
-  "rejectReasonHint": "The rejection reason is sent to the requester."
+  "rejectReasonHint": "The rejection reason is sent to the requester.",
+  "resumeStatus": "Resume status",
+  "resumeError": "Resume error",
+  "retryResume": "Retry resume",
+  "resumeRetryStarted": "Run resume retry started.",
+  "resumeRetryFailed": "Unable to resume the run. Please try again.",
+  "resumeFailed": "Run resume failed",
+  "resumeFailedDescription": "The decision was recorded, but the original conversation has not resumed."
 }

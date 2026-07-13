@@ -33,7 +33,7 @@ import {
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { PageHeader } from '@/shared/ui/PageHeader'
-import { useFormatDate } from '@/shared/lib/format'
+import { compareTimestamp, useFormatDate } from '@/shared/lib/format'
 import { getRuntimeOverview, dashboardKeys } from './api'
 import type { OverviewQuery, OverviewRange, OverviewTrace } from './types'
 import { runtimeRanges, timelineChartData } from './utils'
@@ -360,8 +360,8 @@ export function DashboardPage() {
             columns={[
               { title: t('run'), dataIndex: 'name', ellipsis: true, render: (value) => value || 'Unnamed run' },
               { title: t('subject'), render: (_, item) => item.agent_id || item.workflow_id || '—', ellipsis: true },
-              { title: t('latency'), dataIndex: 'duration_ms', width: 106, render: duration },
-              { title: t('startTime'), dataIndex: 'start_time', width: 164, render: formatDate },
+              { title: t('latency'), dataIndex: 'duration_ms', width: 106, sorter: (a, b) => (a.duration_ms ?? 0) - (b.duration_ms ?? 0), render: duration },
+              { title: t('startTime'), dataIndex: 'start_time', width: 164, defaultSortOrder: 'descend' as const, sorter: (a, b) => compareTimestamp(a.start_time, b.start_time), render: formatDate },
               { title: t('common:status'), dataIndex: 'status', width: 92, render: (value) => <Tag color="error">{value}</Tag> },
             ]}
           />

@@ -6,7 +6,7 @@ import { PageHeader } from '@/shared/ui/PageHeader'
 import { CopyableValue, MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
 import { JsonValueCard } from '@/shared/ui/FormattedContentCard'
 import { deleteMemory, getMemories, updateMemory, type Memory } from './api'
-import { compactId, useFormatDate } from '@/shared/lib/format'
+import { compactId, compareTimestamp, useFormatDate } from '@/shared/lib/format'
 import { parseMemoryInput } from './utils'
 import { useTranslation } from 'react-i18next'
 
@@ -116,7 +116,7 @@ export function MemoryPage() {
                   ),
                 },
                 { title: 'User', dataIndex: 'user_id', width: 130, render: compactId },
-                { title: 'Updated', dataIndex: 'updated_at', width: 170, render: formatDate },
+                { title: 'Updated', dataIndex: 'updated_at', width: 170, defaultSortOrder: 'descend' as const, sorter: (a: Memory, b: Memory) => compareTimestamp(a.updated_at, b.updated_at), render: formatDate },
                 {
                   title: 'Actions',
                   key: 'actions',

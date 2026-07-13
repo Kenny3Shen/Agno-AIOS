@@ -8,6 +8,8 @@ from typing import Any, Literal
 
 ChatRunEventName = Literal[
     "run.started",
+    "run.paused",
+    "run.continued",
     "content.delta",
     "tool.update",
     "reasoning.delta",
@@ -114,4 +116,22 @@ def completed_payload(event: Any) -> dict[str, Any]:
         "session_id": _text(event_value(event, "session_id"), 128),
         "metrics": metric_values(event_value(event, "metrics")),
         "followups": [_text(item, 240) for item in followups if _text(item, 240)] if isinstance(followups, list) else [],
+    }
+
+
+def paused_payload(event: Any) -> dict[str, Any]:
+    """Project only the approval identity and tool summary needed by the chat UI."""
+    tools = event_value(event, "tools", [])
+    approval_id = _text(event_value(event, "approval_id"), 128)
+    tool_name = ""
+    if isinstance(tools, list):
+        for raw_tool in tools:
+            tool = to_mapping(raw_tool)
+            approval_id = approval_id or _text(tool.get("approval_id"), 128)
+            tool_name = tool_name or _text(tool.get("tool_name") or tool.get("name"), 160)
+    return {
+        "run_id": _text(event_value(event, "run_id"), 128),
+        "session_id": _text(event_value(event, "session_id"), 128),
+        "approval_id": approval_id,
+        "tool_name": tool_name or "需要审批的工具",
     }

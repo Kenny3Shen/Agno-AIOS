@@ -11,8 +11,15 @@
   "rejectApproval": "拒绝审批",
   "confirmReject": "确认拒绝",
   "rejectReasonPlaceholder": "请说明拒绝原因",
-  "submittedAt": "Submitted at",
-  "resolvedAt": "Resolved at",
+  "submittedAt": "提交时间",
+  "resolvedAt": "处理时间",
   "zipPreviewFailed": "无法加载 ZIP 预览。",
-  "rejectReasonHint": "拒绝原因会发送给申请用户。"
+  "rejectReasonHint": "拒绝原因会发送给申请用户。",
+  "resumeStatus": "恢复状态",
+  "resumeError": "恢复错误",
+  "retryResume": "重试恢复",
+  "resumeRetryStarted": "已开始重试恢复运行。",
+  "resumeRetryFailed": "无法恢复运行，请稍后重试。",
+  "resumeFailed": "运行恢复失败",
+  "resumeFailedDescription": "该操作已决议，但原对话尚未恢复。"
 }

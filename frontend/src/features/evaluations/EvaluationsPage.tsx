@@ -4,7 +4,7 @@ import { App, Button, Card, Select, Table, Tabs, Tag } from 'antd'
 import { PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { listCases, listFailures, listRuns, listSuites, replay, runCase, runSuite, type EvalCase, type EvalRun } from './api'
-import { compactId, formatDate } from '@/shared/lib/format'
+import { compactId, compareTimestamp, formatDate } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
 
 const RunTable = ({ rows, onReplay }: { rows: EvalRun[]; onReplay?: (id: string) => void }) => (
@@ -18,6 +18,16 @@ const RunTable = ({ rows, onReplay }: { rows: EvalRun[]; onReplay?: (id: string)
       {
         title: 'Result',
         dataIndex: 'passed',
+        filters: [
+          { text: 'passed', value: 'true' },
+          { text: 'failed', value: 'false' },
+          { text: 'unknown', value: 'unknown' },
+        ],
+        onFilter: (value, row) => {
+          if (value === 'true') return row.passed === true
+          if (value === 'false') return row.passed === false
+          return row.passed !== true && row.passed !== false
+        },
         render: (v) => (
           <Tag color={v === true ? 'success' : v === false ? 'error' : 'default'}>
             {v === true ? 'passed' : v === false ? 'failed' : 'unknown'}
@@ -25,7 +35,7 @@ const RunTable = ({ rows, onReplay }: { rows: EvalRun[]; onReplay?: (id: string)
         ),
       },
       { title: 'Score', dataIndex: 'score' },
-      { title: 'Created', dataIndex: 'created_at', render: (value) => formatDate(value) },
+      { title: 'Created', dataIndex: 'created_at', defaultSortOrder: 'descend' as const, sorter: (a: EvalRun, b: EvalRun) => compareTimestamp(a.created_at, b.created_at), render: (value) => formatDate(value) },
       ...(onReplay
         ? [
             {

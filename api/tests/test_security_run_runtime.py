@@ -42,6 +42,17 @@ class DetailedEventAgent:
         yield {"event": "ToolCallCompleted", "run_id": "run-1", "tool": {"tool_call_id": "tool-1", "tool_name": "lookup", "arguments": {"token": "secret"}, "result": "sensitive output"}}
 
 
+class PausedEventAgent:
+    async def arun(self, *_args, **_kwargs):
+        yield {"event": "RunStarted", "run_id": "run-paused", "session_id": "session-1"}
+        yield {
+            "event": "RunPaused",
+            "run_id": "run-paused",
+            "session_id": "session-1",
+            "tools": [{"tool_name": "simulate_containment", "approval_id": "approval-1"}],
+        }
+
+
 class BlockingAgent:
     async def arun(self, *_args, **_kwargs):
         raise RuntimeError("Your request was blocked.")
@@ -496,6 +507,41 @@ async def test_stream_agent_events_projects_safe_tools_sources_and_metrics():
 
 
 @pytest.mark.asyncio
+async def test_stream_agent_events_persists_and_projects_required_approval_pause():
+    runtime = security_run_runtime.SecurityRunRuntime()
+    with (
+        patch.object(security_run_runtime, "save_paused_run", new=AsyncMock()) as save,
+        patch.object(security_run_runtime, "notify_admins_of_hitl_approval", new=AsyncMock()) as notify,
+    ):
+        events = [
+            event
+            async for event in runtime._stream_agent_events(
+                PausedEventAgent(),
+                security_run_runtime.SecurityRunRequest.from_chat_args(
+                    "simulate isolation", session_id="session-1", model_id="model-1", user_id="u1"
+                ),
+            )
+        ]
+
+    paused = next(event for event in events if event.event == "run.paused")
+    assert paused.data == {
+        "run_id": "run-paused",
+        "session_id": "session-1",
+        "approval_id": "approval-1",
+        "tool_name": "simulate_containment",
+    }
+    assert save.await_args.args[0]["approval_id"] == "approval-1"
+    assert save.await_args.args[0]["request_context"]["model_id"] == "model-1"
+    notify.assert_awaited_once_with(
+        approval_id="approval-1",
+        tool_name="simulate_containment",
+        submitter_user_id="u1",
+        run_id="run-paused",
+        session_id="session-1",
+    )
+
+
+@pytest.mark.asyncio
 async def test_stream_events_filter_raw_details_at_the_source():
     runtime = security_run_runtime.SecurityRunRuntime()
     request = security_run_runtime.SecurityRunRequest.from_chat_args("hello", user_id="u1")
@@ -591,3 +637,100 @@ async def test_security_run_request_drives_provider_block_fallback():
         ]
     assert chunks[0].event == "content.delta"
     assert chunks[1] == ChatRunEvent("content.delta", {"run_id": "", "delta": "fallback chunk"})
+
+
+
+def test_rejection_confirmation_note_uses_resolution_data():
+    assert (
+        security_run_runtime._rejection_confirmation_note(
+            {"rejection_reason": "证据不足，暂不封禁"}
+        )
+        == "Rejected by administrator: 证据不足，暂不封禁"
+    )
+    assert (
+        security_run_runtime._rejection_confirmation_note({"note": "policy"})
+        == "Rejected by administrator: policy"
+    )
+    assert security_run_runtime._rejection_confirmation_note({}) == "Rejected by administrator"
+
+
+@pytest.mark.asyncio
+async def test_apply_native_hitl_resolution_rejects_with_admin_note():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, patch
+
+    from agno.models.response import ToolExecution
+    from agno.run.requirement import RunRequirement
+
+    tool = ToolExecution(
+        tool_name="simulate_containment",
+        tool_args={"target": "test@test.com", "action": "block"},
+        tool_call_id="call-1",
+        requires_confirmation=True,
+        approval_type="required",
+        approval_id="approval-1",
+    )
+    requirement = RunRequirement(tool_execution=tool)
+    run_output = SimpleNamespace(requirements=[requirement], tools=[tool])
+    agent = SimpleNamespace(aget_run_output=AsyncMock(return_value=run_output))
+    db = SimpleNamespace(
+        get_approval=AsyncMock(
+            return_value={
+                "status": "rejected",
+                "resolution_data": {"rejection_reason": "证据不足，暂不封禁", "note": "证据不足，暂不封禁"},
+            }
+        )
+    )
+
+    with patch.object(security_run_runtime, "get_async_agno_postgres_db", return_value=db):
+        requirements = await security_run_runtime.apply_native_hitl_resolution(
+            agent,
+            approval_id="approval-1",
+            run_id="run-1",
+            session_id="session-1",
+            user_id="user-1",
+        )
+
+    assert requirements is not None
+    assert len(requirements) == 1
+    assert requirement.confirmation is False
+    assert tool.confirmed is False
+    assert tool.confirmation_note == "Rejected by administrator: 证据不足，暂不封禁"
+    agent.aget_run_output.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_apply_native_hitl_resolution_confirms_approved_tools():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, patch
+
+    from agno.models.response import ToolExecution
+    from agno.run.requirement import RunRequirement
+
+    tool = ToolExecution(
+        tool_name="simulate_containment",
+        tool_args={"target": "test@test.com", "action": "block"},
+        tool_call_id="call-1",
+        requires_confirmation=True,
+        approval_type="required",
+        approval_id="approval-1",
+    )
+    requirement = RunRequirement(tool_execution=tool)
+    run_output = SimpleNamespace(requirements=[requirement], tools=[tool])
+    agent = SimpleNamespace(aget_run_output=AsyncMock(return_value=run_output))
+    db = SimpleNamespace(
+        get_approval=AsyncMock(return_value={"status": "approved", "resolution_data": None})
+    )
+
+    with patch.object(security_run_runtime, "get_async_agno_postgres_db", return_value=db):
+        requirements = await security_run_runtime.apply_native_hitl_resolution(
+            agent,
+            approval_id="approval-1",
+            run_id="run-1",
+            session_id="session-1",
+            user_id="user-1",
+        )
+
+    assert requirements is not None
+    assert requirement.confirmation is True
+    assert tool.confirmed is True

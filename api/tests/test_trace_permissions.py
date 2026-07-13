@@ -449,3 +449,63 @@ async def test_trace_list_rejects_invalid_status_or_time_range() -> None:
             start_time="2026-02-13T00:00:00Z",
             end_time="2026-02-12T00:00:00Z",
         )
+
+
+@pytest.mark.asyncio
+async def test_trace_detail_replaces_pause_placeholder_with_tool_result() -> None:
+    trace_record = SimpleNamespace(
+        to_dict=lambda: {
+            "trace_id": "trace-hitl",
+            "user_id": "owner",
+            "session_id": "session-1",
+            "run_id": "run-1",
+            "status": "OK",
+        }
+    )
+    root_span = SimpleNamespace(
+        to_dict=lambda: {
+            "span_id": "root",
+            "parent_span_id": None,
+            "status_code": "OK",
+            "attributes": {
+                "input.value": "block test@test.com",
+                "output.value": "I have tools to execute, but I need confirmation.",
+            },
+        }
+    )
+    session = {
+        "runs": [
+            {
+                "run_id": "run-1",
+                "status": "COMPLETED",
+                "content": "## HITL 模拟处置已提交\n\n- **状态**：**等待管理员审批**。",
+                "tools": [
+                    {
+                        "tool_name": "simulate_containment",
+                        "confirmed": True,
+                        "tool_args": {"target": "test@test.com", "action": "block"},
+                        "result": {
+                            "status": "simulated",
+                            "target": "test@test.com",
+                            "action": "block",
+                            "message": "Approval resolved and simulated containment recorded. No external system was changed.",
+                        },
+                    }
+                ],
+            }
+        ]
+    }
+
+    with (
+        patch.object(tracing_service._trace_db, "get_trace", AsyncMock(return_value=trace_record)),
+        patch.object(tracing_service._trace_db, "get_spans", AsyncMock(return_value=[root_span])),
+        patch.object(tracing_service._trace_db, "get_session", AsyncMock(return_value=session)),
+    ):
+        result = await get_trace_detail("trace-hitl", actor=actor("owner"))
+
+    assert result is not None
+    root = result["spans"][0]
+    output_text = root["parsed"]["output"]["text"]
+    assert "I have tools to execute, but I need confirmation." not in output_text
+    assert "simulate_containment" in output_text
+    assert "simulated" in output_text

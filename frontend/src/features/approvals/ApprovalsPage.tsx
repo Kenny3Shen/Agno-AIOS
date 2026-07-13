@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Card, Collapse, Descriptions, Drawer, Input, Modal, Segmented, Select, Space, Table, Tag, Typography, type DescriptionsProps } from 'antd'
+import { Alert, App, Button, Card, Collapse, Descriptions, Drawer, Input, Modal, Segmented, Select, Space, Table, Tag, Typography, type DescriptionsProps, type TableProps } from 'antd'
 import { CheckOutlined, CloseOutlined } from '@ant-design/icons'
 import XMarkdown from '@ant-design/x-markdown'
 import { currentUserQuery } from '@/features/auth'
@@ -13,10 +13,11 @@ import {
   getSkillSubmissionPreview,
   isSubmissionApproval,
   resolveApproval,
+  resumeApproval,
   resolveSubmissionApproval,
   type Approval,
 } from './api'
-import { compactId, useFormatDate } from '@/shared/lib/format'
+import { compactId, compareTimestamp, useFormatDate } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
 
 const uploadPayload = (approval: Approval) => approval.payload ?? {}
@@ -60,10 +61,16 @@ const statusLabel = (status: string) => status ? `${status.slice(0, 1).toUpperCa
 const rejectionReason = (approval: Approval) =>
   approval.rejection_reason ?? (typeof approval.resolution_data?.rejection_reason === 'string' ? approval.resolution_data.rejection_reason : '')
 
+const resumeStatus = (approval: Approval) =>
+  approval.resume_status ?? (typeof approval.resolution_data?.resume_status === 'string' ? approval.resolution_data.resume_status : null)
+const resumeError = (approval: Approval) =>
+  approval.resume_error ?? (typeof approval.resolution_data?.resume_error === 'string' ? approval.resolution_data.resume_error : null)
+
 const optionalCopyable = (value?: string | null, empty = '-') => (value?.trim() ? <CopyableValue value={value} /> : empty)
 
 function IdentityCell({ identity }: { identity: ApprovalIdentity }) {
-  return <Typography.Text ellipsis={{ tooltip: identity.email || undefined }}>{identity.email || '—'}</Typography.Text>
+  const label = identity.email || identity.id
+  return <Typography.Text ellipsis={{ tooltip: label || undefined }}>{label || '—'}</Typography.Text>
 }
 
 const statusTag = (status: string) => (
@@ -103,6 +110,8 @@ function detailItems(approval: Approval, formatDate: (value?: string | number | 
       { key: 'submitted-at', label: t('submittedAt'), children: formatDate(approval.created_at) },
       { key: 'resolved-at', label: t('resolvedAt'), children: formatDate(approval.resolved_at) },
       ...(approval.status === 'rejected' ? [{ key: 'rejection-reason', label: 'Rejection reason', children: rejectionReason(approval) || '-' }] : []),
+      ...(resumeStatus(approval) ? [{ key: 'resume-status', label: t('resumeStatus'), children: statusLabel(resumeStatus(approval) ?? '') }] : []),
+      ...(resumeError(approval) ? [{ key: 'resume-error', label: t('resumeError'), children: resumeError(approval) }] : []),
     ],
     people: [
       { key: 'submitter-email', label: 'Submitter email', children: optionalCopyable(submitted.email) },
@@ -171,6 +180,97 @@ export function ApprovalsPage() {
       await refresh()
     },
   })
+  const retryResume = useMutation({
+    mutationFn: (approval: Approval) => resumeApproval(approval.id),
+    onSuccess: async (row) => {
+      setSelected(row)
+      message.success(t('resumeRetryStarted'))
+      await refresh()
+    },
+    onError: (error) => message.error(error instanceof Error ? error.message : t('resumeRetryFailed')),
+  })
+  const typeFilters = useMemo(() => {
+    const values = new Set((query.data ?? []).map((row) => approvalType(row)).filter((value) => value && value !== '-'))
+    return [...values].sort().map((value) => ({ text: value, value }))
+  }, [query.data])
+
+  const columns = useMemo<TableProps<Approval>['columns']>(
+    () => [
+      {
+        title: 'Request',
+        width: 240,
+        sorter: (a, b) => approvalTitle(a).localeCompare(approvalTitle(b)),
+        render: (_, row) => (
+          <Space orientation="vertical" size={0}>
+            <Typography.Text strong ellipsis>
+              {approvalTitle(row)}
+            </Typography.Text>
+            <Typography.Text type="secondary" ellipsis>
+              {compactId(row.id)}
+            </Typography.Text>
+          </Space>
+        ),
+      },
+      {
+        title: 'Type',
+        width: 150,
+        filters: typeFilters,
+        onFilter: (value, row) => approvalType(row) === value,
+        render: (_, row) => approvalType(row),
+      },
+      {
+        title: 'Submitter',
+        width: 210,
+        ellipsis: true,
+        sorter: (a, b) => {
+          const left = submitter(a).email || submitter(a).id
+          const right = submitter(b).email || submitter(b).id
+          return left.localeCompare(right)
+        },
+        render: (_, row) => <IdentityCell identity={submitter(row)} />,
+      },
+      {
+        title: 'Approver',
+        width: 210,
+        ellipsis: true,
+        sorter: (a, b) => {
+          const left = approver(a).email || approver(a).id
+          const right = approver(b).email || approver(b).id
+          return left.localeCompare(right)
+        },
+        render: (_, row) => <IdentityCell identity={approver(row)} />,
+      },
+      {
+        title: 'Status',
+        dataIndex: 'status',
+        width: 120,
+        filters: [
+          { text: statusLabel('pending'), value: 'pending' },
+          { text: statusLabel('approved'), value: 'approved' },
+          { text: statusLabel('rejected'), value: 'rejected' },
+        ],
+        onFilter: (value, row) => row.status === value,
+        render: statusTag,
+      },
+      {
+        title: t('submittedAt'),
+        dataIndex: 'created_at',
+        width: 180,
+        defaultSortOrder: 'descend',
+        sorter: (a, b) => compareTimestamp(a.created_at, b.created_at),
+        render: formatDate,
+      },
+      {
+        title: t('resolvedAt'),
+        dataIndex: 'resolved_at',
+        width: 180,
+        sorter: (a, b) => compareTimestamp(a.resolved_at, b.resolved_at),
+        render: formatDate,
+      },
+    ],
+    [formatDate, t, typeFilters]
+  )
+
   const approvalActions = selected && canResolve ? (
     <Space size={4}>
       <Button
@@ -193,6 +293,11 @@ export function ApprovalsPage() {
       >
         {t('common:reject')}
       </Button>
+      {!isSubmissionApproval(selected) && selected.tool_name === 'simulate_containment' && resumeStatus(selected) === 'failed' && (
+        <Button loading={retryResume.isPending} onClick={() => retryResume.mutate(selected)}>
+          {t('retryResume')}
+        </Button>
+      )}
     </Space>
   ) : null
   return (
@@ -217,6 +322,7 @@ export function ApprovalsPage() {
           dataSource={query.data ?? []}
           loading={query.isLoading}
           scroll={{ x: 1290 }}
+          pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (total) => `${total}` }}
           rowClassName={(row) => (row.id === selected?.id ? 'selected-table-row' : '')}
           onRow={(row) => ({
             tabIndex: 0,
@@ -230,29 +336,7 @@ export function ApprovalsPage() {
               }
             },
           })}
-          columns={[
-            {
-              title: 'Request',
-              width: 240,
-              render: (_, row) => (
-                <Space orientation="vertical" size={0}>
-                  <Typography.Text strong ellipsis>{approvalTitle(row)}</Typography.Text>
-                  <Typography.Text type="secondary" ellipsis>{compactId(row.id)}</Typography.Text>
-                </Space>
-              ),
-            },
-            { title: 'Type', width: 150, render: (_, row) => approvalType(row) },
-            { title: 'Submitter', width: 210, render: (_, row) => <IdentityCell identity={submitter(row)} /> },
-            { title: 'Approver', width: 210, render: (_, row) => <IdentityCell identity={approver(row)} /> },
-            {
-              title: 'Status',
-              dataIndex: 'status',
-              width: 120,
-              render: statusTag,
-            },
-            { title: 'Submitted at', dataIndex: 'created_at', width: 180, render: formatDate },
-            { title: 'Resolved at', dataIndex: 'resolved_at', width: 180, render: formatDate },
-          ]}
+          columns={columns}
         />
       </Card>
       <Drawer size={760} open={Boolean(selected)} onClose={() => setSelected(null)} title="Approval detail" extra={approvalActions}>
@@ -265,6 +349,15 @@ export function ApprovalsPage() {
                 showIcon
                 message={t('rejected')}
                 description={rejectionReason(selected) || t('noRejectReason')}
+                style={{ marginBottom: 16 }}
+              />
+            )}
+            {resumeStatus(selected) === 'failed' && (
+              <Alert
+                type="warning"
+                showIcon
+                message={t('resumeFailed')}
+                description={resumeError(selected) || t('resumeFailedDescription')}
                 style={{ marginBottom: 16 }}
               />
             )}
@@ -302,8 +395,14 @@ export function ApprovalsPage() {
                       pagination={false}
                       dataSource={skillPreview.data.files}
                       columns={[
-                        { title: t('common:file'), dataIndex: 'name' },
-                        { title: t('common:size'), dataIndex: 'size', render: (size: number) => `${size} B` },
+                        { title: t('common:file'), dataIndex: 'name', sorter: (a, b) => a.name.localeCompare(b.name) },
+                        {
+                          title: t('common:size'),
+                          dataIndex: 'size',
+                          width: 120,
+                          sorter: (a, b) => a.size - b.size,
+                          render: (size: number) => `${size} B`,
+                        },
                       ]}
                     />
                     {Object.keys(skillPreview.data.previews).length > 0 && (

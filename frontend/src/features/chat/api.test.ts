@@ -71,6 +71,27 @@ describe('chat API', () => {
     expect(events).toEqual(['run.started', 'content.delta', 'run.completed'])
   })
 
+  it('treats a HITL pause as a normal stream terminal event', async () => {
+    server.use(
+      http.post(
+        '/api/chat',
+        () =>
+          new HttpResponse('event: run.paused\ndata: {"run_id":"run-1","session_id":"s1","approval_id":"approval-1","tool_name":"simulate_containment"}\n\n', {
+            headers: { 'Content-Type': 'text/event-stream' },
+          })
+      )
+    )
+    const events: string[] = []
+    await expect(
+      streamMessage(
+        { message: 'contain asset', session_id: 's1', model_id: 'model' },
+        (event) => events.push(event.type),
+        new AbortController().signal
+      )
+    ).resolves.toBeUndefined()
+    expect(events).toEqual(['run.paused'])
+  })
+
   it('sends a reasoning effort override only when selected', async () => {
     server.use(
       http.post('/api/chat', async ({ request }) => {

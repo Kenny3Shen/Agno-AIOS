@@ -1,6 +1,6 @@
 import type { ModelConfig, ReasoningEffort } from '@/shared/types/common'
 import { DEEPSEEK_REASONING_EFFORTS, openaiReasoningEfforts } from '@/shared/lib/reasoning'
-import type { ChatAction, ChatRunEvent, ChatSource, ChatState, Message, RunMetrics, ThoughtStep, ToolStatus, ToolStep } from './types'
+import type { ChatAction, ChatRunEvent, ChatSource, ChatState, Message, RunMetrics, RunStatus, ThoughtStep, ToolStatus, ToolStep } from './types'
 
 export const initialChatState: ChatState = {
   messages: [],
@@ -39,7 +39,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
       }
     case 'event': {
       const event: ChatRunEvent = action.event
-      const terminal = event.type === 'run.completed' || event.type === 'run.cancelled' || event.type === 'run.failed'
+      const terminal = event.type === 'run.paused' || event.type === 'run.completed' || event.type === 'run.cancelled' || event.type === 'run.failed'
       const messages = updateMessage(state.messages, action.id, (message) => {
         switch (event.type) {
           case 'run.started':
@@ -67,6 +67,28 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
           }
           case 'sources':
             return { ...message, sources: event.items }
+          case 'run.paused': {
+            const toolSteps = message.tool_steps ?? []
+            const tool = event.tool
+            const index = tool ? toolSteps.findIndex((step) => step.id === tool.id) : -1
+            return {
+              ...message,
+              run_id: event.runId,
+              session_id: event.sessionId ?? message.session_id,
+              approval_id: event.approvalId,
+              status: 'paused',
+              final: true,
+              tool_steps: tool ? (index < 0 ? [...toolSteps, tool] : toolSteps.map((step, stepIndex) => (stepIndex === index ? tool : step))) : toolSteps,
+            }
+          }
+          case 'run.continued':
+            return {
+              ...message,
+              run_id: event.runId,
+              session_id: event.sessionId ?? message.session_id,
+              status: 'streaming',
+              final: false,
+            }
           case 'run.completed':
             return {
               ...message,
@@ -180,12 +202,20 @@ const normalizeThoughts = (value: unknown): ThoughtStep[] =>
       })
     : []
 
+const normalizeRunStatus = (value: unknown): RunStatus => {
+  const status = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  if (status === 'streaming' || status === 'running' || status === 'started') return 'streaming'
+  if (status === 'paused' || status === 'pending') return 'paused'
+  if (status === 'cancelled' || status === 'canceled') return 'cancelled'
+  if (status === 'failed' || status === 'error') return 'failed'
+  return 'completed'
+}
+
 export const normalizeMessages = (value: unknown): Message[] =>
   Array.isArray(value)
     ? value.map((item, index) => {
         const source = isRecord(item) ? item : {}
-        const status =
-          source.status === 'streaming' || source.status === 'cancelled' || source.status === 'failed' ? source.status : 'completed'
+        const status = normalizeRunStatus(source.status)
         return {
           id: String(source.id ?? source.message_id ?? source.run_id ?? `${source.role ?? 'message'}-${index}`),
           role: source.role === 'user' || source.role === 'system' ? source.role : 'assistant',
@@ -194,6 +224,7 @@ export const normalizeMessages = (value: unknown): Message[] =>
           status,
           run_id: asString(source.run_id),
           session_id: asString(source.session_id),
+          approval_id: asString(source.approval_id),
           metrics: asMetrics(source.metrics),
           sources: normalizeSources(source.sources ?? source.citations ?? source.references),
           tool_steps: normalizeTools(source.tool_steps ?? source.tools),

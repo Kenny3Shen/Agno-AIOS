@@ -32,6 +32,9 @@ export interface Approval {
   resolved_at?: string | number
   rejection_reason?: string | null
   resolution_data?: Record<string, unknown> | null
+  resume_status?: 'pending' | 'running' | 'completed' | 'failed' | string | null
+  resume_error?: string | null
+  resumed_at?: string | number | null
   payload?: Record<string, unknown>
 }
 
@@ -59,6 +62,7 @@ export const resolveApproval = (id: string, status: 'approved' | 'rejected', rej
     `/approvals/${encodeURIComponent(id)}/resolve`,
     jsonInit('POST', { status, ...(rejectionReason ? { rejection_reason: rejectionReason } : {}) })
   )
+export const resumeApproval = (id: string) => requestJson<Approval>(`/approvals/${encodeURIComponent(id)}/resume`, jsonInit('POST'))
 export const resolveSubmissionApproval = (id: string, status: 'approved' | 'rejected', rejectionReason?: string) =>
   requestJson<Approval>(
     `/approvals/submissions/${encodeURIComponent(id)}/resolve`,

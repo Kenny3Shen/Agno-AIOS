@@ -15,6 +15,7 @@
   },
   "status": {
     "streaming": "分析中",
+    "paused": "等待审批",
     "completed": "已完成",
     "cancelled": "已停止",
     "failed": "运行失败"
@@ -48,6 +49,7 @@
   "welcomeTitle": "从哪里开始调查？",
   "thoughtProcess": "思考与执行过程",
   "establishingRun": "正在建立分析运行…",
+  "awaitingApproval": "此操作正在等待管理员在审批中心处理。",
   "welcomeDescription": "连接漏洞情报、资产上下文和运行记录，发起一项可追溯的安全分析。",
   "current": "当前"
 }

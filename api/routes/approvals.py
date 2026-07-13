@@ -17,6 +17,8 @@ from api.services.approvals_service import (
     list_approvals_payload,
     resolve_approval_record,
 )
+from api.services.security_run_runtime import resume_security_run
+from api.services.notification_service import notify_submitter_of_hitl_resolution
 from api.services.security_policy import PolicyAuditEvent, record_policy_event
 from api.services.upload_approval_service import (
     can_view_submission_approval,
@@ -181,7 +183,10 @@ async def resolve_approval(
     try:
         resolution_data = dict(body.resolution_data or {})
         if body.status == "rejected":
-            resolution_data["rejection_reason"] = (body.rejection_reason or "").strip()
+            reason = (body.rejection_reason or "").strip()
+            # Agno resolution_data convention uses "note"; keep rejection_reason for our UI.
+            resolution_data["rejection_reason"] = reason
+            resolution_data["note"] = reason
         approval = await resolve_approval_record(
             approval_id,
             status=body.status,
@@ -197,6 +202,35 @@ async def resolve_approval(
         raise HTTPException(status_code=500, detail="Failed to resolve approval") from exc
     if approval is None:
         raise HTTPException(status_code=404, detail="Approval not found")
+    resume_status = "not_applicable"
+    if approval.get("tool_name") == "simulate_containment":
+        rejection_reason = ""
+        if body.status == "rejected":
+            rejection_reason = str(
+                (body.rejection_reason or "").strip()
+                or (resolution_data.get("rejection_reason") if isinstance(resolution_data, dict) else "")
+                or (resolution_data.get("note") if isinstance(resolution_data, dict) else "")
+                or ""
+            )
+        # Rejection note is applied natively via RunRequirement.reject(note=...) on resume.
+        submitter_id = str(approval.get("user_id") or "")
+        if submitter_id:
+            await notify_submitter_of_hitl_resolution(
+                approval_id=approval_id,
+                tool_name=str(approval.get("tool_name") or "simulate_containment"),
+                submitter_id=submitter_id,
+                status=body.status,
+                rejection_reason=rejection_reason,
+                run_id=str(approval.get("run_id") or ""),
+                session_id=str(approval.get("session_id") or ""),
+            )
+        try:
+            resume_status = await resume_security_run(approval_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except Exception as exc:
+            logger.exception("恢复 HITL Run 失败: {}", exc)
+            resume_status = "failed"
     await record_policy_event(
         user,
         PolicyAuditEvent(
@@ -212,4 +246,42 @@ async def resolve_approval(
         ),
         request,
     )
-    return approval
+    response_approval = approval
+    if approval.get("tool_name") == "simulate_containment":
+        response_approval = await get_approval_record(approval_id) or approval
+    return {**response_approval, "resume_status": resume_status}
+
+
+@router.post("/{approval_id}/resume")
+async def retry_approval_resume(
+    approval_id: str,
+    request: Request,
+    user: User = Depends(require_scope("approvals:write")),
+):
+    """Retry a failed continuation without granting a new approval."""
+    approval = await get_approval_record(approval_id)
+    if approval is None:
+        raise HTTPException(status_code=404, detail="Approval not found")
+    if approval.get("tool_name") != "simulate_containment":
+        raise HTTPException(status_code=400, detail="Approval is not a resumable containment action")
+    if approval.get("status") not in {"approved", "rejected"}:
+        raise HTTPException(status_code=409, detail="Approval must be resolved before resuming")
+    try:
+        resume_status = await resume_security_run(approval_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("重试恢复 HITL Run 失败: {}", exc)
+        raise HTTPException(status_code=500, detail="Failed to resume approval run") from exc
+    await record_policy_event(
+        user,
+        PolicyAuditEvent(
+            action="approvals.resume",
+            resource_type="approval",
+            resource_id=approval_id,
+            metadata={"run_id": approval.get("run_id"), "resume_status": resume_status},
+        ),
+        request,
+    )
+    refreshed = await get_approval_record(approval_id)
+    return {**(refreshed or approval), "resume_status": resume_status}

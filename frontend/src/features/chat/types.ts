@@ -7,7 +7,7 @@ export interface RunMetrics {
   duration?: number | null
 }
 
-export type RunStatus = 'streaming' | 'completed' | 'cancelled' | 'failed'
+export type RunStatus = 'streaming' | 'paused' | 'completed' | 'cancelled' | 'failed'
 export type ToolStatus = 'loading' | 'success' | 'error' | 'abort'
 
 export interface ToolStep {
@@ -48,6 +48,7 @@ export interface Message {
   thought_chain?: ThoughtStep[] | null
   reasoning?: string | null
   followups?: string[] | null
+  approval_id?: string | null
   error?: { code?: string; message: string; retryable?: boolean } | null
   raw_run?: JsonRecord | null
   tools?: unknown[] | null
@@ -79,6 +80,8 @@ export type ChatRunEvent =
   | { type: 'reasoning.delta'; runId?: string; delta: string }
   | { type: 'thought.update'; runId?: string; thought: ThoughtStep }
   | { type: 'sources'; runId?: string; items: ChatSource[] }
+  | { type: 'run.paused'; runId: string; sessionId?: string; approvalId: string; tool?: ToolStep }
+  | { type: 'run.continued'; runId: string; sessionId?: string }
   | { type: 'run.completed'; runId?: string; sessionId?: string; metrics?: RunMetrics | null; followups?: string[] }
   | { type: 'run.cancelled'; runId?: string; reason?: string }
   | { type: 'run.failed'; runId?: string; code?: string; message: string; retryable?: boolean }

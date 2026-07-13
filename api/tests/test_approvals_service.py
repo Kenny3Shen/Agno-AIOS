@@ -103,7 +103,9 @@ class FakeApprovalDb:
             "created_at": 1714560000,
         }
 
-    async def update_approval(self, approval_id: str, expected_status=None, **kwargs):
+    def update_approval(self, approval_id: str, expected_status=None, **kwargs):
+        # Sync signature matches Agno aresolve_approval non-AsyncBaseDb path;
+        # production uses AsyncPostgresDb so aresolve awaits async update_approval.
         self.updated = {
             "approval_id": approval_id,
             "expected_status": expected_status,
@@ -255,7 +257,7 @@ async def test_resolve_route_derives_resolver_from_actor_and_records_audit():
             user=current_actor,
         )
 
-    assert result == resolved
+    assert result == {**resolved, "resume_status": "not_applicable"}
     resolve_mock.assert_awaited_once_with(
         "approval-1",
         status="approved",
@@ -324,4 +326,66 @@ async def test_rejected_approval_route_adds_reason_to_resolution_data():
     assert resolve_mock.await_args.kwargs["resolution_data"] == {
         "source": "review",
         "rejection_reason": "Policy violation",
+        "note": "Policy violation",
     }
+
+
+@pytest.mark.asyncio
+async def test_list_approvals_enrich_submitter_email_from_user_id():
+    db = FakeApprovalDb()
+    with (
+        patch(
+            "api.services.approvals_service.get_async_agno_postgres_db",
+            return_value=db,
+        ),
+        patch(
+            "api.services.approvals_service.lookup_user_emails",
+            new=AsyncMock(return_value={"u1": "operator@example.com"}),
+        ),
+    ):
+        from api.services.approvals_service import list_approvals
+
+        approvals, total, _kwargs = await list_approvals(actor=actor())
+
+    assert total == 2
+    assert approvals[0]["submitted_by"] == {"id": "u1", "email": "operator@example.com"}
+    assert approvals[0]["submitted_by_email"] == "operator@example.com"
+
+
+@pytest.mark.asyncio
+async def test_resolve_hitl_rejection_notifies_submitter_and_resumes_natively():
+    current_actor = actor("admin-1")
+    resolved = {
+        "id": "approval-1",
+        "status": "rejected",
+        "run_id": "run-1",
+        "session_id": "session-1",
+        "source_type": "agent",
+        "tool_name": "simulate_containment",
+        "user_id": "user-1",
+    }
+    with (
+        patch.object(approvals, "resolve_approval_record", new=AsyncMock(return_value=resolved)) as resolve,
+        patch.object(approvals, "notify_submitter_of_hitl_resolution", new=AsyncMock()) as notify,
+        patch.object(approvals, "resume_security_run", new=AsyncMock(return_value="completed")) as resume,
+        patch.object(approvals, "get_approval_record", new=AsyncMock(return_value={**resolved, "resume_status": "completed"})),
+        patch.object(approvals, "record_policy_event", new=AsyncMock()),
+    ):
+        result = await approvals.resolve_approval(
+            "approval-1",
+            approvals.ApprovalResolveRequest(status="rejected", rejection_reason="证据不足，暂不封禁"),
+            request=request(),
+            user=current_actor,
+        )
+
+    resolve.assert_awaited_once()
+    assert resolve.await_args.kwargs["resolution_data"] == {
+        "rejection_reason": "证据不足，暂不封禁",
+        "note": "证据不足，暂不封禁",
+    }
+    notify.assert_awaited_once()
+    assert notify.await_args.kwargs["submitter_id"] == "user-1"
+    assert notify.await_args.kwargs["status"] == "rejected"
+    assert notify.await_args.kwargs["rejection_reason"] == "证据不足，暂不封禁"
+    resume.assert_awaited_once_with("approval-1")
+    assert result["resume_status"] == "completed"

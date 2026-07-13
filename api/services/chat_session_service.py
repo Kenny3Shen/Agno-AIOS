@@ -22,6 +22,7 @@ ARCHIVED_AT_METADATA_KEY = "agno_aios_archived_at"
 TITLE_METADATA_KEY = "agno_aios_title"
 
 
+
 async def is_session_archived_async(session_id: str) -> bool:
     await ensure_agno_postgres_tables_async()
     session = await get_async_agno_postgres_db().get_session(
@@ -214,6 +215,110 @@ def _project_session_rows(
     return sessions
 
 
+
+def _history_run_status(value: object, tools: object) -> str:
+    """Map Agno run status values onto chat UI statuses."""
+    raw = str(value or "").strip()
+    normalized = raw.lower()
+    if normalized in {"paused", "pending"}:
+        status = "paused"
+    elif normalized in {"cancelled", "canceled"}:
+        status = "cancelled"
+    elif normalized in {"error", "failed"}:
+        status = "failed"
+    elif normalized in {"running", "started", "streaming"}:
+        status = "streaming"
+    else:
+        status = "completed"
+
+    if status != "paused":
+        return status
+
+    # Keep waiting-for-approval only while a confirmation tool is still unresolved.
+    if isinstance(tools, list):
+        waiting = False
+        for tool in tools:
+            if not isinstance(tool, dict):
+                continue
+            confirmed = tool.get("confirmed")
+            requires_confirmation = bool(tool.get("requires_confirmation"))
+            approval_type = str(tool.get("approval_type") or "")
+            has_approval = bool(tool.get("approval_id"))
+            if not (requires_confirmation or approval_type == "required" or has_approval):
+                continue
+            if confirmed is True or confirmed is False:
+                continue
+            waiting = True
+            break
+        if not waiting:
+            return "completed"
+    return "paused"
+
+
+def _history_approval_id(tools: object) -> str | None:
+    if not isinstance(tools, list):
+        return None
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        approval_id = tool.get("approval_id")
+        if isinstance(approval_id, str) and approval_id.strip():
+            return approval_id.strip()
+    return None
+
+
+def _project_history_content(run: dict[str, object], status: str) -> str:
+    """Prefer non-stale assistant text; after HITL resume, fall back to tool outcomes."""
+    content = run.get("content")
+    content_text = content.strip() if isinstance(content, str) else ""
+    tools_value = run.get("tools")
+    tools: list[Any] = tools_value if isinstance(tools_value, list) else []
+    confirmed = [
+        tool
+        for tool in tools
+        if isinstance(tool, dict) and tool.get("confirmed") is True and tool.get("result") not in (None, "")
+    ]
+    rejected = [
+        tool
+        for tool in tools
+        if isinstance(tool, dict) and (tool.get("confirmed") is False or tool.get("tool_call_error") is True)
+    ]
+    waiting_markers = ("等待管理员审批", "i have tools to execute, but i need confirmation")
+    stale = content_text.casefold()
+    is_stale = any(marker in stale for marker in waiting_markers)
+    has_admin_reason = "Rejected by administrator" in content_text or "拒绝原因" in content_text
+    if rejected and status != "paused" and (not content_text or is_stale or not has_admin_reason):
+        notes = [
+            str(tool.get("confirmation_note") or "").strip()
+            for tool in rejected
+            if str(tool.get("confirmation_note") or "").strip()
+        ]
+        if notes and not has_admin_reason:
+            lines_out = ["## 封禁请求未执行"]
+            for tool in rejected:
+                name = str(tool.get("tool_name") or "tool")
+                note = str(tool.get("confirmation_note") or "Tool call was rejected").strip()
+                args = tool.get("tool_args") if isinstance(tool.get("tool_args"), dict) else {}
+                lines_out.append(f"- **工具**：`{name}`")
+                if isinstance(args, dict) and args.get("target"):
+                    lines_out.append(f"- **目标**：`{args.get('target')}`")
+                lines_out.append(f"- **拒绝原因**：{note}")
+            lines_out.append("")
+            lines_out.append("管理员已拒绝该 HITL 请求；模拟处置未执行，外部系统未发生实际变更。")
+            return chr(10).join(lines_out)
+    if confirmed and status != "paused" and (not content_text or is_stale):
+        lines_out = ["## HITL 工具已执行"]
+        for tool in confirmed:
+            name = str(tool.get("tool_name") or "tool")
+            result = tool.get("result")
+            lines_out.append(f"- **工具**：`{name}`")
+            lines_out.append(f"- **结果**：`{result}`")
+        lines_out.append("")
+        lines_out.append("管理员审批已处理；以上结果来自审批恢复后的工具执行记录。")
+        return chr(10).join(lines_out)
+    return content_text
+
+
 async def get_session_messages_async(
     session_id: str,
     *,
@@ -252,42 +357,59 @@ async def get_session_messages_async(
             messages.append({"id": f"{run_id}:user", "role": "user", "content": user_text.strip(), "final": True, "session_id": session_id})
 
         content = run.get("content", "")
-        if isinstance(content, str) and content.strip():
-            raw_tools = run.get("tools")
+        tools_value_for_gate = run.get("tools")
+        has_tool_results = isinstance(tools_value_for_gate, list) and any(
+            isinstance(tool, dict)
+            and (
+                (tool.get("confirmed") is True and tool.get("result") not in (None, ""))
+                or tool.get("confirmed") is False
+                or tool.get("tool_call_error") is True
+                or str(tool.get("confirmation_note") or "").strip()
+            )
+            for tool in tools_value_for_gate
+        )
+        if (isinstance(content, str) and content.strip()) or has_tool_results:
+            tools_value = run.get("tools")
+            raw_tools: list[Any] = tools_value if isinstance(tools_value, list) else []
+            status = _history_run_status(run.get("status"), raw_tools)
+            tool_status = "running" if status == "paused" else "completed"
             tools = (
                 [
                     tool_update(
                         tool,
-                        "completed",
+                        tool_status,
                         include_raw_io=chat_settings.show_raw_tool_io,
                     )
                     for tool in raw_tools
                 ]
-                if chat_settings.show_thought_chain and isinstance(raw_tools, list)
+                if chat_settings.show_thought_chain
                 else []
             )
             followups = run.get("followups")
-            message = {
+            message: dict[str, Any] = {
                 "id": run_id,
                 "role": "assistant",
-                "content": content.strip(),
+                "content": _project_history_content(cast(dict[str, object], run), status) or (content.strip() if isinstance(content, str) else ""),
                 "final": True,
                 "run_id": run_id,
                 "session_id": session_id,
-                "status": str(run.get("status") or "completed"),
+                "status": status,
                 "metrics": metric_values(run.get("metrics")),
                 "sources": source_items(run.get("citations")) or source_items(run.get("references")),
                 "tools": tools,
                 "followups": [item for item in followups if isinstance(item, str)] if isinstance(followups, list) else [],
             }
+            approval_id = _history_approval_id(raw_tools)
+            if approval_id:
+                message["approval_id"] = approval_id
             if chat_settings.show_raw_reasoning:
                 reasoning = run.get("reasoning") or run.get("reasoning_content")
                 if isinstance(reasoning, str) and reasoning.strip():
                     message["reasoning"] = reasoning.strip()
                 elif isinstance(reasoning, list):
-                    content = "".join(str(item) for item in reasoning if isinstance(item, str)).strip()
-                    if content:
-                        message["reasoning"] = content
+                    joined = "".join(str(item) for item in reasoning if isinstance(item, str)).strip()
+                    if joined:
+                        message["reasoning"] = joined
             messages.append(message)
     return messages
 

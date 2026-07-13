@@ -15,6 +15,7 @@
   },
   "status": {
     "streaming": "Analyzing",
+    "paused": "Awaiting approval",
     "completed": "Completed",
     "cancelled": "Stopped",
     "failed": "Run failed"
@@ -48,6 +49,7 @@
   "welcomeTitle": "Where should we start?",
   "thoughtProcess": "Thinking & execution",
   "establishingRun": "Starting analysis run…",
+  "awaitingApproval": "This action is waiting for an administrator in the approvals center.",
   "welcomeDescription": "Connect vulnerability intel, asset context, and runtime records for a traceable security analysis.",
   "current": "Current"
 }

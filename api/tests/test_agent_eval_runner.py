@@ -32,7 +32,9 @@ async def test_security_runtime_exposes_agent_context_for_evals():
     request = SecurityRunRequest.from_chat_args("ping", user_id="user-1")
     async with runtime.security_agent_context(request) as agent:
         assert agent.id == "security-operations"
-        assert agent.tools == ["mcp-tools"]
+        assert agent.tools[0] == "mcp-tools"
+        assert agent.tools[1].name == "simulate_containment"
+        assert agent.tools[1].approval_type == "required"
 
 
 class FakeAccuracyEval:

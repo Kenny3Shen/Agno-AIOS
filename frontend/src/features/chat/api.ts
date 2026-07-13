@@ -103,6 +103,21 @@ const parseEvent = (event: string, data: string): ChatRunEvent | null => {
             })
           : [],
       }
+    case 'run.paused': {
+      const approvalId = stringValue(value, 'approval_id')
+      const toolName = stringValue(value, 'tool_name')
+      return runId && approvalId
+        ? {
+            type: event,
+            runId,
+            sessionId: stringValue(value, 'session_id'),
+            approvalId,
+            tool: toolName ? { id: toolName, name: toolName, status: 'loading' } : undefined,
+          }
+        : null
+    }
+    case 'run.continued':
+      return runId ? { type: event, runId, sessionId: stringValue(value, 'session_id') } : null
     case 'run.completed':
       return {
         type: event,
@@ -137,7 +152,11 @@ export const streamMessage = async (
   await consumeSse(response.body, ({ event, data }) => {
     const chatEvent = parseEvent(event, data)
     if (!chatEvent) return
-    terminal ||= chatEvent.type === 'run.completed' || chatEvent.type === 'run.cancelled' || chatEvent.type === 'run.failed'
+    terminal ||=
+      chatEvent.type === 'run.paused' ||
+      chatEvent.type === 'run.completed' ||
+      chatEvent.type === 'run.cancelled' ||
+      chatEvent.type === 'run.failed'
     onEvent(chatEvent)
   })
   if (!terminal) throw new Error('Chat stream ended before a terminal event')

@@ -6,7 +6,7 @@ import { currentUserQuery } from '@/features/auth'
 import { roleOf } from '@/shared/auth/permissions'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { searchCves, updateCves, type Cve } from './api'
-import { useFormatDate } from '@/shared/lib/format'
+import { compareTimestamp, useFormatDate } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
 
 export function CvePage() {
@@ -81,7 +81,7 @@ export function CvePage() {
             },
             { title: 'Description', dataIndex: 'description', ellipsis: true },
             { title: 'Source', dataIndex: 'source', width: 130, render: (value) => <Tag>{value}</Tag> },
-            { title: 'Indexed', dataIndex: 'create_time', width: 190, render: (value) => formatDate(value) },
+            { title: 'Indexed', dataIndex: 'create_time', width: 190, defaultSortOrder: 'descend' as const, sorter: (a, b) => compareTimestamp(a.create_time, b.create_time), render: (value) => formatDate(value) },
           ]}
         />
       </Card>

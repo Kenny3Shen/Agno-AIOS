@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chatReducer, consumeSse, defaultReasoningEffort, initialChatState, previousPrompt, supportedReasoningEfforts } from './utils'
+import { chatReducer, consumeSse, defaultReasoningEffort, initialChatState, normalizeMessages, previousPrompt, supportedReasoningEfforts } from './utils'
 import type { Message } from './types'
 
 describe('chat behavior', () => {
@@ -35,6 +35,25 @@ describe('chat behavior', () => {
     })
     expect(failed.messages[failed.messages.length - 1]?.content).toBe('partial')
     expect(failed.messages[failed.messages.length - 1]?.final).toBe(true)
+  })
+
+  it('marks a HITL run paused without treating it as an error', () => {
+    const assistant: Message = { id: 'a', role: 'assistant', content: '', final: false, status: 'streaming' }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    const paused = chatReducer(started, {
+      type: 'event',
+      id: 'a',
+      event: {
+        type: 'run.paused',
+        runId: 'run-1',
+        sessionId: 's1',
+        approvalId: 'approval-1',
+        tool: { id: 'simulate_containment', name: 'simulate_containment', status: 'loading' },
+      },
+    })
+    expect(paused.requesting).toBe(false)
+    expect(paused.error).toBeNull()
+    expect(paused.messages[0]).toMatchObject({ status: 'paused', final: true, approval_id: 'approval-1', run_id: 'run-1' })
   })
 
   it('finds the prompt that belongs to a retried answer', () => {
@@ -93,3 +112,13 @@ describe('chat behavior', () => {
     })
   })
 })
+
+
+  it('maps Agno PAUSED history status onto chat paused state', () => {
+    const messages = normalizeMessages([
+      { id: 'a', role: 'assistant', content: '等待管理员审批', status: 'PAUSED', approval_id: 'approval-1' },
+      { id: 'b', role: 'assistant', content: 'done', status: 'COMPLETED' },
+    ])
+    expect(messages[0]).toMatchObject({ status: 'paused', approval_id: 'approval-1' })
+    expect(messages[1]).toMatchObject({ status: 'completed' })
+  })

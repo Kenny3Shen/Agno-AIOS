@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from agno.session.agent import AgentSession
 import pytest
@@ -159,3 +159,58 @@ async def test_session_history_messages_keep_their_session_id():
         messages = await chat_session_service.get_session_messages_async("session-1")
 
     assert [message["session_id"] for message in messages] == ["session-1", "session-1"]
+
+
+@pytest.mark.asyncio
+async def test_session_history_maps_paused_status_and_approval_id():
+    db = AsyncFakeAgnoDb(
+        rows=[],
+        session_row={
+            "session_id": "session-1",
+            "runs": [
+                {
+                    "run_id": "run-paused",
+                    "input": {"input_content": "simulate block"},
+                    "content": "等待管理员审批",
+                    "status": "PAUSED",
+                    "tools": [
+                        {
+                            "tool_name": "simulate_containment",
+                            "approval_id": "approval-1",
+                            "requires_confirmation": True,
+                            "confirmed": None,
+                        }
+                    ],
+                },
+                {
+                    "run_id": "run-done",
+                    "input": {"input_content": "simulate block"},
+                    "content": "已执行模拟封禁",
+                    "status": "COMPLETED",
+                    "tools": [
+                        {
+                            "tool_name": "simulate_containment",
+                            "approval_id": "approval-2",
+                            "requires_confirmation": True,
+                            "confirmed": True,
+                        }
+                    ],
+                },
+            ],
+        },
+    )
+    with (
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
+        patch.object(
+            chat_session_service,
+            "get_chat_settings_async",
+            new=AsyncMock(return_value=__import__("types").SimpleNamespace(show_raw_tool_io=False, show_thought_chain=True, show_raw_reasoning=False)),
+        ),
+    ):
+        messages = await chat_session_service.get_session_messages_async("session-1")
+
+    assistant = [message for message in messages if message["role"] == "assistant"]
+    assert assistant[0]["status"] == "paused"
+    assert assistant[0]["approval_id"] == "approval-1"
+    assert assistant[1]["status"] == "completed"

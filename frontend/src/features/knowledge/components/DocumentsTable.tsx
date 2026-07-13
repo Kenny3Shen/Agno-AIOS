@@ -46,12 +46,18 @@ export function DocumentsTable({
         rowClassName={(row) => (row.id === selectedId ? 'selected-table-row' : '')}
         onRow={(row) => ({ onClick: () => onSelect(row) })}
         columns={[
-          { title: 'Title', dataIndex: 'title', ellipsis: true },
-          { title: 'Chunks', dataIndex: 'chunks', width: 96, onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }) },
+          { title: 'Title', dataIndex: 'title', ellipsis: true, sorter: (a, b) => (a.title ?? '').localeCompare(b.title ?? '') },
+          { title: 'Chunks', dataIndex: 'chunks', width: 96, sorter: (a, b) => (a.chunks ?? 0) - (b.chunks ?? 0), onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }) },
           {
             title: 'Status',
             dataIndex: 'status',
             width: 110,
+            filters: [
+              { text: 'ready', value: 'ready' },
+              { text: 'completed', value: 'completed' },
+              { text: 'processing', value: 'processing' },
+            ],
+            onFilter: (value, row) => (row.status ?? 'ready') === value,
             render: (value) => <Tag color={value === 'ready' || value === 'completed' ? 'success' : 'processing'}>{value ?? 'ready'}</Tag>,
           },
           {

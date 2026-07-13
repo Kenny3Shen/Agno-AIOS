@@ -419,6 +419,13 @@
   color: #df3f36;
   font-size: 12px;
 }
+
+.message-run-paused {
+  display: block;
+  margin-top: 10px;
+  color: var(--chat-muted);
+  font-size: 13px;
+}
 @keyframes chat-pulse {
   50% {
     opacity: 0.55;
