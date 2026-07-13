@@ -8,6 +8,7 @@ import { roleOf } from '@/shared/auth/permissions'
 import { DEEPSEEK_REASONING_EFFORTS, openaiReasoningEfforts, reasoningEffortLabel } from '@/shared/lib/reasoning'
 import { getChatSettings, getModels, saveChatSettings, saveModels, testModel, type ChatSettings } from './api'
 import type { ModelConfig, ModelConfigResponse } from '@/shared/types/common'
+import { useTranslation } from 'react-i18next'
 
 const providerDefaults = (provider: ModelConfig['provider']) => {
   if (provider === 'deepseek')
@@ -38,6 +39,7 @@ const reasoningOptions = (provider: ModelConfig['provider'], protocol: ModelConf
 }
 
 export function SettingsPage() {
+  const { t } = useTranslation('settings')
   const { message } = App.useApp()
   const client = useQueryClient()
   const models = useQuery({ queryKey: ['settings', 'models'], queryFn: getModels })
@@ -55,9 +57,9 @@ export function SettingsPage() {
     try {
       await saveChatSettings({ [key]: value })
       await client.invalidateQueries({ queryKey: ['settings', 'chat'] })
-      message.success('Chat 设置已更新')
+      message.success(t('chatUpdated'))
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '更新 Chat 设置失败')
+      message.error(error instanceof Error ? error.message : t('chatUpdateFailed'))
     }
   }
 
@@ -86,10 +88,10 @@ export function SettingsPage() {
     setSaving(true)
     try {
       await persist({ ...current, models: next })
-      message.success('模型已保存')
+      message.success(t('modelSaved'))
       closeEditor()
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '保存模型失败')
+      message.error(error instanceof Error ? error.message : t('modelSaveFailed'))
     } finally {
       setSaving(false)
     }
@@ -117,9 +119,9 @@ export function SettingsPage() {
     setUpdatingId(model.id)
     try {
       await persist({ ...current, active_model_id: model.id })
-      message.success(`${model.name} 已设为当前模型`)
+      message.success(t('modelActivated', { name: model.name }))
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '切换当前模型失败')
+      message.error(error instanceof Error ? error.message : t('modelActivateFailed'))
     } finally {
       setUpdatingId(null)
     }
@@ -131,9 +133,9 @@ export function SettingsPage() {
     setUpdatingId(model.id)
     try {
       await persist({ ...current, models: current.models.map((item) => (item.id === model.id ? { ...item, enabled } : item)) })
-      message.success(enabled ? `${model.name} 已启用` : `${model.name} 已禁用`)
+      message.success(enabled ? t('modelEnabled', { name: model.name }) : t('modelDisabled', { name: model.name }))
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '更新模型状态失败')
+      message.error(error instanceof Error ? error.message : t('modelStatusFailed'))
     } finally {
       setUpdatingId(null)
     }
@@ -144,12 +146,12 @@ export function SettingsPage() {
     try {
       const result = await testModel(model)
       if (result.success) {
-        message.success(`连接成功，${result.latency_ms ?? '-'} ms`)
+        message.success(t('connectOk', { latency: result.latency_ms ?? '-' }))
       } else {
         message.error(result.message)
       }
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '连接测试失败')
+      message.error(error instanceof Error ? error.message : t('connectFailed'))
     } finally {
       setTestingId(null)
     }
@@ -220,23 +222,23 @@ export function SettingsPage() {
           width: 170,
           render: (_, row) => (
             <Space>
-              <Tooltip title="测试连接">
+              <Tooltip title={t('testConnection')}>
                 <Button
                   icon={<ApiOutlined />}
                   loading={testingId === row.id}
-                  aria-label={`测试 ${row.name} 的连接`}
+                  aria-label={t('testConnectionNamed', { name: row.name })}
                   onClick={() => void runConnectivityTest(row)}
                 />
               </Tooltip>
-              <Tooltip title="编辑模型">
-                <Button icon={<EditOutlined />} aria-label={`编辑 ${row.name}`} onClick={() => openEditor(row)} />
+              <Tooltip title={t('editModel')}>
+                <Button icon={<EditOutlined />} aria-label={t('editModelNamed', { name: row.name })} onClick={() => openEditor(row)} />
               </Tooltip>
-              <Tooltip title={models.data?.active_model_id === row.id ? '当前模型' : '设为当前模型'}>
+              <Tooltip title={models.data?.active_model_id === row.id ? t('currentModel') : t('setCurrentModel')}>
                 <Button
                   icon={<CheckCircleOutlined />}
                   disabled={models.data?.active_model_id === row.id}
                   loading={updatingId === row.id}
-                  aria-label={`设 ${row.name} 为当前模型`}
+                  aria-label={t('setCurrentModelNamed', { name: row.name })}
                   onClick={() => void setActiveModel(row)}
                 />
               </Tooltip>
@@ -256,36 +258,36 @@ export function SettingsPage() {
         dataSource={chatSettings.data ? [chatSettings.data] : []}
         columns={[
           {
-            title: '安全执行时间线',
+            title: t('securityTimeline'),
             dataIndex: 'show_thought_chain',
             render: (value) => <Switch checked={value} onChange={(next) => void setChatSetting('show_thought_chain', next)} />,
           },
           {
-            title: '原始推理',
+            title: t('rawReasoning'),
             dataIndex: 'show_raw_reasoning',
             render: (value) => <Switch checked={value} onChange={(next) => void setChatSetting('show_raw_reasoning', next)} />,
           },
           {
-            title: '原始工具 I/O',
+            title: t('rawToolIo'),
             dataIndex: 'show_raw_tool_io',
             render: (value) => <Switch checked={value} onChange={(next) => void setChatSetting('show_raw_tool_io', next)} />,
           },
           {
-            title: '长期记忆',
+            title: t('longTermMemory'),
             dataIndex: 'memory_enabled',
             render: (value) => <Switch checked={value} onChange={(next) => void setChatSetting('memory_enabled', next)} />,
           },
         ]}
       />
       <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 12 }}>
-        原始推理与工具输入/输出默认不发送给浏览器。关闭长期记忆不会删除既有记忆，也不影响当前会话历史与摘要。
+        {t('privacyNote')}
       </Typography.Paragraph>
     </div>
   )
 
   return (
     <main className="page">
-      <PageHeader title="Settings" description="配置模型连接和 Chat 行为" />
+      <PageHeader title={t('title')} description={t('description')} />
       <Card className="workbench-card">
         <Tabs
           activeKey={activeTab}
@@ -294,13 +296,13 @@ export function SettingsPage() {
           tabBarExtraContent={
             activeTab === 'models' ? (
               <Button type="primary" icon={<PlusOutlined />} onClick={addModel}>
-                添加模型
+                {t('addModel')}
               </Button>
             ) : null
           }
           items={[
-            { key: 'models', label: '模型连接', children: modelConnections },
-            ...(isAdmin ? [{ key: 'chat', label: 'Chat 设置', children: chatControls }] : []),
+            { key: 'models', label: t('modelConnections'), children: modelConnections },
+            ...(isAdmin ? [{ key: 'chat', label: t('chatSettings'), children: chatControls }] : []),
           ]}
         />
       </Card>
@@ -309,10 +311,10 @@ export function SettingsPage() {
         open={Boolean(editing)}
         onCancel={closeEditor}
         onOk={() => form.submit()}
-        okText="保存模型"
-        cancelText="取消"
+        okText={t('saveModel')}
+        cancelText={t('common:cancel')}
         confirmLoading={saving}
-        title="Model configuration"
+        title={t('modelConnections')}
         destroyOnHidden
       >
         {editing && (
@@ -320,8 +322,8 @@ export function SettingsPage() {
             <Form.Item name="id" hidden>
               <Input />
             </Form.Item>
-            <Form.Item name="name" label="Name" rules={[{ required: true, whitespace: true, message: '请输入模型名称' }]}>
-              <Input placeholder="例如：OpenAI production" />
+            <Form.Item name="name" label="Name" rules={[{ required: true, whitespace: true, message: t('nameRequired') }]}>
+              <Input placeholder={t('namePlaceholder')} />
             </Form.Item>
             <Form.Item name="provider" label="Provider" rules={[{ required: true }]}>
               <Select
@@ -329,10 +331,10 @@ export function SettingsPage() {
                 onChange={(provider: ModelConfig['provider']) => form.setFieldsValue(providerDefaults(provider))}
               />
             </Form.Item>
-            <Form.Item name="model_id" label="Model ID" rules={[{ required: true, whitespace: true, message: '请输入 Model ID' }]}>
-              <Input placeholder="例如：gpt-4.1-mini" />
+            <Form.Item name="model_id" label="Model ID" rules={[{ required: true, whitespace: true, message: t('modelIdRequired') }]}>
+              <Input placeholder={t('modelIdPlaceholder')} />
             </Form.Item>
-            <Form.Item name="api_key" label="API key" rules={[{ required: true, whitespace: true, message: '请输入 API key' }]}>
+            <Form.Item name="api_key" label="API key" rules={[{ required: true, whitespace: true, message: t('apiKeyRequired') }]}>
               <Input.Password placeholder="sk-..." />
             </Form.Item>
             <Form.Item noStyle shouldUpdate={(previous, current) => previous.provider !== current.provider}>
@@ -343,8 +345,8 @@ export function SettingsPage() {
                     name="base_url"
                     label="Base URL"
                     rules={[
-                      { required: baseUrlRequired, whitespace: true, message: 'OpenAI-compatible 服务需要 Base URL' },
-                      { type: 'url', message: '请输入有效的 URL' },
+                      { required: baseUrlRequired, whitespace: true, message: t('baseUrlRequired') },
+                      { type: 'url', message: t('urlInvalid') },
                     ]}
                   >
                     <Input placeholder="https://api.example.com/v1" />
@@ -405,7 +407,7 @@ export function SettingsPage() {
                         }}
                       </Form.Item>
                       <Form.Item name="description" label="Description">
-                        <Input placeholder="模型用途说明（可选）" />
+                        <Input placeholder={t('purposeOptional')} />
                       </Form.Item>
                       <Form.Item name="enabled" label="Enabled" valuePropName="checked">
                         <Switch />

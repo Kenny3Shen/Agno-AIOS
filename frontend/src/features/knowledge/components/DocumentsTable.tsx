@@ -3,6 +3,7 @@ import { DeleteOutlined, EditOutlined } from '@ant-design/icons'
 import type { ResourceVisibility } from '@/shared/types/common'
 import { VisibilitySelect } from '@/shared/ui/VisibilitySelect'
 import type { Document } from '../types'
+import { useTranslation } from 'react-i18next'
 
 export function DocumentsTable({
   documents,
@@ -29,11 +30,12 @@ export function DocumentsTable({
   onVisibilityChange: (document: Document, visibility: ResourceVisibility) => void
   deletingId?: string
 }) {
+  const { t } = useTranslation('knowledge')
   return (
     <Card
       className="workbench-card splitter-panel-card"
       title="Documents"
-      extra={<Input.Search value={filter} onChange={(event) => onFilterChange(event.target.value)} allowClear placeholder="筛选文档" />}
+      extra={<Input.Search value={filter} onChange={(event) => onFilterChange(event.target.value)} allowClear placeholder={t('filterDocuments')} />}
     >
       <Table<Document>
         rowKey="id"
@@ -73,9 +75,9 @@ export function DocumentsTable({
             render: (_, row) =>
               row.can_manage ? (
                 <Space size={2} onClick={(event) => event.stopPropagation()}>
-                  <Tooltip title="更新">
+                  <Tooltip title={t('update')}>
                     <Button
-                      aria-label={`更新 ${row.title}`}
+                      aria-label={t('updateNamed', { title: row.title })}
                       type="text"
                       size="small"
                       icon={<EditOutlined />}
@@ -85,16 +87,16 @@ export function DocumentsTable({
                       }}
                     />
                   </Tooltip>
-                  <Tooltip title="删除">
+                  <Tooltip title={t('common:delete')}>
                     <Popconfirm
-                      title="删除该文档？"
+                      title={t('deleteConfirm')}
                       onConfirm={(event) => {
                         event?.stopPropagation()
                         onDelete(row)
                       }}
                     >
                       <Button
-                        aria-label={`删除 ${row.title}`}
+                        aria-label={t('deleteNamed', { title: row.title })}
                         danger
                         type="text"
                         size="small"

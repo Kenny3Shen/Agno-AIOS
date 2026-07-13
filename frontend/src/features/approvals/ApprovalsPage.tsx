@@ -16,7 +16,8 @@ import {
   resolveSubmissionApproval,
   type Approval,
 } from './api'
-import { compactId, formatDate } from '@/shared/lib/format'
+import { compactId, useFormatDate } from '@/shared/lib/format'
+import { useTranslation } from 'react-i18next'
 
 const uploadPayload = (approval: Approval) => approval.payload ?? {}
 
@@ -69,7 +70,7 @@ const statusTag = (status: string) => (
   <Tag color={status === 'pending' ? 'warning' : status === 'approved' ? 'success' : 'error'}>{statusLabel(status)}</Tag>
 )
 
-function detailItems(approval: Approval): { decision: DescriptionsProps['items']; people: DescriptionsProps['items']; request: DescriptionsProps['items'] } {
+function detailItems(approval: Approval, formatDate: (value?: string | number | null) => string, t: (key: string, options?: Record<string, unknown>) => string): { decision: DescriptionsProps['items']; people: DescriptionsProps['items']; request: DescriptionsProps['items'] } {
   const submitted = submitter(approval)
   const resolved = approver(approval)
   const payload = uploadPayload(approval)
@@ -99,8 +100,8 @@ function detailItems(approval: Approval): { decision: DescriptionsProps['items']
   return {
     decision: [
       { key: 'status', label: 'Status', children: statusTag(approval.status) },
-      { key: 'submitted-at', label: 'Submitted at', children: formatDate(approval.created_at) },
-      { key: 'resolved-at', label: 'Resolved at', children: formatDate(approval.resolved_at) },
+      { key: 'submitted-at', label: t('submittedAt'), children: formatDate(approval.created_at) },
+      { key: 'resolved-at', label: t('resolvedAt'), children: formatDate(approval.resolved_at) },
       ...(approval.status === 'rejected' ? [{ key: 'rejection-reason', label: 'Rejection reason', children: rejectionReason(approval) || '-' }] : []),
     ],
     people: [
@@ -119,6 +120,8 @@ const locationSearch = () => {
 }
 
 export function ApprovalsPage() {
+  const { t } = useTranslation('approvals')
+  const formatDate = useFormatDate()
   const { message } = App.useApp()
   const client = useQueryClient()
   const [searchStr, setSearchStr] = useState(locationSearch)
@@ -164,7 +167,7 @@ export function ApprovalsPage() {
       setSelected(row)
       setRejectOpen(false)
       setRejectReason('')
-      message.success(`审批已${row.status}`)
+      message.success(t('resolved', { status: row.status }))
       await refresh()
     },
   })
@@ -178,7 +181,7 @@ export function ApprovalsPage() {
         style={{ minWidth: 84 }}
         onClick={() => resolve.mutate({ approval: selected, decision: 'approved' })}
       >
-        批准
+        {t('common:approve')}
       </Button>
       <Button
         danger
@@ -188,21 +191,21 @@ export function ApprovalsPage() {
         style={{ minWidth: 84 }}
         onClick={() => setRejectOpen(true)}
       >
-        拒绝
+        {t('common:reject')}
       </Button>
     </Space>
   ) : null
   return (
     <main className="page">
       <PageHeader
-        title="Approvals"
-        description="处理暂停的 Agent 操作、人工确认与资源上传请求"
+        title={t('title')}
+        description={t('description')}
         actions={
           <Select
             value={status}
             onChange={setStatus}
             options={[
-              { value: '', label: '全部状态' },
+              { value: '', label: t('allStatuses') },
               ...['pending', 'approved', 'rejected'].map((value) => ({ value, label: statusLabel(value) })),
             ]}
           />
@@ -218,7 +221,7 @@ export function ApprovalsPage() {
           onRow={(row) => ({
             tabIndex: 0,
             role: 'button',
-            'aria-label': `查看审批 ${row.id}`,
+            'aria-label': t('viewApproval', { id: row.id }),
             onClick: () => setSelected(row),
             onKeyDown: (event) => {
               if (event.key === 'Enter' || event.key === ' ') {
@@ -255,18 +258,18 @@ export function ApprovalsPage() {
       <Drawer size={760} open={Boolean(selected)} onClose={() => setSelected(null)} title="Approval detail" extra={approvalActions}>
         {selected && (
           <>
-            {selected.status === 'approved' && <Alert type="success" showIcon message="已批准" style={{ marginBottom: 16 }} />}
+            {selected.status === 'approved' && <Alert type="success" showIcon message={t('approved')} style={{ marginBottom: 16 }} />}
             {selected.status === 'rejected' && (
               <Alert
                 type="error"
                 showIcon
-                message="已拒绝"
-                description={rejectionReason(selected) || '未提供拒绝原因'}
+                message={t('rejected')}
+                description={rejectionReason(selected) || t('noRejectReason')}
                 style={{ marginBottom: 16 }}
               />
             )}
             {(() => {
-              const details = detailItems(selected)
+              const details = detailItems(selected, formatDate, t)
               return (
                 <Space orientation="vertical" size={16} style={{ width: '100%' }}>
                   <Card size="small" title="Decision" className="approval-detail-section">
@@ -287,7 +290,7 @@ export function ApprovalsPage() {
             {canResolve && selected.resource_type === 'skill' && selected.status === 'pending' && (
               <Card
                 size="small"
-                title="ZIP 内容预览"
+                title={t('zipPreview')}
                 loading={skillPreview.isLoading}
                 style={{ marginTop: 16 }}
               >
@@ -299,8 +302,8 @@ export function ApprovalsPage() {
                       pagination={false}
                       dataSource={skillPreview.data.files}
                       columns={[
-                        { title: '文件', dataIndex: 'name' },
-                        { title: '大小', dataIndex: 'size', render: (size: number) => `${size} B` },
+                        { title: t('common:file'), dataIndex: 'name' },
+                        { title: t('common:size'), dataIndex: 'size', render: (size: number) => `${size} B` },
                       ]}
                     />
                     {Object.keys(skillPreview.data.previews).length > 0 && (
@@ -343,7 +346,7 @@ export function ApprovalsPage() {
                     )}
                   </>
                 )}
-                {skillPreview.isError && <p>无法加载 ZIP 预览。</p>}
+                {skillPreview.isError && <p>{t('zipPreviewFailed')}</p>}
               </Card>
             )}
           </>
@@ -351,10 +354,10 @@ export function ApprovalsPage() {
       </Drawer>
       <Modal
         open={rejectOpen}
-        title="拒绝审批"
-        okText="确认拒绝"
+        title={t('rejectApproval')}
+        okText={t('confirmReject')}
         okButtonProps={{ danger: true, disabled: !rejectReason.trim() }}
-        cancelText="取消"
+        cancelText={t('common:cancel')}
         confirmLoading={resolve.isPending}
         styles={{ body: { paddingBottom: 8 }, footer: { marginTop: 20 } }}
         onCancel={() => {
@@ -365,13 +368,13 @@ export function ApprovalsPage() {
           if (selected) resolve.mutate({ approval: selected, decision: 'rejected', rejectionReason: rejectReason.trim() })
         }}
       >
-        <Typography.Paragraph type="secondary">拒绝原因会发送给申请用户。</Typography.Paragraph>
+        <Typography.Paragraph type="secondary">{t('rejectReasonHint')}</Typography.Paragraph>
         <div style={{ paddingBottom: 28 }}>
           <Input.TextArea
             rows={4}
             value={rejectReason}
             onChange={(event) => setRejectReason(event.target.value)}
-            placeholder="请说明拒绝原因"
+            placeholder={t('rejectReasonPlaceholder')}
             maxLength={2000}
             showCount
           />

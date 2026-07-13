@@ -6,9 +6,12 @@ import { currentUserQuery } from '@/features/auth'
 import { roleOf } from '@/shared/auth/permissions'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { searchCves, updateCves, type Cve } from './api'
-import { formatDate } from '@/shared/lib/format'
+import { useFormatDate } from '@/shared/lib/format'
+import { useTranslation } from 'react-i18next'
 
 export function CvePage() {
+  const { t } = useTranslation('cve')
+  const formatDate = useFormatDate()
   const { message } = App.useApp()
   const currentUser = useQuery(currentUserQuery())
   const canUpdateDatabase = roleOf(currentUser.data) === 'admin'
@@ -16,14 +19,14 @@ export function CvePage() {
   const [source, setSource] = useState<string>()
   const [pagination, setPagination] = useState({ page: 1, size: 20 })
   const search = useMutation({ mutationFn: searchCves })
-  const update = useMutation({ mutationFn: updateCves, onSuccess: () => message.success('CVE 数据库已更新') })
+  const update = useMutation({ mutationFn: updateCves, onSuccess: () => message.success(t('updated')) })
   const runSearch = (page = 1, size = pagination.size) => {
     setPagination({ page, size })
     search.mutate({ query, source, page, size })
   }
   return (
     <main className="page">
-      <PageHeader title="CVE Intelligence" description="搜索本地漏洞情报并维护数据索引" />
+      <PageHeader title={t('title')} description={t('description')} />
       <Card className="workbench-card">
         <Space className="cve-toolbar" wrap>
           <Space.Compact className="cve-search-control">
@@ -31,24 +34,24 @@ export function CvePage() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               onPressEnter={() => runSearch()}
-              placeholder="CVE ID、产品或关键词；留空查看最近入库"
+              placeholder={t('searchPlaceholder')}
             />
             <Button type="primary" icon={<SearchOutlined />} loading={search.isPending} onClick={() => runSearch()}>
-              搜索
+              {t('common:search')}
             </Button>
           </Space.Compact>
           <Select
             allowClear
             value={source}
             onChange={setSource}
-            placeholder="全部来源"
+            placeholder={t('allSources')}
             options={[
               { value: 'github', label: 'GitHub' },
               { value: 'exploit-db', label: 'Exploit-DB' },
             ]}
           />
           <Button icon={<ReloadOutlined />} loading={update.isPending} disabled={!canUpdateDatabase} onClick={() => update.mutate()}>
-            更新数据库
+            {t('updateDb')}
           </Button>
         </Space>
         <Table<Cve>
@@ -60,7 +63,7 @@ export function CvePage() {
             pageSize: pagination.size,
             total: search.data?.total,
             showSizeChanger: true,
-            showTotal: (total) => `共 ${total} 条`,
+            showTotal: (total) => t('total', { total }),
           }}
           onChange={(next) => runSearch(next.current ?? 1, next.pageSize ?? pagination.size)}
           style={{ marginTop: 12 }}

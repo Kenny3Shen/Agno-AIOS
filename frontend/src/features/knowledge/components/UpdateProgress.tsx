@@ -1,23 +1,24 @@
 import { Alert, Steps } from 'antd'
+import { useTranslation } from 'react-i18next'
 import type { KnowledgeProgressEvent, KnowledgeProgressStage, KnowledgeProgressStatus } from '../types'
 
 type ProgressStageKey = Exclude<KnowledgeProgressStage, 'done'>
 
 const STAGE_ORDER: ProgressStageKey[] = ['upload', 'parse', 'vectorize', 'cleanup']
 
-const STAGE_TITLES: Record<ProgressStageKey, string> = {
-  upload: '上传',
-  parse: '解析',
-  vectorize: '向量化',
-  cleanup: '清理',
-}
+const stageTitleKey = {
+  upload: 'stages.upload',
+  parse: 'stages.parse',
+  vectorize: 'stages.vectorize',
+  cleanup: 'stages.cleanup',
+} as const
 
-const STAGE_FALLBACK: Record<ProgressStageKey, string> = {
-  upload: '上传中',
-  parse: '解析中',
-  vectorize: '向量化中',
-  cleanup: '清理中',
-}
+const stageFallbackKey = {
+  upload: 'stages.uploadActive',
+  parse: 'stages.parseActive',
+  vectorize: 'stages.vectorizeActive',
+  cleanup: 'stages.cleanupActive',
+} as const
 
 export type ProgressStageState = {
   stage: ProgressStageKey
@@ -28,9 +29,9 @@ export type ProgressStageState = {
 export function createInitialProgress(includeUpload: boolean): ProgressStageState[] {
   return STAGE_ORDER.map((stage) => {
     if (stage === 'upload' && !includeUpload) {
-      return { stage, status: 'skipped', message: '跳过' }
+      return { stage, status: 'skipped', message: '' }
     }
-    return { stage, status: 'pending', message: STAGE_FALLBACK[stage] }
+    return { stage, status: 'pending', message: '' }
   })
 }
 
@@ -76,11 +77,18 @@ export function UpdateProgress({
   stages: ProgressStageState[]
   includeUpload: boolean
 }) {
+  const { t } = useTranslation('knowledge')
   const visible = includeUpload ? stages : stages.filter((item) => item.stage !== 'upload')
   const current = activeStepIndex(visible)
   const failed = visible.find((item) => item.status === 'failed')
   const running = visible.find((item) => item.status === 'running')
-  const summary = failed?.message || running?.message || '处理中'
+  const displayMessage = (item: ProgressStageState) => {
+    if (item.message) return item.message
+    if (item.status === 'skipped') return t('stages.skipped')
+    if (item.status === 'running' || item.status === 'pending') return t(stageFallbackKey[item.stage])
+    return t(stageTitleKey[item.stage])
+  }
+  const summary = failed?.message || running?.message || t('stages.processing')
 
   return (
     <div className="knowledge-update-progress">
@@ -88,8 +96,8 @@ export function UpdateProgress({
         size="small"
         current={current}
         items={visible.map((item) => ({
-          title: STAGE_TITLES[item.stage],
-          content: item.message,
+          title: t(stageTitleKey[item.stage]),
+          content: displayMessage(item),
           status: stepStatus(item.status),
         }))}
       />

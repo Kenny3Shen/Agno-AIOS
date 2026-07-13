@@ -6,10 +6,13 @@ import { PageHeader } from '@/shared/ui/PageHeader'
 import { CopyableValue, MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
 import { JsonValueCard } from '@/shared/ui/FormattedContentCard'
 import { deleteMemory, getMemories, updateMemory, type Memory } from './api'
-import { compactId, formatDate } from '@/shared/lib/format'
+import { compactId, useFormatDate } from '@/shared/lib/format'
 import { parseMemoryInput } from './utils'
+import { useTranslation } from 'react-i18next'
 
 export function MemoryPage() {
+  const { t } = useTranslation('memory')
+  const formatDate = useFormatDate()
   const { message } = App.useApp()
   const client = useQueryClient()
   const screens = Grid.useBreakpoint()
@@ -62,7 +65,7 @@ export function MemoryPage() {
 
   return (
     <main className="page">
-      <PageHeader title="Memory" description="审阅、修订和删除 Agent 用户记忆" />
+      <PageHeader title={t('title')} description={t('description')} />
       <Card className="workbench-card memory-toolbar">
         <Space>
           <Input
@@ -70,10 +73,10 @@ export function MemoryPage() {
             onChange={(event) => setSearch(event.target.value)}
             onPressEnter={() => setApplied(search)}
             prefix={<SearchOutlined />}
-            placeholder="搜索记忆、用户或主题"
+            placeholder={t('searchPlaceholder')}
           />
           <Button type="primary" onClick={() => setApplied(search)}>
-            查询
+            {t('common:query')}
           </Button>
         </Space>
       </Card>
@@ -89,7 +92,7 @@ export function MemoryPage() {
               onRow={(row) => ({
                 tabIndex: 0,
                 role: 'button',
-                'aria-label': `查看记忆 ${row.id}`,
+                'aria-label': t('viewMemory', { id: row.id }),
                 onClick: () => setSelected(row),
                 onKeyDown: (event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
@@ -120,9 +123,9 @@ export function MemoryPage() {
                   width: 88,
                   render: (_, row) => (
                     <Space size={2} onClick={(event) => event.stopPropagation()}>
-                      <Tooltip title="编辑">
+                      <Tooltip title={t('common:edit')}>
                         <Button
-                          aria-label={`编辑 ${row.id}`}
+                          aria-label={t('editNamed', { id: row.id })}
                           type="text"
                           size="small"
                           icon={<EditOutlined />}
@@ -132,16 +135,16 @@ export function MemoryPage() {
                           }}
                         />
                       </Tooltip>
-                      <Tooltip title="删除">
+                      <Tooltip title={t('common:delete')}>
                         <Popconfirm
-                          title="删除这条记忆？"
+                          title={t('deleteConfirm')}
                           onConfirm={(event) => {
                             event?.stopPropagation()
                             remove.mutate(row)
                           }}
                         >
                           <Button
-                            aria-label={`删除 ${row.id}`}
+                            aria-label={t('deleteNamed', { id: row.id })}
                             danger
                             type="text"
                             size="small"
@@ -162,12 +165,12 @@ export function MemoryPage() {
             {selected ? (
               <MetadataDescriptions items={metadata} />
             ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="选择一条记忆查看详情" />
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('selectForDetails')} />
             )}
           </Card>
         </Splitter.Panel>
       </Splitter>
-      <Modal open={Boolean(editing)} footer={null} onCancel={() => setEditing(null)} title="编辑记忆" destroyOnHidden>
+      <Modal open={Boolean(editing)} footer={null} onCancel={() => setEditing(null)} title={t('editMemory')} destroyOnHidden>
         {editing && (
           <Form
             layout="vertical"
@@ -181,7 +184,7 @@ export function MemoryPage() {
                   .map((value) => value.trim())
                   .filter(Boolean)
               )
-              message.success('记忆已更新')
+              message.success(t('updated'))
               setEditing(null)
               setSelected(null)
               await refresh()
@@ -194,7 +197,7 @@ export function MemoryPage() {
               <Input />
             </Form.Item>
             <Button type="primary" htmlType="submit">
-              保存
+              {t('common:save')}
             </Button>
           </Form>
         )}

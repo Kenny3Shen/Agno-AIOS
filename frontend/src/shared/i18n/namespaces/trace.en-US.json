@@ -1,0 +1,8 @@
+{
+  "title": "Trace",
+  "description": "End-to-end observability from Session to Run to Span",
+  "allSessions": "All sessions",
+  "activeSessions": "Active sessions",
+  "archivedSessions": "Archived sessions",
+  "ownOnly": "You can only view your own traces"
+}

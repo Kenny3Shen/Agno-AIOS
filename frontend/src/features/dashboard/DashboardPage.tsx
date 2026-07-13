@@ -31,8 +31,9 @@ import {
   SafetyCertificateOutlined,
   WarningOutlined,
 } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import { PageHeader } from '@/shared/ui/PageHeader'
-import { formatDate } from '@/shared/lib/format'
+import { useFormatDate } from '@/shared/lib/format'
 import { getRuntimeOverview, dashboardKeys } from './api'
 import type { OverviewQuery, OverviewRange, OverviewTrace } from './types'
 import { runtimeRanges, timelineChartData } from './utils'
@@ -43,6 +44,8 @@ const integer = (value: number | null | undefined) => (value == null ? '—' : I
 const { RangePicker } = DatePicker
 
 export function DashboardPage() {
+  const { t } = useTranslation('dashboard')
+  const formatDate = useFormatDate()
   const router = useRouter()
   const { token } = theme.useToken()
   const [range, setRange] = useState<OverviewRange>('24h')
@@ -110,7 +113,7 @@ export function DashboardPage() {
         { name: 'Runs', type: 'line', data: timeline.map((item) => item.runs), symbol: 'circle', symbolSize: 6, lineStyle: { width: 2 } },
         { name: 'Error rate', type: 'line', yAxisIndex: 1, data: timeline.map((item) => item.errorRate), smooth: true, symbol: 'none' },
         {
-          name: '输入 Token',
+          name: t('seriesInputTokens'),
           type: 'bar',
           yAxisIndex: 2,
           stack: 'tokens',
@@ -118,7 +121,7 @@ export function DashboardPage() {
           barMaxWidth: 22,
         },
         {
-          name: '输出 Token',
+          name: t('seriesOutputTokens'),
           type: 'bar',
           yAxisIndex: 2,
           stack: 'tokens',
@@ -128,7 +131,7 @@ export function DashboardPage() {
         },
       ],
     }),
-    [common, timeline, token.colorError, token.colorInfo, token.colorPrimary, token.colorWarning]
+    [common, formatDate, t, timeline, token.colorError, token.colorInfo, token.colorPrimary, token.colorWarning]
   )
 
   const latencyOption = useMemo<EChartsOption>(
@@ -149,7 +152,7 @@ export function DashboardPage() {
         { name: 'P95', type: 'line', data: timeline.map((item) => item.p95), smooth: true, symbol: 'none', lineStyle: { width: 3 } },
       ],
     }),
-    [common, timeline, token.colorInfo, token.colorWarning]
+    [common, formatDate, timeline, token.colorInfo, token.colorWarning]
   )
 
   const distributionOption = useMemo<EChartsOption>(
@@ -201,8 +204,8 @@ export function DashboardPage() {
   return (
     <main className={`page dashboard-page dashboard-data-${dataMotion}`}>
       <PageHeader
-        title="运行概览"
-        description="以运行时间轴聚合 Trace、质量与治理信号"
+        title={t('title')}
+        description={t('description')}
         actions={
           <Space wrap>
             <Segmented
@@ -214,13 +217,13 @@ export function DashboardPage() {
               }}
             />
             <RangePicker
-              aria-label="自定义时间段"
+              aria-label={t('customRange')}
               showTime
               value={customRange}
               onChange={(value) => setCustomRange(value as [Dayjs, Dayjs] | null)}
             />
-            <Tooltip title="刷新">
-              <Button aria-label="刷新运行概览" icon={<ReloadOutlined />} loading={query.isFetching} onClick={() => void query.refetch()} />
+            <Tooltip title={t('common:refresh')}>
+              <Button aria-label={t('refreshOverview')} icon={<ReloadOutlined />} loading={query.isFetching} onClick={() => void query.refetch()} />
             </Tooltip>
           </Space>
         }
@@ -230,33 +233,33 @@ export function DashboardPage() {
           className="dashboard-error"
           type="error"
           showIcon
-          message="无法加载运行概览"
-          description="请检查运行服务和当前访问权限后重试。"
+          message={t('loadFailed')}
+          description={t('loadFailedHint')}
         />
       )}
-      <section className="dashboard-signal-rail" aria-label="运行状态">
+      <section className="dashboard-signal-rail" aria-label={t('runtimeStatus')}>
         <span>
           <i className={healthClassName} />
           Runtime <b>{healthStatus}</b>
         </span>
         <span>
-          观察窗口{' '}
+          {t('observationWindow')}{' '}
           <b>{customRange ? `${formatDate(customRange[0].toISOString())} — ${formatDate(customRange[1].toISOString())}` : range}</b>
         </span>
         <span>
-          更新于 <b>{data?.generated_at ? formatDate(data.generated_at) : '—'}</b>
+          {t('updatedAt')} <b>{data?.generated_at ? formatDate(data.generated_at) : '—'}</b>
         </span>
       </section>
       <Row gutter={[12, 12]} className="dashboard-kpis dashboard-motion-group">
         <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
           <Card className="workbench-card dashboard-kpi" loading={query.isLoading}>
-            <Statistic title="运行总量" value={data?.metrics.total_runs ?? 0} prefix={<CheckCircleOutlined />} />
+            <Statistic title={t('totalRuns')} value={data?.metrics.total_runs ?? 0} prefix={<CheckCircleOutlined />} />
           </Card>
         </Col>
         <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
           <Card className="workbench-card dashboard-kpi" loading={query.isLoading}>
             <Statistic
-              title="失败率"
+              title={t('failureRate')}
               value={data?.metrics.failure_rate == null ? 0 : data.metrics.failure_rate * 100}
               precision={1}
               suffix="%"
@@ -267,104 +270,104 @@ export function DashboardPage() {
         </Col>
         <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
           <Card className="workbench-card dashboard-kpi" loading={query.isLoading}>
-            <Statistic title="P95 时延" value={data?.metrics.p95_duration_ms ?? 0} suffix="ms" prefix={<ClockCircleOutlined />} />
+            <Statistic title={t('p95Latency')} value={data?.metrics.p95_duration_ms ?? 0} suffix="ms" prefix={<ClockCircleOutlined />} />
           </Card>
         </Col>
         <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
           <Card className="workbench-card dashboard-kpi" loading={query.isLoading}>
-            <Statistic title="输入 Token" value={data?.metrics.input_tokens ?? 0} prefix={<DatabaseOutlined />} />
+            <Statistic title={t('inputTokens')} value={data?.metrics.input_tokens ?? 0} prefix={<DatabaseOutlined />} />
           </Card>
         </Col>
         <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
           <Card className="workbench-card dashboard-kpi" loading={query.isLoading}>
-            <Statistic title="输出 Token" value={data?.metrics.output_tokens ?? 0} prefix={<DatabaseOutlined />} />
+            <Statistic title={t('outputTokens')} value={data?.metrics.output_tokens ?? 0} prefix={<DatabaseOutlined />} />
           </Card>
         </Col>
         <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
           <Card className="workbench-card dashboard-kpi" loading={query.isLoading}>
-            <Statistic title="已上报 Token" value={data?.metrics.total_tokens ?? 0} prefix={<DatabaseOutlined />} />
+            <Statistic title={t('reportedTokens')} value={data?.metrics.total_tokens ?? 0} prefix={<DatabaseOutlined />} />
           </Card>
         </Col>
       </Row>
       <section className="dashboard-grid dashboard-primary-grid dashboard-motion-group">
         <Card
           className="workbench-card dashboard-chart-card dashboard-motion-item"
-          title="运行时间轴与 Token 使用量"
+          title={t('timelineTitle')}
           loading={query.isLoading}
         >
           {hasTimeline ? (
             <ReactECharts option={volumeOption} style={{ height: 300 }} opts={{ renderer: 'canvas' }} />
           ) : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前窗口暂无运行记录" />
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('noRunsInWindow')} />
           )}
         </Card>
         <Card
           className="workbench-card dashboard-chart-card dashboard-motion-item"
-          title={`${distribution.dimension} 分布`}
+          title={t('distributionTitle', { dimension: distribution.dimension })}
           loading={query.isLoading}
         >
           {distribution.items.length > 0 ? (
             <ReactECharts option={distributionOption} style={{ height: 300 }} opts={{ renderer: 'canvas' }} />
           ) : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可聚合主体" />
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('noSubjects')} />
           )}
         </Card>
       </section>
       <section className="dashboard-grid dashboard-secondary-grid dashboard-motion-group">
-        <Card className="workbench-card dashboard-chart-card dashboard-motion-item" title="时延趋势" loading={query.isLoading}>
+        <Card className="workbench-card dashboard-chart-card dashboard-motion-item" title={t('latencyTrend')} loading={query.isLoading}>
           {hasTimeline ? (
             <ReactECharts option={latencyOption} style={{ height: 260 }} opts={{ renderer: 'canvas' }} />
           ) : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无时延数据" />
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('noLatency')} />
           )}
         </Card>
-        <Card className="workbench-card dashboard-summary-card dashboard-motion-item" title="质量与治理" loading={query.isLoading}>
+        <Card className="workbench-card dashboard-summary-card dashboard-motion-item" title={t('qualityGovernance')} loading={query.isLoading}>
           <div className="dashboard-summary-list">
             <SummaryMetric
               icon={<ExperimentOutlined />}
-              label="评估通过率"
+              label={t('evalPassRate')}
               value={percent(data?.snapshots?.evaluation?.pass_rate)}
               note={
                 data?.snapshots?.evaluation
                   ? `${data.snapshots.evaluation.passed} passed · ${data.snapshots.evaluation.failed} failed`
-                  : '暂无评估数据'
+                  : t('noEvalData')
               }
             />
             <SummaryMetric
               icon={<SafetyCertificateOutlined />}
-              label="待审批"
+              label={t('pendingApprovals')}
               value={integer(data?.snapshots?.pending_approvals)}
-              note="需要人工决策的运行请求"
+              note={t('pendingApprovalsHint')}
             />
             <SummaryMetric
               icon={<DatabaseOutlined />}
-              label="知识文档 / 记忆"
+              label={t('knowledgeMemory')}
               value={`${integer(data?.snapshots?.knowledge_documents)} / ${integer(data?.snapshots?.memories)}`}
-              note="当前可用的运行上下文资产"
+              note={t('knowledgeMemoryHint')}
             />
           </div>
         </Card>
       </section>
       <section className="dashboard-grid dashboard-detail-grid">
-        <Card className="workbench-card" title="最近失败运行" loading={query.isLoading}>
+        <Card className="workbench-card" title={t('recentFailures')} loading={query.isLoading}>
           <Table<OverviewTrace>
             size="small"
             rowKey="trace_id"
             dataSource={data?.recent_failures ?? []}
             pagination={false}
-            locale={{ emptyText: '当前窗口没有失败运行' }}
+            locale={{ emptyText: t('noFailures') }}
             onRow={(record) => ({ onClick: () => openTrace(record), className: 'dashboard-trace-row' })}
             columns={[
-              { title: '运行', dataIndex: 'name', ellipsis: true, render: (value) => value || 'Unnamed run' },
-              { title: '主体', render: (_, item) => item.agent_id || item.workflow_id || '—', ellipsis: true },
-              { title: '时延', dataIndex: 'duration_ms', width: 106, render: duration },
-              { title: '开始时间', dataIndex: 'start_time', width: 164, render: formatDate },
-              { title: '状态', dataIndex: 'status', width: 92, render: (value) => <Tag color="error">{value}</Tag> },
+              { title: t('run'), dataIndex: 'name', ellipsis: true, render: (value) => value || 'Unnamed run' },
+              { title: t('subject'), render: (_, item) => item.agent_id || item.workflow_id || '—', ellipsis: true },
+              { title: t('latency'), dataIndex: 'duration_ms', width: 106, render: duration },
+              { title: t('startTime'), dataIndex: 'start_time', width: 164, render: formatDate },
+              { title: t('common:status'), dataIndex: 'status', width: 92, render: (value) => <Tag color="error">{value}</Tag> },
             ]}
           />
         </Card>
         {data?.audit && (
-          <Card className="workbench-card" title="近期审计活动" loading={query.isLoading}>
+          <Card className="workbench-card" title={t('recentAudit')} loading={query.isLoading}>
             <div className="dashboard-audit-list">
               {data.audit.recent.length ? (
                 data.audit.recent.map((event) => (
@@ -383,7 +386,7 @@ export function DashboardPage() {
                   </Flex>
                 ))
               ) : (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无审计活动" />
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('noAudit')} />
               )}
             </div>
           </Card>

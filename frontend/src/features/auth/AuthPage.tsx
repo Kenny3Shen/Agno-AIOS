@@ -18,7 +18,7 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: () => Promise<v
       setToken(token.access_token)
       await onAuthenticated()
     } catch (error) {
-      message.error(error instanceof Error ? error.message : t('auth.failed'))
+      message.error(error instanceof Error ? error.message : t('auth:failed'))
     } finally {
       setLoading(false)
     }
@@ -50,8 +50,8 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: () => Promise<v
           </div>
         </div>
         <div className="auth-enter auth-enter-copy">
-          <Typography.Title level={2}>{t('auth.title')}</Typography.Title>
-          <Typography.Paragraph type="secondary">{t('auth.subtitle')}</Typography.Paragraph>
+          <Typography.Title level={2}>{t('auth:title')}</Typography.Title>
+          <Typography.Paragraph type="secondary">{t('auth:subtitle')}</Typography.Paragraph>
         </div>
         <Form
           className="auth-enter auth-enter-form"
@@ -60,14 +60,14 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: () => Promise<v
           requiredMark={false}
           initialValues={{ email: 'admin@example.com' }}
         >
-          <Form.Item name="email" label={t('auth.email')} rules={[{ required: true }, { type: 'email' }]}>
+          <Form.Item name="email" label={t('auth:email')} rules={[{ required: true }, { type: 'email' }]}>
             <Input prefix={<MailOutlined />} autoComplete="username" />
           </Form.Item>
-          <Form.Item name="password" label={t('auth.password')} rules={[{ required: true }]}>
+          <Form.Item name="password" label={t('auth:password')} rules={[{ required: true }]}>
             <Input.Password prefix={<LockOutlined />} autoComplete="current-password" />
           </Form.Item>
           <Button type="primary" htmlType="submit" loading={loading} block>
-            {t('auth.signIn')}
+            {t('auth:signIn')}
           </Button>
         </Form>
         <Space orientation="vertical" className="oauth-list">

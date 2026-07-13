@@ -1,0 +1,53 @@
+{
+  "prompts": {
+    "cve": {
+      "label": "Analyze latest CVE impact on assets",
+      "description": "Correlate vuln intel with asset context"
+    },
+    "exposure": {
+      "label": "Build external exposure triage plan",
+      "description": "Prioritized investigation steps"
+    },
+    "runbook": {
+      "label": "Draft response runbook for an alert",
+      "description": "Executable response workflow"
+    }
+  },
+  "status": {
+    "streaming": "Analyzing",
+    "completed": "Completed",
+    "cancelled": "Stopped",
+    "failed": "Run failed"
+  },
+  "rawToolInput": "Raw tool input",
+  "rawToolOutput": "Raw tool output",
+  "noModel": "No model selected",
+  "model": "Model",
+  "reasoningEffort": "Reasoning effort",
+  "modelAndReasoning": "Model & reasoning effort",
+  "regenerate": "Regenerate",
+  "copyRunId": "Copy Run ID",
+  "runIdCopied": "Run ID copied",
+  "runIdCopyFailed": "Unable to copy Run ID",
+  "rawReasoning": "Raw reasoning",
+  "sources": "Sources",
+  "duration": "Duration",
+  "securityAnalysis": "Security analysis",
+  "agentRunning": "Agent is running",
+  "sessionReady": "Session ready",
+  "newAnalysis": "New analysis",
+  "continueAnalysis": "Continue analysis",
+  "workspace": "Security investigation workspace",
+  "placeholderReady": "Describe the issue to investigate…",
+  "placeholderNoModel": "Configure an available model in Settings first",
+  "attachmentsComing": "Attachments coming soon",
+  "stopGenerating": "Stop generating",
+  "sendMessage": "Send message",
+  "jumpToLatest": "Jump to latest",
+  "welcomeKicker": "T.A.I.S / SECURITY ANALYSIS",
+  "welcomeTitle": "Where should we start?",
+  "thoughtProcess": "Thinking & execution",
+  "establishingRun": "Starting analysis run…",
+  "welcomeDescription": "Connect vulnerability intel, asset context, and runtime records for a traceable security analysis.",
+  "current": "Current"
+}

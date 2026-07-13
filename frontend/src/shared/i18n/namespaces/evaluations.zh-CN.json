@@ -1,0 +1,9 @@
+{
+  "title": "评估",
+  "description": "运行评估套件、检查失败样本和质量趋势",
+  "allSuites": "全部套件",
+  "suiteSubmitted": "评估套件已提交",
+  "evalSubmitted": "评估已提交",
+  "replaySubmitted": "Replay 已提交",
+  "runSuite": "运行套件"
+}

@@ -22,10 +22,11 @@ import { ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { CopyableValue } from '@/shared/ui/MetadataDescriptions'
 import { JsonValueCard } from '@/shared/ui/FormattedContentCard'
-import { compactId, formatDate } from '@/shared/lib/format'
+import { compactId, useFormatDate } from '@/shared/lib/format'
 import { auditKeys, getAuditLogs } from './api'
 import type { AuditFilterValues, AuditLog, AuditLogQuery } from './types'
 import { auditFormToQuery, auditStatusColor, hasAuditMetadata, initialAuditUserId } from './utils'
+import { useTranslation } from 'react-i18next'
 
 const { RangePicker } = DatePicker
 const DEFAULT_LIMIT = 25
@@ -72,7 +73,7 @@ function ActorCell({ row }: { row: AuditLog }) {
   )
 }
 
-function detailItems(row: AuditLog): DescriptionsProps['items'] {
+function detailItems(row: AuditLog, formatDate: (value?: string | number | null) => string): DescriptionsProps['items'] {
   return [
     { key: 'id', label: 'ID', children: <CopyableValue value={String(row.id)} /> },
     { key: 'user', label: 'User ID', children: <CopyableValue value={row.actor_user_id} /> },
@@ -89,6 +90,8 @@ function detailItems(row: AuditLog): DescriptionsProps['items'] {
 }
 
 export function AuditPage() {
+  const { t } = useTranslation('audit')
+  const formatDate = useFormatDate()
   const screens = Grid.useBreakpoint()
   const [form] = Form.useForm<AuditFilterValues>()
   const initialUserId = useMemo(() => initialAuditUserId(), [])
@@ -128,7 +131,7 @@ export function AuditPage() {
 
   return (
     <main className="page audit-page">
-      <PageHeader title="Audit" description="按用户、资源和时间追踪后台操作记录" />
+      <PageHeader title={t('title')} description={t('description')} />
       <Card className="workbench-card audit-filter-card">
         <Form<AuditFilterValues> form={form} layout="vertical" initialValues={{ actor_user_id: initialUserId }} onFinish={applyFilters}>
           <div className="audit-filter-grid">
@@ -159,11 +162,11 @@ export function AuditPage() {
           </div>
           <Space wrap>
             <Button type="primary" htmlType="submit" icon={<SearchOutlined />}>
-              查询
+              {t('common:query')}
             </Button>
-            <Button onClick={resetFilters}>重置</Button>
+            <Button onClick={resetFilters}>{t('common:reset')}</Button>
             <Button icon={<ReloadOutlined />} loading={logsQuery.isFetching} onClick={() => void logsQuery.refetch()}>
-              刷新
+              {t('common:refresh')}
             </Button>
           </Space>
         </Form>
@@ -211,7 +214,7 @@ export function AuditPage() {
       >
         {selected ? (
           <div className="audit-drawer-stack">
-            <Descriptions column={1} size="small" bordered items={detailItems(selected)} />
+            <Descriptions column={1} size="small" bordered items={detailItems(selected, formatDate)} />
             <JsonValueCard value={selected.metadata ?? {}} title="Metadata" />
           </div>
         ) : null}

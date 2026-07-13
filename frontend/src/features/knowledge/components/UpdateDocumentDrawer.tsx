@@ -21,6 +21,7 @@ import {
   validateKnowledgeFile,
 } from '../utils'
 import { IngestOptionsFields } from './IngestOptionsFields'
+import { useTranslation } from 'react-i18next'
 import {
   applyProgressEvent,
   createInitialProgress,
@@ -60,6 +61,7 @@ export function UpdateDocumentDrawer({
   onUpdated: (document: Document) => Promise<void>
   ingestDefaults?: KnowledgeIngestDefaults
 }) {
+  const { t } = useTranslation('knowledge')
   const { message } = App.useApp()
   const [pending, setPending] = useState(false)
   const [activeTab, setActiveTab] = useState<KnowledgeUpdateTabKey>('update')
@@ -94,7 +96,7 @@ export function UpdateDocumentDrawer({
       setProgressStages(null)
       onClose()
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '文档更新失败')
+      message.error(error instanceof Error ? error.message : t('updateFailed'))
     } finally {
       setPending(false)
     }
@@ -110,7 +112,7 @@ export function UpdateDocumentDrawer({
         onClose()
       }}
       destroyOnHidden
-      title="更新文档"
+      title={t('updateDocument')}
       maskClosable={!pending}
       keyboard={!pending}
     >
@@ -127,7 +129,7 @@ export function UpdateDocumentDrawer({
         tabBarExtraContent={{
           right: (
             <Button loading={pending} type="primary" icon={<SaveOutlined />} onClick={submitActiveTab}>
-              保存
+              {t('common:save')}
             </Button>
           ),
         }}
@@ -142,7 +144,7 @@ export function UpdateDocumentDrawer({
                 fileName={fileName}
                 ingestDefaults={ingestDefaults}
                 disabled={pending}
-                onNoop={() => message.info('没有需要保存的更改')}
+                onNoop={() => message.info(t('noChanges'))}
                 onSubmit={(update, success) => submit(update, success)}
                 onTrackProgress={trackProgress}
               />
@@ -187,6 +189,7 @@ function UpdateTab({
   onSubmit: (update: () => Promise<Document>, success: string) => void
   onTrackProgress: (includeUpload: boolean) => (event: KnowledgeProgressEvent) => void
 }) {
+  const { t } = useTranslation('knowledge')
   const { message } = App.useApp()
   const initialIngestOptions = useMemo(() => ingestOptionsFromMetadata(document.metadata), [document.metadata])
   return (
@@ -232,7 +235,7 @@ function UpdateTab({
                 },
                 { stream: true, onProgress }
               ),
-            '已保存并重新向量化'
+            t('savedRevectorized')
           )
         }
         if (decision.kind === 'rebuild') {
@@ -248,7 +251,7 @@ function UpdateTab({
                 },
                 { stream: true, onProgress }
               ),
-            '已保存并重新向量化'
+            t('savedRevectorized')
           )
         }
         return onSubmit(
@@ -257,7 +260,7 @@ function UpdateTab({
               mode: 'metadata',
               metadata: decision.metadata,
             }),
-          '已保存'
+          t('saved')
         )
       }}
     >
@@ -265,7 +268,7 @@ function UpdateTab({
         className="knowledge-form-note"
         type="info"
         showIcon
-        title="保存 Metadata、上传替换文件或修改高级分块参数；需要重新生成向量索引时会自动处理。"
+        title="{t('updateHint')}"
       />
       <Form.Item name="title" label="Title" rules={[{ required: true, whitespace: true }]}>
         <Input />
@@ -279,7 +282,7 @@ function UpdateTab({
       <Form.Item name="file_name" label="Current source file">
         <Input disabled />
       </Form.Item>
-      <Form.Item name="fileList" label="替换文件" valuePropName="fileList" getValueFromEvent={normalizeUploadFiles}>
+      <Form.Item name="fileList" label="{t('replaceFile')}" valuePropName="fileList" getValueFromEvent={normalizeUploadFiles}>
         <Upload.Dragger
           accept={KNOWLEDGE_FILE_ACCEPT}
           maxCount={1}
@@ -294,8 +297,8 @@ function UpdateTab({
           <p className="knowledge-upload-icon">
             <InboxOutlined />
           </p>
-          <p>拖拽新文档到此处，或点击选择文件</p>
-          <p className="ant-upload-hint">未选择文件时不会使用上传表单；支持 Markdown、文本、代码、CSV、JSON、PDF 和 DOCX。</p>
+          <p>{t('dragReplace')}</p>
+          <p className="ant-upload-hint">{t('replaceSupport')}</p>
         </Upload.Dragger>
       </Form.Item>
       <IngestOptionsFields defaults={ingestDefaults} />
@@ -318,6 +321,7 @@ function TextTab({
   onSubmit: (update: () => Promise<Document>, success: string) => void
   onTrackProgress: (includeUpload: boolean) => (event: KnowledgeProgressEvent) => void
 }) {
+  const { t } = useTranslation('knowledge')
   return (
     <Form
       form={form}
@@ -346,7 +350,7 @@ function TextTab({
               },
               { stream: true, onProgress }
             ),
-          '已保存并重新向量化'
+          t('savedRevectorized')
         )
       }}
     >
@@ -354,7 +358,7 @@ function TextTab({
         className="knowledge-form-note"
         type="warning"
         showIcon
-        title="请提供完整的新正文。保存后将重新分块、重新向量化，并替换旧内容。"
+        title="{t('replaceTextHint')}"
       />
       <Form.Item name="title" label="Title" rules={[{ required: true, whitespace: true }]}>
         <Input />
@@ -365,10 +369,10 @@ function TextTab({
       <Form.Item name="visibility" label="Visibility">
         <VisibilitySelect style={{ width: '100%' }} />
       </Form.Item>
-      <Form.Item name="file_name" label="文件名" tooltip="文件后缀决定 Reader 和分块策略" rules={[{ required: true, whitespace: true }]}>
+      <Form.Item name="file_name" label={t('fileName')} tooltip="{t('fileNameHint')}" rules={[{ required: true, whitespace: true }]}>
         <Input />
       </Form.Item>
-      <Form.Item name="content" label="新正文" rules={[{ required: true, whitespace: true }]}>
+      <Form.Item name="content" label={t('newBody')} rules={[{ required: true, whitespace: true }]}>
         <Input.TextArea rows={14} />
       </Form.Item>
       <IngestOptionsFields defaults={ingestDefaults} />

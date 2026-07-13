@@ -26,6 +26,7 @@ import { copyToClipboard } from '@/shared/lib/clipboard'
 import { FormattedContentCard } from '@/shared/ui/FormattedContentCard'
 import { MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
 import type { JsonRecord, ResourceVisibility } from '@/shared/types/common'
+import { useTranslation } from 'react-i18next'
 import {
   callTool,
   deleteToken,
@@ -45,20 +46,22 @@ import {
   type McpToken,
 } from './api'
 
-const tokenTime = (value: number) => (value ? new Date(value * 1000).toLocaleString() : '永不过期')
+const tokenTime = (value: number, neverExpires: string) => (value ? new Date(value * 1000).toLocaleString() : neverExpires)
 
-const riskTags = (item: McpComponent) => {
+function RiskTags({ item }: { item: McpComponent }) {
+  const { t } = useTranslation('mcp')
   const annotations = item.annotations ?? {}
   return (
     <Space wrap>
-      {annotations.readOnlyHint === true && <Tag color="blue">只读</Tag>}
-      {annotations.destructiveHint === true && <Tag color="red">破坏性</Tag>}
-      {annotations.openWorldHint === true && <Tag color="orange">外部系统</Tag>}
+      {annotations.readOnlyHint === true && <Tag color="blue">{t('readonly')}</Tag>}
+      {annotations.destructiveHint === true && <Tag color="red">{t('destructive')}</Tag>}
+      {annotations.openWorldHint === true && <Tag color="orange">{t('externalSystem')}</Tag>}
     </Space>
   )
 }
 
 export function McpPage() {
+  const { t } = useTranslation('mcp')
   const { message, modal } = App.useApp()
   const screens = Grid.useBreakpoint()
   const client = useQueryClient()
@@ -79,9 +82,9 @@ export function McpPage() {
     try {
       await setServerVisibility(name, visibility)
       await refresh()
-      message.success('Server 可见性已更新')
+      message.success(t('visibilityUpdated'))
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '更新 Server 可见性失败')
+      message.error(error instanceof Error ? error.message : t('visibilityFailed'))
     }
   }
   const removeServer = async (server: McpServer) => {
@@ -91,10 +94,10 @@ export function McpPage() {
         setNamespace(undefined)
         setComponent(undefined)
       }
-      message.success('Server 已删除')
+      message.success(t('serverDeleted'))
       await refresh()
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '删除 Server 失败')
+      message.error(error instanceof Error ? error.message : t('serverDeleteFailed'))
     }
   }
 
@@ -102,7 +105,7 @@ export function McpPage() {
     mutationFn: ({ server, enabled }: { server: McpServer; enabled: boolean }) =>
       server.server_type === 'builtin' ? updateConfig(server.name, enabled) : setServerEnabled(server.id, enabled),
     onSuccess: async (_, { enabled }) => {
-      message.success(enabled ? 'Server 已启用' : 'Server 已停用')
+      message.success(enabled ? t('serverEnabled') : t('serverDisabled'))
       await refresh()
     },
     onError: (error) => message.error(error.message),
@@ -110,7 +113,7 @@ export function McpPage() {
   const toggleComponent = useMutation({
     mutationFn: ({ item, enabled }: { item: McpComponent; enabled: boolean }) => setComponentEnabled(item, enabled),
     onSuccess: async (_, { enabled }) => {
-      message.success(enabled ? '组件已启用' : '组件已停用')
+      message.success(enabled ? t('componentEnabled') : t('componentDisabled'))
       await refresh()
     },
     onError: (error) => message.error(error.message),
@@ -126,16 +129,16 @@ export function McpPage() {
       const result = await callTool(component.name, args)
       setCallResult(result)
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '参数必须是 JSON 对象')
+      message.error(error instanceof Error ? error.message : t('paramsMustBeObject'))
     }
   }
 
   const runTool = () => {
     if (component?.annotations?.destructiveHint === true) {
       modal.confirm({
-        title: '确认调用破坏性工具',
+        title: t('confirmDestructive'),
         content: component.name,
-        okText: '确认调用',
+        okText: t('confirmCall'),
         okButtonProps: { danger: true },
         onOk: executeTool,
       })
@@ -147,15 +150,15 @@ export function McpPage() {
   return (
     <main className="page mcp-page">
       <PageHeader
-        title="MCP"
-        description="管理 PostgreSQL 中的 MCP Server，并查看 FastMCP 暴露的真实组件"
+        title={t('title')}
+        description={t('description')}
         actions={
           <>
             <Button icon={<PlusOutlined />} onClick={() => setServerOpen(true)}>
-              添加 Server
+              {t('addServerShort')}
             </Button>
             <Button type="primary" icon={<KeyOutlined />} onClick={() => setIssueOpen(true)}>
-              签发令牌
+              {t('issueTokenShort')}
             </Button>
           </>
         }
@@ -227,8 +230,8 @@ export function McpPage() {
                             width: 76,
                             render: (_, row) =>
                               row.can_delete ? (
-                                <Popconfirm title={`删除 Server “${row.name}”？此操作不可恢复。`} okText="删除" okButtonProps={{ danger: true }} onConfirm={() => removeServer(row)}>
-                                  <Button danger type="text" icon={<DeleteOutlined />} aria-label={`删除 Server ${row.name}`} onClick={(event) => event.stopPropagation()} />
+                                <Popconfirm title={t('deleteServerConfirm', { name: row.name })} okText={t('common:delete')} okButtonProps={{ danger: true }} onConfirm={() => removeServer(row)}>
+                                  <Button danger type="text" icon={<DeleteOutlined />} aria-label={t('deleteServerNamed', { name: row.name })} onClick={(event) => event.stopPropagation()} />
                                 </Popconfirm>
                               ) : null,
                           },
@@ -244,7 +247,7 @@ export function McpPage() {
                           emptyText: (
                             <Empty
                               image={Empty.PRESENTED_IMAGE_SIMPLE}
-                              description={namespace ? '该 namespace 没有可见组件' : '选择一个 Server 查看组件'}
+                              description={namespace ? t('noVisibleComponents') : t('selectServerForComponents')}
                             />
                           ),
                         }}
@@ -276,7 +279,7 @@ export function McpPage() {
                               </Space>
                             ),
                           },
-                          { title: 'Risk', width: 190, render: (_, row) => riskTags(row) },
+                          { title: 'Risk', width: 190, render: (_, row) => <RiskTags item={row} /> },
                           {
                             title: 'Enabled',
                             width: 90,
@@ -313,7 +316,7 @@ export function McpPage() {
                             setCallOpen(true)
                           }}
                         >
-                          试调用
+                          {t('tryCallShort')}
                         </Button>
                       )
                     }
@@ -331,7 +334,7 @@ export function McpPage() {
                       />
                     )}
                     {!component && !selectedServer && (
-                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="选择 Server 或 Component 查看详情" />
+                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('selectForDetails')} />
                     )}
                     {component && (
                       <Tabs
@@ -386,20 +389,20 @@ export function McpPage() {
                   dataSource={tokens.data ?? []}
                   columns={[
                     { title: 'Name', dataIndex: 'name' },
-                    { title: 'Created', dataIndex: 'created_at', render: tokenTime },
-                    { title: 'Expires', dataIndex: 'expires_at', render: tokenTime },
+                    { title: 'Created', dataIndex: 'created_at', render: (value: number) => tokenTime(value, t('neverExpires')) },
+                    { title: 'Expires', dataIndex: 'expires_at', render: (value: number) => tokenTime(value, t('neverExpires')) },
                     {
                       title: 'Actions',
                       width: 120,
                       render: (_, row) => (
                         <Popconfirm
-                          title="删除此令牌？"
+                          title={t('deleteTokenConfirm')}
                           onConfirm={async () => {
                             await deleteToken(row.id)
                             await refresh()
                           }}
                         >
-                          <Button danger>删除</Button>
+                          <Button danger>{t('common:delete')}</Button>
                         </Popconfirm>
                       ),
                     },
@@ -411,31 +414,31 @@ export function McpPage() {
         ]}
       />
 
-      <Modal open={issueOpen} footer={null} onCancel={() => setIssueOpen(false)} title="签发 MCP Token">
+      <Modal open={issueOpen} footer={null} onCancel={() => setIssueOpen(false)} title={t('issueToken')}>
         <Form
           layout="vertical"
           initialValues={{ expires_in: 86400 }}
           onFinish={async (values: { name: string; expires_in: number }) => {
             const result = await issueToken(values.name, values.expires_in)
             await copyToClipboard(result.token)
-            message.success('令牌已签发并复制，此后不再显示明文')
+            message.success(t('tokenIssued'))
             setIssueOpen(false)
             await refresh()
           }}
         >
-          <Form.Item name="name" label="名称" rules={[{ required: true }]}>
+          <Form.Item name="name" label={t('common:name')} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="expires_in" label="有效期（秒，0 表示永久）">
+          <Form.Item name="expires_in" label={t('ttlSeconds')}>
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
           <Button type="primary" htmlType="submit">
-            签发
+            {t('issue')}
           </Button>
         </Form>
       </Modal>
 
-      <Modal open={serverOpen} footer={null} onCancel={() => setServerOpen(false)} title="添加 MCP Server">
+      <Modal open={serverOpen} footer={null} onCancel={() => setServerOpen(false)} title={t('addServer')}>
         <Form
           form={serverForm}
           layout="vertical"
@@ -444,48 +447,48 @@ export function McpPage() {
             try {
               const result = await uploadServer(values)
               if (result.status === 'pending') {
-                message.success('MCP Server 已提交，等待管理员审批')
+                message.success(t('serverPendingApproval'))
               } else {
-                message.success('Server 已保存，重启后加载')
+                message.success(t('serverSavedRestart'))
                 await refresh()
               }
               setServerOpen(false)
             } catch (error) {
-              message.error(error instanceof Error ? error.message : '提交 MCP Server 失败')
+              message.error(error instanceof Error ? error.message : t('submitServerFailed'))
             }
           }}
         >
-          <Form.Item name="name" label="名称" rules={[{ required: true }]}>
+          <Form.Item name="name" label={t('common:name')} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="description" label="描述">
+          <Form.Item name="description" label={t('common:description')}>
             <Input />
           </Form.Item>
           <Form.Item name="manifest" label="MCPConfig JSON" rules={[{ required: true }]}>
             <Input.TextArea rows={10} />
           </Form.Item>
-          <Form.Item name="visibility" label="可见性">
+          <Form.Item name="visibility" label={t('common:visibility')}>
             <VisibilitySelect style={{ width: '100%' }} />
           </Form.Item>
           <Space>
             <Button type="primary" htmlType="submit">
-              保存
+              {t('common:save')}
             </Button>
             <Button
               onClick={async () => {
                 const values = await serverForm.validateFields()
                 const result = await testServer(values)
-                message.success(`连接成功，发现 ${result.tools.length} 个 Tools`)
+                message.success(t('connectDiscovered', { count: result.tools.length }))
               }}
             >
-              连接测试
+              {t('testConnection')}
             </Button>
           </Space>
         </Form>
       </Modal>
 
-      <Modal open={callOpen} onCancel={() => setCallOpen(false)} title={`试调用 ${component?.name ?? ''}`} onOk={runTool} okText="调用">
-        <Typography.Paragraph type="secondary">参数必须是 JSON 对象。调用会访问真实工具。</Typography.Paragraph>
+      <Modal open={callOpen} onCancel={() => setCallOpen(false)} title={t('tryCall', { name: component?.name ?? '' })} onOk={runTool} okText={t('call')}>
+        <Typography.Paragraph type="secondary">{t('callHint')}</Typography.Paragraph>
         <Input.TextArea rows={8} value={callArgs} onChange={(event) => setCallArgs(event.target.value)} />
         {callResult !== undefined && <FormattedContentCard title="Result" value={callResult} />}
       </Modal>

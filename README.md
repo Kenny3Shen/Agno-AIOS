@@ -44,6 +44,7 @@ TAIS_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
 ## 配置与运维
 
 - 版本号以 `pyproject.toml` 的 `[project].version` 为唯一来源；API `app_version` / OpenAPI `version` 默认从已安装包元数据读取，可用 `APP_VERSION` 覆盖。发版时同步 `frontend/package.json` 的 `version`。
+- 前端 i18n：侧栏语言按钮切换 `zh-CN`/`en-US`（`localStorage.locale`），页面文案走 feature 命名空间；日期格式跟随当前语言。
 - 环境变量：应用配置使用 `TAIS_*` / 领域名（`POSTGRES_*`、`AUTH_*`、`MCP_*`）；`AGNO_*` 仅用于引擎耦合（如 `AGNO_DB_SCHEMA`）。
 - CVE 情报源配置为仓库根目录 `cve_sources.toml`（可用 `TAIS_CVE_SOURCE_CONFIG_PATH` 覆盖）。
 - `POSTGRES_*` / `POSTGRES_URL`：PostgreSQL 连接。
@@ -113,7 +114,7 @@ flowchart LR
 
 - `frontend/src/app`：Provider、Router、Shell 与全局样式。
 - `frontend/src/features`：按领域划分的页面和逻辑。
-- `frontend/src/shared`：API client、认证、i18n、类型与通用 UI。
+- `frontend/src/shared`：API client、认证、i18n（`shared/i18n/namespaces/*` 按 feature 拆分 zh-CN/en-US）、类型与通用 UI。
 - `api/`：认证、路由、服务、MCP 运行时、任务与测试。
 - `scripts/`：运维脚本。
 

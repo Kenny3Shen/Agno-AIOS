@@ -1,0 +1,9 @@
+{
+  "title": "CVE",
+  "description": "Search local vulnerability intel and maintain the index",
+  "updated": "CVE database updated",
+  "searchPlaceholder": "CVE ID, product, or keyword; leave empty for latest",
+  "allSources": "All sources",
+  "total": "{{total}} results",
+  "updateDb": "Update database"
+}

@@ -1,0 +1,18 @@
+{
+  "title": "Approvals",
+  "description": "Handle paused agent actions, human confirmation, and upload requests",
+  "resolved": "Approval {{status}}",
+  "allStatuses": "All statuses",
+  "viewApproval": "View approval {{id}}",
+  "approved": "Approved",
+  "rejected": "Rejected",
+  "noRejectReason": "No rejection reason provided",
+  "zipPreview": "ZIP preview",
+  "rejectApproval": "Reject approval",
+  "confirmReject": "Confirm rejection",
+  "rejectReasonPlaceholder": "Explain the rejection reason",
+  "submittedAt": "Submitted at",
+  "resolvedAt": "Resolved at",
+  "zipPreviewFailed": "Unable to load ZIP preview.",
+  "rejectReasonHint": "The rejection reason is sent to the requester."
+}

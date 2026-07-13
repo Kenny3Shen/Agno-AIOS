@@ -1,0 +1,8 @@
+{
+  "title": "观测",
+  "description": "从 Session、Run 到 Span 的端到端观测与调试",
+  "allSessions": "全部 Session",
+  "activeSessions": "活跃 Session",
+  "archivedSessions": "已归档 Session",
+  "ownOnly": "仅可查看自己的 Trace"
+}

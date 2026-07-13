@@ -1,9 +1,12 @@
 import { Card, Typography } from 'antd'
 import { CopyableValue, MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
-import { formatDate } from '@/shared/lib/format'
+import { useFormatDate } from '@/shared/lib/format'
 import type { Document } from '../types'
+import { useTranslation } from 'react-i18next'
 
 export function MetadataPanel({ document }: { document: Document | null }) {
+  const { t } = useTranslation('knowledge')
+  const formatDate = useFormatDate()
   const metadata = Object.fromEntries(
     Object.entries(document?.metadata ?? {}).filter(([key]) => !['title', 'source', 'owner_user_id', 'user_id', 'file_path'].includes(key))
   )
@@ -22,7 +25,7 @@ export function MetadataPanel({ document }: { document: Document | null }) {
           value={metadata}
         />
       ) : (
-        <div className="empty-panel">选择文档查看元数据</div>
+        <div className="empty-panel">{t('selectDocMeta')}</div>
       )}
     </Card>
   )

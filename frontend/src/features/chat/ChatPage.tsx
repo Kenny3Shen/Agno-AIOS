@@ -21,23 +21,13 @@ import {
 import { useChat } from './useChat'
 import type { Message, ThoughtStep, ToolStep } from './types'
 import type { ModelConfig, ReasoningEffort } from '@/shared/types/common'
+import { useTranslation } from 'react-i18next'
 import { copyToClipboard } from '@/shared/lib/clipboard'
 import { reasoningEffortLabel } from '@/shared/lib/reasoning'
 import { supportedReasoningEfforts } from './utils'
 import './chat.css'
 
-const prompts = [
-  { key: 'cve', label: '分析最新 CVE 对现有资产的影响', description: '关联漏洞情报和资产上下文' },
-  { key: 'exposure', label: '生成外部暴露面排查计划', description: '建立优先级明确的调查步骤' },
-  { key: 'runbook', label: '为当前告警编写处置 Runbook', description: '输出可执行的响应流程' },
-]
-
-const statusText: Record<NonNullable<Message['status']>, string> = {
-  streaming: '分析中',
-  completed: '已完成',
-  cancelled: '已停止',
-  failed: '运行失败',
-}
+const promptKeys = ['cve', 'exposure', 'runbook'] as const
 
 const reasoningOptions = (model: ModelConfig | null) => {
   return supportedReasoningEfforts(model).map((value) => ({ value, label: reasoningEffortLabel(value) }))
@@ -51,7 +41,7 @@ interface ModelSettingsOption {
 }
 
 const renderRaw = (value: unknown) => (typeof value === 'string' ? value : JSON.stringify(value, null, 2))
-function RawDetails({ label, value }: { label: string; value: unknown }) {
+function RawDetails({ label, value, copyLabel }: { label: string; value: unknown; copyLabel: string }) {
   if (value === undefined || value === null || value === '') return null
   const content = renderRaw(value)
   return (
@@ -59,14 +49,14 @@ function RawDetails({ label, value }: { label: string; value: unknown }) {
       <summary>{label}</summary>
       <div>
         <Button type="link" size="small" icon={<CopyOutlined />} onClick={() => void copyToClipboard(content)}>
-          复制
+          {copyLabel}
         </Button>
         <pre>{content}</pre>
       </div>
     </details>
   )
 }
-function toolNode(tool: ToolStep) {
+function toolNode(tool: ToolStep, labels: { input: string; output: string; copy: string }) {
   return {
     key: `tool-${tool.id}`,
     title: tool.name,
@@ -77,8 +67,8 @@ function toolNode(tool: ToolStep) {
     footer: (
       <>
         {tool.duration != null && <span>{tool.duration.toFixed(1)}s</span>}
-        <RawDetails label="原始工具输入" value={tool.input} />
-        <RawDetails label="原始工具输出" value={tool.output} />
+        <RawDetails label={labels.input} value={tool.input} copyLabel={labels.copy} />
+        <RawDetails label={labels.output} value={tool.output} copyLabel={labels.copy} />
       </>
     ),
   }
@@ -112,9 +102,10 @@ function ModelSettings({
   onModelChange: (value: string) => void
   onReasoningChange: (value: ReasoningEffort) => void
 }) {
+  const { t } = useTranslation('chat')
   const [open, setOpen] = useState(false)
   const [activeGroup, setActiveGroup] = useState<'model' | 'reasoning'>('model')
-  const label = `${selectedModel?.name ?? '未选择模型'}${reasoningEffort ? ` · ${reasoningEffortLabel(reasoningEffort)}` : ''}`
+  const label = `${selectedModel?.name ?? t('noModel')}${reasoningEffort ? ` · ${reasoningEffortLabel(reasoningEffort)}` : ''}`
   const options = useMemo<ModelSettingsOption[]>(() => {
     const modelOptions = models.map((model) => ({
       value: model.id,
@@ -123,10 +114,10 @@ function ModelSettings({
     }))
     const effortOptions = availableReasoningOptions.map((option) => ({ value: option.value, label: option.label }))
     return [
-      { value: 'model', label: '模型', children: modelOptions },
-      ...(effortOptions.length ? [{ value: 'reasoning', label: '推理强度', children: effortOptions }] : []),
+      { value: 'model', label: t('model'), children: modelOptions },
+      ...(effortOptions.length ? [{ value: 'reasoning', label: t('reasoningEffort'), children: effortOptions }] : []),
     ]
-  }, [availableReasoningOptions, models])
+  }, [availableReasoningOptions, models, t])
   const selectedPath =
     activeGroup === 'reasoning' && reasoningEffort
       ? ['reasoning', reasoningEffort]
@@ -151,7 +142,7 @@ function ModelSettings({
     return (
       <span className="model-settings-cascader-option">
         <span>{option.label}</span>
-        {current && <span>当前</span>}
+        {current && <span>{t('current')}</span>}
       </span>
     )
   }
@@ -184,7 +175,7 @@ function ModelSettings({
         </div>
       }
     >
-      <Button className="model-settings-trigger" type="text" disabled={disabled} aria-label="模型与推理强度" title={label}>
+      <Button className="model-settings-trigger" type="text" disabled={disabled} aria-label={t('modelAndReasoning')} title={label}>
         <span className="model-select-value" title={selectedModel?.name ?? ''}>
           {label}
         </span>
@@ -195,23 +186,24 @@ function ModelSettings({
 }
 
 function MessageBody({ message, retry }: { message: Message; retry: () => void }) {
+  const { t } = useTranslation('chat')
   const { message: toast } = App.useApp()
   const [thoughtOpen, setThoughtOpen] = useState(message.status === 'streaming')
   const motionState = message.role === 'assistant' ? (message.status ?? 'completed') : 'sent'
   const actions = [
-    { key: 'copy', label: '复制', icon: <CopyOutlined />, onItemClick: () => void copyToClipboard(message.content) },
+    { key: 'copy', label: t('common:copy'), icon: <CopyOutlined />, onItemClick: () => void copyToClipboard(message.content) },
     ...(message.role === 'assistant'
       ? [
-          { key: 'retry', label: '重新生成', icon: <ReloadOutlined />, onItemClick: retry },
+          { key: 'retry', label: t('regenerate'), icon: <ReloadOutlined />, onItemClick: retry },
           ...(message.run_id
             ? [
                 {
                   key: 'copy-run-id',
-                  label: '复制 Run ID',
+                  label: t('copyRunId'),
                   icon: <CopyOutlined />,
                   onItemClick: () => {
                     void copyToClipboard(message.run_id ?? '').then((copied) =>
-                      copied ? toast.success('Run ID 已复制') : toast.error('Run ID 复制失败')
+                      copied ? toast.success(t('runIdCopied')) : toast.error(t('runIdCopyFailed'))
                     )
                   },
                 },
@@ -227,7 +219,7 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
         <Actions items={actions} />
       </div>
     )
-  const chain = [...(message.thought_chain ?? []).map(thoughtNode), ...(message.tool_steps ?? []).map(toolNode)]
+  const chain = [...(message.thought_chain ?? []).map(thoughtNode), ...(message.tool_steps ?? []).map((tool) => toolNode(tool, { input: t('rawToolInput'), output: t('rawToolOutput'), copy: t('common:copy') }))]
   const hasThoughts = chain.length > 0 || Boolean(message.reasoning)
   return (
     <div className={`message-body message-body--${motionState}`}>
@@ -241,11 +233,11 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
             onClick={() => setThoughtOpen((open) => !open)}
             aria-expanded={thoughtOpen}
           >
-            思考与执行过程
+            {t('thoughtProcess')}
           </Button>
           {thoughtOpen && (
             <div className="thought-content">
-              <RawDetails label="原始 reasoning" value={message.reasoning} />
+              <RawDetails label={t('rawReasoning')} copyLabel={t('common:copy')} value={message.reasoning} />
               {chain.length > 0 && (
                 <ThoughtChain
                   className="tool-chain"
@@ -265,11 +257,11 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
           escapeRawHtml
         />
       ) : (
-        <div className="response-pending">正在建立分析运行…</div>
+        <div className="response-pending">{t('establishingRun')}</div>
       )}
       {(message.sources?.length ?? 0) > 0 && (
         <Sources
-          title="参考来源"
+          title={t('sources')}
           items={
             message.sources?.map((source) => ({
               key: source.id,
@@ -281,9 +273,9 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
         />
       )}
       <div className={`run-strip run-${message.status ?? 'completed'}`}>
-        <span className="run-status">{statusText[message.status ?? 'completed']}</span>
+        <span className="run-status">{({ streaming: t('status.streaming'), completed: t('status.completed'), cancelled: t('status.cancelled'), failed: t('status.failed') } as const)[message.status ?? 'completed']}</span>
         {message.metrics?.duration != null && (
-          <span className="run-metric" title="运行耗时">
+          <span className="run-metric" title={t('duration')}>
             {message.metrics.duration.toFixed(1)}s
           </span>
         )}
@@ -305,6 +297,7 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
 }
 
 export function ChatPage() {
+  const { t } = useTranslation('chat')
   const chat = useChat()
   const scrollRef = useRef<HTMLDivElement>(null)
   const [followLatest, setFollowLatest] = useState(true)
@@ -353,13 +346,13 @@ export function ChatPage() {
         <header className="chat-context-bar">
           <div>
             <SafetyCertificateOutlined />
-            <span>{activeSession?.title || '安全分析'}</span>
+            <span>{activeSession?.title || t('securityAnalysis')}</span>
             <span className="context-divider" />
-            <span>{chat.selectedModel?.name ?? '未选择模型'}</span>
+            <span>{chat.selectedModel?.name ?? t('noModel')}</span>
           </div>
           <div className="context-status">
             <span className={activeRun ? 'status-dot active' : 'status-dot'} />
-            {activeRun ? 'Agent 正在运行' : chat.sessionId ? '会话已就绪' : '新建分析'}
+            {activeRun ? t('agentRunning') : chat.sessionId ? t('sessionReady') : t('newAnalysis')}
           </div>
         </header>
         <div
@@ -375,24 +368,31 @@ export function ChatPage() {
               <div className="welcome-emblem">
                 <SafetyOutlined />
               </div>
-              <p className="welcome-kicker">T.A.I.S / SECURITY ANALYSIS</p>
-              <h1>从哪里开始调查？</h1>
-              <p className="welcome-description">连接漏洞情报、资产上下文和运行记录，发起一项可追溯的安全分析。</p>
+              <p className="welcome-kicker">{t('welcomeKicker')}</p>
+              <h1>{t('welcomeTitle')}</h1>
+              <p className="welcome-description">{t('welcomeDescription')}</p>
               <div className="prompt-grid">
-                {prompts.map((prompt, index) => (
-                  <button
-                    key={prompt.key}
-                    type="button"
-                    className="prompt-card"
-                    onClick={() => chat.dispatch({ type: 'input', value: prompt.label })}
-                  >
-                    <span className={`prompt-icon prompt-icon-${index}`}>
-                      {index === 0 ? <SearchOutlined /> : index === 1 ? <SafetyCertificateOutlined /> : <CodeOutlined />}
-                    </span>
-                    <strong>{prompt.label}</strong>
-                    <small>{prompt.description}</small>
-                  </button>
-                ))}
+                {promptKeys.map((key, index) => {
+                  const prompt = {
+                    key,
+                    label: t(`prompts.${key}.label`),
+                    description: t(`prompts.${key}.description`),
+                  }
+                  return (
+                    <button
+                      key={prompt.key}
+                      type="button"
+                      className="prompt-card"
+                      onClick={() => chat.dispatch({ type: 'input', value: prompt.label })}
+                    >
+                      <span className={`prompt-icon prompt-icon-${index}`}>
+                        {index === 0 ? <SearchOutlined /> : index === 1 ? <SafetyCertificateOutlined /> : <CodeOutlined />}
+                      </span>
+                      <strong>{prompt.label}</strong>
+                      <small>{prompt.description}</small>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           ) : (
@@ -401,7 +401,7 @@ export function ChatPage() {
           {chat.state.messages.at(-1)?.followups?.length ? (
             <Prompts
               className="followup-prompts"
-              title="继续分析"
+              title={t('continueAnalysis')}
               items={chat.state.messages.at(-1)?.followups?.map((label, index) => ({ key: String(index), label })) ?? []}
               onItemClick={({ data }) => void chat.submit(String(data.label ?? ''))}
             />
@@ -410,20 +410,20 @@ export function ChatPage() {
             <div className="chat-error" role="alert">
               {chat.state.error}
               <Button type="link" size="small" onClick={() => chat.retry(chat.state.messages.at(-1)?.id ?? '')}>
-                重试
+                {t('common:retry')}
               </Button>
             </div>
           )}
         </div>
         {!followLatest && (
           <Button className="latest-button" shape="round" icon={<ArrowDownOutlined />} onClick={scrollToLatest}>
-            返回最新消息
+            {t('jumpToLatest')}
           </Button>
         )}
         <div className="sender-shell">
           <div className="sender-context">
             <SafetyCertificateOutlined />
-            {activeSession?.title || '安全调查工作区'}
+            {activeSession?.title || t('workspace')}
           </div>
           <Sender
             value={chat.state.input}
@@ -432,11 +432,11 @@ export function ChatPage() {
             loading={chat.state.requesting}
             disabled={inputDisabled}
             suffix={false}
-            placeholder={chat.selectedModel?.configured ? '描述你要调查的问题…' : '请先在设置中配置可用模型'}
+            placeholder={chat.selectedModel?.configured ? t('placeholderReady') : t('placeholderNoModel')}
             autoSize={{ minRows: 1, maxRows: 5 }}
             footer={
               <div className="sender-controls">
-                <Button className="sender-extension" type="text" icon={<PaperClipOutlined />} disabled aria-label="附件功能即将推出" />
+                <Button className="sender-extension" type="text" icon={<PaperClipOutlined />} disabled aria-label={t('attachmentsComing')} />
                 <div className="sender-actions">
                   <ModelSettings
                     models={chat.models.data?.models ?? []}
@@ -448,8 +448,8 @@ export function ChatPage() {
                     onReasoningChange={chat.setReasoningEffort}
                   />
                   <Button
-                    aria-label={chat.state.requesting ? '停止生成' : '发送消息'}
-                    title={chat.state.requesting ? '停止生成' : '发送消息'}
+                    aria-label={chat.state.requesting ? t('stopGenerating') : t('sendMessage')}
+                    title={chat.state.requesting ? t('stopGenerating') : t('sendMessage')}
                     type={chat.state.requesting ? 'default' : 'primary'}
                     danger={chat.state.requesting}
                     shape="circle"

@@ -5,6 +5,7 @@ import { PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { listCases, listFailures, listRuns, listSuites, replay, runCase, runSuite, type EvalCase, type EvalRun } from './api'
 import { compactId, formatDate } from '@/shared/lib/format'
+import { useTranslation } from 'react-i18next'
 
 const RunTable = ({ rows, onReplay }: { rows: EvalRun[]; onReplay?: (id: string) => void }) => (
   <Table<EvalRun>
@@ -24,7 +25,7 @@ const RunTable = ({ rows, onReplay }: { rows: EvalRun[]; onReplay?: (id: string)
         ),
       },
       { title: 'Score', dataIndex: 'score' },
-      { title: 'Created', dataIndex: 'created_at', render: formatDate },
+      { title: 'Created', dataIndex: 'created_at', render: (value) => formatDate(value) },
       ...(onReplay
         ? [
             {
@@ -42,6 +43,7 @@ const RunTable = ({ rows, onReplay }: { rows: EvalRun[]; onReplay?: (id: string)
 )
 
 export function EvaluationsPage() {
+  const { t } = useTranslation('evaluations')
   const { message } = App.useApp()
   const client = useQueryClient()
   const suites = useQuery({ queryKey: ['evals', 'suites'], queryFn: listSuites })
@@ -53,15 +55,15 @@ export function EvaluationsPage() {
   return (
     <main className="page">
       <PageHeader
-        title="Agent Evaluations"
-        description="运行评估套件、检查失败样本和质量趋势"
+        title={t('title')}
+        description={t('description')}
         actions={
           <>
             <Select
               allowClear
               value={suite || undefined}
               onChange={(v) => setSuite(v ?? '')}
-              placeholder="全部套件"
+              placeholder={t('allSuites')}
               options={(suites.data ?? []).map((item) => ({ value: item.id, label: item.name }))}
               style={{ width: 220 }}
             />
@@ -71,11 +73,11 @@ export function EvaluationsPage() {
               disabled={!suite}
               onClick={async () => {
                 await runSuite(suite)
-                message.success('评估套件已提交')
+                message.success(t('suiteSubmitted'))
                 await refresh()
               }}
             >
-              运行套件
+              {t('runSuite')}
             </Button>
           </>
         }
@@ -103,7 +105,7 @@ export function EvaluationsPage() {
                           icon={<PlayCircleOutlined />}
                           onClick={async () => {
                             await runCase(row.id)
-                            message.success('评估已提交')
+                            message.success(t('evalSubmitted'))
                             await refresh()
                           }}
                         >
@@ -124,7 +126,7 @@ export function EvaluationsPage() {
                   rows={failures.data ?? []}
                   onReplay={async (id) => {
                     await replay(id)
-                    message.success('Replay 已提交')
+                    message.success(t('replaySubmitted'))
                     await refresh()
                   }}
                 />

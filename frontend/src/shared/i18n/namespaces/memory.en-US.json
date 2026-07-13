@@ -1,0 +1,12 @@
+{
+  "title": "Memory",
+  "description": "Review, edit, and delete agent user memories",
+  "searchPlaceholder": "Search memory, user, or topic",
+  "viewMemory": "View memory {{id}}",
+  "editNamed": "Edit {{id}}",
+  "deleteNamed": "Delete {{id}}",
+  "deleteConfirm": "Delete this memory?",
+  "selectForDetails": "Select a memory for details",
+  "editMemory": "Edit memory",
+  "updated": "Memory updated"
+}

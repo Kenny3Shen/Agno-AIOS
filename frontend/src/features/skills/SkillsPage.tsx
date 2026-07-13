@@ -8,8 +8,10 @@ import { deleteSkill, listSkills, setVisibility, toggleSkill, uploadSkill, type 
 import { getSkillBody, getSkillDetailMetadata } from './utils'
 import { VisibilitySelect } from '@/shared/ui/VisibilitySelect'
 import { MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
+import { useTranslation } from 'react-i18next'
 
 export function SkillsPage() {
+  const { t } = useTranslation('skills')
   const { message } = App.useApp()
   const screens = Grid.useBreakpoint()
   const vertical = screens.md === false
@@ -22,28 +24,28 @@ export function SkillsPage() {
     try {
       await setVisibility(name, visibility)
       await refresh()
-      message.success('可见性已更新')
+      message.success(t('visibilityUpdated'))
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '更新技能可见性失败')
+      message.error(error instanceof Error ? error.message : t('visibilityFailed'))
     }
   }
   const removeSkill = async (skill: Skill) => {
     try {
       await deleteSkill(skill.name)
       if (selected?.name === skill.name) setSelected(null)
-      message.success('技能已删除')
+      message.success(t('deleted'))
       await refresh()
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '删除技能失败')
+      message.error(error instanceof Error ? error.message : t('deleteFailed'))
     }
   }
   const toggle = useMutation({
     mutationFn: ({ skill, enabled }: { skill: Skill; enabled: boolean }) => toggleSkill(skill.name, enabled),
     onSuccess: async (_, { enabled }) => {
-      message.success(enabled ? '技能已启用' : '技能已停用')
+      message.success(enabled ? t('enabled') : t('disabled'))
       await refresh()
     },
-    onError: (error) => message.error(error instanceof Error ? error.message : '更新技能状态失败'),
+    onError: (error) => message.error(error instanceof Error ? error.message : t('statusFailed')),
   })
   const body = selected ? getSkillBody(selected.skill_markdown) : ''
   const detailMetadata = selected ? getSkillDetailMetadata(selected) : null
@@ -51,11 +53,11 @@ export function SkillsPage() {
   return (
     <main className="page">
       <PageHeader
-        title="Skills"
-        description="管理 Agent 可调用技能、脚本与资源可见性"
+        title={t('title')}
+        description={t('description')}
         actions={
           <Button type="primary" icon={<UploadOutlined />} onClick={() => setUploadOpen(true)}>
-            上传技能
+            {t('uploadSkill')}
           </Button>
         }
       />
@@ -71,7 +73,7 @@ export function SkillsPage() {
               onRow={(row) => ({
                 tabIndex: 0,
                 role: 'button',
-                'aria-label': `查看技能 ${row.name}`,
+                'aria-label': t('viewSkill', { name: row.name }),
                 onClick: () => setSelected(row),
                 onKeyDown: (event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
@@ -127,8 +129,8 @@ export function SkillsPage() {
                   width: 88,
                   render: (_, row) =>
                     row.can_delete ? (
-                      <Popconfirm title={`删除技能 “${row.name}”？此操作不可恢复。`} okText="删除" okButtonProps={{ danger: true }} onConfirm={() => removeSkill(row)}>
-                        <Button danger type="text" icon={<DeleteOutlined />} aria-label={`删除技能 ${row.name}`} onClick={(event) => event.stopPropagation()} />
+                      <Popconfirm title={t('deleteConfirm', { name: row.name })} okText={t('common:delete')} okButtonProps={{ danger: true }} onConfirm={() => removeSkill(row)}>
+                        <Button danger type="text" icon={<DeleteOutlined />} aria-label={t('deleteNamed', { name: row.name })} onClick={(event) => event.stopPropagation()} />
                       </Popconfirm>
                     ) : null,
                 },
@@ -148,19 +150,19 @@ export function SkillsPage() {
                     children: body ? (
                       <XMarkdown content={body} openLinksInNewTab escapeRawHtml />
                     ) : (
-                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该技能没有 SKILL.md 内容" />
+                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('noSkillMd')} />
                     ),
                   },
                   { key: 'metadata', label: 'Metadata', children: <MetadataDescriptions value={detailMetadata} /> },
                 ]}
               />
             ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="选择一个技能查看详情" />
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('selectForDetails')} />
             )}
           </Card>
         </Splitter.Panel>
       </Splitter>
-      <Drawer size={480} open={uploadOpen} onClose={() => setUploadOpen(false)} title="上传技能">
+      <Drawer size={480} open={uploadOpen} onClose={() => setUploadOpen(false)} title={t('uploadSkill')}>
         <Form
           layout="vertical"
           initialValues={{ visibility: 'private' }}
@@ -168,31 +170,31 @@ export function SkillsPage() {
             try {
               const result = await uploadSkill(values.name, values.visibility, values.file.file)
               if (result.status === 'pending') {
-                message.success('技能已提交，等待管理员审批')
+                message.success(t('pendingApproval'))
               } else {
-                message.success('技能已上传')
+                message.success(t('uploaded'))
                 await refresh()
               }
               setUploadOpen(false)
             } catch (error) {
-              message.error(error instanceof Error ? error.message : '上传技能失败')
+              message.error(error instanceof Error ? error.message : t('uploadFailed'))
             }
           }}
         >
-          <Form.Item name="name" label="名称" extra="留空时将使用 ZIP 文件名">
-            <Input placeholder="例如：my-skill" />
+          <Form.Item name="name" label={t('common:name')} extra={t('namePlaceholderEmpty')}>
+            <Input placeholder={t('namePlaceholder')} />
           </Form.Item>
-          <Form.Item name="visibility" label="可见性">
+          <Form.Item name="visibility" label={t('common:visibility')}>
             <VisibilitySelect style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item name="file" label="ZIP 文件" valuePropName="file">
+          <Form.Item name="file" label={t('zipFile')} valuePropName="file">
             <Upload.Dragger maxCount={1} beforeUpload={() => false}>
               <InboxOutlined />
-              <p>选择技能包</p>
+              <p>{t('selectPackage')}</p>
             </Upload.Dragger>
           </Form.Item>
           <Button htmlType="submit" type="primary">
-            上传
+            {t('upload')}
           </Button>
         </Form>
       </Drawer>

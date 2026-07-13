@@ -1,0 +1,12 @@
+{
+  "title": "记忆",
+  "description": "审阅、修订和删除 Agent 用户记忆",
+  "searchPlaceholder": "搜索记忆、用户或主题",
+  "viewMemory": "查看记忆 {{id}}",
+  "editNamed": "编辑 {{id}}",
+  "deleteNamed": "删除 {{id}}",
+  "deleteConfirm": "删除这条记忆？",
+  "selectForDetails": "选择一条记忆查看详情",
+  "editMemory": "编辑记忆",
+  "updated": "记忆已更新"
+}

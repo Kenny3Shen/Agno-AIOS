@@ -67,8 +67,8 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
     () =>
       buildConversationItems(chat.sessions.data ?? []).map((item) => ({
         ...item,
-        label: item.label || t('shell.conversations.unnamed'),
-        title: item.title || t('shell.conversations.unnamed'),
+        label: item.label || t('shell:conversations.unnamed'),
+        title: item.title || t('shell:conversations.unnamed'),
       })),
     [chat.sessions.data, t]
   )
@@ -86,7 +86,7 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
   }
   const copySessionId = (sessionId: string) => {
     void copyToClipboard(sessionId).then((copied) =>
-      copied ? toast.success(t('shell.conversations.copied')) : toast.error(t('shell.conversations.copyFailed'))
+      copied ? toast.success(t('shell:conversations.copied')) : toast.error(t('shell:conversations.copyFailed'))
     )
   }
   const archive = async (sessionId: string) => {
@@ -94,9 +94,9 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
       await archiveSession(sessionId)
       if (chat.sessionId === sessionId) chat.newChat()
       await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
-      toast.success(t('shell.conversations.archived'))
+      toast.success(t('shell:conversations.archived'))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('shell.conversations.archiveFailed'))
+      toast.error(error instanceof Error ? error.message : t('shell:conversations.archiveFailed'))
     }
   }
   const confirmRename = async () => {
@@ -110,10 +110,10 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
           item.session_id === renameTarget.session_id ? { ...item, ...updated, title: updated.title ?? title.trim() } : item
         )
       )
-      toast.success(t('shell.conversations.renamed'))
+      toast.success(t('shell:conversations.renamed'))
       setRenameTarget(null)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('shell.conversations.renameFailed'))
+      toast.error(error instanceof Error ? error.message : t('shell:conversations.renameFailed'))
     } finally {
       setRenaming(false)
     }
@@ -126,39 +126,39 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
     <>
       <section
         className={`chat-task-panel chat-task-panel-${variant} ${expanded ? 'chat-task-panel-expanded' : 'chat-task-panel-collapsed'}`}
-        aria-label={t('shell.conversations.title')}
+        aria-label={t('shell:conversations.title')}
       >
         <button
           type="button"
           className="chat-task-panel-toggle"
           aria-expanded={expanded}
           aria-controls={contentId}
-          aria-label={t('shell.conversations.title')}
+          aria-label={t('shell:conversations.title')}
           onClick={() => onExpandedChange(!expanded)}
         >
           <span className="chat-task-panel-toggle-label">
             <HistoryOutlined />
-            {t('shell.conversations.title')}
+            {t('shell:conversations.title')}
           </span>
           {expanded ? <DownOutlined /> : <RightOutlined />}
         </button>
         {expanded ? (
           <div id={contentId} className="chat-task-panel-content">
             {chat.sessions.isLoading ? (
-              <div className="chat-task-panel-loading" aria-label={t('common.loading')}>
+              <div className="chat-task-panel-loading" aria-label={t('common:loading')}>
                 <Skeleton active title={false} paragraph={{ rows: 3 }} />
               </div>
             ) : chat.sessions.isError ? (
               <div className="chat-task-panel-state" role="alert">
-                <span>{t('shell.conversations.loadFailed')}</span>
+                <span>{t('shell:conversations.loadFailed')}</span>
                 <Button
                   size="small"
                   type="text"
                   icon={<ReloadOutlined />}
-                  aria-label={t('shell.conversations.retry')}
+                  aria-label={t('shell:conversations.retry')}
                   onClick={() => void chat.sessions.refetch()}
                 >
-                  {t('shell.conversations.retry')}
+                  {t('shell:conversations.retry')}
                 </Button>
               </div>
             ) : (
@@ -171,7 +171,7 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
                     label: (group) => (
                       <Flex gap="small">
                         <FieldTimeOutlined />
-                        {t(`shell.conversations.${group}`)}
+                        {t(`shell:conversations.${group}`)}
                       </Flex>
                     ),
                     collapsible: (group) => group !== 'today',
@@ -186,7 +186,7 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
                       {
                         key: 'rename',
                         icon: <EditOutlined />,
-                        label: t('shell.conversations.rename'),
+                        label: t('shell:conversations.rename'),
                         onClick: () => {
                           const session = (chat.sessions.data ?? []).find((value) => value.session_id === item.key)
                           if (session) startRename(session)
@@ -195,14 +195,14 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
                       {
                         key: 'copy-session-id',
                         icon: <CopyOutlined />,
-                        label: t('shell.conversations.copySessionId'),
+                        label: t('shell:conversations.copySessionId'),
                         onClick: () => copySessionId(item.key),
                       },
                       {
                         key: 'archive',
                         danger: true,
                         icon: <DeleteOutlined />,
-                        label: t('shell.conversations.archive'),
+                        label: t('shell:conversations.archive'),
                         onClick: () => void archive(item.key),
                       },
                     ],
@@ -211,7 +211,7 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
                 {!conversations.length ? (
                   <Empty
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description={t('shell.conversations.empty')}
+                    description={t('shell:conversations.empty')}
                     className="chat-task-panel-empty"
                   />
                 ) : null}
@@ -221,20 +221,20 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
         ) : null}
       </section>
       <Modal
-        title={t('shell.conversations.renameTitle')}
+        title={t('shell:conversations.renameTitle')}
         open={Boolean(renameTarget)}
         confirmLoading={renaming}
-        okText={t('common.save')}
+        okText={t('common:save')}
         onOk={() => void confirmRename()}
         onCancel={() => setRenameTarget(null)}
       >
         <Form form={renameForm} layout="vertical">
           <Form.Item
             name="title"
-            label={t('shell.conversations.sessionTitle')}
+            label={t('shell:conversations.sessionTitle')}
             rules={[
-              { required: true, whitespace: true, message: t('shell.conversations.titleRequired') },
-              { max: 120, message: t('shell.conversations.titleTooLong') },
+              { required: true, whitespace: true, message: t('shell:conversations.titleRequired') },
+              { max: 120, message: t('shell:conversations.titleTooLong') },
             ]}
           >
             <Input maxLength={120} onPressEnter={() => void confirmRename()} />

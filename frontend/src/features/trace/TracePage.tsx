@@ -27,7 +27,7 @@ import { roleOf } from '@/shared/auth/permissions'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { CopyableValue, MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
 import { FormattedContentCard } from '@/shared/ui/FormattedContentCard'
-import { formatDate } from '@/shared/lib/format'
+import { useFormatDate } from '@/shared/lib/format'
 import { traceQuery, tracesQuery, traceSessionsQuery } from './queries'
 import {
   buildTraceSearch,
@@ -40,6 +40,7 @@ import {
   type SessionArchiveFilter,
 } from './utils'
 import type { Span, SpanTreeNode, TraceFilters, TraceRun } from './types'
+import { useTranslation } from 'react-i18next'
 
 interface RunSpanTreeNode extends TreeDataNode {
   kind: 'span'
@@ -86,7 +87,7 @@ function spanNodes(nodes: SpanTreeNode[], traceId: string, runId: string): RunSp
   })
 }
 
-function runSpanTree(runs: TraceRun[], detailsByTraceId: Map<string, SpanTreeNode[]>): RunSpanTreeNode[] {
+function runSpanTree(runs: TraceRun[], detailsByTraceId: Map<string, SpanTreeNode[]>, formatDate: (value?: string | number | null) => string): RunSpanTreeNode[] {
   return runs.flatMap((run) => {
     const root = detailsByTraceId.get(run.traceId)?.[0]
     if (!root) return []
@@ -118,6 +119,8 @@ function runSpanTree(runs: TraceRun[], detailsByTraceId: Map<string, SpanTreeNod
 }
 
 export function TracePage() {
+  const { t } = useTranslation('trace')
+  const formatDate = useFormatDate()
   const router = useRouter()
   const screens = Grid.useBreakpoint()
   const vertical = screens.lg === false
@@ -193,7 +196,7 @@ export function TracePage() {
     () => new Map(detailTraceIds.map((traceId, index) => [traceId, detailQueries[index]?.data?.tree ?? []])),
     [detailQueries, detailTraceIds]
   )
-  const runTreeData = useMemo(() => runSpanTree(visibleRuns, treeData), [treeData, visibleRuns])
+  const runTreeData = useMemo(() => runSpanTree(visibleRuns, treeData, formatDate), [formatDate, treeData, visibleRuns])
   const activeDetail = detailsByTraceId.get(activeTraceId)
   const selectedSpan = activeDetail?.spans.find((span) => span.span_id === selectedSpanId) ?? null
 
@@ -302,15 +305,15 @@ export function TracePage() {
   return (
     <main className="page trace-page">
       <PageHeader
-        title="Trace Observability"
-        description="从 Session、Run 到 Span 的端到端观测与调试"
+        title={t('title')}
+        description={t('description')}
         actions={
           <Button
             icon={<ReloadOutlined />}
             loading={chatSessions.isFetching || summaries.isFetching || selectedTraceList.isFetching}
             onClick={refresh}
           >
-            刷新
+            {t('common:refresh')}
           </Button>
         }
       />
@@ -339,9 +342,9 @@ export function TracePage() {
               value={archiveFilter}
               onChange={setArchiveFilter}
               options={[
-                { value: 'all', label: '全部 Session' },
-                { value: 'active', label: '活跃 Session' },
-                { value: 'archived', label: '已归档 Session' },
+                { value: 'all', label: t('allSessions') },
+                { value: 'active', label: t('activeSessions') },
+                { value: 'archived', label: t('archivedSessions') },
               ]}
             />
             <RangePicker
@@ -351,13 +354,13 @@ export function TracePage() {
               onChange={(value) => setTimeRange(value as [Dayjs, Dayjs] | null)}
             />
             <Button type="primary" icon={<SearchOutlined />} onClick={apply}>
-              查询
+              {t('common:query')}
             </Button>
-            <Button onClick={reset}>重置</Button>
+            <Button onClick={reset}>{t('common:reset')}</Button>
           </div>
           {!isAdmin && (
             <Typography.Text className="trace-filter-hint" type="secondary">
-              仅可查看自己的 Trace
+              {t('ownOnly')}
             </Typography.Text>
           )}
         </div>
@@ -451,6 +454,7 @@ export function TracePage() {
 }
 
 function SpanDetailTabs({ span }: { span: Span }) {
+  const formatDate = useFormatDate()
   const metadata = Object.fromEntries(
     Object.entries({ metadata: span.parsed?.metadata, attributes: span.attributes, events: span.events }).filter(
       ([, value]) => value != null && (!Array.isArray(value) || value.length > 0)

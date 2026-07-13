@@ -1,3 +1,4 @@
+import '@/shared/i18n'
 import '@testing-library/dom'
 import { afterAll, afterEach, beforeAll } from 'vitest'
 import { cleanup } from '@testing-library/react'

@@ -1,165 +1,104 @@
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 
-const resources = {
+import commonZh from './namespaces/common.zh-CN.json'
+import commonEn from './namespaces/common.en-US.json'
+import authZh from './namespaces/auth.zh-CN.json'
+import authEn from './namespaces/auth.en-US.json'
+import shellZh from './namespaces/shell.zh-CN.json'
+import shellEn from './namespaces/shell.en-US.json'
+import chatZh from './namespaces/chat.zh-CN.json'
+import chatEn from './namespaces/chat.en-US.json'
+import dashboardZh from './namespaces/dashboard.zh-CN.json'
+import dashboardEn from './namespaces/dashboard.en-US.json'
+import knowledgeZh from './namespaces/knowledge.zh-CN.json'
+import knowledgeEn from './namespaces/knowledge.en-US.json'
+import settingsZh from './namespaces/settings.zh-CN.json'
+import settingsEn from './namespaces/settings.en-US.json'
+import mcpZh from './namespaces/mcp.zh-CN.json'
+import mcpEn from './namespaces/mcp.en-US.json'
+import approvalsZh from './namespaces/approvals.zh-CN.json'
+import approvalsEn from './namespaces/approvals.en-US.json'
+import auditZh from './namespaces/audit.zh-CN.json'
+import auditEn from './namespaces/audit.en-US.json'
+import cveZh from './namespaces/cve.zh-CN.json'
+import cveEn from './namespaces/cve.en-US.json'
+import collectZh from './namespaces/collect.zh-CN.json'
+import collectEn from './namespaces/collect.en-US.json'
+import memoryZh from './namespaces/memory.zh-CN.json'
+import memoryEn from './namespaces/memory.en-US.json'
+import skillsZh from './namespaces/skills.zh-CN.json'
+import skillsEn from './namespaces/skills.en-US.json'
+import traceZh from './namespaces/trace.zh-CN.json'
+import traceEn from './namespaces/trace.en-US.json'
+import evaluationsZh from './namespaces/evaluations.zh-CN.json'
+import evaluationsEn from './namespaces/evaluations.en-US.json'
+import workflowZh from './namespaces/workflow.zh-CN.json'
+import workflowEn from './namespaces/workflow.en-US.json'
+
+export const defaultNS = 'common' as const
+export const supportedLngs = ['zh-CN', 'en-US'] as const
+export type AppLocale = (typeof supportedLngs)[number]
+
+export const resources = {
   'zh-CN': {
-    translation: {
-      common: {
-        refresh: '刷新',
-        save: '保存',
-        cancel: '取消',
-        delete: '删除',
-        search: '搜索',
-        loading: '加载中',
-        empty: '暂无数据',
-        actions: '操作',
-        status: '状态',
-        details: '详情',
-        create: '新建',
-        copy: '复制',
-      },
-      auth: {
-        title: '登录 T.A.I.S',
-        subtitle: 'Trinity AI Security 工作台',
-        email: '邮箱',
-        password: '密码',
-        signIn: '登录',
-        failed: '登录失败',
-      },
-      shell: {
-        home: '工作台',
-        dashboard: '运行概览',
-        chat: '智能体',
-        workflow: '工作流',
-        skills: 'Skills',
-        mcp: 'MCP',
-        knowledge: '知识库',
-        trace: '观测',
-        memory: '记忆',
-        evaluations: '评估',
-        approvals: '审批',
-        cve: 'CVE',
-        collect: '采集',
-        audit: '审计',
-        settings: '设置',
-        logout: '退出登录',
-        theme: '切换主题',
-        language: '切换语言',
-        openDashboard: '返回运行概览',
-        openNavigation: '打开导航',
-        toggleNavigation: '折叠或展开导航',
-        groups: {
-          workspace: '工作台',
-          capabilities: '能力与数据',
-          governance: '运行治理',
-          intelligence: '安全情报',
-        },
-        conversations: {
-          title: '最近对话',
-          today: '今天',
-          yesterday: '昨天',
-          earlier: '更早',
-          empty: '暂无对话',
-          loadFailed: '无法加载最近对话',
-          retry: '重试',
-          unnamed: '未命名会话',
-          rename: '重命名',
-          copySessionId: '复制 Session ID',
-          archive: '归档',
-          copied: 'Session ID 已复制',
-          copyFailed: 'Session ID 复制失败',
-          archived: '会话已归档',
-          archiveFailed: '归档会话失败',
-          renameTitle: '重命名会话',
-          sessionTitle: '会话标题',
-          titleRequired: '请输入会话标题',
-          titleTooLong: '标题不能超过 120 个字符',
-          renamed: '会话已重命名',
-          renameFailed: '重命名失败',
-        },
-      },
-    },
+    common: commonZh,
+    auth: authZh,
+    shell: shellZh,
+    chat: chatZh,
+    dashboard: dashboardZh,
+    knowledge: knowledgeZh,
+    settings: settingsZh,
+    mcp: mcpZh,
+    approvals: approvalsZh,
+    audit: auditZh,
+    cve: cveZh,
+    collect: collectZh,
+    memory: memoryZh,
+    skills: skillsZh,
+    trace: traceZh,
+    evaluations: evaluationsZh,
+    workflow: workflowZh,
   },
   'en-US': {
-    translation: {
-      common: {
-        refresh: 'Refresh',
-        save: 'Save',
-        cancel: 'Cancel',
-        delete: 'Delete',
-        search: 'Search',
-        loading: 'Loading',
-        empty: 'No data',
-        actions: 'Actions',
-        status: 'Status',
-        details: 'Details',
-        create: 'Create',
-        copy: 'Copy',
-      },
-      auth: {
-        title: 'Sign in to T.A.I.S',
-        subtitle: 'Trinity AI Security workspace',
-        email: 'Email',
-        password: 'Password',
-        signIn: 'Sign in',
-        failed: 'Sign in failed',
-      },
-      shell: {
-        home: 'Workspace',
-        dashboard: 'Overview',
-        chat: 'Agent',
-        workflow: 'Workflow',
-        skills: 'Skills',
-        mcp: 'MCP',
-        knowledge: 'Knowledge',
-        trace: 'Trace',
-        memory: 'Memory',
-        evaluations: 'Evaluations',
-        approvals: 'Approvals',
-        cve: 'CVE',
-        collect: 'Collect',
-        audit: 'Audit',
-        settings: 'Settings',
-        logout: 'Sign out',
-        theme: 'Toggle theme',
-        language: 'Change language',
-        openDashboard: 'Open overview',
-        openNavigation: 'Open navigation',
-        toggleNavigation: 'Collapse or expand navigation',
-        groups: {
-          workspace: 'Workspace',
-          capabilities: 'Capabilities & data',
-          governance: 'Operations & governance',
-          intelligence: 'Security intelligence',
-        },
-        conversations: {
-          title: 'Recent conversations',
-          today: 'Today',
-          yesterday: 'Yesterday',
-          earlier: 'Earlier',
-          empty: 'No conversations yet',
-          loadFailed: 'Unable to load recent conversations',
-          retry: 'Retry',
-          unnamed: 'Untitled conversation',
-          rename: 'Rename',
-          copySessionId: 'Copy Session ID',
-          archive: 'Archive',
-          copied: 'Session ID copied',
-          copyFailed: 'Unable to copy Session ID',
-          archived: 'Conversation archived',
-          archiveFailed: 'Unable to archive conversation',
-          renameTitle: 'Rename conversation',
-          sessionTitle: 'Conversation title',
-          titleRequired: 'Enter a conversation title',
-          titleTooLong: 'The title cannot exceed 120 characters',
-          renamed: 'Conversation renamed',
-          renameFailed: 'Unable to rename conversation',
-        },
-      },
-    },
+    common: commonEn,
+    auth: authEn,
+    shell: shellEn,
+    chat: chatEn,
+    dashboard: dashboardEn,
+    knowledge: knowledgeEn,
+    settings: settingsEn,
+    mcp: mcpEn,
+    approvals: approvalsEn,
+    audit: auditEn,
+    cve: cveEn,
+    collect: collectEn,
+    memory: memoryEn,
+    skills: skillsEn,
+    trace: traceEn,
+    evaluations: evaluationsEn,
+    workflow: workflowEn,
   },
 } as const
 
-void i18n.use(initReactI18next).init({ resources, lng: 'zh-CN', fallbackLng: 'en-US', interpolation: { escapeValue: false } })
+export type AppResources = (typeof resources)['zh-CN']
+export type AppNamespace = keyof AppResources
+
+const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('locale') : null
+const initialLng: AppLocale = stored === 'en-US' ? 'en-US' : 'zh-CN'
+
+void i18n.use(initReactI18next).init({
+  resources,
+  lng: initialLng,
+  fallbackLng: 'en-US',
+  defaultNS,
+  ns: Object.keys(resources['zh-CN']),
+  interpolation: { escapeValue: false },
+  returnNull: false,
+})
+
+if (typeof document !== 'undefined') {
+  document.documentElement.lang = initialLng
+}
 
 export default i18n

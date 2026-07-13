@@ -1,0 +1,53 @@
+{
+  "prompts": {
+    "cve": {
+      "label": "分析最新 CVE 对现有资产的影响",
+      "description": "关联漏洞情报和资产上下文"
+    },
+    "exposure": {
+      "label": "生成外部暴露面排查计划",
+      "description": "建立优先级明确的调查步骤"
+    },
+    "runbook": {
+      "label": "为当前告警编写处置 Runbook",
+      "description": "输出可执行的响应流程"
+    }
+  },
+  "status": {
+    "streaming": "分析中",
+    "completed": "已完成",
+    "cancelled": "已停止",
+    "failed": "运行失败"
+  },
+  "rawToolInput": "原始工具输入",
+  "rawToolOutput": "原始工具输出",
+  "noModel": "未选择模型",
+  "model": "模型",
+  "reasoningEffort": "推理强度",
+  "modelAndReasoning": "模型与推理强度",
+  "regenerate": "重新生成",
+  "copyRunId": "复制 Run ID",
+  "runIdCopied": "Run ID 已复制",
+  "runIdCopyFailed": "Run ID 复制失败",
+  "rawReasoning": "原始 reasoning",
+  "sources": "参考来源",
+  "duration": "运行耗时",
+  "securityAnalysis": "安全分析",
+  "agentRunning": "Agent 正在运行",
+  "sessionReady": "会话已就绪",
+  "newAnalysis": "新建分析",
+  "continueAnalysis": "继续分析",
+  "workspace": "安全调查工作区",
+  "placeholderReady": "描述你要调查的问题…",
+  "placeholderNoModel": "请先在设置中配置可用模型",
+  "attachmentsComing": "附件功能即将推出",
+  "stopGenerating": "停止生成",
+  "sendMessage": "发送消息",
+  "jumpToLatest": "返回最新消息",
+  "welcomeKicker": "T.A.I.S / SECURITY ANALYSIS",
+  "welcomeTitle": "从哪里开始调查？",
+  "thoughtProcess": "思考与执行过程",
+  "establishingRun": "正在建立分析运行…",
+  "welcomeDescription": "连接漏洞情报、资产上下文和运行记录，发起一项可追溯的安全分析。",
+  "current": "当前"
+}

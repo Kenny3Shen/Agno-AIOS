@@ -1,0 +1,9 @@
+{
+  "title": "Evaluations",
+  "description": "Run evaluation suites, inspect failures, and quality trends",
+  "allSuites": "All suites",
+  "suiteSubmitted": "Evaluation suite submitted",
+  "evalSubmitted": "Evaluation submitted",
+  "replaySubmitted": "Replay submitted",
+  "runSuite": "Run suite"
+}

@@ -131,7 +131,7 @@ const notificationKind = (notification: Notification) => {
 }
 
 export function AppFrame({ children }: { children: ReactNode }) {
-  const { t } = useTranslation()
+  const { t } = useTranslation(['shell', 'common'])
   const router = useRouter()
   const queryClient = useQueryClient()
   const preferences = usePreferences()
@@ -164,12 +164,12 @@ export function AppFrame({ children }: { children: ReactNode }) {
     () =>
       filterNavigationGroups(navigationGroups, (scope) => hasScope(userQuery.data, scope)).map((group) => ({
         key: navigationGroupMenuKey(group.key),
-        label: t(`shell.groups.${group.labelKey}`),
+        label: t(`shell:groups.${group.labelKey}`),
         children: group.items.map((item) => ({
           key: item.key,
           icon: item.icon,
-          label: t(`shell.${item.labelKey}`),
-          title: t(`shell.${item.labelKey}`),
+          label: t(`shell:${item.labelKey}`),
+          title: t(`shell:${item.labelKey}`),
         })),
       })),
     [t, userQuery.data]
@@ -180,8 +180,8 @@ export function AppFrame({ children }: { children: ReactNode }) {
         group.items.map((item) => ({
           key: item.key,
           icon: item.icon,
-          label: t(`shell.${item.labelKey}`),
-          title: t(`shell.${item.labelKey}`),
+          label: t(`shell:${item.labelKey}`),
+          title: t(`shell:${item.labelKey}`),
         }))
       ),
     [t, userQuery.data]
@@ -193,7 +193,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
         .map((item) => ({
           key: item.key,
           icon: item.icon,
-          label: t(`shell.${item.labelKey}`),
+          label: t(`shell:${item.labelKey}`),
         })),
     [t, userQuery.data]
   )
@@ -271,7 +271,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
   return (
     <Layout className="app-shell">
       <Sider width={264} collapsedWidth={76} collapsed={mobile ? true : collapsed} className="shell-sider" trigger={null}>
-        <button type="button" className="shell-brand" onClick={navigateToDashboard} aria-label={t('shell.openDashboard')}>
+        <button type="button" className="shell-brand" onClick={navigateToDashboard} aria-label={t('shell:openDashboard')}>
           <span className="brand-mark">T</span>
           <div className="shell-brand-copy">
             <strong>T.A.I.S</strong>
@@ -309,13 +309,13 @@ export function AppFrame({ children }: { children: ReactNode }) {
       <Layout>
         <Header className="shell-header">
           <Space>
-            {mobile && <Button type="text" icon={<MenuOutlined />} onClick={openMobileNavigation} aria-label={t('shell.openNavigation')} />}
+            {mobile && <Button type="text" icon={<MenuOutlined />} onClick={openMobileNavigation} aria-label={t('shell:openNavigation')} />}
             {!mobile && (
               <Button
                 type="text"
                 icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
                 onClick={() => setCollapsed((value) => !value)}
-                aria-label={t('shell.toggleNavigation')}
+                aria-label={t('shell:toggleNavigation')}
               />
             )}
           </Space>
@@ -329,7 +329,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
                 onOpenChange={setNotificationOpen}
                 classNames={{ root: 'notification-popover' }}
                 content={
-                  <section className="notification-center" aria-label="Notifications">
+                  <section className="notification-center" aria-label={t('shell:notifications')}>
                     <header className="notification-center-header">
                       <div>
                         <Typography.Text strong>Notifications</Typography.Text>
@@ -376,16 +376,16 @@ export function AppFrame({ children }: { children: ReactNode }) {
                           )
                         })
                       ) : (
-                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无通知" className="notification-center-empty" />
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('shell:noNotifications')} className="notification-center-empty" />
                       )}
                     </div>
                   </section>
                 }
               >
-                <Tooltip title="通知">
+                <Tooltip title={t('shell:notifications')}>
                   <Button
                     type="text"
-                    aria-label="Notifications"
+                    aria-label={t('shell:notifications')}
                     icon={
                       <Badge count={notificationsQuery.data?.unread_count ?? 0} size="small">
                         <BellOutlined />
@@ -395,10 +395,10 @@ export function AppFrame({ children }: { children: ReactNode }) {
                 </Tooltip>
               </Popover>
             )}
-            <Tooltip title={t('shell.language')}>
+            <Tooltip title={t('shell:language')}>
               <Button type="text" icon={<TranslationOutlined />} onClick={preferences.toggleLocale} />
             </Tooltip>
-            <Tooltip title={t('shell.theme')}>
+            <Tooltip title={t('shell:theme')}>
               <Button type="text" icon={preferences.dark ? <SunOutlined /> : <MoonOutlined />} onClick={preferences.toggleTheme} />
             </Tooltip>
             <Tooltip title="GitHub">
@@ -410,7 +410,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
                   {
                     key: 'logout',
                     icon: <SafetyCertificateOutlined />,
-                    label: t('shell.logout'),
+                    label: t('shell:logout'),
                     onClick: async () => {
                       await logout()
                       queryClient.clear()

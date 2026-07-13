@@ -1,13 +1,22 @@
+import { useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
+
 export const compactId = (value?: string | null) => {
   const text = value?.trim() ?? ''
   if (!text) return '-'
   return text.length <= 18 ? text : `${text.slice(0, 8)}...${text.slice(-4)}`
 }
 
-export const formatDate = (value?: string | number | null, locale: unknown = 'zh-CN') => {
+export const formatDate = (value?: string | number | null, locale: string = 'zh-CN') => {
   if (value === undefined || value === null || value === '') return '-'
   const date = new Date(typeof value === 'number' && value < 10_000_000_000 ? value * 1000 : value)
-  return Number.isNaN(date.valueOf()) ? String(value) : date.toLocaleString(typeof locale === 'string' ? locale : 'zh-CN')
+  return Number.isNaN(date.valueOf()) ? String(value) : date.toLocaleString(locale)
+}
+
+/** Locale-aware date formatter bound to the active i18n language. */
+export const useFormatDate = () => {
+  const { i18n } = useTranslation()
+  return useCallback((value?: string | number | null) => formatDate(value, i18n.language || 'zh-CN'), [i18n.language])
 }
 
 export const asRecord = (value: unknown): Record<string, unknown> =>

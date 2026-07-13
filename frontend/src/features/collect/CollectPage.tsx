@@ -5,14 +5,16 @@ import XMarkdown from '@ant-design/x-markdown'
 import { CloudDownloadOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { parseUrl } from './api'
+import { useTranslation } from 'react-i18next'
 
 export function CollectPage() {
+  const { t } = useTranslation('collect')
   const [url, setUrl] = useState('')
   const mutation = useMutation({ mutationFn: () => parseUrl(url) })
   const markdown = Array.isArray(mutation.data?.markdown) ? mutation.data.markdown.join('\n\n') : (mutation.data?.markdown ?? '')
   return (
     <main className="page">
-      <PageHeader title="Web Collect" description="将网页内容转换为可审阅的 Markdown 资产" />
+      <PageHeader title={t('title')} description={t('description')} />
       <Card className="workbench-card collect-card">
         <Space.Compact className="collect-toolbar">
           <Input
@@ -28,7 +30,7 @@ export function CollectPage() {
             loading={mutation.isPending}
             onClick={() => mutation.mutate()}
           >
-            采集
+            {t('action')}
           </Button>
         </Space.Compact>
         <Splitter className="workbench-splitter collect-splitter" orientation="horizontal">

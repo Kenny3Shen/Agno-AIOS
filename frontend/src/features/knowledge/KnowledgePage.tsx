@@ -13,6 +13,7 @@ import { MetadataPanel } from './components/MetadataPanel'
 import { DocumentDrawer } from './components/DocumentDrawer'
 import { UpdateDocumentDrawer } from './components/UpdateDocumentDrawer'
 import { effectiveKnowledgeIngestDefaults, resolveRetrievalContent, SEARCH_TYPE_OPTIONS } from './utils'
+import { useTranslation } from 'react-i18next'
 
 const renderModeOptions: Array<{ value: RetrievalRenderMode; label: string }> = [
   { value: 'auto', label: 'Auto' },
@@ -75,6 +76,7 @@ function RetrievalResultCard({ result }: { result: SearchResult }) {
 }
 
 export function KnowledgePage() {
+  const { t } = useTranslation('knowledge')
   const { message } = App.useApp()
   const screens = Grid.useBreakpoint()
   const vertical = screens.md === false
@@ -111,7 +113,7 @@ export function KnowledgePage() {
     onSuccess: async () => {
       setSelectedId('')
       await refresh()
-      message.success('文档已删除')
+      message.success(t('deleted'))
     },
     onError: (error) => message.error(error.message),
   })
@@ -128,16 +130,15 @@ export function KnowledgePage() {
 
   return (
     <main className="page knowledge-page">
-      <PageHeader
-        title="Knowledge"
-        description="管理 Agent 检索知识、入库状态和资源可见性"
+      <PageHeader title={t('title')}
+        description={t('description')}
         actions={
           <>
             <Button icon={<ReloadOutlined />} onClick={() => void refresh()}>
-              刷新
+              {t('common:refresh')}
             </Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-              添加文档
+              {t('addDocShort')}
             </Button>
           </>
         }
@@ -192,7 +193,7 @@ export function KnowledgePage() {
                     initialValues={{ limit: 5, search_type: ingestDefaults.search_type }}
                   >
                     <Form.Item name="query" rules={[{ required: true }]} style={{ flex: 1 }}>
-                      <Input prefix={<SearchOutlined />} placeholder="测试检索查询" />
+                      <Input prefix={<SearchOutlined />} placeholder={t('searchPlaceholder')} />
                     </Form.Item>
                     <Form.Item name="search_type" label="Search type">
                       <Select options={searchTypeOptions} style={{ width: 120 }} />
@@ -201,7 +202,7 @@ export function KnowledgePage() {
                       <InputNumber min={1} max={20} />
                     </Form.Item>
                     <Button htmlType="submit" type="primary">
-                      检索
+                      {t('retrieve')}
                     </Button>
                   </Form>
                 </Space>

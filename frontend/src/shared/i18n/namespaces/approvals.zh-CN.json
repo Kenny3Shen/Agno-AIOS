@@ -1,0 +1,18 @@
+{
+  "title": "审批",
+  "description": "处理暂停的 Agent 操作、人工确认与资源上传请求",
+  "resolved": "审批已{{status}}",
+  "allStatuses": "全部状态",
+  "viewApproval": "查看审批 {{id}}",
+  "approved": "已批准",
+  "rejected": "已拒绝",
+  "noRejectReason": "未提供拒绝原因",
+  "zipPreview": "ZIP 内容预览",
+  "rejectApproval": "拒绝审批",
+  "confirmReject": "确认拒绝",
+  "rejectReasonPlaceholder": "请说明拒绝原因",
+  "submittedAt": "Submitted at",
+  "resolvedAt": "Resolved at",
+  "zipPreviewFailed": "无法加载 ZIP 预览。",
+  "rejectReasonHint": "拒绝原因会发送给申请用户。"
+}

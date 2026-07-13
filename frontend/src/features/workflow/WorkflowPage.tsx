@@ -4,15 +4,17 @@ import { PageHeader } from '@/shared/ui/PageHeader'
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
 import { useWorkflow } from './useWorkflow'
 import { buildWorkflowCode } from './utils'
+import { useTranslation } from 'react-i18next'
 
 export function WorkflowPage() {
+  const { t } = useTranslation('workflow')
   const workflow = useWorkflow()
   const step = workflow.selected
   return (
     <main className="page">
       <PageHeader
-        title="Workflow Builder"
-        description="组合 Agent、Team 和 Workflow 步骤并生成 Agno 执行代码"
+        title={t('title')}
+        description={t('description')}
         actions={
           <Space.Compact>
             <Button icon={<PlusOutlined />} onClick={() => workflow.add('agent')}>
