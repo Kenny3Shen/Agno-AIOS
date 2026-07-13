@@ -56,10 +56,19 @@ describe('ApprovalsPage', () => {
 
     renderWithQuery(<ApprovalsPage />)
 
-    expect(await screen.findByText('Skill 上传')).toBeTruthy()
-    await userEvent.click(screen.getByText('Skill 上传'))
+    expect(await screen.findByText('web-search')).toBeTruthy()
+    expect(screen.getAllByText('Submitter').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Approver').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Submitted at').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Resolved at').length).toBeGreaterThan(0)
+    await userEvent.click(screen.getByText('web-search'))
+    expect(screen.getByText('Decision')).toBeTruthy()
+    expect(screen.getByText('People')).toBeTruthy()
+    expect(screen.getByText('Request data')).toBeTruthy()
+    expect(screen.getAllByText('Not assigned').length).toBeGreaterThan(0)
     expect(screen.getByText('member-1')).toBeTruthy()
     expect(screen.getAllByText('member@example.com').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('member@example.com').some((element) => element.classList.contains('metadata-copyable'))).toBe(true)
     expect(screen.getByText(/"name": "web-search"/)).toBeTruthy()
     expect((await screen.findAllByText('SKILL.md')).length).toBeGreaterThan(0)
     await userEvent.click(screen.getAllByText('SKILL.md').at(-1)!)
@@ -69,7 +78,7 @@ describe('ApprovalsPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /批准/ }))
     expect(await screen.findByText('审批已approved')).toBeTruthy()
     expect(screen.getByText('admin-1')).toBeTruthy()
-    expect(screen.getByText('admin@example.com')).toBeTruthy()
+    expect(screen.getAllByText('admin@example.com').length).toBeGreaterThan(0)
   })
 
   it('lets a regular user view only their submitted approval without resolution controls', async () => {
@@ -83,10 +92,11 @@ describe('ApprovalsPage', () => {
           approvals: [
             {
               id: 'upload-1',
-              status: 'approved',
+              status: 'rejected',
               resource_type: 'mcp',
               submitted_by: { id: 'member-1', email: 'member@example.com' },
               resolved_by: { id: 'admin-1', email: 'admin@example.com' },
+              rejection_reason: 'The server manifest is incomplete.',
               payload: { name: 'approved-server' },
             },
           ],
@@ -96,8 +106,10 @@ describe('ApprovalsPage', () => {
 
     renderWithQuery(<ApprovalsPage />)
 
-    await userEvent.click(await screen.findByText('MCP Server 上传'))
-    expect(screen.getByText('已批准')).toBeTruthy()
+    await userEvent.click(await screen.findByText('approved-server'))
+    expect(screen.getByText('已拒绝')).toBeTruthy()
+    expect(screen.getAllByText('The server manifest is incomplete.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('admin@example.com').length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /批准/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /拒绝/ })).toBeNull()
   })

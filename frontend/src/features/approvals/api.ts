@@ -10,11 +10,18 @@ export interface Approval {
   id: string
   status: string
   source_type?: string
+  source_name?: string
   approval_type?: string
+  pause_type?: string
   tool_name?: string
   tool_args?: Record<string, unknown>
   run_id?: string
   session_id?: string
+  agent_id?: string
+  team_id?: string
+  workflow_id?: string
+  user_id?: string
+  schedule_id?: string
   created_at?: string
   updated_at?: string
   resource_type?: 'skill' | 'mcp' | string

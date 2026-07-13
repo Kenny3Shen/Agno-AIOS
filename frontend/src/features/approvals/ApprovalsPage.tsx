@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Card, Collapse, Descriptions, Drawer, Input, Modal, Segmented, Select, Space, Table, Tag, Typography } from 'antd'
+import { Alert, App, Button, Card, Collapse, Descriptions, Drawer, Input, Modal, Segmented, Select, Space, Table, Tag, Typography, type DescriptionsProps } from 'antd'
 import { CheckOutlined, CloseOutlined } from '@ant-design/icons'
 import XMarkdown from '@ant-design/x-markdown'
 import { currentUserQuery } from '@/features/auth'
 import { hasScope } from '@/shared/auth/permissions'
 import { PageHeader } from '@/shared/ui/PageHeader'
+import { CopyableValue } from '@/shared/ui/MetadataDescriptions'
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
 import {
   getApprovals,
@@ -17,26 +18,100 @@ import {
 } from './api'
 import { compactId, formatDate } from '@/shared/lib/format'
 
+const uploadPayload = (approval: Approval) => approval.payload ?? {}
+
 const approvalTitle = (approval: Approval) => {
-  if (approval.resource_type === 'skill') return 'Skill 上传'
-  if (approval.resource_type === 'mcp') return 'MCP Server 上传'
-  return approval.tool_name ?? '-'
+  const name = uploadPayload(approval).name
+  if (typeof name === 'string' && name.trim()) return name
+  if (approval.resource_type === 'skill') return 'Skill upload'
+  if (approval.resource_type === 'mcp') return 'MCP server upload'
+  return approval.tool_name ?? approval.source_name ?? '-'
 }
 
-const approvalType = (approval: Approval) => approval.resource_type ? `${approval.resource_type} upload` : approval.approval_type ?? '-'
+const approvalType = (approval: Approval) => {
+  if (approval.resource_type === 'skill') return 'Skill upload'
+  if (approval.resource_type === 'mcp') return 'MCP upload'
+  return approval.approval_type ?? approval.source_type ?? '-'
+}
 
 const approvalPayload = (approval: Approval) => approval.payload ?? approval.tool_args
 
-const actorEmail = (actor: Approval['submitted_by'] | Approval['resolved_by'], legacyEmail?: string) =>
-  typeof actor === 'object' && actor !== null ? actor.email || '-' : legacyEmail || '-'
+interface ApprovalIdentity {
+  email: string
+  id: string
+}
 
-const actorId = (actor: Approval['submitted_by'] | Approval['resolved_by']) =>
-  typeof actor === 'object' && actor !== null ? actor.id || '-' : actor || '-'
+const actorIdentity = (
+  actor: Approval['submitted_by'] | Approval['resolved_by'],
+  legacyEmail?: string,
+  fallbackId?: string
+): ApprovalIdentity => {
+  if (typeof actor === 'object' && actor !== null) return { email: actor.email || legacyEmail || '', id: actor.id || fallbackId || '' }
+  if (typeof actor === 'string') return { email: legacyEmail || (actor.includes('@') ? actor : ''), id: actor || fallbackId || '' }
+  return { email: legacyEmail || '', id: fallbackId || '' }
+}
+
+const submitter = (approval: Approval) => actorIdentity(approval.submitted_by, approval.submitted_by_email, approval.user_id)
+const approver = (approval: Approval) => actorIdentity(approval.resolved_by, approval.resolved_by_email)
 
 const statusLabel = (status: string) => status ? `${status.slice(0, 1).toUpperCase()}${status.slice(1)}` : '-'
 
 const rejectionReason = (approval: Approval) =>
   approval.rejection_reason ?? (typeof approval.resolution_data?.rejection_reason === 'string' ? approval.resolution_data.rejection_reason : '')
+
+const optionalCopyable = (value?: string | null, empty = '-') => (value?.trim() ? <CopyableValue value={value} /> : empty)
+
+function IdentityCell({ identity }: { identity: ApprovalIdentity }) {
+  return <Typography.Text ellipsis={{ tooltip: identity.email || undefined }}>{identity.email || '—'}</Typography.Text>
+}
+
+const statusTag = (status: string) => (
+  <Tag color={status === 'pending' ? 'warning' : status === 'approved' ? 'success' : 'error'}>{statusLabel(status)}</Tag>
+)
+
+function detailItems(approval: Approval): { decision: DescriptionsProps['items']; people: DescriptionsProps['items']; request: DescriptionsProps['items'] } {
+  const submitted = submitter(approval)
+  const resolved = approver(approval)
+  const payload = uploadPayload(approval)
+  const isUpload = isSubmissionApproval(approval)
+  const request: DescriptionsProps['items'] = [
+    { key: 'approval-id', label: 'Approval ID', children: <CopyableValue value={approval.id} /> },
+    { key: 'request-name', label: 'Request', children: approvalTitle(approval) },
+    { key: 'request-type', label: 'Type', children: approvalType(approval) },
+  ]
+  if (isUpload) {
+    request.push(
+      { key: 'resource-type', label: 'Resource', children: approval.resource_type?.toUpperCase() || '-' },
+      { key: 'visibility', label: 'Visibility', children: typeof payload.visibility === 'string' ? payload.visibility : '-' },
+      { key: 'archive', label: 'Package', children: typeof payload.filename === 'string' ? payload.filename : '-' }
+    )
+  } else {
+    request.push(
+      { key: 'source', label: 'Source', children: approval.source_name ?? approval.source_type ?? '-' },
+      { key: 'run', label: 'Run ID', children: optionalCopyable(approval.run_id) },
+      { key: 'session', label: 'Session ID', children: optionalCopyable(approval.session_id) },
+      { key: 'agent', label: 'Agent ID', children: optionalCopyable(approval.agent_id) },
+      { key: 'team', label: 'Team ID', children: optionalCopyable(approval.team_id) },
+      { key: 'workflow', label: 'Workflow ID', children: optionalCopyable(approval.workflow_id) },
+      { key: 'schedule', label: 'Schedule ID', children: optionalCopyable(approval.schedule_id) }
+    )
+  }
+  return {
+    decision: [
+      { key: 'status', label: 'Status', children: statusTag(approval.status) },
+      { key: 'submitted-at', label: 'Submitted at', children: formatDate(approval.created_at) },
+      { key: 'resolved-at', label: 'Resolved at', children: formatDate(approval.resolved_at) },
+      ...(approval.status === 'rejected' ? [{ key: 'rejection-reason', label: 'Rejection reason', children: rejectionReason(approval) || '-' }] : []),
+    ],
+    people: [
+      { key: 'submitter-email', label: 'Submitter email', children: optionalCopyable(submitted.email) },
+      { key: 'submitter-id', label: 'Submitter ID', children: optionalCopyable(submitted.id) },
+      { key: 'approver-email', label: 'Approver email', children: optionalCopyable(resolved.email, 'Not assigned') },
+      { key: 'approver-id', label: 'Approver ID', children: optionalCopyable(resolved.id, 'Not assigned') },
+    ],
+    request,
+  }
+}
 
 const locationSearch = () => {
   const hashQueryIndex = window.location.hash.indexOf('?')
@@ -138,6 +213,7 @@ export function ApprovalsPage() {
           rowKey="id"
           dataSource={query.data ?? []}
           loading={query.isLoading}
+          scroll={{ x: 1290 }}
           rowClassName={(row) => (row.id === selected?.id ? 'selected-table-row' : '')}
           onRow={(row) => ({
             tabIndex: 0,
@@ -152,21 +228,31 @@ export function ApprovalsPage() {
             },
           })}
           columns={[
-            { title: 'ID', dataIndex: 'id', render: compactId },
-            { title: 'Request', render: (_, row) => approvalTitle(row) },
-            { title: 'Type', render: (_, row) => approvalType(row) },
+            {
+              title: 'Request',
+              width: 240,
+              render: (_, row) => (
+                <Space orientation="vertical" size={0}>
+                  <Typography.Text strong ellipsis>{approvalTitle(row)}</Typography.Text>
+                  <Typography.Text type="secondary" ellipsis>{compactId(row.id)}</Typography.Text>
+                </Space>
+              ),
+            },
+            { title: 'Type', width: 150, render: (_, row) => approvalType(row) },
+            { title: 'Submitter', width: 210, render: (_, row) => <IdentityCell identity={submitter(row)} /> },
+            { title: 'Approver', width: 210, render: (_, row) => <IdentityCell identity={approver(row)} /> },
             {
               title: 'Status',
               dataIndex: 'status',
-              render: (value) => <Tag color={value === 'pending' ? 'warning' : value === 'approved' ? 'success' : 'error'}>{statusLabel(value)}</Tag>,
+              width: 120,
+              render: statusTag,
             },
-            { title: 'Submitted user email', render: (_, row) => actorEmail(row.submitted_by, row.submitted_by_email), ellipsis: true },
-            { title: 'Created', dataIndex: 'created_at', render: formatDate },
-            { title: '处理时间', dataIndex: 'resolved_at', render: formatDate },
+            { title: 'Submitted at', dataIndex: 'created_at', width: 180, render: formatDate },
+            { title: 'Resolved at', dataIndex: 'resolved_at', width: 180, render: formatDate },
           ]}
         />
       </Card>
-      <Drawer size={600} open={Boolean(selected)} onClose={() => setSelected(null)} title="Approval detail" extra={approvalActions}>
+      <Drawer size={760} open={Boolean(selected)} onClose={() => setSelected(null)} title="Approval detail" extra={approvalActions}>
         {selected && (
           <>
             {selected.status === 'approved' && <Alert type="success" showIcon message="已批准" style={{ marginBottom: 16 }} />}
@@ -179,20 +265,25 @@ export function ApprovalsPage() {
                 style={{ marginBottom: 16 }}
               />
             )}
-            <Descriptions
-              bordered
-              column={1}
-              items={[
-                { key: 'id', label: 'ID', children: selected.id },
-                { key: 'run', label: 'Run', children: selected.run_id ?? '-' },
-                { key: 'session', label: 'Session', children: selected.session_id ?? '-' },
-                { key: 'submitter-email', label: 'Submitted user email', children: actorEmail(selected.submitted_by, selected.submitted_by_email) },
-                { key: 'submitter-id', label: 'Submitted user ID', children: actorId(selected.submitted_by) },
-                { key: 'resolver-email', label: 'Approved by email', children: actorEmail(selected.resolved_by, selected.resolved_by_email) },
-                { key: 'resolver-id', label: 'Approved by ID', children: actorId(selected.resolved_by) },
-              ]}
-            />
-            <PayloadViewer value={approvalPayload(selected)} />
+            {(() => {
+              const details = detailItems(selected)
+              return (
+                <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+                  <Card size="small" title="Decision" className="approval-detail-section">
+                    <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }} items={details.decision} />
+                  </Card>
+                  <Card size="small" title="People" className="approval-detail-section">
+                    <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }} items={details.people} />
+                  </Card>
+                  <Card size="small" title="Request" className="approval-detail-section">
+                    <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }} items={details.request} />
+                  </Card>
+                  <Card size="small" title="Request data" className="approval-detail-section">
+                    <PayloadViewer value={approvalPayload(selected)} />
+                  </Card>
+                </Space>
+              )
+            })()}
             {canResolve && selected.resource_type === 'skill' && selected.status === 'pending' && (
               <Card
                 size="small"
