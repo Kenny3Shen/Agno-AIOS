@@ -61,6 +61,7 @@ class KnowledgeDocumentPayload(TypedDict):
     source: str
     chunks: int
     created_at: str
+    updated_at: str
     status: str
     status_message: str
     type: str
@@ -200,6 +201,9 @@ def content_chunk_count(content: object, metadata: Mapping[str, object]) -> int:
 def content_to_document(content: object) -> KnowledgeDocumentPayload:
     metadata = safe_metadata(getattr(content, "metadata", None))
     created_at = getattr(content, "created_at", None)
+    updated_at = getattr(content, "updated_at", None)
+    created_at_text = format_timestamp(created_at)
+    updated_at_text = format_timestamp(updated_at) if updated_at not in (None, "") else created_at_text
     status = content_status(content, metadata)
     status_message = str(getattr(content, "status_message", "") or metadata.get("status_message") or "")
     content_type = str(getattr(content, "type", "") or metadata.get("file_type") or "")
@@ -209,7 +213,8 @@ def content_to_document(content: object) -> KnowledgeDocumentPayload:
         "title": str(getattr(content, "name", "") or "未命名知识"),
         "source": metadata_value(metadata, "source", "file_path", default="manual"),
         "chunks": content_chunk_count(content, metadata),
-        "created_at": format_timestamp(created_at),
+        "created_at": created_at_text,
+        "updated_at": updated_at_text,
         "status": status,
         "status_message": status_message,
         "type": content_type,

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Card, Descriptions, Form, Grid, Input, InputNumber, Select, Space, Splitter, Tabs, Tag, Typography } from 'antd'
+import { App, Button, Card, Descriptions, Form, Grid, Input, InputNumber, Select, Space, Tabs, Tag, Typography } from 'antd'
 import { PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import XMarkdown from '@ant-design/x-markdown'
 import { PageHeader } from '@/shared/ui/PageHeader'
@@ -83,6 +83,7 @@ export function KnowledgePage() {
   const client = useQueryClient()
   const [filter, setFilter] = useState('')
   const [selectedId, setSelectedId] = useState('')
+  const [metaOpen, setMetaOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [updateOpen, setUpdateOpen] = useState(false)
   const [results, setResults] = useState<SearchResult[]>([])
@@ -112,6 +113,7 @@ export function KnowledgePage() {
     mutationFn: deleteDocument,
     onSuccess: async () => {
       setSelectedId('')
+      setMetaOpen(false)
       await refresh()
       message.success(t('deleted'))
     },
@@ -123,6 +125,10 @@ export function KnowledgePage() {
     onSuccess: (document, variables) => syncUpdatedDocument(document, variables.id, selectedId === variables.id),
     onError: (error) => message.error(error.message),
   })
+  const openMetadata = (document: Document) => {
+    setSelectedId(document.id)
+    setMetaOpen(true)
+  }
   const openUpdate = (document: Document) => {
     setSelectedId(document.id)
     setUpdateOpen(true)
@@ -148,28 +154,21 @@ export function KnowledgePage() {
         items={[
           {
             key: 'documents',
-            label: 'Documents',
+            label: t('documents'),
             children: (
-              <Splitter className="workbench-splitter knowledge-splitter" orientation={vertical ? 'vertical' : 'horizontal'}>
-                <Splitter.Panel defaultSize="70%" min={vertical ? 260 : '45%'}>
-                  <DocumentsTable
-                    documents={documents}
-                    filter={filter}
-                    loading={query.isLoading}
-                    selectedId={selectedId}
-                    vertical={vertical}
-                    onFilterChange={setFilter}
-                    onSelect={(document) => setSelectedId(document.id)}
-                    onUpdate={openUpdate}
-                    onDelete={(document) => remove.mutate(document.id)}
-                    onVisibilityChange={(document, value) => visibility.mutate({ id: document.id, value })}
-                    deletingId={remove.isPending ? remove.variables : undefined}
-                  />
-                </Splitter.Panel>
-                <Splitter.Panel defaultSize="30%" min={vertical ? 180 : '20%'}>
-                  <MetadataPanel document={selected} />
-                </Splitter.Panel>
-              </Splitter>
+              <DocumentsTable
+                documents={documents}
+                filter={filter}
+                loading={query.isLoading}
+                selectedId={selectedId}
+                vertical={vertical}
+                onFilterChange={setFilter}
+                onSelect={openMetadata}
+                onUpdate={openUpdate}
+                onDelete={(document) => remove.mutate(document.id)}
+                onVisibilityChange={(document, value) => visibility.mutate({ id: document.id, value })}
+                deletingId={remove.isPending ? remove.variables : undefined}
+              />
             ),
           },
           {
@@ -216,6 +215,7 @@ export function KnowledgePage() {
           },
         ]}
       />
+      <MetadataPanel document={selected} open={metaOpen && Boolean(selected)} onClose={() => setMetaOpen(false)} />
       <DocumentDrawer
         open={createOpen}
         onClose={() => setCreateOpen(false)}

@@ -1324,6 +1324,7 @@ async def test_list_documents_uses_contents_db_without_runtime() -> None:
             "source": "/kb/runbook.md",
             "chunks": 4,
             "created_at": "1970-01-01T00:00:00+00:00",
+            "updated_at": "1970-01-01T00:00:00+00:00",
             "status": "",
             "status_message": "",
             "type": "",

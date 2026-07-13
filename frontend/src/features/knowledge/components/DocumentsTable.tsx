@@ -1,7 +1,9 @@
+import { useMemo } from 'react'
 import { Button, Card, Input, Popconfirm, Space, Table, Tag, Tooltip } from 'antd'
 import { DeleteOutlined, EditOutlined } from '@ant-design/icons'
 import type { ResourceVisibility } from '@/shared/types/common'
 import { VisibilitySelect } from '@/shared/ui/VisibilitySelect'
+import { compareTimestamp, useFormatDate } from '@/shared/lib/format'
 import type { Document } from '../types'
 import { useTranslation } from 'react-i18next'
 
@@ -31,10 +33,18 @@ export function DocumentsTable({
   deletingId?: string
 }) {
   const { t } = useTranslation('knowledge')
+  const formatDate = useFormatDate()
+  const sourceFilters = useMemo(() => {
+    const values = Array.from(
+      new Set(documents.map((document) => (document.source || '').trim()).filter(Boolean))
+    ).sort((a, b) => a.localeCompare(b))
+    return values.map((value) => ({ text: value, value }))
+  }, [documents])
+
   return (
     <Card
       className="workbench-card splitter-panel-card"
-      title="Documents"
+      title={t('documents')}
       extra={<Input.Search value={filter} onChange={(event) => onFilterChange(event.target.value)} allowClear placeholder={t('filterDocuments')} />}
     >
       <Table<Document>
@@ -42,14 +52,34 @@ export function DocumentsTable({
         dataSource={documents}
         loading={loading}
         pagination={{ pageSize: 12 }}
-        scroll={vertical ? { x: 680 } : undefined}
+        scroll={vertical ? { x: 1100 } : { x: 1100 }}
         rowClassName={(row) => (row.id === selectedId ? 'selected-table-row' : '')}
         onRow={(row) => ({ onClick: () => onSelect(row) })}
         columns={[
-          { title: 'Title', dataIndex: 'title', ellipsis: true, sorter: (a, b) => (a.title ?? '').localeCompare(b.title ?? '') },
-          { title: 'Chunks', dataIndex: 'chunks', width: 96, sorter: (a, b) => (a.chunks ?? 0) - (b.chunks ?? 0), onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }) },
           {
-            title: 'Status',
+            title: t('columns.title'),
+            dataIndex: 'title',
+            ellipsis: true,
+            sorter: (a, b) => (a.title ?? '').localeCompare(b.title ?? ''),
+          },
+          {
+            title: t('columns.source'),
+            dataIndex: 'source',
+            width: 140,
+            ellipsis: true,
+            filters: sourceFilters,
+            onFilter: (value, row) => (row.source || '') === value,
+            render: (value?: string) => (value ? <Tag>{value}</Tag> : '-'),
+          },
+          {
+            title: t('columns.chunks'),
+            dataIndex: 'chunks',
+            width: 96,
+            sorter: (a, b) => (a.chunks ?? 0) - (b.chunks ?? 0),
+            onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }),
+          },
+          {
+            title: t('columns.status'),
             dataIndex: 'status',
             width: 110,
             filters: [
@@ -61,7 +91,21 @@ export function DocumentsTable({
             render: (value) => <Tag color={value === 'ready' || value === 'completed' ? 'success' : 'processing'}>{value ?? 'ready'}</Tag>,
           },
           {
-            title: 'Visibility',
+            title: t('columns.created'),
+            dataIndex: 'created_at',
+            width: 168,
+            sorter: (a, b) => compareTimestamp(a.created_at, b.created_at),
+            render: (value?: string) => formatDate(value),
+          },
+          {
+            title: t('columns.updated'),
+            dataIndex: 'updated_at',
+            width: 168,
+            sorter: (a, b) => compareTimestamp(a.updated_at ?? a.created_at, b.updated_at ?? b.created_at),
+            render: (_value, row) => formatDate(row.updated_at || row.created_at),
+          },
+          {
+            title: t('columns.visibility'),
             dataIndex: 'visibility',
             width: 130,
             render: (value, row) => (
@@ -75,7 +119,7 @@ export function DocumentsTable({
             ),
           },
           {
-            title: 'Actions',
+            title: t('columns.actions'),
             key: 'actions',
             width: 96,
             render: (_, row) =>

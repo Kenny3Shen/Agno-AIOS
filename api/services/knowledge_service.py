@@ -1008,7 +1008,7 @@ class KnowledgeBaseLifecycle:
             "created_at": lambda document: document["created_at"],
             "name": lambda document: document["title"].casefold(),
             "status": lambda document: document["status"],
-            "updated_at": lambda document: document["created_at"],
+            "updated_at": lambda document: document["updated_at"] or document["created_at"],
         }
         key = sort_keys.get(sort_by, sort_keys["updated_at"])
         documents.sort(key=key, reverse=sort_order.lower() != "asc")

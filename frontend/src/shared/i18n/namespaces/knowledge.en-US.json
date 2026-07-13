@@ -71,6 +71,21 @@
   "uploadIngest": "Upload & ingest",
   "selectDocMeta": "Select a document to view metadata",
   "ingestAction": "Ingest",
+  "documents": "Documents",
+  "metadataTitle": "Metadata",
+  "created": "Created",
+  "updated": "Updated",
+  "owner": "Owner",
+  "columns": {
+    "title": "Title",
+    "source": "Source",
+    "chunks": "Chunks",
+    "status": "Status",
+    "created": "Created",
+    "updated": "Updated",
+    "visibility": "Visibility",
+    "actions": "Actions"
+  },
   "errors": {
     "tooLarge": "File must be 50 MB or smaller",
     "empty": "Empty files are not allowed",

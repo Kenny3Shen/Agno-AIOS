@@ -17,9 +17,11 @@ MCP 框架为 FastMCP, 文档通过 fastmcp-docs mcp 查询
 
 - `bun install/add/ remove <package>`
 
-测试与构建使用 package scripts：
+测试使用 package scripts：
 
 `cd frontend && bun run check`
+
+更新前端文件后：
 
 `bun run build`
 

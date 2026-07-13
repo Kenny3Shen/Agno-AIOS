@@ -6,6 +6,7 @@ export interface Document {
   source: string
   chunks: number
   created_at: string
+  updated_at?: string
   status?: string
   visibility?: ResourceVisibility
   owner_user_id?: string

@@ -22,6 +22,7 @@ def test_document_projection_compacts_metadata_and_formats_timestamps() -> None:
         id="doc-1",
         name="Policy",
         created_at=0,
+        updated_at=3600,
         status="completed",
         status_message="",
         type=".md",
@@ -40,9 +41,22 @@ def test_document_projection_compacts_metadata_and_formats_timestamps() -> None:
     assert document["source"] == "/kb/policy.md"
     assert document["chunks"] == 3
     assert document["created_at"] == "1970-01-01T00:00:00+00:00"
+    assert document["updated_at"] == "1970-01-01T01:00:00+00:00"
     assert document["metadata"]["user_id"] == "u1"
     assert "ignored" not in document["metadata"]
     assert 0 < len(document["metadata"]["custom"]) < 200
+
+
+def test_document_projection_falls_back_updated_at_to_created_at() -> None:
+    content = SimpleNamespace(
+        id="doc-2",
+        name="Policy",
+        created_at=0,
+        metadata={"source": "manual"},
+    )
+    document = knowledge_document_service.content_to_document(content)
+    assert document["created_at"] == "1970-01-01T00:00:00+00:00"
+    assert document["updated_at"] == document["created_at"]
 
 
 def test_document_projection_hides_internal_source_metadata() -> None:

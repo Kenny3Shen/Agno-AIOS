@@ -71,6 +71,21 @@
   "uploadIngest": "上传并入库",
   "selectDocMeta": "选择文档查看元数据",
   "ingestAction": "入库",
+  "documents": "文档",
+  "metadataTitle": "元数据",
+  "created": "创建时间",
+  "updated": "更新时间",
+  "owner": "所有者",
+  "columns": {
+    "title": "标题",
+    "source": "来源",
+    "chunks": "分块",
+    "status": "状态",
+    "created": "创建时间",
+    "updated": "更新时间",
+    "visibility": "可见性",
+    "actions": "操作"
+  },
   "errors": {
     "tooLarge": "文件不能超过 50 MB",
     "empty": "不能上传空文件",

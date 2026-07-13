@@ -13,6 +13,7 @@ const oldDocument: Document = {
   source: 'Papers',
   chunks: 3,
   created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
   status: 'completed',
   visibility: 'private',
   owner_user_id: 'user-1',
@@ -56,7 +57,7 @@ describe('knowledge document workflow', () => {
     await user.type(source, 'Runbooks')
     await user.click(screen.getByRole('button', { name: /保存/ }))
 
-    await waitFor(() => expect(screen.getByText('Runbooks')).toBeTruthy())
+    await waitFor(() => expect(screen.getAllByText('Runbooks').length).toBeGreaterThan(0))
   })
 
   it('keeps the document selected when text replacement revectorizes in place', async () => {
