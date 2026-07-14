@@ -5,18 +5,9 @@ from typing import TypedDict
 
 from agno.memory import UserMemory
 
-from api.auth.claims import ActorLike, has_scope, scope_user_id
+from api.auth.claims import ActorLike
 from api.services.actor_scope import scoped_requested_user_id
-from api.services.page_payloads import (
-    PageMetric,
-    PageRecord,
-    compact,
-    iso,
-    metric,
-    now_utc,
-    record,
-    row_dict,
-)
+from api.services.page_payloads import iso, now_utc, row_dict
 from api.services.postgres_store import coerce_json_value, get_async_agno_postgres_db
 
 MEMORY_OPTIMIZATION_REVIEW_THRESHOLD = 50
@@ -24,7 +15,6 @@ MEMORY_ABNORMAL_GROWTH_THRESHOLD = 500
 
 
 class MemoryItemPayload(TypedDict):
-    id: str
     memory_id: str
     memory: str
     topics: list[str]
@@ -49,56 +39,6 @@ class MemoryPaginationMeta(TypedDict):
 class MemoryListNativeResponse(TypedDict):
     data: list[MemoryItemPayload]
     meta: MemoryPaginationMeta
-    # Transition dual-write fields for existing clients.
-    items: list[MemoryItemPayload]
-    total_count: int
-    page: int
-    limit: int
-
-
-class MemoryUserPayload(TypedDict):
-    user_id: str
-    total_memories: int
-    last_memory_updated_at: str
-    status: str
-
-
-class MemoryFiltersPayload(TypedDict):
-    user_id: str
-    topic: str
-    search: str
-    page: int
-    limit: int
-    total: int
-
-
-class MemoryThresholdsPayload(TypedDict):
-    optimization_review: int
-    abnormal_growth: int
-
-
-class MemoryModePayload(TypedDict):
-    type: str
-    update_memory_on_run: bool
-    enable_agentic_memory: bool
-    enable_session_summaries: bool
-    readonly: bool
-
-
-class MemoryPayloadResponse(TypedDict):
-    module: str
-    title: str
-    description: str
-    status: str
-    metrics: list[PageMetric]
-    records: list[PageRecord]
-    generated_at: str
-    memories: list[MemoryItemPayload]
-    memory_users: list[MemoryUserPayload]
-    memory_topics: list[str]
-    memory_filters: MemoryFiltersPayload
-    memory_thresholds: MemoryThresholdsPayload
-    memory_mode: MemoryModePayload
 
 
 class MemoryMutationNotFound(ValueError):
@@ -189,21 +129,63 @@ def _memory_update_topics(value: object) -> list[str]:
     return topics
 
 
-async def get_memory_payload(
+def _pagination_meta(*, page: int, limit: int, total_count: int, search_time_ms: float = 0.0) -> MemoryPaginationMeta:
+    safe_page = max(1, int(page or 1))
+    safe_limit = max(1, int(limit or 1))
+    total = max(0, int(total_count or 0))
+    total_pages = (total + safe_limit - 1) // safe_limit if total else 0
+    return {
+        "page": safe_page,
+        "limit": safe_limit,
+        "total_pages": total_pages,
+        "total_count": total,
+        "search_time_ms": float(search_time_ms or 0.0),
+    }
+
+
+def _memory_item(
+    row: dict[str, object],
+    *,
+    status: str = "stored",
+) -> MemoryItemPayload:
+    memory_id = row.get("memory_id") or row.get("id")
+    memory = _memory_text(row.get("memory") or row.get("memories") or row.get("content"))
+    item_id = str(memory_id or memory or "memory")
+    return {
+        "memory_id": item_id,
+        "memory": memory,
+        "topics": _memory_topics(row.get("topics") or row.get("topic")),
+        "input": str(row.get("input") or ""),
+        "user_id": str(row.get("user_id") or ""),
+        "agent_id": str(row.get("agent_id") or ""),
+        "team_id": str(row.get("team_id") or ""),
+        "feedback": str(row.get("feedback") or ""),
+        "created_at": iso(row.get("created_at")),
+        "updated_at": iso(row.get("updated_at") or row.get("created_at")),
+        "status": status,
+    }
+
+
+async def list_memories_native(
     actor: ActorLike | None = None,
     *,
     user_id: str | None = None,
     topic: str | None = None,
-    search: str | None = None,
+    search_content: str | None = None,
     page: int = 1,
-    limit: int = 50,
-) -> MemoryPayloadResponse:
+    limit: int = 20,
+) -> MemoryListNativeResponse:
+    """List memories in Agno-native paginated form."""
     db = get_async_agno_postgres_db()
     safe_page = max(1, int(page or 1))
-    safe_limit = min(100, max(1, int(limit or 50)))
+    safe_limit = min(100, max(1, int(limit or 20)))
     scoped_user_id = scoped_requested_user_id(actor, user_id)
     scoped_topic = (topic or "").strip()
-    scoped_search = (search or "").strip()
+    scoped_search = (
+        str(search_content).strip()
+        if search_content is not None and str(search_content).strip()
+        else ""
+    )
     topics_filter = [scoped_topic] if scoped_topic else None
 
     raw_result = await db.get_user_memories(
@@ -222,178 +204,38 @@ async def get_memory_payload(
         raw_memories = raw_result
         total_memories = len(raw_memories)
 
-    stats_scope_user_id = scope_user_id(actor, None)
-    user_stats, total_users = await db.get_user_memory_stats(
-        user_id=stats_scope_user_id,
+    # Growth status is derived from per-user memory counts in the actor scope.
+    user_stats, _total_users = await db.get_user_memory_stats(
+        user_id=scoped_requested_user_id(actor, None),
         limit=500,
         page=1,
     )
-    topics = sorted(await db.get_all_memory_topics(user_id=scoped_user_id))
-
-    memory_users: list[MemoryUserPayload] = [
-        {
-            "user_id": str(row.get("user_id") or "default"),
-            "total_memories": int(row.get("total_memories") or 0),
-            "last_memory_updated_at": iso(row.get("last_memory_updated_at")),
-            "status": _memory_status_for_count(int(row.get("total_memories") or 0)),
-        }
-        for row in user_stats
-    ]
     user_status_by_id: dict[str, str] = {
-        str(row["user_id"]): str(row["status"]) for row in memory_users
+        str(row.get("user_id") or "default"): _memory_status_for_count(
+            int(row.get("total_memories") or 0)
+        )
+        for row in user_stats
     }
-    memories: list[MemoryItemPayload] = []
-    records: list[PageRecord] = []
+
+    items: list[MemoryItemPayload] = []
     for raw_row in raw_memories:
         row = _memory_row(raw_row)
-        memory_id = row.get("memory_id") or row.get("id")
-        memory = _memory_text(row.get("memory") or row.get("memories") or row.get("content"))
-        row_topics = _memory_topics(row.get("topics") or row.get("topic"))
         item_user_id = str(row.get("user_id") or "")
-        item_status = user_status_by_id.get(item_user_id, "stored")
-        item_id = str(memory_id or memory or "memory")
-        item: MemoryItemPayload = {
-            "id": item_id,
-            "memory_id": item_id,
-            "memory": memory,
-            "topics": row_topics,
-            "input": str(row.get("input") or ""),
-            "user_id": item_user_id,
-            "agent_id": str(row.get("agent_id") or ""),
-            "team_id": str(row.get("team_id") or ""),
-            "feedback": str(row.get("feedback") or ""),
-            "created_at": iso(row.get("created_at")),
-            "updated_at": iso(row.get("updated_at") or row.get("created_at")),
-            "status": item_status,
-        }
-        memories.append(item)
-        records.append(
-            record(
-                record_id=item["id"],
-                title=compact(memory or memory_id or "Memory", 96),
-                subtitle=item["user_id"] or item["agent_id"] or "default",
-                status=item_status,
-                meta={
-                    "topics": ", ".join(row_topics),
-                    "agent_id": item["agent_id"],
-                    "input": compact(item["input"], 120),
-                },
-                updated_at=item["updated_at"],
+        items.append(
+            _memory_item(
+                row,
+                status=user_status_by_id.get(item_user_id, "stored"),
             )
         )
-    review_users = sum(
-        1
-        for row in memory_users
-        if int(row["total_memories"]) >= MEMORY_OPTIMIZATION_REVIEW_THRESHOLD
-    )
-    risk_users = sum(
-        1
-        for row in memory_users
-        if int(row["total_memories"]) >= MEMORY_ABNORMAL_GROWTH_THRESHOLD
-    )
 
-    return {
-        "module": "memory",
-        "title": "Memory",
-        "description": "Agno 用户记忆库存、筛选与增长监测。",
-        "status": "ready",
-        "metrics": [
-            metric("Memories", total_memories, "当前筛选命中的 Agno user memories", "blue"),
-            metric("Users", total_users, "当前权限范围内的 user_id", "green"),
-            metric("Review", review_users, f"{MEMORY_OPTIMIZATION_REVIEW_THRESHOLD}+ memories", "yellow"),
-            metric("Risk", risk_users, f"{MEMORY_ABNORMAL_GROWTH_THRESHOLD}+ memories", "red" if risk_users else "green"),
-            metric("Mode", "Auto", "update_memory_on_run", "yellow"),
-        ],
-        "records": records,
-        "generated_at": iso(now_utc()),
-        "memories": memories,
-        "memory_users": memory_users,
-        "memory_topics": topics,
-        "memory_filters": {
-            "user_id": scoped_user_id or "",
-            "topic": scoped_topic,
-            "search": scoped_search,
-            "page": safe_page,
-            "limit": safe_limit,
-            "total": total_memories,
-        },
-        "memory_thresholds": {
-            "optimization_review": MEMORY_OPTIMIZATION_REVIEW_THRESHOLD,
-            "abnormal_growth": MEMORY_ABNORMAL_GROWTH_THRESHOLD,
-        },
-        "memory_mode": {
-            "type": "automatic",
-            "update_memory_on_run": True,
-            "enable_agentic_memory": False,
-            "enable_session_summaries": True,
-            "readonly": not (actor is not None and has_scope(actor, "memories:write")),
-        },
-    }
-
-
-def _pagination_meta(*, page: int, limit: int, total_count: int, search_time_ms: float = 0.0) -> MemoryPaginationMeta:
-    safe_page = max(1, int(page or 1))
-    safe_limit = max(1, int(limit or 1))
-    total = max(0, int(total_count or 0))
-    total_pages = (total + safe_limit - 1) // safe_limit if total else 0
-    return {
-        "page": safe_page,
-        "limit": safe_limit,
-        "total_pages": total_pages,
-        "total_count": total,
-        "search_time_ms": float(search_time_ms or 0.0),
-    }
-
-
-def memories_to_native_list(
-    payload: MemoryPayloadResponse,
-) -> MemoryListNativeResponse:
-    """Map workbench payload to Agno-native list envelope (data/meta)."""
-    items = list(payload["memories"])
-    filters = payload["memory_filters"]
-    page = int(filters["page"])
-    limit = int(filters["limit"])
-    total_count = int(filters["total"])
-    meta = _pagination_meta(page=page, limit=limit, total_count=total_count)
     return {
         "data": items,
-        "meta": meta,
-        "items": items,
-        "total_count": total_count,
-        "page": page,
-        "limit": limit,
+        "meta": _pagination_meta(
+            page=safe_page,
+            limit=safe_limit,
+            total_count=int(total_memories),
+        ),
     }
-
-
-async def list_memories_native(
-    actor: ActorLike | None = None,
-    *,
-    user_id: str | None = None,
-    topic: str | None = None,
-    search: str | None = None,
-    search_content: str | None = None,
-    page: int = 1,
-    limit: int = 20,
-) -> MemoryListNativeResponse:
-    """List memories in Agno-native paginated form.
-
-    Accepts both ``search`` (legacy) and ``search_content`` (native) query names.
-    """
-    if search_content is not None and str(search_content).strip():
-        effective_search = str(search_content).strip()
-    elif search is not None and str(search).strip():
-        effective_search = str(search).strip()
-    else:
-        effective_search = None
-    payload = await get_memory_payload(
-        actor,
-        user_id=user_id,
-        topic=topic,
-        search=effective_search,
-        page=page,
-        limit=limit,
-    )
-    return memories_to_native_list(payload)
 
 
 async def delete_memory_record(
@@ -427,7 +269,6 @@ async def delete_memory_record(
     if remaining_memory is not None:
         raise MemoryMutationFailed("Memory delete did not persist")
     return {
-        "id": safe_memory_id,
         "memory_id": safe_memory_id,
         "user_id": owner_user,
         "deleted": True,
@@ -480,7 +321,6 @@ async def update_memory_record(
         raise MemoryMutationFailed("Memory update did not persist")
     persisted_row = _memory_row(persisted_memory)
     return {
-        "id": safe_memory_id,
         "memory_id": safe_memory_id,
         "memory": _memory_text(persisted_row.get("memory")) or safe_memory,
         "topics": _memory_topics(persisted_row.get("topics")) or safe_topics,

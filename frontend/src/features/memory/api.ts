@@ -2,8 +2,9 @@ import { jsonInit, requestJson } from '@/shared/api/client'
 import { asRecord } from '@/shared/lib/format'
 
 export interface Memory {
+  /** UI key; always mirrored from API ``memory_id``. */
   id: string
-  memory_id?: string
+  memory_id: string
   memory: string
   topics?: string[]
   input?: string
@@ -23,20 +24,18 @@ export interface MemoryListResult {
   limit: number
 }
 
-const memoryId = (row: Record<string, unknown>) => String(row.id ?? row.memory_id ?? '').trim()
-
-/** Normalize legacy workbench and Agno-native memory rows. */
+/** Map Agno-native memory rows into UI Memory records. */
 export const normalizeMemory = (value: unknown): Memory | null => {
   const row = asRecord(value)
-  const id = memoryId(row)
-  if (!id) return null
+  const memoryId = String(row.memory_id ?? '').trim()
+  if (!memoryId) return null
   const topicsRaw = row.topics
   const topics = Array.isArray(topicsRaw)
     ? topicsRaw.map((topic) => String(topic)).filter((topic) => topic.trim().length > 0)
     : undefined
   return {
-    id,
-    memory_id: String(row.memory_id ?? id),
+    id: memoryId,
+    memory_id: memoryId,
     memory: String(row.memory ?? ''),
     topics,
     input: row.input != null ? String(row.input) : undefined,
@@ -50,39 +49,7 @@ export const normalizeMemory = (value: unknown): Memory | null => {
   }
 }
 
-const listRows = (data: Record<string, unknown>): unknown[] => {
-  if (Array.isArray(data.data)) return data.data
-  if (Array.isArray(data.items)) return data.items
-  if (Array.isArray(data.memories)) return data.memories
-  return []
-}
-
-const listTotal = (data: Record<string, unknown>, fallbackItems: number) => {
-  const meta = asRecord(data.meta)
-  const filters = asRecord(data.memory_filters)
-  const candidates = [meta.total_count, data.total_count, data.total, filters.total]
-  for (const value of candidates) {
-    if (value === undefined || value === null || value === '') continue
-    const number = Number(value)
-    if (Number.isFinite(number)) return number
-  }
-  return fallbackItems
-}
-
-const listPage = (data: Record<string, unknown>) => {
-  const meta = asRecord(data.meta)
-  const filters = asRecord(data.memory_filters)
-  return Number(meta.page ?? data.page ?? filters.page ?? 1) || 1
-}
-
-const listLimit = (data: Record<string, unknown>) => {
-  const meta = asRecord(data.meta)
-  const filters = asRecord(data.memory_filters)
-  return Number(meta.limit ?? data.limit ?? filters.limit ?? 20) || 20
-}
-
 export type MemoryListParams = {
-  search?: string
   search_content?: string
   user_id?: string
   topic?: string
@@ -92,25 +59,23 @@ export type MemoryListParams = {
 
 export const getMemories = async (params: MemoryListParams = {}): Promise<MemoryListResult> => {
   const search = new URLSearchParams()
-  const searchValue = params.search_content ?? params.search
-  if (searchValue) {
-    // Prefer Agno-native query name; backend also accepts `search`.
-    search.set('search_content', searchValue)
-  }
+  if (params.search_content) search.set('search_content', params.search_content)
   if (params.user_id) search.set('user_id', params.user_id)
   if (params.topic) search.set('topic', params.topic)
   if (params.page != null) search.set('page', String(params.page))
   if (params.limit != null) search.set('limit', String(params.limit))
   const query = search.toString()
   const data = asRecord(await requestJson<unknown>(`/memories${query ? `?${query}` : ''}`))
-  const items = listRows(data)
+  const meta = asRecord(data.meta)
+  const rows = Array.isArray(data.data) ? data.data : []
+  const items = rows
     .map((row) => normalizeMemory(row))
     .filter((row): row is Memory => row != null)
   return {
     items,
-    total: listTotal(data, items.length),
-    page: listPage(data),
-    limit: listLimit(data),
+    total: Number(meta.total_count ?? items.length) || 0,
+    page: Number(meta.page ?? 1) || 1,
+    limit: Number(meta.limit ?? 20) || 20,
   }
 }
 

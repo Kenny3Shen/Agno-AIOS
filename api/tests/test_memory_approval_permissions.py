@@ -17,7 +17,7 @@ def actor(user_id: str, role: str = "user"):
 
 
 def request() -> Request:
-    return Request({"type": "http", "method": "POST", "path": "/api/memory", "headers": []})
+    return Request({"type": "http", "method": "POST", "path": "/api/memories", "headers": []})
 
 
 class FakeMemoryDb:
@@ -220,44 +220,47 @@ def test_memory_write_permission_is_not_granted_to_guest():
 
 
 @pytest.mark.asyncio
-async def test_memory_payload_uses_current_user_for_ordinary_actor():
+async def test_list_memories_scopes_ordinary_actor_to_own_user_id():
     db = FakeMemoryDb()
     with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
-        payload = await memory_service.get_memory_payload(
-            actor("u1"), user_id="other-user", topic="preference", search="concise"
+        payload = await memory_service.list_memories_native(
+            actor("u1"),
+            user_id="other-user",
+            topic="preference",
+            search_content="concise",
         )
+
     assert db.memory_kwargs["user_id"] == "u1"
     assert db.memory_kwargs["topics"] == ["preference"]
     assert db.memory_kwargs["search_content"] == "concise"
     assert db.stats_kwargs["user_id"] == "u1"
-    assert db.topics_user_id == "u1"
-    assert payload["memory_filters"]["user_id"] == "u1"
-    assert payload["memory_users"][0]["status"] == "review"
-    assert payload["memories"][0]["status"] == "review"
-    assert payload["records"][0]["status"] == "review"
+    assert len(payload["data"]) == 1
+    assert payload["data"][0]["memory_id"] == "mem-1"
+    assert payload["data"][0]["status"] == "review"
+    assert "id" not in payload["data"][0]
+    assert has_scope(actor("u1"), "memories:read")
 
 
 @pytest.mark.asyncio
-async def test_memory_payload_admin_can_filter_requested_user():
+async def test_list_memories_admin_can_filter_requested_user():
     db = FakeMemoryDb()
     with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
-        payload = await memory_service.get_memory_payload(
-            actor("admin", "admin"), user_id="u2"
+        payload = await memory_service.list_memories_native(
+            actor("admin", "admin"),
+            user_id="u2",
         )
     assert db.memory_kwargs["user_id"] == "u2"
     assert db.stats_kwargs["user_id"] is None
-    assert db.topics_user_id == "u2"
-    assert payload["memory_filters"]["user_id"] == "u2"
-    assert payload["memory_mode"]["update_memory_on_run"]
-    assert payload["memory_mode"]["enable_session_summaries"]
+    assert payload["data"][0]["user_id"] == "u2"
 
 
 @pytest.mark.asyncio
-async def test_memory_payload_without_actor_is_readonly():
+async def test_list_memories_without_actor_still_returns_data():
     db = FakeMemoryDb()
     with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
-        payload = await memory_service.get_memory_payload(None)
-    assert payload["memory_mode"]["readonly"] is True
+        payload = await memory_service.list_memories_native(None)
+    assert payload["meta"]["total_count"] == 1
+    assert payload["data"][0]["memory_id"] == "mem-1"
 
 
 @pytest.mark.asyncio
@@ -367,7 +370,7 @@ async def test_memory_update_returns_not_found_when_memory_not_in_scope():
 
 
 @pytest.mark.asyncio
-async def test_list_memories_native_envelope_and_dual_ids():
+async def test_list_memories_native_envelope():
     db = FakeMemoryDb()
     with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
         payload = await memory_service.list_memories_native(
@@ -380,40 +383,27 @@ async def test_list_memories_native_envelope_and_dual_ids():
     assert db.memory_kwargs["search_content"] == "incident"
     assert db.memory_kwargs["page"] == 1
     assert db.memory_kwargs["limit"] == 20
+    assert set(payload.keys()) == {"data", "meta"}
     assert payload["meta"]["page"] == 1
     assert payload["meta"]["limit"] == 20
     assert payload["meta"]["total_count"] == 1
     assert payload["meta"]["total_pages"] == 1
-    assert payload["total_count"] == 1
     assert len(payload["data"]) == 1
-    assert payload["data"][0]["id"] == "mem-1"
     assert payload["data"][0]["memory_id"] == "mem-1"
-    assert payload["items"][0]["memory_id"] == "mem-1"
+    assert "id" not in payload["data"][0]
 
 
 @pytest.mark.asyncio
-async def test_list_memories_native_prefers_search_content_over_search():
+async def test_list_memories_uses_memory_id_only():
     db = FakeMemoryDb()
     with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
-        await memory_service.list_memories_native(
-            actor("u1"),
-            search="legacy",
-            search_content="native",
-        )
-    assert db.memory_kwargs["search_content"] == "native"
+        payload = await memory_service.list_memories_native(actor("u1"))
+    assert payload["data"][0]["memory_id"] == "mem-1"
+    assert "id" not in payload["data"][0]
 
 
 @pytest.mark.asyncio
-async def test_memory_payload_includes_memory_id_dual_field():
-    db = FakeMemoryDb()
-    with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
-        payload = await memory_service.get_memory_payload(actor("u1"))
-    assert payload["memories"][0]["id"] == "mem-1"
-    assert payload["memories"][0]["memory_id"] == "mem-1"
-
-
-@pytest.mark.asyncio
-async def test_memory_update_response_includes_id_dual_field():
+async def test_memory_update_response_uses_memory_id_only():
     db = FakeMemoryMutationDb()
     now = datetime(2026, 7, 5, tzinfo=UTC)
     with (
@@ -426,5 +416,6 @@ async def test_memory_update_response_includes_id_dual_field():
             memory="Updated memory",
             topics=["preference"],
         )
-    assert result["id"] == "mem-1"
     assert result["memory_id"] == "mem-1"
+    assert "id" not in result
+

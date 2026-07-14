@@ -21,7 +21,7 @@ export function MemoryPage() {
   const [applied, setApplied] = useState('')
   const [selected, setSelected] = useState<Memory | null>(null)
   const [editing, setEditing] = useState<Memory | null>(null)
-  const query = useQuery({ queryKey: ['memory', applied], queryFn: () => getMemories({ search: applied }) })
+  const query = useQuery({ queryKey: ['memory', applied], queryFn: () => getMemories({ search_content: applied || undefined }) })
   const refresh = () => client.invalidateQueries({ queryKey: ['memory'] })
   const remove = useMutation({
     mutationFn: (row: Memory) => deleteMemory(row.id, row.user_id),

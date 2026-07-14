@@ -20,20 +20,16 @@ describe('normalizeMemory', () => {
     })
   })
 
-  it('maps legacy id rows', () => {
+  it('ignores legacy id-only rows', () => {
     expect(
       normalizeMemory({
         id: 'legacy-1',
         memory: 'Legacy memory',
       }),
-    ).toMatchObject({
-      id: 'legacy-1',
-      memory_id: 'legacy-1',
-      memory: 'Legacy memory',
-    })
+    ).toBeNull()
   })
 
-  it('returns null when id is missing', () => {
+  it('returns null when memory_id is missing', () => {
     expect(normalizeMemory({ memory: 'no id' })).toBeNull()
   })
 })
