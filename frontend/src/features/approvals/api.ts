@@ -41,6 +41,19 @@ export interface SkillSubmissionPreview {
   entry_count: number
 }
 
+export interface ApprovalListParams {
+  status?: string
+  page?: number
+  limit?: number
+}
+
+export interface ApprovalListResult {
+  items: Approval[]
+  total: number
+  page: number
+  limit: number
+}
+
 export const isSubmissionApproval = (approval: Approval) =>
   approval.resource_type === 'skill' || approval.resource_type === 'mcp'
 
@@ -100,21 +113,94 @@ export const normalizeApproval = (value: unknown): Approval | null => {
   }
 }
 
-export const getApprovals = async (status = '') => {
+const normalizeRows = (rows: unknown[]): Approval[] =>
+  rows.map((row) => normalizeApproval(row)).filter((row): row is Approval => row != null)
+
+const fetchHitlPage = async (status: string, page: number, limit: number) => {
+  const search = new URLSearchParams()
+  search.set('page', String(page))
+  search.set('limit', String(limit))
+  if (status) search.set('status', status)
+  const payload = asRecord(await requestJson<unknown>(`/approvals?${search.toString()}`))
+  const meta = asRecord(payload.meta)
+  const rows = Array.isArray(payload.data) ? payload.data : []
+  return {
+    items: normalizeRows(rows),
+    total: Number(meta.total_count ?? 0) || 0,
+    page: Number(meta.page ?? page) || page,
+    limit: Number(meta.limit ?? limit) || limit,
+  }
+}
+
+/**
+ * Fetch a HITL slice by absolute offset (for merging with submissions).
+ * Uses Agno page/limit and local slice when offset is not page-aligned.
+ */
+const fetchHitlSlice = async (status: string, offset: number, count: number) => {
+  if (count <= 0) {
+    const probe = await fetchHitlPage(status, 1, 1)
+    return { items: [] as Approval[], total: probe.total }
+  }
+  const safeOffset = Math.max(0, offset)
+  const pageSize = count
+  const apiPage = Math.floor(safeOffset / pageSize) + 1
+  const skip = safeOffset % pageSize
+  const first = await fetchHitlPage(status, apiPage, pageSize)
+  let rows = first.items.slice(skip)
+  if (rows.length < count && safeOffset + rows.length < first.total) {
+    const second = await fetchHitlPage(status, apiPage + 1, pageSize)
+    rows = [...rows, ...second.items].slice(0, count)
+  } else {
+    rows = rows.slice(0, count)
+  }
+  return { items: rows, total: first.total }
+}
+
+const fetchSubmissions = async (status: string) => {
+  const shouldFetch = !status || ['pending', 'approved', 'rejected'].includes(status)
+  if (!shouldFetch) return [] as Approval[]
   const query = status ? `?status=${encodeURIComponent(status)}` : ''
-  const shouldFetchSubmissions = !status || ['pending', 'approved', 'rejected'].includes(status)
-  const [hitlPayload, submissions] = await Promise.all([
-    requestJson<unknown>(`/approvals?limit=100${status ? `&status=${encodeURIComponent(status)}` : ''}`),
-    shouldFetchSubmissions ? requestJson<unknown>(`/approvals/submissions${query}`) : Promise.resolve({ approvals: [] }),
-  ])
-  const hitl = asRecord(hitlPayload)
-  const submissionData = asRecord(submissions)
-  // HITL list: Agno-native { data, meta }. Submissions remain workbench { approvals }.
-  const hitlRows = Array.isArray(hitl.data) ? hitl.data : []
-  const submissionRows = asArray(submissionData.approvals)
-  return [...submissionRows, ...hitlRows]
-    .map((row) => normalizeApproval(row))
-    .filter((row): row is Approval => row != null)
+  const payload = asRecord(await requestJson<unknown>(`/approvals/submissions${query}`))
+  return normalizeRows(asArray(payload.approvals))
+}
+
+/**
+ * Combined Approvals list with real pagination.
+ * Virtual order: upload submissions first, then Agno HITL rows.
+ */
+export const getApprovals = async (params: ApprovalListParams | string = {}): Promise<ApprovalListResult> => {
+  // Back-compat: getApprovals('pending') from older call sites.
+  const normalized: ApprovalListParams =
+    typeof params === 'string' ? { status: params } : params ?? {}
+  const status = normalized.status ?? ''
+  const page = Math.max(1, Number(normalized.page ?? 1) || 1)
+  const limit = Math.min(100, Math.max(1, Number(normalized.limit ?? 20) || 20))
+
+  const submissions = await fetchSubmissions(status)
+  const submissionCount = submissions.length
+  const start = (page - 1) * limit
+
+  const pageSubmissions =
+    start < submissionCount ? submissions.slice(start, start + limit) : []
+  const hitlNeed = limit - pageSubmissions.length
+  const hitlOffset = Math.max(0, start - submissionCount)
+
+  const hitl =
+    hitlNeed > 0
+      ? await fetchHitlSlice(status, hitlOffset, hitlNeed)
+      : await fetchHitlSlice(status, 0, 0)
+
+  return {
+    items: [...pageSubmissions, ...hitl.items],
+    total: submissionCount + hitl.total,
+    page,
+    limit,
+  }
+}
+
+export const getApproval = async (id: string): Promise<Approval | null> => {
+  const row = await requestJson<unknown>(`/approvals/${encodeURIComponent(id)}`)
+  return normalizeApproval(row)
 }
 
 export const resolveApproval = (id: string, status: 'approved' | 'rejected', rejectionReason?: string) =>
@@ -153,4 +239,3 @@ export const getApprovalCount = async (userId?: string): Promise<number> => {
   if (!Number.isFinite(count) || count <= 0) return 0
   return Math.floor(count)
 }
-

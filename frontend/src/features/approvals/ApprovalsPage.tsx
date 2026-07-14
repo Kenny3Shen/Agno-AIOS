@@ -9,6 +9,7 @@ import { PageHeader } from '@/shared/ui/PageHeader'
 import { CopyableValue } from '@/shared/ui/MetadataDescriptions'
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
 import {
+  getApproval,
   getApprovals,
   getSkillSubmissionPreview,
   isSubmissionApproval,
@@ -144,11 +145,19 @@ export function ApprovalsPage() {
   const currentUser = useQuery(currentUserQuery())
   const canResolve = hasScope(currentUser.data, 'approvals:write')
   const [status, setStatus] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [selected, setSelected] = useState<Approval | null>(null)
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [markdownPreviewModes, setMarkdownPreviewModes] = useState<Record<string, 'raw' | 'markdown'>>({})
-  const query = useQuery({ queryKey: ['approvals', status], queryFn: () => getApprovals(status) })
+  const query = useQuery({
+    queryKey: ['approvals', 'list', status, page, pageSize],
+    queryFn: () => getApprovals({ status, page, limit: pageSize }),
+    placeholderData: (previous) => previous,
+  })
+  const rows = useMemo(() => query.data?.items ?? [], [query.data?.items])
+  const total = query.data?.total ?? 0
   const notificationApprovalId = new URLSearchParams(searchStr).get('approval_id')
   useEffect(() => {
     const updateSearch = () => setSearchStr(locationSearch())
@@ -160,13 +169,30 @@ export function ApprovalsPage() {
     }
   }, [])
   useEffect(() => {
+    setPage(1)
+  }, [status])
+  useEffect(() => {
     if (!notificationApprovalId || openedNotificationApprovalId.current === notificationApprovalId) return
-    const approval = query.data?.find((item) => item.id === notificationApprovalId)
+    const approval = rows.find((item) => item.id === notificationApprovalId)
     if (approval) {
       openedNotificationApprovalId.current = notificationApprovalId
       setSelected(approval)
+      return
     }
-  }, [notificationApprovalId, query.data])
+    let cancelled = false
+    void getApproval(notificationApprovalId)
+      .then((row) => {
+        if (cancelled || !row) return
+        openedNotificationApprovalId.current = notificationApprovalId
+        setSelected(row)
+      })
+      .catch(() => {
+        // Missing or unauthorized approval — leave selection unchanged.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [notificationApprovalId, rows])
   const skillPreview = useQuery({
     queryKey: ['approvals', 'skill-preview', selected?.id],
     queryFn: () => getSkillSubmissionPreview(selected?.id ?? ''),
@@ -196,9 +222,9 @@ export function ApprovalsPage() {
     onError: (error) => message.error(error instanceof Error ? error.message : t('resumeRetryFailed')),
   })
   const typeFilters = useMemo(() => {
-    const values = new Set((query.data ?? []).map((row) => approvalType(row)).filter((value) => value && value !== '-'))
+    const values = new Set(rows.map((row) => approvalType(row)).filter((value) => value && value !== '-'))
     return [...values].sort().map((value) => ({ text: value, value }))
-  }, [query.data])
+  }, [rows])
 
   const columns = useMemo<TableProps<Approval>['columns']>(
     () => [
@@ -325,10 +351,24 @@ export function ApprovalsPage() {
       <Card className="workbench-card">
         <Table<Approval>
           rowKey="id"
-          dataSource={query.data ?? []}
+          dataSource={rows}
           loading={query.isLoading}
           scroll={{ x: 1290 }}
-          pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (total) => `${total}` }}
+          pagination={{
+            current: page,
+            pageSize,
+            total,
+            showSizeChanger: true,
+            pageSizeOptions: [10, 20, 50, 100],
+            showTotal: (value) => `${value}`,
+            onChange: (nextPage, nextSize) => {
+              setPage(nextPage)
+              if (nextSize !== pageSize) {
+                setPageSize(nextSize)
+                setPage(1)
+              }
+            },
+          }}
           rowClassName={(row) => (row.id === selected?.id ? 'selected-table-row' : '')}
           onRow={(row) => ({
             tabIndex: 0,

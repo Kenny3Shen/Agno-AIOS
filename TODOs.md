@@ -1,5 +1,15 @@
 # 下一步工作
 
+## 已完成：Approvals 列表真分页
+
+- 前端 `getApprovals({ status, page, limit })` 读 HITL `data`/`meta`，不再 `limit=100` 客户端切页。
+- 表格受控分页；上传 submissions 仍全量拉取，与 HITL 按「submissions 优先」合并后分页。
+- 深链 `approval_id` 不在当前页时 `GET /api/approvals/{id}` 拉详情。
+
+相关入口：
+
+- 代码：`frontend/src/features/approvals/api.ts`、`ApprovalsPage.tsx`
+
 ## 已完成：Approvals email/拒绝理由字段收窄
 
 - HITL list/detail 不再输出 `submitted_by_email` / `resolved_by_email`，只 enrich `submitted_by` / `resolved_by` 对象。
