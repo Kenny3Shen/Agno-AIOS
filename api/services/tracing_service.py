@@ -134,13 +134,80 @@ def _root_input_from_spans(spans: list[Any]) -> str | None:
     return text_value or None
 
 
+async def _batch_root_spans_by_trace_ids(trace_ids: list[str]) -> dict[str, list[Any]]:
+    """Load preferred root spans for many traces in one spans-table query.
+
+    Prefers ``parent_span_id IS NULL`` rows. Traces without a root still get
+    one earliest span so ``_root_input_from_spans`` can fall back.
+    """
+    safe_ids = [str(trace_id).strip() for trace_id in trace_ids if str(trace_id or "").strip()]
+    if not safe_ids:
+        return {}
+
+    from sqlalchemy import case, select
+
+    table = await _trace_db._get_table(table_type="spans")
+    if table is None:
+        return {}
+
+    # DISTINCT ON (trace_id): one row per trace, root first, then earliest start.
+    stmt = (
+        select(
+            table.c.trace_id,
+            table.c.parent_span_id,
+            table.c.attributes,
+            table.c.start_time,
+        )
+        .where(table.c.trace_id.in_(safe_ids))
+        .distinct(table.c.trace_id)
+        .order_by(
+            table.c.trace_id,
+            case((table.c.parent_span_id.is_(None), 0), else_=1),
+            table.c.start_time,
+        )
+    )
+
+    by_trace: dict[str, list[Any]] = {trace_id: [] for trace_id in safe_ids}
+    async with _trace_db.async_session_factory() as session:
+        result = await session.execute(stmt)
+        for row in result.mappings():
+            trace_id = str(row["trace_id"])
+            attributes = row.get("attributes")
+            if not isinstance(attributes, dict):
+                attributes = coerce_json_value(attributes)
+            if not isinstance(attributes, dict):
+                attributes = {}
+            by_trace.setdefault(trace_id, []).append(
+                {
+                    "parent_span_id": row.get("parent_span_id"),
+                    "attributes": attributes,
+                }
+            )
+    return by_trace
+
+
 async def _root_inputs_for_trace_ids(trace_ids: list[str]) -> dict[str, str | None]:
-    """Best-effort root span input lookup (Agno list does the same)."""
-    inputs: dict[str, str | None] = {}
-    for trace_id in trace_ids:
-        safe_id = str(trace_id or "").strip()
-        if not safe_id:
-            continue
+    """Best-effort root span input lookup via one batch spans query.
+
+    Falls back to per-trace ``get_spans`` only if the batch path fails.
+    """
+    safe_ids = [str(trace_id).strip() for trace_id in trace_ids if str(trace_id or "").strip()]
+    inputs: dict[str, str | None] = {trace_id: None for trace_id in safe_ids}
+    if not safe_ids:
+        return inputs
+
+    try:
+        spans_by_trace = await _batch_root_spans_by_trace_ids(safe_ids)
+    except Exception:
+        logger.debug("batch root span input load failed; falling back to get_spans")
+        spans_by_trace = None
+
+    if spans_by_trace is not None:
+        for trace_id in safe_ids:
+            inputs[trace_id] = _root_input_from_spans(spans_by_trace.get(trace_id) or [])
+        return inputs
+
+    for safe_id in safe_ids:
         try:
             spans = await _trace_db.get_spans(trace_id=safe_id, limit=200)
         except Exception:

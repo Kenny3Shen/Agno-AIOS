@@ -286,7 +286,11 @@ async def test_list_traces_filters_after_audit_status_reconciliation() -> None:
 
     with (
         patch.object(tracing_service._trace_db, "get_traces", fake_get_traces),
-        patch.object(tracing_service._trace_db, "get_spans", AsyncMock(return_value=[])),
+        patch.object(
+            tracing_service,
+            "_batch_root_spans_by_trace_ids",
+            AsyncMock(return_value={"trace-1": []}),
+        ),
         patch.object(tracing_service, "reconcile_trace_statuses", fake_reconcile),
     ):
         result = await tracing_service.list_traces(user_id="u1", status="ERROR")
@@ -544,23 +548,29 @@ async def test_list_traces_native_envelope_duration_and_input() -> None:
             "duration_ms": 1500,
         }
     )
-    root_span = SimpleNamespace(
-        parent_span_id=None,
-        attributes={"input.value": "inspect host 10.0.0.1"},
-    )
 
     async def fake_get_traces(**_kwargs):
         return [trace_record], 1
 
-    async def fake_get_spans(**_kwargs):
-        return [root_span]
+    async def fake_batch_root_spans(trace_ids):
+        assert list(trace_ids) == ["trace-1"]
+        return {
+            "trace-1": [
+                {
+                    "parent_span_id": None,
+                    "attributes": {"input.value": "inspect host 10.0.0.1"},
+                }
+            ]
+        }
 
     async def fake_reconcile(items, **_kwargs):
         return list(items)
 
+    get_spans = AsyncMock(return_value=[])
     with (
         patch.object(tracing_service._trace_db, "get_traces", fake_get_traces),
-        patch.object(tracing_service._trace_db, "get_spans", fake_get_spans),
+        patch.object(tracing_service, "_batch_root_spans_by_trace_ids", fake_batch_root_spans),
+        patch.object(tracing_service._trace_db, "get_spans", get_spans),
         patch.object(tracing_service, "reconcile_trace_statuses", fake_reconcile),
     ):
         result = await tracing_service.list_traces(user_id="u1", page=1, limit=20)
@@ -575,5 +585,75 @@ async def test_list_traces_native_envelope_duration_and_input() -> None:
     assert "duration_ms" not in result["data"][0]
     assert result["data"][0]["duration"] == "1.50s"
     assert result["data"][0]["input"] == "inspect host 10.0.0.1"
+    get_spans.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_list_traces_batches_root_inputs_for_page() -> None:
+    traces = [
+        SimpleNamespace(
+            to_dict=lambda tid=tid: {
+                "trace_id": tid,
+                "name": "agent.run",
+                "user_id": "u1",
+                "status": "OK",
+                "duration_ms": 100,
+            }
+        )
+        for tid in ("trace-a", "trace-b")
+    ]
+    batch_calls: list[list[str]] = []
+
+    async def fake_get_traces(**_kwargs):
+        return traces, 2
+
+    async def fake_batch_root_spans(trace_ids):
+        batch_calls.append(list(trace_ids))
+        return {
+            "trace-a": [
+                {"parent_span_id": None, "attributes": {"input.value": "prompt a"}},
+            ],
+            "trace-b": [
+                {"parent_span_id": None, "attributes": {"input.value": "prompt b"}},
+            ],
+        }
+
+    async def fake_reconcile(items, **_kwargs):
+        return list(items)
+
+    get_spans = AsyncMock(side_effect=AssertionError("list path must not N+1 get_spans"))
+    with (
+        patch.object(tracing_service._trace_db, "get_traces", fake_get_traces),
+        patch.object(tracing_service, "_batch_root_spans_by_trace_ids", fake_batch_root_spans),
+        patch.object(tracing_service._trace_db, "get_spans", get_spans),
+        patch.object(tracing_service, "reconcile_trace_statuses", fake_reconcile),
+    ):
+        result = await tracing_service.list_traces(user_id="u1", page=1, limit=20)
+
+    assert batch_calls == [["trace-a", "trace-b"]]
+    assert [row["input"] for row in result["data"]] == ["prompt a", "prompt b"]
+    get_spans.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_root_inputs_fallback_to_get_spans_when_batch_fails() -> None:
+    root_span = SimpleNamespace(
+        parent_span_id=None,
+        attributes={"input.value": "fallback input"},
+    )
+    get_spans = AsyncMock(return_value=[root_span])
+
+    with (
+        patch.object(
+            tracing_service,
+            "_batch_root_spans_by_trace_ids",
+            AsyncMock(side_effect=RuntimeError("db down")),
+        ),
+        patch.object(tracing_service._trace_db, "get_spans", get_spans),
+    ):
+        inputs = await tracing_service._root_inputs_for_trace_ids(["trace-1", "trace-2"])
+
+    assert inputs == {"trace-1": "fallback input", "trace-2": "fallback input"}
+    assert get_spans.await_count == 2
 
 

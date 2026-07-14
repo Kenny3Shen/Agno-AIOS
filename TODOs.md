@@ -1,5 +1,16 @@
 # 下一步工作
 
+## 已完成：Trace list root input 批量加载
+
+- `_root_inputs_for_trace_ids` 改为 spans 表 `trace_id IN (...)` 单次查询（优先 root / `parent_span_id IS NULL`），替换 list 页 per-trace `get_spans` N+1。
+- 批量失败时回退到原 per-trace `get_spans`；input 仍 best-effort（可空）。
+- 响应契约不变：`{data,meta}`、`duration`、可选 `input`。
+
+相关入口：
+
+- 代码：`api/services/tracing_service.py`（`_batch_root_spans_by_trace_ids`）
+- 测试：`api/tests/test_trace_permissions.py`
+
 ## 已完成：Approvals 列表真分页
 
 - 前端 `getApprovals({ status, page, limit })` 读 HITL `data`/`meta`，不再 `limit=100` 客户端切页。
