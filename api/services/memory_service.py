@@ -62,14 +62,14 @@ def _memory_status_for_count(count: int) -> str:
 
 
 def _memory_text(value: object) -> str:
+    """Normalize Agno memory payload to plain text.
+
+    Accepts a string or a dict whose ``memory`` field holds the text. Does not
+    fall back to legacy row keys like content/summary.
+    """
     memory = coerce_json_value(value)
     if isinstance(memory, dict):
-        return str(
-            memory.get("memory")
-            or memory.get("content")
-            or memory.get("summary")
-            or ""
-        )
+        return str(memory.get("memory") or "")
     return str(memory or "")
 
 
@@ -147,14 +147,15 @@ def _memory_item(
     row: dict[str, object],
     *,
     status: str = "stored",
-) -> MemoryItemPayload:
-    memory_id = row.get("memory_id") or row.get("id")
-    memory = _memory_text(row.get("memory") or row.get("memories") or row.get("content"))
-    item_id = str(memory_id or memory or "memory")
+) -> MemoryItemPayload | None:
+    """Project one Agno memory row. Requires ``memory_id``; no legacy field aliases."""
+    memory_id = str(row.get("memory_id") or "").strip()
+    if not memory_id:
+        return None
     return {
-        "memory_id": item_id,
-        "memory": memory,
-        "topics": _memory_topics(row.get("topics") or row.get("topic")),
+        "memory_id": memory_id,
+        "memory": _memory_text(row.get("memory")),
+        "topics": _memory_topics(row.get("topics")),
         "input": str(row.get("input") or ""),
         "user_id": str(row.get("user_id") or ""),
         "agent_id": str(row.get("agent_id") or ""),
@@ -221,12 +222,12 @@ async def list_memories_native(
     for raw_row in raw_memories:
         row = _memory_row(raw_row)
         item_user_id = str(row.get("user_id") or "")
-        items.append(
-            _memory_item(
-                row,
-                status=user_status_by_id.get(item_user_id, "stored"),
-            )
+        item = _memory_item(
+            row,
+            status=user_status_by_id.get(item_user_id, "stored"),
         )
+        if item is not None:
+            items.append(item)
 
     return {
         "data": items,

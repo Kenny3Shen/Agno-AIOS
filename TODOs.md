@@ -1,5 +1,14 @@
 # 下一步工作
 
+## 已完成：Memory 字段收窄 + Trace URL 去 legacy
+
+- Memory list 投影只认 `memory_id` / `memory` / `topics`；缺 `memory_id` 的行丢弃，不再用 `id`/`content`/`topic` 兜底。
+- Trace `parseTraceSearch` 只读 `session_id`/`run_id`，忽略旧别名 `session`/`run`。
+
+相关入口：
+
+- 代码：`api/services/memory_service.py`、`frontend/src/features/trace/utils.ts`
+
 ## 已完成：去掉 overview pending_approvals 别名
 
 - Dashboard / overview 仅使用 `snapshots.approvals.{pending,approved,rejected}`。

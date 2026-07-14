@@ -419,3 +419,37 @@ async def test_memory_update_response_uses_memory_id_only():
     assert result["memory_id"] == "mem-1"
     assert "id" not in result
 
+
+def test_memory_item_requires_memory_id_and_rejects_legacy_aliases():
+    assert memory_service._memory_item({"id": "legacy-1", "memory": "x"}) is None
+    assert memory_service._memory_item({"memory_id": "m1", "content": "from-content"}) == {
+        "memory_id": "m1",
+        "memory": "",
+        "topics": [],
+        "input": "",
+        "user_id": "",
+        "agent_id": "",
+        "team_id": "",
+        "feedback": "",
+        "created_at": memory_service.iso(None),
+        "updated_at": memory_service.iso(None),
+        "status": "stored",
+    }
+    row = memory_service._memory_item(
+        {
+            "memory_id": "m2",
+            "memory": "hello",
+            "topics": ["t1"],
+            "topic": "ignored",
+            "id": "ignored",
+            "memories": "ignored",
+            "content": "ignored",
+            "user_id": "u1",
+        }
+    )
+    assert row is not None
+    assert row["memory_id"] == "m2"
+    assert row["memory"] == "hello"
+    assert row["topics"] == ["t1"]
+    assert row["user_id"] == "u1"
+

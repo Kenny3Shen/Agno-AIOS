@@ -55,11 +55,15 @@ describe('trace hierarchy', () => {
     expect(state.traceId).toBe('trace-1')
   })
 
-  it('parses legacy session and run URL params as filters', () => {
+    it('ignores legacy session/run URL aliases', () => {
     const state = parseTraceSearch('?session=legacy-session&run=legacy-run')
+    expect(state.filters).toMatchObject({ session_id: '', run_id: '' })
+    expect(state.selectedSession).toBe('')
+  })
 
-    expect(state.filters).toMatchObject({ session_id: 'legacy-session', run_id: 'legacy-run' })
-    expect(state.selectedSession).toBe('legacy-session')
+  it('parses canonical session_id and run_id URL params', () => {
+    const state = parseTraceSearch('?session_id=filter-session&run_id=filter-run')
+    expect(state.filters).toMatchObject({ session_id: 'filter-session', run_id: 'filter-run' })
   })
 
   it('builds selected session URLs without writing it as a filter', () => {

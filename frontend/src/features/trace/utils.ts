@@ -17,8 +17,8 @@ export const emptyTraceFilters = (): TraceFilters => ({
 export function parseTraceSearch(search: string | URLSearchParams): TraceUrlState {
   const params = typeof search === 'string' ? new URLSearchParams(search) : search
   const filters = {
-    session_id: params.get('session_id') ?? params.get('session') ?? '',
-    run_id: params.get('run_id') ?? params.get('run') ?? '',
+    session_id: params.get('session_id') ?? '',
+    run_id: params.get('run_id') ?? '',
     user_id: params.get('user_id') ?? '',
     status: params.get('status') ?? '',
     start_time: params.get('start_time') ?? '',

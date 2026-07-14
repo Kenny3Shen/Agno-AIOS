@@ -83,9 +83,9 @@ uv run update-cve
 
 React 工作台通过共享 API client 携带 token 请求 FastAPI；后端检查权限和资源归属后，按模型、MCP、Skills、Knowledge 与 Memory 配置创建 Agno 运行时。Chat 通过 SSE 返回流式输出，Trace、Memory 和 Knowledge 等视图通过 Query 刷新读取最新数据。
 
-Memory API 仅使用 `/api/memories`（Agno 风格 `data`/`meta`，查询参数 `search_content`，主键字段 `memory_id`）。
+Memory API 仅使用 `/api/memories`（Agno 风格 `data`/`meta`，查询参数 `search_content`，主键字段 `memory_id`）。 列表行仅认 `memory_id`/`memory`/`topics` 等 Agno 字段，不再兼容 `id`/`content`/`topic` 别名。
 
-Trace 列表/会话 `GET /api/traces` 与 `GET /api/traces/sessions` 使用 Agno 风格 `data`/`meta`；list/detail 对外只暴露 Agno 风格 `duration`（由存储层 `duration_ms` 投影，不改 Agno 表结构），list 尽量附带 root `input`。detail 仍为工作台自研契约。
+Trace 列表/会话 `GET /api/traces` 与 `GET /api/traces/sessions` 使用 Agno 风格 `data`/`meta`；list/detail 对外只暴露 Agno 风格 `duration`（由存储层 `duration_ms` 投影，不改 Agno 表结构），list 尽量附带 root `input`。detail 仍为工作台自研契约。 Trace 深链 query 仅使用 `session_id`/`run_id`（不再识别 `session`/`run`）。
 
 Approvals HITL 列表 `GET /api/approvals` 使用 Agno 风格 `data`/`meta`；详情/resolve/resume 与 Skill/MCP `submissions` 仍为工作台自研契约（身份 enrich、拒绝理由、Run 恢复）。
 
