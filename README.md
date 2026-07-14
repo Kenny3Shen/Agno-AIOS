@@ -63,6 +63,8 @@ TAIS_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
 
 Responses 协议通过 Agno `OpenAIResponses.parallel_tool_calls` 传递；Chat Completions 协议通过 Agno `OpenAIChat` / `OpenAILike` 的 `request_params` 传递。聊天 Run 和会话摘要使用同一模型工厂，因此该设置同时覆盖两条调用路径。
 
+模型工厂把 structured output 模式存在实例私有属性 `_tais_structured_output_mode`，**不写** Agno `model.metadata`，避免 OpenAI Responses / Chat 把内部标记当作 HTTP `metadata` 发给 Grok 等不兼容网关（会 400 `Argument not supported: metadata`）。
+
 前端生产构建：
 
 ```bash

@@ -6,6 +6,11 @@ from agno.models.base import Model
 from agno.models.deepseek import DeepSeek
 from agno.models.openai import OpenAIChat, OpenAILike, OpenAIResponses
 
+# App-private attribute on Agno Model instances. Must NOT use model.metadata:
+# OpenAIResponses/OpenAIChat put model.metadata into the HTTP request body, and
+# many OpenAI-compatible gateways (e.g. Grok Responses) reject `metadata`.
+STRUCTURED_OUTPUT_MODE_ATTR = "_tais_structured_output_mode"
+
 
 def build_agno_model(
     config: dict[str, Any], *, reasoning_effort: str | None = None
@@ -82,6 +87,15 @@ def build_agno_model(
     raise ValueError(f"Unsupported model provider: {provider}")
 
 
+def get_structured_output_mode(model: Model) -> str | None:
+    """Read T.A.I.S structured-output mode stored on a built model instance."""
+    value = getattr(model, STRUCTURED_OUTPUT_MODE_ATTR, None)
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    return text or None
+
+
 def _output_mode(value: Any) -> str:
     output_mode = str(value or "").strip().lower()
     if output_mode in {"", "none"}:
@@ -102,7 +116,6 @@ def _parallel_tool_calls(value: Any) -> bool | None:
 
 def _with_output_mode(model: Model, output_mode: str) -> Model:
     runtime_model = cast(Any, model)
-    metadata = dict(runtime_model.metadata or {})
-    metadata["agno_aios.structured_output_mode"] = output_mode
-    runtime_model.metadata = metadata
+    # Private attr only — never model.metadata (leaks into Responses/Chat API body).
+    setattr(runtime_model, STRUCTURED_OUTPUT_MODE_ATTR, output_mode)
     return model

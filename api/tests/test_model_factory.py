@@ -1,7 +1,7 @@
 from agno.models.deepseek import DeepSeek
 from agno.models.openai import OpenAIChat, OpenAILike, OpenAIResponses
 
-from api.services.model_factory import build_agno_model
+from api.services.model_factory import build_agno_model, get_structured_output_mode
 from api.services.model_config_service import ModelConfigStore
 
 
@@ -141,17 +141,44 @@ def test_deepseek_forces_json_chat_capabilities():
     )
 
     assert isinstance(model, DeepSeek)
-    metadata = getattr(model, "metadata", None) or {}
-    assert metadata["agno_aios.structured_output_mode"] == "json"
+    assert get_structured_output_mode(model) == "json"
+    assert getattr(model, "metadata", None) in (None, {})
     assert model.supports_native_structured_outputs is False
 
 
 def test_none_output_mode_normalizes_to_json_mode():
     model = build_agno_model(config(structured_output_mode="none"))
-    metadata = getattr(model, "metadata", None) or {}
 
-    assert metadata["agno_aios.structured_output_mode"] == "json"
+    assert get_structured_output_mode(model) == "json"
+    assert getattr(model, "metadata", None) in (None, {})
     assert model.supports_native_structured_outputs is False
+
+
+def test_structured_output_mode_does_not_pollute_request_metadata():
+    """Grok/xAI Responses rejects HTTP body field ``metadata``."""
+    responses = build_agno_model(
+        config(
+            provider="openai-compatible",
+            api_protocol="responses",
+            structured_output_mode="native",
+        )
+    )
+    chat = build_agno_model(
+        config(
+            provider="openai-compatible",
+            api_protocol="chat-completions",
+            structured_output_mode="json",
+        )
+    )
+
+    assert isinstance(responses, OpenAIResponses)
+    assert isinstance(chat, OpenAILike)
+    assert get_structured_output_mode(responses) == "native"
+    assert get_structured_output_mode(chat) == "json"
+    assert "metadata" not in responses.get_request_params()
+    assert "metadata" not in chat.get_request_params()
+    assert getattr(responses, "metadata", None) in (None, {})
+    assert getattr(chat, "metadata", None) in (None, {})
 
 
 def test_native_provider_does_not_require_custom_base_url():

@@ -1,5 +1,15 @@
 # 下一步工作
 
+## 已完成：模型 structured output 标记与 API metadata 解耦
+
+- `build_agno_model` 使用私有属性 `_tais_structured_output_mode`，不再写入 `model.metadata`。
+- 避免 Grok/xAI 等 OpenAI-compatible Responses 网关因 `metadata` 参数 400；`get_request_params()` 不再携带该字段。
+- 新增工厂单测：Responses/Chat 请求参数不含 `metadata`。
+
+相关入口：
+
+- 代码：`api/services/model_factory.py`、`api/tests/test_model_factory.py`
+
 ## 已完成：Evals 读路径对齐 Agno 分页 envelope
 
 - `GET /api/agent-evals/agno-runs` 返回 `{ data, meta }`，行主键 `id`、载荷 `eval_data`（Agno EvalSchema 命名），去掉 list 内嵌 `items`/`trends`/`total`。
