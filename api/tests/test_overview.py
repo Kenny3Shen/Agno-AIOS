@@ -382,5 +382,5 @@ async def test_overview_adds_approval_status_snapshot_for_authorized_actor(monke
         "approved": 4,
         "rejected": 1,
     }
-    assert snapshots.get("pending_approvals") == 2
+    assert "pending_approvals" not in snapshots
 

@@ -23,7 +23,7 @@ const overview = {
   metrics: { total_runs: 0, failure_rate: 0, p95_duration_ms: 0, input_tokens: 0, output_tokens: 0, total_tokens: 0 },
   series: [],
   distributions: {},
-  snapshots: { pending_approvals: 0, knowledge_documents: 0, memories: 0 },
+  snapshots: { approvals: { pending: 0, approved: 0, rejected: 0 }, knowledge_documents: 0, memories: 0 },
   recent_failures: [],
 }
 

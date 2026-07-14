@@ -318,8 +318,6 @@ async def _snapshots(actor: ActorLike) -> dict[str, Any]:
                 "approved": counts["approved"],
                 "rejected": counts["rejected"],
             }
-            # Backward-compatible alias used by older clients / badge tests.
-            result["pending_approvals"] = counts["pending"]
         except Exception:
             pass
 

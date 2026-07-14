@@ -71,8 +71,6 @@ export interface OverviewApprovalCounts {
 }
 
 export interface OverviewAssets {
-  /** @deprecated Prefer ``approvals.pending``. */
-  pending_approvals?: number | null
   approvals?: OverviewApprovalCounts | null
   knowledge_documents?: number | null
   memories?: number | null

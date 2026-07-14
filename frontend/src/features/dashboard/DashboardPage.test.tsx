@@ -46,7 +46,6 @@ const overview = (audit = false) => ({
   snapshots: {
     evaluation: { total: 2, passed: 1, failed: 1, pass_rate: 0.5 },
     approvals: { pending: 2, approved: 5, rejected: 1 },
-    pending_approvals: 2,
   },
   ...(audit
     ? {
