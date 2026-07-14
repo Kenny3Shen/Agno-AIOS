@@ -85,6 +85,8 @@ Memory API 仅使用 `/api/memories`（Agno 风格 `data`/`meta`，查询参数 
 
 Trace 列表/会话 `GET /api/traces` 与 `GET /api/traces/sessions` 使用 Agno 风格 `data`/`meta`；list/detail 对外只暴露 Agno 风格 `duration`（由存储层 `duration_ms` 投影，不改 Agno 表结构），list 尽量附带 root `input`。detail 仍为工作台自研契约。
 
+Approvals HITL 列表 `GET /api/approvals` 使用 Agno 风格 `data`/`meta`；详情/resolve/resume 与 Skill/MCP `submissions` 仍为工作台自研契约（身份 enrich、拒绝理由、Run 恢复）。
+
 ```mermaid
 flowchart LR
     Operator["安全运营人员"] --> Shell

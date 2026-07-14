@@ -12,17 +12,9 @@ from sqlalchemy import select
 from api.auth.claims import ActorLike, scope_user_id
 from api.auth.database import async_session_maker
 from api.auth.models import User
-from api.services.page_payloads import (
-    PageMetric,
-    PageRecord,
-    compact,
-    iso,
-    metric,
-    now_utc,
-    record,
-    row_dict,
-)
+from api.services.page_payloads import row_dict
 from api.services.postgres_store import get_async_agno_postgres_db
+
 
 class ApprovalRecord(TypedDict):
     id: str
@@ -70,24 +62,17 @@ class ApprovalQueryKwargs(TypedDict):
     page: int
 
 
-class ApprovalMeta(TypedDict):
+class ApprovalPaginationMeta(TypedDict):
     page: int
     limit: int
-    total: int
-    pending: int
+    total_pages: int
+    total_count: int
+    search_time_ms: float
 
 
-class ApprovalListResponse(TypedDict):
-    module: str
-    title: str
-    description: str
-    status: str
-    metrics: list[PageMetric]
-    records: list[PageRecord]
-    generated_at: str
-    approvals: list[ApprovalRecord]
-    approval_filters: ApprovalQueryKwargs
-    approval_meta: ApprovalMeta
+class ApprovalListNativeResponse(TypedDict):
+    data: list[ApprovalRecord]
+    meta: ApprovalPaginationMeta
 
 
 class ApprovalResolveConflictError(Exception):
@@ -236,36 +221,6 @@ async def enrich_approval(approval: ApprovalRecord) -> ApprovalRecord:
     return await enrich_approval_actors(approval)
 
 
-def approval_record_summary(approval: ApprovalRecord) -> PageRecord:
-    subtitle_parts = [
-        str(value)
-        for value in (
-            approval.get("source_name") or approval.get("source_type"),
-            approval.get("user_id"),
-            approval.get("run_id"),
-        )
-        if value
-    ]
-    updated_at = approval.get("updated_at") or approval.get("resolved_at") or approval.get("created_at")
-    return record(
-        record_id=str(approval.get("id") or ""),
-        title=compact(approval.get("tool_name") or approval.get("id") or "Approval"),
-        subtitle=" / ".join(subtitle_parts),
-        status=str(approval.get("status") or "pending"),
-        meta={
-            "source_type": approval.get("source_type"),
-            "approval_type": approval.get("approval_type"),
-            "pause_type": approval.get("pause_type"),
-            "run_status": approval.get("run_status"),
-            "agent_id": approval.get("agent_id"),
-            "team_id": approval.get("team_id"),
-            "workflow_id": approval.get("workflow_id"),
-            "schedule_id": approval.get("schedule_id"),
-        },
-        updated_at=updated_at,
-    )
-
-
 def _scoped_user_id(actor: ActorLike | None, requested_user_id: str | None) -> str | None:
     return scope_user_id(actor, requested_user_id)
 
@@ -312,40 +267,37 @@ async def list_approvals(
     return approvals, int(total), kwargs
 
 
-async def list_approvals_payload(
+def _pagination_meta(*, page: int, limit: int, total_count: int, search_time_ms: float = 0.0) -> ApprovalPaginationMeta:
+    safe_page = max(1, int(page or 1))
+    safe_limit = max(1, int(limit or 1))
+    total = max(0, int(total_count or 0))
+    total_pages = (total + safe_limit - 1) // safe_limit if total else 0
+    return {
+        "page": safe_page,
+        "limit": safe_limit,
+        "total_pages": total_pages,
+        "total_count": total,
+        "search_time_ms": float(search_time_ms or 0.0),
+    }
+
+
+async def list_approvals_native(
     *,
     params: ApprovalListParams | None = None,
     actor: ActorLike | None = None,
-) -> ApprovalListResponse:
+) -> ApprovalListNativeResponse:
+    """List HITL approvals with Agno-native ``data`` / ``meta`` envelope.
+
+    Keeps actor enrichment (emails) and scope isolation; does not mount AgentOS.
+    """
     approvals, total, kwargs = await list_approvals(params=params, actor=actor)
-    pending = int(
-        await get_async_agno_postgres_db().get_pending_approval_count(
-            user_id=kwargs.get("user_id")
-        )
-    )
-    approved = sum(1 for approval in approvals if approval["status"] == "approved")
-    rejected = sum(1 for approval in approvals if approval["status"] == "rejected")
     return {
-        "module": "approvals",
-        "title": "Approvals",
-        "description": "Agno HITL 审批请求、工具调用确认和处理历史。",
-        "status": "ready",
-        "metrics": [
-            metric("Pending", pending, "等待管理员处理", "red" if pending else "green"),
-            metric("Approved", approved, "当前页已批准", "green"),
-            metric("Rejected", rejected, "当前页已拒绝", "red" if rejected else "blue"),
-            metric("Total", total, "当前筛选总数", "blue"),
-        ],
-        "records": [approval_record_summary(approval) for approval in approvals],
-        "generated_at": iso(now_utc()),
-        "approvals": approvals,
-        "approval_filters": kwargs,
-        "approval_meta": {
-            "page": kwargs["page"],
-            "limit": kwargs["limit"],
-            "total": total,
-            "pending": pending,
-        },
+        "data": approvals,
+        "meta": _pagination_meta(
+            page=int(kwargs["page"]),
+            limit=int(kwargs["limit"]),
+            total_count=total,
+        ),
     }
 
 

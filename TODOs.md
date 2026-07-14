@@ -1,5 +1,16 @@
 # 下一步工作
 
+## 已完成：Approvals 列表对齐 Agno 分页 envelope
+
+- `GET /api/approvals` 返回 `{ data, meta }`（`page` / `limit` / `total_pages` / `total_count` / `search_time_ms`），去掉 workbench `module`/`metrics`/`records`/`approval_meta` 大包。
+- 保留 scopes、user isolation、actor email enrich；resolve / resume / submissions 不变。
+- 前端 `getApprovals` 从 `data` 读取 HITL 列表，`normalizeApproval` 统一行形状；submissions 仍走 `/api/approvals/submissions`。
+
+相关入口：
+
+- API：`GET /api/approvals`、`GET|POST /api/approvals/{id}`、`POST .../resolve|resume`、`/submissions*`
+- 代码：`api/services/approvals_service.py`、`frontend/src/features/approvals/api.ts`
+
 ## 已完成：Trace 列表/会话对齐 Agno 分页 envelope
 
 - `GET /api/traces` 与 `GET /api/traces/sessions` 返回 `{ data, meta }`，继续走 status reconcile。

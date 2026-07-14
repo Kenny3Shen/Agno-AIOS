@@ -12,7 +12,7 @@ from api.services.approvals_service import (
     ApprovalListParams,
     ApprovalResolveConflictError,
     get_approval_record,
-    list_approvals_payload,
+    list_approvals_native,
     resolve_approval_record,
 )
 
@@ -44,7 +44,6 @@ class FakeApprovalDb:
     def __init__(self):
         self.list_kwargs: dict[str, object] = {}
         self.updated: dict[str, object] = {}
-        self.pending_count_user_id: str | None = None
         self.return_update = True
 
     async def get_approvals(self, **kwargs):
@@ -86,10 +85,6 @@ class FakeApprovalDb:
             2,
         )
 
-    async def get_pending_approval_count(self, user_id=None):
-        self.pending_count_user_id = user_id
-        return 1
-
     async def get_approval(self, approval_id: str):
         if approval_id == "missing":
             return None
@@ -127,7 +122,7 @@ class FakeApprovalDb:
 
 
 @pytest.mark.asyncio
-async def test_list_approvals_payload_uses_agno_filters_and_metrics():
+async def test_list_approvals_native_uses_agno_filters_and_data_meta():
     db = FakeApprovalDb()
     params = ApprovalListParams(
         status="pending",
@@ -141,7 +136,7 @@ async def test_list_approvals_payload_uses_agno_filters_and_metrics():
         "api.services.approvals_service.get_async_agno_postgres_db",
         return_value=db,
     ):
-        payload = await list_approvals_payload(params=params, actor=actor())
+        payload = await list_approvals_native(params=params, actor=actor())
 
     assert db.list_kwargs == {
         "status": "pending",
@@ -157,14 +152,15 @@ async def test_list_approvals_payload_uses_agno_filters_and_metrics():
         "limit": 10,
         "page": 2,
     }
-    assert db.pending_count_user_id is None
-    assert payload["module"] == "approvals"
-    assert payload["approval_filters"]["status"] == "pending"
-    assert payload["approval_meta"]["total"] == 2
-    assert payload["approvals"][0]["tool_name"] == "delete_user_data"
-    assert payload["records"][0]["id"] == "approval-1"
-    assert payload["metrics"][0]["label"] == "Pending"
-    assert payload["metrics"][0]["value"] == 1
+    assert payload["data"][0]["tool_name"] == "delete_user_data"
+    assert payload["data"][0]["id"] == "approval-1"
+    assert payload["meta"] == {
+        "page": 2,
+        "limit": 10,
+        "total_pages": 1,
+        "total_count": 2,
+        "search_time_ms": 0.0,
+    }
 
 
 @pytest.mark.asyncio
@@ -227,8 +223,10 @@ async def test_approvals_route_uses_agno_service():
     ):
         payload = await approvals.list_approvals(user=actor("admin-1"))
 
-    assert payload["module"] == "approvals"
-    assert payload["approvals"][0]["id"] == "approval-1"
+    assert payload["data"][0]["id"] == "approval-1"
+    assert payload["meta"]["total_count"] == 2
+    assert payload["meta"]["page"] == 1
+    assert payload["meta"]["limit"] == 50
     assert db.list_kwargs["limit"] == 50
 
 

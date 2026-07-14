@@ -14,7 +14,8 @@ describe('ApprovalsPage', () => {
       ),
       http.get('/api/approvals', () =>
         HttpResponse.json({
-          approvals: [],
+          data: [],
+          meta: { page: 1, limit: 100, total_pages: 0, total_count: 0, search_time_ms: 0 },
         })
       ),
       http.get('/api/approvals/submissions', () =>
@@ -86,7 +87,12 @@ describe('ApprovalsPage', () => {
       http.get('/api/auth/users/me', () =>
         HttpResponse.json({ id: 'member-1', email: 'member@example.com', role: 'user', scopes: ['approvals:read'] })
       ),
-      http.get('/api/approvals', () => HttpResponse.json({ approvals: [] })),
+      http.get('/api/approvals', () =>
+        HttpResponse.json({
+          data: [],
+          meta: { page: 1, limit: 100, total_pages: 0, total_count: 0, search_time_ms: 0 },
+        })
+      ),
       http.get('/api/approvals/submissions', () =>
         HttpResponse.json({
           approvals: [
@@ -121,7 +127,7 @@ describe('ApprovalsPage', () => {
       ),
       http.get('/api/approvals', () =>
         HttpResponse.json({
-          approvals: [
+          data: [
             {
               id: 'approval-1',
               status: 'approved',
@@ -132,6 +138,7 @@ describe('ApprovalsPage', () => {
               resolved_by: { id: 'admin-1', email: 'admin@example.com' },
             },
           ],
+          meta: { page: 1, limit: 100, total_pages: 1, total_count: 1, search_time_ms: 0 },
         })
       ),
       http.get('/api/approvals/submissions', () => HttpResponse.json({ approvals: [] })),

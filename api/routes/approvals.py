@@ -15,7 +15,7 @@ from api.services.approvals_service import (
     ApprovalListParams,
     ApprovalResolveConflictError,
     get_approval_record,
-    list_approvals_payload,
+    list_approvals_native,
     resolve_approval_record,
 )
 from api.services.security_policy import PolicyAuditEvent, record_policy_event
@@ -143,8 +143,9 @@ async def list_approvals(
     limit: int = 50,
     user: User = Depends(require_scope("approvals:read")),
 ):
+    """List HITL approvals with Agno-native ``data`` / ``meta`` pagination envelope."""
     try:
-        return await list_approvals_payload(
+        return await list_approvals_native(
             params=ApprovalListParams(
                 status=status,
                 source_type=source_type,
