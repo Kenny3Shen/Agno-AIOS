@@ -45,21 +45,31 @@ interface ApprovalIdentity {
 
 const actorIdentity = (
   actor: Approval['submitted_by'] | Approval['resolved_by'],
-  legacyEmail?: string,
   fallbackId?: string
 ): ApprovalIdentity => {
-  if (typeof actor === 'object' && actor !== null) return { email: actor.email || legacyEmail || '', id: actor.id || fallbackId || '' }
-  if (typeof actor === 'string') return { email: legacyEmail || (actor.includes('@') ? actor : ''), id: actor || fallbackId || '' }
-  return { email: legacyEmail || '', id: fallbackId || '' }
+  if (typeof actor === 'object' && actor !== null) {
+    return { email: actor.email || '', id: actor.id || fallbackId || '' }
+  }
+  if (typeof actor === 'string') {
+    return { email: actor.includes('@') ? actor : '', id: actor || fallbackId || '' }
+  }
+  return { email: '', id: fallbackId || '' }
 }
 
-const submitter = (approval: Approval) => actorIdentity(approval.submitted_by, approval.submitted_by_email, approval.user_id)
-const approver = (approval: Approval) => actorIdentity(approval.resolved_by, approval.resolved_by_email)
+const submitter = (approval: Approval) => actorIdentity(approval.submitted_by, approval.user_id)
+const approver = (approval: Approval) => actorIdentity(approval.resolved_by)
 
 const statusLabel = (status: string) => status ? `${status.slice(0, 1).toUpperCase()}${status.slice(1)}` : '-'
 
-const rejectionReason = (approval: Approval) =>
-  approval.rejection_reason ?? (typeof approval.resolution_data?.rejection_reason === 'string' ? approval.resolution_data.rejection_reason : '')
+/** HITL: resolution_data.note (Agno). Submissions: top-level rejection_reason. */
+const rejectionReason = (approval: Approval) => {
+  const note = approval.resolution_data?.note
+  if (typeof note === 'string' && note.trim()) return note
+  // Historical HITL rows may still store rejection_reason inside resolution_data.
+  const legacy = approval.resolution_data?.rejection_reason
+  if (typeof legacy === 'string' && legacy.trim()) return legacy
+  return approval.rejection_reason?.trim() || ''
+}
 
 const runStatus = (approval: Approval) => approval.run_status?.toUpperCase() ?? null
 

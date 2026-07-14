@@ -353,7 +353,6 @@ async def test_rejected_approval_route_adds_reason_to_resolution_data():
     assert resolve_mock.await_args is not None
     assert resolve_mock.await_args.kwargs["resolution_data"] == {
         "source": "review",
-        "rejection_reason": "Policy violation",
         "note": "Policy violation",
     }
 
@@ -377,7 +376,8 @@ async def test_list_approvals_enrich_submitter_email_from_user_id():
 
     assert total == 2
     assert approvals[0]["submitted_by"] == {"id": "u1", "email": "operator@example.com"}
-    assert approvals[0]["submitted_by_email"] == "operator@example.com"
+    assert "submitted_by_email" not in approvals[0]
+    assert "resolved_by_email" not in approvals[0]
 
 
 @pytest.mark.asyncio
@@ -414,7 +414,6 @@ async def test_resolve_hitl_rejection_schedules_native_continuation_and_returns_
     resolve_call = resolve.await_args
     assert resolve_call is not None
     assert resolve_call.kwargs["resolution_data"] == {
-        "rejection_reason": "证据不足，暂不封禁",
         "note": "证据不足，暂不封禁",
     }
     resume.assert_awaited_once_with("approval-1")

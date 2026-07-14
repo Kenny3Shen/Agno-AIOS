@@ -43,8 +43,6 @@ class ApprovalRecord(TypedDict):
     updated_at: NotRequired[object]
     run_status: NotRequired[str | None]
     submitted_by: NotRequired[dict[str, str] | None]
-    submitted_by_email: NotRequired[str | None]
-    resolved_by_email: NotRequired[str | None]
 
 
 class ApprovalQueryKwargs(TypedDict):
@@ -185,7 +183,7 @@ async def enrich_approval_actors(
     *,
     email_by_id: Mapping[str, str] | None = None,
 ) -> ApprovalRecord:
-    """Attach submitted_by / resolved_by email fields used by the Approvals UI."""
+    """Attach submitted_by / resolved_by actor objects (id + email) for the Approvals UI."""
     user_id = _optional_str(approval.get("user_id"))
     resolved_by = approval.get("resolved_by")
     resolved_id = _optional_str(resolved_by) if not isinstance(resolved_by, Mapping) else _optional_str(
@@ -211,9 +209,9 @@ async def enrich_approval_actors(
     return {
         **approval,
         "submitted_by": _actor_payload(user_id, submitter_email),
-        "submitted_by_email": submitter_email or None,
-        "resolved_by": _actor_payload(resolved_id or resolved_email, resolved_email) if (resolved_id or resolved_email) else None,
-        "resolved_by_email": resolved_email or None,
+        "resolved_by": _actor_payload(resolved_id or resolved_email, resolved_email)
+        if (resolved_id or resolved_email)
+        else None,
     }
 
 

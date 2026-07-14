@@ -115,7 +115,7 @@ def approval_rejection_reason(run: object) -> str:
     approval = to_mapping(metadata.get("approval"))
     resolution = to_mapping(approval.get("resolution_data"))
     return _text(
-        resolution.get("rejection_reason") or resolution.get("note"),
+        resolution.get("note") or resolution.get("rejection_reason"),
         limit=2000,
     )
 

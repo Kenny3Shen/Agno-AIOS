@@ -215,8 +215,7 @@ async def resolve_approval(
         resolution_data = dict(body.resolution_data or {})
         if body.status == "rejected":
             reason = (body.rejection_reason or "").strip()
-            # Agno resolution_data convention uses "note"; keep rejection_reason for our UI.
-            resolution_data["rejection_reason"] = reason
+            # Agno convention: only ``note`` (no dual rejection_reason key).
             resolution_data["note"] = reason
         approval = await resolve_approval_record(
             approval_id,

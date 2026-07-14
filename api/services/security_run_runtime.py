@@ -719,8 +719,8 @@ def _approval_rejection_reason(resolution_data: object) -> str:
     if not isinstance(resolution_data, dict):
         return ""
     return str(
-        resolution_data.get("rejection_reason")
-        or resolution_data.get("note")
+        resolution_data.get("note")
+        or resolution_data.get("rejection_reason")
         or ""
     ).strip()
 

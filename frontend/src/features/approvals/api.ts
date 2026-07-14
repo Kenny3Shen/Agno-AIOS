@@ -26,10 +26,9 @@ export interface Approval {
   updated_at?: string | number
   resource_type?: 'skill' | 'mcp' | string
   submitted_by?: ApprovalActor | string
-  submitted_by_email?: string
   resolved_by?: ApprovalActor | string | null
-  resolved_by_email?: string
   resolved_at?: string | number
+  /** Upload submissions only (workbench field). HITL reasons live in resolution_data.note. */
   rejection_reason?: string | null
   resolution_data?: Record<string, unknown> | null
   run_status?: 'PAUSED' | 'RUNNING' | 'COMPLETED' | 'ERROR' | 'CANCELLED' | string | null
@@ -86,9 +85,7 @@ export const normalizeApproval = (value: unknown): Approval | null => {
     updated_at: row.updated_at as string | number | undefined,
     resource_type: row.resource_type != null ? String(row.resource_type) : undefined,
     submitted_by: asActor(row.submitted_by),
-    submitted_by_email: row.submitted_by_email != null ? String(row.submitted_by_email) : undefined,
     resolved_by: asActor(row.resolved_by) ?? null,
-    resolved_by_email: row.resolved_by_email != null ? String(row.resolved_by_email) : undefined,
     resolved_at: row.resolved_at as string | number | undefined,
     rejection_reason: row.rejection_reason != null ? String(row.rejection_reason) : null,
     resolution_data:

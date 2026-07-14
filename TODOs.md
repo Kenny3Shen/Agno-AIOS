@@ -1,5 +1,15 @@
 # 下一步工作
 
+## 已完成：Approvals email/拒绝理由字段收窄
+
+- HITL list/detail 不再输出 `submitted_by_email` / `resolved_by_email`，只 enrich `submitted_by` / `resolved_by` 对象。
+- resolve 拒绝时仅写 `resolution_data.note`（不再 dual-write `rejection_reason` 键）；读路径优先 `note`，历史行仍可读旧键。
+- 请求体 `rejection_reason` 与 submissions 顶层 `rejection_reason` 保留（产品表单 / 上传审批）。
+
+相关入口：
+
+- 代码：`api/services/approvals_service.py`、`api/routes/approvals.py`、`frontend/src/features/approvals/*`
+
 ## 已完成：Memory 字段收窄 + Trace URL 去 legacy
 
 - Memory list 投影只认 `memory_id` / `memory` / `topics`；缺 `memory_id` 的行丢弃，不再用 `id`/`content`/`topic` 兜底。
