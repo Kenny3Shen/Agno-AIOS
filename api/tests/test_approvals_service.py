@@ -12,6 +12,7 @@ from api.services.approvals_service import (
     ApprovalListParams,
     ApprovalResolveConflictError,
     get_approval_record,
+    get_pending_approval_count,
     list_approvals_native,
     resolve_approval_record,
 )
@@ -44,7 +45,13 @@ class FakeApprovalDb:
     def __init__(self):
         self.list_kwargs: dict[str, object] = {}
         self.updated: dict[str, object] = {}
+        self.pending_count_user_id: str | None = None
+        self.pending_count_value: int = 3
         self.return_update = True
+
+    async def get_pending_approval_count(self, user_id=None):
+        self.pending_count_user_id = user_id
+        return self.pending_count_value
 
     async def get_approvals(self, **kwargs):
         self.list_kwargs = kwargs
@@ -448,3 +455,47 @@ async def test_retry_only_accepts_failed_security_chat_runs():
 
     resume.assert_awaited_once_with("approval-1", retry_error=True)
     assert result["run_status"] == "RUNNING"
+
+@pytest.mark.asyncio
+async def test_get_pending_approval_count_scopes_non_admin():
+    db = FakeApprovalDb()
+    with patch(
+        "api.services.approvals_service.get_async_agno_postgres_db",
+        return_value=db,
+    ):
+        count = await get_pending_approval_count(actor=actor("user-9", role="user"))
+
+    assert count == 3
+    assert db.pending_count_user_id == "user-9"
+
+
+@pytest.mark.asyncio
+async def test_get_pending_approval_count_admin_global_and_filter():
+    db = FakeApprovalDb()
+    with patch(
+        "api.services.approvals_service.get_async_agno_postgres_db",
+        return_value=db,
+    ):
+        global_count = await get_pending_approval_count(actor=actor("admin-1"))
+        filtered = await get_pending_approval_count(
+            actor=actor("admin-1"),
+            user_id="member-2",
+        )
+
+    assert global_count == 3
+    assert filtered == 3
+    assert db.pending_count_user_id == "member-2"
+
+
+@pytest.mark.asyncio
+async def test_approvals_count_route_returns_agno_shape():
+    db = FakeApprovalDb()
+    db.pending_count_value = 7
+    with patch(
+        "api.services.approvals_service.get_async_agno_postgres_db",
+        return_value=db,
+    ):
+        payload = await approvals.get_approval_count(user=actor("admin-1"))
+
+    assert payload == {"count": 7}
+

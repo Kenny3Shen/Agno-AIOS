@@ -301,6 +301,26 @@ async def list_approvals_native(
     }
 
 
+
+
+async def get_pending_approval_count(
+    *,
+    actor: ActorLike | None = None,
+    user_id: str | None = None,
+) -> int:
+    """Return pending HITL approval count (Agno ``get_pending_approval_count``).
+
+    Non-admin actors are forced to their own user_id; admins may pass optional
+    ``user_id`` filter (None = global pending count).
+    """
+    scoped = _scoped_user_id(actor, user_id)
+    raw = await get_async_agno_postgres_db().get_pending_approval_count(user_id=scoped)
+    try:
+        return max(0, int(raw or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 async def get_approval_record(approval_id: str) -> ApprovalRecord | None:
     approval = await get_async_agno_postgres_db().get_approval(approval_id)
     return await enrich_approval(normalize_approval(approval)) if approval is not None else None

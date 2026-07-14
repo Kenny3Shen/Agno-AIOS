@@ -1,5 +1,15 @@
 # 下一步工作
 
+## 已完成：Approvals pending count 端点
+
+- 新增 `GET /api/approvals/count` → Agno 风格 `{ count }`，scopes + user isolation 与列表一致。
+- overview `pending_approvals` 复用 service；侧栏 Approvals 导航显示 pending badge。
+
+相关入口：
+
+- API：`GET /api/approvals/count`
+- 代码：`api/services/approvals_service.py`、`frontend/src/features/approvals/api.ts`、`frontend/src/app/shell/AppFrame.tsx`
+
 ## 已完成：模型 structured output 标记与 API metadata 解耦
 
 - `build_agno_model` 使用私有属性 `_tais_structured_output_mode`，不再写入 `model.metadata`。

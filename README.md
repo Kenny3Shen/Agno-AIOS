@@ -89,6 +89,8 @@ Trace 列表/会话 `GET /api/traces` 与 `GET /api/traces/sessions` 使用 Agno
 
 Approvals HITL 列表 `GET /api/approvals` 使用 Agno 风格 `data`/`meta`；详情/resolve/resume 与 Skill/MCP `submissions` 仍为工作台自研契约（身份 enrich、拒绝理由、Run 恢复）。
 
+`GET /api/approvals/count` 返回 Agno 风格 `{ count }`（pending HITL），供导航 badge 与 dashboard 快照复用。
+
 Agent Evals 的 Agno 结果读路径 `GET /api/agent-evals/agno-runs` 使用 Agno 风格 `data`/`meta`，行字段对齐 `id` + `eval_data`（保留 `passed`/`score` 投影）；suites/cases/runs/replay 与 `/failures`/`/trends` 仍为工作台自研。
 
 ```mermaid

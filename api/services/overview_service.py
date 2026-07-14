@@ -310,7 +310,9 @@ async def _snapshots(actor: ActorLike) -> dict[str, Any]:
 
     if has_scope(actor, "approvals:read"):
         try:
-            result["pending_approvals"] = int(await db.get_pending_approval_count(user_id=user_id))
+            from api.services.approvals_service import get_pending_approval_count
+
+            result["pending_approvals"] = await get_pending_approval_count(actor=actor)
         except Exception:
             pass
 

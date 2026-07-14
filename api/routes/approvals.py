@@ -15,6 +15,7 @@ from api.services.approvals_service import (
     ApprovalListParams,
     ApprovalResolveConflictError,
     get_approval_record,
+    get_pending_approval_count,
     list_approvals_native,
     resolve_approval_record,
 )
@@ -165,6 +166,25 @@ async def list_approvals(
     except Exception as exc:
         logger.error(f"获取 Agno 审批列表失败: {exc}")
         raise HTTPException(status_code=500, detail="Failed to load approvals") from exc
+
+
+@router.get("/count")
+async def get_approval_count(
+    user_id: str | None = None,
+    user: User = Depends(require_scope("approvals:read")),
+):
+    """Pending HITL approval count (Agno-native ``{ count }``).
+
+    Non-admins always count their own rows; admins may filter by ``user_id``.
+    Must be registered before ``/{approval_id}`` so ``count`` is not captured
+    as an approval id.
+    """
+    try:
+        count = await get_pending_approval_count(actor=user, user_id=user_id)
+    except Exception as exc:
+        logger.error(f"获取 Agno 待审批数量失败: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to load approval count") from exc
+    return {"count": count}
 
 
 @router.get("/{approval_id}")

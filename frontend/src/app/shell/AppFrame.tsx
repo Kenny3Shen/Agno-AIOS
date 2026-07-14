@@ -48,6 +48,7 @@ import {
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { currentUserQuery, logout } from '@/features/auth'
+import { getApprovalCount } from '@/features/approvals/api'
 import { ChatTaskPanel } from '@/features/chat/ChatTaskPanel'
 import { chatKeys } from '@/features/chat/queries'
 import {
@@ -164,6 +165,14 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const token = getToken()
   const userQuery = useQuery({ ...currentUserQuery(), enabled: Boolean(token), retry: false })
   const canReadApprovals = hasScope(userQuery.data, 'approvals:read')
+  const approvalCountQuery = useQuery({
+    queryKey: ['approvals', 'count'],
+    queryFn: () => getApprovalCount(),
+    enabled: Boolean(token) && canReadApprovals,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  })
+  const pendingApprovalCount = approvalCountQuery.data ?? 0
   const canReadNotifications = hasScope(userQuery.data, 'sessions:read')
   const notificationsQuery = useQuery({
     queryKey: ['notifications'],
@@ -223,11 +232,18 @@ export function AppFrame({ children }: { children: ReactNode }) {
         children: group.items.map((item) => ({
           key: item.key,
           icon: item.icon,
-          label: t(`shell:${item.labelKey}`),
+          label: item.key === '/approvals' && pendingApprovalCount > 0 ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <span>{t(`shell:${item.labelKey}`)}</span>
+              <Badge count={pendingApprovalCount} size="small" overflowCount={99} />
+            </span>
+          ) : (
+            t(`shell:${item.labelKey}`)
+          ),
           title: t(`shell:${item.labelKey}`),
         })),
       })),
-    [t, userQuery.data]
+    [pendingApprovalCount, t, userQuery.data]
   )
   const collapsedItems = useMemo<MenuProps['items']>(
     () =>
@@ -235,11 +251,18 @@ export function AppFrame({ children }: { children: ReactNode }) {
         group.items.map((item) => ({
           key: item.key,
           icon: item.icon,
-          label: t(`shell:${item.labelKey}`),
+          label: item.key === '/approvals' && pendingApprovalCount > 0 ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <span>{t(`shell:${item.labelKey}`)}</span>
+              <Badge count={pendingApprovalCount} size="small" overflowCount={99} />
+            </span>
+          ) : (
+            t(`shell:${item.labelKey}`)
+          ),
           title: t(`shell:${item.labelKey}`),
         }))
       ),
-    [t, userQuery.data]
+    [pendingApprovalCount, t, userQuery.data]
   )
   const settingsItems = useMemo<MenuProps['items']>(
     () =>

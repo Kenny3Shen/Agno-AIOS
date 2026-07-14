@@ -139,3 +139,21 @@ export const resolveSubmissionApproval = (id: string, status: 'approved' | 'reje
 
 export const getSkillSubmissionPreview = (id: string) =>
   requestJson<SkillSubmissionPreview>(`/approvals/submissions/${encodeURIComponent(id)}/skill-preview`)
+
+export type ApprovalCountResult = {
+  count: number
+}
+
+/** Pending HITL approval count (Agno-native ``{ count }``). */
+export const getApprovalCount = async (userId?: string): Promise<number> => {
+  const search = new URLSearchParams()
+  if (userId) search.set('user_id', userId)
+  const query = search.toString()
+  const payload = asRecord(
+    await requestJson<unknown>(`/approvals/count${query ? `?${query}` : ''}`)
+  )
+  const count = Number(payload.count ?? 0)
+  if (!Number.isFinite(count) || count <= 0) return 0
+  return Math.floor(count)
+}
+
