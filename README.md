@@ -53,6 +53,16 @@ TAIS_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
 - `TAIS_KNOWLEDGE_*`：Knowledge chunk、search、rerank 与 PgVector 配置。
 - `VITE_API_PROXY_TARGET`：前端开发代理地址。
 
+### 模型工具调用并行度
+
+在“系统设置 → 模型连接 → 编辑 → Advanced”中，可为每个非 DeepSeek 模型设置“并行工具调用”。该配置持久化为 `parallel_tool_calls`：
+
+- **启用**：向模型 API 发送 `parallel_tool_calls=true`。
+- **禁用**：向模型 API 发送 `parallel_tool_calls=false`；对于不支持并行工具调用的网关或模型应选择此项。
+- **留空**：不发送该参数，使用模型提供商默认值。
+
+Responses 协议通过 Agno `OpenAIResponses.parallel_tool_calls` 传递；Chat Completions 协议通过 Agno `OpenAIChat` / `OpenAILike` 的 `request_params` 传递。聊天 Run 和会话摘要使用同一模型工厂，因此该设置同时覆盖两条调用路径。
+
 前端生产构建：
 
 ```bash
@@ -138,15 +148,16 @@ flowchart LR
 
 ### HITL 人机审批技术架构
 
-HITL（Human-in-the-Loop）用于在 Agent 执行**高影响工具**前强制暂停，由具备审批权限的管理员确认或拒绝后再继续运行。当前产品以模拟处置工具 `simulate_containment` 验证整条安全边界：真实外部系统不会被变更，但审批、恢复、通知、聊天/Trace 投影与审计路径与生产处置一致。
+HITL（Human-in-the-Loop）在 Agent 执行高影响工具前暂停同一个 Agno Run，由管理员批准或拒绝后继续。Agno approvals、session RunOutput、`RunRequirement` 和 `run_status` 是唯一运行状态源；应用层不再手工维护暂停/恢复状态。
 
-审批中心还承载另一类**资源入库审批**（Skill / MCP 上传 staging）。下文先说明 **Agent 工具 HITL**（Agno native pause/continue），再补充与上传审批的差异。
+当前演示工具是 MCP `hitl` namespace 下的 `hitl_simulate_containment(target, action, reason)`。它只记录模拟处置和执行审计，不修改外部系统。审批中心同时承载 Skill/MCP 上传审批，但上传审批不进入 Agno Run 恢复链路。
 
 #### 设计原则
 
-- **优先 Agno 原生 API**：工具暂停用 `@approval(type="required")` + `@tool(requires_confirmation=True)`；审批落库用 Agno `AsyncPostgresDb` approvals 表；解析用 `agno.run.approval.aresolve_approval`；恢复用 `RunRequirement.confirm()` / `reject(note=...)` + `agent.acontinue_run(...)`。
-- **产品层只补 Agno 没有的能力**：进程重启后的可恢复上下文（`hitl_paused_runs`）、管理员/提交者通知、提交者邮箱 enrichment、Chat/Trace 历史中的暂停占位与拒绝原因投影、前端审批中心与拒绝必填理由。
-- **拒绝原因必须进工具结果**：纯 `@approval` 路径上，`continue_run` 只会把 `confirmed=False` 写回工具，**不会**把 `resolution_data.note` 复制到 `confirmation_note`。因此恢复时必须走 `requirement.reject(note=...)`，才能让 Agent / 会话历史看到「Rejected by administrator: …」。
+- **Agno 单一状态源**：审批落库使用 Agno approvals，解析使用 `aresolve_approval(..., expected_status="pending")`，恢复使用原 session RunOutput、`RunRequirement` 和 `acontinue_run()`。
+- **MCP namespace 门闩**：Agent 只挂载 `MCPTools`；加载后仅对 `hitl_` 前缀的 Agno `Function` 应用 `approval(type="required")`。
+- **运行配置跟随 Run**：初始 `arun()` 把版本化 `tais_runtime` 写入 Run metadata，恢复时据此重建相同模型、reasoning、Knowledge owner、Memory 和工具输出设置。
+- **产品层只补工作台能力**：管理员/提交者通知、通知 SSE、身份 enrichment、Chat/Trace 最终投影、审批 UI 和拒绝理由校验。
 
 #### 端到端时序
 
@@ -156,73 +167,58 @@ sequenceDiagram
     participant Chat as Chat SSE
     participant Runtime as SecurityRunRuntime
     participant Agno as Agno Agent
-    participant ADB as Agno Approvals DB
-    participant HR as hitl_paused_runs
+    participant DB as Agno Session / Approval DB
     participant Admin as 管理员 / 审批中心
-    participant Notify as 通知中心
+    participant Notify as Notification SSE
 
     User->>Chat: 发起模拟隔离/封禁
     Chat->>Runtime: arun(stream_events)
-    Runtime->>Agno: tools=[MCP, simulate_containment]
-    Agno->>Agno: 调用 simulate_containment
-    Agno->>ADB: create approval (pending, required)
+    Runtime->>Agno: tools=[MCPTools]
+    Agno->>DB: 保存 tais_runtime metadata
+    Agno->>Agno: 调用 hitl_simulate_containment
+    Agno->>DB: approval=pending, run_status=PAUSED
     Agno-->>Runtime: RunEvent.run_paused + approval_id
-    Runtime->>HR: save_paused_run(request_context)
     Runtime->>Notify: 通知管理员待审批
     Runtime-->>Chat: run.paused (approval_id, tool summary)
-    Chat-->>User: 会话显示等待审批
-
-    Admin->>Admin: POST /api/approvals/{id}/resolve
-    Admin->>ADB: aresolve_approval(approved|rejected + note)
-    Admin->>Notify: 通知提交者结果
-    Admin->>Runtime: resume_security_run(approval_id)
-    Runtime->>HR: resume_status=running
-    Runtime->>Agno: aget_run_output → confirm/reject(note)
-    Runtime->>Agno: acontinue_run(requirements=...)
-    Agno-->>Runtime: 工具结果 / 最终回复
-    Runtime->>HR: resume_status=completed|failed
-    Runtime-->>User: 历史刷新可见批准执行或拒绝原因
+    Admin->>DB: aresolve_approval(expected_status=pending)
+    Runtime->>DB: run_status=RUNNING
+    Runtime-->>Admin: resolve 立即返回
+    Runtime->>DB: get_session 找到原 RunOutput
+    Runtime->>Agno: confirm/reject(note) + acontinue_run
+    Agno->>DB: 同一 Run 最终内容 + COMPLETED
+    Runtime->>Notify: 通知提交者最终结果
+    Notify-->>User: 刷新通知、审批、Chat history、会话列表
 ```
 
 #### 分层组件
 
 | 层级 | 职责 | 关键实现 |
 |------|------|----------|
-| 工具边界 | 声明必须审批的模拟处置 | `api/services/hitl_containment.py` |
+| 工具边界 | FastMCP `hitl` namespace 与模拟处置 | `api/mcp/tools/hitl.py` |
 | Skill 提示 | 约束何时调用、如何汇报通过/拒绝 | `api/agent/skills/hitl-containment-skill/` |
-| 运行时 | 挂载工具、流式事件、暂停持久化、原生恢复 | `api/services/security_run_runtime.py` |
+| 运行时 | MCP 审批标记、Run metadata、异步继续与启动恢复 | `api/services/security_run_runtime.py` |
 | 审批 API | 列表/详情/解析、拒绝理由校验、触发恢复 | `api/routes/approvals.py`、`api/services/approvals_service.py` |
-| Agno 审批存储 | pending/approved/rejected 与 `resolution_data` | Agno `AsyncPostgresDb` approvals |
-| 可恢复上下文 | 审批 ID ↔ run/session/user/request | `api/persistence/hitl_runs.py`（表 `hitl_paused_runs`） |
-| 通知 | 管理员待办、提交者结果 | `api/services/notification_service.py` |
+| Agno 状态 | approval、session RunOutput、requirements、`run_status` | Agno `AsyncPostgresDb` |
+| 通知 | 管理员/提交者通知与鉴权 SSE | `notification_service.py`、`routes/notifications.py` |
 | 历史投影 | Chat 消息 / Trace 输出中的暂停与结果文案 | `chat_session_service.py`、`tracing_service.py`、`chat_run_events.py` |
 | 前端 | 审批中心、拒绝弹窗、Chat 暂停态 | `frontend/src/features/approvals/*`、`frontend/src/features/chat/*` |
 
 #### 1. 工具与 Skill 边界
 
-`simulate_containment` 使用双装饰器，同时打开 Agno 的 **required approval** 与 **confirmation** 门闩：
+`api/mcp/tools/hitl.py` 定义 `simulate_containment`，主 MCP 服务以 `namespace="hitl"` 挂载后对客户端暴露为 `hitl_simulate_containment`。Agent 工厂只传入 `tools=[mcp_tools]`，运行时在 MCP 初始化后遍历 `functions` / `async_functions`，对所有 `hitl_` 前缀 Function 应用 Agno required approval。
 
-```python
-@approval(type="required")
-@tool(requires_confirmation=True)
-async def simulate_containment(target, action, reason, run_context=None) -> dict:
-    # 仅在审批通过并 continue 后真正执行
-    # 写审计事件 skill.simulated_containment.executed，返回 status=simulated
-```
-
-- Agent 工厂在 `SecurityRunRuntime._build_security_agent` 中固定挂载：`tools=[mcp_tools, simulate_containment]`，并加载已启用的本地 Skills（含 `hitl-containment-skill`）。
-- Skill 要求：用户明确请求模拟隔离/封禁时才调用；工具返回前不得声称已生效；拒绝时必须完整转述管理员原因；禁止对接真实外部处置系统。
+`MCPTools.header_provider` 在实际工具调用时注入当前 user/session/run ID；FastMCP 工具通过 HTTP headers 写 `skill.simulated_containment.executed` 审计。Skill 要求在审批前说明暂停，批准后使用真实工具结果，拒绝后完整展示管理员理由。
 
 #### 2. 暂停路径（Pause）
 
 1. 用户在 Chat 发消息 → `SecurityRunRuntime` 以 `stream=True, stream_events=True` 调用 `agent.arun`。
-2. 模型决定调用 `simulate_containment` 时，Agno 创建 `approval_type=required` 的审批记录（`pending`），给 tool execution 打上 `approval_id`，并将 run 置为 **PAUSED**。
-3. 运行时收到 `RunEvent.run_paused` 后：
-   - 通过 `paused_payload` 投影 `approval_id` / `run_id` / `session_id` / `tool_name` / 参数摘要；
-   - `save_paused_run` 写入 `hitl_paused_runs`（含 `request_context`：消息、模型、memory 开关、知识归属等），`resume_status=pending`；
-   - `notify_admins_of_hitl_approval` 推送管理员通知（跳转 `/approvals?approval_id=...`）；
+2. 初始 Run metadata 写入版本化 `tais_runtime`，保存恢复 Agent 所需配置。
+3. 模型决定调用 `hitl_simulate_containment` 时，Agno 创建 `approval_type=required` 的审批记录（`pending`），给 tool execution 打上 `approval_id`，并将 Run 置为 `PAUSED`。
+4. 运行时收到 `RunEvent.run_paused` 后：
+   - 通过 `paused_payload` 投影 `approval_id` / `run_id` / `session_id` / `tool_name`；
+   - 通知所有管理员，链接指向具体 approval；
    - 向 Chat SSE 下发 `run.paused`，前端展示等待审批态。
-4. 聊天历史 / Trace 在 status 为 paused 且确认工具仍未 resolved 时，投影为「等待管理员审批」类占位，避免把过期助手草稿当成最终结论。
+5. Chat 与 Trace 此时只展示暂停状态，不创建第二条 Run 或手工修改 Trace。
 
 #### 3. 审批解析路径（Resolve）
 
@@ -237,7 +233,7 @@ API：`POST /api/approvals/{approval_id}/resolve`（scope：`approvals:write`）
 服务端行为：
 
 1. 拒绝时把理由同时写入 `resolution_data.rejection_reason`（产品 UI）与 `resolution_data.note`（Agno 约定）。
-2. `resolve_approval_record` 先 `get_approval`（404），再调用原生：
+2. `resolve_approval_record` 调用 Agno 原生解析：
 
 ```python
 await aresolve_approval(
@@ -249,29 +245,24 @@ await aresolve_approval(
 )
 ```
 
-   - 乐观锁：`expected_status="pending"`；非 pending 映射为 `409 ApprovalResolveConflictError`。
-3. 对 `tool_name == simulate_containment` 的 HITL 记录：
-   - 通知提交者（通过/拒绝 + 理由）；
-   - 调用 `resume_security_run(approval_id)` 恢复 run；
-   - 返回体附带 `resume_status`（`completed` / `failed` / 等）。
+   - 乐观锁固定为 `expected_status="pending"`；重复解析映射为 `409 ApprovalResolveConflictError`。
+3. 对 `security-operations` Agent 且具备 run/session/user ID 的审批，将 Agno `run_status` 更新为 `RUNNING`，按 approval ID 去重注册后台 continuation task，并立即返回刷新后的 approval。
 4. 写入策略审计 `approvals.approved` / `approvals.rejected`。
 
-列表与详情会 enrichment：提交者/解析人邮箱、`resume_status` / `resume_error`（来自 `hitl_paused_runs`）。普通用户 `approvals:read` 仅可见自己相关记录；解析控件仍要求 `approvals:write`（管理员）。
+列表与详情只 enrich 提交者/解析人身份，运行状态统一读取 Agno `run_status`。普通用户 `approvals:read` 仅可见自己的记录；解析和重试要求 `approvals:write`。
+
+重试：`POST /api/approvals/{id}/resume` 仅接受已解析且 `run_status=ERROR` 的安全 Chat approval。
 
 #### 4. 恢复路径（Resume，Agno Native）
 
-`SecurityRunRuntime.resume`：
+`SecurityRunRuntime` 后台任务执行：
 
-1. 从 `hitl_paused_runs` 读取上下文；若 `resume_status == running` 则拒绝并发恢复。
-2. 用 `request_context` 重建 `SecurityRunRequest` 与 Agent（同一 user/session/run）。
-3. `apply_native_hitl_resolution`：
-   - 读已解析的 approval；
-   - `agent.aget_run_output(run_id, session_id, user_id)` 取暂停 run；
-   - 收集 `RunRequirement`（必要时从 tools 重建）；
-   - 匹配 `approval_id`（回退匹配 `simulate_containment`）；
-   - **approved** → `req.confirm()`；**rejected** → `req.reject(note="Rejected by administrator: {reason}")`。
-4. `agent.acontinue_run(run_id=..., session_id=..., requirements=..., stream=True)` 消费剩余事件；若 requirements 为空则退回纯 approval 路径（`acontinue_run` 无 requirements，由 Agno 按 DB 状态应用 confirmed）。
-5. 更新 `resume_status` 为 `completed` 或 `failed`（错误截断写入 `resume_error`）。
+1. 按 approval 的 `session_id` / `user_id` 调用 Agno DB `get_session()`，在 session runs 中找到同一 `run_id` 的 RunOutput。
+2. 从 Run metadata 的 `tais_runtime` 重建相同 Agent 配置。
+3. 收集原 Run 的 active `RunRequirement`：批准调用 `confirm()`；拒绝调用 `reject(note="Rejected by administrator: ...")`。
+4. 调用 `agent.acontinue_run(run_response=原 RunOutput, requirements=..., stream=True)` 并消费到终态。
+5. Agno 持久化同一 Run 的最终内容并更新 approval `run_status=COMPLETED`。异常时写 `ERROR`、标记 Trace 失败并通知双方。
+6. 进程启动时恢复已解析且 `run_status` 为 `PAUSED`/`RUNNING` 的任务；关闭时取消任务但保留 `RUNNING`，下次启动继续。
 
 拒绝 note 的固定前缀保证 Chat/Skill/审计侧可稳定识别：
 
@@ -283,14 +274,15 @@ Rejected by administrator: <管理员填写的理由>
 
 | 扩展 | 原因 |
 |------|------|
-| 表 `hitl_paused_runs` | Agno 保存 session/run，但不保存本产品重建 Agent 所需的请求上下文；进程重启后仍需可 resume |
-| 通知中心 | 管理员待办、提交者结果；Agno 不提供多用户工作台通知 |
+| 版本化 `tais_runtime` metadata | 用原 Run 自身重建 Agent，不引入第二状态源 |
+| approval ID 后台任务表 | 单进程内避免重复调度；重启后按 Agno `run_status` 恢复 |
+| 通知中心与 SSE | 管理员待办、提交者最终结果、断线游标补发 |
 | 邮箱 / 身份 enrichment | 审批列表展示提交者与审批人可读身份 |
-| Chat/Trace 投影 | 暂停占位、拒绝后合成说明、批准后工具结果摘要；避免会话里只剩空/过期 assistant 文本 |
+| Chat/Trace 投影 | 以 Agno 最终 RunOutput 覆盖暂停占位或部分输出 |
 | 前端拒绝必填 | UX 与 API 双重校验，保证 note 始终非空 |
 | 审计事件 | `skill.simulated_containment.executed`、`approvals.*` 与策略审计对接 |
 
-**刻意不做的事**：不再手工改写 Agno session JSON 以「盖戳」拒绝说明；拒绝语义以 `RunRequirement.reject(note=...)` 与工具结果为准。
+**刻意不做的事**：不手工改写 Agno session JSON、trace ID 或拼接 continuation spans。`api/persistence/hitl_runs.py` 和旧表 `hitl_paused_runs` 仅为回滚保留，当前运行时不读写。
 
 #### 6. 数据与状态
 
@@ -298,30 +290,22 @@ Rejected by administrator: <管理员填写的理由>
 
 - 关键字段：`id`、`run_id`、`session_id`、`status`、`approval_type`、`pause_type`、`tool_name`、`tool_args`、`user_id`、`resolution_data`、`resolved_by`、`resolved_at`、`run_status` 等。
 - HITL 工具审批：`approval_type=required`，创建时 `status=pending`。
-
-**`{AGNO_APP_SCHEMA}.hitl_paused_runs`（应用库）**
-
-| 列 | 含义 |
-|----|------|
-| `approval_id` PK | 关联 Agno approval |
-| `run_id` / `session_id` / `user_id` | 恢复身份 |
-| `request_context` JSONB | 重建 `SecurityRunRequest` |
-| `resume_status` | `pending` → `running` → `completed` \| `failed` |
-| `resume_error` | 失败摘要 |
+- `status` 表示审批决定（`pending` / `approved` / `rejected`）；`run_status` 表示主 Run（`PAUSED` / `RUNNING` / `COMPLETED` / `ERROR` 等）。
+- Agno session 中同一 RunOutput 保存最终 assistant 内容、工具结果、requirements 和 `tais_runtime` metadata。
 
 **Run / 工具状态（概念）**
 
 ```text
-running ──tool(requires_confirmation + approval required)──► paused
-paused  ──admin approve──► continue ──► tool executed (status=simulated) ──► completed
-paused  ──admin reject + note──► continue ──► tool rejected (confirmation_note) ──► completed
+RUNNING ──hitl tool──► PAUSED ──resolve──► RUNNING ──acontinue_run──► COMPLETED
+                                      └──continuation error──► ERROR ──manual retry──► RUNNING
 ```
 
 #### 7. 前端体验
 
-- **审批中心**（`/approvals`）：列表 HITL 与上传审批；展示提交者邮箱、工具名/参数、resume 状态；管理员通过/拒绝；拒绝弹窗强制填写原因。
+- **审批中心**（`/approvals`）：列表 HITL 与上传审批；展示提交者邮箱、工具名/参数和 Agno `run_status`；拒绝弹窗强制填写原因；`run_status=ERROR` 时显示「重试恢复」。
 - **Chat**：SSE `run.paused` 展示等待审批；历史刷新后根据 tool `confirmed` / `confirmation_note` 显示最终结果或拒绝说明；消息可携带 `approval_id` 便于跳转审批详情。
-- **通知**：管理员「待 HITL 审批」；提交者「已通过 / 已拒绝 + 理由」；`data.path` 指向审批页。
+- **通知**：`GET /api/notifications/stream?after_id=` 按 ID 游标升序推送 `notification.created`；前端使用 Authorization fetch stream，并按 1/2/5/10 秒退避重连，30 秒 REST 轮询兜底。
+- **双向刷新**：暂停通知管理员并链接具体 approval；继续完成后通知提交者并链接 `/chat?session=...`；失败同时通知双方。事件会刷新通知、审批、对应 Chat history 和会话列表。
 - i18n：`frontend/src/shared/i18n/namespaces/approvals.*` 与 `chat.*`。
 
 #### 8. 权限与安全边界
@@ -336,7 +320,7 @@ paused  ──admin reject + note──► continue ──► tool rejected (con
 | | Agent 工具 HITL | Skill/MCP 上传审批 |
 |--|-----------------|-------------------|
 | 触发 | Chat 中工具调用暂停 run | 用户提交 staging 资源 |
-| 存储 | Agno approvals + `hitl_paused_runs` | 应用侧 submission approvals |
+| 存储 | Agno approvals + session RunOutput | 应用侧 submission approvals |
 | 解析 API | `POST /api/approvals/{id}/resolve` | `POST /api/approvals/submissions/{id}/resolve` |
 | 通过后 | `acontinue_run` 执行工具 | 发布/启用资源 |
 | 拒绝后 | 工具不执行，note 回写 run | 资源不发布，通知提交者 |
@@ -346,21 +330,20 @@ paused  ──admin reject + note──► continue ──► tool rejected (con
 #### 10. 关键代码索引
 
 ```text
-api/services/hitl_containment.py          # simulate_containment 原生装饰器
+api/mcp/tools/hitl.py                     # FastMCP hitl namespace 与模拟处置
 api/agent/skills/hitl-containment-skill/  # Skill 使用规范
-api/services/security_run_runtime.py      # pause 持久化 + apply_native_hitl_resolution + resume
-api/persistence/hitl_runs.py              # hitl_paused_runs
-api/services/approvals_service.py         # aresolve_approval 封装、列表 enrichment
-api/routes/approvals.py                   # HTTP 契约、通知与 resume 编排
-api/services/notification_service.py      # 管理员/提交者通知
+api/services/security_run_runtime.py      # metadata、requirements、后台 continue/recovery
+api/services/approvals_service.py         # aresolve_approval 与 Agno approval 查询
+api/routes/approvals.py                   # 异步 resolve/retry HTTP 契约
+api/routes/notifications.py               # 鉴权通知 SSE
+api/services/notification_service.py      # 管理员/提交者双向通知
 api/services/chat_run_events.py           # run.paused 投影
-api/services/chat_session_service.py      # 历史 HITL 文案
-api/services/tracing_service.py           # Trace HITL 文案
-frontend/src/features/approvals/          # 审批中心
-frontend/src/features/chat/               # 暂停态与结果展示
+api/services/chat_session_service.py      # Agno Run 历史与拒绝理由投影
+api/services/tracing_service.py           # 最终 RunOutput 覆盖 Trace 根输出
+frontend/src/app/shell/AppFrame.tsx       # 通知 stream、重连和 Query 刷新
 ```
 
-相关测试：`api/tests/test_approvals_service.py`、`test_hitl_containment.py`、`test_security_run_runtime.py`（native resolve）、`test_notification_service.py`，以及前端 `ApprovalsPage.test.tsx` / chat utils 测试。
+相关测试：`api/tests/test_hitl_containment.py`、`test_security_run_runtime.py`、`test_approvals_service.py`、`test_notifications.py`、`test_notification_service.py`、`test_chat_session_service.py`、`test_trace_permissions.py`，以及前端 approvals/notifications 测试。
 
 官方 Agno 文档参考：<https://docs.agno.com/hitl/overview>、<https://docs.agno.com/hitl/approval>。
 
