@@ -25,6 +25,7 @@ MEMORY_ABNORMAL_GROWTH_THRESHOLD = 500
 
 class MemoryItemPayload(TypedDict):
     id: str
+    memory_id: str
     memory: str
     topics: list[str]
     input: str
@@ -35,6 +36,24 @@ class MemoryItemPayload(TypedDict):
     created_at: str
     updated_at: str
     status: str
+
+
+class MemoryPaginationMeta(TypedDict):
+    page: int
+    limit: int
+    total_pages: int
+    total_count: int
+    search_time_ms: float
+
+
+class MemoryListNativeResponse(TypedDict):
+    data: list[MemoryItemPayload]
+    meta: MemoryPaginationMeta
+    # Transition dual-write fields for existing clients.
+    items: list[MemoryItemPayload]
+    total_count: int
+    page: int
+    limit: int
 
 
 class MemoryUserPayload(TypedDict):
@@ -232,8 +251,10 @@ async def get_memory_payload(
         row_topics = _memory_topics(row.get("topics") or row.get("topic"))
         item_user_id = str(row.get("user_id") or "")
         item_status = user_status_by_id.get(item_user_id, "stored")
+        item_id = str(memory_id or memory or "memory")
         item: MemoryItemPayload = {
-            "id": str(memory_id or memory or "memory"),
+            "id": item_id,
+            "memory_id": item_id,
             "memory": memory,
             "topics": row_topics,
             "input": str(row.get("input") or ""),
@@ -310,6 +331,71 @@ async def get_memory_payload(
     }
 
 
+def _pagination_meta(*, page: int, limit: int, total_count: int, search_time_ms: float = 0.0) -> MemoryPaginationMeta:
+    safe_page = max(1, int(page or 1))
+    safe_limit = max(1, int(limit or 1))
+    total = max(0, int(total_count or 0))
+    total_pages = (total + safe_limit - 1) // safe_limit if total else 0
+    return {
+        "page": safe_page,
+        "limit": safe_limit,
+        "total_pages": total_pages,
+        "total_count": total,
+        "search_time_ms": float(search_time_ms or 0.0),
+    }
+
+
+def memories_to_native_list(
+    payload: MemoryPayloadResponse,
+) -> MemoryListNativeResponse:
+    """Map workbench payload to Agno-native list envelope (data/meta)."""
+    items = list(payload["memories"])
+    filters = payload["memory_filters"]
+    page = int(filters["page"])
+    limit = int(filters["limit"])
+    total_count = int(filters["total"])
+    meta = _pagination_meta(page=page, limit=limit, total_count=total_count)
+    return {
+        "data": items,
+        "meta": meta,
+        "items": items,
+        "total_count": total_count,
+        "page": page,
+        "limit": limit,
+    }
+
+
+async def list_memories_native(
+    actor: ActorLike | None = None,
+    *,
+    user_id: str | None = None,
+    topic: str | None = None,
+    search: str | None = None,
+    search_content: str | None = None,
+    page: int = 1,
+    limit: int = 20,
+) -> MemoryListNativeResponse:
+    """List memories in Agno-native paginated form.
+
+    Accepts both ``search`` (legacy) and ``search_content`` (native) query names.
+    """
+    if search_content is not None and str(search_content).strip():
+        effective_search = str(search_content).strip()
+    elif search is not None and str(search).strip():
+        effective_search = str(search).strip()
+    else:
+        effective_search = None
+    payload = await get_memory_payload(
+        actor,
+        user_id=user_id,
+        topic=topic,
+        search=effective_search,
+        page=page,
+        limit=limit,
+    )
+    return memories_to_native_list(payload)
+
+
 async def delete_memory_record(
     actor: ActorLike,
     *,
@@ -341,6 +427,7 @@ async def delete_memory_record(
     if remaining_memory is not None:
         raise MemoryMutationFailed("Memory delete did not persist")
     return {
+        "id": safe_memory_id,
         "memory_id": safe_memory_id,
         "user_id": owner_user,
         "deleted": True,
@@ -393,6 +480,7 @@ async def update_memory_record(
         raise MemoryMutationFailed("Memory update did not persist")
     persisted_row = _memory_row(persisted_memory)
     return {
+        "id": safe_memory_id,
         "memory_id": safe_memory_id,
         "memory": _memory_text(persisted_row.get("memory")) or safe_memory,
         "topics": _memory_topics(persisted_row.get("topics")) or safe_topics,

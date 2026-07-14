@@ -81,6 +81,8 @@ uv run update-cve
 
 React 工作台通过共享 API client 携带 token 请求 FastAPI；后端检查权限和资源归属后，按模型、MCP、Skills、Knowledge 与 Memory 配置创建 Agno 运行时。Chat 通过 SSE 返回流式输出，Trace、Memory 和 Knowledge 等视图通过 Query 刷新读取最新数据。
 
+Memory 列表 canonical 路径为 `/api/memories`（Agno 风格 `data`/`meta`，兼容 `id`/`memory_id` 与 `search_content`）；旧 `/api/memory` 工作台 payload 仍保留。
+
 ```mermaid
 flowchart LR
     Operator["安全运营人员"] --> Shell

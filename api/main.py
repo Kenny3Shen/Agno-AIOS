@@ -150,6 +150,7 @@ app.include_router(mcp_routes.router)
 app.include_router(knowledge.router)
 app.include_router(agent_evals.router)
 app.include_router(memory.router)
+app.include_router(memory.native_router)
 app.include_router(approvals.router)
 app.include_router(notifications.router)
 

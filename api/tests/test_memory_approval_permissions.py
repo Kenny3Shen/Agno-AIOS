@@ -364,3 +364,67 @@ async def test_memory_update_returns_not_found_when_memory_not_in_scope():
             )
 
     assert db.upserted == []
+
+
+@pytest.mark.asyncio
+async def test_list_memories_native_envelope_and_dual_ids():
+    db = FakeMemoryDb()
+    with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
+        payload = await memory_service.list_memories_native(
+            actor("u1"),
+            search_content="incident",
+            page=1,
+            limit=20,
+        )
+
+    assert db.memory_kwargs["search_content"] == "incident"
+    assert db.memory_kwargs["page"] == 1
+    assert db.memory_kwargs["limit"] == 20
+    assert payload["meta"]["page"] == 1
+    assert payload["meta"]["limit"] == 20
+    assert payload["meta"]["total_count"] == 1
+    assert payload["meta"]["total_pages"] == 1
+    assert payload["total_count"] == 1
+    assert len(payload["data"]) == 1
+    assert payload["data"][0]["id"] == "mem-1"
+    assert payload["data"][0]["memory_id"] == "mem-1"
+    assert payload["items"][0]["memory_id"] == "mem-1"
+
+
+@pytest.mark.asyncio
+async def test_list_memories_native_prefers_search_content_over_search():
+    db = FakeMemoryDb()
+    with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
+        await memory_service.list_memories_native(
+            actor("u1"),
+            search="legacy",
+            search_content="native",
+        )
+    assert db.memory_kwargs["search_content"] == "native"
+
+
+@pytest.mark.asyncio
+async def test_memory_payload_includes_memory_id_dual_field():
+    db = FakeMemoryDb()
+    with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
+        payload = await memory_service.get_memory_payload(actor("u1"))
+    assert payload["memories"][0]["id"] == "mem-1"
+    assert payload["memories"][0]["memory_id"] == "mem-1"
+
+
+@pytest.mark.asyncio
+async def test_memory_update_response_includes_id_dual_field():
+    db = FakeMemoryMutationDb()
+    now = datetime(2026, 7, 5, tzinfo=UTC)
+    with (
+        patch.object(memory_service, "get_async_agno_postgres_db", return_value=db),
+        patch.object(memory_service, "_now", return_value=now),
+    ):
+        result = await memory_service.update_memory_record(
+            actor("owner-1"),
+            memory_id="mem-1",
+            memory="Updated memory",
+            topics=["preference"],
+        )
+    assert result["id"] == "mem-1"
+    assert result["memory_id"] == "mem-1"

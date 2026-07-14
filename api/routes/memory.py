@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -12,6 +12,7 @@ from api.services.memory_service import (
     MemoryMutationNotFound,
     delete_memory_record,
     get_memory_payload,
+    list_memories_native,
     update_memory_record,
 )
 from api.services.security_policy import (
@@ -19,7 +20,10 @@ from api.services.security_policy import (
     record_policy_event,
 )
 
+# Legacy workbench path kept for compatibility.
 router = APIRouter(prefix="/api/memory", tags=["Memory"])
+# Agno-native style aliases under /api/memories.
+native_router = APIRouter(prefix="/api/memories", tags=["Memory"])
 
 
 class MemoryUpdateRequest(BaseModel):
@@ -44,11 +48,26 @@ def require_memory_delete_permission(
     return user
 
 
+def _resolve_search(
+    search: str | None,
+    search_content: str | None,
+) -> str | None:
+    if search_content is not None and str(search_content).strip():
+        return str(search_content).strip()
+    if search is not None and str(search).strip():
+        return str(search).strip()
+    return None
+
+
 @router.get("")
 async def get_memory(
     user_id: str | None = None,
     topic: str | None = None,
     search: str | None = None,
+    search_content: str | None = Query(
+        default=None,
+        description="Agno-native alias for search",
+    ),
     page: int = 1,
     limit: int = 50,
     user: User = Depends(require_scope("memories:read")),
@@ -58,7 +77,7 @@ async def get_memory(
             actor=user,
             user_id=user_id,
             topic=topic,
-            search=search,
+            search=_resolve_search(search, search_content),
             page=page,
             limit=limit,
         )
@@ -67,12 +86,40 @@ async def get_memory(
         raise HTTPException(status_code=500, detail="Failed to load memory") from exc
 
 
-@router.delete("/{memory_id}")
-async def delete_memory(
+@native_router.get("")
+async def list_memories(
+    user_id: str | None = None,
+    topic: str | None = None,
+    search: str | None = None,
+    search_content: str | None = Query(
+        default=None,
+        description="Fuzzy search within memory content (Agno-native name)",
+    ),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=100),
+    user: User = Depends(require_scope("memories:read")),
+):
+    """List memories with Agno-native ``data`` / ``meta`` pagination envelope."""
+    try:
+        return await list_memories_native(
+            actor=user,
+            user_id=user_id,
+            topic=topic,
+            search=search,
+            search_content=search_content,
+            page=page,
+            limit=limit,
+        )
+    except Exception as exc:
+        logger.error(f"获取 Agno memory list 失败: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to load memories") from exc
+
+
+async def _delete_memory_impl(
     memory_id: str,
     request: Request,
-    user_id: str | None = None,
-    user: User = Depends(require_memory_delete_permission),
+    user_id: str | None,
+    user: User,
 ):
     try:
         result = await delete_memory_record(user, memory_id=memory_id, user_id=user_id)
@@ -96,12 +143,31 @@ async def delete_memory(
     return result
 
 
-@router.patch("/{memory_id}")
-async def update_memory(
+@router.delete("/{memory_id}")
+async def delete_memory(
+    memory_id: str,
+    request: Request,
+    user_id: str | None = None,
+    user: User = Depends(require_memory_delete_permission),
+):
+    return await _delete_memory_impl(memory_id, request, user_id, user)
+
+
+@native_router.delete("/{memory_id}")
+async def delete_memory_native(
+    memory_id: str,
+    request: Request,
+    user_id: str | None = None,
+    user: User = Depends(require_memory_delete_permission),
+):
+    return await _delete_memory_impl(memory_id, request, user_id, user)
+
+
+async def _update_memory_impl(
     memory_id: str,
     body: MemoryUpdateRequest,
     request: Request,
-    user: User = Depends(require_memory_write_permission),
+    user: User,
 ):
     try:
         result = await update_memory_record(
@@ -133,3 +199,23 @@ async def update_memory(
         request,
     )
     return result
+
+
+@router.patch("/{memory_id}")
+async def update_memory(
+    memory_id: str,
+    body: MemoryUpdateRequest,
+    request: Request,
+    user: User = Depends(require_memory_write_permission),
+):
+    return await _update_memory_impl(memory_id, body, request, user)
+
+
+@native_router.patch("/{memory_id}")
+async def update_memory_native(
+    memory_id: str,
+    body: MemoryUpdateRequest,
+    request: Request,
+    user: User = Depends(require_memory_write_permission),
+):
+    return await _update_memory_impl(memory_id, body, request, user)

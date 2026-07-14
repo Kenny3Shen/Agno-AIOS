@@ -1,5 +1,17 @@
 # 下一步工作
 
+## 已完成：Memory 对齐 Agno 原生列表协议
+
+- 新增 canonical 路由 `GET/PATCH/DELETE /api/memories*`，返回 Agno 风格 `data`/`meta` 分页 envelope，并过渡期双写 `items`/`total_count`。
+- 保留 `GET /api/memory` 工作台大包（metrics/topics/users）与既有 scopes、user isolation、policy 审计。
+- 查询兼容 `search` 与 `search_content`（优先 native 名）；item / mutate 响应同时带 `id` 与 `memory_id`。
+- 前端 Memory 客户端改打 `/memories`，`normalizeMemory` 兼容新旧字段；补充 vitest 与后端权限/envelope 用例。
+
+相关入口：
+
+- API：`GET /api/memories`、`PATCH|DELETE /api/memories/{memory_id}`；兼容 `GET|PATCH|DELETE /api/memory*`
+- 代码：`api/routes/memory.py`、`api/services/memory_service.py`、`frontend/src/features/memory/api.ts`
+
 ## 已完成：Agno 原生 HITL 与通知闭环
 
 - 高影响工具迁入 FastMCP `hitl` namespace；仅 `hitl_*` Function 使用 Agno required approval。

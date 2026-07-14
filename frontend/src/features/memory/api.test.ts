@@ -1,0 +1,39 @@
+import { describe, expect, it } from 'vitest'
+import { normalizeMemory } from './api'
+
+describe('normalizeMemory', () => {
+  it('maps native memory_id rows', () => {
+    expect(
+      normalizeMemory({
+        memory_id: 'mem-1',
+        memory: 'Prefers short summaries',
+        topics: ['preference'],
+        user_id: 'u1',
+        updated_at: '2026-07-05T00:00:00+00:00',
+      }),
+    ).toMatchObject({
+      id: 'mem-1',
+      memory_id: 'mem-1',
+      memory: 'Prefers short summaries',
+      topics: ['preference'],
+      user_id: 'u1',
+    })
+  })
+
+  it('maps legacy id rows', () => {
+    expect(
+      normalizeMemory({
+        id: 'legacy-1',
+        memory: 'Legacy memory',
+      }),
+    ).toMatchObject({
+      id: 'legacy-1',
+      memory_id: 'legacy-1',
+      memory: 'Legacy memory',
+    })
+  })
+
+  it('returns null when id is missing', () => {
+    expect(normalizeMemory({ memory: 'no id' })).toBeNull()
+  })
+})
