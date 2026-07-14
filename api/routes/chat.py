@@ -209,15 +209,19 @@ async def list_sessions(
     include_runs: bool = False,
     include_archived: bool = False,
     user_id: str | None = None,
+    page: int = 1,
+    limit: int = 500,
     user: User = Depends(require_scope("sessions:read")),
 ):
-    """获取所有聊天会话列表"""
+    """List chat sessions as Agno-style ``{data, meta}``."""
     try:
         owner_user_id = scope_user_id(user, user_id)
         return await get_all_sessions_async(
             owner_user_id=owner_user_id,
             include_runs=include_runs,
             include_archived=include_archived,
+            page=page,
+            limit=limit,
         )
     except Exception as e:
         logger.error(f"获取会话列表失败: {e}")

@@ -93,7 +93,7 @@ async def test_get_all_sessions_async_projects_sorted_archived_session_rows():
         patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
         patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
     ):
-        sessions = await chat_session_service.get_all_sessions_async(
+        result = await chat_session_service.get_all_sessions_async(
             include_archived=True, owner_user_id="u1", include_runs=True
         )
     kwargs = db.get_sessions_kwargs
@@ -101,6 +101,11 @@ async def test_get_all_sessions_async_projects_sorted_archived_session_rows():
     assert kwargs["user_id"] == "u1"
     assert kwargs["limit"] == 500
     assert not kwargs["deserialize"]
+    assert set(result.keys()) == {"data", "meta"}
+    sessions = result["data"]
+    assert result["meta"]["total_count"] == 2
+    assert result["meta"]["page"] == 1
+    assert result["meta"]["limit"] == 500
     assert [session["session_id"] for session in sessions] == ["newer", "older"]
     assert sessions[0]["preview"] == "newer preview"
     assert sessions[0]["archived"]
@@ -125,8 +130,40 @@ async def test_get_all_sessions_filters_archived_by_default():
         patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
         patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
     ):
-        sessions = await chat_session_service.get_all_sessions_async()
-    assert [session["session_id"] for session in sessions] == ["active"]
+        result = await chat_session_service.get_all_sessions_async()
+    assert [session["session_id"] for session in result["data"]] == ["active"]
+    assert result["meta"]["total_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_all_sessions_paginates_filtered_rows():
+    rows = [
+        {
+            "session_id": f"s{i}",
+            "created_at": i,
+            "updated_at": i,
+            "user_id": "u1",
+            "runs": [],
+            "metadata": {},
+        }
+        for i in range(1, 4)
+    ]
+    db = AsyncFakeAgnoDb(rows)
+    with (
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
+    ):
+        result = await chat_session_service.get_all_sessions_async(
+            owner_user_id="u1", page=2, limit=1
+        )
+    assert [row["session_id"] for row in result["data"]] == ["s2"]
+    assert result["meta"] == {
+        "page": 2,
+        "limit": 1,
+        "total_pages": 3,
+        "total_count": 3,
+        "search_time_ms": 0.0,
+    }
 
 
 @pytest.mark.asyncio

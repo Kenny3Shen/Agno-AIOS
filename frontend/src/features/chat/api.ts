@@ -3,12 +3,43 @@ import type { ModelConfigResponse, ReasoningEffort } from '@/shared/types/common
 import type { ChatRunEvent, ChatSession, Message } from './types'
 import { consumeSse, normalizeMessages } from './utils'
 
-export const listSessions = async (includeArchived = false, userId?: string) => {
+const normalizeSession = (value: unknown): ChatSession | null => {
+  if (!value || typeof value !== 'object') return null
+  const row = value as Record<string, unknown>
+  const sessionId = String(row.session_id ?? '').trim()
+  if (!sessionId) return null
+  return {
+    session_id: sessionId,
+    user_id: row.user_id != null ? String(row.user_id) : null,
+    preview: String(row.preview ?? '新对话'),
+    title: row.title != null ? String(row.title) : null,
+    created_at: Number(row.created_at ?? 0) || 0,
+    updated_at: Number(row.updated_at ?? 0) || 0,
+    archived: Boolean(row.archived),
+    runs: Array.isArray(row.runs) ? (row.runs as ChatSession['runs']) : undefined,
+  }
+}
+
+/** Parse Agno-style ``{data, meta}`` chat session list. */
+export const listSessions = async (
+  includeArchived = false,
+  userId?: string,
+  page = 1,
+  limit = 500
+): Promise<ChatSession[]> => {
   const search = new URLSearchParams()
   if (includeArchived) search.set('include_archived', 'true')
   if (userId) search.set('user_id', userId)
-  const value = await requestJson<unknown>(`/chat/sessions${search.size ? `?${search}` : ''}`)
-  return Array.isArray(value) ? (value as ChatSession[]) : []
+  if (page != null) search.set('page', String(page))
+  if (limit != null) search.set('limit', String(limit))
+  const payload = await requestJson<unknown>(`/chat/sessions${search.size ? `?${search}` : ''}`)
+  const envelope = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}
+  const rows = Array.isArray(envelope.data)
+    ? envelope.data
+    : Array.isArray(payload)
+      ? payload
+      : []
+  return rows.map(normalizeSession).filter((row): row is ChatSession => row != null)
 }
 export const getHistory = async (sessionId: string) =>
   normalizeMessages(await requestJson<unknown>(`/chat/sessions/${encodeURIComponent(sessionId)}`))

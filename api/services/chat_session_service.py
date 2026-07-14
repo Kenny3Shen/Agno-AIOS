@@ -150,16 +150,40 @@ async def rename_session(
     }
 
 
+
+def _pagination_meta(*, page: int, limit: int, total_count: int, search_time_ms: float = 0.0) -> dict[str, object]:
+    safe_page = max(1, int(page or 1))
+    safe_limit = max(1, int(limit or 1))
+    total = max(0, int(total_count or 0))
+    total_pages = (total + safe_limit - 1) // safe_limit if total else 0
+    return {
+        "page": safe_page,
+        "limit": safe_limit,
+        "total_pages": total_pages,
+        "total_count": total,
+        "search_time_ms": float(search_time_ms or 0.0),
+    }
+
+
 async def get_all_sessions_async(
     *,
     include_archived: bool = False,
     owner_user_id: str | None = None,
     include_runs: bool = False,
-) -> list[dict[str, Any]]:
-    """Read session summaries through Agno AsyncPostgresDb."""
+    page: int = 1,
+    limit: int = 500,
+) -> dict[str, Any]:
+    """Read session summaries through Agno AsyncPostgresDb.
+
+    Returns an Agno-style ``{data, meta}`` envelope. Archive filtering is applied
+    after the Agno page fetch; ``meta.total_count`` reflects the filtered list.
+    """
     await ensure_agno_postgres_tables_async()
+    safe_page = max(1, int(page or 1))
+    safe_limit = max(1, min(int(limit or 500), 500))
     result: Any = await get_async_agno_postgres_db().get_sessions(
         user_id=owner_user_id,
+        # Fetch a wider window so post-filter archive rows still fill the page.
         limit=500,
         page=1,
         deserialize=False,
@@ -169,7 +193,18 @@ async def get_all_sessions_async(
         row for row in rows if include_archived or not _is_archived_metadata(row.get("metadata"))
     ]
 
-    return _project_session_rows(visible_rows, include_runs=include_runs)
+    sessions = _project_session_rows(visible_rows, include_runs=include_runs)
+    total_count = len(sessions)
+    offset = (safe_page - 1) * safe_limit
+    page_items = sessions[offset : offset + safe_limit]
+    return {
+        "data": page_items,
+        "meta": _pagination_meta(
+            page=safe_page,
+            limit=safe_limit,
+            total_count=total_count,
+        ),
+    }
 
 
 def _sort_time(row: dict[str, Any]) -> float:

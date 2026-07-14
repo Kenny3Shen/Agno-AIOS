@@ -49,7 +49,8 @@ async def test_session_list_service_passes_owner_filter_to_agno_db():
     ):
         result = await chat_session_service.get_all_sessions_async(owner_user_id="u1")
 
-    assert result == []
+    assert result["data"] == []
+    assert result["meta"]["total_count"] == 0
     assert captured["user_id"] == "u1"
     assert captured["deserialize"] is False
 
@@ -158,15 +159,29 @@ async def test_list_sessions_uses_current_user_as_owner_filter():
         owner_user_id: str | None,
         include_archived: bool = False,
         include_runs: bool = False,
+        page: int = 1,
+        limit: int = 500,
     ):
         captured["owner_user_id"] = owner_user_id
         captured["include_archived"] = str(include_archived)
         captured["include_runs"] = str(include_runs)
-        return []
+        captured["page"] = page
+        captured["limit"] = limit
+        return {
+            "data": [],
+            "meta": {
+                "page": page,
+                "limit": limit,
+                "total_pages": 0,
+                "total_count": 0,
+                "search_time_ms": 0.0,
+            },
+        }
 
     with patch.object(chat, "get_all_sessions_async", fake_get_all_sessions):
         result = await chat.list_sessions(include_archived=True, user=actor("u1"))
-    assert result == []
+    assert result["data"] == []
+    assert result["meta"]["total_count"] == 0
     assert captured["owner_user_id"] == "u1"
     assert captured["include_archived"] == "True"
 
@@ -177,7 +192,16 @@ async def test_list_sessions_honors_admin_user_filter():
 
     async def fake_get_all_sessions(*, owner_user_id: str | None, **_kwargs):
         captured["owner_user_id"] = owner_user_id
-        return []
+        return {
+            "data": [],
+            "meta": {
+                "page": 1,
+                "limit": 500,
+                "total_pages": 0,
+                "total_count": 0,
+                "search_time_ms": 0.0,
+            },
+        }
 
     with patch.object(chat, "get_all_sessions_async", fake_get_all_sessions):
         await chat.list_sessions(user_id="u2", user=actor("admin", "admin"))

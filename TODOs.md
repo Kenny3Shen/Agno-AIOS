@@ -1,5 +1,16 @@
 # 下一步工作
 
+## 已完成：Chat sessions 列表对齐 data/meta
+
+- `GET /api/chat/sessions` 返回 `{ data, meta }`（`page`/`limit`/`total_pages`/`total_count`/`search_time_ms`），不再直接返回数组。
+- 支持可选 `page`/`limit`（默认 1/500）；归档过滤后内存分页，meta 反映过滤后总数。
+- 前端 `listSessions` 解析 envelope 后仍返回 `ChatSession[]`（React Query cache 形状不变）。
+
+相关入口：
+
+- API：`GET /api/chat/sessions`
+- 代码：`api/services/chat_session_service.py`、`api/routes/chat.py`、`frontend/src/features/chat/api.ts`
+
 ## 已完成：Trace list root input 批量加载
 
 - `_root_inputs_for_trace_ids` 改为 spans 表 `trace_id IN (...)` 单次查询（优先 root / `parent_span_id IS NULL`），替换 list 页 per-trace `get_spans` N+1。
