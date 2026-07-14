@@ -12,6 +12,7 @@ from api.services.approvals_service import (
     ApprovalListParams,
     ApprovalResolveConflictError,
     get_approval_record,
+    get_approval_status_counts,
     get_pending_approval_count,
     list_approvals_native,
     resolve_approval_record,
@@ -47,6 +48,7 @@ class FakeApprovalDb:
         self.updated: dict[str, object] = {}
         self.pending_count_user_id: str | None = None
         self.pending_count_value: int = 3
+        self.status_totals: dict[str, int] = {"pending": 3, "approved": 5, "rejected": 1}
         self.return_update = True
 
     async def get_pending_approval_count(self, user_id=None):
@@ -55,6 +57,25 @@ class FakeApprovalDb:
 
     async def get_approvals(self, **kwargs):
         self.list_kwargs = kwargs
+        status = kwargs.get("status")
+        # Count helper uses limit=1; keep full list fixture for normal list queries.
+        if status in self.status_totals and kwargs.get("limit") == 1:
+            total = self.status_totals[str(status)]
+            return (
+                [
+                    {
+                        "id": f"approval-{status}",
+                        "run_id": "run-1",
+                        "session_id": "session-1",
+                        "status": status,
+                        "source_type": "agent",
+                        "tool_name": "delete_user_data",
+                        "user_id": kwargs.get("user_id") or "u1",
+                        "created_at": 1714560000,
+                    }
+                ],
+                total,
+            )
         return (
             [
                 {
@@ -498,4 +519,21 @@ async def test_approvals_count_route_returns_agno_shape():
         payload = await approvals.get_approval_count(user=actor("admin-1"))
 
     assert payload == {"count": 7}
+
+
+@pytest.mark.asyncio
+async def test_get_approval_status_counts_returns_pending_approved_rejected():
+    db = FakeApprovalDb()
+    with patch(
+        "api.services.approvals_service.get_async_agno_postgres_db",
+        return_value=db,
+    ):
+        counts = await get_approval_status_counts(actor=actor("admin-1"))
+
+    assert counts == {
+        "pending": 3,
+        "approved": 5,
+        "rejected": 1,
+        "total": 9,
+    }
 

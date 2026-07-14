@@ -365,3 +365,22 @@ async def test_overview_route_passes_custom_range_to_service():
 async def test_overview_rejects_invalid_timezone():
     with pytest.raises(ValueError):
         await overview_service.get_runtime_overview(actor("u1"), timezone="not/a-timezone")
+
+
+@pytest.mark.asyncio
+async def test_overview_adds_approval_status_snapshot_for_authorized_actor(monkeypatch):
+    async def fake_counts(*, actor=None, user_id=None):
+        return {"pending": 2, "approved": 4, "rejected": 1, "total": 7}
+
+    from api.services import approvals_service
+
+    monkeypatch.setattr(approvals_service, "get_approval_status_counts", fake_counts)
+    snapshots = await overview_service._snapshots(actor("u1"))
+
+    assert snapshots.get("approvals") == {
+        "pending": 2,
+        "approved": 4,
+        "rejected": 1,
+    }
+    assert snapshots.get("pending_approvals") == 2
+

@@ -24,6 +24,8 @@
   "evalPassRate": "评估通过率",
   "noEvalData": "暂无评估数据",
   "pendingApprovals": "待审批",
+  "approvalsSummary": "待审批 / 已审批",
+  "approvalsSummaryHint": "待审批 {{pending}} · 已审批 {{approved}} · 已拒绝 {{rejected}}",
   "pendingApprovalsHint": "需要人工决策的运行请求",
   "knowledgeMemory": "知识文档 / 记忆",
   "knowledgeMemoryHint": "当前可用的运行上下文资产",

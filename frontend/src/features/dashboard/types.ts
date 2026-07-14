@@ -64,8 +64,16 @@ export interface OverviewEvaluation {
   pass_rate: number | null
 }
 
+export interface OverviewApprovalCounts {
+  pending: number
+  approved: number
+  rejected: number
+}
+
 export interface OverviewAssets {
+  /** @deprecated Prefer ``approvals.pending``. */
   pending_approvals?: number | null
+  approvals?: OverviewApprovalCounts | null
   knowledge_documents?: number | null
   memories?: number | null
   evaluation?: OverviewEvaluation | null

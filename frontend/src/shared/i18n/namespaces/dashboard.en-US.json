@@ -24,6 +24,8 @@
   "evalPassRate": "Eval pass rate",
   "noEvalData": "No evaluation data",
   "pendingApprovals": "Pending approvals",
+  "approvalsSummary": "Pending / approved",
+  "approvalsSummaryHint": "{{pending}} pending · {{approved}} approved · {{rejected}} rejected",
   "pendingApprovalsHint": "Runs awaiting human decisions",
   "knowledgeMemory": "Knowledge / memory",
   "knowledgeMemoryHint": "Available runtime context assets",

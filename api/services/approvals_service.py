@@ -314,11 +314,68 @@ async def get_pending_approval_count(
     ``user_id`` filter (None = global pending count).
     """
     scoped = _scoped_user_id(actor, user_id)
-    raw = await get_async_agno_postgres_db().get_pending_approval_count(user_id=scoped)
     try:
+        raw = await get_async_agno_postgres_db().get_pending_approval_count(user_id=scoped)
         return max(0, int(raw or 0))
     except (TypeError, ValueError):
         return 0
+
+
+async def _status_total(
+    *,
+    status: str,
+    user_id: str | None,
+) -> int:
+    """Total rows for one approval status via Agno list total (limit=1)."""
+    _rows, total = await get_async_agno_postgres_db().get_approvals(
+        status=status,
+        user_id=user_id,
+        limit=1,
+        page=1,
+    )
+    try:
+        return max(0, int(total or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+async def get_approval_status_counts(
+    *,
+    actor: ActorLike | None = None,
+    user_id: str | None = None,
+) -> dict[str, int]:
+    """Return pending/approved/rejected HITL counts for dashboard/badge.
+
+    Pending uses Agno ``get_pending_approval_count``; approved/rejected use
+    ``get_approvals(..., limit=1)`` total. Scope isolation matches list.
+    """
+    scoped = _scoped_user_id(actor, user_id)
+    db = get_async_agno_postgres_db()
+    try:
+        pending_raw = await db.get_pending_approval_count(user_id=scoped)
+        pending = max(0, int(pending_raw or 0))
+    except (TypeError, ValueError):
+        pending = 0
+    except Exception:
+        pending = 0
+
+    approved = 0
+    rejected = 0
+    try:
+        approved = await _status_total(status="approved", user_id=scoped)
+    except Exception:
+        approved = 0
+    try:
+        rejected = await _status_total(status="rejected", user_id=scoped)
+    except Exception:
+        rejected = 0
+
+    return {
+        "pending": pending,
+        "approved": approved,
+        "rejected": rejected,
+        "total": pending + approved + rejected,
+    }
 
 
 async def get_approval_record(approval_id: str) -> ApprovalRecord | None:

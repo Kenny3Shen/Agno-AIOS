@@ -43,7 +43,11 @@ const overview = (audit = false) => ({
   ],
   distributions: { agent: [{ name: 'security-agent', value: 4 }], workflow: [], team: [] },
   recent_failures: [],
-  snapshots: { evaluation: { total: 2, passed: 1, failed: 1, pass_rate: 0.5 } },
+  snapshots: {
+    evaluation: { total: 2, passed: 1, failed: 1, pass_rate: 0.5 },
+    approvals: { pending: 2, approved: 5, rejected: 1 },
+    pending_approvals: 2,
+  },
   ...(audit
     ? {
         audit: {

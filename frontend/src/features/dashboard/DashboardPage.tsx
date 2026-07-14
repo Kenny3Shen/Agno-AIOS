@@ -335,9 +335,13 @@ export function DashboardPage() {
             />
             <SummaryMetric
               icon={<SafetyCertificateOutlined />}
-              label={t('pendingApprovals')}
-              value={integer(data?.snapshots?.pending_approvals)}
-              note={t('pendingApprovalsHint')}
+              label={t('approvalsSummary')}
+              value={`${integer(data?.snapshots?.approvals?.pending ?? data?.snapshots?.pending_approvals)} / ${integer(data?.snapshots?.approvals?.approved)}`}
+              note={t('approvalsSummaryHint', {
+                pending: integer(data?.snapshots?.approvals?.pending ?? data?.snapshots?.pending_approvals),
+                approved: integer(data?.snapshots?.approvals?.approved),
+                rejected: integer(data?.snapshots?.approvals?.rejected),
+              })}
             />
             <SummaryMetric
               icon={<DatabaseOutlined />}

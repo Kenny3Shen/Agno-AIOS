@@ -1,5 +1,16 @@
 # 下一步工作
 
+## 已完成：Dashboard 待审批 / 已审批快照
+
+- overview `snapshots.approvals = { pending, approved, rejected }`；保留 `pending_approvals` 别名。
+- Dashboard 治理卡片展示 `待审批 / 已审批`，hint 含已拒绝数。
+- 计数：pending 走 Agno `get_pending_approval_count`，approved/rejected 走 list total（limit=1）。
+
+相关入口：
+
+- API：`GET /api/overview` snapshots；`GET /api/approvals/count` 仍仅 pending（badge）
+- 代码：`api/services/approvals_service.py`、`frontend/src/features/dashboard/*`
+
 ## 已完成：Approvals pending count 端点
 
 - 新增 `GET /api/approvals/count` → Agno 风格 `{ count }`，scopes + user isolation 与列表一致。

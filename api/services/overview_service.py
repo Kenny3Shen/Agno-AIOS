@@ -310,9 +310,16 @@ async def _snapshots(actor: ActorLike) -> dict[str, Any]:
 
     if has_scope(actor, "approvals:read"):
         try:
-            from api.services.approvals_service import get_pending_approval_count
+            from api.services.approvals_service import get_approval_status_counts
 
-            result["pending_approvals"] = await get_pending_approval_count(actor=actor)
+            counts = await get_approval_status_counts(actor=actor)
+            result["approvals"] = {
+                "pending": counts["pending"],
+                "approved": counts["approved"],
+                "rejected": counts["rejected"],
+            }
+            # Backward-compatible alias used by older clients / badge tests.
+            result["pending_approvals"] = counts["pending"]
         except Exception:
             pass
 
