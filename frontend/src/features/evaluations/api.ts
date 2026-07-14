@@ -1,5 +1,6 @@
 import { jsonInit, requestJson } from '@/shared/api/client'
-import { asArray, asRecord } from '@/shared/lib/format'
+import { asRecord } from '@/shared/lib/format'
+
 export interface Suite {
   id: string
   name: string
@@ -8,6 +9,7 @@ export interface Suite {
   enabled: boolean
   tags?: string[]
 }
+
 export interface EvalCase {
   id: string
   suite_id: string
@@ -18,30 +20,96 @@ export interface EvalCase {
   criteria?: string
   enabled: boolean
 }
+
 export interface EvalRun {
   id: string
-  run_id?: string
   name?: string
   eval_type?: string
-  passed?: boolean
+  passed?: boolean | null
   score?: number
   agent_id?: string
-  created_at?: string
-  data?: Record<string, unknown>
+  created_at?: string | number
+  eval_data?: Record<string, unknown>
+  eval_input?: Record<string, unknown>
+  case_run_id?: string
+  case_id?: string
+  suite_run_id?: string
 }
+
+/** Map Agno-native eval-run rows into UI records. */
+export const normalizeEvalRun = (value: unknown): EvalRun | null => {
+  const row = asRecord(value)
+  const id = String(row.id ?? '').trim()
+  if (!id) return null
+  const evalDataRaw = row.eval_data
+  const evalData =
+    evalDataRaw && typeof evalDataRaw === 'object' && !Array.isArray(evalDataRaw)
+      ? (evalDataRaw as Record<string, unknown>)
+      : undefined
+  const evalInputRaw = row.eval_input
+  const evalInput =
+    evalInputRaw && typeof evalInputRaw === 'object' && !Array.isArray(evalInputRaw)
+      ? (evalInputRaw as Record<string, unknown>)
+      : undefined
+  const passedRaw = row.passed
+  const passed =
+    typeof passedRaw === 'boolean'
+      ? passedRaw
+      : passedRaw == null
+        ? null
+        : undefined
+  const scoreRaw = row.score
+  const score =
+    typeof scoreRaw === 'number'
+      ? scoreRaw
+      : typeof scoreRaw === 'string' && scoreRaw.trim()
+        ? Number(scoreRaw)
+        : undefined
+  return {
+    id,
+    name: row.name != null ? String(row.name) : undefined,
+    eval_type: row.eval_type != null ? String(row.eval_type) : undefined,
+    passed,
+    score: score != null && Number.isFinite(score) ? score : undefined,
+    agent_id: row.agent_id != null ? String(row.agent_id) : undefined,
+    created_at: row.created_at as string | number | undefined,
+    eval_data: evalData,
+    eval_input: evalInput,
+    case_run_id: row.case_run_id != null ? String(row.case_run_id) : undefined,
+    case_id: row.case_id != null ? String(row.case_id) : undefined,
+    suite_run_id: row.suite_run_id != null ? String(row.suite_run_id) : undefined,
+  }
+}
+
 export const listSuites = () => requestJson<Suite[]>('/agent-evals/suites')
+
 export const listCases = (suite = '') =>
   requestJson<EvalCase[]>(`/agent-evals/cases${suite ? `?suite_id=${encodeURIComponent(suite)}` : ''}`)
+
 export const listRuns = async () => {
-  const data = asRecord(await requestJson<unknown>('/agent-evals/agno-runs?limit=100&page=1'))
-  return asArray<EvalRun>(data.items)
+  const payload = asRecord(await requestJson<unknown>('/agent-evals/agno-runs?limit=100&page=1'))
+  const rows = Array.isArray(payload.data) ? payload.data : []
+  return rows.map((row) => normalizeEvalRun(row)).filter((row): row is EvalRun => row != null)
 }
+
 export const listFailures = async () => {
-  const data = await requestJson<unknown>('/agent-evals/failures?limit=100')
-  return asArray<EvalRun>(Array.isArray(data) ? data : asRecord(data).items)
+  // Workbench failure list remains a plain array (not Agno paginated envelope).
+  const payload = await requestJson<unknown>('/agent-evals/failures?limit=100')
+  const rows = Array.isArray(payload) ? payload : []
+  return rows.map((row) => normalizeEvalRun(row)).filter((row): row is EvalRun => row != null)
 }
-export const runSuite = (id: string) => requestJson(`/agent-evals/suites/${encodeURIComponent(id)}/runs`, { method: 'POST' })
-export const runCase = (id: string) => requestJson(`/agent-evals/cases/${encodeURIComponent(id)}/runs`, { method: 'POST' })
-export const replay = (id: string) => requestJson(`/agent-evals/case-runs/${encodeURIComponent(id)}/replay`, { method: 'POST' })
-export const createSuite = (payload: Partial<Suite>) => requestJson<Suite>('/agent-evals/suites', jsonInit('POST', payload))
-export const createCase = (payload: Partial<EvalCase>) => requestJson<EvalCase>('/agent-evals/cases', jsonInit('POST', payload))
+
+export const runSuite = (id: string) =>
+  requestJson(`/agent-evals/suites/${encodeURIComponent(id)}/runs`, { method: 'POST' })
+
+export const runCase = (id: string) =>
+  requestJson(`/agent-evals/cases/${encodeURIComponent(id)}/runs`, { method: 'POST' })
+
+export const replay = (id: string) =>
+  requestJson(`/agent-evals/case-runs/${encodeURIComponent(id)}/replay`, { method: 'POST' })
+
+export const createSuite = (payload: Partial<Suite>) =>
+  requestJson<Suite>('/agent-evals/suites', jsonInit('POST', payload))
+
+export const createCase = (payload: Partial<EvalCase>) =>
+  requestJson<EvalCase>('/agent-evals/cases', jsonInit('POST', payload))

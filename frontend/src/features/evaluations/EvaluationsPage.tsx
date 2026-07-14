@@ -12,7 +12,7 @@ const RunTable = ({ rows, onReplay }: { rows: EvalRun[]; onReplay?: (id: string)
     rowKey="id"
     dataSource={rows}
     columns={[
-      { title: 'Run', dataIndex: 'run_id', render: compactId },
+      { title: 'Run', dataIndex: 'id', render: compactId },
       { title: 'Name', dataIndex: 'name' },
       { title: 'Type', dataIndex: 'eval_type', render: (v) => <Tag>{v}</Tag> },
       {

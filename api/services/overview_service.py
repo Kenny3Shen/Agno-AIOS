@@ -330,12 +330,13 @@ async def _snapshots(actor: ActorLike) -> dict[str, Any]:
             from api.services.agent_eval_result_service import list_agno_eval_runs
 
             evaluation_runs = await list_agno_eval_runs(limit=100, page=1)
-            items = evaluation_runs.get("items", [])
+            items = evaluation_runs.get("data") or []
+            meta = evaluation_runs.get("meta") or {}
             passed = sum(item.get("passed") is True for item in items)
             failed = sum(item.get("passed") is False for item in items)
             completed = passed + failed
             result["evaluation"] = {
-                "total": int(evaluation_runs.get("total") or len(items)),
+                "total": int(meta.get("total_count") or len(items)),
                 "passed": passed,
                 "failed": failed,
                 "pass_rate": round(passed / completed, 4) if completed else 0.0,

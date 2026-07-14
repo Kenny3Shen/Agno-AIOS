@@ -110,15 +110,16 @@ def _with_case_run_replay_link(
         return run
 
     enriched = dict(run)
-    data = run.get("data")
-    enriched_data = dict(data) if isinstance(data, dict) else {}
+    raw_eval_data = run.get("eval_data")
+    eval_data = raw_eval_data if isinstance(raw_eval_data, dict) else {}
+    enriched_eval_data = dict(eval_data)
     enriched["case_run_id"] = case_run["id"]
     enriched["case_id"] = case_run["case_id"]
     enriched["suite_run_id"] = case_run["suite_run_id"]
-    enriched_data["case_run_id"] = case_run["id"]
-    enriched_data["case_id"] = case_run["case_id"]
-    enriched_data["suite_run_id"] = case_run["suite_run_id"]
-    enriched["data"] = enriched_data
+    enriched_eval_data["case_run_id"] = case_run["id"]
+    enriched_eval_data["case_id"] = case_run["case_id"]
+    enriched_eval_data["suite_run_id"] = case_run["suite_run_id"]
+    enriched["eval_data"] = enriched_eval_data
     return enriched
 
 
@@ -302,6 +303,11 @@ async def list_agno_eval_runs(
     agent_id: str | None = None,
     user: User = Depends(require_scope("evals:read")),
 ):
+    """List Agno eval runs with AgentOS-style ``data`` / ``meta`` envelope.
+
+    Suites/cases remain under this router as workbench resources; this path is
+    the Agno eval-result read surface (maps to AgentOS ``GET /eval-runs``).
+    """
     del user
     return await result_service.list_agno_eval_runs(
         limit=limit,
@@ -331,6 +337,7 @@ async def get_eval_trends(
     agent_id: str | None = None,
     user: User = Depends(require_scope("evals:read")),
 ):
+    """Workbench aggregate over the current eval-run page (not an Agno OS route)."""
     del user
     result = await result_service.list_agno_eval_runs(
         limit=limit,
@@ -338,7 +345,7 @@ async def get_eval_trends(
         eval_type=list(eval_type) if eval_type is not None else None,
         agent_id=agent_id,
     )
-    return result["trends"]
+    return result_service.build_eval_trends(list(result.get("data") or []))
 
 
 @router.get("/failures")

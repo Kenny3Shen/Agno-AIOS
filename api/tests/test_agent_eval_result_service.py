@@ -75,8 +75,12 @@ async def test_list_agno_eval_runs_uses_async_db_api():
     assert db.list_kwargs["limit"] == 10
     assert db.list_kwargs["page"] == 2
     assert db.list_kwargs["deserialize"] is False
-    assert result["total"] == 37
-    assert result["items"][0]["id"] == "eval-1"
+    assert result["meta"]["total_count"] == 37
+    assert result["meta"]["page"] == 2
+    assert result["meta"]["limit"] == 10
+    assert result["data"][0]["id"] == "eval-1"
+    assert "items" not in result
+    assert "trends" not in result
 
 
 @pytest.mark.asyncio
@@ -88,9 +92,9 @@ async def test_list_agno_eval_runs_handles_list_result_without_total():
     ):
         result = await service.list_agno_eval_runs(limit=5, page=1)
 
-    assert result["total"] == 1
-    assert result["items"][0]["id"] == "eval-2"
-    assert result["items"][0]["passed"] is False
+    assert result["meta"]["total_count"] == 1
+    assert result["data"][0]["id"] == "eval-2"
+    assert result["data"][0]["passed"] is False
 
 
 @pytest.mark.asyncio
@@ -130,7 +134,8 @@ def test_normalize_agno_eval_run_handles_eval_data_and_enum_type():
     )
 
     assert result["id"] == "eval-4"
-    assert result["data"] == {"score": 0.8, "passed": True}
+    assert result["eval_data"] == {"score": 0.8, "passed": True}
+    assert "data" not in result
     assert result["passed"] is True
     assert result["score"] == 0.8
     assert result["eval_type"] == "accuracy"

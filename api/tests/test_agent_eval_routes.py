@@ -83,20 +83,18 @@ async def test_failure_route_enriches_agno_runs_with_case_run_ids_in_batch():
                 return_value=[
                     {
                         "id": "eval-1",
-                        "run_id": "eval-1",
                         "name": "CVE baseline",
                         "eval_type": "accuracy",
                         "passed": False,
-                        "data": {},
+                        "eval_data": {},
                         "eval_input": {},
                     },
                     {
                         "id": "eval-2",
-                        "run_id": "eval-2",
                         "name": "No local case run",
                         "eval_type": "reliability",
                         "passed": False,
-                        "data": {},
+                        "eval_data": {},
                         "eval_input": {},
                     }
                 ]
@@ -121,7 +119,7 @@ async def test_failure_route_enriches_agno_runs_with_case_run_ids_in_batch():
     assert result[0]["case_run_id"] == "case-run-1"
     assert result[0]["case_id"] == "case-1"
     assert result[0]["suite_run_id"] == "suite-run-1"
-    assert result[0]["data"]["case_run_id"] == "case-run-1"
+    assert result[0]["eval_data"]["case_run_id"] == "case-run-1"
     assert "case_run_id" not in result[1]
     assert list_mock.await_args is not None
     assert list_mock.await_args.kwargs["limit"] == 10

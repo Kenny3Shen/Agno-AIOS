@@ -237,12 +237,18 @@ async def test_overview_adds_evaluation_snapshot_for_authorized_actor(monkeypatc
     async def fake_list_runs(*, limit: int, page: int):
         assert (limit, page) == (100, 1)
         return {
-            "total": 4,
-            "items": [
+            "data": [
                 {"passed": True},
                 {"passed": False},
                 {"passed": None},
             ],
+            "meta": {
+                "page": 1,
+                "limit": 100,
+                "total_pages": 1,
+                "total_count": 4,
+                "search_time_ms": 0.0,
+            },
         }
 
     from api.services import agent_eval_result_service

@@ -84,13 +84,18 @@ def _date_key(value: Any) -> str:
 
 
 def normalize_agno_eval_run(raw_run: Any) -> dict[str, Any]:
+    """Project Agno eval run rows toward AgentOS EvalSchema plus UI projections.
+
+    Wire primary key is ``id`` (from Agno ``run_id``). Payload lives in
+    ``eval_data`` (Agno name). ``passed`` / ``score`` are workbench projections
+    derived from eval_data for list/filter UX.
+    """
     row = _row_dict(raw_run)
     run_id = str(row.get("run_id") or row.get("id") or "")
-    data = _payload_from_row(row)
+    eval_data = _payload_from_row(row)
     raw_input = row.get("eval_input")
     return {
         "id": run_id,
-        "run_id": run_id,
         "name": str(row.get("name") or run_id or "Eval Run"),
         "eval_type": _eval_type_key(row.get("eval_type")),
         "agent_id": row.get("agent_id"),
@@ -98,9 +103,10 @@ def normalize_agno_eval_run(raw_run: Any) -> dict[str, Any]:
         "workflow_id": row.get("workflow_id"),
         "model_id": row.get("model_id"),
         "model_provider": row.get("model_provider"),
-        "passed": _passed_from_data(data),
-        "score": _score_from_data(data),
-        "data": data,
+        "evaluated_component_name": row.get("evaluated_component_name"),
+        "passed": _passed_from_data(eval_data),
+        "score": _score_from_data(eval_data),
+        "eval_data": eval_data,
         "eval_input": raw_input if isinstance(raw_input, dict) else {},
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
@@ -119,12 +125,27 @@ def _unpack_runs_result(result: Any) -> tuple[list[Any], int]:
     return rows_list, len(rows_list)
 
 
+def _pagination_meta(*, page: int, limit: int, total_count: int, search_time_ms: float = 0.0) -> dict[str, Any]:
+    safe_page = max(1, int(page or 1))
+    safe_limit = max(1, int(limit or 1))
+    total = max(0, int(total_count or 0))
+    total_pages = (total + safe_limit - 1) // safe_limit if total else 0
+    return {
+        "page": safe_page,
+        "limit": safe_limit,
+        "total_pages": total_pages,
+        "total_count": total,
+        "search_time_ms": float(search_time_ms or 0.0),
+    }
+
+
 async def list_agno_eval_runs(
     limit: int = 50,
     page: int = 1,
     eval_type: list[str] | None = None,
     agent_id: str | None = None,
 ) -> dict[str, Any]:
+    """List Agno eval runs with AgentOS-style ``data`` / ``meta`` envelope."""
     safe_limit = max(1, min(int(limit or 50), 100))
     safe_page = max(1, int(page or 1))
     db: Any = get_async_agno_postgres_db()
@@ -138,13 +159,10 @@ async def list_agno_eval_runs(
         deserialize=False,
     )
     rows, total = _unpack_runs_result(result)
-    items = [normalize_agno_eval_run(row) for row in rows]
+    data = [normalize_agno_eval_run(row) for row in rows]
     return {
-        "items": items,
-        "total": total,
-        "limit": safe_limit,
-        "page": safe_page,
-        "trends": build_eval_trends(items),
+        "data": data,
+        "meta": _pagination_meta(page=safe_page, limit=safe_limit, total_count=total),
     }
 
 
@@ -203,4 +221,4 @@ def build_eval_trends(runs: list[dict[str, Any]]) -> dict[str, Any]:
 
 async def list_failed_eval_runs(limit: int = 50) -> list[dict[str, Any]]:
     result = await list_agno_eval_runs(limit=limit, page=1)
-    return [item for item in result["items"] if item.get("passed") is False]
+    return [item for item in result["data"] if item.get("passed") is False]

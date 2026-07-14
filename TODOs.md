@@ -1,5 +1,16 @@
 # 下一步工作
 
+## 已完成：Evals 读路径对齐 Agno 分页 envelope
+
+- `GET /api/agent-evals/agno-runs` 返回 `{ data, meta }`，行主键 `id`、载荷 `eval_data`（Agno EvalSchema 命名），去掉 list 内嵌 `items`/`trends`/`total`。
+- `/trends` 仍为工作台聚合；`/failures` 仍为失败过滤 + case_run replay 关联；suites/cases/run/replay 自研不变。
+- overview 快照与前端 `listRuns` 改读 `data`/`meta`；`normalizeEvalRun` 接受 `eval_data`。
+
+相关入口：
+
+- API：`GET /api/agent-evals/agno-runs`、`/failures`、`/trends`；suites/cases 不变
+- 代码：`api/services/agent_eval_result_service.py`、`frontend/src/features/evaluations/api.ts`
+
 ## 已完成：Approvals 列表对齐 Agno 分页 envelope
 
 - `GET /api/approvals` 返回 `{ data, meta }`（`page` / `limit` / `total_pages` / `total_count` / `search_time_ms`），去掉 workbench `module`/`metrics`/`records`/`approval_meta` 大包。
