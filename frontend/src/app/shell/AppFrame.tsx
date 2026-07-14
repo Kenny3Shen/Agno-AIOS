@@ -49,7 +49,16 @@ import {
 import { useTranslation } from 'react-i18next'
 import { currentUserQuery, logout } from '@/features/auth'
 import { ChatTaskPanel } from '@/features/chat/ChatTaskPanel'
-import { deleteNotification, getNotifications, markAllNotificationsRead, markNotificationRead, type Notification } from '@/features/notifications/api'
+import { chatKeys } from '@/features/chat/queries'
+import {
+  deleteNotification,
+  getNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  streamNotifications,
+  type Notification,
+  type NotificationsResponse,
+} from '@/features/notifications/api'
 import { loginPath, nextPathFromLocation } from '@/features/auth/routing'
 import { getToken } from '@/shared/auth/storage'
 import { hasScope } from '@/shared/auth/permissions'
@@ -147,6 +156,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const [notificationOpen, setNotificationOpen] = useState(false)
   const [markingAllNotifications, setMarkingAllNotifications] = useState(false)
   const [deletingNotificationId, setDeletingNotificationId] = useState<number | null>(null)
+  const lastNotificationIdRef = useRef(0)
   const path = useRouterState({ select: (state) => state.location.pathname })
   const searchStr = useRouterState({ select: (state) => state.location.searchStr })
   const currentNextPath = nextPathFromLocation({ pathname: path, searchStr })
@@ -161,6 +171,49 @@ export function AppFrame({ children }: { children: ReactNode }) {
     enabled: Boolean(token) && canReadNotifications,
     refetchInterval: 30_000,
   })
+  useEffect(() => {
+    const latest = Math.max(0, ...(notificationsQuery.data?.notifications.map((item) => item.id) ?? []))
+    lastNotificationIdRef.current = Math.max(lastNotificationIdRef.current, latest)
+  }, [notificationsQuery.data])
+  useEffect(() => {
+    if (!token || !canReadNotifications || !notificationsQuery.isFetched) return
+    const controller = new AbortController()
+    const retryDelays = [1_000, 2_000, 5_000, 10_000]
+    const connect = async () => {
+      let attempt = 0
+      while (!controller.signal.aborted) {
+        try {
+          await streamNotifications(
+            lastNotificationIdRef.current,
+            (notification) => {
+              lastNotificationIdRef.current = Math.max(lastNotificationIdRef.current, notification.id)
+              queryClient.setQueryData<NotificationsResponse>(['notifications'], (current) => {
+                if (!current) return { notifications: [notification], unread_count: notification.read ? 0 : 1 }
+                if (current.notifications.some((item) => item.id === notification.id)) return current
+                return {
+                  notifications: [notification, ...current.notifications],
+                  unread_count: current.unread_count + (notification.read ? 0 : 1),
+                }
+              })
+              void queryClient.invalidateQueries({ queryKey: ['approvals'] })
+              void queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
+              const sessionId = typeof notification.data.session_id === 'string' ? notification.data.session_id : ''
+              if (sessionId) void queryClient.invalidateQueries({ queryKey: chatKeys.history(sessionId) })
+            },
+            controller.signal
+          )
+          if (!controller.signal.aborted) throw new Error('Notification stream ended')
+        } catch (error) {
+          if (controller.signal.aborted || (error as Error).name === 'AbortError') return
+          const delay = retryDelays[Math.min(attempt, retryDelays.length - 1)]
+          attempt += 1
+          await new Promise((resolve) => window.setTimeout(resolve, delay))
+        }
+      }
+    }
+    void connect()
+    return () => controller.abort()
+  }, [canReadNotifications, notificationsQuery.isFetched, queryClient, token])
 
   const items = useMemo<MenuProps['items']>(
     () =>
@@ -225,10 +278,10 @@ export function AppFrame({ children }: { children: ReactNode }) {
     } finally {
       const approvalId = typeof notification.data.approval_id === 'string' ? notification.data.approval_id : ''
       const targetPath = typeof notification.data.path === 'string' && notification.data.path.startsWith('/') ? notification.data.path : ''
-      if (approvalId && canReadApprovals) {
-        void router.history.push(`/approvals?approval_id=${encodeURIComponent(approvalId)}`)
-      } else if (targetPath) {
+      if (targetPath) {
         void router.history.push(targetPath)
+      } else if (approvalId && canReadApprovals) {
+        void router.history.push(`/approvals?approval_id=${encodeURIComponent(approvalId)}`)
       } else if (canReadApprovals) {
         void router.history.push('/approvals')
       }

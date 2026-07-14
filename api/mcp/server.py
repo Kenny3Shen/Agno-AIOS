@@ -20,6 +20,7 @@ from api.mcp.config import (
     set_component_override,
 )
 from api.mcp.tools.basic import basic_mcp
+from api.mcp.tools.hitl import hitl_mcp
 from api.mcp.tools.playbook import playbook_mcp
 
 ComponentType = Literal["tool", "resource", "template", "prompt"]
@@ -54,7 +55,11 @@ async def configure_main_mcp() -> None:
     for row in rows:
         try:
             if row["server_type"] == "builtin":
-                child = {"basic": basic_mcp, "playbook": playbook_mcp}.get(row["name"])
+                child = {
+                    "basic": basic_mcp,
+                    "hitl": hitl_mcp,
+                    "playbook": playbook_mcp,
+                }.get(row["name"])
                 if child is None:
                     continue
             else:

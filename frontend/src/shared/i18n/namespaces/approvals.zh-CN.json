@@ -15,7 +15,7 @@
   "resolvedAt": "处理时间",
   "zipPreviewFailed": "无法加载 ZIP 预览。",
   "rejectReasonHint": "拒绝原因会发送给申请用户。",
-  "resumeStatus": "恢复状态",
+  "runStatus": "运行状态",
   "resumeError": "恢复错误",
   "retryResume": "重试恢复",
   "resumeRetryStarted": "已开始重试恢复运行。",

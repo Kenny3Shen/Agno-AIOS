@@ -1,7 +1,8 @@
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
+import { AUTH_TOKEN_STORAGE_KEY } from '@/shared/auth/storage'
 import { server } from '@/test/server'
-import { deleteNotification, getNotifications, markAllNotificationsRead, markNotificationRead } from './api'
+import { deleteNotification, getNotifications, markAllNotificationsRead, markNotificationRead, streamNotifications } from './api'
 
 describe('notifications API', () => {
   it('loads notifications and marks a notification as read', async () => {
@@ -20,10 +21,31 @@ describe('notifications API', () => {
     await expect(markNotificationRead(7)).resolves.toEqual({ success: true })
     await expect(markAllNotificationsRead()).resolves.toEqual({ updated_count: 1 })
   })
-})
-
   it('deletes a notification', async () => {
     server.use(http.delete('/api/notifications/7', () => HttpResponse.json({ success: true })))
     await expect(deleteNotification(7)).resolves.toEqual({ success: true })
   })
 
+  it('streams authenticated notification events after the supplied cursor', async () => {
+    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, 'stream-token')
+    let authorization = ''
+    let cursor = ''
+    server.use(
+      http.get('/api/notifications/stream', ({ request }) => {
+        authorization = request.headers.get('authorization') ?? ''
+        cursor = new URL(request.url).searchParams.get('after_id') ?? ''
+        return new HttpResponse(
+          'event: notification.created\nid: 8\ndata: {"id":8,"title":"HITL resolved","body":"Completed","data":{"session_id":"session-1"},"read":false,"created_at":2}\n\n',
+          { headers: { 'Content-Type': 'text/event-stream' } }
+        )
+      })
+    )
+    const received: number[] = []
+
+    await streamNotifications(7, (notification) => received.push(notification.id), new AbortController().signal)
+
+    expect(authorization).toBe('Bearer stream-token')
+    expect(cursor).toBe('7')
+    expect(received).toEqual([8])
+  })
+})

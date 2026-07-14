@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Column, DateTime, MetaData, Table, Text, func, select, update
+from datetime import timedelta
+
+from sqlalchemy import Column, DateTime, MetaData, Table, Text, and_, func, or_, select, update
 from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.schema import CreateSchema
 
@@ -12,6 +14,7 @@ from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
 
 HITL_RUNS_TABLE = "hitl_paused_runs"
+DEFAULT_RESUME_STALE_SECONDS = 300
 
 
 def _metadata() -> MetaData:
@@ -68,5 +71,44 @@ async def set_resume_status(approval_id: str, status: str, error: str = "") -> b
             update(table)
             .where(table.c.approval_id == approval_id)
             .values(resume_status=status, resume_error=error, updated_at=func.now())
+        )
+    return bool(result.rowcount)
+
+
+async def has_paused_run(approval_id: str) -> bool:
+    return await get_paused_run(approval_id) is not None
+
+
+async def claim_resume(
+    approval_id: str,
+    *,
+    stale_after_seconds: int = DEFAULT_RESUME_STALE_SECONDS,
+) -> bool:
+    """Atomically claim a paused run for resume.
+
+    Succeeds when the row is ``pending``/``failed``, or ``running`` but stale
+    (crash recovery). Returns False when another worker holds a fresh claim
+    or the row is missing / already completed.
+    """
+    await ensure_hitl_runs_table_async()
+    table = hitl_runs_table()
+    safe_stale = max(1, int(stale_after_seconds))
+    stale_before = func.now() - timedelta(seconds=safe_stale)
+    async with get_async_control_plane_engine().begin() as conn:
+        result = await conn.execute(
+            update(table)
+            .where(
+                and_(
+                    table.c.approval_id == approval_id,
+                    or_(
+                        table.c.resume_status.in_(("pending", "failed")),
+                        and_(
+                            table.c.resume_status == "running",
+                            table.c.updated_at < stale_before,
+                        ),
+                    ),
+                )
+            )
+            .values(resume_status="running", resume_error="", updated_at=func.now())
         )
     return bool(result.rowcount)

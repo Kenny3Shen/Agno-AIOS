@@ -127,7 +127,7 @@ async def notify_submitter_of_hitl_resolution(
             body = f"Reason: {reason}"
         else:
             title = f"HITL request approved: {label}"
-            body = f"Your {label} request was approved and the run has been resumed."
+            body = f"Your {label} request was approved and the conversation continuation completed."
         await create_notifications(
             [submitter],
             title=title,
@@ -140,9 +140,56 @@ async def notify_submitter_of_hitl_resolution(
                 "rejection_reason": (rejection_reason or "").strip(),
                 "run_id": run_id,
                 "session_id": session_id,
-                "path": f"/approvals?approval_id={approval_id}",
+                "run_status": "COMPLETED",
+                "path": f"/chat?session={session_id}" if session_id else "/chat",
             },
         )
     except Exception:
         logger.exception("Failed to create HITL resolution notification for submitter")
 
+
+async def notify_hitl_resume_failure(
+    *,
+    approval_id: str,
+    tool_name: str,
+    submitter_id: str,
+    run_id: str,
+    session_id: str,
+    error: str,
+) -> None:
+    """Notify both sides when an approved/rejected run cannot be continued."""
+    label = (tool_name or "tool").strip() or "tool"
+    failure = (error or "Unknown continuation error").strip()[:500]
+    common = {
+        "approval_id": approval_id,
+        "resource_type": "hitl",
+        "tool_name": label,
+        "status": "failed",
+        "run_status": "ERROR",
+        "run_id": run_id,
+        "session_id": session_id,
+        "error": failure,
+    }
+    try:
+        submitter = (submitter_id or "").strip()
+        if submitter:
+            await create_notifications(
+                [submitter],
+                title=f"HITL continuation failed: {label}",
+                body="The approval was recorded, but the conversation could not be continued.",
+                data={
+                    **common,
+                    "path": f"/chat?session={session_id}" if session_id else "/chat",
+                },
+            )
+        await create_notifications(
+            await _admin_user_ids(),
+            title=f"HITL continuation failed: {label}",
+            body=failure,
+            data={
+                **common,
+                "path": f"/approvals?approval_id={approval_id}",
+            },
+        )
+    except Exception:
+        logger.exception("Failed to create HITL continuation failure notifications")

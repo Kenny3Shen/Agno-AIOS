@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from typing import Any, NotRequired, TypedDict, cast
 from uuid import UUID
 
-from sqlalchemy import select
 from agno.run.approval import aresolve_approval
+from sqlalchemy import select
 
 from api.auth.claims import ActorLike, scope_user_id
 from api.auth.database import async_session_maker
@@ -23,7 +23,6 @@ from api.services.page_payloads import (
     row_dict,
 )
 from api.services.postgres_store import get_async_agno_postgres_db
-from api.persistence.hitl_runs import get_paused_run
 
 class ApprovalRecord(TypedDict):
     id: str
@@ -51,8 +50,6 @@ class ApprovalRecord(TypedDict):
     created_at: NotRequired[object]
     updated_at: NotRequired[object]
     run_status: NotRequired[str | None]
-    resume_status: NotRequired[str | None]
-    resume_error: NotRequired[str | None]
     submitted_by: NotRequired[dict[str, str] | None]
     submitted_by_email: NotRequired[str | None]
     resolved_by_email: NotRequired[str | None]
@@ -235,21 +232,8 @@ async def enrich_approval_actors(
     }
 
 
-async def enrich_resume_status(approval: ApprovalRecord) -> ApprovalRecord:
-    if approval.get("tool_name") != "simulate_containment":
-        return approval
-    paused = await get_paused_run(approval["id"])
-    if paused is None:
-        return approval
-    return {
-        **approval,
-        "resume_status": _optional_str(paused.get("resume_status")),
-        "resume_error": _optional_str(paused.get("resume_error")),
-    }
-
-
 async def enrich_approval(approval: ApprovalRecord) -> ApprovalRecord:
-    return await enrich_approval_actors(await enrich_resume_status(approval))
+    return await enrich_approval_actors(approval)
 
 
 def approval_record_summary(approval: ApprovalRecord) -> PageRecord:
@@ -322,7 +306,7 @@ async def list_approvals(
     ]
     email_by_id = await lookup_user_emails(email_ids)
     approvals = [
-        await enrich_approval_actors(await enrich_resume_status(approval), email_by_id=email_by_id)
+        await enrich_approval_actors(approval, email_by_id=email_by_id)
         for approval in normalized
     ]
     return approvals, int(total), kwargs

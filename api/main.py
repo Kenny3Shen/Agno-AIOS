@@ -32,6 +32,7 @@ from api.routes import (
     skills,
     trace,
 )
+from api.services.security_run_runtime import recover_security_runs, shutdown_security_runtime
 from api.services.tracing_service import setup_agno_tracing
 from api.utils.db import initialize_database
 
@@ -96,10 +97,17 @@ async def lifespan(app: FastAPI):
     await bootstrap_mcp_config()
     await bootstrap_mcp_token(app_settings.mcp_token.get_secret_value())
     await configure_main_mcp()
+    try:
+        recovered = await recover_security_runs()
+        if recovered:
+            logger.info("恢复 {} 个已解析的 HITL Run", recovered)
+    except Exception:
+        logger.exception("启动时恢复 HITL Run 失败")
 
     try:
         yield
     finally:
+        await shutdown_security_runtime()
         await close_auth_engine()
         await dispose_async_control_plane_engine()
         logger.info("关闭 {}", app_settings.app_name)

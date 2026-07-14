@@ -21,7 +21,7 @@ from api.persistence.mcp import (
 from api.services.runtime_paths import CONFIG_DIR
 from api.utils.json import loads
 
-SERVICE_IDS = ("playbook", "basic")
+SERVICE_IDS = ("playbook", "basic", "hitl")
 MCP_CONFIG_FILE = CONFIG_DIR / "mcp" / "mcp_config.json"
 MCP_TOKENS_TABLE = "mcp_tokens"
 

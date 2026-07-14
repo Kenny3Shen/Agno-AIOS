@@ -61,10 +61,7 @@ const statusLabel = (status: string) => status ? `${status.slice(0, 1).toUpperCa
 const rejectionReason = (approval: Approval) =>
   approval.rejection_reason ?? (typeof approval.resolution_data?.rejection_reason === 'string' ? approval.resolution_data.rejection_reason : '')
 
-const resumeStatus = (approval: Approval) =>
-  approval.resume_status ?? (typeof approval.resolution_data?.resume_status === 'string' ? approval.resolution_data.resume_status : null)
-const resumeError = (approval: Approval) =>
-  approval.resume_error ?? (typeof approval.resolution_data?.resume_error === 'string' ? approval.resolution_data.resume_error : null)
+const runStatus = (approval: Approval) => approval.run_status?.toUpperCase() ?? null
 
 const optionalCopyable = (value?: string | null, empty = '-') => (value?.trim() ? <CopyableValue value={value} /> : empty)
 
@@ -110,8 +107,7 @@ function detailItems(approval: Approval, formatDate: (value?: string | number | 
       { key: 'submitted-at', label: t('submittedAt'), children: formatDate(approval.created_at) },
       { key: 'resolved-at', label: t('resolvedAt'), children: formatDate(approval.resolved_at) },
       ...(approval.status === 'rejected' ? [{ key: 'rejection-reason', label: 'Rejection reason', children: rejectionReason(approval) || '-' }] : []),
-      ...(resumeStatus(approval) ? [{ key: 'resume-status', label: t('resumeStatus'), children: statusLabel(resumeStatus(approval) ?? '') }] : []),
-      ...(resumeError(approval) ? [{ key: 'resume-error', label: t('resumeError'), children: resumeError(approval) }] : []),
+      ...(runStatus(approval) ? [{ key: 'run-status', label: t('runStatus'), children: statusLabel(runStatus(approval) ?? '') }] : []),
     ],
     people: [
       { key: 'submitter-email', label: 'Submitter email', children: optionalCopyable(submitted.email) },
@@ -293,7 +289,7 @@ export function ApprovalsPage() {
       >
         {t('common:reject')}
       </Button>
-      {!isSubmissionApproval(selected) && selected.tool_name === 'simulate_containment' && resumeStatus(selected) === 'failed' && (
+      {!isSubmissionApproval(selected) && runStatus(selected) === 'ERROR' && (
         <Button loading={retryResume.isPending} onClick={() => retryResume.mutate(selected)}>
           {t('retryResume')}
         </Button>
@@ -342,22 +338,22 @@ export function ApprovalsPage() {
       <Drawer size={760} open={Boolean(selected)} onClose={() => setSelected(null)} title="Approval detail" extra={approvalActions}>
         {selected && (
           <>
-            {selected.status === 'approved' && <Alert type="success" showIcon message={t('approved')} style={{ marginBottom: 16 }} />}
+            {selected.status === 'approved' && <Alert type="success" showIcon title={t('approved')} style={{ marginBottom: 16 }} />}
             {selected.status === 'rejected' && (
               <Alert
                 type="error"
                 showIcon
-                message={t('rejected')}
+                title={t('rejected')}
                 description={rejectionReason(selected) || t('noRejectReason')}
                 style={{ marginBottom: 16 }}
               />
             )}
-            {resumeStatus(selected) === 'failed' && (
+            {runStatus(selected) === 'ERROR' && (
               <Alert
                 type="warning"
                 showIcon
-                message={t('resumeFailed')}
-                description={resumeError(selected) || t('resumeFailedDescription')}
+                title={t('resumeFailed')}
+                description={t('resumeFailedDescription')}
                 style={{ marginBottom: 16 }}
               />
             )}

@@ -401,7 +401,7 @@ async def test_trace_detail_requests_all_spans_and_marks_response_complete() -> 
 
 
 @pytest.mark.asyncio
-async def test_trace_detail_enriches_empty_agent_root_from_chat_run() -> None:
+async def test_trace_detail_prefers_final_chat_run_over_partial_agent_root() -> None:
     trace_record = SimpleNamespace(
         to_dict=lambda: {
             "trace_id": "trace-1",
@@ -415,8 +415,8 @@ async def test_trace_detail_enriches_empty_agent_root_from_chat_run() -> None:
         to_dict=lambda: {
             "span_id": "root",
             "parent_span_id": None,
-            "status_code": "UNSET",
-            "attributes": {},
+            "status_code": "OK",
+            "attributes": {"output.value": "partial response before approval"},
         }
     )
     session = {"runs": [{"run_id": "run-1", "content": "final response"}]}

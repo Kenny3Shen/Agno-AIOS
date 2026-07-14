@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
 import threading
 from tempfile import TemporaryDirectory
@@ -43,7 +45,11 @@ class DetailedEventAgent:
 
 
 class PausedEventAgent:
+    def __init__(self):
+        self.run_kwargs = {}
+
     async def arun(self, *_args, **_kwargs):
+        self.run_kwargs = _kwargs
         yield {"event": "RunStarted", "run_id": "run-paused", "session_id": "session-1"}
         yield {
             "event": "RunPaused",
@@ -509,14 +515,16 @@ async def test_stream_agent_events_projects_safe_tools_sources_and_metrics():
 @pytest.mark.asyncio
 async def test_stream_agent_events_persists_and_projects_required_approval_pause():
     runtime = security_run_runtime.SecurityRunRuntime()
-    with (
-        patch.object(security_run_runtime, "save_paused_run", new=AsyncMock()) as save,
-        patch.object(security_run_runtime, "notify_admins_of_hitl_approval", new=AsyncMock()) as notify,
-    ):
+    agent = PausedEventAgent()
+    with patch.object(
+        security_run_runtime,
+        "notify_admins_of_hitl_approval",
+        new=AsyncMock(),
+    ) as notify:
         events = [
             event
             async for event in runtime._stream_agent_events(
-                PausedEventAgent(),
+                agent,
                 security_run_runtime.SecurityRunRequest.from_chat_args(
                     "simulate isolation", session_id="session-1", model_id="model-1", user_id="u1"
                 ),
@@ -530,8 +538,16 @@ async def test_stream_agent_events_persists_and_projects_required_approval_pause
         "approval_id": "approval-1",
         "tool_name": "simulate_containment",
     }
-    assert save.await_args.args[0]["approval_id"] == "approval-1"
-    assert save.await_args.args[0]["request_context"]["model_id"] == "model-1"
+    assert agent.run_kwargs["metadata"] == {
+        "tais_runtime": {
+            "version": 1,
+            "model_id": "model-1",
+            "reasoning_effort": "",
+            "knowledge_owner_user_id": "",
+            "memory_enabled": True,
+            "store_raw_tool_io": False,
+        }
+    }
     notify.assert_awaited_once_with(
         approval_id="approval-1",
         tool_name="simulate_containment",
@@ -654,11 +670,7 @@ def test_rejection_confirmation_note_uses_resolution_data():
     assert security_run_runtime._rejection_confirmation_note({}) == "Rejected by administrator"
 
 
-@pytest.mark.asyncio
-async def test_apply_native_hitl_resolution_rejects_with_admin_note():
-    from types import SimpleNamespace
-    from unittest.mock import AsyncMock, patch
-
+def test_apply_approval_to_requirements_rejects_with_admin_note():
     from agno.models.response import ToolExecution
     from agno.run.requirement import RunRequirement
 
@@ -672,38 +684,21 @@ async def test_apply_native_hitl_resolution_rejects_with_admin_note():
     )
     requirement = RunRequirement(tool_execution=tool)
     run_output = SimpleNamespace(requirements=[requirement], tools=[tool])
-    agent = SimpleNamespace(aget_run_output=AsyncMock(return_value=run_output))
-    db = SimpleNamespace(
-        get_approval=AsyncMock(
-            return_value={
-                "status": "rejected",
-                "resolution_data": {"rejection_reason": "证据不足，暂不封禁", "note": "证据不足，暂不封禁"},
-            }
-        )
+    requirements = security_run_runtime.apply_approval_to_requirements(
+        run_output,
+        approval_id="approval-1",
+        status="rejected",
+        resolution_data={"rejection_reason": "证据不足，暂不封禁"},
     )
-
-    with patch.object(security_run_runtime, "get_async_agno_postgres_db", return_value=db):
-        requirements = await security_run_runtime.apply_native_hitl_resolution(
-            agent,
-            approval_id="approval-1",
-            run_id="run-1",
-            session_id="session-1",
-            user_id="user-1",
-        )
 
     assert requirements is not None
     assert len(requirements) == 1
     assert requirement.confirmation is False
     assert tool.confirmed is False
     assert tool.confirmation_note == "Rejected by administrator: 证据不足，暂不封禁"
-    agent.aget_run_output.assert_awaited_once()
 
 
-@pytest.mark.asyncio
-async def test_apply_native_hitl_resolution_confirms_approved_tools():
-    from types import SimpleNamespace
-    from unittest.mock import AsyncMock, patch
-
+def test_apply_approval_to_requirements_confirms_approved_tools():
     from agno.models.response import ToolExecution
     from agno.run.requirement import RunRequirement
 
@@ -717,20 +712,333 @@ async def test_apply_native_hitl_resolution_confirms_approved_tools():
     )
     requirement = RunRequirement(tool_execution=tool)
     run_output = SimpleNamespace(requirements=[requirement], tools=[tool])
-    agent = SimpleNamespace(aget_run_output=AsyncMock(return_value=run_output))
-    db = SimpleNamespace(
-        get_approval=AsyncMock(return_value={"status": "approved", "resolution_data": None})
+    requirements = security_run_runtime.apply_approval_to_requirements(
+        run_output,
+        approval_id="approval-1",
+        status="approved",
+        resolution_data=None,
     )
-
-    with patch.object(security_run_runtime, "get_async_agno_postgres_db", return_value=db):
-        requirements = await security_run_runtime.apply_native_hitl_resolution(
-            agent,
-            approval_id="approval-1",
-            run_id="run-1",
-            session_id="session-1",
-            user_id="user-1",
-        )
 
     assert requirements is not None
     assert requirement.confirmation is True
     assert tool.confirmed is True
+
+
+def test_apply_approval_to_requirements_uses_active_requirement_when_id_is_missing():
+    from agno.models.response import ToolExecution
+    from agno.run.requirement import RunRequirement
+
+    tool = ToolExecution(
+        tool_name="hitl_simulate_containment",
+        tool_call_id="call-1",
+        requires_confirmation=True,
+        approval_type="required",
+        approval_id=None,
+    )
+    requirement = RunRequirement(tool_execution=tool)
+
+    requirements = security_run_runtime.apply_approval_to_requirements(
+        SimpleNamespace(requirements=[requirement], tools=[tool]),
+        approval_id="approval-1",
+        status="rejected",
+        resolution_data={"note": "完整拒绝原因"},
+    )
+
+    assert requirements == [requirement]
+    assert tool.confirmed is False
+    assert tool.confirmation_note == "Rejected by administrator: 完整拒绝原因"
+
+
+def test_approved_tool_execution_requires_a_successful_result():
+    from agno.models.response import ToolExecution
+
+    tool = ToolExecution(
+        tool_name="hitl_simulate_containment",
+        approval_id="approval-1",
+        confirmed=True,
+    )
+    run_output = SimpleNamespace(tools=[tool])
+
+    assert not security_run_runtime.approved_tool_executed(run_output, "approval-1")
+    tool.result = '{"status": "simulated"}'
+    assert security_run_runtime.approved_tool_executed(run_output, "approval-1")
+    tool.tool_call_error = True
+    assert not security_run_runtime.approved_tool_executed(run_output, "approval-1")
+
+
+def test_mark_hitl_mcp_tools_only_marks_hitl_namespace():
+    from agno.tools.function import Function
+
+    hitl_tool = Function(name="hitl_simulate_containment", entrypoint=lambda: None)
+    ordinary_tool = Function(name="basic_lookup", entrypoint=lambda: None)
+    mcp_tools = SimpleNamespace(
+        functions={hitl_tool.name: hitl_tool, ordinary_tool.name: ordinary_tool},
+        async_functions={hitl_tool.name: hitl_tool},
+    )
+
+    assert security_run_runtime.mark_hitl_mcp_tools(mcp_tools) == [
+        "hitl_simulate_containment"
+    ]
+    assert hitl_tool.approval_type == "required"
+    assert hitl_tool.requires_confirmation is True
+    assert ordinary_tool.approval_type is None
+    assert ordinary_tool.requires_confirmation is None
+
+
+def test_mcp_header_provider_injects_current_run_identity():
+    provider = security_run_runtime._mcp_header_provider("secret")
+    headers = provider(
+        SimpleNamespace(user_id="user-1", session_id="session-1", run_id="run-1")
+    )
+    assert headers == {
+        "Authorization": "Bearer secret",
+        "X-Agno-User-ID": "user-1",
+        "X-Agno-Session-ID": "session-1",
+        "X-Agno-Run-ID": "run-1",
+    }
+
+
+def test_security_run_request_round_trips_versioned_run_metadata():
+    original = security_run_runtime.SecurityRunRequest.from_chat_args(
+        "contain asset",
+        session_id="session-1",
+        model_id="model-1",
+        reasoning_effort="high",
+        user_id="user-1",
+        knowledge_owner_user_id="owner-1",
+        memory_enabled=False,
+        store_raw_tool_io=True,
+    )
+    restored = security_run_runtime.SecurityRunRequest.from_run_metadata(
+        {"tais_runtime": original.runtime_metadata()},
+        session_id="session-1",
+        user_id="user-1",
+    )
+    assert restored.model_id == "model-1"
+    assert restored.reasoning_effort == "high"
+    assert restored.knowledge_owner_user_id == "owner-1"
+    assert restored.memory_enabled is False
+    assert restored.store_raw_tool_io is True
+
+    with pytest.raises(ValueError, match="version is unsupported"):
+        security_run_runtime.SecurityRunRequest.from_run_metadata(
+            {"tais_runtime": {"version": "1"}},
+            session_id="session-1",
+            user_id="user-1",
+        )
+
+
+def _security_approval(**overrides):
+    return {
+        "id": "approval-1",
+        "status": "approved",
+        "run_status": "PAUSED",
+        "run_id": "run-1",
+        "session_id": "session-1",
+        "user_id": "user-1",
+        "source_type": "agent",
+        "agent_id": "security-operations",
+        "tool_name": "hitl_simulate_containment",
+        **overrides,
+    }
+
+
+class ResumeDb:
+    def __init__(self, approval=None, run_output=None):
+        self.approval = approval or _security_approval()
+        self.run_output = run_output
+        self.status_updates = []
+
+    async def get_approval(self, _approval_id):
+        return self.approval
+
+    async def get_session(self, _session_id, *, user_id):
+        assert user_id == "user-1"
+        return SimpleNamespace(runs=[self.run_output] if self.run_output is not None else [])
+
+    async def update_approval_run_status(self, run_id, status):
+        self.status_updates.append((run_id, status))
+
+    async def get_approvals(self, *, status=None, run_id=None, **_kwargs):
+        if run_id == "run-1":
+            return ([self.approval], 1)
+        return ([], 0)
+
+
+@pytest.mark.asyncio
+async def test_schedule_resume_is_idempotent_for_completed_run():
+    db = ResumeDb(approval=_security_approval(run_status="COMPLETED"))
+    runtime = security_run_runtime.SecurityRunRuntime(
+        security_run_runtime.SecurityRunRuntimeDependencies(get_db=lambda: db)
+    )
+
+    assert await runtime.schedule_resume("approval-1") == "COMPLETED"
+    assert db.status_updates == []
+    assert runtime._resume_tasks == {}
+
+
+@pytest.mark.asyncio
+async def test_schedule_resume_deduplicates_active_background_task():
+    db = ResumeDb()
+    runtime = security_run_runtime.SecurityRunRuntime(
+        security_run_runtime.SecurityRunRuntimeDependencies(get_db=lambda: db)
+    )
+    started = asyncio.Event()
+
+    async def pending_job(approval_id):
+        assert approval_id == "approval-1"
+        started.set()
+        await asyncio.Event().wait()
+
+    with patch.object(runtime, "_resume_job", new=pending_job):
+        assert await runtime.schedule_resume("approval-1") == "RUNNING"
+        await started.wait()
+        assert await runtime.schedule_resume("approval-1") == "RUNNING"
+        assert len(db.status_updates) == 1
+        await runtime.shutdown()
+
+    assert runtime._resume_tasks == {}
+
+
+@pytest.mark.asyncio
+async def test_failed_run_requires_explicit_retry():
+    db = ResumeDb(approval=_security_approval(run_status="ERROR"))
+    runtime = security_run_runtime.SecurityRunRuntime(
+        security_run_runtime.SecurityRunRuntimeDependencies(get_db=lambda: db)
+    )
+    with pytest.raises(ValueError, match="explicit retry"):
+        await runtime.schedule_resume("approval-1")
+
+
+@pytest.mark.asyncio
+async def test_recover_resolved_runs_only_schedules_paused_or_running_security_runs():
+    db = ResumeDb()
+
+    async def get_approvals(*, status, **_kwargs):
+        if status == "approved":
+            return (
+                [
+                    _security_approval(id="approval-paused", run_status="PAUSED"),
+                    _security_approval(id="approval-error", run_status="ERROR"),
+                ],
+                2,
+            )
+        return ([_security_approval(id="approval-running", status="rejected", run_status="RUNNING")], 1)
+
+    runtime = security_run_runtime.SecurityRunRuntime(
+        security_run_runtime.SecurityRunRuntimeDependencies(get_db=lambda: db)
+    )
+    with (
+        patch.object(db, "get_approvals", new=get_approvals),
+        patch.object(runtime, "schedule_resume", new=AsyncMock(return_value="RUNNING")) as schedule,
+    ):
+        assert await runtime.recover_resolved_runs() == 2
+
+    assert [call.args[0] for call in schedule.await_args_list] == [
+        "approval-paused",
+        "approval-running",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_resume_job_rejects_requirement_and_notifies_submitter_after_continuation():
+    from agno.models.response import ToolExecution
+    from agno.run.requirement import RunRequirement
+
+    request = security_run_runtime.SecurityRunRequest.from_chat_args(
+        "contain asset", session_id="session-1", user_id="user-1"
+    )
+    tool = ToolExecution(
+        tool_name="hitl_simulate_containment",
+        tool_call_id="call-1",
+        requires_confirmation=True,
+        approval_type="required",
+        approval_id="approval-1",
+    )
+    requirement = RunRequirement(tool_execution=tool)
+    run_output = SimpleNamespace(
+        run_id="run-1",
+        metadata={"tais_runtime": request.runtime_metadata()},
+        requirements=[requirement],
+        tools=[tool],
+    )
+    db = ResumeDb(
+        approval=_security_approval(
+            status="rejected",
+            resolution_data={"note": "证据不足，暂不封禁"},
+        ),
+        run_output=run_output,
+    )
+    continued_kwargs = {}
+
+    class ContinueAgent:
+        def acontinue_run(self, **kwargs):
+            continued_kwargs.update(kwargs)
+
+            async def events():
+                yield SimpleNamespace(event="RunCompleted")
+                db.approval = {**db.approval, "run_status": "COMPLETED"}
+
+            return events()
+
+    @asynccontextmanager
+    async def agent_context(_request):
+        yield ContinueAgent()
+
+    runtime = security_run_runtime.SecurityRunRuntime(
+        security_run_runtime.SecurityRunRuntimeDependencies(get_db=lambda: db)
+    )
+    with (
+        patch.object(runtime, "security_agent_context", new=agent_context),
+        patch.object(
+            security_run_runtime,
+            "notify_submitter_of_hitl_resolution",
+            new=AsyncMock(),
+        ) as notify,
+    ):
+        await runtime._resume_job("approval-1")
+
+    assert tool.confirmed is False
+    assert tool.confirmation_note == "Rejected by administrator: 证据不足，暂不封禁"
+    assert run_output.metadata["approval"]["id"] == "approval-1"
+    assert run_output.metadata["approval"]["status"] == "rejected"
+    assert run_output.metadata["approval"]["resolution_data"] == {"note": "证据不足，暂不封禁"}
+    assert continued_kwargs["run_response"] is run_output
+    assert "requirements" not in continued_kwargs
+    notify.assert_awaited_once()
+    notify_call = notify.await_args
+    assert notify_call is not None
+    assert notify_call.kwargs["rejection_reason"] == "证据不足，暂不封禁"
+
+
+@pytest.mark.asyncio
+async def test_resume_job_marks_agno_run_and_trace_error_and_notifies_both_sides():
+    db = ResumeDb()
+    runtime = security_run_runtime.SecurityRunRuntime(
+        security_run_runtime.SecurityRunRuntimeDependencies(get_db=lambda: db)
+    )
+    with (
+        patch.object(
+            runtime,
+            "_load_approval_run",
+            new=AsyncMock(side_effect=RuntimeError("continuation failed")),
+        ),
+        patch(
+            "api.services.tracing_service.mark_trace_error",
+            new=AsyncMock(),
+        ) as mark_trace,
+        patch.object(
+            security_run_runtime,
+            "notify_hitl_resume_failure",
+            new=AsyncMock(),
+        ) as notify,
+    ):
+        await runtime._resume_job("approval-1")
+
+    assert db.status_updates == [("run-1", security_run_runtime.RunStatus.error)]
+    mark_trace.assert_awaited_once_with("run-1")
+    notify.assert_awaited_once()
+    notify_call = notify.await_args
+    assert notify_call is not None
+    assert notify_call.kwargs["submitter_id"] == "user-1"
+    assert notify_call.kwargs["error"] == "continuation failed"

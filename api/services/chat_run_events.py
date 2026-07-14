@@ -94,6 +94,43 @@ def metric_values(value: Any) -> dict[str, int | float]:
     return result
 
 
+def approval_rejection_reason(run: object) -> str:
+    run_data = to_mapping(run)
+    for requirement in run_data.get("requirements", []):
+        requirement_data = to_mapping(requirement)
+        reason = _rejection_reason_from_note(requirement_data.get("confirmation_note"))
+        if reason:
+            return reason
+        tool_data = to_mapping(requirement_data.get("tool_execution"))
+        reason = _rejection_reason_from_note(tool_data.get("confirmation_note"))
+        if reason:
+            return reason
+
+    for tool in run_data.get("tools", []):
+        reason = _rejection_reason_from_note(to_mapping(tool).get("confirmation_note"))
+        if reason:
+            return reason
+
+    metadata = to_mapping(run_data.get("metadata"))
+    approval = to_mapping(metadata.get("approval"))
+    resolution = to_mapping(approval.get("resolution_data"))
+    return _text(
+        resolution.get("rejection_reason") or resolution.get("note"),
+        limit=2000,
+    )
+
+
+def _rejection_reason_from_note(value: Any) -> str:
+    """Return a meaningful administrator reason, excluding Agno's generic fallback."""
+    note = _text(value, limit=2000)
+    if not note or note == "Tool call was rejected":
+        return ""
+    prefix = "Rejected by administrator:"
+    if note.startswith(prefix):
+        return note[len(prefix) :].strip()
+    return note
+
+
 def tool_update(value: Any, status: Literal["running", "completed", "error"], *, include_raw_io: bool = False) -> dict[str, Any]:
     tool = to_mapping(value)
     tool_id = _text(tool.get("tool_call_id") or tool.get("id") or tool.get("call_id"), 128)

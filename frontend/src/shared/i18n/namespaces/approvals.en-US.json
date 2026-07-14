@@ -15,7 +15,7 @@
   "resolvedAt": "Resolved at",
   "zipPreviewFailed": "Unable to load ZIP preview.",
   "rejectReasonHint": "The rejection reason is sent to the requester.",
-  "resumeStatus": "Resume status",
+  "runStatus": "Run status",
   "resumeError": "Resume error",
   "retryResume": "Retry resume",
   "resumeRetryStarted": "Run resume retry started.",

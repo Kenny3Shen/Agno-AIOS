@@ -114,7 +114,7 @@ describe('ApprovalsPage', () => {
     expect(screen.queryByRole('button', { name: /拒绝/ })).toBeNull()
   })
 
-  it('shows a failed containment resume and lets an administrator retry it', async () => {
+  it('shows a failed chat HITL resume and lets an administrator retry it', async () => {
     server.use(
       http.get('/api/auth/users/me', () =>
         HttpResponse.json({ id: 'admin-1', email: 'admin@example.com', role: 'admin', scopes: ['admin'] })
@@ -125,10 +125,10 @@ describe('ApprovalsPage', () => {
             {
               id: 'approval-1',
               status: 'approved',
-              tool_name: 'simulate_containment',
+              tool_name: 'any_protected_tool',
               run_id: 'run-1',
               session_id: 'session-1',
-              resume_status: 'failed',
+              run_status: 'ERROR',
               resolved_by: { id: 'admin-1', email: 'admin@example.com' },
             },
           ],
@@ -136,14 +136,14 @@ describe('ApprovalsPage', () => {
       ),
       http.get('/api/approvals/submissions', () => HttpResponse.json({ approvals: [] })),
       http.post('/api/approvals/approval-1/resume', () =>
-        HttpResponse.json({ id: 'approval-1', status: 'approved', tool_name: 'simulate_containment', resume_status: 'completed' })
+        HttpResponse.json({ id: 'approval-1', status: 'approved', tool_name: 'any_protected_tool', run_status: 'RUNNING' })
       )
     )
 
     renderWithQuery(<ApprovalsPage />)
-    await user.click(await screen.findByText('simulate_containment'))
+    await user.click(await screen.findByText('any_protected_tool'))
     expect(screen.getByText('运行恢复失败')).toBeTruthy()
-    expect(screen.getByText('恢复状态')).toBeTruthy()
+    expect(screen.getByText('运行状态')).toBeTruthy()
     await user.click(screen.getByRole('button', { name: '重试恢复' }))
     expect(await screen.findByText('已开始重试恢复运行。')).toBeTruthy()
   })

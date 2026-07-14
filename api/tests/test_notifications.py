@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
+from starlette.requests import Request
 
 from api.auth.models import User
 from api.routes import notifications
@@ -61,3 +62,53 @@ async def test_delete_notification_returns_404_when_missing() -> None:
             await notifications.remove_notification(9, user)
         assert exc.value.status_code == 404
 
+
+@pytest.mark.asyncio
+async def test_notification_stream_replays_rows_in_cursor_order_without_duplicates() -> None:
+    user = cast(User, SimpleNamespace(id="user-1"))
+    request = cast(
+        Request,
+        SimpleNamespace(is_disconnected=AsyncMock(side_effect=[False, False, True])),
+    )
+    rows = [
+        {
+            "id": 4,
+            "title": "first",
+            "body": "one",
+            "data": {},
+            "read": False,
+            "created_at": 1,
+        },
+        {
+            "id": 5,
+            "title": "second",
+            "body": "two",
+            "data": {},
+            "read": False,
+            "created_at": 2,
+        },
+    ]
+    with (
+        patch.object(
+            notifications,
+            "list_notifications_after",
+            new=AsyncMock(side_effect=[rows, []]),
+        ) as list_after,
+        patch.object(notifications.asyncio, "sleep", new=AsyncMock()),
+    ):
+        response = await notifications.stream_notifications(
+            request,
+            after_id=3,
+            user=user,
+        )
+        events = [cast(dict[str, str], event) async for event in response.body_iterator]
+
+    assert [event["id"] for event in events] == ["4", "5"]
+    assert [event["event"] for event in events] == [
+        "notification.created",
+        "notification.created",
+    ]
+    assert [call.args for call in list_after.await_args_list] == [
+        ("user-1", 3),
+        ("user-1", 5),
+    ]

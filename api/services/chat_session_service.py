@@ -12,7 +12,12 @@ from api.services.postgres_store import (
     ensure_agno_postgres_tables_async,
     get_async_agno_postgres_db,
 )
-from api.services.chat_run_events import metric_values, source_items, tool_update
+from api.services.chat_run_events import (
+    approval_rejection_reason,
+    metric_values,
+    source_items,
+    tool_update,
+)
 from api.services.chat_settings import get_chat_settings_async
 
 
@@ -288,23 +293,25 @@ def _project_history_content(run: dict[str, object], status: str) -> str:
     is_stale = any(marker in stale for marker in waiting_markers)
     has_admin_reason = "Rejected by administrator" in content_text or "拒绝原因" in content_text
     if rejected and status != "paused" and (not content_text or is_stale or not has_admin_reason):
-        notes = [
-            str(tool.get("confirmation_note") or "").strip()
-            for tool in rejected
-            if str(tool.get("confirmation_note") or "").strip()
-        ]
+        admin_reason = approval_rejection_reason(run)
+        notes = [str(tool.get("confirmation_note") or "").strip() for tool in rejected]
+        if admin_reason:
+            notes.append(f"Rejected by administrator: {admin_reason}")
         if notes and not has_admin_reason:
-            lines_out = ["## 封禁请求未执行"]
+            lines_out = ["## HITL 请求未执行"]
             for tool in rejected:
                 name = str(tool.get("tool_name") or "tool")
-                note = str(tool.get("confirmation_note") or "Tool call was rejected").strip()
+                note = str(tool.get("confirmation_note") or "").strip()
+                if admin_reason and (not note or note == "Tool call was rejected"):
+                    note = f"Rejected by administrator: {admin_reason}"
+                note = note or "Tool call was rejected"
                 args = tool.get("tool_args") if isinstance(tool.get("tool_args"), dict) else {}
                 lines_out.append(f"- **工具**：`{name}`")
                 if isinstance(args, dict) and args.get("target"):
                     lines_out.append(f"- **目标**：`{args.get('target')}`")
                 lines_out.append(f"- **拒绝原因**：{note}")
             lines_out.append("")
-            lines_out.append("管理员已拒绝该 HITL 请求；模拟处置未执行，外部系统未发生实际变更。")
+            lines_out.append("管理员已拒绝该 HITL 请求；工具未执行。")
             return chr(10).join(lines_out)
     if confirmed and status != "paused" and (not content_text or is_stale):
         lines_out = ["## HITL 工具已执行"]

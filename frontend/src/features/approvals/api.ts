@@ -32,9 +32,7 @@ export interface Approval {
   resolved_at?: string | number
   rejection_reason?: string | null
   resolution_data?: Record<string, unknown> | null
-  resume_status?: 'pending' | 'running' | 'completed' | 'failed' | string | null
-  resume_error?: string | null
-  resumed_at?: string | number | null
+  run_status?: 'PAUSED' | 'RUNNING' | 'COMPLETED' | 'ERROR' | 'CANCELLED' | string | null
   payload?: Record<string, unknown>
 }
 

@@ -23,14 +23,34 @@ async def _ensure() -> None:
         await conn.run_sync(table.create, checkfirst=True)
 
 
-async def create_notifications(user_ids: list[str], *, title: str, body: str, data: dict[str, Any]) -> None:
+async def create_notifications(
+    user_ids: list[str],
+    *,
+    title: str,
+    body: str,
+    data: dict[str, Any],
+) -> list[dict[str, Any]]:
     if not user_ids:
-        return
+        return []
     await _ensure()
     table = _table()
     now = int(time.time())
+    records = [
+        {
+            "user_id": user_id,
+            "title": title,
+            "body": body,
+            "data": data,
+            "created_at": now,
+        }
+        for user_id in dict.fromkeys(user_ids)
+        if user_id
+    ]
+    if not records:
+        return []
     async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(insert(table), [{"user_id": user_id, "title": title, "body": body, "data": data, "created_at": now} for user_id in user_ids])
+        rows = (await conn.execute(insert(table).returning(table), records)).mappings().all()
+    return [dict(row) for row in rows]
 
 
 async def list_notifications(user_id: str, unread_only: bool) -> tuple[list[dict[str, Any]], int]:
@@ -43,6 +63,26 @@ async def list_notifications(user_id: str, unread_only: bool) -> tuple[list[dict
         rows = [dict(row) for row in (await conn.execute(stmt)).mappings().all()]
         unread = int((await conn.execute(select(func.count()).select_from(table).where(table.c.user_id == user_id, table.c.read.is_(False)))).scalar_one())
     return rows, unread
+
+
+async def list_notifications_after(
+    user_id: str,
+    after_id: int,
+    *,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    await _ensure()
+    table = _table()
+    safe_limit = max(1, min(int(limit), 500))
+    stmt = (
+        select(table)
+        .where(table.c.user_id == user_id, table.c.id > max(0, int(after_id)))
+        .order_by(table.c.id.asc())
+        .limit(safe_limit)
+    )
+    async with get_async_control_plane_engine().begin() as conn:
+        rows = (await conn.execute(stmt)).mappings().all()
+    return [dict(row) for row in rows]
 
 
 async def mark_notification_read(notification_id: int, user_id: str) -> bool:
@@ -80,4 +120,3 @@ async def delete_notification(notification_id: int, user_id: str) -> bool:
     async with get_async_control_plane_engine().begin() as conn:
         result = await conn.execute(delete(table).where(table.c.id == notification_id, table.c.user_id == user_id))
     return bool(result.rowcount)
-

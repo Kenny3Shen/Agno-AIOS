@@ -1,9 +1,11 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from agno.session.agent import AgentSession
 import pytest
 
 from api.services import chat_session_service
+from api.services.chat_run_events import approval_rejection_reason
 
 
 class FakeAgnoDb:
@@ -49,6 +51,21 @@ class AsyncFakeAgnoDb(FakeAgnoDb):
     async def upsert_session(self, session):
         self.upserted = session
         return session
+
+
+def test_approval_rejection_reason_prefers_agno_requirement_note():
+    run = {
+        "requirements": [
+            {
+                "confirmation_note": "Rejected by administrator: 保留取证后再处理",
+                "tool_execution": {"confirmation_note": "Tool call was rejected"},
+            }
+        ],
+        "tools": [{"confirmation_note": "Tool call was rejected"}],
+        "metadata": {"approval": {"resolution_data": {"note": "旧的备注"}}},
+    }
+
+    assert approval_rejection_reason(run) == "保留取证后再处理"
 
 
 @pytest.mark.asyncio
@@ -214,3 +231,59 @@ async def test_session_history_maps_paused_status_and_approval_id():
     assert assistant[0]["status"] == "paused"
     assert assistant[0]["approval_id"] == "approval-1"
     assert assistant[1]["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_session_history_uses_approval_resolution_note_for_full_rejection_reason():
+    db = AsyncFakeAgnoDb(
+        rows=[],
+        session_row={
+            "session_id": "session-1",
+            "runs": [
+                {
+                    "run_id": "run-rejected",
+                    "input": {"input_content": "simulate block"},
+                    "content": "等待管理员审批",
+                    "status": "COMPLETED",
+                    "metadata": {
+                        "approval": {
+                            "resolution_data": {
+                                "note": "证据不足，暂不封禁该目标，保留观察。"
+                            }
+                        }
+                    },
+                    "tools": [
+                        {
+                            "tool_name": "hitl_simulate_containment",
+                            "approval_id": "approval-1",
+                            "requires_confirmation": True,
+                            "confirmed": False,
+                            "confirmation_note": "Tool call was rejected",
+                            "tool_args": {"target": "10.0.0.8"},
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+    with (
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
+        patch.object(
+            chat_session_service,
+            "get_chat_settings_async",
+            new=AsyncMock(
+                return_value=SimpleNamespace(
+                    show_raw_tool_io=False,
+                    show_thought_chain=True,
+                    show_raw_reasoning=False,
+                )
+            ),
+        ),
+    ):
+        messages = await chat_session_service.get_session_messages_async("session-1")
+
+    assistant = next(message for message in messages if message["role"] == "assistant")
+    assert assistant["status"] == "completed"
+    assert "证据不足，暂不封禁该目标，保留观察。" in assistant["content"]
+    assert [message["id"] for message in messages].count("run-rejected") == 1

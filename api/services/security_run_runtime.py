@@ -1,10 +1,14 @@
-from dataclasses import dataclass
+import asyncio
 from contextlib import asynccontextmanager
-from pathlib import Path
+from dataclasses import dataclass
 from inspect import isawaitable, iscoroutinefunction
+from pathlib import Path
 from typing import Any, AsyncIterator, Callable
 
 from agno.agent import Agent
+from agno.approval import approval as require_approval
+from agno.run.approval import acheck_and_apply_approval_resolution
+from agno.run import RunStatus
 from agno.run.agent import RunEvent
 from agno.run.requirement import RunRequirement
 from agno.session.summary import SessionSummaryManager
@@ -21,9 +25,11 @@ from api.services.model_config_service import get_model_for_run
 from api.services.model_factory import build_agno_model
 from api.services.postgres_store import get_async_agno_postgres_db
 from api.services.skill_service import get_enabled_skill_dirs
-from api.services.hitl_containment import simulate_containment
-from api.persistence.hitl_runs import get_paused_run, save_paused_run, set_resume_status
-from api.services.notification_service import notify_admins_of_hitl_approval
+from api.services.notification_service import (
+    notify_admins_of_hitl_approval,
+    notify_hitl_resume_failure,
+    notify_submitter_of_hitl_resolution,
+)
 from api.services.chat_settings import get_chat_settings_async
 from api.services.chat_run_events import (
     ChatRunEvent,
@@ -62,6 +68,9 @@ def _build_mcp_token() -> str:
 PROMPT_DIR = Path(__file__).resolve().parents[1] / "agent" / "prompts"
 SECURITY_OPERATIONS_PROMPT = "security_operations.md"
 SAFE_FALLBACK_PROMPT = "safe_fallback.md"
+HITL_MCP_TOOL_PREFIX = "hitl_"
+RUNTIME_METADATA_KEY = "tais_runtime"
+RUNTIME_METADATA_VERSION = 1
 
 
 async def _load_prompt_async(filename: str) -> str:
@@ -114,6 +123,43 @@ def _is_provider_block_error(error: Exception) -> bool:
     return any(marker in message for marker in PROVIDER_BLOCK_MARKERS)
 
 
+def _mcp_header_provider(token: str) -> Callable[..., dict[str, str]]:
+    def provide_headers(run_context: Any | None = None, **_kwargs: Any) -> dict[str, str]:
+        headers = {"Authorization": f"Bearer {token}"}
+        if run_context is None:
+            return headers
+        headers.update(
+            {
+                "X-Agno-User-ID": str(getattr(run_context, "user_id", "") or ""),
+                "X-Agno-Session-ID": str(getattr(run_context, "session_id", "") or ""),
+                "X-Agno-Run-ID": str(getattr(run_context, "run_id", "") or ""),
+            }
+        )
+        return headers
+
+    return provide_headers
+
+
+def mark_hitl_mcp_tools(mcp_tools: Any) -> list[str]:
+    """Apply Agno's blocking approval decorator to the HITL MCP namespace."""
+    marked: list[str] = []
+    registries = (
+        getattr(mcp_tools, "functions", None),
+        getattr(mcp_tools, "async_functions", None),
+    )
+    seen: set[int] = set()
+    for registry in registries:
+        if not isinstance(registry, dict):
+            continue
+        for name, function in registry.items():
+            if not str(name).startswith(HITL_MCP_TOOL_PREFIX) or id(function) in seen:
+                continue
+            require_approval(type="required")(function)
+            seen.add(id(function))
+            marked.append(str(name))
+    return marked
+
+
 @dataclass(frozen=True)
 class SecurityRunRequest:
     """Security Operations Assistant 的一次 Run 请求。"""
@@ -154,25 +200,37 @@ class SecurityRunRequest:
     def agent_user_id(self) -> str:
         return (self.user_id or "anonymous").strip() or "anonymous"
 
-    def paused_context(self) -> dict[str, object]:
+    def runtime_metadata(self) -> dict[str, object]:
         return {
-            "session_id": self.session_id or "",
+            "version": RUNTIME_METADATA_VERSION,
             "model_id": self.model_id or "",
             "reasoning_effort": self.reasoning_effort or "",
-            "user_id": self.user_id or "",
             "knowledge_owner_user_id": self.knowledge_owner_user_id or "",
             "memory_enabled": self.memory_enabled,
             "store_raw_tool_io": self.store_raw_tool_io,
         }
 
     @classmethod
-    def from_paused_context(cls, context: dict[str, object]) -> "SecurityRunRequest":
+    def from_run_metadata(
+        cls,
+        metadata: object,
+        *,
+        session_id: str,
+        user_id: str,
+    ) -> "SecurityRunRequest":
+        root = metadata if isinstance(metadata, dict) else {}
+        context = root.get(RUNTIME_METADATA_KEY)
+        if not isinstance(context, dict):
+            raise ValueError("Paused run is missing T.A.I.S runtime metadata")
+        version = context.get("version")
+        if not isinstance(version, int) or version != RUNTIME_METADATA_VERSION:
+            raise ValueError("Paused run runtime metadata version is unsupported")
         return cls.from_chat_args(
             "Continue the approved security operation.",
-            session_id=str(context.get("session_id") or "") or None,
+            session_id=session_id,
             model_id=str(context.get("model_id") or "") or None,
             reasoning_effort=str(context.get("reasoning_effort") or "") or None,
-            user_id=str(context.get("user_id") or "") or None,
+            user_id=user_id,
             knowledge_owner_user_id=str(context.get("knowledge_owner_user_id") or "") or None,
             memory_enabled=bool(context.get("memory_enabled", True)),
             store_raw_tool_io=bool(context.get("store_raw_tool_io", False)),
@@ -200,6 +258,7 @@ class SecurityRunRuntime:
     ) -> None:
         self.dependencies = dependencies or SecurityRunRuntimeDependencies()
         self._active_agents: dict[tuple[str, str], Any] = {}
+        self._resume_tasks: dict[str, asyncio.Task[None]] = {}
 
     def register_run(self, *, user_id: str, run_id: str, agent: Any) -> None:
         if run_id:
@@ -215,62 +274,197 @@ class SecurityRunRuntime:
             return False
         return bool(agent.cancel_run(run_id))
 
-    async def resume(self, approval_id: str) -> str:
-        """Drain a persisted paused run after its approval was resolved.
+    @staticmethod
+    def _is_security_chat_approval(approval_record: dict[str, Any]) -> bool:
+        return (
+            str(approval_record.get("source_type") or "") == "agent"
+            and str(approval_record.get("agent_id") or "") == "security-operations"
+            and bool(str(approval_record.get("run_id") or ""))
+            and bool(str(approval_record.get("session_id") or ""))
+            and bool(str(approval_record.get("user_id") or ""))
+        )
 
-        Uses Agno-native resume:
-        1. load the paused run requirements
-        2. apply ``RunRequirement.confirm()`` / ``reject(note=...)`` from the
-           resolved approval record (including rejection reason)
-        3. ``agent.acontinue_run(..., requirements=...)``
-        """
-        paused = await get_paused_run(approval_id)
-        if paused is None:
-            raise ValueError("Approval is not a resumable chat run")
-        if paused["resume_status"] == "running":
-            raise ValueError("Run resume is already in progress")
-        context = paused.get("request_context")
-        if not isinstance(context, dict):
-            raise ValueError("Paused run context is invalid")
-        request = SecurityRunRequest.from_paused_context(context)
-        if request.agent_user_id != str(paused.get("user_id") or ""):
-            raise ValueError("Paused run context does not match its owner")
-        await set_resume_status(approval_id, "running")
+    async def _load_approval_run(self, approval_record: dict[str, Any]) -> Any:
+        if not self._is_security_chat_approval(approval_record):
+            raise ValueError("Approval is not a resumable security chat run")
+        session_id = str(approval_record["session_id"])
+        user_id = str(approval_record["user_id"])
+        run_id = str(approval_record["run_id"])
+        session = await self.dependencies.get_db().get_session(
+            session_id,
+            user_id=user_id,
+        )
+        runs = getattr(session, "runs", None) if session is not None else None
+        if not isinstance(runs, list):
+            raise ValueError("Paused run session is missing")
+        run_output = next(
+            (item for item in runs if str(getattr(item, "run_id", "") or "") == run_id),
+            None,
+        )
+        if run_output is None:
+            raise ValueError("Paused run is missing from its Agno session")
+        return run_output
+
+    async def _drain_continuation(self, continued: Any) -> None:
+        if hasattr(continued, "__aiter__"):
+            async for _event in continued:
+                pass
+            return
+        result = await continued
+        if hasattr(result, "__aiter__"):
+            async for _event in result:
+                pass
+
+    async def _resume_job(self, approval_id: str) -> None:
+        db = self.dependencies.get_db()
         try:
-            async with self.security_agent_context(request) as agent:
-                run_id = str(paused["run_id"])
-                session_id = str(paused["session_id"])
-                requirements = await apply_native_hitl_resolution(
-                    agent,
+            approval_record = await db.get_approval(approval_id)
+            if not isinstance(approval_record, dict):
+                raise ValueError("Approval not found")
+            if str(approval_record.get("status") or "") not in {"approved", "rejected"}:
+                raise ValueError("Approval must be resolved before resuming")
+
+            run_output = await self._load_approval_run(approval_record)
+            request = SecurityRunRequest.from_run_metadata(
+                getattr(run_output, "metadata", None),
+                session_id=str(approval_record["session_id"]),
+                user_id=str(approval_record["user_id"]),
+            )
+            if str(approval_record["status"]) == "rejected":
+                apply_rejection_note(
+                    run_output,
                     approval_id=approval_id,
-                    run_id=run_id,
-                    session_id=session_id,
-                    user_id=request.agent_user_id,
+                    resolution_data=approval_record.get("resolution_data"),
                 )
+            # Let Agno update every persisted ToolExecution (both
+            # RunOutput.tools and requirements) from its approval record.
+            # Passing manually-mutated requirements here can leave those two
+            # representations out of sync and turn an approved call into a
+            # synthetic rejection during continuation.
+            await acheck_and_apply_approval_resolution(
+                db,
+                str(approval_record["run_id"]),
+                run_output,
+            )
+            async with self.security_agent_context(request) as agent:
                 continue_kwargs: dict[str, Any] = {
-                    "run_id": run_id,
-                    "session_id": session_id,
+                    "run_response": run_output,
+                    "session_id": request.session_id,
                     "user_id": request.agent_user_id,
                     "stream": True,
                     "stream_events": True,
                 }
-                if requirements is not None:
-                    continue_kwargs["requirements"] = requirements
-                # acontinue_run may return a coroutine wrapping an async iterator.
-                continued = agent.acontinue_run(**continue_kwargs)
-                if hasattr(continued, "__aiter__"):
-                    async for _event in continued:
-                        pass
-                else:
-                    result = await continued
-                    if hasattr(result, "__aiter__"):
-                        async for _event in result:
-                            pass
-        except Exception as exc:
-            await set_resume_status(approval_id, "failed", str(exc)[:2000])
+                await self._drain_continuation(agent.acontinue_run(**continue_kwargs))
+
+            if str(approval_record["status"]) == "approved" and not approved_tool_executed(
+                run_output, approval_id
+            ):
+                raise RuntimeError("Approved HITL tool did not produce an execution result")
+
+            refreshed = await db.get_approval(approval_id)
+            final_approval = refreshed if isinstance(refreshed, dict) else approval_record
+            final_run_status = str(final_approval.get("run_status") or "").upper()
+            if final_run_status != RunStatus.completed.value:
+                raise RuntimeError(
+                    "Agno continuation ended without COMPLETED status: "
+                    f"{final_run_status or 'UNKNOWN'}"
+                )
+            await notify_submitter_of_hitl_resolution(
+                approval_id=approval_id,
+                tool_name=str(final_approval.get("tool_name") or "tool"),
+                submitter_id=str(final_approval.get("user_id") or ""),
+                status=str(final_approval.get("status") or "approved"),
+                rejection_reason=_approval_rejection_reason(final_approval.get("resolution_data")),
+                run_id=str(final_approval.get("run_id") or ""),
+                session_id=str(final_approval.get("session_id") or ""),
+            )
+        except asyncio.CancelledError:
             raise
-        await set_resume_status(approval_id, "completed")
-        return "completed"
+        except Exception as exc:
+            logger.exception("恢复 HITL Run 失败: {}", approval_id)
+            approval_record = await db.get_approval(approval_id)
+            if isinstance(approval_record, dict):
+                run_id = str(approval_record.get("run_id") or "")
+                if run_id:
+                    await db.update_approval_run_status(run_id, RunStatus.error)
+                    from api.services.tracing_service import mark_trace_error
+
+                    await mark_trace_error(run_id)
+                await notify_hitl_resume_failure(
+                    approval_id=approval_id,
+                    tool_name=str(approval_record.get("tool_name") or "tool"),
+                    submitter_id=str(approval_record.get("user_id") or ""),
+                    run_id=run_id,
+                    session_id=str(approval_record.get("session_id") or ""),
+                    error=str(exc)[:500],
+                )
+
+    def _forget_resume_task(self, approval_id: str, task: asyncio.Task[None]) -> None:
+        if self._resume_tasks.get(approval_id) is task:
+            self._resume_tasks.pop(approval_id, None)
+
+    async def schedule_resume(
+        self,
+        approval_id: str,
+        *,
+        retry_error: bool = False,
+    ) -> str:
+        active = self._resume_tasks.get(approval_id)
+        if active is not None and not active.done():
+            return RunStatus.running.value
+
+        db = self.dependencies.get_db()
+        approval_record = await db.get_approval(approval_id)
+        if not isinstance(approval_record, dict):
+            raise ValueError("Approval not found")
+        if not self._is_security_chat_approval(approval_record):
+            raise ValueError("Approval is not a resumable security chat run")
+        if str(approval_record.get("status") or "") not in {"approved", "rejected"}:
+            raise ValueError("Approval must be resolved before resuming")
+
+        run_status = str(approval_record.get("run_status") or "").upper()
+        if run_status == RunStatus.completed.value:
+            return RunStatus.completed.value
+        if run_status == RunStatus.error.value and not retry_error:
+            raise ValueError("Failed run requires an explicit retry")
+
+        run_id = str(approval_record["run_id"])
+        await db.update_approval_run_status(run_id, RunStatus.running)
+        task = asyncio.create_task(
+            self._resume_job(approval_id),
+            name=f"hitl-resume:{approval_id}",
+        )
+        self._resume_tasks[approval_id] = task
+        task.add_done_callback(lambda completed: self._forget_resume_task(approval_id, completed))
+        return RunStatus.running.value
+
+    async def recover_resolved_runs(self) -> int:
+        recovered = 0
+        db = self.dependencies.get_db()
+        for status in ("approved", "rejected"):
+            page = 1
+            while True:
+                rows, total = await db.get_approvals(status=status, limit=100, page=page)
+                for approval_record in rows:
+                    if not isinstance(approval_record, dict) or not self._is_security_chat_approval(approval_record):
+                        continue
+                    run_status = str(approval_record.get("run_status") or "").upper()
+                    if run_status not in {RunStatus.paused.value, RunStatus.running.value}:
+                        continue
+                    await self.schedule_resume(str(approval_record["id"]))
+                    recovered += 1
+                if page * 100 >= int(total):
+                    break
+                page += 1
+        return recovered
+
+    async def shutdown(self) -> None:
+        tasks = [task for task in self._resume_tasks.values() if not task.done()]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._resume_tasks.clear()
 
     async def _build_model(
         self,
@@ -311,6 +505,7 @@ class SecurityRunRuntime:
                 request.message,
                 session_id=request.session_id,
                 user_id=request.agent_user_id,
+                metadata={RUNTIME_METADATA_KEY: request.runtime_metadata()},
                 stream=True,
                 stream_events=True,
             ):
@@ -358,17 +553,6 @@ class SecurityRunRuntime:
                     approval_id = str(paused.get("approval_id") or "")
                     if approval_id and run_id:
                         session_id = str(paused.get("session_id") or request.session_id or "")
-                        await save_paused_run(
-                            {
-                                "approval_id": approval_id,
-                                "run_id": run_id,
-                                "session_id": session_id,
-                                "user_id": request.agent_user_id,
-                                "request_context": request.paused_context(),
-                                "resume_status": "pending",
-                                "resume_error": "",
-                            }
-                        )
                         await notify_admins_of_hitl_approval(
                             approval_id=approval_id,
                             tool_name=str(paused.get("tool_name") or ""),
@@ -437,7 +621,7 @@ class SecurityRunRuntime:
             description="集威胁情报分析与安全剧本执行于一体的安全运营助手，可完成情报检索、深度分析和自动化处置全流程。",
             instructions=[await _load_prompt_async(SECURITY_OPERATIONS_PROMPT)],
             model=model,
-            tools=[mcp_tools, simulate_containment],
+            tools=[mcp_tools],
             knowledge=await _maybe_await(self.dependencies.get_async_knowledge_base()),
             knowledge_filters={"user_id": request.knowledge_owner_user_id}
             if request.knowledge_owner_user_id
@@ -461,20 +645,19 @@ class SecurityRunRuntime:
 
     @asynccontextmanager
     async def security_agent_context(self, request: SecurityRunRequest) -> AsyncIterator[Agent]:
+        token = await _run_sync_dependency(self.dependencies.get_mcp_token)
         server_params = StreamableHTTPClientParams(
             url=await _run_sync_dependency(self.dependencies.get_mcp_url),
-            headers={
-                "Authorization": "Bearer "
-                + await _run_sync_dependency(self.dependencies.get_mcp_token),
-                "X-Agno-User-ID": request.agent_user_id,
-                "X-Agno-Session-ID": request.session_id or "",
-            },
         )
         async with self.dependencies.mcp_tools_factory(
             server_params=server_params,
             transport="streamable-http",
             timeout_seconds=20,
+            header_provider=_mcp_header_provider(token),
         ) as mcp_tools:
+            marked = mark_hitl_mcp_tools(mcp_tools)
+            if marked:
+                logger.debug("Agno required approval applied to MCP tools: {}", marked)
             security_agent = await _maybe_await(
                 self._build_security_agent(mcp_tools, request)
             )
@@ -532,18 +715,20 @@ def cancel_security_run(*, user_id: str, run_id: str) -> bool:
 
 
 
-def _rejection_confirmation_note(resolution_data: object) -> str:
-    """Build the Agno ``confirmation_note`` used when a HITL tool is rejected."""
+def _approval_rejection_reason(resolution_data: object) -> str:
     if not isinstance(resolution_data, dict):
-        return "Rejected by administrator"
-    note = str(
+        return ""
+    return str(
         resolution_data.get("rejection_reason")
         or resolution_data.get("note")
         or ""
     ).strip()
-    if not note:
-        return "Rejected by administrator"
-    return f"Rejected by administrator: {note}"
+
+
+def _rejection_confirmation_note(resolution_data: object) -> str:
+    """Build the Agno ``confirmation_note`` used when a HITL tool is rejected."""
+    reason = _approval_rejection_reason(resolution_data)
+    return f"Rejected by administrator: {reason}" if reason else "Rejected by administrator"
 
 
 def _requirements_for_run(run_output: Any) -> list[RunRequirement]:
@@ -560,78 +745,93 @@ def _requirements_for_run(run_output: Any) -> list[RunRequirement]:
     return rebuilt
 
 
-def _requirement_matches_approval(requirement: RunRequirement, approval_id: str) -> bool:
-    tool = getattr(requirement, "tool_execution", None)
-    if tool is None:
-        return False
-    tool_approval = str(getattr(tool, "approval_id", None) or "")
-    if tool_approval:
-        return tool_approval == approval_id
-    # Fallback for older paused tools that only carry the function name.
-    return str(getattr(tool, "tool_name", "") or "") == "simulate_containment"
-
-
-async def apply_native_hitl_resolution(
-    agent: Any,
+def apply_approval_to_requirements(
+    run_output: Any,
     *,
     approval_id: str,
-    run_id: str,
-    session_id: str,
-    user_id: str | None,
+    status: str,
+    resolution_data: object,
 ) -> list[RunRequirement] | None:
-    """Apply Agno-native confirm/reject on paused requirements from the approval record.
-
-    Mirrors the official Slack HITL pattern: resolve requirements in memory, then
-    pass them to ``acontinue_run``. Returns ``None`` when the pure approval path
-    should apply resolution automatically (no requirements available).
-    """
-    db = get_async_agno_postgres_db()
-    approval = await db.get_approval(approval_id)
-    if not isinstance(approval, dict):
-        return None
-    status = str(approval.get("status") or "")
+    """Resolve Agno requirements while preserving an administrator rejection note."""
     if status not in {"approved", "rejected"}:
         raise ValueError(f"Approval is not resolved: {status or 'unknown'}")
 
-    try:
-        run_output = await agent.aget_run_output(
-            run_id=run_id,
-            session_id=session_id,
-            user_id=user_id,
-        )
-    except Exception:
-        logger.exception("Failed to load paused run for native HITL resolution: {}", run_id)
-        return None
-    if run_output is None:
-        return None
-
     requirements = _requirements_for_run(run_output)
     if not requirements:
-        # Agno @approval path: empty requirements → acontinue_run applies DB resolution.
+        return None
+    targets = [
+        requirement
+        for requirement in requirements
+        if str(getattr(getattr(requirement, "tool_execution", None), "approval_id", "") or "")
+        == approval_id
+    ]
+    if not targets:
+        # Agno can persist active approval requirements without copying the
+        # approval record ID onto each ToolExecution. In that shape, resolve
+        # every still-open confirmation requirement carried by this approval Run.
+        targets = [
+            requirement
+            for requirement in requirements
+            if getattr(requirement, "needs_confirmation", False)
+        ]
+    if not targets:
         return None
 
-    targets = [req for req in requirements if _requirement_matches_approval(req, approval_id)]
-    if not targets:
-        targets = [req for req in requirements if getattr(req, "needs_confirmation", False)]
-    if not targets:
-        return None
-
-    rejection_note = _rejection_confirmation_note(approval.get("resolution_data"))
+    rejection_note = _rejection_confirmation_note(resolution_data)
     applied = False
-    for req in targets:
-        if not getattr(req, "needs_confirmation", False):
+    for requirement in targets:
+        if not getattr(requirement, "needs_confirmation", False):
             continue
-        try:
-            if status == "approved":
-                req.confirm()
-            else:
-                req.reject(note=rejection_note)
-            applied = True
-        except ValueError:
-            logger.warning("Skipping non-confirmable HITL requirement on approval {}", approval_id)
-            continue
+        if status == "approved":
+            requirement.confirm()
+        else:
+            requirement.reject(note=rejection_note)
+        applied = True
     return requirements if applied else None
 
 
-async def resume_security_run(approval_id: str) -> str:
-    return await DEFAULT_SECURITY_RUN_RUNTIME.resume(approval_id)
+def apply_rejection_note(
+    run_output: Any,
+    *,
+    approval_id: str,
+    resolution_data: object,
+) -> None:
+    """Preserve the administrator note without resolving Agno's requirement."""
+    note = _rejection_confirmation_note(resolution_data)
+    for tool in list(getattr(run_output, "tools", None) or []):
+        if str(getattr(tool, "approval_id", "") or "") == approval_id:
+            tool.confirmation_note = note
+    for requirement in _requirements_for_run(run_output):
+        tool = getattr(requirement, "tool_execution", None)
+        if tool is not None and str(getattr(tool, "approval_id", "") or "") == approval_id:
+            tool.confirmation_note = note
+
+
+def approved_tool_executed(run_output: Any, approval_id: str) -> bool:
+    """A completed approval must correspond to a successful HITL tool result."""
+    tools = [
+        tool
+        for tool in list(getattr(run_output, "tools", None) or [])
+        if str(getattr(tool, "approval_id", "") or "") == approval_id
+    ]
+    return any(
+        getattr(tool, "confirmed", None) is True
+        and not bool(getattr(tool, "tool_call_error", False))
+        and getattr(tool, "result", None) not in (None, "")
+        for tool in tools
+    )
+
+
+async def resume_security_run(approval_id: str, *, retry_error: bool = False) -> str:
+    return await DEFAULT_SECURITY_RUN_RUNTIME.schedule_resume(
+        approval_id,
+        retry_error=retry_error,
+    )
+
+
+async def recover_security_runs() -> int:
+    return await DEFAULT_SECURITY_RUN_RUNTIME.recover_resolved_runs()
+
+
+async def shutdown_security_runtime() -> None:
+    await DEFAULT_SECURITY_RUN_RUNTIME.shutdown()

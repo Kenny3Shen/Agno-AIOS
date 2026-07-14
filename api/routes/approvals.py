@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -17,9 +18,8 @@ from api.services.approvals_service import (
     list_approvals_payload,
     resolve_approval_record,
 )
-from api.services.security_run_runtime import resume_security_run
-from api.services.notification_service import notify_submitter_of_hitl_resolution
 from api.services.security_policy import PolicyAuditEvent, record_policy_event
+from api.services.security_run_runtime import resume_security_run
 from api.services.upload_approval_service import (
     can_view_submission_approval,
     list_submission_approvals,
@@ -59,6 +59,16 @@ def _resolver_id(user: User) -> str:
 
 def _resolver_email(user: User) -> str:
     return str(getattr(user, "email", "") or "")
+
+
+def _is_security_chat_approval(approval: Mapping[str, object]) -> bool:
+    return (
+        str(approval.get("source_type") or "") == "agent"
+        and str(approval.get("agent_id") or "") == "security-operations"
+        and bool(str(approval.get("run_id") or ""))
+        and bool(str(approval.get("session_id") or ""))
+        and bool(str(approval.get("user_id") or ""))
+    )
 
 
 @router.get("/submissions")
@@ -202,35 +212,14 @@ async def resolve_approval(
         raise HTTPException(status_code=500, detail="Failed to resolve approval") from exc
     if approval is None:
         raise HTTPException(status_code=404, detail="Approval not found")
-    resume_status = "not_applicable"
-    if approval.get("tool_name") == "simulate_containment":
-        rejection_reason = ""
-        if body.status == "rejected":
-            rejection_reason = str(
-                (body.rejection_reason or "").strip()
-                or (resolution_data.get("rejection_reason") if isinstance(resolution_data, dict) else "")
-                or (resolution_data.get("note") if isinstance(resolution_data, dict) else "")
-                or ""
-            )
-        # Rejection note is applied natively via RunRequirement.reject(note=...) on resume.
-        submitter_id = str(approval.get("user_id") or "")
-        if submitter_id:
-            await notify_submitter_of_hitl_resolution(
-                approval_id=approval_id,
-                tool_name=str(approval.get("tool_name") or "simulate_containment"),
-                submitter_id=submitter_id,
-                status=body.status,
-                rejection_reason=rejection_reason,
-                run_id=str(approval.get("run_id") or ""),
-                session_id=str(approval.get("session_id") or ""),
-            )
+    if _is_security_chat_approval(approval):
         try:
-            resume_status = await resume_security_run(approval_id)
+            await resume_security_run(approval_id)
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except Exception as exc:
-            logger.exception("恢复 HITL Run 失败: {}", exc)
-            resume_status = "failed"
+            logger.exception("调度 HITL Run 恢复失败: {}", exc)
+            raise HTTPException(status_code=500, detail="Failed to schedule approval run") from exc
     await record_policy_event(
         user,
         PolicyAuditEvent(
@@ -246,10 +235,7 @@ async def resolve_approval(
         ),
         request,
     )
-    response_approval = approval
-    if approval.get("tool_name") == "simulate_containment":
-        response_approval = await get_approval_record(approval_id) or approval
-    return {**response_approval, "resume_status": resume_status}
+    return await get_approval_record(approval_id) or approval
 
 
 @router.post("/{approval_id}/resume")
@@ -262,12 +248,14 @@ async def retry_approval_resume(
     approval = await get_approval_record(approval_id)
     if approval is None:
         raise HTTPException(status_code=404, detail="Approval not found")
-    if approval.get("tool_name") != "simulate_containment":
-        raise HTTPException(status_code=400, detail="Approval is not a resumable containment action")
+    if not _is_security_chat_approval(approval):
+        raise HTTPException(status_code=400, detail="Approval is not a resumable security chat run")
     if approval.get("status") not in {"approved", "rejected"}:
         raise HTTPException(status_code=409, detail="Approval must be resolved before resuming")
+    if str(approval.get("run_status") or "").upper() != "ERROR":
+        raise HTTPException(status_code=409, detail="Only failed approval runs can be retried")
     try:
-        resume_status = await resume_security_run(approval_id)
+        await resume_security_run(approval_id, retry_error=True)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:
@@ -279,9 +267,9 @@ async def retry_approval_resume(
             action="approvals.resume",
             resource_type="approval",
             resource_id=approval_id,
-            metadata={"run_id": approval.get("run_id"), "resume_status": resume_status},
+            metadata={"run_id": approval.get("run_id"), "run_status": "RUNNING"},
         ),
         request,
     )
     refreshed = await get_approval_record(approval_id)
-    return {**(refreshed or approval), "resume_status": resume_status}
+    return refreshed or approval

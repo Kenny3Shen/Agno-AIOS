@@ -6,6 +6,7 @@ from fastapi.encoders import jsonable_encoder
 from loguru import logger
 
 from api.auth.ownership import assert_owned_resource
+from api.services.chat_run_events import approval_rejection_reason
 from api.services.postgres_store import coerce_json_value, get_async_agno_postgres_db
 from api.services.trace_status_service import reconcile_trace_statuses, trace_has_status
 from api.utils.json import JSONDecodeError, dumps, loads
@@ -467,23 +468,25 @@ def _project_run_output(run: dict[str, Any]) -> str:
 
     has_admin_reason = "Rejected by administrator" in content_text or "拒绝原因" in content_text
     if rejected_tools and (not content_text or _is_stale_waiting_content(content_text) or not has_admin_reason):
-        notes = [
-            str(tool.get("confirmation_note") or "").strip()
-            for tool in rejected_tools
-            if str(tool.get("confirmation_note") or "").strip()
-        ]
+        admin_reason = approval_rejection_reason(run)
+        notes = [str(tool.get("confirmation_note") or "").strip() for tool in rejected_tools]
+        if admin_reason:
+            notes.append(f"Rejected by administrator: {admin_reason}")
         if notes and not has_admin_reason:
-            lines = ["## 封禁请求未执行"]
+            lines = ["## HITL 请求未执行"]
             for tool in rejected_tools:
                 name = str(tool.get("tool_name") or "tool")
-                note = str(tool.get("confirmation_note") or "Tool call was rejected").strip()
+                note = str(tool.get("confirmation_note") or "").strip()
+                if admin_reason and (not note or note == "Tool call was rejected"):
+                    note = f"Rejected by administrator: {admin_reason}"
+                note = note or "Tool call was rejected"
                 args = tool.get("tool_args") if isinstance(tool.get("tool_args"), dict) else {}
                 lines.append(f"- **工具**：`{name}`")
                 if isinstance(args, dict) and args.get("target"):
                     lines.append(f"- **目标**：`{args.get('target')}`")
                 lines.append(f"- **拒绝原因**：{note}")
             lines.append("")
-            lines.append("管理员已拒绝该 HITL 请求；模拟处置未执行，外部系统未发生实际变更。")
+            lines.append("管理员已拒绝该 HITL 请求；工具未执行。")
             return chr(10).join(lines)
 
     if confirmed_tools and (not content_text or _is_stale_waiting_content(content_text)):
@@ -541,15 +544,6 @@ async def _chat_run_output(session_id: str | None, run_id: str | None) -> str:
     return ""
 
 
-def _root_output_needs_enrichment(output: object) -> bool:
-    if not isinstance(output, dict):
-        return True
-    if output.get("format") == "empty":
-        return True
-    text_value = str(output.get("text") or "")
-    return _is_pause_placeholder(text_value)
-
-
 def _enrich_root_spans(
     spans: list[dict[str, Any]],
     *,
@@ -569,9 +563,7 @@ def _enrich_root_spans(
         parsed = span.get("parsed")
         if not isinstance(parsed, dict) or not chat_run_output:
             continue
-        output = parsed.get("output")
-        if _root_output_needs_enrichment(output):
-            parsed["output"] = _json_or_text(chat_run_output)
+        parsed["output"] = _json_or_text(chat_run_output)
 
 
 def _build_span_tree(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -675,17 +667,9 @@ async def get_trace_detail(trace_id: str, actor: Any | None = None) -> dict[str,
         span["session_id"] = trace_dict.get("session_id")
         span["run_id"] = trace_dict.get("run_id")
         span["parsed"] = parse_span_display(span)
-    needs_root_output = any(
-        not span.get("parent_span_id") and _root_output_needs_enrichment(span.get("parsed", {}).get("output"))
-        for span in span_dicts
-    )
-    chat_run_output = (
-        await _chat_run_output(
-            str(trace_dict.get("session_id") or "") or None,
-            str(trace_dict.get("run_id") or "") or None,
-        )
-        if needs_root_output
-        else ""
+    chat_run_output = await _chat_run_output(
+        str(trace_dict.get("session_id") or "") or None,
+        str(trace_dict.get("run_id") or "") or None,
     )
     _enrich_root_spans(
         span_dicts,

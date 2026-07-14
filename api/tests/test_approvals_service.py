@@ -245,6 +245,7 @@ async def test_resolve_route_derives_resolver_from_actor_and_records_audit():
 
     with (
         patch.object(approvals, "resolve_approval_record", new=AsyncMock(return_value=resolved)) as resolve_mock,
+        patch.object(approvals, "get_approval_record", new=AsyncMock(return_value=resolved)),
         patch.object(approvals, "record_policy_event", new=AsyncMock()) as audit_mock,
     ):
         result = await approvals.resolve_approval(
@@ -257,7 +258,7 @@ async def test_resolve_route_derives_resolver_from_actor_and_records_audit():
             user=current_actor,
         )
 
-    assert result == {**resolved, "resume_status": "not_applicable"}
+    assert result == resolved
     resolve_mock.assert_awaited_once_with(
         "approval-1",
         status="approved",
@@ -312,6 +313,7 @@ async def test_rejected_approval_route_adds_reason_to_resolution_data():
     resolved = {"id": "approval-1", "status": "rejected"}
     with (
         patch.object(approvals, "resolve_approval_record", new=AsyncMock(return_value=resolved)) as resolve_mock,
+        patch.object(approvals, "get_approval_record", new=AsyncMock(return_value=resolved)),
         patch.object(approvals, "record_policy_event", new=AsyncMock()),
     ):
         await approvals.resolve_approval(
@@ -353,7 +355,7 @@ async def test_list_approvals_enrich_submitter_email_from_user_id():
 
 
 @pytest.mark.asyncio
-async def test_resolve_hitl_rejection_notifies_submitter_and_resumes_natively():
+async def test_resolve_hitl_rejection_schedules_native_continuation_and_returns_running():
     current_actor = actor("admin-1")
     resolved = {
         "id": "approval-1",
@@ -361,14 +363,18 @@ async def test_resolve_hitl_rejection_notifies_submitter_and_resumes_natively():
         "run_id": "run-1",
         "session_id": "session-1",
         "source_type": "agent",
-        "tool_name": "simulate_containment",
+        "agent_id": "security-operations",
+        "tool_name": "any_protected_tool",
         "user_id": "user-1",
     }
     with (
         patch.object(approvals, "resolve_approval_record", new=AsyncMock(return_value=resolved)) as resolve,
-        patch.object(approvals, "notify_submitter_of_hitl_resolution", new=AsyncMock()) as notify,
-        patch.object(approvals, "resume_security_run", new=AsyncMock(return_value="completed")) as resume,
-        patch.object(approvals, "get_approval_record", new=AsyncMock(return_value={**resolved, "resume_status": "completed"})),
+        patch.object(approvals, "resume_security_run", new=AsyncMock(return_value="RUNNING")) as resume,
+        patch.object(
+            approvals,
+            "get_approval_record",
+            new=AsyncMock(return_value={**resolved, "run_status": "RUNNING"}),
+        ),
         patch.object(approvals, "record_policy_event", new=AsyncMock()),
     ):
         result = await approvals.resolve_approval(
@@ -376,16 +382,71 @@ async def test_resolve_hitl_rejection_notifies_submitter_and_resumes_natively():
             approvals.ApprovalResolveRequest(status="rejected", rejection_reason="证据不足，暂不封禁"),
             request=request(),
             user=current_actor,
-        )
+    )
 
     resolve.assert_awaited_once()
-    assert resolve.await_args.kwargs["resolution_data"] == {
+    resolve_call = resolve.await_args
+    assert resolve_call is not None
+    assert resolve_call.kwargs["resolution_data"] == {
         "rejection_reason": "证据不足，暂不封禁",
         "note": "证据不足，暂不封禁",
     }
-    notify.assert_awaited_once()
-    assert notify.await_args.kwargs["submitter_id"] == "user-1"
-    assert notify.await_args.kwargs["status"] == "rejected"
-    assert notify.await_args.kwargs["rejection_reason"] == "证据不足，暂不封禁"
     resume.assert_awaited_once_with("approval-1")
-    assert result["resume_status"] == "completed"
+    assert result["run_status"] == "RUNNING"
+
+
+@pytest.mark.asyncio
+async def test_resolve_without_paused_run_skips_resume():
+    current_actor = actor("admin-1")
+    resolved = {
+        "id": "approval-2",
+        "status": "approved",
+        "tool_name": "simulate_containment",
+        "user_id": "user-1",
+    }
+    with (
+        patch.object(approvals, "resolve_approval_record", new=AsyncMock(return_value=resolved)),
+        patch.object(approvals, "resume_security_run", new=AsyncMock()) as resume,
+        patch.object(approvals, "get_approval_record", new=AsyncMock(return_value=resolved)),
+        patch.object(approvals, "record_policy_event", new=AsyncMock()),
+    ):
+        result = await approvals.resolve_approval(
+            "approval-2",
+            approvals.ApprovalResolveRequest(status="approved"),
+            request=request(),
+            user=current_actor,
+        )
+    resume.assert_not_awaited()
+    assert result == resolved
+
+
+@pytest.mark.asyncio
+async def test_retry_only_accepts_failed_security_chat_runs():
+    current_actor = actor("admin-1")
+    failed = {
+        "id": "approval-1",
+        "status": "approved",
+        "run_status": "ERROR",
+        "run_id": "run-1",
+        "session_id": "session-1",
+        "source_type": "agent",
+        "agent_id": "security-operations",
+        "user_id": "user-1",
+    }
+    with (
+        patch.object(
+            approvals,
+            "get_approval_record",
+            new=AsyncMock(side_effect=[failed, {**failed, "run_status": "RUNNING"}]),
+        ),
+        patch.object(approvals, "resume_security_run", new=AsyncMock(return_value="RUNNING")) as resume,
+        patch.object(approvals, "record_policy_event", new=AsyncMock()),
+    ):
+        result = await approvals.retry_approval_resume(
+            "approval-1",
+            request=request(),
+            user=current_actor,
+        )
+
+    resume.assert_awaited_once_with("approval-1", retry_error=True)
+    assert result["run_status"] == "RUNNING"
