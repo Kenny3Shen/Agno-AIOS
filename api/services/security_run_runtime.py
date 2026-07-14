@@ -745,51 +745,6 @@ def _requirements_for_run(run_output: Any) -> list[RunRequirement]:
     return rebuilt
 
 
-def apply_approval_to_requirements(
-    run_output: Any,
-    *,
-    approval_id: str,
-    status: str,
-    resolution_data: object,
-) -> list[RunRequirement] | None:
-    """Resolve Agno requirements while preserving an administrator rejection note."""
-    if status not in {"approved", "rejected"}:
-        raise ValueError(f"Approval is not resolved: {status or 'unknown'}")
-
-    requirements = _requirements_for_run(run_output)
-    if not requirements:
-        return None
-    targets = [
-        requirement
-        for requirement in requirements
-        if str(getattr(getattr(requirement, "tool_execution", None), "approval_id", "") or "")
-        == approval_id
-    ]
-    if not targets:
-        # Agno can persist active approval requirements without copying the
-        # approval record ID onto each ToolExecution. In that shape, resolve
-        # every still-open confirmation requirement carried by this approval Run.
-        targets = [
-            requirement
-            for requirement in requirements
-            if getattr(requirement, "needs_confirmation", False)
-        ]
-    if not targets:
-        return None
-
-    rejection_note = _rejection_confirmation_note(resolution_data)
-    applied = False
-    for requirement in targets:
-        if not getattr(requirement, "needs_confirmation", False):
-            continue
-        if status == "approved":
-            requirement.confirm()
-        else:
-            requirement.reject(note=rejection_note)
-        applied = True
-    return requirements if applied else None
-
-
 def apply_rejection_note(
     run_output: Any,
     *,

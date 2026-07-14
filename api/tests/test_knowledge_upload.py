@@ -10,6 +10,7 @@ import pytest
 from fastapi import HTTPException, UploadFile
 from starlette.datastructures import Headers
 from starlette.requests import Request
+from sse_starlette.sse import EventSourceResponse
 
 from api.auth.models import User
 from api.routes import knowledge as knowledge_route
@@ -98,6 +99,7 @@ async def test_update_route_passes_rebuild_metadata_and_ingest_options_to_lifecy
             user=current_user,
         )
 
+    assert not isinstance(result, EventSourceResponse)
     assert result["can_manage"] is True
     assert captured == {
         "doc_id": "doc-1",
@@ -377,6 +379,7 @@ async def test_upload_route_ingests_persisted_path_with_browser_metadata(tmp_pat
             user=actor(),
         )
 
+    assert not isinstance(result, EventSourceResponse)
     assert result["id"] == "doc-1"
     assert result["can_manage"] is True
     assert captured == {
@@ -529,6 +532,7 @@ async def test_update_upload_route_replaces_selected_document_from_persisted_pat
             user=current_user,
         )
 
+    assert not isinstance(result, EventSourceResponse)
     assert result["id"] == "doc-1"
     assert result["can_manage"] is True
     assert captured == {

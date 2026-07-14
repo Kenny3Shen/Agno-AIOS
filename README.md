@@ -282,7 +282,7 @@ Rejected by administrator: <管理员填写的理由>
 | 前端拒绝必填 | UX 与 API 双重校验，保证 note 始终非空 |
 | 审计事件 | `skill.simulated_containment.executed`、`approvals.*` 与策略审计对接 |
 
-**刻意不做的事**：不手工改写 Agno session JSON、trace ID 或拼接 continuation spans。`api/persistence/hitl_runs.py` 和旧表 `hitl_paused_runs` 仅为回滚保留，当前运行时不读写。
+**刻意不做的事**：不手工改写 Agno session JSON、trace ID 或拼接 continuation spans。不再维护独立的 `hitl_paused_runs` 表；启动时会 `DROP TABLE IF EXISTS` 清理历史残留。
 
 #### 6. 数据与状态
 

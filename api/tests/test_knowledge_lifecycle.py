@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Any
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -138,7 +139,7 @@ async def test_add_text_document_uses_async_insert_and_reload() -> None:
         created_at=0,
     )
     knowledge = StrictAsyncKnowledge(contents=[content_row])
-    stored_sources: dict[str, dict[str, object]] = {}
+    stored_sources: dict[str, dict[str, Any]] = {}
 
     async def store_source_async(content_id: str, source: Mapping[str, object]) -> None:
         stored_sources[content_id] = dict(source)
@@ -250,7 +251,7 @@ async def test_add_text_document_resolves_inserted_content_by_source_digest() ->
         created_at=0,
     )
     knowledge = StrictAsyncKnowledge(contents=[latest_unrelated, content_row])
-    stored_sources: dict[str, dict[str, object]] = {}
+    stored_sources: dict[str, dict[str, Any]] = {}
 
     async def store_source_async(content_id: str, source: Mapping[str, object]) -> None:
         stored_sources[content_id] = dict(source)
@@ -287,7 +288,7 @@ async def test_add_file_document_uses_async_insert_and_reload(tmp_path) -> None:
         created_at=0,
     )
     knowledge = StrictAsyncKnowledge(contents=[content_row])
-    stored_sources: dict[str, dict[str, object]] = {}
+    stored_sources: dict[str, dict[str, Any]] = {}
 
     async def store_source_async(content_id: str, source: Mapping[str, object]) -> None:
         stored_sources[content_id] = dict(source)
@@ -334,7 +335,7 @@ async def test_add_uploaded_file_preserves_browser_file_metadata(tmp_path) -> No
         created_at=0,
     )
     knowledge = StrictAsyncKnowledge(contents=[content_row])
-    stored_sources: dict[str, dict[str, object]] = {}
+    stored_sources: dict[str, dict[str, Any]] = {}
 
     async def store_source_async(content_id: str, source: Mapping[str, object]) -> None:
         stored_sources[content_id] = dict(source)
@@ -428,7 +429,7 @@ async def test_update_document_metadata_uses_agno_patch_content_and_updates_sour
         created_at=0,
     )
     knowledge = StrictAsyncKnowledge(content_by_id={"content-metadata": content_row})
-    stored_sources: dict[str, dict[str, object]] = {
+    stored_sources: dict[str, dict[str, Any]] = {
         "content-metadata": {
             "kind": "text",
             "name": "Runbook",
@@ -738,7 +739,7 @@ async def test_rebuild_document_applies_advanced_ingest_options_to_snapshot() ->
     knowledge = StrictAsyncKnowledge(
         content_by_id={"content-rebuild-options": content_row},
     )
-    stored_sources: dict[str, dict[str, object]] = {}
+    stored_sources: dict[str, dict[str, Any]] = {}
 
     async def content_by_id(content_id: str):
         return knowledge._content_by_id.get(content_id)
@@ -971,7 +972,7 @@ async def test_replace_document_source_reloads_current_content_in_place() -> Non
         content_by_id={"content-old": old_row},
     )
     deleted: list[str] = []
-    stored_sources: dict[str, dict[str, object]] = {}
+    stored_sources: dict[str, dict[str, Any]] = {}
 
     async def content_by_id(content_id: str):
         return knowledge._content_by_id.get(content_id)
@@ -1068,7 +1069,7 @@ async def test_replace_document_file_reloads_current_content_and_cleans_old_uplo
     )
     deleted: list[str] = []
     cleanup_calls: list[Mapping[str, object]] = []
-    stored_sources: dict[str, dict[str, object]] = {}
+    stored_sources: dict[str, dict[str, Any]] = {}
 
     async def content_by_id(content_id: str):
         return knowledge._content_by_id.get(content_id)
