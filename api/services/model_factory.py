@@ -17,6 +17,7 @@ def build_agno_model(
     base_url = str(config.get("base_url") or "").strip() or None
     output_mode = _output_mode(config.get("structured_output_mode"))
     native_outputs = output_mode == "native"
+    parallel_tool_calls = _parallel_tool_calls(config.get("parallel_tool_calls"))
     effective_reasoning_effort = (
         reasoning_effort
         if reasoning_effort is not None
@@ -41,31 +42,42 @@ def build_agno_model(
         if effective_reasoning_effort:
             kwargs["reasoning_effort"] = effective_reasoning_effort
         if protocol == "responses":
+            if parallel_tool_calls is not None:
+                kwargs["parallel_tool_calls"] = parallel_tool_calls
             return _with_output_mode(OpenAIResponses(**kwargs), output_mode)
+        if parallel_tool_calls is not None:
+            kwargs["request_params"] = {
+                "parallel_tool_calls": parallel_tool_calls,
+            }
         return _with_output_mode(OpenAIChat(**kwargs), output_mode)
 
     if provider == "openai-compatible":
         if not base_url:
             raise ValueError("OpenAI-compatible model requires base_url")
         if protocol == "responses":
+            kwargs: dict[str, Any] = {
+                "id": model_id,
+                "api_key": api_key,
+                "base_url": base_url,
+                "supports_native_structured_outputs": native_outputs,
+            }
+            if parallel_tool_calls is not None:
+                kwargs["parallel_tool_calls"] = parallel_tool_calls
             return _with_output_mode(
-                OpenAIResponses(
-                    id=model_id,
-                    api_key=api_key,
-                    base_url=base_url,
-                    supports_native_structured_outputs=native_outputs,
-                ),
+                OpenAIResponses(**kwargs),
                 output_mode,
             )
-        return _with_output_mode(
-            OpenAILike(
-                id=model_id,
-                api_key=api_key,
-                base_url=base_url,
-                supports_native_structured_outputs=native_outputs,
-            ),
-            output_mode,
-        )
+        kwargs: dict[str, Any] = {
+            "id": model_id,
+            "api_key": api_key,
+            "base_url": base_url,
+            "supports_native_structured_outputs": native_outputs,
+        }
+        if parallel_tool_calls is not None:
+            kwargs["request_params"] = {
+                "parallel_tool_calls": parallel_tool_calls,
+            }
+        return _with_output_mode(OpenAILike(**kwargs), output_mode)
 
     raise ValueError(f"Unsupported model provider: {provider}")
 
@@ -82,6 +94,10 @@ def _output_mode(value: Any) -> str:
 def _reasoning_effort(value: Any) -> str | None:
     effort = str(value or "").strip().lower()
     return effort or None
+
+
+def _parallel_tool_calls(value: Any) -> bool | None:
+    return value if isinstance(value, bool) else None
 
 
 def _with_output_mode(model: Model, output_mode: str) -> Model:

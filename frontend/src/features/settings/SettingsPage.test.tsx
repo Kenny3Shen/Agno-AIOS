@@ -23,6 +23,7 @@ const models = {
       api_protocol: 'chat-completions',
       structured_output_mode: 'json',
       default_reasoning_effort: 'max',
+      parallel_tool_calls: null,
       base_url: 'https://api.deepseek.com',
       api_key: 'masked',
       description: '',
@@ -38,6 +39,7 @@ const models = {
       api_protocol: 'responses',
       structured_output_mode: 'native',
       default_reasoning_effort: 'high',
+      parallel_tool_calls: false,
       base_url: '',
       api_key: 'masked',
       description: '',
@@ -86,5 +88,14 @@ describe('model settings editor', () => {
 
     fireEvent.click(screen.getByLabelText('编辑 Second model'))
     expect(((await screen.findByLabelText('Name')) as HTMLInputElement).value).toBe('Second model')
+  })
+
+  it('shows an optional parallel tool calls setting for supported models', async () => {
+    mockSettings()
+    renderWithQuery(<SettingsPage />)
+
+    fireEvent.click(await screen.findByLabelText('编辑 Second model'))
+    expect(await screen.findByText('并行工具调用')).toBeTruthy()
+    expect(screen.getByText('控制 API 的 parallel_tool_calls 参数。留空时使用提供商默认值。')).toBeTruthy()
   })
 })

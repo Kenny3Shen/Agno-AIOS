@@ -34,6 +34,9 @@
   "baseUrlRequired": "Base URL is required for OpenAI-compatible services",
   "urlInvalid": "Enter a valid URL",
   "purposeOptional": "Model purpose (optional)",
+  "parallelToolCalls": "Parallel tool calls",
+  "parallelToolCallsHelp": "Controls the API parallel_tool_calls parameter. Leave unset to use the provider default.",
+  "providerDefault": "Provider default",
   "privacyNote": "Raw reasoning and tool I/O are not sent to the browser by default. Disabling long-term memory does not delete existing memories or affect the current session history/summaries.",
   "addModel": "Add model"
 }

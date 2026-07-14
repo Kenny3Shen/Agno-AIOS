@@ -34,6 +34,9 @@
   "baseUrlRequired": "OpenAI-compatible 服务需要 Base URL",
   "urlInvalid": "请输入有效的 URL",
   "purposeOptional": "模型用途说明（可选）",
+  "parallelToolCalls": "并行工具调用",
+  "parallelToolCallsHelp": "控制 API 的 parallel_tool_calls 参数。留空时使用提供商默认值。",
+  "providerDefault": "提供商默认值",
   "privacyNote": "原始推理与工具输入/输出默认不发送给浏览器。关闭长期记忆不会删除既有记忆，也不影响当前会话历史与摘要。",
   "addModel": "添加模型"
 }

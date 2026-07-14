@@ -32,6 +32,11 @@ const outputModeOptions = [
   { value: 'json', label: 'JSON mode' },
 ]
 
+const parallelToolCallsOptions = [
+  { value: true, label: 'Enabled' },
+  { value: false, label: 'Disabled' },
+]
+
 const reasoningOptions = (provider: ModelConfig['provider'], protocol: ModelConfig['api_protocol']) => {
   if (provider === 'deepseek') return DEEPSEEK_REASONING_EFFORTS.map((value) => ({ value, label: reasoningEffortLabel(value) }))
   if (provider === 'openai') return openaiReasoningEfforts(protocol).map((value) => ({ value, label: reasoningEffortLabel(value) }))
@@ -106,6 +111,7 @@ export function SettingsPage() {
       api_protocol: 'chat-completions',
       structured_output_mode: 'json',
       default_reasoning_effort: null,
+      parallel_tool_calls: null,
       base_url: '',
       api_key: '',
       description: '',
@@ -402,6 +408,29 @@ export function SettingsPage() {
                           return (
                             <Form.Item name="default_reasoning_effort" label="Default reasoning effort" rules={[{ required: true }]}>
                               <Select options={reasoningOptions(provider, protocol)} />
+                            </Form.Item>
+                          )
+                        }}
+                      </Form.Item>
+                      <Form.Item
+                        noStyle
+                        shouldUpdate={(previous, current) =>
+                          previous.provider !== current.provider || previous.api_protocol !== current.api_protocol
+                        }
+                      >
+                        {({ getFieldValue }) => {
+                          if (getFieldValue('provider') === 'deepseek') return null
+                          return (
+                            <Form.Item
+                              name="parallel_tool_calls"
+                              label={t('parallelToolCalls')}
+                              extra={t('parallelToolCallsHelp')}
+                            >
+                              <Select
+                                allowClear
+                                placeholder={t('providerDefault')}
+                                options={parallelToolCallsOptions}
+                              />
                             </Form.Item>
                           )
                         }}

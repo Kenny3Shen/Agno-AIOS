@@ -145,6 +145,25 @@ def test_model_config_uses_native_provider_defaults_without_rewriting_explicit_v
     )
 
 
+def test_model_config_preserves_parallel_tool_calls_setting():
+    model = model_config_service.ModelConfig.normalized(
+        {
+            "id": "terra",
+            "provider": "openai",
+            "model_id": "gpt-5.6-terra-responses-lite",
+            "parallel_tool_calls": False,
+        },
+        "fallback",
+    )
+    store = model_config_service.ModelConfigStore(
+        active_model_id=model.id,
+        models=[model],
+    )
+
+    assert model.parallel_tool_calls is False
+    assert model_config_service._store_to_rows(store)[0]["parallel_tool_calls"] is False
+
+
 def test_model_config_rejects_incompatible_reasoning_effort():
     with pytest.raises(ValueError, match="OpenAI-compatible"):
         model_config_service.ModelConfig(

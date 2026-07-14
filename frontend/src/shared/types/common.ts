@@ -9,6 +9,8 @@ export interface ModelConfig {
   api_protocol: 'chat-completions' | 'responses'
   structured_output_mode: 'native' | 'json'
   default_reasoning_effort?: ReasoningEffort | null
+  /** Leave unset to use the provider default. */
+  parallel_tool_calls?: boolean | null
   base_url: string
   api_key: string
   description: string

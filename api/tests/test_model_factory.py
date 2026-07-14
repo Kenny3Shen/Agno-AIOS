@@ -69,6 +69,52 @@ def test_builds_openai_chat_and_responses_models():
     )
 
 
+def test_responses_models_use_configured_parallel_tool_calls():
+    native_responses = build_agno_model(
+        config(
+            provider="openai",
+            api_protocol="responses",
+            base_url="",
+            parallel_tool_calls=False,
+        )
+    )
+    compatible_responses = build_agno_model(
+        config(
+            provider="openai-compatible",
+            api_protocol="responses",
+            parallel_tool_calls=True,
+        )
+    )
+
+    assert isinstance(native_responses, OpenAIResponses)
+    assert native_responses.parallel_tool_calls is False
+    assert isinstance(compatible_responses, OpenAIResponses)
+    assert compatible_responses.parallel_tool_calls is True
+
+
+def test_chat_completions_models_use_configured_parallel_tool_calls():
+    native_chat = build_agno_model(
+        config(
+            provider="openai",
+            api_protocol="chat-completions",
+            base_url="",
+            parallel_tool_calls=False,
+        )
+    )
+    compatible_chat = build_agno_model(
+        config(
+            provider="openai-compatible",
+            api_protocol="chat-completions",
+            parallel_tool_calls=False,
+        )
+    )
+
+    assert isinstance(native_chat, OpenAIChat)
+    assert native_chat.get_request_params()["parallel_tool_calls"] is False
+    assert isinstance(compatible_chat, OpenAILike)
+    assert compatible_chat.get_request_params()["parallel_tool_calls"] is False
+
+
 def test_builds_openai_compatible_protocol_models():
     chat = build_agno_model(config(api_protocol="chat-completions"))
     responses = build_agno_model(config(api_protocol="responses"))

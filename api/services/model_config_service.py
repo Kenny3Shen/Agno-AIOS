@@ -35,6 +35,7 @@ class ModelConfig(BaseModel):
     api_protocol: ModelApiProtocol = "chat-completions"
     structured_output_mode: StructuredOutputMode = "json"
     default_reasoning_effort: ReasoningEffort | None = None
+    parallel_tool_calls: bool | None = None
     base_url: str = ""
     api_key: str = ""
     description: str = ""
@@ -132,6 +133,7 @@ class ModelConfig(BaseModel):
             api_protocol=cast(ModelApiProtocol, api_protocol),
             structured_output_mode=cast(StructuredOutputMode, structured_output_mode),
             default_reasoning_effort=cast(ReasoningEffort | None, configured_reasoning_effort),
+            parallel_tool_calls=raw.get("parallel_tool_calls"),
             base_url=base_url,
             api_key=str(raw.get("api_key") or "").strip(),
             description=str(raw.get("description") or "").strip(),
@@ -364,6 +366,7 @@ def _store_to_rows(
                 "api_protocol": model.api_protocol,
                 "structured_output_mode": model.structured_output_mode,
                 "default_reasoning_effort": model.default_reasoning_effort,
+                "parallel_tool_calls": model.parallel_tool_calls,
                 "base_url": model.base_url,
                 "api_key": model.api_key,
                 "description": model.description,

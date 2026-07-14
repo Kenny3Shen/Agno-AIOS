@@ -43,6 +43,7 @@ def model_configs_table(metadata: MetaData | None = None) -> Table:
         Column("api_protocol", String(64), nullable=False),
         Column("structured_output_mode", String(32), nullable=False),
         Column("default_reasoning_effort", String(16), nullable=True),
+        Column("parallel_tool_calls", Boolean, nullable=True),
         Column("base_url", Text, nullable=False, server_default=""),
         Column("api_key", Text, nullable=False, server_default=""),
         Column("description", Text, nullable=False, server_default=""),
@@ -70,6 +71,12 @@ async def ensure_model_configs_table_async() -> None:
             text(
                 f"ALTER TABLE {schema}.{table_name} "
                 "ADD COLUMN IF NOT EXISTS default_reasoning_effort VARCHAR(16)"
+            )
+        )
+        await conn.execute(
+            text(
+                f"ALTER TABLE {schema}.{table_name} "
+                "ADD COLUMN IF NOT EXISTS parallel_tool_calls BOOLEAN"
             )
         )
         for index in table.indexes:
