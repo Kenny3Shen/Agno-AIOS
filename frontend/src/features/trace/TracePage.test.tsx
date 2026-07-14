@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
 import { TracePage } from './TracePage'
-import type { Trace, TraceSessionSummary } from './types'
+import type { TraceSessionSummary } from './types'
 
 const routerMock = vi.hoisted(() => ({ push: vi.fn<(path: string) => void>(), searchStr: '' }))
 
@@ -28,7 +28,7 @@ const traceSessions: TraceSessionSummary[] = Array.from({ length: 9 }, (_, index
   user_id: 'user-1',
 }))
 
-const tracesFor = (sessionId: string, page: number): Trace[] => {
+const tracesFor = (sessionId: string, page: number) => {
   const owner = sessionId || 'all'
   const items = Array.from({ length: 7 }, (_, index) => ({
     trace_id: `${owner}-trace-${index + 1}`,
@@ -36,7 +36,7 @@ const tracesFor = (sessionId: string, page: number): Trace[] => {
     run_id: `${owner}-run-${index + 1}`,
     name: `Run ${index + 1}`,
     status: 'OK',
-    duration_ms: 1000 + index,
+    duration: `${((1000 + index) / 1000).toFixed(2)}s`,
     start_time: `2026-07-${String(20 - index).padStart(2, '0')}T12:00:00Z`,
     end_time: '',
   }))
@@ -49,7 +49,7 @@ const traceDetail = (traceId: string) => {
     span_id: `${traceId}-root`,
     name: `Run ${runNumber}`,
     status_code: 'OK',
-    duration_ms: 1000,
+    duration: '1.00s',
     start_time: '2026-07-20T12:00:00Z',
     parsed: { input: `root input ${runNumber}` },
   }
@@ -58,7 +58,7 @@ const traceDetail = (traceId: string) => {
     parent_span_id: root.span_id,
     name: `Child ${runNumber}`,
     status_code: 'OK',
-    duration_ms: 100,
+    duration: '100ms',
     start_time: '2026-07-20T12:00:00Z',
     parsed: { input: `child input ${runNumber}` },
   }
@@ -100,14 +100,20 @@ describe('TracePage interactions', () => {
       ),
       http.get('/api/chat/sessions', () => HttpResponse.json([])),
       http.get('/api/traces/sessions', () =>
-        HttpResponse.json({ items: traceSessions, total_count: traceSessions.length, page: 1, limit: 200 })
+        HttpResponse.json({
+          data: traceSessions,
+          meta: { page: 1, limit: 200, total_count: traceSessions.length, total_pages: 1, search_time_ms: 0 },
+        })
       ),
       http.get('/api/traces', ({ request }) => {
         const url = new URL(request.url)
         const params = new URLSearchParams(url.search)
         traceRequests.push(params)
         const page = Number(params.get('page') ?? '1')
-        return HttpResponse.json({ items: tracesFor(params.get('session_id') ?? '', page), total_count: 7, page, limit: 6 })
+        return HttpResponse.json({
+          data: tracesFor(params.get('session_id') ?? '', page),
+          meta: { page, limit: 6, total_count: 7, total_pages: 2, search_time_ms: 0 },
+        })
       }),
       http.get('/api/traces/:traceId', ({ params }) => HttpResponse.json(traceDetail(String(params.traceId))))
     )
@@ -187,7 +193,9 @@ describe('TracePage interactions', () => {
     const runsCard = cardByTitle('Runs & Spans')
     const root = await within(runsCard).findByText('Run root · Run 1')
     expect(within(runsCard).queryByText('Run · Run 1')).toBeNull()
-    expect(root.parentElement?.textContent).toContain('1.00 s · OK')
+    const rootRow = root.closest('.run-tree-node')
+    expect(rootRow?.textContent).toContain('OK')
+    expect(rootRow?.textContent).toContain('1.00s')
 
     await user.click(root)
     expect(await screen.findByText('root input 1')).toBeTruthy()

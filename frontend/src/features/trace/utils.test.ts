@@ -18,7 +18,7 @@ const traces: Trace[] = [
     run_id: 'r1',
     name: 'run',
     status: 'OK',
-    duration_ms: 20,
+    duration: '20ms',
     start_time: '2026-01-01T00:00:00Z',
     end_time: '',
     total_spans: 3,
@@ -29,7 +29,7 @@ const traces: Trace[] = [
     run_id: 'r1',
     name: 'model',
     status: 'ERROR',
-    duration_ms: 8,
+    duration: '8ms',
     start_time: '2026-01-01T00:00:01Z',
     end_time: '',
     total_spans: 1,
@@ -40,7 +40,7 @@ const traces: Trace[] = [
     run_id: 'r2',
     name: 'run',
     status: 'OK',
-    duration_ms: 10,
+    duration: '10ms',
     start_time: '2026-01-02T00:00:00Z',
     end_time: '',
   },
@@ -160,7 +160,7 @@ describe('trace hierarchy', () => {
     expect(previewSpanValue({ prompt: 'inspect target' })).toBe('JSON · 1 fields')
     expect(previewSpanValue({ format: 'text', text: 'Inspect the target', data: null })).toBe('Inspect the target')
     expect(
-      firstSpanId([{ span: { span_id: 'root', name: 'agent', status_code: 'OK', duration_ms: 1, start_time: '' }, children: [] }])
+      firstSpanId([{ span: { span_id: 'root', name: 'agent', status_code: 'OK', duration: '1ms', start_time: '' }, children: [] }])
     ).toBe('root')
   })
 })

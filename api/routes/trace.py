@@ -35,7 +35,7 @@ async def api_list_traces(
     page: int = Query(default=1, ge=1),
     user: User = Depends(require_scope("traces:read")),
 ):
-    """List traces from the tracing database."""
+    """List traces with Agno-native data/meta pagination envelope."""
     try:
         effective_user_id = effective_trace_user_filter(user, user_id)
         return await list_traces(

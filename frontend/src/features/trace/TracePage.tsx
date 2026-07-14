@@ -53,7 +53,6 @@ interface RunSpanTreeNode extends TreeDataNode {
 const SESSION_PAGE_SIZE = 8
 const RUN_PAGE_SIZE = 6
 const { RangePicker } = DatePicker
-const seconds = (milliseconds: number) => `${(Number(milliseconds) / 1_000).toFixed(2)} s`
 
 function initialRange(start: string, end: string): [Dayjs, Dayjs] | null {
   const startValue = dayjs(start)
@@ -78,7 +77,7 @@ function spanNodes(nodes: SpanTreeNode[], traceId: string, runId: string): RunSp
           </div>
           <span>
             <Tag color={node.span.status_code === 'ERROR' ? 'error' : 'success'}>{node.span.status_code}</Tag>
-            {seconds(node.span.duration_ms)}
+            {node.span.duration}
           </span>
         </div>
       ),
@@ -102,12 +101,11 @@ function runSpanTree(runs: TraceRun[], detailsByTraceId: Map<string, SpanTreeNod
           <div className="run-tree-node">
             <div>
               <strong>Run root · {root.span.name || run.name || 'Unnamed'}</strong>
-              <small>
-                {formatDate(run.startTime)} · {seconds(run.durationMs)} · {run.status}
-              </small>
+              <small>{formatDate(run.startTime)}</small>
             </div>
             <span>
               <Tag color={run.status === 'ERROR' ? 'error' : 'success'}>{run.status}</Tag>
+              {run.duration}
             </span>
           </div>
         ),
@@ -496,7 +494,7 @@ function SpanDetailTabs({ span }: { span: Span }) {
                   label: 'Status',
                   children: <Tag color={span.status_code === 'ERROR' ? 'error' : 'success'}>{span.status_code}</Tag>,
                 },
-                { key: 'duration', label: 'Duration', children: `${Number(span.duration_ms).toFixed(1)} ms` },
+                { key: 'duration', label: 'Duration', children: span.duration || '-' },
                 { key: 'started', label: 'Started', children: formatDate(span.start_time) },
               ]}
               value={metadata}

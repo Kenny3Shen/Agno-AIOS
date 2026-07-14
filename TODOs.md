@@ -1,5 +1,16 @@
 # 下一步工作
 
+## 已完成：Trace 列表/会话对齐 Agno 分页 envelope
+
+- `GET /api/traces` 与 `GET /api/traces/sessions` 返回 `{ data, meta }`，继续走 status reconcile。
+- list/detail 对外只暴露 Agno 风格 `duration`（存储仍为 Agno `duration_ms`，API 层投影），list best-effort 附带 root `input`。
+- sessions 经 `data/meta` 归一化；detail tree/spans 仍为工作台自研节点形状，但 duration 字段与 Agno 一致。
+
+相关入口：
+
+- API：`GET /api/traces`、`GET /api/traces/sessions`
+- 代码：`api/services/tracing_service.py`、`frontend/src/features/trace/api.ts`
+
 ## 已完成：Memory 对齐 Agno 原生列表协议
 
 - 唯一 REST 前缀：`GET/PATCH/DELETE /api/memories*`，Agno 风格 `data`/`meta` 分页 envelope。

@@ -126,7 +126,7 @@ export function groupRuns(traces: Trace[], sessionId: string): TraceRun[] {
         traceId: trace.trace_id,
         name: trace.name,
         status: trace.status,
-        durationMs: trace.duration_ms,
+        duration: trace.duration,
         startTime: trace.start_time,
         traces: [trace],
       }

@@ -55,13 +55,13 @@ async def test_trace_list_forces_current_user_for_non_admin():
     async def fake_list_traces(**kwargs):
         captured["user_id"] = kwargs.get("user_id")
         captured["session_id"] = kwargs.get("session_id")
-        return {"items": [], "total_count": 0, "page": 1, "limit": 20}
+        return {"data": [], "meta": {"page": 1, "limit": 20, "total_pages": 0, "total_count": 0, "search_time_ms": 0.0}}
 
     with patch.object(trace, "list_traces", fake_list_traces):
         result = await trace.api_list_traces(
             session_id="session-1", user_id="attacker-choice", user=actor("u1")
         )
-    assert result["items"] == []
+    assert result["data"] == []
     assert captured["user_id"] == "u1"
     assert captured["session_id"] == "session-1"
 
@@ -73,10 +73,14 @@ async def test_trace_list_passes_all_filters_to_service():
     async def fake_list_traces(**kwargs):
         captured.update(kwargs)
         return {
-            "items": [],
-            "total_count": 0,
-            "page": kwargs["page"],
-            "limit": kwargs["limit"],
+            "data": [],
+            "meta": {
+                "page": kwargs["page"],
+                "limit": kwargs["limit"],
+                "total_pages": 0,
+                "total_count": 0,
+                "search_time_ms": 0.0,
+            },
         }
 
     with patch.object(trace, "list_traces", fake_list_traces):
@@ -94,8 +98,8 @@ async def test_trace_list_passes_all_filters_to_service():
             page=3,
             user=actor("admin-1", "admin"),
         )
-    assert result["page"] == 3
-    assert result["limit"] == 50
+    assert result["meta"]["page"] == 3
+    assert result["meta"]["limit"] == 50
     assert captured == {
         "run_id": "run-1",
         "session_id": "session-1",
@@ -117,7 +121,16 @@ async def test_trace_session_list_forces_current_user_and_passes_filters():
 
     async def fake_list_trace_sessions(**kwargs):
         captured.update(kwargs)
-        return {"items": [], "total_count": 0, "page": kwargs["page"], "limit": kwargs["limit"]}
+        return {
+            "data": [],
+            "meta": {
+                "page": kwargs["page"],
+                "limit": kwargs["limit"],
+                "total_pages": 0,
+                "total_count": 0,
+                "search_time_ms": 0.0,
+            },
+        }
 
     with patch.object(trace, "list_trace_sessions", fake_list_trace_sessions):
         result = await trace.api_list_trace_sessions(
@@ -132,7 +145,8 @@ async def test_trace_session_list_forces_current_user_and_passes_filters():
             page=2,
             user=actor("u1"),
         )
-    assert result["page"] == 2
+    assert result["meta"]["page"] == 2
+    assert result["meta"]["limit"] == 25
     assert captured["run_id"] == "run-1"
     assert captured["session_id"] == "session-1"
     assert captured["user_id"] == "u1"
@@ -167,11 +181,11 @@ async def test_trace_sessions_group_before_paginating_and_skip_empty_session_ids
         result = await tracing_service.list_trace_sessions(
             run_id="run-1", session_id="one", user_id="u1", status="ERROR", limit=1, page=1
         )
-    assert result["total_count"] == 1
-    assert result["items"][0]["session_id"] == "one"
-    assert result["items"][0]["trace_count"] == 1
-    assert result["items"][0]["run_count"] == 1
-    assert result["items"][0]["status"] == "ERROR"
+    assert result["meta"]["total_count"] == 1
+    assert result["data"][0]["session_id"] == "one"
+    assert result["data"][0]["trace_count"] == 1
+    assert result["data"][0]["run_count"] == 1
+    assert result["data"][0]["status"] == "ERROR"
     assert captured["user_id"] == "u1"
     assert captured["run_id"] == "run-1"
     assert captured["session_id"] == "one"
@@ -237,7 +251,7 @@ async def test_list_traces_passes_all_filters_to_agno_db():
             limit=25,
             page=2,
         )
-    assert result == {"items": [], "total_count": 0, "page": 2, "limit": 25}
+    assert result == {"data": [], "meta": {"page": 2, "limit": 25, "total_pages": 0, "total_count": 0, "search_time_ms": 0.0}}
     assert captured["run_id"] == "run-1"
     assert captured["session_id"] == "session-1"
     assert captured["user_id"] == "u1"
@@ -272,12 +286,15 @@ async def test_list_traces_filters_after_audit_status_reconciliation() -> None:
 
     with (
         patch.object(tracing_service._trace_db, "get_traces", fake_get_traces),
+        patch.object(tracing_service._trace_db, "get_spans", AsyncMock(return_value=[])),
         patch.object(tracing_service, "reconcile_trace_statuses", fake_reconcile),
     ):
         result = await tracing_service.list_traces(user_id="u1", status="ERROR")
 
-    assert result["total_count"] == 1
-    assert result["items"][0]["status"] == "ERROR"
+    assert result["meta"]["total_count"] == 1
+    assert result["data"][0]["status"] == "ERROR"
+    assert result["data"][0]["duration"] == "0ms"
+    assert "duration_ms" not in result["data"][0]
 
 
 @pytest.mark.asyncio
@@ -398,6 +415,10 @@ async def test_trace_detail_requests_all_spans_and_marks_response_complete() -> 
     assert result is not None
     assert result["spans_complete"] is True
     assert result["span_count"] == 1
+    assert result["spans"][0]["duration"] == "0ms"
+    assert "duration_ms" not in result["spans"][0]
+    assert "duration_ms" not in result["trace"]
+    assert result["trace"]["duration"] == "0ms"
 
 
 @pytest.mark.asyncio
@@ -509,3 +530,50 @@ async def test_trace_detail_replaces_pause_placeholder_with_tool_result() -> Non
     assert "I have tools to execute, but I need confirmation." not in output_text
     assert "simulate_containment" in output_text
     assert "simulated" in output_text
+
+
+@pytest.mark.asyncio
+async def test_list_traces_native_envelope_duration_and_input() -> None:
+    trace_record = SimpleNamespace(
+        to_dict=lambda: {
+            "trace_id": "trace-1",
+            "name": "agent.run",
+            "run_id": "run-1",
+            "user_id": "u1",
+            "status": "OK",
+            "duration_ms": 1500,
+        }
+    )
+    root_span = SimpleNamespace(
+        parent_span_id=None,
+        attributes={"input.value": "inspect host 10.0.0.1"},
+    )
+
+    async def fake_get_traces(**_kwargs):
+        return [trace_record], 1
+
+    async def fake_get_spans(**_kwargs):
+        return [root_span]
+
+    async def fake_reconcile(items, **_kwargs):
+        return list(items)
+
+    with (
+        patch.object(tracing_service._trace_db, "get_traces", fake_get_traces),
+        patch.object(tracing_service._trace_db, "get_spans", fake_get_spans),
+        patch.object(tracing_service, "reconcile_trace_statuses", fake_reconcile),
+    ):
+        result = await tracing_service.list_traces(user_id="u1", page=1, limit=20)
+
+    assert set(result.keys()) == {"data", "meta"}
+    assert result["meta"]["page"] == 1
+    assert result["meta"]["limit"] == 20
+    assert result["meta"]["total_count"] == 1
+    assert result["meta"]["total_pages"] == 1
+    assert "items" not in result
+    assert result["data"][0]["trace_id"] == "trace-1"
+    assert "duration_ms" not in result["data"][0]
+    assert result["data"][0]["duration"] == "1.50s"
+    assert result["data"][0]["input"] == "inspect host 10.0.0.1"
+
+

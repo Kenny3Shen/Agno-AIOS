@@ -3,7 +3,10 @@ export interface Trace {
   trace_id: string
   name: string
   status: string
-  duration_ms: number
+  /** Agno-native human-readable duration (e.g. "1.23s", "150ms"). */
+  duration: string
+  /** Root span input preview when available. */
+  input?: string | null
   start_time: string
   end_time: string
   total_spans?: number
@@ -22,17 +25,32 @@ export interface Span {
   parent_span_id?: string | null
   name: string
   status_code: string
-  duration_ms: number
+  /** Agno-native human-readable duration (e.g. "1.23s", "150ms"). */
+  duration: string
   start_time: string
   parsed?: JsonRecord
   attributes?: JsonRecord
   events?: unknown[]
 }
+/** UI-facing list shape after client normalization. */
 export interface TraceList {
   items: Trace[]
   total_count: number
   page: number
   limit: number
+  total_pages?: number
+}
+
+/** Wire shape for GET /api/traces (Agno-native envelope). */
+export interface TraceListNative {
+  data: Trace[]
+  meta: {
+    page: number
+    limit: number
+    total_pages: number
+    total_count: number
+    search_time_ms?: number
+  }
 }
 export interface TraceFilters {
   session_id: string
@@ -60,11 +78,25 @@ export interface TraceSessionSummary {
   team_id?: string | null
   workflow_id?: string | null
 }
+/** UI-facing session list after client normalization. */
 export interface TraceSessionList {
   items: TraceSessionSummary[]
   total_count: number
   page: number
   limit: number
+  total_pages?: number
+}
+
+/** Wire shape for GET /api/traces/sessions. */
+export interface TraceSessionListNative {
+  data: TraceSessionSummary[]
+  meta: {
+    page: number
+    limit: number
+    total_pages: number
+    total_count: number
+    search_time_ms?: number
+  }
 }
 export interface SpanTreeNode {
   span: Span
@@ -89,7 +121,7 @@ export interface TraceRun {
   traceId: string
   name: string
   status: string
-  durationMs: number
+  duration: string
   startTime: string
   traces: Trace[]
 }

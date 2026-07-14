@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from agno.tracing import setup_tracing
+from agno.os.routers.traces.schemas import format_duration_ms
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
 
@@ -36,6 +37,131 @@ OUTPUT_ATTRIBUTE_KEYS = (
 )
 
 TRACE_STATUSES = frozenset({"OK", "ERROR", "UNSET"})
+
+
+def _pagination_meta(*, page: int, limit: int, total_count: int, search_time_ms: float = 0.0) -> dict[str, object]:
+    safe_page = max(1, int(page or 1))
+    safe_limit = max(1, int(limit or 1))
+    total = max(0, int(total_count or 0))
+    total_pages = (total + safe_limit - 1) // safe_limit if total else 0
+    return {
+        "page": safe_page,
+        "limit": safe_limit,
+        "total_pages": total_pages,
+        "total_count": total,
+        "search_time_ms": float(search_time_ms or 0.0),
+    }
+
+
+def _duration_ms_value(value: object) -> int | None:
+    """Coerce storage/runtime duration_ms to int for Agno format_duration_ms."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            return int(float(value.strip()))
+        except ValueError:
+            return None
+    return None
+
+
+def _project_duration(row: dict[str, Any]) -> dict[str, Any]:
+    """Project Agno storage ``duration_ms`` to wire ``duration`` (drop ms field).
+
+    DB/engine keep ``duration_ms`` (Agno Trace/Span schema). HTTP responses only
+    expose Agno OS-style ``duration`` strings via format_duration_ms.
+    """
+    projected = dict(row)
+    duration_ms = _duration_ms_value(projected.pop("duration_ms", None))
+    projected["duration"] = format_duration_ms(duration_ms)
+    return projected
+
+
+def _project_trace_list_item(item: dict[str, Any]) -> dict[str, Any]:
+    """Project list item toward Agno TraceSummary wire fields."""
+    projected = _project_duration(item)
+    projected.setdefault("input", None)
+    return projected
+
+
+def _trace_list_response(
+    items: list[dict[str, Any]],
+    *,
+    page: int,
+    limit: int,
+    total_count: int,
+) -> dict[str, Any]:
+    data = [_project_trace_list_item(item) for item in items]
+    return {
+        "data": data,
+        "meta": _pagination_meta(page=page, limit=limit, total_count=total_count),
+    }
+
+
+def _root_input_from_spans(spans: list[Any]) -> str | None:
+    root = next((span for span in spans if not getattr(span, "parent_span_id", None)), None)
+    if root is None and spans:
+        # Fall back to first span if parent linkage is missing.
+        root = spans[0]
+    if root is None:
+        return None
+
+    if isinstance(root, dict):
+        attributes = root.get("attributes") if isinstance(root.get("attributes"), dict) else {}
+    else:
+        attributes = getattr(root, "attributes", None)
+        attributes = attributes if isinstance(attributes, dict) else {}
+    if not attributes:
+        return None
+
+    value = _first_attribute(attributes, INPUT_ATTRIBUTE_KEYS)
+    if value is None:
+        return None
+    parsed = _json_or_text(value)
+    if isinstance(parsed, dict):
+        for key in ("text", "content", "message", "input"):
+            candidate = parsed.get(key)
+            if candidate not in (None, ""):
+                return str(candidate)
+        return dumps(parsed)
+    if isinstance(parsed, list):
+        return dumps(parsed)
+    text_value = str(parsed or "").strip()
+    return text_value or None
+
+
+async def _root_inputs_for_trace_ids(trace_ids: list[str]) -> dict[str, str | None]:
+    """Best-effort root span input lookup (Agno list does the same)."""
+    inputs: dict[str, str | None] = {}
+    for trace_id in trace_ids:
+        safe_id = str(trace_id or "").strip()
+        if not safe_id:
+            continue
+        try:
+            spans = await _trace_db.get_spans(trace_id=safe_id, limit=200)
+        except Exception:
+            logger.debug("failed to load spans for list input: {}", safe_id)
+            inputs[safe_id] = None
+            continue
+        inputs[safe_id] = _root_input_from_spans(list(spans or []))
+    return inputs
+
+
+async def _attach_list_inputs(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not items:
+        return items
+    trace_ids = [str(item.get("trace_id") or "") for item in items if item.get("trace_id")]
+    inputs = await _root_inputs_for_trace_ids(trace_ids)
+    for item in items:
+        trace_id = str(item.get("trace_id") or "")
+        if "input" not in item or item.get("input") in (None, ""):
+            item["input"] = inputs.get(trace_id)
+    return items
+
 
 
 def setup_agno_tracing() -> None:
@@ -213,9 +339,11 @@ async def list_traces(
     limit: int = 20,
     page: int = 1,
 ) -> dict[str, Any]:
-    """Return a paginated list of traces.
+    """Return a paginated list of traces (Agno-native data/meta envelope).
 
-    Uses Agno `AsyncPostgresDb.get_traces()` convenience API.
+    Uses Agno `AsyncPostgresDb.get_traces()` convenience API, then applies
+    T.A.I.S status reconciliation. Wire fields project storage ``duration_ms`` to Agno-style ``duration``
+    and optional root ``input``; storage schema is unchanged.
     """
     if limit <= 0:
         limit = 20
@@ -244,7 +372,13 @@ async def list_traces(
             [jsonable_encoder(trace.to_dict()) for trace in traces],
             actor_user_id=user_id,
         )
-        return {"items": items, "total_count": total_count, "page": page, "limit": limit}
+        items = await _attach_list_inputs(items)
+        return _trace_list_response(
+            items,
+            page=page,
+            limit=limit,
+            total_count=int(total_count),
+        )
 
     items = await _all_trace_items(
         run_id=run_id,
@@ -262,12 +396,14 @@ async def list_traces(
     )
     filtered = [item for item in items if trace_has_status(item, normalized_status)]
     offset = (page - 1) * limit
-    return {
-        "items": filtered[offset : offset + limit],
-        "total_count": len(filtered),
-        "page": page,
-        "limit": limit,
-    }
+    page_items = filtered[offset : offset + limit]
+    page_items = await _attach_list_inputs(page_items)
+    return _trace_list_response(
+        page_items,
+        page=page,
+        limit=limit,
+        total_count=len(filtered),
+    )
 
 
 async def _all_trace_items(
@@ -384,11 +520,14 @@ async def list_trace_sessions(
         )
     sessions.sort(key=lambda item: str(item.get("latest_start_time") or ""), reverse=True)
     offset = (page - 1) * limit
+    page_sessions = sessions[offset : offset + limit]
     return {
-        "items": sessions[offset : offset + limit],
-        "total_count": len(sessions),
-        "page": page,
-        "limit": limit,
+        "data": page_sessions,
+        "meta": _pagination_meta(
+            page=page,
+            limit=limit,
+            total_count=len(sessions),
+        ),
     }
 
 
@@ -658,15 +797,18 @@ async def get_trace_detail(trace_id: str, actor: Any | None = None) -> dict[str,
             actor_user_id=str(trace_dict.get("user_id") or "") or None,
         )
     )[0]
+    trace_dict = _project_duration(trace_dict)
 
     # Agno defaults this call to 1,000 rows. Passing None deliberately asks
     # for the complete trace; expose that contract in the API response.
     spans = await _trace_db.get_spans(trace_id=trace_id, limit=None)
-    span_dicts = [jsonable_encoder(s.to_dict()) for s in spans]
-    for span in span_dicts:
+    span_dicts: list[dict[str, Any]] = []
+    for raw in spans:
+        span = _project_duration(jsonable_encoder(raw.to_dict()))
         span["session_id"] = trace_dict.get("session_id")
         span["run_id"] = trace_dict.get("run_id")
         span["parsed"] = parse_span_display(span)
+        span_dicts.append(span)
     chat_run_output = await _chat_run_output(
         str(trace_dict.get("session_id") or "") or None,
         str(trace_dict.get("run_id") or "") or None,
