@@ -13,6 +13,8 @@ import {
   toDefinition,
   defaultTriggers,
   emptySlotsFor,
+  branchHandlesFor,
+  reparentTargetFromHandle,
 } from './utils'
 import type { WorkflowState } from './types'
 
@@ -199,5 +201,50 @@ describe('run status reduce', () => {
     ])
     expect(map.a).toBe('ok')
     expect(map.b).toBe('paused')
+  })
+})
+
+describe('multi-handle branches', () => {
+  it('exposes then/else handles for condition', () => {
+    const handles = branchHandlesFor(createNode('condition'))
+    expect(handles.map((h) => h.id)).toEqual(['then', 'else'])
+  })
+
+  it('exposes choice handles for router', () => {
+    const router = createNode('router')
+    const handles = branchHandlesFor(router)
+    expect(handles).toHaveLength(2)
+    expect(handles.every((h) => h.id.startsWith('choice:'))).toBe(true)
+  })
+
+  it('maps handle to reparent target', () => {
+    const condition = createNode('condition')
+    condition.id = 'c1'
+    expect(reparentTargetFromHandle(condition, 'then')).toEqual({
+      kind: 'branch',
+      parentId: 'c1',
+      branch: 'thenSteps',
+    })
+    const router = createNode('router')
+    router.id = 'r1'
+    const choiceId = router.choices![0]!.id
+    expect(reparentTargetFromHandle(router, `choice:${choiceId}`)).toEqual({
+      kind: 'choice',
+      parentId: 'r1',
+      choiceId,
+    })
+  })
+
+  it('layouts edges with sourceHandle for branches', () => {
+    const condition = createNode('condition')
+    condition.id = 'c1'
+    condition.thenSteps = [{ id: 't1', type: 'step', name: 'T', targetId: 'security-operations' }]
+    condition.elseSteps = [{ id: 'e1', type: 'step', name: 'E', targetId: 'safe-fallback' }]
+    const layout = layoutCanvas([condition])
+    const thenEdge = layout.edges.find((e) => e.target === 't1')
+    const elseEdge = layout.edges.find((e) => e.target === 'e1')
+    expect(thenEdge?.sourceHandle).toBe('then')
+    expect(elseEdge?.sourceHandle).toBe('else')
+    expect(thenEdge?.targetHandle).toBe('in')
   })
 })

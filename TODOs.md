@@ -1,5 +1,15 @@
 # 下一步工作
 
+## 已完成：Workflow 画布 PR8a（多 Handle 分支边）
+
+- Condition：`then` / `else` 双 source Handle；Router：每个 choice 独立 Handle。
+- `layoutCanvas` 边带 `sourceHandle` / `targetHandle`；分支边样式区分。
+- 从分支 Handle 连线 → reparent 到对应 `thenSteps` / `elseSteps` / `choices`。
+- CTA / 连接校验：`nodrag`、禁自环与非法 handle。
+
+相关入口：`WorkflowFlowNode`、`utils.branchHandlesFor`/`reparentTargetFromHandle`、`WorkflowCanvas`
+
+
 ## 已完成：Workflow PR7（Publish + Cron 真调度）
 
 - **Publish**：`POST /api/workflows/{id}/publish` 将 draft definition 固化为 `published_definition`；webhook/cron **只跑 published**。

@@ -1656,6 +1656,7 @@ html.dark .shell-menu .ant-menu-item-selected {
 /* ===== Workflow Studio (canvas-first, Dify/Coze style) ===== */
 .workflow-studio {
   --wf-edge-stroke: color-mix(in srgb, var(--tais-muted) 70%, #94a3b8);
+  --wf-edge-branch: color-mix(in srgb, var(--tais-blue) 55%, #d48806);
   --wf-edge-label: var(--tais-muted);
   --wf-edge-label-bg: var(--tais-surface);
   --wf-canvas-dot: color-mix(in srgb, var(--tais-muted) 35%, transparent);
@@ -1683,6 +1684,7 @@ html.dark .shell-menu .ant-menu-item-selected {
 
 html.dark .workflow-studio {
   --wf-edge-stroke: color-mix(in srgb, var(--tais-muted) 75%, #64748b);
+  --wf-edge-branch: color-mix(in srgb, #69b1ff 50%, #faad14);
   --wf-canvas-dot: color-mix(in srgb, var(--tais-muted) 28%, transparent);
   --wf-canvas-glow-a: color-mix(in srgb, var(--tais-blue) 10%, transparent);
   --wf-canvas-glow-b: color-mix(in srgb, #a78bfa 8%, transparent);
@@ -2159,6 +2161,41 @@ html.dark .wf-flow-node__badge {
   color: var(--wf-hitl-fg);
   background: var(--wf-hitl-bg);
   border: 1px solid var(--wf-hitl-border);
+}
+
+
+.wf-flow-node.has-branch-handles {
+  padding-bottom: 2px;
+}
+
+.wf-flow-node__branch-labels {
+  display: flex;
+  justify-content: space-around;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed color-mix(in srgb, var(--wf-node-color) 25%, transparent);
+}
+
+.wf-flow-node__branch-label {
+  flex: 1;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--wf-node-color) 85%, var(--tais-muted));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wf-handle--branch {
+  bottom: -5px !important;
+}
+
+.workflow-canvas--main .react-flow__edge.wf-edge-branch .react-flow__edge-path {
+  stroke: var(--wf-edge-branch) !important;
 }
 
 .wf-handle {

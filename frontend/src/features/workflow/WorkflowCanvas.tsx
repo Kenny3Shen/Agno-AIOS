@@ -30,12 +30,14 @@ import '@xyflow/react/dist/style.css'
 import type { WorkflowNode, WorkflowNodeType } from './types'
 import { usePreferences } from '@/app/providers/AppProviders'
 import {
+  branchHandlesFor,
   defaultDropTarget,
   emptySlotsFor,
   findNode,
   isContainerType,
   isDescendantOf,
   layoutCanvas,
+  reparentTargetFromHandle,
   type ReparentTarget,
 } from './utils'
 import { WorkflowFlowNode } from './WorkflowFlowNode'
@@ -54,6 +56,7 @@ type Props = {
   onSelectMany: (ids: string[]) => void
   onPositionsChange: (positions: Record<string, { x: number; y: number }>) => void
   onConnectSequence: (sourceId: string, targetId: string) => void
+  onConnectBranch: (sourceId: string, targetId: string, sourceHandle?: string | null) => void
   onDropNode: (
     type: WorkflowNodeType,
     position: { x: number; y: number },
@@ -116,6 +119,7 @@ function buildGraph(
         subtitle,
         hitl,
         runStatus: nodeRunStatus[item.id] ?? null,
+        branchHandles: source ? branchHandlesFor(source) : [],
         emptySlots,
         dropHighlight: dropTargetId === item.id,
         onEmptySlot: (slotKey: string) => onEmptySlot(item.id, slotKey),
@@ -128,25 +132,37 @@ function buildGraph(
     }
   })
 
-  const flowEdges: Edge[] = layout.edges.map((edge) => ({
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    label: edge.label,
-    type: 'smoothstep',
-    animated: edge.label === 'next',
-    markerEnd: {
-      type: MarkerType.ArrowClosed,
-      width: 18,
-      height: 18,
-      color: 'var(--wf-edge-stroke)',
-    },
-    style: { stroke: 'var(--wf-edge-stroke)', strokeWidth: 1.5 },
-    labelStyle: { fontSize: 10, fill: 'var(--wf-edge-label)', fontWeight: 500 },
-    labelBgStyle: { fill: 'var(--wf-edge-label-bg)', fillOpacity: 0.95 },
-    labelBgPadding: [4, 2] as [number, number],
-    labelBgBorderRadius: 4,
-  }))
+  const flowEdges: Edge[] = layout.edges.map((edge) => {
+    const isBranch =
+      edge.label === 'then' ||
+      edge.label === 'else' ||
+      (edge.sourceHandle != null && edge.sourceHandle.startsWith('choice:'))
+    return {
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: edge.sourceHandle,
+      targetHandle: edge.targetHandle ?? 'in',
+      label: edge.label,
+      type: 'smoothstep',
+      animated: edge.label === 'next',
+      className: isBranch ? 'wf-edge-branch' : edge.label === 'next' ? 'wf-edge-next' : undefined,
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 18,
+        height: 18,
+        color: isBranch ? 'var(--wf-edge-branch)' : 'var(--wf-edge-stroke)',
+      },
+      style: {
+        stroke: isBranch ? 'var(--wf-edge-branch)' : 'var(--wf-edge-stroke)',
+        strokeWidth: isBranch ? 1.75 : 1.5,
+      },
+      labelStyle: { fontSize: 10, fill: 'var(--wf-edge-label)', fontWeight: 500 },
+      labelBgStyle: { fill: 'var(--wf-edge-label-bg)', fillOpacity: 0.95 },
+      labelBgPadding: [4, 2] as [number, number],
+      labelBgBorderRadius: 4,
+    }
+  })
 
   return { nodes: flowNodes, edges: flowEdges }
 }
@@ -159,6 +175,7 @@ function CanvasInner({
   onSelectMany,
   onPositionsChange,
   onConnectSequence,
+  onConnectBranch,
   onDropNode,
   onReparent,
   onEmptySlot,
@@ -355,20 +372,45 @@ function CanvasInner({
 
   const onConnect: OnConnect = useCallback(
     (connection) => {
-      if (connection.source && connection.target && connection.source !== connection.target) {
-        onConnectSequence(connection.source, connection.target)
+      if (!connection.source || !connection.target || connection.source === connection.target) {
+        return
       }
+      const sourceNode = findNode(steps, connection.source)
+      if (sourceNode && isContainerType(sourceNode.type)) {
+        const branchTarget = reparentTargetFromHandle(sourceNode, connection.sourceHandle)
+        if (branchTarget) {
+          onConnectBranch(connection.source, connection.target, connection.sourceHandle)
+          return
+        }
+      }
+      onConnectSequence(connection.source, connection.target)
     },
-    [onConnectSequence]
+    [onConnectBranch, onConnectSequence, steps]
   )
 
   const isValidConnection = useCallback(
-    (connection: { source: string | null; target: string | null }) => {
+    (connection: {
+      source: string | null
+      target: string | null
+      sourceHandle?: string | null
+      targetHandle?: string | null
+    }) => {
       if (!connection.source || !connection.target) return false
       if (connection.source === connection.target) return false
+      // Prevent nesting a node under its own descendant via edge.
+      if (isDescendantOf(steps, connection.target, connection.source)) return false
+      const sourceNode = findNode(steps, connection.source)
+      if (sourceNode && isContainerType(sourceNode.type)) {
+        // Container sources must use a branch handle (not a bare out for condition/router).
+        if (sourceNode.type === 'condition' || sourceNode.type === 'router') {
+          const handle = connection.sourceHandle || ''
+          if (!handle || handle === 'out') return false
+          return reparentTargetFromHandle(sourceNode, handle) != null
+        }
+      }
       return true
     },
-    []
+    [steps]
   )
 
   const onDragOver = useCallback((event: DragEvent) => {

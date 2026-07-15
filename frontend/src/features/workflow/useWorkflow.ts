@@ -36,6 +36,7 @@ import {
   removeNodesInTree,
   reorderRootsByPositions,
   reparentNode,
+  reparentTargetFromHandle,
   toDefinition,
   updateNodeInTree,
   type ReparentTarget,
@@ -340,6 +341,25 @@ export function useWorkflow() {
       dirty: true,
       steps: moveNodeAfter(current.steps, targetId, sourceId),
     }))
+  }
+
+  /** Wire target under source's branch handle (condition/router/parallel). */
+  const connectBranch = (sourceId: string, targetId: string, sourceHandle?: string | null) => {
+    withHistory((current) => {
+      const source = findNode(current.steps, sourceId)
+      if (!source) return current
+      const target = reparentTargetFromHandle(source, sourceHandle)
+      if (!target) return current
+      const steps = reparentNode(current.steps, targetId, target)
+      if (steps === current.steps) return current
+      return {
+        ...current,
+        dirty: true,
+        steps,
+        selectedId: targetId,
+        selectedIds: [targetId],
+      }
+    })
   }
 
   const organizeLayout = () => {
@@ -663,6 +683,7 @@ export function useWorkflow() {
     applyPositions,
     reparent,
     connectSequence,
+    connectBranch,
     organizeLayout,
     copySelected,
     pasteClipboard,

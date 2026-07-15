@@ -3,12 +3,19 @@ import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { WorkflowNodeRunStatus, WorkflowNodeType } from './types'
 import type { EmptySlot } from './utils'
 
+export type BranchHandle = {
+  id: string
+  label: string
+}
+
 export type WorkflowFlowNodeData = {
   label: string
   nodeType: WorkflowNodeType
   subtitle?: string
   hitl?: boolean
   runStatus?: WorkflowNodeRunStatus | null
+  /** Outgoing branch handles (condition/router/parallel). */
+  branchHandles?: BranchHandle[]
   emptySlots?: EmptySlot[]
   dropHighlight?: boolean
   onEmptySlot?: (slotKey: string) => void
@@ -33,6 +40,11 @@ const RUN_LABEL: Record<WorkflowNodeRunStatus, string> = {
   paused: 'PAUSED',
 }
 
+function handleLeftPercent(index: number, total: number): string {
+  if (total <= 1) return '50%'
+  return `${((index + 1) / (total + 1)) * 100}%`
+}
+
 function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
   const payload = data as unknown as WorkflowFlowNodeData
   const meta = TYPE_META[payload.nodeType] ?? TYPE_META.step
@@ -41,6 +53,8 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
     '--wf-node-bg': meta.bg,
   } as CSSProperties
   const runClass = payload.runStatus ? `is-run-${payload.runStatus}` : ''
+  const branches = payload.branchHandles ?? []
+  const multiOut = branches.length > 0
 
   const onSlotClick = (event: MouseEvent, key: string) => {
     event.stopPropagation()
@@ -50,10 +64,15 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
 
   return (
     <div
-      className={`wf-flow-node ${selected ? 'is-selected' : ''} ${payload.dropHighlight ? 'is-drop-target' : ''} ${runClass}`}
+      className={`wf-flow-node ${selected ? 'is-selected' : ''} ${payload.dropHighlight ? 'is-drop-target' : ''} ${runClass} ${multiOut ? 'has-branch-handles' : ''}`}
       style={style}
     >
-      <Handle type="target" position={Position.Top} className="wf-handle" />
+      <Handle
+        type="target"
+        position={Position.Top}
+        id="in"
+        className="wf-handle wf-handle--in"
+      />
       <div className="wf-flow-node__badge" aria-hidden>
         {meta.icon}
         {payload.runStatus ? (
@@ -81,8 +100,36 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
             ))}
           </div>
         ) : null}
+        {multiOut ? (
+          <div className="wf-flow-node__branch-labels" aria-hidden>
+            {branches.map((branch) => (
+              <span key={branch.id} className="wf-flow-node__branch-label">
+                {branch.label}
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
-      <Handle type="source" position={Position.Bottom} className="wf-handle" />
+      {multiOut ? (
+        branches.map((branch, index) => (
+          <Handle
+            key={branch.id}
+            type="source"
+            position={Position.Bottom}
+            id={branch.id}
+            className="wf-handle wf-handle--branch"
+            style={{ left: handleLeftPercent(index, branches.length) }}
+            title={branch.label}
+          />
+        ))
+      ) : (
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          id="out"
+          className="wf-handle wf-handle--out"
+        />
+      )}
     </div>
   )
 }

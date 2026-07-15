@@ -341,6 +341,55 @@ export const defaultDropTarget = (container: WorkflowNode): ReparentTarget | nul
   return null
 }
 
+
+/** Branch source handles rendered on a control-flow node. */
+export const branchHandlesFor = (
+  node: WorkflowNode
+): Array<{ id: string; label: string }> => {
+  if (node.type === 'condition') {
+    return [
+      { id: 'then', label: 'then' },
+      { id: 'else', label: 'else' },
+    ]
+  }
+  if (node.type === 'router') {
+    return (node.choices ?? []).map((choice) => ({
+      id: `choice:${choice.id}`,
+      label: choice.name || 'path',
+    }))
+  }
+  if (node.type === 'parallel') {
+    return [{ id: 'out', label: 'branch' }]
+  }
+  if (node.type === 'loop') {
+    return [{ id: 'out', label: 'body' }]
+  }
+  return []
+}
+
+/** Map a connection sourceHandle to a reparent target under the source node. */
+export const reparentTargetFromHandle = (
+  source: WorkflowNode,
+  sourceHandle: string | null | undefined
+): ReparentTarget | null => {
+  const handle = (sourceHandle || '').trim()
+  if (source.type === 'condition') {
+    if (handle === 'then' || handle === 'thenSteps') {
+      return { kind: 'branch', parentId: source.id, branch: 'thenSteps' }
+    }
+    if (handle === 'else' || handle === 'elseSteps') {
+      return { kind: 'branch', parentId: source.id, branch: 'elseSteps' }
+    }
+  }
+  if (source.type === 'router' && handle.startsWith('choice:')) {
+    return { kind: 'choice', parentId: source.id, choiceId: handle.slice('choice:'.length) }
+  }
+  if ((source.type === 'parallel' || source.type === 'loop') && (handle === 'out' || handle === 'body' || !handle)) {
+    return { kind: 'branch', parentId: source.id, branch: 'steps' }
+  }
+  return null
+}
+
 export const emptySlotsFor = (node: WorkflowNode): EmptySlot[] => {
   if (node.type === 'parallel') {
     if ((node.steps ?? []).length) return []
@@ -674,6 +723,8 @@ export type CanvasLayoutEdge = {
   source: string
   target: string
   label?: string
+  sourceHandle?: string
+  targetHandle?: string
 }
 
 export const layoutCanvas = (
@@ -684,7 +735,13 @@ export const layoutCanvas = (
   const edges: CanvasLayoutEdge[] = []
   let row = 0
   const forceAuto = Boolean(options?.forceAuto)
-  const visit = (node: WorkflowNode, depth: number, parentId: string | null, edgeLabel?: string) => {
+  const visit = (
+    node: WorkflowNode,
+    depth: number,
+    parentId: string | null,
+    edgeLabel?: string,
+    edgeSourceHandle?: string
+  ) => {
     const autoY = row * 90
     const autoX = depth * 220
     const x = forceAuto ? autoX : (node.position?.x ?? autoX)
@@ -703,18 +760,24 @@ export const layoutCanvas = (
         source: parentId,
         target: node.id,
         label: edgeLabel,
+        sourceHandle: edgeSourceHandle,
+        targetHandle: 'in',
       })
     }
     row += 1
     if (node.type === 'condition') {
-      for (const child of node.thenSteps ?? []) visit(child, depth + 1, node.id, 'then')
-      for (const child of node.elseSteps ?? []) visit(child, depth + 1, node.id, 'else')
+      for (const child of node.thenSteps ?? []) visit(child, depth + 1, node.id, 'then', 'then')
+      for (const child of node.elseSteps ?? []) visit(child, depth + 1, node.id, 'else', 'else')
     } else if (node.type === 'router') {
       for (const choice of node.choices ?? []) {
-        for (const child of choice.steps) visit(child, depth + 1, node.id, choice.name)
+        for (const child of choice.steps) {
+          visit(child, depth + 1, node.id, choice.name, `choice:${choice.id}`)
+        }
       }
+    } else if (node.type === 'parallel' || node.type === 'loop') {
+      for (const child of node.steps ?? []) visit(child, depth + 1, node.id, undefined, 'out')
     } else {
-      for (const child of node.steps ?? []) visit(child, depth + 1, node.id)
+      for (const child of node.steps ?? []) visit(child, depth + 1, node.id, undefined, 'out')
     }
   }
   for (const root of roots) visit(root, 0, null)
@@ -724,6 +787,8 @@ export const layoutCanvas = (
       source: roots[i]!.id,
       target: roots[i + 1]!.id,
       label: 'next',
+      sourceHandle: 'out',
+      targetHandle: 'in',
     })
   }
   return { nodes, edges }

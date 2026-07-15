@@ -272,6 +272,7 @@ export function WorkflowPage() {
             onSelectMany={workflow.selectMany}
             onPositionsChange={workflow.applyPositions}
             onConnectSequence={workflow.connectSequence}
+            onConnectBranch={workflow.connectBranch}
             onDropNode={(type, position, target) => workflow.addAt(type, position, target)}
             onReparent={workflow.reparent}
             onEmptySlot={(parentId, slotKey) => workflow.addToSlot(parentId, slotKey)}
