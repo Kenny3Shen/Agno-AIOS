@@ -17,6 +17,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import type { WorkflowNode, WorkflowNodeType } from './types'
+import { usePreferences } from '@/app/providers/AppProviders'
 import { findNode, layoutCanvas } from './utils'
 import { WorkflowFlowNode } from './WorkflowFlowNode'
 
@@ -44,6 +45,7 @@ function CanvasInner({
   emptyHint,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null)
+  const { dark } = usePreferences()
   const { screenToFlowPosition, fitView } = useReactFlow()
 
   const { nodes, edges } = useMemo(() => {
@@ -82,10 +84,15 @@ function CanvasInner({
       label: edge.label,
       type: 'smoothstep',
       animated: edge.label === 'next',
-      markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18, color: '#94a3b8' },
-      style: { stroke: '#94a3b8', strokeWidth: 1.5 },
-      labelStyle: { fontSize: 10, fill: '#64748b', fontWeight: 500 },
-      labelBgStyle: { fill: 'var(--ant-color-bg-container, #fff)', fillOpacity: 0.9 },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 18,
+        height: 18,
+        color: 'var(--wf-edge-stroke)',
+      },
+      style: { stroke: 'var(--wf-edge-stroke)', strokeWidth: 1.5 },
+      labelStyle: { fontSize: 10, fill: 'var(--wf-edge-label)', fontWeight: 500 },
+      labelBgStyle: { fill: 'var(--wf-edge-label-bg)', fillOpacity: 0.95 },
       labelBgPadding: [4, 2] as [number, number],
       labelBgBorderRadius: 4,
     }))
@@ -156,16 +163,18 @@ function CanvasInner({
         nodesConnectable
         elementsSelectable
         panOnScroll
-                connectionMode={ConnectionMode.Loose}
+        connectionMode={ConnectionMode.Loose}
+        colorMode={dark ? 'dark' : 'light'}
         fitView
         fitViewOptions={{ padding: 0.2 }}
+        defaultMarkerColor="var(--wf-edge-stroke)"
         minZoom={0.25}
         maxZoom={1.75}
         defaultEdgeOptions={{ type: 'smoothstep' }}
         proOptions={{ hideAttribution: true }}
         deleteKeyCode={null}
       >
-        <Background variant={BackgroundVariant.Dots} gap={18} size={1.2} color="#c5cdd8" />
+        <Background variant={BackgroundVariant.Dots} gap={18} size={1.2} color="var(--wf-canvas-dot)" />
         <MiniMap
           pannable
           zoomable

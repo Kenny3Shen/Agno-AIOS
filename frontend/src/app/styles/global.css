@@ -1655,6 +1655,21 @@ html.dark .shell-menu .ant-menu-item-selected {
 
 /* ===== Workflow Studio (canvas-first, Dify/Coze style) ===== */
 .workflow-studio {
+  --wf-edge-stroke: color-mix(in srgb, var(--tais-muted) 70%, #94a3b8);
+  --wf-edge-label: var(--tais-muted);
+  --wf-edge-label-bg: var(--tais-surface);
+  --wf-canvas-dot: color-mix(in srgb, var(--tais-muted) 35%, transparent);
+  --wf-canvas-glow-a: color-mix(in srgb, var(--tais-blue) 12%, transparent);
+  --wf-canvas-glow-b: color-mix(in srgb, #722ed1 10%, transparent);
+  --wf-panel-border: var(--tais-border);
+  --wf-shadow: 0 6px 18px color-mix(in srgb, #000 8%, transparent);
+  --wf-shadow-soft: 0 4px 14px color-mix(in srgb, #000 6%, transparent);
+  --wf-empty-bg: color-mix(in srgb, var(--tais-surface) 92%, transparent);
+  --wf-hitl-fg: #b45309;
+  --wf-hitl-bg: #fff7ed;
+  --wf-hitl-border: #fed7aa;
+  --wf-handle-ring: var(--tais-surface);
+
   display: flex;
   flex-direction: column;
   height: calc(100vh - 64px);
@@ -1662,6 +1677,22 @@ html.dark .shell-menu .ant-menu-item-selected {
   margin: -8px -12px 0;
   padding: 0;
   overflow: hidden;
+  color: var(--tais-text);
+  background: var(--tais-bg);
+}
+
+html.dark .workflow-studio {
+  --wf-edge-stroke: color-mix(in srgb, var(--tais-muted) 75%, #64748b);
+  --wf-canvas-dot: color-mix(in srgb, var(--tais-muted) 28%, transparent);
+  --wf-canvas-glow-a: color-mix(in srgb, var(--tais-blue) 10%, transparent);
+  --wf-canvas-glow-b: color-mix(in srgb, #a78bfa 8%, transparent);
+  --wf-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+  --wf-shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.28);
+  --wf-empty-bg: color-mix(in srgb, var(--tais-surface) 88%, transparent);
+  --wf-hitl-fg: #fdba74;
+  --wf-hitl-bg: color-mix(in srgb, #9a3412 35%, var(--tais-surface));
+  --wf-hitl-border: color-mix(in srgb, #fb923c 40%, var(--tais-border));
+  --wf-handle-ring: var(--tais-surface);
 }
 
 .workflow-studio__toolbar {
@@ -1670,8 +1701,8 @@ html.dark .shell-menu .ant-menu-item-selected {
   gap: 12px;
   flex-wrap: wrap;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--ant-color-border-secondary, #e5e7eb);
-  background: var(--ant-color-bg-container, #fff);
+  border-bottom: 1px solid var(--wf-panel-border);
+  background: var(--tais-surface);
   z-index: 2;
 }
 
@@ -1684,7 +1715,7 @@ html.dark .shell-menu .ant-menu-item-selected {
 
 .workflow-studio__brand .anticon {
   font-size: 22px;
-  color: var(--ant-color-primary, #1677ff);
+  color: var(--ant-color-primary, var(--tais-blue));
 }
 
 .workflow-studio__subtitle {
@@ -1694,6 +1725,7 @@ html.dark .shell-menu .ant-menu-item-selected {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--tais-muted);
 }
 
 .workflow-studio__toolbar-main {
@@ -1709,7 +1741,8 @@ html.dark .shell-menu .ant-menu-item-selected {
   font-weight: 600;
   max-width: 320px;
   border-radius: 8px;
-  background: var(--ant-color-fill-quaternary, rgba(0, 0, 0, 0.02));
+  color: var(--tais-text);
+  background: var(--tais-soft);
 }
 
 .workflow-studio__actions {
@@ -1721,7 +1754,7 @@ html.dark .shell-menu .ant-menu-item-selected {
   min-height: 0;
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) 320px;
-  background: var(--ant-color-bg-layout, #f5f7fa);
+  background: var(--tais-bg);
 }
 
 .workflow-studio__left,
@@ -1729,28 +1762,30 @@ html.dark .shell-menu .ant-menu-item-selected {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-color: var(--ant-color-border-secondary, #e5e7eb);
-  background: var(--ant-color-bg-container, #fff);
+  border-color: var(--wf-panel-border);
+  background: var(--tais-surface);
   overflow: auto;
+  color: var(--tais-text);
 }
 
 .workflow-studio__left {
-  border-right: 1px solid var(--ant-color-border-secondary, #e5e7eb);
+  border-right: 1px solid var(--wf-panel-border);
 }
 
 .workflow-studio__right {
-  border-left: 1px solid var(--ant-color-border-secondary, #e5e7eb);
+  border-left: 1px solid var(--wf-panel-border);
 }
 
 .workflow-studio__canvas {
   min-width: 0;
   min-height: 0;
   position: relative;
+  background: var(--tais-bg);
 }
 
 .workflow-studio__panel {
   padding: 12px;
-  border-bottom: 1px solid var(--ant-color-border-secondary, #eef1f5);
+  border-bottom: 1px solid var(--wf-panel-border);
 }
 
 .workflow-studio__panel--grow {
@@ -1766,13 +1801,14 @@ html.dark .shell-menu .ant-menu-item-selected {
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
-  color: var(--ant-color-text-secondary, #64748b);
+  color: var(--tais-muted);
   margin-bottom: 10px;
 }
 
 .workflow-studio__hint {
   margin: 10px 0 0;
   font-size: 12px;
+  color: var(--tais-muted);
 }
 
 .workflow-palette {
@@ -1787,17 +1823,23 @@ html.dark .shell-menu .ant-menu-item-selected {
   padding: 10px 12px;
   border: 1px solid;
   border-radius: 10px;
-  background: var(--ant-color-bg-container, #fff);
+  background: var(--tais-surface);
+  color: var(--tais-text);
   cursor: grab;
   user-select: none;
-  transition: box-shadow 0.15s ease, transform 0.15s ease, background 0.15s ease;
+  transition:
+    box-shadow 0.15s ease,
+    transform 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease;
   font-size: 13px;
   font-weight: 500;
 }
 
 .workflow-palette__item:hover {
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--wf-shadow-soft);
   transform: translateY(-1px);
+  background: var(--tais-soft);
 }
 
 .workflow-palette__item:active {
@@ -1810,7 +1852,7 @@ html.dark .shell-menu .ant-menu-item-selected {
   border-radius: 8px;
   display: grid;
   place-items: center;
-  background: var(--ant-color-fill-quaternary, rgba(0, 0, 0, 0.04));
+  background: var(--tais-soft);
 }
 
 .workflow-canvas--main {
@@ -1818,9 +1860,34 @@ html.dark .shell-menu .ant-menu-item-selected {
   height: 100%;
   position: relative;
   background:
-    radial-gradient(circle at 20% 20%, rgba(22, 119, 255, 0.04), transparent 40%),
-    radial-gradient(circle at 80% 80%, rgba(114, 46, 209, 0.04), transparent 42%),
-    var(--ant-color-bg-layout, #f5f7fa);
+    radial-gradient(circle at 20% 20%, var(--wf-canvas-glow-a), transparent 40%),
+    radial-gradient(circle at 80% 80%, var(--wf-canvas-glow-b), transparent 42%),
+    var(--tais-bg);
+}
+
+/* React Flow theme bridge (works with colorMode=dark/light) */
+.workflow-canvas--main .react-flow {
+  --xy-background-color: transparent;
+  --xy-background-pattern-dots-color: var(--wf-canvas-dot);
+  --xy-minimap-background-color: var(--tais-surface);
+  --xy-minimap-mask-background-color: color-mix(in srgb, var(--tais-bg) 55%, transparent);
+  --xy-minimap-node-background-color: color-mix(in srgb, var(--tais-muted) 35%, var(--tais-soft));
+  --xy-controls-button-background-color: var(--tais-surface);
+  --xy-controls-button-background-color-hover: var(--tais-soft);
+  --xy-controls-button-color: var(--tais-text);
+  --xy-controls-button-color-hover: var(--tais-text);
+  --xy-controls-button-border-color: var(--tais-border);
+  --xy-edge-stroke: var(--wf-edge-stroke);
+  --xy-edge-stroke-selected: var(--tais-blue);
+  --xy-connectionline-stroke: var(--wf-edge-stroke);
+  --xy-node-background-color: var(--tais-surface);
+  --xy-node-color: var(--tais-text);
+  --xy-node-border: 1px solid var(--tais-border);
+  --xy-handle-background-color: var(--tais-blue);
+  --xy-handle-border-color: var(--wf-handle-ring);
+  --xy-selection-background-color: color-mix(in srgb, var(--tais-blue) 12%, transparent);
+  --xy-selection-border: 1px dotted color-mix(in srgb, var(--tais-blue) 70%, transparent);
+  background: transparent !important;
 }
 
 .workflow-canvas__empty-overlay {
@@ -1840,17 +1907,17 @@ html.dark .shell-menu .ant-menu-item-selected {
   align-items: center;
   padding: 28px 36px;
   border-radius: 16px;
-  border: 1px dashed var(--ant-color-border, #d0d7e2);
-  background: rgba(255, 255, 255, 0.88);
+  border: 1px dashed var(--tais-border);
+  background: var(--wf-empty-bg);
   backdrop-filter: blur(6px);
-  color: var(--ant-color-text-secondary, #64748b);
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  color: var(--tais-muted);
+  box-shadow: var(--wf-shadow-soft);
   text-align: center;
   max-width: 360px;
 }
 
 .workflow-canvas__empty-card strong {
-  color: var(--ant-color-text, #0f172a);
+  color: var(--tais-text);
   font-size: 15px;
 }
 
@@ -1858,6 +1925,7 @@ html.dark .shell-menu .ant-menu-item-selected {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  color: var(--tais-text);
 }
 
 .workflow-inspector__switch {
@@ -1866,24 +1934,30 @@ html.dark .shell-menu .ant-menu-item-selected {
   gap: 8px;
   margin-top: 8px;
   font-size: 13px;
+  color: var(--tais-text);
 }
 
 /* Custom React Flow nodes */
 .wf-flow-node {
   width: 200px;
   border-radius: 12px;
-  border: 1.5px solid color-mix(in srgb, var(--wf-node-color) 55%, #cbd5e1);
-  background: var(--ant-color-bg-container, #fff);
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+  border: 1.5px solid color-mix(in srgb, var(--wf-node-color) 50%, var(--tais-border));
+  background: var(--tais-surface);
+  color: var(--tais-text);
+  box-shadow: var(--wf-shadow-soft);
   overflow: hidden;
-  transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  transition:
+    box-shadow 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease,
+    background 0.15s ease;
 }
 
 .wf-flow-node.is-selected {
   border-color: var(--wf-node-color);
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--wf-node-color) 22%, transparent),
-    0 10px 24px rgba(15, 23, 42, 0.1);
+    0 0 0 3px color-mix(in srgb, var(--wf-node-color) 28%, transparent),
+    var(--wf-shadow);
 }
 
 .wf-flow-node__badge {
@@ -1896,25 +1970,30 @@ html.dark .shell-menu .ant-menu-item-selected {
   letter-spacing: 0.04em;
   color: var(--wf-node-color);
   background: var(--wf-node-bg);
-  border-bottom: 1px solid color-mix(in srgb, var(--wf-node-color) 18%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--wf-node-color) 22%, transparent);
+}
+
+html.dark .wf-flow-node__badge {
+  background: color-mix(in srgb, var(--wf-node-color) 18%, var(--tais-soft));
 }
 
 .wf-flow-node__body {
   padding: 10px 12px 12px;
+  background: var(--tais-surface);
 }
 
 .wf-flow-node__type {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--ant-color-text-tertiary, #94a3b8);
+  color: var(--tais-muted);
   margin-bottom: 2px;
 }
 
 .wf-flow-node__title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--ant-color-text, #0f172a);
+  color: var(--tais-text);
   line-height: 1.35;
   word-break: break-word;
 }
@@ -1922,7 +2001,7 @@ html.dark .shell-menu .ant-menu-item-selected {
 .wf-flow-node__sub {
   margin-top: 4px;
   font-size: 11px;
-  color: var(--ant-color-text-secondary, #64748b);
+  color: var(--tais-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1935,23 +2014,57 @@ html.dark .shell-menu .ant-menu-item-selected {
   border-radius: 999px;
   font-size: 10px;
   font-weight: 600;
-  color: #b45309;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
+  color: var(--wf-hitl-fg);
+  background: var(--wf-hitl-bg);
+  border: 1px solid var(--wf-hitl-border);
 }
 
 .wf-handle {
   width: 10px !important;
   height: 10px !important;
-  border: 2px solid #fff !important;
-  background: var(--wf-node-color, #1677ff) !important;
+  border: 2px solid var(--wf-handle-ring) !important;
+  background: var(--wf-node-color, var(--tais-blue)) !important;
 }
 
 .wf-minimap,
 .wf-controls {
   border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+  border: 1px solid var(--tais-border);
+  box-shadow: var(--wf-shadow-soft);
+  background: var(--tais-surface) !important;
+}
+
+.workflow-canvas--main .react-flow__controls-button {
+  background: var(--tais-surface) !important;
+  border-bottom-color: var(--tais-border) !important;
+  fill: var(--tais-text) !important;
+}
+
+.workflow-canvas--main .react-flow__controls-button:hover {
+  background: var(--tais-soft) !important;
+}
+
+.workflow-canvas--main .react-flow__controls-button svg {
+  fill: currentColor;
+  color: var(--tais-text);
+}
+
+.workflow-canvas--main .react-flow__minimap {
+  background: var(--tais-surface) !important;
+}
+
+.workflow-canvas--main .react-flow__edge-path,
+.workflow-canvas--main .react-flow__connection-path {
+  stroke: var(--wf-edge-stroke) !important;
+}
+
+.workflow-canvas--main .react-flow__edge-text {
+  fill: var(--wf-edge-label) !important;
+}
+
+.workflow-canvas--main .react-flow__edge-textbg {
+  fill: var(--wf-edge-label-bg) !important;
 }
 
 @media (max-width: 1100px) {
@@ -1973,7 +2086,7 @@ html.dark .shell-menu .ant-menu-item-selected {
   .workflow-studio__left,
   .workflow-studio__right {
     border: none;
-    border-bottom: 1px solid var(--ant-color-border-secondary, #e5e7eb);
+    border-bottom: 1px solid var(--wf-panel-border);
   }
   .workflow-canvas--main {
     min-height: 55vh;

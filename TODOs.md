@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Workflow Studio Dark Mode
+
+- Studio / 画布 / 节点 / MiniMap / Controls 使用 `--tais-*` 与 `html.dark` 变量。
+- React Flow `colorMode` 跟随应用主题开关。
+
+
 ## 已完成：Workflow 画布优先 Studio（Dify/Coze 风格）
 
 - 主区域为全高 React Flow 画布；左侧节点面板拖入/双击添加，右侧 Inspector + 运行日志。
