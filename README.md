@@ -81,7 +81,7 @@ uv run update-cve
 
 ## 架构
 
-React 工作台通过共享 API client 携带 token 请求 FastAPI；后端检查权限和资源归属后，按模型、MCP、Skills、Knowledge 与 Memory 配置创建 Agno 运行时。Chat 通过 SSE 返回流式输出；`GET /api/chat/sessions` 使用 Agno 风格 `data`/`meta`（默认 page/limit，行字段仍为工作台 session 摘要）。Trace、Memory 和 Knowledge 等视图通过 Query 刷新读取最新数据。
+React 工作台通过共享 API client 携带 token 请求 FastAPI；后端检查权限和资源归属后，按模型、MCP、Skills、Knowledge 与 Memory 配置创建 Agno 运行时。Chat 通过 SSE 返回流式输出；`GET /api/chat/sessions` 使用 Agno 风格 `data`/`meta`（DB 真分页 + 归档 SQL 过滤，行字段仍为工作台 session 摘要；overview 最多采样 5000 traces；submissions 为 data/meta）。Trace、Memory 和 Knowledge 等视图通过 Query 刷新读取最新数据。
 
 Memory API 仅使用 `/api/memories`（Agno 风格 `data`/`meta`，查询参数 `search_content`，主键字段 `memory_id`）。 列表行仅认 `memory_id`/`memory`/`topics` 等 Agno 字段，不再兼容 `id`/`content`/`topic` 别名。
 

@@ -178,7 +178,8 @@ async def _batch_root_spans_by_trace_ids(trace_ids: list[str]) -> dict[str, list
 async def _root_inputs_for_trace_ids(trace_ids: list[str]) -> dict[str, str | None]:
     """Best-effort root span input lookup via one batch spans query.
 
-    Falls back to per-trace ``get_spans`` only if the batch path fails.
+    On batch failure, leave ``input`` as null rather than reintroducing N+1
+    ``get_spans`` calls on the list path.
     """
     safe_ids = [str(trace_id).strip() for trace_id in trace_ids if str(trace_id or "").strip()]
     inputs: dict[str, str | None] = {trace_id: None for trace_id in safe_ids}
@@ -188,22 +189,11 @@ async def _root_inputs_for_trace_ids(trace_ids: list[str]) -> dict[str, str | No
     try:
         spans_by_trace = await _batch_root_spans_by_trace_ids(safe_ids)
     except Exception:
-        logger.debug("batch root span input load failed; falling back to get_spans")
-        spans_by_trace = None
-
-    if spans_by_trace is not None:
-        for trace_id in safe_ids:
-            inputs[trace_id] = _root_input_from_spans(spans_by_trace.get(trace_id) or [])
+        logger.debug("batch root span input load failed; leaving list inputs null")
         return inputs
 
-    for safe_id in safe_ids:
-        try:
-            spans = await _trace_db.get_spans(trace_id=safe_id, limit=200)
-        except Exception:
-            logger.debug("failed to load spans for list input: {}", safe_id)
-            inputs[safe_id] = None
-            continue
-        inputs[safe_id] = _root_input_from_spans(list(spans or []))
+    for trace_id in safe_ids:
+        inputs[trace_id] = _root_input_from_spans(spans_by_trace.get(trace_id) or [])
     return inputs
 
 
@@ -462,6 +452,11 @@ async def list_traces(
     )
 
 
+# Status filtering is not native on Agno get_traces; scan a bounded window only.
+_STATUS_FILTER_MAX_TRACES = 2_000
+_STATUS_FILTER_PAGE_SIZE = 200
+
+
 async def _all_trace_items(
     *,
     run_id: str | None,
@@ -473,6 +468,7 @@ async def _all_trace_items(
     start_time: datetime | None,
     end_time: datetime | None,
 ) -> list[dict[str, Any]]:
+    """Load traces for post-hoc status filtering with a hard scan cap."""
     trace_page = 1
     items: list[dict[str, Any]] = []
     while True:
@@ -485,10 +481,19 @@ async def _all_trace_items(
             workflow_id=workflow_id,
             start_time=start_time,
             end_time=end_time,
-            limit=200,
+            limit=_STATUS_FILTER_PAGE_SIZE,
             page=trace_page,
         )
         items.extend(jsonable_encoder(trace.to_dict()) for trace in batch)
+        if len(items) >= _STATUS_FILTER_MAX_TRACES:
+            if int(total_count or 0) > len(items):
+                logger.warning(
+                    "trace status filter truncated scan: loaded {} of {}",
+                    len(items),
+                    total_count,
+                )
+            items = items[:_STATUS_FILTER_MAX_TRACES]
+            break
         if len(items) >= total_count or not batch:
             break
         trace_page += 1

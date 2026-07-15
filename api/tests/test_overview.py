@@ -191,6 +191,25 @@ async def test_overview_reads_every_trace_page_inside_the_selected_window():
 
 
 @pytest.mark.asyncio
+async def test_overview_caps_trace_pages_when_window_is_huge():
+    calls: list[int] = []
+
+    async def get_traces(**kwargs):
+        calls.append(kwargs["page"])
+        return [{"trace_id": f"t{kwargs['page']}"}], 50_000
+
+    with patch.object(overview_service.get_async_agno_postgres_db(), "get_traces", get_traces):
+        traces = await overview_service._fetch_traces(
+            start=datetime(2026, 7, 12, 11, tzinfo=UTC),
+            end=datetime(2026, 7, 12, 12, tzinfo=UTC),
+            user_id="u1",
+        )
+
+    assert calls == [1, 2, 3, 4, 5]
+    assert len(traces) == 5
+
+
+@pytest.mark.asyncio
 async def test_overview_fetch_reconciles_audit_failures_before_metrics() -> None:
     trace = SimpleNamespace(
         to_dict=lambda: {"trace_id": "trace-1", "run_id": "run-1", "status": "OK"}

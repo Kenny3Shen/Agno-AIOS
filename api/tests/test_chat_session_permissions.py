@@ -35,24 +35,23 @@ def test_admin_can_access_foreign_resource():
 
 
 @pytest.mark.asyncio
-async def test_session_list_service_passes_owner_filter_to_agno_db():
+async def test_session_list_service_passes_owner_filter_to_query():
     captured: dict[str, object] = {}
 
-    class FakeDb:
-        async def get_sessions(self, **kwargs):
-            captured.update(kwargs)
-            return []
+    async def fake_query(**kwargs):
+        captured.update(kwargs)
+        return [], 0
 
     with (
         patch.object(chat_session_service, "ensure_agno_postgres_tables_async", new_callable=AsyncMock),
-        patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=FakeDb()),
+        patch.object(chat_session_service, "_query_sessions_page", fake_query),
     ):
         result = await chat_session_service.get_all_sessions_async(owner_user_id="u1")
 
     assert result["data"] == []
     assert result["meta"]["total_count"] == 0
-    assert captured["user_id"] == "u1"
-    assert captured["deserialize"] is False
+    assert captured["owner_user_id"] == "u1"
+    assert captured["include_archived"] is False
 
 
 def route_dependency(endpoint_name: str):

@@ -23,7 +23,7 @@ from api.services.security_policy import PolicyAuditEvent, record_policy_event
 from api.services.security_run_runtime import resume_security_run
 from api.services.upload_approval_service import (
     can_view_submission_approval,
-    list_submission_approvals,
+    list_submission_approvals_page,
     preview_skill_submission,
     resolve_submission_approval,
 )
@@ -75,11 +75,18 @@ def _is_security_chat_approval(approval: Mapping[str, object]) -> bool:
 @router.get("/submissions")
 async def list_submission_approval_requests(
     status: Literal["pending", "approved", "rejected"] | None = None,
+    page: int = 1,
+    limit: int = 100,
     user: User = Depends(current_active_user),
 ):
-    """List staged Skill/MCP uploads; non-admins can only see their own."""
+    """List staged Skill/MCP uploads as ``{data, meta}``; non-admins see own only."""
     submitted_by = None if actor_role(user) == "admin" else actor_id(user)
-    return {"approvals": await list_submission_approvals(status, submitted_by=submitted_by)}
+    return await list_submission_approvals_page(
+        status,
+        submitted_by=submitted_by,
+        page=page,
+        limit=limit,
+    )
 
 
 @router.post("/submissions/{approval_id}/resolve")

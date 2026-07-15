@@ -154,6 +154,48 @@ async def rename_session(
 
 
 
+async def _query_sessions_page(
+    *,
+    include_archived: bool,
+    owner_user_id: str | None,
+    page: int,
+    limit: int,
+) -> tuple[list[dict[str, Any]], int]:
+    """SQL page of session rows with optional archive filter."""
+    from sqlalchemy import func, or_, select
+
+    db = get_async_agno_postgres_db()
+    table = await db._get_table(table_type="sessions")
+    if table is None:
+        return [], 0
+
+    stmt = select(table)
+    if owner_user_id is not None:
+        stmt = stmt.where(table.c.user_id == owner_user_id)
+    if not include_archived:
+        # JSONB bool/string/missing -> treat only explicit true as archived.
+        stmt = stmt.where(
+            or_(
+                table.c.metadata.is_(None),
+                ~table.c.metadata.contains({"agno_aios_archived": True}),
+            )
+        )
+
+    count_stmt = select(func.count()).select_from(stmt.alias())
+    order_col = func.coalesce(table.c.updated_at, table.c.created_at)
+    page_stmt = (
+        stmt.order_by(order_col.desc().nullslast(), table.c.session_id.desc())
+        .limit(limit)
+        .offset((page - 1) * limit)
+    )
+
+    async with db.async_session_factory() as session:
+        total_count = int(await session.scalar(count_stmt) or 0)
+        result = await session.execute(page_stmt)
+        rows = [dict(row._mapping) for row in result.fetchall()]
+    return rows, total_count
+
+
 async def get_all_sessions_async(
     *,
     include_archived: bool = False,
@@ -162,32 +204,24 @@ async def get_all_sessions_async(
     page: int = 1,
     limit: int = 500,
 ) -> dict[str, Any]:
-    """Read session summaries through Agno AsyncPostgresDb.
+    """Read session summaries with DB-level page/limit.
 
-    Returns an Agno-style ``{data, meta}`` envelope. Archive filtering is applied
-    after the Agno page fetch; ``meta.total_count`` reflects the filtered list.
+    Returns Agno-style ``{data, meta}``. Archive filtering uses
+    ``metadata @> {"agno_aios_archived": true}`` so totals stay accurate beyond
+    the previous 500-row window.
     """
     await ensure_agno_postgres_tables_async()
     safe_page = max(1, int(page or 1))
     safe_limit = max(1, min(int(limit or 500), 500))
-    result: Any = await get_async_agno_postgres_db().get_sessions(
-        user_id=owner_user_id,
-        # Fetch a wider window so post-filter archive rows still fill the page.
-        limit=500,
-        page=1,
-        deserialize=False,
+    rows, total_count = await _query_sessions_page(
+        include_archived=include_archived,
+        owner_user_id=owner_user_id,
+        page=safe_page,
+        limit=safe_limit,
     )
-    rows = cast(list[dict[str, Any]], result[0] if isinstance(result, tuple) else result)
-    visible_rows = [
-        row for row in rows if include_archived or not _is_archived_metadata(row.get("metadata"))
-    ]
-
-    sessions = _project_session_rows(visible_rows, include_runs=include_runs)
-    total_count = len(sessions)
-    offset = (safe_page - 1) * safe_limit
-    page_items = sessions[offset : offset + safe_limit]
+    sessions = _project_session_rows(rows, include_runs=include_runs)
     return {
-        "data": page_items,
+        "data": sessions,
         "meta": pagination_meta(
             page=safe_page,
             limit=safe_limit,
@@ -222,8 +256,10 @@ def _project_session_rows(
     rows: list[dict[str, Any]],
     *,
     include_runs: bool,
+    already_sorted: bool = False,
 ) -> list[dict[str, Any]]:
-    rows.sort(key=_sort_time, reverse=True)
+    if not already_sorted:
+        rows.sort(key=_sort_time, reverse=True)
     sessions: list[dict[str, Any]] = []
     for row in rows:
         runs = coerce_json_value(row.get("runs"))

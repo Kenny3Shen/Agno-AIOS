@@ -636,12 +636,8 @@ async def test_list_traces_batches_root_inputs_for_page() -> None:
 
 
 @pytest.mark.asyncio
-async def test_root_inputs_fallback_to_get_spans_when_batch_fails() -> None:
-    root_span = SimpleNamespace(
-        parent_span_id=None,
-        attributes={"input.value": "fallback input"},
-    )
-    get_spans = AsyncMock(return_value=[root_span])
+async def test_root_inputs_leave_null_when_batch_fails() -> None:
+    get_spans = AsyncMock(return_value=[])
 
     with (
         patch.object(
@@ -653,7 +649,7 @@ async def test_root_inputs_fallback_to_get_spans_when_batch_fails() -> None:
     ):
         inputs = await tracing_service._root_inputs_for_trace_ids(["trace-1", "trace-2"])
 
-    assert inputs == {"trace-1": "fallback input", "trace-2": "fallback input"}
-    assert get_spans.await_count == 2
+    assert inputs == {"trace-1": None, "trace-2": None}
+    get_spans.assert_not_called()
 
 

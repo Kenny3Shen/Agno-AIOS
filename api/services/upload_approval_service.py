@@ -117,10 +117,48 @@ async def submit_mcp_upload(*, payload: dict[str, Any], submitted_by: str, submi
 
 
 async def list_submission_approvals(
-    status: str | None = None, *, submitted_by: str | None = None
+    status: str | None = None,
+    *,
+    submitted_by: str | None = None,
+    page: int = 1,
+    limit: int | None = None,
 ) -> list[dict[str, Any]]:
     """Return upload approvals, optionally limited to their submitter."""
-    return [_public(record) for record in await list_upload_approvals(status, submitted_by=submitted_by)]
+    return [
+        _public(record)
+        for record in await list_upload_approvals(
+            status,
+            submitted_by=submitted_by,
+            page=page,
+            limit=limit,
+        )
+    ]
+
+
+async def list_submission_approvals_page(
+    status: str | None = None,
+    *,
+    submitted_by: str | None = None,
+    page: int = 1,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Agno-style ``{data, meta}`` for upload submissions."""
+    from api.persistence.upload_approvals import count_upload_approvals
+    from api.utils.pagination import pagination_meta
+
+    safe_page = max(1, int(page or 1))
+    safe_limit = max(1, min(int(limit or 50), 100))
+    total = await count_upload_approvals(status, submitted_by=submitted_by)
+    rows = await list_submission_approvals(
+        status,
+        submitted_by=submitted_by,
+        page=safe_page,
+        limit=safe_limit,
+    )
+    return {
+        "data": rows,
+        "meta": pagination_meta(page=safe_page, limit=safe_limit, total_count=total),
+    }
 
 
 async def get_submission_approval(approval_id: str) -> dict[str, Any] | None:

@@ -23,6 +23,9 @@ _RANGE_WINDOWS: dict[OverviewRange, timedelta] = {
     "7d": timedelta(days=7),
 }
 _PAGE_LIMIT = 1_000
+# Cap dashboard materialization so 7d windows cannot load unbounded history.
+_MAX_OVERVIEW_TRACE_PAGES = 5  # 5 * 1000 = 5000 traces max per overview request
+_MAX_OVERVIEW_TRACES = _PAGE_LIMIT * _MAX_OVERVIEW_TRACE_PAGES
 
 
 def _as_datetime(value: Any) -> datetime | None:
@@ -267,6 +270,11 @@ def _recent_failure(trace: dict[str, Any]) -> dict[str, Any]:
 async def _fetch_traces(
     *, start: datetime, end: datetime, user_id: str | None
 ) -> list[dict[str, Any]]:
+    """Load traces for dashboard metrics with a hard row/page cap.
+
+    Full-window scans are unbounded on busy tenants; metrics and series use the
+    most recent capped sample. ``total_count`` from Agno is not exposed here.
+    """
     db = get_async_agno_postgres_db()
     traces, total = await db.get_traces(
         start_time=start,
@@ -277,7 +285,11 @@ async def _fetch_traces(
     )
     rows = list(traces)
     total_count = int(total or len(rows))
-    for page in range(2, (total_count + _PAGE_LIMIT - 1) // _PAGE_LIMIT + 1):
+    max_pages = min(
+        _MAX_OVERVIEW_TRACE_PAGES,
+        max(1, (total_count + _PAGE_LIMIT - 1) // _PAGE_LIMIT),
+    )
+    for page in range(2, max_pages + 1):
         next_page, _ = await db.get_traces(
             start_time=start,
             end_time=end,
@@ -286,6 +298,15 @@ async def _fetch_traces(
             page=page,
         )
         rows.extend(next_page)
+        if len(rows) >= _MAX_OVERVIEW_TRACES:
+            rows = rows[:_MAX_OVERVIEW_TRACES]
+            break
+    if total_count > len(rows):
+        logger.warning(
+            "overview truncated traces: loaded {} of {} in window",
+            len(rows),
+            total_count,
+        )
     result: list[dict[str, Any]] = []
     for trace in rows:
         dumped = trace if isinstance(trace, dict) else trace.to_dict()

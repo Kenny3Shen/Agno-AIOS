@@ -63,8 +63,14 @@ async def get_upload_approval(approval_id: str) -> dict[str, Any] | None:
 
 
 async def list_upload_approvals(
-    status: str | None = None, *, submitted_by: str | None = None
+    status: str | None = None,
+    *,
+    submitted_by: str | None = None,
+    page: int = 1,
+    limit: int | None = None,
 ) -> list[dict[str, Any]]:
+    """List upload approvals. Optional ``page``/``limit`` enable SQL pagination."""
+
     await ensure_upload_approvals_table()
     table = upload_approvals_table()
     stmt = select(table).order_by(table.c.created_at.desc())
@@ -72,9 +78,31 @@ async def list_upload_approvals(
         stmt = stmt.where(table.c.status == status)
     if submitted_by is not None:
         stmt = stmt.where(table.c.submitted_by == submitted_by)
+    if limit is not None:
+        safe_page = max(1, int(page or 1))
+        safe_limit = max(1, min(int(limit), 200))
+        stmt = stmt.limit(safe_limit).offset((safe_page - 1) * safe_limit)
     async with get_async_control_plane_engine().begin() as conn:
         rows = (await conn.execute(stmt)).mappings().all()
     return [dict(row) for row in rows]
+
+
+async def count_upload_approvals(
+    status: str | None = None,
+    *,
+    submitted_by: str | None = None,
+) -> int:
+    from sqlalchemy import func
+
+    await ensure_upload_approvals_table()
+    table = upload_approvals_table()
+    stmt = select(func.count()).select_from(table)
+    if status:
+        stmt = stmt.where(table.c.status == status)
+    if submitted_by is not None:
+        stmt = stmt.where(table.c.submitted_by == submitted_by)
+    async with get_async_control_plane_engine().begin() as conn:
+        return int(await conn.scalar(stmt) or 0)
 
 
 async def resolve_upload_approval(

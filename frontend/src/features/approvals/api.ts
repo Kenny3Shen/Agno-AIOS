@@ -156,12 +156,38 @@ const fetchHitlSlice = async (status: string, offset: number, count: number) => 
   return { items: rows, total: first.total }
 }
 
-const fetchSubmissions = async (status: string) => {
+const fetchSubmissionsPage = async (status: string, page: number, limit: number) => {
   const shouldFetch = !status || ['pending', 'approved', 'rejected'].includes(status)
-  if (!shouldFetch) return [] as Approval[]
-  const query = status ? `?status=${encodeURIComponent(status)}` : ''
-  const payload = asRecord(await requestJson<unknown>(`/approvals/submissions${query}`))
-  return normalizeRows(asArray(payload.approvals))
+  if (!shouldFetch) {
+    return { items: [] as Approval[], total: 0 }
+  }
+  const search = new URLSearchParams()
+  if (status) search.set('status', status)
+  search.set('page', String(page))
+  search.set('limit', String(limit))
+  const payload = asRecord(await requestJson<unknown>(`/approvals/submissions?${search}`))
+  const meta = asRecord(payload.meta)
+  // Accept native data/meta; tolerate legacy {approvals} during rollout.
+  const rows = Array.isArray(payload.data)
+    ? payload.data
+    : asArray(payload.approvals)
+  return {
+    items: normalizeRows(rows),
+    total: Number(meta.total_count ?? rows.length) || 0,
+  }
+}
+
+/** Absolute-offset slice of upload submissions (for virtual merge with HITL). */
+const fetchSubmissionsSlice = async (status: string, offset: number, limit: number) => {
+  if (limit <= 0) return { items: [] as Approval[], total: 0 }
+  const pageSize = Math.min(100, Math.max(limit, 1))
+  const startPage = Math.floor(offset / pageSize) + 1
+  const page = await fetchSubmissionsPage(status, startPage, pageSize)
+  const localStart = offset % pageSize
+  return {
+    items: page.items.slice(localStart, localStart + limit),
+    total: page.total,
+  }
 }
 
 /**
@@ -172,23 +198,20 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
   const status = params.status ?? ''
   const page = Math.max(1, Number(params.page ?? 1) || 1)
   const limit = Math.min(100, Math.max(1, Number(params.limit ?? 20) || 20))
-
-  const submissions = await fetchSubmissions(status)
-  const submissionCount = submissions.length
   const start = (page - 1) * limit
 
-  const pageSubmissions =
-    start < submissionCount ? submissions.slice(start, start + limit) : []
+  // First page of submissions is enough for total; slice by absolute offset.
+  const submissions = await fetchSubmissionsSlice(status, start, limit)
+  const submissionCount = submissions.total
+  const pageSubmissions = submissions.items
   const hitlNeed = limit - pageSubmissions.length
   const hitlOffset = Math.max(0, start - submissionCount)
 
-  const hitl =
-    hitlNeed > 0
-      ? await fetchHitlSlice(status, hitlOffset, hitlNeed)
-      : await fetchHitlSlice(status, 0, 0)
+  // Always request HITL slice (limit 0 still returns meta.total_count for the pager).
+  const hitl = await fetchHitlSlice(status, hitlOffset, Math.max(hitlNeed, 0))
 
   return {
-    items: [...pageSubmissions, ...hitl.items],
+    items: [...pageSubmissions, ...hitl.items.slice(0, Math.max(hitlNeed, 0))],
     total: submissionCount + hitl.total,
     page,
     limit,

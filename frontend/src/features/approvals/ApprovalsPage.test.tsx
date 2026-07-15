@@ -20,7 +20,8 @@ describe('ApprovalsPage', () => {
       ),
       http.get('/api/approvals/submissions', () =>
         HttpResponse.json({
-          approvals: [
+          meta: { page: 1, limit: 100, total_pages: 1, total_count: 1, search_time_ms: 0 },
+          data: [
             {
               id: 'upload-1',
               status: 'pending',
@@ -95,7 +96,8 @@ describe('ApprovalsPage', () => {
       ),
       http.get('/api/approvals/submissions', () =>
         HttpResponse.json({
-          approvals: [
+          meta: { page: 1, limit: 100, total_pages: 1, total_count: 1, search_time_ms: 0 },
+          data: [
             {
               id: 'upload-1',
               status: 'rejected',
@@ -141,7 +143,7 @@ describe('ApprovalsPage', () => {
           meta: { page: 1, limit: 100, total_pages: 1, total_count: 1, search_time_ms: 0 },
         })
       ),
-      http.get('/api/approvals/submissions', () => HttpResponse.json({ approvals: [] })),
+      http.get('/api/approvals/submissions', () => HttpResponse.json({ data: [], meta: { page: 1, limit: 100, total_pages: 0, total_count: 0, search_time_ms: 0 } })),
       http.post('/api/approvals/approval-1/resume', () =>
         HttpResponse.json({ id: 'approval-1', status: 'approved', tool_name: 'any_protected_tool', run_status: 'RUNNING' })
       )

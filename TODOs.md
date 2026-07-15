@@ -1,5 +1,18 @@
 # 下一步工作
 
+## 已完成：性能热路径收紧
+
+- Chat sessions：DB 级 `page`/`limit` + SQL 归档过滤（`metadata @> agno_aios_archived`），去掉 500 窗后内存分页。
+- Overview：traces 最多 5 页 ×1000（5000）采样，超出打 warning，避免 7d 全量加载。
+- Trace status 过滤：扫描上限 2000 条；list root input batch 失败不再 per-trace `get_spans`（input=null）。
+- Approvals submissions：`GET /api/approvals/submissions` 改为 `{data,meta}` + page/limit；前端按 offset 切片合并 HITL。
+- Memory list：本已透传 Agno `page`/`limit`；stats 查询单独有界。
+
+相关入口：
+
+- `api/services/chat_session_service.py`、`overview_service.py`、`tracing_service.py`
+- `api/persistence/upload_approvals.py`、`api/routes/approvals.py`、`frontend/src/features/approvals/api.ts`
+
 ## 已完成：可靠性 / 可观测性收紧
 
 - overview snapshots 各子块异常改为 `logger.exception`（不再静默 `pass`），缺键仍表示该能力不可用。
