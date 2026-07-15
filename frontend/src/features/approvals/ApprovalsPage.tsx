@@ -46,6 +46,33 @@ const workflowPrompt = (approval: Approval): string => {
   return ''
 }
 
+
+type UserInputField = {
+  name: string
+  field_type?: string
+  description?: string
+  required?: boolean
+}
+
+const parseUserInputSchema = (approval: Approval): UserInputField[] => {
+  const raw = approval.tool_args?.user_input_schema
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const row = item as Record<string, unknown>
+    const name = String(row.name ?? row.key ?? '').trim()
+    if (!name) return []
+    return [
+      {
+        name,
+        field_type: row.field_type != null ? String(row.field_type) : row.type != null ? String(row.type) : 'str',
+        description: row.description != null ? String(row.description) : '',
+        required: Boolean(row.required ?? true),
+      },
+    ]
+  })
+}
+
 const workflowOutputSeed = (approval: Approval): string => {
   const args = approval.tool_args
   if (!args) return ''
@@ -184,6 +211,7 @@ export function ApprovalsPage() {
   const [rejectReason, setRejectReason] = useState('')
   const [approveOpen, setApproveOpen] = useState(false)
   const [userInputText, setUserInputText] = useState('')
+  const [userInputValues, setUserInputValues] = useState<Record<string, string>>({})
   const [editedOutput, setEditedOutput] = useState('')
   const [markdownPreviewModes, setMarkdownPreviewModes] = useState<Record<string, 'raw' | 'markdown'>>({})
   const query = useQuery({
@@ -258,6 +286,7 @@ export function ApprovalsPage() {
       setRejectReason('')
       setApproveOpen(false)
       setUserInputText('')
+      setUserInputValues({})
       setEditedOutput('')
       message.success(t('resolved', { status: row.status }))
       await refresh()
@@ -354,48 +383,66 @@ export function ApprovalsPage() {
     [formatDate, t, typeFilters]
   )
 
-  const approvalActions = selected && canResolve ? (
+  const approvalActions = selected ? (
     <Space size={4}>
-      <Button
-        type="primary"
-        icon={<CheckOutlined />}
-        disabled={selected.status !== 'pending'}
-        loading={resolve.isPending}
-        style={{ minWidth: 84 }}
-        onClick={() => {
-          if (isSubmissionApproval(selected)) {
-            resolve.mutate({ approval: selected, decision: 'approved' })
-            return
-          }
-          const pause = workflowPauseType(selected)
-          if (pause === 'user_input' || pause === 'output_review') {
-            setUserInputText('')
-            setEditedOutput(workflowOutputSeed(selected))
-            setApproveOpen(true)
-            return
-          }
-          resolve.mutate({ approval: selected, decision: 'approved' })
-        }}
-      >
-        {t('common:approve')}
-      </Button>
-      <Button
-        danger
-        icon={<CloseOutlined />}
-        disabled={selected.status !== 'pending'}
-        loading={resolve.isPending}
-        style={{ minWidth: 84 }}
-        onClick={() => setRejectOpen(true)}
-      >
-        {t('common:reject')}
-      </Button>
-      {!isSubmissionApproval(selected) && runStatus(selected) === 'ERROR' && (
-        <Button loading={retryResume.isPending} onClick={() => retryResume.mutate(selected)}>
-          {t('retryResume')}
+      {canResolve ? (
+        <>
+          <Button
+            type="primary"
+            icon={<CheckOutlined />}
+            disabled={selected.status !== 'pending'}
+            loading={resolve.isPending}
+            style={{ minWidth: 84 }}
+            onClick={() => {
+              if (isSubmissionApproval(selected)) {
+                resolve.mutate({ approval: selected, decision: 'approved' })
+                return
+              }
+              const pause = workflowPauseType(selected)
+              if (pause === 'user_input' || pause === 'output_review') {
+                setUserInputText('')
+                const schema = parseUserInputSchema(selected)
+                const seed: Record<string, string> = {}
+                for (const field of schema) seed[field.name] = ''
+                setUserInputValues(seed)
+                setEditedOutput(workflowOutputSeed(selected))
+                setApproveOpen(true)
+                return
+              }
+              resolve.mutate({ approval: selected, decision: 'approved' })
+            }}
+          >
+            {t('common:approve')}
+          </Button>
+          <Button
+            danger
+            icon={<CloseOutlined />}
+            disabled={selected.status !== 'pending'}
+            loading={resolve.isPending}
+            style={{ minWidth: 84 }}
+            onClick={() => setRejectOpen(true)}
+          >
+            {t('common:reject')}
+          </Button>
+          {!isSubmissionApproval(selected) && runStatus(selected) === 'ERROR' && (
+            <Button loading={retryResume.isPending} onClick={() => retryResume.mutate(selected)}>
+              {t('retryResume')}
+            </Button>
+          )}
+        </>
+      ) : null}
+      {selected.source_type === 'workflow' && selected.workflow_id ? (
+        <Button
+          onClick={() => {
+            window.location.hash = `#/workflow?workflow_id=${encodeURIComponent(selected.workflow_id!)}`
+          }}
+        >
+          {t('openWorkflow')}
         </Button>
-      )}
+      ) : null}
     </Space>
   ) : null
+
   return (
     <main className="page">
       <PageHeader
@@ -571,10 +618,14 @@ export function ApprovalsPage() {
         okText={t('common:approve')}
         confirmLoading={resolve.isPending}
         okButtonProps={{
-          disabled:
-            selected != null &&
-            workflowPauseType(selected) === 'user_input' &&
-            !userInputText.trim(),
+          disabled: (() => {
+            if (!selected || workflowPauseType(selected) !== 'user_input') return false
+            const schema = parseUserInputSchema(selected)
+            if (!schema.length) return !userInputText.trim()
+            return schema.some(
+              (field) => field.required !== false && !(userInputValues[field.name] ?? '').trim()
+            )
+          })(),
         }}
         onCancel={() => {
           setApproveOpen(false)
@@ -585,10 +636,16 @@ export function ApprovalsPage() {
           if (!selected) return
           const pause = workflowPauseType(selected)
           if (pause === 'user_input') {
+            const schema = parseUserInputSchema(selected)
+            const user_input = schema.length
+              ? Object.fromEntries(
+                  schema.map((field) => [field.name, (userInputValues[field.name] ?? '').trim()])
+                )
+              : { response: userInputText.trim() }
             resolve.mutate({
               approval: selected,
               decision: 'approved',
-              resolutionData: { user_input: { response: userInputText.trim() } },
+              resolutionData: { user_input },
             })
             return
           }
@@ -609,12 +666,41 @@ export function ApprovalsPage() {
               <Typography.Paragraph type="secondary">{workflowPrompt(selected)}</Typography.Paragraph>
             ) : null}
             {workflowPauseType(selected) === 'user_input' ? (
-              <Input.TextArea
-                rows={4}
-                value={userInputText}
-                onChange={(event) => setUserInputText(event.target.value)}
-                placeholder={t('userInputPlaceholder')}
-              />
+              parseUserInputSchema(selected).length ? (
+                <Space orientation="vertical" style={{ width: '100%' }} size={10}>
+                  {parseUserInputSchema(selected).map((field) => (
+                    <div key={field.name}>
+                      <Typography.Text strong>
+                        {field.name}
+                        {field.required === false ? '' : ' *'}
+                      </Typography.Text>
+                      {field.description ? (
+                        <Typography.Paragraph type="secondary" style={{ marginBottom: 4 }}>
+                          {field.description}
+                        </Typography.Paragraph>
+                      ) : null}
+                      <Input.TextArea
+                        rows={field.field_type === 'str' || !field.field_type ? 3 : 2}
+                        value={userInputValues[field.name] ?? ''}
+                        onChange={(event) =>
+                          setUserInputValues((current) => ({
+                            ...current,
+                            [field.name]: event.target.value,
+                          }))
+                        }
+                        placeholder={field.description || field.name}
+                      />
+                    </div>
+                  ))}
+                </Space>
+              ) : (
+                <Input.TextArea
+                  rows={4}
+                  value={userInputText}
+                  onChange={(event) => setUserInputText(event.target.value)}
+                  placeholder={t('userInputPlaceholder')}
+                />
+              )
             ) : (
               <Input.TextArea
                 rows={8}

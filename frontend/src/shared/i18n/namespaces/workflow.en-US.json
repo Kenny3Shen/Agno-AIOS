@@ -66,5 +66,9 @@
   "organize": "Organize",
   "organizeHint": "Auto-layout nodes (Ctrl/Cmd+L)",
   "undoHint": "Undo (Ctrl/Cmd+Z)",
-  "redoHint": "Redo (Ctrl/Cmd+Y)"
+  "redoHint": "Redo (Ctrl/Cmd+Y)",
+  "openApproval": "Open approval",
+  "runHistory": "Recent runs",
+  "userInputSchemaPlaceholder": "user_input_schema JSON array",
+  "userInputSchemaHint": "JSON array of {name, field_type, description, required} for Approvals form"
 }

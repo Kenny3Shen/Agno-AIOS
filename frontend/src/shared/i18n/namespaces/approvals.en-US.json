@@ -25,5 +25,6 @@
   "approveUserInput": "Provide user input",
   "approveOutputReview": "Review step output",
   "userInputPlaceholder": "Type the response for the workflow step",
-  "editedOutputPlaceholder": "Edit the step output before continuing"
+  "editedOutputPlaceholder": "Edit the step output before continuing",
+  "openWorkflow": "Open workflow"
 }

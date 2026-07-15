@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { reduceNodeRunStatus } from './runStatus'
 import {
   applyAutoLayout,
   buildWorkflowCode,
@@ -28,7 +29,10 @@ const state: WorkflowState = {
   saving: false,
   running: false,
   runLog: [],
+  nodeRunStatus: {},
+  runHistory: [],
   error: null,
+  lastApprovalId: null,
   lastRunId: null,
   lastSessionId: null,
   triggers: defaultTriggers(),
@@ -178,5 +182,22 @@ describe('reparent and auto-layout', () => {
     expect(laid[0]?.position).toBeTruthy()
     expect(laid[1]?.position).toBeTruthy()
     expect(laid[0]?.position?.y).not.toEqual(laid[1]?.position?.y)
+  })
+})
+
+describe('run status reduce', () => {
+  it('marks started/completed/paused nodes', () => {
+    const steps = [
+      { id: 'a', type: 'step' as const, name: 'Triage', targetId: 'security-operations' },
+      { id: 'b', type: 'step' as const, name: 'Report', targetId: 'safe-fallback' },
+    ]
+    const map = reduceNodeRunStatus(steps, [
+      { id: '1', type: 'step.started', message: '', stepId: 'a', at: 1 },
+      { id: '2', type: 'step.completed', message: '', stepId: 'a', at: 2 },
+      { id: '3', type: 'step.started', message: '', stepId: 'b', at: 3 },
+      { id: '4', type: 'workflow.paused', message: '', stepId: 'b', approvalId: 'ap1', at: 4 },
+    ])
+    expect(map.a).toBe('ok')
+    expect(map.b).toBe('paused')
   })
 })

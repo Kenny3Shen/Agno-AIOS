@@ -1,5 +1,16 @@
 # 下一步工作
 
+## 已完成：Workflow PR6（运行态可视化 + Approvals 闭环 + schema 表单）
+
+- 画布节点 run 状态：`running / ok / error / paused`（SSE 归约 + 脉冲高亮）。
+- SSE：`workflow.paused` 附带 `step_id` / `approval_id` / `pause_type`；stream 将 pause 视为终端。
+- Studio：最近 runs 历史、Open Trace / Open approval 深链；`#/workflow?workflow_id=` 回跳。
+- Approvals：`user_input_schema` 动态表单 → `resolution_data.user_input`；output_review 编辑；Open workflow。
+- Inspector：Step 可配置 `user_input_schema` JSON。
+
+相关入口：`runStatus.ts`、`WorkflowCanvas`/`FlowNode`/`Page`、`ApprovalsPage`、`workflow_run_runtime.py`
+
+
 ## 已完成：Workflow Studio 编辑深化（reparent / history / layout / HITL 表单）
 
 - 画布：**拖入容器 reparent**（节点拖到 Parallel/Condition/Loop/Router 上嵌套）；调色板 drop 到容器同理。

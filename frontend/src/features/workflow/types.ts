@@ -1,3 +1,10 @@
+export type UserInputSchemaField = {
+  name: string
+  field_type?: string
+  description?: string
+  required?: boolean
+}
+
 export type WorkflowNodeType =
   | 'step'
   | 'parallel'
@@ -29,6 +36,8 @@ export type WorkflowNode = {
   confirmationMessage?: string
   requiresUserInput?: boolean
   userInputMessage?: string
+  /** Agno-style field schema for user_input HITL */
+  userInputSchema?: UserInputSchemaField[]
   requiresOutputReview?: boolean
   outputReviewMessage?: string
   /** canvas layout */
@@ -56,6 +65,7 @@ export type WorkflowDefinitionNode = {
   confirmation_message?: string
   requires_user_input?: boolean
   user_input_message?: string
+  user_input_schema?: UserInputSchemaField[]
   requires_output_review?: boolean
   output_review_message?: string
   position?: { x: number; y: number }
@@ -120,9 +130,13 @@ export type WorkflowState = {
   saving: boolean
   running: boolean
   runLog: WorkflowRunLogItem[]
+  /** Per-node run visualization: running | ok | error | paused */
+  nodeRunStatus: Record<string, WorkflowNodeRunStatus>
+  runHistory: WorkflowRunHistoryItem[]
   error: string | null
   lastRunId: string | null
   lastSessionId: string | null
+  lastApprovalId: string | null
 }
 
 export type WorkflowRunEventType =
@@ -145,11 +159,29 @@ export type WorkflowRunEventType =
   | 'router.started'
   | 'router.completed'
 
+export type WorkflowNodeRunStatus = 'running' | 'ok' | 'error' | 'paused'
+
 export interface WorkflowRunLogItem {
   id: string
   type: WorkflowRunEventType | string
   message: string
   stepName?: string | null
+  stepId?: string | null
   content?: string | null
+  approvalId?: string | null
+  pauseType?: string | null
+  runId?: string | null
+  sessionId?: string | null
   at: number
+}
+
+export interface WorkflowRunHistoryItem {
+  id: string
+  runId: string
+  sessionId: string
+  status: 'running' | 'completed' | 'failed' | 'cancelled' | 'paused'
+  startedAt: number
+  finishedAt?: number
+  approvalId?: string | null
+  summary?: string
 }

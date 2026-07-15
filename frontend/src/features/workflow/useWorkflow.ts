@@ -11,7 +11,14 @@ import {
   streamWorkflowRun,
   updateWorkflow,
 } from './api'
-import type { WorkflowNode, WorkflowNodeType, WorkflowState, WorkflowTriggers } from './types'
+import type {
+  WorkflowNode,
+  WorkflowNodeType,
+  WorkflowRunHistoryItem,
+  WorkflowState,
+  WorkflowTriggers,
+} from './types'
+import { historyStatusFromEvent, reduceNodeRunStatus } from './runStatus'
 import {
   addChildToNode,
   applyAutoLayout,
@@ -56,9 +63,12 @@ const initialState = (): WorkflowState => ({
   saving: false,
   running: false,
   runLog: [],
+  nodeRunStatus: {},
+  runHistory: [],
   error: null,
   lastRunId: null,
   lastSessionId: null,
+  lastApprovalId: null,
 })
 
 const snapOf = (state: Pick<WorkflowState, 'steps' | 'selectedId' | 'selectedIds'>): HistorySnap => ({
@@ -493,24 +503,73 @@ export function useWorkflow() {
     const controller = new AbortController()
     abortRef.current = controller
     const sessionId = crypto.randomUUID()
+    const historyId = crypto.randomUUID()
     setState((current) => ({
       ...current,
       running: true,
       error: null,
       runLog: [],
+      nodeRunStatus: {},
       sessionId,
       lastSessionId: sessionId,
       lastRunId: null,
+      lastApprovalId: null,
+      runHistory: [
+        {
+          id: historyId,
+          runId: '',
+          sessionId,
+          status: 'running' as const,
+          startedAt: Date.now(),
+        } satisfies WorkflowRunHistoryItem,
+        ...current.runHistory,
+      ].slice(0, 20),
     }))
     try {
       await streamWorkflowRun(
         state.workflowId,
         { input: state.input, session_id: sessionId, model_id: state.modelId },
         (item) => {
-          setState((current) => ({
-            ...current,
-            runLog: [...current.runLog, item],
-          }))
+          setState((current) => {
+            const runLog = [...current.runLog, item]
+            const nodeRunStatus = reduceNodeRunStatus(current.steps, runLog)
+            const histStatus = historyStatusFromEvent(item.type)
+            let runHistory = current.runHistory
+            if (histStatus || item.runId || item.approvalId) {
+              runHistory = current.runHistory.map((entry) => {
+                if (entry.id !== historyId) return entry
+                return {
+                  ...entry,
+                  runId: item.runId || entry.runId,
+                  sessionId: item.sessionId || entry.sessionId,
+                  status: histStatus ?? entry.status,
+                  finishedAt:
+                    histStatus && histStatus !== 'running'
+                      ? Date.now()
+                      : entry.finishedAt,
+                  approvalId: item.approvalId ?? entry.approvalId,
+                  summary: item.message || entry.summary,
+                }
+              })
+            }
+            return {
+              ...current,
+              runLog,
+              nodeRunStatus,
+              runHistory,
+              lastRunId: item.runId || current.lastRunId,
+              lastSessionId: item.sessionId || current.lastSessionId,
+              lastApprovalId: item.approvalId ?? current.lastApprovalId,
+              // stream ends on pause; treat as not actively streaming
+              running:
+                item.type === 'workflow.paused' ||
+                item.type === 'workflow.completed' ||
+                item.type === 'workflow.failed' ||
+                item.type === 'workflow.cancelled'
+                  ? false
+                  : current.running,
+            }
+          })
         },
         controller.signal
       )
@@ -530,7 +589,15 @@ export function useWorkflow() {
 
   const stop = () => {
     abortRef.current?.abort()
-    setState((current) => ({ ...current, running: false }))
+    setState((current) => ({
+      ...current,
+      running: false,
+      runHistory: current.runHistory.map((entry, index) =>
+        index === 0 && entry.status === 'running'
+          ? { ...entry, status: 'cancelled', finishedAt: Date.now() }
+          : entry
+      ),
+    }))
   }
 
   const selected = useMemo(

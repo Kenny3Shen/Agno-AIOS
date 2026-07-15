@@ -2007,10 +2007,69 @@ html.dark .workflow-studio {
     var(--wf-shadow);
 }
 
+
+.wf-flow-node__run-pill {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-left: auto;
+}
+
+.wf-flow-node__run-pill.is-running {
+  color: #1677ff;
+  background: color-mix(in srgb, #1677ff 16%, transparent);
+}
+
+.wf-flow-node__run-pill.is-ok {
+  color: #389e0d;
+  background: color-mix(in srgb, #389e0d 16%, transparent);
+}
+
+.wf-flow-node__run-pill.is-error {
+  color: #cf1322;
+  background: color-mix(in srgb, #cf1322 16%, transparent);
+}
+
+.wf-flow-node__run-pill.is-paused {
+  color: #d48806;
+  background: color-mix(in srgb, #d48806 18%, transparent);
+}
+
+.wf-flow-node.is-run-running {
+  box-shadow: 0 0 0 2px color-mix(in srgb, #1677ff 45%, transparent), var(--wf-shadow-soft);
+  animation: wf-node-pulse 1.4s ease-in-out infinite;
+}
+
+.wf-flow-node.is-run-ok {
+  box-shadow: 0 0 0 2px color-mix(in srgb, #389e0d 40%, transparent), var(--wf-shadow-soft);
+}
+
+.wf-flow-node.is-run-error {
+  box-shadow: 0 0 0 2px color-mix(in srgb, #cf1322 45%, transparent), var(--wf-shadow-soft);
+}
+
+.wf-flow-node.is-run-paused {
+  box-shadow: 0 0 0 2px color-mix(in srgb, #d48806 50%, transparent), var(--wf-shadow);
+}
+
+@keyframes wf-node-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, #1677ff 35%, transparent), var(--wf-shadow-soft);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, #1677ff 55%, transparent), var(--wf-shadow);
+  }
+}
+
 .wf-flow-node__badge {
   height: 28px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 0 12px;
   font-size: 12px;
   font-weight: 700;

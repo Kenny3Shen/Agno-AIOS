@@ -1,6 +1,7 @@
 import type {
   WorkflowDefinition,
   WorkflowDefinitionNode,
+  UserInputSchemaField,
   WorkflowNode,
   WorkflowNodeType,
   WorkflowRecord,
@@ -545,6 +546,7 @@ const toDefinitionNode = (node: WorkflowNode): WorkflowDefinitionNode => {
   if (node.requiresUserInput) {
     step.requires_user_input = true
     if (node.userInputMessage) step.user_input_message = node.userInputMessage
+    if (node.userInputSchema?.length) step.user_input_schema = node.userInputSchema
   }
   if (node.requiresOutputReview) {
     step.requires_output_review = true
@@ -629,6 +631,9 @@ const fromDefinitionNode = (node: WorkflowDefinitionNode): WorkflowNode => {
     confirmationMessage: node.confirmation_message || '',
     requiresUserInput: Boolean(node.requires_user_input),
     userInputMessage: node.user_input_message || '',
+    userInputSchema: Array.isArray(node.user_input_schema)
+      ? (node.user_input_schema as UserInputSchemaField[])
+      : undefined,
     requiresOutputReview: Boolean(node.requires_output_review),
     outputReviewMessage: node.output_review_message || '',
     ...basePos,

@@ -67,6 +67,7 @@ type Props = {
   onCopy: () => void
   onPaste: () => void
   onOrganize: () => void
+  nodeRunStatus?: Record<string, 'running' | 'ok' | 'error' | 'paused'>
   emptyHint?: string
 }
 
@@ -78,7 +79,8 @@ function buildGraph(
   prevNodes: Node[],
   animateNew: boolean,
   dropTargetId: string | null,
-  onEmptySlot: (parentId: string, slotKey: string) => void
+  onEmptySlot: (parentId: string, slotKey: string) => void,
+  nodeRunStatus: Record<string, 'running' | 'ok' | 'error' | 'paused'> = {}
 ): FlowGraph {
   const layout = layoutCanvas(steps)
   const prevById = new Map(prevNodes.map((item) => [item.id, item]))
@@ -113,6 +115,7 @@ function buildGraph(
         nodeType: item.type,
         subtitle,
         hitl,
+        runStatus: nodeRunStatus[item.id] ?? null,
         emptySlots,
         dropHighlight: dropTargetId === item.id,
         onEmptySlot: (slotKey: string) => onEmptySlot(item.id, slotKey),
@@ -165,6 +168,7 @@ function CanvasInner({
   onCopy,
   onPaste,
   onOrganize,
+  nodeRunStatus = {},
   emptyHint,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -220,12 +224,13 @@ function CanvasInner({
         prev.nodes,
         animateNew,
         dropTargetId,
-        (parentId, slotKey) => emptySlotRef.current(parentId, slotKey)
+        (parentId, slotKey) => emptySlotRef.current(parentId, slotKey),
+        nodeRunStatus
       )
       bootstrappedRef.current = true
       return next
     })
-  }, [structureKey, selectionKey, steps, selectedIds, selectedId, dropTargetId])
+  }, [structureKey, selectionKey, steps, selectedIds, selectedId, dropTargetId, nodeRunStatus])
 
   useEffect(() => {
     if (!graph.nodes.some((node) => node.className?.includes('wf-node-enter'))) return

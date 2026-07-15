@@ -37,7 +37,7 @@ import { WorkflowCanvas, paletteDragStart } from './WorkflowCanvas'
 import type { WorkflowNodeType } from './types'
 import { buildWorkflowCode } from './utils'
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 
 const PALETTE: Array<{
   type: WorkflowNodeType
@@ -61,6 +61,19 @@ export function WorkflowPage() {
   const models = workflow.modelsQuery.data?.models ?? []
   const saved = workflow.workflowsQuery.data ?? []
   const versions = workflow.versionsQuery.data ?? []
+
+  const savedList = workflow.workflowsQuery.data
+  const currentWorkflowId = workflow.state.workflowId
+  // Deep link: #/workflow?workflow_id=...
+  useEffect(() => {
+    const raw = window.location.hash.split('?')[1] ?? ''
+    const id = new URLSearchParams(raw).get('workflow_id')
+    if (!id || currentWorkflowId === id) return
+    const known = (savedList ?? []).some((item) => item.id === id)
+    if (known) workflow.load(id)
+    // Intentionally omit workflow.load identity; list + current id gate loads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedList, currentWorkflowId])
 
   const paletteLabel = (type: WorkflowNodeType) => {
     const map: Record<WorkflowNodeType, string> = {
@@ -257,6 +270,7 @@ export function WorkflowPage() {
             onCopy={workflow.copySelected}
             onPaste={workflow.pasteClipboard}
             onOrganize={workflow.organizeLayout}
+            nodeRunStatus={workflow.state.nodeRunStatus}
             emptyHint={t('canvasEmpty')}
           />
         </section>
@@ -343,14 +357,54 @@ export function WorkflowPage() {
                       <span>{t('requiresUserInput')}</span>
                     </div>
                     {step.requiresUserInput ? (
-                      <Input.TextArea
-                        value={step.userInputMessage || ''}
-                        onChange={(e) =>
-                          workflow.update({ ...step, userInputMessage: e.target.value })
-                        }
-                        placeholder={t('userInputMessagePlaceholder')}
-                        rows={2}
-                      />
+                      <>
+                        <Input.TextArea
+                          value={step.userInputMessage || ''}
+                          onChange={(e) =>
+                            workflow.update({ ...step, userInputMessage: e.target.value })
+                          }
+                          placeholder={t('userInputMessagePlaceholder')}
+                          rows={2}
+                        />
+                        <Input.TextArea
+                          style={{ marginTop: 8 }}
+                          value={JSON.stringify(
+                            step.userInputSchema ?? [
+                              {
+                                name: 'response',
+                                field_type: 'str',
+                                description: 'User response',
+                                required: true,
+                              },
+                            ],
+                            null,
+                            2
+                          )}
+                          onChange={(e) => {
+                            try {
+                              const parsed = JSON.parse(e.target.value) as unknown
+                              if (Array.isArray(parsed)) {
+                                workflow.update({
+                                  ...step,
+                                  userInputSchema: parsed as Array<{
+                                    name: string
+                                    field_type?: string
+                                    description?: string
+                                    required?: boolean
+                                  }>,
+                                })
+                              }
+                            } catch {
+                              // ignore partial JSON while typing
+                            }
+                          }}
+                          placeholder={t('userInputSchemaPlaceholder')}
+                          rows={5}
+                        />
+                        <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                          {t('userInputSchemaHint')}
+                        </Typography.Text>
+                      </>
                     ) : null}
                     <div className="workflow-inspector__switch">
                       <Switch
@@ -502,23 +556,105 @@ export function WorkflowPage() {
                         rows={3}
                         style={{ marginBottom: 8 }}
                       />
-                      {workflow.state.lastSessionId ? (
-                        <Button
-                          type="link"
-                          size="small"
-                          style={{ paddingInline: 0 }}
-                          onClick={() =>
-                            void routerNav.navigate({
-                              to: '/trace',
-                              search: {
-                                session_id: workflow.state.lastSessionId ?? undefined,
-                                selected_session: workflow.state.lastSessionId ?? undefined,
-                              },
-                            })
-                          }
-                        >
-                          {t('openTrace')}
-                        </Button>
+                      <Space size={8} wrap style={{ marginBottom: 8 }}>
+                        {workflow.state.lastSessionId ? (
+                          <Button
+                            type="link"
+                            size="small"
+                            style={{ paddingInline: 0 }}
+                            onClick={() =>
+                              void routerNav.navigate({
+                                to: '/trace',
+                                search: {
+                                  session_id: workflow.state.lastSessionId ?? undefined,
+                                  run_id: workflow.state.lastRunId ?? undefined,
+                                  selected_session: workflow.state.lastSessionId ?? undefined,
+                                  trace: workflow.state.lastRunId ?? undefined,
+                                },
+                              })
+                            }
+                          >
+                            {t('openTrace')}
+                          </Button>
+                        ) : null}
+                        {workflow.state.lastApprovalId ? (
+                          <Button
+                            type="link"
+                            size="small"
+                            style={{ paddingInline: 0 }}
+                            onClick={() => {
+                              window.location.hash = `#/approvals?approval_id=${encodeURIComponent(workflow.state.lastApprovalId!)}`
+                            }}
+                          >
+                            {t('openApproval')}
+                          </Button>
+                        ) : null}
+                      </Space>
+                      {workflow.state.runHistory.length ? (
+                        <div style={{ marginBottom: 10 }}>
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            {t('runHistory')}
+                          </Typography.Text>
+                          <List
+                            size="small"
+                            dataSource={workflow.state.runHistory.slice(0, 8)}
+                            renderItem={(item) => (
+                              <List.Item style={{ padding: '4px 0' }}>
+                                <Space size={4} wrap>
+                                  <Tag
+                                    color={
+                                      item.status === 'completed'
+                                        ? 'success'
+                                        : item.status === 'failed' || item.status === 'cancelled'
+                                          ? 'error'
+                                          : item.status === 'paused'
+                                            ? 'warning'
+                                            : 'processing'
+                                    }
+                                    style={{ margin: 0 }}
+                                  >
+                                    {item.status}
+                                  </Tag>
+                                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                    {item.summary || item.runId || item.sessionId}
+                                  </Typography.Text>
+                                  {item.sessionId ? (
+                                    <Button
+                                      type="link"
+                                      size="small"
+                                      style={{ paddingInline: 0, fontSize: 12 }}
+                                      onClick={() =>
+                                        void routerNav.navigate({
+                                          to: '/trace',
+                                          search: {
+                                            session_id: item.sessionId,
+                                            run_id: item.runId || undefined,
+                                            selected_session: item.sessionId,
+                                            trace: item.runId || undefined,
+                                          },
+                                        })
+                                      }
+                                    >
+                                      Trace
+                                    </Button>
+                                  ) : null}
+                                  {item.approvalId ? (
+                                    <Button
+                                      type="link"
+                                      size="small"
+                                      style={{ paddingInline: 0, fontSize: 12 }}
+                                      onClick={() => {
+                                        window.location.hash = `#/approvals?approval_id=${encodeURIComponent(item.approvalId!)}`
+                                      }}
+                                    >
+                                      {t('openApproval')}
+                                    </Button>
+                                  ) : null}
+                                </Space>
+                              </List.Item>
+                            )}
+                          />
+                        </div>
                       ) : null}
                       {workflow.state.runLog.length ? (
                         <List
@@ -527,10 +663,35 @@ export function WorkflowPage() {
                           renderItem={(item) => (
                             <List.Item style={{ padding: '4px 0' }}>
                               <Space size={4} wrap>
-                                <Tag style={{ margin: 0 }}>{item.type}</Tag>
+                                <Tag
+                                  color={
+                                    item.type === 'workflow.paused'
+                                      ? 'warning'
+                                      : item.type.includes('error') || item.type.includes('failed')
+                                        ? 'error'
+                                        : item.type.includes('completed')
+                                          ? 'success'
+                                          : 'default'
+                                  }
+                                  style={{ margin: 0 }}
+                                >
+                                  {item.type}
+                                </Tag>
                                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                                   {item.stepName || item.message}
                                 </Typography.Text>
+                                {item.approvalId ? (
+                                  <Button
+                                    type="link"
+                                    size="small"
+                                    style={{ paddingInline: 0, fontSize: 12 }}
+                                    onClick={() => {
+                                      window.location.hash = `#/approvals?approval_id=${encodeURIComponent(item.approvalId!)}`
+                                    }}
+                                  >
+                                    {t('openApproval')}
+                                  </Button>
+                                ) : null}
                               </Space>
                             </List.Item>
                           )}

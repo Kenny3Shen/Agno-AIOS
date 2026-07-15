@@ -64,6 +64,28 @@ def _base_payload(
     }
 
 
+
+def _extract_user_input_schema(event: Any) -> list[Any] | None:
+    """Best-effort pull of user_input_schema from pause event / requirements."""
+    direct = event_value(event, "user_input_schema")
+    if isinstance(direct, list) and direct:
+        return list(direct)
+    requirements = event_value(event, "step_requirements") or event_value(
+        event, "requirements"
+    )
+    if isinstance(requirements, list):
+        for item in requirements:
+            if isinstance(item, dict):
+                schema = item.get("user_input_schema") or item.get("schema")
+                if isinstance(schema, list) and schema:
+                    return list(schema)
+            else:
+                schema = getattr(item, "user_input_schema", None)
+                if isinstance(schema, list) and schema:
+                    return list(schema)
+    return None
+
+
 async def _create_workflow_step_approval(
     *,
     workflow_id: str,
@@ -91,6 +113,15 @@ async def _create_workflow_step_approval(
         pause_type = "confirmation"
         approval_type = "confirmation"
     message = str(event_value(event, "content") or "") or f"Workflow step HITL: {step_name}"
+    schema = event_value(event, "user_input_schema")
+    if not isinstance(schema, list) or not schema:
+        schema = _extract_user_input_schema(event)
+    output_seed = (
+        event_value(event, "output")
+        or event_value(event, "content")
+        or event_value(event, "previous_step_content")
+        or event_value(event, "step_output")
+    )
     approval_id = str(uuid4())
     now = int(__import__("time").time())
     payload = {
@@ -107,10 +138,9 @@ async def _create_workflow_step_approval(
             "step_name": step_name,
             "message": message,
             "pause_type": pause_type,
-            "output": event_value(event, "output")
-            or event_value(event, "content")
-            or event_value(event, "previous_step_content"),
-            "user_input_schema": event_value(event, "user_input_schema"),
+            "output": output_seed,
+            "user_input_schema": schema,
+            "workflow_id": workflow_id,
         },
         "workflow_id": workflow_id,
         "user_id": user_id,
@@ -450,7 +480,9 @@ async def stream_workflow_run(
                         "workflow_id": workflow_id,
                         "run_id": run_id_value,
                         "session_id": session_value,
+                        "step_id": str(event_value(event, "step_id") or "") or None,
                         "step_name": str(event_value(event, "step_name", "") or "") or None,
+                        "pause_type": "confirmation",
                         "approval_id": approval_id,
                         "message": "Router paused for HITL selection — resolve in Approvals",
                     },
@@ -505,12 +537,18 @@ async def stream_workflow_run(
                         "workflow_id": workflow_id,
                         "run_id": run_id_value,
                         "session_id": session_value,
+                        "step_id": str(event_value(event, "step_id") or "") or None,
                         "step_name": str(
-                            event_value(event, "paused_step_name", "") or ""
+                            event_value(event, "paused_step_name", "")
+                            or event_value(event, "step_name", "")
+                            or ""
                         )
                         or None,
+                        "pause_type": str(
+                            event_value(event, "pause_kind") or "confirmation"
+                        ),
                         "approval_id": approval_id,
-                        "message": "Workflow paused for step confirmation — resolve in Approvals",
+                        "message": "Workflow paused for step HITL — resolve in Approvals",
                     },
                 )
                 return

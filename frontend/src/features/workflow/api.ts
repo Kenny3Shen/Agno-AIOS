@@ -297,11 +297,44 @@ export const streamWorkflowRun = async (
       type,
       message,
       stepName,
+      stepId:
+        parsed.step_id != null
+          ? String(parsed.step_id)
+          : parsed.stepId != null
+            ? String(parsed.stepId)
+            : null,
       content,
+      approvalId:
+        parsed.approval_id != null
+          ? String(parsed.approval_id)
+          : parsed.approvalId != null
+            ? String(parsed.approvalId)
+            : null,
+      pauseType:
+        parsed.pause_type != null
+          ? String(parsed.pause_type)
+          : parsed.pauseType != null
+            ? String(parsed.pauseType)
+            : null,
+      runId:
+        parsed.run_id != null
+          ? String(parsed.run_id)
+          : parsed.runId != null
+            ? String(parsed.runId)
+            : null,
+      sessionId:
+        parsed.session_id != null
+          ? String(parsed.session_id)
+          : parsed.sessionId != null
+            ? String(parsed.sessionId)
+            : null,
       at: Date.now(),
     })
     terminal ||=
-      type === 'workflow.completed' || type === 'workflow.failed' || type === 'workflow.cancelled'
+      type === 'workflow.completed' ||
+      type === 'workflow.failed' ||
+      type === 'workflow.cancelled' ||
+      type === 'workflow.paused'
   })
   if (!terminal) throw new Error('Workflow stream ended before a terminal event')
 }

@@ -66,5 +66,9 @@
   "organize": "整理布局",
   "organizeHint": "自动排布节点（Ctrl/Cmd+L）",
   "undoHint": "撤销（Ctrl/Cmd+Z）",
-  "redoHint": "重做（Ctrl/Cmd+Y）"
+  "redoHint": "重做（Ctrl/Cmd+Y）",
+  "openApproval": "打开审批",
+  "runHistory": "最近运行",
+  "userInputSchemaPlaceholder": "user_input_schema JSON 数组",
+  "userInputSchemaHint": "字段数组 {name, field_type, description, required}，用于审批中心动态表单"
 }

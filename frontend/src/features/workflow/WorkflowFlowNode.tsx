@@ -1,6 +1,6 @@
 import { memo, type CSSProperties, type MouseEvent } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import type { WorkflowNodeType } from './types'
+import type { WorkflowNodeRunStatus, WorkflowNodeType } from './types'
 import type { EmptySlot } from './utils'
 
 export type WorkflowFlowNodeData = {
@@ -8,6 +8,7 @@ export type WorkflowFlowNodeData = {
   nodeType: WorkflowNodeType
   subtitle?: string
   hitl?: boolean
+  runStatus?: WorkflowNodeRunStatus | null
   emptySlots?: EmptySlot[]
   dropHighlight?: boolean
   onEmptySlot?: (slotKey: string) => void
@@ -25,6 +26,13 @@ const TYPE_META: Record<
   workflow_ref: { color: '#389e0d', bg: 'rgba(82,196,26,0.1)', icon: 'W' },
 }
 
+const RUN_LABEL: Record<WorkflowNodeRunStatus, string> = {
+  running: 'RUNNING',
+  ok: 'OK',
+  error: 'ERROR',
+  paused: 'PAUSED',
+}
+
 function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
   const payload = data as unknown as WorkflowFlowNodeData
   const meta = TYPE_META[payload.nodeType] ?? TYPE_META.step
@@ -32,6 +40,7 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
     '--wf-node-color': meta.color,
     '--wf-node-bg': meta.bg,
   } as CSSProperties
+  const runClass = payload.runStatus ? `is-run-${payload.runStatus}` : ''
 
   const onSlotClick = (event: MouseEvent, key: string) => {
     event.stopPropagation()
@@ -41,12 +50,17 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
 
   return (
     <div
-      className={`wf-flow-node ${selected ? 'is-selected' : ''} ${payload.dropHighlight ? 'is-drop-target' : ''}`}
+      className={`wf-flow-node ${selected ? 'is-selected' : ''} ${payload.dropHighlight ? 'is-drop-target' : ''} ${runClass}`}
       style={style}
     >
       <Handle type="target" position={Position.Top} className="wf-handle" />
       <div className="wf-flow-node__badge" aria-hidden>
         {meta.icon}
+        {payload.runStatus ? (
+          <span className={`wf-flow-node__run-pill is-${payload.runStatus}`}>
+            {RUN_LABEL[payload.runStatus]}
+          </span>
+        ) : null}
       </div>
       <div className="wf-flow-node__body">
         <div className="wf-flow-node__type">{payload.nodeType}</div>
