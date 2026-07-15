@@ -19,9 +19,11 @@ from api.services.workflow_service import (
     create_workflow_for_actor,
     delete_workflow_for_actor,
     executor_catalog,
+    get_published_definition,
     get_workflow_for_actor,
     list_versions_for_actor,
     list_workflows_for_actor,
+    publish_workflow_for_actor,
     restore_version_for_actor,
     update_workflow_for_actor,
     verify_webhook_secret,
@@ -201,6 +203,36 @@ async def restore_workflow_version(
     return row
 
 
+@router.post("/{workflow_id}/publish")
+async def publish_workflow(
+    workflow_id: str,
+    request: Request,
+    user: User = Depends(require_scope("workflows:write")),
+):
+    """Promote current draft definition to the published revision used by webhook/cron."""
+    try:
+        row = await publish_workflow_for_actor(user, workflow_id)
+    except WorkflowDefinitionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if row is None:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    ctx = audit_request_context(request)
+    await record_audit_event_async(
+        actor=user,
+        action="workflow.publish",
+        resource_type="workflow",
+        resource_id=workflow_id,
+        status="success",
+        metadata={
+            "published_version": row.get("published_version"),
+            "version": row.get("version"),
+        },
+        ip_address=ctx["ip_address"] if ctx else "",
+        user_agent=ctx["user_agent"] if ctx else "",
+    )
+    return row
+
+
 @router.post("/{workflow_id}/hooks/webhook")
 async def webhook_trigger_workflow(
     workflow_id: str,
@@ -215,9 +247,12 @@ async def webhook_trigger_workflow(
     header_secret = request.headers.get("x-workflow-secret")
     if not verify_webhook_secret(row, secret or header_secret):
         raise HTTPException(status_code=401, detail="Invalid webhook secret")
-    definition = row.get("definition")
-    if not isinstance(definition, dict):
-        raise HTTPException(status_code=422, detail="Workflow definition is invalid")
+    definition = get_published_definition(row)
+    if definition is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Workflow has no published revision; publish before triggering",
+        )
     input_text = (body.input if body else "") or "webhook trigger"
     session_id = str(uuid4())
     run_id = str(uuid4())

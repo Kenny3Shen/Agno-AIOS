@@ -11,7 +11,7 @@ import type {
 
 export const defaultTriggers = (): WorkflowTriggers => ({
   webhook: { enabled: false, secret: '' },
-  cron: { enabled: false, expression: '' },
+  cron: { enabled: false, expression: '', last_run_at: 0 },
 })
 
 export const createNode = (type: WorkflowNodeType = 'step'): WorkflowNode => {

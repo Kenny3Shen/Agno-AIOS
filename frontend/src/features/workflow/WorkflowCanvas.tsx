@@ -355,11 +355,20 @@ function CanvasInner({
 
   const onConnect: OnConnect = useCallback(
     (connection) => {
-      if (connection.source && connection.target) {
+      if (connection.source && connection.target && connection.source !== connection.target) {
         onConnectSequence(connection.source, connection.target)
       }
     },
     [onConnectSequence]
+  )
+
+  const isValidConnection = useCallback(
+    (connection: { source: string | null; target: string | null }) => {
+      if (!connection.source || !connection.target) return false
+      if (connection.source === connection.target) return false
+      return true
+    },
+    []
   )
 
   const onDragOver = useCallback((event: DragEvent) => {
@@ -499,6 +508,7 @@ function CanvasInner({
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
+        isValidConnection={isValidConnection}
         nodesDraggable
         nodesConnectable
         elementsSelectable

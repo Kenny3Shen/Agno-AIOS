@@ -183,11 +183,15 @@ const normalizeWorkflow = (value: unknown): WorkflowRecord | null => {
         cron: {
           enabled: Boolean(cron.enabled),
           expression: String(cron.expression ?? ''),
+          last_run_at: Number(cron.last_run_at ?? 0) || 0,
         },
       }
     })(),
     enabled: row.enabled !== false,
     version: Number(row.version ?? 1),
+    published_version: row.published_version != null ? Number(row.published_version) : null,
+    published_at: row.published_at != null ? Number(row.published_at) : null,
+    has_published: Boolean(row.has_published),
     created_at: Number(row.created_at ?? 0),
     updated_at: Number(row.updated_at ?? 0),
   }
@@ -231,6 +235,15 @@ export const updateWorkflow = async (
 ) => {
   const row = normalizeWorkflow(
     await requestJson<unknown>(`/workflows/${encodeURIComponent(id)}`, jsonInit('PATCH', body))
+  )
+  if (!row) throw new Error('Invalid workflow payload')
+  return row
+}
+
+
+export const publishWorkflow = async (id: string) => {
+  const row = normalizeWorkflow(
+    await requestJson<unknown>(`/workflows/${encodeURIComponent(id)}/publish`, jsonInit('POST', {}))
   )
   if (!row) throw new Error('Invalid workflow payload')
   return row

@@ -29,6 +29,7 @@ import {
   UndoOutlined,
   RedoOutlined,
   ApartmentOutlined,
+  CloudUploadOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useRouter } from '@tanstack/react-router'
@@ -152,6 +153,16 @@ export function WorkflowPage() {
             {t('save')}
             {workflow.state.dirty ? ' *' : ''}
           </Button>
+          <Tooltip title={t('publishHint')}>
+            <Button
+              icon={<CloudUploadOutlined />}
+              loading={workflow.state.saving}
+              disabled={!workflow.state.workflowId || workflow.state.dirty}
+              onClick={() => void workflow.publish()}
+            >
+              {t('publish')}
+            </Button>
+          </Tooltip>
           <Button
             icon={<PlayCircleOutlined />}
             disabled={workflow.state.running}
@@ -746,6 +757,39 @@ export function WorkflowPage() {
                           placeholder={t('webhookSecret')}
                         />
                       ) : null}
+                      <div className="workflow-inspector__switch" style={{ marginTop: 12 }}>
+                        <Switch
+                          size="small"
+                          checked={workflow.state.triggers.cron.enabled}
+                          onChange={(enabled) =>
+                            workflow.patchTriggers({
+                              ...workflow.state.triggers,
+                              cron: { ...workflow.state.triggers.cron, enabled },
+                            })
+                          }
+                        />
+                        <span>{t('cronTrigger')}</span>
+                      </div>
+                      {workflow.state.triggers.cron.enabled ? (
+                        <Input
+                          size="small"
+                          style={{ marginTop: 4 }}
+                          value={workflow.state.triggers.cron.expression}
+                          onChange={(e) =>
+                            workflow.patchTriggers({
+                              ...workflow.state.triggers,
+                              cron: {
+                                ...workflow.state.triggers.cron,
+                                expression: e.target.value,
+                              },
+                            })
+                          }
+                          placeholder={t('cronExpression')}
+                        />
+                      ) : null}
+                      <Typography.Paragraph type="secondary" style={{ fontSize: 11, marginTop: 8 }}>
+                        {t('publishTriggersHint')}
+                      </Typography.Paragraph>
                     </>
                   ),
                 },

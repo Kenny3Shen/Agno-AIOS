@@ -50,7 +50,7 @@
   "triggers": "Triggers",
   "webhookTrigger": "Webhook trigger",
   "webhookSecret": "Webhook secret",
-  "cronTrigger": "Cron trigger (config)",
+  "cronTrigger": "Cron trigger",
   "selectorCel": "Router CEL selector (returns choice name)",
   "routerChoicesHint": "Router seeds path_a / path_b; names must match the CEL result.",
   "nestedWorkflowPlaceholder": "Select a saved nested workflow",
@@ -70,5 +70,9 @@
   "openApproval": "Open approval",
   "runHistory": "Recent runs",
   "userInputSchemaPlaceholder": "user_input_schema JSON array",
-  "userInputSchemaHint": "JSON array of {name, field_type, description, required} for Approvals form"
+  "userInputSchemaHint": "JSON array of {name, field_type, description, required} for Approvals form",
+  "publish": "Publish",
+  "publishHint": "Promote draft to the live revision used by webhook/cron",
+  "publishTriggersHint": "Webhook and cron always run the published revision. Save draft, then Publish.",
+  "cronExpression": "Cron expression (e.g. */15 * * * *)"
 }

@@ -40,6 +40,7 @@ def _normalize_triggers(raw: object | None) -> dict[str, Any]:
         "cron": {
             "enabled": bool(cron.get("enabled")),
             "expression": str(cron.get("expression") or "").strip(),
+            "last_run_at": float(cron.get("last_run_at") or 0) or 0,
         },
     }
 
@@ -57,6 +58,16 @@ def _row_payload(row: dict[str, Any]) -> dict[str, Any]:
         "triggers": _normalize_triggers(row.get("triggers")),
         "enabled": bool(row.get("enabled", True)),
         "version": int(row.get("version") or 1),
+        "published_version": (
+            int(row["published_version"])
+            if row.get("published_version") is not None
+            else None
+        ),
+        "published_at": (
+            int(row["published_at"]) if row.get("published_at") is not None else None
+        ),
+        "has_published": isinstance(row.get("published_definition"), dict)
+        and bool(row.get("published_definition")),
         "created_at": int(row.get("created_at") or 0),
         "updated_at": int(row.get("updated_at") or 0),
     }
@@ -320,3 +331,55 @@ def verify_webhook_secret(row: dict[str, Any], secret: str | None) -> bool:
     if not expected:
         return False
     return secrets.compare_digest(expected, str(secret or ""))
+
+
+
+def get_published_definition(row: dict[str, Any]) -> dict[str, Any] | None:
+    """Return published definition only (triggers use this for webhook/cron)."""
+    published = row.get("published_definition")
+    if isinstance(published, dict) and published.get("steps") is not None:
+        return published
+    return None
+
+
+async def publish_workflow_for_actor(actor: ActorLike, workflow_id: str) -> dict[str, Any] | None:
+    """Snapshot current draft definition as the live published revision."""
+    existing = await get_workflow_for_actor(actor, workflow_id)
+    if existing is None:
+        return None
+    row = await workflow_store.get_workflow(workflow_id)
+    if row is None:
+        return None
+    definition = row.get("definition")
+    if not isinstance(definition, dict):
+        raise WorkflowDefinitionError("Workflow definition is invalid")
+    # re-validate draft before publish
+    normalized = validate_and_normalize_definition(definition)
+    now = workflow_store.now_ts()
+    version = int(row.get("version") or 1)
+    updated = await workflow_store.update_workflow(
+        workflow_id,
+        owner_user_id=None if has_scope(actor, ADMIN_SCOPE) else actor_id(actor),
+        values={
+            "published_definition": normalized,
+            "published_version": version,
+            "published_at": now,
+            "updated_at": now,
+        },
+    )
+    if updated is None:
+        return None
+    await _snapshot_version(row={**updated, "definition": normalized, "version": version}, created_by=actor_id(actor) or "system")
+    return _row_payload(updated)
+
+
+async def mark_cron_last_run(workflow_id: str, ts: float) -> None:
+    row = await workflow_store.get_workflow(workflow_id)
+    if row is None:
+        return
+    triggers = _normalize_triggers(row.get("triggers"))
+    triggers["cron"]["last_run_at"] = float(ts)
+    await workflow_store.update_workflow(
+        workflow_id,
+        values={"triggers": triggers, "updated_at": workflow_store.now_ts()},
+    )

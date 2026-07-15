@@ -79,7 +79,7 @@ export type WorkflowDefinition = {
 
 export type WorkflowTriggers = {
   webhook: { enabled: boolean; secret: string }
-  cron: { enabled: boolean; expression: string }
+  cron: { enabled: boolean; expression: string; last_run_at?: number }
 }
 
 export type WorkflowRecord = {
@@ -91,6 +91,9 @@ export type WorkflowRecord = {
   triggers?: WorkflowTriggers
   enabled: boolean
   version: number
+  published_version?: number | null
+  published_at?: number | null
+  has_published?: boolean
   created_at: number
   updated_at: number
 }

@@ -35,6 +35,7 @@ from api.routes import (
     workflows,
 )
 from api.services.security_run_runtime import recover_security_runs, shutdown_security_runtime
+from api.services.workflow_cron import start_workflow_cron_scheduler, stop_workflow_cron_scheduler
 from api.services.tracing_service import setup_agno_tracing
 from api.utils.db import initialize_database
 
@@ -127,8 +128,14 @@ async def lifespan(app: FastAPI):
         logger.exception("启动时恢复 HITL Run 失败")
 
     try:
+        await start_workflow_cron_scheduler()
+    except Exception:
+        logger.exception("启动 Workflow cron 调度器失败")
+
+    try:
         yield
     finally:
+        await stop_workflow_cron_scheduler()
         await shutdown_security_runtime()
         await close_auth_engine()
         await dispose_async_control_plane_engine()

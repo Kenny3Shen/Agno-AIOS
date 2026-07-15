@@ -50,7 +50,7 @@
   "triggers": "触发器",
   "webhookTrigger": "Webhook 触发",
   "webhookSecret": "Webhook secret",
-  "cronTrigger": "Cron 触发（配置）",
+  "cronTrigger": "Cron 触发",
   "selectorCel": "Router CEL selector（返回 choice name）",
   "routerChoicesHint": "choice 在添加 Router 时自动生成 path_a / path_b；名称需与 CEL 返回值一致。",
   "nestedWorkflowPlaceholder": "选择已保存的子工作流",
@@ -70,5 +70,9 @@
   "openApproval": "打开审批",
   "runHistory": "最近运行",
   "userInputSchemaPlaceholder": "user_input_schema JSON 数组",
-  "userInputSchemaHint": "字段数组 {name, field_type, description, required}，用于审批中心动态表单"
+  "userInputSchemaHint": "字段数组 {name, field_type, description, required}，用于审批中心动态表单",
+  "publish": "发布",
+  "publishHint": "将草稿提升为 webhook/cron 使用的线上版本",
+  "publishTriggersHint": "Webhook 与 Cron 始终执行已发布版本。请先保存草稿，再点发布。",
+  "cronExpression": "Cron 表达式（如 */15 * * * *）"
 }

@@ -73,7 +73,7 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
               <button
                 key={slot.key}
                 type="button"
-                className="wf-flow-node__cta"
+                className="wf-flow-node__cta nodrag nopan"
                 onClick={(event) => onSlotClick(event, slot.key)}
               >
                 + {slot.label}

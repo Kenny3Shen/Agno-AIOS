@@ -1,5 +1,15 @@
 # 下一步工作
 
+## 已完成：Workflow PR7（Publish + Cron 真调度）
+
+- **Publish**：`POST /api/workflows/{id}/publish` 将 draft definition 固化为 `published_definition`；webhook/cron **只跑 published**。
+- **Cron**：进程内 ticker（30s）+ `croniter`；`triggers.cron.{enabled,expression,last_run_at}`；防重入先写 last_run_at。
+- Studio：Publish 按钮、Cron 开关与表达式、提示「触发器走已发布版本」。
+- RF skill 小修：CTA `nodrag`、`isValidConnection` 禁自环。
+
+相关入口：`workflow_cron.py`、`workflow_service.publish_*`、`routes/workflows.py`、`main.py` lifespan、`WorkflowPage`
+
+
 ## 已完成：Workflow PR6（运行态可视化 + Approvals 闭环 + schema 表单）
 
 - 画布节点 run 状态：`running / ok / error / paused`（SSE 归约 + 脉冲高亮）。

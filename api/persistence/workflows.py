@@ -48,6 +48,9 @@ def workflows_table(metadata: MetaData | None = None) -> Table:
         Column("triggers", JSONB, nullable=False, server_default="{}"),
         Column("enabled", Boolean, nullable=False, server_default="true"),
         Column("version", BigInteger, nullable=False, server_default="1"),
+        Column("published_definition", JSONB, nullable=True),
+        Column("published_version", BigInteger, nullable=True),
+        Column("published_at", BigInteger, nullable=True),
         Column("created_at", BigInteger, nullable=False),
         Column("updated_at", BigInteger, nullable=False),
     )
@@ -72,6 +75,19 @@ async def ensure_workflows_table_async() -> None:
             await conn.execute(text(ddl))
     except Exception:
         pass
+    for extra_ddl in (
+        f'ALTER TABLE "{schema}"."{WORKFLOWS_TABLE}" '
+        "ADD COLUMN IF NOT EXISTS published_definition JSONB",
+        f'ALTER TABLE "{schema}"."{WORKFLOWS_TABLE}" '
+        "ADD COLUMN IF NOT EXISTS published_version BIGINT",
+        f'ALTER TABLE "{schema}"."{WORKFLOWS_TABLE}" '
+        "ADD COLUMN IF NOT EXISTS published_at BIGINT",
+    ):
+        try:
+            async with get_async_control_plane_engine().begin() as conn:
+                await conn.execute(text(extra_ddl))
+        except Exception:
+            pass
 
 
 async def insert_workflow(record: dict[str, Any]) -> dict[str, Any]:
@@ -240,3 +256,19 @@ async def get_workflow_version(
             )
         ).mappings().first()
     return dict(row) if row else None
+
+
+async def list_workflows_for_cron(*, limit: int = 200) -> list[dict[str, Any]]:
+    """Return enabled workflows that may have cron triggers (filter in service)."""
+    await ensure_workflows_table_async()
+    table = workflows_table()
+    safe_limit = max(1, min(int(limit or 200), 500))
+    stmt = (
+        select(table)
+        .where(table.c.enabled.is_(True))
+        .order_by(table.c.updated_at.desc())
+        .limit(safe_limit)
+    )
+    async with get_async_control_plane_engine().begin() as conn:
+        rows = (await conn.execute(stmt)).mappings().all()
+    return [dict(row) for row in rows]

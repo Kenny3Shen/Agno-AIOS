@@ -8,6 +8,7 @@ import {
   listWorkflowVersions,
   listWorkflows,
   restoreWorkflowVersion,
+  publishWorkflow,
   streamWorkflowRun,
   updateWorkflow,
 } from './api'
@@ -458,6 +459,38 @@ export function useWorkflow() {
     }
   }
 
+  const publish = async () => {
+    if (!state.workflowId) {
+      setState((current) => ({ ...current, error: 'Save the workflow before publishing' }))
+      return
+    }
+    if (state.dirty) {
+      setState((current) => ({ ...current, error: 'Save changes before publishing' }))
+      return
+    }
+    setState((current) => ({ ...current, saving: true, error: null }))
+    try {
+      const record = await publishWorkflow(state.workflowId)
+      const loaded = fromRecord(record)
+      setState((current) => ({
+        ...current,
+        ...loaded,
+        selectedIds: loaded.selectedId ? [loaded.selectedId] : [],
+        saving: false,
+        dirty: false,
+        error: null,
+      }))
+      await workflowsQuery.refetch()
+      await versionsQuery.refetch()
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        saving: false,
+        error: error instanceof Error ? error.message : 'Publish failed',
+      }))
+    }
+  }
+
   const restoreVersion = async (version: number) => {
     if (!state.workflowId) return
     try {
@@ -638,6 +671,7 @@ export function useWorkflow() {
     load,
     reset,
     save,
+    publish,
     restoreVersion,
     removeSaved,
     run,
