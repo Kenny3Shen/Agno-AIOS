@@ -20,7 +20,7 @@ import type {
   WorkflowState,
   WorkflowTriggers,
 } from './types'
-import { historyStatusFromEvent, reduceNodeRunStatus } from './runStatus'
+import { appendRunLog, applyNodeRunStatusEvent, historyStatusFromEvent } from './runStatus'
 import {
   addChildToNode,
   applyAutoLayout,
@@ -665,8 +665,12 @@ export function useWorkflow() {
         { input: state.input, session_id: sessionId, model_id: state.modelId },
         (item) => {
           setState((current) => {
-            const runLog = [...current.runLog, item]
-            const nodeRunStatus = reduceNodeRunStatus(current.steps, runLog)
+            const runLog = appendRunLog(current.runLog, item, 200)
+            const nodeRunStatus = applyNodeRunStatusEvent(
+              current.steps,
+              current.nodeRunStatus,
+              item
+            )
             const histStatus = historyStatusFromEvent(item.type)
             let runHistory = current.runHistory
             if (histStatus || item.runId || item.approvalId) {

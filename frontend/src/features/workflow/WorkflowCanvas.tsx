@@ -209,7 +209,7 @@ function CanvasInner({
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const { dark } = usePreferences()
-  const { screenToFlowPosition, fitView, getIntersectingNodes, updateNodeData, getNodes } = useReactFlow()
+  const { screenToFlowPosition, fitView, getIntersectingNodes, updateNodeData } = useReactFlow()
 
   const [graph, setGraph] = useState<FlowGraph>({ nodes: [], edges: [] })
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
@@ -219,6 +219,10 @@ function CanvasInner({
   nodeRunStatusRef.current = nodeRunStatus
   const stepsRef = useRef(steps)
   stepsRef.current = steps
+  const selectionRef = useRef({ selectedIds, selectedId })
+  selectionRef.current = { selectedIds, selectedId }
+  const highlightRef = useRef({ dropTargetId, connectTargetId })
+  highlightRef.current = { dropTargetId, connectTargetId }
   const draggingRef = useRef(false)
   const bootstrappedRef = useRef(false)
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -296,57 +300,99 @@ function CanvasInner({
 
   useEffect(() => {
     if (draggingRef.current) return
-    const effectiveSelectedIds = selectedIds.length
-      ? selectedIds
-      : selectedId
-        ? [selectedId]
-        : []
     const liveSteps = stepsRef.current
+    const { selectedIds: selIds, selectedId: selId } = selectionRef.current
+    const effectiveSelectedIds = selIds.length ? selIds : selId ? [selId] : []
+    const { dropTargetId: dropId, connectTargetId: connectId } = highlightRef.current
     setGraph((prev) => {
       const animateNew = bootstrappedRef.current
       const next = buildGraph(
         liveSteps,
-        effectiveSelectedIds,
+        // selection applied via post-pass / selection effect (avoids layout on click)
+        [],
         prev.nodes,
         animateNew,
-        dropTargetId,
+        null,
         (parentId, slotKey) => onEmptySlotRef.current(parentId, slotKey),
-        // run status applied via updateNodeData (no layout rebuild)
         {},
         invalidById,
-        connectTargetId,
+        null,
         {
           onDelete: () => onDeleteRef.current(),
           onCopy: () => onCopyRef.current(),
           onDuplicate: () => onDupRef.current(),
         }
       )
-      // Preserve runStatus from previous nodes when topology rebuilds mid-run.
+      // Preserve runStatus + apply current selection/highlights (refs, not deps).
       const prevStatus = new Map(
         prev.nodes.map((n) => [n.id, (n.data as { runStatus?: string | null })?.runStatus ?? null])
       )
       const liveStatus = nodeRunStatusRef.current
+      const selectedSet = new Set(effectiveSelectedIds)
       next.nodes = next.nodes.map((n) => {
         const status = liveStatus[n.id] ?? prevStatus.get(n.id) ?? null
-        if (!status) return n
+        const data = {
+          ...(n.data as object),
+          ...(status ? { runStatus: status } : {}),
+          dropHighlight: dropId === n.id,
+          connectHighlight: connectId === n.id,
+        }
         return {
           ...n,
-          data: { ...(n.data as object), runStatus: status },
+          selected: selectedSet.has(n.id),
+          data,
         }
       })
       bootstrappedRef.current = true
       return next
     })
-  }, [
-    topologyKey,
-    selectionKey,
-    selectedIds,
-    selectedId,
-    dropTargetId,
-    invalidById,
-    invalidKey,
-    connectTargetId,
-  ])
+  }, [topologyKey, invalidById, invalidKey])
+
+  // Selection only: patch `selected` without layoutCanvas / edge rebuild.
+  useEffect(() => {
+    const selectedSet = new Set(
+      selectedIds.length ? selectedIds : selectedId ? [selectedId] : []
+    )
+    setGraph((current) => {
+      if (!current.nodes.length) return current
+      let changed = false
+      const nodes = current.nodes.map((node) => {
+        const nextSelected = selectedSet.has(node.id)
+        if (node.selected === nextSelected) return node
+        changed = true
+        return { ...node, selected: nextSelected }
+      })
+      return changed ? { ...current, nodes } : current
+    })
+  }, [selectionKey, selectedIds, selectedId])
+
+  // Drop / connect highlight: patch node data flags only.
+  useEffect(() => {
+    setGraph((current) => {
+      if (!current.nodes.length) return current
+      let changed = false
+      const nodes = current.nodes.map((node) => {
+        const data = node.data as {
+          dropHighlight?: boolean
+          connectHighlight?: boolean
+        }
+        const dropHighlight = dropTargetId === node.id
+        const connectHighlight = connectTargetId === node.id
+        if (
+          Boolean(data.dropHighlight) === dropHighlight &&
+          Boolean(data.connectHighlight) === connectHighlight
+        ) {
+          return node
+        }
+        changed = true
+        return {
+          ...node,
+          data: { ...data, dropHighlight, connectHighlight },
+        }
+      })
+      return changed ? { ...current, nodes } : current
+    })
+  }, [dropTargetId, connectTargetId])
 
   // Presentation-only edits (rename / CEL / executor): patch node data, keep positions.
   useEffect(() => {
@@ -400,17 +446,28 @@ function CanvasInner({
     })
   }, [contentKey])
 
-  // Run status: React Flow updateNodeData + controlled graph sync (no buildGraph).
+  // Run status: only patch nodes whose status actually changed (no layout).
+  const prevRunStatusRef = useRef(nodeRunStatus)
   useEffect(() => {
     const live = nodeRunStatus
-    const ids = new Set(getNodes().map((n) => n.id))
-    for (const id of ids) {
-      const nextStatus = live[id] ?? null
-      updateNodeData(id, { runStatus: nextStatus })
+    const prevLive = prevRunStatusRef.current
+    prevRunStatusRef.current = live
+
+    const changedIds = new Set<string>()
+    for (const id of new Set([...Object.keys(prevLive), ...Object.keys(live)])) {
+      if ((prevLive[id] ?? null) !== (live[id] ?? null)) changedIds.add(id)
     }
+    if (!changedIds.size) return
+
+    for (const id of changedIds) {
+      updateNodeData(id, { runStatus: live[id] ?? null })
+    }
+
     setGraph((current) => {
+      if (!current.nodes.length) return current
       let changed = false
       const nodes = current.nodes.map((node) => {
+        if (!changedIds.has(node.id)) return node
         const nextStatus = live[node.id] ?? null
         const prevStatus = (node.data as { runStatus?: string | null })?.runStatus ?? null
         if (nextStatus === prevStatus) return node
@@ -422,7 +479,7 @@ function CanvasInner({
       })
       return changed ? { ...current, nodes } : current
     })
-  }, [nodeRunStatus, updateNodeData, getNodes])
+  }, [nodeRunStatus, updateNodeData])
 
   // Focus viewport on running / paused nodes during a run.
   useEffect(() => {

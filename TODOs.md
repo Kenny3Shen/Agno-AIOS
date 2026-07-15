@@ -1,5 +1,16 @@
 # 下一步工作
 
+## 已完成：Studio 性能（SSE 增量 + 选中/高亮 patch）
+
+- Run SSE：`applyNodeRunStatusEvent` 增量更新 `nodeRunStatus`（不再每次全量 replay log）。
+- `runLog` 上限 200（`appendRunLog`），控制内存。
+- 画布：点击选中 / drop·connect 高亮只 patch `selected` 与 data flags，不触发 `layoutCanvas`。
+- runStatus 仅对 **变更节点** 调 `updateNodeData`。
+
+相关：`runStatus.ts`、`useWorkflow.ts`、`WorkflowCanvas.tsx`
+
+
+
 ## 已完成：Studio P0（RF updateNodeData + antd-in-canvas）
 
 - 画布：`topologyKey` / `contentKey` 拆分；SSE `runStatus` 走 `updateNodeData` + data patch，避免全量 `buildGraph`。

@@ -42,46 +42,77 @@ const mark = (
   map: Record<string, WorkflowNodeRunStatus>,
   id: string | null,
   status: WorkflowNodeRunStatus
-) => {
+): Record<string, WorkflowNodeRunStatus> => {
   if (!id) return map
+  if (map[id] === status) return map
   return { ...map, [id]: status }
+}
+
+/** Apply a single SSE event onto an existing status map (O(nodes) worst-case, not O(log length)). */
+export const applyNodeRunStatusEvent = (
+  steps: WorkflowNode[],
+  map: Record<string, WorkflowNodeRunStatus>,
+  item: Pick<WorkflowRunLogItem, 'type' | 'stepId' | 'stepName'> | WorkflowRunLogItem
+): Record<string, WorkflowNodeRunStatus> => {
+  const id = resolveNodeId(steps, item.stepId, item.stepName)
+  const type = item.type
+  if (type.endsWith('.started') || type === 'loop.iteration.started') {
+    return mark(map, id, 'running')
+  }
+  if (type.endsWith('.completed') || type === 'loop.iteration.completed') {
+    return mark(map, id, 'ok')
+  }
+  if (type.endsWith('.error') || type === 'workflow.failed') {
+    let next = mark(map, id, 'error')
+    if (type === 'workflow.failed' && !id) {
+      for (const [nodeId, status] of Object.entries(next)) {
+        if (status === 'running') next = mark(next, nodeId, 'error')
+      }
+    }
+    return next
+  }
+  if (type === 'workflow.paused') {
+    return mark(map, id, 'paused')
+  }
+  if (type === 'workflow.completed') {
+    let next = map
+    let changed = false
+    for (const [nodeId, status] of Object.entries(map)) {
+      if (status === 'running') {
+        if (!changed) {
+          next = { ...map }
+          changed = true
+        }
+        next[nodeId] = 'ok'
+      }
+    }
+    return next
+  }
+  if (type === 'workflow.cancelled') {
+    let next = map
+    let changed = false
+    for (const [nodeId, status] of Object.entries(map)) {
+      if (status === 'running' || status === 'paused') {
+        if (!changed) {
+          next = { ...map }
+          changed = true
+        }
+        next[nodeId] = 'error'
+      }
+    }
+    return next
+  }
+  return map
 }
 
 /** Reduce SSE log items into per-node status map. */
 export const reduceNodeRunStatus = (
   steps: WorkflowNode[],
-  log: WorkflowRunLogItem[]
+  log: Array<Pick<WorkflowRunLogItem, 'type' | 'stepId' | 'stepName'> | WorkflowRunLogItem>
 ): Record<string, WorkflowNodeRunStatus> => {
   let map: Record<string, WorkflowNodeRunStatus> = {}
   for (const item of log) {
-    const id = resolveNodeId(steps, item.stepId, item.stepName)
-    const type = item.type
-    if (type.endsWith('.started') || type === 'loop.iteration.started') {
-      map = mark(map, id, 'running')
-    } else if (type.endsWith('.completed') || type === 'loop.iteration.completed') {
-      map = mark(map, id, 'ok')
-    } else if (type.endsWith('.error') || type === 'workflow.failed') {
-      map = mark(map, id, 'error')
-      if (type === 'workflow.failed' && !id) {
-        // leave last running as error
-        const runningIds = Object.entries(map)
-          .filter(([, status]) => status === 'running')
-          .map(([nodeId]) => nodeId)
-        for (const nodeId of runningIds) map = mark(map, nodeId, 'error')
-      }
-    } else if (type === 'workflow.paused') {
-      map = mark(map, id, 'paused')
-      // any still-running nodes stay running except the paused one
-    } else if (type === 'workflow.completed') {
-      // promote remaining running → ok
-      for (const [nodeId, status] of Object.entries(map)) {
-        if (status === 'running') map = mark(map, nodeId, 'ok')
-      }
-    } else if (type === 'workflow.cancelled') {
-      for (const [nodeId, status] of Object.entries(map)) {
-        if (status === 'running' || status === 'paused') map = mark(map, nodeId, 'error')
-      }
-    }
+    map = applyNodeRunStatusEvent(steps, map, item)
   }
   return map
 }
@@ -95,4 +126,16 @@ export const historyStatusFromEvent = (
   if (type === 'workflow.cancelled') return 'cancelled'
   if (type === 'workflow.paused') return 'paused'
   return null
+}
+
+/** Keep the run log bounded for UI memory (newest retained when over cap). */
+export const appendRunLog = (
+  log: WorkflowRunLogItem[],
+  item: WorkflowRunLogItem,
+  limit = 200
+): WorkflowRunLogItem[] => {
+  if (log.length < limit) return [...log, item]
+  // drop oldest chunk when full
+  const keepFrom = Math.max(0, log.length - limit + 1)
+  return [...log.slice(keepFrom), item]
 }
