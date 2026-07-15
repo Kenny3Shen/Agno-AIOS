@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：设置页帮助文案改为 Tooltip
+
+- 模型高级表单项（并行工具、重试相关）去掉 `Form.Item extra`，改用 `tooltip` 图标提示。
+- Chat 设置长文 `privacyNote` 收成短链 + Tooltip。
+
+相关入口：`frontend/src/features/settings/SettingsPage.tsx`
+
 ## 已完成：Workflow PR1（线性 Step + Save/Run SSE）
 
 - `app.workflows` 表 + CRUD（`{data,meta}`）；定义 DSL 仅 `type=step` + 内置 agent ref。

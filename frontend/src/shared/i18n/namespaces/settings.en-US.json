@@ -46,5 +46,6 @@
   "exponentialBackoff": "Exponential backoff",
   "exponentialBackoffHelp": "Double the delay after each failed attempt.",
   "httpMaxRetries": "HTTP client retries",
-  "httpMaxRetriesHelp": "OpenAI SDK max_retries. Leave empty for the SDK default; prefer request retries above."
+  "httpMaxRetriesHelp": "OpenAI SDK max_retries. Leave empty for the SDK default; prefer request retries above.",
+  "privacyNoteShort": "Privacy & memory notes"
 }

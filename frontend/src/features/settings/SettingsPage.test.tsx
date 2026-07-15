@@ -104,7 +104,9 @@ describe('model settings editor', () => {
 
     fireEvent.click(await screen.findByLabelText('编辑 Second model'))
     expect(await screen.findByText('并行工具调用')).toBeTruthy()
-    expect(screen.getByText('控制 API 的 parallel_tool_calls 参数。留空时使用提供商默认值。')).toBeTruthy()
-    expect(screen.getByText('Agno 应用层重试。遇到 429/503 等可恢复错误时额外重试次数；0 表示不重试。默认 3。')).toBeTruthy()
+    expect(await screen.findByText('请求重试次数')).toBeTruthy()
+    // Help copy lives in compact label tooltips (no Form.Item extra text).
+    const tips = document.querySelectorAll('.ant-form-item-tooltip')
+    expect(tips.length).toBeGreaterThanOrEqual(2)
   })
 })

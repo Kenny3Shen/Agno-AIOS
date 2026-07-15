@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { App, Button, Card, Collapse, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
-import { ApiOutlined, CheckCircleOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
+import { ApiOutlined, CheckCircleOutlined, EditOutlined, PlusOutlined, QuestionCircleOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { currentUserQuery } from '@/features/auth'
 import { roleOf } from '@/shared/auth/permissions'
@@ -9,6 +9,7 @@ import { DEEPSEEK_REASONING_EFFORTS, openaiReasoningEfforts, reasoningEffortLabe
 import { getChatSettings, getModels, saveChatSettings, saveModels, testModel, type ChatSettings } from './api'
 import type { ModelConfig, ModelConfigResponse } from '@/shared/types/common'
 import { useTranslation } from 'react-i18next'
+import './settings.css'
 
 const providerDefaults = (provider: ModelConfig['provider']) => {
   if (provider === 'deepseek')
@@ -36,6 +37,7 @@ const parallelToolCallsOptions = [
   { value: true, label: 'Enabled' },
   { value: false, label: 'Disabled' },
 ]
+
 
 const reasoningOptions = (provider: ModelConfig['provider'], protocol: ModelConfig['api_protocol']) => {
   if (provider === 'deepseek') return DEEPSEEK_REASONING_EFFORTS.map((value) => ({ value, label: reasoningEffortLabel(value) }))
@@ -295,9 +297,14 @@ export function SettingsPage() {
           },
         ]}
       />
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 12 }}>
-        {t('privacyNote')}
-      </Typography.Paragraph>
+      <div className="settings-chat-privacy">
+        <Tooltip title={t('privacyNote')}>
+          <Typography.Text type="secondary" className="settings-chat-privacy-trigger">
+            <QuestionCircleOutlined aria-label={t('privacyNote')} />
+            <span>{t('privacyNoteShort')}</span>
+          </Typography.Text>
+        </Tooltip>
+      </div>
     </div>
   )
 
@@ -434,7 +441,7 @@ export function SettingsPage() {
                             <Form.Item
                               name="parallel_tool_calls"
                               label={t('parallelToolCalls')}
-                              extra={t('parallelToolCallsHelp')}
+                              tooltip={t('parallelToolCallsHelp')}
                             >
                               <Select
                                 allowClear
@@ -445,20 +452,21 @@ export function SettingsPage() {
                           )
                         }}
                       </Form.Item>
-                      <Form.Item name="retries" label={t('retries')} extra={t('retriesHelp')}>
+                      <Form.Item name="retries" label={t('retries')}
+                        tooltip={t('retriesHelp')}>
                         <InputNumber min={0} max={10} style={{ width: '100%' }} />
                       </Form.Item>
                       <Form.Item
                         name="delay_between_retries"
                         label={t('delayBetweenRetries')}
-                        extra={t('delayBetweenRetriesHelp')}
+                        tooltip={t('delayBetweenRetriesHelp')}
                       >
                         <InputNumber min={0} max={60} style={{ width: '100%' }} />
                       </Form.Item>
                       <Form.Item
                         name="exponential_backoff"
                         label={t('exponentialBackoff')}
-                        extra={t('exponentialBackoffHelp')}
+                        tooltip={t('exponentialBackoffHelp')}
                         valuePropName="checked"
                       >
                         <Switch />
@@ -466,7 +474,7 @@ export function SettingsPage() {
                       <Form.Item
                         name="http_max_retries"
                         label={t('httpMaxRetries')}
-                        extra={t('httpMaxRetriesHelp')}
+                        tooltip={t('httpMaxRetriesHelp')}
                       >
                         <InputNumber min={0} max={10} style={{ width: '100%' }} placeholder={t('providerDefault')} />
                       </Form.Item>

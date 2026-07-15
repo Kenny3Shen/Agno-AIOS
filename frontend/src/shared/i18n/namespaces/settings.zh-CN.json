@@ -46,5 +46,6 @@
   "exponentialBackoff": "指数退避",
   "exponentialBackoffHelp": "重试间隔按 2^n 放大，减轻网关抖动。",
   "httpMaxRetries": "HTTP 客户端重试",
-  "httpMaxRetriesHelp": "OpenAI SDK 连接层 max_retries。留空使用 SDK 默认；一般优先依赖上面的请求重试。"
+  "httpMaxRetriesHelp": "OpenAI SDK 连接层 max_retries。留空使用 SDK 默认；一般优先依赖上面的请求重试。",
+  "privacyNoteShort": "隐私与记忆说明"
 }
