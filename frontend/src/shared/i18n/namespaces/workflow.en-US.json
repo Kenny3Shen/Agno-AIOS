@@ -81,5 +81,6 @@
   "templates": "Templates",
   "templatesEmpty": "No templates available",
   "celPlaceholder": "CEL expression — pick a hint or type",
-  "pr9Hint": "PR9: security templates, workflows:run, CEL autocomplete"
+  "pr9Hint": "PR9: security templates, workflows:run, CEL autocomplete",
+  "runScopeHint": "Requires workflows:run (or write) permission"
 }

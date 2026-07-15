@@ -81,5 +81,6 @@
   "templates": "模板",
   "templatesEmpty": "暂无模板",
   "celPlaceholder": "CEL 表达式 — 可选择提示或直接输入",
-  "pr9Hint": "PR9：安全模板、workflows:run、CEL 自动完成"
+  "pr9Hint": "PR9：安全模板、workflows:run、CEL 自动完成",
+  "runScopeHint": "需要 workflows:run（或 write）权限"
 }

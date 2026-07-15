@@ -209,7 +209,7 @@ function CanvasInner({
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const { dark } = usePreferences()
-  const { screenToFlowPosition, fitView, getIntersectingNodes } = useReactFlow()
+  const { screenToFlowPosition, fitView, getIntersectingNodes, updateNodeData, getNodes } = useReactFlow()
 
   const [graph, setGraph] = useState<FlowGraph>({ nodes: [], edges: [] })
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
@@ -217,6 +217,8 @@ function CanvasInner({
   const connectingFromRef = useRef<{ nodeId: string; handleId: string | null } | null>(null)
   const nodeRunStatusRef = useRef(nodeRunStatus)
   nodeRunStatusRef.current = nodeRunStatus
+  const stepsRef = useRef(steps)
+  stepsRef.current = steps
   const draggingRef = useRef(false)
   const bootstrappedRef = useRef(false)
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -231,7 +233,8 @@ function CanvasInner({
   const onDupRef = useRef(onDuplicateSelected)
   onDupRef.current = onDuplicateSelected
 
-  const structureKey = useMemo(
+  // Topology: ids/types/nesting/positions — full layout rebuild.
+  const topologyKey = useMemo(
     () =>
       steps
         .map((node) => {
@@ -246,7 +249,32 @@ function CanvasInner({
           const pos = node.position
             ? `${Math.round(node.position.x)},${Math.round(node.position.y)}`
             : '-'
-          return `${node.id}:${node.type}:${node.name ?? ''}:${pos}:${kids}`
+          return `${node.id}:${node.type}:${pos}:${kids}`
+        })
+        .join('#'),
+    [steps]
+  )
+
+  // Presentation: labels / subtitles / HITL flags — data patch only.
+  const contentKey = useMemo(
+    () =>
+      steps
+        .map((node) => {
+          const hitl = Boolean(
+            node.requiresConfirmation || node.requiresUserInput || node.requiresOutputReview
+          )
+          let subtitle: string = node.type
+          if (node.type === 'step') subtitle = node.targetId || 'agent'
+          else if (node.type === 'condition') subtitle = node.evaluatorCel || 'CEL'
+          else if (node.type === 'router') subtitle = node.selectorCel || 'selector'
+          else if (node.type === 'workflow_ref') subtitle = node.workflowId || 'nested'
+          else if (node.type === 'loop') subtitle = `max ${node.maxIterations ?? 3}`
+          else if (node.type === 'parallel') subtitle = `${node.steps?.length ?? 0} branches`
+          const branches =
+            node.type === 'router'
+              ? (node.choices ?? []).map((c) => `${c.id}:${c.name}`).join(',')
+              : ''
+          return `${node.id}:${node.name ?? ''}:${subtitle}:${hitl ? 1 : 0}:${branches}`
         })
         .join('#'),
     [steps]
@@ -273,16 +301,17 @@ function CanvasInner({
       : selectedId
         ? [selectedId]
         : []
+    const liveSteps = stepsRef.current
     setGraph((prev) => {
       const animateNew = bootstrappedRef.current
       const next = buildGraph(
-        steps,
+        liveSteps,
         effectiveSelectedIds,
         prev.nodes,
         animateNew,
         dropTargetId,
         (parentId, slotKey) => onEmptySlotRef.current(parentId, slotKey),
-        // run status applied in a cheap follow-up effect via data patch
+        // run status applied via updateNodeData (no layout rebuild)
         {},
         invalidById,
         connectTargetId,
@@ -292,7 +321,7 @@ function CanvasInner({
           onDuplicate: () => onDupRef.current(),
         }
       )
-      // Preserve runStatus from previous nodes when structure rebuilds mid-run.
+      // Preserve runStatus from previous nodes when topology rebuilds mid-run.
       const prevStatus = new Map(
         prev.nodes.map((n) => [n.id, (n.data as { runStatus?: string | null })?.runStatus ?? null])
       )
@@ -309,9 +338,8 @@ function CanvasInner({
       return next
     })
   }, [
-    structureKey,
+    topologyKey,
     selectionKey,
-    steps,
     selectedIds,
     selectedId,
     dropTargetId,
@@ -320,12 +348,70 @@ function CanvasInner({
     connectTargetId,
   ])
 
-  // PR8d: patch runStatus without full layout/buildGraph rebuild on every SSE tick.
+  // Presentation-only edits (rename / CEL / executor): patch node data, keep positions.
   useEffect(() => {
+    if (draggingRef.current) return
+    if (!bootstrappedRef.current) return
+    const liveSteps = stepsRef.current
+    setGraph((current) => {
+      if (!current.nodes.length) return current
+      let changed = false
+      const nodes = current.nodes.map((node) => {
+        const source = findNode(liveSteps, node.id)
+        if (!source) return node
+        const hitl = Boolean(
+          source.requiresConfirmation ||
+            source.requiresUserInput ||
+            source.requiresOutputReview
+        )
+        let subtitle: string = source.type
+        if (source.type === 'step') subtitle = source.targetId || 'agent'
+        else if (source.type === 'condition') subtitle = source.evaluatorCel || 'CEL'
+        else if (source.type === 'router') subtitle = source.selectorCel || 'selector'
+        else if (source.type === 'workflow_ref') subtitle = source.workflowId || 'nested'
+        else if (source.type === 'loop') subtitle = `max ${source.maxIterations ?? 3}`
+        else if (source.type === 'parallel') subtitle = `${source.steps?.length ?? 0} branches`
+        const label = source.name?.trim() || subtitle
+        const data = node.data as {
+          label?: string
+          subtitle?: string
+          hitl?: boolean
+          branchHandles?: unknown
+        }
+        const branchHandles = source ? (branchHandlesFor(source) as unknown) : data.branchHandles
+        const nextData = {
+          ...data,
+          label,
+          subtitle,
+          hitl,
+          branchHandles,
+        }
+        if (
+          data.label === nextData.label &&
+          data.subtitle === nextData.subtitle &&
+          data.hitl === nextData.hitl
+        ) {
+          return node
+        }
+        changed = true
+        return { ...node, data: nextData }
+      })
+      return changed ? { ...current, nodes } : current
+    })
+  }, [contentKey])
+
+  // Run status: React Flow updateNodeData + controlled graph sync (no buildGraph).
+  useEffect(() => {
+    const live = nodeRunStatus
+    const ids = new Set(getNodes().map((n) => n.id))
+    for (const id of ids) {
+      const nextStatus = live[id] ?? null
+      updateNodeData(id, { runStatus: nextStatus })
+    }
     setGraph((current) => {
       let changed = false
       const nodes = current.nodes.map((node) => {
-        const nextStatus = nodeRunStatus[node.id] ?? null
+        const nextStatus = live[node.id] ?? null
         const prevStatus = (node.data as { runStatus?: string | null })?.runStatus ?? null
         if (nextStatus === prevStatus) return node
         changed = true
@@ -336,7 +422,7 @@ function CanvasInner({
       })
       return changed ? { ...current, nodes } : current
     })
-  }, [nodeRunStatus])
+  }, [nodeRunStatus, updateNodeData, getNodes])
 
   // Focus viewport on running / paused nodes during a run.
   useEffect(() => {
@@ -715,7 +801,20 @@ function CanvasInner({
           size={1.2}
           color="var(--wf-canvas-dot)"
         />
-        <MiniMap pannable zoomable nodeStrokeWidth={2} className="wf-minimap" />
+        <MiniMap
+          pannable
+          zoomable
+          nodeStrokeWidth={2}
+          className="wf-minimap"
+          nodeColor={(node) => {
+            const status = (node.data as { runStatus?: string | null })?.runStatus
+            if (status === 'running') return '#1677ff'
+            if (status === 'ok') return '#52c41a'
+            if (status === 'error') return '#ff4d4f'
+            if (status === 'paused') return '#faad14'
+            return dark ? '#444' : '#c0c0c0'
+          }}
+        />
         <Controls showInteractive={false} className="wf-controls" />
       </ReactFlow>
       {!steps.length ? (

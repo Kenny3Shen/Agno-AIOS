@@ -298,3 +298,15 @@ const isValidConnection = useCallback((connection: Connection) => {
 ## Additional Components
 
 See [ADDITIONAL_COMPONENTS.md](ADDITIONAL_COMPONENTS.md) for MiniMap, Controls, Background, NodeToolbar, NodeResizer.
+
+## Workflow Studio contract (T.A.I.S)
+
+Project-specific rules for `frontend/src/features/workflow/*`:
+
+5. **High-frequency run state** — **Pass if** SSE `nodeRunStatus` updates use `updateNodeData` / data patch and do **not** call full `buildGraph` / layout rebuild.
+6. **Topology vs presentation** — **Pass if** nesting/position changes rebuild the graph, while rename / CEL / executor label changes only patch node `data`.
+7. **antd inside / beside the canvas** — **Pass if** interactive antd controls use `nodrag` / `nowheel` / `nopan` (and `getPopupContainer` to `.workflow-studio` or `document.body`) so pan/zoom and dropdowns do not fight.
+8. **Handle ids** — Keep edge handles aligned: `in` / `in-left`, `out` / `out-right`, condition `then`/`else` (+ `-right`), router `choice:{id}` (+ `-right`).
+
+Do not migrate off `@xyflow/react` without an explicit product decision.
+

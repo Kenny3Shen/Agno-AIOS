@@ -15,6 +15,7 @@ description: Decision guide for antd 6.x, Ant Design Pro 5/ProComponents, Ant De
 - Language: TypeScript.
 - Styling: tokens first, then `classNames`/`styles`; avoid global overrides.
 - Provider: one root `ConfigProvider` unless strict isolation is required.
+- **Workflow Studio (React Flow + antd):** keep a single root `ConfigProvider`; do not nest another theme provider on the canvas. Form controls next to the canvas should use `getPopupContainer` → `.workflow-studio` / `document.body`, and mark interactive regions so the flow does not steal drag/wheel (`nodrag` / `nowheel` when overlaid).
 
 ### Mandatory rules
 - Before writing or changing antd component code, query the component API first with `antd info <Component> --format json`. Do not rely on memory when the CLI can answer it offline.

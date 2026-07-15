@@ -2416,3 +2416,13 @@ html.dark .workflow-templates__item {
   color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.45));
   line-height: 1.35;
 }
+
+/* Inspector / antd-in-canvas: RF must not steal drag & wheel from forms */
+.workflow-inspector.nodrag,
+.workflow-inspector.nowheel {
+  touch-action: manipulation;
+}
+.workflow-studio .ant-select-dropdown,
+.workflow-studio .ant-picker-dropdown {
+  z-index: 1100;
+}

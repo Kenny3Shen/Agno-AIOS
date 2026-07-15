@@ -58,6 +58,9 @@ const PALETTE: Array<{
   { type: 'workflow_ref', icon: <DeploymentUnitOutlined />, color: '#389e0d' },
 ]
 
+const studioPopupContainer = (node: HTMLElement) =>
+  (node.closest('.workflow-studio') as HTMLElement | null) ?? document.body
+
 export function WorkflowPage() {
   const { t } = useTranslation('workflow')
   const routerNav = useRouter()
@@ -128,6 +131,7 @@ export function WorkflowPage() {
             variant="borderless"
           />
           <Select
+            getPopupContainer={studioPopupContainer}
             size="middle"
             style={{ minWidth: 180 }}
             placeholder={t('modelPlaceholder')}
@@ -142,21 +146,21 @@ export function WorkflowPage() {
         </div>
         <Space wrap className="workflow-studio__actions">
           <Button onClick={workflow.reset}>{t('new')}</Button>
-          <Tooltip title={t('undoHint')}>
+          <Tooltip title={t('undoHint')} getPopupContainer={studioPopupContainer}>
             <Button
               icon={<UndoOutlined />}
               disabled={!workflow.canUndo}
               onClick={workflow.undo}
             />
           </Tooltip>
-          <Tooltip title={t('redoHint')}>
+          <Tooltip title={t('redoHint')} getPopupContainer={studioPopupContainer}>
             <Button
               icon={<RedoOutlined />}
               disabled={!workflow.canRedo}
               onClick={workflow.redo}
             />
           </Tooltip>
-          <Tooltip title={t('organizeHint')}>
+          <Tooltip title={t('organizeHint')} getPopupContainer={studioPopupContainer}>
             <Button icon={<ApartmentOutlined />} onClick={workflow.organizeLayout}>
               {t('organize')}
             </Button>
@@ -171,7 +175,7 @@ export function WorkflowPage() {
             {t('save')}
             {workflow.state.dirty ? ' *' : ''}
           </Button>
-          <Tooltip title={t('publishHint')}>
+          <Tooltip title={t('publishHint')} getPopupContainer={studioPopupContainer}>
             <Button
               icon={<CloudUploadOutlined />}
               loading={workflow.state.saving}
@@ -181,13 +185,18 @@ export function WorkflowPage() {
               {t('publish')}
             </Button>
           </Tooltip>
-          <Button
-            icon={<PlayCircleOutlined />}
-            disabled={workflow.state.running || !canRun}
-            onClick={() => void workflow.run()}
+          <Tooltip
+            title={!canRun ? t('runScopeHint') : undefined}
+            getPopupContainer={studioPopupContainer}
           >
-            {t('run')}
-          </Button>
+            <Button
+              icon={<PlayCircleOutlined />}
+              disabled={workflow.state.running || !canRun}
+              onClick={() => void workflow.run()}
+            >
+              {t('run')}
+            </Button>
+          </Tooltip>
           {workflow.state.running ? (
             <Button danger icon={<StopOutlined />} onClick={workflow.stop}>
               {t('stop')}
@@ -262,6 +271,7 @@ export function WorkflowPage() {
           <section className="workflow-studio__panel workflow-studio__panel--grow">
             <div className="workflow-studio__panel-title">{t('library')}</div>
             <Select
+              getPopupContainer={studioPopupContainer}
               style={{ width: '100%' }}
               placeholder={t('loadPlaceholder')}
               value={workflow.state.workflowId ?? undefined}
@@ -291,6 +301,7 @@ export function WorkflowPage() {
                   {t('versions')}
                 </div>
                 <Select
+                  getPopupContainer={studioPopupContainer}
                   style={{ width: '100%' }}
                   placeholder={t('restoreVersion')}
                   options={versions.map((item) => ({
@@ -363,7 +374,7 @@ export function WorkflowPage() {
             <div className="workflow-studio__panel-title">
               {t('inspector')}
               {step ? (
-                <Tooltip title={t('deleteNode')}>
+                <Tooltip title={t('deleteNode')} getPopupContainer={studioPopupContainer}>
                   <Button
                     size="small"
                     type="text"
@@ -378,9 +389,10 @@ export function WorkflowPage() {
             {!step ? (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('selectStep')} />
             ) : (
-              <div className="workflow-inspector">
+              <div className="workflow-inspector nodrag nowheel">
                 <Tag color="processing">{step.type}</Tag>
                 <Input
+                  className="nodrag nowheel"
                   value={step.name}
                   onChange={(e) => workflow.update({ ...step, name: e.target.value })}
                   placeholder={t('stepNamePlaceholder')}
@@ -390,6 +402,7 @@ export function WorkflowPage() {
                 {step.type === 'step' ? (
                   <>
                     <Select
+                      getPopupContainer={studioPopupContainer}
                       style={{ width: '100%', marginTop: 8 }}
                       placeholder={t('executorPlaceholder')}
                       value={step.targetId}
@@ -597,6 +610,7 @@ export function WorkflowPage() {
 
                 {step.type === 'workflow_ref' ? (
                   <Select
+                    getPopupContainer={studioPopupContainer}
                     style={{ width: '100%', marginTop: 8 }}
                     placeholder={t('nestedWorkflowPlaceholder')}
                     value={step.workflowId || undefined}

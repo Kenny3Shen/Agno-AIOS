@@ -1,5 +1,15 @@
 # 下一步工作
 
+## 已完成：Studio P0（RF updateNodeData + antd-in-canvas）
+
+- 画布：`topologyKey` / `contentKey` 拆分；SSE `runStatus` 走 `updateNodeData` + data patch，避免全量 `buildGraph`。
+- Inspector/CEL：`nodrag`/`nowheel`/`nopan`；Select/Tooltip/`AutoComplete` `getPopupContainer` → `.workflow-studio`。
+- MiniMap 按 run 状态上色；RF / ant-design skill 补充 Studio 共存门禁。
+
+相关：`WorkflowCanvas`、`CelExpressionField`、`WorkflowPage`、skill 附录
+
+
+
 ## 已完成：Workflow PR9（模板 / run scope / CEL 提示）
 
 - **权限**：`workflows:run`（user 默认具备）；`POST .../runs` 仅需 run，编辑仍需 write。

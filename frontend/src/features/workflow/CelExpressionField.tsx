@@ -10,9 +10,18 @@ type Props = {
   mode: Mode
   rows?: number
   placeholder?: string
+  /** Anchor for dropdown (studio root). Defaults to body. */
+  getPopupContainer?: (node: HTMLElement) => HTMLElement
 }
 
-export function CelExpressionField({ value = '', onChange, mode, rows = 3, placeholder }: Props) {
+export function CelExpressionField({
+  value = '',
+  onChange,
+  mode,
+  rows = 3,
+  placeholder,
+  getPopupContainer,
+}: Props) {
   const [open, setOpen] = useState(false)
   const options = useMemo(() => {
     const hints = filterCelHints(celHintsFor(mode), value)
@@ -35,6 +44,7 @@ export function CelExpressionField({ value = '', onChange, mode, rows = 3, place
 
   return (
     <AutoComplete
+      className="nodrag nowheel nopan"
       style={{ width: '100%', marginTop: 4 }}
       options={options}
       open={open}
@@ -45,8 +55,18 @@ export function CelExpressionField({ value = '', onChange, mode, rows = 3, place
         onChange(String(next ?? ''))
         setOpen(false)
       }}
+      getPopupContainer={
+        getPopupContainer ??
+        ((node) =>
+          (node.closest('.workflow-studio') as HTMLElement | null) ?? document.body)
+      }
     >
-      <Input.TextArea rows={rows} placeholder={placeholder} className="nodrag" />
+      <Input.TextArea
+        rows={rows}
+        placeholder={placeholder}
+        className="nodrag nowheel nopan"
+        onWheel={(e) => e.stopPropagation()}
+      />
     </AutoComplete>
   )
 }
