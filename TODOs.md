@@ -1,5 +1,15 @@
 # 下一步工作
 
+## 已完成：Workflow PR9（模板 / run scope / CEL 提示）
+
+- **权限**：`workflows:run`（user 默认具备）；`POST .../runs` 仅需 run，编辑仍需 write。
+- **模板**：`GET /api/workflows/templates` + Studio 左侧模板卡片一键载入草稿（IR / fan-out / patrol / severity router）。
+- **CEL**：Inspector Condition/Loop/Router 使用 `CelExpressionField` 自动完成提示。
+
+相关：`api/auth/claims.py`、`workflow_templates.py`、`routes/workflows.py`、`CelExpressionField`/`celHints`、`WorkflowPage`/`useWorkflow`
+
+
+
 ## 已完成：PR8c 触发器生产化 + PR8d 画布性能 + Metadata Drawer
 
 ### PR8c（触发器）

@@ -77,5 +77,9 @@
   "cronExpression": "Cron 表达式（如 */15 * * * *）",
   "validationTitle": "保存前请先修复",
   "triggerHistory": "触发历史",
-  "triggerHistoryEmpty": "暂无 cron/webhook 触发记录"
+  "triggerHistoryEmpty": "暂无 cron/webhook 触发记录",
+  "templates": "模板",
+  "templatesEmpty": "暂无模板",
+  "celPlaceholder": "CEL 表达式 — 可选择提示或直接输入",
+  "pr9Hint": "PR9：安全模板、workflows:run、CEL 自动完成"
 }

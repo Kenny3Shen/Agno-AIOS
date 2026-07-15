@@ -437,3 +437,45 @@ export const listWorkflowTriggerHistory = async (
   }
 }
 
+export type WorkflowTemplate = {
+  id: string
+  name: string
+  description: string
+  category: string
+  tags: string[]
+  definition: {
+    name: string
+    description: string
+    steps: WorkflowDefinitionNode[]
+  }
+}
+
+export const listWorkflowTemplates = async () => {
+  const raw = await requestJson<unknown>('/workflows/templates')
+  const row = asRecord(raw) ?? {}
+  const data = Array.isArray(row.data) ? row.data : Array.isArray(raw) ? (raw as unknown[]) : []
+  return data.flatMap((item) => {
+    const r = asRecord(item)
+    if (!r) return []
+    const def = asRecord(r.definition) ?? {}
+    const stepsRaw = Array.isArray(def.steps) ? def.steps : []
+    return [
+      {
+        id: String(r.id ?? ''),
+        name: String(r.name ?? ''),
+        description: String(r.description ?? ''),
+        category: String(r.category ?? ''),
+        tags: Array.isArray(r.tags) ? r.tags.map(String) : [],
+        definition: {
+          name: String(def.name ?? r.name ?? ''),
+          description: String(def.description ?? ''),
+          steps: stepsRaw.flatMap((child) => {
+            const node = normalizeNode(child)
+            return node ? [node] : []
+          }),
+        },
+      } satisfies WorkflowTemplate,
+    ]
+  })
+}
+

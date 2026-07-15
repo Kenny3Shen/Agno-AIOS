@@ -113,3 +113,23 @@ async def test_trigger_history_requires_read_and_returns_data():
     assert result["meta"]["total"] == 1
     assert result["data"][0]["run_id"] == "r1"
     assert result["data"][0]["source"] == "cron"
+
+
+
+def test_run_workflow_allows_user_with_workflows_run():
+    dependency = route_dependency("run_workflow")
+    assert dependency(user=actor()) is not None
+
+
+@pytest.mark.asyncio
+async def test_list_templates_returns_security_playbooks():
+    from api.services import workflow_templates as templates_mod
+
+    result = await workflows.list_templates(user=actor())
+    assert "data" in result
+    ids = {item["id"] for item in result["data"]}
+    assert "ir-triage" in ids
+    assert "alert-fanout" in ids
+    # definitions compile-ready
+    for item in result["data"]:
+        assert item["definition"]["steps"]

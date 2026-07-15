@@ -466,7 +466,8 @@ Vitest 默认关闭 CSS 解析、限制 `maxWorkers=4`、使用 instant `user-ev
 | POST | `/api/workflows` | `workflows:write` | 创建 |
 | GET/PATCH/DELETE | `/api/workflows/{id}` | read / write | 详情、更新、删除（owner 隔离，admin 可跨用户） |
 | GET | `/api/workflows/executors` | `workflows:read` | 可绑执行器目录 |
-| POST | `/api/workflows/{id}/runs` | `workflows:write` | SSE 运行 |
+| GET | `/api/workflows/templates` | `workflows:read` | 内置安全模板 |
+| POST | `/api/workflows/{id}/runs` | `workflows:run` | SSE 运行 |
 
 **SSE 事件（工作台投影）**
 
@@ -500,6 +501,7 @@ frontend/src/features/workflow/*      # 画布优先 Studio（reparent / 快捷�
 | **PR1** ✅ | 线性 Step + Save/Run SSE | 本版 |
 | **PR2** ✅ | `Parallel` / `Condition(CEL)` / `Loop` | 表单级嵌套控制流；CEL 依赖 `cel-python`；编译期禁止 Parallel 内 HITL |
 | **PR3** ✅ | 画布 + Step HITL | React Flow 只读布局选中；Step `requires_confirmation` → Approvals；`workflows:read/write` |
+| **PR9** ✅ | 安全模板库 / `workflows:run` / Inspector CEL 自动完成 |
 | **PR8c** ✅ | 触发器生产化：cron 原子占坑 / webhook·cron 审计 / Studio 触发历史 |
 | **PR8d** ✅ | 画布性能：runStatus data patch；Inspector undo burst |
 | **PR8b** ✅ | 画布打磨：保存校验 / 连线高亮 / run 聚焦 / NodeToolbar |

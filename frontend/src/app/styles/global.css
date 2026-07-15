@@ -2373,3 +2373,46 @@ html.dark .wf-flow-node__badge {
     min-height: 55vh;
   }
 }
+
+/* Workflow templates (PR9) */
+.workflow-templates {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+  padding-right: 2px;
+}
+.workflow-templates__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  border: 1px solid var(--tais-border, rgba(0, 0, 0, 0.08));
+  background: var(--tais-surface, #fff);
+  color: inherit;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+html.dark .workflow-templates__item {
+  background: var(--tais-surface, #141414);
+  border-color: var(--tais-border, rgba(255, 255, 255, 0.12));
+}
+.workflow-templates__item:hover:not(:disabled) {
+  border-color: var(--ant-color-primary, #1677ff);
+  box-shadow: 0 0 0 1px rgba(22, 119, 255, 0.15);
+}
+.workflow-templates__item:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.workflow-templates__item strong {
+  font-size: 12px;
+}
+.workflow-templates__item span {
+  font-size: 11px;
+  color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.45));
+  line-height: 1.35;
+}

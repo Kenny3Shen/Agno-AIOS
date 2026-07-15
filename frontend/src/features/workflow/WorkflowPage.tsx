@@ -40,6 +40,9 @@ import type { WorkflowNodeType } from './types'
 import { buildWorkflowCode } from './utils'
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
 import { listWorkflowTriggerHistory } from './api'
+import { CelExpressionField } from './CelExpressionField'
+import { currentUserQuery } from '@/features/auth'
+import { hasScope } from '@/shared/auth/permissions'
 import { useEffect, type ReactNode } from 'react'
 
 const PALETTE: Array<{
@@ -59,6 +62,11 @@ export function WorkflowPage() {
   const { t } = useTranslation('workflow')
   const routerNav = useRouter()
   const workflow = useWorkflow()
+  const currentUser = useQuery(currentUserQuery())
+  const canRun =
+    hasScope(currentUser.data, 'workflows:run') ||
+    hasScope(currentUser.data, 'workflows:write')
+  const canWrite = hasScope(currentUser.data, 'workflows:write')
 
   const triggerHistoryQuery = useQuery({
     queryKey: ['workflows', 'trigger-history', workflow.state.workflowId],
@@ -157,6 +165,7 @@ export function WorkflowPage() {
             icon={<SaveOutlined />}
             type="primary"
             loading={workflow.state.saving}
+            disabled={!canWrite}
             onClick={() => void workflow.save()}
           >
             {t('save')}
@@ -166,7 +175,7 @@ export function WorkflowPage() {
             <Button
               icon={<CloudUploadOutlined />}
               loading={workflow.state.saving}
-              disabled={!workflow.state.workflowId || workflow.state.dirty}
+              disabled={!canWrite || !workflow.state.workflowId || workflow.state.dirty}
               onClick={() => void workflow.publish()}
             >
               {t('publish')}
@@ -174,7 +183,7 @@ export function WorkflowPage() {
           </Tooltip>
           <Button
             icon={<PlayCircleOutlined />}
-            disabled={workflow.state.running}
+            disabled={workflow.state.running || !canRun}
             onClick={() => void workflow.run()}
           >
             {t('run')}
@@ -224,6 +233,30 @@ export function WorkflowPage() {
             <Typography.Paragraph type="secondary" className="workflow-studio__hint">
               {t('paletteDragHint')}
             </Typography.Paragraph>
+          </section>
+
+          <section className="workflow-studio__panel">
+            <div className="workflow-studio__panel-title">{t('templates')}</div>
+            <div className="workflow-templates">
+              {(workflow.templatesQuery.data ?? []).map((tpl) => (
+                <button
+                  key={tpl.id}
+                  type="button"
+                  className="workflow-templates__item"
+                  title={tpl.description}
+                  disabled={!canWrite}
+                  onClick={() => workflow.applyTemplate(tpl.id)}
+                >
+                  <strong>{tpl.name}</strong>
+                  <span>{tpl.description}</span>
+                </button>
+              ))}
+              {!workflow.templatesQuery.data?.length && !workflow.templatesQuery.isLoading ? (
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {t('templatesEmpty')}
+                </Typography.Text>
+              ) : null}
+            </div>
           </section>
 
           <section className="workflow-studio__panel workflow-studio__panel--grow">
@@ -481,13 +514,11 @@ export function WorkflowPage() {
                 {step.type === 'condition' ? (
                   <>
                     <Typography.Text type="secondary">{t('evaluatorCel')}</Typography.Text>
-                    <Input.TextArea
+                    <CelExpressionField
+                      mode="condition"
                       value={step.evaluatorCel}
-                      onChange={(e) =>
-                        workflow.update({ ...step, evaluatorCel: e.target.value })
-                      }
-                      rows={3}
-                      style={{ marginTop: 4 }}
+                      onChange={(value) => workflow.update({ ...step, evaluatorCel: value })}
+                      placeholder={t('celPlaceholder')}
                     />
                     <Space wrap style={{ marginTop: 8 }}>
                       <Button
@@ -521,13 +552,11 @@ export function WorkflowPage() {
                       }
                     />
                     <Typography.Text type="secondary">{t('endConditionCel')}</Typography.Text>
-                    <Input.TextArea
+                    <CelExpressionField
+                      mode="loop"
                       value={step.endConditionCel}
-                      onChange={(e) =>
-                        workflow.update({ ...step, endConditionCel: e.target.value })
-                      }
-                      rows={3}
-                      style={{ marginTop: 4 }}
+                      onChange={(value) => workflow.update({ ...step, endConditionCel: value })}
+                      placeholder={t('celPlaceholder')}
                     />
                     <Button
                       size="small"
@@ -554,13 +583,11 @@ export function WorkflowPage() {
                 {step.type === 'router' ? (
                   <>
                     <Typography.Text type="secondary">{t('selectorCel')}</Typography.Text>
-                    <Input.TextArea
+                    <CelExpressionField
+                      mode="router"
                       value={step.selectorCel}
-                      onChange={(e) =>
-                        workflow.update({ ...step, selectorCel: e.target.value })
-                      }
-                      rows={3}
-                      style={{ marginTop: 4 }}
+                      onChange={(value) => workflow.update({ ...step, selectorCel: value })}
+                      placeholder={t('celPlaceholder')}
                     />
                     <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
                       {t('routerChoicesHint')}

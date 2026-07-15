@@ -7,6 +7,7 @@ import {
   listExecutors,
   listWorkflowVersions,
   listWorkflows,
+  listWorkflowTemplates,
   restoreWorkflowVersion,
   publishWorkflow,
   streamWorkflowRun,
@@ -27,6 +28,7 @@ import {
   createNode,
   defaultTriggers,
   findNode,
+  fromDefinition,
   fromRecord,
   insertChild,
   moveNodeAfter,
@@ -105,6 +107,10 @@ export function useWorkflow() {
     queryKey: ['workflows', 'versions', state.workflowId],
     queryFn: () => listWorkflowVersions(state.workflowId!),
     enabled: Boolean(state.workflowId),
+  })
+  const templatesQuery = useQuery({
+    queryKey: ['workflows', 'templates'],
+    queryFn: listWorkflowTemplates,
   })
 
   useEffect(() => {
@@ -473,6 +479,35 @@ export function useWorkflow() {
     }))
   }
 
+  const applyTemplate = (templateId: string) => {
+    const template = (templatesQuery.data ?? []).find((item) => item.id === templateId)
+    if (!template) return
+    pastRef.current = []
+    futureRef.current = []
+    bumpHistory()
+    const loaded = fromDefinition(template.definition, {
+      name: template.definition.name || template.name,
+      description: template.definition.description || template.description,
+    })
+    setState((current) => ({
+      ...current,
+      ...loaded,
+      selectedIds: loaded.selectedId ? [loaded.selectedId] : [],
+      input: current.input,
+      sessionId: crypto.randomUUID(),
+      modelId: current.modelId,
+      runLog: [],
+      nodeRunStatus: {},
+      runHistory: [],
+      error: null,
+      validationIssues: [],
+      dirty: true,
+      lastRunId: null,
+      lastSessionId: null,
+      lastApprovalId: null,
+    }))
+  }
+
   const reset = () => {
     abortRef.current?.abort()
     pastRef.current = []
@@ -713,6 +748,7 @@ export function useWorkflow() {
     executorsQuery,
     modelsQuery,
     versionsQuery,
+    templatesQuery,
     patch,
     patchMeta,
     patchTriggers,
@@ -737,6 +773,7 @@ export function useWorkflow() {
     undo,
     redo,
     load,
+    applyTemplate,
     reset,
     save,
     publish,

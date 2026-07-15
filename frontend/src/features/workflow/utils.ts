@@ -803,6 +803,22 @@ const fromDefinitionNode = (node: WorkflowDefinitionNode): WorkflowNode => {
   }
 }
 
+export const fromDefinition = (
+  definition: WorkflowDefinition,
+  options?: { name?: string; description?: string }
+): Partial<WorkflowState> => {
+  const steps = (definition.steps ?? []).map(fromDefinitionNode)
+  return {
+    workflowId: null,
+    name: options?.name ?? definition.name ?? '',
+    description: options?.description ?? definition.description ?? '',
+    steps,
+    triggers: defaultTriggers(),
+    selectedId: steps[0]?.id ?? null,
+    dirty: true,
+  }
+}
+
 export const fromRecord = (record: WorkflowRecord): Partial<WorkflowState> => {
   const steps = (record.definition?.steps ?? []).map(fromDefinitionNode)
   return {

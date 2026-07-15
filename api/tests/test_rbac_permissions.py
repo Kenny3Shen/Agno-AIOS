@@ -43,6 +43,7 @@ def test_user_scopes_use_agentos_resource_names():
         "sessions:write",
         "workflows:read",
         "workflows:write",
+        "workflows:run",
         "traces:read",
         "memories:read",
         "memories:write",
@@ -87,6 +88,7 @@ def test_guest_scopes_are_read_only():
     assert has_scope(actor, "knowledge:read")
     assert not has_scope(actor, "sessions:write")
     assert not has_scope(actor, "workflows:write")
+    assert not has_scope(actor, "workflows:run")
     assert not has_scope(actor, "memories:write")
     assert not has_scope(actor, "knowledge:write")
     assert not has_scope(actor, "evals:read")

@@ -20,6 +20,7 @@ from api.services.audit_service import (
 )
 from api.services.workflow_compiler import WorkflowDefinitionError
 from api.services.workflow_run_runtime import stream_workflow_run
+from api.services.workflow_templates import list_workflow_templates
 from api.services.workflow_service import (
     create_workflow_for_actor,
     delete_workflow_for_actor,
@@ -55,6 +56,12 @@ class WorkflowRunRequest(BaseModel):
 @router.get("/executors")
 async def list_executors(user: User = Depends(require_scope("workflows:read"))):
     return {"data": executor_catalog()}
+
+
+@router.get("/templates")
+async def list_templates(user: User = Depends(require_scope("workflows:read"))):
+    """Built-in security workflow templates (PR9)."""
+    return {"data": list_workflow_templates()}
 
 
 @router.get("")
@@ -440,7 +447,7 @@ async def run_workflow(
     workflow_id: str,
     body: WorkflowRunRequest,
     request: Request,
-    user: User = Depends(require_scope("workflows:write")),
+    user: User = Depends(require_scope("workflows:run")),
 ):
     row = await get_workflow_for_actor(user, workflow_id)
     if row is None:
