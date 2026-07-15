@@ -1,5 +1,115 @@
 # 下一步工作
 
+## 下一阶段（产品 P0，已对齐）
+
+> 目标：把「安全模板 → 保存 → 发布 → Webhook/Cron → HITL → Trace/通知」做成 **10 分钟默认可走通路径**；并补齐 Workflow 与 Chat 的能力对齐（Step 级 Skill）。
+>
+> 原则：不扩新控制流节点类型；不换画布库；不回退 Memory/Trace legacy。
+
+### 产品验收（总）
+
+- 新用户（有 `workflows:write` + `run`）从空 Studio 出发，**不查文档** 可在 10 分钟内：
+  1. 选用安全模板创建草稿并保存  
+  2. 看懂 **草稿 vs 已发布**  
+  3. Publish 后配置/复制 Webhook 或启用 Cron  
+  4. 触发一次运行 → 如有 HITL 在 Approvals 处理 → 从 Studio/通知跳到 Trace  
+- 值班路径：失败触发或待审批 **进通知中心**，不只埋在 Audit。
+
+### 明确不做（本阶段）
+
+- 新 DSL 节点类型 / 换 React Flow  
+- 远程 Skill 市场、多租户计费  
+- Dashboard 大重构（仅要求失败可发现，聚合下推可放 P1）  
+- Parallel 内 HITL、全站 i18n 一次做完  
+
+---
+
+### PR-P0.1 主路径状态机（Draft / Published / 引导）
+
+**用户价值**：知道「线上跑的是哪一版」；空状态默认走模板。
+
+| 项 | 说明 |
+|----|------|
+| Studio 顶栏 | 常驻：`draft vN` / `published vM @ time` / `未发布`；脏草稿徽标 |
+| 未发布拦截 | Cron/Webhook 启用时前端强提示 + 禁用或二次确认；后端 409 文案对齐 |
+| 空状态 | 画布空态 CTA：**从模板开始**（IR triage 默认） |
+| 模板动作 | 「载入草稿」外增加 **保存并打开**（可选：保存后高亮 Publish） |
+| 验收 | 未 Publish 开 Cron → 明确错误；Publish 后顶栏版本变化；空画布 1 次点击进模板 |
+
+**主要路径**：`WorkflowPage` / `useWorkflow` / `workflow_templates` / i18n
+
+---
+
+### PR-P0.2 触发器运维可读（Webhook / Cron）
+
+**用户价值**：触发器像「服务」而不是「隐藏配置」。
+
+| 项 | 说明 |
+|----|------|
+| Webhook | Studio 展示完整 URL、secret 复制/轮换、`curl` 示例；可选同步响应 `run_id`（已有 SSE 则文档化） |
+| Cron | 展示 `last_run_at`、**下次预计触发**（前端 croniter 或后端字段）、启用前校验已发布 |
+| 历史 | 触发历史保留；失败项一键 Trace |
+| 通知 | `workflow.trigger.*` 终态 `error` → 通知 owner（复用 notification_service） |
+| 验收 | 复制 curl 可触发已发布流；失败后通知可见；Cron 卡片能回答「上次/下次」 |
+
+**主要路径**：`workflow_cron` / `routes/workflows` webhook / `WorkflowPage` Definition / `notification_service`
+
+---
+
+### PR-P0.3 Step 级 Skill 绑定（Chat/Workflow 对齐）
+
+**用户价值**：编排步骤可用与 Chat 相同的安全 Skill，模板可声明依赖。
+
+| 项 | 说明 |
+|----|------|
+| DSL | Step：`skills?: string[]`（skill 目录名）；默认 `[]` = 不挂 skill |
+| 编译/运行 | Workflow run 按 step 或 run 级过滤 `get_enabled_skill_dirs` ∩ 绑定（最小：run 级并集，文档写清） |
+| Chat（最小） | 保持全局 enabled；可选后续 session 覆盖（本 PR 可不做） |
+| Studio | Step Inspector：多选已启用 Skill；模板 JSON 带推荐 `skills` |
+| 审计 | `skill.load` metadata：workflow_id / run_id / skill names |
+| 验收 | IR 模板某步绑定 skill 后，run 日志/审计可见加载；未绑定则不加载该 skill |
+
+**主要路径**：`workflow_compiler` / `workflow_run_runtime` / `skill_service` / Inspector / templates
+
+**风险**：Skill 脚本安全面 — 本 PR 只绑定已启用 skill，不扩大脚本权限。
+
+---
+
+### PR-P0.4 审批值班入口（薄）
+
+**用户价值**：HITL 从「列表功能」变成「待办」。
+
+| 项 | 说明 |
+|----|------|
+| Approvals | Tab 或筛选：**工作流 HITL** vs **上传审批**；默认进 pending |
+| 通知 | 新 pending workflow approval → 通知审批人/admin（已有部分则补齐 deep link） |
+| Studio | paused 态 CTA 保持「打开审批」；通知点击进同一 deep link |
+| 验收 | 暂停 run → 通知 → 打开表单 → 批准后 continue；列表能只看 workflow |
+
+**主要路径**：`ApprovalsPage` / `notification_service` / `workflow_run_runtime` pause
+
+---
+
+### 建议实施顺序
+
+```
+P0.1 状态机 + 空态引导     （1 切片，纯产品可见）
+P0.2 触发器运维 + 失败通知 （依赖已发布语义）
+P0.3 Step Skill 绑定       （能力对齐，模板含依赖）
+P0.4 审批值班薄入口        （可与 P0.2 通知并行）
+```
+
+### P1（本阶段后，不阻塞 P0）
+
+- Dashboard 聚合下推 / 可信失败列表  
+- Playbook 内容库扩充 + Executor 目录产品化  
+- 角色预设（分析师 / 作者 / 审批 / 审计）  
+- Skill 版本与「被引用」只读视图  
+- i18n 与静默失败显性化（模型/Memory 后台错误）
+
+---
+
+
 ## 已完成：Studio 性能（SSE 增量 + 选中/高亮 patch）
 
 - Run SSE：`applyNodeRunStatusEvent` 增量更新 `nodeRunStatus`（不再每次全量 replay log）。

@@ -501,6 +501,7 @@ frontend/src/features/workflow/*      # 画布优先 Studio（reparent / 快捷�
 | **PR1** ✅ | 线性 Step + Save/Run SSE | 本版 |
 | **PR2** ✅ | `Parallel` / `Condition(CEL)` / `Loop` | 表单级嵌套控制流；CEL 依赖 `cel-python`；编译期禁止 Parallel 内 HITL |
 | **PR3** ✅ | 画布 + Step HITL | React Flow 只读布局选中；Step `requires_confirmation` → Approvals；`workflows:read/write` |
+| **P0 产品** 🔜 | 主路径状态机 / 触发器运维 / Step Skill / 审批值班（见 TODOs） |
 | **Perf** ✅ | Studio SSE 增量 runStatus + 选中/高亮 patch + runLog 上限 |
 | **P0 UI** ✅ | Studio：`updateNodeData` 运行态 + antd-in-canvas（nodrag/popup） |
 | **PR9** ✅ | 安全模板库 / `workflows:run` / Inspector CEL 自动完成 |
@@ -559,10 +560,10 @@ frontend/src/features/workflow/*      # 画布优先 Studio（reparent / 快捷�
 ### 设计决策（已拍板 / 默认）
 
 1. **Executor 来源（PR1）**：内置 Agent 注册表，不手填任意 Python。  
-2. **MCP/Skills（PR1–PR2）**：步骤默认无工具；需要工具的编排在后续 PR 按 step 开关。  
+2. **MCP/Skills**：步骤默认无工具；**P0.3** 起 Step 可绑定已启用 Skill（见 TODOs 产品 P0）。  
 3. **画布（PR1–PR2）**：不做；列表 + 嵌套 Inspector；React Flow 在 PR3。  
 4. **Session**：每次 Run 新 `session_id`，与 Chat session 隔离；UI 可跳转 Trace。  
-5. **权限（PR3）**：独立 `workflows:read` / `workflows:write`；菜单用 `workflows:read`。
+5. **权限（PR3/PR9）**：`workflows:read` / `write` / `run`；菜单用 read；Run 用 run；编辑用 write。
 
 ### 明确不做
 
