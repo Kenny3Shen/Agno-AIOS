@@ -51,8 +51,9 @@ describe('workflow behavior', () => {
     })
   })
 
-  it('builds router definition', () => {
+  it('builds router definition without seeding agent steps', () => {
     const router = createNode('router')
+    expect(router.choices?.every((c) => c.steps.length === 0)).toBe(true)
     const definition = toDefinition({
       name: 'r',
       description: '',
@@ -60,6 +61,14 @@ describe('workflow behavior', () => {
     })
     expect(definition.steps[0]?.type).toBe('router')
     expect(definition.steps[0]?.choices?.length).toBe(2)
+  })
+
+  it('creates control-flow nodes without nested agent steps', () => {
+    expect(createNode('parallel').steps).toEqual([])
+    expect(createNode('condition').thenSteps).toEqual([])
+    expect(createNode('condition').elseSteps).toEqual([])
+    expect(createNode('loop').steps).toEqual([])
+    expect(createNode('step').type).toBe('step')
   })
 
   it('reorders roots by position and connect sequence', () => {

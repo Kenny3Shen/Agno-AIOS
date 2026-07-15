@@ -15,12 +15,14 @@ export const defaultTriggers = (): WorkflowTriggers => ({
 
 export const createNode = (type: WorkflowNodeType = 'step'): WorkflowNode => {
   const id = crypto.randomUUID()
+  // Control-flow nodes start empty: users drop Agent steps into them.
+  // Seeding default agents caused "extra Agent step" spam on the canvas.
   if (type === 'parallel') {
     return {
       id,
       type: 'parallel',
       name: 'Parallel',
-      steps: [createNode('step'), createNode('step')],
+      steps: [],
     }
   }
   if (type === 'condition') {
@@ -29,8 +31,8 @@ export const createNode = (type: WorkflowNodeType = 'step'): WorkflowNode => {
       type: 'condition',
       name: 'Condition',
       evaluatorCel: 'input.contains("critical")',
-      thenSteps: [createNode('step')],
-      elseSteps: [createNode('step')],
+      thenSteps: [],
+      elseSteps: [],
     }
   }
   if (type === 'loop') {
@@ -40,22 +42,18 @@ export const createNode = (type: WorkflowNodeType = 'step'): WorkflowNode => {
       name: 'Loop',
       maxIterations: 3,
       endConditionCel: 'current_iteration >= 1',
-      steps: [createNode('step')],
+      steps: [],
     }
   }
   if (type === 'router') {
-    const a = createNode('step')
-    const b = createNode('step')
-    a.name = 'path_a'
-    b.name = 'path_b'
     return {
       id,
       type: 'router',
       name: 'Router',
       selectorCel: 'input.contains("critical") ? "path_a" : "path_b"',
       choices: [
-        { id: crypto.randomUUID(), name: 'path_a', steps: [a] },
-        { id: crypto.randomUUID(), name: 'path_b', steps: [b] },
+        { id: crypto.randomUUID(), name: 'path_a', steps: [] },
+        { id: crypto.randomUUID(), name: 'path_b', steps: [] },
       ],
     }
   }
