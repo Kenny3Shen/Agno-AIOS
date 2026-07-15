@@ -6,6 +6,7 @@ import {
   InputNumber,
   Select,
   Space,
+  Switch,
   Tag,
   Typography,
   Alert,
@@ -25,6 +26,7 @@ import { PageHeader } from '@/shared/ui/PageHeader'
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
 import { useWorkflow } from './useWorkflow'
 import { buildWorkflowCode, nodeLabel } from './utils'
+import { WorkflowCanvas } from './WorkflowCanvas'
 import type { WorkflowNode, WorkflowNodeType } from './types'
 import { useTranslation } from 'react-i18next'
 import { useRouter } from '@tanstack/react-router'
@@ -210,6 +212,14 @@ export function WorkflowPage() {
           />
         </Card>
 
+        <Card className="workbench-card workflow-canvas-card" title={t('canvas')}>
+          <WorkflowCanvas
+            steps={workflow.state.steps}
+            selectedId={workflow.state.selectedId}
+            onSelect={(id) => workflow.patchMeta({ selectedId: id, dirty: workflow.state.dirty })}
+          />
+        </Card>
+
         <Card className="workbench-card" title={`${t('steps')} (${workflow.state.steps.length})`}>
           {workflow.state.steps.length ? (
             <div className="step-list">
@@ -273,6 +283,25 @@ export function WorkflowPage() {
                     placeholder={t('instructionsPlaceholder')}
                     rows={6}
                   />
+                  <Space>
+                    <Switch
+                      checked={Boolean(step.requiresConfirmation)}
+                      onChange={(checked) =>
+                        workflow.update({ ...step, requiresConfirmation: checked })
+                      }
+                    />
+                    <Typography.Text>{t('requiresConfirmation')}</Typography.Text>
+                  </Space>
+                  {step.requiresConfirmation ? (
+                    <Input.TextArea
+                      value={step.confirmationMessage || ''}
+                      onChange={(e) =>
+                        workflow.update({ ...step, confirmationMessage: e.target.value })
+                      }
+                      placeholder={t('confirmationMessagePlaceholder')}
+                      rows={2}
+                    />
+                  ) : null}
                 </>
               ) : null}
 

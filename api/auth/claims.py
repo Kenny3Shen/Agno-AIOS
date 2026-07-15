@@ -24,6 +24,8 @@ ROLE_SCOPES: dict[Role, set[str]] = {
     "user": {
         "sessions:read",
         "sessions:write",
+        "workflows:read",
+        "workflows:write",
         "traces:read",
         "memories:read",
         "memories:write",

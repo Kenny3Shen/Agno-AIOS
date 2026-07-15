@@ -1,6 +1,6 @@
 {
   "title": "Workflows",
-  "description": "PR2: linear steps plus Parallel / Condition(CEL) / Loop — save definitions and run Agno Workflows over SSE",
+  "description": "PR3: nested control flow + canvas + step HITL — save definitions and run Agno Workflows over SSE",
   "addStep": "Agent step",
   "addNode": "Add node",
   "addParallel": "Parallel",
@@ -13,7 +13,7 @@
   "library": "Library",
   "loadPlaceholder": "Load a saved workflow",
   "deleteSaved": "Delete current workflow",
-  "pr2Hint": "Nested Parallel / Condition(CEL) / Loop are supported. Canvas and step HITL arrive in PR3.",
+  "pr2Hint": "PR3: React Flow canvas + step confirmation HITL (shared Approvals) + workflows:read/write scopes.",
   "definition": "Definition",
   "namePlaceholder": "Workflow name",
   "descriptionPlaceholder": "Description",
@@ -37,5 +37,9 @@
   "runLog": "Run log",
   "emptyRunLog": "Step / parallel / condition / loop events appear after a run",
   "openTrace": "Open session in Trace",
-  "generatedCode": "Exported reference code (PR2 control flow)"
+  "generatedCode": "Exported reference code (PR2 control flow)",
+  "canvas": "Canvas",
+  "requiresConfirmation": "Require step confirmation (HITL)",
+  "confirmationMessagePlaceholder": "Confirmation message (shown in Approvals)",
+  "pr3Hint": "PR3: React Flow canvas + step confirmation HITL (shared Approvals) + workflows:read/write scopes."
 }

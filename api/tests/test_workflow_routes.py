@@ -20,7 +20,7 @@ def route_dependency(endpoint_name: str):
     raise AssertionError(f"missing route for {endpoint_name}")
 
 
-def test_list_workflows_allows_user_with_sessions_read():
+def test_list_workflows_allows_user_with_workflows_read():
     dependency = route_dependency("list_workflows")
     assert dependency(user=actor()) is not None
 

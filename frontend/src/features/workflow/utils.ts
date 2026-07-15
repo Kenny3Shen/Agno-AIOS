@@ -166,13 +166,18 @@ const toDefinitionNode = (node: WorkflowNode): WorkflowDefinitionNode => {
       steps: (node.steps ?? []).map(toDefinitionNode),
     }
   }
-  return {
+  const step: WorkflowDefinitionNode = {
     id: node.id,
     type: 'step',
     name: node.name || node.targetId || 'step',
     executor: { kind: 'agent', ref: node.targetId || 'security-operations' },
     instructions: node.instructions || '',
   }
+  if (node.requiresConfirmation) {
+    step.requires_confirmation = true
+    if (node.confirmationMessage) step.confirmation_message = node.confirmationMessage
+  }
+  return step
 }
 
 export const toDefinition = (
@@ -219,6 +224,8 @@ const fromDefinitionNode = (node: WorkflowDefinitionNode): WorkflowNode => {
     targetId: node.executor?.ref || 'security-operations',
     name: node.name || '',
     instructions: node.instructions || '',
+    requiresConfirmation: Boolean(node.requires_confirmation),
+    confirmationMessage: node.confirmation_message || '',
   }
 }
 
@@ -306,4 +313,66 @@ export const nodeLabel = (node: WorkflowNode): string => {
   if (node.name?.trim()) return node.name
   if (node.type === 'step') return node.targetId || 'step'
   return node.type
+}
+
+
+export type CanvasLayoutNode = {
+  id: string
+  type: WorkflowNodeType
+  label: string
+  depth: number
+  x: number
+  y: number
+}
+
+export type CanvasLayoutEdge = {
+  id: string
+  source: string
+  target: string
+  label?: string
+}
+
+/** Hierarchical layout for nested workflow tree (left → right). */
+export const layoutCanvas = (roots: WorkflowNode[]): { nodes: CanvasLayoutNode[]; edges: CanvasLayoutEdge[] } => {
+  const nodes: CanvasLayoutNode[] = []
+  const edges: CanvasLayoutEdge[] = []
+  let row = 0
+  const visit = (node: WorkflowNode, depth: number, parentId: string | null, edgeLabel?: string) => {
+    const y = row * 90
+    const x = depth * 220
+    nodes.push({
+      id: node.id,
+      type: node.type,
+      label: nodeLabel(node),
+      depth,
+      x,
+      y,
+    })
+    if (parentId) {
+      edges.push({
+        id: `${parentId}->${node.id}`,
+        source: parentId,
+        target: node.id,
+        label: edgeLabel,
+      })
+    }
+    row += 1
+    if (node.type === 'condition') {
+      for (const child of node.thenSteps ?? []) visit(child, depth + 1, node.id, 'then')
+      for (const child of node.elseSteps ?? []) visit(child, depth + 1, node.id, 'else')
+    } else {
+      for (const child of node.steps ?? []) visit(child, depth + 1, node.id)
+    }
+  }
+  for (const root of roots) visit(root, 0, null)
+  // sequential top-level edges
+  for (let i = 0; i < roots.length - 1; i += 1) {
+    edges.push({
+      id: `seq-${roots[i]!.id}->${roots[i + 1]!.id}`,
+      source: roots[i]!.id,
+      target: roots[i + 1]!.id,
+      label: 'next',
+    })
+  }
+  return { nodes, edges }
 }

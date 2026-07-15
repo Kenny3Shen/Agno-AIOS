@@ -1651,3 +1651,20 @@ html.dark .shell-menu .ant-menu-item-selected {
     animation-iteration-count: 1 !important;
   }
 }
+
+
+.workflow-canvas-card .ant-card-body {
+  padding: 0;
+}
+
+.workflow-canvas {
+  height: 360px;
+  width: 100%;
+}
+
+.workflow-canvas.empty {
+  display: grid;
+  place-items: center;
+  color: var(--ant-color-text-secondary, #64748b);
+  height: 200px;
+}

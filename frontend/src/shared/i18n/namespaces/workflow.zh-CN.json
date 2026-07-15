@@ -1,6 +1,6 @@
 {
   "title": "工作流",
-  "description": "PR2：线性 Step + Parallel / Condition(CEL) / Loop — 保存定义并通过 SSE 运行 Agno Workflow",
+  "description": "PR3：嵌套控制流 + 画布 + Step HITL — 保存并通过 SSE 运行 Agno Workflow",
   "addStep": "Agent 步骤",
   "addNode": "添加节点",
   "addParallel": "并行 Parallel",
@@ -13,7 +13,7 @@
   "library": "工作流库",
   "loadPlaceholder": "加载已保存的工作流",
   "deleteSaved": "删除当前工作流",
-  "pr2Hint": "支持嵌套 Parallel / Condition(CEL) / Loop。画布与 Step HITL 在 PR3。",
+  "pr2Hint": "PR3：React Flow 画布 + Step 确认 HITL（Approvals 共用）+ workflows:read/write 权限。",
   "definition": "定义",
   "namePlaceholder": "工作流名称",
   "descriptionPlaceholder": "描述",
@@ -37,5 +37,9 @@
   "runLog": "运行日志",
   "emptyRunLog": "运行后显示 step / parallel / condition / loop 事件",
   "openTrace": "在 Trace 中打开 session",
-  "generatedCode": "导出参考代码（PR2 控制流）"
+  "generatedCode": "导出参考代码（PR2 控制流）",
+  "canvas": "画布",
+  "requiresConfirmation": "步骤需人工确认 (HITL)",
+  "confirmationMessagePlaceholder": "确认提示文案（显示在 Approvals）",
+  "pr3Hint": "PR3：React Flow 画布 + Step 确认 HITL（Approvals 共用）+ workflows:read/write 权限。"
 }

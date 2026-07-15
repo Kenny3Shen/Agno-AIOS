@@ -144,3 +144,60 @@ async def test_stream_workflow_run_projects_lifecycle_events():
     assert completed.data["content"] == "triaged"
     condition = next(event for event in events if event.event == "condition.completed")
     assert condition.data["branch"] == "then"
+
+
+
+class FakePausedWorkflow:
+    def __init__(self):
+        self.name = "paused-demo"
+
+    def arun(self, **_kwargs):
+        async def _gen():
+            yield SimpleNamespace(
+                event="WorkflowStarted",
+                run_id="run-p",
+                session_id="sess-p",
+                workflow_name="paused-demo",
+            )
+            yield SimpleNamespace(
+                event="WorkflowPaused",
+                run_id="run-p",
+                session_id="sess-p",
+                paused_step_name="Gate",
+                step_id="gate",
+                content="Confirm gate",
+            )
+
+        return _gen()
+
+
+@pytest.mark.asyncio
+async def test_stream_workflow_paused_creates_approval():
+    with (
+        patch.object(
+            workflow_run_runtime,
+            "compile_workflow",
+            new=AsyncMock(return_value=FakePausedWorkflow()),
+        ),
+        patch.object(
+            workflow_run_runtime,
+            "_create_workflow_step_approval",
+            new=AsyncMock(return_value="appr-1"),
+        ) as create_appr,
+    ):
+        events = [
+            event
+            async for event in workflow_run_runtime.stream_workflow_run(
+                workflow_id="wf-p",
+                definition={"name": "p", "steps": []},
+                input_text="x",
+                user_id="u1",
+                session_id="sess-p",
+                run_id="run-p",
+            )
+        ]
+    names = [event.event for event in events]
+    assert names[-1] == "workflow.paused"
+    paused = events[-1]
+    assert paused.data["approval_id"] == "appr-1"
+    create_appr.assert_awaited_once()

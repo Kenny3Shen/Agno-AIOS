@@ -119,9 +119,9 @@ def _assert_valid_cel(expression: str, path: str) -> None:
         raise WorkflowDefinitionError(f"{path}: invalid CEL expression: {expression!r}")
 
 
-def _reject_hitl_flags(item: dict[str, Any], path: str) -> None:
+def _reject_advanced_hitl_flags(item: dict[str, Any], path: str) -> None:
+    """PR3 supports step requires_confirmation only; other HITL modes stay closed."""
     hitl_keys = (
-        "requires_confirmation",
         "requires_user_input",
         "requires_output_review",
         "requires_iteration_review",
@@ -130,7 +130,7 @@ def _reject_hitl_flags(item: dict[str, Any], path: str) -> None:
     for key in hitl_keys:
         if item.get(key):
             raise WorkflowDefinitionError(
-                f"{path}.{key} is not supported yet (HITL arrives in a later PR)"
+                f"{path}.{key} is not supported yet (only step requires_confirmation in PR3)"
             )
 
 
@@ -168,8 +168,12 @@ def _normalize_node(
     if node_id in seen_ids:
         raise WorkflowDefinitionError(f"duplicate node id: {node_id}")
     seen_ids.add(node_id)
-    _reject_hitl_flags(item_obj, path)
+    _reject_advanced_hitl_flags(item_obj, path)
     display_name = str(item_obj.get("name") or node_id).strip() or node_id
+    if node_type != "step" and item_obj.get("requires_confirmation"):
+        raise WorkflowDefinitionError(
+            f"{path}: requires_confirmation is only supported on type=step in PR3"
+        )
 
     if node_type == "step":
         return _normalize_step(
@@ -243,19 +247,25 @@ def _normalize_step(
             f"{path} unknown executor.ref={ref!r}; "
             f"allowed: {', '.join(sorted(BUILTIN_AGENT_REFS))}"
         )
-    # Agno Parallel cannot pause for executor HITL; PR2 stays tool-free/HITL-free.
-    if inside_parallel and item.get("requires_confirmation"):
+    requires_confirmation = bool(item.get("requires_confirmation"))
+    confirmation_message = str(item.get("confirmation_message") or "").strip()
+    # Agno Parallel cannot pause for executor HITL.
+    if inside_parallel and requires_confirmation:
         raise WorkflowDefinitionError(
-            f"{path}: HITL is forbidden inside Parallel (Agno constraint)"
+            f"{path}: requires_confirmation is forbidden inside Parallel (Agno constraint)"
         )
     instructions = str(item.get("instructions") or "").strip()
-    return {
+    payload: dict[str, Any] = {
         "id": node_id,
         "type": "step",
         "name": display_name,
         "executor": {"kind": "agent", "ref": ref},
         "instructions": instructions,
+        "requires_confirmation": requires_confirmation,
     }
+    if confirmation_message:
+        payload["confirmation_message"] = confirmation_message
+    return payload
 
 
 def _normalize_children(
@@ -531,6 +541,10 @@ async def _compile_node(
             step_id=str(node["id"]),
             description=instructions or name,
             agent=agent,
+            requires_confirmation=bool(node.get("requires_confirmation")),
+            confirmation_message=(
+                str(node.get("confirmation_message") or "").strip() or None
+            ),
         )
 
     if node_type == "parallel":

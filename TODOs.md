@@ -1,5 +1,14 @@
 # 下一步工作
 
+## 已完成：Workflow PR3（画布 + Step HITL + workflows scope）
+
+- 独立权限：`workflows:read` / `workflows:write`（菜单 / API 不再复用 sessions）。
+- Step `requires_confirmation`（禁止 Parallel 内 HITL）；暂停时写入 Approvals（`source_type=workflow`），批准后 `acontinue_run`。
+- 前端 React Flow 画布（层次布局 + 选中联动 Inspector）；导出代码含 HITL 字段。
+
+相关入口：`api/auth/claims.py`、`workflow_compiler.py`、`workflow_run_runtime.py`、`routes/approvals.py`、`frontend/src/features/workflow/*`
+
+
 ## 已完成：Workflow PR2（Parallel / Condition / Loop）
 
 - DSL 递归校验：`step | parallel | condition | loop`（深度/节点/叶子上限；唯一 id；CEL 语法校验）。

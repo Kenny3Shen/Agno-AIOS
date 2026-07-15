@@ -462,11 +462,11 @@ Vitest 默认关闭 CSS 解析、限制 `maxWorkers=4`、使用 instant `user-ev
 
 | 方法 | 路径 | Scope | 说明 |
 |------|------|-------|------|
-| GET | `/api/workflows` | `sessions:read` | `{data,meta}` 列表 |
-| POST | `/api/workflows` | `sessions:write` | 创建 |
+| GET | `/api/workflows` | `workflows:read` | `{data,meta}` 列表 |
+| POST | `/api/workflows` | `workflows:write` | 创建 |
 | GET/PATCH/DELETE | `/api/workflows/{id}` | read / write | 详情、更新、删除（owner 隔离，admin 可跨用户） |
-| GET | `/api/workflows/executors` | `sessions:read` | 可绑执行器目录 |
-| POST | `/api/workflows/{id}/runs` | `sessions:write` | SSE 运行 |
+| GET | `/api/workflows/executors` | `workflows:read` | 可绑执行器目录 |
+| POST | `/api/workflows/{id}/runs` | `workflows:write` | SSE 运行 |
 
 **SSE 事件（工作台投影）**
 
@@ -479,7 +479,7 @@ Vitest 默认关闭 CSS 解析、限制 `maxWorkers=4`、使用 instant `user-ev
 | `loop.started` / `loop.completed` | 循环块（含 `max_iterations` / `total_iterations`） |
 | `loop.iteration.started` / `loop.iteration.completed` | 循环迭代（含 `iteration` / `should_continue`） |
 | `workflow.completed` / `workflow.failed` / `workflow.cancelled` | 终态 |
-| `workflow.paused` | 预留（HITL 完整闭环在 PR3） |
+| `workflow.paused` | Step 确认暂停；携带 `approval_id`，在 Approvals 批准/拒绝后 `acontinue_run` |
 
 **关键代码**
 
@@ -498,7 +498,7 @@ frontend/src/features/workflow/*      # 库/编辑/保存/运行日志
 |------|------|------|
 | **PR1** ✅ | 线性 Step + Save/Run SSE | 本版 |
 | **PR2** ✅ | `Parallel` / `Condition(CEL)` / `Loop` | 表单级嵌套控制流；CEL 依赖 `cel-python`；编译期禁止 Parallel 内 HITL |
-| **PR3** | 画布 + Step HITL | React Flow；与 Approvals 共用；独立 `workflows:*` scope |
+| **PR3** ✅ | 画布 + Step HITL | React Flow 只读布局选中；Step `requires_confirmation` → Approvals；`workflows:read/write` |
 | **PR4** | Router / 嵌套 Workflow / 版本 / 触发器 | 产品化与定时/Webhook |
 
 **PR2 嵌套 DSL 示例**
@@ -550,7 +550,7 @@ frontend/src/features/workflow/*      # 库/编辑/保存/运行日志
 2. **MCP/Skills（PR1–PR2）**：步骤默认无工具；需要工具的编排在后续 PR 按 step 开关。  
 3. **画布（PR1–PR2）**：不做；列表 + 嵌套 Inspector；React Flow 在 PR3。  
 4. **Session**：每次 Run 新 `session_id`，与 Chat session 隔离；UI 可跳转 Trace。  
-5. **权限（PR1）**：复用 `sessions:read/write`；菜单不再误用 `mcp:read`。后续可拆 `workflows:read/write`。
+5. **权限（PR3）**：独立 `workflows:read` / `workflows:write`；菜单用 `workflows:read`。
 
 ### 明确不做
 

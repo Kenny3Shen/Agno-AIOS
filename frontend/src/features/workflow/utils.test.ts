@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildWorkflowCode, moveStep, toDefinition, fromRecord, createNode } from './utils'
+import { buildWorkflowCode, moveStep, toDefinition, fromRecord, createNode, layoutCanvas } from './utils'
 import type { WorkflowState } from './types'
 
 const state: WorkflowState = {
@@ -121,3 +121,19 @@ describe('workflow behavior', () => {
     expect(code).toContain('stream_events=True')
   })
 })
+
+
+  it('layouts nested nodes for the canvas', () => {
+    const layout = layoutCanvas([
+      {
+        id: 'root',
+        type: 'condition',
+        name: 'C',
+        evaluatorCel: 'true',
+        thenSteps: [{ id: 't1', type: 'step', name: 'T', targetId: 'security-operations' }],
+        elseSteps: [{ id: 'e1', type: 'step', name: 'E', targetId: 'safe-fallback' }],
+      },
+    ])
+    expect(layout.nodes.map((n) => n.id)).toEqual(['root', 't1', 'e1'])
+    expect(layout.edges.some((e) => e.label === 'then')).toBe(true)
+  })

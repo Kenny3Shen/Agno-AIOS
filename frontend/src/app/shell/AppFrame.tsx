@@ -88,7 +88,7 @@ const navigationGroups: NavigationGroup<NavigationItem>[] = [
     labelKey: 'workspace',
     items: [
       { key: '/chat', icon: <MessageOutlined />, labelKey: 'chat', scope: 'sessions:write' },
-      { key: '/workflow', icon: <NodeIndexOutlined />, labelKey: 'workflow', scope: 'sessions:write' },
+      { key: '/workflow', icon: <NodeIndexOutlined />, labelKey: 'workflow', scope: 'workflows:read' },
     ],
   },
   {

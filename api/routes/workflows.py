@@ -41,7 +41,7 @@ class WorkflowRunRequest(BaseModel):
 
 
 @router.get("/executors")
-async def list_executors(user: User = Depends(require_scope("sessions:read"))):
+async def list_executors(user: User = Depends(require_scope("workflows:read"))):
     return {"data": executor_catalog()}
 
 
@@ -50,7 +50,7 @@ async def list_workflows(
     user_id: str | None = None,
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
-    user: User = Depends(require_scope("sessions:read")),
+    user: User = Depends(require_scope("workflows:read")),
 ):
     return await list_workflows_for_actor(
         user, user_id=user_id, page=page, limit=limit
@@ -61,7 +61,7 @@ async def list_workflows(
 async def create_workflow(
     body: WorkflowWriteRequest,
     request: Request,
-    user: User = Depends(require_scope("sessions:write")),
+    user: User = Depends(require_scope("workflows:write")),
 ):
     try:
         row = await create_workflow_for_actor(
@@ -89,7 +89,7 @@ async def create_workflow(
 @router.get("/{workflow_id}")
 async def get_workflow(
     workflow_id: str,
-    user: User = Depends(require_scope("sessions:read")),
+    user: User = Depends(require_scope("workflows:read")),
 ):
     row = await get_workflow_for_actor(user, workflow_id)
     if row is None:
@@ -102,7 +102,7 @@ async def patch_workflow(
     workflow_id: str,
     body: WorkflowWriteRequest,
     request: Request,
-    user: User = Depends(require_scope("sessions:write")),
+    user: User = Depends(require_scope("workflows:write")),
 ):
     try:
         row = await update_workflow_for_actor(
@@ -135,7 +135,7 @@ async def patch_workflow(
 async def remove_workflow(
     workflow_id: str,
     request: Request,
-    user: User = Depends(require_scope("sessions:write")),
+    user: User = Depends(require_scope("workflows:write")),
 ):
     deleted = await delete_workflow_for_actor(user, workflow_id)
     if not deleted:
@@ -159,7 +159,7 @@ async def run_workflow(
     workflow_id: str,
     body: WorkflowRunRequest,
     request: Request,
-    user: User = Depends(require_scope("sessions:write")),
+    user: User = Depends(require_scope("workflows:write")),
 ):
     row = await get_workflow_for_actor(user, workflow_id)
     if row is None:
@@ -188,6 +188,8 @@ async def run_workflow(
             ):
                 if event.event in {"workflow.failed", "workflow.cancelled"}:
                     terminal = "error" if event.event == "workflow.failed" else "cancelled"
+                elif event.event == "workflow.paused":
+                    terminal = "paused"
                 yield {
                     "event": event.event,
                     "data": json.dumps(event.data, ensure_ascii=False),

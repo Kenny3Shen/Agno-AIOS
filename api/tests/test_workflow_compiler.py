@@ -205,3 +205,49 @@ def test_validate_rejects_unknown_type():
                 ]
             }
         )
+
+
+def test_validate_step_requires_confirmation():
+    normalized = validate_and_normalize_definition(
+        {
+            "steps": [
+                {
+                    "id": "gate",
+                    "type": "step",
+                    "name": "Gate",
+                    "executor": {"ref": "security-operations"},
+                    "requires_confirmation": True,
+                    "confirmation_message": "Proceed?",
+                }
+            ]
+        }
+    )
+    assert normalized["steps"][0]["requires_confirmation"] is True
+    assert normalized["steps"][0]["confirmation_message"] == "Proceed?"
+
+
+def test_validate_rejects_confirmation_inside_parallel():
+    with pytest.raises(WorkflowDefinitionError, match="forbidden inside Parallel"):
+        validate_and_normalize_definition(
+            {
+                "steps": [
+                    {
+                        "id": "fanout",
+                        "type": "parallel",
+                        "steps": [
+                            {
+                                "id": "a",
+                                "type": "step",
+                                "executor": {"ref": "security-operations"},
+                                "requires_confirmation": True,
+                            },
+                            {
+                                "id": "b",
+                                "type": "step",
+                                "executor": {"ref": "safe-fallback"},
+                            },
+                        ],
+                    }
+                ]
+            }
+        )

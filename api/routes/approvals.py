@@ -21,6 +21,10 @@ from api.services.approvals_service import (
 )
 from api.services.security_policy import PolicyAuditEvent, record_policy_event
 from api.services.security_run_runtime import resume_security_run
+from api.services.workflow_run_runtime import (
+    is_workflow_step_approval,
+    schedule_workflow_resume,
+)
 from api.services.upload_approval_service import (
     can_view_submission_approval,
     list_submission_approvals_page,
@@ -247,6 +251,14 @@ async def resolve_approval(
         except Exception as exc:
             logger.exception("调度 HITL Run 恢复失败: {}", exc)
             raise HTTPException(status_code=500, detail="Failed to schedule approval run") from exc
+    elif is_workflow_step_approval(dict(approval)):
+        try:
+            schedule_workflow_resume(approval_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except Exception as exc:
+            logger.exception("调度 Workflow 恢复失败: {}", exc)
+            raise HTTPException(status_code=500, detail="Failed to schedule workflow resume") from exc
     await record_policy_event(
         user,
         PolicyAuditEvent(

@@ -28,12 +28,14 @@ const approvalTitle = (approval: Approval) => {
   if (typeof name === 'string' && name.trim()) return name
   if (approval.resource_type === 'skill') return 'Skill upload'
   if (approval.resource_type === 'mcp') return 'MCP server upload'
+  if (approval.source_type === 'workflow') return approval.tool_name ?? approval.source_name ?? 'Workflow step'
   return approval.tool_name ?? approval.source_name ?? '-'
 }
 
 const approvalType = (approval: Approval) => {
   if (approval.resource_type === 'skill') return 'Skill upload'
   if (approval.resource_type === 'mcp') return 'MCP upload'
+  if (approval.source_type === 'workflow') return 'Workflow confirmation'
   return approval.approval_type ?? approval.source_type ?? '-'
 }
 

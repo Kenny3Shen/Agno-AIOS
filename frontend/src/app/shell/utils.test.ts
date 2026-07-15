@@ -16,7 +16,7 @@ describe('shell navigation groups', () => {
       labelKey: 'workspace',
       items: [
         { key: '/chat', scope: 'sessions:write' },
-        { key: '/workflow', scope: 'sessions:write' },
+        { key: '/workflow', scope: 'workflows:read' },
       ],
     },
     {
@@ -35,10 +35,7 @@ describe('shell navigation groups', () => {
       {
         key: 'workspace',
         labelKey: 'workspace',
-        items: [
-          { key: '/chat', scope: 'sessions:write' },
-          { key: '/workflow', scope: 'sessions:write' },
-        ],
+        items: [{ key: '/chat', scope: 'sessions:write' }],
       },
     ])
   })

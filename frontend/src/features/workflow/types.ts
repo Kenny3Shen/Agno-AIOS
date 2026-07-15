@@ -17,6 +17,9 @@ export type WorkflowNode = {
   /** loop */
   maxIterations?: number
   endConditionCel?: string
+  /** PR3 step HITL */
+  requiresConfirmation?: boolean
+  confirmationMessage?: string
 }
 
 /** @deprecated prefer WorkflowNode; kept as alias for leaf steps */
@@ -34,6 +37,8 @@ export type WorkflowDefinitionNode = {
   else_steps?: WorkflowDefinitionNode[]
   max_iterations?: number
   end_condition?: { cel?: string; value?: boolean } | null
+  requires_confirmation?: boolean
+  confirmation_message?: string
 }
 
 export type WorkflowDefinition = {

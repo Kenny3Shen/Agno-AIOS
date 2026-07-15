@@ -95,6 +95,8 @@ const normalizeNode = (value: unknown): WorkflowDefinitionNode | null => {
       ref: String(executor.ref ?? item.targetId ?? 'security-operations'),
     },
     instructions: String(item.instructions ?? ''),
+    requires_confirmation: Boolean(item.requires_confirmation),
+    confirmation_message: item.confirmation_message != null ? String(item.confirmation_message) : undefined,
   }
 }
 
