@@ -1,0 +1,146 @@
+from __future__ import annotations
+
+import time
+from typing import Any
+from uuid import uuid4
+
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Column,
+    Index,
+    MetaData,
+    String,
+    Table,
+    Text,
+    delete,
+    func,
+    select,
+    update,
+)
+from sqlalchemy.dialects.postgresql import JSONB, insert
+from sqlalchemy.schema import CreateSchema
+
+from api.config import get_settings
+from api.persistence.database import get_async_control_plane_engine
+
+WORKFLOWS_TABLE = "workflows"
+
+
+def _schema() -> str:
+    return get_settings().agno_app_schema
+
+
+def _metadata() -> MetaData:
+    return MetaData(schema=_schema())
+
+
+def workflows_table(metadata: MetaData | None = None) -> Table:
+    table = Table(
+        WORKFLOWS_TABLE,
+        metadata or _metadata(),
+        Column("id", String(36), primary_key=True),
+        Column("name", Text, nullable=False),
+        Column("description", Text, nullable=False, server_default=""),
+        Column("owner_user_id", String(255), nullable=False),
+        Column("definition", JSONB, nullable=False),
+        Column("enabled", Boolean, nullable=False, server_default="true"),
+        Column("version", BigInteger, nullable=False, server_default="1"),
+        Column("created_at", BigInteger, nullable=False),
+        Column("updated_at", BigInteger, nullable=False),
+    )
+    Index("idx_workflows_owner", table.c.owner_user_id)
+    Index("idx_workflows_updated", table.c.updated_at)
+    return table
+
+
+async def ensure_workflows_table_async() -> None:
+    table = workflows_table()
+    async with get_async_control_plane_engine().begin() as conn:
+        await conn.execute(CreateSchema(_schema(), if_not_exists=True))
+        await conn.run_sync(table.create, checkfirst=True)
+
+
+async def insert_workflow(record: dict[str, Any]) -> dict[str, Any]:
+    await ensure_workflows_table_async()
+    table = workflows_table()
+    async with get_async_control_plane_engine().begin() as conn:
+        row = (
+            await conn.execute(insert(table).values(record).returning(table))
+        ).mappings().one()
+    return dict(row)
+
+
+async def get_workflow(workflow_id: str) -> dict[str, Any] | None:
+    await ensure_workflows_table_async()
+    table = workflows_table()
+    async with get_async_control_plane_engine().begin() as conn:
+        row = (
+            await conn.execute(select(table).where(table.c.id == workflow_id))
+        ).mappings().first()
+    return dict(row) if row else None
+
+
+async def list_workflows(
+    *,
+    owner_user_id: str | None = None,
+    page: int = 1,
+    limit: int = 20,
+) -> tuple[list[dict[str, Any]], int]:
+    await ensure_workflows_table_async()
+    table = workflows_table()
+    safe_page = max(1, int(page or 1))
+    safe_limit = max(1, min(int(limit or 20), 100))
+    filters = []
+    if owner_user_id is not None:
+        filters.append(table.c.owner_user_id == owner_user_id)
+    count_stmt = select(func.count()).select_from(table)
+    list_stmt = select(table).order_by(table.c.updated_at.desc())
+    for clause in filters:
+        count_stmt = count_stmt.where(clause)
+        list_stmt = list_stmt.where(clause)
+    list_stmt = list_stmt.limit(safe_limit).offset((safe_page - 1) * safe_limit)
+    async with get_async_control_plane_engine().begin() as conn:
+        total = int((await conn.execute(count_stmt)).scalar_one())
+        rows = (await conn.execute(list_stmt)).mappings().all()
+    return [dict(row) for row in rows], total
+
+
+async def update_workflow(
+    workflow_id: str,
+    *,
+    owner_user_id: str | None = None,
+    values: dict[str, Any],
+) -> dict[str, Any] | None:
+    await ensure_workflows_table_async()
+    table = workflows_table()
+    stmt = update(table).where(table.c.id == workflow_id)
+    if owner_user_id is not None:
+        stmt = stmt.where(table.c.owner_user_id == owner_user_id)
+    stmt = stmt.values(**values).returning(table)
+    async with get_async_control_plane_engine().begin() as conn:
+        row = (await conn.execute(stmt)).mappings().first()
+    return dict(row) if row else None
+
+
+async def delete_workflow(
+    workflow_id: str,
+    *,
+    owner_user_id: str | None = None,
+) -> bool:
+    await ensure_workflows_table_async()
+    table = workflows_table()
+    stmt = delete(table).where(table.c.id == workflow_id)
+    if owner_user_id is not None:
+        stmt = stmt.where(table.c.owner_user_id == owner_user_id)
+    async with get_async_control_plane_engine().begin() as conn:
+        result = await conn.execute(stmt)
+    return bool(result.rowcount)
+
+
+def new_workflow_id() -> str:
+    return str(uuid4())
+
+
+def now_ts() -> int:
+    return int(time.time())

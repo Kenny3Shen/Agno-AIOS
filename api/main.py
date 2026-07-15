@@ -32,6 +32,7 @@ from api.routes import (
     settings,
     skills,
     trace,
+    workflows,
 )
 from api.services.security_run_runtime import recover_security_runs, shutdown_security_runtime
 from api.services.tracing_service import setup_agno_tracing
@@ -165,6 +166,7 @@ app.include_router(chat.router)
 app.include_router(collect.router)
 app.include_router(settings.router)
 app.include_router(trace.router)
+app.include_router(workflows.router)
 app.include_router(overview.router)
 app.include_router(skills.router)
 app.include_router(mcp_routes.router)

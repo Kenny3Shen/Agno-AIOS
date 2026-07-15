@@ -402,6 +402,128 @@ Vitest 默认关闭 CSS 解析、限制 `maxWorkers=4`、使用 instant `user-ev
 - **HITL / Approval**：人机审批门闩；Agent 工具 HITL 暂停 run 直至管理员解析，上传审批则控制 Skill/MCP 入库。详见 [HITL 人机审批技术架构](#hitl-人机审批技术架构)。
 - **RunRequirement**：Agno 暂停 run 的确认/输入要求；恢复时 `confirm()` / `reject(note=...)` 后 `acontinue_run`。
 
+
+## 工作流编排技术架构
+
+> 状态：**PR1 已落地**（线性 Step 定义 CRUD + 编译 + SSE 运行）。并行 / 条件 / 循环 / 画布为后续阶段。
+
+### 目标与原则
+
+工作台 Workflow 不是独立调度引擎，而是把 **可持久化 DSL → Agno `Workflow` 编译 → 流式运行 → Trace / 审计** 串成闭环：
+
+| 原则 | 说明 |
+|------|------|
+| 状态源 | Agno `Workflow` / `WorkflowSession` / Run 事件 |
+| 工作台职责 | 定义 CRUD、校验、编译、SSE 投影、权限与审计 |
+| 不做 | 全量挂载 AgentOS、前端 `eval` 用户代码、自研执行引擎 |
+| 与 Chat 关系 | 共享模型工厂；PR1 步骤 **无 MCP 工具**，降低编排不确定性 |
+
+### 端到端数据流
+
+```text
+[Workflow UI] --CRUD--> /api/workflows  --JSON DSL-->  app.workflows 表
+       |                      |
+       | POST .../runs        v
+       +--------SSE----> compile_workflow() -> agno.workflow.Workflow
+                                  |
+                                  | arun(stream=True, stream_events=True)
+                                  v
+                         workflow.* / step.* SSE
+                                  |
+                    Trace(session_id, workflow_id) + audit workflow.run
+```
+
+### PR1 契约（当前实现）
+
+**定义 DSL（仅线性 `step`）**
+
+```json
+{
+  "name": "Incident triage",
+  "description": "...",
+  "steps": [
+    {
+      "id": "triage",
+      "type": "step",
+      "name": "Triage",
+      "executor": { "kind": "agent", "ref": "security-operations" },
+      "instructions": "Classify severity"
+    }
+  ]
+}
+```
+
+- `executor.ref` 必须来自内置目录：`security-operations`、`safe-fallback`（`GET /api/workflows/executors`）。
+- 非 `step` 类型（`parallel` / `condition` / `loop` / `router`）在 PR1 **422 拒绝**。
+
+**HTTP**
+
+| 方法 | 路径 | Scope | 说明 |
+|------|------|-------|------|
+| GET | `/api/workflows` | `sessions:read` | `{data,meta}` 列表 |
+| POST | `/api/workflows` | `sessions:write` | 创建 |
+| GET/PATCH/DELETE | `/api/workflows/{id}` | read / write | 详情、更新、删除（owner 隔离，admin 可跨用户） |
+| GET | `/api/workflows/executors` | `sessions:read` | 可绑执行器目录 |
+| POST | `/api/workflows/{id}/runs` | `sessions:write` | SSE 运行 |
+
+**SSE 事件（工作台投影）**
+
+| Event | 含义 |
+|-------|------|
+| `workflow.started` | 运行开始（含 `run_id` / `session_id`） |
+| `step.started` / `step.completed` / `step.error` | 线性步骤生命周期；`content` 为预览截断 |
+| `workflow.completed` / `workflow.failed` / `workflow.cancelled` | 终态 |
+| `workflow.paused` | 预留（HITL 完整闭环在后续 PR） |
+
+**关键代码**
+
+```text
+api/persistence/workflows.py          # app.workflows 表
+api/services/workflow_compiler.py     # DSL 校验 + Agno Step/Workflow 编译
+api/services/workflow_service.py      # CRUD / 权限投影
+api/services/workflow_run_runtime.py  # arun 流 → SSE
+api/routes/workflows.py               # HTTP + EventSourceResponse
+frontend/src/features/workflow/*      # 库/编辑/保存/运行日志
+```
+
+### 路线图（PR2+）
+
+| 阶段 | 能力 | 说明 |
+|------|------|------|
+| **PR1** ✅ | 线性 Step + Save/Run SSE | 本版 |
+| **PR2** | `Parallel` / `Condition(CEL)` / `Loop` | 表单级控制流；编译期禁止 Parallel 内 executor HITL |
+| **PR3** | 画布 + Step HITL | React Flow；与 Approvals 共用；独立 `workflows:*` scope |
+| **PR4** | Router / 嵌套 Workflow / 版本 / 触发器 | 产品化与定时/Webhook |
+
+**目标 DSL 扩展示意（未实现）**
+
+```json
+{
+  "nodes": [
+    { "id": "branch", "type": "condition", "evaluator": { "cel": "previous_step_content.contains(\"critical\")" }, "then": ["contain"], "else": ["report"] },
+    { "id": "fanout", "type": "parallel", "steps": ["cve", "asset"] }
+  ]
+}
+```
+
+后端仍编译为 Agno `Condition` / `Parallel` / `Loop` / `Router`，前端只编辑可序列化图。
+
+### 设计决策（已拍板 / 默认）
+
+1. **Executor 来源（PR1）**：内置 Agent 注册表，不手填任意 Python。  
+2. **MCP/Skills（PR1）**：步骤默认无工具；需要工具的编排在 PR2+ 按 step 开关。  
+3. **画布（PR1）**：不做；列表 + Inspector 足够跑通。  
+4. **Session**：每次 Run 新 `session_id`，与 Chat session 隔离；UI 可跳转 Trace。  
+5. **权限（PR1）**：复用 `sessions:read/write`；菜单不再误用 `mcp:read`。后续可拆 `workflows:read/write`。
+
+### 明确不做
+
+- 继续只生成不可执行伪代码当作「编排完成」  
+- 前端直接执行用户代码  
+- 绕过 Agno 自研 step runner  
+- 首期并行 + 深度嵌套 + 画布一把做完  
+
+
 ## 当前计划
 
 已完成工作、下一阶段优先级、风险与验收标准见 [TODOs.md](./TODOs.md)。

@@ -1,5 +1,17 @@
 # 下一步工作
 
+## 已完成：Workflow PR1（线性 Step + Save/Run SSE）
+
+- `app.workflows` 表 + CRUD（`{data,meta}`）；定义 DSL 仅 `type=step` + 内置 agent ref。
+- `workflow_compiler` → Agno `Workflow`/`Step`；`POST /api/workflows/{id}/runs` SSE（`workflow.*` / `step.*`）。
+- 前端：库加载、保存、运行日志、导出参考代码、Trace session 深链；菜单 scope 改为 `sessions:write`。
+- README 新增「工作流编排技术架构」路线图（PR2–PR4）。
+
+相关入口：
+
+- `api/persistence/workflows.py`、`api/services/workflow_*.py`、`api/routes/workflows.py`
+- `frontend/src/features/workflow/*`
+
 ## 已完成：Chat / Markdown LaTeX 公式渲染
 
 - 抽出共享 `Markdown` 组件，启用 `@ant-design/x-markdown/plugins/Latex`（KaTeX）。
