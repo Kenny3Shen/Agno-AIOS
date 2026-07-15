@@ -11,6 +11,41 @@ from api.services.runtime_paths import CONFIG_DIR, resolve_project_path
 from api.utils.json import loads
 
 
+
+def _optional_int(
+    value: Any,
+    *,
+    default: int | None,
+    minimum: int,
+    maximum: int,
+    allow_none: bool = False,
+) -> int | None:
+    if value is None or value == "":
+        if allow_none:
+            return default
+        return 0 if default is None else default
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        if allow_none:
+            return default
+        return 0 if default is None else default
+    return max(minimum, min(maximum, number))
+
+
+def _optional_bool(value: Any, *, default: bool) -> bool:
+    if value is None or value == "":
+        return default
+    if isinstance(value, bool):
+        return value
+    text_value = str(value).strip().lower()
+    if text_value in {"1", "true", "yes", "on"}:
+        return True
+    if text_value in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
 ModelProvider = Literal["deepseek", "openai", "openai-compatible"]
 ModelApiProtocol = Literal["chat-completions", "responses"]
 StructuredOutputMode = Literal["native", "json"]
@@ -36,6 +71,10 @@ class ModelConfig(BaseModel):
     structured_output_mode: StructuredOutputMode = "json"
     default_reasoning_effort: ReasoningEffort | None = None
     parallel_tool_calls: bool | None = None
+    retries: int = Field(default=3, ge=0, le=10)
+    delay_between_retries: int = Field(default=1, ge=0, le=60)
+    exponential_backoff: bool = True
+    http_max_retries: int | None = Field(default=None, ge=0, le=10)
     base_url: str = ""
     api_key: str = ""
     description: str = ""
@@ -134,6 +173,19 @@ class ModelConfig(BaseModel):
             structured_output_mode=cast(StructuredOutputMode, structured_output_mode),
             default_reasoning_effort=cast(ReasoningEffort | None, configured_reasoning_effort),
             parallel_tool_calls=raw.get("parallel_tool_calls"),
+            retries=_optional_int(raw.get("retries"), default=3, minimum=0, maximum=10) or 0,
+            delay_between_retries=_optional_int(
+                raw.get("delay_between_retries"), default=1, minimum=0, maximum=60
+            )
+            or 0,
+            exponential_backoff=_optional_bool(raw.get("exponential_backoff"), default=True),
+            http_max_retries=_optional_int(
+                raw.get("http_max_retries"),
+                default=None,
+                minimum=0,
+                maximum=10,
+                allow_none=True,
+            ),
             base_url=base_url,
             api_key=str(raw.get("api_key") or "").strip(),
             description=str(raw.get("description") or "").strip(),
@@ -367,6 +419,10 @@ def _store_to_rows(
                 "structured_output_mode": model.structured_output_mode,
                 "default_reasoning_effort": model.default_reasoning_effort,
                 "parallel_tool_calls": model.parallel_tool_calls,
+                "retries": model.retries,
+                "delay_between_retries": model.delay_between_retries,
+                "exponential_backoff": model.exponential_backoff,
+                "http_max_retries": model.http_max_retries,
                 "base_url": model.base_url,
                 "api_key": model.api_key,
                 "description": model.description,

@@ -197,3 +197,42 @@ def test_native_provider_does_not_require_custom_base_url():
     )
 
     assert store.model_for_run().provider == "openai"
+
+
+def test_applies_retry_settings_to_responses_and_chat():
+    responses = build_agno_model(
+        config(
+            api_protocol="responses",
+            retries=4,
+            delay_between_retries=2,
+            exponential_backoff=True,
+            http_max_retries=1,
+        )
+    )
+    chat = build_agno_model(
+        config(
+            api_protocol="chat-completions",
+            retries=0,
+            delay_between_retries=5,
+            exponential_backoff=False,
+            http_max_retries=3,
+        )
+    )
+    assert isinstance(responses, OpenAIResponses)
+    assert isinstance(chat, OpenAILike)
+    assert responses.retries == 4
+    assert responses.delay_between_retries == 2
+    assert responses.exponential_backoff is True
+    assert responses.max_retries == 1
+    assert chat.retries == 0
+    assert chat.delay_between_retries == 5
+    assert chat.exponential_backoff is False
+    assert chat.max_retries == 3
+
+
+def test_default_retries_when_config_omits_retry_fields():
+    model = build_agno_model(config())
+    assert model.retries == 3
+    assert model.delay_between_retries == 1
+    assert model.exponential_backoff is True
+    assert getattr(model, "max_retries", None) is None

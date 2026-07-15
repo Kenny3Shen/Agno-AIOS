@@ -44,6 +44,10 @@ def model_configs_table(metadata: MetaData | None = None) -> Table:
         Column("structured_output_mode", String(32), nullable=False),
         Column("default_reasoning_effort", String(16), nullable=True),
         Column("parallel_tool_calls", Boolean, nullable=True),
+        Column("retries", BigInteger, nullable=False, server_default="3"),
+        Column("delay_between_retries", BigInteger, nullable=False, server_default="1"),
+        Column("exponential_backoff", Boolean, nullable=False, server_default="true"),
+        Column("http_max_retries", BigInteger, nullable=True),
         Column("base_url", Text, nullable=False, server_default=""),
         Column("api_key", Text, nullable=False, server_default=""),
         Column("description", Text, nullable=False, server_default=""),
@@ -77,6 +81,30 @@ async def ensure_model_configs_table_async() -> None:
             text(
                 f"ALTER TABLE {schema}.{table_name} "
                 "ADD COLUMN IF NOT EXISTS parallel_tool_calls BOOLEAN"
+            )
+        )
+        await conn.execute(
+            text(
+                f"ALTER TABLE {schema}.{table_name} "
+                "ADD COLUMN IF NOT EXISTS retries BIGINT NOT NULL DEFAULT 3"
+            )
+        )
+        await conn.execute(
+            text(
+                f"ALTER TABLE {schema}.{table_name} "
+                "ADD COLUMN IF NOT EXISTS delay_between_retries BIGINT NOT NULL DEFAULT 1"
+            )
+        )
+        await conn.execute(
+            text(
+                f"ALTER TABLE {schema}.{table_name} "
+                "ADD COLUMN IF NOT EXISTS exponential_backoff BOOLEAN NOT NULL DEFAULT true"
+            )
+        )
+        await conn.execute(
+            text(
+                f"ALTER TABLE {schema}.{table_name} "
+                "ADD COLUMN IF NOT EXISTS http_max_retries BIGINT"
             )
         )
         for index in table.indexes:

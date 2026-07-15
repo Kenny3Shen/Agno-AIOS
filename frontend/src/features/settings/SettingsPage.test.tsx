@@ -24,6 +24,10 @@ const models = {
       structured_output_mode: 'json',
       default_reasoning_effort: 'max',
       parallel_tool_calls: null,
+      retries: 3,
+      delay_between_retries: 1,
+      exponential_backoff: true,
+      http_max_retries: null,
       base_url: 'https://api.deepseek.com',
       api_key: 'masked',
       description: '',
@@ -40,6 +44,10 @@ const models = {
       structured_output_mode: 'native',
       default_reasoning_effort: 'high',
       parallel_tool_calls: false,
+      retries: 3,
+      delay_between_retries: 1,
+      exponential_backoff: true,
+      http_max_retries: null,
       base_url: '',
       api_key: 'masked',
       description: '',
@@ -97,5 +105,6 @@ describe('model settings editor', () => {
     fireEvent.click(await screen.findByLabelText('编辑 Second model'))
     expect(await screen.findByText('并行工具调用')).toBeTruthy()
     expect(screen.getByText('控制 API 的 parallel_tool_calls 参数。留空时使用提供商默认值。')).toBeTruthy()
+    expect(screen.getByText('Agno 应用层重试。遇到 429/503 等可恢复错误时额外重试次数；0 表示不重试。默认 3。')).toBeTruthy()
   })
 })

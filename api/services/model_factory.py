@@ -12,6 +12,35 @@ from agno.models.openai import OpenAIChat, OpenAILike, OpenAIResponses
 STRUCTURED_OUTPUT_MODE_ATTR = "_tais_structured_output_mode"
 
 
+def _retry_kwargs(config: dict[str, Any]) -> dict[str, Any]:
+    """Agno Model + OpenAI client retry settings from model config."""
+    retries = config.get("retries", 3)
+    try:
+        retries_i = max(0, min(10, int(retries)))
+    except (TypeError, ValueError):
+        retries_i = 3
+    delay = config.get("delay_between_retries", 1)
+    try:
+        delay_i = max(0, min(60, int(delay)))
+    except (TypeError, ValueError):
+        delay_i = 1
+    backoff = config.get("exponential_backoff", True)
+    if not isinstance(backoff, bool):
+        backoff = str(backoff).strip().lower() in {"1", "true", "yes", "on"}
+    params: dict[str, Any] = {
+        "retries": retries_i,
+        "delay_between_retries": delay_i,
+        "exponential_backoff": backoff,
+    }
+    http_max = config.get("http_max_retries")
+    if http_max is not None and http_max != "":
+        try:
+            params["max_retries"] = max(0, min(10, int(http_max)))
+        except (TypeError, ValueError):
+            pass
+    return params
+
+
 def build_agno_model(
     config: dict[str, Any], *, reasoning_effort: str | None = None
 ) -> Model:
@@ -30,7 +59,7 @@ def build_agno_model(
     )
 
     if provider == "deepseek":
-        kwargs: dict[str, Any] = {"id": model_id, "api_key": api_key}
+        kwargs: dict[str, Any] = {"id": model_id, "api_key": api_key, **_retry_kwargs(config)}
         if base_url:
             kwargs["base_url"] = base_url
         if effective_reasoning_effort:
@@ -43,6 +72,7 @@ def build_agno_model(
             "api_key": api_key,
             "base_url": base_url,
             "supports_native_structured_outputs": native_outputs,
+            **_retry_kwargs(config),
         }
         if effective_reasoning_effort:
             kwargs["reasoning_effort"] = effective_reasoning_effort
@@ -65,6 +95,7 @@ def build_agno_model(
                 "api_key": api_key,
                 "base_url": base_url,
                 "supports_native_structured_outputs": native_outputs,
+                **_retry_kwargs(config),
             }
             if parallel_tool_calls is not None:
                 kwargs["parallel_tool_calls"] = parallel_tool_calls
@@ -77,6 +108,7 @@ def build_agno_model(
             "api_key": api_key,
             "base_url": base_url,
             "supports_native_structured_outputs": native_outputs,
+            **_retry_kwargs(config),
         }
         if parallel_tool_calls is not None:
             kwargs["request_params"] = {

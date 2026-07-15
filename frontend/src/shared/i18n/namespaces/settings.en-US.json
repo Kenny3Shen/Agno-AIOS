@@ -38,5 +38,13 @@
   "parallelToolCallsHelp": "Controls the API parallel_tool_calls parameter. Leave unset to use the provider default.",
   "providerDefault": "Provider default",
   "privacyNote": "Raw reasoning and tool I/O are not sent to the browser by default. Disabling long-term memory does not delete existing memories or affect the current session history/summaries.",
-  "addModel": "Add model"
+  "addModel": "Add model",
+  "retries": "Request retries",
+  "retriesHelp": "Agno application-level retries for recoverable 429/5xx errors. 0 disables. Default 3.",
+  "delayBetweenRetries": "Retry delay (seconds)",
+  "delayBetweenRetriesHelp": "Wait before the first retry; with exponential backoff later waits are 1x, 2x, 4x…",
+  "exponentialBackoff": "Exponential backoff",
+  "exponentialBackoffHelp": "Double the delay after each failed attempt.",
+  "httpMaxRetries": "HTTP client retries",
+  "httpMaxRetriesHelp": "OpenAI SDK max_retries. Leave empty for the SDK default; prefer request retries above."
 }

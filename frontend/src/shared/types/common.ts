@@ -11,6 +11,12 @@ export interface ModelConfig {
   default_reasoning_effort?: ReasoningEffort | null
   /** Leave unset to use the provider default. */
   parallel_tool_calls?: boolean | null
+  /** Agno Model retries for 429/5xx (0 disables). */
+  retries?: number
+  delay_between_retries?: number
+  exponential_backoff?: boolean
+  /** OpenAI SDK HTTP client max_retries; leave unset for SDK default. */
+  http_max_retries?: number | null
   base_url: string
   api_key: string
   description: string

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Card, Collapse, Form, Input, Modal, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
+import { App, Button, Card, Collapse, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
 import { ApiOutlined, CheckCircleOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { currentUserQuery } from '@/features/auth'
@@ -70,7 +70,13 @@ export function SettingsPage() {
 
   const openEditor = (model: ModelConfig) => {
     form.resetFields()
-    form.setFieldsValue(model)
+    form.setFieldsValue({
+      retries: 3,
+      delay_between_retries: 1,
+      exponential_backoff: true,
+      http_max_retries: null,
+      ...model,
+    })
     setEditing(model)
   }
 
@@ -112,6 +118,10 @@ export function SettingsPage() {
       structured_output_mode: 'json',
       default_reasoning_effort: null,
       parallel_tool_calls: null,
+      retries: 3,
+      delay_between_retries: 1,
+      exponential_backoff: true,
+      http_max_retries: null,
       base_url: '',
       api_key: '',
       description: '',
@@ -434,6 +444,31 @@ export function SettingsPage() {
                             </Form.Item>
                           )
                         }}
+                      </Form.Item>
+                      <Form.Item name="retries" label={t('retries')} extra={t('retriesHelp')}>
+                        <InputNumber min={0} max={10} style={{ width: '100%' }} />
+                      </Form.Item>
+                      <Form.Item
+                        name="delay_between_retries"
+                        label={t('delayBetweenRetries')}
+                        extra={t('delayBetweenRetriesHelp')}
+                      >
+                        <InputNumber min={0} max={60} style={{ width: '100%' }} />
+                      </Form.Item>
+                      <Form.Item
+                        name="exponential_backoff"
+                        label={t('exponentialBackoff')}
+                        extra={t('exponentialBackoffHelp')}
+                        valuePropName="checked"
+                      >
+                        <Switch />
+                      </Form.Item>
+                      <Form.Item
+                        name="http_max_retries"
+                        label={t('httpMaxRetries')}
+                        extra={t('httpMaxRetriesHelp')}
+                      >
+                        <InputNumber min={0} max={10} style={{ width: '100%' }} placeholder={t('providerDefault')} />
                       </Form.Item>
                       <Form.Item name="description" label="Description">
                         <Input placeholder={t('purposeOptional')} />

@@ -38,5 +38,13 @@
   "parallelToolCallsHelp": "控制 API 的 parallel_tool_calls 参数。留空时使用提供商默认值。",
   "providerDefault": "提供商默认值",
   "privacyNote": "原始推理与工具输入/输出默认不发送给浏览器。关闭长期记忆不会删除既有记忆，也不影响当前会话历史与摘要。",
-  "addModel": "添加模型"
+  "addModel": "添加模型",
+  "retries": "请求重试次数",
+  "retriesHelp": "Agno 应用层重试。遇到 429/503 等可恢复错误时额外重试次数；0 表示不重试。默认 3。",
+  "delayBetweenRetries": "重试间隔（秒）",
+  "delayBetweenRetriesHelp": "首次重试前等待秒数；开启指数退避时后续为 1x、2x、4x…",
+  "exponentialBackoff": "指数退避",
+  "exponentialBackoffHelp": "重试间隔按 2^n 放大，减轻网关抖动。",
+  "httpMaxRetries": "HTTP 客户端重试",
+  "httpMaxRetriesHelp": "OpenAI SDK 连接层 max_retries。留空使用 SDK 默认；一般优先依赖上面的请求重试。"
 }

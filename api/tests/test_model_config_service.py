@@ -190,3 +190,39 @@ async def test_load_model_config_store_rewrites_multiple_active_rows():
     assert await_args is not None
     saved_rows = await_args.args[0]
     assert sum(1 for row in saved_rows if row["active"]) == 1
+
+
+def test_model_config_normalizes_retry_fields():
+    model = model_config_service.ModelConfig.normalized(
+        {
+            "id": "custom",
+            "name": "Custom",
+            "model_id": "m1",
+            "provider": "openai-compatible",
+            "base_url": "https://api.example.com/v1",
+            "retries": "5",
+            "delay_between_retries": "2",
+            "exponential_backoff": "false",
+            "http_max_retries": "1",
+        },
+        "custom",
+    )
+    assert model.retries == 5
+    assert model.delay_between_retries == 2
+    assert model.exponential_backoff is False
+    assert model.http_max_retries == 1
+
+    defaults = model_config_service.ModelConfig.normalized(
+        {
+            "id": "custom2",
+            "name": "Custom2",
+            "model_id": "m2",
+            "provider": "openai-compatible",
+            "base_url": "https://api.example.com/v1",
+        },
+        "custom2",
+    )
+    assert defaults.retries == 3
+    assert defaults.delay_between_retries == 1
+    assert defaults.exponential_backoff is True
+    assert defaults.http_max_retries is None
