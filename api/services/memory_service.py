@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TypedDict
+from typing import TypedDict, cast
 
 from agno.memory import UserMemory
 
@@ -9,6 +9,7 @@ from api.auth.claims import ActorLike
 from api.services.actor_scope import scoped_requested_user_id
 from api.services.page_payloads import iso, now_utc, row_dict
 from api.services.postgres_store import coerce_json_value, get_async_agno_postgres_db
+from api.utils.pagination import pagination_meta
 
 MEMORY_OPTIMIZATION_REVIEW_THRESHOLD = 50
 MEMORY_ABNORMAL_GROWTH_THRESHOLD = 500
@@ -64,8 +65,7 @@ def _memory_status_for_count(count: int) -> str:
 def _memory_text(value: object) -> str:
     """Normalize Agno memory payload to plain text.
 
-    Accepts a string or a dict whose ``memory`` field holds the text. Does not
-    fall back to legacy row keys like content/summary.
+    Accepts a string, or a dict and reads only the ``memory`` field.
     """
     memory = coerce_json_value(value)
     if isinstance(memory, dict):
@@ -129,18 +129,6 @@ def _memory_update_topics(value: object) -> list[str]:
     return topics
 
 
-def _pagination_meta(*, page: int, limit: int, total_count: int, search_time_ms: float = 0.0) -> MemoryPaginationMeta:
-    safe_page = max(1, int(page or 1))
-    safe_limit = max(1, int(limit or 1))
-    total = max(0, int(total_count or 0))
-    total_pages = (total + safe_limit - 1) // safe_limit if total else 0
-    return {
-        "page": safe_page,
-        "limit": safe_limit,
-        "total_pages": total_pages,
-        "total_count": total,
-        "search_time_ms": float(search_time_ms or 0.0),
-    }
 
 
 def _memory_item(
@@ -231,10 +219,13 @@ async def list_memories_native(
 
     return {
         "data": items,
-        "meta": _pagination_meta(
-            page=safe_page,
-            limit=safe_limit,
-            total_count=int(total_memories),
+        "meta": cast(
+            MemoryPaginationMeta,
+            pagination_meta(
+                page=safe_page,
+                limit=safe_limit,
+                total_count=int(total_memories),
+            ),
         ),
     }
 

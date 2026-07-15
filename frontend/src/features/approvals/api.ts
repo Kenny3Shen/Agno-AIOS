@@ -168,13 +168,10 @@ const fetchSubmissions = async (status: string) => {
  * Combined Approvals list with real pagination.
  * Virtual order: upload submissions first, then Agno HITL rows.
  */
-export const getApprovals = async (params: ApprovalListParams | string = {}): Promise<ApprovalListResult> => {
-  // Back-compat: getApprovals('pending') from older call sites.
-  const normalized: ApprovalListParams =
-    typeof params === 'string' ? { status: params } : params ?? {}
-  const status = normalized.status ?? ''
-  const page = Math.max(1, Number(normalized.page ?? 1) || 1)
-  const limit = Math.min(100, Math.max(1, Number(normalized.limit ?? 20) || 20))
+export const getApprovals = async (params: ApprovalListParams = {}): Promise<ApprovalListResult> => {
+  const status = params.status ?? ''
+  const page = Math.max(1, Number(params.page ?? 1) || 1)
+  const limit = Math.min(100, Math.max(1, Number(params.limit ?? 20) || 20))
 
   const submissions = await fetchSubmissions(status)
   const submissionCount = submissions.length

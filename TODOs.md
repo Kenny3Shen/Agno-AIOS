@@ -1,5 +1,16 @@
 # 下一步工作
 
+## 已完成：代码卫生清理（分页 helper / 注释 / 兼容）
+
+- 抽取共用 `api/utils/pagination.py::pagination_meta`，memory/approvals/chat/trace/evals list 去掉重复实现。
+- Memory `_memory_text` 注释与「只读 `memory` 字段」实现对齐。
+- 前端 `getApprovals` 去掉 `string` 状态别名兼容（仅对象参数）。
+- Trace status reconcile 文档标明已是 audit `IN (...)` 批量查询（无需再改实现）。
+
+相关入口：
+
+- 代码：`api/utils/pagination.py`、各 `*_service.py`、`frontend/src/features/approvals/api.ts`
+
 ## 已完成：Chat sessions 列表对齐 data/meta
 
 - `GET /api/chat/sessions` 返回 `{ data, meta }`（`page`/`limit`/`total_pages`/`total_count`/`search_time_ms`），不再直接返回数组。

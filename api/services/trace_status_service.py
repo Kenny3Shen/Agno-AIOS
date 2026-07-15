@@ -15,7 +15,11 @@ async def reconcile_trace_statuses(
     *,
     actor_user_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Overlay durable chat audit failures onto Trace projections."""
+    """Overlay durable chat audit failures onto Trace projections.
+
+    Loads failed run IDs for the page in one ``resource_id IN (...)`` audit
+    query (see ``failed_chat_run_ids_async``), not per-run lookups.
+    """
     items = [dict(trace) for trace in traces]
     run_ids = {
         str(trace.get("run_id") or "").strip()

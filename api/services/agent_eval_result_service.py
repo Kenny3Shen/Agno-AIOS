@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 from api.services.postgres_store import get_async_agno_postgres_db
+from api.utils.pagination import pagination_meta
 
 
 def _row_dict(raw_row: Any) -> dict[str, Any]:
@@ -125,18 +126,6 @@ def _unpack_runs_result(result: Any) -> tuple[list[Any], int]:
     return rows_list, len(rows_list)
 
 
-def _pagination_meta(*, page: int, limit: int, total_count: int, search_time_ms: float = 0.0) -> dict[str, Any]:
-    safe_page = max(1, int(page or 1))
-    safe_limit = max(1, int(limit or 1))
-    total = max(0, int(total_count or 0))
-    total_pages = (total + safe_limit - 1) // safe_limit if total else 0
-    return {
-        "page": safe_page,
-        "limit": safe_limit,
-        "total_pages": total_pages,
-        "total_count": total,
-        "search_time_ms": float(search_time_ms or 0.0),
-    }
 
 
 async def list_agno_eval_runs(
@@ -162,7 +151,7 @@ async def list_agno_eval_runs(
     data = [normalize_agno_eval_run(row) for row in rows]
     return {
         "data": data,
-        "meta": _pagination_meta(page=safe_page, limit=safe_limit, total_count=total),
+        "meta": pagination_meta(page=safe_page, limit=safe_limit, total_count=total),
     }
 
 

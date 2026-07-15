@@ -11,6 +11,7 @@ from api.services.chat_run_events import approval_rejection_reason
 from api.services.postgres_store import coerce_json_value, get_async_agno_postgres_db
 from api.services.trace_status_service import reconcile_trace_statuses, trace_has_status
 from api.utils.json import JSONDecodeError, dumps, loads
+from api.utils.pagination import pagination_meta
 
 # Keep a single DB wrapper instance.
 _trace_db = get_async_agno_postgres_db()
@@ -39,18 +40,6 @@ OUTPUT_ATTRIBUTE_KEYS = (
 TRACE_STATUSES = frozenset({"OK", "ERROR", "UNSET"})
 
 
-def _pagination_meta(*, page: int, limit: int, total_count: int, search_time_ms: float = 0.0) -> dict[str, object]:
-    safe_page = max(1, int(page or 1))
-    safe_limit = max(1, int(limit or 1))
-    total = max(0, int(total_count or 0))
-    total_pages = (total + safe_limit - 1) // safe_limit if total else 0
-    return {
-        "page": safe_page,
-        "limit": safe_limit,
-        "total_pages": total_pages,
-        "total_count": total,
-        "search_time_ms": float(search_time_ms or 0.0),
-    }
 
 
 def _duration_ms_value(value: object) -> int | None:
@@ -98,7 +87,7 @@ def _trace_list_response(
     data = [_project_trace_list_item(item) for item in items]
     return {
         "data": data,
-        "meta": _pagination_meta(page=page, limit=limit, total_count=total_count),
+        "meta": pagination_meta(page=page, limit=limit, total_count=total_count),
     }
 
 
@@ -590,7 +579,7 @@ async def list_trace_sessions(
     page_sessions = sessions[offset : offset + limit]
     return {
         "data": page_sessions,
-        "meta": _pagination_meta(
+        "meta": pagination_meta(
             page=page,
             limit=limit,
             total_count=len(sessions),

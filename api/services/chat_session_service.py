@@ -19,6 +19,7 @@ from api.services.chat_run_events import (
     tool_update,
 )
 from api.services.chat_settings import get_chat_settings_async
+from api.utils.pagination import pagination_meta
 
 
 ARCHIVED_METADATA_KEY = "agno_aios_archived"
@@ -151,18 +152,6 @@ async def rename_session(
 
 
 
-def _pagination_meta(*, page: int, limit: int, total_count: int, search_time_ms: float = 0.0) -> dict[str, object]:
-    safe_page = max(1, int(page or 1))
-    safe_limit = max(1, int(limit or 1))
-    total = max(0, int(total_count or 0))
-    total_pages = (total + safe_limit - 1) // safe_limit if total else 0
-    return {
-        "page": safe_page,
-        "limit": safe_limit,
-        "total_pages": total_pages,
-        "total_count": total,
-        "search_time_ms": float(search_time_ms or 0.0),
-    }
 
 
 async def get_all_sessions_async(
@@ -199,7 +188,7 @@ async def get_all_sessions_async(
     page_items = sessions[offset : offset + safe_limit]
     return {
         "data": page_items,
-        "meta": _pagination_meta(
+        "meta": pagination_meta(
             page=safe_page,
             limit=safe_limit,
             total_count=total_count,

@@ -14,6 +14,7 @@ from api.auth.database import async_session_maker
 from api.auth.models import User
 from api.services.page_payloads import row_dict
 from api.services.postgres_store import get_async_agno_postgres_db
+from api.utils.pagination import pagination_meta
 
 
 class ApprovalRecord(TypedDict):
@@ -265,18 +266,6 @@ async def list_approvals(
     return approvals, int(total), kwargs
 
 
-def _pagination_meta(*, page: int, limit: int, total_count: int, search_time_ms: float = 0.0) -> ApprovalPaginationMeta:
-    safe_page = max(1, int(page or 1))
-    safe_limit = max(1, int(limit or 1))
-    total = max(0, int(total_count or 0))
-    total_pages = (total + safe_limit - 1) // safe_limit if total else 0
-    return {
-        "page": safe_page,
-        "limit": safe_limit,
-        "total_pages": total_pages,
-        "total_count": total,
-        "search_time_ms": float(search_time_ms or 0.0),
-    }
 
 
 async def list_approvals_native(
@@ -291,10 +280,13 @@ async def list_approvals_native(
     approvals, total, kwargs = await list_approvals(params=params, actor=actor)
     return {
         "data": approvals,
-        "meta": _pagination_meta(
-            page=int(kwargs["page"]),
-            limit=int(kwargs["limit"]),
-            total_count=total,
+        "meta": cast(
+            ApprovalPaginationMeta,
+            pagination_meta(
+                page=int(kwargs["page"]),
+                limit=int(kwargs["limit"]),
+                total_count=total,
+            ),
         ),
     }
 
