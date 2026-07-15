@@ -1,4 +1,17 @@
-import { Button, Card, Empty, Input, Select, Space, Tag, Typography, Alert, List } from 'antd'
+import {
+  Button,
+  Card,
+  Empty,
+  Input,
+  InputNumber,
+  Select,
+  Space,
+  Tag,
+  Typography,
+  Alert,
+  List,
+  Dropdown,
+} from 'antd'
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
@@ -11,9 +24,84 @@ import {
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
 import { useWorkflow } from './useWorkflow'
-import { buildWorkflowCode } from './utils'
+import { buildWorkflowCode, nodeLabel } from './utils'
+import type { WorkflowNode, WorkflowNodeType } from './types'
 import { useTranslation } from 'react-i18next'
 import { useRouter } from '@tanstack/react-router'
+
+const typeColor: Record<WorkflowNodeType, string> = {
+  step: 'blue',
+  parallel: 'purple',
+  condition: 'gold',
+  loop: 'cyan',
+}
+
+function NodeRow({
+  node,
+  index,
+  depth,
+  selectedId,
+  onSelect,
+}: {
+  node: WorkflowNode
+  index: number
+  depth: number
+  selectedId: string | null
+  onSelect: (id: string) => void
+}) {
+  const children =
+    node.type === 'condition'
+      ? [
+          ...(node.thenSteps ?? []).map((child) => ({ branch: 'thenSteps' as const, child })),
+          ...(node.elseSteps ?? []).map((child) => ({ branch: 'elseSteps' as const, child })),
+        ]
+      : (node.steps ?? []).map((child) => ({ branch: 'steps' as const, child }))
+
+  return (
+    <>
+      <button
+        type="button"
+        className={`step-row ${node.id === selectedId ? 'selected' : ''}`}
+        style={{ paddingLeft: 12 + depth * 16 }}
+        onClick={() => onSelect(node.id)}
+      >
+        <span>{index + 1}</span>
+        <div>
+          <strong>{nodeLabel(node)}</strong>
+          <small>
+            {node.type === 'step'
+              ? node.targetId || 'agent'
+              : node.type === 'condition'
+                ? node.evaluatorCel || 'cel'
+                : node.type === 'loop'
+                  ? `max ${node.maxIterations ?? 3}`
+                  : `${node.steps?.length ?? 0} branches`}
+          </small>
+        </div>
+        <Tag color={typeColor[node.type]}>{node.type}</Tag>
+      </button>
+      {children.map(({ branch, child }, childIndex) => (
+        <div key={child.id}>
+          {node.type === 'condition' ? (
+            <Typography.Text
+              type="secondary"
+              style={{ display: 'block', paddingLeft: 28 + depth * 16, fontSize: 12 }}
+            >
+              {branch}
+            </Typography.Text>
+          ) : null}
+          <NodeRow
+            node={child}
+            index={childIndex}
+            depth={depth + 1}
+            selectedId={selectedId}
+            onSelect={onSelect}
+          />
+        </div>
+      ))}
+    </>
+  )
+}
 
 export function WorkflowPage() {
   const { t } = useTranslation('workflow')
@@ -24,6 +112,13 @@ export function WorkflowPage() {
   const models = workflow.modelsQuery.data?.models ?? []
   const saved = workflow.workflowsQuery.data ?? []
 
+  const addMenuItems = [
+    { key: 'step', label: t('addStep') },
+    { key: 'parallel', label: t('addParallel') },
+    { key: 'condition', label: t('addCondition') },
+    { key: 'loop', label: t('addLoop') },
+  ]
+
   return (
     <main className="page">
       <PageHeader
@@ -31,9 +126,14 @@ export function WorkflowPage() {
         description={t('description')}
         actions={
           <Space wrap>
-            <Button icon={<PlusOutlined />} onClick={() => workflow.add('agent')}>
-              {t('addStep')}
-            </Button>
+            <Dropdown
+              menu={{
+                items: addMenuItems,
+                onClick: ({ key }) => workflow.add(key as WorkflowNodeType),
+              }}
+            >
+              <Button icon={<PlusOutlined />}>{t('addNode')}</Button>
+            </Dropdown>
             <Button icon={<SaveOutlined />} type="primary" loading={workflow.state.saving} onClick={() => void workflow.save()}>
               {t('save')}
             </Button>
@@ -75,7 +175,7 @@ export function WorkflowPage() {
             </Button>
           ) : null}
           <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
-            {t('pr1Hint')}
+            {t('pr2Hint')}
           </Typography.Paragraph>
         </Card>
 
@@ -114,48 +214,14 @@ export function WorkflowPage() {
           {workflow.state.steps.length ? (
             <div className="step-list">
               {workflow.state.steps.map((item, index) => (
-                <button
-                  type="button"
+                <NodeRow
                   key={item.id}
-                  className={`step-row ${item.id === workflow.state.selectedId ? 'selected' : ''}`}
-                  onClick={() => workflow.patchMeta({ selectedId: item.id, dirty: workflow.state.dirty })}
-                >
-                  <span>{index + 1}</span>
-                  <div>
-                    <strong>{item.name || item.targetId || t('unconfigured')}</strong>
-                    <small>{item.targetId || 'agent'}</small>
-                  </div>
-                  <Tag>{item.kind}</Tag>
-                  <Space>
-                    <Button
-                      type="text"
-                      icon={<ArrowUpOutlined />}
-                      disabled={index === 0}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        workflow.move(item.id, -1)
-                      }}
-                    />
-                    <Button
-                      type="text"
-                      icon={<ArrowDownOutlined />}
-                      disabled={index === workflow.state.steps.length - 1}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        workflow.move(item.id, 1)
-                      }}
-                    />
-                    <Button
-                      danger
-                      type="text"
-                      icon={<DeleteOutlined />}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        workflow.remove(item.id)
-                      }}
-                    />
-                  </Space>
-                </button>
+                  node={item}
+                  index={index}
+                  depth={0}
+                  selectedId={workflow.state.selectedId}
+                  onSelect={(id) => workflow.patchMeta({ selectedId: id, dirty: workflow.state.dirty })}
+                />
               ))}
             </div>
           ) : (
@@ -163,79 +229,158 @@ export function WorkflowPage() {
           )}
         </Card>
 
-        <Card className="workbench-card" title={t('inspector')}>
+        <Card
+          className="workbench-card"
+          title={t('inspector')}
+          extra={
+            step ? (
+              <Space>
+                {workflow.state.steps.some((item) => item.id === step.id) ? (
+                  <>
+                    <Button size="small" icon={<ArrowUpOutlined />} onClick={() => workflow.move(step.id, -1)} />
+                    <Button size="small" icon={<ArrowDownOutlined />} onClick={() => workflow.move(step.id, 1)} />
+                  </>
+                ) : null}
+                <Button size="small" danger icon={<DeleteOutlined />} onClick={() => workflow.remove(step.id)} />
+              </Space>
+            ) : null
+          }
+        >
           {step ? (
-            <Space orientation="vertical" style={{ width: '100%' }}>
-              <Select
-                value={step.targetId || undefined}
-                placeholder={t('executorPlaceholder')}
-                options={executors.map((item) => ({
-                  value: item.ref,
-                  label: `${item.name} (${item.ref})`,
-                }))}
-                onChange={(ref) => workflow.update({ ...step, targetId: ref, name: step.name || ref })}
-                style={{ width: '100%' }}
-              />
+            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+              <Tag color={typeColor[step.type]}>{step.type}</Tag>
               <Input
                 value={step.name}
                 onChange={(e) => workflow.update({ ...step, name: e.target.value })}
                 placeholder={t('stepNamePlaceholder')}
               />
-              <Input.TextArea
-                value={step.instructions}
-                onChange={(e) => workflow.update({ ...step, instructions: e.target.value })}
-                rows={7}
-                placeholder={t('instructionsPlaceholder')}
-              />
+
+              {step.type === 'step' ? (
+                <>
+                  <Select
+                    style={{ width: '100%' }}
+                    placeholder={t('executorPlaceholder')}
+                    value={step.targetId}
+                    options={executors.map((item) => ({
+                      value: item.ref,
+                      label: `${item.name} (${item.ref})`,
+                    }))}
+                    onChange={(value) => workflow.update({ ...step, targetId: value })}
+                  />
+                  <Input.TextArea
+                    value={step.instructions}
+                    onChange={(e) => workflow.update({ ...step, instructions: e.target.value })}
+                    placeholder={t('instructionsPlaceholder')}
+                    rows={6}
+                  />
+                </>
+              ) : null}
+
+              {step.type === 'condition' ? (
+                <>
+                  <Typography.Text type="secondary">{t('evaluatorCel')}</Typography.Text>
+                  <Input.TextArea
+                    value={step.evaluatorCel}
+                    onChange={(e) => workflow.update({ ...step, evaluatorCel: e.target.value })}
+                    placeholder='input.contains("critical")'
+                    rows={3}
+                  />
+                  <Space wrap>
+                    <Button size="small" onClick={() => workflow.addChild(step.id, 'thenSteps', 'step')}>
+                      {t('addThenStep')}
+                    </Button>
+                    <Button size="small" onClick={() => workflow.addChild(step.id, 'elseSteps', 'step')}>
+                      {t('addElseStep')}
+                    </Button>
+                  </Space>
+                </>
+              ) : null}
+
+              {step.type === 'loop' ? (
+                <>
+                  <Typography.Text type="secondary">{t('maxIterations')}</Typography.Text>
+                  <InputNumber
+                    min={1}
+                    max={20}
+                    style={{ width: '100%' }}
+                    value={step.maxIterations ?? 3}
+                    onChange={(value) =>
+                      workflow.update({ ...step, maxIterations: Number(value) || 3 })
+                    }
+                  />
+                  <Typography.Text type="secondary">{t('endConditionCel')}</Typography.Text>
+                  <Input.TextArea
+                    value={step.endConditionCel}
+                    onChange={(e) => workflow.update({ ...step, endConditionCel: e.target.value })}
+                    placeholder='last_step_content.contains("DONE")'
+                    rows={3}
+                  />
+                  <Button size="small" onClick={() => workflow.addChild(step.id, 'steps', 'step')}>
+                    {t('addLoopStep')}
+                  </Button>
+                </>
+              ) : null}
+
+              {step.type === 'parallel' ? (
+                <Button size="small" onClick={() => workflow.addChild(step.id, 'steps', 'step')}>
+                  {t('addParallelBranch')}
+                </Button>
+              ) : null}
             </Space>
           ) : (
             <Empty description={t('selectStep')} />
           )}
         </Card>
+
+        <Card
+          className="workbench-card"
+          title={t('runLog')}
+          extra={
+            workflow.state.lastSessionId ? (
+              <Button
+                type="link"
+                onClick={() =>
+                  void router.navigate({
+                    to: '/trace',
+                    search: {
+                      session_id: workflow.state.lastSessionId ?? undefined,
+                      selected_session: workflow.state.lastSessionId ?? undefined,
+                    },
+                  })
+                }
+              >
+                {t('openTrace')}
+              </Button>
+            ) : null
+          }
+        >
+          {workflow.state.runLog.length ? (
+            <List
+              size="small"
+              dataSource={[...workflow.state.runLog].reverse()}
+              renderItem={(item) => (
+                <List.Item>
+                  <List.Item.Meta
+                    title={
+                      <Space>
+                        <Tag>{item.type}</Tag>
+                        {item.stepName ? <span>{item.stepName}</span> : null}
+                      </Space>
+                    }
+                    description={item.content || item.message}
+                  />
+                </List.Item>
+              )}
+            />
+          ) : (
+            <Empty description={t('emptyRunLog')} />
+          )}
+        </Card>
+
+        <Card className="workbench-card" title={t('generatedCode')}>
+          <PayloadViewer value={buildWorkflowCode(workflow.state)} />
+        </Card>
       </div>
-
-      <Card className="workbench-card" title={t('runLog')} style={{ marginTop: 12 }}>
-        {workflow.state.runLog.length ? (
-          <List
-            size="small"
-            dataSource={[...workflow.state.runLog].reverse()}
-            renderItem={(item) => (
-              <List.Item>
-                <Space direction="vertical" size={0} style={{ width: '100%' }}>
-                  <Space>
-                    <Tag color={item.type.includes('error') || item.type.includes('failed') ? 'error' : 'processing'}>
-                      {item.type}
-                    </Tag>
-                    {item.stepName ? <Typography.Text strong>{item.stepName}</Typography.Text> : null}
-                  </Space>
-                  <Typography.Paragraph style={{ marginBottom: 0 }} ellipsis={{ rows: 3, expandable: true }}>
-                    {item.content || item.message}
-                  </Typography.Paragraph>
-                </Space>
-              </List.Item>
-            )}
-          />
-        ) : (
-          <Empty description={t('emptyRunLog')} />
-        )}
-        {workflow.state.lastSessionId ? (
-          <Button
-            type="link"
-            style={{ paddingInline: 0 }}
-            onClick={() =>
-              void router.history.push(
-                `/trace?session_id=${encodeURIComponent(workflow.state.lastSessionId ?? '')}&selected_session=${encodeURIComponent(workflow.state.lastSessionId ?? '')}`
-              )
-            }
-          >
-            {t('openTrace')}
-          </Button>
-        ) : null}
-      </Card>
-
-      <Card className="workbench-card" title={t('generatedCode')} style={{ marginTop: 12 }}>
-        <PayloadViewer value={buildWorkflowCode(workflow.state)} />
-      </Card>
     </main>
   )
 }

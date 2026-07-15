@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import type { WorkflowState, WorkflowStep } from './types'
-import { createStep, fromRecord, moveStep, toDefinition } from './utils'
+import type { WorkflowNode, WorkflowNodeType, WorkflowState } from './types'
+import {
+  addChildToNode,
+  createNode,
+  findNode,
+  fromRecord,
+  moveStep,
+  removeNodeInTree,
+  toDefinition,
+  updateNodeInTree,
+} from './utils'
 import {
   createWorkflow,
   deleteWorkflow,
@@ -55,35 +64,45 @@ export function useWorkflow() {
   }, [modelsQuery.data?.active_model_id, state.modelId])
 
   const patch = useCallback((value: Partial<WorkflowState>) => {
-    setState((current) => ({ ...current, ...value, dirty: value.dirty === false ? false : true }))
+    setState((current) => ({ ...current, ...value, dirty: value.dirty !== false }))
   }, [])
 
   const patchMeta = useCallback((value: Partial<WorkflowState>) => {
     setState((current) => ({ ...current, ...value }))
   }, [])
 
-  const add = (kind: WorkflowStep['kind'] = 'agent') => {
-    const step = createStep(kind)
+  const add = (type: WorkflowNodeType = 'step') => {
+    const node = createNode(type)
     setState((current) => ({
       ...current,
-      steps: [...current.steps, step],
-      selectedId: step.id,
+      steps: [...current.steps, node],
+      selectedId: node.id,
       dirty: true,
     }))
   }
 
-  const update = (step: WorkflowStep) =>
+  const addChild = (parentId: string, branch: 'steps' | 'thenSteps' | 'elseSteps', type: WorkflowNodeType = 'step') => {
+    const child = createNode(type)
     setState((current) => ({
       ...current,
       dirty: true,
-      steps: current.steps.map((item) => (item.id === step.id ? step : item)),
+      selectedId: child.id,
+      steps: addChildToNode(current.steps, parentId, branch, child),
+    }))
+  }
+
+  const update = (node: WorkflowNode) =>
+    setState((current) => ({
+      ...current,
+      dirty: true,
+      steps: updateNodeInTree(current.steps, node.id, () => node),
     }))
 
   const remove = (id: string) =>
     setState((current) => ({
       ...current,
       dirty: true,
-      steps: current.steps.filter((item) => item.id !== id),
+      steps: removeNodeInTree(current.steps, id),
       selectedId: current.selectedId === id ? null : current.selectedId,
     }))
 
@@ -179,10 +198,6 @@ export function useWorkflow() {
           setState((current) => ({
             ...current,
             runLog: [...current.runLog, item],
-            lastRunId:
-              item.type === 'workflow.started' || item.type === 'step.started'
-                ? current.lastRunId
-                : current.lastRunId,
           }))
         },
         controller.signal
@@ -207,7 +222,7 @@ export function useWorkflow() {
   }
 
   const selected = useMemo(
-    () => state.steps.find((step) => step.id === state.selectedId) ?? null,
+    () => (state.selectedId ? findNode(state.steps, state.selectedId) : null),
     [state.selectedId, state.steps]
   )
 
@@ -220,6 +235,7 @@ export function useWorkflow() {
     patch,
     patchMeta,
     add,
+    addChild,
     update,
     remove,
     move,

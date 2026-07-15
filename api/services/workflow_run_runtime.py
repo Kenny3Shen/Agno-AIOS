@@ -1,4 +1,4 @@
-"""Stream Agno Workflow runs as workbench SSE events (PR1)."""
+"""Stream Agno Workflow runs as workbench SSE events (PR2 control flow)."""
 
 from __future__ import annotations
 
@@ -39,6 +39,31 @@ def _step_index(value: Any) -> int | None:
     return None
 
 
+def _base_payload(
+    *,
+    workflow_id: str,
+    run_id: str,
+    session_id: str,
+    event: Any,
+) -> dict[str, Any]:
+    step_name = event_value(event, "step_name")
+    step_id = event_value(event, "step_id")
+    return {
+        "workflow_id": workflow_id,
+        "run_id": run_id,
+        "session_id": session_id,
+        "step_id": str(step_id or "") or None,
+        "step_name": str(step_name or "") or None,
+        "step_index": _step_index(event_value(event, "step_index")),
+        "nested_depth": event_value(event, "nested_depth"),
+        "parent_step_id": (
+            str(event_value(event, "parent_step_id") or "") or None
+            if event_value(event, "parent_step_id") is not None
+            else None
+        ),
+    }
+
+
 async def stream_workflow_run(
     *,
     workflow_id: str,
@@ -77,16 +102,18 @@ async def stream_workflow_run(
             stream=True,
             stream_events=True,
         )
-        # Agno returns AsyncIterator when stream=True
         async for event in stream:  # type: ignore[union-attr]
             event_name = str(event_value(event, "event", "") or "")
             run_id_value = str(event_value(event, "run_id", active_run_id) or active_run_id)
             session_value = str(
                 event_value(event, "session_id", active_session_id) or active_session_id
             )
-            step_name = event_value(event, "step_name")
-            step_id = event_value(event, "step_id")
-            step_index = _step_index(event_value(event, "step_index"))
+            base = _base_payload(
+                workflow_id=workflow_id,
+                run_id=run_id_value,
+                session_id=session_value,
+                event=event,
+            )
 
             if event_name == WorkflowRunEvent.workflow_started.value:
                 yield WorkflowRunEventOut(
@@ -99,41 +126,89 @@ async def stream_workflow_run(
                     },
                 )
             elif event_name == WorkflowRunEvent.step_started.value:
-                yield WorkflowRunEventOut(
-                    "step.started",
-                    {
-                        "workflow_id": workflow_id,
-                        "run_id": run_id_value,
-                        "session_id": session_value,
-                        "step_id": str(step_id or "") or None,
-                        "step_name": str(step_name or "") or None,
-                        "step_index": step_index,
-                    },
-                )
+                yield WorkflowRunEventOut("step.started", base)
             elif event_name == WorkflowRunEvent.step_completed.value:
                 yield WorkflowRunEventOut(
                     "step.completed",
-                    {
-                        "workflow_id": workflow_id,
-                        "run_id": run_id_value,
-                        "session_id": session_value,
-                        "step_id": str(step_id or "") or None,
-                        "step_name": str(step_name or "") or None,
-                        "step_index": step_index,
-                        "content": _preview(event_value(event, "content")),
-                    },
+                    {**base, "content": _preview(event_value(event, "content"))},
                 )
             elif event_name == WorkflowRunEvent.step_error.value:
                 yield WorkflowRunEventOut(
                     "step.error",
                     {
-                        "workflow_id": workflow_id,
-                        "run_id": run_id_value,
-                        "session_id": session_value,
-                        "step_id": str(step_id or "") or None,
-                        "step_name": str(step_name or "") or None,
-                        "step_index": step_index,
-                        "message": str(event_value(event, "error", "step failed") or "step failed"),
+                        **base,
+                        "message": str(
+                            event_value(event, "error", "step failed") or "step failed"
+                        ),
+                    },
+                )
+            elif event_name == WorkflowRunEvent.parallel_execution_started.value:
+                yield WorkflowRunEventOut(
+                    "parallel.started",
+                    {
+                        **base,
+                        "parallel_step_count": event_value(event, "parallel_step_count"),
+                    },
+                )
+            elif event_name == WorkflowRunEvent.parallel_execution_completed.value:
+                yield WorkflowRunEventOut(
+                    "parallel.completed",
+                    {
+                        **base,
+                        "parallel_step_count": event_value(event, "parallel_step_count"),
+                    },
+                )
+            elif event_name == WorkflowRunEvent.condition_execution_started.value:
+                yield WorkflowRunEventOut(
+                    "condition.started",
+                    {
+                        **base,
+                        "condition_result": event_value(event, "condition_result"),
+                    },
+                )
+            elif event_name == WorkflowRunEvent.condition_execution_completed.value:
+                yield WorkflowRunEventOut(
+                    "condition.completed",
+                    {
+                        **base,
+                        "condition_result": event_value(event, "condition_result"),
+                        "branch": event_value(event, "branch"),
+                    },
+                )
+            elif event_name == WorkflowRunEvent.loop_execution_started.value:
+                yield WorkflowRunEventOut(
+                    "loop.started",
+                    {
+                        **base,
+                        "max_iterations": event_value(event, "max_iterations"),
+                    },
+                )
+            elif event_name == WorkflowRunEvent.loop_execution_completed.value:
+                yield WorkflowRunEventOut(
+                    "loop.completed",
+                    {
+                        **base,
+                        "total_iterations": event_value(event, "total_iterations"),
+                        "max_iterations": event_value(event, "max_iterations"),
+                    },
+                )
+            elif event_name == WorkflowRunEvent.loop_iteration_started.value:
+                yield WorkflowRunEventOut(
+                    "loop.iteration.started",
+                    {
+                        **base,
+                        "iteration": event_value(event, "iteration"),
+                        "max_iterations": event_value(event, "max_iterations"),
+                    },
+                )
+            elif event_name == WorkflowRunEvent.loop_iteration_completed.value:
+                yield WorkflowRunEventOut(
+                    "loop.iteration.completed",
+                    {
+                        **base,
+                        "iteration": event_value(event, "iteration"),
+                        "max_iterations": event_value(event, "max_iterations"),
+                        "should_continue": event_value(event, "should_continue"),
                     },
                 )
             elif event_name == WorkflowRunEvent.workflow_completed.value:
@@ -177,7 +252,7 @@ async def stream_workflow_run(
                         "run_id": run_id_value,
                         "session_id": session_value,
                         "step_name": str(event_value(event, "paused_step_name", "") or "") or None,
-                        "message": "Workflow paused (HITL not fully wired in PR1)",
+                        "message": "Workflow paused (HITL not fully wired yet)",
                     },
                 )
     except Exception as exc:

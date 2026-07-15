@@ -454,7 +454,9 @@ Vitest 默认关闭 CSS 解析、限制 `maxWorkers=4`、使用 instant `user-ev
 ```
 
 - `executor.ref` 必须来自内置目录：`security-operations`、`safe-fallback`（`GET /api/workflows/executors`）。
-- 非 `step` 类型（`parallel` / `condition` / `loop` / `router`）在 PR1 **422 拒绝**。
+- PR2 支持嵌套 `step` / `parallel` / `condition` / `loop`；`router` 仍 422。
+- 约束：最大深度 5、总节点 ≤40、叶子 Agent 步 ≤20；Parallel 至少 2 分支；Condition/Loop 使用 CEL（`cel-python`）。
+- 编译期拒绝 HITL 字段与 Parallel 内 executor HITL（与 Agno 一致）。
 
 **HTTP**
 
@@ -471,15 +473,19 @@ Vitest 默认关闭 CSS 解析、限制 `maxWorkers=4`、使用 instant `user-ev
 | Event | 含义 |
 |-------|------|
 | `workflow.started` | 运行开始（含 `run_id` / `session_id`） |
-| `step.started` / `step.completed` / `step.error` | 线性步骤生命周期；`content` 为预览截断 |
+| `step.started` / `step.completed` / `step.error` | 叶子步骤生命周期；`content` 为预览截断 |
+| `parallel.started` / `parallel.completed` | 并行块生命周期（含 `parallel_step_count`） |
+| `condition.started` / `condition.completed` | 条件块（含 `condition_result` / `branch`） |
+| `loop.started` / `loop.completed` | 循环块（含 `max_iterations` / `total_iterations`） |
+| `loop.iteration.started` / `loop.iteration.completed` | 循环迭代（含 `iteration` / `should_continue`） |
 | `workflow.completed` / `workflow.failed` / `workflow.cancelled` | 终态 |
-| `workflow.paused` | 预留（HITL 完整闭环在后续 PR） |
+| `workflow.paused` | 预留（HITL 完整闭环在 PR3） |
 
 **关键代码**
 
 ```text
 api/persistence/workflows.py          # app.workflows 表
-api/services/workflow_compiler.py     # DSL 校验 + Agno Step/Workflow 编译
+api/services/workflow_compiler.py     # DSL 校验 + Agno Step/Parallel/Condition/Loop 编译
 api/services/workflow_service.py      # CRUD / 权限投影
 api/services/workflow_run_runtime.py  # arun 流 → SSE
 api/routes/workflows.py               # HTTP + EventSourceResponse
@@ -491,28 +497,58 @@ frontend/src/features/workflow/*      # 库/编辑/保存/运行日志
 | 阶段 | 能力 | 说明 |
 |------|------|------|
 | **PR1** ✅ | 线性 Step + Save/Run SSE | 本版 |
-| **PR2** | `Parallel` / `Condition(CEL)` / `Loop` | 表单级控制流；编译期禁止 Parallel 内 executor HITL |
+| **PR2** ✅ | `Parallel` / `Condition(CEL)` / `Loop` | 表单级嵌套控制流；CEL 依赖 `cel-python`；编译期禁止 Parallel 内 HITL |
 | **PR3** | 画布 + Step HITL | React Flow；与 Approvals 共用；独立 `workflows:*` scope |
 | **PR4** | Router / 嵌套 Workflow / 版本 / 触发器 | 产品化与定时/Webhook |
 
-**目标 DSL 扩展示意（未实现）**
+**PR2 嵌套 DSL 示例**
 
 ```json
 {
-  "nodes": [
-    { "id": "branch", "type": "condition", "evaluator": { "cel": "previous_step_content.contains(\"critical\")" }, "then": ["contain"], "else": ["report"] },
-    { "id": "fanout", "type": "parallel", "steps": ["cve", "asset"] }
+  "name": "IR nested",
+  "steps": [
+    {
+      "id": "fanout",
+      "type": "parallel",
+      "name": "Fan-out",
+      "steps": [
+        { "id": "cve", "type": "step", "name": "CVE", "executor": { "kind": "agent", "ref": "security-operations" } },
+        { "id": "asset", "type": "step", "name": "Asset", "executor": { "kind": "agent", "ref": "safe-fallback" } }
+      ]
+    },
+    {
+      "id": "branch",
+      "type": "condition",
+      "name": "Severity",
+      "evaluator": { "cel": "input.contains(\"critical\")" },
+      "then": [
+        { "id": "contain", "type": "step", "name": "Contain", "executor": { "kind": "agent", "ref": "security-operations" } }
+      ],
+      "else": [
+        { "id": "report", "type": "step", "name": "Report", "executor": { "kind": "agent", "ref": "safe-fallback" } }
+      ]
+    },
+    {
+      "id": "retry",
+      "type": "loop",
+      "name": "Retry",
+      "max_iterations": 3,
+      "end_condition": { "cel": "last_step_content.contains(\"DONE\")" },
+      "steps": [
+        { "id": "probe", "type": "step", "name": "Probe", "executor": { "kind": "agent", "ref": "safe-fallback" } }
+      ]
+    }
   ]
 }
 ```
 
-后端仍编译为 Agno `Condition` / `Parallel` / `Loop` / `Router`，前端只编辑可序列化图。
+后端编译为 Agno `Step` / `Parallel` / `Condition` / `Loop`；前端为表单级嵌套编辑（非画布）。
 
 ### 设计决策（已拍板 / 默认）
 
 1. **Executor 来源（PR1）**：内置 Agent 注册表，不手填任意 Python。  
-2. **MCP/Skills（PR1）**：步骤默认无工具；需要工具的编排在 PR2+ 按 step 开关。  
-3. **画布（PR1）**：不做；列表 + Inspector 足够跑通。  
+2. **MCP/Skills（PR1–PR2）**：步骤默认无工具；需要工具的编排在后续 PR 按 step 开关。  
+3. **画布（PR1–PR2）**：不做；列表 + 嵌套 Inspector；React Flow 在 PR3。  
 4. **Session**：每次 Run 新 `session_id`，与 Chat session 隔离；UI 可跳转 Trace。  
 5. **权限（PR1）**：复用 `sessions:read/write`；菜单不再误用 `mcp:read`。后续可拆 `workflows:read/write`。
 

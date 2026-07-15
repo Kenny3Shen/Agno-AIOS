@@ -1,9 +1,102 @@
 import { apiFetch, jsonInit, requestJson } from '@/shared/api/client'
 import { consumeSse } from '@/features/chat/utils'
-import type { ExecutorOption, WorkflowRecord, WorkflowRunEventType, WorkflowRunLogItem } from './types'
+import type {
+  ExecutorOption,
+  WorkflowDefinitionNode,
+  WorkflowNodeType,
+  WorkflowRecord,
+  WorkflowRunLogItem,
+} from './types'
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+
+const normalizeNode = (value: unknown): WorkflowDefinitionNode | null => {
+  const item = asRecord(value)
+  if (!item) return null
+  const type = (String(item.type || 'step').toLowerCase() || 'step') as WorkflowNodeType
+  const id = String(item.id ?? crypto.randomUUID())
+  const name = String(item.name ?? id)
+
+  if (type === 'parallel') {
+    return {
+      id,
+      type: 'parallel',
+      name,
+      steps: Array.isArray(item.steps)
+        ? item.steps.flatMap((child) => {
+            const node = normalizeNode(child)
+            return node ? [node] : []
+          })
+        : [],
+    }
+  }
+  if (type === 'condition') {
+    const evaluator = asRecord(item.evaluator) ?? {}
+    const thenRaw = Array.isArray(item.then_steps)
+      ? item.then_steps
+      : Array.isArray(item["then"])
+        ? item["then"]
+        : Array.isArray(item.steps)
+          ? item.steps
+          : []
+    const elseRaw = Array.isArray(item.else_steps)
+      ? item.else_steps
+      : Array.isArray(item["else"])
+        ? item["else"]
+        : []
+    return {
+      id,
+      type: 'condition',
+      name,
+      evaluator: {
+        cel: evaluator.cel != null ? String(evaluator.cel) : undefined,
+        value: typeof evaluator.value === 'boolean' ? evaluator.value : undefined,
+      },
+      then_steps: thenRaw.flatMap((child) => {
+        const node = normalizeNode(child)
+        return node ? [node] : []
+      }),
+      else_steps: elseRaw.flatMap((child) => {
+        const node = normalizeNode(child)
+        return node ? [node] : []
+      }),
+    }
+  }
+  if (type === 'loop') {
+    const end = asRecord(item.end_condition) ?? asRecord(item.endCondition)
+    return {
+      id,
+      type: 'loop',
+      name,
+      max_iterations: Number(item.max_iterations ?? item.maxIterations ?? 3),
+      end_condition: end
+        ? {
+            cel: end.cel != null ? String(end.cel) : undefined,
+            value: typeof end.value === 'boolean' ? end.value : undefined,
+          }
+        : null,
+      steps: Array.isArray(item.steps)
+        ? item.steps.flatMap((child) => {
+            const node = normalizeNode(child)
+            return node ? [node] : []
+          })
+        : [],
+    }
+  }
+
+  const executor = asRecord(item.executor) ?? {}
+  return {
+    id,
+    type: 'step',
+    name,
+    executor: {
+      kind: 'agent',
+      ref: String(executor.ref ?? item.targetId ?? 'security-operations'),
+    },
+    instructions: String(item.instructions ?? ''),
+  }
+}
 
 const normalizeWorkflow = (value: unknown): WorkflowRecord | null => {
   const row = asRecord(value)
@@ -21,21 +114,8 @@ const normalizeWorkflow = (value: unknown): WorkflowRecord | null => {
       description: String(definition.description ?? row.description ?? ''),
       steps: Array.isArray(definition.steps)
         ? definition.steps.flatMap((step) => {
-            const item = asRecord(step)
-            if (!item) return []
-            const executor = asRecord(item.executor) ?? {}
-            return [
-              {
-                id: String(item.id ?? crypto.randomUUID()),
-                type: 'step' as const,
-                name: String(item.name ?? ''),
-                executor: {
-                  kind: 'agent' as const,
-                  ref: String(executor.ref ?? 'security-operations'),
-                },
-                instructions: String(item.instructions ?? ''),
-              },
-            ]
+            const node = normalizeNode(step)
+            return node ? [node] : []
           })
         : [],
     },
@@ -129,14 +209,19 @@ export const streamWorkflowRun = async (
     } catch {
       parsed = { message: data }
     }
-    const type = (event || 'message') as WorkflowRunEventType | string
-    const stepName = typeof parsed.step_name === 'string' ? parsed.step_name : null
-    const content = typeof parsed.content === 'string' ? parsed.content : null
+    const type = (event || String(parsed.event || 'message')).trim()
+    const stepName =
+      parsed.step_name != null
+        ? String(parsed.step_name)
+        : parsed.stepName != null
+          ? String(parsed.stepName)
+          : null
+    const content = parsed.content != null ? String(parsed.content) : null
     const message =
-      typeof parsed.message === 'string'
-        ? parsed.message
-        : type === 'step.completed' && content
-          ? content.slice(0, 240)
+      parsed.message != null
+        ? String(parsed.message)
+        : stepName
+          ? `${type} · ${stepName}`
           : type
     onEvent({
       id: crypto.randomUUID(),
@@ -146,7 +231,8 @@ export const streamWorkflowRun = async (
       content,
       at: Date.now(),
     })
-    terminal ||= type === 'workflow.completed' || type === 'workflow.failed' || type === 'workflow.cancelled'
+    terminal ||=
+      type === 'workflow.completed' || type === 'workflow.failed' || type === 'workflow.cancelled'
   })
   if (!terminal) throw new Error('Workflow stream ended before a terminal event')
 }

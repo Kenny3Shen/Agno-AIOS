@@ -1,5 +1,16 @@
 # 下一步工作
 
+## 已完成：Workflow PR2（Parallel / Condition / Loop）
+
+- DSL 递归校验：`step | parallel | condition | loop`（深度/节点/叶子上限；唯一 id；CEL 语法校验）。
+- `workflow_compiler` → Agno `Parallel` / `Condition(CEL)` / `Loop`；依赖 `cel-python`。
+- SSE 投影：`parallel.*` / `condition.*` / `loop.*` / `loop.iteration.*`。
+- 前端：嵌套节点列表 + Inspector（CEL / max_iterations / then-else / 子步骤）。
+- 编译期拒绝 HITL 字段；Parallel 内禁止 executor HITL。
+
+相关入口：`api/services/workflow_compiler.py`、`workflow_run_runtime.py`、`frontend/src/features/workflow/*`
+
+
 ## 已完成：设置页帮助文案改为 Tooltip
 
 - 模型高级表单项（并行工具、重试相关）去掉 `Form.Item extra`，改用 `tooltip` 图标提示。
