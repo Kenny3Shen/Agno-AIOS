@@ -247,4 +247,25 @@ describe('multi-handle branches', () => {
     expect(elseEdge?.sourceHandle).toBe('else')
     expect(thenEdge?.targetHandle).toBe('in')
   })
+
+  it('uses left-right ports for root sequence edges', () => {
+    const a = createNode('step')
+    a.id = 'a'
+    const b = createNode('step')
+    b.id = 'b'
+    const layout = layoutCanvas([a, b])
+    const next = layout.edges.find((e) => e.label === 'next')
+    expect(next?.sourceHandle).toBe('out-right')
+    expect(next?.targetHandle).toBe('in-left')
+  })
+
+  it('normalizes side handle aliases for reparent', () => {
+    const condition = createNode('condition')
+    condition.id = 'c1'
+    expect(reparentTargetFromHandle(condition, 'then-right')).toEqual({
+      kind: 'branch',
+      parentId: 'c1',
+      branch: 'thenSteps',
+    })
+  })
 })

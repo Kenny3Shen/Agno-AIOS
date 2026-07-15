@@ -404,7 +404,7 @@ function CanvasInner({
         // Container sources must use a branch handle (not a bare out for condition/router).
         if (sourceNode.type === 'condition' || sourceNode.type === 'router') {
           const handle = connection.sourceHandle || ''
-          if (!handle || handle === 'out') return false
+          if (!handle || handle === 'out' || handle === 'out-right') return false
           return reparentTargetFromHandle(sourceNode, handle) != null
         }
       }

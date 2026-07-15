@@ -45,6 +45,15 @@ function handleLeftPercent(index: number, total: number): string {
   return `${((index + 1) / (total + 1)) * 100}%`
 }
 
+function handleTopPercent(index: number, total: number): string {
+  if (total <= 1) return '50%'
+  // Keep ports within the body band (avoid badge/header)
+  const start = 38
+  const end = 88
+  if (total === 1) return '62%'
+  return `${start + ((end - start) * index) / (total - 1)}%`
+}
+
 function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
   const payload = data as unknown as WorkflowFlowNodeData
   const meta = TYPE_META[payload.nodeType] ?? TYPE_META.step
@@ -67,12 +76,22 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
       className={`wf-flow-node ${selected ? 'is-selected' : ''} ${payload.dropHighlight ? 'is-drop-target' : ''} ${runClass} ${multiOut ? 'has-branch-handles' : ''}`}
       style={style}
     >
+      {/* Entrances: top + left */}
       <Handle
         type="target"
         position={Position.Top}
         id="in"
-        className="wf-handle wf-handle--in"
+        className="wf-handle wf-handle--in wf-handle--top"
+        title="In (top)"
       />
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="in-left"
+        className="wf-handle wf-handle--in wf-handle--left"
+        title="In (left)"
+      />
+
       <div className="wf-flow-node__badge" aria-hidden>
         {meta.icon}
         {payload.runStatus ? (
@@ -110,25 +129,51 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
           </div>
         ) : null}
       </div>
+
       {multiOut ? (
-        branches.map((branch, index) => (
+        <>
+          {/* Branch exits: bottom (vertical) + right (horizontal) */}
+          {branches.map((branch, index) => (
+            <Handle
+              key={`b-${branch.id}`}
+              type="source"
+              position={Position.Bottom}
+              id={branch.id}
+              className="wf-handle wf-handle--branch wf-handle--bottom"
+              style={{ left: handleLeftPercent(index, branches.length) }}
+              title={`${branch.label} (bottom)`}
+            />
+          ))}
+          {branches.map((branch, index) => (
+            <Handle
+              key={`r-${branch.id}`}
+              type="source"
+              position={Position.Right}
+              id={`${branch.id}-right`}
+              className="wf-handle wf-handle--branch wf-handle--right"
+              style={{ top: handleTopPercent(index, branches.length) }}
+              title={`${branch.label} (right)`}
+            />
+          ))}
+        </>
+      ) : (
+        <>
+          {/* Default exits: bottom + right */}
           <Handle
-            key={branch.id}
             type="source"
             position={Position.Bottom}
-            id={branch.id}
-            className="wf-handle wf-handle--branch"
-            style={{ left: handleLeftPercent(index, branches.length) }}
-            title={branch.label}
+            id="out"
+            className="wf-handle wf-handle--out wf-handle--bottom"
+            title="Out (bottom)"
           />
-        ))
-      ) : (
-        <Handle
-          type="source"
-          position={Position.Bottom}
-          id="out"
-          className="wf-handle wf-handle--out"
-        />
+          <Handle
+            type="source"
+            position={Position.Right}
+            id="out-right"
+            className="wf-handle wf-handle--out wf-handle--right"
+            title="Out (right)"
+          />
+        </>
       )}
     </div>
   )

@@ -2194,6 +2194,32 @@ html.dark .wf-flow-node__badge {
   bottom: -5px !important;
 }
 
+/* Side ports — do not override transform (React Flow positions via transform). */
+.wf-handle--left {
+  left: -5px !important;
+}
+
+.wf-handle--right {
+  right: -5px !important;
+  left: auto !important;
+}
+
+.wf-handle--top {
+  top: -5px !important;
+}
+
+.wf-handle--bottom {
+  bottom: -5px !important;
+}
+
+.wf-handle--left:hover,
+.wf-handle--right:hover,
+.wf-handle--top:hover,
+.wf-handle--bottom:hover {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wf-node-color, var(--tais-blue)) 35%, transparent);
+}
+
+
 .workflow-canvas--main .react-flow__edge.wf-edge-branch .react-flow__edge-path {
   stroke: var(--wf-edge-branch) !important;
 }

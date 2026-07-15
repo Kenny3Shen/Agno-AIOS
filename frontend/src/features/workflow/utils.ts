@@ -372,7 +372,11 @@ export const reparentTargetFromHandle = (
   source: WorkflowNode,
   sourceHandle: string | null | undefined
 ): ReparentTarget | null => {
-  const handle = (sourceHandle || '').trim()
+  // Normalize side aliases: "then-right" → "then", "out-right" → "out"
+  let handle = (sourceHandle || '').trim()
+  if (handle.endsWith('-right')) handle = handle.slice(0, -'-right'.length)
+  if (handle.endsWith('-left')) handle = handle.slice(0, -'-left'.length)
+
   if (source.type === 'condition') {
     if (handle === 'then' || handle === 'thenSteps') {
       return { kind: 'branch', parentId: source.id, branch: 'thenSteps' }
@@ -384,10 +388,25 @@ export const reparentTargetFromHandle = (
   if (source.type === 'router' && handle.startsWith('choice:')) {
     return { kind: 'choice', parentId: source.id, choiceId: handle.slice('choice:'.length) }
   }
-  if ((source.type === 'parallel' || source.type === 'loop') && (handle === 'out' || handle === 'body' || !handle)) {
+  if (
+    (source.type === 'parallel' || source.type === 'loop') &&
+    (handle === 'out' || handle === 'body' || handle === 'steps' || !handle)
+  ) {
     return { kind: 'branch', parentId: source.id, branch: 'steps' }
   }
   return null
+}
+
+/** True if handle is a node entrance (top or left). */
+export const isEntranceHandle = (handle: string | null | undefined): boolean => {
+  const h = (handle || '').trim()
+  return !h || h === 'in' || h === 'in-left'
+}
+
+/** True if handle is a default (non-branch) exit. */
+export const isDefaultExitHandle = (handle: string | null | undefined): boolean => {
+  const h = (handle || '').trim()
+  return !h || h === 'out' || h === 'out-right'
 }
 
 export const emptySlotsFor = (node: WorkflowNode): EmptySlot[] => {
@@ -787,8 +806,9 @@ export const layoutCanvas = (
       source: roots[i]!.id,
       target: roots[i + 1]!.id,
       label: 'next',
-      sourceHandle: 'out',
-      targetHandle: 'in',
+      // Root sequence prefers left→right ports for Dify-like flow.
+      sourceHandle: 'out-right',
+      targetHandle: 'in-left',
     })
   }
   return { nodes, edges }
