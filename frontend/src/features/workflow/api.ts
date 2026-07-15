@@ -388,3 +388,52 @@ export const restoreWorkflowVersion = async (workflowId: string, version: number
   if (!row) throw new Error('Invalid workflow payload')
   return row
 }
+
+export type WorkflowTriggerHistoryItem = {
+  id: string | number
+  action: string
+  status: string
+  source: string
+  run_id: string
+  session_id: string
+  expression?: string
+  created_at: string
+}
+
+export const listWorkflowTriggerHistory = async (
+  id: string,
+  opts?: { page?: number; limit?: number }
+) => {
+  const page = opts?.page ?? 1
+  const limit = opts?.limit ?? 20
+  const raw = await requestJson<unknown>(
+    `/workflows/${encodeURIComponent(id)}/triggers/history?page=${page}&limit=${limit}`
+  )
+  const row = asRecord(raw) ?? {}
+  const data = Array.isArray(row.data) ? row.data : []
+  const meta = asRecord(row.meta) ?? {}
+  return {
+    data: data.flatMap((item) => {
+      const r = asRecord(item)
+      if (!r) return []
+      return [
+        {
+          id: (r.id as string | number) ?? '',
+          action: String(r.action ?? ''),
+          status: String(r.status ?? ''),
+          source: String(r.source ?? ''),
+          run_id: String(r.run_id ?? ''),
+          session_id: String(r.session_id ?? ''),
+          expression: r.expression != null ? String(r.expression) : '',
+          created_at: String(r.created_at ?? ''),
+        } satisfies WorkflowTriggerHistoryItem,
+      ]
+    }),
+    meta: {
+      page: Number(meta.page ?? page) || page,
+      limit: Number(meta.limit ?? limit) || limit,
+      total: Number(meta.total ?? data.length) || 0,
+    },
+  }
+}
+

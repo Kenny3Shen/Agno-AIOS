@@ -125,9 +125,9 @@ export function useWorkflow() {
   const withHistory = useCallback(
     (recipe: (current: WorkflowState) => WorkflowState) => {
       setState((current) => {
-        pushHistory(current)
         const next = recipe(current)
         if (next === current) return current
+        pushHistory(current)
         return { ...next, validationIssues: [] }
       })
     },
@@ -275,12 +275,29 @@ export function useWorkflow() {
     })
   }
 
-  const update = (node: WorkflowNode) =>
-    setState((current) => ({
-      ...current,
-      dirty: true,
-      steps: updateNodeInTree(current.steps, node.id, () => node),
-    }))
+  // Inspector field edits: push one undo snapshot per burst (typing does not spam history).
+  const inspectorHistoryNodeRef = useRef<string | null>(null)
+  const inspectorHistoryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const update = (node: WorkflowNode) => {
+    setState((current) => {
+      if (inspectorHistoryNodeRef.current !== node.id) {
+        pushHistory(current)
+        inspectorHistoryNodeRef.current = node.id
+      }
+      if (inspectorHistoryTimerRef.current) clearTimeout(inspectorHistoryTimerRef.current)
+      inspectorHistoryTimerRef.current = setTimeout(() => {
+        inspectorHistoryNodeRef.current = null
+        inspectorHistoryTimerRef.current = null
+      }, 600)
+      return {
+        ...current,
+        dirty: true,
+        validationIssues: [],
+        steps: updateNodeInTree(current.steps, node.id, () => node),
+      }
+    })
+  }
 
   const remove = (id: string) =>
     withHistory((current) => {

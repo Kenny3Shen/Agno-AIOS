@@ -4,15 +4,14 @@ import {
   App,
   Button,
   Card,
+  Drawer,
   Empty,
   Form,
-  Grid,
   Input,
   InputNumber,
   Modal,
   Popconfirm,
   Space,
-  Splitter,
   Switch,
   Table,
   Tabs,
@@ -63,10 +62,10 @@ function RiskTags({ item }: { item: McpComponent }) {
 export function McpPage() {
   const { t } = useTranslation('mcp')
   const { message, modal } = App.useApp()
-  const screens = Grid.useBreakpoint()
   const client = useQueryClient()
   const [namespace, setNamespace] = useState<string>()
   const [component, setComponent] = useState<McpComponent>()
+  const [detailOpen, setDetailOpen] = useState(false)
   const [issueOpen, setIssueOpen] = useState(false)
   const [serverOpen, setServerOpen] = useState(false)
   const [callOpen, setCallOpen] = useState(false)
@@ -169,217 +168,137 @@ export function McpPage() {
             key: 'components',
             label: 'Servers & Components',
             children: (
-              <Splitter className="workbench-splitter mcp-splitter" orientation={screens.md === false ? 'vertical' : 'horizontal'}>
-                <Splitter.Panel defaultSize="68%" min={screens.md === false ? 320 : '48%'}>
-                  <Card className="workbench-card splitter-panel-card">
-                    <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
-                      <Table<McpServer>
-                        rowKey="id"
-                        size="small"
-                        loading={config.isLoading}
-                        dataSource={servers}
-                        pagination={false}
-                        rowClassName={(row) => (row.namespace === namespace ? 'ant-table-row-selected' : '')}
-                        onRow={(row) => ({
-                          onClick: () => {
-                            setNamespace(row.namespace)
-                            setComponent(undefined)
-                          },
-                        })}
-                        columns={[
-                          {
-                            title: 'Server / Namespace',
-                            render: (_, row) => (
-                              <Space>
-                                <strong>{row.name}</strong>
-                                <Typography.Text type="secondary">{row.namespace}</Typography.Text>
-                              </Space>
-                            ),
-                          },
-                          { title: 'Transport', dataIndex: 'transport', width: 150, render: (value) => <Tag>{value}</Tag> },
-                          {
-                            title: 'Enabled',
-                            width: 90,
-                            render: (_, row) => {
-                              const pending = toggleServer.isPending && toggleServer.variables?.server.id === row.id
-                              return (
-                                <Switch
-                                  checked={row.enabled}
-                                  loading={pending}
-                                  disabled={!row.can_manage || pending}
-                                  onClick={(_checked, event) => event.stopPropagation()}
-                                  onChange={(enabled) => toggleServer.mutate({ server: row, enabled })}
-                                />
-                              )
-                            },
-                          },
-                          {
-                            title: 'Visibility',
-                            width: 140,
-                            render: (_, row) => (
-                              <VisibilitySelect
-                                value={row.visibility}
-                                disabled={!row.can_manage}
-                                onClick={(event) => event.stopPropagation()}
-                                onChange={(value) => void updateServerVisibility(row.name, value)}
-                              />
-                            ),
-                          },
-                          {
-                            title: 'Actions',
-                            width: 76,
-                            render: (_, row) =>
-                              row.can_delete ? (
-                                <Popconfirm title={t('deleteServerConfirm', { name: row.name })} okText={t('common:delete')} okButtonProps={{ danger: true }} onConfirm={() => removeServer(row)}>
-                                  <Button danger type="text" icon={<DeleteOutlined />} aria-label={t('deleteServerNamed', { name: row.name })} onClick={(event) => event.stopPropagation()} />
-                                </Popconfirm>
-                              ) : null,
-                          },
-                        ]}
-                      />
-                      <Table<McpComponent>
-                        rowKey="key"
-                        size="small"
-                        loading={components.isLoading}
-                        dataSource={components.data ?? []}
-                        pagination={false}
-                        locale={{
-                          emptyText: (
-                            <Empty
-                              image={Empty.PRESENTED_IMAGE_SIMPLE}
-                              description={namespace ? t('noVisibleComponents') : t('selectServerForComponents')}
+              <Card className="workbench-card">
+                <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
+                  <Table<McpServer>
+                    rowKey="id"
+                    size="small"
+                    loading={config.isLoading}
+                    dataSource={servers}
+                    pagination={false}
+                    rowClassName={(row) => (row.namespace === namespace ? 'ant-table-row-selected' : '')}
+                    onRow={(row) => ({
+                      onClick: () => {
+                        setNamespace(row.namespace)
+                        setComponent(undefined)
+                        setDetailOpen(true)
+                      },
+                    })}
+                    columns={[
+                      {
+                        title: 'Server / Namespace',
+                        render: (_, row) => (
+                          <Space>
+                            <strong>{row.name}</strong>
+                            <Typography.Text type="secondary">{row.namespace}</Typography.Text>
+                          </Space>
+                        ),
+                      },
+                      { title: 'Transport', dataIndex: 'transport', width: 150, render: (value) => <Tag>{value}</Tag> },
+                      {
+                        title: 'Enabled',
+                        width: 90,
+                        render: (_, row) => {
+                          const pending = toggleServer.isPending && toggleServer.variables?.server.id === row.id
+                          return (
+                            <Switch
+                              checked={row.enabled}
+                              loading={pending}
+                              disabled={!row.can_manage || pending}
+                              onClick={(_checked, event) => event.stopPropagation()}
+                              onChange={(enabled) => toggleServer.mutate({ server: row, enabled })}
                             />
-                          ),
-                        }}
-                        onRow={(row) => ({ onClick: () => setComponent(row) })}
-                        columns={[
-                          {
-                            title: 'Component',
-                            render: (_, row) => (
-                              <Space orientation="vertical" size={0}>
-                                <strong>{row.title || row.name}</strong>
-                                <Typography.Text code>{row.name}</Typography.Text>
-                              </Space>
-                            ),
-                          },
-                          {
-                            title: 'Type',
-                            dataIndex: 'type',
-                            width: 100,
-                            render: (value) => <Tag color={value === 'tool' ? 'blue' : 'purple'}>{value}</Tag>,
-                          },
-                          {
-                            title: 'Tags',
-                            dataIndex: 'tags',
-                            render: (tags: string[]) => (
-                              <Space wrap>
-                                {tags.map((tag) => (
-                                  <Tag key={tag}>{tag}</Tag>
-                                ))}
-                              </Space>
-                            ),
-                          },
-                          { title: 'Risk', width: 190, render: (_, row) => <RiskTags item={row} /> },
-                          {
-                            title: 'Enabled',
-                            width: 90,
-                            render: (_, row) => {
-                              const pending = toggleComponent.isPending && toggleComponent.variables?.item.key === row.key
-                              const server = servers.find((item) => item.id === row.server_id)
-                              return (
-                                <Switch
-                                  aria-label={`${row.name} enabled`}
-                                  checked={row.enabled}
-                                  disabled={!server?.can_manage || pending}
-                                  loading={pending}
-                                  onClick={(_checked, event) => event.stopPropagation()}
-                                  onChange={(enabled) => toggleComponent.mutate({ item: row, enabled })}
-                                />
-                              )
-                            },
-                          },
-                        ]}
-                      />
-                    </Space>
-                  </Card>
-                </Splitter.Panel>
-                <Splitter.Panel defaultSize="32%" min={screens.md === false ? 260 : '24%'}>
-                  <Card
-                    className="workbench-card splitter-panel-card"
-                    title="Detail"
-                    extra={
-                      component?.type === 'tool' && (
-                        <Button
-                          icon={<PlayCircleOutlined />}
-                          onClick={() => {
-                            setCallResult(undefined)
-                            setCallOpen(true)
-                          }}
-                        >
-                          {t('tryCallShort')}
-                        </Button>
-                      )
-                    }
-                  >
-                    {!component && selectedServer && (
-                      <MetadataDescriptions
-                        items={[
-                          { key: 'name', label: 'Name', children: selectedServer.name },
-                          { key: 'namespace', label: 'Namespace', children: selectedServer.namespace },
-                          { key: 'transport', label: 'Transport', children: selectedServer.transport },
-                          { key: 'store', label: 'Config store', children: config.data?.config_store },
-                        ]}
-                        value={selectedServer.manifest}
-                        prefix="Manifest"
-                      />
-                    )}
-                    {!component && !selectedServer && (
-                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('selectForDetails')} />
-                    )}
-                    {component && (
-                      <Tabs
-                        destroyOnHidden
-                        items={[
-                          {
-                            key: 'overview',
-                            label: 'Overview',
-                            children: (
-                              <MetadataDescriptions
-                                items={[
-                                  { key: 'name', label: 'Name', children: component.name },
-                                  { key: 'title', label: 'Title', children: component.title || '-' },
-                                  { key: 'namespace', label: 'Namespace', children: component.namespace || '-' },
-                                  { key: 'description', label: 'Description', children: component.description || '-' },
-                                ]}
-                                value={{ tags: component.tags, annotations: component.annotations }}
-                              />
-                            ),
-                          },
-                          {
-                            key: 'schemas',
-                            label: 'Schemas',
-                            children: (
-                              <Splitter orientation="vertical" style={{ height: 'calc(100vh - 360px)', minHeight: 420 }}>
-                                <Splitter.Panel defaultSize="50%" min={160}>
-                                  <FormattedContentCard title="Input schema" value={component.input_schema} />
-                                </Splitter.Panel>
-                                <Splitter.Panel defaultSize="50%" min={160}>
-                                  <FormattedContentCard title="Output schema" value={component.output_schema} />
-                                </Splitter.Panel>
-                              </Splitter>
-                            ),
-                          },
-                          { key: 'metadata', label: 'Metadata', children: <MetadataDescriptions value={component.meta} /> },
-                        ]}
-                      />
-                    )}
-                  </Card>
-                </Splitter.Panel>
-              </Splitter>
+                          )
+                        },
+                      },
+                      {
+                        title: 'Visibility',
+                        width: 140,
+                        render: (_, row) => (
+                          <VisibilitySelect
+                            value={row.visibility}
+                            disabled={!row.can_manage}
+                            onClick={(event) => event.stopPropagation()}
+                            onChange={(value) => void updateServerVisibility(row.name, value)}
+                          />
+                        ),
+                      },
+                      {
+                        title: 'Actions',
+                        width: 76,
+                        render: (_, row) =>
+                          row.can_delete ? (
+                            <Popconfirm title={t('deleteServerConfirm', { name: row.name })} okText={t('common:delete')} okButtonProps={{ danger: true }} onConfirm={() => removeServer(row)}>
+                              <Button danger type="text" icon={<DeleteOutlined />} aria-label={t('deleteServerNamed', { name: row.name })} onClick={(event) => event.stopPropagation()} />
+                            </Popconfirm>
+                          ) : null,
+                      },
+                    ]}
+                  />
+                  <Table<McpComponent>
+                    rowKey="key"
+                    size="small"
+                    loading={components.isLoading}
+                    dataSource={components.data ?? []}
+                    pagination={false}
+                    locale={{
+                      emptyText: (
+                        <Empty
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description={namespace ? t('noVisibleComponents') : t('selectServerForComponents')}
+                        />
+                      ),
+                    }}
+                    onRow={(row) => ({
+                      onClick: () => {
+                        setComponent(row)
+                        setDetailOpen(true)
+                      },
+                    })}
+                    columns={[
+                      {
+                        title: 'Component',
+                        render: (_, row) => (
+                          <Space>
+                            <Tag>{row.type}</Tag>
+                            <strong>{row.name}</strong>
+                          </Space>
+                        ),
+                      },
+                      { title: 'Title', dataIndex: 'title', ellipsis: true },
+                      { title: 'Namespace', dataIndex: 'namespace', width: 140 },
+                      {
+                        title: 'Risk',
+                        width: 180,
+                        render: (_, row) => <RiskTags item={row} />,
+                      },
+                      {
+                        title: 'Enabled',
+                        width: 90,
+                        render: (_, row) => {
+                          const pending = toggleComponent.isPending && toggleComponent.variables?.item.key === row.key
+                          const server = servers.find((item) => item.id === row.server_id)
+                          return (
+                            <Switch
+                              aria-label={`${row.name} enabled`}
+                              checked={row.enabled}
+                              disabled={!server?.can_manage || pending}
+                              loading={pending}
+                              onClick={(_checked, event) => event.stopPropagation()}
+                              onChange={(enabled) => toggleComponent.mutate({ item: row, enabled })}
+                            />
+                          )
+                        },
+                      },
+                    ]}
+                  />
+                </Space>
+              </Card>
             ),
           },
           {
             key: 'tokens',
+
             label: 'Tokens',
             children: (
               <Card className="workbench-card">
@@ -408,11 +327,85 @@ export function McpPage() {
                     },
                   ]}
                 />
+
               </Card>
             ),
           },
         ]}
       />
+      <Drawer
+        size={640}
+        open={detailOpen && Boolean(component || selectedServer)}
+        onClose={() => {
+          setDetailOpen(false)
+          setComponent(undefined)
+        }}
+        title={component?.name || selectedServer?.name || 'Detail'}
+        destroyOnHidden
+        extra={
+          component?.type === 'tool' ? (
+            <Button
+              icon={<PlayCircleOutlined />}
+              onClick={() => {
+                setCallResult(undefined)
+                setCallOpen(true)
+              }}
+            >
+              {t('tryCallShort')}
+            </Button>
+          ) : null
+        }
+      >
+        {!component && selectedServer ? (
+          <MetadataDescriptions
+            items={[
+              { key: 'name', label: 'Name', children: selectedServer.name },
+              { key: 'namespace', label: 'Namespace', children: selectedServer.namespace },
+              { key: 'transport', label: 'Transport', children: selectedServer.transport },
+              { key: 'store', label: 'Config store', children: config.data?.config_store },
+            ]}
+            value={selectedServer.manifest}
+            prefix="Manifest"
+          />
+        ) : null}
+        {!component && !selectedServer ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('selectForDetails')} />
+        ) : null}
+        {component ? (
+          <Tabs
+            destroyOnHidden
+            items={[
+              {
+                key: 'overview',
+                label: 'Overview',
+                children: (
+                  <MetadataDescriptions
+                    items={[
+                      { key: 'name', label: 'Name', children: component.name },
+                      { key: 'title', label: 'Title', children: component.title || '-' },
+                      { key: 'namespace', label: 'Namespace', children: component.namespace || '-' },
+                      { key: 'description', label: 'Description', children: component.description || '-' },
+                    ]}
+                    value={{ tags: component.tags, annotations: component.annotations }}
+                  />
+                ),
+              },
+              {
+                key: 'schemas',
+                label: 'Schemas',
+                children: (
+                  <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
+                    <FormattedContentCard title="Input schema" value={component.input_schema} />
+                    <FormattedContentCard title="Output schema" value={component.output_schema} />
+                  </Space>
+                ),
+              },
+              { key: 'metadata', label: 'Metadata', children: <MetadataDescriptions value={component.meta} /> },
+            ]}
+          />
+        ) : null}
+      </Drawer>
+
 
       <Modal open={issueOpen} footer={null} onCancel={() => setIssueOpen(false)} title={t('issueToken')}>
         <Form

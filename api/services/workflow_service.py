@@ -374,6 +374,7 @@ async def publish_workflow_for_actor(actor: ActorLike, workflow_id: str) -> dict
 
 
 async def mark_cron_last_run(workflow_id: str, ts: float) -> None:
+    """Best-effort last_run stamp (non-atomic). Prefer try_claim_cron_run."""
     row = await workflow_store.get_workflow(workflow_id)
     if row is None:
         return
@@ -382,4 +383,21 @@ async def mark_cron_last_run(workflow_id: str, ts: float) -> None:
     await workflow_store.update_workflow(
         workflow_id,
         values={"triggers": triggers, "updated_at": workflow_store.now_ts()},
+    )
+
+
+async def try_claim_cron_run(
+    workflow_id: str,
+    *,
+    expected_last_run_at: float,
+    claim_ts: float,
+) -> bool:
+    """Atomically claim a cron fire if last_run_at still matches.
+
+    Returns True when this process won the claim (multi-instance safe).
+    """
+    return await workflow_store.claim_cron_last_run(
+        workflow_id,
+        expected_last_run_at=float(expected_last_run_at or 0),
+        claim_ts=float(claim_ts),
     )

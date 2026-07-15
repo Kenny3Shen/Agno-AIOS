@@ -32,12 +32,14 @@ import {
   CloudUploadOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { useWorkflow } from './useWorkflow'
 import { WorkflowCanvas, paletteDragStart } from './WorkflowCanvas'
 import type { WorkflowNodeType } from './types'
 import { buildWorkflowCode } from './utils'
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
+import { listWorkflowTriggerHistory } from './api'
 import { useEffect, type ReactNode } from 'react'
 
 const PALETTE: Array<{
@@ -57,6 +59,13 @@ export function WorkflowPage() {
   const { t } = useTranslation('workflow')
   const routerNav = useRouter()
   const workflow = useWorkflow()
+
+  const triggerHistoryQuery = useQuery({
+    queryKey: ['workflows', 'trigger-history', workflow.state.workflowId],
+    queryFn: () => listWorkflowTriggerHistory(workflow.state.workflowId!, { limit: 12 }),
+    enabled: Boolean(workflow.state.workflowId),
+    refetchInterval: 30_000,
+  })
   const step = workflow.selected
   const executors = workflow.executorsQuery.data ?? []
   const models = workflow.modelsQuery.data?.models ?? []
@@ -819,6 +828,70 @@ export function WorkflowPage() {
                       <Typography.Paragraph type="secondary" style={{ fontSize: 11, marginTop: 8 }}>
                         {t('publishTriggersHint')}
                       </Typography.Paragraph>
+                      {workflow.state.workflowId ? (
+                        <div style={{ marginTop: 12 }}>
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            {t('triggerHistory')}
+                          </Typography.Text>
+                          {(triggerHistoryQuery.data?.data?.length ?? 0) > 0 ? (
+                            <List
+                              size="small"
+                              loading={triggerHistoryQuery.isLoading}
+                              dataSource={triggerHistoryQuery.data?.data ?? []}
+                              renderItem={(item) => (
+                                <List.Item style={{ padding: '4px 0' }}>
+                                  <Space size={4} wrap>
+                                    <Tag
+                                      color={
+                                        item.status === 'success'
+                                          ? 'success'
+                                          : item.status === 'paused'
+                                            ? 'warning'
+                                            : item.status === 'started'
+                                              ? 'processing'
+                                              : 'error'
+                                      }
+                                      style={{ margin: 0 }}
+                                    >
+                                      {item.source}
+                                    </Tag>
+                                    <Tag style={{ margin: 0 }}>{item.status}</Tag>
+                                    <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                                      {item.created_at
+                                        ? new Date(item.created_at).toLocaleString()
+                                        : item.run_id || '-'}
+                                    </Typography.Text>
+                                    {item.session_id ? (
+                                      <Button
+                                        type="link"
+                                        size="small"
+                                        style={{ paddingInline: 0, fontSize: 12 }}
+                                        onClick={() =>
+                                          void routerNav.navigate({
+                                            to: '/trace',
+                                            search: {
+                                              session_id: item.session_id,
+                                              run_id: item.run_id || undefined,
+                                              selected_session: item.session_id,
+                                              trace: item.run_id || undefined,
+                                            },
+                                          })
+                                        }
+                                      >
+                                        Trace
+                                      </Button>
+                                    ) : null}
+                                  </Space>
+                                </List.Item>
+                              )}
+                            />
+                          ) : (
+                            <Typography.Paragraph type="secondary" style={{ fontSize: 11, marginTop: 4 }}>
+                              {triggerHistoryQuery.isLoading ? '…' : t('triggerHistoryEmpty')}
+                            </Typography.Paragraph>
+                          )}
+                        </div>
+                      ) : null}
                     </>
                   ),
                 },

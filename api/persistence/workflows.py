@@ -152,6 +152,51 @@ async def update_workflow(
     return dict(row) if row else None
 
 
+
+async def claim_cron_last_run(
+    workflow_id: str,
+    *,
+    expected_last_run_at: float,
+    claim_ts: float,
+) -> bool:
+    """CAS claim on triggers.cron.last_run_at (row lock) for multi-instance safety."""
+    await ensure_workflows_table_async()
+    table = workflows_table()
+    expected = float(expected_last_run_at or 0)
+    async with get_async_control_plane_engine().begin() as conn:
+        row = (
+            await conn.execute(
+                select(table).where(table.c.id == workflow_id).with_for_update()
+            )
+        ).mappings().first()
+        if row is None:
+            return False
+        triggers_raw = row.get("triggers")
+        triggers: dict[str, Any] = (
+            {str(k): v for k, v in triggers_raw.items()}
+            if isinstance(triggers_raw, dict)
+            else {}
+        )
+        cron_raw = triggers.get("cron")
+        cron: dict[str, Any] = (
+            {str(k): v for k, v in cron_raw.items()} if isinstance(cron_raw, dict) else {}
+        )
+        current = float(cron.get("last_run_at") or 0)
+        # Another worker advanced last_run_at past our snapshot → lose claim.
+        if current > expected + 0.01:
+            return False
+        if expected > 0 and abs(current - expected) > 0.01:
+            return False
+        cron["last_run_at"] = float(claim_ts)
+        triggers["cron"] = cron
+        result = await conn.execute(
+            update(table)
+            .where(table.c.id == workflow_id)
+            .values(triggers=triggers, updated_at=int(claim_ts))
+        )
+        return bool(result.rowcount)
+
+
 async def delete_workflow(
     workflow_id: str,
     *,

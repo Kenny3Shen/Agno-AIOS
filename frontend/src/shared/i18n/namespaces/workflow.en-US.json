@@ -42,7 +42,7 @@
   "requiresConfirmation": "Require step confirmation (HITL)",
   "confirmationMessagePlaceholder": "Confirmation message (shown in Approvals)",
   "pr3Hint": "PR3: React Flow canvas + step confirmation HITL (shared Approvals) + workflows:read/write scopes.",
-  "pr4Hint": "Drag nodes to reorder; connect edges to resequence roots. Router, nested workflows, version restore, and webhook triggers are live. Cron is config-only for now.",
+  "pr4Hint": "Drag nodes to reorder; connect edges to resequence roots. Router, nested workflows, version restore, webhook and cron triggers are live.",
   "addRouter": "Router",
   "addWorkflowRef": "Nested workflow",
   "versions": "Versions",
@@ -75,5 +75,7 @@
   "publishHint": "Promote draft to the live revision used by webhook/cron",
   "publishTriggersHint": "Webhook and cron always run the published revision. Save draft, then Publish.",
   "cronExpression": "Cron expression (e.g. */15 * * * *)",
-  "validationTitle": "Fix these before save"
+  "validationTitle": "Fix these before save",
+  "triggerHistory": "Trigger history",
+  "triggerHistoryEmpty": "No cron/webhook fires yet"
 }

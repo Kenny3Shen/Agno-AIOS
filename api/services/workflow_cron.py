@@ -1,10 +1,11 @@
-"""Cron trigger ticker for published workflows (PR7)."""
+"""Cron trigger ticker for published workflows (PR7 / PR8c)."""
 
 from __future__ import annotations
 
 import asyncio
 import time
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
@@ -12,11 +13,12 @@ from croniter import croniter
 from loguru import logger
 
 from api.persistence import workflows as workflow_store
+from api.services.audit_service import record_audit_event_async
 from api.services.workflow_run_runtime import stream_workflow_run
 from api.services.workflow_service import (
     _normalize_triggers,
     get_published_definition,
-    mark_cron_last_run,
+    try_claim_cron_run,
 )
 
 
@@ -33,6 +35,15 @@ def _cron_due(expression: str, last_run_at: float, now: float) -> bool:
     except (ValueError, KeyError, TypeError):
         logger.warning("Invalid cron expression: {!r}", expr)
         return False
+
+
+def _system_actor(owner_user_id: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=owner_user_id or "system",
+        email="system@workflow-cron",
+        role="system",
+        is_superuser=False,
+    )
 
 
 async def tick_workflow_crons(*, limit: int = 200) -> int:
@@ -58,11 +69,18 @@ async def tick_workflow_crons(*, limit: int = 200) -> int:
         if definition is None:
             logger.debug("Skip cron {}: no published definition", workflow_id)
             continue
+        # Atomic claim: multi-instance safe (FOR UPDATE + CAS on last_run_at).
+        claimed = await try_claim_cron_run(
+            workflow_id,
+            expected_last_run_at=last_run_at,
+            claim_ts=now,
+        )
+        if not claimed:
+            logger.debug("Skip cron {}: lost lease claim", workflow_id)
+            continue
         owner = str(row.get("owner_user_id") or "system")
         run_id = str(uuid4())
         session_id = str(uuid4())
-        # Mark first to avoid double-fire on slow runs / overlapping ticks.
-        await mark_cron_last_run(workflow_id, now)
         started += 1
         asyncio.create_task(
             _run_cron_workflow(
@@ -71,6 +89,7 @@ async def tick_workflow_crons(*, limit: int = 200) -> int:
                 owner_user_id=owner,
                 run_id=run_id,
                 session_id=session_id,
+                expression=expression,
             ),
             name=f"workflow-cron-{workflow_id}",
         )
@@ -84,8 +103,24 @@ async def _run_cron_workflow(
     owner_user_id: str,
     run_id: str,
     session_id: str,
+    expression: str = "",
 ) -> None:
+    actor = _system_actor(owner_user_id)
+    terminal = "error"
     try:
+        await record_audit_event_async(
+            actor=actor,
+            action="workflow.trigger.cron",
+            resource_type="workflow",
+            resource_id=workflow_id,
+            status="started",
+            metadata={
+                "run_id": run_id,
+                "session_id": session_id,
+                "expression": expression,
+                "source": "cron",
+            },
+        )
         async for event in stream_workflow_run(
             workflow_id=workflow_id,
             definition=definition,
@@ -95,22 +130,45 @@ async def _run_cron_workflow(
             model_id=None,
             run_id=run_id,
         ):
-            # Drain stream; HITL pause is terminal for this fire.
             if event.event in {
                 "workflow.completed",
                 "workflow.failed",
                 "workflow.cancelled",
                 "workflow.paused",
             }:
+                if event.event == "workflow.completed":
+                    terminal = "success"
+                elif event.event == "workflow.paused":
+                    terminal = "paused"
+                elif event.event == "workflow.cancelled":
+                    terminal = "cancelled"
+                else:
+                    terminal = "error"
                 break
         logger.info(
-            "Cron workflow {} finished run={} session={}",
+            "Cron workflow {} finished run={} session={} status={}",
             workflow_id,
             run_id,
             session_id,
+            terminal,
         )
     except Exception:
+        terminal = "error"
         logger.exception("Cron workflow {} failed run={}", workflow_id, run_id)
+    finally:
+        await record_audit_event_async(
+            actor=actor,
+            action="workflow.trigger.cron",
+            resource_type="workflow",
+            resource_id=workflow_id,
+            status=terminal,
+            metadata={
+                "run_id": run_id,
+                "session_id": session_id,
+                "expression": expression,
+                "source": "cron",
+            },
+        )
 
 
 _cron_task: asyncio.Task[None] | None = None

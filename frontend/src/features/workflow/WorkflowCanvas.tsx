@@ -215,6 +215,8 @@ function CanvasInner({
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
   const [connectTargetId, setConnectTargetId] = useState<string | null>(null)
   const connectingFromRef = useRef<{ nodeId: string; handleId: string | null } | null>(null)
+  const nodeRunStatusRef = useRef(nodeRunStatus)
+  nodeRunStatusRef.current = nodeRunStatus
   const draggingRef = useRef(false)
   const bootstrappedRef = useRef(false)
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -280,7 +282,8 @@ function CanvasInner({
         animateNew,
         dropTargetId,
         (parentId, slotKey) => onEmptySlotRef.current(parentId, slotKey),
-        nodeRunStatus,
+        // run status applied in a cheap follow-up effect via data patch
+        {},
         invalidById,
         connectTargetId,
         {
@@ -289,6 +292,19 @@ function CanvasInner({
           onDuplicate: () => onDupRef.current(),
         }
       )
+      // Preserve runStatus from previous nodes when structure rebuilds mid-run.
+      const prevStatus = new Map(
+        prev.nodes.map((n) => [n.id, (n.data as { runStatus?: string | null })?.runStatus ?? null])
+      )
+      const liveStatus = nodeRunStatusRef.current
+      next.nodes = next.nodes.map((n) => {
+        const status = liveStatus[n.id] ?? prevStatus.get(n.id) ?? null
+        if (!status) return n
+        return {
+          ...n,
+          data: { ...(n.data as object), runStatus: status },
+        }
+      })
       bootstrappedRef.current = true
       return next
     })
@@ -299,11 +315,28 @@ function CanvasInner({
     selectedIds,
     selectedId,
     dropTargetId,
-    nodeRunStatus,
     invalidById,
     invalidKey,
     connectTargetId,
   ])
+
+  // PR8d: patch runStatus without full layout/buildGraph rebuild on every SSE tick.
+  useEffect(() => {
+    setGraph((current) => {
+      let changed = false
+      const nodes = current.nodes.map((node) => {
+        const nextStatus = nodeRunStatus[node.id] ?? null
+        const prevStatus = (node.data as { runStatus?: string | null })?.runStatus ?? null
+        if (nextStatus === prevStatus) return node
+        changed = true
+        return {
+          ...node,
+          data: { ...(node.data as object), runStatus: nextStatus },
+        }
+      })
+      return changed ? { ...current, nodes } : current
+    })
+  }, [nodeRunStatus])
 
   // Focus viewport on running / paused nodes during a run.
   useEffect(() => {

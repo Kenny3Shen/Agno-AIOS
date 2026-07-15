@@ -1,5 +1,22 @@
 # 下一步工作
 
+## 已完成：PR8c 触发器生产化 + PR8d 画布性能 + Metadata Drawer
+
+### PR8c（触发器）
+- Cron：`claim_cron_last_run` 行锁 + CAS `last_run_at`（多实例防双发）
+- Cron/Webhook 审计：`workflow.trigger.cron` / `workflow.trigger.webhook`（started + 终态）
+- `GET /api/workflows/{id}/triggers/history` → Studio Definition 触发历史 + Trace 跳转
+
+### PR8d（画布）
+- Run 状态：`nodeRunStatus` 用 data patch 更新，避免每次 SSE 全量 `buildGraph`
+- Inspector 字段编辑：按节点 burst 写入 undo（600ms 合并）
+
+### Metadata Drawer
+- Skills / MCP / Memory：侧栏 Metadata 改为 Drawer，主区全宽表格
+
+相关：`workflow_cron.py`、`workflows.py` routes/persistence、`WorkflowCanvas`/`useWorkflow`/`WorkflowPage`、`SkillsPage`/`McpPage`/`MemoryPage`
+
+
 ## 已完成：Workflow 画布 PR8b（打磨）
 
 - 保存前校验：空 Parallel/Loop/Condition/Router、缺 executor / workflow_ref → 节点标红 + Inspector 列表可点击定位。

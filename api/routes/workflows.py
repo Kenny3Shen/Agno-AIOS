@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
@@ -12,7 +13,11 @@ from sse_starlette.sse import EventSourceResponse
 from api.auth.claims import actor_id
 from api.auth.models import User
 from api.auth.scopes import require_scope
-from api.services.audit_service import audit_request_context, record_audit_event_async
+from api.services.audit_service import (
+    audit_request_context,
+    list_audit_events_async,
+    record_audit_event_async,
+)
 from api.services.workflow_compiler import WorkflowDefinitionError
 from api.services.workflow_run_runtime import stream_workflow_run
 from api.services.workflow_service import (
@@ -257,9 +262,31 @@ async def webhook_trigger_workflow(
     session_id = str(uuid4())
     run_id = str(uuid4())
     owner = str(row.get("owner_user_id") or "system")
+    actor = SimpleNamespace(
+        id=owner,
+        email="system@workflow-webhook",
+        role="system",
+        is_superuser=False,
+    )
+    ctx = audit_request_context(request)
 
     async def event_generator():
+        terminal = "error"
         try:
+            await record_audit_event_async(
+                actor=actor,
+                action="workflow.trigger.webhook",
+                resource_type="workflow",
+                resource_id=workflow_id,
+                status="started",
+                metadata={
+                    "run_id": run_id,
+                    "session_id": session_id,
+                    "source": "webhook",
+                },
+                ip_address=ctx["ip_address"],
+                user_agent=ctx["user_agent"],
+            )
             async for event in stream_workflow_run(
                 workflow_id=workflow_id,
                 definition=definition,
@@ -269,11 +296,20 @@ async def webhook_trigger_workflow(
                 model_id=body.model_id if body else None,
                 run_id=run_id,
             ):
+                if event.event == "workflow.completed":
+                    terminal = "success"
+                elif event.event == "workflow.paused":
+                    terminal = "paused"
+                elif event.event == "workflow.cancelled":
+                    terminal = "cancelled"
+                elif event.event == "workflow.failed":
+                    terminal = "error"
                 yield {
                     "event": event.event,
                     "data": json.dumps(event.data, ensure_ascii=False),
                 }
         except Exception as exc:
+            terminal = "error"
             logger.exception("webhook workflow failed: {}", workflow_id)
             yield {
                 "event": "workflow.failed",
@@ -281,13 +317,122 @@ async def webhook_trigger_workflow(
                     {
                         "workflow_id": workflow_id,
                         "run_id": run_id,
+                        "session_id": session_id,
+                        "code": "WORKFLOW_WEBHOOK_ERROR",
                         "message": f"{type(exc).__name__}: {exc}",
                     },
                     ensure_ascii=False,
                 ),
             }
+        finally:
+            await record_audit_event_async(
+                actor=actor,
+                action="workflow.trigger.webhook",
+                resource_type="workflow",
+                resource_id=workflow_id,
+                status=terminal,
+                metadata={
+                    "run_id": run_id,
+                    "session_id": session_id,
+                    "source": "webhook",
+                },
+                ip_address=ctx["ip_address"],
+                user_agent=ctx["user_agent"],
+            )
 
     return EventSourceResponse(event_generator())
+
+
+@router.get("/{workflow_id}/triggers/history")
+async def list_workflow_trigger_history(
+    workflow_id: str,
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=100),
+    user: User = Depends(require_scope("workflows:read")),
+):
+    """Recent cron/webhook trigger audit events for Studio trigger panel."""
+    row = await get_workflow_for_actor(user, workflow_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    # Pull a wider window then filter by trigger actions (audit API is exact-match on action).
+    window = min(200, max(limit * 5, 50))
+    cron_items, _ = await list_audit_events_async(
+        page=1,
+        limit=window,
+        action="workflow.trigger.cron",
+        resource_type="workflow",
+        resource_id=workflow_id,
+    )
+    webhook_items, _ = await list_audit_events_async(
+        page=1,
+        limit=window,
+        action="workflow.trigger.webhook",
+        resource_type="workflow",
+        resource_id=workflow_id,
+    )
+    merged = [*cron_items, *webhook_items]
+
+    def _sort_key(item: dict[str, Any]) -> tuple:
+        created = item.get("created_at")
+        # datetime or iso string
+        return (str(created or ""), str(item.get("id") or ""))
+
+    merged.sort(key=_sort_key, reverse=True)
+    # Prefer terminal statuses over "started" for same run_id
+    seen_runs: set[str] = set()
+    deduped: list[dict[str, Any]] = []
+    for item in merged:
+        meta_raw = item.get("metadata")
+        meta: dict[str, Any] = meta_raw if isinstance(meta_raw, dict) else {}
+        run_id = str(meta.get("run_id") or item.get("id") or "")
+        status = str(item.get("status") or "")
+        if status == "started" and run_id in seen_runs:
+            continue
+        if run_id and status != "started":
+            seen_runs.add(run_id)
+        # skip pure started if we already have terminal for same run
+        if status == "started" and run_id:
+            has_terminal = False
+            for prior in deduped:
+                prior_meta_raw = prior.get("metadata")
+                prior_meta = prior_meta_raw if isinstance(prior_meta_raw, dict) else {}
+                if str(prior_meta.get("run_id") or "") == run_id and str(
+                    prior.get("status") or ""
+                ) != "started":
+                    has_terminal = True
+                    break
+            if has_terminal:
+                continue
+        deduped.append(item)
+    total = len(deduped)
+    start_idx = (page - 1) * limit
+    page_items = deduped[start_idx : start_idx + limit]
+    data: list[dict[str, Any]] = []
+    for item in page_items:
+        meta_raw = item.get("metadata")
+        meta = meta_raw if isinstance(meta_raw, dict) else {}
+        created = item.get("created_at")
+        if hasattr(created, "isoformat"):
+            created_at = created.isoformat()
+        else:
+            created_at = str(created or "")
+        action = str(item.get("action") or "")
+        source = str(meta.get("source") or "")
+        if not source:
+            source = "cron" if action.endswith(".cron") else "webhook"
+        data.append(
+            {
+                "id": item.get("id"),
+                "action": action,
+                "status": item.get("status"),
+                "source": source,
+                "run_id": str(meta.get("run_id") or ""),
+                "session_id": str(meta.get("session_id") or ""),
+                "expression": str(meta.get("expression") or ""),
+                "created_at": created_at,
+            }
+        )
+    return {"data": data, "meta": {"page": page, "limit": limit, "total": total}}
 
 
 @router.post("/{workflow_id}/runs")

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Card, Empty, Form, Grid, Input, Modal, Popconfirm, Space, Splitter, Table, Tag, Tooltip, Typography } from 'antd'
+import { App, Button, Card, Drawer, Empty, Form, Input, Modal, Popconfirm, Space, Table, Tag, Tooltip, Typography } from 'antd'
 import { DeleteOutlined, EditOutlined, SearchOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { CopyableValue, MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
@@ -15,8 +15,6 @@ export function MemoryPage() {
   const formatDate = useFormatDate()
   const { message } = App.useApp()
   const client = useQueryClient()
-  const screens = Grid.useBreakpoint()
-  const vertical = screens.md === false
   const [search, setSearch] = useState('')
   const [applied, setApplied] = useState('')
   const [selected, setSelected] = useState<Memory | null>(null)
@@ -80,96 +78,103 @@ export function MemoryPage() {
           </Button>
         </Space>
       </Card>
-      <Splitter className="workbench-splitter memory-splitter" orientation={vertical ? 'vertical' : 'horizontal'}>
-        <Splitter.Panel defaultSize="70%" min={vertical ? 280 : '45%'}>
-          <Card className="workbench-card splitter-panel-card" title="Memories" extra={<Tag>{query.data?.total ?? 0}</Tag>}>
-            <Table<Memory>
-              rowKey="id"
-              dataSource={query.data?.items ?? []}
-              loading={query.isLoading}
-              pagination={{ pageSize: 12 }}
-              rowClassName={(row) => (row.id === selected?.id ? 'selected-table-row' : '')}
-              onRow={(row) => ({
-                tabIndex: 0,
-                role: 'button',
-                'aria-label': t('viewMemory', { id: row.id }),
-                onClick: () => setSelected(row),
-                onKeyDown: (event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault()
-                    setSelected(row)
-                  }
-                },
-              })}
-              columns={[
-                { title: 'Memory', dataIndex: 'memory', ellipsis: true },
-                {
-                  title: 'Topics',
-                  dataIndex: 'topics',
-                  width: 220,
-                  render: (topics: string[]) => (
-                    <Space wrap>
-                      {(topics ?? []).map((topic) => (
-                        <Tag key={topic}>{topic}</Tag>
-                      ))}
-                    </Space>
-                  ),
-                },
-                { title: 'User', dataIndex: 'user_id', width: 130, render: compactId },
-                { title: 'Updated', dataIndex: 'updated_at', width: 170, defaultSortOrder: 'descend' as const, sorter: (a: Memory, b: Memory) => compareTimestamp(a.updated_at, b.updated_at), render: formatDate },
-                {
-                  title: 'Actions',
-                  key: 'actions',
-                  width: 88,
-                  render: (_, row) => (
-                    <Space size={2} onClick={(event) => event.stopPropagation()}>
-                      <Tooltip title={t('common:edit')}>
-                        <Button
-                          aria-label={t('editNamed', { id: row.id })}
-                          type="text"
-                          size="small"
-                          icon={<EditOutlined />}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            setEditing(row)
-                          }}
-                        />
-                      </Tooltip>
-                      <Tooltip title={t('common:delete')}>
-                        <Popconfirm
-                          title={t('deleteConfirm')}
-                          onConfirm={(event) => {
-                            event?.stopPropagation()
-                            remove.mutate(row)
-                          }}
-                        >
-                          <Button
-                            aria-label={t('deleteNamed', { id: row.id })}
-                            danger
-                            type="text"
-                            size="small"
-                            icon={<DeleteOutlined />}
-                            onClick={(event) => event.stopPropagation()}
-                          />
-                        </Popconfirm>
-                      </Tooltip>
-                    </Space>
-                  ),
-                },
-              ]}
-            />
-          </Card>
-        </Splitter.Panel>
-        <Splitter.Panel defaultSize="30%" min={vertical ? 220 : '20%'}>
-          <Card className="workbench-card splitter-panel-card" title="Metadata">
-            {selected ? (
-              <MetadataDescriptions items={metadata} />
-            ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('selectForDetails')} />
-            )}
-          </Card>
-        </Splitter.Panel>
-      </Splitter>
+      <Card className="workbench-card" title="Memories" extra={<Tag>{query.data?.total ?? 0}</Tag>}>
+        <Table<Memory>
+          rowKey="id"
+          dataSource={query.data?.items ?? []}
+          loading={query.isLoading}
+          pagination={{ pageSize: 12 }}
+          rowClassName={(row) => (row.id === selected?.id ? 'selected-table-row' : '')}
+          onRow={(row) => ({
+            tabIndex: 0,
+            role: 'button',
+            'aria-label': t('viewMemory', { id: row.id }),
+            onClick: () => setSelected(row),
+            onKeyDown: (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                setSelected(row)
+              }
+            },
+          })}
+          columns={[
+            { title: 'Memory', dataIndex: 'memory', ellipsis: true },
+            {
+              title: 'Topics',
+              dataIndex: 'topics',
+              width: 220,
+              render: (topics: string[]) => (
+                <Space wrap>
+                  {(topics ?? []).map((topic) => (
+                    <Tag key={topic}>{topic}</Tag>
+                  ))}
+                </Space>
+              ),
+            },
+            { title: 'User', dataIndex: 'user_id', width: 130, render: compactId },
+            {
+              title: 'Updated',
+              dataIndex: 'updated_at',
+              width: 170,
+              defaultSortOrder: 'descend' as const,
+              sorter: (a: Memory, b: Memory) => compareTimestamp(a.updated_at, b.updated_at),
+              render: formatDate,
+            },
+            {
+              title: 'Actions',
+              key: 'actions',
+              width: 88,
+              render: (_, row) => (
+                <Space size={2} onClick={(event) => event.stopPropagation()}>
+                  <Tooltip title={t('common:edit')}>
+                    <Button
+                      aria-label={t('editNamed', { id: row.id })}
+                      type="text"
+                      size="small"
+                      icon={<EditOutlined />}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setEditing(row)
+                      }}
+                    />
+                  </Tooltip>
+                  <Tooltip title={t('common:delete')}>
+                    <Popconfirm
+                      title={t('deleteConfirm')}
+                      onConfirm={(event) => {
+                        event?.stopPropagation()
+                        remove.mutate(row)
+                      }}
+                    >
+                      <Button
+                        aria-label={t('deleteNamed', { id: row.id })}
+                        danger
+                        type="text"
+                        size="small"
+                        icon={<DeleteOutlined />}
+                        onClick={(event) => event.stopPropagation()}
+                      />
+                    </Popconfirm>
+                  </Tooltip>
+                </Space>
+              ),
+            },
+          ]}
+        />
+      </Card>
+      <Drawer
+        size={520}
+        open={Boolean(selected)}
+        onClose={() => setSelected(null)}
+        title="Metadata"
+        destroyOnHidden
+      >
+        {selected ? (
+          <MetadataDescriptions items={metadata} />
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('selectForDetails')} />
+        )}
+      </Drawer>
       <Modal open={Boolean(editing)} footer={null} onCancel={() => setEditing(null)} title={t('editMemory')} destroyOnHidden>
         {editing && (
           <Form

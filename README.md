@@ -500,6 +500,8 @@ frontend/src/features/workflow/*      # 画布优先 Studio（reparent / 快捷�
 | **PR1** ✅ | 线性 Step + Save/Run SSE | 本版 |
 | **PR2** ✅ | `Parallel` / `Condition(CEL)` / `Loop` | 表单级嵌套控制流；CEL 依赖 `cel-python`；编译期禁止 Parallel 内 HITL |
 | **PR3** ✅ | 画布 + Step HITL | React Flow 只读布局选中；Step `requires_confirmation` → Approvals；`workflows:read/write` |
+| **PR8c** ✅ | 触发器生产化：cron 原子占坑 / webhook·cron 审计 / Studio 触发历史 |
+| **PR8d** ✅ | 画布性能：runStatus data patch；Inspector undo burst |
 | **PR8b** ✅ | 画布打磨：保存校验 / 连线高亮 / run 聚焦 / NodeToolbar |
 | **PR8a** ✅ | 多 Handle 分支边（Condition then/else · Router choices） |
 | **PR7** ✅ | Publish + Cron 真调度（published 修订 / webhook·cron 只用线上版） |

@@ -84,3 +84,32 @@ async def test_create_workflow_success_audits():
         result = await workflows.create_workflow(body, request=request, user=actor())
     assert result["id"] == "wf-1"
     audit.assert_awaited_once()
+
+
+
+@pytest.mark.asyncio
+async def test_trigger_history_requires_read_and_returns_data():
+    request_items = [
+        {
+            "id": 1,
+            "action": "workflow.trigger.cron",
+            "status": "success",
+            "resource_id": "wf-1",
+            "created_at": "2026-01-01T00:00:00",
+            "metadata": {"run_id": "r1", "session_id": "s1", "source": "cron"},
+        }
+    ]
+    with (
+        patch.object(workflows, "get_workflow_for_actor", AsyncMock(return_value={"id": "wf-1"})),
+        patch.object(
+            workflows,
+            "list_audit_events_async",
+            AsyncMock(side_effect=[(request_items, 1), ([], 0)]),
+        ),
+    ):
+        result = await workflows.list_workflow_trigger_history(
+            workflow_id="wf-1", page=1, limit=20, user=actor()
+        )
+    assert result["meta"]["total"] == 1
+    assert result["data"][0]["run_id"] == "r1"
+    assert result["data"][0]["source"] == "cron"
