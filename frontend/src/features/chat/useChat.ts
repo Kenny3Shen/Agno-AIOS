@@ -109,8 +109,23 @@ export function useChat() {
       await queryClient.invalidateQueries({ queryKey: chatKeys.history(activeSession) })
       await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
     } catch (error) {
-      if ((error as Error).name !== 'AbortError')
-        dispatch({ type: 'network-error', id: assistantId, message: error instanceof Error ? error.message : 'Chat request failed' })
+      if ((error as Error).name === 'AbortError') {
+        dispatch({
+          type: 'event',
+          id: assistantId,
+          event: {
+            type: 'run.cancelled',
+            runId: activeRunIdRef.current ?? undefined,
+            reason: '已停止生成',
+          },
+        })
+      } else {
+        dispatch({
+          type: 'network-error',
+          id: assistantId,
+          message: error instanceof Error ? error.message : 'Chat request failed',
+        })
+      }
     } finally {
       abortRef.current = null
       activeRunIdRef.current = null
@@ -127,15 +142,13 @@ export function useChat() {
   }
   const cancel = async () => {
     const runId = activeRunIdRef.current
+    // Always stop the client SSE first so the UI unblocks even before run.started.
+    abortRef.current?.abort()
     if (!runId) return
     try {
       await cancelRun(runId)
-    } catch (error) {
-      dispatch({
-        type: 'network-error',
-        id: state.messages.at(-1)?.id ?? '',
-        message: error instanceof Error ? error.message : 'Unable to cancel the active run',
-      })
+    } catch {
+      // Best-effort server cancel; client stream is already aborted.
     }
   }
   const setReasoningEffort = (value: ReasoningEffort | null) => dispatch({ type: 'reasoning-effort', value })

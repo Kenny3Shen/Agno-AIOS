@@ -71,7 +71,7 @@ class ModelConfig(BaseModel):
     structured_output_mode: StructuredOutputMode = "json"
     default_reasoning_effort: ReasoningEffort | None = None
     parallel_tool_calls: bool | None = None
-    retries: int = Field(default=3, ge=0, le=10)
+    retries: int = Field(default=4, ge=0, le=10)
     delay_between_retries: int = Field(default=1, ge=0, le=60)
     exponential_backoff: bool = True
     http_max_retries: int | None = Field(default=None, ge=0, le=10)
@@ -173,7 +173,7 @@ class ModelConfig(BaseModel):
             structured_output_mode=cast(StructuredOutputMode, structured_output_mode),
             default_reasoning_effort=cast(ReasoningEffort | None, configured_reasoning_effort),
             parallel_tool_calls=raw.get("parallel_tool_calls"),
-            retries=_optional_int(raw.get("retries"), default=3, minimum=0, maximum=10) or 0,
+            retries=_optional_int(raw.get("retries"), default=4, minimum=0, maximum=10) or 0,
             delay_between_retries=_optional_int(
                 raw.get("delay_between_retries"), default=1, minimum=0, maximum=60
             )

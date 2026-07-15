@@ -475,7 +475,7 @@ export function ChatPage() {
                     danger={chat.state.requesting}
                     shape="circle"
                     icon={chat.state.requesting ? <StopOutlined /> : <ArrowUpOutlined />}
-                    disabled={chat.state.requesting ? !activeRun : sendDisabled}
+                    disabled={chat.state.requesting ? false : sendDisabled}
                     onClick={() => {
                       if (chat.state.requesting) void chat.cancel()
                       else void chat.submit(chat.state.input)

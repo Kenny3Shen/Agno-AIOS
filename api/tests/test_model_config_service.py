@@ -222,7 +222,7 @@ def test_model_config_normalizes_retry_fields():
         },
         "custom2",
     )
-    assert defaults.retries == 3
+    assert defaults.retries == 4
     assert defaults.delay_between_retries == 1
     assert defaults.exponential_backoff is True
     assert defaults.http_max_retries is None

@@ -44,7 +44,7 @@ def model_configs_table(metadata: MetaData | None = None) -> Table:
         Column("structured_output_mode", String(32), nullable=False),
         Column("default_reasoning_effort", String(16), nullable=True),
         Column("parallel_tool_calls", Boolean, nullable=True),
-        Column("retries", BigInteger, nullable=False, server_default="3"),
+        Column("retries", BigInteger, nullable=False, server_default="4"),
         Column("delay_between_retries", BigInteger, nullable=False, server_default="1"),
         Column("exponential_backoff", Boolean, nullable=False, server_default="true"),
         Column("http_max_retries", BigInteger, nullable=True),
@@ -86,7 +86,7 @@ async def ensure_model_configs_table_async() -> None:
         await conn.execute(
             text(
                 f"ALTER TABLE {schema}.{table_name} "
-                "ADD COLUMN IF NOT EXISTS retries BIGINT NOT NULL DEFAULT 3"
+                "ADD COLUMN IF NOT EXISTS retries BIGINT NOT NULL DEFAULT 4"
             )
         )
         await conn.execute(

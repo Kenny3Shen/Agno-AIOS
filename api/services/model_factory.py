@@ -14,11 +14,11 @@ STRUCTURED_OUTPUT_MODE_ATTR = "_tais_structured_output_mode"
 
 def _retry_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     """Agno Model + OpenAI client retry settings from model config."""
-    retries = config.get("retries", 3)
+    retries = config.get("retries", 4)
     try:
         retries_i = max(0, min(10, int(retries)))
     except (TypeError, ValueError):
-        retries_i = 3
+        retries_i = 4
     delay = config.get("delay_between_retries", 1)
     try:
         delay_i = max(0, min(60, int(delay)))

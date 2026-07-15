@@ -232,7 +232,7 @@ def test_applies_retry_settings_to_responses_and_chat():
 
 def test_default_retries_when_config_omits_retry_fields():
     model = build_agno_model(config())
-    assert model.retries == 3
+    assert model.retries == 4
     assert model.delay_between_retries == 1
     assert model.exponential_backoff is True
     assert getattr(model, "max_retries", None) is None

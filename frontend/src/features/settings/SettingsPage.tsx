@@ -71,7 +71,7 @@ export function SettingsPage() {
   const openEditor = (model: ModelConfig) => {
     form.resetFields()
     form.setFieldsValue({
-      retries: 3,
+      retries: 4,
       delay_between_retries: 1,
       exponential_backoff: true,
       http_max_retries: null,
@@ -118,7 +118,7 @@ export function SettingsPage() {
       structured_output_mode: 'json',
       default_reasoning_effort: null,
       parallel_tool_calls: null,
-      retries: 3,
+      retries: 4,
       delay_between_retries: 1,
       exponential_backoff: true,
       http_max_retries: null,

@@ -138,4 +138,17 @@ describe('chat behavior', () => {
     })
     expect(resumed.messages[0]).toMatchObject({ content: 'final answer', status: 'streaming', retry: null })
   })
+
+  it('marks a run cancelled and clears requesting', () => {
+    const assistant: Message = { id: 'a', role: 'assistant', content: 'partial', final: false, status: 'streaming' }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    expect(started.requesting).toBe(true)
+    const cancelled = chatReducer(started, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'run.cancelled', runId: 'run-1', reason: '已停止生成' },
+    })
+    expect(cancelled.requesting).toBe(false)
+    expect(cancelled.messages[0]).toMatchObject({ status: 'cancelled', final: true })
+  })
 })

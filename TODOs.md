@@ -36,7 +36,7 @@
 ## 已完成：模型重试参数（Chat Completions + Responses）
 
 - `build_agno_model` 对 DeepSeek / OpenAI Chat / OpenAI Responses / OpenAILike 统一注入 Agno `retries` / `delay_between_retries` / `exponential_backoff`，可选 SDK `max_retries`（配置键 `http_max_retries`）。
-- 模型设置表单与 `model_configs` 表持久化上述字段；默认 retries=3、delay=1、exponential_backoff=true。
+- 模型设置表单与 `model_configs` 表持久化上述字段；默认 retries=4、delay=1、exponential_backoff=true。
 - 503/429 等可恢复错误由 Agno `_ainvoke_with_retry` 重试；400 等 non-retryable 不重试。
 
 相关入口：
