@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { App, Button, Card, Drawer, Empty, Form, Grid, Input, Popconfirm, Space, Splitter, Switch, Table, Tabs, Tag, Upload } from 'antd'
 import { DeleteOutlined, InboxOutlined, UploadOutlined } from '@ant-design/icons'
-import XMarkdown from '@ant-design/x-markdown'
+import { Markdown } from '@/shared/ui/Markdown'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { deleteSkill, listSkills, setVisibility, toggleSkill, uploadSkill, type Skill } from './api'
 import { getSkillBody, getSkillDetailMetadata } from './utils'
@@ -148,7 +148,7 @@ export function SkillsPage() {
                     key: 'content',
                     label: 'SKILL.md',
                     children: body ? (
-                      <XMarkdown content={body} openLinksInNewTab escapeRawHtml />
+                      <Markdown content={body} openLinksInNewTab escapeRawHtml />
                     ) : (
                       <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('noSkillMd')} />
                     ),

@@ -1,6 +1,6 @@
 import { Button, Empty, Space } from 'antd'
 import { CopyOutlined } from '@ant-design/icons'
-import XMarkdown from '@ant-design/x-markdown'
+import { Markdown } from '@/shared/ui/Markdown'
 import { copyToClipboard } from '@/shared/lib/clipboard'
 
 export function PayloadViewer({ value, markdown = false }: { value: unknown; markdown?: boolean }) {
@@ -11,7 +11,7 @@ export function PayloadViewer({ value, markdown = false }: { value: unknown; mar
       <Space className="payload-actions">
         <Button type="text" icon={<CopyOutlined />} onClick={() => void copyToClipboard(text)} />
       </Space>
-      {markdown ? <XMarkdown content={text} openLinksInNewTab escapeRawHtml /> : <pre>{text}</pre>}
+      {markdown ? <Markdown content={text} openLinksInNewTab escapeRawHtml /> : <pre>{text}</pre>}
     </div>
   )
 }

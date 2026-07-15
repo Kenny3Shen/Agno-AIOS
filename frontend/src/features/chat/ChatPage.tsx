@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Actions, Bubble, Prompts, Sender, Sources, ThoughtChain } from '@ant-design/x'
-import XMarkdown from '@ant-design/x-markdown'
+import { Markdown } from '@/shared/ui/Markdown'
 import { App, Avatar, Button, Cascader, Popover } from 'antd'
 import {
   ArrowDownOutlined,
@@ -250,7 +250,7 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
         </section>
       )}
       {message.content ? (
-        <XMarkdown
+        <Markdown
           content={message.content}
           streaming={{ hasNextChunk: !message.final, tail: !message.final }}
           openLinksInNewTab

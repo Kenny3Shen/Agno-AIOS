@@ -1,6 +1,6 @@
 import { Button, Card, Empty, Tag, Typography } from 'antd'
 import { CopyOutlined } from '@ant-design/icons'
-import XMarkdown from '@ant-design/x-markdown'
+import { Markdown } from '@/shared/ui/Markdown'
 import { copyToClipboard } from '@/shared/lib/clipboard'
 
 type ContentKind = 'empty' | 'json' | 'markdown' | 'text'
@@ -68,7 +68,7 @@ export function FormattedContentCard({ value, title }: { value: unknown; title: 
   return (
     <Card className="formatted-content-card" size="small" title={title} extra={<Tag>{content.format}</Tag>}>
       {content.kind === 'markdown' ? (
-        <XMarkdown content={String(content.value)} openLinksInNewTab escapeRawHtml />
+        <Markdown content={String(content.value)} openLinksInNewTab escapeRawHtml />
       ) : (
         <Typography.Paragraph className="formatted-text">{String(content.value)}</Typography.Paragraph>
       )}

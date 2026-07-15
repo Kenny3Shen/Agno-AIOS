@@ -1,5 +1,16 @@
 # 下一步工作
 
+## 已完成：Chat / Markdown LaTeX 公式渲染
+
+- 抽出共享 `Markdown` 组件，启用 `@ant-design/x-markdown/plugins/Latex`（KaTeX）。
+- Chat、Approvals、Knowledge、Collect、Skills、PayloadViewer、FormattedContentCard 统一使用。
+- 支持 `$...$`、`$$...$$`、`\(...\)`、`\[...\]`；流式与最终消息均可渲染。
+
+相关入口：
+
+- `frontend/src/shared/ui/Markdown.tsx`
+- `frontend/src/features/chat/ChatPage.tsx`
+
 ## 已完成：Chat 模型重试 UI + Dashboard Trace 深链
 
 - Chat：`security_run_runtime` 包装 Agno `_ainvoke_stream_with_retry`，流式重试时发 SSE `run.retrying`；前端清空 partial content/tools，状态 `retrying` 并展示「第 n/m 次重试」。

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Button, Card, Input, Space, Splitter } from 'antd'
-import XMarkdown from '@ant-design/x-markdown'
+import { Markdown } from '@/shared/ui/Markdown'
 import { CloudDownloadOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { parseUrl } from './api'
@@ -42,7 +42,7 @@ export function CollectPage() {
           <Splitter.Panel defaultSize="50%" min="30%">
             <Card className="workbench-card splitter-panel-card" size="small" title="Preview">
               <div className="payload-viewer collect-preview">
-                <XMarkdown content={markdown} openLinksInNewTab escapeRawHtml />
+                <Markdown content={markdown} openLinksInNewTab escapeRawHtml />
               </div>
             </Card>
           </Splitter.Panel>

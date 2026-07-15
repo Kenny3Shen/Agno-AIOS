@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { App, Button, Card, Descriptions, Form, Grid, Input, InputNumber, Select, Space, Tabs, Tag, Typography } from 'antd'
 import { PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
-import XMarkdown from '@ant-design/x-markdown'
+import { Markdown } from '@/shared/ui/Markdown'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { JsonValueCard } from '@/shared/ui/FormattedContentCard'
 import type { ResourceVisibility } from '@/shared/types/common'
@@ -66,7 +66,7 @@ function RetrievalResultCard({ result }: { result: SearchResult }) {
         {content.kind === 'json' ? (
           <JsonValueCard value={content.value} title="Content" />
         ) : content.kind === 'markdown' ? (
-          <XMarkdown content={String(content.value)} openLinksInNewTab escapeRawHtml />
+          <Markdown content={String(content.value)} openLinksInNewTab escapeRawHtml />
         ) : (
           <Typography.Paragraph className="formatted-text">{String(content.value)}</Typography.Paragraph>
         )}

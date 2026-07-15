@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, App, Button, Card, Collapse, Descriptions, Drawer, Input, Modal, Segmented, Select, Space, Table, Tag, Typography, type DescriptionsProps, type TableProps } from 'antd'
 import { CheckOutlined, CloseOutlined } from '@ant-design/icons'
-import XMarkdown from '@ant-design/x-markdown'
+import { Markdown } from '@/shared/ui/Markdown'
 import { currentUserQuery } from '@/features/auth'
 import { hasScope } from '@/shared/auth/permissions'
 import { PageHeader } from '@/shared/ui/PageHeader'
@@ -480,7 +480,7 @@ export function ApprovalsPage() {
                             ) : null,
                             children: mode === 'markdown' ? (
                               <div className="payload-viewer">
-                                <XMarkdown content={content} openLinksInNewTab escapeRawHtml />
+                                <Markdown content={content} openLinksInNewTab escapeRawHtml />
                               </div>
                             ) : (
                               <pre className="payload-viewer">{content}</pre>

@@ -1066,3 +1066,13 @@ html.dark {
     padding-inline: 12px;
   }
 }
+
+.message-body .katex-display,
+.message-body .block-katex {
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 0.75em 0;
+}
+.message-body .inline-katex {
+  display: inline;
+}
