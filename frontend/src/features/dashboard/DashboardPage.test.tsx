@@ -5,6 +5,13 @@ import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
 import { DashboardPage } from './DashboardPage'
 
+const routerMock = vi.hoisted(() => ({ push: vi.fn<(path: string) => void>() }))
+
+vi.mock('@tanstack/react-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-router')>()),
+  useRouter: () => ({ history: { push: routerMock.push } }),
+}))
+
 vi.mock('echarts-for-react', () => ({
   default: ({ option }: { option: { animationDuration?: number; animationDurationUpdate?: number } }) => (
     <div
@@ -15,7 +22,7 @@ vi.mock('echarts-for-react', () => ({
   ),
 }))
 
-const overview = (audit = false) => ({
+const overview = (audit = false): import('./types').RuntimeOverview => ({
   generated_at: '2026-07-12T12:00:00Z',
   range: '24h',
   health: { status: 'ready' },
@@ -111,5 +118,37 @@ describe('runtime overview page', () => {
     expect(screen.getByText('运行时间轴与 Token 使用量')).toBeTruthy()
     expect(screen.queryByText('点击时间桶查看 Trace')).toBeNull()
     expect(screen.queryByText('当前窗口暂无 Token 使用记录')).toBeNull()
+  })
+
+  it('navigates to Trace with canonical query params from recent failures', async () => {
+    routerMock.push.mockClear()
+    const response = overview()
+    response.recent_failures = [
+      {
+        trace_id: 'trace-fail-1',
+        name: 'failed run',
+        status: 'ERROR',
+        duration_ms: 42,
+        start_time: '2026-07-12T11:30:00Z',
+        session_id: 'session-fail',
+        run_id: 'run-fail',
+        agent_id: 'security-agent',
+      },
+    ]
+    server.use(http.get('/api/overview', () => HttpResponse.json(response)))
+    renderWithQuery(<DashboardPage />)
+    fireEvent.click(await screen.findByText('failed run'))
+    await waitFor(() => {
+      expect(routerMock.push).toHaveBeenCalled()
+    })
+    const target = String(routerMock.push.mock.calls.at(-1)?.[0] ?? '')
+    expect(target.startsWith('/trace?')).toBe(true)
+    const params = new URLSearchParams(target.slice(target.indexOf('?')))
+    expect(params.get('session_id')).toBe('session-fail')
+    expect(params.get('run_id')).toBe('run-fail')
+    expect(params.get('selected_session')).toBe('session-fail')
+    expect(params.get('trace')).toBe('trace-fail-1')
+    expect(params.has('session')).toBe(false)
+    expect(params.has('run')).toBe(false)
   })
 })

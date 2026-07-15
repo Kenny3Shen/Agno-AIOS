@@ -7,7 +7,7 @@ export interface RunMetrics {
   duration?: number | null
 }
 
-export type RunStatus = 'streaming' | 'paused' | 'completed' | 'cancelled' | 'failed'
+export type RunStatus = 'streaming' | 'retrying' | 'paused' | 'completed' | 'cancelled' | 'failed'
 export type ToolStatus = 'loading' | 'success' | 'error' | 'abort'
 
 export interface ToolStep {
@@ -50,6 +50,7 @@ export interface Message {
   followups?: string[] | null
   approval_id?: string | null
   error?: { code?: string; message: string; retryable?: boolean } | null
+  retry?: { attempt: number; maxAttempts: number; delaySeconds?: number; message?: string } | null
   raw_run?: JsonRecord | null
   tools?: unknown[] | null
 }
@@ -85,6 +86,14 @@ export type ChatRunEvent =
   | { type: 'run.completed'; runId?: string; sessionId?: string; metrics?: RunMetrics | null; followups?: string[] }
   | { type: 'run.cancelled'; runId?: string; reason?: string }
   | { type: 'run.failed'; runId?: string; code?: string; message: string; retryable?: boolean }
+  | {
+      type: 'run.retrying'
+      runId?: string
+      attempt: number
+      maxAttempts: number
+      delaySeconds?: number
+      message?: string
+    }
 
 export type ChatAction =
   | { type: 'history'; messages: Message[] }

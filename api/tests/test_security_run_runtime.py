@@ -964,3 +964,83 @@ async def test_resume_job_marks_agno_run_and_trace_error_and_notifies_both_sides
     assert notify_call is not None
     assert notify_call.kwargs["submitter_id"] == "user-1"
     assert notify_call.kwargs["error"] == "continuation failed"
+
+@pytest.mark.asyncio
+async def test_stream_agent_events_emits_run_retrying_and_clears_partial_content_path():
+    """Model-layer stream retry publishes run.retrying before the stream restarts."""
+    runtime = security_run_runtime.SecurityRunRuntime()
+
+    class RetryingModel:
+        def __init__(self):
+            self.retries = 2
+            self.delay_between_retries = 0
+            self.exponential_backoff = False
+            self.name = "test"
+            self.id = "test-model"
+            self.calls = 0
+
+        def classify_error(self, error):
+            return error
+
+        def _is_retryable_error(self, _error):
+            return True
+
+        def _get_retry_delay(self, _attempt):
+            return 0
+
+        async def ainvoke_stream(self, **_kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                from agno.exceptions import ModelProviderError
+
+                raise ModelProviderError("auth_unavailable", status_code=503)
+            if False:  # pragma: no cover
+                yield None
+
+        async def _ainvoke_stream_with_retry(self, **kwargs):
+            # Placeholder replaced by notifier install.
+            if False:  # pragma: no cover
+                yield None
+
+    model = RetryingModel()
+
+    class RetryAgent:
+        def __init__(self):
+            self.model = model
+
+        async def arun(self, *_args, **_kwargs):
+            # Drive the patched stream retry path once so the notifier fires.
+            async for _ in self.model._ainvoke_stream_with_retry():
+                pass
+            yield {
+                "event": "RunStarted",
+                "run_id": "run-retry",
+                "session_id": "session-1",
+                "model": "test-model",
+                "model_provider": "test",
+            }
+            yield {"event": "RunContent", "run_id": "run-retry", "content": "recovered"}
+            yield {
+                "event": "RunCompleted",
+                "run_id": "run-retry",
+                "session_id": "session-1",
+                "metrics": {"total_tokens": 1},
+            }
+
+    chunks = [
+        event
+        async for event in runtime._stream_agent_events(
+            RetryAgent(),
+            security_run_runtime.SecurityRunRequest.from_chat_args(
+                "hello",
+                session_id="session-1",
+                user_id="user-1",
+            ),
+        )
+    ]
+    retry_events = [c for c in chunks if c.event == "run.retrying"]
+    assert retry_events, chunks
+    assert retry_events[0].data["attempt"] == 1
+    assert retry_events[0].data["max_attempts"] == 3
+    assert any(c.event == "content.delta" and c.data.get("delta") == "recovered" for c in chunks)
+

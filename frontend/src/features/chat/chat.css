@@ -465,7 +465,8 @@
   }
 }
 .message-body--sent,
-.message-body--streaming {
+.message-body--streaming,
+.message-body--retrying {
   animation: message-arrive var(--motion-base) var(--motion-enter-ease) both;
 }
 .message-body--completed .run-strip,

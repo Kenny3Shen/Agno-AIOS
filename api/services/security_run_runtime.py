@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Callable
 
 from agno.agent import Agent
+from agno.exceptions import ModelProviderError, RetryableModelProviderError
 from agno.approval import approval as require_approval
 from agno.run.approval import acheck_and_apply_approval_resolution
 from agno.run import RunStatus
@@ -247,6 +248,79 @@ class SecurityRunRuntimeDependencies:
     get_mcp_token: Callable[[], str] = _build_mcp_token
     mcp_tools_factory: Callable[..., Any] = MCPTools
     agent_factory: Callable[..., Any] = Agent
+
+
+
+def _install_stream_retry_notifier(model: Any, queue: asyncio.Queue[dict[str, Any] | None]) -> Callable[[], None]:
+    """Patch Agno model stream retry so workbench can surface attempt/delay to the UI.
+
+    Agno restarts the entire stream on ModelProviderError; without a signal the
+    Chat UI keeps partial content and looks non-streaming after a successful retry.
+    """
+    if model is None:
+        return lambda: None
+    original = getattr(model, "_ainvoke_stream_with_retry", None)
+    if original is None or not callable(original):
+        return lambda: None
+
+    async def _ainvoke_stream_with_retry_notifying(self: Any, **kwargs: Any):
+        last_exception: ModelProviderError | None = None
+        retries_with_guidance_count = kwargs.pop("retries_with_guidance_count", 0)
+        total_attempts = int(getattr(self, "retries", 0) or 0) + 1
+
+        for attempt in range(total_attempts):
+            try:
+                async for response in self.ainvoke_stream(**kwargs):
+                    yield response
+                return
+            except ModelProviderError as exc:
+                last_exception = self.classify_error(exc)
+                if not self._is_retryable_error(last_exception):
+                    raise last_exception from exc
+                if attempt < total_attempts - 1:
+                    delay = float(self._get_retry_delay(attempt))
+                    queue.put_nowait(
+                        {
+                            "attempt": attempt + 1,
+                            "max_attempts": total_attempts,
+                            "delay_seconds": delay,
+                            "message": str(last_exception),
+                        }
+                    )
+                    await asyncio.sleep(delay)
+            except RetryableModelProviderError as exc:
+                current_count = retries_with_guidance_count
+                limit = int(getattr(self, "retry_with_guidance_limit", 0) or 0)
+                if current_count >= limit:
+                    raise ModelProviderError(
+                        message=f"Max retries with guidance reached. Error: {exc.original_error}",
+                        model_name=self.name,
+                        model_id=self.id,
+                    ) from exc
+                kwargs.pop("retry_with_guidance", None)
+                kwargs["retries_with_guidance_count"] = current_count + 1
+                from agno.models.message import Message as AgnoMessage
+
+                kwargs["messages"].append(
+                    AgnoMessage(role="user", content=exc.retry_guidance_message, temporary=True)
+                )
+                async for response in self._ainvoke_stream_with_retry(
+                    **kwargs, retry_with_guidance=True
+                ):
+                    yield response
+                return
+
+        if last_exception is not None:
+            raise last_exception
+        raise RuntimeError("Model stream retry exhausted without an exception")
+
+    bound = _ainvoke_stream_with_retry_notifying.__get__(model, type(model))
+    model._ainvoke_stream_with_retry = bound  # type: ignore[method-assign]
+
+    def restore() -> None:
+        model._ainvoke_stream_with_retry = original  # type: ignore[method-assign]
+
+    return restore
 
 
 class SecurityRunRuntime:
@@ -507,59 +581,183 @@ class SecurityRunRuntime:
         show_raw_tool_io = bool(getattr(chat_settings, "show_raw_tool_io", False))
         show_thought_chain = bool(getattr(chat_settings, "show_thought_chain", True))
         registered_run_ids: set[str] = set()
+        retry_queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+        restore_retry = _install_stream_retry_notifier(
+            getattr(agent, "model", None), retry_queue
+        )
+        active_run_id = ""
+        agent_queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
+
+        async def _produce_agent_events() -> None:
+            try:
+                async for event in agent.arun(
+                    request.message,
+                    session_id=request.session_id,
+                    user_id=request.agent_user_id,
+                    metadata={RUNTIME_METADATA_KEY: request.runtime_metadata()},
+                    stream=True,
+                    stream_events=True,
+                ):
+                    await agent_queue.put(("event", event))
+            except BaseException as exc:
+                await agent_queue.put(("error", exc))
+            finally:
+                await agent_queue.put(("done", None))
+
+        def _retry_event(retry_info: dict[str, Any]) -> ChatRunEvent:
+            return ChatRunEvent(
+                "run.retrying",
+                {
+                    "run_id": active_run_id,
+                    "attempt": retry_info.get("attempt"),
+                    "max_attempts": retry_info.get("max_attempts"),
+                    "delay_seconds": retry_info.get("delay_seconds"),
+                    "message": str(retry_info.get("message") or ""),
+                },
+            )
+
+        producer = asyncio.create_task(
+            _produce_agent_events(), name="security-run-agent-events"
+        )
+        agent_waiter: asyncio.Task[tuple[str, Any]] | None = asyncio.create_task(
+            agent_queue.get()
+        )
+        retry_waiter: asyncio.Task[dict[str, Any] | None] | None = asyncio.create_task(
+            retry_queue.get()
+        )
         try:
-            async for event in agent.arun(
-                request.message,
-                session_id=request.session_id,
-                user_id=request.agent_user_id,
-                metadata={RUNTIME_METADATA_KEY: request.runtime_metadata()},
-                stream=True,
-                stream_events=True,
-            ):
+            while True:
+                wait_set = {t for t in (agent_waiter, retry_waiter) if t is not None}
+                done, _pending = await asyncio.wait(
+                    wait_set, return_when=asyncio.FIRST_COMPLETED
+                )
+                if retry_waiter is not None and retry_waiter in done:
+                    retry_info = retry_waiter.result()
+                    retry_waiter = asyncio.create_task(retry_queue.get())
+                    if isinstance(retry_info, dict):
+                        yield _retry_event(retry_info)
+                if agent_waiter is None or agent_waiter not in done:
+                    continue
+                kind, payload = agent_waiter.result()
+                if kind == "done":
+                    agent_waiter = None
+                    break
+                if kind == "error":
+                    agent_waiter = None
+                    raise payload
+                agent_waiter = asyncio.create_task(agent_queue.get())
+                event = payload
                 event_type = str(event_value(event, "event", ""))
                 run_id = str(event_value(event, "run_id", "") or "")
+                if run_id:
+                    active_run_id = run_id
                 if event_type == RunEvent.run_started.value:
                     if run_id:
                         registered_run_ids.add(run_id)
-                    self.register_run(user_id=request.agent_user_id, run_id=run_id, agent=agent)
-                    yield ChatRunEvent("run.started", {
-                        "run_id": run_id,
-                        "session_id": str(event_value(event, "session_id", request.session_id or "") or ""),
-                        "model": str(event_value(event, "model", "") or ""),
-                        "provider": str(event_value(event, "model_provider", "") or ""),
-                    })
+                    self.register_run(
+                        user_id=request.agent_user_id, run_id=run_id, agent=agent
+                    )
+                    yield ChatRunEvent(
+                        "run.started",
+                        {
+                            "run_id": run_id,
+                            "session_id": str(
+                                event_value(
+                                    event, "session_id", request.session_id or ""
+                                )
+                                or ""
+                            ),
+                            "model": str(event_value(event, "model", "") or ""),
+                            "provider": str(
+                                event_value(event, "model_provider", "") or ""
+                            ),
+                        },
+                    )
                 elif event_type == RunEvent.run_content.value:
                     content = event_value(event, "content")
                     if isinstance(content, str) and content:
-                        yield ChatRunEvent("content.delta", {"run_id": run_id, "delta": content})
+                        yield ChatRunEvent(
+                            "content.delta", {"run_id": run_id, "delta": content}
+                        )
                 elif event_type == RunEvent.reasoning_content_delta.value:
                     if show_raw_reasoning:
-                        reasoning = event_value(event, "content", event_value(event, "reasoning", ""))
+                        reasoning = event_value(
+                            event, "content", event_value(event, "reasoning", "")
+                        )
                         if isinstance(reasoning, str) and reasoning:
-                            yield ChatRunEvent("reasoning.delta", {"run_id": run_id, "delta": reasoning})
-                elif event_type in {RunEvent.reasoning_started.value, RunEvent.reasoning_step.value, RunEvent.reasoning_completed.value}:
+                            yield ChatRunEvent(
+                                "reasoning.delta",
+                                {"run_id": run_id, "delta": reasoning},
+                            )
+                elif event_type in {
+                    RunEvent.reasoning_started.value,
+                    RunEvent.reasoning_step.value,
+                    RunEvent.reasoning_completed.value,
+                }:
                     if show_thought_chain:
                         completed = event_type == RunEvent.reasoning_completed.value
-                        summary = event_value(event, "message", event_value(event, "content", ""))
-                        yield ChatRunEvent("thought.update", {"run_id": run_id, "thought": {
-                            "id": "reasoning", "type": "reasoning", "title": "模型推理",
-                            "status": "completed" if completed else "running",
-                            "summary": str(summary or "正在推理")[:280],
-                        }})
+                        summary = event_value(
+                            event, "message", event_value(event, "content", "")
+                        )
+                        yield ChatRunEvent(
+                            "thought.update",
+                            {
+                                "run_id": run_id,
+                                "thought": {
+                                    "id": "reasoning",
+                                    "type": "reasoning",
+                                    "title": "模型推理",
+                                    "status": "completed" if completed else "running",
+                                    "summary": str(summary or "正在推理")[:280],
+                                },
+                            },
+                        )
                 elif event_type == RunEvent.tool_call_started.value:
                     if show_thought_chain:
-                        yield ChatRunEvent("tool.update", {"run_id": run_id, "tool": tool_update(event_value(event, "tool"), "running", include_raw_io=show_raw_tool_io)})
+                        yield ChatRunEvent(
+                            "tool.update",
+                            {
+                                "run_id": run_id,
+                                "tool": tool_update(
+                                    event_value(event, "tool"),
+                                    "running",
+                                    include_raw_io=show_raw_tool_io,
+                                ),
+                            },
+                        )
                 elif event_type == RunEvent.tool_call_completed.value:
                     if show_thought_chain:
-                        yield ChatRunEvent("tool.update", {"run_id": run_id, "tool": tool_update(event_value(event, "tool"), "completed", include_raw_io=show_raw_tool_io)})
+                        yield ChatRunEvent(
+                            "tool.update",
+                            {
+                                "run_id": run_id,
+                                "tool": tool_update(
+                                    event_value(event, "tool"),
+                                    "completed",
+                                    include_raw_io=show_raw_tool_io,
+                                ),
+                            },
+                        )
                 elif event_type == RunEvent.tool_call_error.value:
                     if show_thought_chain:
-                        yield ChatRunEvent("tool.update", {"run_id": run_id, "tool": tool_update(event_value(event, "tool"), "error", include_raw_io=show_raw_tool_io)})
+                        yield ChatRunEvent(
+                            "tool.update",
+                            {
+                                "run_id": run_id,
+                                "tool": tool_update(
+                                    event_value(event, "tool"),
+                                    "error",
+                                    include_raw_io=show_raw_tool_io,
+                                ),
+                            },
+                        )
                 elif event_type == RunEvent.run_paused.value:
                     paused = paused_payload(event)
                     approval_id = str(paused.get("approval_id") or "")
                     if approval_id and run_id:
-                        session_id = str(paused.get("session_id") or request.session_id or "")
+                        session_id = str(
+                            paused.get("session_id") or request.session_id or ""
+                        )
                         await notify_admins_of_hitl_approval(
                             approval_id=approval_id,
                             tool_name=str(paused.get("tool_name") or ""),
@@ -568,26 +766,80 @@ class SecurityRunRuntime:
                             session_id=session_id,
                         )
                     yield ChatRunEvent("run.paused", paused)
-                    self.unregister_run(user_id=request.agent_user_id, run_id=run_id)
+                    self.unregister_run(
+                        user_id=request.agent_user_id, run_id=run_id
+                    )
                     registered_run_ids.discard(run_id)
                 elif event_type == RunEvent.run_continued.value:
-                    yield ChatRunEvent("run.continued", {"run_id": run_id, "session_id": str(event_value(event, "session_id", "") or "")})
+                    yield ChatRunEvent(
+                        "run.continued",
+                        {
+                            "run_id": run_id,
+                            "session_id": str(
+                                event_value(event, "session_id", "") or ""
+                            ),
+                        },
+                    )
                 elif event_type == RunEvent.run_completed.value:
-                    sources = source_items(event_value(event, "citations")) or source_items(event_value(event, "references"))
+                    sources = source_items(
+                        event_value(event, "citations")
+                    ) or source_items(event_value(event, "references"))
                     if sources:
-                        yield ChatRunEvent("sources", {"run_id": run_id, "items": sources})
+                        yield ChatRunEvent(
+                            "sources", {"run_id": run_id, "items": sources}
+                        )
                     yield ChatRunEvent("run.completed", completed_payload(event))
-                    self.unregister_run(user_id=request.agent_user_id, run_id=run_id)
+                    self.unregister_run(
+                        user_id=request.agent_user_id, run_id=run_id
+                    )
                     registered_run_ids.discard(run_id)
                 elif event_type == RunEvent.run_cancelled.value:
-                    yield ChatRunEvent("run.cancelled", {"run_id": run_id, "reason": str(event_value(event, "reason", "已停止生成") or "已停止生成")})
-                    self.unregister_run(user_id=request.agent_user_id, run_id=run_id)
+                    yield ChatRunEvent(
+                        "run.cancelled",
+                        {
+                            "run_id": run_id,
+                            "reason": str(
+                                event_value(event, "reason", "已停止生成")
+                                or "已停止生成"
+                            ),
+                        },
+                    )
+                    self.unregister_run(
+                        user_id=request.agent_user_id, run_id=run_id
+                    )
                     registered_run_ids.discard(run_id)
                 elif event_type == RunEvent.run_error.value:
-                    yield ChatRunEvent("run.failed", {"run_id": run_id, "code": "AGENT_RUN_ERROR", "message": "安全分析运行失败", "retryable": True})
-                    self.unregister_run(user_id=request.agent_user_id, run_id=run_id)
+                    yield ChatRunEvent(
+                        "run.failed",
+                        {
+                            "run_id": run_id,
+                            "code": "AGENT_RUN_ERROR",
+                            "message": "安全分析运行失败",
+                            "retryable": True,
+                        },
+                    )
+                    self.unregister_run(
+                        user_id=request.agent_user_id, run_id=run_id
+                    )
                     registered_run_ids.discard(run_id)
         finally:
+            restore_retry()
+            if not producer.done():
+                producer.cancel()
+                try:
+                    await producer
+                except asyncio.CancelledError:
+                    pass
+            for waiter in (agent_waiter, retry_waiter):
+                if waiter is not None and not waiter.done():
+                    waiter.cancel()
+            while True:
+                try:
+                    retry_info = retry_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                if isinstance(retry_info, dict):
+                    yield _retry_event(retry_info)
             for run_id in registered_run_ids:
                 self.unregister_run(user_id=request.agent_user_id, run_id=run_id)
 

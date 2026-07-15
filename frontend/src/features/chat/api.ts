@@ -163,6 +163,21 @@ const parseEvent = (event: string, data: string): ChatRunEvent | null => {
       return typeof value.message === 'string'
         ? { type: event, runId, code: stringValue(value, 'code'), message: value.message, retryable: value.retryable === true }
         : null
+    case 'run.retrying': {
+      const attempt = typeof value.attempt === 'number' ? value.attempt : Number(value.attempt)
+      const maxAttempts = typeof value.max_attempts === 'number' ? value.max_attempts : Number(value.max_attempts)
+      if (!Number.isFinite(attempt) || !Number.isFinite(maxAttempts)) return null
+      const delayRaw = value.delay_seconds
+      const delaySeconds = typeof delayRaw === 'number' ? delayRaw : Number(delayRaw)
+      return {
+        type: event,
+        runId,
+        attempt,
+        maxAttempts,
+        delaySeconds: Number.isFinite(delaySeconds) ? delaySeconds : undefined,
+        message: stringValue(value, 'message'),
+      }
+    }
     default:
       return null
   }

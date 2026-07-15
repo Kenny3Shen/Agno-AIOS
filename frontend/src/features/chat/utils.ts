@@ -43,9 +43,36 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
       const messages = updateMessage(state.messages, action.id, (message) => {
         switch (event.type) {
           case 'run.started':
-            return { ...message, run_id: event.runId, session_id: event.sessionId ?? message.session_id, status: 'streaming' }
+            return { ...message, run_id: event.runId, session_id: event.sessionId ?? message.session_id, status: 'streaming', retry: null, error: null }
           case 'content.delta':
-            return { ...message, content: message.content + event.delta, status: 'streaming' }
+            return {
+              ...message,
+              content: message.content + event.delta,
+              status: 'streaming',
+              retry: null,
+              error: null,
+            }
+          case 'run.retrying':
+            return {
+              ...message,
+              run_id: event.runId ?? message.run_id,
+              content: '',
+              reasoning: null,
+              tool_steps: [],
+              thought_chain: [],
+              sources: null,
+              metrics: null,
+              followups: null,
+              final: false,
+              status: 'retrying',
+              error: null,
+              retry: {
+                attempt: event.attempt,
+                maxAttempts: event.maxAttempts,
+                delaySeconds: event.delaySeconds,
+                message: event.message,
+              },
+            }
           case 'tool.update': {
             const toolSteps = message.tool_steps ?? []
             const index = toolSteps.findIndex((step) => step.id === event.tool.id)

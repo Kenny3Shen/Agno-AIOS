@@ -18,7 +18,8 @@
     "paused": "Awaiting approval",
     "completed": "Completed",
     "cancelled": "Stopped",
-    "failed": "Run failed"
+    "failed": "Run failed",
+    "retrying": "Retrying"
   },
   "rawToolInput": "Raw tool input",
   "rawToolOutput": "Raw tool output",
@@ -51,5 +52,6 @@
   "establishingRun": "Starting analysis run…",
   "awaitingApproval": "This action is waiting for an administrator in the approvals center.",
   "welcomeDescription": "Connect vulnerability intel, asset context, and runtime records for a traceable security analysis.",
-  "current": "Current"
+  "current": "Current",
+  "retryingDetail": "Model temporarily unavailable; retry {{attempt}}/{{max}}…"
 }

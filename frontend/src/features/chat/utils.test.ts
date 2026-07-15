@@ -111,8 +111,6 @@ describe('chat behavior', () => {
       followups: ['Assess impact'],
     })
   })
-})
-
 
   it('maps Agno PAUSED history status onto chat paused state', () => {
     const messages = normalizeMessages([
@@ -122,3 +120,22 @@ describe('chat behavior', () => {
     expect(messages[0]).toMatchObject({ status: 'paused', approval_id: 'approval-1' })
     expect(messages[1]).toMatchObject({ status: 'completed' })
   })
+
+  it('clears partial content when the model provider retries', () => {
+    const assistant: Message = { id: 'a', role: 'assistant', content: '', final: false, status: 'streaming' }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    const partial = chatReducer(started, { type: 'event', id: 'a', event: { type: 'content.delta', delta: 'partial' } })
+    const retrying = chatReducer(partial, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'run.retrying', attempt: 1, maxAttempts: 4, delaySeconds: 2, message: '503' },
+    })
+    const resumed = chatReducer(retrying, { type: 'event', id: 'a', event: { type: 'content.delta', delta: 'final answer' } })
+    expect(retrying.messages[0]).toMatchObject({
+      content: '',
+      status: 'retrying',
+      retry: { attempt: 1, maxAttempts: 4, delaySeconds: 2 },
+    })
+    expect(resumed.messages[0]).toMatchObject({ content: 'final answer', status: 'streaming', retry: null })
+  })
+})

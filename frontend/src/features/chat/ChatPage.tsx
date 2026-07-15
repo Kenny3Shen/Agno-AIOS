@@ -188,7 +188,7 @@ function ModelSettings({
 function MessageBody({ message, retry }: { message: Message; retry: () => void }) {
   const { t } = useTranslation('chat')
   const { message: toast } = App.useApp()
-  const [thoughtOpen, setThoughtOpen] = useState(message.status === 'streaming')
+  const [thoughtOpen, setThoughtOpen] = useState(message.status === 'streaming' || message.status === 'retrying')
   const motionState = message.role === 'assistant' ? (message.status ?? 'completed') : 'sent'
   const actions = [
     { key: 'copy', label: t('common:copy'), icon: <CopyOutlined />, onItemClick: () => void copyToClipboard(message.content) },
@@ -257,7 +257,13 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
           escapeRawHtml
         />
       ) : (
-        <div className="response-pending">{message.status === 'paused' ? t('awaitingApproval') : t('establishingRun')}</div>
+        <div className="response-pending">
+          {message.status === 'paused'
+            ? t('awaitingApproval')
+            : message.status === 'retrying' && message.retry
+              ? t('retryingDetail', { attempt: message.retry.attempt, max: message.retry.maxAttempts })
+              : t('establishingRun')}
+        </div>
       )}
       {message.status === 'paused' && (
         <output className="message-run-paused" aria-live="polite">
@@ -279,7 +285,14 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
       )}
       <div className={`run-strip run-${message.status ?? 'completed'}`}>
         <span className="run-status">
-          {({ streaming: t('status.streaming'), paused: t('status.paused'), completed: t('status.completed'), cancelled: t('status.cancelled'), failed: t('status.failed') } as const)[message.status ?? 'completed']}
+          {({
+            streaming: t('status.streaming'),
+            retrying: t('status.retrying'),
+            paused: t('status.paused'),
+            completed: t('status.completed'),
+            cancelled: t('status.cancelled'),
+            failed: t('status.failed'),
+          } as const)[message.status ?? 'completed']}
         </span>
         {message.metrics?.duration != null && (
           <span className="run-metric" title={t('duration')}>
@@ -320,7 +333,7 @@ export function ChatPage() {
       content: item,
       placement: item.role === 'user' ? ('end' as const) : ('start' as const),
       variant: item.role === 'user' ? ('filled' as const) : ('outlined' as const),
-      streaming: item.status === 'streaming',
+      streaming: item.status === 'streaming' || item.status === 'retrying',
       avatar:
         item.role === 'user' ? (
           <Avatar icon={<UserOutlined />} />
@@ -331,7 +344,7 @@ export function ChatPage() {
         ),
       contentRender: (value: Message) => <MessageBody message={value} retry={() => chat.retry(value.id)} />,
     }))
-  const activeRun = [...chat.state.messages].reverse().find((item) => item.role === 'assistant' && item.status === 'streaming')
+  const activeRun = [...chat.state.messages].reverse().find((item) => item.role === 'assistant' && (item.status === 'streaming' || item.status === 'retrying'))
   const pausedRun = [...chat.state.messages].reverse().find((item) => item.role === 'assistant' && item.status === 'paused')
   const availableReasoningOptions = reasoningOptions(chat.selectedModel)
   const inputDisabled = !chat.selectedModel?.enabled || !chat.selectedModel.configured

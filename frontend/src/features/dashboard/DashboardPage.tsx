@@ -36,6 +36,7 @@ import { PageHeader } from '@/shared/ui/PageHeader'
 import { compareTimestamp, useFormatDate } from '@/shared/lib/format'
 import { getRuntimeOverview, dashboardKeys } from './api'
 import type { OverviewQuery, OverviewRange, OverviewTrace } from './types'
+import { buildTraceSearch, emptyTraceFilters } from '@/features/trace/utils'
 import { runtimeRanges, timelineChartData } from './utils'
 
 const duration = (value: number | null | undefined) => (value == null ? '—' : `${value.toFixed(0)} ms`)
@@ -191,10 +192,14 @@ export function DashboardPage() {
   )
 
   const openTrace = (trace: OverviewTrace) => {
-    const search = new URLSearchParams()
-    if (trace.session_id) search.set('session', trace.session_id)
-    if (trace.run_id) search.set('run', trace.run_id)
-    void router.history.push(`/trace${search.size ? `?${search}` : ''}`)
+    const filters = {
+      ...emptyTraceFilters(),
+      session_id: trace.session_id?.trim() || '',
+      run_id: trace.run_id?.trim() || '',
+    }
+    const selectedSession = filters.session_id
+    const search = buildTraceSearch(filters, selectedSession, trace.trace_id?.trim() || '')
+    void router.history.push(`/trace${search ? `?${search}` : ''}`)
   }
   const hasTimeline = timeline.some((item) => item.runs > 0)
   const healthStatus = data?.health.status ?? 'checking'

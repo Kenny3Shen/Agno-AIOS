@@ -1,5 +1,15 @@
 # 下一步工作
 
+## 已完成：Chat 模型重试 UI + Dashboard Trace 深链
+
+- Chat：`security_run_runtime` 包装 Agno `_ainvoke_stream_with_retry`，流式重试时发 SSE `run.retrying`；前端清空 partial content/tools，状态 `retrying` 并展示「第 n/m 次重试」。
+- Dashboard「最近失败」跳转使用 Trace 规范 query：`session_id` / `run_id` / `selected_session` / `trace`（不再写 `session`/`run` legacy 别名）。
+
+相关入口：
+
+- `api/services/security_run_runtime.py`、`api/services/chat_run_events.py`
+- `frontend/src/features/chat/*`、`frontend/src/features/dashboard/DashboardPage.tsx`
+
 ## 已完成：模型重试参数（Chat Completions + Responses）
 
 - `build_agno_model` 对 DeepSeek / OpenAI Chat / OpenAI Responses / OpenAILike 统一注入 Agno `retries` / `delay_between_retries` / `exponential_backoff`，可选 SDK `max_retries`（配置键 `http_max_retries`）。

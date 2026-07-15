@@ -83,11 +83,11 @@ uv run update-cve
 
 ## 架构
 
-React 工作台通过共享 API client 携带 token 请求 FastAPI；后端检查权限和资源归属后，按模型、MCP、Skills、Knowledge 与 Memory 配置创建 Agno 运行时。Chat 通过 SSE 返回流式输出；`GET /api/chat/sessions` 使用 Agno 风格 `data`/`meta`（DB 真分页 + 归档 SQL 过滤，行字段仍为工作台 session 摘要；overview 最多采样 5000 traces；submissions 为 data/meta）。Trace、Memory 和 Knowledge 等视图通过 Query 刷新读取最新数据。
+React 工作台通过共享 API client 携带 token 请求 FastAPI；后端检查权限和资源归属后，按模型、MCP、Skills、Knowledge 与 Memory 配置创建 Agno 运行时。Chat 通过 SSE 返回流式输出（含模型层 `run.retrying` 重试提示）；`GET /api/chat/sessions` 使用 Agno 风格 `data`/`meta`（DB 真分页 + 归档 SQL 过滤，行字段仍为工作台 session 摘要；overview 最多采样 5000 traces；submissions 为 data/meta）。Trace、Memory 和 Knowledge 等视图通过 Query 刷新读取最新数据。
 
 Memory API 仅使用 `/api/memories`（Agno 风格 `data`/`meta`，查询参数 `search_content`，主键字段 `memory_id`）。 列表行仅认 `memory_id`/`memory`/`topics` 等 Agno 字段，不再兼容 `id`/`content`/`topic` 别名。
 
-Trace 列表/会话 `GET /api/traces` 与 `GET /api/traces/sessions` 使用 Agno 风格 `data`/`meta`；list/detail 对外只暴露 Agno 风格 `duration`（由存储层 `duration_ms` 投影，不改 Agno 表结构），list 尽量附带 root `input`（页面内一次 spans 批量查询，避免 per-trace N+1）。detail 仍为工作台自研契约。 Trace 深链 query 仅使用 `session_id`/`run_id`（不再识别 `session`/`run`）。
+Trace 列表/会话 `GET /api/traces` 与 `GET /api/traces/sessions` 使用 Agno 风格 `data`/`meta`；list/detail 对外只暴露 Agno 风格 `duration`（由存储层 `duration_ms` 投影，不改 Agno 表结构），list 尽量附带 root `input`（页面内一次 spans 批量查询，避免 per-trace N+1）。detail 仍为工作台自研契约。 Trace 深链 query 仅使用 `session_id`/`run_id`/`selected_session`/`trace`（不再识别 `session`/`run`）；Dashboard 最近失败亦走该契约。
 
 Approvals HITL 列表 `GET /api/approvals` 使用 Agno 风格 `data`/`meta`；详情/resolve/resume 与 Skill/MCP `submissions` 仍为工作台自研契约（身份 enrich、拒绝理由、Run 恢复）。HITL 响应仅 enrich `submitted_by`/`resolved_by` 对象（无 `*_email` 双字段）；拒绝理由写入 `resolution_data.note`（Agno 约定），请求体仍用 `rejection_reason`。 审批中心表格对 HITL 使用服务端 `page`/`limit` 真分页；上传审批 submissions 仍整表拉取后与 HITL 按「submissions 在前」虚拟合并。
 

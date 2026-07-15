@@ -18,6 +18,7 @@ ChatRunEventName = Literal[
     "run.completed",
     "run.cancelled",
     "run.failed",
+    "run.retrying",
 ]
 
 
