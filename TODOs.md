@@ -1,5 +1,14 @@
 # 下一步工作
 
+## 已完成：Workflow PR4（Router / 嵌套 / 版本触发器 / 画布编辑 / 完整 HITL）
+
+- DSL：`router`（CEL selector + choices）、`workflow_ref`；Step 支持 confirmation / user_input / output_review。
+- 画布：拖拽落盘 `position`、按 Y 重排顶层；连线调整顶层顺序。
+- 版本：保存时快照 `workflow_versions`；`GET .../versions` + restore。
+- 触发器：`triggers.webhook`（secret + `POST .../hooks/webhook` SSE）；cron 配置落库（调度器后续）。
+- SSE：`router.*`；暂停审批区分 pause_type 并在 resume 时 confirm/set_user_input/edit。
+
+
 ## 已完成：Workflow PR3（画布 + Step HITL + workflows scope）
 
 - 独立权限：`workflows:read` / `workflows:write`（菜单 / API 不再复用 sessions）。

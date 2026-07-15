@@ -36,6 +36,8 @@ const typeColor: Record<WorkflowNodeType, string> = {
   parallel: 'purple',
   condition: 'gold',
   loop: 'cyan',
+  router: 'magenta',
+  workflow_ref: 'green',
 }
 
 function NodeRow({
@@ -51,13 +53,17 @@ function NodeRow({
   selectedId: string | null
   onSelect: (id: string) => void
 }) {
-  const children =
-    node.type === 'condition'
-      ? [
-          ...(node.thenSteps ?? []).map((child) => ({ branch: 'thenSteps' as const, child })),
-          ...(node.elseSteps ?? []).map((child) => ({ branch: 'elseSteps' as const, child })),
-        ]
-      : (node.steps ?? []).map((child) => ({ branch: 'steps' as const, child }))
+  const children: Array<{ branch: string; child: WorkflowNode }> = []
+  if (node.type === 'condition') {
+    for (const child of node.thenSteps ?? []) children.push({ branch: 'then', child })
+    for (const child of node.elseSteps ?? []) children.push({ branch: 'else', child })
+  } else if (node.type === 'router') {
+    for (const choice of node.choices ?? []) {
+      for (const child of choice.steps) children.push({ branch: choice.name, child })
+    }
+  } else {
+    for (const child of node.steps ?? []) children.push({ branch: 'steps', child })
+  }
 
   return (
     <>
@@ -77,14 +83,18 @@ function NodeRow({
                 ? node.evaluatorCel || 'cel'
                 : node.type === 'loop'
                   ? `max ${node.maxIterations ?? 3}`
-                  : `${node.steps?.length ?? 0} branches`}
+                  : node.type === 'router'
+                    ? node.selectorCel || 'selector'
+                    : node.type === 'workflow_ref'
+                      ? node.workflowId || 'ref'
+                      : `${node.steps?.length ?? 0} branches`}
           </small>
         </div>
         <Tag color={typeColor[node.type]}>{node.type}</Tag>
       </button>
       {children.map(({ branch, child }, childIndex) => (
         <div key={child.id}>
-          {node.type === 'condition' ? (
+          {node.type === 'condition' || node.type === 'router' ? (
             <Typography.Text
               type="secondary"
               style={{ display: 'block', paddingLeft: 28 + depth * 16, fontSize: 12 }}
@@ -113,12 +123,15 @@ export function WorkflowPage() {
   const executors = workflow.executorsQuery.data ?? []
   const models = workflow.modelsQuery.data?.models ?? []
   const saved = workflow.workflowsQuery.data ?? []
+  const versions = workflow.versionsQuery.data ?? []
 
   const addMenuItems = [
     { key: 'step', label: t('addStep') },
     { key: 'parallel', label: t('addParallel') },
     { key: 'condition', label: t('addCondition') },
     { key: 'loop', label: t('addLoop') },
+    { key: 'router', label: t('addRouter') },
+    { key: 'workflow_ref', label: t('addWorkflowRef') },
   ]
 
   return (
@@ -136,7 +149,12 @@ export function WorkflowPage() {
             >
               <Button icon={<PlusOutlined />}>{t('addNode')}</Button>
             </Dropdown>
-            <Button icon={<SaveOutlined />} type="primary" loading={workflow.state.saving} onClick={() => void workflow.save()}>
+            <Button
+              icon={<SaveOutlined />}
+              type="primary"
+              loading={workflow.state.saving}
+              onClick={() => void workflow.save()}
+            >
               {t('save')}
             </Button>
             <Button
@@ -156,7 +174,9 @@ export function WorkflowPage() {
         }
       />
 
-      {workflow.state.error ? <Alert type="error" showIcon style={{ marginBottom: 12 }} message={workflow.state.error} /> : null}
+      {workflow.state.error ? (
+        <Alert type="error" showIcon style={{ marginBottom: 12 }} message={workflow.state.error} />
+      ) : null}
 
       <div className="workflow-layout">
         <Card className="workbench-card" title={t('library')}>
@@ -165,20 +185,42 @@ export function WorkflowPage() {
             placeholder={t('loadPlaceholder')}
             value={workflow.state.workflowId ?? undefined}
             allowClear
-            options={saved.map((item) => ({ value: item.id, label: `${item.name} (v${item.version})` }))}
+            options={saved.map((item) => ({
+              value: item.id,
+              label: `${item.name} (v${item.version})`,
+            }))}
             onChange={(value) => {
               if (value) workflow.load(value)
               else workflow.reset()
             }}
           />
           {workflow.state.workflowId ? (
-            <Button danger type="link" style={{ paddingInline: 0, marginTop: 8 }} onClick={() => void workflow.removeSaved()}>
+            <Button
+              danger
+              type="link"
+              style={{ paddingInline: 0, marginTop: 8 }}
+              onClick={() => void workflow.removeSaved()}
+            >
               {t('deleteSaved')}
             </Button>
           ) : null}
           <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
-            {t('pr2Hint')}
+            {t('pr4Hint')}
           </Typography.Paragraph>
+          {versions.length ? (
+            <div style={{ marginTop: 12 }}>
+              <Typography.Text type="secondary">{t('versions')}</Typography.Text>
+              <Select
+                style={{ width: '100%', marginTop: 4 }}
+                placeholder={t('restoreVersion')}
+                options={versions.map((item) => ({
+                  value: item.version,
+                  label: `v${item.version} · ${new Date(item.created_at * 1000).toLocaleString()}`,
+                }))}
+                onChange={(version) => void workflow.restoreVersion(Number(version))}
+              />
+            </div>
+          ) : null}
         </Card>
 
         <Card className="workbench-card" title={t('definition')}>
@@ -196,9 +238,11 @@ export function WorkflowPage() {
           />
           <Input.TextArea
             value={workflow.state.input}
-            onChange={(e) => workflow.patchMeta({ input: e.target.value, dirty: workflow.state.dirty })}
+            onChange={(e) =>
+              workflow.patchMeta({ input: e.target.value, dirty: workflow.state.dirty })
+            }
             placeholder={t('inputPlaceholder')}
-            rows={5}
+            rows={4}
             style={{ marginTop: 8 }}
           />
           <Select
@@ -208,15 +252,79 @@ export function WorkflowPage() {
             options={models
               .filter((model) => model.enabled)
               .map((model) => ({ value: model.id, label: model.name || model.model_id }))}
-            onChange={(value) => workflow.patchMeta({ modelId: value, dirty: workflow.state.dirty })}
+            onChange={(value) =>
+              workflow.patchMeta({ modelId: value, dirty: workflow.state.dirty })
+            }
           />
+          <Typography.Text type="secondary" style={{ display: 'block', marginTop: 12 }}>
+            {t('triggers')}
+          </Typography.Text>
+          <Space direction="vertical" style={{ width: '100%', marginTop: 8 }}>
+            <Space>
+              <Switch
+                checked={workflow.state.triggers.webhook.enabled}
+                onChange={(enabled) =>
+                  workflow.patchTriggers({
+                    ...workflow.state.triggers,
+                    webhook: { ...workflow.state.triggers.webhook, enabled },
+                  })
+                }
+              />
+              <span>{t('webhookTrigger')}</span>
+            </Space>
+            {workflow.state.triggers.webhook.enabled ? (
+              <Input
+                value={workflow.state.triggers.webhook.secret}
+                onChange={(e) =>
+                  workflow.patchTriggers({
+                    ...workflow.state.triggers,
+                    webhook: { ...workflow.state.triggers.webhook, secret: e.target.value },
+                  })
+                }
+                placeholder={t('webhookSecret')}
+              />
+            ) : null}
+            {workflow.state.workflowId && workflow.state.triggers.webhook.enabled ? (
+              <Typography.Text code copyable>
+                {`POST /api/workflows/${workflow.state.workflowId}/hooks/webhook?secret=...`}
+              </Typography.Text>
+            ) : null}
+            <Space>
+              <Switch
+                checked={workflow.state.triggers.cron.enabled}
+                onChange={(enabled) =>
+                  workflow.patchTriggers({
+                    ...workflow.state.triggers,
+                    cron: { ...workflow.state.triggers.cron, enabled },
+                  })
+                }
+              />
+              <span>{t('cronTrigger')}</span>
+            </Space>
+            {workflow.state.triggers.cron.enabled ? (
+              <Input
+                value={workflow.state.triggers.cron.expression}
+                onChange={(e) =>
+                  workflow.patchTriggers({
+                    ...workflow.state.triggers,
+                    cron: { ...workflow.state.triggers.cron, expression: e.target.value },
+                  })
+                }
+                placeholder="0 * * * *"
+              />
+            ) : null}
+          </Space>
         </Card>
 
         <Card className="workbench-card workflow-canvas-card" title={t('canvas')}>
           <WorkflowCanvas
             steps={workflow.state.steps}
             selectedId={workflow.state.selectedId}
-            onSelect={(id) => workflow.patchMeta({ selectedId: id, dirty: workflow.state.dirty })}
+            onSelect={(id) =>
+              workflow.patchMeta({ selectedId: id, dirty: workflow.state.dirty })
+            }
+            onPositionsChange={workflow.applyPositions}
+            onConnectSequence={workflow.connectSequence}
           />
         </Card>
 
@@ -230,7 +338,9 @@ export function WorkflowPage() {
                   index={index}
                   depth={0}
                   selectedId={workflow.state.selectedId}
-                  onSelect={(id) => workflow.patchMeta({ selectedId: id, dirty: workflow.state.dirty })}
+                  onSelect={(id) =>
+                    workflow.patchMeta({ selectedId: id, dirty: workflow.state.dirty })
+                  }
                 />
               ))}
             </div>
@@ -247,11 +357,24 @@ export function WorkflowPage() {
               <Space>
                 {workflow.state.steps.some((item) => item.id === step.id) ? (
                   <>
-                    <Button size="small" icon={<ArrowUpOutlined />} onClick={() => workflow.move(step.id, -1)} />
-                    <Button size="small" icon={<ArrowDownOutlined />} onClick={() => workflow.move(step.id, 1)} />
+                    <Button
+                      size="small"
+                      icon={<ArrowUpOutlined />}
+                      onClick={() => workflow.move(step.id, -1)}
+                    />
+                    <Button
+                      size="small"
+                      icon={<ArrowDownOutlined />}
+                      onClick={() => workflow.move(step.id, 1)}
+                    />
                   </>
                 ) : null}
-                <Button size="small" danger icon={<DeleteOutlined />} onClick={() => workflow.remove(step.id)} />
+                <Button
+                  size="small"
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={() => workflow.remove(step.id)}
+                />
               </Space>
             ) : null
           }
@@ -281,7 +404,7 @@ export function WorkflowPage() {
                     value={step.instructions}
                     onChange={(e) => workflow.update({ ...step, instructions: e.target.value })}
                     placeholder={t('instructionsPlaceholder')}
-                    rows={6}
+                    rows={4}
                   />
                   <Space>
                     <Switch
@@ -302,6 +425,44 @@ export function WorkflowPage() {
                       rows={2}
                     />
                   ) : null}
+                  <Space>
+                    <Switch
+                      checked={Boolean(step.requiresUserInput)}
+                      onChange={(checked) =>
+                        workflow.update({ ...step, requiresUserInput: checked })
+                      }
+                    />
+                    <Typography.Text>{t('requiresUserInput')}</Typography.Text>
+                  </Space>
+                  {step.requiresUserInput ? (
+                    <Input.TextArea
+                      value={step.userInputMessage || ''}
+                      onChange={(e) =>
+                        workflow.update({ ...step, userInputMessage: e.target.value })
+                      }
+                      placeholder={t('userInputMessagePlaceholder')}
+                      rows={2}
+                    />
+                  ) : null}
+                  <Space>
+                    <Switch
+                      checked={Boolean(step.requiresOutputReview)}
+                      onChange={(checked) =>
+                        workflow.update({ ...step, requiresOutputReview: checked })
+                      }
+                    />
+                    <Typography.Text>{t('requiresOutputReview')}</Typography.Text>
+                  </Space>
+                  {step.requiresOutputReview ? (
+                    <Input.TextArea
+                      value={step.outputReviewMessage || ''}
+                      onChange={(e) =>
+                        workflow.update({ ...step, outputReviewMessage: e.target.value })
+                      }
+                      placeholder={t('outputReviewMessagePlaceholder')}
+                      rows={2}
+                    />
+                  ) : null}
                 </>
               ) : null}
 
@@ -311,7 +472,6 @@ export function WorkflowPage() {
                   <Input.TextArea
                     value={step.evaluatorCel}
                     onChange={(e) => workflow.update({ ...step, evaluatorCel: e.target.value })}
-                    placeholder='input.contains("critical")'
                     rows={3}
                   />
                   <Space wrap>
@@ -340,8 +500,9 @@ export function WorkflowPage() {
                   <Typography.Text type="secondary">{t('endConditionCel')}</Typography.Text>
                   <Input.TextArea
                     value={step.endConditionCel}
-                    onChange={(e) => workflow.update({ ...step, endConditionCel: e.target.value })}
-                    placeholder='last_step_content.contains("DONE")'
+                    onChange={(e) =>
+                      workflow.update({ ...step, endConditionCel: e.target.value })
+                    }
                     rows={3}
                   />
                   <Button size="small" onClick={() => workflow.addChild(step.id, 'steps', 'step')}>
@@ -354,6 +515,30 @@ export function WorkflowPage() {
                 <Button size="small" onClick={() => workflow.addChild(step.id, 'steps', 'step')}>
                   {t('addParallelBranch')}
                 </Button>
+              ) : null}
+
+              {step.type === 'router' ? (
+                <>
+                  <Typography.Text type="secondary">{t('selectorCel')}</Typography.Text>
+                  <Input.TextArea
+                    value={step.selectorCel}
+                    onChange={(e) => workflow.update({ ...step, selectorCel: e.target.value })}
+                    rows={3}
+                  />
+                  <Typography.Text type="secondary">{t('routerChoicesHint')}</Typography.Text>
+                </>
+              ) : null}
+
+              {step.type === 'workflow_ref' ? (
+                <Select
+                  style={{ width: '100%' }}
+                  placeholder={t('nestedWorkflowPlaceholder')}
+                  value={step.workflowId || undefined}
+                  options={saved
+                    .filter((item) => item.id !== workflow.state.workflowId)
+                    .map((item) => ({ value: item.id, label: item.name }))}
+                  onChange={(value) => workflow.update({ ...step, workflowId: value })}
+                />
               ) : null}
             </Space>
           ) : (

@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import type { WorkflowNode, WorkflowNodeType, WorkflowState } from './types'
+import type { WorkflowNode, WorkflowNodeType, WorkflowState, WorkflowTriggers } from './types'
 import {
   addChildToNode,
   createNode,
+  defaultTriggers,
   findNode,
   fromRecord,
+  moveNodeAfter,
   moveStep,
   removeNodeInTree,
+  reorderRootsByPositions,
   toDefinition,
   updateNodeInTree,
 } from './utils'
@@ -15,7 +18,9 @@ import {
   createWorkflow,
   deleteWorkflow,
   listExecutors,
+  listWorkflowVersions,
   listWorkflows,
+  restoreWorkflowVersion,
   streamWorkflowRun,
   updateWorkflow,
 } from './api'
@@ -29,6 +34,7 @@ const initialState = (): WorkflowState => ({
   sessionId: crypto.randomUUID(),
   modelId: null,
   steps: [],
+  triggers: defaultTriggers(),
   selectedId: null,
   dirty: false,
   saving: false,
@@ -54,6 +60,11 @@ export function useWorkflow() {
   const modelsQuery = useQuery({
     queryKey: ['models'],
     queryFn: getModels,
+  })
+  const versionsQuery = useQuery({
+    queryKey: ['workflows', 'versions', state.workflowId],
+    queryFn: () => listWorkflowVersions(state.workflowId!),
+    enabled: Boolean(state.workflowId),
   })
 
   useEffect(() => {
@@ -81,7 +92,11 @@ export function useWorkflow() {
     }))
   }
 
-  const addChild = (parentId: string, branch: 'steps' | 'thenSteps' | 'elseSteps', type: WorkflowNodeType = 'step') => {
+  const addChild = (
+    parentId: string,
+    branch: 'steps' | 'thenSteps' | 'elseSteps',
+    type: WorkflowNodeType = 'step'
+  ) => {
     const child = createNode(type)
     setState((current) => ({
       ...current,
@@ -108,6 +123,30 @@ export function useWorkflow() {
 
   const move = (id: string, direction: -1 | 1) =>
     setState((current) => ({ ...current, dirty: true, steps: moveStep(current.steps, id, direction) }))
+
+  const applyPositions = (positions: Record<string, { x: number; y: number }>) => {
+    setState((current) => {
+      let steps = current.steps
+      for (const [id, position] of Object.entries(positions)) {
+        steps = updateNodeInTree(steps, id, (node) => ({ ...node, position }))
+      }
+      // reorder roots by Y after drag
+      steps = reorderRootsByPositions(steps)
+      return { ...current, steps, dirty: true }
+    })
+  }
+
+  const connectSequence = (sourceId: string, targetId: string) => {
+    setState((current) => ({
+      ...current,
+      dirty: true,
+      steps: moveNodeAfter(current.steps, targetId, sourceId),
+    }))
+  }
+
+  const patchTriggers = (triggers: WorkflowTriggers) => {
+    setState((current) => ({ ...current, triggers, dirty: true }))
+  }
 
   const load = (id: string) => {
     const record = (workflowsQuery.data ?? []).find((item) => item.id === id)
@@ -140,6 +179,7 @@ export function useWorkflow() {
         name: definition.name,
         description: definition.description,
         definition,
+        triggers: state.triggers,
       }
       const record = state.workflowId
         ? await updateWorkflow(state.workflowId, body)
@@ -152,11 +192,32 @@ export function useWorkflow() {
         error: null,
       }))
       await workflowsQuery.refetch()
+      await versionsQuery.refetch()
     } catch (error) {
       setState((current) => ({
         ...current,
         saving: false,
         error: error instanceof Error ? error.message : 'Save failed',
+      }))
+    }
+  }
+
+  const restoreVersion = async (version: number) => {
+    if (!state.workflowId) return
+    try {
+      const record = await restoreWorkflowVersion(state.workflowId, version)
+      setState((current) => ({
+        ...current,
+        ...fromRecord(record),
+        dirty: false,
+        error: null,
+      }))
+      await workflowsQuery.refetch()
+      await versionsQuery.refetch()
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        error: error instanceof Error ? error.message : 'Restore failed',
       }))
     }
   }
@@ -232,16 +293,21 @@ export function useWorkflow() {
     workflowsQuery,
     executorsQuery,
     modelsQuery,
+    versionsQuery,
     patch,
     patchMeta,
+    patchTriggers,
     add,
     addChild,
     update,
     remove,
     move,
+    applyPositions,
+    connectSequence,
     load,
     reset,
     save,
+    restoreVersion,
     removeSaved,
     run,
     stop,

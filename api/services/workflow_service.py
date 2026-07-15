@@ -1,9 +1,11 @@
-"""CRUD + projection for workbench workflow definitions."""
+"""CRUD + projection for workbench workflow definitions (PR4 versions/triggers)."""
 
 from __future__ import annotations
 
+import secrets
 import time
 from typing import Any
+from uuid import uuid4
 
 from api.auth.claims import ADMIN_SCOPE, ActorLike, actor_id, has_scope
 from api.persistence import workflows as workflow_store
@@ -13,6 +15,33 @@ from api.services.workflow_compiler import (
     validate_and_normalize_definition,
 )
 from api.utils.pagination import pagination_meta
+
+
+def _normalize_triggers(raw: object | None) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {
+            "webhook": {"enabled": False, "secret": ""},
+            "cron": {"enabled": False, "expression": ""},
+        }
+    webhook_raw = raw.get("webhook")
+    cron_raw = raw.get("cron")
+    webhook: dict[str, Any] = (
+        {str(k): v for k, v in webhook_raw.items()} if isinstance(webhook_raw, dict) else {}
+    )
+    cron: dict[str, Any] = (
+        {str(k): v for k, v in cron_raw.items()} if isinstance(cron_raw, dict) else {}
+    )
+    secret = str(webhook.get("secret") or "").strip()
+    return {
+        "webhook": {
+            "enabled": bool(webhook.get("enabled")),
+            "secret": secret,
+        },
+        "cron": {
+            "enabled": bool(cron.get("enabled")),
+            "expression": str(cron.get("expression") or "").strip(),
+        },
+    }
 
 
 def _row_payload(row: dict[str, Any]) -> dict[str, Any]:
@@ -25,6 +54,7 @@ def _row_payload(row: dict[str, Any]) -> dict[str, Any]:
         "description": str(row.get("description") or definition.get("description") or ""),
         "owner_user_id": str(row.get("owner_user_id") or ""),
         "definition": definition,
+        "triggers": _normalize_triggers(row.get("triggers")),
         "enabled": bool(row.get("enabled", True)),
         "version": int(row.get("version") or 1),
         "created_at": int(row.get("created_at") or 0),
@@ -73,12 +103,40 @@ async def get_workflow_for_actor(actor: ActorLike, workflow_id: str) -> dict[str
     return _row_payload(row)
 
 
+async def _snapshot_version(
+    *,
+    row: dict[str, Any],
+    created_by: str,
+) -> None:
+    """Snapshot current row as immutable version history entry."""
+    try:
+        await workflow_store.insert_workflow_version(
+            {
+                "id": str(uuid4()),
+                "workflow_id": str(row.get("id") or ""),
+                "version": int(row.get("version") or 1),
+                "name": str(row.get("name") or ""),
+                "description": str(row.get("description") or ""),
+                "definition": row.get("definition")
+                if isinstance(row.get("definition"), dict)
+                else {},
+                "triggers": _normalize_triggers(row.get("triggers")),
+                "created_at": workflow_store.now_ts(),
+                "created_by": created_by,
+            }
+        )
+    except Exception:
+        # Version history is best-effort; do not fail saves.
+        pass
+
+
 async def create_workflow_for_actor(
     actor: ActorLike,
     *,
     name: str | None,
     description: str | None,
     definition: object,
+    triggers: object | None = None,
 ) -> dict[str, Any]:
     try:
         normalized = validate_and_normalize_definition(
@@ -97,18 +155,23 @@ async def create_workflow_for_actor(
     except WorkflowDefinitionError:
         raise
     now = workflow_store.now_ts()
+    trigger_cfg = _normalize_triggers(triggers)
+    if trigger_cfg["webhook"]["enabled"] and not trigger_cfg["webhook"]["secret"]:
+        trigger_cfg["webhook"]["secret"] = secrets.token_urlsafe(24)
     record = {
         "id": workflow_store.new_workflow_id(),
         "name": normalized["name"],
         "description": normalized["description"],
         "owner_user_id": actor_id(actor),
         "definition": normalized,
+        "triggers": trigger_cfg,
         "enabled": True,
         "version": 1,
         "created_at": now,
         "updated_at": now,
     }
     row = await workflow_store.insert_workflow(record)
+    await _snapshot_version(row=row, created_by=actor_id(actor))
     return _row_payload(row)
 
 
@@ -120,10 +183,19 @@ async def update_workflow_for_actor(
     description: str | None = None,
     definition: object | None = None,
     enabled: bool | None = None,
+    triggers: object | None = None,
 ) -> dict[str, Any] | None:
-    existing = await get_workflow_for_actor(actor, workflow_id)
-    if existing is None:
+    existing_row = await workflow_store.get_workflow(workflow_id)
+    if existing_row is None:
         return None
+    if not has_scope(actor, ADMIN_SCOPE) and str(
+        existing_row.get("owner_user_id") or ""
+    ) != actor_id(actor):
+        return None
+    existing = _row_payload(existing_row)
+    # Snapshot pre-update state as previous version history
+    await _snapshot_version(row=existing_row, created_by=actor_id(actor))
+
     current_def = existing["definition"]
     if not isinstance(current_def, dict):
         current_def = {}
@@ -148,11 +220,83 @@ async def update_workflow_for_actor(
     }
     if enabled is not None:
         values["enabled"] = bool(enabled)
+    if triggers is not None:
+        trigger_cfg = _normalize_triggers(triggers)
+        if trigger_cfg["webhook"]["enabled"] and not trigger_cfg["webhook"]["secret"]:
+            prev = _normalize_triggers(existing.get("triggers"))
+            trigger_cfg["webhook"]["secret"] = (
+                prev["webhook"].get("secret") or secrets.token_urlsafe(24)
+            )
+        values["triggers"] = trigger_cfg
     owner = None if has_scope(actor, ADMIN_SCOPE) else actor_id(actor)
     row = await workflow_store.update_workflow(
         workflow_id, owner_user_id=owner, values=values
     )
     return _row_payload(row) if row else None
+
+
+async def list_versions_for_actor(
+    actor: ActorLike,
+    workflow_id: str,
+    *,
+    page: int = 1,
+    limit: int = 20,
+) -> dict[str, Any] | None:
+    existing = await get_workflow_for_actor(actor, workflow_id)
+    if existing is None:
+        return None
+    started = time.perf_counter()
+    rows, total = await workflow_store.list_workflow_versions(
+        workflow_id, page=page, limit=limit
+    )
+    data = [
+        {
+            "id": str(row.get("id") or ""),
+            "workflow_id": workflow_id,
+            "version": int(row.get("version") or 0),
+            "name": str(row.get("name") or ""),
+            "description": str(row.get("description") or ""),
+            "definition": row.get("definition")
+            if isinstance(row.get("definition"), dict)
+            else {},
+            "triggers": _normalize_triggers(row.get("triggers")),
+            "created_at": int(row.get("created_at") or 0),
+            "created_by": str(row.get("created_by") or ""),
+        }
+        for row in rows
+    ]
+    return {
+        "data": data,
+        "meta": pagination_meta(
+            page=page,
+            limit=limit,
+            total_count=total,
+            search_time_ms=(time.perf_counter() - started) * 1000,
+        ),
+    }
+
+
+async def restore_version_for_actor(
+    actor: ActorLike,
+    workflow_id: str,
+    version: int,
+) -> dict[str, Any] | None:
+    existing = await get_workflow_for_actor(actor, workflow_id)
+    if existing is None:
+        return None
+    snap = await workflow_store.get_workflow_version(workflow_id, version)
+    if snap is None:
+        return None
+    return await update_workflow_for_actor(
+        actor,
+        workflow_id,
+        name=str(snap.get("name") or existing["name"]),
+        description=str(snap.get("description") or ""),
+        definition=snap.get("definition")
+        if isinstance(snap.get("definition"), dict)
+        else existing["definition"],
+        triggers=snap.get("triggers"),
+    )
 
 
 async def delete_workflow_for_actor(actor: ActorLike, workflow_id: str) -> bool:
@@ -165,3 +309,14 @@ async def delete_workflow_for_actor(actor: ActorLike, workflow_id: str) -> bool:
 
 def executor_catalog() -> list[dict[str, str]]:
     return list_executor_options()
+
+
+def verify_webhook_secret(row: dict[str, Any], secret: str | None) -> bool:
+    triggers = _normalize_triggers(row.get("triggers"))
+    webhook = triggers.get("webhook") or {}
+    if not webhook.get("enabled"):
+        return False
+    expected = str(webhook.get("secret") or "")
+    if not expected:
+        return False
+    return secrets.compare_digest(expected, str(secret or ""))

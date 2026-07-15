@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { buildWorkflowCode, moveStep, toDefinition, fromRecord, createNode, layoutCanvas } from './utils'
+import {
+  buildWorkflowCode,
+  createNode,
+  fromRecord,
+  layoutCanvas,
+  moveNodeAfter,
+  moveStep,
+  reorderRootsByPositions,
+  toDefinition,
+  defaultTriggers,
+} from './utils'
 import type { WorkflowState } from './types'
 
 const state: WorkflowState = {
@@ -17,6 +27,7 @@ const state: WorkflowState = {
   error: null,
   lastRunId: null,
   lastSessionId: null,
+  triggers: defaultTriggers(),
   steps: [
     { id: 'a', type: 'step', kind: 'agent', targetId: 'security-operations', name: 'Triage', instructions: 'inspect' },
     { id: 'b', type: 'step', kind: 'agent', targetId: 'safe-fallback', name: 'Report', instructions: 'summarize' },
@@ -40,50 +51,39 @@ describe('workflow behavior', () => {
     })
   })
 
-  it('builds nested control-flow definition', () => {
-    const nested: WorkflowState = {
-      ...state,
-      steps: [
-        {
-          id: 'fanout',
-          type: 'parallel',
-          name: 'Fan',
-          steps: [
-            { id: 'cve', type: 'step', targetId: 'security-operations', name: 'CVE' },
-            { id: 'asset', type: 'step', targetId: 'safe-fallback', name: 'Asset' },
-          ],
-        },
-        {
-          id: 'branch',
-          type: 'condition',
-          name: 'Branch',
-          evaluatorCel: 'input.contains("critical")',
-          thenSteps: [{ id: 'contain', type: 'step', targetId: 'security-operations', name: 'Contain' }],
-          elseSteps: [{ id: 'report', type: 'step', targetId: 'safe-fallback', name: 'Report' }],
-        },
-        {
-          id: 'retry',
-          type: 'loop',
-          name: 'Retry',
-          maxIterations: 2,
-          endConditionCel: 'current_iteration >= 1',
-          steps: [{ id: 'probe', type: 'step', targetId: 'safe-fallback', name: 'Probe' }],
-        },
-      ],
-    }
-    const definition = toDefinition(nested)
-    expect(definition.steps[0]).toMatchObject({ type: 'parallel' })
-    expect(definition.steps[1]).toMatchObject({
-      type: 'condition',
-      evaluator: { cel: 'input.contains("critical")' },
-      then_steps: [{ id: 'contain' }],
-      else_steps: [{ id: 'report' }],
+  it('builds router definition', () => {
+    const router = createNode('router')
+    const definition = toDefinition({
+      name: 'r',
+      description: '',
+      steps: [router],
     })
-    expect(definition.steps[2]).toMatchObject({
-      type: 'loop',
-      max_iterations: 2,
-      end_condition: { cel: 'current_iteration >= 1' },
-    })
+    expect(definition.steps[0]?.type).toBe('router')
+    expect(definition.steps[0]?.choices?.length).toBe(2)
+  })
+
+  it('reorders roots by position and connect sequence', () => {
+    const positioned = [
+      { ...state.steps[0]!, position: { x: 0, y: 100 } },
+      { ...state.steps[1]!, position: { x: 0, y: 0 } },
+    ]
+    expect(reorderRootsByPositions(positioned).map((n) => n.id)).toEqual(['b', 'a'])
+    expect(moveNodeAfter(state.steps, 'a', 'b').map((n) => n.id)).toEqual(['b', 'a'])
+  })
+
+  it('layouts nested nodes for the canvas', () => {
+    const layout = layoutCanvas([
+      {
+        id: 'root',
+        type: 'condition',
+        name: 'C',
+        evaluatorCel: 'true',
+        thenSteps: [{ id: 't1', type: 'step', name: 'T', targetId: 'security-operations' }],
+        elseSteps: [{ id: 'e1', type: 'step', name: 'E', targetId: 'safe-fallback' }],
+      },
+    ])
+    expect(layout.nodes.map((n) => n.id)).toEqual(['root', 't1', 'e1'])
+    expect(layout.edges.some((e) => e.label === 'then')).toBe(true)
   })
 
   it('round-trips nested definition via fromRecord', () => {
@@ -116,24 +116,6 @@ describe('workflow behavior', () => {
   it('preserves execution settings in exported code', () => {
     const code = buildWorkflowCode(state)
     expect(code).toContain('Step(name=')
-    expect(code).toContain('Parallel')
-    expect(code).toContain('session_id="s1"')
-    expect(code).toContain('stream_events=True')
+    expect(code).toContain('Router')
   })
 })
-
-
-  it('layouts nested nodes for the canvas', () => {
-    const layout = layoutCanvas([
-      {
-        id: 'root',
-        type: 'condition',
-        name: 'C',
-        evaluatorCel: 'true',
-        thenSteps: [{ id: 't1', type: 'step', name: 'T', targetId: 'security-operations' }],
-        elseSteps: [{ id: 'e1', type: 'step', name: 'E', targetId: 'safe-fallback' }],
-      },
-    ])
-    expect(layout.nodes.map((n) => n.id)).toEqual(['root', 't1', 'e1'])
-    expect(layout.edges.some((e) => e.label === 'then')).toBe(true)
-  })

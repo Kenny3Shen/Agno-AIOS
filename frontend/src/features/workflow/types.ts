@@ -1,28 +1,40 @@
-export type WorkflowNodeType = 'step' | 'parallel' | 'condition' | 'loop'
+export type WorkflowNodeType =
+  | 'step'
+  | 'parallel'
+  | 'condition'
+  | 'loop'
+  | 'router'
+  | 'workflow_ref'
 
 export type WorkflowNode = {
   id: string
   type: WorkflowNodeType
   name: string
-  /** Leaf agent step */
   kind?: 'agent'
   targetId?: string
   instructions?: string
-  /** parallel / loop children */
   steps?: WorkflowNode[]
-  /** condition */
   evaluatorCel?: string
   thenSteps?: WorkflowNode[]
   elseSteps?: WorkflowNode[]
-  /** loop */
   maxIterations?: number
   endConditionCel?: string
-  /** PR3 step HITL */
+  /** router */
+  selectorCel?: string
+  choices?: Array<{ id: string; name: string; steps: WorkflowNode[] }>
+  /** nested workflow */
+  workflowId?: string
+  /** HITL */
   requiresConfirmation?: boolean
   confirmationMessage?: string
+  requiresUserInput?: boolean
+  userInputMessage?: string
+  requiresOutputReview?: boolean
+  outputReviewMessage?: string
+  /** canvas layout */
+  position?: { x: number; y: number }
 }
 
-/** @deprecated prefer WorkflowNode; kept as alias for leaf steps */
 export type WorkflowStep = WorkflowNode
 
 export type WorkflowDefinitionNode = {
@@ -37,8 +49,16 @@ export type WorkflowDefinitionNode = {
   else_steps?: WorkflowDefinitionNode[]
   max_iterations?: number
   end_condition?: { cel?: string; value?: boolean } | null
+  selector?: { cel?: string }
+  choices?: Array<{ id: string; name: string; steps: WorkflowDefinitionNode[] }>
+  workflow_id?: string
   requires_confirmation?: boolean
   confirmation_message?: string
+  requires_user_input?: boolean
+  user_input_message?: string
+  requires_output_review?: boolean
+  output_review_message?: string
+  position?: { x: number; y: number }
 }
 
 export type WorkflowDefinition = {
@@ -47,16 +67,34 @@ export type WorkflowDefinition = {
   steps: WorkflowDefinitionNode[]
 }
 
+export type WorkflowTriggers = {
+  webhook: { enabled: boolean; secret: string }
+  cron: { enabled: boolean; expression: string }
+}
+
 export type WorkflowRecord = {
   id: string
   name: string
   description: string
   owner_user_id: string
   definition: WorkflowDefinition
+  triggers?: WorkflowTriggers
   enabled: boolean
   version: number
   created_at: number
   updated_at: number
+}
+
+export type WorkflowVersionRecord = {
+  id: string
+  workflow_id: string
+  version: number
+  name: string
+  description: string
+  definition: WorkflowDefinition
+  triggers?: WorkflowTriggers
+  created_at: number
+  created_by: string
 }
 
 export type ExecutorOption = {
@@ -74,6 +112,7 @@ export type WorkflowState = {
   sessionId: string
   modelId: string | null
   steps: WorkflowNode[]
+  triggers: WorkflowTriggers
   selectedId: string | null
   dirty: boolean
   saving: boolean
@@ -101,6 +140,8 @@ export type WorkflowRunEventType =
   | 'loop.completed'
   | 'loop.iteration.started'
   | 'loop.iteration.completed'
+  | 'router.started'
+  | 'router.completed'
 
 export interface WorkflowRunLogItem {
   id: string

@@ -16,6 +16,7 @@ from sqlalchemy import (
     delete,
     func,
     select,
+    text,
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, insert
@@ -44,6 +45,7 @@ def workflows_table(metadata: MetaData | None = None) -> Table:
         Column("description", Text, nullable=False, server_default=""),
         Column("owner_user_id", String(255), nullable=False),
         Column("definition", JSONB, nullable=False),
+        Column("triggers", JSONB, nullable=False, server_default="{}"),
         Column("enabled", Boolean, nullable=False, server_default="true"),
         Column("version", BigInteger, nullable=False, server_default="1"),
         Column("created_at", BigInteger, nullable=False),
@@ -59,6 +61,17 @@ async def ensure_workflows_table_async() -> None:
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(CreateSchema(_schema(), if_not_exists=True))
         await conn.run_sync(table.create, checkfirst=True)
+    # Best-effort schema evolution for PR4 triggers JSONB.
+    schema = _schema()
+    ddl = (
+        f'ALTER TABLE "{schema}"."{WORKFLOWS_TABLE}" '
+        "ADD COLUMN IF NOT EXISTS triggers JSONB NOT NULL DEFAULT '{}'::jsonb"
+    )
+    try:
+        async with get_async_control_plane_engine().begin() as conn:
+            await conn.execute(text(ddl))
+    except Exception:
+        pass
 
 
 async def insert_workflow(record: dict[str, Any]) -> dict[str, Any]:
@@ -144,3 +157,86 @@ def new_workflow_id() -> str:
 
 def now_ts() -> int:
     return int(time.time())
+
+
+WORKFLOW_VERSIONS_TABLE = "workflow_versions"
+
+
+def workflow_versions_table(metadata: MetaData | None = None) -> Table:
+    table = Table(
+        WORKFLOW_VERSIONS_TABLE,
+        metadata or _metadata(),
+        Column("id", String(36), primary_key=True),
+        Column("workflow_id", String(36), nullable=False, index=True),
+        Column("version", BigInteger, nullable=False),
+        Column("name", Text, nullable=False),
+        Column("description", Text, nullable=False, server_default=""),
+        Column("definition", JSONB, nullable=False),
+        Column("triggers", JSONB, nullable=False, server_default="{}"),
+        Column("created_at", BigInteger, nullable=False),
+        Column("created_by", String(255), nullable=False, server_default=""),
+    )
+    Index("idx_workflow_versions_wf", table.c.workflow_id, table.c.version)
+    return table
+
+
+async def ensure_workflow_versions_table_async() -> None:
+    table = workflow_versions_table()
+    async with get_async_control_plane_engine().begin() as conn:
+        await conn.execute(CreateSchema(_schema(), if_not_exists=True))
+        await conn.run_sync(table.create, checkfirst=True)
+
+
+async def insert_workflow_version(record: dict[str, Any]) -> dict[str, Any]:
+    await ensure_workflow_versions_table_async()
+    table = workflow_versions_table()
+    async with get_async_control_plane_engine().begin() as conn:
+        row = (
+            await conn.execute(insert(table).values(record).returning(table))
+        ).mappings().one()
+    return dict(row)
+
+
+async def list_workflow_versions(
+    workflow_id: str,
+    *,
+    page: int = 1,
+    limit: int = 20,
+) -> tuple[list[dict[str, Any]], int]:
+    await ensure_workflow_versions_table_async()
+    table = workflow_versions_table()
+    safe_page = max(1, int(page or 1))
+    safe_limit = max(1, min(int(limit or 20), 100))
+    count_stmt = (
+        select(func.count())
+        .select_from(table)
+        .where(table.c.workflow_id == workflow_id)
+    )
+    list_stmt = (
+        select(table)
+        .where(table.c.workflow_id == workflow_id)
+        .order_by(table.c.version.desc())
+        .limit(safe_limit)
+        .offset((safe_page - 1) * safe_limit)
+    )
+    async with get_async_control_plane_engine().begin() as conn:
+        total = int((await conn.execute(count_stmt)).scalar_one())
+        rows = (await conn.execute(list_stmt)).mappings().all()
+    return [dict(row) for row in rows], total
+
+
+async def get_workflow_version(
+    workflow_id: str, version: int
+) -> dict[str, Any] | None:
+    await ensure_workflow_versions_table_async()
+    table = workflow_versions_table()
+    async with get_async_control_plane_engine().begin() as conn:
+        row = (
+            await conn.execute(
+                select(table).where(
+                    table.c.workflow_id == workflow_id,
+                    table.c.version == version,
+                )
+            )
+        ).mappings().first()
+    return dict(row) if row else None

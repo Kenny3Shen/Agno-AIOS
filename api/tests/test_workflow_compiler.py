@@ -199,7 +199,7 @@ def test_validate_rejects_unknown_type():
                 "steps": [
                     {
                         "id": "r",
-                        "type": "router",
+                        "type": "unknown_widget",
                         "executor": {"ref": "security-operations"},
                     }
                 ]
@@ -251,3 +251,82 @@ def test_validate_rejects_confirmation_inside_parallel():
                 ]
             }
         )
+
+
+def test_validate_router():
+    normalized = validate_and_normalize_definition(
+        {
+            "name": "route",
+            "steps": [
+                {
+                    "id": "r1",
+                    "type": "router",
+                    "name": "Route",
+                    "selector": {"cel": 'input.contains("x") ? "path_a" : "path_b"'},
+                    "choices": [
+                        {
+                            "id": "c1",
+                            "name": "path_a",
+                            "steps": [
+                                {
+                                    "id": "a",
+                                    "type": "step",
+                                    "executor": {"ref": "security-operations"},
+                                }
+                            ],
+                        },
+                        {
+                            "id": "c2",
+                            "name": "path_b",
+                            "steps": [
+                                {
+                                    "id": "b",
+                                    "type": "step",
+                                    "executor": {"ref": "safe-fallback"},
+                                }
+                            ],
+                        },
+                    ],
+                }
+            ],
+        }
+    )
+    assert normalized["steps"][0]["type"] == "router"
+    assert len(normalized["steps"][0]["choices"]) == 2
+
+
+def test_validate_step_user_input_and_output_review():
+    normalized = validate_and_normalize_definition(
+        {
+            "steps": [
+                {
+                    "id": "u",
+                    "type": "step",
+                    "executor": {"ref": "security-operations"},
+                    "requires_user_input": True,
+                    "user_input_message": "Provide IOC",
+                    "requires_output_review": True,
+                    "output_review_message": "Review report",
+                }
+            ]
+        }
+    )
+    step = normalized["steps"][0]
+    assert step["requires_user_input"] is True
+    assert step["requires_output_review"] is True
+
+
+def test_validate_workflow_ref():
+    normalized = validate_and_normalize_definition(
+        {
+            "steps": [
+                {
+                    "id": "sub",
+                    "type": "workflow_ref",
+                    "name": "Child",
+                    "workflow_id": "wf-other",
+                }
+            ]
+        }
+    )
+    assert normalized["steps"][0]["workflow_id"] == "wf-other"

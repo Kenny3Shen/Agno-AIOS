@@ -73,14 +73,24 @@ async def _create_workflow_step_approval(
     event: Any,
     model_id: str | None,
 ) -> str | None:
-    """Persist a pending Approvals row for step confirmation pauses."""
+    """Persist a pending Approvals row for step HITL pauses."""
     step_name = str(
         event_value(event, "paused_step_name")
         or event_value(event, "step_name")
         or "step"
     )
     step_id = str(event_value(event, "step_id") or "") or None
-    message = str(event_value(event, "content") or "") or f"Confirm workflow step: {step_name}"
+    pause_kind = str(event_value(event, "pause_kind") or "confirmation").lower()
+    if "user_input" in pause_kind or "input" in pause_kind:
+        pause_type = "user_input"
+        approval_type = "user_input"
+    elif "output" in pause_kind or "review" in pause_kind:
+        pause_type = "output_review"
+        approval_type = "output_review"
+    else:
+        pause_type = "confirmation"
+        approval_type = "confirmation"
+    message = str(event_value(event, "content") or "") or f"Workflow step HITL: {step_name}"
     approval_id = str(uuid4())
     now = int(__import__("time").time())
     payload = {
@@ -89,13 +99,14 @@ async def _create_workflow_step_approval(
         "session_id": session_id,
         "status": "pending",
         "source_type": "workflow",
-        "approval_type": "confirmation",
-        "pause_type": "confirmation",
+        "approval_type": approval_type,
+        "pause_type": pause_type,
         "tool_name": f"workflow.step:{step_name}",
         "tool_args": {
             "step_id": step_id,
             "step_name": step_name,
-            "confirmation_message": message,
+            "message": message,
+            "pause_type": pause_type,
         },
         "workflow_id": workflow_id,
         "user_id": user_id,
@@ -103,6 +114,7 @@ async def _create_workflow_step_approval(
         "context": {
             "model_id": model_id,
             "pause_kind": event_value(event, "pause_kind"),
+            "pause_type": pause_type,
         },
         "requirements": event_value(event, "step_requirements"),
         "run_status": "PAUSED",
@@ -168,22 +180,47 @@ async def resume_workflow_run(approval_id: str) -> str:
         raise ValueError(f"Paused run {run_id} not found in session {session_id}")
 
     requirements = list(getattr(run_response, "step_requirements", None) or [])
+    resolution_raw = approval.get("resolution_data")
+    resolution: dict[str, Any] = (
+        {str(k): v for k, v in resolution_raw.items()}
+        if isinstance(resolution_raw, dict)
+        else {}
+    )
+    pause_type = str(
+        (approval.get("context") or {}).get("pause_type")
+        if isinstance(approval.get("context"), dict)
+        else approval.get("pause_type")
+        or "confirmation"
+    )
     if requirements:
         active = requirements[-1]
-        if status == "approved":
-            if hasattr(active, "confirm"):
-                active.confirm()
-            else:
-                active.confirmed = True
-        else:
-            note = None
-            resolution = approval.get("resolution_data")
-            if isinstance(resolution, dict):
-                note = resolution.get("note") or resolution.get("rejection_reason")
+        if status == "rejected":
+            note = resolution.get("note") or resolution.get("rejection_reason")
             if hasattr(active, "reject"):
                 active.reject(str(note) if note else None)
             else:
                 active.confirmed = False
+        elif pause_type == "user_input":
+            user_input = resolution.get("user_input")
+            if isinstance(user_input, dict) and hasattr(active, "set_user_input"):
+                active.set_user_input(user_input)
+            elif hasattr(active, "confirm"):
+                active.confirm()
+            else:
+                active.confirmed = True
+        elif pause_type == "output_review":
+            edited = resolution.get("edited_output")
+            if edited is not None and hasattr(active, "edit"):
+                active.edit(edited)
+            elif hasattr(active, "confirm"):
+                active.confirm()
+            else:
+                active.confirmed = True
+        else:
+            if hasattr(active, "confirm"):
+                active.confirm()
+            else:
+                active.confirmed = True
 
     try:
         await db.update_approval(approval_id, run_status="RUNNING")
@@ -375,6 +412,47 @@ async def stream_workflow_run(
                         "should_continue": event_value(event, "should_continue"),
                     },
                 )
+            
+            elif event_name == WorkflowRunEvent.router_execution_started.value:
+                yield WorkflowRunEventOut(
+                    "router.started",
+                    {
+                        **base,
+                        "selected": event_value(event, "selected_steps")
+                        or event_value(event, "selected"),
+                    },
+                )
+            elif event_name == WorkflowRunEvent.router_execution_completed.value:
+                yield WorkflowRunEventOut(
+                    "router.completed",
+                    {
+                        **base,
+                        "selected": event_value(event, "selected_steps")
+                        or event_value(event, "selected"),
+                    },
+                )
+            elif event_name == WorkflowRunEvent.router_paused.value:
+                approval_id = await _create_workflow_step_approval(
+                    workflow_id=workflow_id,
+                    run_id=run_id_value,
+                    session_id=session_value,
+                    user_id=user_id,
+                    event=event,
+                    model_id=model_id,
+                )
+                yield WorkflowRunEventOut(
+                    "workflow.paused",
+                    {
+                        "workflow_id": workflow_id,
+                        "run_id": run_id_value,
+                        "session_id": session_value,
+                        "step_name": str(event_value(event, "step_name", "") or "") or None,
+                        "approval_id": approval_id,
+                        "message": "Router paused for HITL selection — resolve in Approvals",
+                    },
+                )
+                return
+
             elif event_name == WorkflowRunEvent.workflow_completed.value:
                 yield WorkflowRunEventOut(
                     "workflow.completed",

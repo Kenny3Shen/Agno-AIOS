@@ -454,7 +454,7 @@ Vitest 默认关闭 CSS 解析、限制 `maxWorkers=4`、使用 instant `user-ev
 ```
 
 - `executor.ref` 必须来自内置目录：`security-operations`、`safe-fallback`（`GET /api/workflows/executors`）。
-- PR2 支持嵌套 `step` / `parallel` / `condition` / `loop`；`router` 仍 422。
+- PR4 支持嵌套 `step` / `parallel` / `condition` / `loop` / `router` / `workflow_ref`。
 - 约束：最大深度 5、总节点 ≤40、叶子 Agent 步 ≤20；Parallel 至少 2 分支；Condition/Loop 使用 CEL（`cel-python`）。
 - 编译期拒绝 HITL 字段与 Parallel 内 executor HITL（与 Agno 一致）。
 
@@ -478,6 +478,7 @@ Vitest 默认关闭 CSS 解析、限制 `maxWorkers=4`、使用 instant `user-ev
 | `condition.started` / `condition.completed` | 条件块（含 `condition_result` / `branch`） |
 | `loop.started` / `loop.completed` | 循环块（含 `max_iterations` / `total_iterations`） |
 | `loop.iteration.started` / `loop.iteration.completed` | 循环迭代（含 `iteration` / `should_continue`） |
+| `router.started` / `router.completed` | Router 选择分支 |
 | `workflow.completed` / `workflow.failed` / `workflow.cancelled` | 终态 |
 | `workflow.paused` | Step 确认暂停；携带 `approval_id`，在 Approvals 批准/拒绝后 `acontinue_run` |
 
@@ -499,7 +500,7 @@ frontend/src/features/workflow/*      # 库/编辑/保存/运行日志
 | **PR1** ✅ | 线性 Step + Save/Run SSE | 本版 |
 | **PR2** ✅ | `Parallel` / `Condition(CEL)` / `Loop` | 表单级嵌套控制流；CEL 依赖 `cel-python`；编译期禁止 Parallel 内 HITL |
 | **PR3** ✅ | 画布 + Step HITL | React Flow 只读布局选中；Step `requires_confirmation` → Approvals；`workflows:read/write` |
-| **PR4** | Router / 嵌套 Workflow / 版本 / 触发器 | 产品化与定时/Webhook |
+| **PR4** ✅ | Router / 嵌套 Workflow / 版本 / 触发器 + 画布编辑 + 完整 Step HITL | 见下 |
 
 **PR2 嵌套 DSL 示例**
 

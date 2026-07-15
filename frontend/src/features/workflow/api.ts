@@ -82,6 +82,49 @@ const normalizeNode = (value: unknown): WorkflowDefinitionNode | null => {
             return node ? [node] : []
           })
         : [],
+      position: asRecord(item.position)
+        ? { x: Number(asRecord(item.position)?.x ?? 0), y: Number(asRecord(item.position)?.y ?? 0) }
+        : undefined,
+    }
+  }
+  if (type === 'router') {
+    const selector = asRecord(item.selector) ?? {}
+    const choices = Array.isArray(item.choices) ? item.choices : []
+    return {
+      id,
+      type: 'router',
+      name,
+      selector: { cel: selector.cel != null ? String(selector.cel) : undefined },
+      choices: choices.flatMap((raw) => {
+        const choice = asRecord(raw)
+        if (!choice) return []
+        return [
+          {
+            id: String(choice.id ?? crypto.randomUUID()),
+            name: String(choice.name ?? choice.id ?? 'choice'),
+            steps: Array.isArray(choice.steps)
+              ? choice.steps.flatMap((child) => {
+                  const node = normalizeNode(child)
+                  return node ? [node] : []
+                })
+              : [],
+          },
+        ]
+      }),
+      position: asRecord(item.position)
+        ? { x: Number(asRecord(item.position)?.x ?? 0), y: Number(asRecord(item.position)?.y ?? 0) }
+        : undefined,
+    }
+  }
+  if (type === 'workflow_ref') {
+    return {
+      id,
+      type: 'workflow_ref',
+      name,
+      workflow_id: String(item.workflow_id ?? item.workflowId ?? ''),
+      position: asRecord(item.position)
+        ? { x: Number(asRecord(item.position)?.x ?? 0), y: Number(asRecord(item.position)?.y ?? 0) }
+        : undefined,
     }
   }
 
@@ -97,6 +140,13 @@ const normalizeNode = (value: unknown): WorkflowDefinitionNode | null => {
     instructions: String(item.instructions ?? ''),
     requires_confirmation: Boolean(item.requires_confirmation),
     confirmation_message: item.confirmation_message != null ? String(item.confirmation_message) : undefined,
+    requires_user_input: Boolean(item.requires_user_input),
+    user_input_message: item.user_input_message != null ? String(item.user_input_message) : undefined,
+    requires_output_review: Boolean(item.requires_output_review),
+    output_review_message: item.output_review_message != null ? String(item.output_review_message) : undefined,
+    position: asRecord(item.position)
+      ? { x: Number(asRecord(item.position)?.x ?? 0), y: Number(asRecord(item.position)?.y ?? 0) }
+      : undefined,
   }
 }
 
@@ -121,6 +171,21 @@ const normalizeWorkflow = (value: unknown): WorkflowRecord | null => {
           })
         : [],
     },
+    triggers: (() => {
+      const triggers = asRecord(row.triggers) ?? {}
+      const webhook = asRecord(triggers.webhook) ?? {}
+      const cron = asRecord(triggers.cron) ?? {}
+      return {
+        webhook: {
+          enabled: Boolean(webhook.enabled),
+          secret: String(webhook.secret ?? ''),
+        },
+        cron: {
+          enabled: Boolean(cron.enabled),
+          expression: String(cron.expression ?? ''),
+        },
+      }
+    })(),
     enabled: row.enabled !== false,
     version: Number(row.version ?? 1),
     created_at: Number(row.created_at ?? 0),
@@ -147,6 +212,7 @@ export const createWorkflow = async (body: {
   name: string
   description: string
   definition: WorkflowRecord['definition']
+  triggers?: WorkflowRecord['triggers']
 }) => {
   const row = normalizeWorkflow(await requestJson<unknown>('/workflows', jsonInit('POST', body)))
   if (!row) throw new Error('Invalid workflow payload')
@@ -160,6 +226,7 @@ export const updateWorkflow = async (
     description?: string
     definition?: WorkflowRecord['definition']
     enabled?: boolean
+    triggers?: WorkflowRecord['triggers']
   }
 ) => {
   const row = normalizeWorkflow(
@@ -237,4 +304,41 @@ export const streamWorkflowRun = async (
       type === 'workflow.completed' || type === 'workflow.failed' || type === 'workflow.cancelled'
   })
   if (!terminal) throw new Error('Workflow stream ended before a terminal event')
+}
+
+
+export const listWorkflowVersions = async (workflowId: string, page = 1, limit = 20) => {
+  const payload = asRecord(
+    await requestJson<unknown>(
+      `/workflows/${encodeURIComponent(workflowId)}/versions?page=${page}&limit=${limit}`
+    )
+  )
+  const data = Array.isArray(payload?.data) ? payload.data : []
+  return data.flatMap((item) => {
+    const row = asRecord(item)
+    if (!row) return []
+    return [
+      {
+        id: String(row.id ?? ''),
+        workflow_id: String(row.workflow_id ?? workflowId),
+        version: Number(row.version ?? 0),
+        name: String(row.name ?? ''),
+        description: String(row.description ?? ''),
+        definition: (asRecord(row.definition) as never) ?? { name: '', description: '', steps: [] },
+        created_at: Number(row.created_at ?? 0),
+        created_by: String(row.created_by ?? ''),
+      },
+    ]
+  })
+}
+
+export const restoreWorkflowVersion = async (workflowId: string, version: number) => {
+  const row = normalizeWorkflow(
+    await requestJson<unknown>(
+      `/workflows/${encodeURIComponent(workflowId)}/versions/${version}/restore`,
+      jsonInit('POST', {})
+    )
+  )
+  if (!row) throw new Error('Invalid workflow payload')
+  return row
 }

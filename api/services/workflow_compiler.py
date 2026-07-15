@@ -1,15 +1,15 @@
 """Compile workbench workflow definitions into Agno Workflow instances.
 
-PR2: nested step | parallel | condition | loop (CEL evaluators).
-PR1 linear step lists remain valid.
+PR4: step | parallel | condition | loop | router | workflow_ref
++ step HITL (confirmation / user_input / output_review).
 """
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, Awaitable, Callable, cast
 
 from agno.agent import Agent
-from agno.workflow import Condition, Loop, Parallel, Step, Workflow
+from agno.workflow import Condition, Loop, Parallel, Router, Step, Steps, Workflow
 from agno.workflow.cel import CEL_AVAILABLE, validate_cel_expression
 from agno.workflow.workflow import WorkflowSteps
 
@@ -33,7 +33,7 @@ BUILTIN_AGENT_REFS: dict[str, dict[str, str]] = {
     },
 }
 
-SUPPORTED_NODE_TYPES = frozenset({"step", "parallel", "condition", "loop"})
+SUPPORTED_NODE_TYPES = frozenset({"step", "parallel", "condition", "loop", "router", "workflow_ref"})
 MAX_DEPTH = 5
 MAX_TOTAL_NODES = 40
 MAX_LEAF_STEPS = 20
@@ -120,18 +120,16 @@ def _assert_valid_cel(expression: str, path: str) -> None:
 
 
 def _reject_advanced_hitl_flags(item: dict[str, Any], path: str) -> None:
-    """PR3 supports step requires_confirmation only; other HITL modes stay closed."""
-    hitl_keys = (
-        "requires_user_input",
-        "requires_output_review",
-        "requires_iteration_review",
-        "human_review",
-    )
-    for key in hitl_keys:
-        if item.get(key):
-            raise WorkflowDefinitionError(
-                f"{path}.{key} is not supported yet (only step requires_confirmation in PR3)"
-            )
+    """PR4: step HITL fields are handled on steps; block opaque human_review blobs."""
+    if item.get("human_review"):
+        raise WorkflowDefinitionError(
+            f"{path}.human_review blob is not supported; use requires_confirmation / "
+            "requires_user_input / requires_output_review on steps"
+        )
+    if item.get("requires_iteration_review"):
+        raise WorkflowDefinitionError(
+            f"{path}.requires_iteration_review is not supported on this node type"
+        )
 
 
 def _normalize_node(
@@ -170,10 +168,15 @@ def _normalize_node(
     seen_ids.add(node_id)
     _reject_advanced_hitl_flags(item_obj, path)
     display_name = str(item_obj.get("name") or node_id).strip() or node_id
-    if node_type != "step" and item_obj.get("requires_confirmation"):
-        raise WorkflowDefinitionError(
-            f"{path}: requires_confirmation is only supported on type=step in PR3"
-        )
+    for hitl_key in (
+        "requires_confirmation",
+        "requires_user_input",
+        "requires_output_review",
+    ):
+        if node_type != "step" and item_obj.get(hitl_key):
+            raise WorkflowDefinitionError(
+                f"{path}: {hitl_key} is only supported on type=step"
+            )
 
     if node_type == "step":
         return _normalize_step(
@@ -204,14 +207,33 @@ def _normalize_node(
             counters=counters,
             inside_parallel=inside_parallel,
         )
-    return _normalize_loop(
+    if node_type == "loop":
+        return _normalize_loop(
+            item_obj,
+            path=path,
+            node_id=node_id,
+            display_name=display_name,
+            depth=depth,
+            seen_ids=seen_ids,
+            counters=counters,
+            inside_parallel=inside_parallel,
+        )
+    if node_type == "router":
+        return _normalize_router(
+            item_obj,
+            path=path,
+            node_id=node_id,
+            display_name=display_name,
+            depth=depth,
+            seen_ids=seen_ids,
+            counters=counters,
+            inside_parallel=inside_parallel,
+        )
+    return _normalize_workflow_ref(
         item_obj,
         path=path,
         node_id=node_id,
         display_name=display_name,
-        depth=depth,
-        seen_ids=seen_ids,
-        counters=counters,
         inside_parallel=inside_parallel,
     )
 
@@ -248,11 +270,16 @@ def _normalize_step(
             f"allowed: {', '.join(sorted(BUILTIN_AGENT_REFS))}"
         )
     requires_confirmation = bool(item.get("requires_confirmation"))
+    requires_user_input = bool(item.get("requires_user_input"))
+    requires_output_review = bool(item.get("requires_output_review"))
     confirmation_message = str(item.get("confirmation_message") or "").strip()
+    user_input_message = str(item.get("user_input_message") or "").strip()
+    output_review_message = str(item.get("output_review_message") or "").strip()
+    hitl_any = requires_confirmation or requires_user_input or requires_output_review
     # Agno Parallel cannot pause for executor HITL.
-    if inside_parallel and requires_confirmation:
+    if inside_parallel and hitl_any:
         raise WorkflowDefinitionError(
-            f"{path}: requires_confirmation is forbidden inside Parallel (Agno constraint)"
+            f"{path}: step HITL is forbidden inside Parallel (Agno constraint)"
         )
     instructions = str(item.get("instructions") or "").strip()
     payload: dict[str, Any] = {
@@ -262,9 +289,26 @@ def _normalize_step(
         "executor": {"kind": "agent", "ref": ref},
         "instructions": instructions,
         "requires_confirmation": requires_confirmation,
+        "requires_user_input": requires_user_input,
+        "requires_output_review": requires_output_review,
     }
     if confirmation_message:
         payload["confirmation_message"] = confirmation_message
+    if user_input_message:
+        payload["user_input_message"] = user_input_message
+    if output_review_message:
+        payload["output_review_message"] = output_review_message
+    # optional free-form schema for user_input
+    schema = item.get("user_input_schema")
+    if isinstance(schema, list) and schema:
+        payload["user_input_schema"] = schema
+    # optional layout for canvas
+    position = item.get("position")
+    if isinstance(position, dict):
+        payload["position"] = {
+            "x": float(position.get("x") or 0),
+            "y": float(position.get("y") or 0),
+        }
     return payload
 
 
@@ -306,6 +350,17 @@ def _normalize_children(
     return children
 
 
+
+def _with_position(item: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    position = item.get("position")
+    if isinstance(position, dict):
+        payload["position"] = {
+            "x": float(position.get("x") or 0),
+            "y": float(position.get("y") or 0),
+        }
+    return payload
+
+
 def _normalize_parallel(
     item: dict[str, Any],
     *,
@@ -326,12 +381,15 @@ def _normalize_parallel(
     )
     if len(children) < 2:
         raise WorkflowDefinitionError(f"{path}.steps must contain at least 2 branches")
-    return {
-        "id": node_id,
-        "type": "parallel",
-        "name": display_name,
-        "steps": children,
-    }
+    return _with_position(
+        item,
+        {
+            "id": node_id,
+            "type": "parallel",
+            "name": display_name,
+            "steps": children,
+        },
+    )
 
 
 def _normalize_condition(
@@ -385,7 +443,7 @@ def _normalize_condition(
         "then": then_steps,
         "else": else_steps,
     }
-    return normalized
+    return _with_position(item, normalized)
 
 
 def _normalize_loop(
@@ -435,7 +493,7 @@ def _normalize_loop(
     else:
         # bool end_condition is unusual; treat as constant CEL via bool evaluator only for compile
         normalized["end_condition"] = {"value": bool(end_condition)}
-    return normalized
+    return _with_position(item, normalized)
 
 
 def validate_and_normalize_definition(raw: object) -> dict[str, Any]:
@@ -473,11 +531,118 @@ def validate_and_normalize_definition(raw: object) -> dict[str, Any]:
     return {"name": name, "description": description, "steps": steps}
 
 
+
+def _normalize_router(
+    item: dict[str, Any],
+    *,
+    path: str,
+    node_id: str,
+    display_name: str,
+    depth: int,
+    seen_ids: set[str],
+    counters: dict[str, int],
+    inside_parallel: bool,
+) -> dict[str, Any]:
+    selector = _parse_cel_field(
+        item.get("selector"),
+        path=_path(path, "selector"),
+        required=True,
+    )
+    if not isinstance(selector, str):
+        raise WorkflowDefinitionError(f"{path}.selector must be a CEL expression string")
+    raw_choices = item.get("choices")
+    if not isinstance(raw_choices, list) or len(raw_choices) < 2:
+        raise WorkflowDefinitionError(f"{path}.choices must contain at least 2 branches")
+    if len(raw_choices) > MAX_BRANCH_CHILDREN:
+        raise WorkflowDefinitionError(
+            f"{path}.choices supports at most {MAX_BRANCH_CHILDREN} branches"
+        )
+    choices: list[dict[str, Any]] = []
+    choice_names: set[str] = set()
+    for index, raw in enumerate(raw_choices):
+        if not isinstance(raw, dict):
+            raise WorkflowDefinitionError(f"{path}.choices[{index}] must be an object")
+        choice_id = _require_non_empty_id(
+            raw.get("id"), f"{path}.choices[{index}]", f"choice-{index + 1}"
+        )
+        if choice_id in seen_ids:
+            raise WorkflowDefinitionError(f"duplicate node id: {choice_id}")
+        seen_ids.add(choice_id)
+        choice_name = str(raw.get("name") or choice_id).strip() or choice_id
+        if choice_name in choice_names:
+            raise WorkflowDefinitionError(f"{path}: duplicate choice name {choice_name!r}")
+        choice_names.add(choice_name)
+        raw_steps = raw.get("steps")
+        if not isinstance(raw_steps, list) or not raw_steps:
+            raise WorkflowDefinitionError(
+                f"{path}.choices[{index}].steps must be a non-empty array"
+            )
+        children = _normalize_children(
+            raw_steps,
+            path=f"{path}.choices[{index}].steps",
+            depth=depth,
+            seen_ids=seen_ids,
+            counters=counters,
+            inside_parallel=inside_parallel,
+        )
+        choices.append(
+            {
+                "id": choice_id,
+                "name": choice_name,
+                "steps": children,
+            }
+        )
+    return _with_position(
+        item,
+        {
+            "id": node_id,
+            "type": "router",
+            "name": display_name,
+            "selector": {"cel": selector},
+            "choices": choices,
+        },
+    )
+
+
+def _normalize_workflow_ref(
+    item: dict[str, Any],
+    *,
+    path: str,
+    node_id: str,
+    display_name: str,
+    inside_parallel: bool,
+) -> dict[str, Any]:
+    if inside_parallel:
+        raise WorkflowDefinitionError(
+            f"{path}: nested workflow_ref is forbidden inside Parallel"
+        )
+    ref = str(
+        item.get("workflow_id")
+        or item.get("workflowId")
+        or item.get("ref")
+        or ""
+    ).strip()
+    if not ref:
+        raise WorkflowDefinitionError(f"{path}.workflow_id is required")
+    return _with_position(
+        item,
+        {
+            "id": node_id,
+            "type": "workflow_ref",
+            "name": display_name,
+            "workflow_id": ref,
+        },
+    )
+
+
 def _count_leaf_steps(nodes: list[dict[str, Any]]) -> int:
     total = 0
     for node in nodes:
         node_type = node.get("type")
         if node_type == "step":
+            total += 1
+        elif node_type == "workflow_ref":
+            # nested workflow counts as one leaf unit for budget
             total += 1
         elif node_type == "parallel":
             total += _count_leaf_steps(list(node.get("steps") or []))
@@ -486,6 +651,10 @@ def _count_leaf_steps(nodes: list[dict[str, Any]]) -> int:
             total += _count_leaf_steps(list(node.get("else") or []))
         elif node_type == "loop":
             total += _count_leaf_steps(list(node.get("steps") or []))
+        elif node_type == "router":
+            for choice in list(node.get("choices") or []):
+                if isinstance(choice, dict):
+                    total += _count_leaf_steps(list(choice.get("steps") or []))
     return total
 
 
@@ -523,6 +692,8 @@ async def _compile_node(
     node: dict[str, Any],
     *,
     model_id: str | None,
+    resolve_nested: "Callable[[str], Awaitable[dict[str, Any]]] | None" = None,
+    nesting_stack: set[str] | None = None,
 ) -> Any:
     node_type = str(node.get("type") or "step")
     name = str(node.get("name") or node.get("id") or node_type)
@@ -545,11 +716,22 @@ async def _compile_node(
             confirmation_message=(
                 str(node.get("confirmation_message") or "").strip() or None
             ),
+            requires_user_input=bool(node.get("requires_user_input")),
+            user_input_message=(
+                str(node.get("user_input_message") or "").strip() or None
+            ),
+            user_input_schema=node.get("user_input_schema")
+            if isinstance(node.get("user_input_schema"), list)
+            else None,
+            requires_output_review=bool(node.get("requires_output_review")),
+            output_review_message=(
+                str(node.get("output_review_message") or "").strip() or None
+            ),
         )
 
     if node_type == "parallel":
         children = [
-            await _compile_node(child, model_id=model_id)
+            await _compile_node(child, model_id=model_id, resolve_nested=resolve_nested, nesting_stack=nesting_stack)
             for child in list(node.get("steps") or [])
         ]
         return Parallel(*children, name=name)
@@ -565,11 +747,11 @@ async def _compile_node(
         else:
             raise WorkflowDefinitionError(f"condition {name!r} missing evaluator")
         then_steps = [
-            await _compile_node(child, model_id=model_id)
+            await _compile_node(child, model_id=model_id, resolve_nested=resolve_nested, nesting_stack=nesting_stack)
             for child in list(node.get("then") or [])
         ]
         else_steps = [
-            await _compile_node(child, model_id=model_id)
+            await _compile_node(child, model_id=model_id, resolve_nested=resolve_nested, nesting_stack=nesting_stack)
             for child in list(node.get("else") or [])
         ]
         return Condition(
@@ -596,7 +778,7 @@ async def _compile_node(
         elif isinstance(end_raw, str) and end_raw.strip():
             end_condition = end_raw.strip()
         children = [
-            await _compile_node(child, model_id=model_id)
+            await _compile_node(child, model_id=model_id, resolve_nested=resolve_nested, nesting_stack=nesting_stack)
             for child in list(node.get("steps") or [])
         ]
         return Loop(
@@ -606,6 +788,64 @@ async def _compile_node(
             end_condition=end_condition,
         )
 
+    if node_type == "router":
+        selector_raw = node.get("selector")
+        if isinstance(selector_raw, dict) and selector_raw.get("cel"):
+            selector: Any = str(selector_raw["cel"])
+        elif isinstance(selector_raw, str):
+            selector = selector_raw
+        else:
+            raise WorkflowDefinitionError(f"router {name!r} missing CEL selector")
+        choices: list[Any] = []
+        for choice in list(node.get("choices") or []):
+            if not isinstance(choice, dict):
+                continue
+            choice_name = str(choice.get("name") or choice.get("id") or "choice")
+            choice_children = [
+                await _compile_node(
+                    child,
+                    model_id=model_id,
+                    resolve_nested=resolve_nested,
+                    nesting_stack=nesting_stack,
+                )
+                for child in list(choice.get("steps") or [])
+            ]
+            if len(choice_children) == 1:
+                # Ensure choice has stable name for CEL selector match
+                only = choice_children[0]
+                if hasattr(only, "name"):
+                    only.name = choice_name
+                choices.append(only)
+            else:
+                choices.append(Steps(name=choice_name, steps=choice_children))
+        return Router(name=name, choices=choices, selector=selector)
+
+    if node_type == "workflow_ref":
+        ref = str(node.get("workflow_id") or "").strip()
+        if not ref:
+            raise WorkflowDefinitionError(f"workflow_ref {name!r} missing workflow_id")
+        if resolve_nested is None:
+            raise WorkflowDefinitionError(
+                f"workflow_ref {ref!r} cannot be resolved (no loader)"
+            )
+        stack = nesting_stack or set()
+        if ref in stack:
+            raise WorkflowDefinitionError(
+                f"circular workflow_ref detected involving {ref!r}"
+            )
+        nested_def = await resolve_nested(ref)
+        nested_stack = set(stack)
+        nested_stack.add(ref)
+        nested_wf = await compile_workflow(
+            nested_def,
+            workflow_id=ref,
+            model_id=model_id,
+            resolve_nested=resolve_nested,
+            nesting_stack=nested_stack,
+        )
+        nested_wf.name = name or nested_wf.name
+        return nested_wf
+
     raise WorkflowDefinitionError(f"unsupported node type at compile: {node_type!r}")
 
 
@@ -614,11 +854,35 @@ async def compile_workflow(
     *,
     workflow_id: str | None = None,
     model_id: str | None = None,
+    resolve_nested: Callable[[str], Awaitable[dict[str, Any]]] | None = None,
+    nesting_stack: set[str] | None = None,
 ) -> Workflow:
     """Build an Agno Workflow from a validated nested definition."""
     normalized = validate_and_normalize_definition(definition)
+    stack = set(nesting_stack or ())
+    if workflow_id:
+        stack.add(workflow_id)
+
+    async def _default_resolve(ref: str) -> dict[str, Any]:
+        from api.persistence import workflows as workflow_store
+
+        row = await workflow_store.get_workflow(ref)
+        if row is None:
+            raise WorkflowDefinitionError(f"nested workflow not found: {ref}")
+        definition_raw = row.get("definition")
+        if not isinstance(definition_raw, dict):
+            raise WorkflowDefinitionError(f"nested workflow {ref} has invalid definition")
+        return definition_raw
+
+    loader = resolve_nested or _default_resolve
     compiled_steps = [
-        await _compile_node(node, model_id=model_id) for node in normalized["steps"]
+        await _compile_node(
+            node,
+            model_id=model_id,
+            resolve_nested=loader,
+            nesting_stack=stack,
+        )
+        for node in normalized["steps"]
     ]
     return Workflow(
         id=workflow_id,
