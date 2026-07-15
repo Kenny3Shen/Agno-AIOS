@@ -490,7 +490,7 @@ api/services/workflow_compiler.py     # DSL 校验 + Agno Step/Parallel/Conditio
 api/services/workflow_service.py      # CRUD / 权限投影
 api/services/workflow_run_runtime.py  # arun 流 → SSE
 api/routes/workflows.py               # HTTP + EventSourceResponse
-frontend/src/features/workflow/*      # 库/编辑/保存/运行日志
+frontend/src/features/workflow/*      # 画布优先 Studio（拖拽节点 / Inspector / SSE）
 ```
 
 ### 路线图（PR2+）

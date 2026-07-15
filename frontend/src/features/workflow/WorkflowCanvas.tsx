@@ -1,83 +1,103 @@
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback, useRef, type DragEvent } from 'react'
 import {
   ReactFlow,
   Background,
   Controls,
   MiniMap,
+  ReactFlowProvider,
+  useReactFlow,
   type Node,
   type Edge,
   type NodeMouseHandler,
   type OnNodeDrag,
   type OnConnect,
   MarkerType,
-  Position,
   ConnectionMode,
+  BackgroundVariant,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import type { WorkflowNode, WorkflowNodeType } from './types'
-import { layoutCanvas } from './utils'
+import { findNode, layoutCanvas } from './utils'
+import { WorkflowFlowNode } from './WorkflowFlowNode'
 
-const typeColor: Record<WorkflowNodeType, string> = {
-  step: '#1677ff',
-  parallel: '#722ed1',
-  condition: '#faad14',
-  loop: '#13c2c2',
-  router: '#eb2f96',
-  workflow_ref: '#52c41a',
-}
+const nodeTypes = { workflow: WorkflowFlowNode }
+
+const PALETTE_MIME = 'application/x-workflow-node'
 
 type Props = {
   steps: WorkflowNode[]
   selectedId: string | null
-  onSelect: (id: string) => void
+  onSelect: (id: string | null) => void
   onPositionsChange: (positions: Record<string, { x: number; y: number }>) => void
   onConnectSequence: (sourceId: string, targetId: string) => void
+  onDropNode: (type: WorkflowNodeType, position: { x: number; y: number }) => void
+  emptyHint?: string
 }
 
-export function WorkflowCanvas({
+function CanvasInner({
   steps,
   selectedId,
   onSelect,
   onPositionsChange,
   onConnectSequence,
+  onDropNode,
+  emptyHint,
 }: Props) {
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const { screenToFlowPosition, fitView } = useReactFlow()
+
   const { nodes, edges } = useMemo(() => {
     const layout = layoutCanvas(steps)
-    const flowNodes: Node[] = layout.nodes.map((item) => ({
-      id: item.id,
-      position: { x: item.x, y: item.y },
-      data: { label: `${item.type}: ${item.label}` },
-      sourcePosition: Position.Bottom,
-      targetPosition: Position.Top,
-      style: {
-        border: `2px solid ${typeColor[item.type]}`,
-        borderRadius: 8,
-        padding: 8,
-        fontSize: 12,
-        background: item.id === selectedId ? 'rgba(22,119,255,0.08)' : '#fff',
-        minWidth: 140,
-        boxShadow: item.id === selectedId ? '0 0 0 2px rgba(22,119,255,0.25)' : undefined,
-        cursor: 'grab',
-      },
-    }))
+    const flowNodes: Node[] = layout.nodes.map((item) => {
+      const source = findNode(steps, item.id)
+      const hitl = Boolean(
+        source?.requiresConfirmation ||
+          source?.requiresUserInput ||
+          source?.requiresOutputReview
+      )
+      let subtitle: string = item.type
+      if (source?.type === 'step') subtitle = source.targetId || 'agent'
+      else if (source?.type === 'condition') subtitle = source.evaluatorCel || 'CEL'
+      else if (source?.type === 'router') subtitle = source.selectorCel || 'selector'
+      else if (source?.type === 'workflow_ref') subtitle = source.workflowId || 'nested'
+      else if (source?.type === 'loop') subtitle = `max ${source.maxIterations ?? 3}`
+      else if (source?.type === 'parallel') subtitle = `${source.steps?.length ?? 0} branches`
+      return {
+        id: item.id,
+        type: 'workflow',
+        position: { x: item.x, y: item.y },
+        data: {
+          label: item.label,
+          nodeType: item.type,
+          subtitle,
+          hitl,
+        },
+        selected: item.id === selectedId,
+      }
+    })
     const flowEdges: Edge[] = layout.edges.map((edge) => ({
       id: edge.id,
       source: edge.source,
       target: edge.target,
       label: edge.label,
-      markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
-      style: { stroke: '#94a3b8' },
-      labelStyle: { fontSize: 10, fill: '#64748b' },
+      type: 'smoothstep',
+      animated: edge.label === 'next',
+      markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18, color: '#94a3b8' },
+      style: { stroke: '#94a3b8', strokeWidth: 1.5 },
+      labelStyle: { fontSize: 10, fill: '#64748b', fontWeight: 500 },
+      labelBgStyle: { fill: 'var(--ant-color-bg-container, #fff)', fillOpacity: 0.9 },
+      labelBgPadding: [4, 2] as [number, number],
+      labelBgBorderRadius: 4,
     }))
     return { nodes: flowNodes, edges: flowEdges }
   }, [steps, selectedId])
 
   const onNodeClick: NodeMouseHandler = useCallback(
-    (_event, node) => {
-      onSelect(node.id)
-    },
+    (_event, node) => onSelect(node.id),
     [onSelect]
   )
+
+  const onPaneClick = useCallback(() => onSelect(null), [onSelect])
 
   const onNodeDragStop: OnNodeDrag = useCallback(
     (_event, _node, allNodes) => {
@@ -99,33 +119,83 @@ export function WorkflowCanvas({
     [onConnectSequence]
   )
 
-  if (!steps.length) {
-    return (
-      <div className="workflow-canvas empty">
-        <span>Add nodes to visualize and edit the graph</span>
-      </div>
-    )
-  }
+  const onDragOver = useCallback((event: DragEvent) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+  }, [])
+
+  const onDrop = useCallback(
+    (event: DragEvent) => {
+      event.preventDefault()
+      const type = event.dataTransfer.getData(PALETTE_MIME) as WorkflowNodeType
+      if (!type) return
+      const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
+      onDropNode(type, position)
+      // slight delay so new node is mounted
+      requestAnimationFrame(() => fitView({ padding: 0.2, duration: 200 }))
+    },
+    [screenToFlowPosition, onDropNode, fitView]
+  )
 
   return (
-    <div className="workflow-canvas">
+    <div
+      ref={wrapperRef}
+      className={`workflow-canvas workflow-canvas--main ${steps.length ? '' : 'is-empty'}`}
+      onDrop={onDrop}
+      onDragOver={onDragOver}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        nodeTypes={nodeTypes}
         onNodeClick={onNodeClick}
+        onPaneClick={onPaneClick}
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
         nodesDraggable
         nodesConnectable
         elementsSelectable
-        connectionMode={ConnectionMode.Loose}
+        panOnScroll
+                connectionMode={ConnectionMode.Loose}
         fitView
+        fitViewOptions={{ padding: 0.2 }}
+        minZoom={0.25}
+        maxZoom={1.75}
+        defaultEdgeOptions={{ type: 'smoothstep' }}
         proOptions={{ hideAttribution: true }}
+        deleteKeyCode={null}
       >
-        <Background gap={16} size={1} />
-        <MiniMap pannable zoomable />
-        <Controls />
+        <Background variant={BackgroundVariant.Dots} gap={18} size={1.2} color="#c5cdd8" />
+        <MiniMap
+          pannable
+          zoomable
+          nodeStrokeWidth={2}
+          className="wf-minimap"
+        />
+        <Controls showInteractive={false} className="wf-controls" />
       </ReactFlow>
+      {!steps.length ? (
+        <div className="workflow-canvas__empty-overlay">
+          <div className="workflow-canvas__empty-card">
+            <strong>{emptyHint || 'Drag nodes from the left palette'}</strong>
+            <span>Drop onto the canvas to start building your workflow</span>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
+
+export function WorkflowCanvas(props: Props) {
+  return (
+    <ReactFlowProvider>
+      <CanvasInner {...props} />
+    </ReactFlowProvider>
+  )
+}
+
+export function paletteDragStart(event: DragEvent, type: WorkflowNodeType) {
+  event.dataTransfer.setData(PALETTE_MIME, type)
+  event.dataTransfer.effectAllowed = 'copy'
+}
+

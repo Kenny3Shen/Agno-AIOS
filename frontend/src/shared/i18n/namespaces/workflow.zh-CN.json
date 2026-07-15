@@ -1,6 +1,6 @@
 {
   "title": "工作流",
-  "description": "PR4：画布拖拽/连线 + Router/嵌套 Workflow + 版本/触发器 + 完整 Step HITL",
+  "description": "画布优先 · 从左侧拖入节点，像 Dify / Coze 一样编排",
   "addStep": "Agent 步骤",
   "addNode": "添加节点",
   "addParallel": "并行 Parallel",
@@ -57,5 +57,10 @@
   "requiresUserInput": "步骤需用户输入",
   "userInputMessagePlaceholder": "用户输入提示",
   "requiresOutputReview": "步骤输出需人工复核",
-  "outputReviewMessagePlaceholder": "输出复核提示"
+  "outputReviewMessagePlaceholder": "输出复核提示",
+  "studioHint": "画布优先 · 从左侧拖入节点，像 Dify / Coze 一样编排",
+  "palette": "节点面板",
+  "paletteDragHint": "拖到画布空白处添加；也可双击快速添加",
+  "canvasEmpty": "从左侧拖入节点开始编排",
+  "deleteNode": "删除节点"
 }

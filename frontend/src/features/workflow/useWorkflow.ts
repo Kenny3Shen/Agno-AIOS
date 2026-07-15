@@ -92,6 +92,18 @@ export function useWorkflow() {
     }))
   }
 
+  /** Drop a palette node onto the canvas at a flow position. */
+  const addAt = (type: WorkflowNodeType, position: { x: number; y: number }) => {
+    const node = createNode(type)
+    node.position = { x: position.x, y: position.y }
+    setState((current) => ({
+      ...current,
+      steps: [...current.steps, node],
+      selectedId: node.id,
+      dirty: true,
+    }))
+  }
+
   const addChild = (
     parentId: string,
     branch: 'steps' | 'thenSteps' | 'elseSteps',
@@ -298,6 +310,7 @@ export function useWorkflow() {
     patchMeta,
     patchTriggers,
     add,
+    addAt,
     addChild,
     update,
     remove,

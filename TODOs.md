@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Workflow 画布优先 Studio（Dify/Coze 风格）
+
+- 主区域为全高 React Flow 画布；左侧节点面板拖入/双击添加，右侧 Inspector + 运行日志。
+- 自定义节点卡片、拖放落点坐标、顶栏 Save/Run/模型。
+- 不再以列表为主编辑面。
+
+
 ## 已完成：Workflow PR4（Router / 嵌套 / 版本触发器 / 画布编辑 / 完整 HITL）
 
 - DSL：`router`（CEL selector + choices）、`workflow_ref`；Step 支持 confirmation / user_input / output_review。

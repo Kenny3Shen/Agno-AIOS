@@ -1,6 +1,6 @@
 {
   "title": "Workflows",
-  "description": "PR4: canvas drag/connect + Router/nested Workflow + versions/triggers + full step HITL",
+  "description": "Canvas-first · drag nodes from the palette, Dify/Coze style",
   "addStep": "Agent step",
   "addNode": "Add node",
   "addParallel": "Parallel",
@@ -57,5 +57,10 @@
   "requiresUserInput": "Require user input",
   "userInputMessagePlaceholder": "User input prompt",
   "requiresOutputReview": "Require output review",
-  "outputReviewMessagePlaceholder": "Output review prompt"
+  "outputReviewMessagePlaceholder": "Output review prompt",
+  "studioHint": "Canvas-first · drag nodes from the palette, Dify/Coze style",
+  "palette": "Nodes",
+  "paletteDragHint": "Drag onto the canvas to add; double-click to quick-add",
+  "canvasEmpty": "Drag a node from the left to start",
+  "deleteNode": "Delete node"
 }
