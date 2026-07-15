@@ -1,5 +1,15 @@
 # 下一步工作
 
+## 已完成：Workflow 画布 PR8b（打磨）
+
+- 保存前校验：空 Parallel/Loop/Condition/Router、缺 executor / workflow_ref → 节点标红 + Inspector 列表可点击定位。
+- 连线中高亮目标节点；合法/非法连接沿用 handle 规则。
+- 运行中 `fitView` 聚焦 running/paused 节点。
+- 选中 NodeToolbar：Copy / Dup / Del。
+
+相关入口：`validateWorkflowDraft`、`WorkflowCanvas`/`FlowNode`、`useWorkflow.save`
+
+
 ## 已完成：Workflow 画布 PR8a（多 Handle 分支边）
 
 - Condition：`then` / `else` 双 source Handle；Router：每个 choice 独立 Handle。

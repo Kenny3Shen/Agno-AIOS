@@ -1,6 +1,6 @@
 {
   "title": "Workflows",
-  "description": "Canvas-first · drag nodes from the palette, Dify/Coze style",
+  "description": "Drag nodes from the palette",
   "addStep": "Agent step",
   "addNode": "Add node",
   "addParallel": "Parallel",
@@ -74,5 +74,6 @@
   "publish": "Publish",
   "publishHint": "Promote draft to the live revision used by webhook/cron",
   "publishTriggersHint": "Webhook and cron always run the published revision. Save draft, then Publish.",
-  "cronExpression": "Cron expression (e.g. */15 * * * *)"
+  "cronExpression": "Cron expression (e.g. */15 * * * *)",
+  "validationTitle": "Fix these before save"
 }

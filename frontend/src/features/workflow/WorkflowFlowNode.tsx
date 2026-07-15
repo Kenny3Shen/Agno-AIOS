@@ -1,5 +1,5 @@
 import { memo, type CSSProperties, type MouseEvent } from 'react'
-import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { Handle, NodeToolbar, Position, type NodeProps } from '@xyflow/react'
 import type { WorkflowNodeRunStatus, WorkflowNodeType } from './types'
 import type { EmptySlot } from './utils'
 
@@ -14,11 +14,17 @@ export type WorkflowFlowNodeData = {
   subtitle?: string
   hitl?: boolean
   runStatus?: WorkflowNodeRunStatus | null
+  invalid?: boolean
+  invalidMessage?: string | null
   /** Outgoing branch handles (condition/router/parallel). */
   branchHandles?: BranchHandle[]
   emptySlots?: EmptySlot[]
   dropHighlight?: boolean
+  connectHighlight?: boolean
   onEmptySlot?: (slotKey: string) => void
+  onToolbarDelete?: () => void
+  onToolbarCopy?: () => void
+  onToolbarDuplicate?: () => void
 }
 
 const TYPE_META: Record<
@@ -46,11 +52,9 @@ function handleLeftPercent(index: number, total: number): string {
 }
 
 function handleTopPercent(index: number, total: number): string {
-  if (total <= 1) return '50%'
-  // Keep ports within the body band (avoid badge/header)
+  if (total <= 1) return '62%'
   const start = 38
   const end = 88
-  if (total === 1) return '62%'
   return `${start + ((end - start) * index) / (total - 1)}%`
 }
 
@@ -73,10 +77,51 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
 
   return (
     <div
-      className={`wf-flow-node ${selected ? 'is-selected' : ''} ${payload.dropHighlight ? 'is-drop-target' : ''} ${runClass} ${multiOut ? 'has-branch-handles' : ''}`}
+      className={`wf-flow-node ${selected ? 'is-selected' : ''} ${payload.dropHighlight ? 'is-drop-target' : ''} ${payload.connectHighlight ? 'is-connect-target' : ''} ${payload.invalid ? 'is-invalid' : ''} ${runClass} ${multiOut ? 'has-branch-handles' : ''}`}
       style={style}
+      title={payload.invalidMessage || undefined}
     >
-      {/* Entrances: top + left */}
+      <NodeToolbar
+        isVisible={selected}
+        position={Position.Top}
+        offset={10}
+        className="wf-node-toolbar nodrag nopan"
+      >
+        <button
+          type="button"
+          className="wf-node-toolbar__btn nodrag nopan"
+          onClick={(e) => {
+            e.stopPropagation()
+            payload.onToolbarCopy?.()
+          }}
+          title="Copy"
+        >
+          Copy
+        </button>
+        <button
+          type="button"
+          className="wf-node-toolbar__btn nodrag nopan"
+          onClick={(e) => {
+            e.stopPropagation()
+            payload.onToolbarDuplicate?.()
+          }}
+          title="Duplicate"
+        >
+          Dup
+        </button>
+        <button
+          type="button"
+          className="wf-node-toolbar__btn wf-node-toolbar__btn--danger nodrag nopan"
+          onClick={(e) => {
+            e.stopPropagation()
+            payload.onToolbarDelete?.()
+          }}
+          title="Delete"
+        >
+          Del
+        </button>
+      </NodeToolbar>
+
       <Handle
         type="target"
         position={Position.Top}
@@ -94,6 +139,7 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
 
       <div className="wf-flow-node__badge" aria-hidden>
         {meta.icon}
+        {payload.invalid ? <span className="wf-flow-node__invalid-pill">!</span> : null}
         {payload.runStatus ? (
           <span className={`wf-flow-node__run-pill is-${payload.runStatus}`}>
             {RUN_LABEL[payload.runStatus]}
@@ -105,6 +151,9 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
         <div className="wf-flow-node__title">{payload.label}</div>
         {payload.subtitle ? <div className="wf-flow-node__sub">{payload.subtitle}</div> : null}
         {payload.hitl ? <div className="wf-flow-node__hitl">HITL</div> : null}
+        {payload.invalid && payload.invalidMessage ? (
+          <div className="wf-flow-node__error">{payload.invalidMessage}</div>
+        ) : null}
         {payload.emptySlots?.length ? (
           <div className="wf-flow-node__slots">
             {payload.emptySlots.map((slot) => (
@@ -132,7 +181,6 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
 
       {multiOut ? (
         <>
-          {/* Branch exits: bottom (vertical) + right (horizontal) */}
           {branches.map((branch, index) => (
             <Handle
               key={`b-${branch.id}`}
@@ -158,7 +206,6 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
         </>
       ) : (
         <>
-          {/* Default exits: bottom + right */}
           <Handle
             type="source"
             position={Position.Bottom}

@@ -137,6 +137,8 @@ export type WorkflowState = {
   nodeRunStatus: Record<string, WorkflowNodeRunStatus>
   runHistory: WorkflowRunHistoryItem[]
   error: string | null
+  /** Client-side save validation (node-linked). */
+  validationIssues: Array<{ nodeId: string | null; code: string; message: string }>
   lastRunId: string | null
   lastSessionId: string | null
   lastApprovalId: string | null

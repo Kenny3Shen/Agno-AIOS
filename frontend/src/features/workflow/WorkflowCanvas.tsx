@@ -21,6 +21,8 @@ import {
   type OnNodeDrag,
   type OnNodesChange,
   type OnConnect,
+  type OnConnectStart,
+  type OnConnectEnd,
   type OnSelectionChangeFunc,
   MarkerType,
   ConnectionMode,
@@ -70,7 +72,9 @@ type Props = {
   onCopy: () => void
   onPaste: () => void
   onOrganize: () => void
+  onDuplicateSelected: () => void
   nodeRunStatus?: Record<string, 'running' | 'ok' | 'error' | 'paused'>
+  validationIssues?: Array<{ nodeId: string | null; code: string; message: string }>
   emptyHint?: string
 }
 
@@ -83,7 +87,14 @@ function buildGraph(
   animateNew: boolean,
   dropTargetId: string | null,
   onEmptySlot: (parentId: string, slotKey: string) => void,
-  nodeRunStatus: Record<string, 'running' | 'ok' | 'error' | 'paused'> = {}
+  nodeRunStatus: Record<string, 'running' | 'ok' | 'error' | 'paused'> = {},
+  invalidById: Record<string, string> = {},
+  connectTargetId: string | null = null,
+  toolbar: {
+    onDelete: (id: string) => void
+    onCopy: () => void
+    onDuplicate: () => void
+  } | null = null
 ): FlowGraph {
   const layout = layoutCanvas(steps)
   const prevById = new Map(prevNodes.map((item) => [item.id, item]))
@@ -119,10 +130,16 @@ function buildGraph(
         subtitle,
         hitl,
         runStatus: nodeRunStatus[item.id] ?? null,
+        invalid: Boolean(invalidById[item.id]),
+        invalidMessage: invalidById[item.id] ?? null,
         branchHandles: source ? branchHandlesFor(source) : [],
         emptySlots,
         dropHighlight: dropTargetId === item.id,
+        connectHighlight: connectTargetId === item.id,
         onEmptySlot: (slotKey: string) => onEmptySlot(item.id, slotKey),
+        onToolbarDelete: () => toolbar?.onDelete(item.id),
+        onToolbarCopy: () => toolbar?.onCopy(),
+        onToolbarDuplicate: () => toolbar?.onDuplicate(),
       },
       selected: selected.has(item.id),
       ...(prev?.measured ? { measured: prev.measured } : {}),
@@ -185,7 +202,9 @@ function CanvasInner({
   onCopy,
   onPaste,
   onOrganize,
+  onDuplicateSelected,
   nodeRunStatus = {},
+  validationIssues = [],
   emptyHint,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -194,12 +213,21 @@ function CanvasInner({
 
   const [graph, setGraph] = useState<FlowGraph>({ nodes: [], edges: [] })
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
+  const [connectTargetId, setConnectTargetId] = useState<string | null>(null)
+  const connectingFromRef = useRef<{ nodeId: string; handleId: string | null } | null>(null)
   const draggingRef = useRef(false)
   const bootstrappedRef = useRef(false)
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const enterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const emptySlotRef = useRef(onEmptySlot)
-  emptySlotRef.current = onEmptySlot
+  const lastFocusKeyRef = useRef('')
+  const onEmptySlotRef = useRef(onEmptySlot)
+  onEmptySlotRef.current = onEmptySlot
+  const onDeleteRef = useRef(onDeleteSelected)
+  onDeleteRef.current = onDeleteSelected
+  const onCopyRef = useRef(onCopy)
+  onCopyRef.current = onCopy
+  const onDupRef = useRef(onDuplicateSelected)
+  onDupRef.current = onDuplicateSelected
 
   const structureKey = useMemo(
     () =>
@@ -226,6 +254,16 @@ function CanvasInner({
     ? selectedIds.join(',')
     : selectedId ?? ''
 
+  const invalidById = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const issue of validationIssues) {
+      if (issue.nodeId && !map[issue.nodeId]) map[issue.nodeId] = issue.message
+    }
+    return map
+  }, [validationIssues])
+
+  const invalidKey = useMemo(() => Object.keys(invalidById).sort().join(','), [invalidById])
+
   useEffect(() => {
     if (draggingRef.current) return
     const effectiveSelectedIds = selectedIds.length
@@ -241,13 +279,49 @@ function CanvasInner({
         prev.nodes,
         animateNew,
         dropTargetId,
-        (parentId, slotKey) => emptySlotRef.current(parentId, slotKey),
-        nodeRunStatus
+        (parentId, slotKey) => onEmptySlotRef.current(parentId, slotKey),
+        nodeRunStatus,
+        invalidById,
+        connectTargetId,
+        {
+          onDelete: () => onDeleteRef.current(),
+          onCopy: () => onCopyRef.current(),
+          onDuplicate: () => onDupRef.current(),
+        }
       )
       bootstrappedRef.current = true
       return next
     })
-  }, [structureKey, selectionKey, steps, selectedIds, selectedId, dropTargetId, nodeRunStatus])
+  }, [
+    structureKey,
+    selectionKey,
+    steps,
+    selectedIds,
+    selectedId,
+    dropTargetId,
+    nodeRunStatus,
+    invalidById,
+    invalidKey,
+    connectTargetId,
+  ])
+
+  // Focus viewport on running / paused nodes during a run.
+  useEffect(() => {
+    const focusIds = Object.entries(nodeRunStatus)
+      .filter(([, status]) => status === 'running' || status === 'paused')
+      .map(([id]) => id)
+    const key = focusIds.slice().sort().join(',')
+    if (!key || key === lastFocusKeyRef.current) return
+    lastFocusKeyRef.current = key
+    requestAnimationFrame(() => {
+      void fitView({
+        nodes: focusIds.map((id) => ({ id })),
+        padding: 0.35,
+        duration: 320,
+        maxZoom: 1.25,
+      })
+    })
+  }, [nodeRunStatus, fitView])
 
   useEffect(() => {
     if (!graph.nodes.some((node) => node.className?.includes('wf-node-enter'))) return
@@ -370,6 +444,18 @@ function CanvasInner({
     [dropTargetId, onPositionsChange, onReparent, resolveContainerTarget]
   )
 
+  const onConnectStart: OnConnectStart = useCallback((_event, params) => {
+    connectingFromRef.current = {
+      nodeId: params.nodeId ?? '',
+      handleId: params.handleId ?? null,
+    }
+  }, [])
+
+  const onConnectEnd: OnConnectEnd = useCallback(() => {
+    connectingFromRef.current = null
+    setConnectTargetId(null)
+  }, [])
+
   const onConnect: OnConnect = useCallback(
     (connection) => {
       if (!connection.source || !connection.target || connection.source === connection.target) {
@@ -380,13 +466,31 @@ function CanvasInner({
         const branchTarget = reparentTargetFromHandle(sourceNode, connection.sourceHandle)
         if (branchTarget) {
           onConnectBranch(connection.source, connection.target, connection.sourceHandle)
+          connectingFromRef.current = null
+          setConnectTargetId(null)
           return
         }
       }
       onConnectSequence(connection.source, connection.target)
+      connectingFromRef.current = null
+      setConnectTargetId(null)
     },
     [onConnectBranch, onConnectSequence, steps]
   )
+
+  const onNodeMouseEnter: NodeMouseHandler = useCallback(
+    (_event, node) => {
+      if (!connectingFromRef.current?.nodeId) return
+      if (node.id === connectingFromRef.current.nodeId) return
+      setConnectTargetId(node.id)
+    },
+    []
+  )
+
+  const onNodeMouseLeave: NodeMouseHandler = useCallback(() => {
+    if (!connectingFromRef.current?.nodeId) return
+    setConnectTargetId(null)
+  }, [])
 
   const isValidConnection = useCallback(
     (connection: {
@@ -550,7 +654,11 @@ function CanvasInner({
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
+        onConnectStart={onConnectStart}
+        onConnectEnd={onConnectEnd}
         isValidConnection={isValidConnection}
+        onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseLeave={onNodeMouseLeave}
         nodesDraggable
         nodesConnectable
         elementsSelectable

@@ -1,6 +1,6 @@
 {
   "title": "工作流",
-  "description": "画布优先 · 从左侧拖入节点，像 Dify / Coze 一样编排",
+  "description": "从左侧拖入节点编排",
   "addStep": "Agent 步骤",
   "addNode": "添加节点",
   "addParallel": "并行 Parallel",
@@ -74,5 +74,6 @@
   "publish": "发布",
   "publishHint": "将草稿提升为 webhook/cron 使用的线上版本",
   "publishTriggersHint": "Webhook 与 Cron 始终执行已发布版本。请先保存草稿，再点发布。",
-  "cronExpression": "Cron 表达式（如 */15 * * * *）"
+  "cronExpression": "Cron 表达式（如 */15 * * * *）",
+  "validationTitle": "保存前请先修复"
 }

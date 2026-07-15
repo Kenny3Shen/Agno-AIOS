@@ -39,6 +39,7 @@ import {
   reparentTargetFromHandle,
   toDefinition,
   updateNodeInTree,
+  validateWorkflowDraft,
   type ReparentTarget,
 } from './utils'
 
@@ -68,6 +69,7 @@ const initialState = (): WorkflowState => ({
   nodeRunStatus: {},
   runHistory: [],
   error: null,
+  validationIssues: [],
   lastRunId: null,
   lastSessionId: null,
   lastApprovalId: null,
@@ -124,7 +126,9 @@ export function useWorkflow() {
     (recipe: (current: WorkflowState) => WorkflowState) => {
       setState((current) => {
         pushHistory(current)
-        return recipe(current)
+        const next = recipe(current)
+        if (next === current) return current
+        return { ...next, validationIssues: [] }
       })
     },
     [pushHistory]
@@ -411,6 +415,23 @@ export function useWorkflow() {
     })
   }
 
+  const duplicateSelected = () => {
+    // snapshot selection into clipboard then paste with offset
+    const ids = state.selectedIds.length
+      ? state.selectedIds
+      : state.selectedId
+        ? [state.selectedId]
+        : []
+    const nodes = ids
+      .map((id) => findNode(state.steps, id))
+      .filter((node): node is WorkflowNode => Boolean(node))
+    const tops = nodes.filter(
+      (node) => !nodes.some((other) => other.id !== node.id && Boolean(findNode([other], node.id)))
+    )
+    clipboardRef.current = (tops.length ? tops : nodes).map(cloneNodeDeep)
+    pasteClipboard()
+  }
+
   const patchTriggers = (triggers: WorkflowTriggers) => {
     setState((current) => ({ ...current, triggers, dirty: true }))
   }
@@ -430,6 +451,7 @@ export function useWorkflow() {
       sessionId: crypto.randomUUID(),
       runLog: [],
       error: null,
+      validationIssues: [],
       dirty: false,
     }))
   }
@@ -443,11 +465,18 @@ export function useWorkflow() {
   }
 
   const save = async () => {
-    if (!state.steps.length) {
-      setState((current) => ({ ...current, error: 'Add at least one step before saving' }))
+    const issues = validateWorkflowDraft(state.steps)
+    if (issues.length) {
+      setState((current) => ({
+        ...current,
+        validationIssues: issues,
+        error: issues[0]?.message ?? 'Fix validation errors before saving',
+        selectedId: issues[0]?.nodeId ?? current.selectedId,
+        selectedIds: issues[0]?.nodeId ? [issues[0].nodeId] : current.selectedIds,
+      }))
       return
     }
-    setState((current) => ({ ...current, saving: true, error: null }))
+    setState((current) => ({ ...current, saving: true, error: null, validationIssues: [] }))
     try {
       const definition = toDefinition(state)
       const body = {
@@ -687,6 +716,7 @@ export function useWorkflow() {
     organizeLayout,
     copySelected,
     pasteClipboard,
+    duplicateSelected,
     undo,
     redo,
     load,

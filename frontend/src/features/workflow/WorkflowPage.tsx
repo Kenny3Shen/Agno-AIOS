@@ -282,7 +282,9 @@ export function WorkflowPage() {
             onCopy={workflow.copySelected}
             onPaste={workflow.pasteClipboard}
             onOrganize={workflow.organizeLayout}
+            onDuplicateSelected={workflow.duplicateSelected}
             nodeRunStatus={workflow.state.nodeRunStatus}
+            validationIssues={workflow.state.validationIssues}
             emptyHint={t('canvasEmpty')}
           />
         </section>
@@ -290,6 +292,32 @@ export function WorkflowPage() {
         {/* Right: inspector + run */}
         <aside className="workflow-studio__right">
           <section className="workflow-studio__panel workflow-studio__panel--grow">
+            {workflow.state.validationIssues.length ? (
+              <Alert
+                type="error"
+                showIcon
+                style={{ marginBottom: 10 }}
+                message={t('validationTitle')}
+                description={
+                  <ul className="workflow-validation-list">
+                    {workflow.state.validationIssues.slice(0, 8).map((issue, index) => (
+                      <li key={`${issue.code}-${issue.nodeId ?? 'root'}-${index}`}>
+                        <Button
+                          type="link"
+                          size="small"
+                          style={{ paddingInline: 0, height: 'auto' }}
+                          onClick={() => {
+                            if (issue.nodeId) workflow.select(issue.nodeId)
+                          }}
+                        >
+                          {issue.message}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                }
+              />
+            ) : null}
             <div className="workflow-studio__panel-title">
               {t('inspector')}
               {step ? (

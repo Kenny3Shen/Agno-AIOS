@@ -15,6 +15,7 @@ import {
   emptySlotsFor,
   branchHandlesFor,
   reparentTargetFromHandle,
+  validateWorkflowDraft,
 } from './utils'
 import type { WorkflowState } from './types'
 
@@ -34,6 +35,7 @@ const state: WorkflowState = {
   nodeRunStatus: {},
   runHistory: [],
   error: null,
+  validationIssues: [],
   lastApprovalId: null,
   lastRunId: null,
   lastSessionId: null,
@@ -267,5 +269,24 @@ describe('multi-handle branches', () => {
       parentId: 'c1',
       branch: 'thenSteps',
     })
+  })
+})
+
+describe('draft validation', () => {
+  it('flags empty parallel and missing executor', () => {
+    const parallel = createNode('parallel')
+    parallel.id = 'p1'
+    const step = createNode('step')
+    step.id = 's1'
+    step.targetId = ''
+    const issues = validateWorkflowDraft([parallel, step])
+    expect(issues.some((i) => i.code === 'empty_parallel')).toBe(true)
+    expect(issues.some((i) => i.code === 'missing_executor')).toBe(true)
+  })
+
+  it('accepts a minimal valid linear workflow', () => {
+    const step = createNode('step')
+    step.targetId = 'security-operations'
+    expect(validateWorkflowDraft([step])).toEqual([])
   })
 })

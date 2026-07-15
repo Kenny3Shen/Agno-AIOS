@@ -2116,6 +2116,82 @@ html.dark .wf-flow-node__badge {
 }
 
 
+
+.wf-flow-node.is-invalid {
+  border-color: #cf1322 !important;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, #cf1322 40%, transparent),
+    var(--wf-shadow-soft);
+}
+
+.wf-flow-node.is-connect-target {
+  outline: 2px solid color-mix(in srgb, var(--tais-blue) 70%, transparent);
+  outline-offset: 3px;
+}
+
+.wf-flow-node__invalid-pill {
+  margin-left: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  background: #cf1322;
+}
+
+.wf-flow-node__error {
+  margin-top: 6px;
+  font-size: 10px;
+  line-height: 1.3;
+  color: #cf1322;
+  word-break: break-word;
+}
+
+.wf-node-toolbar {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--tais-surface);
+  border: 1px solid var(--tais-border);
+  box-shadow: var(--wf-shadow-soft);
+}
+
+.wf-node-toolbar__btn {
+  appearance: none;
+  border: 1px solid var(--tais-border);
+  background: var(--tais-soft);
+  color: var(--tais-text);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wf-node-toolbar__btn:hover {
+  background: var(--tais-surface);
+  border-color: var(--tais-blue);
+  color: var(--tais-blue);
+}
+
+.wf-node-toolbar__btn--danger:hover {
+  border-color: #cf1322;
+  color: #cf1322;
+}
+
+.workflow-validation-list {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.workflow-validation-list li {
+  margin: 2px 0;
+}
+
 .wf-flow-node.is-drop-target {
   border-color: var(--wf-node-color);
   box-shadow:

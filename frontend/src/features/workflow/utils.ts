@@ -453,6 +453,101 @@ export const parseEmptySlot = (
   return null
 }
 
+
+export type WorkflowValidationIssue = {
+  nodeId: string | null
+  code: string
+  message: string
+}
+
+/** Client-side save checks (mirrors compiler empty-branch rules). */
+export const validateWorkflowDraft = (roots: WorkflowNode[]): WorkflowValidationIssue[] => {
+  const issues: WorkflowValidationIssue[] = []
+  if (!roots.length) {
+    issues.push({
+      nodeId: null,
+      code: 'empty_workflow',
+      message: 'Add at least one node before saving',
+    })
+    return issues
+  }
+
+  const walk = (nodes: WorkflowNode[], path: string) => {
+    for (const node of nodes) {
+      const label = node.name?.trim() || node.type
+      const here = `${path}/${label}`
+      if (node.type === 'parallel') {
+        if (!(node.steps ?? []).length) {
+          issues.push({
+            nodeId: node.id,
+            code: 'empty_parallel',
+            message: `${here}: Parallel needs at least one branch`,
+          })
+        }
+      }
+      if (node.type === 'loop') {
+        if (!(node.steps ?? []).length) {
+          issues.push({
+            nodeId: node.id,
+            code: 'empty_loop',
+            message: `${here}: Loop body is empty`,
+          })
+        }
+      }
+      if (node.type === 'condition') {
+        if (!(node.thenSteps ?? []).length && !(node.elseSteps ?? []).length) {
+          issues.push({
+            nodeId: node.id,
+            code: 'empty_condition',
+            message: `${here}: Condition needs then and/or else steps`,
+          })
+        }
+      }
+      if (node.type === 'router') {
+        const choices = node.choices ?? []
+        if (!choices.length) {
+          issues.push({
+            nodeId: node.id,
+            code: 'empty_router',
+            message: `${here}: Router has no choices`,
+          })
+        }
+        for (const choice of choices) {
+          if (!choice.steps.length) {
+            issues.push({
+              nodeId: node.id,
+              code: 'empty_router_choice',
+              message: `${here}: choice "${choice.name || choice.id}" is empty`,
+            })
+          }
+        }
+      }
+      if (node.type === 'workflow_ref' && !(node.workflowId || '').trim()) {
+        issues.push({
+          nodeId: node.id,
+          code: 'missing_workflow_ref',
+          message: `${here}: Nested workflow id is required`,
+        })
+      }
+      if (node.type === 'step' && !(node.targetId || '').trim()) {
+        issues.push({
+          nodeId: node.id,
+          code: 'missing_executor',
+          message: `${here}: Agent executor is required`,
+        })
+      }
+      for (const list of [node.steps, node.thenSteps, node.elseSteps]) {
+        if (list?.length) walk(list, here)
+      }
+      for (const choice of node.choices ?? []) {
+        if (choice.steps.length) walk(choice.steps, `${here}/${choice.name || 'choice'}`)
+      }
+    }
+  }
+  walk(roots, 'workflow')
+  return issues
+}
+
 const subtreeHeight = (node: WorkflowNode): number => {
   const children =
     node.type === 'condition'
