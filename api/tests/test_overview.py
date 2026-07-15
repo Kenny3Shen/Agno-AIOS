@@ -384,3 +384,28 @@ async def test_overview_adds_approval_status_snapshot_for_authorized_actor(monke
     }
     assert "pending_approvals" not in snapshots
 
+
+
+@pytest.mark.asyncio
+async def test_overview_snapshot_failures_are_logged(monkeypatch):
+    class FakeDb:
+        async def get_user_memories(self, **_kwargs):
+            raise RuntimeError("memories down")
+
+    logged: list[str] = []
+
+    def fake_exception(message, *args, **_kwargs):
+        logged.append(str(message).format(*args) if args else str(message))
+
+    monkeypatch.setattr(overview_service, "get_async_agno_postgres_db", lambda: FakeDb())
+    monkeypatch.setattr(
+        overview_service,
+        "has_scope",
+        lambda _actor, scope: scope == "memories:read",
+    )
+    monkeypatch.setattr(overview_service.logger, "exception", fake_exception)
+
+    snapshots = await overview_service._snapshots(actor("u1"))
+
+    assert snapshots == {}
+    assert any("overview snapshot failed: memories" in message for message in logged)

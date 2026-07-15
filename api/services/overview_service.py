@@ -7,6 +7,7 @@ from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi.encoders import jsonable_encoder
+from loguru import logger
 from sqlalchemy import select
 
 from api.auth.claims import ActorLike, has_scope, scope_user_id
@@ -306,7 +307,7 @@ async def _snapshots(actor: ActorLike) -> dict[str, Any]:
             raw = await db.get_user_memories(user_id=user_id, limit=1, page=1)
             result["memories"] = int(raw[1] if isinstance(raw, tuple) else len(raw))
         except Exception:
-            pass
+            logger.exception("overview snapshot failed: memories")
 
     if has_scope(actor, "approvals:read"):
         try:
@@ -319,7 +320,7 @@ async def _snapshots(actor: ActorLike) -> dict[str, Any]:
                 "rejected": counts["rejected"],
             }
         except Exception:
-            pass
+            logger.exception("overview snapshot failed: approvals")
 
     if has_scope(actor, "knowledge:read"):
         try:
@@ -330,7 +331,7 @@ async def _snapshots(actor: ActorLike) -> dict[str, Any]:
                 await knowledge_base.list_documents_async(owner_user_id=user_id)
             )
         except Exception:
-            pass
+            logger.exception("overview snapshot failed: knowledge_documents")
 
     if has_scope(actor, "evals:read"):
         try:
@@ -349,7 +350,7 @@ async def _snapshots(actor: ActorLike) -> dict[str, Any]:
                 "pass_rate": round(passed / completed, 4) if completed else 0.0,
             }
         except Exception:
-            pass
+            logger.exception("overview snapshot failed: evaluation")
     return result
 
 
@@ -359,6 +360,7 @@ async def _audit_summary() -> dict[str, Any] | None:
 
         events, _ = await list_audit_events_async(page=1, limit=10)
     except Exception:
+        logger.exception("overview snapshot failed: audit_summary")
         return None
     action_counts = Counter(str(event.get("action") or "") for event in events)
     return {

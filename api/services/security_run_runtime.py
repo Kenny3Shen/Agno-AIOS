@@ -320,6 +320,7 @@ class SecurityRunRuntime:
         try:
             approval_record = await db.get_approval(approval_id)
             if not isinstance(approval_record, dict):
+                logger.error("HITL resume aborted: approval {} not found", approval_id)
                 raise ValueError("Approval not found")
             if str(approval_record.get("status") or "") not in {"approved", "rejected"}:
                 raise ValueError("Approval must be resolved before resuming")
@@ -383,6 +384,12 @@ class SecurityRunRuntime:
         except Exception as exc:
             logger.exception("恢复 HITL Run 失败: {}", approval_id)
             approval_record = await db.get_approval(approval_id)
+            if not isinstance(approval_record, dict):
+                logger.error(
+                    "HITL resume failure for {} could not load approval for notifications: {}",
+                    approval_id,
+                    exc,
+                )
             if isinstance(approval_record, dict):
                 run_id = str(approval_record.get("run_id") or "")
                 if run_id:

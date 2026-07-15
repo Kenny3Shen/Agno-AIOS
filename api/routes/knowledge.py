@@ -30,6 +30,9 @@ from api.services.knowledge_upload_service import (
 
 router = APIRouter(prefix="/api/knowledge", tags=["Knowledge"])
 
+# Wall-clock budget for one streamed ingest/update job (vectorize can be slow).
+KNOWLEDGE_INGEST_TIMEOUT_SECONDS = 15 * 60
+
 
 class KnowledgeDocumentResponsePayload(KnowledgeDocumentPayload):
     can_manage: bool
@@ -99,7 +102,10 @@ async def _run_progress_sse(
         try:
             for stage_event in initial_progress_stages(include_upload=include_upload):
                 await queue.put(stage_event)
-            document = await work(on_progress)
+            document = await asyncio.wait_for(
+                work(on_progress),
+                timeout=KNOWLEDGE_INGEST_TIMEOUT_SECONDS,
+            )
             await queue.put(
                 {
                     "stage": "done",
@@ -107,6 +113,18 @@ async def _run_progress_sse(
                     "label": "完成",
                     "message": "完成",
                     "document": document,
+                }
+            )
+        except TimeoutError:
+            message = f"知识入库超时（>{KNOWLEDGE_INGEST_TIMEOUT_SECONDS // 60} 分钟）"
+            await queue.put(
+                {
+                    "stage": "done",
+                    "status": "failed",
+                    "label": "失败",
+                    "message": message,
+                    "error": message,
+                    "code": 504,
                 }
             )
         except KnowledgeUploadTooLargeError as exc:
@@ -695,7 +713,10 @@ async def update_document(
         try:
             for stage_event in initial_progress_stages(include_upload=False):
                 await queue.put(stage_event)
-            document = await run_update(on_progress=on_progress)
+            document = await asyncio.wait_for(
+                run_update(on_progress=on_progress),
+                timeout=KNOWLEDGE_INGEST_TIMEOUT_SECONDS,
+            )
             await queue.put(
                 {
                     "stage": "done",
@@ -703,6 +724,18 @@ async def update_document(
                     "label": "完成",
                     "message": "完成",
                     "document": document,
+                }
+            )
+        except TimeoutError:
+            message = f"知识入库超时（>{KNOWLEDGE_INGEST_TIMEOUT_SECONDS // 60} 分钟）"
+            await queue.put(
+                {
+                    "stage": "done",
+                    "status": "failed",
+                    "label": "失败",
+                    "message": message,
+                    "error": message,
+                    "code": 504,
                 }
             )
         except LookupError as exc:
@@ -884,7 +917,10 @@ async def update_document_upload(
         try:
             for stage_event in initial_progress_stages(include_upload=True):
                 await queue.put(stage_event)
-            document, _stored = await run_upload(on_progress=on_progress)
+            document, _stored = await asyncio.wait_for(
+                run_upload(on_progress=on_progress),
+                timeout=KNOWLEDGE_INGEST_TIMEOUT_SECONDS,
+            )
             await queue.put(
                 {
                     "stage": "done",
@@ -892,6 +928,18 @@ async def update_document_upload(
                     "label": "完成",
                     "message": "完成",
                     "document": document,
+                }
+            )
+        except TimeoutError:
+            message = f"知识入库超时（>{KNOWLEDGE_INGEST_TIMEOUT_SECONDS // 60} 分钟）"
+            await queue.put(
+                {
+                    "stage": "done",
+                    "status": "failed",
+                    "label": "失败",
+                    "message": message,
+                    "error": message,
+                    "code": 504,
                 }
             )
         except KnowledgeUploadTooLargeError as exc:

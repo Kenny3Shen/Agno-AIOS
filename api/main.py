@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from anyio import Lock, Path as AsyncPath
@@ -84,9 +85,29 @@ class LazyFrontendStaticFiles:
         await (await self._get_app())(scope, receive, send)
 
 
+def _asyncio_exception_handler(loop: asyncio.AbstractEventLoop, context: dict) -> None:
+    """Surface fire-and-forget task failures (e.g. Agno amake_memories)."""
+    message = str(context.get("message") or "Unhandled asyncio exception")
+    exception = context.get("exception")
+    task = context.get("task") or context.get("future")
+    task_name = getattr(task, "get_name", lambda: None)() if task is not None else None
+    if exception is not None:
+        logger.opt(exception=exception).error(
+            "Asyncio background failure{}: {}",
+            f" [{task_name}]" if task_name else "",
+            message,
+        )
+        return
+    logger.error("Asyncio background failure{}: {}", f" [{task_name}]" if task_name else "", message)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await configure_logging_async(app_settings)
+    try:
+        asyncio.get_running_loop().set_exception_handler(_asyncio_exception_handler)
+    except RuntimeError:
+        logger.warning("Unable to install asyncio exception handler (no running loop)")
     logger.info("启动 {}", app_settings.app_name)
     app.state.settings = app_settings
     await initialize_database()

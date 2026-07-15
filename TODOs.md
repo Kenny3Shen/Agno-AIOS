@@ -1,5 +1,16 @@
 # 下一步工作
 
+## 已完成：可靠性 / 可观测性收紧
+
+- overview snapshots 各子块异常改为 `logger.exception`（不再静默 `pass`），缺键仍表示该能力不可用。
+- 进程 lifespan 安装 asyncio exception handler，捕获 Agno `amake_memories` 等 fire-and-forget Task 失败（含 Grok metadata 类错误）写入结构化日志。
+- HITL resume：approval 缺失 / 失败后无法加载记录时增加 error 日志；既有 submitter+admin 通知路径不变。
+- Knowledge SSE 入库/更新/上传增加 15 分钟 `wait_for` 超时，超时发 `progress.failed`（code 504）；阶段失败与前端 toast 路径保持。
+
+相关入口：
+
+- `api/services/overview_service.py`、`api/main.py`、`api/services/security_run_runtime.py`、`api/routes/knowledge.py`
+
 ## 已完成：代码卫生清理（分页 helper / 注释 / 兼容）
 
 - 抽取共用 `api/utils/pagination.py::pagination_meta`，memory/approvals/chat/trace/evals list 去掉重复实现。
