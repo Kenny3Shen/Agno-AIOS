@@ -32,10 +32,40 @@ const approvalTitle = (approval: Approval) => {
   return approval.tool_name ?? approval.source_name ?? '-'
 }
 
+const workflowPauseType = (approval: Approval): string => {
+  const fromField = approval.pause_type || approval.approval_type
+  if (fromField) return String(fromField)
+  const args = approval.tool_args
+  if (args && typeof args.pause_type === 'string') return args.pause_type
+  return 'confirmation'
+}
+
+const workflowPrompt = (approval: Approval): string => {
+  const args = approval.tool_args
+  if (args && typeof args.message === 'string' && args.message.trim()) return args.message
+  return ''
+}
+
+const workflowOutputSeed = (approval: Approval): string => {
+  const args = approval.tool_args
+  if (!args) return ''
+  for (const key of ['output', 'content', 'message', 'step_output']) {
+    const value = args[key]
+    if (typeof value === 'string' && value.trim()) return value
+  }
+  return ''
+}
+
+
 const approvalType = (approval: Approval) => {
   if (approval.resource_type === 'skill') return 'Skill upload'
   if (approval.resource_type === 'mcp') return 'MCP upload'
-  if (approval.source_type === 'workflow') return 'Workflow confirmation'
+  if (approval.source_type === 'workflow') {
+    const pause = workflowPauseType(approval)
+    if (pause === 'user_input') return 'Workflow user input'
+    if (pause === 'output_review') return 'Workflow output review'
+    return 'Workflow confirmation'
+  }
   return approval.approval_type ?? approval.source_type ?? '-'
 }
 
@@ -152,6 +182,9 @@ export function ApprovalsPage() {
   const [selected, setSelected] = useState<Approval | null>(null)
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
+  const [approveOpen, setApproveOpen] = useState(false)
+  const [userInputText, setUserInputText] = useState('')
+  const [editedOutput, setEditedOutput] = useState('')
   const [markdownPreviewModes, setMarkdownPreviewModes] = useState<Record<string, 'raw' | 'markdown'>>({})
   const query = useQuery({
     queryKey: ['approvals', 'list', status, page, pageSize],
@@ -202,14 +235,30 @@ export function ApprovalsPage() {
   })
   const refresh = () => client.invalidateQueries({ queryKey: ['approvals'] })
   const resolve = useMutation({
-    mutationFn: ({ approval, decision, rejectionReason: reason }: { approval: Approval; decision: 'approved' | 'rejected'; rejectionReason?: string }) =>
+    mutationFn: ({
+      approval,
+      decision,
+      rejectionReason: reason,
+      resolutionData,
+    }: {
+      approval: Approval
+      decision: 'approved' | 'rejected'
+      rejectionReason?: string
+      resolutionData?: Record<string, unknown>
+    }) =>
       isSubmissionApproval(approval)
         ? resolveSubmissionApproval(approval.id, decision, reason)
-        : resolveApproval(approval.id, decision, reason),
+        : resolveApproval(approval.id, decision, {
+            rejectionReason: reason,
+            resolutionData,
+          }),
     onSuccess: async (row) => {
       setSelected(row)
       setRejectOpen(false)
       setRejectReason('')
+      setApproveOpen(false)
+      setUserInputText('')
+      setEditedOutput('')
       message.success(t('resolved', { status: row.status }))
       await refresh()
     },
@@ -313,7 +362,20 @@ export function ApprovalsPage() {
         disabled={selected.status !== 'pending'}
         loading={resolve.isPending}
         style={{ minWidth: 84 }}
-        onClick={() => resolve.mutate({ approval: selected, decision: 'approved' })}
+        onClick={() => {
+          if (isSubmissionApproval(selected)) {
+            resolve.mutate({ approval: selected, decision: 'approved' })
+            return
+          }
+          const pause = workflowPauseType(selected)
+          if (pause === 'user_input' || pause === 'output_review') {
+            setUserInputText('')
+            setEditedOutput(workflowOutputSeed(selected))
+            setApproveOpen(true)
+            return
+          }
+          resolve.mutate({ approval: selected, decision: 'approved' })
+        }}
       >
         {t('common:approve')}
       </Button>
@@ -499,6 +561,71 @@ export function ApprovalsPage() {
           </>
         )}
       </Drawer>
+      <Modal
+        open={approveOpen}
+        title={
+          selected && workflowPauseType(selected) === 'output_review'
+            ? t('approveOutputReview')
+            : t('approveUserInput')
+        }
+        okText={t('common:approve')}
+        confirmLoading={resolve.isPending}
+        okButtonProps={{
+          disabled:
+            selected != null &&
+            workflowPauseType(selected) === 'user_input' &&
+            !userInputText.trim(),
+        }}
+        onCancel={() => {
+          setApproveOpen(false)
+          setUserInputText('')
+          setEditedOutput('')
+        }}
+        onOk={() => {
+          if (!selected) return
+          const pause = workflowPauseType(selected)
+          if (pause === 'user_input') {
+            resolve.mutate({
+              approval: selected,
+              decision: 'approved',
+              resolutionData: { user_input: { response: userInputText.trim() } },
+            })
+            return
+          }
+          if (pause === 'output_review') {
+            resolve.mutate({
+              approval: selected,
+              decision: 'approved',
+              resolutionData: { edited_output: editedOutput },
+            })
+            return
+          }
+          resolve.mutate({ approval: selected, decision: 'approved' })
+        }}
+      >
+        {selected ? (
+          <>
+            {workflowPrompt(selected) ? (
+              <Typography.Paragraph type="secondary">{workflowPrompt(selected)}</Typography.Paragraph>
+            ) : null}
+            {workflowPauseType(selected) === 'user_input' ? (
+              <Input.TextArea
+                rows={4}
+                value={userInputText}
+                onChange={(event) => setUserInputText(event.target.value)}
+                placeholder={t('userInputPlaceholder')}
+              />
+            ) : (
+              <Input.TextArea
+                rows={8}
+                value={editedOutput}
+                onChange={(event) => setEditedOutput(event.target.value)}
+                placeholder={t('editedOutputPlaceholder')}
+              />
+            )}
+          </>
+        ) : null}
+      </Modal>
       <Modal
         open={rejectOpen}
         title={t('rejectApproval')}

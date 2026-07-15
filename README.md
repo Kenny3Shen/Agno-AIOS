@@ -490,7 +490,7 @@ api/services/workflow_compiler.py     # DSL 校验 + Agno Step/Parallel/Conditio
 api/services/workflow_service.py      # CRUD / 权限投影
 api/services/workflow_run_runtime.py  # arun 流 → SSE
 api/routes/workflows.py               # HTTP + EventSourceResponse
-frontend/src/features/workflow/*      # 画布优先 Studio（拖拽节点 / Inspector / SSE）
+frontend/src/features/workflow/*      # 画布优先 Studio（reparent / 快捷键 / auto-layout / Inspector / SSE）
 ```
 
 ### 路线图（PR2+）
@@ -500,6 +500,7 @@ frontend/src/features/workflow/*      # 画布优先 Studio（拖拽节点 / Ins
 | **PR1** ✅ | 线性 Step + Save/Run SSE | 本版 |
 | **PR2** ✅ | `Parallel` / `Condition(CEL)` / `Loop` | 表单级嵌套控制流；CEL 依赖 `cel-python`；编译期禁止 Parallel 内 HITL |
 | **PR3** ✅ | 画布 + Step HITL | React Flow 只读布局选中；Step `requires_confirmation` → Approvals；`workflows:read/write` |
+| **PR5** ✅ | 画布 reparent / undo·redo·多选 / auto-layout / Approvals user_input·output_review 表单 |
 | **PR4** ✅ | Router / 嵌套 Workflow / 版本 / 触发器 + 画布编辑 + 完整 Step HITL | 见下 |
 
 **PR2 嵌套 DSL 示例**

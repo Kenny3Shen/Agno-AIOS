@@ -1,5 +1,16 @@
 # 下一步工作
 
+## 已完成：Workflow Studio 编辑深化（reparent / history / layout / HITL 表单）
+
+- 画布：**拖入容器 reparent**（节点拖到 Parallel/Condition/Loop/Router 上嵌套）；调色板 drop 到容器同理。
+- 空容器 **CTA**（+ Add then/else/branch/body）一键补 Agent step。
+- **Undo/Redo**、Delete/Backspace、Ctrl/Cmd+C/V、Shift 多选、Ctrl/Cmd+L 整理布局。
+- **一键整理**：树形 auto-layout 写回 `position`（层次 packer，无额外 dagre 依赖）。
+- Approvals：`user_input` / `output_review` 批准弹窗写 `resolution_data`；后端 tool_args 附带 output 种子。
+
+相关入口：`frontend/src/features/workflow/*`、`ApprovalsPage`/`approvals/api`、`workflow_run_runtime.py`
+
+
 ## 已完成：Workflow Studio Dark Mode
 
 - Studio / 画布 / 节点 / MiniMap / Controls 使用 `--tais-*` 与 `html.dark` 变量。

@@ -107,6 +107,10 @@ async def _create_workflow_step_approval(
             "step_name": step_name,
             "message": message,
             "pause_type": pause_type,
+            "output": event_value(event, "output")
+            or event_value(event, "content")
+            or event_value(event, "previous_step_content"),
+            "user_input_schema": event_value(event, "user_input_schema"),
         },
         "workflow_id": workflow_id,
         "user_id": user_id,

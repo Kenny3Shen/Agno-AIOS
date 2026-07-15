@@ -223,11 +223,29 @@ export const getApproval = async (id: string): Promise<Approval | null> => {
   return normalizeApproval(row)
 }
 
-export const resolveApproval = (id: string, status: 'approved' | 'rejected', rejectionReason?: string) =>
-  requestJson<Approval>(
+export type ResolveApprovalOptions = {
+  rejectionReason?: string
+  resolutionData?: Record<string, unknown>
+}
+
+export const resolveApproval = (
+  id: string,
+  status: 'approved' | 'rejected',
+  rejectionReasonOrOptions?: string | ResolveApprovalOptions
+) => {
+  const options: ResolveApprovalOptions =
+    typeof rejectionReasonOrOptions === 'string' || rejectionReasonOrOptions == null
+      ? { rejectionReason: rejectionReasonOrOptions }
+      : rejectionReasonOrOptions
+  return requestJson<Approval>(
     `/approvals/${encodeURIComponent(id)}/resolve`,
-    jsonInit('POST', { status, ...(rejectionReason ? { rejection_reason: rejectionReason } : {}) })
+    jsonInit('POST', {
+      status,
+      ...(options.rejectionReason ? { rejection_reason: options.rejectionReason } : {}),
+      ...(options.resolutionData ? { resolution_data: options.resolutionData } : {}),
+    })
   ).then((row) => normalizeApproval(row) ?? (row as Approval))
+}
 
 export const resumeApproval = (id: string) =>
   requestJson<Approval>(`/approvals/${encodeURIComponent(id)}/resume`, jsonInit('POST')).then(

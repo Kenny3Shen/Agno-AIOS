@@ -114,6 +114,8 @@ export type WorkflowState = {
   steps: WorkflowNode[]
   triggers: WorkflowTriggers
   selectedId: string | null
+  /** Multi-select (includes selectedId when set). */
+  selectedIds: string[]
   dirty: boolean
   saving: boolean
   running: boolean

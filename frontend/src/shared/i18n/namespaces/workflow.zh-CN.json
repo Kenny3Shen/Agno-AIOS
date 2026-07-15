@@ -60,7 +60,11 @@
   "outputReviewMessagePlaceholder": "输出复核提示",
   "studioHint": "画布优先 · 从左侧拖入节点，像 Dify / Coze 一样编排",
   "palette": "节点面板",
-  "paletteDragHint": "拖到画布空白处添加；也可双击快速添加",
-  "canvasEmpty": "从左侧拖入节点开始编排",
-  "deleteNode": "删除节点"
+  "paletteDragHint": "拖到画布或容器；Shift 多选；Del 删除",
+  "canvasEmpty": "从左侧拖入节点 — 拖到容器上可嵌套",
+  "deleteNode": "删除节点",
+  "organize": "整理布局",
+  "organizeHint": "自动排布节点（Ctrl/Cmd+L）",
+  "undoHint": "撤销（Ctrl/Cmd+Z）",
+  "redoHint": "重做（Ctrl/Cmd+Y）"
 }

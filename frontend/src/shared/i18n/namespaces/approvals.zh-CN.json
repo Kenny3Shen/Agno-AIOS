@@ -21,5 +21,9 @@
   "resumeRetryStarted": "已开始重试恢复运行。",
   "resumeRetryFailed": "无法恢复运行，请稍后重试。",
   "resumeFailed": "运行恢复失败",
-  "resumeFailedDescription": "该操作已决议，但原对话尚未恢复。"
+  "resumeFailedDescription": "该操作已决议，但原对话尚未恢复。",
+  "approveUserInput": "填写用户输入",
+  "approveOutputReview": "审核步骤输出",
+  "userInputPlaceholder": "输入工作流步骤所需的回复",
+  "editedOutputPlaceholder": "在继续前编辑步骤输出"
 }

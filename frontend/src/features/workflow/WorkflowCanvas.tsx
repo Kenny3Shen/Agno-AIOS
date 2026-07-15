@@ -1,4 +1,12 @@
-import { useMemo, useCallback, useRef, type DragEvent } from 'react'
+import {
+  useMemo,
+  useCallback,
+  useRef,
+  useState,
+  useEffect,
+  type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react'
 import {
   ReactFlow,
   Background,
@@ -6,11 +14,14 @@ import {
   MiniMap,
   ReactFlowProvider,
   useReactFlow,
+  applyNodeChanges,
   type Node,
   type Edge,
   type NodeMouseHandler,
   type OnNodeDrag,
+  type OnNodesChange,
   type OnConnect,
+  type OnSelectionChangeFunc,
   MarkerType,
   ConnectionMode,
   BackgroundVariant,
@@ -18,103 +29,323 @@ import {
 import '@xyflow/react/dist/style.css'
 import type { WorkflowNode, WorkflowNodeType } from './types'
 import { usePreferences } from '@/app/providers/AppProviders'
-import { findNode, layoutCanvas } from './utils'
+import {
+  defaultDropTarget,
+  emptySlotsFor,
+  findNode,
+  isContainerType,
+  isDescendantOf,
+  layoutCanvas,
+  type ReparentTarget,
+} from './utils'
 import { WorkflowFlowNode } from './WorkflowFlowNode'
 
 const nodeTypes = { workflow: WorkflowFlowNode }
 
 const PALETTE_MIME = 'application/x-workflow-node'
 
+const NODE_SETTLE_MS = 220
+
 type Props = {
   steps: WorkflowNode[]
   selectedId: string | null
-  onSelect: (id: string | null) => void
+  selectedIds: string[]
+  onSelect: (id: string | null, multi?: boolean) => void
+  onSelectMany: (ids: string[]) => void
   onPositionsChange: (positions: Record<string, { x: number; y: number }>) => void
   onConnectSequence: (sourceId: string, targetId: string) => void
-  onDropNode: (type: WorkflowNodeType, position: { x: number; y: number }) => void
+  onDropNode: (
+    type: WorkflowNodeType,
+    position: { x: number; y: number },
+    target?: ReparentTarget | null
+  ) => void
+  onReparent: (nodeId: string, target: ReparentTarget) => void
+  onEmptySlot: (parentId: string, slotKey: string) => void
+  onDeleteSelected: () => void
+  onUndo: () => void
+  onRedo: () => void
+  onCopy: () => void
+  onPaste: () => void
+  onOrganize: () => void
   emptyHint?: string
+}
+
+type FlowGraph = { nodes: Node[]; edges: Edge[] }
+
+function buildGraph(
+  steps: WorkflowNode[],
+  selectedIds: string[],
+  prevNodes: Node[],
+  animateNew: boolean,
+  dropTargetId: string | null,
+  onEmptySlot: (parentId: string, slotKey: string) => void
+): FlowGraph {
+  const layout = layoutCanvas(steps)
+  const prevById = new Map(prevNodes.map((item) => [item.id, item]))
+  const prevIds = new Set(prevNodes.map((item) => item.id))
+  const selected = new Set(selectedIds)
+
+  const flowNodes: Node[] = layout.nodes.map((item) => {
+    const source = findNode(steps, item.id)
+    const hitl = Boolean(
+      source?.requiresConfirmation ||
+        source?.requiresUserInput ||
+        source?.requiresOutputReview
+    )
+    let subtitle: string = item.type
+    if (source?.type === 'step') subtitle = source.targetId || 'agent'
+    else if (source?.type === 'condition') subtitle = source.evaluatorCel || 'CEL'
+    else if (source?.type === 'router') subtitle = source.selectorCel || 'selector'
+    else if (source?.type === 'workflow_ref') subtitle = source.workflowId || 'nested'
+    else if (source?.type === 'loop') subtitle = `max ${source.maxIterations ?? 3}`
+    else if (source?.type === 'parallel') subtitle = `${source.steps?.length ?? 0} branches`
+
+    const prev = prevById.get(item.id)
+    const isNew = animateNew && !prevIds.has(item.id)
+    const emptySlots = source ? emptySlotsFor(source) : []
+
+    return {
+      id: item.id,
+      type: 'workflow',
+      position: { x: item.x, y: item.y },
+      data: {
+        label: item.label,
+        nodeType: item.type,
+        subtitle,
+        hitl,
+        emptySlots,
+        dropHighlight: dropTargetId === item.id,
+        onEmptySlot: (slotKey: string) => onEmptySlot(item.id, slotKey),
+      },
+      selected: selected.has(item.id),
+      ...(prev?.measured ? { measured: prev.measured } : {}),
+      ...(prev?.width != null ? { width: prev.width } : {}),
+      ...(prev?.height != null ? { height: prev.height } : {}),
+      className: isNew ? 'wf-node-enter' : undefined,
+    }
+  })
+
+  const flowEdges: Edge[] = layout.edges.map((edge) => ({
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    label: edge.label,
+    type: 'smoothstep',
+    animated: edge.label === 'next',
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      width: 18,
+      height: 18,
+      color: 'var(--wf-edge-stroke)',
+    },
+    style: { stroke: 'var(--wf-edge-stroke)', strokeWidth: 1.5 },
+    labelStyle: { fontSize: 10, fill: 'var(--wf-edge-label)', fontWeight: 500 },
+    labelBgStyle: { fill: 'var(--wf-edge-label-bg)', fillOpacity: 0.95 },
+    labelBgPadding: [4, 2] as [number, number],
+    labelBgBorderRadius: 4,
+  }))
+
+  return { nodes: flowNodes, edges: flowEdges }
 }
 
 function CanvasInner({
   steps,
   selectedId,
+  selectedIds,
   onSelect,
+  onSelectMany,
   onPositionsChange,
   onConnectSequence,
   onDropNode,
+  onReparent,
+  onEmptySlot,
+  onDeleteSelected,
+  onUndo,
+  onRedo,
+  onCopy,
+  onPaste,
+  onOrganize,
   emptyHint,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const { dark } = usePreferences()
-  const { screenToFlowPosition, fitView } = useReactFlow()
+  const { screenToFlowPosition, fitView, getIntersectingNodes } = useReactFlow()
 
-  const { nodes, edges } = useMemo(() => {
-    const layout = layoutCanvas(steps)
-    const flowNodes: Node[] = layout.nodes.map((item) => {
-      const source = findNode(steps, item.id)
-      const hitl = Boolean(
-        source?.requiresConfirmation ||
-          source?.requiresUserInput ||
-          source?.requiresOutputReview
+  const [graph, setGraph] = useState<FlowGraph>({ nodes: [], edges: [] })
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null)
+  const draggingRef = useRef(false)
+  const bootstrappedRef = useRef(false)
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const enterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const emptySlotRef = useRef(onEmptySlot)
+  emptySlotRef.current = onEmptySlot
+
+  const structureKey = useMemo(
+    () =>
+      steps
+        .map((node) => {
+          const kids =
+            node.type === 'condition'
+              ? `${(node.thenSteps ?? []).map((c) => c.id).join(',')}|${(node.elseSteps ?? []).map((c) => c.id).join(',')}`
+              : node.type === 'router'
+                ? (node.choices ?? [])
+                    .map((c) => `${c.id}:${c.steps.map((s) => s.id).join(',')}`)
+                    .join(';')
+                : (node.steps ?? []).map((c) => c.id).join(',')
+          const pos = node.position
+            ? `${Math.round(node.position.x)},${Math.round(node.position.y)}`
+            : '-'
+          return `${node.id}:${node.type}:${node.name ?? ''}:${pos}:${kids}`
+        })
+        .join('#'),
+    [steps]
+  )
+
+  const selectionKey = selectedIds.length
+    ? selectedIds.join(',')
+    : selectedId ?? ''
+
+  useEffect(() => {
+    if (draggingRef.current) return
+    const effectiveSelectedIds = selectedIds.length
+      ? selectedIds
+      : selectedId
+        ? [selectedId]
+        : []
+    setGraph((prev) => {
+      const animateNew = bootstrappedRef.current
+      const next = buildGraph(
+        steps,
+        effectiveSelectedIds,
+        prev.nodes,
+        animateNew,
+        dropTargetId,
+        (parentId, slotKey) => emptySlotRef.current(parentId, slotKey)
       )
-      let subtitle: string = item.type
-      if (source?.type === 'step') subtitle = source.targetId || 'agent'
-      else if (source?.type === 'condition') subtitle = source.evaluatorCel || 'CEL'
-      else if (source?.type === 'router') subtitle = source.selectorCel || 'selector'
-      else if (source?.type === 'workflow_ref') subtitle = source.workflowId || 'nested'
-      else if (source?.type === 'loop') subtitle = `max ${source.maxIterations ?? 3}`
-      else if (source?.type === 'parallel') subtitle = `${source.steps?.length ?? 0} branches`
-      return {
-        id: item.id,
-        type: 'workflow',
-        position: { x: item.x, y: item.y },
-        data: {
-          label: item.label,
-          nodeType: item.type,
-          subtitle,
-          hitl,
-        },
-        selected: item.id === selectedId,
-      }
+      bootstrappedRef.current = true
+      return next
     })
-    const flowEdges: Edge[] = layout.edges.map((edge) => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      label: edge.label,
-      type: 'smoothstep',
-      animated: edge.label === 'next',
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-        width: 18,
-        height: 18,
-        color: 'var(--wf-edge-stroke)',
-      },
-      style: { stroke: 'var(--wf-edge-stroke)', strokeWidth: 1.5 },
-      labelStyle: { fontSize: 10, fill: 'var(--wf-edge-label)', fontWeight: 500 },
-      labelBgStyle: { fill: 'var(--wf-edge-label-bg)', fillOpacity: 0.95 },
-      labelBgPadding: [4, 2] as [number, number],
-      labelBgBorderRadius: 4,
+  }, [structureKey, selectionKey, steps, selectedIds, selectedId, dropTargetId])
+
+  useEffect(() => {
+    if (!graph.nodes.some((node) => node.className?.includes('wf-node-enter'))) return
+    if (enterTimerRef.current) clearTimeout(enterTimerRef.current)
+    enterTimerRef.current = setTimeout(() => {
+      setGraph((current) => ({
+        ...current,
+        nodes: current.nodes.map((node) =>
+          node.className?.includes('wf-node-enter')
+            ? { ...node, className: undefined }
+            : node
+        ),
+      }))
+      enterTimerRef.current = null
+    }, 320)
+    return () => {
+      if (enterTimerRef.current) clearTimeout(enterTimerRef.current)
+    }
+  }, [graph.nodes])
+
+  useEffect(
+    () => () => {
+      if (settleTimerRef.current) clearTimeout(settleTimerRef.current)
+      if (enterTimerRef.current) clearTimeout(enterTimerRef.current)
+    },
+    []
+  )
+
+  const onNodesChange: OnNodesChange = useCallback((changes) => {
+    setGraph((current) => ({
+      ...current,
+      nodes: applyNodeChanges(changes, current.nodes),
     }))
-    return { nodes: flowNodes, edges: flowEdges }
-  }, [steps, selectedId])
+  }, [])
 
   const onNodeClick: NodeMouseHandler = useCallback(
-    (_event, node) => onSelect(node.id),
+    (event, node) => {
+      onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey)
+    },
     [onSelect]
   )
 
   const onPaneClick = useCallback(() => onSelect(null), [onSelect])
 
+  const onSelectionChange: OnSelectionChangeFunc = useCallback(
+    ({ nodes: selectedNodes }) => {
+      if (draggingRef.current) return
+      // RF box-select / multi-select
+      if (selectedNodes.length > 1) {
+        onSelectMany(selectedNodes.map((n) => n.id))
+      }
+    },
+    [onSelectMany]
+  )
+
+  const resolveContainerTarget = useCallback(
+    (nodeId: string, candidateId: string): ReparentTarget | null => {
+      if (candidateId === nodeId) return null
+      if (isDescendantOf(steps, nodeId, candidateId)) return null
+      const container = findNode(steps, candidateId)
+      if (!container || !isContainerType(container.type)) return null
+      return defaultDropTarget(container)
+    },
+    [steps]
+  )
+
+  const onNodeDragStart: OnNodeDrag = useCallback(() => {
+    draggingRef.current = true
+    wrapperRef.current?.classList.add('is-dragging-node')
+    if (settleTimerRef.current) {
+      clearTimeout(settleTimerRef.current)
+      settleTimerRef.current = null
+    }
+  }, [])
+
+  const onNodeDrag: OnNodeDrag = useCallback(
+    (_event, node) => {
+      const hits = getIntersectingNodes(node).filter((item) => item.id !== node.id)
+      let nextTarget: string | null = null
+      for (const hit of hits) {
+        const target = resolveContainerTarget(node.id, hit.id)
+        if (target) {
+          nextTarget = hit.id
+          break
+        }
+      }
+      setDropTargetId((current) => (current === nextTarget ? current : nextTarget))
+    },
+    [getIntersectingNodes, resolveContainerTarget]
+  )
+
   const onNodeDragStop: OnNodeDrag = useCallback(
-    (_event, _node, allNodes) => {
+    (_event, node, allNodes) => {
+      draggingRef.current = false
+      const targetId = dropTargetId
+      setDropTargetId(null)
+
+      if (targetId) {
+        const target = resolveContainerTarget(node.id, targetId)
+        if (target) {
+          onReparent(node.id, target)
+          settleTimerRef.current = setTimeout(() => {
+            wrapperRef.current?.classList.remove('is-dragging-node')
+            settleTimerRef.current = null
+          }, NODE_SETTLE_MS + 40)
+          return
+        }
+      }
+
       const positions: Record<string, { x: number; y: number }> = {}
       for (const item of allNodes) {
         positions[item.id] = { x: item.position.x, y: item.position.y }
       }
       onPositionsChange(positions)
+      settleTimerRef.current = setTimeout(() => {
+        wrapperRef.current?.classList.remove('is-dragging-node')
+        settleTimerRef.current = null
+      }, NODE_SETTLE_MS + 40)
     },
-    [onPositionsChange]
+    [dropTargetId, onPositionsChange, onReparent, resolveContainerTarget]
   )
 
   const onConnect: OnConnect = useCallback(
@@ -131,18 +362,118 @@ function CanvasInner({
     event.dataTransfer.dropEffect = 'copy'
   }, [])
 
+  const findContainerAtPoint = useCallback(
+    (flowPos: { x: number; y: number }): { id: string; target: ReparentTarget } | null => {
+      // Hit-test nodes by position/size (last drawn = top-most preference reversed: prefer deepest)
+      const candidates: Array<{ id: string; target: ReparentTarget; area: number }> = []
+      for (const node of graph.nodes) {
+        const width = node.measured?.width ?? node.width ?? 200
+        const height = node.measured?.height ?? node.height ?? 88
+        const x = node.position.x
+        const y = node.position.y
+        if (
+          flowPos.x >= x &&
+          flowPos.x <= x + width &&
+          flowPos.y >= y &&
+          flowPos.y <= y + height
+        ) {
+          const source = findNode(steps, node.id)
+          if (!source || !isContainerType(source.type)) continue
+          const target = defaultDropTarget(source)
+          if (!target) continue
+          candidates.push({ id: node.id, target, area: width * height })
+        }
+      }
+      if (!candidates.length) return null
+      // Prefer smaller (deeper) containers
+      candidates.sort((a, b) => a.area - b.area)
+      return candidates[0] ?? null
+    },
+    [graph.nodes, steps]
+  )
+
   const onDrop = useCallback(
     (event: DragEvent) => {
       event.preventDefault()
       const type = event.dataTransfer.getData(PALETTE_MIME) as WorkflowNodeType
       if (!type) return
       const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
-      onDropNode(type, position)
-      // slight delay so new node is mounted
-      requestAnimationFrame(() => fitView({ padding: 0.2, duration: 200 }))
+      const hit = findContainerAtPoint(position)
+      onDropNode(type, position, hit?.target ?? null)
+      requestAnimationFrame(() => fitView({ padding: 0.2, duration: NODE_SETTLE_MS }))
     },
-    [screenToFlowPosition, onDropNode, fitView]
+    [screenToFlowPosition, onDropNode, fitView, findContainerAtPoint]
   )
+
+  const onKeyDown = useCallback(
+    (event: KeyboardEvent | ReactKeyboardEvent<HTMLDivElement>) => {
+      const mod = event.metaKey || event.ctrlKey
+      if (mod && event.key.toLowerCase() === 'z' && !event.shiftKey) {
+        event.preventDefault()
+        onUndo()
+        return
+      }
+      if (mod && (event.key.toLowerCase() === 'y' || (event.key.toLowerCase() === 'z' && event.shiftKey))) {
+        event.preventDefault()
+        onRedo()
+        return
+      }
+      if (mod && event.key.toLowerCase() === 'c') {
+        event.preventDefault()
+        onCopy()
+        return
+      }
+      if (mod && event.key.toLowerCase() === 'v') {
+        event.preventDefault()
+        onPaste()
+        return
+      }
+      if (mod && event.key.toLowerCase() === 'a') {
+        event.preventDefault()
+        onSelectMany(steps.map((n) => n.id))
+        return
+      }
+      if (mod && event.key.toLowerCase() === 'l') {
+        event.preventDefault()
+        onOrganize()
+        return
+      }
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault()
+        onDeleteSelected()
+      }
+    },
+    [onUndo, onRedo, onCopy, onPaste, onSelectMany, onOrganize, onDeleteSelected, steps]
+  )
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return
+      }
+      const root = wrapperRef.current
+      if (!root) return
+      const active = document.activeElement
+      if (
+        active &&
+        active !== document.body &&
+        active !== root &&
+        !root.contains(active)
+      ) {
+        return
+      }
+      onKeyDown(event as unknown as ReactKeyboardEvent<HTMLDivElement>)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onKeyDown])
 
   return (
     <div
@@ -152,21 +483,27 @@ function CanvasInner({
       onDragOver={onDragOver}
     >
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={graph.nodes}
+        edges={graph.edges}
         nodeTypes={nodeTypes}
+        onNodesChange={onNodesChange}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
+        onSelectionChange={onSelectionChange}
+        onNodeDragStart={onNodeDragStart}
+        onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
         nodesDraggable
         nodesConnectable
         elementsSelectable
+        selectionOnDrag
+        multiSelectionKeyCode="Shift"
         panOnScroll
         connectionMode={ConnectionMode.Loose}
         colorMode={dark ? 'dark' : 'light'}
         fitView
-        fitViewOptions={{ padding: 0.2 }}
+        fitViewOptions={{ padding: 0.2, duration: NODE_SETTLE_MS }}
         defaultMarkerColor="var(--wf-edge-stroke)"
         minZoom={0.25}
         maxZoom={1.75}
@@ -174,20 +511,20 @@ function CanvasInner({
         proOptions={{ hideAttribution: true }}
         deleteKeyCode={null}
       >
-        <Background variant={BackgroundVariant.Dots} gap={18} size={1.2} color="var(--wf-canvas-dot)" />
-        <MiniMap
-          pannable
-          zoomable
-          nodeStrokeWidth={2}
-          className="wf-minimap"
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={18}
+          size={1.2}
+          color="var(--wf-canvas-dot)"
         />
+        <MiniMap pannable zoomable nodeStrokeWidth={2} className="wf-minimap" />
         <Controls showInteractive={false} className="wf-controls" />
       </ReactFlow>
       {!steps.length ? (
         <div className="workflow-canvas__empty-overlay">
           <div className="workflow-canvas__empty-card">
             <strong>{emptyHint || 'Drag nodes from the left palette'}</strong>
-            <span>Drop onto the canvas to start building your workflow</span>
+            <span>Drop onto the canvas — or onto a container to nest</span>
           </div>
         </div>
       ) : null}

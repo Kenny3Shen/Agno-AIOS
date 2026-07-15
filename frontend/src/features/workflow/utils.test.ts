@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyAutoLayout,
   buildWorkflowCode,
   createNode,
   fromRecord,
   layoutCanvas,
   moveNodeAfter,
   moveStep,
+  reparentNode,
   reorderRootsByPositions,
   toDefinition,
   defaultTriggers,
+  emptySlotsFor,
 } from './utils'
 import type { WorkflowState } from './types'
 
@@ -20,6 +23,7 @@ const state: WorkflowState = {
   sessionId: 's1',
   modelId: 'model-1',
   selectedId: null,
+  selectedIds: [],
   dirty: false,
   saving: false,
   running: false,
@@ -126,5 +130,53 @@ describe('workflow behavior', () => {
     const code = buildWorkflowCode(state)
     expect(code).toContain('Step(name=')
     expect(code).toContain('Router')
+  })
+})
+
+describe('reparent and auto-layout', () => {
+  it('reparents a step into parallel', () => {
+    const parallel = createNode('parallel')
+    parallel.id = 'p1'
+    const step = createNode('step')
+    step.id = 's1'
+    const next = reparentNode([parallel, step], 's1', {
+      kind: 'branch',
+      parentId: 'p1',
+      branch: 'steps',
+    })
+    expect(next).toHaveLength(1)
+    expect(next[0]?.type).toBe('parallel')
+    expect(next[0]?.steps?.map((n) => n.id)).toEqual(['s1'])
+  })
+
+  it('blocks reparent into own descendant', () => {
+    const parallel = createNode('parallel')
+    parallel.id = 'p1'
+    const step = createNode('step')
+    step.id = 's1'
+    parallel.steps = [step]
+    const next = reparentNode([parallel], 'p1', {
+      kind: 'branch',
+      parentId: 's1',
+      branch: 'steps',
+    })
+    expect(next[0]?.id).toBe('p1')
+    expect(next[0]?.steps?.[0]?.id).toBe('s1')
+  })
+
+  it('exposes empty slots for empty containers', () => {
+    expect(emptySlotsFor(createNode('parallel')).map((s) => s.key)).toEqual(['steps'])
+    expect(emptySlotsFor(createNode('condition')).map((s) => s.key)).toEqual(['thenSteps', 'elseSteps'])
+  })
+
+  it('auto-layout assigns positions', () => {
+    const a = createNode('step')
+    a.id = 'a'
+    const b = createNode('step')
+    b.id = 'b'
+    const laid = applyAutoLayout([a, b])
+    expect(laid[0]?.position).toBeTruthy()
+    expect(laid[1]?.position).toBeTruthy()
+    expect(laid[0]?.position?.y).not.toEqual(laid[1]?.position?.y)
   })
 })

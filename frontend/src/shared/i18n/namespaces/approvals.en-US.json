@@ -21,5 +21,9 @@
   "resumeRetryStarted": "Run resume retry started.",
   "resumeRetryFailed": "Unable to resume the run. Please try again.",
   "resumeFailed": "Run resume failed",
-  "resumeFailedDescription": "The decision was recorded, but the original conversation has not resumed."
+  "resumeFailedDescription": "The decision was recorded, but the original conversation has not resumed.",
+  "approveUserInput": "Provide user input",
+  "approveOutputReview": "Review step output",
+  "userInputPlaceholder": "Type the response for the workflow step",
+  "editedOutputPlaceholder": "Edit the step output before continuing"
 }

@@ -156,6 +156,296 @@ export const addChildToNode = (
     return { ...parent, [branch]: [...current, child] }
   })
 
+export type BranchKey = 'steps' | 'thenSteps' | 'elseSteps'
+
+export type ReparentTarget =
+  | { kind: 'root'; index?: number }
+  | { kind: 'branch'; parentId: string; branch: BranchKey }
+  | { kind: 'choice'; parentId: string; choiceId: string }
+
+export type EmptySlot = {
+  key: string
+  label: string
+  branch?: BranchKey
+  choiceId?: string
+}
+
+export const isContainerType = (type: WorkflowNodeType): boolean =>
+  type === 'parallel' || type === 'condition' || type === 'loop' || type === 'router'
+
+export const collectNodeIds = (nodes: WorkflowNode[]): string[] => {
+  const ids: string[] = []
+  const walk = (list: WorkflowNode[]) => {
+    for (const node of list) {
+      ids.push(node.id)
+      if (node.steps) walk(node.steps)
+      if (node.thenSteps) walk(node.thenSteps)
+      if (node.elseSteps) walk(node.elseSteps)
+      for (const choice of node.choices ?? []) walk(choice.steps)
+    }
+  }
+  walk(nodes)
+  return ids
+}
+
+export const isDescendantOf = (
+  nodes: WorkflowNode[],
+  ancestorId: string,
+  maybeDescendantId: string
+): boolean => {
+  const ancestor = findNode(nodes, ancestorId)
+  if (!ancestor) return false
+  return collectNodeIds([ancestor]).includes(maybeDescendantId)
+}
+
+/** Deep-clone a node tree with fresh ids (for copy/paste). */
+export const cloneNodeDeep = (node: WorkflowNode): WorkflowNode => {
+  const id = crypto.randomUUID()
+  const base = { ...node, id, position: node.position ? { ...node.position } : undefined }
+  if (node.type === 'condition') {
+    return {
+      ...base,
+      type: 'condition',
+      thenSteps: (node.thenSteps ?? []).map(cloneNodeDeep),
+      elseSteps: (node.elseSteps ?? []).map(cloneNodeDeep),
+    }
+  }
+  if (node.type === 'router') {
+    return {
+      ...base,
+      type: 'router',
+      choices: (node.choices ?? []).map((choice) => ({
+        id: crypto.randomUUID(),
+        name: choice.name,
+        steps: choice.steps.map(cloneNodeDeep),
+      })),
+    }
+  }
+  if (node.steps) {
+    return { ...base, steps: node.steps.map(cloneNodeDeep) }
+  }
+  return base
+}
+
+export const removeNodesInTree = (nodes: WorkflowNode[], ids: string[]): WorkflowNode[] => {
+  const doomed = new Set(ids)
+  const filterList = (list: WorkflowNode[]): WorkflowNode[] =>
+    list.flatMap((node) => {
+      if (doomed.has(node.id)) return []
+      return [
+        {
+          ...node,
+          steps: node.steps ? filterList(node.steps) : node.steps,
+          thenSteps: node.thenSteps ? filterList(node.thenSteps) : node.thenSteps,
+          elseSteps: node.elseSteps ? filterList(node.elseSteps) : node.elseSteps,
+          choices: node.choices?.map((choice) => ({
+            ...choice,
+            steps: filterList(choice.steps),
+          })),
+        },
+      ]
+    })
+  return filterList(nodes)
+}
+
+/** Extract a node from the tree; returns the node and remaining roots. */
+export const extractNode = (
+  nodes: WorkflowNode[],
+  id: string
+): { node: WorkflowNode | null; remaining: WorkflowNode[] } => {
+  const node = findNode(nodes, id)
+  if (!node) return { node: null, remaining: nodes }
+  return { node, remaining: removeNodeInTree(nodes, id) }
+}
+
+export const insertChild = (
+  nodes: WorkflowNode[],
+  target: ReparentTarget,
+  child: WorkflowNode
+): WorkflowNode[] => {
+  if (target.kind === 'root') {
+    const next = [...nodes]
+    const index = target.index ?? next.length
+    next.splice(Math.max(0, Math.min(index, next.length)), 0, child)
+    return next
+  }
+  if (target.kind === 'choice') {
+    return updateNodeInTree(nodes, target.parentId, (parent) => {
+      if (parent.type !== 'router') return parent
+      return {
+        ...parent,
+        choices: (parent.choices ?? []).map((choice) =>
+          choice.id === target.choiceId
+            ? { ...choice, steps: [...choice.steps, child] }
+            : choice
+        ),
+      }
+    })
+  }
+  return addChildToNode(nodes, target.parentId, target.branch, child)
+}
+
+/**
+ * Move `nodeId` under a container (or to root). Blocks cycles and HITL-in-Parallel.
+ */
+export const reparentNode = (
+  nodes: WorkflowNode[],
+  nodeId: string,
+  target: ReparentTarget
+): WorkflowNode[] => {
+  if (target.kind !== 'root' && target.parentId === nodeId) return nodes
+  if (target.kind !== 'root' && isDescendantOf(nodes, nodeId, target.parentId)) return nodes
+
+  const { node, remaining } = extractNode(nodes, nodeId)
+  if (!node) return nodes
+
+  if (target.kind !== 'root') {
+    const parent = findNode(remaining, target.parentId) ?? findNode(nodes, target.parentId)
+    if (!parent || !isContainerType(parent.type)) return nodes
+    // Agno: no HITL inside Parallel
+    if (parent.type === 'parallel') {
+      const hitl = Boolean(
+        node.requiresConfirmation || node.requiresUserInput || node.requiresOutputReview
+      )
+      if (hitl || collectNodeIds([node]).some((id) => {
+        const n = findNode([node], id)
+        return Boolean(n?.requiresConfirmation || n?.requiresUserInput || n?.requiresOutputReview)
+      })) {
+        return nodes
+      }
+    }
+  }
+
+  return insertChild(remaining, target, node)
+}
+
+/** Default drop target when releasing a node over a container. */
+export const defaultDropTarget = (container: WorkflowNode): ReparentTarget | null => {
+  if (container.type === 'parallel' || container.type === 'loop') {
+    return { kind: 'branch', parentId: container.id, branch: 'steps' }
+  }
+  if (container.type === 'condition') {
+    const thenEmpty = !(container.thenSteps ?? []).length
+    const elseEmpty = !(container.elseSteps ?? []).length
+    if (thenEmpty) return { kind: 'branch', parentId: container.id, branch: 'thenSteps' }
+    if (elseEmpty) return { kind: 'branch', parentId: container.id, branch: 'elseSteps' }
+    return { kind: 'branch', parentId: container.id, branch: 'thenSteps' }
+  }
+  if (container.type === 'router') {
+    const choices = container.choices ?? []
+    const empty = choices.find((c) => c.steps.length === 0) ?? choices[0]
+    if (!empty) return null
+    return { kind: 'choice', parentId: container.id, choiceId: empty.id }
+  }
+  return null
+}
+
+export const emptySlotsFor = (node: WorkflowNode): EmptySlot[] => {
+  if (node.type === 'parallel') {
+    if ((node.steps ?? []).length) return []
+    return [{ key: 'steps', label: 'Add branch', branch: 'steps' }]
+  }
+  if (node.type === 'loop') {
+    if ((node.steps ?? []).length) return []
+    return [{ key: 'steps', label: 'Add body step', branch: 'steps' }]
+  }
+  if (node.type === 'condition') {
+    const slots: EmptySlot[] = []
+    if (!(node.thenSteps ?? []).length) {
+      slots.push({ key: 'thenSteps', label: 'Add then', branch: 'thenSteps' })
+    }
+    if (!(node.elseSteps ?? []).length) {
+      slots.push({ key: 'elseSteps', label: 'Add else', branch: 'elseSteps' })
+    }
+    return slots
+  }
+  if (node.type === 'router') {
+    return (node.choices ?? [])
+      .filter((c) => c.steps.length === 0)
+      .map((c) => ({
+        key: `choice:${c.id}`,
+        label: `Add ${c.name || 'path'}`,
+        choiceId: c.id,
+      }))
+  }
+  return []
+}
+
+export const parseEmptySlot = (
+  parent: WorkflowNode,
+  slotKey: string
+): ReparentTarget | null => {
+  if (slotKey === 'steps' || slotKey === 'thenSteps' || slotKey === 'elseSteps') {
+    return { kind: 'branch', parentId: parent.id, branch: slotKey }
+  }
+  if (slotKey.startsWith('choice:')) {
+    return { kind: 'choice', parentId: parent.id, choiceId: slotKey.slice('choice:'.length) }
+  }
+  return null
+}
+
+const subtreeHeight = (node: WorkflowNode): number => {
+  const children =
+    node.type === 'condition'
+      ? [...(node.thenSteps ?? []), ...(node.elseSteps ?? [])]
+      : node.type === 'router'
+        ? (node.choices ?? []).flatMap((c) => c.steps)
+        : (node.steps ?? [])
+  if (!children.length) return 1
+  return children.reduce((sum, child) => sum + subtreeHeight(child), 0)
+}
+
+/** Hierarchical auto-layout (tree packer; Dify-like vertical flow). Overwrites positions. */
+export const applyAutoLayout = (roots: WorkflowNode[]): WorkflowNode[] => {
+  const H_GAP = 240
+  const V_GAP = 110
+  const positions = new Map<string, { x: number; y: number }>()
+  let cursorY = 0
+
+  const place = (node: WorkflowNode, depth: number, startY: number): number => {
+    const height = subtreeHeight(node)
+    const y = startY + ((height - 1) * V_GAP) / 2
+    positions.set(node.id, { x: depth * H_GAP, y })
+    let childY = startY
+    const children: Array<{ child: WorkflowNode }> =
+      node.type === 'condition'
+        ? [
+            ...(node.thenSteps ?? []).map((child) => ({ child })),
+            ...(node.elseSteps ?? []).map((child) => ({ child })),
+          ]
+        : node.type === 'router'
+          ? (node.choices ?? []).flatMap((c) => c.steps.map((child) => ({ child })))
+          : (node.steps ?? []).map((child) => ({ child }))
+    for (const { child } of children) {
+      const h = subtreeHeight(child)
+      place(child, depth + 1, childY)
+      childY += h * V_GAP
+    }
+    return height
+  }
+
+  for (const root of roots) {
+    const h = place(root, 0, cursorY)
+    cursorY += h * V_GAP + 24
+  }
+
+  const stamp = (list: WorkflowNode[]): WorkflowNode[] =>
+    list.map((node) => ({
+      ...node,
+      position: positions.get(node.id) ?? node.position,
+      steps: node.steps ? stamp(node.steps) : node.steps,
+      thenSteps: node.thenSteps ? stamp(node.thenSteps) : node.thenSteps,
+      elseSteps: node.elseSteps ? stamp(node.elseSteps) : node.elseSteps,
+      choices: node.choices?.map((choice) => ({
+        ...choice,
+        steps: stamp(choice.steps),
+      })),
+    }))
+
+  return stamp(roots)
+}
+
+
 /** Reorder top-level nodes by comparing canvas Y positions. */
 export const reorderRootsByPositions = (nodes: WorkflowNode[]): WorkflowNode[] => {
   return [...nodes].sort((a, b) => {
@@ -382,16 +672,18 @@ export type CanvasLayoutEdge = {
 }
 
 export const layoutCanvas = (
-  roots: WorkflowNode[]
+  roots: WorkflowNode[],
+  options?: { forceAuto?: boolean }
 ): { nodes: CanvasLayoutNode[]; edges: CanvasLayoutEdge[] } => {
   const nodes: CanvasLayoutNode[] = []
   const edges: CanvasLayoutEdge[] = []
   let row = 0
+  const forceAuto = Boolean(options?.forceAuto)
   const visit = (node: WorkflowNode, depth: number, parentId: string | null, edgeLabel?: string) => {
     const autoY = row * 90
     const autoX = depth * 220
-    const x = node.position?.x ?? autoX
-    const y = node.position?.y ?? autoY
+    const x = forceAuto ? autoX : (node.position?.x ?? autoX)
+    const y = forceAuto ? autoY : (node.position?.y ?? autoY)
     nodes.push({
       id: node.id,
       type: node.type,

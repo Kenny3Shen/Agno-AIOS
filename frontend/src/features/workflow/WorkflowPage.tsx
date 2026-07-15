@@ -26,6 +26,9 @@ import {
   SaveOutlined,
   StopOutlined,
   PlusOutlined,
+  UndoOutlined,
+  RedoOutlined,
+  ApartmentOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useRouter } from '@tanstack/react-router'
@@ -108,6 +111,25 @@ export function WorkflowPage() {
         </div>
         <Space wrap className="workflow-studio__actions">
           <Button onClick={workflow.reset}>{t('new')}</Button>
+          <Tooltip title={t('undoHint')}>
+            <Button
+              icon={<UndoOutlined />}
+              disabled={!workflow.canUndo}
+              onClick={workflow.undo}
+            />
+          </Tooltip>
+          <Tooltip title={t('redoHint')}>
+            <Button
+              icon={<RedoOutlined />}
+              disabled={!workflow.canRedo}
+              onClick={workflow.redo}
+            />
+          </Tooltip>
+          <Tooltip title={t('organizeHint')}>
+            <Button icon={<ApartmentOutlined />} onClick={workflow.organizeLayout}>
+              {t('organize')}
+            </Button>
+          </Tooltip>
           <Button
             icon={<SaveOutlined />}
             type="primary"
@@ -221,12 +243,20 @@ export function WorkflowPage() {
           <WorkflowCanvas
             steps={workflow.state.steps}
             selectedId={workflow.state.selectedId}
-            onSelect={(id) =>
-              workflow.patchMeta({ selectedId: id, dirty: workflow.state.dirty })
-            }
+            selectedIds={workflow.state.selectedIds}
+            onSelect={workflow.select}
+            onSelectMany={workflow.selectMany}
             onPositionsChange={workflow.applyPositions}
             onConnectSequence={workflow.connectSequence}
-            onDropNode={(type, position) => workflow.addAt(type, position)}
+            onDropNode={(type, position, target) => workflow.addAt(type, position, target)}
+            onReparent={workflow.reparent}
+            onEmptySlot={(parentId, slotKey) => workflow.addToSlot(parentId, slotKey)}
+            onDeleteSelected={workflow.removeSelected}
+            onUndo={workflow.undo}
+            onRedo={workflow.redo}
+            onCopy={workflow.copySelected}
+            onPaste={workflow.pasteClipboard}
+            onOrganize={workflow.organizeLayout}
             emptyHint={t('canvasEmpty')}
           />
         </section>

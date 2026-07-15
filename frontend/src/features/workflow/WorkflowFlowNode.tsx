@@ -1,12 +1,16 @@
-import { memo, type CSSProperties } from 'react'
+import { memo, type CSSProperties, type MouseEvent } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { WorkflowNodeType } from './types'
+import type { EmptySlot } from './utils'
 
 export type WorkflowFlowNodeData = {
   label: string
   nodeType: WorkflowNodeType
   subtitle?: string
   hitl?: boolean
+  emptySlots?: EmptySlot[]
+  dropHighlight?: boolean
+  onEmptySlot?: (slotKey: string) => void
 }
 
 const TYPE_META: Record<
@@ -28,8 +32,18 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
     '--wf-node-color': meta.color,
     '--wf-node-bg': meta.bg,
   } as CSSProperties
+
+  const onSlotClick = (event: MouseEvent, key: string) => {
+    event.stopPropagation()
+    event.preventDefault()
+    payload.onEmptySlot?.(key)
+  }
+
   return (
-    <div className={`wf-flow-node ${selected ? 'is-selected' : ''}`} style={style}>
+    <div
+      className={`wf-flow-node ${selected ? 'is-selected' : ''} ${payload.dropHighlight ? 'is-drop-target' : ''}`}
+      style={style}
+    >
       <Handle type="target" position={Position.Top} className="wf-handle" />
       <div className="wf-flow-node__badge" aria-hidden>
         {meta.icon}
@@ -39,6 +53,20 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
         <div className="wf-flow-node__title">{payload.label}</div>
         {payload.subtitle ? <div className="wf-flow-node__sub">{payload.subtitle}</div> : null}
         {payload.hitl ? <div className="wf-flow-node__hitl">HITL</div> : null}
+        {payload.emptySlots?.length ? (
+          <div className="wf-flow-node__slots">
+            {payload.emptySlots.map((slot) => (
+              <button
+                key={slot.key}
+                type="button"
+                className="wf-flow-node__cta"
+                onClick={(event) => onSlotClick(event, slot.key)}
+              >
+                + {slot.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
       <Handle type="source" position={Position.Bottom} className="wf-handle" />
     </div>

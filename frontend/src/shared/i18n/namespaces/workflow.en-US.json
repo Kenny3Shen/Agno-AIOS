@@ -60,7 +60,11 @@
   "outputReviewMessagePlaceholder": "Output review prompt",
   "studioHint": "Canvas-first · drag nodes from the palette, Dify/Coze style",
   "palette": "Nodes",
-  "paletteDragHint": "Drag onto the canvas to add; double-click to quick-add",
-  "canvasEmpty": "Drag a node from the left to start",
-  "deleteNode": "Delete node"
+  "paletteDragHint": "Drag onto canvas or a container; Shift+click multi-select; Del deletes",
+  "canvasEmpty": "Drag a node from the left — drop on a container to nest",
+  "deleteNode": "Delete node",
+  "organize": "Organize",
+  "organizeHint": "Auto-layout nodes (Ctrl/Cmd+L)",
+  "undoHint": "Undo (Ctrl/Cmd+Z)",
+  "redoHint": "Redo (Ctrl/Cmd+Y)"
 }
