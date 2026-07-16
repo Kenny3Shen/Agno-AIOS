@@ -255,7 +255,7 @@
   "edgeNext": "next",
   "edgeThen": "then",
   "edgeElse": "else",
-  "multiSelectAgentHint": "Bulk-edit executor, Skills, instructions, and confirmation for selected Agent steps.",
+  "multiSelectAgentHint": "Bulk-edit executor, Skills, instructions, and HITL (confirm / user input / output review) for selected Agent steps.",
   "multiSelectNoAgents": "No Agent steps in the current multi-selection (control-flow only).",
   "multiSelectAgentCount": "{{count}} Agent steps selected",
   "multiSelectExecutorPlaceholder": "Set executor for selected agents",

@@ -341,7 +341,7 @@ export function useWorkflow() {
 
   /** Apply a patch to every selected Agent step (multi-select bulk edit). */
   const updateSelectedSteps = (
-    patch: Partial<Pick<WorkflowNode, 'targetId' | 'skills' | 'requiresConfirmation' | 'instructions'>>,
+    patch: Partial<Pick<WorkflowNode, 'targetId' | 'skills' | 'requiresConfirmation' | 'requiresUserInput' | 'requiresOutputReview' | 'instructions'>>,
   ) => {
     // Burst undo for typing (instructions); discrete Select/Checkbox still one snapshot per burst.
     setState((current) => {

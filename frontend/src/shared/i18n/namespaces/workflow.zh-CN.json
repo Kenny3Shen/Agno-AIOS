@@ -255,7 +255,7 @@
   "edgeNext": "下一步",
   "edgeThen": "成立",
   "edgeElse": "否则",
-  "multiSelectAgentHint": "可批量设置选中 Agent 步骤的执行器、Skill、指令与人工确认。",
+  "multiSelectAgentHint": "可批量设置选中 Agent 步骤的执行器、Skill、指令与 HITL（确认 / 用户输入 / 输出复核）。",
   "multiSelectNoAgents": "当前多选中没有 Agent 步骤（仅控制流节点）。",
   "multiSelectAgentCount": "选中 {{count}} 个 Agent 步骤",
   "multiSelectExecutorPlaceholder": "批量设置执行器",

@@ -868,6 +868,10 @@ export function WorkflowPage() {
                     : undefined
                   const allConfirm = agentSteps.every((node) => node.requiresConfirmation)
                   const noneConfirm = agentSteps.every((node) => !node.requiresConfirmation)
+                  const allUserInput = agentSteps.every((node) => node.requiresUserInput)
+                  const noneUserInput = agentSteps.every((node) => !node.requiresUserInput)
+                  const allOutputReview = agentSteps.every((node) => node.requiresOutputReview)
+                  const noneOutputReview = agentSteps.every((node) => !node.requiresOutputReview)
                   const skillKey = (skills: string[] | undefined) =>
                     JSON.stringify([...(skills ?? [])].map(String).sort())
                   const skillsMixed = !agentSteps.every(
@@ -1002,6 +1006,30 @@ export function WorkflowPage() {
                         }
                       >
                         {t('requiresConfirmation')}
+                      </Checkbox>
+                      <Checkbox
+                        className="nodrag"
+                        checked={allUserInput}
+                        indeterminate={!allUserInput && !noneUserInput}
+                        onChange={(e) =>
+                          workflow.updateSelectedSteps({
+                            requiresUserInput: e.target.checked,
+                          })
+                        }
+                      >
+                        {t('requiresUserInput')}
+                      </Checkbox>
+                      <Checkbox
+                        className="nodrag"
+                        checked={allOutputReview}
+                        indeterminate={!allOutputReview && !noneOutputReview}
+                        onChange={(e) =>
+                          workflow.updateSelectedSteps({
+                            requiresOutputReview: e.target.checked,
+                          })
+                        }
+                      >
+                        {t('requiresOutputReview')}
                       </Checkbox>
                       <Space size={8} wrap>
                         <Button size="small" onClick={() => workflow.select(null)}>

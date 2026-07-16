@@ -743,3 +743,32 @@ describe('updateNodeInTree bulk instructions patch', () => {
   })
 })
 
+describe('updateNodeInTree bulk HITL flags', () => {
+  it('bulk-patches HITL flags on agent steps', () => {
+    const a = createNode('step')
+    a.id = 'a'
+    a.requiresUserInput = false
+    a.requiresOutputReview = false
+    const b = createNode('step')
+    b.id = 'b'
+    b.requiresUserInput = true
+    b.requiresOutputReview = false
+    let steps = [a, b]
+    for (const id of ['a', 'b']) {
+      steps = updateNodeInTree(steps, id, (item) => ({
+        ...item,
+        requiresUserInput: true,
+        requiresOutputReview: true,
+      }))
+    }
+    expect(findNode(steps, 'a')).toMatchObject({
+      requiresUserInput: true,
+      requiresOutputReview: true,
+    })
+    expect(findNode(steps, 'b')).toMatchObject({
+      requiresUserInput: true,
+      requiresOutputReview: true,
+    })
+  })
+})
+

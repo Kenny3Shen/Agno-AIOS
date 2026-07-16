@@ -1,6 +1,11 @@
 # 下一步工作
 
 
+## 已完成：Studio 多选批量 HITL 开关
+
+- 多选 Inspector：批量 `requiresUserInput` / `requiresOutputReview`（与确认开关一致，支持 indeterminate）。
+- 与执行器 / Skill / 指令批量编辑同一面板。
+
 ## 已完成：Studio 多选批量指令 + Chat 关工具清 Live Search
 
 - 多选 Inspector：批量编辑 Agent `instructions`（不一致时提示覆盖）；输入用 burst undo（600ms）避免历史刷屏。
