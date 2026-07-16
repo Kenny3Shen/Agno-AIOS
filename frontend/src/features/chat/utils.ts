@@ -139,7 +139,17 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
     case 'live-search':
       return { ...state, liveSearch: action.value }
     case 'enable-tools':
-      return { ...state, enableTools: action.value }
+      // Tools-off is an explicit lite path: de-emphasize dependent toggles in UI state.
+      return {
+        ...state,
+        enableTools: action.value,
+        ...(action.value
+          ? {}
+          : {
+              // Keep localStorage preference for knowledge; only clear live search which is tool-gated.
+              liveSearch: false,
+            }),
+      }
     case 'start':
       return {
         ...state,

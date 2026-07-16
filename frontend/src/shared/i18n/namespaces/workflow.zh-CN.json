@@ -255,11 +255,14 @@
   "edgeNext": "下一步",
   "edgeThen": "成立",
   "edgeElse": "否则",
-  "multiSelectAgentHint": "可批量设置选中 Agent 步骤的执行器、Skill 与人工确认。",
+  "multiSelectAgentHint": "可批量设置选中 Agent 步骤的执行器、Skill、指令与人工确认。",
   "multiSelectNoAgents": "当前多选中没有 Agent 步骤（仅控制流节点）。",
   "multiSelectAgentCount": "选中 {{count}} 个 Agent 步骤",
   "multiSelectExecutorPlaceholder": "批量设置执行器",
   "multiSelectSkillsPlaceholder": "批量绑定 Skill（覆盖原有绑定）",
   "multiSelectSkillsMixed": "所选步骤 Skill 不一致；选择后将统一覆盖为新绑定。清空则全部不挂 Skill。",
-  "skillsBadge": "Skill · {{count}}"
+  "skillsBadge": "Skill · {{count}}",
+  "instructionsLabel": "步骤指令",
+  "multiSelectInstructionsMixed": "所选步骤指令不一致，输入将统一覆盖…",
+  "multiSelectInstructionsHint": "当前指令不一致；编辑内容会写入全部选中的 Agent 步骤。"
 }

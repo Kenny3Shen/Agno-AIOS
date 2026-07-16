@@ -343,7 +343,8 @@ export function useWorkflow() {
   const updateSelectedSteps = (
     patch: Partial<Pick<WorkflowNode, 'targetId' | 'skills' | 'requiresConfirmation' | 'instructions'>>,
   ) => {
-    withHistory((current) => {
+    // Burst undo for typing (instructions); discrete Select/Checkbox still one snapshot per burst.
+    setState((current) => {
       const ids = new Set(
         current.selectedIds.length
           ? current.selectedIds
@@ -352,6 +353,15 @@ export function useWorkflow() {
             : [],
       )
       if (!ids.size) return current
+      if (inspectorHistoryNodeRef.current !== 'multi-select') {
+        pushHistory(current)
+        inspectorHistoryNodeRef.current = 'multi-select'
+      }
+      if (inspectorHistoryTimerRef.current) clearTimeout(inspectorHistoryTimerRef.current)
+      inspectorHistoryTimerRef.current = setTimeout(() => {
+        inspectorHistoryNodeRef.current = null
+        inspectorHistoryTimerRef.current = null
+      }, 600)
       let steps = current.steps
       for (const id of ids) {
         const node = findNode(steps, id)

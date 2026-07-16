@@ -723,3 +723,23 @@ describe('updateNodeInTree bulk skills patch', () => {
   })
 })
 
+describe('updateNodeInTree bulk instructions patch', () => {
+  it('bulk-patches instructions on agent steps', () => {
+    const a = createNode('step')
+    a.id = 'a'
+    a.instructions = 'one'
+    const b = createNode('step')
+    b.id = 'b'
+    b.instructions = 'two'
+    let steps = [a, b]
+    for (const id of ['a', 'b']) {
+      steps = updateNodeInTree(steps, id, (item) => ({
+        ...item,
+        instructions: 'shared ops brief',
+      }))
+    }
+    expect(findNode(steps, 'a')?.instructions).toBe('shared ops brief')
+    expect(findNode(steps, 'b')?.instructions).toBe('shared ops brief')
+  })
+})
+

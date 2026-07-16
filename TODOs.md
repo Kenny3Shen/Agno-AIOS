@@ -1,6 +1,11 @@
 # 下一步工作
 
 
+## 已完成：Studio 多选批量指令 + Chat 关工具清 Live Search
+
+- 多选 Inspector：批量编辑 Agent `instructions`（不一致时提示覆盖）；输入用 burst undo（600ms）避免历史刷屏。
+- Chat：关闭「工具/Skill」时清 `liveSearch` 状态与 localStorage，与禁用开关一致。
+
 ## 已完成：Chat 关工具时禁用 Knowledge / Live Search 开关
 
 - `enableTools=false` 时禁用并取消高亮 Knowledge / Live Search 开关（与后端 lean 忽略一致）。

@@ -177,6 +177,15 @@ describe('chat behavior', () => {
     })
   })
 
+  it('clears liveSearch when tools are turned off', () => {
+    const withLive = chatReducer(
+      { ...initialChatState, liveSearch: true, enableTools: true },
+      { type: 'enable-tools', value: false },
+    )
+    expect(withLive.enableTools).toBe(false)
+    expect(withLive.liveSearch).toBe(false)
+  })
+
   it('sets a soft error without failing messages', () => {
     const next = chatReducer(initialChatState, { type: 'soft-error', message: 'server cancel failed' })
     expect(next.error).toBe('server cancel failed')

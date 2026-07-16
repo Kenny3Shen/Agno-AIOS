@@ -874,6 +874,12 @@ export function WorkflowPage() {
                     (node) => skillKey(node.skills) === skillKey(agentSteps[0]?.skills),
                   )
                   const sharedSkills = skillsMixed ? [] : [...(agentSteps[0]?.skills ?? [])]
+                  const instructionsMixed = !agentSteps.every(
+                    (node) => (node.instructions ?? '') === (agentSteps[0]?.instructions ?? ''),
+                  )
+                  const sharedInstructions = instructionsMixed
+                    ? ''
+                    : (agentSteps[0]?.instructions ?? '')
                   return (
                     <Space orientation="vertical" style={{ width: '100%' }} size={10}>
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -955,6 +961,35 @@ export function WorkflowPage() {
                         >
                           {skillsMixed ? t('multiSelectSkillsMixed') : t('stepSkillsHint')}
                         </Typography.Paragraph>
+                      </div>
+                      <div data-inspector-field="instructions">
+                        <Typography.Text
+                          type="secondary"
+                          style={{ fontSize: 11, display: 'block', marginBottom: 4 }}
+                        >
+                          {t('instructionsLabel')}
+                        </Typography.Text>
+                        <Input.TextArea
+                          className="nodrag nowheel"
+                          rows={3}
+                          value={sharedInstructions}
+                          placeholder={
+                            instructionsMixed
+                              ? t('multiSelectInstructionsMixed')
+                              : t('instructionsPlaceholder')
+                          }
+                          onChange={(e) =>
+                            workflow.updateSelectedSteps({ instructions: e.target.value })
+                          }
+                        />
+                        {instructionsMixed ? (
+                          <Typography.Paragraph
+                            type="secondary"
+                            style={{ fontSize: 11, marginTop: 4, marginBottom: 0 }}
+                          >
+                            {t('multiSelectInstructionsHint')}
+                          </Typography.Paragraph>
+                        ) : null}
                       </div>
                       <Checkbox
                         className="nodrag"

@@ -222,6 +222,9 @@ export function useChat() {
   const setEnableTools = (value: boolean) => {
     try {
       localStorage.setItem('agno-aios-chat-enable-tools', String(value))
+      if (!value) {
+        localStorage.setItem('agno-aios-chat-live-search', 'false')
+      }
     } catch {
       // ignore
     }
