@@ -507,3 +507,37 @@ def test_other_workflow_ref_allowed_with_forbid_id():
         forbid_self_workflow_id="wf-self",
     )
     assert normalized["steps"][0]["workflow_id"] == "other-wf"
+
+
+def test_normalize_step_uses_executor_display_name_when_name_empty_or_ref():
+    out = validate_and_normalize_definition(
+        {
+            "name": "wf",
+            "description": "",
+            "steps": [
+                {
+                    "id": "s1",
+                    "type": "step",
+                    "name": "",
+                    "executor": {"kind": "agent", "ref": "security-operations"},
+                },
+                {
+                    "id": "s2",
+                    "type": "step",
+                    "name": "security-operations",
+                    "executor": {"kind": "agent", "ref": "security-operations"},
+                },
+                {
+                    "id": "s3",
+                    "type": "step",
+                    "name": "自定义研判",
+                    "executor": {"kind": "agent", "ref": "safe-fallback"},
+                },
+            ],
+        }
+    )
+    steps = out["steps"]
+    assert steps[0]["name"] == "安全运营助手"
+    assert steps[1]["name"] == "安全运营助手"
+    assert steps[2]["name"] == "自定义研判"
+

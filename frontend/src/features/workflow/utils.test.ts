@@ -71,6 +71,15 @@ describe('workflow behavior', () => {
     expect(state.steps.map((item) => item.id)).toEqual(['a', 'b'])
   })
 
+  it('serializes empty step name without targetId fallback', () => {
+    const step = createNode('step')
+    step.name = ''
+    step.targetId = 'security-operations'
+    const definition = toDefinition({ name: 'x', description: '', steps: [step] })
+    expect(definition.steps[0]?.name).toBe('')
+    expect(definition.steps[0]?.executor).toEqual({ kind: 'agent', ref: 'security-operations' })
+  })
+
   it('builds a linear definition for save/run', () => {
     expect(toDefinition(state)).toMatchObject({
       name: 'IR',

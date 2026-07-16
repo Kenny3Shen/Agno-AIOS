@@ -8,6 +8,13 @@
 - 单测覆盖映射 / 回退 / 控制流副标题 / `executorNamesKey` 稳定序。
 
 
+
+## 已完成：Run 时 Step 空名映射 Executor 显示名
+
+- 编译 `validate_and_normalize_definition`：step `name` 为空 / 等于 id / 等于 ref 时，写入 catalog `name`（如「安全运营助手」），Run Log / HITL 不再裸露 `security-operations`。
+- 前端 `toDefinition` 不再把 `targetId` 当作 name 序列化；显式空名交给后端解析。
+- 保留用户自定义步骤名。
+
 ## 已完成：Executor 目录产品化 + Playbook 内容库
 
 - 内置执行器目录扩展字段：`category` / `capabilities` / `recommended_for` / `role`（`security-operations` 运营 vs `safe-fallback` 轻量）。

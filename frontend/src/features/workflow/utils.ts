@@ -1070,7 +1070,7 @@ const toDefinitionNode = (node: WorkflowNode): WorkflowDefinitionNode => {
   const step: WorkflowDefinitionNode = {
     id: node.id,
     type: 'step',
-    name: node.name || node.targetId || 'step',
+    name: (node.name || '').trim(),
     executor: { kind: 'agent', ref: node.targetId || 'security-operations' },
     instructions: node.instructions || '',
     ...basePos,

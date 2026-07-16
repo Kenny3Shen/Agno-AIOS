@@ -283,6 +283,12 @@ def _normalize_step(
             f"{path} unknown executor.ref={ref!r}; "
             f"allowed: {', '.join(sorted(BUILTIN_AGENT_REFS))}"
         )
+    # Prefer explicit step name; otherwise catalog display name (not raw ref/uuid).
+    meta = BUILTIN_AGENT_REFS[ref]
+    resolved_name = (display_name or "").strip()
+    if not resolved_name or resolved_name == node_id or resolved_name == ref:
+        resolved_name = meta["name"]
+    display_name = resolved_name
     requires_confirmation = bool(item.get("requires_confirmation"))
     requires_user_input = bool(item.get("requires_user_input"))
     requires_output_review = bool(item.get("requires_output_review"))
