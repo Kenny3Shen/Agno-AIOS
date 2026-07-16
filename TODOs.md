@@ -8,6 +8,11 @@
 - 客户端校验 `hitl_in_parallel`；Inspector / 多选批量开启 HITL 在 Parallel 内禁用或跳过。
 - 单测：粘贴进 condition/parallel、同级顺序、HITL 回退根级、校验码。
 
+## 已完成：粘贴位置锚定 + layout nodeLabel 对齐
+
+- `pasteClipboard`：有选中宿主时把新节点锚在宿主旁（容器 +220/+40），避免粘贴进嵌套后飞到旧坐标。
+- `nodeLabel`：空 Agent 步不再回退 `targetId`；校验路径文案与默认画布名一致（Agent step / Parallel / …）。
+
 ## 已完成：Chat 自动轻量后 Knowledge/Live 开关去高亮
 
 - 上一轮 `leanMode` 时，即使偏好仍开，Knowledge / Live Search 开关不再显示 active，改用 muted + Tooltip 说明「偏好保留，下一轮有工具意图再生效」。

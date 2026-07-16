@@ -35,6 +35,7 @@ import {
   fromRecord,
   insertChild,
   isInsideParallel,
+  locateNode,
   pasteNodesIntoSelection,
   triggerEnableBlocked,
   moveNodeAfter,
@@ -519,12 +520,37 @@ export function useWorkflow() {
     const items = clipboardRef.current
     if (!items.length) return
     withHistory((current) => {
-      const clones = items.map((node) => {
+      const soleId =
+        current.selectedIds.length === 1
+          ? current.selectedIds[0]
+          : current.selectedId && current.selectedIds.length <= 1
+            ? current.selectedId
+            : null
+      const host = soleId ? findNode(current.steps, soleId) : null
+      // Anchor near selected host so paste into container/sibling doesn't jump to old coords.
+      let anchor: { x: number; y: number } | null = null
+      if (host?.position) {
+        anchor = { x: host.position.x + 220, y: host.position.y + 40 }
+      } else if (host) {
+        const parentLoc = locateNode(current.steps, host.id)
+        if (parentLoc && parentLoc.kind !== 'root') {
+          const parent = findNode(current.steps, parentLoc.parentId)
+          if (parent?.position) {
+            anchor = { x: parent.position.x + 220, y: parent.position.y + 40 }
+          }
+        }
+      }
+
+      const clones = items.map((node, index) => {
         const clone = cloneNodeDeep(node)
-        const pos = clone.position
-        clone.position = pos
-          ? { x: pos.x + 40, y: pos.y + 40 }
-          : { x: 80, y: 80 }
+        if (anchor) {
+          clone.position = { x: anchor.x, y: anchor.y + index * 100 }
+        } else {
+          const pos = clone.position
+          clone.position = pos
+            ? { x: pos.x + 40, y: pos.y + 40 }
+            : { x: 80 + index * 40, y: 80 + index * 40 }
+        }
         return clone
       })
       // refresh clipboard offsets for repeated paste

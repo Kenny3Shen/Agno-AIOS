@@ -27,6 +27,7 @@ import {
   cloneNodeDeep,
   pasteNodesIntoSelection,
   locateNode,
+  nodeLabel,
   triggerEnableBlocked,
   workflowWebhookCurl,
   workflowWebhookUrl,
@@ -971,3 +972,15 @@ describe('pasteNodesIntoSelection', () => {
     })
   })
 })
+
+describe('nodeLabel', () => {
+  it('prefers explicit name and avoids raw targetId for empty agent steps', () => {
+    const step = createNode('step')
+    step.targetId = 'security-operations'
+    step.name = ''
+    expect(nodeLabel(step)).toBe('Agent step')
+    step.name = 'Triage'
+    expect(nodeLabel(step)).toBe('Triage')
+  })
+})
+

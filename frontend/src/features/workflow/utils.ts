@@ -845,7 +845,7 @@ export const validateWorkflowDraft = (
 
   const walk = (nodes: WorkflowNode[], path: string, insideParallel = false) => {
     for (const node of nodes) {
-      const label = node.name?.trim() || node.type
+      const label = node.name?.trim() || nodeLabel(node)
       const here = `${path}/${label}`
       const nestedParallel = insideParallel || node.type === 'parallel'
       if (
@@ -1386,11 +1386,25 @@ export const triggerEnableBlocked = (state: {
   return null
 }
 
+/** Internal layout/debug label (canvas display uses i18n + executor names). */
 export const nodeLabel = (node: WorkflowNode): string => {
-  if (node.name?.trim()) return node.name
-  if (node.type === 'step') return node.targetId || 'step'
-  if (node.type === 'workflow_ref') return node.workflowId || 'workflow_ref'
-  return node.type
+  if (node.name?.trim()) return node.name.trim()
+  switch (node.type) {
+    case 'step':
+      return 'Agent step'
+    case 'workflow_ref':
+      return 'Nested workflow'
+    case 'parallel':
+      return 'Parallel'
+    case 'condition':
+      return 'Condition'
+    case 'loop':
+      return 'Loop'
+    case 'router':
+      return 'Router'
+    default:
+      return node.type
+  }
 }
 
 /** Resolve canvas subtitle for a node (executor display name when available). */
