@@ -122,6 +122,26 @@ async def get_server_row(server_id: int) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+async def get_server_row_by_name(name: str) -> dict[str, Any] | None:
+    await ensure_mcp_tables()
+    table = mcp_servers_table()
+    async with get_async_control_plane_engine().begin() as conn:
+        row = (
+            await conn.execute(select(table).where(table.c.name == name))
+        ).mappings().first()
+    return dict(row) if row else None
+
+
+async def server_name_exists(name: str) -> bool:
+    await ensure_mcp_tables()
+    table = mcp_servers_table()
+    async with get_async_control_plane_engine().begin() as conn:
+        found = (
+            await conn.execute(select(table.c.id).where(table.c.name == name).limit(1))
+        ).first()
+    return found is not None
+
+
 async def upsert_server_row(record: dict[str, Any]) -> dict[str, Any]:
     await ensure_mcp_tables()
     table = mcp_servers_table()

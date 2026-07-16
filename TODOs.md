@@ -124,6 +124,15 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：MCP 按 name 定点查询
+
+- 新增 `get_server_row_by_name` / `server_name_exists`，toggle/upload 查重/visibility 不再 `list_mcp_servers` 全表扫
+- 列表仍走 `visible_mcp_servers` 全量（配置规模小）
+
+相关：`api/persistence/mcp.py` / `mcp_config_service.py`
+
+---
+
 ## 已完成：model_config 一次性导入归档 + Overview 采样 50 + SSE after 上限
 
 - 空表 bootstrap：从 `model_config.json` 导入后重命名为 `model_config.json.imported`，避免反复空表回灌

@@ -16,7 +16,7 @@ async def test_apply_service_toggle_updates_postgres_row():
     rows = [{"id": 1, "name": "playbook", "server_type": "builtin", "enabled": True}]
     update = AsyncMock()
     with (
-        patch.object(mcp_config_service, "list_mcp_servers", AsyncMock(return_value=rows)),
+        patch.object(mcp_config_service, "get_server_row_by_name", AsyncMock(return_value=rows[0])),
         patch.object(mcp_config_service, "update_server_row", update),
     ):
         change = await mcp_config_service.apply_service_toggle("playbook", False)
@@ -27,7 +27,7 @@ async def test_apply_service_toggle_updates_postgres_row():
 
 @pytest.mark.asyncio
 async def test_apply_service_toggle_rejects_unknown_service():
-    with patch.object(mcp_config_service, "list_mcp_servers", AsyncMock(return_value=[])):
+    with patch.object(mcp_config_service, "get_server_row_by_name", AsyncMock(return_value=None)):
         with pytest.raises(HTTPException) as exc:
             await mcp_config_service.apply_service_toggle("agent", True)
     assert exc.value.status_code == 400
@@ -69,7 +69,7 @@ async def test_apply_upload_inserts_postgres_server():
     }
     upsert = AsyncMock(return_value=inserted)
     with (
-        patch.object(mcp_config_service, "list_mcp_servers", AsyncMock(return_value=[])),
+        patch.object(mcp_config_service, "server_name_exists", AsyncMock(return_value=False)),
         patch.object(mcp_config_service, "insert_server_row", upsert),
     ):
         change = await mcp_config_service.apply_mcp_upload(
@@ -89,8 +89,8 @@ async def test_apply_upload_inserts_postgres_server():
 async def test_apply_upload_rejects_duplicate_name():
     with patch.object(
         mcp_config_service,
-        "list_mcp_servers",
-        AsyncMock(return_value=[{"name": "Existing"}]),
+        "server_name_exists",
+        AsyncMock(return_value=True),
     ):
         with pytest.raises(HTTPException) as exc:
             await mcp_config_service.apply_mcp_upload(

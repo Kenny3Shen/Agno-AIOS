@@ -11,7 +11,14 @@ from sqlalchemy.exc import IntegrityError
 from api.auth.claims import actor_role
 from api.auth.visibility import can_manage_resource, can_read_resource, normalize_visibility
 from api.mcp.config import list_mcp_servers, normalize_namespace
-from api.persistence.mcp import delete_server_row, get_server_row, insert_server_row, update_server_row
+from api.persistence.mcp import (
+    delete_server_row,
+    get_server_row,
+    get_server_row_by_name,
+    insert_server_row,
+    server_name_exists,
+    update_server_row,
+)
 from api.utils.json import JSONDecodeError, loads
 
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -108,9 +115,8 @@ async def visible_mcp_servers(user: Any) -> list[dict[str, Any]]:
 
 
 async def apply_service_toggle(service_id: str, enabled: bool) -> McpConfigChange:
-    rows = await list_mcp_servers()
-    row = next((item for item in rows if item["server_type"] == "builtin" and item["name"] == service_id), None)
-    if row is None:
+    row = await get_server_row_by_name(service_id)
+    if row is None or row.get("server_type") != "builtin":
         raise HTTPException(status_code=400, detail="Invalid service ID")
     await update_server_row(row["id"], {"enabled": enabled, "updated_at": int(time.time())})
     return McpConfigChange(
@@ -133,7 +139,7 @@ async def apply_mcp_upload(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     transport, config = parse_mcp_manifest(manifest)
-    if any(row["name"] == normalized_name for row in await list_mcp_servers()):
+    if await server_name_exists(normalized_name):
         raise HTTPException(status_code=409, detail="该 MCP 名称已存在")
     now = int(time.time())
     try:
@@ -157,7 +163,7 @@ async def apply_mcp_server_visibility(name: str, visibility: str, user: Any) -> 
         normalized_visibility = normalize_visibility(visibility, strict=True)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    row = next((item for item in await list_mcp_servers() if item["name"] == name), None)
+    row = await get_server_row_by_name(name)
     if row is None:
         raise HTTPException(status_code=404, detail="MCP server not found")
     if not can_manage_resource(user, row):
