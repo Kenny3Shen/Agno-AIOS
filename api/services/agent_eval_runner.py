@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from loguru import logger
 from collections.abc import Callable
 from dataclasses import dataclass
 from inspect import isawaitable
@@ -226,6 +227,12 @@ async def run_suite(
                 dependencies=dependencies,
             )
         except Exception:
+            logger.exception(
+                "Eval suite {} case {} failed during suite run {}",
+                suite_id,
+                case_id,
+                suite_run_id,
+            )
             summary["errored"] += 1
             continue
         status = str(result.get("status", ""))

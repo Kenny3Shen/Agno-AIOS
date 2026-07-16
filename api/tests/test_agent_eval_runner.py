@@ -192,6 +192,41 @@ async def test_run_suite_keeps_running_after_case_failure():
     assert mark_suite_call.kwargs["summary"] == {"passed": 1, "failed": 1, "errored": 0, "skipped": 0}
 
 
+
+@pytest.mark.asyncio
+async def test_run_suite_counts_exceptions_as_errored():
+    from api.services import agent_eval_runner as runner
+
+    actor = SimpleNamespace(id="user-1")
+    cases = [
+        {"id": "case-1", "enabled": True},
+        {"id": "case-2", "enabled": True},
+    ]
+
+    async def fake_run_case(case_id, actor, suite_run_id=None, replay_of_case_run_id=None, dependencies=None):
+        if case_id == "case-1":
+            raise RuntimeError("boom")
+        return {"id": "case-run-2", "status": "passed"}
+
+    with (
+        patch.object(runner.case_store, "get_suite", new=AsyncMock(return_value={"id": "suite-1", "enabled": True})),
+        patch.object(runner.case_store, "list_cases", new=AsyncMock(return_value={"data": cases, "meta": {"total_count": len(cases)}})),
+        patch.object(runner.case_store, "create_suite_run", new=AsyncMock(return_value={"id": "suite-run-1"})),
+        patch.object(
+            runner.case_store,
+            "mark_suite_run",
+            new=AsyncMock(return_value={"id": "suite-run-1", "status": "failed"}),
+        ) as mark_suite,
+        patch.object(runner, "run_case", side_effect=fake_run_case),
+    ):
+        result = await runner.run_suite("suite-1", actor=actor)
+
+    assert result["status"] == "failed"
+    mark_suite_call = mark_suite.await_args
+    assert mark_suite_call is not None
+    assert mark_suite_call.kwargs["summary"] == {"passed": 1, "failed": 0, "errored": 1, "skipped": 0}
+
+
 @pytest.mark.asyncio
 async def test_replay_case_run_links_new_run_to_failed_source():
     from api.services import agent_eval_runner as runner

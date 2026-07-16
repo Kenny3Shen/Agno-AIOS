@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Eval suite 单 case 异常可观测
+
+- `agent_eval_runner.run_suite`：单 case 抛错时 `logger.exception` 后计入 `errored` 并继续跑后续 case。
+- 单测覆盖 exception → errored 计数。
+
 ## 已完成：Workflow trigger history meta + Chat cancel 可观测
 
 - `GET /api/workflows/{id}/triggers/history`：`meta.total` → 标准 `pagination_meta`（`total_count`/`total_pages`/`search_time_ms`）。
