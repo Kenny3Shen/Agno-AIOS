@@ -1132,10 +1132,6 @@ class SecurityRunRuntime:
             request.reasoning_effort,
             live_search=request.live_search,
         )
-        knowledge = None
-        search_knowledge = bool(request.search_knowledge)
-        if search_knowledge:
-            knowledge = await _maybe_await(self.dependencies.get_async_knowledge_base())
         enable_tools = bool(request.enable_tools)
         tools = [mcp_tools] if mcp_tools is not None else []
         skills = (
@@ -1144,11 +1140,17 @@ class SecurityRunRuntime:
             else None
         )
         # Lean surface when tools off or intent filter attached nothing.
-        # Cost path: skip MCP/Skills, use lite prompt, no datetime injection,
-        # shorter/no history on new sessions, and do not inject long-term
-        # memories into the model context (still may write memories after the
-        # run when memory_enabled).
+        # Cost path: skip MCP/Skills/knowledge tool surface, use lite prompt,
+        # no datetime injection, shorter/no history on new sessions, and do
+        # not inject long-term memories into the model context (still may
+        # write memories after the run when memory_enabled).
         tool_surface = bool(tools) or skills is not None
+        # Knowledge retrieval tools are part of the full tool surface; lean
+        # turns ignore the request flag so trivial chat stays cheap.
+        search_knowledge = bool(request.search_knowledge) and tool_surface
+        knowledge = None
+        if search_knowledge:
+            knowledge = await _maybe_await(self.dependencies.get_async_knowledge_base())
         prompt_name = (
             SECURITY_OPERATIONS_PROMPT if tool_surface else SECURITY_OPERATIONS_LITE_PROMPT
         )

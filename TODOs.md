@@ -1,6 +1,13 @@
 # 下一步工作
 
 
+## 已完成：Chat 轻量轮次跳过 Knowledge 注入
+
+- `_build_security_agent`：仅在 `tool_surface=True` 时挂载 Knowledge / `search_knowledge` 指令；lean / tools-off 忽略请求里的 `search_knowledge=true`，避免 trivial 轮次加载检索工具与说明。
+- 全量工具面（MCP 或 Skills）仍按请求启用知识库与 `knowledge_filters`。
+- 单测：lean 请求 knowledge 不调用 KB；全量 surface 请求时加载 KB。
+- Grok 4.5 冒烟（search_knowledge true/false）：均 `lean_mode=true`，`input_tokens` ≈2100–2135（与关闭 knowledge 同量级，说明未挂检索工具面）。
+
 ## 已完成：Chat 轻量轮次跳过 datetime + 空会话 history
 
 - `_build_security_agent`：`tool_surface=False` 时 `add_datetime_to_context=False`。
