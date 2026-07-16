@@ -261,14 +261,42 @@ def _sort_time(row: dict[str, Any]) -> float:
         return 0.0
 
 
+def _session_type_from_row(row: dict[str, Any]) -> str:
+    """Normalize Agno session type for list/recents (agent | team | workflow)."""
+    raw = row.get("session_type")
+    if raw is not None and str(raw).strip():
+        value = raw.value if hasattr(raw, "value") else raw
+        text = str(value).strip().lower()
+        if text in {"agent", "team", "workflow"}:
+            return text
+    if row.get("workflow_id"):
+        return "workflow"
+    if row.get("team_id"):
+        return "team"
+    if row.get("agent_id"):
+        return "agent"
+    return "agent"
+
+
 def _preview_from_runs(runs: Any) -> str:
+    """Best-effort list preview from first run input (chat + workflow shapes)."""
     if not isinstance(runs, list) or not runs or not isinstance(runs[0], dict):
         return ""
-    inp = runs[0].get("input", {})
-    if isinstance(inp, dict):
-        return str(inp.get("input_content") or "")[:80]
-    if isinstance(inp, str):
-        return inp[:80]
+    run = runs[0]
+    candidates: list[Any] = [
+        run.get("input"),
+        run.get("content"),
+        run.get("message"),
+        run.get("input_content"),
+    ]
+    for value in candidates:
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:80]
+        if isinstance(value, dict):
+            for key in ("input_content", "content", "message", "input", "text", "query"):
+                nested = value.get(key)
+                if isinstance(nested, str) and nested.strip():
+                    return nested.strip()[:80]
     return ""
 
 
@@ -284,11 +312,15 @@ def _project_session_rows(
     sessions: list[dict[str, Any]] = []
     for row in rows:
         runs = coerce_json_value(row.get("runs"))
-        preview = _preview_from_runs(runs)
+        session_type = _session_type_from_row(row)
+        preview = _preview_from_runs(runs).strip()
+        if not preview:
+            preview = "工作流运行" if session_type == "workflow" else "新对话"
         session = {
             "session_id": row.get("session_id"),
             "user_id": row.get("user_id"),
-            "preview": preview.strip() or "新对话",
+            "session_type": session_type,
+            "preview": preview,
             "title": _title_metadata(row.get("metadata")),
             "created_at": row.get("created_at"),
             "updated_at": row.get("updated_at"),

@@ -368,6 +368,7 @@ function MessageBody({ message, retry, sessionId }: { message: Message; retry: (
 
 export function ChatPage() {
   const { t } = useTranslation('chat')
+  const router = useRouter()
   const chat = useChat()
   const scrollRef = useRef<HTMLDivElement>(null)
   const senderShellRef = useRef<HTMLDivElement>(null)
@@ -412,12 +413,10 @@ export function ChatPage() {
   }, [])
 
   // Prefer instant scroll while streaming to avoid smooth-scroll jank on every delta.
-  const lastAssistant = chat.state.messages.at(-1)
+  const lastAssistant = [...chat.state.messages].reverse().find((item) => item.role === 'assistant')
   // Soft errors (e.g. server cancel) keep messages healthy — only offer Retry for failed runs.
   const bannerCanRetry = Boolean(
-    lastAssistant &&
-      lastAssistant.role === 'assistant' &&
-      (lastAssistant.status === 'failed' || lastAssistant.error?.retryable)
+    lastAssistant && (lastAssistant.status === 'failed' || lastAssistant.error?.retryable)
   )
   const streamTick = useMemo(() => {
     if (!lastAssistant || lastAssistant.role !== 'assistant') {
@@ -562,6 +561,25 @@ export function ChatPage() {
                 {bannerCanRetry ? (
                   <Button type="link" size="small" onClick={() => chat.retry(lastAssistant?.id ?? '')}>
                     {t('common:retry')}
+                  </Button>
+                ) : null}
+                {(lastAssistant?.run_id || lastAssistant?.session_id || chat.sessionId) ? (
+                  <Button
+                    type="link"
+                    size="small"
+                    onClick={() => {
+                      const session = (lastAssistant?.session_id || chat.sessionId || '').trim()
+                      const runId = (lastAssistant?.run_id || '').trim()
+                      const filters = {
+                        ...emptyTraceFilters(),
+                        session_id: session,
+                        run_id: runId,
+                      }
+                      const search = buildTraceSearch(filters, session, runId)
+                      void router.history.push(`/trace${search ? `?${search}` : ''}`)
+                    }}
+                  >
+                    {t('openTrace')}
                   </Button>
                 ) : null}
                 <Button

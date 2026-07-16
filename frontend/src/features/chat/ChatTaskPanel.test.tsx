@@ -51,6 +51,37 @@ describe('conversation list mapping', () => {
     expect(filterConversationItems(items, '  ').map((item) => item.key)).toEqual(['other', 'abc-risk'])
   })
 
+
+  it('prefixes workflow sessions with [WF] for recents scanning', () => {
+    const items = buildConversationItems([
+      {
+        session_id: 'wf-1',
+        session_type: 'workflow',
+        preview: 'IR triage',
+        created_at: 1,
+        updated_at: 2,
+      },
+      {
+        session_id: 'agent-1',
+        session_type: 'agent',
+        preview: 'CVE lookup',
+        created_at: 1,
+        updated_at: 3,
+      },
+      {
+        session_id: 'wf-2',
+        session_type: 'workflow',
+        title: '[WF] already tagged',
+        preview: 'x',
+        created_at: 1,
+        updated_at: 4,
+      },
+    ])
+    expect(items.find((item) => item.key === 'wf-1')?.label).toBe('[WF] IR triage')
+    expect(items.find((item) => item.key === 'agent-1')?.label).toBe('CVE lookup')
+    expect(items.find((item) => item.key === 'wf-2')?.label).toBe('[WF] already tagged')
+  })
+
   it('sorts sessions by update time and assigns stable date group keys', () => {
     const now = dayjs('2026-07-13T12:00:00').valueOf()
     const items = buildConversationItems(

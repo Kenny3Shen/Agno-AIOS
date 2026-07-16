@@ -18,6 +18,7 @@ import {
   ApiOutlined,
   BranchesOutlined,
   ClusterOutlined,
+  CloseOutlined,
   DeleteOutlined,
   DeploymentUnitOutlined,
   NodeIndexOutlined,
@@ -680,10 +681,10 @@ export function WorkflowPage() {
                     <Button
                       size="small"
                       type="text"
+                      icon={<CloseOutlined />}
+                      aria-label={t('clearSelection')}
                       onClick={() => workflow.select(null)}
-                    >
-                      {t('clearSelection')}
-                    </Button>
+                    />
                   </Tooltip>
                   <Tooltip title={t('deleteSelected')} getPopupContainer={studioPopupContainer}>
                     <Button

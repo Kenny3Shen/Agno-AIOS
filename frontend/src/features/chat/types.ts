@@ -58,6 +58,7 @@ export interface Message {
 export interface ChatSession {
   session_id: string
   user_id?: string | null
+  session_type?: 'agent' | 'team' | 'workflow' | string | null
   preview: string
   title?: string | null
   created_at: number

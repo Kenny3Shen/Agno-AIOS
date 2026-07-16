@@ -139,6 +139,48 @@ async def test_list_sessions_async_projects_sorted_archived_session_rows():
     assert sessions[0]["runs"] == [{"input": "newer preview"}]
     assert not sessions[1]["archived"]
     assert sessions[1]["preview"] == "older preview"
+    assert sessions[0].get("session_type") == "agent"
+    assert sessions[1].get("session_type") == "agent"
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_projects_workflow_session_preview_and_type():
+    rows = [
+        {
+            "session_id": "wf-1",
+            "created_at": 1,
+            "updated_at": 2,
+            "user_id": "u1",
+            "session_type": "workflow",
+            "workflow_id": "w-1",
+            "runs": [{"input": {"content": "triage phishing alert"}}],
+            "metadata": {},
+        },
+        {
+            "session_id": "wf-2",
+            "created_at": 1,
+            "updated_at": 1,
+            "user_id": "u1",
+            "workflow_id": "w-2",
+            "runs": [],
+            "metadata": {},
+        },
+    ]
+
+    async def fake_query(**kwargs):
+        return rows, 2
+
+    with (
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(chat_session_service, "_query_sessions_page", fake_query),
+    ):
+        result = await chat_session_service.list_sessions_async(owner_user_id="u1")
+
+    sessions = result["data"]
+    assert sessions[0]["session_type"] == "workflow"
+    assert sessions[0]["preview"] == "triage phishing alert"
+    assert sessions[1]["session_type"] == "workflow"
+    assert sessions[1]["preview"] == "工作流运行"
 
 
 

@@ -124,6 +124,13 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Chat 最近对话 [WF] + 错误横幅 Trace + 预览/类型投影
+
+- Session 列表投影 `session_type`；工作流空预览默认「工作流运行」；输入兼容 content/input_content。
+- 最近对话对 workflow 前缀 `[WF]`（已带前缀不重复）。
+- Chat 错误横幅：可打开 Trace；`lastAssistant` 取最近助手消息。
+- Studio 多选「取消选择」改为图标按钮。
+
 ## 已完成：Trace 树与筛选更多 i18n
 
 - Run/Span 树标签、状态筛选、Duration/Started 等接入 trace 命名空间。
