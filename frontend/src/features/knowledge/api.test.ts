@@ -157,7 +157,7 @@ describe('knowledge document API', () => {
       http.post('/api/knowledge/search', async ({ request }) => {
         expect(await request.json()).toEqual({ query: 'policy', limit: 8, search_type: 'vector' })
         return HttpResponse.json({
-          results: [{ content: '# Policy', score: 0.9, doc_id: 'doc-1', title: 'Policy', source: 'KB', chunk_index: 0 }],
+          data: [{ content: '# Policy', score: 0.9, doc_id: 'doc-1', title: 'Policy', source: 'KB', chunk_index: 0 }],
         })
       })
     )

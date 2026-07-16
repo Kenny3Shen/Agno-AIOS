@@ -220,8 +220,8 @@ export const updateDocumentUpload = (
 export const deleteDocument = (id: string) => requestJson(`/knowledge/documents/${encodeURIComponent(id)}`, { method: 'DELETE' })
 export const searchKnowledge = async (query: string, limit: number, searchType?: KnowledgeSearchType) =>
   (
-    await requestJson<{ results: SearchResult[] }>(
+    await requestJson<{ data: SearchResult[] }>(
       '/knowledge/search',
       jsonInit('POST', buildKnowledgeSearchPayload(query, limit, searchType))
     )
-  ).results
+  ).data ?? []

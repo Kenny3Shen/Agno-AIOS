@@ -285,10 +285,11 @@ describe('knowledge document workflow', () => {
       http.get('/api/knowledge', () => HttpResponse.json(response(oldDocument))),
       http.post('/api/knowledge/search', () =>
         HttpResponse.json({
-          results: [
+          data: [
             { content: '{"risk":"high"}', score: 0.91, doc_id: 'doc-json', title: 'JSON result', source: 'KB', chunk_index: 0 },
             { content: '# Markdown result', score: 0.82, doc_id: 'doc-md', title: 'Markdown result', source: 'KB', chunk_index: 1 },
           ],
+          meta: { page: 1, limit: 8, total_pages: 1, total_count: 2, search_time_ms: 0 },
         })
       )
     )

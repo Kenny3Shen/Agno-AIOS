@@ -124,6 +124,13 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Knowledge search / Eval failures data/meta + Chat cancel e2e
+
+- `POST /api/knowledge/search`：`{results}` → `{data, meta}`（`pagination_meta`，total=本批命中数）。
+- `GET /api/agent-evals/failures`：裸数组 → `{data, meta}`；前端 `listFailures` 只解 `data`。
+- `frontend/e2e/chat.smoke.spec.ts`：发送 → 挂起 SSE →「停止生成」→ `POST /api/chat/runs/{id}/cancel`。
+- 无旧 envelope 兼容；全量 Playwright smoke 10 条绿。
+
 ## 已完成：Eval suites/cases + MCP components/tokens data/meta
 
 - Agent Eval 定义列表 `list_suites` / `list_cases` 改为 `{data, meta}`；runner 读 `data`。
@@ -1328,7 +1335,7 @@ P0.4 审批值班薄入口        ✅
 
 ## P1：建立关键流程 E2E
 
-已落地 shell / Trace / Knowledge / Approvals / Workflow 深链 Playwright smoke（`frontend/e2e/*.smoke.spec.ts`）。
+已落地 shell / Trace / Knowledge / Approvals / Workflow / Chat cancel Playwright smoke（`frontend/e2e/*.smoke.spec.ts`）。
 
 建议首先覆盖：
 

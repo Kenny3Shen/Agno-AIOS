@@ -114,10 +114,9 @@ export const listRuns = async (params: { page?: number; limit?: number } = {}): 
 }
 
 export const listFailures = async (params: { limit?: number } = {}): Promise<EvalRun[]> => {
-  // Workbench failure list remains a plain array (not Agno paginated envelope).
   const limit = Math.min(100, Math.max(1, params.limit ?? 50))
-  const payload = await requestJson<unknown>(`/agent-evals/failures?limit=${limit}`)
-  const rows = Array.isArray(payload) ? payload : []
+  const payload = asRecord(await requestJson<unknown>(`/agent-evals/failures?limit=${limit}`))
+  const rows = Array.isArray(payload.data) ? payload.data : []
   return rows.map((row) => normalizeEvalRun(row)).filter((row): row is EvalRun => row != null)
 }
 

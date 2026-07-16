@@ -855,13 +855,19 @@ async def search_knowledge(
     user: User = Depends(require_scope("knowledge:read")),
 ) -> dict:
     try:
+        results = await get_knowledge_base_lifecycle().search_documents_async(
+            request.query,
+            request.limit,
+            search_type=request.search_type,
+            owner_user_id=effective_knowledge_user_filter(user),
+        )
         return {
-            "results": await get_knowledge_base_lifecycle().search_documents_async(
-                request.query,
-                request.limit,
-                search_type=request.search_type,
-                owner_user_id=effective_knowledge_user_filter(user),
-            )
+            "data": results,
+            "meta": pagination_meta(
+                page=1,
+                limit=max(int(request.limit or 1), 1),
+                total_count=len(results),
+            ),
         }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -11,6 +11,7 @@ from api.auth.scopes import require_scope
 from api.services import agent_eval_case_store as case_store
 from api.services import agent_eval_result_service as result_service
 from api.services import agent_eval_runner
+from api.utils.pagination import pagination_meta
 
 router = APIRouter(prefix="/api/agent-evals", tags=["Agent Evals"])
 
@@ -371,4 +372,12 @@ async def list_eval_failures(
     failures = await result_service.list_failed_eval_runs(limit=limit)
     eval_run_ids = [eval_run_id for item in failures if (eval_run_id := _eval_run_id(item))]
     case_runs_by_eval_id = await case_store.list_case_runs_by_agno_eval_run_ids(eval_run_ids)
-    return [_with_case_run_replay_link(item, case_runs_by_eval_id) for item in failures]
+    items = [_with_case_run_replay_link(item, case_runs_by_eval_id) for item in failures]
+    return {
+        "data": items,
+        "meta": pagination_meta(
+            page=1,
+            limit=max(int(limit or 1), 1),
+            total_count=len(items),
+        ),
+    }

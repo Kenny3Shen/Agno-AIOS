@@ -116,11 +116,17 @@ async def test_failure_route_enriches_agno_runs_with_case_run_ids_in_batch():
     ):
         result = await agent_evals.list_eval_failures(limit=10, user=actor())
 
-    assert result[0]["case_run_id"] == "case-run-1"
-    assert result[0]["case_id"] == "case-1"
-    assert result[0]["suite_run_id"] == "suite-run-1"
-    assert result[0]["eval_data"]["case_run_id"] == "case-run-1"
-    assert "case_run_id" not in result[1]
+    assert isinstance(result, dict)
+    assert "data" in result and "meta" in result
+    items = result["data"]
+    assert result["meta"]["page"] == 1
+    assert result["meta"]["limit"] == 10
+    assert result["meta"]["total_count"] == 2
+    assert items[0]["case_run_id"] == "case-run-1"
+    assert items[0]["case_id"] == "case-1"
+    assert items[0]["suite_run_id"] == "suite-run-1"
+    assert items[0]["eval_data"]["case_run_id"] == "case-run-1"
+    assert "case_run_id" not in items[1]
     assert list_mock.await_args is not None
     assert list_mock.await_args.kwargs["limit"] == 10
     assert list_case_runs_mock.await_args is not None

@@ -86,7 +86,7 @@ uv run update-cve
 
 ## 架构
 
-React 工作台通过共享 API client 携带 token 请求 FastAPI；后端检查权限和资源归属后，按模型、MCP、Skills、Knowledge 与 Memory 配置创建 Agno 运行时。Chat 通过 SSE 返回流式输出（含模型层 `run.retrying` 重试提示）；Markdown 启用 KaTeX（`$` / `$$` / `\\[ \\]`）渲染公式；`GET /api/chat/sessions` 使用 Agno 风格 `data`/`meta`（默认客户端 `limit=40`、接口硬顶 500；DB 真分页 + 归档 SQL 过滤；前端最近对话侧栏 infinite load more）。Overview 评估快照用近期样本（`sample_size`）算 pass_rate；文档数走 paged total；Knowledge 列表前端受控服务端分页（默认 12）；traces 延迟 p50/p95 与 series 优先 SQL 全窗聚合，token 最多采样 50（不做 status reconcile）；失败数与 recent_failures 走窗口 `status=ERROR` 查询；submissions 为 data/meta。Trace、Memory 和 Knowledge 等视图通过 Query 刷新读取最新数据。 Agent Eval 的 suite/case **run 历史**列表 `GET /api/agent-evals/suites/{id}/runs` 与 `.../cases/{id}/runs` 使用 Agno 风格 `data`/`meta`（`page`/`limit`，默认 50、上限 100）。
+React 工作台通过共享 API client 携带 token 请求 FastAPI；后端检查权限和资源归属后，按模型、MCP、Skills、Knowledge 与 Memory 配置创建 Agno 运行时。Chat 通过 SSE 返回流式输出（含模型层 `run.retrying` 重试提示）；Markdown 启用 KaTeX（`$` / `$$` / `\\[ \\]`）渲染公式；`GET /api/chat/sessions` 使用 Agno 风格 `data`/`meta`（默认客户端 `limit=40`、接口硬顶 500；DB 真分页 + 归档 SQL 过滤；前端最近对话侧栏 infinite load more）。Overview 评估快照用近期样本（`sample_size`）算 pass_rate；文档数走 paged total；Knowledge 列表前端受控服务端分页（默认 12）；traces 延迟 p50/p95 与 series 优先 SQL 全窗聚合，token 最多采样 50（不做 status reconcile）；失败数与 recent_failures 走窗口 `status=ERROR` 查询；submissions 为 data/meta。Trace、Memory 和 Knowledge 等视图通过 Query 刷新读取最新数据。 Agent Eval 的 suite/case **run 历史**列表 `GET /api/agent-evals/suites/{id}/runs` 与 `.../cases/{id}/runs` 使用 Agno 风格 `data`/`meta`（`page`/`limit`，默认 50、上限 100）。Knowledge 检索 `POST /api/knowledge/search` 与 Eval `GET /api/agent-evals/failures` 同样为 `data`/`meta`（无旧 `results`/裸数组兼容）。
 
 Memory API 仅使用 `/api/memories`（Agno 风格 `data`/`meta`，查询参数 `search_content`，主键字段 `memory_id`）。 列表行仅认 `memory_id`/`memory`/`topics` 等 Agno 字段，不再兼容 `id`/`content`/`topic` 别名。
 
@@ -100,7 +100,7 @@ Approvals HITL 列表 `GET /api/approvals` 使用 Agno 风格 `data`/`meta`；�
 
 列表分页 `meta` 由共用 `api/utils/pagination.pagination_meta` 生成（Memory/Trace/Approvals/Chat sessions/Evals）。
 
-Agent Evals 的 Agno 结果读路径 `GET /api/agent-evals/agno-runs` 使用 Agno 风格 `data`/`meta`，行字段对齐 `id` + `eval_data`（保留 `passed`/`score` 投影）；前端 Runs 表按 `page`/`limit` 受控分页，Failures 默认取近期 50 条；suites/cases/runs/replay 与 `/failures`/`/trends` 仍为工作台自研。
+Agent Evals 的 Agno 结果读路径 `GET /api/agent-evals/agno-runs` 使用 Agno 风格 `data`/`meta`，行字段对齐 `id` + `eval_data`（保留 `passed`/`score` 投影）；前端 Runs 表按 `page`/`limit` 受控分页；Failures `GET /failures` 为 `data`/`meta`（默认取近期 50 条）；suites/cases/runs/replay 与 `/trends` 仍为工作台自研。
 
 ```mermaid
 flowchart LR
@@ -386,7 +386,7 @@ cd frontend && bun run test:e2e
 
 前端门禁：`bun run lint`（oxlint deny-warnings）、`bun run typecheck`、`bun run test`；Trace 列表 root `input` 批量失败会打 exception 日志并返回 `input=null`（不 N+1）。 ERROR 列表在 page=1 用 audit 失败 run 补充时，按 `run_id` 批量查 traces（非 per-run `get_trace`）。
 
-使用 Playwright + 页内 `/api` mock，不依赖本地后端与开发库数据；覆盖登录、侧栏分组/权限过滤、智能体清 session、深链展开与侧栏折叠；以及 Trace 深链 Session→Run→Span、Knowledge 文本入库 SSE 完成路径、Approvals 值班列表与 `approval_id` 深链、Workflow `workflow_id` 深链加载。
+使用 Playwright + 页内 `/api` mock，不依赖本地后端与开发库数据；覆盖登录、侧栏分组/权限过滤、智能体清 session、深链展开与侧栏折叠；以及 Trace 深链 Session→Run→Span、Knowledge 文本入库 SSE 完成路径、Approvals 值班列表与 `approval_id` 深链、Workflow `workflow_id` 深链加载、Chat「停止生成」取消 run。
 
 前端 Ant Design 6 使用 `classNames` / `styles` 语义化 API（例如 `Popover`/`Cascader` 的 popup class），避免 `overlayClassName` / `popupClassName` 等已弃用 props；`Alert` 使用 `title` 而非已弃用 `message`。
 
