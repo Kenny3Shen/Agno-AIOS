@@ -52,6 +52,8 @@ interface RunSpanTreeNode extends TreeDataNode {
 }
 
 const SESSION_PAGE_SIZE = 8
+/** Cap background chat-session walk used for archive/preview merge. */
+const MAX_CHAT_SESSION_PAGES = 5
 const RUN_PAGE_SIZE = 6
 const { RangePicker } = DatePicker
 
@@ -151,12 +153,22 @@ export function TracePage() {
   const [runPage, setRunPage] = useState(1)
   const effectiveUserId = isAdmin ? filters.user_id : (currentUser.data?.id ?? '')
   const chatSessions = useInfiniteQuery(sessionsQuery(true, effectiveUserId || undefined))
-  // Trace merge needs archive/preview for all chat sessions; walk pages in the background.
+  // Archive/preview merge only needs a bounded chat-session window (not the full history).
+  const chatSessionPageCount = chatSessions.data?.pages.length ?? 0
   useEffect(() => {
-    if (chatSessions.hasNextPage && !chatSessions.isFetchingNextPage) {
+    if (
+      chatSessionPageCount < MAX_CHAT_SESSION_PAGES &&
+      chatSessions.hasNextPage &&
+      !chatSessions.isFetchingNextPage
+    ) {
       void chatSessions.fetchNextPage()
     }
-  }, [chatSessions.fetchNextPage, chatSessions.hasNextPage, chatSessions.isFetchingNextPage])
+  }, [
+    chatSessionPageCount,
+    chatSessions.fetchNextPage,
+    chatSessions.hasNextPage,
+    chatSessions.isFetchingNextPage,
+  ])
   const summaries = useQuery(
     traceSessionsQuery({
       session_id: filters.session_id,

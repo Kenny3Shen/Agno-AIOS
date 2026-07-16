@@ -136,6 +136,14 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Trace 页 chat sessions 自动翻页上限
+
+- Trace 合并归档/预览时后台 `listSessions` 最多 5 页（约 500 会话），避免用户会话很多时无限拉取
+
+相关：`TracePage.tsx`
+
+---
+
 ## 已完成：Overview 窗口失败计数 + 原生 recent failures
 
 - `failed_runs` / `failure_rate` / `total_runs` 用 Agno 窗口 total（含 `status=ERROR` count），不再依赖采样切片
