@@ -100,6 +100,24 @@ export function WorkflowPage() {
       message.warning(t('pasteHitlDiverted', { count: diverted }))
     }
   }
+  const warnReparentBlocked = (blocked: string | null | undefined) => {
+    if (blocked === 'hitl_in_parallel') {
+      message.warning(t('reparentHitlBlocked'))
+    }
+  }
+  const reparentWithHitlGuard = (
+    nodeId: string,
+    target: Parameters<typeof workflow.reparent>[1],
+  ) => {
+    warnReparentBlocked(workflow.reparent(nodeId, target))
+  }
+  const connectBranchWithHitlGuard = (
+    sourceId: string,
+    targetId: string,
+    sourceHandle?: string | null,
+  ) => {
+    warnReparentBlocked(workflow.connectBranch(sourceId, targetId, sourceHandle))
+  }
   const runLogListRef = useRef<HTMLDivElement>(null)
   const inspectorPanelRef = useRef<HTMLElement | null>(null)
   const focusFieldRef = useRef<string | null>(null)
@@ -753,9 +771,9 @@ export function WorkflowPage() {
             onSelectMany={workflow.selectMany}
             onPositionsChange={workflow.applyPositions}
             onConnectSequence={workflow.connectSequence}
-            onConnectBranch={workflow.connectBranch}
+            onConnectBranch={connectBranchWithHitlGuard}
             onDropNode={(type, position, target) => workflow.addAt(type, position, target)}
-            onReparent={workflow.reparent}
+            onReparent={reparentWithHitlGuard}
             onEmptySlot={(parentId, slotKey) => workflow.addToSlot(parentId, slotKey)}
             onDeleteSelected={workflow.removeSelected}
             onFocusInspector={focusInspectorForNode}

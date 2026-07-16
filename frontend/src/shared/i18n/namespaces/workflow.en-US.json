@@ -268,5 +268,6 @@
   "multiSelectInstructionsHint": "Instructions differ across selection; edits apply to every selected Agent step.",
   "hitlBlockedInParallel": "Parallel branches cannot pause for step HITL. Move the step out of Parallel or clear HITL.",
   "multiSelectHitlParallelHint": "HITL cannot be enabled on steps inside Parallel; those selections are skipped.",
-  "pasteHitlDiverted": "{{count}} HITL step(s) cannot live inside Parallel — placed at root instead"
+  "pasteHitlDiverted": "{{count}} HITL step(s) cannot live inside Parallel — placed at root instead",
+  "reparentHitlBlocked": "Steps with HITL cannot move into a Parallel branch"
 }

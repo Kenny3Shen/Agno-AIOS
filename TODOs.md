@@ -18,6 +18,12 @@
 - `pasteNodesIntoSelection` 返回 `{ steps, divertedHitlCount }`。
 - Studio 粘贴时若 Parallel 内 HITL 被改放到根级，Toast 提示数量。
 
+## 已完成：拖入 Parallel 的 HITL 明确拦截提示
+
+- `reparentNode` 返回 `{ steps, blocked }`（`cycle` / `hitl_in_parallel` / `invalid`）。
+- 画布 reparent / 分支连线失败时 Toast，不再静默无反馈。
+- 与粘贴/复制 HITL 分流提示一致，对齐 Agno Parallel 约束。
+
 ## 已完成：Chat 自动轻量后 Knowledge/Live 开关去高亮
 
 - 上一轮 `leanMode` 时，即使偏好仍开，Knowledge / Live Search 开关不再显示 active，改用 muted + Tooltip 说明「偏好保留，下一轮有工具意图再生效」。

@@ -241,9 +241,25 @@ describe('reparent and auto-layout', () => {
       parentId: 'p1',
       branch: 'steps',
     })
-    expect(next).toHaveLength(1)
-    expect(next[0]?.type).toBe('parallel')
-    expect(next[0]?.steps?.map((n) => n.id)).toEqual(['s1'])
+    expect(next.blocked).toBeUndefined()
+    expect(next.steps).toHaveLength(1)
+    expect(next.steps[0]?.type).toBe('parallel')
+    expect(next.steps[0]?.steps?.map((n) => n.id)).toEqual(['s1'])
+  })
+
+  it('blocks HITL reparent into parallel', () => {
+    const parallel = createNode('parallel')
+    parallel.id = 'p1'
+    const step = createNode('step')
+    step.id = 's1'
+    step.requiresConfirmation = true
+    const next = reparentNode([parallel, step], 's1', {
+      kind: 'branch',
+      parentId: 'p1',
+      branch: 'steps',
+    })
+    expect(next.blocked).toBe('hitl_in_parallel')
+    expect(next.steps).toHaveLength(2)
   })
 
   it('blocks reparent into own descendant', () => {
@@ -257,8 +273,9 @@ describe('reparent and auto-layout', () => {
       parentId: 's1',
       branch: 'steps',
     })
-    expect(next[0]?.id).toBe('p1')
-    expect(next[0]?.steps?.[0]?.id).toBe('s1')
+    expect(next.blocked).toBe('cycle')
+    expect(next.steps[0]?.id).toBe('p1')
+    expect(next.steps[0]?.steps?.[0]?.id).toBe('s1')
   })
 
   it('exposes empty slots for empty containers', () => {

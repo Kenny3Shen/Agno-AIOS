@@ -412,6 +412,13 @@ export const insertChild = (
   return addChildToNode(nodes, target.parentId, target.branch, child)
 }
 
+export type ReparentBlockedReason = 'cycle' | 'hitl_in_parallel' | 'invalid'
+
+export type ReparentOutcome = {
+  steps: WorkflowNode[]
+  blocked?: ReparentBlockedReason
+}
+
 /**
  * Move `nodeId` under a container (or to root). Blocks cycles and HITL-in-Parallel.
  */
@@ -419,23 +426,29 @@ export const reparentNode = (
   nodes: WorkflowNode[],
   nodeId: string,
   target: ReparentTarget
-): WorkflowNode[] => {
-  if (target.kind !== 'root' && target.parentId === nodeId) return nodes
-  if (target.kind !== 'root' && isDescendantOf(nodes, nodeId, target.parentId)) return nodes
+): ReparentOutcome => {
+  if (target.kind !== 'root' && target.parentId === nodeId) {
+    return { steps: nodes, blocked: 'cycle' }
+  }
+  if (target.kind !== 'root' && isDescendantOf(nodes, nodeId, target.parentId)) {
+    return { steps: nodes, blocked: 'cycle' }
+  }
 
   const { node, remaining } = extractNode(nodes, nodeId)
-  if (!node) return nodes
+  if (!node) return { steps: nodes, blocked: 'invalid' }
 
   if (target.kind !== 'root') {
     const parent = findNode(remaining, target.parentId) ?? findNode(nodes, target.parentId)
-    if (!parent || !isContainerType(parent.type)) return nodes
+    if (!parent || !isContainerType(parent.type)) {
+      return { steps: nodes, blocked: 'invalid' }
+    }
     // Agno: no HITL inside Parallel
     if (parent.type === 'parallel' && nodeTreeHasHitl(node)) {
-      return nodes
+      return { steps: nodes, blocked: 'hitl_in_parallel' }
     }
   }
 
-  return insertChild(remaining, target, node)
+  return { steps: insertChild(remaining, target, node) }
 }
 
 /** Default drop target when releasing a node over a container. */

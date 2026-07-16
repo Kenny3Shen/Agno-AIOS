@@ -50,6 +50,7 @@ import {
   validateWorkflowDraft,
   validateWorkflowName,
   type ReparentTarget,
+  type ReparentBlockedReason,
 } from './utils'
 
 const HISTORY_LIMIT = 40
@@ -457,12 +458,24 @@ export function useWorkflow() {
     })
   }
 
-  const reparent = (nodeId: string, target: ReparentTarget) => {
+  const reparent = (nodeId: string, target: ReparentTarget): ReparentBlockedReason | null => {
+    let blocked: ReparentBlockedReason | null = null
     withHistory((current) => {
-      const steps = reparentNode(current.steps, nodeId, target)
-      if (steps === current.steps) return current
-      return { ...current, steps, dirty: true, selectedId: nodeId, selectedIds: [nodeId] }
+      const outcome = reparentNode(current.steps, nodeId, target)
+      if (outcome.blocked) {
+        blocked = outcome.blocked
+        return current
+      }
+      if (outcome.steps === current.steps) return current
+      return {
+        ...current,
+        steps: outcome.steps,
+        dirty: true,
+        selectedId: nodeId,
+        selectedIds: [nodeId],
+      }
     })
+    return blocked
   }
 
   const connectSequence = (sourceId: string, targetId: string) => {
@@ -474,22 +487,32 @@ export function useWorkflow() {
   }
 
   /** Wire target under source's branch handle (condition/router/parallel). */
-  const connectBranch = (sourceId: string, targetId: string, sourceHandle?: string | null) => {
+  const connectBranch = (
+    sourceId: string,
+    targetId: string,
+    sourceHandle?: string | null,
+  ): ReparentBlockedReason | null => {
+    let blocked: ReparentBlockedReason | null = null
     withHistory((current) => {
       const source = findNode(current.steps, sourceId)
       if (!source) return current
       const target = reparentTargetFromHandle(source, sourceHandle)
       if (!target) return current
-      const steps = reparentNode(current.steps, targetId, target)
-      if (steps === current.steps) return current
+      const outcome = reparentNode(current.steps, targetId, target)
+      if (outcome.blocked) {
+        blocked = outcome.blocked
+        return current
+      }
+      if (outcome.steps === current.steps) return current
       return {
         ...current,
         dirty: true,
-        steps,
+        steps: outcome.steps,
         selectedId: targetId,
         selectedIds: [targetId],
       }
     })
+    return blocked
   }
 
   const organizeLayout = () => {
