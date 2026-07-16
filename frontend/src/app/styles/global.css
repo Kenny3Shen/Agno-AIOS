@@ -2570,21 +2570,8 @@ html.dark .wf-smart-guide {
   background: #ff7875;
 }
 
-.workflow-studio__right .ant-list-sm .ant-list-item {
-  padding-block: 4px;
-}
-
 .workflow-studio__right .ant-tag {
   line-height: 18px;
-}
-
-.collect-article-item.is-selected {
-  background: color-mix(in srgb, var(--ant-color-primary, #1677ff) 10%, transparent);
-  border-radius: 8px;
-}
-.collect-article-item:hover {
-  background: var(--tais-soft);
-  border-radius: 8px;
 }
 
 /* Compact event/history rows (replaces deprecated antd List in Studio). */

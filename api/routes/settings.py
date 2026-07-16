@@ -130,6 +130,11 @@ async def run_model_connectivity_test(
     except Exception as exc:
         status_code = getattr(exc, "status_code", None)
         detail = str(getattr(exc, "message", None) or exc)
+        logger.warning(
+            "model connectivity test failed status_code={} detail={}",
+            status_code if isinstance(status_code, int) else None,
+            detail,
+        )
         return ModelConnectivityTestResponse(
             success=False,
             latency_ms=int((perf_counter() - started) * 1000),

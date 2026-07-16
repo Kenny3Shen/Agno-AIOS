@@ -63,6 +63,11 @@ def _row_payload(row: dict[str, Any]) -> dict[str, Any]:
                 last_run_at=float(cron_cfg.get("last_run_at") or 0),
             )
         except Exception:
+            logger.debug(
+                "next_cron_at compute failed for workflow {}",
+                row.get("id"),
+                exc_info=True,
+            )
             next_cron_at = None
     return {
         "id": str(row.get("id") or ""),

@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：静默异常可观测 + 死 CSS 清理
+
+- `workflow_service._row_payload`：`next_cron_at` 计算失败改 `logger.debug(..., exc_info=True)`。
+- `settings.run_model_connectivity_test`：连通性失败 `logger.warning`（仍返回 success=false 给前端）。
+- 删除废弃 `.ant-list-sm` 与旧 Collect List 项样式（已改为 button 列表）。
+
 ## 已完成：去掉 antd 废弃 List（Workflow / Collect）
 
 - Studio 运行历史 / 运行记录 / 触发历史：`List` → 轻量 `div` 列表 + CSS。
