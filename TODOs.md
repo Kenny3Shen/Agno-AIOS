@@ -124,6 +124,16 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：通知 SSE 缓存上限 + Overview token 采样 100 + README 对齐
+
+- 通知中心 SSE 增量写入 Query 缓存时截断至 100 条，与 `list_notifications` 默认上限一致，避免长会话无界膨胀
+- Overview `_PAGE_LIMIT` 200→100（latency/series 已 SQL；token 样本更小）
+- README：Approvals `kind=all` 描述改为两路服务端分页虚拟合并（去掉过时「submissions 整表」）
+
+相关：`AppFrame.tsx` / `overview_service.py` / `test_overview.py` / `README.md`
+
+---
+
 ## 已完成：通知列表上限 + Evals 分页 + Collect 搜索防抖
 
 - 通知：`list_notifications` 默认 LIMIT 100（上限 200），`unread_count` 仍全表计数，避免抽屉无界物化历史

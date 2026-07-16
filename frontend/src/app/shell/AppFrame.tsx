@@ -197,10 +197,14 @@ export function AppFrame({ children }: { children: ReactNode }) {
             (notification) => {
               lastNotificationIdRef.current = Math.max(lastNotificationIdRef.current, notification.id)
               queryClient.setQueryData<NotificationsResponse>(['notifications'], (current) => {
-                if (!current) return { notifications: [notification], unread_count: notification.read ? 0 : 1 }
+                // Keep cache aligned with GET /notifications list cap (default 100).
+                const maxCached = 100
+                if (!current) {
+                  return { notifications: [notification], unread_count: notification.read ? 0 : 1 }
+                }
                 if (current.notifications.some((item) => item.id === notification.id)) return current
                 return {
-                  notifications: [notification, ...current.notifications],
+                  notifications: [notification, ...current.notifications].slice(0, maxCached),
                   unread_count: current.unread_count + (notification.read ? 0 : 1),
                 }
               })
