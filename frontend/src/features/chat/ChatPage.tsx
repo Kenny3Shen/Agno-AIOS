@@ -372,6 +372,12 @@ export function ChatPage() {
 
   // Prefer instant scroll while streaming to avoid smooth-scroll jank on every delta.
   const lastAssistant = chat.state.messages.at(-1)
+  // Soft errors (e.g. server cancel) keep messages healthy — only offer Retry for failed runs.
+  const bannerCanRetry = Boolean(
+    lastAssistant &&
+      lastAssistant.role === 'assistant' &&
+      (lastAssistant.status === 'failed' || lastAssistant.error?.retryable)
+  )
   const streamTick = useMemo(() => {
     if (!lastAssistant || lastAssistant.role !== 'assistant') {
       return `${chat.state.messages.length}:idle`
@@ -489,9 +495,11 @@ export function ChatPage() {
             <div className="chat-error" role="alert">
               <span className="chat-error__message">{chat.state.error}</span>
               <span className="chat-error__actions">
-                <Button type="link" size="small" onClick={() => chat.retry(chat.state.messages.at(-1)?.id ?? '')}>
-                  {t('common:retry')}
-                </Button>
+                {bannerCanRetry ? (
+                  <Button type="link" size="small" onClick={() => chat.retry(lastAssistant?.id ?? '')}>
+                    {t('common:retry')}
+                  </Button>
+                ) : null}
                 <Button
                   type="text"
                   size="small"

@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Chat 错误横幅可关闭且仅失败可重试 / Dashboard 失败口径说明
+
+- Chat soft-error：关闭按钮；仅当最后一条助手消息 failed/retryable 时显示 Retry（cancel soft-error 不再误导重试）。
+- Dashboard 失败率 KPI：展示原生 ERROR 失败次数 + Tooltip 口径；最近失败表 extra 标明 ERROR + chat-audit 有界补充。
+
 ## 已完成：Workflow 校验→Inspector 聚焦 + Run 自动展开 / Chat soft-error 关闭
 
 - Workflow 保存校验失败或点击 issue：右侧 Inspector 滚入视口，按 issue code 聚焦 executor / workflow_ref / children / name 字段。

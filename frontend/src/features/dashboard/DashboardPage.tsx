@@ -276,13 +276,20 @@ export function DashboardPage() {
         <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
           <Card className="workbench-card dashboard-kpi" loading={query.isLoading}>
             <Statistic
-              title={t('failureRate')}
+              title={
+                <Tooltip title={t('failedRunsNativeHint')}>
+                  <span>{t('failureRate')}</span>
+                </Tooltip>
+              }
               value={data?.metrics.failure_rate == null ? 0 : data.metrics.failure_rate * 100}
               precision={1}
               suffix="%"
               styles={{ content: { color: data?.metrics.failure_rate ? token.colorError : undefined } }}
               prefix={<WarningOutlined />}
             />
+            <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
+              {t('failedRunsCount', { count: data?.metrics.failed_runs ?? 0 })}
+            </Typography.Text>
           </Card>
         </Col>
         <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
@@ -375,7 +382,16 @@ export function DashboardPage() {
         </Card>
       </section>
       <section className="dashboard-grid dashboard-detail-grid">
-        <Card className="workbench-card" title={t('recentFailures')} loading={query.isLoading}>
+        <Card
+          className="workbench-card"
+          title={t('recentFailures')}
+          extra={
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {t('recentFailuresHint')}
+            </Typography.Text>
+          }
+          loading={query.isLoading}
+        >
           <Table<OverviewTrace>
             size="small"
             rowKey="trace_id"

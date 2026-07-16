@@ -41,5 +41,8 @@
   "seriesInputTokens": "输入 Token",
   "seriesOutputTokens": "输出 Token",
   "evalSampleNote": "{{passed}} 通过 · {{failed}} 失败（样本 {{sample}} / 共 {{total}}）",
-  "sampleOfWindow": "样本 {{sample}}/{{total}}"
+  "sampleOfWindow": "样本 {{sample}}/{{total}}",
+  "failedRunsCount": "{{count}} 次失败（原生 ERROR）",
+  "failedRunsNativeHint": "失败率与失败次数按窗口内 Agno trace status=ERROR 统计。下方列表还可能包含未翻成 ERROR 的近期 chat-audit 失败（有界）。",
+  "recentFailuresHint": "ERROR + chat-audit（有界）"
 }

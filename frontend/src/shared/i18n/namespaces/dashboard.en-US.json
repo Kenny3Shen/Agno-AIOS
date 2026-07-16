@@ -41,5 +41,8 @@
   "seriesInputTokens": "Input tokens",
   "seriesOutputTokens": "Output tokens",
   "evalSampleNote": "{{passed}} passed · {{failed}} failed (sample {{sample}} of {{total}})",
-  "sampleOfWindow": "sample {{sample}}/{{total}}"
+  "sampleOfWindow": "sample {{sample}}/{{total}}",
+  "failedRunsCount": "{{count}} failed (native ERROR)",
+  "failedRunsNativeHint": "Failure rate and count use Agno trace status=ERROR for the selected window. The list below may also include recent chat-audit failures that never flipped to ERROR.",
+  "recentFailuresHint": "ERROR + chat-audit (bounded)"
 }
