@@ -11,6 +11,7 @@ import {
   CodeOutlined,
   CopyOutlined,
   NumberOutlined,
+  NodeIndexOutlined,
   DownOutlined,
   BookOutlined,
   GlobalOutlined,
@@ -26,6 +27,8 @@ import { useChat } from './useChat'
 import type { Message, ThoughtStep, ToolStep } from './types'
 import type { ModelConfig, ReasoningEffort } from '@/shared/types/common'
 import { useTranslation } from 'react-i18next'
+import { useRouter } from '@tanstack/react-router'
+import { buildTraceSearch, emptyTraceFilters } from '@/features/trace/utils'
 import { copyToClipboard } from '@/shared/lib/clipboard'
 import { reasoningEffortLabel } from '@/shared/lib/reasoning'
 import { supportedReasoningEfforts } from './utils'
@@ -189,11 +192,24 @@ function ModelSettings({
   )
 }
 
-function MessageBody({ message, retry }: { message: Message; retry: () => void }) {
+function MessageBody({ message, retry, sessionId }: { message: Message; retry: () => void; sessionId?: string | null }) {
   const { t } = useTranslation('chat')
   const { message: toast } = App.useApp()
+  const router = useRouter()
   const [thoughtOpen, setThoughtOpen] = useState(message.status === 'streaming' || message.status === 'retrying')
   const motionState = message.role === 'assistant' ? (message.status ?? 'completed') : 'sent'
+  const traceSessionId = (message.session_id || sessionId || '').trim()
+  const traceRunId = (message.run_id || '').trim()
+  const openTrace = () => {
+    if (!traceRunId && !traceSessionId) return
+    const filters = {
+      ...emptyTraceFilters(),
+      session_id: traceSessionId,
+      run_id: traceRunId,
+    }
+    const search = buildTraceSearch(filters, traceSessionId, traceRunId)
+    void router.history.push(`/trace${search ? `?${search}` : ''}`)
+  }
   const actions = [
     {
       key: 'copy',
@@ -204,14 +220,24 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
     ...(message.role === 'assistant'
       ? [
           { key: 'retry', label: t('regenerate'), icon: <ReloadOutlined />, onItemClick: retry },
-          ...(message.run_id
+          ...(traceRunId || traceSessionId
+            ? [
+                {
+                  key: 'open-trace',
+                  label: t('openTrace'),
+                  icon: <NodeIndexOutlined />,
+                  onItemClick: openTrace,
+                },
+              ]
+            : []),
+          ...(traceRunId
             ? [
                 {
                   key: 'copy-run-id',
                   label: t('copyRunId'),
                   icon: <NumberOutlined />,
                   onItemClick: () => {
-                    void copyToClipboard(message.run_id ?? '').then((copied) =>
+                    void copyToClipboard(traceRunId).then((copied) =>
                       copied ? toast.success(t('runIdCopied')) : toast.error(t('runIdCopyFailed'))
                     )
                   },
@@ -365,7 +391,9 @@ export function ChatPage() {
             T
           </Avatar>
         ),
-      contentRender: (value: Message) => <MessageBody message={value} retry={() => chat.retry(value.id)} />,
+      contentRender: (value: Message) => (
+        <MessageBody message={value} retry={() => chat.retry(value.id)} sessionId={chat.sessionId} />
+      ),
     }))
   const activeRun = [...chat.state.messages].reverse().find((item) => item.role === 'assistant' && (item.status === 'streaming' || item.status === 'retrying'))
   const pausedRun = [...chat.state.messages].reverse().find((item) => item.role === 'assistant' && item.status === 'paused')

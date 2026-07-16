@@ -1131,11 +1131,12 @@ html.dark {
 .message-actions .ant-actions-list,
 .message-body .ant-actions-list {
   display: inline-flex !important;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 8px;
   margin-left: auto;
+  row-gap: 4px;
 }
 .message-body .ant-actions-item,
 .message-body .ant-actions-icon {

@@ -60,5 +60,6 @@
   "knowledgeSearchHelp": "Allow this turn to search the Knowledge base. Off skips knowledge retrieval.",
   "stoppedGenerating": "Generation stopped",
   "cancelServerFailed": "Stopped locally, but server cancel failed",
+  "openTrace": "Open Trace",
   "openApproval": "Open approvals"
 }

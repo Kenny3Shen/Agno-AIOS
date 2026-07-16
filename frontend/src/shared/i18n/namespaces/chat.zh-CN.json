@@ -60,5 +60,6 @@
   "knowledgeSearchHelp": "允许本轮检索 Knowledge 知识库。关闭后不挂载知识检索。",
   "stoppedGenerating": "已停止生成",
   "cancelServerFailed": "已停止本地输出，但服务端取消失败",
+  "openTrace": "打开 Trace",
   "openApproval": "打开审批"
 }
