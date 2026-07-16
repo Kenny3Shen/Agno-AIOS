@@ -255,8 +255,11 @@
   "edgeNext": "next",
   "edgeThen": "then",
   "edgeElse": "else",
-  "multiSelectAgentHint": "Bulk-edit executor and confirmation for selected Agent steps.",
+  "multiSelectAgentHint": "Bulk-edit executor, Skills, and confirmation for selected Agent steps.",
   "multiSelectNoAgents": "No Agent steps in the current multi-selection (control-flow only).",
   "multiSelectAgentCount": "{{count}} Agent steps selected",
-  "multiSelectExecutorPlaceholder": "Set executor for selected agents"
+  "multiSelectExecutorPlaceholder": "Set executor for selected agents",
+  "multiSelectSkillsPlaceholder": "Bind Skills for selected agents (replaces existing)",
+  "multiSelectSkillsMixed": "Selected steps have different Skills; choosing options replaces all bindings. Clear removes Skills from all.",
+  "skillsBadge": "Skills · {{count}}"
 }

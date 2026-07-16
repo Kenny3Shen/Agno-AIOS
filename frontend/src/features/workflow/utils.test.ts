@@ -703,3 +703,23 @@ describe('updateNodeInTree bulk agent patch', () => {
   })
 })
 
+describe('updateNodeInTree bulk skills patch', () => {
+  it('bulk-patches skills on agent steps', () => {
+    const a = createNode('step')
+    a.id = 'a'
+    a.skills = ['cve-intel-skill']
+    const b = createNode('step')
+    b.id = 'b'
+    b.skills = ['playbook-skill']
+    let steps = [a, b]
+    for (const id of ['a', 'b']) {
+      steps = updateNodeInTree(steps, id, (item) => ({
+        ...item,
+        skills: ['playbook-skill', 'hitl-containment-skill'],
+      }))
+    }
+    expect(findNode(steps, 'a')?.skills).toEqual(['playbook-skill', 'hitl-containment-skill'])
+    expect(findNode(steps, 'b')?.skills).toEqual(['playbook-skill', 'hitl-containment-skill'])
+  })
+})
+

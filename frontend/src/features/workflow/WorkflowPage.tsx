@@ -868,6 +868,12 @@ export function WorkflowPage() {
                     : undefined
                   const allConfirm = agentSteps.every((node) => node.requiresConfirmation)
                   const noneConfirm = agentSteps.every((node) => !node.requiresConfirmation)
+                  const skillKey = (skills: string[] | undefined) =>
+                    JSON.stringify([...(skills ?? [])].map(String).sort())
+                  const skillsMixed = !agentSteps.every(
+                    (node) => skillKey(node.skills) === skillKey(agentSteps[0]?.skills),
+                  )
+                  const sharedSkills = skillsMixed ? [] : [...(agentSteps[0]?.skills ?? [])]
                   return (
                     <Space orientation="vertical" style={{ width: '100%' }} size={10}>
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -916,6 +922,39 @@ export function WorkflowPage() {
                             workflow.updateSelectedSteps({ targetId: value })
                           }}
                         />
+                      </div>
+                      <div data-inspector-field="skills">
+                        <Typography.Text
+                          type="secondary"
+                          style={{ fontSize: 11, display: 'block', marginBottom: 4 }}
+                        >
+                          {t('stepSkills')}
+                        </Typography.Text>
+                        <Select
+                          mode="multiple"
+                          allowClear
+                          size="small"
+                          className="nodrag nowheel"
+                          style={{ width: '100%' }}
+                          placeholder={t('multiSelectSkillsPlaceholder')}
+                          options={enabledSkillOptions}
+                          optionFilterProp="label"
+                          value={sharedSkills}
+                          loading={skillsQuery.isLoading}
+                          getPopupContainer={studioPopupContainer}
+                          onChange={(value) =>
+                            workflow.updateSelectedSteps({
+                              skills: Array.isArray(value) ? value.map(String) : [],
+                            })
+                          }
+                          maxTagCount="responsive"
+                        />
+                        <Typography.Paragraph
+                          type="secondary"
+                          style={{ fontSize: 11, marginTop: 4, marginBottom: 0 }}
+                        >
+                          {skillsMixed ? t('multiSelectSkillsMixed') : t('stepSkillsHint')}
+                        </Typography.Paragraph>
                       </div>
                       <Checkbox
                         className="nodrag"

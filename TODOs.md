@@ -1,6 +1,12 @@
 # 下一步工作
 
 
+## 已完成：Studio 多选批量 Skills + 画布 Skill 徽标
+
+- 多选 Inspector：批量绑定 Skill（覆盖写；清空 = 全部不挂）；不一致时提示并显示空选择。
+- 画布 Agent 节点展示 `Skill · N` 徽标；presentation patch / contentKey 感知 skills。
+- 单测：`updateNodeInTree` bulk skills。
+
 ## 已完成：Studio 多选批量编辑 Agent 执行器/确认
 
 - 多选 Inspector：对选中的 Agent 步骤批量设置 `targetId` 执行器与 `requiresConfirmation`。

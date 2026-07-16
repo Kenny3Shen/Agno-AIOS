@@ -20,6 +20,8 @@ export type WorkflowFlowNodeData = {
   nodeType: WorkflowNodeType
   subtitle?: string
   hitl?: boolean
+  /** Bound skill count for agent steps (0 hides badge). */
+  skillCount?: number
   runStatus?: WorkflowNodeRunStatus | null
   invalid?: boolean
   invalidMessage?: string | null
@@ -178,6 +180,9 @@ function WorkflowFlowNodeComponent({
         <div className="wf-flow-node__title">{payload.label}</div>
         {payload.subtitle ? <div className="wf-flow-node__sub">{payload.subtitle}</div> : null}
         {payload.hitl ? <div className="wf-flow-node__hitl">{t('hitlBadge')}</div> : null}
+        {payload.skillCount && payload.skillCount > 0 ? (
+          <div className="wf-flow-node__skills">{t('skillsBadge', { count: payload.skillCount })}</div>
+        ) : null}
         {payload.invalid && payload.invalidMessage ? (
           <div className="wf-flow-node__error">{payload.invalidMessage}</div>
         ) : null}

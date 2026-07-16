@@ -152,6 +152,8 @@ function buildGraph(
         source?.requiresUserInput ||
         source?.requiresOutputReview
     )
+    const skillCount =
+      source?.type === 'step' ? (source.skills ?? []).filter(Boolean).length : 0
     const subtitle = source
       ? resolveNodeCanvasSubtitle(source, t, executorNames)
       : item.type
@@ -173,6 +175,7 @@ function buildGraph(
         nodeType: item.type,
         subtitle,
         hitl,
+        skillCount,
         runStatus: nodeRunStatus[item.id] ?? null,
         invalid: Boolean(invalidById[item.id]),
         invalidMessage: invalidById[item.id] ?? null,
@@ -333,12 +336,14 @@ function CanvasInner({
           const hitl = Boolean(
             node.requiresConfirmation || node.requiresUserInput || node.requiresOutputReview
           )
+          const skillCount =
+            node.type === 'step' ? (node.skills ?? []).filter(Boolean).length : 0
           const subtitle = resolveNodeCanvasSubtitle(node, t, executorNames)
           const branches =
             node.type === 'router'
               ? (node.choices ?? []).map((c) => `${c.id}:${c.name}`).join(',')
               : ''
-          return `${node.id}:${node.name ?? ''}:${subtitle}:${hitl ? 1 : 0}:${branches}`
+          return `${node.id}:${node.name ?? ''}:${subtitle}:${hitl ? 1 : 0}:${skillCount}:${branches}`
         })
         .join('#') + `@${executorCatalogKey}`,
     [steps, t, executorNames, executorCatalogKey]
@@ -467,6 +472,8 @@ function CanvasInner({
             source.requiresUserInput ||
             source.requiresOutputReview
         )
+        const skillCount =
+          source.type === 'step' ? (source.skills ?? []).filter(Boolean).length : 0
         const subtitle = resolveNodeCanvasSubtitle(source, t, executorNames)
         const label =
           source.name?.trim() ||
@@ -477,7 +484,8 @@ function CanvasInner({
         if (
           data.label === label &&
           data.subtitle === subtitle &&
-          data.hitl === hitl
+          data.hitl === hitl &&
+          (data.skillCount ?? 0) === skillCount
         ) {
           return node
         }
@@ -487,6 +495,7 @@ function CanvasInner({
           label,
           subtitle,
           hitl,
+          skillCount,
           branchHandles,
         }
         return { ...node, data: nextData }
