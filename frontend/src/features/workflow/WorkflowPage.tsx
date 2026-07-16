@@ -696,9 +696,7 @@ export function WorkflowPage() {
                   </Button>
                 }
               />
-            ) : null}
-
-            {!step ? (
+            ) : !step ? (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('selectStep')} />
             ) : (
               <div className="workflow-inspector nodrag nowheel">

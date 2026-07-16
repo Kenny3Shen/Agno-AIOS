@@ -80,6 +80,15 @@
   box-shadow: 0 0 0 4px color-mix(in srgb, #3fb950 14%, transparent);
   animation: chat-pulse 1.8s ease-in-out infinite;
 }
+.status-dot.paused {
+  background: #d29922;
+  box-shadow: 0 0 0 4px color-mix(in srgb, #d29922 16%, transparent);
+}
+.context-status .context-approval-link {
+  padding-inline: 0;
+  height: auto;
+  font-size: 11px;
+}
 .bubble-scroll {
   min-height: 0;
   flex: 1;

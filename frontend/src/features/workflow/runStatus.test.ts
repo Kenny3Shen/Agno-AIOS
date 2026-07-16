@@ -4,7 +4,7 @@ import {
   applyNodeRunStatusEvent,
   reduceNodeRunStatus,
 } from './runStatus'
-import type { WorkflowNode, WorkflowRunLogItem } from './types'
+import type { WorkflowNode, WorkflowNodeRunStatus, WorkflowRunLogItem } from './types'
 
 const steps: WorkflowNode[] = [
   {
@@ -48,9 +48,9 @@ describe('runStatus performance helpers', () => {
       event('step.started', 'b'),
       event('workflow.paused', 'b'),
     ]
-    let incremental: Record<string, string> = {}
+    let incremental: Record<string, WorkflowNodeRunStatus> = {}
     for (const item of log) {
-      incremental = applyNodeRunStatusEvent(steps, incremental as never, item)
+      incremental = applyNodeRunStatusEvent(steps, incremental, item)
     }
     expect(incremental).toEqual(reduceNodeRunStatus(steps, log))
   })

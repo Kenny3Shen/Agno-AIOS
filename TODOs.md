@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Chat context bar 审批入口 + 多选 Inspector 收敛
+
+- Chat 顶栏暂停态：与消息体一致的「打开审批」深链（`#/approvals?approval_id=`）；paused status-dot。
+- Studio 多选：Inspector 仅展示批量删除提示，隐藏单节点编辑表单（避免误改最后选中节点）。
+- `runStatus.test.ts`：去掉 `as never`，状态 map 使用 `WorkflowNodeRunStatus`。
+
 ## 已完成：Chat HITL 打开审批 + Memory 状态批量查询
 
 - Chat 暂停态消息：`approval_id` 时提供「打开审批」深链。

@@ -457,8 +457,18 @@ export function ChatPage() {
             <span>{chat.selectedModel?.name ?? t('noModel')}</span>
           </div>
           <div className="context-status">
-            <span className={activeRun ? 'status-dot active' : 'status-dot'} />
+            <span className={activeRun ? 'status-dot active' : pausedRun ? 'status-dot paused' : 'status-dot'} />
             {activeRun ? t('agentRunning') : pausedRun ? t('awaitingApproval') : chat.sessionId ? t('sessionReady') : t('newAnalysis')}
+            {pausedRun?.approval_id ? (
+              <Button
+                type="link"
+                size="small"
+                className="context-approval-link"
+                href={`#/approvals?approval_id=${encodeURIComponent(pausedRun.approval_id)}`}
+              >
+                {t('openApproval')}
+              </Button>
+            ) : null}
           </div>
         </header>
         <div
