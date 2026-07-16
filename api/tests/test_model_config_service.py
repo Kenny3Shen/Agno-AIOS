@@ -6,8 +6,14 @@ from api.services import model_config_service
 
 
 @pytest.fixture(autouse=True)
-def _clear_model_config_cache():
+def _clear_model_config_cache(tmp_path, monkeypatch):
+    """Isolate legacy JSON path so load never archives the developer config file."""
     model_config_service._invalidate_model_config_cache()
+    monkeypatch.setattr(
+        model_config_service,
+        "model_config_file",
+        lambda: tmp_path / "model_config.json",
+    )
     yield
     model_config_service._invalidate_model_config_cache()
 
@@ -236,6 +242,35 @@ async def test_load_model_config_store_does_not_rewrite_for_provider_heuristic_o
     assert grok.provider == "xai"
     replace.assert_not_awaited()
     model_config_service._invalidate_model_config_cache()
+
+
+@pytest.mark.asyncio
+async def test_load_model_config_store_archives_leftover_json_when_postgres_has_rows(tmp_path):
+    """Non-empty table: retire leftover model_config.json without re-importing it."""
+    leftover = tmp_path / "model_config.json"
+    leftover.write_text(
+        '{"active_model_id":"stale","models":[{"id":"stale","name":"Stale","model_id":"m","api_key":"k"}]}',
+        encoding="utf-8",
+    )
+    store = model_config_service.ModelConfigStore.default()
+    rows = model_config_service._store_to_rows(store)
+    replace = AsyncMock()
+
+    with (
+        patch.object(model_config_service, "model_config_file", return_value=leftover),
+        patch.object(model_config_service, "list_model_config_rows", AsyncMock(return_value=rows)),
+        patch.object(model_config_service, "replace_model_config_rows", replace),
+    ):
+        loaded = await model_config_service.load_model_config_store()
+
+    assert loaded.active_model_id == store.active_model_id
+    assert all(model.id != "stale" for model in loaded.models)
+    assert not leftover.exists()
+    assert (tmp_path / "model_config.json.imported").exists()
+    if replace.await_count:
+        # Integrity rewrite is allowed; must not seed leftover "stale" model.
+        saved = replace.await_args.args[0]
+        assert all(row["id"] != "stale" for row in saved)
 
 
 @pytest.mark.asyncio

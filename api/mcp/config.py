@@ -21,7 +21,7 @@ from api.persistence.mcp import (
     upsert_token_row,
 )
 from api.services.runtime_paths import CONFIG_DIR
-from api.utils.json import loads
+from api.utils.json import JSONDecodeError, loads
 
 SERVICE_IDS = ("playbook", "basic", "hitl")
 MCP_CONFIG_FILE = CONFIG_DIR / "mcp" / "mcp_config.json"
@@ -93,16 +93,15 @@ async def _archive_legacy_mcp_config_file(path: AsyncPath) -> None:
 async def _migrate_legacy_file_if_needed() -> None:
     rows = await list_server_rows()
     path = AsyncPath(MCP_CONFIG_FILE)
+    if not await path.exists():
+        return
     if any(row["server_type"] == "external" for row in rows):
         # Externals already live in Postgres; drop leftover one-shot file if present.
-        if await path.exists():
-            await _archive_legacy_mcp_config_file(path)
-        return
-    if not await path.exists():
+        await _archive_legacy_mcp_config_file(path)
         return
     try:
         raw = loads(await path.read_text(encoding="utf-8"))
-    except Exception:
+    except (JSONDecodeError, OSError, TypeError, ValueError):
         logger.warning(
             "legacy MCP config unreadable at {}; skip file migrate",
             path,

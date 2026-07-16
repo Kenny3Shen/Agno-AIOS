@@ -8,7 +8,7 @@ from typing import Any
 from agno.db.postgres import AsyncPostgresDb
 
 from api.config import get_settings
-from api.utils.json import loads
+from api.utils.json import JSONDecodeError, loads
 
 
 def postgres_host() -> str:
@@ -101,13 +101,14 @@ async def ensure_agno_postgres_tables_async() -> None:
 
 
 def coerce_json_value(value: Any) -> Any:
+    """Unwrap nested JSON strings up to 3 levels; leave plain text unchanged."""
     current = value
     for _ in range(3):
         if not isinstance(current, str):
             return current
         try:
             current = loads(current)
-        except Exception:
+        except (JSONDecodeError, TypeError, ValueError):
             return current
     return current
 

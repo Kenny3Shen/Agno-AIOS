@@ -451,7 +451,7 @@ def _mask_secret(value: str) -> str:
 
 
 def _archive_legacy_model_config_file(config_file: Path) -> None:
-    """Rename one-shot JSON bootstrap so empty-table import is not re-applied."""
+    """Rename JSON bootstrap to ``*.imported`` (empty seed or leftover after PG seed)."""
     try:
         archived = config_file.with_name(f"{config_file.name}.imported")
         # Avoid clobbering a previous archive; keep the first successful import.
@@ -559,6 +559,12 @@ async def load_model_config_store() -> ModelConfigStore:
         if legacy_path is not None:
             _archive_legacy_model_config_file(legacy_path)
         return _cache_model_config_store(store)
+
+    # Postgres is source of truth once seeded; retire leftover JSON so a later
+    # empty-table restart cannot re-import stale keys (mirrors MCP .migrated).
+    leftover = model_config_file()
+    if leftover.exists():
+        _archive_legacy_model_config_file(leftover)
 
     base_store = ModelConfigStore.from_rows(rows)
     store = base_store.with_defaults().with_valid_active_model()

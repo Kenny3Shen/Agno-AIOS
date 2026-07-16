@@ -124,6 +124,16 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：model_config 残留 JSON 归档 + coerce_json 收窄
+
+- 表非空时归档残留 `model_config.json` → `*.imported`（与 MCP `.migrated` 对齐），避免日后空表误回灌陈旧密钥
+- 测试 fixture 隔离 `model_config_file` 路径，避免误归档开发机配置
+- `coerce_json_value` 仅捕获 JSONDecodeError/TypeError/ValueError，并补 docstring
+
+相关：`model_config_service.py` / `postgres_store.py` / `test_model_config_service.py`
+
+---
+
 ## 已完成：删除 chat_settings re-export + 停 provider 热路径 rewrite
 
 - 删除 `api/services/chat_settings.py` re-export；运行时仅 `chat_settings_service`
