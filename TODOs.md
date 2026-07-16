@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Chat 重试可见性强化
+
+- `formatRetryDetail`：展示 attempt/max，有 `delay_seconds` 时显示等待秒数，并附带简短提供商错误。
+- 消息占位 / run strip / 列表底部 `chat-retrying` 条：重试中可点「停止」；样式 warning 色。
+- 画布：HITL 节点拖入 Parallel 不再高亮非法 drop；连线 `isValidConnection` 同步拦截。
+
 ## 已完成：Studio 粘贴进容器 / 同级 + Parallel 内 HITL 防护
 
 - `pasteNodesIntoSelection`：单选容器 → `defaultDropTarget` 默认槽；单选普通步骤 → `locateNode` + `insertAfterLocation` 同级插入；多选/无选中 → 根级追加。

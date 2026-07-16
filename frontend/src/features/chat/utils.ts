@@ -467,6 +467,28 @@ export const defaultReasoningEffort = (model: ModelConfig | null): ReasoningEffo
 }
 
 /** Tools are on and the latest assistant turn reported auto-lite (no skills). */
+/** Build user-facing retry progress (attempt/max + optional delay). */
+export const formatRetryDetail = (
+  retry: { attempt: number; maxAttempts: number; delaySeconds?: number; message?: string } | null | undefined,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string => {
+  if (!retry) return t('establishingRun')
+  const delay = retry.delaySeconds
+  const hasDelay = typeof delay === 'number' && Number.isFinite(delay) && delay > 0
+  const base = hasDelay
+    ? t('retryingDetailWithDelay', {
+        attempt: retry.attempt,
+        max: retry.maxAttempts,
+        seconds: Math.max(1, Math.round(delay)),
+      })
+    : t('retryingDetail', { attempt: retry.attempt, max: retry.maxAttempts })
+  const provider = (retry.message || '').trim()
+  if (!provider) return base
+  // Keep banner short; full text stays in run strip tooltip via raw message if needed.
+  const short = provider.length > 120 ? `${provider.slice(0, 117)}…` : provider
+  return `${base} (${short})`
+}
+
 export const isLastTurnAutoLean = (
   enableTools: boolean,
   latestAssistant?: Pick<Message, 'enableTools' | 'leanMode'> | null,

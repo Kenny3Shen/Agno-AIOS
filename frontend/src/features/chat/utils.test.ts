@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  formatRetryDetail,
   chatReducer,
   consumeSse,
   defaultReasoningEffort,
@@ -379,3 +380,25 @@ describe('lean-aware toggle helpers', () => {
   })
 })
 
+describe('formatRetryDetail', () => {
+  const t = (key: string, options?: Record<string, unknown>) => {
+    if (key === 'retryingDetailWithDelay') {
+      return `retry ${options?.attempt}/${options?.max} in ${options?.seconds}s`
+    }
+    if (key === 'retryingDetail') {
+      return `retry ${options?.attempt}/${options?.max}`
+    }
+    if (key === 'establishingRun') return 'starting'
+    return key
+  }
+
+  it('includes delay when provided', () => {
+    expect(
+      formatRetryDetail({ attempt: 1, maxAttempts: 4, delaySeconds: 2.4, message: '503' }, t),
+    ).toBe('retry 1/4 in 2s (503)')
+  })
+
+  it('omits delay when missing', () => {
+    expect(formatRetryDetail({ attempt: 2, maxAttempts: 4 }, t)).toBe('retry 2/4')
+  })
+})

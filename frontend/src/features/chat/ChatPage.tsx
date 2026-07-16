@@ -35,6 +35,7 @@ import { reasoningEffortLabel } from '@/shared/lib/reasoning'
 import {
   formatSkillLabels,
   formatToolLabel,
+  formatRetryDetail,
   supportedReasoningEfforts,
   isLastTurnAutoLean,
   isKnowledgeToggleActive,
@@ -306,16 +307,28 @@ function MessageBody({ message, retry, sessionId }: { message: Message; retry: (
           escapeRawHtml
         />
       ) : (
-        <div className="response-pending">
+        <div
+          className={
+            message.status === 'retrying'
+              ? 'response-pending response-pending--retrying'
+              : 'response-pending'
+          }
+          aria-live="polite"
+        >
           {message.status === 'paused'
             ? t('awaitingApproval')
             : message.status === 'cancelled'
               ? t('status.cancelled')
-              : message.status === 'retrying' && message.retry
-                ? t('retryingDetail', { attempt: message.retry.attempt, max: message.retry.maxAttempts })
+              : message.status === 'retrying'
+                ? formatRetryDetail(message.retry, t)
                 : t('establishingRun')}
         </div>
       )}
+      {message.status === 'retrying' && message.content ? (
+        <div className="message-run-retrying" role="status" aria-live="polite">
+          {formatRetryDetail(message.retry, t)}
+        </div>
+      ) : null}
       {message.status === 'paused' && (
         <output className="message-run-paused" aria-live="polite">
           <span>{t('awaitingApproval')}</span>
@@ -346,14 +359,19 @@ function MessageBody({ message, retry, sessionId }: { message: Message; retry: (
       )}
       <div className={`run-strip run-${message.status ?? 'completed'}`}>
         <span className="run-status">
-          {({
-            streaming: t('status.streaming'),
-            retrying: t('status.retrying'),
-            paused: t('status.paused'),
-            completed: t('status.completed'),
-            cancelled: t('status.cancelled'),
-            failed: t('status.failed'),
-          } as const)[message.status ?? 'completed']}
+          {message.status === 'retrying' && message.retry
+            ? t('status.retryingProgress', {
+                attempt: message.retry.attempt,
+                max: message.retry.maxAttempts,
+              })
+            : ({
+                streaming: t('status.streaming'),
+                retrying: t('status.retrying'),
+                paused: t('status.paused'),
+                completed: t('status.completed'),
+                cancelled: t('status.cancelled'),
+                failed: t('status.failed'),
+              } as const)[message.status ?? 'completed']}
         </span>
         {message.enableTools === false ? (
           <Tooltip title={t('toolsSkillsHelp')}>
@@ -669,6 +687,18 @@ export function ChatPage() {
               items={chat.state.messages.at(-1)?.followups?.map((label, index) => ({ key: String(index), label })) ?? []}
               onItemClick={({ data }) => void chat.submit(String(data.label ?? ''))}
             />
+          ) : null}
+          {lastAssistant?.status === 'retrying' && !chat.state.error ? (
+            <div className="chat-retrying" role="status" aria-live="polite">
+              <span className="chat-retrying__message">
+                {formatRetryDetail(lastAssistant.retry, t)}
+              </span>
+              {chat.state.requesting ? (
+                <Button type="link" size="small" danger onClick={() => void chat.cancel()}>
+                  {t('stopGenerating')}
+                </Button>
+              ) : null}
+            </div>
           ) : null}
           {chat.state.error && (
             <div className="chat-error" role="alert">

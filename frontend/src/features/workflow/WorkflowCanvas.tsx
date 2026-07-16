@@ -40,6 +40,8 @@ import {
   findNode,
   isContainerType,
   isDescendantOf,
+  nodeTreeHasHitl,
+  isInsideParallel,
   layoutCanvas,
   reparentTargetFromHandle,
   computeSmartSnap,
@@ -736,6 +738,15 @@ function CanvasInner({
       if (isDescendantOf(steps, nodeId, candidateId)) return null
       const container = findNode(steps, candidateId)
       if (!container || !isContainerType(container.type)) return null
+      const dragged = findNode(steps, nodeId)
+      // Do not highlight Parallel drops that Agno rejects (HITL trees).
+      if (
+        dragged &&
+        (container.type === 'parallel' || isInsideParallel(steps, container.id)) &&
+        nodeTreeHasHitl(dragged)
+      ) {
+        return null
+      }
       return defaultDropTarget(container)
     },
     [steps]
@@ -864,6 +875,16 @@ function CanvasInner({
       const th = connection.targetHandle
       if (th && th !== 'in' && th !== 'in-left') return false
       const sourceNode = findNode(steps, source)
+      const targetNode = findNode(steps, target)
+      if (
+        sourceNode &&
+        targetNode &&
+        isContainerType(sourceNode.type) &&
+        (sourceNode.type === 'parallel' || isInsideParallel(steps, sourceNode.id)) &&
+        nodeTreeHasHitl(targetNode)
+      ) {
+        return false
+      }
       if (sourceNode && isContainerType(sourceNode.type)) {
         // Container sources must use a branch handle (not a bare out for condition/router).
         if (sourceNode.type === 'condition' || sourceNode.type === 'router') {

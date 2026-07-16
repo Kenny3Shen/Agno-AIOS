@@ -1194,3 +1194,34 @@ html.dark {
   font-size: 11px;
   line-height: 18px;
 }
+
+.response-pending--retrying,
+.message-run-retrying,
+.chat-retrying {
+  color: var(--ant-color-warning-text, #d48806);
+}
+.response-pending--retrying {
+  animation: response-wait 1.2s ease-in-out infinite;
+}
+.message-run-retrying {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.chat-retrying {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 12px 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--ant-color-warning-border, #ffe58f);
+  background: var(--ant-color-warning-bg, #fffbe6);
+  animation: status-settle var(--motion-fast) var(--motion-enter-ease) both;
+}
+.chat-retrying__message {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
