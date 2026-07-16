@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Approvals 前端列表 data/meta 收口
+
+- `getApprovals` 返回值 `items`/`total`/`page`/`limit` → `{data, meta}`（`total_count`/`total_pages`/`search_time_ms`）。
+- `ApprovalsPage` / unit tests 同步；虚拟 merge（upload+HITL）逻辑不变。
+- 无旧 `items`/`total` 兼容。
+
 ## 已完成：Eval suite 单 case 异常可观测
 
 - `agent_eval_runner.run_suite`：单 case 抛错时 `logger.exception` 后计入 `errored` 并继续跑后续 case。

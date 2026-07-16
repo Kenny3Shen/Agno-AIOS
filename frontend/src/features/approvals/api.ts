@@ -51,11 +51,18 @@ export interface ApprovalListParams {
   limit?: number
 }
 
-export interface ApprovalListResult {
-  items: Approval[]
-  total: number
+export interface ApprovalListMeta {
   page: number
   limit: number
+  total_count: number
+  total_pages: number
+  search_time_ms: number
+}
+
+/** Combined Approvals list (Agno-style ``{data, meta}``; virtual merge for kind=all). */
+export interface ApprovalListResult {
+  data: Approval[]
+  meta: ApprovalListMeta
 }
 
 export const isSubmissionApproval = (approval: Approval) =>
@@ -124,12 +131,37 @@ export const normalizeApproval = (value: unknown): Approval | null => {
 const normalizeRows = (rows: unknown[]): Approval[] =>
   rows.map((row) => normalizeApproval(row)).filter((row): row is Approval => row != null)
 
+const listMeta = (
+  page: number,
+  limit: number,
+  totalCount: number,
+  searchTimeMs = 0
+): ApprovalListMeta => {
+  const safePage = Math.max(1, page)
+  const safeLimit = Math.max(1, limit)
+  const total = Math.max(0, totalCount)
+  return {
+    page: safePage,
+    limit: safeLimit,
+    total_count: total,
+    total_pages: total ? Math.ceil(total / safeLimit) : 0,
+    search_time_ms: searchTimeMs,
+  }
+}
+
+type SourcePage = {
+  data: Approval[]
+  total_count: number
+  page: number
+  limit: number
+}
+
 const fetchHitlPage = async (
   status: string,
   page: number,
   limit: number,
   sourceType?: string
-) => {
+): Promise<SourcePage> => {
   const search = new URLSearchParams()
   search.set('page', String(page))
   search.set('limit', String(limit))
@@ -139,8 +171,8 @@ const fetchHitlPage = async (
   const meta = asRecord(payload.meta)
   const rows = Array.isArray(payload.data) ? payload.data : []
   return {
-    items: normalizeRows(rows),
-    total: Number(meta.total_count ?? 0) || 0,
+    data: normalizeRows(rows),
+    total_count: Number(meta.total_count ?? 0) || 0,
     page: Number(meta.page ?? page) || page,
     limit: Number(meta.limit ?? limit) || limit,
   }
@@ -155,30 +187,30 @@ const fetchHitlSlice = async (
   offset: number,
   count: number,
   sourceType?: string
-) => {
+): Promise<SourcePage> => {
   if (count <= 0) {
     const probe = await fetchHitlPage(status, 1, 1, sourceType)
-    return { items: [] as Approval[], total: probe.total }
+    return { data: [], total_count: probe.total_count, page: 1, limit: 1 }
   }
   const safeOffset = Math.max(0, offset)
   const pageSize = count
   const apiPage = Math.floor(safeOffset / pageSize) + 1
   const skip = safeOffset % pageSize
   const first = await fetchHitlPage(status, apiPage, pageSize, sourceType)
-  let rows = first.items.slice(skip)
-  if (rows.length < count && safeOffset + rows.length < first.total) {
+  let rows = first.data.slice(skip)
+  if (rows.length < count && safeOffset + rows.length < first.total_count) {
     const second = await fetchHitlPage(status, apiPage + 1, pageSize, sourceType)
-    rows = [...rows, ...second.items].slice(0, count)
+    rows = [...rows, ...second.data].slice(0, count)
   } else {
     rows = rows.slice(0, count)
   }
-  return { items: rows, total: first.total }
+  return { data: rows, total_count: first.total_count, page: apiPage, limit: pageSize }
 }
 
-const fetchSubmissionsPage = async (status: string, page: number, limit: number) => {
+const fetchSubmissionsPage = async (status: string, page: number, limit: number): Promise<SourcePage> => {
   const shouldFetch = !status || ['pending', 'approved', 'rejected'].includes(status)
   if (!shouldFetch) {
-    return { items: [] as Approval[], total: 0 }
+    return { data: [], total_count: 0, page, limit }
   }
   const search = new URLSearchParams()
   if (status) search.set('status', status)
@@ -188,30 +220,34 @@ const fetchSubmissionsPage = async (status: string, page: number, limit: number)
   const meta = asRecord(payload.meta)
   const rows = Array.isArray(payload.data) ? payload.data : []
   return {
-    items: normalizeRows(rows),
-    total: Number(meta.total_count ?? rows.length) || 0,
+    data: normalizeRows(rows),
+    total_count: Number(meta.total_count ?? rows.length) || 0,
+    page: Number(meta.page ?? page) || page,
+    limit: Number(meta.limit ?? limit) || limit,
   }
 }
 
 /** Absolute-offset slice of upload submissions (for virtual merge with HITL). */
-const fetchSubmissionsSlice = async (status: string, offset: number, limit: number) => {
-  if (limit <= 0) return { items: [] as Approval[], total: 0 }
+const fetchSubmissionsSlice = async (status: string, offset: number, limit: number): Promise<SourcePage> => {
+  if (limit <= 0) return { data: [], total_count: 0, page: 1, limit: 0 }
   const safeOffset = Math.max(0, offset)
   const pageSize = Math.min(100, Math.max(limit, 1))
   const startPage = Math.floor(safeOffset / pageSize) + 1
   const localStart = safeOffset % pageSize
   const first = await fetchSubmissionsPage(status, startPage, pageSize)
-  let rows = first.items.slice(localStart)
+  let rows = first.data.slice(localStart)
   // When offset is not page-aligned, the first page may not fill `limit`.
-  if (rows.length < limit && safeOffset + rows.length < first.total) {
+  if (rows.length < limit && safeOffset + rows.length < first.total_count) {
     const second = await fetchSubmissionsPage(status, startPage + 1, pageSize)
-    rows = [...rows, ...second.items].slice(0, limit)
+    rows = [...rows, ...second.data].slice(0, limit)
   } else {
     rows = rows.slice(0, limit)
   }
   return {
-    items: rows,
-    total: first.total,
+    data: rows,
+    total_count: first.total_count,
+    page: startPage,
+    limit: pageSize,
   }
 }
 
@@ -230,10 +266,8 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
   if (kind === 'upload') {
     const submissions = await fetchSubmissionsSlice(status, start, limit)
     return {
-      items: submissions.items,
-      total: submissions.total,
-      page,
-      limit,
+      data: submissions.data,
+      meta: listMeta(page, limit, submissions.total_count),
     }
   }
 
@@ -241,10 +275,8 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
   if (kind === 'workflow') {
     const hitl = await fetchHitlSlice(status, start, limit, 'workflow')
     return {
-      items: hitl.items,
-      total: hitl.total,
-      page,
-      limit,
+      data: hitl.data,
+      meta: listMeta(page, limit, hitl.total_count),
     }
   }
 
@@ -252,10 +284,8 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
   if (kind === 'agent') {
     const hitl = await fetchHitlSlice(status, start, limit, 'agent')
     return {
-      items: hitl.items,
-      total: hitl.total,
-      page,
-      limit,
+      data: hitl.data,
+      meta: listMeta(page, limit, hitl.total_count),
     }
   }
 
@@ -267,26 +297,22 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
       fetchSubmissionsSlice(status, 0, limit),
       fetchHitlSlice(status, 0, limit),
     ])
-    const pageSubmissions = submissions.items
+    const pageSubmissions = submissions.data
     const hitlNeed = Math.max(0, limit - pageSubmissions.length)
     return {
-      items: [...pageSubmissions, ...hitl.items.slice(0, hitlNeed)],
-      total: submissions.total + hitl.total,
-      page,
-      limit,
+      data: [...pageSubmissions, ...hitl.data.slice(0, hitlNeed)],
+      meta: listMeta(page, limit, submissions.total_count + hitl.total_count),
     }
   }
 
   // Later pages: probe upload total first; pure-HITL pages skip uploads entirely.
   const uploadProbe = await fetchSubmissionsPage(status, 1, 1)
-  const submissionCount = uploadProbe.total
+  const submissionCount = uploadProbe.total_count
   if (start >= submissionCount) {
     const hitl = await fetchHitlSlice(status, start - submissionCount, limit)
     return {
-      items: hitl.items,
-      total: submissionCount + hitl.total,
-      page,
-      limit,
+      data: hitl.data,
+      meta: listMeta(page, limit, submissionCount + hitl.total_count),
     }
   }
 
@@ -295,13 +321,11 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
     fetchSubmissionsSlice(status, start, limit),
     fetchHitlSlice(status, 0, limit),
   ])
-  const pageSubmissions = submissions.items
+  const pageSubmissions = submissions.data
   const hitlNeed = Math.max(0, limit - pageSubmissions.length)
   return {
-    items: [...pageSubmissions, ...hitl.items.slice(0, hitlNeed)],
-    total: submissions.total + hitl.total,
-    page,
-    limit,
+    data: [...pageSubmissions, ...hitl.data.slice(0, hitlNeed)],
+    meta: listMeta(page, limit, submissions.total_count + hitl.total_count),
   }
 }
 

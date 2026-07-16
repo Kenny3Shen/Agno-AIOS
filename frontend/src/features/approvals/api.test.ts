@@ -31,13 +31,13 @@ describe('getApprovals', () => {
     )
 
     const first = await getApprovals({ status: 'pending', kind: 'upload', page: 1, limit: 10 })
-    expect(first.items.map((item) => item.id)).toEqual(
+    expect(first.data.map((item) => item.id)).toEqual(
       Array.from({ length: 10 }, (_, i) => `s${i}`),
     )
-    expect(first.total).toBe(25)
+    expect(first.meta.total_count).toBe(25)
 
     const second = await getApprovals({ status: 'pending', kind: 'upload', page: 2, limit: 10 })
-    expect(second.items.map((item) => item.id)).toEqual(
+    expect(second.data.map((item) => item.id)).toEqual(
       Array.from({ length: 10 }, (_, i) => `s${10 + i}`),
     )
   })
@@ -74,7 +74,7 @@ describe('getApprovals', () => {
     )
 
     const result = await getApprovals({ status: 'pending', kind: 'all', page: 1, limit: 10 })
-    expect(result.items.map((item) => item.id)).toEqual(['u0', 'u1', 'h0', 'h1'])
-    expect(result.total).toBe(4)
+    expect(result.data.map((item) => item.id)).toEqual(['u0', 'u1', 'h0', 'h1'])
+    expect(result.meta.total_count).toBe(4)
   })
 })

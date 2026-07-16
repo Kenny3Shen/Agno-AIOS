@@ -219,8 +219,8 @@ export function ApprovalsPage() {
     queryFn: () => getApprovals({ status, kind, page, limit: pageSize }),
     placeholderData: (previous) => previous,
   })
-  const rows = useMemo(() => query.data?.items ?? [], [query.data?.items])
-  const total = query.data?.total ?? 0
+  const rows = useMemo(() => query.data?.data ?? [], [query.data?.data])
+  const total = query.data?.meta.total_count ?? 0
   const notificationApprovalId = new URLSearchParams(searchStr).get('approval_id')
   useEffect(() => {
     const updateSearch = () => setSearchStr(locationSearch())
