@@ -49,7 +49,8 @@ class WorkflowWriteRequest(BaseModel):
 
 
 class WorkflowRunRequest(BaseModel):
-    input: str = Field(..., min_length=1)
+    """Studio run body. Empty input is normalized to a default token server-side."""
+    input: str = Field(default="", max_length=100_000)
     session_id: str | None = None
     model_id: str | None = None
 
@@ -471,6 +472,7 @@ async def run_workflow(
 
     session_id = (body.session_id or "").strip() or str(uuid4())
     run_id = str(uuid4())
+    input_text = (body.input or "").strip() or "workflow run"
     ctx = audit_request_context(request)
 
     async def event_generator():
@@ -479,7 +481,7 @@ async def run_workflow(
             async for event in stream_workflow_run(
                 workflow_id=workflow_id,
                 definition=definition,
-                input_text=body.input,
+                input_text=input_text,
                 user_id=actor_id(user),
                 session_id=session_id,
                 model_id=body.model_id,

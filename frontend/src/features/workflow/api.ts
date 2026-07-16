@@ -278,12 +278,29 @@ export const streamWorkflowRun = async (
   onEvent: WorkflowSseHandler,
   signal: AbortSignal
 ) => {
+  const body = {
+    ...payload,
+    input: (payload.input || '').trim() || 'workflow run',
+  }
   const response = await apiFetch(`/workflows/${encodeURIComponent(workflowId)}/runs`, {
-    ...jsonInit('POST', payload),
+    ...jsonInit('POST', body),
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     signal,
   })
-  if (!response.ok || !response.body) throw new Error(`Workflow run failed (${response.status})`)
+  if (!response.ok || !response.body) {
+    let detail = `Workflow run failed (${response.status})`
+    try {
+      const err = (await response.json()) as { detail?: unknown }
+      if (typeof err.detail === 'string' && err.detail.trim()) detail = err.detail
+      else if (Array.isArray(err.detail) && err.detail[0]) {
+        const first = err.detail[0] as { msg?: string }
+        if (first.msg) detail = first.msg
+      }
+    } catch {
+      // ignore
+    }
+    throw new Error(detail)
+  }
   let terminal = false
   await consumeSse(response.body, ({ event, data }) => {
     let parsed: Record<string, unknown> = {}
