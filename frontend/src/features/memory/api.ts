@@ -17,11 +17,18 @@ export interface Memory {
   updated_at?: string
 }
 
-export interface MemoryListResult {
-  items: Memory[]
-  total: number
+export interface MemoryListMeta {
   page: number
   limit: number
+  total_count: number
+  total_pages: number
+  search_time_ms: number
+}
+
+/** Agno-style memory list envelope after row normalize. */
+export interface MemoryListResult {
+  data: Memory[]
+  meta: MemoryListMeta
 }
 
 /** Map Agno-native memory rows into UI Memory records. */
@@ -68,14 +75,21 @@ export const getMemories = async (params: MemoryListParams = {}): Promise<Memory
   const data = asRecord(await requestJson<unknown>(`/memories${query ? `?${query}` : ''}`))
   const meta = asRecord(data.meta)
   const rows = Array.isArray(data.data) ? data.data : []
-  const items = rows
+  const dataRows = rows
     .map((row) => normalizeMemory(row))
     .filter((row): row is Memory => row != null)
+  const page = Number(meta.page ?? params.page ?? 1) || 1
+  const limit = Number(meta.limit ?? params.limit ?? 20) || 20
+  const totalCount = Number(meta.total_count ?? dataRows.length) || 0
   return {
-    items,
-    total: Number(meta.total_count ?? items.length) || 0,
-    page: Number(meta.page ?? 1) || 1,
-    limit: Number(meta.limit ?? 20) || 20,
+    data: dataRows,
+    meta: {
+      page,
+      limit,
+      total_count: totalCount,
+      total_pages: Number(meta.total_pages ?? (totalCount ? Math.ceil(totalCount / Math.max(limit, 1)) : 0)) || 0,
+      search_time_ms: Number(meta.search_time_ms ?? 0) || 0,
+    },
   }
 }
 

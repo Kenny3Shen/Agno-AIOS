@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Memory / Eval runs 前端列表 data/meta 收口
+
+- `getMemories`：`items`/`total`/`page`/`limit` → `{data, meta}`；`MemoryPage` 同步。
+- `listRuns`（agno-runs）：同上；`EvaluationsPage` Runs 表同步。
+- 无旧 `items`/`total` 兼容；补 `getMemories` envelope 单测。
+
 ## 已完成：Approvals 前端列表 data/meta 收口
 
 - `getApprovals` 返回值 `items`/`total`/`page`/`limit` → `{data, meta}`（`total_count`/`total_pages`/`search_time_ms`）。

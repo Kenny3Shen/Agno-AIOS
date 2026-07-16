@@ -104,15 +104,15 @@ export function MemoryPage() {
           </Button>
         </Space>
       </Card>
-      <Card className="workbench-card" title="Memories" extra={<Tag>{query.data?.total ?? 0}</Tag>}>
+      <Card className="workbench-card" title="Memories" extra={<Tag>{query.data?.meta.total_count ?? 0}</Tag>}>
         <Table<Memory>
           rowKey="id"
-          dataSource={query.data?.items ?? []}
+          dataSource={query.data?.data ?? []}
           loading={query.isLoading}
           pagination={{
             current: page,
             pageSize,
-            total: query.data?.total ?? 0,
+            total: query.data?.meta.total_count ?? 0,
             showSizeChanger: false,
             onChange: setPage,
           }}

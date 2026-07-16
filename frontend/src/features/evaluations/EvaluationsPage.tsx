@@ -154,12 +154,12 @@ export function EvaluationsPage() {
             },
             { key: 'runs', label: 'Runs', children: (
                 <RunTable
-                  rows={runs.data?.items ?? []}
+                  rows={runs.data?.data ?? []}
                   loading={runs.isLoading}
                   pagination={{
                     current: runsPage,
                     pageSize: runsPageSize,
-                    total: runs.data?.total ?? 0,
+                    total: runs.data?.meta.total_count ?? 0,
                     onChange: setRunsPage,
                   }}
                 />

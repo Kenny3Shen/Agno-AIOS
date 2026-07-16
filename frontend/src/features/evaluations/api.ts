@@ -91,11 +91,17 @@ export const listCases = async (suite = '') =>
     )
   ).data ?? []
 
-export type EvalListResult = {
-  items: EvalRun[]
-  total: number
+export type EvalListMeta = {
   page: number
   limit: number
+  total_count: number
+  total_pages: number
+  search_time_ms: number
+}
+
+export type EvalListResult = {
+  data: EvalRun[]
+  meta: EvalListMeta
 }
 
 export const listRuns = async (params: { page?: number; limit?: number } = {}): Promise<EvalListResult> => {
@@ -105,11 +111,19 @@ export const listRuns = async (params: { page?: number; limit?: number } = {}): 
   const payload = asRecord(await requestJson<unknown>(`/agent-evals/agno-runs?${search}`))
   const meta = asRecord(payload.meta)
   const rows = Array.isArray(payload.data) ? payload.data : []
+  const data = rows.map((row) => normalizeEvalRun(row)).filter((row): row is EvalRun => row != null)
+  const totalCount = Number(meta.total_count ?? data.length) || 0
+  const resolvedPage = Number(meta.page ?? page) || page
+  const resolvedLimit = Number(meta.limit ?? limit) || limit
   return {
-    items: rows.map((row) => normalizeEvalRun(row)).filter((row): row is EvalRun => row != null),
-    total: Number(meta.total_count ?? rows.length) || 0,
-    page: Number(meta.page ?? page) || page,
-    limit: Number(meta.limit ?? limit) || limit,
+    data,
+    meta: {
+      page: resolvedPage,
+      limit: resolvedLimit,
+      total_count: totalCount,
+      total_pages: Number(meta.total_pages ?? (totalCount ? Math.ceil(totalCount / Math.max(resolvedLimit, 1)) : 0)) || 0,
+      search_time_ms: Number(meta.search_time_ms ?? 0) || 0,
+    },
   }
 }
 
