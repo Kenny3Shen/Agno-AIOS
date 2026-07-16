@@ -167,7 +167,13 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
     const session = (chat.sessions.data ?? []).find((item) => item.session_id === sessionId)
     const isWorkflow = String(session?.session_type || '').toLowerCase() === 'workflow'
     if (isWorkflow) {
-      // Workflow runs are not Chat agent transcripts — open Trace for this session.
+      // Prefer Studio when workflow_id is known; otherwise open Trace for this session.
+      const workflowId = String(session?.workflow_id || '').trim()
+      if (workflowId) {
+        void router.history.push(`/workflow?workflow_id=${encodeURIComponent(workflowId)}`)
+        onNavigate?.()
+        return
+      }
       const filters = {
         ...emptyTraceFilters(),
         session_id: sessionId,

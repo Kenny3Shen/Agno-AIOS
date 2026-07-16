@@ -44,13 +44,18 @@ export function useChat() {
     else if (!sessionId) dispatch({ type: 'reset' })
   }, [history.data, sessionId])
 
-  // Workflow sessions are not agent transcripts — bounce deep links to Trace.
+  // Workflow sessions are not agent transcripts — open Studio when known, else Trace.
   useEffect(() => {
     if (!sessionId || !isWorkflowSession) return
+    const workflowId = String(activeSessionMeta?.workflow_id || '').trim()
+    if (workflowId) {
+      void router.history.replace(`/workflow?workflow_id=${encodeURIComponent(workflowId)}`)
+      return
+    }
     const filters = { ...emptyTraceFilters(), session_id: sessionId }
     const search = buildTraceSearch(filters, sessionId, '')
     void router.history.replace(`/trace${search ? `?${search}` : ''}`)
-  }, [isWorkflowSession, router.history, sessionId])
+  }, [activeSessionMeta?.workflow_id, isWorkflowSession, router.history, sessionId])
   const hasPausedRun = state.messages.some((message) => message.role === 'assistant' && message.status === 'paused')
   useEffect(() => {
     if (!sessionId || !hasPausedRun || isWorkflowSession) return

@@ -931,7 +931,7 @@ const toDefinitionNode = (node: WorkflowNode): WorkflowDefinitionNode => {
     return {
       id: node.id,
       type: 'parallel',
-      name: node.name || 'Parallel',
+      name: node.name || '',
       steps: (node.steps ?? []).map(toDefinitionNode),
       ...basePos,
     }
@@ -940,7 +940,7 @@ const toDefinitionNode = (node: WorkflowNode): WorkflowDefinitionNode => {
     return {
       id: node.id,
       type: 'condition',
-      name: node.name || 'Condition',
+      name: node.name || '',
       evaluator: { cel: node.evaluatorCel || 'true' },
       then_steps: (node.thenSteps ?? []).map(toDefinitionNode),
       else_steps: (node.elseSteps ?? []).map(toDefinitionNode),
@@ -951,7 +951,7 @@ const toDefinitionNode = (node: WorkflowNode): WorkflowDefinitionNode => {
     return {
       id: node.id,
       type: 'loop',
-      name: node.name || 'Loop',
+      name: node.name || '',
       max_iterations: node.maxIterations ?? 3,
       end_condition: node.endConditionCel ? { cel: node.endConditionCel } : null,
       steps: (node.steps ?? []).map(toDefinitionNode),
@@ -962,7 +962,7 @@ const toDefinitionNode = (node: WorkflowNode): WorkflowDefinitionNode => {
     return {
       id: node.id,
       type: 'router',
-      name: node.name || 'Router',
+      name: node.name || '',
       selector: { cel: node.selectorCel || 'step_choices[0]' },
       choices: (node.choices ?? []).map((choice) => ({
         id: choice.id,
@@ -976,7 +976,7 @@ const toDefinitionNode = (node: WorkflowNode): WorkflowDefinitionNode => {
     return {
       id: node.id,
       type: 'workflow_ref',
-      name: node.name || 'Nested workflow',
+      name: node.name || '',
       workflow_id: node.workflowId || '',
       ...basePos,
     }
@@ -1011,7 +1011,7 @@ const toDefinitionNode = (node: WorkflowNode): WorkflowDefinitionNode => {
 export const toDefinition = (
   state: Pick<WorkflowState, 'name' | 'description' | 'steps'>
 ): WorkflowDefinition => ({
-  name: state.name || 'Untitled workflow',
+  name: state.name || '',
   description: state.description || '',
   steps: state.steps.map(toDefinitionNode),
 })
@@ -1023,7 +1023,7 @@ const fromDefinitionNode = (node: WorkflowDefinitionNode): WorkflowNode => {
     return {
       id: node.id || crypto.randomUUID(),
       type: 'parallel',
-      name: node.name || 'Parallel',
+      name: node.name || '',
       steps: (node.steps ?? []).map(fromDefinitionNode),
       ...basePos,
     }
@@ -1032,7 +1032,7 @@ const fromDefinitionNode = (node: WorkflowDefinitionNode): WorkflowNode => {
     return {
       id: node.id || crypto.randomUUID(),
       type: 'condition',
-      name: node.name || 'Condition',
+      name: node.name || '',
       evaluatorCel: node.evaluator?.cel || (node.evaluator?.value === false ? 'false' : 'true'),
       thenSteps: (node.then_steps ?? []).map(fromDefinitionNode),
       elseSteps: (node.else_steps ?? []).map(fromDefinitionNode),
@@ -1043,7 +1043,7 @@ const fromDefinitionNode = (node: WorkflowDefinitionNode): WorkflowNode => {
     return {
       id: node.id || crypto.randomUUID(),
       type: 'loop',
-      name: node.name || 'Loop',
+      name: node.name || '',
       maxIterations: node.max_iterations ?? 3,
       endConditionCel: node.end_condition?.cel || '',
       steps: (node.steps ?? []).map(fromDefinitionNode),
@@ -1054,7 +1054,7 @@ const fromDefinitionNode = (node: WorkflowDefinitionNode): WorkflowNode => {
     return {
       id: node.id || crypto.randomUUID(),
       type: 'router',
-      name: node.name || 'Router',
+      name: node.name || '',
       selectorCel: node.selector?.cel || '',
       choices: (node.choices ?? []).map((choice) => ({
         id: choice.id || crypto.randomUUID(),
@@ -1068,7 +1068,7 @@ const fromDefinitionNode = (node: WorkflowDefinitionNode): WorkflowNode => {
     return {
       id: node.id || crypto.randomUUID(),
       type: 'workflow_ref',
-      name: node.name || 'Nested workflow',
+      name: node.name || '',
       workflowId: node.workflow_id || '',
       ...basePos,
     }

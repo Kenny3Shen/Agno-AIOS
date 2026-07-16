@@ -916,6 +916,9 @@ class SecurityRunRuntime:
         )
         tools = [mcp_tools] if enable_tools and mcp_tools is not None else []
         skills = await self._build_enabled_skills() if enable_tools else None
+        # Lean mode: shorter history, no session-summary manager (extra model work).
+        history_runs = 5 if enable_tools else 2
+        session_summaries = enable_tools
         return self.dependencies.agent_factory(
             id="security-operations",
             name="安全运营助手",
@@ -937,9 +940,9 @@ class SecurityRunRuntime:
             update_memory_on_run=request.memory_enabled,
             add_memories_to_context=request.memory_enabled,
             store_tool_messages=request.store_raw_tool_io,
-            enable_session_summaries=True,
-            session_summary_manager=_session_summary_manager(model),
-            num_history_runs=5,
+            enable_session_summaries=session_summaries,
+            session_summary_manager=_session_summary_manager(model) if session_summaries else None,
+            num_history_runs=history_runs,
             add_datetime_to_context=True,
             markdown=True,
         )

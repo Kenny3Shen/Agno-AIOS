@@ -513,3 +513,23 @@ describe('fieldForValidationIssue', () => {
     expect(fieldForValidationIssue({ code: 'empty_workflow' })).toBe('name')
   })
 })
+
+
+  it('keeps empty control-flow names on save (UI uses defaultName i18n)', () => {
+    const parallel = createNode('parallel')
+    const definition = toDefinition({ name: '', description: '', steps: [parallel] })
+    expect(definition.name).toBe('')
+    expect(definition.steps[0]?.name).toBe('')
+    const restored = fromRecord({
+      id: 'wf',
+      name: '',
+      description: '',
+      owner_user_id: 'u',
+      definition,
+      enabled: true,
+      version: 1,
+      created_at: 1,
+      updated_at: 1,
+    })
+    expect(restored.steps?.[0]?.name).toBe('')
+  })

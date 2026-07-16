@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Workflow 空节点名保留 + Chat 轻量上下文 + [WF] 进 Studio
+
+- `toDefinition`/`fromRecord` 不再把空控制流名写成 Parallel/Condition 等英文；画布仍用 `defaultName_*` i18n。
+- Chat `enable_tools=false`：`num_history_runs=2`，关闭 session summaries（减少摘要模型与历史体积）。
+- 最近对话 / `#/chat?session=` 对 workflow：有 `workflow_id` 时打开 Studio（`#/workflow?workflow_id=`），否则仍进 Trace。
+
 ## 已完成：Approvals HITL 表单类型化 + Studio schema 编辑器 + Chat 开关持久化
 
 - Approvals `user_input`：按 `field_type`（str/text/number/bool）渲染 Input / TextArea / InputNumber / Switch；提交时 coerce 为 bool/number；取消时清空表单状态。

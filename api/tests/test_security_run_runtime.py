@@ -1158,6 +1158,9 @@ async def test_enable_tools_false_skips_mcp_and_skills():
     assert created["tools"] == []
     assert created["skills"] is None
     assert created["instructions"] == ["lite"]
+    assert created["num_history_runs"] == 2
+    assert created["enable_session_summaries"] is False
+    assert created["session_summary_manager"] is None
     assert request.runtime_metadata()["enable_tools"] is False
 
 
