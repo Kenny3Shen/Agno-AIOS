@@ -18,7 +18,7 @@ from api.services.chat_run_events import (
     source_items,
     tool_update,
 )
-from api.services.chat_settings import get_chat_settings_async
+from api.services.chat_settings_service import get_chat_settings_async
 from api.utils.pagination import pagination_meta
 
 

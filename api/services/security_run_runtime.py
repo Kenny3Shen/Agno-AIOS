@@ -31,7 +31,7 @@ from api.services.notification_service import (
     notify_hitl_resume_failure,
     notify_submitter_of_hitl_resolution,
 )
-from api.services.chat_settings import get_chat_settings_async
+from api.services.chat_settings_service import get_chat_settings_async
 from api.services.chat_run_events import (
     ChatRunEvent,
     completed_payload,

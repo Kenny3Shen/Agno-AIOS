@@ -584,11 +584,16 @@ async def load_model_config_store() -> ModelConfigStore:
 
     base_store = ModelConfigStore.from_rows(rows)
     store = base_store.with_defaults().with_valid_active_model()
-    if (
+    needs_rewrite = (
         store.to_storage_dict() != base_store.to_storage_dict()
         or _rows_need_persist(rows)
         or _rows_need_provider_migration(rows, store)
-    ):
+    )
+    if needs_rewrite:
+        logger.info(
+            "rewriting model config rows (normalize/provider migrate); count={}",
+            len(store.models),
+        )
         await replace_model_config_rows(_store_to_rows(store, rows))
     return _cache_model_config_store(store)
 

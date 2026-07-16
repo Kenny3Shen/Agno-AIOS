@@ -52,8 +52,8 @@ interface RunSpanTreeNode extends TreeDataNode {
 }
 
 const SESSION_PAGE_SIZE = 8
-/** Cap background chat-session walk used for archive/preview merge. */
-const MAX_CHAT_SESSION_PAGES = 5
+/** Cap background chat-session walk (chat sessionsQuery pages) for archive/preview merge. */
+const MAX_CHAT_SESSION_PAGES = 3
 const RUN_PAGE_SIZE = 6
 const { RangePicker } = DatePicker
 

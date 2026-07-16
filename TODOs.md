@@ -124,6 +124,16 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Chat settings 模块合并 + Trace 会话合并页数
+
+- `ChatSettings` / `get_chat_settings_async` 并入 `chat_settings_service`；`chat_settings.py` 仅 re-export
+- runtime 消费者改直接 import service；model config 行 rewrite 写 info 日志
+- Trace 页 chat sessions 自动翻页 5→3（约 120 条，配合 limit=40）
+
+相关：`chat_settings_service.py` / `chat_settings.py` / `TracePage.tsx` / `model_config_service.py`
+
+---
+
 ## 已完成：ensure_*_table 进程内 AsyncOnce
 
 - 抽取 `api/utils/async_once.AsyncOnce`（双检锁一次执行）
