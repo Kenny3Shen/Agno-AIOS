@@ -9,15 +9,15 @@ describe('notifications API', () => {
     server.use(
       http.get('/api/notifications', () =>
         HttpResponse.json({
-          notifications: [{ id: 7, title: 'Skill upload awaiting approval', body: 'Submitted by member@example.com', data: {}, read: false, created_at: 1 }],
-          unread_count: 1,
+          data: [{ id: 7, title: 'Skill upload awaiting approval', body: 'Submitted by member@example.com', data: {}, read: false, created_at: 1 }],
+          meta: { page: 1, limit: 100, total_pages: 1, total_count: 1, unread_count: 1, search_time_ms: 0 },
         })
       ),
       http.post('/api/notifications/7/read', () => HttpResponse.json({ success: true })),
       http.post('/api/notifications/read-all', () => HttpResponse.json({ updated_count: 1 }))
     )
 
-    expect((await getNotifications()).unread_count).toBe(1)
+    expect((await getNotifications()).meta.unread_count).toBe(1)
     await expect(markNotificationRead(7)).resolves.toEqual({ success: true })
     await expect(markAllNotificationsRead()).resolves.toEqual({ updated_count: 1 })
   })

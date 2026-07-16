@@ -77,7 +77,7 @@ test.describe('workflow critical path', () => {
           return true
         }
         if (method === 'GET' && path.endsWith('/api/skills')) {
-          await fulfillJson(route, { skills: [] })
+          await fulfillJson(route, { data: [], meta: { page: 1, limit: 1, total_pages: 0, total_count: 0, search_time_ms: 0 } })
           return true
         }
         if (method === 'GET' && path.includes(`/api/workflows/${workflow.id}/versions`)) {

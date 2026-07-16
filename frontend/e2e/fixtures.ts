@@ -131,7 +131,10 @@ export async function mockApis(page: Page, options: MockOptions = {}) {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ notifications: [], unread_count: 0 }),
+        body: JSON.stringify({
+          data: [],
+          meta: { page: 1, limit: 100, total_pages: 0, total_count: 0, unread_count: 0, search_time_ms: 0 },
+        }),
       })
       return
     }

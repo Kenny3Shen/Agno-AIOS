@@ -12,8 +12,15 @@ export interface Notification {
 }
 
 export interface NotificationsResponse {
-  notifications: Notification[]
-  unread_count: number
+  data: Notification[]
+  meta: {
+    page: number
+    limit: number
+    total_pages: number
+    total_count: number
+    search_time_ms?: number
+    unread_count: number
+  }
 }
 
 export const getNotifications = () => requestJson<NotificationsResponse>('/notifications')

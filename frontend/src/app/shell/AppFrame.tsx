@@ -189,7 +189,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
     refetchInterval: 30_000,
   })
   useEffect(() => {
-    const latest = Math.max(0, ...(notificationsQuery.data?.notifications.map((item) => item.id) ?? []))
+    const latest = Math.max(0, ...(notificationsQuery.data?.data.map((item) => item.id) ?? []))
     lastNotificationIdRef.current = Math.max(lastNotificationIdRef.current, latest)
   }, [notificationsQuery.data])
   useEffect(() => {
@@ -208,12 +208,27 @@ export function AppFrame({ children }: { children: ReactNode }) {
                 // Keep cache aligned with GET /notifications list cap (default 100).
                 const maxCached = 100
                 if (!current) {
-                  return { notifications: [notification], unread_count: notification.read ? 0 : 1 }
+                  return {
+                    data: [notification],
+                    meta: {
+                      page: 1,
+                      limit: maxCached,
+                      total_pages: 1,
+                      total_count: 1,
+                      unread_count: notification.read ? 0 : 1,
+                    },
+                  }
                 }
-                if (current.notifications.some((item) => item.id === notification.id)) return current
+                if (current.data.some((item) => item.id === notification.id)) return current
+                const data = [notification, ...current.data].slice(0, maxCached)
                 return {
-                  notifications: [notification, ...current.notifications].slice(0, maxCached),
-                  unread_count: current.unread_count + (notification.read ? 0 : 1),
+                  data,
+                  meta: {
+                    ...current.meta,
+                    total_count: data.length,
+                    limit: Math.max(current.meta.limit, data.length),
+                    unread_count: current.meta.unread_count + (notification.read ? 0 : 1),
+                  },
                 }
               })
               void queryClient.invalidateQueries({ queryKey: ['approvals'] })
@@ -448,14 +463,14 @@ export function AppFrame({ children }: { children: ReactNode }) {
                       <div>
                         <Typography.Text strong>{t('shell:notifications')}</Typography.Text>
                         <Typography.Text type="secondary" className="notification-center-count">
-                          {t('shell:unreadCount', { count: notificationsQuery.data?.unread_count ?? 0 })}
+                          {t('shell:unreadCount', { count: notificationsQuery.data?.meta.unread_count ?? 0 })}
                         </Typography.Text>
                       </div>
                       <Button
                         type="link"
                         size="small"
                         loading={markingAllNotifications}
-                        disabled={!notificationsQuery.data?.unread_count}
+                        disabled={!notificationsQuery.data?.meta.unread_count}
                         onClick={() => void markAllAsRead()}
                       >
                         {t('shell:markAllRead')}
@@ -467,8 +482,8 @@ export function AppFrame({ children }: { children: ReactNode }) {
                           <Skeleton active title={{ width: '42%' }} paragraph={{ rows: 2 }} />
                           <Skeleton active title={{ width: '56%' }} paragraph={{ rows: 2 }} />
                         </div>
-                      ) : notificationsQuery.data?.notifications.length ? (
-                        notificationsQuery.data.notifications.slice(0, 6).map((notification) => {
+                      ) : notificationsQuery.data?.data.length ? (
+                        notificationsQuery.data.data.slice(0, 6).map((notification) => {
                           const kind = notificationKind(notification)
                           return (
                             <div
@@ -517,7 +532,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
                     type="text"
                     aria-label={t('shell:notifications')}
                     icon={
-                      <Badge count={notificationsQuery.data?.unread_count ?? 0} size="small">
+                      <Badge count={notificationsQuery.data?.meta.unread_count ?? 0} size="small">
                         <BellOutlined />
                       </Badge>
                     }

@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Skills / Notifications 列表 data/meta
+
+- `GET /api/skills`：`{skills}` → `{data, meta}`（全量列表，meta.total_count=len）。
+- `GET /api/notifications`：`{notifications, unread_count}` → `{data, meta}`，`meta.unread_count` 为全量未读。
+- 前端 Skills/Notifications/AppFrame/e2e fixtures 同步；无旧 envelope 兼容。
+
 ## 已完成：CVE update 去 status 包装 + Workflow 深链 smoke
 
 - `POST /api/cve/update` 成功体去掉 `status: 200`（失败仍 HTTPException）。

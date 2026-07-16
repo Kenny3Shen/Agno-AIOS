@@ -27,6 +27,7 @@ from api.services.skill_service import (
 )
 from api.services.upload_approval_service import submit_skill_upload
 from api.services.notification_service import notify_admins_of_submission
+from api.utils.pagination import pagination_meta
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
@@ -68,10 +69,6 @@ class SkillInfo(BaseModel):
     can_delete: bool
 
 
-class SkillListResponse(BaseModel):
-    skills: list[SkillInfo]
-
-
 class SkillToggleRequest(BaseModel):
     enabled: bool
 
@@ -102,15 +99,24 @@ class SkillVisibilityRequest(BaseModel):
 
 # ── API 端点 ──────────────────────────────────────────────────
 
-@router.get("", response_model=SkillListResponse)
+@router.get("")
 def list_skills(user: User = Depends(require_scope("skill:read"))):
-    """List skill metadata (no full SKILL.md body; use GET /{name} for detail)."""
-    return SkillListResponse(
-        skills=[
-            SkillInfo(**item)
-            for item in list_skill_infos(user, include_detail=False)
-        ]
-    )
+    """List skill metadata with Agno-style ``data`` / ``meta`` envelope.
+
+    Full SKILL.md bodies are omitted; use GET /{name} for detail.
+    """
+    items = [
+        SkillInfo(**item)
+        for item in list_skill_infos(user, include_detail=False)
+    ]
+    return {
+        "data": items,
+        "meta": pagination_meta(
+            page=1,
+            limit=max(len(items), 1),
+            total_count=len(items),
+        ),
+    }
 
 
 @router.get("/{skill_name}", response_model=SkillInfo)

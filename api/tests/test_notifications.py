@@ -131,3 +131,29 @@ async def test_notifications_ensure_runs_once(monkeypatch) -> None:
     assert calls == 1
     store._notifications_ensure_once.reset()
 
+
+
+@pytest.mark.asyncio
+async def test_get_notifications_returns_data_meta_envelope() -> None:
+    user = cast(User, SimpleNamespace(id="user-1"))
+    rows = [
+        {
+            "id": 1,
+            "title": "hello",
+            "body": "world",
+            "data": {},
+            "read": False,
+            "created_at": 1,
+        }
+    ]
+    with patch.object(
+        notifications,
+        "list_notifications",
+        new=AsyncMock(return_value=(rows, 3)),
+    ) as list_rows:
+        result = await notifications.get_notifications(unread_only=False, user=user)
+    list_rows.assert_awaited_once_with("user-1", False)
+    assert result["data"] == rows
+    assert result["meta"]["unread_count"] == 3
+    assert result["meta"]["total_count"] == 1
+    assert result["meta"]["page"] == 1

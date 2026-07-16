@@ -7,6 +7,7 @@ from sse_starlette.sse import EventSourceResponse
 from api.auth.claims import actor_id
 from api.auth.models import User
 from api.auth.scopes import require_scope
+from api.utils.pagination import pagination_meta
 from api.persistence.notifications import (
     delete_notification,
     list_notifications,
@@ -19,8 +20,21 @@ router = APIRouter(prefix="/api/notifications", tags=["Notifications"])
 
 @router.get("")
 async def get_notifications(unread_only: bool = False, user: User = Depends(require_scope("sessions:read"))):
+    """List recent notifications with Agno-style ``data`` / ``meta``.
+
+    ``meta.unread_count`` is the full unread total (not limited to the returned page).
+    """
     items, unread_count = await list_notifications(actor_id(user), unread_only)
-    return {"notifications": items, "unread_count": unread_count}
+    # list_notifications caps rows at 100; meta.limit documents that page size.
+    return {
+        "data": items,
+        "meta": pagination_meta(
+            page=1,
+            limit=100,
+            total_count=len(items),
+            unread_count=unread_count,
+        ),
+    }
 
 
 @router.get("/stream")

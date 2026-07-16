@@ -10,7 +10,7 @@ describe('SkillsPage', () => {
     server.use(
       http.get('/api/skills', () =>
         HttpResponse.json({
-          skills: [
+          data: [
             {
               name: 'web-search',
               description: 'Searches the web',
@@ -24,6 +24,7 @@ describe('SkillsPage', () => {
               can_delete: true,
             },
           ],
+          meta: { page: 1, limit: 1, total_pages: 1, total_count: 1, search_time_ms: 0 },
         })
       )
     )
