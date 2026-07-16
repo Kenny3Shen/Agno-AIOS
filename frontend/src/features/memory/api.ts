@@ -1,6 +1,6 @@
 import { jsonInit, requestJson } from '@/shared/api/client'
 import { asRecord } from '@/shared/lib/format'
-import { normalizePaginatedList } from '@/shared/lib/pagination'
+import { normalizePaginatedList, type ListPaginationMeta } from '@/shared/lib/pagination'
 
 export interface Memory {
   /** UI key; always mirrored from API ``memory_id``. */
@@ -18,16 +18,10 @@ export interface Memory {
   updated_at?: string
 }
 
-export interface MemoryListMeta {
-  page: number
-  limit: number
-  total_count: number
-  total_pages: number
-  search_time_ms: number
-}
+export type MemoryListMeta = ListPaginationMeta
 
 /** Agno-style memory list envelope after row normalize. */
-export interface MemoryListResult {
+export type MemoryListResult = {
   data: Memory[]
   meta: MemoryListMeta
 }

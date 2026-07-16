@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Catalog 列表与 meta 类型对齐共享 normalizer
+
+- Chat / Memory / Approvals 的 `*ListMeta` 改为 `ListPaginationMeta` 别名。
+- Workflow `listExecutors` / `listWorkflowVersions` / `listWorkflowTemplates` 走 `normalizePaginatedList`。
+- Skills / MCP components·tokens / Eval suites·cases catalog 列表同样收口（仍返回数组给现有 UI）。
+
 ## 已完成：Workflow / Audit / Eval failures 列表 normalizer 收口
 
 - `listWorkflows` 经 `normalizePaginatedList` + `normalizeWorkflow`（调用方仍要 `WorkflowRecord[]`）。

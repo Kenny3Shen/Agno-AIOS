@@ -250,20 +250,20 @@ export const deleteWorkflow = async (id: string) =>
   requestJson<{ success: boolean }>(`/workflows/${encodeURIComponent(id)}`, { method: 'DELETE' })
 
 export const listExecutors = async () => {
-  const payload = asRecord(await requestJson<unknown>('/workflows/executors'))
-  const data = Array.isArray(payload?.data) ? payload.data : []
-  return data.flatMap((item): ExecutorOption[] => {
-    const row = asRecord(item)
-    if (!row?.ref) return []
-    return [
-      {
+  const raw = await requestJson<unknown>('/workflows/executors')
+  const { data } = normalizePaginatedList(raw, {
+    mapItem: (item): ExecutorOption | null => {
+      const row = asRecord(item)
+      if (!row?.ref) return null
+      return {
         ref: String(row.ref),
         kind: String(row.kind ?? 'agent'),
         name: String(row.name ?? row.ref),
         description: String(row.description ?? ''),
-      },
-    ]
+      }
+    },
   })
+  return data
 }
 
 export type WorkflowSseHandler = (item: WorkflowRunLogItem) => void
@@ -368,40 +368,38 @@ export const streamWorkflowRun = async (
 
 
 export const listWorkflowVersions = async (workflowId: string, page = 1, limit = 20) => {
-  const payload = asRecord(
-    await requestJson<unknown>(
-      `/workflows/${encodeURIComponent(workflowId)}/versions?page=${page}&limit=${limit}`
-    )
+  const raw = await requestJson<unknown>(
+    `/workflows/${encodeURIComponent(workflowId)}/versions?page=${page}&limit=${limit}`,
   )
-  const data = Array.isArray(payload?.data) ? payload.data : []
-  return data.flatMap((item) => {
-    const row = asRecord(item)
-    if (!row) return []
-    return [
-      {
+  const { data } = normalizePaginatedList(raw, {
+    page,
+    limit,
+    mapItem: (item) => {
+      const row = asRecord(item)
+      if (!row) return null
+      const definition = asRecord(row.definition) ?? {}
+      return {
         id: String(row.id ?? ''),
         workflow_id: String(row.workflow_id ?? workflowId),
         version: Number(row.version ?? 0),
         name: String(row.name ?? ''),
         description: String(row.description ?? ''),
-        definition: (() => {
-          const definition = asRecord(row.definition) ?? {}
-          return {
-            name: String(definition.name ?? row.name ?? ''),
-            description: String(definition.description ?? row.description ?? ''),
-            steps: Array.isArray(definition.steps)
-              ? definition.steps.flatMap((step) => {
-                  const node = normalizeNode(step)
-                  return node ? [node] : []
-                })
-              : [],
-          }
-        })(),
+        definition: {
+          name: String(definition.name ?? row.name ?? ''),
+          description: String(definition.description ?? row.description ?? ''),
+          steps: Array.isArray(definition.steps)
+            ? definition.steps.flatMap((step) => {
+                const node = normalizeNode(step)
+                return node ? [node] : []
+              })
+            : [],
+        },
         created_at: Number(row.created_at ?? 0),
         created_by: String(row.created_by ?? ''),
-      },
-    ]
+      }
+    },
   })
+  return data
 }
 
 export const restoreWorkflowVersion = async (workflowId: string, version: number) => {
@@ -470,15 +468,13 @@ export type WorkflowTemplate = {
 
 export const listWorkflowTemplates = async () => {
   const raw = await requestJson<unknown>('/workflows/templates')
-  const row = asRecord(raw) ?? {}
-  const data = Array.isArray(row.data) ? row.data : Array.isArray(raw) ? (raw as unknown[]) : []
-  return data.flatMap((item) => {
-    const r = asRecord(item)
-    if (!r) return []
-    const def = asRecord(r.definition) ?? {}
-    const stepsRaw = Array.isArray(def.steps) ? def.steps : []
-    return [
-      {
+  const { data } = normalizePaginatedList(raw, {
+    mapItem: (item) => {
+      const r = asRecord(item)
+      if (!r) return null
+      const def = asRecord(r.definition) ?? {}
+      const stepsRaw = Array.isArray(def.steps) ? def.steps : []
+      return {
         id: String(r.id ?? ''),
         name: String(r.name ?? ''),
         description: String(r.description ?? ''),
@@ -492,8 +488,9 @@ export const listWorkflowTemplates = async () => {
             return node ? [node] : []
           }),
         },
-      } satisfies WorkflowTemplate,
-    ]
+      }
+    },
   })
+  return data
 }
 

@@ -1,6 +1,6 @@
 import { jsonInit, requestJson } from '@/shared/api/client'
 import { asRecord } from '@/shared/lib/format'
-import { listPaginationMeta, normalizePaginatedList } from '@/shared/lib/pagination'
+import { listPaginationMeta, normalizePaginatedList, type ListPaginationMeta } from '@/shared/lib/pagination'
 
 export interface ApprovalActor {
   id: string
@@ -52,16 +52,10 @@ export interface ApprovalListParams {
   limit?: number
 }
 
-export interface ApprovalListMeta {
-  page: number
-  limit: number
-  total_count: number
-  total_pages: number
-  search_time_ms: number
-}
+export type ApprovalListMeta = ListPaginationMeta
 
 /** Combined Approvals list (Agno-style ``{data, meta}``; server merge for kind=all). */
-export interface ApprovalListResult {
+export type ApprovalListResult = {
   data: Approval[]
   meta: ApprovalListMeta
 }

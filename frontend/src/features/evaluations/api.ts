@@ -82,15 +82,29 @@ export const normalizeEvalRun = (value: unknown): EvalRun | null => {
   }
 }
 
-export const listSuites = async () =>
-  (await requestJson<{ data: Suite[] }>('/agent-evals/suites')).data ?? []
+export const listSuites = async () => {
+  const raw = await requestJson<unknown>('/agent-evals/suites')
+  const { data } = normalizePaginatedList(raw, {
+    mapItem: (row) => {
+      if (!row || typeof row !== 'object') return null
+      return row as Suite
+    },
+  })
+  return data
+}
 
-export const listCases = async (suite = '') =>
-  (
-    await requestJson<{ data: EvalCase[] }>(
-      `/agent-evals/cases${suite ? `?suite_id=${encodeURIComponent(suite)}` : ''}`
-    )
-  ).data ?? []
+export const listCases = async (suite = '') => {
+  const raw = await requestJson<unknown>(
+    `/agent-evals/cases${suite ? `?suite_id=${encodeURIComponent(suite)}` : ''}`,
+  )
+  const { data } = normalizePaginatedList(raw, {
+    mapItem: (row) => {
+      if (!row || typeof row !== 'object') return null
+      return row as EvalCase
+    },
+  })
+  return data
+}
 
 export type EvalListMeta = ListPaginationMeta
 

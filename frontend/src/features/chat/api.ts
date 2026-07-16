@@ -1,5 +1,5 @@
 import { apiFetch, jsonInit, requestJson } from '@/shared/api/client'
-import { normalizePaginatedList } from '@/shared/lib/pagination'
+import { normalizePaginatedList, type ListPaginationMeta } from '@/shared/lib/pagination'
 import type { ModelConfigResponse, ReasoningEffort } from '@/shared/types/common'
 import type { ChatRunEvent, ChatSession } from './types'
 import { consumeSse, normalizeMessages } from './utils'
@@ -21,13 +21,7 @@ const normalizeSession = (value: unknown): ChatSession | null => {
   }
 }
 
-export type SessionListMeta = {
-  page: number
-  limit: number
-  total_pages: number
-  total_count: number
-  search_time_ms: number
-}
+export type SessionListMeta = ListPaginationMeta
 
 export type SessionListResult = {
   data: ChatSession[]

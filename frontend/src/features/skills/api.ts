@@ -1,4 +1,5 @@
 import { jsonInit, requestJson } from '@/shared/api/client'
+import { normalizePaginatedList } from '@/shared/lib/pagination'
 import type { ResourceVisibility } from '@/shared/types/common'
 export interface Skill {
   name: string
@@ -21,7 +22,16 @@ export interface UploadApprovalSubmission {
   id?: string
   status?: string
 }
-export const listSkills = async () => (await requestJson<{ data: Skill[] }>('/skills')).data ?? []
+export const listSkills = async () => {
+  const raw = await requestJson<unknown>('/skills')
+  const { data } = normalizePaginatedList(raw, {
+    mapItem: (row) => {
+      if (!row || typeof row !== 'object') return null
+      return row as Skill
+    },
+  })
+  return data
+}
 export const getSkill = (name: string) =>
   requestJson<Skill>(`/skills/${encodeURIComponent(name)}`)
 export const toggleSkill = (name: string, enabled: boolean) =>
