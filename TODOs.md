@@ -1,5 +1,13 @@
 # 下一步工作
 
+## 已完成：画布 Step 副标题映射 Executor 显示名
+
+- `resolveNodeCanvasSubtitle`：Agent step 副标题优先用 executor catalog `name`（如「安全运营助手」），无匹配回退 `targetId`，空 ref 用 i18n `subtitleAgent`。
+- `WorkflowCanvas` 通过 `executorNames` 注入目录；catalog 到达后仅 presentation patch，不触发全量 layout。
+- 内容 patch 的默认节点标题与 `buildGraph` 对齐（`defaultName_*`，不再误用 raw subtitle）。
+- 单测覆盖映射 / 回退 / 控制流副标题 / `executorNamesKey` 稳定序。
+
+
 ## 已完成：Executor 目录产品化 + Playbook 内容库
 
 - 内置执行器目录扩展字段：`category` / `capabilities` / `recommended_for` / `role`（`security-operations` 运营 vs `safe-fallback` 轻量）。

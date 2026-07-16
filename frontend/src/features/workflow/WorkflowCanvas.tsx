@@ -43,6 +43,8 @@ import {
   layoutCanvas,
   reparentTargetFromHandle,
   computeSmartSnap,
+  resolveNodeCanvasSubtitle,
+  executorNamesKey,
   NODE_LAYOUT_WIDTH,
   NODE_LAYOUT_HEIGHT,
   type ReparentTarget,
@@ -109,6 +111,8 @@ type Props = {
   emptyHint?: string
   emptyActionLabel?: string
   onEmptyAction?: () => void
+  /** ref → display name for agent step subtitles on the canvas. */
+  executorNames?: ReadonlyMap<string, string> | Record<string, string>
 }
 
 type FlowGraph = { nodes: WorkflowCanvasNode[]; edges: Edge[] }
@@ -130,7 +134,8 @@ function buildGraph(
     onCopy: () => void
     onDuplicate: () => void
   } | null = null,
-  t: TranslateFn = (key) => key
+  t: TranslateFn = (key) => key,
+  executorNames: ReadonlyMap<string, string> | Record<string, string> = {},
 ): FlowGraph {
   const layout = layoutCanvas(steps)
   const prevById = new Map(prevNodes.map((item) => [item.id, item]))
@@ -144,16 +149,9 @@ function buildGraph(
         source?.requiresUserInput ||
         source?.requiresOutputReview
     )
-    let subtitle: string = item.type
-    if (source?.type === 'step') subtitle = source.targetId || t('subtitleAgent')
-    else if (source?.type === 'condition') subtitle = source.evaluatorCel || 'CEL'
-    else if (source?.type === 'router') subtitle = source.selectorCel || 'selector'
-    else if (source?.type === 'workflow_ref') subtitle = source.workflowId || t('subtitleNested')
-    else if (source?.type === 'loop') {
-      subtitle = t('subtitleMaxIter', { count: source.maxIterations ?? 3 })
-    } else if (source?.type === 'parallel') {
-      subtitle = t('subtitleBranches', { count: source.steps?.length ?? 0 })
-    }
+    const subtitle = source
+      ? resolveNodeCanvasSubtitle(source, t, executorNames)
+      : item.type
     const displayLabel =
       source?.name?.trim() ||
       t(`defaultName_${item.type}`) ||
@@ -253,8 +251,12 @@ function CanvasInner({
   emptyHint,
   emptyActionLabel,
   onEmptyAction,
+  executorNames = {},
 }: Props) {
   const { t } = useTranslation('workflow')
+  const executorCatalogKey = useMemo(() => executorNamesKey(executorNames), [executorNames])
+  const executorNamesRef = useRef(executorNames)
+  executorNamesRef.current = executorNames
   const wrapperRef = useRef<HTMLDivElement>(null)
   const { dark } = usePreferences()
   const { screenToFlowPosition, fitView, getIntersectingNodes, updateNodeData } = useReactFlow()
@@ -318,24 +320,15 @@ function CanvasInner({
           const hitl = Boolean(
             node.requiresConfirmation || node.requiresUserInput || node.requiresOutputReview
           )
-          let subtitle: string = node.type
-          if (node.type === 'step') subtitle = node.targetId || t('subtitleAgent')
-          else if (node.type === 'condition') subtitle = node.evaluatorCel || 'CEL'
-          else if (node.type === 'router') subtitle = node.selectorCel || 'selector'
-          else if (node.type === 'workflow_ref') subtitle = node.workflowId || t('subtitleNested')
-          else if (node.type === 'loop') {
-            subtitle = t('subtitleMaxIter', { count: node.maxIterations ?? 3 })
-          } else if (node.type === 'parallel') {
-            subtitle = t('subtitleBranches', { count: node.steps?.length ?? 0 })
-          }
+          const subtitle = resolveNodeCanvasSubtitle(node, t, executorNames)
           const branches =
             node.type === 'router'
               ? (node.choices ?? []).map((c) => `${c.id}:${c.name}`).join(',')
               : ''
           return `${node.id}:${node.name ?? ''}:${subtitle}:${hitl ? 1 : 0}:${branches}`
         })
-        .join('#'),
-    [steps, t]
+        .join('#') + `@${executorCatalogKey}`,
+    [steps, t, executorNames, executorCatalogKey]
   )
 
   const selectionKey = selectedIds.length
@@ -377,6 +370,7 @@ function CanvasInner({
           onDuplicate: () => onDupRef.current(),
         },
         t,
+        executorNamesRef.current,
       )
       // Preserve runStatus + apply current selection/highlights (refs, not deps).
       const prevStatus = new Map(
@@ -460,17 +454,11 @@ function CanvasInner({
             source.requiresUserInput ||
             source.requiresOutputReview
         )
-        let subtitle: string = source.type
-        if (source.type === 'step') subtitle = source.targetId || t('subtitleAgent')
-        else if (source.type === 'condition') subtitle = source.evaluatorCel || 'CEL'
-        else if (source.type === 'router') subtitle = source.selectorCel || 'selector'
-        else if (source.type === 'workflow_ref') subtitle = source.workflowId || t('subtitleNested')
-        else if (source.type === 'loop') {
-          subtitle = t('subtitleMaxIter', { count: source.maxIterations ?? 3 })
-        } else if (source.type === 'parallel') {
-          subtitle = t('subtitleBranches', { count: source.steps?.length ?? 0 })
-        }
-        const label = source.name?.trim() || subtitle
+        const subtitle = resolveNodeCanvasSubtitle(source, t, executorNames)
+        const label =
+          source.name?.trim() ||
+          t(`defaultName_${source.type}`) ||
+          subtitle
         const branchHandles = branchHandlesFor(source)
         const data = node.data
         if (
@@ -492,7 +480,7 @@ function CanvasInner({
       })
       return changed ? { ...current, nodes } : current
     })
-  }, [contentKey])
+  }, [contentKey, t, executorNames])
 
   // Run status: only patch nodes whose status actually changed (no layout).
   const prevRunStatusRef = useRef(nodeRunStatus)

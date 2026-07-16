@@ -60,7 +60,7 @@ import { currentUserQuery } from '@/features/auth'
 import { hasScope } from '@/shared/auth/permissions'
 import { useFormatDate } from '@/shared/lib/format'
 import { copyToClipboard } from '@/shared/lib/clipboard'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 const PALETTE: Array<{
   type: WorkflowNodeType
@@ -221,6 +221,16 @@ export function WorkflowPage() {
     }))
   const step = workflow.selected
   const executors = workflow.executorsQuery.data ?? []
+  const executorNames = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const item of executors) {
+      const ref = (item.ref || '').trim()
+      if (!ref) continue
+      const name = (item.name || '').trim()
+      if (name) map.set(ref, name)
+    }
+    return map
+  }, [executors])
   const models = workflow.modelsQuery.data?.models ?? []
   const saved = workflow.workflowRecords
   const workflowListMeta = workflow.workflowListMeta
@@ -685,6 +695,7 @@ export function WorkflowPage() {
             steps={workflow.state.steps}
             selectedId={workflow.state.selectedId}
             selectedIds={workflow.state.selectedIds}
+            executorNames={executorNames}
             onSelect={workflow.select}
             onSelectMany={workflow.selectMany}
             onPositionsChange={workflow.applyPositions}

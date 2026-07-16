@@ -1258,6 +1258,48 @@ export const nodeLabel = (node: WorkflowNode): string => {
   return node.type
 }
 
+/** Resolve canvas subtitle for a node (executor display name when available). */
+export type CanvasSubtitleT = (key: string, options?: Record<string, unknown>) => string
+
+export const resolveNodeCanvasSubtitle = (
+  node: WorkflowNode,
+  t: CanvasSubtitleT,
+  executorNames: ReadonlyMap<string, string> | Record<string, string> = {},
+): string => {
+  if (node.type === 'step') {
+    const ref = (node.targetId || '').trim()
+    if (!ref) return t('subtitleAgent')
+    let mapped: string | undefined
+    if (executorNames instanceof Map) {
+      mapped = executorNames.get(ref)
+    } else {
+      mapped = (executorNames as Record<string, string>)[ref]
+    }
+    const name = (mapped || '').trim()
+    return name || ref
+  }
+  if (node.type === 'condition') return node.evaluatorCel || 'CEL'
+  if (node.type === 'router') return node.selectorCel || 'selector'
+  if (node.type === 'workflow_ref') return node.workflowId || t('subtitleNested')
+  if (node.type === 'loop') return t('subtitleMaxIter', { count: node.maxIterations ?? 3 })
+  if (node.type === 'parallel') return t('subtitleBranches', { count: node.steps?.length ?? 0 })
+  return node.type
+}
+
+/** Stable key fragment for executor catalog (drives presentation refresh). */
+export const executorNamesKey = (
+  executorNames: ReadonlyMap<string, string> | Record<string, string>,
+): string => {
+  const entries =
+    executorNames instanceof Map
+      ? [...executorNames.entries()]
+      : Object.entries(executorNames as Record<string, string>)
+  return entries
+    .map(([ref, name]) => `${ref}=${name}`)
+    .sort()
+    .join('|')
+}
+
 export type CanvasLayoutNode = {
   id: string
   type: WorkflowNodeType

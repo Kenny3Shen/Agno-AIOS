@@ -24,6 +24,8 @@ import {
   workflowWebhookCurl,
   workflowWebhookUrl,
   rotateWebhookSecret,
+  resolveNodeCanvasSubtitle,
+  executorNamesKey,
 } from './utils'
 import type { WorkflowState } from './types'
 
@@ -587,3 +589,51 @@ describe('fieldForValidationIssue', () => {
     expect(issues.some((i) => i.code === 'self_workflow_ref')).toBe(true)
     expect(fieldForValidationIssue({ code: 'self_workflow_ref' })).toBe('workflow_ref')
   })
+
+describe('resolveNodeCanvasSubtitle', () => {
+  const t = (key: string, options?: Record<string, unknown>) => {
+    if (key === 'subtitleAgent') return 'agent'
+    if (key === 'subtitleNested') return 'nested'
+    if (key === 'subtitleMaxIter') return `max ${options?.count ?? 3}`
+    if (key === 'subtitleBranches') return `branches ${options?.count ?? 0}`
+    return key
+  }
+
+  it('maps step targetId to executor display name', () => {
+    const step = createNode('step')
+    step.targetId = 'security-operations'
+    const names = new Map([['security-operations', '安全运营助手']])
+    expect(resolveNodeCanvasSubtitle(step, t, names)).toBe('安全运营助手')
+  })
+
+  it('falls back to targetId when executor catalog misses the ref', () => {
+    const step = createNode('step')
+    step.targetId = 'custom-agent'
+    expect(resolveNodeCanvasSubtitle(step, t, {})).toBe('custom-agent')
+  })
+
+  it('uses subtitleAgent when step has no targetId', () => {
+    const step = createNode('step')
+    step.targetId = ''
+    expect(resolveNodeCanvasSubtitle(step, t, {})).toBe('agent')
+  })
+
+  it('formats control-flow subtitles', () => {
+    const condition = createNode('condition')
+    condition.evaluatorCel = 'input.score > 0.8'
+    expect(resolveNodeCanvasSubtitle(condition, t, {})).toBe('input.score > 0.8')
+
+    const loop = createNode('loop')
+    loop.maxIterations = 5
+    expect(resolveNodeCanvasSubtitle(loop, t, {})).toBe('max 5')
+
+    const parallel = createNode('parallel')
+    parallel.steps = [createNode('step'), createNode('step')]
+    expect(resolveNodeCanvasSubtitle(parallel, t, {})).toBe('branches 2')
+  })
+
+  it('executorNamesKey is order-stable', () => {
+    expect(executorNamesKey({ b: 'B', a: 'A' })).toBe(executorNamesKey(new Map([['a', 'A'], ['b', 'B']])))
+  })
+})
+
