@@ -305,12 +305,19 @@ async def notify_background_task_failure(
     message = (error or "Background task failed").strip() or "Background task failed"
     label = (task_name or "background task").strip() or "background task"
     body = message if len(message) <= 500 else f"{message[:497]}..."
+    lower = label.lower()
+    if "memory" in lower or "memories" in lower:
+        path = "/memory"
+        title = f"Memory task failed: {label}"
+    else:
+        path = "/audit"
+        title = f"Background task failed: {label}"
     data = {
         "resource_type": "background_task",
         "status": "error",
         "task_name": label,
         "error": body,
-        "path": "/audit",
+        "path": path,
     }
     recipients: list[str] = []
     try:
@@ -322,7 +329,7 @@ async def notify_background_task_failure(
             return
         await create_notifications(
             recipients,
-            title=f"Background task failed: {label}",
+            title=title,
             body=body,
             data=data,
         )

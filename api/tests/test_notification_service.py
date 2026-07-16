@@ -183,6 +183,21 @@ async def test_notify_background_task_failure_targets_admins_and_optional_user()
 
 
 @pytest.mark.asyncio
+async def test_notify_background_task_failure_routes_memory_to_memory_page():
+    with (
+        patch.object(notification_service, "_admin_user_ids", new=AsyncMock(return_value=["admin-1"])),
+        patch.object(notification_service, "create_notifications", new=AsyncMock()) as create,
+    ):
+        await notification_service.notify_background_task_failure(
+            task_name="amake_memories",
+            error="Argument not supported: metadata",
+        )
+    create.assert_awaited_once()
+    kwargs = create.await_args.kwargs
+    assert kwargs["data"]["path"] == "/memory"
+    assert "Memory task failed" in kwargs["title"]
+
+@pytest.mark.asyncio
 async def test_notify_background_task_failure_swallows_errors():
     with (
         patch.object(notification_service, "_admin_user_ids", new=AsyncMock(side_effect=RuntimeError("db down"))),

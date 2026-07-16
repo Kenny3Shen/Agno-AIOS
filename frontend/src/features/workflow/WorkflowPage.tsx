@@ -387,6 +387,7 @@ export function WorkflowPage() {
         </Space>
       </header>
       {workflowListMeta &&
+      !workflow.librarySearch.trim() &&
       workflowListMeta.total_count > saved.length &&
       !workflow.workflowsQuery.hasNextPage ? (
         <Alert
