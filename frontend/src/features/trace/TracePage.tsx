@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 import dayjs, { type Dayjs } from 'dayjs'
 import {
@@ -149,7 +149,13 @@ export function TracePage() {
   const [sessionPage, setSessionPage] = useState(1)
   const [runPage, setRunPage] = useState(1)
   const effectiveUserId = isAdmin ? filters.user_id : (currentUser.data?.id ?? '')
-  const chatSessions = useQuery(sessionsQuery(true, effectiveUserId || undefined))
+  const chatSessions = useInfiniteQuery(sessionsQuery(true, effectiveUserId || undefined))
+  // Trace merge needs archive/preview for all chat sessions; walk pages in the background.
+  useEffect(() => {
+    if (chatSessions.hasNextPage && !chatSessions.isFetchingNextPage) {
+      void chatSessions.fetchNextPage()
+    }
+  }, [chatSessions.fetchNextPage, chatSessions.hasNextPage, chatSessions.isFetchingNextPage])
   const summaries = useQuery(
     traceSessionsQuery({
       session_id: filters.session_id,
@@ -168,9 +174,13 @@ export function TracePage() {
     ...tracesQuery({ ...filters, user_id: effectiveUserId, session_id: selectedSession, page: runPage, limit: RUN_PAGE_SIZE }),
     enabled: hasRunSelection,
   })
+  const chatSessionItems = useMemo(
+    () => chatSessions.data?.pages.flatMap((page) => page.data) ?? [],
+    [chatSessions.data]
+  )
   const sessions = useMemo(
-    () => filterSessionsByArchive(mergeTraceSessions(chatSessions.data ?? [], summaries.data?.items ?? []), archiveFilter),
-    [archiveFilter, chatSessions.data, summaries.data?.items]
+    () => filterSessionsByArchive(mergeTraceSessions(chatSessionItems, summaries.data?.items ?? []), archiveFilter),
+    [archiveFilter, chatSessionItems, summaries.data?.items]
   )
   const visibleSessions = useMemo(
     () => sessions.slice((sessionPage - 1) * SESSION_PAGE_SIZE, sessionPage * SESSION_PAGE_SIZE),

@@ -11,6 +11,9 @@ const sessions = {
   data: [] as ChatSession[],
   isLoading: false,
   isError: false,
+  hasNextPage: false,
+  isFetchingNextPage: false,
+  fetchNextPage: vi.fn<() => Promise<unknown>>(),
   refetch: vi.fn<() => Promise<unknown>>(),
 }
 
@@ -64,6 +67,9 @@ describe('ChatTaskPanel', () => {
     sessions.data = []
     sessions.isLoading = false
     sessions.isError = false
+    sessions.hasNextPage = false
+    sessions.isFetchingNextPage = false
+    sessions.fetchNextPage.mockReset()
     sessions.refetch.mockReset()
     chat.sessionId = null
     chat.setSession.mockReset()
@@ -130,4 +136,20 @@ describe('ChatTaskPanel', () => {
     expect(screen.getByText('Recent conversations')).toBeTruthy()
     expect(screen.getByText('Today')).toBeTruthy()
   })
+  it('loads more sessions when hasNextPage is true', async () => {
+    const user = setupUser()
+    sessions.data = [
+      {
+        session_id: 'session-1',
+        preview: 'First page',
+        created_at: dayjs().unix(),
+        updated_at: dayjs().unix(),
+      },
+    ]
+    sessions.hasNextPage = true
+    renderWithQuery(<ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} variant="sider" />)
+    await user.click(screen.getByRole('button', { name: '加载更多' }))
+    expect(sessions.fetchNextPage).toHaveBeenCalledOnce()
+  })
+
 })

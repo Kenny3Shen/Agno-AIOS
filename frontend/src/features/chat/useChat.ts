@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useReducer, useRef } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 import { cancelRun, streamMessage } from './api'
-import { chatKeys, historyQuery, modelsQuery, sessionsQuery } from './queries'
+import { chatKeys, historyQuery, modelsQuery, SESSION_PAGE_SIZE, sessionsQuery } from './queries'
 import { chatReducer, defaultReasoningEffort, initialChatState, previousPrompt } from './utils'
+import type { SessionListResult } from './api'
 import type { ChatRunEvent, ChatSession, Message } from './types'
 import type { ReasoningEffort } from '@/shared/types/common'
 
@@ -15,7 +16,15 @@ export function useChat() {
   const [state, dispatch] = useReducer(chatReducer, initialChatState)
   const abortRef = useRef<AbortController | null>(null)
   const activeRunIdRef = useRef<string | null>(null)
-  const sessions = useQuery(sessionsQuery())
+  const sessionsQueryResult = useInfiniteQuery(sessionsQuery())
+  const sessionItems = useMemo(
+    () => sessionsQueryResult.data?.pages.flatMap((page) => page.data) ?? [],
+    [sessionsQueryResult.data]
+  )
+  const sessions = {
+    ...sessionsQueryResult,
+    data: sessionItems,
+  }
   const history = useQuery(historyQuery(sessionId ?? ''))
   const models = useQuery(modelsQuery())
 
@@ -70,10 +79,30 @@ export function useChat() {
         created_at: now,
         updated_at: now,
       }
-      queryClient.setQueryData<ChatSession[]>(chatKeys.sessions(), (items) => [
-        optimisticSession,
-        ...(items ?? []).filter((item) => item.session_id !== activeSession),
-      ])
+      queryClient.setQueryData<{ pages: SessionListResult[]; pageParams: number[] }>(chatKeys.sessions(), (current) => {
+        const pages = current?.pages ?? []
+        if (!pages.length) {
+          return {
+            pages: [
+              {
+                data: [optimisticSession],
+                meta: { page: 1, limit: SESSION_PAGE_SIZE, total_pages: 1, total_count: 1, search_time_ms: 0 },
+              },
+            ],
+            pageParams: [1],
+          }
+        }
+        const [first, ...rest] = pages
+        const nextFirst: SessionListResult = {
+          ...first,
+          data: [optimisticSession, ...first.data.filter((item) => item.session_id !== activeSession)],
+          meta: {
+            ...first.meta,
+            total_count: Math.max(first.meta.total_count, first.data.length) + (first.data.some((item) => item.session_id === activeSession) ? 0 : 1),
+          },
+        }
+        return { pages: [nextFirst, ...rest], pageParams: current?.pageParams ?? [1] }
+      })
     }
     const assistantId = crypto.randomUUID()
     const user: Message = { id: crypto.randomUUID(), role: 'user', content: text, final: true, session_id: activeSession }

@@ -1134,3 +1134,9 @@ html.dark {
   color: var(--tais-orange) !important;
   background: color-mix(in srgb, var(--tais-orange) 12%, transparent) !important;
 }
+
+.chat-task-panel-load-more {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 8px;
+}

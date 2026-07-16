@@ -48,7 +48,8 @@
     "titleRequired": "Enter a conversation title",
     "titleTooLong": "The title cannot exceed 120 characters",
     "renamed": "Conversation renamed",
-    "renameFailed": "Unable to rename conversation"
+    "renameFailed": "Unable to rename conversation",
+    "loadMore": "Load more"
   },
   "noNotifications": "No notifications",
   "markAllRead": "Mark all as read",

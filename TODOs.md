@@ -136,6 +136,15 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Chat sessions 侧栏 load more
+
+- `listSessions` 返回 `{ data, meta }`；`sessionsQuery` 改为 `useInfiniteQuery`（page size 100）
+- 最近对话侧栏在有下一页时显示「加载更多」；乐观新建/重命名写入 infinite pages 缓存
+
+相关：`chat/api.ts` / `queries.ts` / `useChat.ts` / `ChatTaskPanel.tsx`
+
+---
+
 ## 已完成：热路径收紧（eval 采样 / knowledge status / sessions limit）
 
 - Overview 评估快照：`list_agno_eval_runs(limit=20)`；`pass_rate` 基于近期样本，payload 含 `sample_size`；Dashboard 文案标注样本/总数

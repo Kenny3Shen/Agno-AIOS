@@ -20,13 +20,37 @@ const normalizeSession = (value: unknown): ChatSession | null => {
   }
 }
 
+export type SessionListMeta = {
+  page: number
+  limit: number
+  total_pages: number
+  total_count: number
+  search_time_ms: number
+}
+
+export type SessionListResult = {
+  data: ChatSession[]
+  meta: SessionListMeta
+}
+
+const normalizeSessionListMeta = (value: unknown, page: number, limit: number, itemCount: number): SessionListMeta => {
+  const meta = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  return {
+    page: Number(meta.page ?? page) || page,
+    limit: Number(meta.limit ?? limit) || limit,
+    total_pages: Number(meta.total_pages ?? 0) || 0,
+    total_count: Number(meta.total_count ?? itemCount) || 0,
+    search_time_ms: Number(meta.search_time_ms ?? 0) || 0,
+  }
+}
+
 /** Parse Agno-style ``{data, meta}`` chat session list. */
 export const listSessions = async (
   includeArchived = false,
   userId?: string,
   page = 1,
   limit = 100
-): Promise<ChatSession[]> => {
+): Promise<SessionListResult> => {
   const search = new URLSearchParams()
   if (includeArchived) search.set('include_archived', 'true')
   if (userId) search.set('user_id', userId)
@@ -35,7 +59,11 @@ export const listSessions = async (
   const payload = await requestJson<unknown>(`/chat/sessions${search.size ? `?${search}` : ''}`)
   const envelope = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}
   const rows = Array.isArray(envelope.data) ? envelope.data : []
-  return rows.map(normalizeSession).filter((row): row is ChatSession => row != null)
+  const data = rows.map(normalizeSession).filter((row): row is ChatSession => row != null)
+  return {
+    data,
+    meta: normalizeSessionListMeta(envelope.meta, page, limit, data.length),
+  }
 }
 export const getHistory = async (sessionId: string) =>
   normalizeMessages(await requestJson<unknown>(`/chat/sessions/${encodeURIComponent(sessionId)}`))

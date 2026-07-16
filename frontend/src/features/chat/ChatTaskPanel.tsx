@@ -14,7 +14,7 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { useTranslation } from 'react-i18next'
-import { archiveSession, renameSession } from './api'
+import { archiveSession, renameSession, type SessionListResult } from './api'
 import { chatKeys } from './queries'
 import { useChat } from './useChat'
 import type { ChatSession } from './types'
@@ -105,11 +105,20 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
     setRenaming(true)
     try {
       const updated = await renameSession(renameTarget.session_id, title.trim())
-      queryClient.setQueryData<ChatSession[]>(chatKeys.sessions(), (items) =>
-        (items ?? []).map((item) =>
-          item.session_id === renameTarget.session_id ? { ...item, ...updated, title: updated.title ?? title.trim() } : item
-        )
-      )
+      queryClient.setQueryData<{ pages: SessionListResult[]; pageParams: number[] }>(chatKeys.sessions(), (current) => {
+        if (!current?.pages?.length) return current
+        return {
+          ...current,
+          pages: current.pages.map((page) => ({
+            ...page,
+            data: page.data.map((item) =>
+              item.session_id === renameTarget.session_id
+                ? { ...item, ...updated, title: updated.title ?? title.trim() }
+                : item
+            ),
+          })),
+        }
+      })
       toast.success(t('shell:conversations.renamed'))
       setRenameTarget(null)
     } catch (error) {
@@ -208,6 +217,19 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
                     ],
                   })}
                 />
+                {chat.sessions.hasNextPage ? (
+                  <div className="chat-task-panel-load-more">
+                    <Button
+                      size="small"
+                      type="link"
+                      loading={Boolean(chat.sessions.isFetchingNextPage)}
+                      disabled={Boolean(chat.sessions.isFetchingNextPage)}
+                      onClick={() => void chat.sessions.fetchNextPage()}
+                    >
+                      {t('shell:conversations.loadMore')}
+                    </Button>
+                  </div>
+                ) : null}
                 {!conversations.length ? (
                   <Empty
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
