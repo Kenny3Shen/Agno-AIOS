@@ -250,7 +250,7 @@ async def test_list_memories_admin_can_filter_requested_user():
             user_id="u2",
         )
     assert db.memory_kwargs["user_id"] == "u2"
-    assert db.stats_kwargs["user_id"] is None
+    assert db.stats_kwargs["user_id"] == "u2"
     assert payload["data"][0]["user_id"] == "u2"
 
 
@@ -453,3 +453,14 @@ def test_memory_item_requires_memory_id_and_rejects_legacy_aliases():
     assert row["topics"] == ["t1"]
     assert row["user_id"] == "u1"
 
+
+
+
+@pytest.mark.asyncio
+async def test_list_memories_scopes_stats_to_actor_user():
+    """Ordinary actors must not trigger unscoped memory stats scans."""
+    db = FakeMemoryDb()
+    with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
+        await memory_service.list_memories_native(actor("u1"))
+    assert db.stats_kwargs.get("user_id") == "u1"
+    assert db.stats_kwargs.get("limit") == 1

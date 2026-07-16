@@ -193,14 +193,21 @@ async def list_memories_native(
         raw_memories = raw_result
         total_memories = len(raw_memories)
 
-    # Growth status is derived from per-user memory counts in the actor scope.
-    # List rows already use Agno page/limit; stats is a separate bounded lookup.
-    user_stats, _total_users = await db.get_user_memory_stats(
-        user_id=scoped_requested_user_id(actor, None),
-        limit=500,
-        page=1,
-    )
-    user_status_by_id: dict[str, str] = {
+    # Growth badge uses per-user totals (unfiltered). Scope stats to the same
+    # user as the list when possible so we never pull a 500-user stats dump for
+    # ordinary actors or admin single-user filters.
+    if scoped_user_id:
+        user_stats, _total_users = await db.get_user_memory_stats(
+            user_id=scoped_user_id,
+            limit=1,
+            page=1,
+        )
+    else:
+        user_stats, _total_users = await db.get_user_memory_stats(
+            limit=500,
+            page=1,
+        )
+    user_status_by_id = {
         str(row.get("user_id") or "default"): _memory_status_for_count(
             int(row.get("total_memories") or 0)
         )

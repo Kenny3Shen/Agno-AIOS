@@ -1,5 +1,5 @@
 import { jsonInit, requestJson } from '@/shared/api/client'
-import { asArray, asRecord } from '@/shared/lib/format'
+import { asRecord } from '@/shared/lib/format'
 
 export interface ApprovalActor {
   id: string
@@ -190,10 +190,7 @@ const fetchSubmissionsPage = async (status: string, page: number, limit: number)
   search.set('limit', String(limit))
   const payload = asRecord(await requestJson<unknown>(`/approvals/submissions?${search}`))
   const meta = asRecord(payload.meta)
-  // Accept native data/meta; tolerate legacy {approvals} during rollout.
-  const rows = Array.isArray(payload.data)
-    ? payload.data
-    : asArray(payload.approvals)
+  const rows = Array.isArray(payload.data) ? payload.data : []
   return {
     items: normalizeRows(rows),
     total: Number(meta.total_count ?? rows.length) || 0,

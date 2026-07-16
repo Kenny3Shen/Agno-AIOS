@@ -193,17 +193,13 @@ def is_workflow_step_approval(approval: dict[str, Any]) -> bool:
     )
 
 
-# Back-compat alias used by routes during PR3.
-_is_workflow_step_approval = is_workflow_step_approval
-
-
 async def resume_workflow_run(approval_id: str) -> str:
     """Continue a paused workflow after Approvals resolve (background-friendly)."""
     db = get_async_agno_postgres_db()
     approval = await db.get_approval(approval_id)
     if not isinstance(approval, dict):
         raise ValueError(f"Approval {approval_id} not found")
-    if not _is_workflow_step_approval(approval):
+    if not is_workflow_step_approval(approval):
         raise ValueError("Approval is not a workflow step confirmation")
     status = str(approval.get("status") or "")
     if status not in {"approved", "rejected"}:

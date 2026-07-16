@@ -348,9 +348,12 @@ async def _snapshots(actor: ActorLike) -> dict[str, Any]:
             from api.services.knowledge_service import get_knowledge_base_lifecycle
 
             knowledge_base = get_knowledge_base_lifecycle()
-            result["knowledge_documents"] = len(
-                await knowledge_base.list_documents_async(owner_user_id=user_id)
+            _docs, document_count = await knowledge_base.list_documents_page_async(
+                owner_user_id=user_id,
+                page=1,
+                limit=1,
             )
+            result["knowledge_documents"] = int(document_count)
         except Exception:
             logger.exception("overview snapshot failed: knowledge_documents")
 

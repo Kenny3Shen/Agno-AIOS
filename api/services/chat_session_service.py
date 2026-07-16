@@ -219,7 +219,7 @@ async def get_all_sessions_async(
         page=safe_page,
         limit=safe_limit,
     )
-    sessions = _project_session_rows(rows, include_runs=include_runs)
+    sessions = _project_session_rows(rows, include_runs=include_runs, already_sorted=True)
     return {
         "data": sessions,
         "meta": pagination_meta(
