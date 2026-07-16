@@ -122,9 +122,9 @@ async def list_submission_approvals(
     *,
     submitted_by: str | None = None,
     page: int = 1,
-    limit: int | None = None,
+    limit: int = 100,
 ) -> list[dict[str, Any]]:
-    """Return upload approvals, optionally limited to their submitter."""
+    """Return a page of upload approvals, optionally scoped to a submitter."""
     return [
         _public(record)
         for record in await list_upload_approvals(

@@ -98,9 +98,9 @@ async def list_upload_approvals(
     *,
     submitted_by: str | None = None,
     page: int = 1,
-    limit: int | None = None,
+    limit: int = 100,
 ) -> list[dict[str, Any]]:
-    """List upload approvals. Optional ``page``/``limit`` enable SQL pagination."""
+    """List upload approvals with SQL page/limit (hard-capped)."""
 
     await ensure_upload_approvals_table()
     table = upload_approvals_table()
@@ -109,13 +109,9 @@ async def list_upload_approvals(
         stmt = stmt.where(table.c.status == status)
     if submitted_by is not None:
         stmt = stmt.where(table.c.submitted_by == submitted_by)
-    # Always bound the result set: explicit page/limit or a safety ceiling.
-    if limit is not None:
-        safe_page = max(1, int(page or 1))
-        safe_limit = max(1, min(int(limit), 200))
-        stmt = stmt.limit(safe_limit).offset((safe_page - 1) * safe_limit)
-    else:
-        stmt = stmt.limit(500)
+    safe_page = max(1, int(page or 1))
+    safe_limit = max(1, min(int(limit or 100), 200))
+    stmt = stmt.limit(safe_limit).offset((safe_page - 1) * safe_limit)
     async with get_async_control_plane_engine().begin() as conn:
         rows = (await conn.execute(stmt)).mappings().all()
     return [dict(row) for row in rows]

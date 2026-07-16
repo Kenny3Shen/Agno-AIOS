@@ -45,7 +45,7 @@ async def test_list_submission_approvals_can_be_limited_to_submitter():
     with patch.object(service, "list_upload_approvals", AsyncMock(return_value=stored)) as list_records:
         approvals = await service.list_submission_approvals("pending", submitted_by="user-1")
 
-    list_records.assert_awaited_once_with("pending", submitted_by="user-1", page=1, limit=None)
+    list_records.assert_awaited_once_with("pending", submitted_by="user-1", page=1, limit=100)
     assert approvals[0]["submitted_by"] == {"id": "user-1", "email": ""}
 
 

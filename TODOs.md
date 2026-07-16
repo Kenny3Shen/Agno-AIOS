@@ -590,6 +590,14 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：上传审批列表强制分页
+
+- `list_upload_approvals` / `list_submission_approvals` 去掉 `limit=None` 全表回退；默认 `limit=100`，硬顶 200，始终 `LIMIT/OFFSET`。
+- 页面路径仍走 `list_submission_approvals_page` 的 `{data, meta}`。
+- 清理 `test_workflow_routes` 未使用 import。
+
+相关：`api/persistence/upload_approvals.py` / `api/services/upload_approval_service.py`
+
 ## 已完成：生产路径 type-ignore 清理
 
 - `security_run_runtime` 流式重试 patch 改用 `setattr`，去掉 `# type: ignore[method-assign]`。

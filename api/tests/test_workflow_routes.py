@@ -123,8 +123,6 @@ def test_run_workflow_allows_user_with_workflows_run():
 
 @pytest.mark.asyncio
 async def test_list_templates_returns_security_playbooks():
-    from api.services import workflow_templates as templates_mod
-
     result = await workflows.list_templates(user=actor())
     assert "data" in result
     ids = {item["id"] for item in result["data"]}
