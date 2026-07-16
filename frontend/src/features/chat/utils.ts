@@ -309,7 +309,13 @@ export const previousPrompt = (messages: Message[], assistantId: string) => {
 }
 
 export const supportedReasoningEfforts = (model: ModelConfig | null): ReasoningEffort[] => {
-  if (!model || model.provider === 'openai-compatible' || model.provider === 'xai') return []
+  if (!model) return []
+  if (model.capabilities) {
+    return model.capabilities.supports_reasoning_effort
+      ? (model.capabilities.reasoning_efforts as ReasoningEffort[])
+      : []
+  }
+  if (model.provider === 'openai-compatible' || model.provider === 'xai') return []
   if (model.provider === 'deepseek') return DEEPSEEK_REASONING_EFFORTS
   return openaiReasoningEfforts(model.api_protocol)
 }
@@ -318,5 +324,10 @@ export const defaultReasoningEffort = (model: ModelConfig | null): ReasoningEffo
   const available = supportedReasoningEfforts(model)
   if (!available.length) return null
   const configured = model?.default_reasoning_effort
-  return configured && available.includes(configured) ? configured : (available.at(-1) ?? null)
+  if (configured && available.includes(configured)) return configured
+  const optimal = model?.capabilities?.optimal_reasoning_effort
+  if (optimal && available.includes(optimal)) return optimal
+  const fallback = model?.capabilities?.fallback_reasoning_effort
+  if (fallback && available.includes(fallback)) return fallback
+  return available.at(-1) ?? null
 }

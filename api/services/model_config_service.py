@@ -9,6 +9,12 @@ from api.config import get_settings
 from api.persistence.model_configs import list_model_config_rows, replace_model_config_rows
 from api.services.runtime_paths import CONFIG_DIR, resolve_project_path
 from api.utils.json import loads
+from api.services.model_capabilities import (
+    apply_optimal_model_defaults,
+    capabilities_for,
+    provider_defaults as _capability_provider_defaults,
+    resolve_reasoning_effort,
+)
 
 
 
@@ -53,14 +59,7 @@ ReasoningEffort = Literal["minimal", "low", "medium", "high", "max"]
 
 
 def _provider_defaults(provider: str) -> tuple[str, str, str | None]:
-    if provider == "deepseek":
-        return "chat-completions", "json", "max"
-    if provider == "openai":
-        return "responses", "native", "high"
-    if provider == "xai":
-        # Official Agno xAI uses Chat Completions only.
-        return "chat-completions", "json", None
-    return "chat-completions", "json", None
+    return _capability_provider_defaults(provider)
 
 
 def _looks_like_xai(base_url: str, model_id: str) -> bool:
@@ -129,44 +128,42 @@ class ModelConfig(BaseModel):
         if not provider:
             provider = "openai-compatible"
             raw["provider"] = provider
-        protocol, output_mode, reasoning_effort = _provider_defaults(provider)
-        if provider in {"deepseek", "xai"}:
-            raw["api_protocol"] = protocol
-            if provider == "deepseek":
-                raw["structured_output_mode"] = output_mode
-            if provider == "xai":
-                raw["api_protocol"] = "chat-completions"
-                # Allow native | json; default json if unset
-                raw.setdefault("structured_output_mode", output_mode)
-                if not base_url:
-                    raw["base_url"] = "https://api.x.ai/v1"
-                # Drop unsupported reasoning_effort from legacy Responses Grok configs.
-                raw["default_reasoning_effort"] = None
-        else:
-            raw.setdefault("api_protocol", protocol)
-            raw.setdefault("structured_output_mode", output_mode)
-        raw.setdefault("default_reasoning_effort", reasoning_effort)
+        # Provider locks + optimal defaults (missing keys only)
+        raw = apply_optimal_model_defaults(raw, force=False)
+        caps = capabilities_for(provider, model_id=model_id)
+        if caps.locks_api_protocol:
+            raw["api_protocol"] = caps.optimal_api_protocol
+        if provider == "deepseek":
+            raw["structured_output_mode"] = caps.optimal_structured_output
+        if not caps.supports_reasoning_effort:
+            raw["default_reasoning_effort"] = None
         return raw
 
     @model_validator(mode="after")
     def _validate_reasoning_effort(self) -> Self:
-        effort = self.default_reasoning_effort
-        if self.provider in {"openai-compatible", "xai"}:
-            if effort is not None:
-                label = "xAI" if self.provider == "xai" else "OpenAI-compatible"
-                raise ValueError(f"{label} 模型不支持 reasoning_effort")
+        caps = capabilities_for(
+            self.provider,
+            api_protocol=self.api_protocol,
+            model_id=self.model_id,
+        )
+        if not caps.supports_reasoning_effort:
+            # Strip rather than hard-fail so legacy configs load cleanly.
+            if self.default_reasoning_effort is not None:
+                self.default_reasoning_effort = None
             return self
-        if self.provider == "deepseek":
-            if effort not in {"high", "max"}:
-                raise ValueError("DeepSeek reasoning_effort 仅支持 high 或 max")
-            return self
-        allowed = {"minimal", "low", "medium", "high"}
-        if self.api_protocol == "chat-completions":
-            allowed.remove("minimal")
-        if effort not in allowed:
-            raise ValueError(
-                f"OpenAI {self.api_protocol} reasoning_effort 必须为 {', '.join(sorted(allowed))}"
+        if self.default_reasoning_effort is None:
+            self.default_reasoning_effort = cast(
+                ReasoningEffort | None, caps.optimal_reasoning_effort
             )
+            return self
+        resolved = resolve_reasoning_effort(
+            provider=self.provider,
+            api_protocol=self.api_protocol,
+            model_id=self.model_id,
+            configured=self.default_reasoning_effort,
+        )
+        if resolved != self.default_reasoning_effort:
+            self.default_reasoning_effort = cast(ReasoningEffort | None, resolved)
         return self
 
     @classmethod
@@ -236,9 +233,16 @@ class ModelConfig(BaseModel):
         )
 
     def to_public_dict(self) -> dict[str, Any]:
+        from api.services.model_capabilities import public_capabilities
+
         data = self.model_dump()
         data["api_key"] = _mask_secret(self.api_key)
         data["configured"] = self.configured
+        data["capabilities"] = public_capabilities(
+            self.provider,
+            api_protocol=self.api_protocol,
+            model_id=self.model_id,
+        )
         return data
 
 

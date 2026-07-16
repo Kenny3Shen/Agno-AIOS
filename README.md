@@ -66,7 +66,7 @@ Responses 协议通过 Agno `OpenAIResponses.parallel_tool_calls` 传递；Chat 
 
 模型配置支持请求重试：`retries` / `delay_between_retries` / `exponential_backoff`（Agno 应用层，覆盖 Chat Completions 与 Responses），以及可选 `http_max_retries`（OpenAI SDK 连接层）。默认 4 次指数退避，可在设置页按模型调整。
 
-模型供应商支持 DeepSeek / OpenAI / **xAI（Agno 官方 `xAI` 类，Chat Completions）** / OpenAI-compatible。 xAI 可配置 structured output 与 Live Search；Chat 输入区可开关联网搜索与知识库检索。历史 Grok 配置（`api.x.ai` 或 `model_id` 以 `grok` 开头）加载时自动迁移为 `provider=xai`，不再走 OpenAI Responses。
+模型供应商支持 DeepSeek / OpenAI / **xAI（Agno 官方 `xAI` 类，Chat Completions）** / OpenAI-compatible。 xAI 可配置 structured output 与 Live Search；Chat 输入区可开关联网搜索与知识库检索。 模型参数由能力画像解析（optimal → 配置 → 请求覆盖 → fallback）；xAI 不使用 `reasoning_effort`，靠推理/非推理 model id。历史 Grok 配置（`api.x.ai` 或 `model_id` 以 `grok` 开头）加载时自动迁移为 `provider=xai`，不再走 OpenAI Responses。
 
 模型工厂把 structured output 模式存在实例私有属性 `_tais_structured_output_mode`，**不写** Agno `model.metadata`，避免 OpenAI Responses / Chat 把内部标记当作 HTTP `metadata` 发给 Grok 等不兼容网关（会 400 `Argument not supported: metadata`）。
 

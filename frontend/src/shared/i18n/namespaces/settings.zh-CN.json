@@ -57,5 +57,7 @@
   "cannotDeleteBuiltin": "内置模型不可删除，可禁用",
   "cannotDeleteLastModel": "至少保留一个模型",
   "liveSearch": "Live Search",
-  "liveSearchHelp": "启用后向支持的网关发送 search_parameters（xAI 原生；OpenAI-compatible 经 extra_body）。DeepSeek / OpenAI 官方接口会忽略此项。"
+  "liveSearchHelp": "启用后向支持的网关发送 search_parameters（xAI 原生；OpenAI-compatible 经 extra_body）。DeepSeek / OpenAI 官方接口会忽略此项。",
+  "liveSearchUnsupported": "当前供应商不支持 Live Search（仅 xAI / OpenAI-compatible 网关）。",
+  "xaiReasoningHint": "xAI 不使用 reasoning_effort；请选择推理型号或 non-reasoning 型号。"
 }

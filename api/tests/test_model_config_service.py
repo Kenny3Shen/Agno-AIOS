@@ -164,11 +164,22 @@ def test_model_config_preserves_parallel_tool_calls_setting():
     assert model_config_service._store_to_rows(store)[0]["parallel_tool_calls"] is False
 
 
-def test_model_config_rejects_incompatible_reasoning_effort():
-    with pytest.raises(ValueError, match="OpenAI-compatible"):
-        model_config_service.ModelConfig(
-            id="compatible", default_reasoning_effort="high"
-        )
+def test_model_config_strips_reasoning_effort_for_unsupported_providers():
+    model = model_config_service.ModelConfig(
+        id="compatible",
+        provider="openai-compatible",
+        base_url="https://api.example.com/v1",
+        default_reasoning_effort="high",
+    )
+    assert model.default_reasoning_effort is None
+
+    xai = model_config_service.ModelConfig(
+        id="xai-bad",
+        provider="xai",
+        model_id="grok-4.5",
+        default_reasoning_effort="high",
+    )
+    assert xai.default_reasoning_effort is None
 
 
 @pytest.mark.asyncio
@@ -295,3 +306,26 @@ def test_live_search_enabled_normalized():
     )
     assert model.live_search_enabled is True
     assert model.structured_output_mode == "native"
+
+
+
+def test_capability_profiles_resolve_optimal_and_fallback():
+    from api.services.model_capabilities import (
+        capabilities_for,
+        resolve_reasoning_effort,
+        apply_optimal_model_defaults,
+    )
+
+    assert capabilities_for("xai").supports_reasoning_effort is False
+    assert capabilities_for("xai").supports_live_search is True
+    assert capabilities_for("xai").reasoning_via_model_id is True
+
+    assert resolve_reasoning_effort(provider="deepseek", override="bogus") == "max"
+    assert resolve_reasoning_effort(provider="deepseek", override="max") == "max"
+    assert resolve_reasoning_effort(provider="openai", api_protocol="responses", configured="minimal") == "minimal"
+    assert resolve_reasoning_effort(provider="xai", override="high") is None
+
+    filled = apply_optimal_model_defaults({"provider": "openai", "id": "o"})
+    assert filled["api_protocol"] == "responses"
+    assert filled["structured_output_mode"] == "native"
+    assert filled["default_reasoning_effort"] == "high"

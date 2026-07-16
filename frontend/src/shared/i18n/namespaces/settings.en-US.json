@@ -57,5 +57,7 @@
   "cannotDeleteBuiltin": "Built-in models cannot be deleted; disable them instead",
   "cannotDeleteLastModel": "Keep at least one model",
   "liveSearch": "Live Search",
-  "liveSearchHelp": "Sends search_parameters when supported (native xAI; OpenAI-compatible via extra_body). Ignored for DeepSeek and native OpenAI."
+  "liveSearchHelp": "Sends search_parameters when supported (native xAI; OpenAI-compatible via extra_body). Ignored for DeepSeek and native OpenAI.",
+  "liveSearchUnsupported": "Live Search is only applied for xAI and OpenAI-compatible gateways.",
+  "xaiReasoningHint": "xAI does not use reasoning_effort; pick a reasoning or non-reasoning model id."
 }

@@ -356,6 +356,9 @@ export function ChatPage() {
   const pausedRun = [...chat.state.messages].reverse().find((item) => item.role === 'assistant' && item.status === 'paused')
   const availableReasoningOptions = reasoningOptions(chat.selectedModel)
   const inputDisabled = !chat.selectedModel?.enabled || !chat.selectedModel.configured
+  const liveSearchSupported =
+    chat.selectedModel?.capabilities?.supports_live_search ??
+    (chat.selectedModel?.provider === 'xai' || chat.selectedModel?.provider === 'openai-compatible')
   const sendDisabled = inputDisabled || Boolean(pausedRun) || !chat.state.input.trim()
   const scrollToLatest = useCallback(() => {
     const node = scrollRef.current
@@ -474,7 +477,7 @@ export function ChatPage() {
                     aria-pressed={chat.state.liveSearch}
                     aria-label={t('liveSearch')}
                     title={t('liveSearchHelp')}
-                    disabled={chat.state.requesting || Boolean(pausedRun)}
+                    disabled={chat.state.requesting || Boolean(pausedRun) || !liveSearchSupported}
                     onClick={() => chat.setLiveSearch(!chat.state.liveSearch)}
                   >
                     {t('liveSearch')}

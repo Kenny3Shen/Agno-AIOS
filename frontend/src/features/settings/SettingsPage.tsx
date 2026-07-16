@@ -60,6 +60,7 @@ const parallelToolCallsOptions = [
 const reasoningOptions = (provider: ModelConfig['provider'], protocol: ModelConfig['api_protocol']) => {
   if (provider === 'deepseek') return DEEPSEEK_REASONING_EFFORTS.map((value) => ({ value, label: reasoningEffortLabel(value) }))
   if (provider === 'openai') return openaiReasoningEfforts(protocol).map((value) => ({ value, label: reasoningEffortLabel(value) }))
+  // xAI / compatible: no reasoning_effort (xAI uses reasoning vs non-reasoning model ids)
   return []
 }
 
@@ -546,13 +547,21 @@ export function SettingsPage() {
                           )
                         }}
                       </Form.Item>
-                      <Form.Item
-                        name="live_search_enabled"
-                        label={t('liveSearch')}
-                        tooltip={t('liveSearchHelp')}
-                        valuePropName="checked"
-                      >
-                        <Switch />
+                      <Form.Item noStyle shouldUpdate={(previous, current) => previous.provider !== current.provider}>
+                        {({ getFieldValue }) => {
+                          const provider = getFieldValue('provider') as ModelConfig['provider']
+                          const liveSupported = provider === 'xai' || provider === 'openai-compatible'
+                          return (
+                            <Form.Item
+                              name="live_search_enabled"
+                              label={t('liveSearch')}
+                              tooltip={liveSupported ? t('liveSearchHelp') : t('liveSearchUnsupported')}
+                              valuePropName="checked"
+                            >
+                              <Switch disabled={!liveSupported} />
+                            </Form.Item>
+                          )
+                        }}
                       </Form.Item>
                       <Form.Item name="retries" label={t('retries')}
                         tooltip={t('retriesHelp')}>

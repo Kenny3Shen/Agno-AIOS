@@ -7,6 +7,8 @@ from agno.models.deepseek import DeepSeek
 from agno.models.openai import OpenAIChat, OpenAILike, OpenAIResponses
 from agno.models.xai import xAI
 
+from api.services.model_capabilities import resolve_reasoning_effort
+
 # App-private attribute on Agno Model instances. Must NOT use model.metadata:
 # OpenAIResponses/OpenAIChat put model.metadata into the HTTP request body, and
 # many OpenAI-compatible gateways (e.g. Grok Responses) reject `metadata`.
@@ -101,10 +103,12 @@ def build_agno_model(
     output_mode = _output_mode(config.get("structured_output_mode"))
     native_outputs = output_mode == "native"
     parallel_tool_calls = _parallel_tool_calls(config.get("parallel_tool_calls"))
-    effective_reasoning_effort = (
-        reasoning_effort
-        if reasoning_effort is not None
-        else _reasoning_effort(config.get("default_reasoning_effort"))
+    effective_reasoning_effort = resolve_reasoning_effort(
+        provider=provider,
+        api_protocol=protocol,
+        model_id=model_id,
+        configured=_reasoning_effort(config.get("default_reasoning_effort")),
+        override=_reasoning_effort(reasoning_effort) if reasoning_effort is not None else None,
     )
 
     if provider == "deepseek":

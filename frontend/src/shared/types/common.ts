@@ -1,6 +1,21 @@
 export type ResourceVisibility = 'private' | 'public'
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'max'
 
+export interface ModelCapabilities {
+  provider: string
+  supports_reasoning_effort: boolean
+  reasoning_efforts: ReasoningEffort[]
+  optimal_reasoning_effort: ReasoningEffort | null
+  fallback_reasoning_effort: ReasoningEffort | null
+  supports_live_search: boolean
+  optimal_api_protocol: 'chat-completions' | 'responses'
+  optimal_structured_output: 'native' | 'json'
+  locks_api_protocol: boolean
+  reasoning_via_model_id: boolean
+  notes?: string
+  xai_non_reasoning_model?: boolean
+}
+
 export interface ModelConfig {
   id: string
   name: string
@@ -25,6 +40,7 @@ export interface ModelConfig {
   enabled: boolean
   builtin: boolean
   configured?: boolean
+  capabilities?: ModelCapabilities
 }
 
 export interface ModelConfigResponse {

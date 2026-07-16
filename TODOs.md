@@ -136,6 +136,17 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：模型能力画像（optimal + fallback）
+
+- `model_capabilities.py`：各 provider 最优协议/structured/reasoning/Live Search
+- xAI：无 `reasoning_effort`（按 model_id 推理/非推理）；支持 Live Search
+- 解析链：请求覆盖 → 模型配置 → optimal → fallback；不支持则省略
+- 公开 `capabilities` 字段；Chat/设置按能力收窄开关
+
+相关：`model_capabilities.py` / `model_config_service.py` / `model_factory.py`
+
+---
+
 ## 已完成：xAI Structured Output + Live Search / Knowledge 开关
 
 - xAI 放开 `structured_output_mode`（native/json）；设置页可配 `live_search_enabled`

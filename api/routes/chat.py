@@ -51,26 +51,39 @@ def _validate_reasoning_effort(
     reasoning_effort: str,
     model_config: dict[str, object],
 ) -> None:
+    from api.services.model_capabilities import capabilities_for, resolve_reasoning_effort
+
     provider = str(model_config.get("provider") or "openai-compatible")
     protocol = str(model_config.get("api_protocol") or "chat-completions")
-    allowed_efforts = {
-        "deepseek": {"high", "max"},
-        "openai": (
-            {"minimal", "low", "medium", "high"}
-            if protocol == "responses"
-            else {"low", "medium", "high"}
-        ),
-    }.get(provider)
-    if allowed_efforts is None:
+    model_id = str(model_config.get("model_id") or "")
+    caps = capabilities_for(provider, api_protocol=protocol, model_id=model_id)
+    if not caps.supports_reasoning_effort:
+        # xAI: reasoning is model-id based; ignore client effort quietly is worse than 422
+        # for explicit misuse — return clear message.
+        if caps.reasoning_via_model_id:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "xAI 不支持 reasoning_effort 参数；请改用推理/非推理型号 "
+                    "（例如 grok-*-reasoning vs *-non-reasoning）。"
+                ),
+            )
         raise HTTPException(
             status_code=422,
             detail="当前模型供应商不支持 reasoning_effort。",
         )
-    if reasoning_effort not in allowed_efforts:
+    resolved = resolve_reasoning_effort(
+        provider=provider,
+        api_protocol=protocol,
+        model_id=model_id,
+        override=reasoning_effort,
+    )
+    if resolved != reasoning_effort:
         raise HTTPException(
             status_code=422,
             detail=(
-                f"当前 {provider} {protocol} 模型不支持 reasoning_effort={reasoning_effort}。"
+                f"当前 {provider} {protocol} 模型不支持 reasoning_effort={reasoning_effort}；"
+                f"可用: {', '.join(caps.reasoning_efforts)}。"
             ),
         )
 

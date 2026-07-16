@@ -302,3 +302,15 @@ def test_compatible_live_search_uses_extra_body():
     )
     assert isinstance(model, OpenAILike)
     assert model.request_params["extra_body"]["search_parameters"]["mode"] == "on"
+
+
+
+def test_resolve_reasoning_effort_falls_back_for_invalid_override():
+    model = build_agno_model(
+        config(provider="deepseek", default_reasoning_effort="max"),
+        reasoning_effort="low",  # not supported by deepseek
+    )
+    from agno.models.deepseek import DeepSeek
+
+    assert isinstance(model, DeepSeek)
+    assert model.reasoning_effort == "max"  # invalid override skipped; configured max used
