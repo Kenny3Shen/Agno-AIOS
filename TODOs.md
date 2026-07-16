@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Workflow run SSE Playwright smoke
+
+- `frontend/e2e/workflow.smoke.spec.ts`：深链加载后填写输入 → 点运行 → mock SSE（`workflow.started` / `step.completed` / `workflow.completed`）→ 运行记录出现 step/terminal 事件。
+- 与既有 `workflow_id` 深链 smoke 并列。
+
 ## 已完成：Approvals resolve Playwright smoke
 
 - `frontend/e2e/approvals.smoke.spec.ts`：Drawer 中对 confirmation HITL 点「批准」→ `POST /api/approvals/{id}/resolve`。

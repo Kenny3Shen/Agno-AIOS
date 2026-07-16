@@ -386,7 +386,7 @@ cd frontend && bun run test:e2e
 
 前端门禁：`bun run lint`（oxlint deny-warnings）、`bun run typecheck`、`bun run test`；Trace 列表 root `input` 批量失败会打 exception 日志并返回 `input=null`（不 N+1）。 ERROR 列表在 page=1 用 audit 失败 run 补充时，按 `run_id` 批量查 traces（非 per-run `get_trace`）。
 
-使用 Playwright + 页内 `/api` mock，不依赖本地后端与开发库数据；覆盖登录、侧栏分组/权限过滤、智能体清 session、深链展开与侧栏折叠；以及 Trace 深链 Session→Run→Span、Knowledge 文本入库 SSE 完成路径、Approvals 值班列表、`approval_id` 深链与 HITL 批准 resolve、Workflow `workflow_id` 深链加载、Chat「停止生成」取消 run。
+使用 Playwright + 页内 `/api` mock，不依赖本地后端与开发库数据；覆盖登录、侧栏分组/权限过滤、智能体清 session、深链展开与侧栏折叠；以及 Trace 深链 Session→Run→Span、Knowledge 文本入库 SSE 完成路径、Approvals 值班列表、`approval_id` 深链与 HITL 批准 resolve、Workflow `workflow_id` 深链加载与 Studio Run SSE、Chat「停止生成」取消 run。
 
 前端 Ant Design 6 使用 `classNames` / `styles` 语义化 API（例如 `Popover`/`Cascader` 的 popup class），避免 `overlayClassName` / `popupClassName` 等已弃用 props；`Alert` 使用 `title` 而非已弃用 `message`。
 
