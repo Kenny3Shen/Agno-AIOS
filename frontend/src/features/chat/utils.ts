@@ -171,6 +171,11 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
           error: { message: action.message, retryable: true },
         })),
       }
+    case 'soft-error':
+      return {
+        ...state,
+        error: action.message,
+      }
     case 'reset':
       return { ...state, messages: [], input: '', requesting: false, error: null, reasoningEffort: null }
   }

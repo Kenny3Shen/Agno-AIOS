@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useReducer, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 import { cancelRun, streamMessage } from './api'
@@ -9,6 +10,7 @@ import type { ChatRunEvent, ChatSession, Message } from './types'
 import type { ReasoningEffort } from '@/shared/types/common'
 
 export function useChat() {
+  const { t } = useTranslation('chat')
   const queryClient = useQueryClient()
   const router = useRouter()
   const searchStr = useRouterState({ select: (state) => state.location.searchStr })
@@ -147,7 +149,7 @@ export function useChat() {
           event: {
             type: 'run.cancelled',
             runId: activeRunIdRef.current ?? undefined,
-            reason: '已停止生成',
+            reason: t('stoppedGenerating'),
           },
         })
       } else {
@@ -180,8 +182,9 @@ export function useChat() {
       await cancelRun(runId)
     } catch (error) {
       // Best-effort server cancel; client stream is already aborted.
-      const message = error instanceof Error ? error.message : String(error)
-      console.warn(`[chat] server cancel failed for run ${runId}: ${message}`)
+      const detail = error instanceof Error ? error.message : String(error)
+      console.warn(`[chat] server cancel failed for run ${runId}: ${detail}`)
+      dispatch({ type: 'soft-error', message: t('cancelServerFailed') })
     }
   }
   const setReasoningEffort = (value: ReasoningEffort | null) => dispatch({ type: 'reasoning-effort', value })

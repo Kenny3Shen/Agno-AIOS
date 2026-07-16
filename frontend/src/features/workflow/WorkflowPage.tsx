@@ -8,6 +8,7 @@ import {
   InputNumber,
   Select,
   Space,
+  Spin,
   Switch,
   Tag,
   Tooltip,
@@ -34,6 +35,7 @@ import {
   ReloadOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
+import { Markdown } from '@/shared/ui/Markdown'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { useWorkflow } from './useWorkflow'
@@ -339,6 +341,19 @@ export function WorkflowPage() {
         />
       ) : null}
 
+      {workflow.state.loading ? (
+        <Alert
+          type="info"
+          showIcon
+          className="workflow-studio__banner"
+          title={
+            <Space size={8}>
+              <Spin size="small" />
+              <span>{t('loadingWorkflow')}</span>
+            </Space>
+          }
+        />
+      ) : null}
 
       {workflow.state.error ? (
         <Alert
@@ -429,6 +444,8 @@ export function WorkflowPage() {
               placeholder={t('loadPlaceholder')}
               value={workflow.state.workflowId ?? undefined}
               allowClear
+              loading={workflow.state.loading || workflow.workflowsQuery.isLoading}
+              disabled={workflow.state.loading}
               options={saved.map((item) => ({
                 value: item.id,
                 label: `${item.name} (v${item.version})`,
@@ -933,6 +950,28 @@ export function WorkflowPage() {
                           </div>
                         </div>
                       ) : null}
+                      {(() => {
+                        const latestOutput = [...workflow.state.runLog]
+                          .reverse()
+                          .find(
+                            (item) =>
+                              Boolean(item.content?.trim()) &&
+                              (item.type === 'step.completed' ||
+                                item.type === 'workflow.completed' ||
+                                item.type.includes('completed')),
+                          )
+                        return latestOutput?.content ? (
+                          <div className="workflow-run-output" style={{ marginBottom: 10 }}>
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                              {t('latestOutput')}
+                              {latestOutput.stepName ? ` · ${latestOutput.stepName}` : ''}
+                            </Typography.Text>
+                            <div className="workflow-run-output__body">
+                              <Markdown content={latestOutput.content} openLinksInNewTab escapeRawHtml />
+                            </div>
+                          </div>
+                        ) : null
+                      })()}
                       {workflow.state.runLog.length ? (
                         <div className="workflow-compact-list">
                           {[...workflow.state.runLog].reverse().slice(0, 40).map((item) => (
@@ -968,6 +1007,14 @@ export function WorkflowPage() {
                                   </Button>
                                 ) : null}
                               </Space>
+                              {item.content &&
+                              (item.type === 'step.completed' ||
+                                item.type === 'workflow.completed' ||
+                                item.type.includes('completed')) ? (
+                                <div className="workflow-run-log-content">
+                                  <Markdown content={item.content} openLinksInNewTab escapeRawHtml />
+                                </div>
+                              ) : null}
                             </div>
                           ))}
                         </div>

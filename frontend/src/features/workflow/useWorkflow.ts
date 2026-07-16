@@ -71,6 +71,7 @@ const initialState = (): WorkflowState => ({
   selectedId: null,
   selectedIds: [],
   dirty: false,
+  loading: false,
   saving: false,
   running: false,
   runLog: [],
@@ -497,6 +498,7 @@ export function useWorkflow() {
       error: null,
       validationIssues: [],
       dirty: false,
+      loading: false,
     }))
   }, [])
 
@@ -507,13 +509,17 @@ export function useWorkflow() {
         applyRecord(fromRecord(cached))
         return
       }
+      setState((current) => ({ ...current, loading: true, error: null }))
       void getWorkflow(id)
         .then((record) => {
           applyRecord(fromRecord(record))
         })
         .catch((error: unknown) => {
           const message = error instanceof Error ? error.message : 'Failed to load workflow'
-          setState((current) => ({ ...current, error: message }))
+          setState((current) => ({ ...current, loading: false, error: message }))
+        })
+        .finally(() => {
+          setState((current) => ({ ...current, loading: false }))
         })
     },
     [applyRecord, workflowsQuery.data],

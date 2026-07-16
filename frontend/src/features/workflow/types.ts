@@ -144,6 +144,8 @@ export type WorkflowState = {
   /** Multi-select (includes selectedId when set). */
   selectedIds: string[]
   dirty: boolean
+  /** Loading a saved workflow by id (deep link / library). */
+  loading: boolean
   saving: boolean
   running: boolean
   runLog: WorkflowRunLogItem[]

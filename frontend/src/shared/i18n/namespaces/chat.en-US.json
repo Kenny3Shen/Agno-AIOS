@@ -57,5 +57,7 @@
   "liveSearch": "Live Search",
   "liveSearchHelp": "Enable model live search (xAI search_parameters; compatible gateways via extra_body).",
   "knowledgeSearch": "Knowledge",
-  "knowledgeSearchHelp": "Allow this turn to search the Knowledge base. Off skips knowledge retrieval."
+  "knowledgeSearchHelp": "Allow this turn to search the Knowledge base. Off skips knowledge retrieval.",
+  "stoppedGenerating": "Generation stopped",
+  "cancelServerFailed": "Stopped locally, but server cancel failed"
 }

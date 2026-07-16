@@ -40,6 +40,7 @@ const state: WorkflowState = {
   selectedId: null,
   selectedIds: [],
   dirty: false,
+  loading: false,
   saving: false,
   running: false,
   runLog: [],

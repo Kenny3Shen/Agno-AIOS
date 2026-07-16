@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Workflow 加载态 + Run 输出 Markdown / Chat 停止反馈
+
+- Workflow：`loading` 状态（深链/库外 ID 拉取）；Studio 顶栏与库 Select 显示加载；Run 面板展示最新输出 Markdown，完成事件 content 就地渲染。
+- Chat：停止原因 i18n（`stoppedGenerating`）；服务端 cancel 失败用 `soft-error` 横幅提示，不把消息标成 failed。
+
 ## 已完成：抽取 ``batch_traces_by_run_ids`` 公共查找
 
 - 新增 `api/services/trace_lookup_service.py`：按 run_id 批量查最新 trace 行（DISTINCT ON）。

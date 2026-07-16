@@ -139,6 +139,12 @@ describe('chat behavior', () => {
     expect(resumed.messages[0]).toMatchObject({ content: 'final answer', status: 'streaming', retry: null })
   })
 
+  it('sets a soft error without failing messages', () => {
+    const next = chatReducer(initialChatState, { type: 'soft-error', message: 'server cancel failed' })
+    expect(next.error).toBe('server cancel failed')
+    expect(next.messages).toEqual([])
+  })
+
   it('marks a run cancelled and clears requesting', () => {
     const assistant: Message = { id: 'a', role: 'assistant', content: 'partial', final: false, status: 'streaming' }
     const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
@@ -146,7 +152,7 @@ describe('chat behavior', () => {
     const cancelled = chatReducer(started, {
       type: 'event',
       id: 'a',
-      event: { type: 'run.cancelled', runId: 'run-1', reason: '已停止生成' },
+      event: { type: 'run.cancelled', runId: 'run-1', reason: 'Generation stopped' },
     })
     expect(cancelled.requesting).toBe(false)
     expect(cancelled.messages[0]).toMatchObject({ status: 'cancelled', final: true })

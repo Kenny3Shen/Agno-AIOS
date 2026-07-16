@@ -103,6 +103,7 @@ export type ChatAction =
   | { type: 'start'; user?: Message; assistant: Message; modelId: string | null }
   | { type: 'event'; id: string; event: ChatRunEvent }
   | { type: 'network-error'; id: string; message: string }
+  | { type: 'soft-error'; message: string }
   | { type: 'model'; value: string | null; reasoningEffort: ReasoningEffort | null }
   | { type: 'reasoning-effort'; value: ReasoningEffort | null }
   | { type: 'search-knowledge'; value: boolean }

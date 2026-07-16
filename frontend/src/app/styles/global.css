@@ -2588,6 +2588,37 @@ html.dark .wf-smart-guide {
   border-bottom: none;
 }
 
+.workflow-run-output {
+  border: 1px solid var(--ant-color-split, rgba(0, 0, 0, 0.06));
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--tais-soft, rgba(0, 0, 0, 0.02));
+}
+
+.workflow-run-output__body {
+  margin-top: 6px;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.workflow-run-log-content {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--tais-surface, #fff);
+  border: 1px solid var(--ant-color-split, rgba(0, 0, 0, 0.06));
+  max-height: 160px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+html.dark .workflow-run-log-content {
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .collect-article-list {
   display: flex;
   flex-direction: column;

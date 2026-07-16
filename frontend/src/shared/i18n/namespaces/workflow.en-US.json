@@ -115,5 +115,7 @@
   "stepSkillsPlaceholder": "Select enabled skills (multi)",
   "stepSkillsHint": "At run time loads global-enabled ∩ bound names. Empty means no skills.",
   "canvasTips": "Drag to reorder; connect edges to resequence root steps. Router, nested workflows, version restore, and triggers are available.",
-  "listTruncated": "Showing {{shown}} of {{total}} workflows (page cap; deep links still open by id)"
+  "listTruncated": "Showing {{shown}} of {{total}} workflows (page cap; deep links still open by id)",
+  "loadingWorkflow": "Opening workflow…",
+  "latestOutput": "Latest output"
 }

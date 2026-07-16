@@ -115,5 +115,7 @@
   "stepSkillsPlaceholder": "选择已启用的 Skill（可多选）",
   "stepSkillsHint": "运行时仅加载「全局启用 ∩ 本步绑定」。不选则不挂 Skill。",
   "canvasTips": "拖拽调整顺序；连线可改变顶层步骤序列。支持路由、嵌套工作流、版本恢复与触发器。",
-  "listTruncated": "工作流列表显示 {{shown}} / {{total}}（达到页上限，深链仍可按 ID 打开）"
+  "listTruncated": "工作流列表显示 {{shown}} / {{total}}（达到页上限，深链仍可按 ID 打开）",
+  "loadingWorkflow": "正在打开工作流…",
+  "latestOutput": "最新输出"
 }

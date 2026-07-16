@@ -57,5 +57,7 @@
   "liveSearch": "联网搜索",
   "liveSearchHelp": "启用模型 Live Search（xAI search_parameters；兼容网关经 extra_body）。需模型/网关支持。",
   "knowledgeSearch": "知识库",
-  "knowledgeSearchHelp": "允许本轮检索 Knowledge 知识库。关闭后不挂载知识检索。"
+  "knowledgeSearchHelp": "允许本轮检索 Knowledge 知识库。关闭后不挂载知识检索。",
+  "stoppedGenerating": "已停止生成",
+  "cancelServerFailed": "已停止本地输出，但服务端取消失败"
 }
