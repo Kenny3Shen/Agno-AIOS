@@ -9,11 +9,13 @@ export type ListPaginationMeta = {
   search_time_ms: number
   truncated?: boolean
   scanned_count?: number
+  /** Notifications list only. */
+  unread_count?: number
 }
 
-export type PaginatedList<T> = {
+export type PaginatedList<T, M extends ListPaginationMeta = ListPaginationMeta> = {
   data: T[]
-  meta: ListPaginationMeta
+  meta: M
 }
 
 type NormalizeListOptions<T> = {
@@ -21,7 +23,10 @@ type NormalizeListOptions<T> = {
   page?: number
   /** Fallback limit when meta.limit is absent. */
   limit?: number
-  /** Keep optional truncated/scanned_count from meta (Trace). */
+  /**
+   * Copy optional server meta fields when present:
+   * truncated, scanned_count, unread_count.
+   */
   extras?: boolean
   mapItem: (row: unknown) => T | null
 }
@@ -56,6 +61,7 @@ export function normalizePaginatedList<T>(
   if (options.extras) {
     if (meta.truncated != null) base.truncated = Boolean(meta.truncated)
     if (meta.scanned_count != null) base.scanned_count = Number(meta.scanned_count) || 0
+    if (meta.unread_count != null) base.unread_count = Number(meta.unread_count) || 0
   }
 
   return { data, meta: base }

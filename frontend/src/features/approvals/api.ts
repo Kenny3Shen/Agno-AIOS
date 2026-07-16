@@ -1,6 +1,6 @@
 import { jsonInit, requestJson } from '@/shared/api/client'
 import { asRecord } from '@/shared/lib/format'
-import { listPaginationMeta } from '@/shared/lib/pagination'
+import { listPaginationMeta, normalizePaginatedList } from '@/shared/lib/pagination'
 
 export interface ApprovalActor {
   id: string
@@ -129,9 +129,6 @@ export const normalizeApproval = (value: unknown): Approval | null => {
   }
 }
 
-const normalizeRows = (rows: unknown[]): Approval[] =>
-  rows.map((row) => normalizeApproval(row)).filter((row): row is Approval => row != null)
-
 
 const fetchHitlPage = async (
   status: string,
@@ -144,13 +141,12 @@ const fetchHitlPage = async (
   search.set('limit', String(limit))
   if (status) search.set('status', status)
   if (sourceType) search.set('source_type', sourceType)
-  const payload = asRecord(await requestJson<unknown>(`/approvals?${search.toString()}`))
-  const meta = asRecord(payload.meta)
-  const rows = Array.isArray(payload.data) ? payload.data : []
-  return {
-    data: normalizeRows(rows),
-    total_count: Number(meta.total_count ?? 0) || 0,
-  }
+  const result = normalizePaginatedList(await requestJson<unknown>(`/approvals?${search.toString()}`), {
+    page,
+    limit,
+    mapItem: normalizeApproval,
+  })
+  return { data: result.data, total_count: result.meta.total_count }
 }
 
 const fetchSubmissionsPage = async (
@@ -166,13 +162,12 @@ const fetchSubmissionsPage = async (
   if (status) search.set('status', status)
   search.set('page', String(page))
   search.set('limit', String(limit))
-  const payload = asRecord(await requestJson<unknown>(`/approvals/submissions?${search}`))
-  const meta = asRecord(payload.meta)
-  const rows = Array.isArray(payload.data) ? payload.data : []
-  return {
-    data: normalizeRows(rows),
-    total_count: Number(meta.total_count ?? rows.length) || 0,
-  }
+  const result = normalizePaginatedList(await requestJson<unknown>(`/approvals/submissions?${search}`), {
+    page,
+    limit,
+    mapItem: normalizeApproval,
+  })
+  return { data: result.data, total_count: result.meta.total_count }
 }
 
 /**
@@ -206,14 +201,12 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
   search.set('combined', 'true')
   search.set('page', String(page))
   search.set('limit', String(limit))
-  const payload = asRecord(await requestJson<unknown>(`/approvals?${search.toString()}`))
-  const meta = asRecord(payload.meta)
-  const data = normalizeRows(Array.isArray(payload.data) ? payload.data : [])
-  const total = Number(meta.total_count ?? data.length) || 0
-  return {
-    data,
-    meta: listPaginationMeta(page, limit, total, Number(meta.search_time_ms ?? 0) || 0),
-  }
+  const result = normalizePaginatedList(await requestJson<unknown>(`/approvals?${search.toString()}`), {
+    page,
+    limit,
+    mapItem: normalizeApproval,
+  })
+  return result
 }
 
 

@@ -1,4 +1,5 @@
 import { apiFetch, jsonInit, requestJson } from '@/shared/api/client'
+import { normalizePaginatedList } from '@/shared/lib/pagination'
 import { buildKnowledgeSearchPayload } from './utils'
 import type {
   AddTextPayload,
@@ -218,10 +219,21 @@ export const updateDocumentUpload = (
   })()
 }
 export const deleteDocument = (id: string) => requestJson(`/knowledge/documents/${encodeURIComponent(id)}`, { method: 'DELETE' })
-export const searchKnowledge = async (query: string, limit: number, searchType?: KnowledgeSearchType) =>
-  (
-    await requestJson<{ data: SearchResult[] }>(
-      '/knowledge/search',
-      jsonInit('POST', buildKnowledgeSearchPayload(query, limit, searchType))
-    )
-  ).data ?? []
+export const searchKnowledge = async (
+  query: string,
+  limit: number,
+  searchType?: KnowledgeSearchType,
+): Promise<SearchResult[]> => {
+  const raw = await requestJson<unknown>(
+    '/knowledge/search',
+    jsonInit('POST', buildKnowledgeSearchPayload(query, limit, searchType)),
+  )
+  const { data } = normalizePaginatedList(raw, {
+    limit,
+    mapItem: (row) => {
+      if (!row || typeof row !== 'object') return null
+      return row as SearchResult
+    },
+  })
+  return data
+}

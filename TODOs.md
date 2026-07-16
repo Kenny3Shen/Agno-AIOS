@@ -124,6 +124,13 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：共享列表 normalizer 扩面（CVE / 通知 / Collect / Approvals / Knowledge）
+
+- `normalizePaginatedList` extras 支持 `unread_count`（通知角标 meta）。
+- 接入：CVE search、Notifications、Collect articles/sources、Approvals HITL/submissions/combined、Knowledge search 解析。
+- AppFrame SSE 写入通知缓存时补齐 `search_time_ms`，满足 `ListPaginationMeta`。
+- 相关单测 121 绿。
+
 ## 已完成：前端共享 ``normalizePaginatedList``
 
 - 新增 `frontend/src/shared/lib/pagination.ts`：`normalizePaginatedList` / `listPaginationMeta`。

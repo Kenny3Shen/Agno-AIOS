@@ -1,4 +1,5 @@
 import { apiFetch, jsonInit, requestJson } from '@/shared/api/client'
+import { normalizePaginatedList, type ListPaginationMeta } from '@/shared/lib/pagination'
 import type { JsonRecord } from '@/shared/types/common'
 
 export interface Notification {
@@ -10,25 +11,6 @@ export interface Notification {
   created_at: number
   read_at?: number | null
 }
-
-export interface NotificationsResponse {
-  data: Notification[]
-  meta: {
-    page: number
-    limit: number
-    total_pages: number
-    total_count: number
-    search_time_ms?: number
-    unread_count: number
-  }
-}
-
-export const getNotifications = () => requestJson<NotificationsResponse>('/notifications')
-export const markNotificationRead = (id: number) =>
-  requestJson<{ success: boolean }>(`/notifications/${encodeURIComponent(id)}/read`, jsonInit('POST'))
-export const markAllNotificationsRead = () => requestJson<{ updated_count: number }>('/notifications/read-all', jsonInit('POST'))
-export const deleteNotification = (id: number) =>
-  requestJson<{ success: boolean }>(`/notifications/${encodeURIComponent(id)}`, jsonInit('DELETE'))
 
 const parseNotification = (value: unknown): Notification | null => {
   if (!value || typeof value !== 'object') return null
@@ -44,6 +26,31 @@ const parseNotification = (value: unknown): Notification | null => {
     read_at: typeof row.read_at === 'number' ? row.read_at : null,
   }
 }
+
+export type NotificationsResponse = {
+  data: Notification[]
+  meta: ListPaginationMeta & { unread_count: number }
+}
+
+export const getNotifications = async (): Promise<NotificationsResponse> => {
+  const raw = await requestJson<unknown>('/notifications')
+  const result = normalizePaginatedList(raw, {
+    mapItem: parseNotification,
+    extras: true,
+  })
+  return {
+    data: result.data,
+    meta: {
+      ...result.meta,
+      unread_count: Number(result.meta.unread_count ?? 0) || 0,
+    },
+  }
+}
+export const markNotificationRead = (id: number) =>
+  requestJson<{ success: boolean }>(`/notifications/${encodeURIComponent(id)}/read`, jsonInit('POST'))
+export const markAllNotificationsRead = () => requestJson<{ updated_count: number }>('/notifications/read-all', jsonInit('POST'))
+export const deleteNotification = (id: number) =>
+  requestJson<{ success: boolean }>(`/notifications/${encodeURIComponent(id)}`, jsonInit('DELETE'))
 
 export const streamNotifications = async (
   afterId: number,

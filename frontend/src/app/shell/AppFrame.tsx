@@ -217,6 +217,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
                       limit: maxCached,
                       total_pages: 1,
                       total_count: 1,
+                      search_time_ms: 0,
                       unread_count: notification.read ? 0 : 1,
                     },
                   }

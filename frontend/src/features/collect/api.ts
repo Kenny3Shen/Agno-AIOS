@@ -1,4 +1,5 @@
 import { jsonInit, requestJson } from '@/shared/api/client'
+import { normalizePaginatedList, type ListPaginationMeta } from '@/shared/lib/pagination'
 
 export interface CollectArticle {
   id: number
@@ -29,32 +30,44 @@ export const parseUrl = (url: string) =>
     url?: string
   }>('/url2md/parse', jsonInit('POST', { url }))
 
-export interface CollectListMeta {
-  page: number
-  limit: number
-  total_pages: number
-  total_count: number
-  search_time_ms?: number
-}
+export type CollectListMeta = ListPaginationMeta
 
-export const searchArticles = (payload: {
+export const searchArticles = async (payload: {
   query?: string
   source_domain?: string
   page?: number
   size?: number
-}) =>
-  requestJson<{ data: CollectArticle[]; meta: CollectListMeta }>(
+}) => {
+  const page = payload.page ?? 1
+  const size = payload.size ?? 20
+  const raw = await requestJson<unknown>(
     '/url2md/articles/search',
     jsonInit('POST', {
       query: payload.query ?? '',
       source_domain: payload.source_domain,
-      page: payload.page ?? 1,
-      size: payload.size ?? 20,
-    })
+      page,
+      size,
+    }),
   )
+  return normalizePaginatedList(raw, {
+    page,
+    limit: size,
+    mapItem: (row) => {
+      if (!row || typeof row !== 'object') return null
+      return row as CollectArticle
+    },
+  })
+}
 
-export const listSources = () =>
-  requestJson<{ data: CollectSource[]; meta: CollectListMeta }>('/url2md/sources')
+export const listSources = async () => {
+  const raw = await requestJson<unknown>('/url2md/sources')
+  return normalizePaginatedList(raw, {
+    mapItem: (row) => {
+      if (!row || typeof row !== 'object') return null
+      return row as CollectSource
+    },
+  })
+}
 
 export const crawlSources = (payload?: {
   domains?: string[]

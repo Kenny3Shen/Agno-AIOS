@@ -27,11 +27,15 @@ describe('normalizePaginatedList', () => {
 
   it('preserves truncated extras when requested', () => {
     const result = normalizePaginatedList(
-      { data: [], meta: { page: 1, limit: 20, total_count: 0, truncated: true, scanned_count: 40 } },
+      {
+        data: [],
+        meta: { page: 1, limit: 20, total_count: 0, truncated: true, scanned_count: 40, unread_count: 2 },
+      },
       { mapItem: () => null, extras: true },
     )
     expect(result.meta.truncated).toBe(true)
     expect(result.meta.scanned_count).toBe(40)
+    expect(result.meta.unread_count).toBe(2)
   })
 })
 
