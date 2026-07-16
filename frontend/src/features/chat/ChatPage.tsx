@@ -278,7 +278,17 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
       )}
       {message.status === 'paused' && (
         <output className="message-run-paused" aria-live="polite">
-          {t('awaitingApproval')}
+          <span>{t('awaitingApproval')}</span>
+          {message.approval_id ? (
+            <Button
+              type="link"
+              size="small"
+              style={{ paddingInline: 0, marginLeft: 8 }}
+              href={`#/approvals?approval_id=${encodeURIComponent(message.approval_id)}`}
+            >
+              {t('openApproval')}
+            </Button>
+          ) : null}
         </output>
       )}
       {(message.sources?.length ?? 0) > 0 && (

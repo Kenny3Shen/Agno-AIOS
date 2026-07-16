@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from typing import TypedDict, cast
+from typing import Any, TypedDict, cast
 
 from agno.memory import UserMemory
 
@@ -148,6 +148,63 @@ def _memory_item(
     }
 
 
+
+async def _memory_status_by_user_ids(db: Any, user_ids: set[str]) -> dict[str, str]:
+    """Map user_id -> growth badge status with at most one DB round-trip for many users."""
+    if not user_ids:
+        return {}
+    ids = sorted(user_ids)
+    totals: dict[str, int] = {uid: 0 for uid in ids}
+
+    # Prefer a single GROUP BY when multiple users share a page (admin unscoped list).
+    get_table = getattr(db, "_get_table", None)
+    session_factory = getattr(db, "async_session_factory", None)
+    if len(ids) > 1 and callable(get_table) and callable(session_factory):
+        try:
+            from sqlalchemy import func, select
+
+            table = await get_table(table_type="memories")
+            if table is not None:
+                stmt = (
+                    select(
+                        table.c.user_id,
+                        func.count(table.c.memory_id).label("total_memories"),
+                    )
+                    .where(table.c.user_id.in_(ids))
+                    .group_by(table.c.user_id)
+                )
+                async with session_factory() as session:
+                    result = await session.execute(stmt)
+                    for row in result.fetchall():
+                        uid = str(getattr(row, "user_id", None) or row[0] or "").strip()
+                        if not uid:
+                            continue
+                        total = int(getattr(row, "total_memories", None) or row[1] or 0)
+                        totals[uid] = total
+                return {uid: _memory_status_for_count(totals.get(uid, 0)) for uid in ids}
+        except Exception:
+            # Fall through to Agno stats convenience API.
+            pass
+
+    async def _stats_for_user(uid: str) -> tuple[str, int]:
+        user_stats, _total_users = await db.get_user_memory_stats(
+            user_id=uid,
+            limit=1,
+            page=1,
+        )
+        total = 0
+        for row in user_stats or []:
+            if str(row.get("user_id") or "") == uid:
+                total = int(row.get("total_memories") or 0)
+                break
+            if not total and row.get("total_memories") is not None:
+                total = int(row.get("total_memories") or 0)
+        return uid, total
+
+    pairs = await asyncio.gather(*[_stats_for_user(uid) for uid in ids])
+    return {uid: _memory_status_for_count(total) for uid, total in pairs}
+
+
 async def list_memories_native(
     actor: ActorLike | None = None,
     *,
@@ -198,26 +255,7 @@ async def list_memories_native(
             if uid:
                 page_user_ids.add(uid)
 
-    async def _stats_for_user(uid: str) -> tuple[str, str]:
-        user_stats, _total_users = await db.get_user_memory_stats(
-            user_id=uid,
-            limit=1,
-            page=1,
-        )
-        total = 0
-        for row in user_stats or []:
-            if str(row.get("user_id") or "") == uid:
-                total = int(row.get("total_memories") or 0)
-                break
-            if not total and row.get("total_memories") is not None:
-                total = int(row.get("total_memories") or 0)
-        return uid, _memory_status_for_count(total)
-
-    if page_user_ids:
-        status_pairs = await asyncio.gather(*[_stats_for_user(uid) for uid in sorted(page_user_ids)])
-        user_status_by_id = dict(status_pairs)
-    else:
-        user_status_by_id = {}
+    user_status_by_id = await _memory_status_by_user_ids(db, page_user_ids)
 
     items: list[MemoryItemPayload] = []
     for raw_row in raw_memories:

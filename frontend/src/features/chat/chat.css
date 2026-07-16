@@ -438,6 +438,10 @@
 }
 
 .message-run-paused {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
   display: block;
   margin-top: 10px;
   color: var(--chat-muted);

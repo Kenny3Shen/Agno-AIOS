@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Chat HITL 打开审批 + Memory 状态批量查询
+
+- Chat 暂停态消息：`approval_id` 时提供「打开审批」深链。
+- Memory 列表成长徽章：多用户页优先单次 GROUP BY；否则按页用户并行 `get_user_memory_stats`（不再盲扫 limit=500）。
+
 ## 已完成：Skill 引用截断提示
 
 - `list_skill_workflow_references` 返回 `{data, truncated}`；候选或结果触顶时 `meta.truncated`。

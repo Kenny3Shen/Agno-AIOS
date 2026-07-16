@@ -487,3 +487,54 @@ async def test_list_memories_scopes_stats_to_actor_user():
         await memory_service.list_memories_native(actor("u1"))
     assert db.stats_kwargs.get("user_id") == "u1"
     assert db.stats_kwargs.get("limit") == 1
+
+
+
+@pytest.mark.asyncio
+async def test_list_memories_admin_batches_multi_user_stats():
+    """Admin page with multiple users uses one GROUP BY when table API exists."""
+    class MultiUserDb(FakeMemoryDb):
+        async def get_user_memories(self, **kwargs):
+            self.memory_kwargs = kwargs
+            return (
+                [
+                    {
+                        "memory_id": "m1",
+                        "memory": "a",
+                        "topics": [],
+                        "user_id": "u1",
+                        "created_at": 1,
+                        "updated_at": 1,
+                    },
+                    {
+                        "memory_id": "m2",
+                        "memory": "b",
+                        "topics": [],
+                        "user_id": "u2",
+                        "created_at": 2,
+                        "updated_at": 2,
+                    },
+                ],
+                2,
+            )
+
+        # No _get_table / async_session_factory → per-user stats fallback.
+
+    stats_calls: list[dict[str, object]] = []
+
+    db = MultiUserDb()
+
+    async def tracking_stats(**kwargs):
+        stats_calls.append(kwargs)
+        uid = kwargs.get("user_id") or "u1"
+        total = 51 if uid == "u1" else 3
+        return ([{"user_id": uid, "total_memories": total, "last_memory_updated_at": 1}], 1)
+
+    db.get_user_memory_stats = tracking_stats  # type: ignore[method-assign]
+    with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
+        payload = await memory_service.list_memories_native(actor("admin", "admin"))
+    assert {row["user_id"] for row in payload["data"]} == {"u1", "u2"}
+    assert {call.get("user_id") for call in stats_calls} == {"u1", "u2"}
+    by_user = {row["user_id"]: row["status"] for row in payload["data"]}
+    assert by_user["u1"] == "review"
+    assert by_user["u2"] == "healthy"
