@@ -222,7 +222,7 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
     return (
       <div className={`message-body message-body--${motionState}`}>
         <p>{message.content}</p>
-        <Actions className="message-actions" items={actions} />
+        <div className="message-actions-bar"><Actions className="message-actions" items={actions} /></div>
       </div>
     )
   const chain = [...(message.thought_chain ?? []).map(thoughtNode), ...(message.tool_steps ?? []).map((tool) => toolNode(tool, { input: t('rawToolInput'), output: t('rawToolOutput'), copy: t('common:copy') }))]
@@ -317,7 +317,7 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
           {message.error.message}
         </div>
       )}
-      {message.final && <Actions className="message-actions" items={actions} />}
+      {message.final && <div className="message-actions-bar"><Actions className="message-actions" items={actions} /></div>}
     </div>
   )
 }

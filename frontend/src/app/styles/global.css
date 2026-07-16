@@ -2508,3 +2508,29 @@ html.dark .workflow-templates__item {
   font-size: 13px;
   line-height: 1.55;
 }
+
+/* Draw.io-style smart alignment guides while dragging */
+.wf-smart-guides {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  z-index: 5;
+}
+.wf-smart-guide {
+  position: absolute;
+  background: #ff4d4f;
+  opacity: 0.85;
+  box-shadow: 0 0 0 0.5px color-mix(in srgb, #ff4d4f 40%, transparent);
+}
+.wf-smart-guide--v {
+  width: 1px;
+  transform: translateX(-0.5px);
+}
+.wf-smart-guide--h {
+  height: 1px;
+  transform: translateY(-0.5px);
+}
+html.dark .wf-smart-guide {
+  background: #ff7875;
+}

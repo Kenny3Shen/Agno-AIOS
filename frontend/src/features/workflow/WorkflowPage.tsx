@@ -30,14 +30,6 @@ import {
   UndoOutlined,
   RedoOutlined,
   ApartmentOutlined,
-  AlignLeftOutlined,
-  AlignRightOutlined,
-  AlignCenterOutlined,
-  VerticalAlignTopOutlined,
-  VerticalAlignMiddleOutlined,
-  VerticalAlignBottomOutlined,
-  ColumnWidthOutlined,
-  ColumnHeightOutlined,
   CloudUploadOutlined,
   CopyOutlined,
   ReloadOutlined,
@@ -293,28 +285,6 @@ export function WorkflowPage() {
               {t('organize')}
             </Button>
           </Tooltip>
-          <Space.Compact size="small" className="workflow-studio__align">
-            {(
-              [
-                ['left', <AlignLeftOutlined key="l" />, t('alignLeft')],
-                ['center-h', <AlignCenterOutlined key="ch" />, t('alignCenterH')],
-                ['right', <AlignRightOutlined key="r" />, t('alignRight')],
-                ['top', <VerticalAlignTopOutlined key="t" />, t('alignTop')],
-                ['center-v', <VerticalAlignMiddleOutlined key="cv" />, t('alignCenterV')],
-                ['bottom', <VerticalAlignBottomOutlined key="b" />, t('alignBottom')],
-                ['distribute-h', <ColumnWidthOutlined key="dh" />, t('distributeH')],
-                ['distribute-v', <ColumnHeightOutlined key="dv" />, t('distributeV')],
-              ] as const
-            ).map(([mode, icon, title]) => (
-              <Tooltip key={mode} title={title} getPopupContainer={studioPopupContainer}>
-                <Button
-                  icon={icon}
-                  disabled={(workflow.state.selectedIds?.length ?? 0) < 2}
-                  onClick={() => workflow.alignSelected(mode)}
-                />
-              </Tooltip>
-            ))}
-          </Space.Compact>
           <Button
             icon={<SaveOutlined />}
             type="primary"

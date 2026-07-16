@@ -27,6 +27,7 @@ import {
   MarkerType,
   ConnectionMode,
   BackgroundVariant,
+  ViewportPortal,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import type { WorkflowNode, WorkflowNodeType } from './types'
@@ -40,7 +41,11 @@ import {
   isDescendantOf,
   layoutCanvas,
   reparentTargetFromHandle,
+  computeSmartSnap,
+  NODE_LAYOUT_WIDTH,
+  NODE_LAYOUT_HEIGHT,
   type ReparentTarget,
+  type SmartGuideLine,
 } from './utils'
 import {
   WorkflowFlowNode,
@@ -238,8 +243,11 @@ function CanvasInner({
   const { screenToFlowPosition, fitView, getIntersectingNodes, updateNodeData } = useReactFlow()
 
   const [graph, setGraph] = useState<FlowGraph>({ nodes: [], edges: [] })
+  const graphNodesRef = useRef<WorkflowCanvasNode[]>([])
+  graphNodesRef.current = graph.nodes
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
   const [connectTargetId, setConnectTargetId] = useState<string | null>(null)
+  const [smartGuides, setSmartGuides] = useState<SmartGuideLine[]>([])
   const connectingFromRef = useRef<{ nodeId: string; handleId: string | null } | null>(null)
   const nodeRunStatusRef = useRef(nodeRunStatus)
   nodeRunStatusRef.current = nodeRunStatus
@@ -543,10 +551,77 @@ function CanvasInner({
   )
 
   const onNodesChange: OnNodesChange<WorkflowCanvasNode> = useCallback((changes) => {
-    setGraph((current) => ({
-      ...current,
-      nodes: applyNodeChanges(changes, current.nodes),
-    }))
+    setGraph((current) => {
+      let nextChanges = changes
+      if (draggingRef.current) {
+        const active = changes.find(
+          (change) =>
+            change.type === 'position' &&
+            change.dragging === true &&
+            change.position != null
+        )
+        if (active && active.type === 'position' && active.position) {
+          const node = current.nodes.find((item) => item.id === active.id)
+          if (node) {
+            const width = node.measured?.width ?? node.width ?? NODE_LAYOUT_WIDTH
+            const height = node.measured?.height ?? node.height ?? NODE_LAYOUT_HEIGHT
+            const peers = current.nodes
+              .filter((item) => item.id !== active.id)
+              .map((item) => ({
+                x: item.position.x,
+                y: item.position.y,
+                width: item.measured?.width ?? item.width ?? NODE_LAYOUT_WIDTH,
+                height: item.measured?.height ?? item.height ?? NODE_LAYOUT_HEIGHT,
+              }))
+            const snapped = computeSmartSnap(
+              {
+                x: active.position.x,
+                y: active.position.y,
+                width,
+                height,
+              },
+              peers
+            )
+            // Defer guide paint; avoid setState during setState.
+            queueMicrotask(() => {
+              setSmartGuides((prev) => {
+                const next = snapped.guides
+                if (
+                  prev.length === next.length &&
+                  prev.every(
+                    (g, i) =>
+                      g.orientation === next[i]?.orientation &&
+                      g.pos === next[i]?.pos &&
+                      g.start === next[i]?.start &&
+                      g.end === next[i]?.end
+                  )
+                ) {
+                  return prev
+                }
+                return next
+              })
+            })
+            nextChanges = changes.map((change) => {
+              if (
+                change.type === 'position' &&
+                change.id === active.id &&
+                change.position
+              ) {
+                return {
+                  ...change,
+                  position: { x: snapped.x, y: snapped.y },
+                }
+              }
+              return change
+            })
+          }
+        }
+      }
+      return {
+        ...current,
+        nodes: applyNodeChanges(nextChanges, current.nodes),
+      }
+    })
   }, [])
 
   const onNodeClick: NodeMouseHandler = useCallback(
@@ -582,6 +657,7 @@ function CanvasInner({
 
   const onNodeDragStart: OnNodeDrag = useCallback(() => {
     draggingRef.current = true
+    setSmartGuides([])
     wrapperRef.current?.classList.add('is-dragging-node')
     if (settleTimerRef.current) {
       clearTimeout(settleTimerRef.current)
@@ -591,6 +667,7 @@ function CanvasInner({
 
   const onNodeDrag: OnNodeDrag = useCallback(
     (_event, node) => {
+      // Container reparent highlight; smart snap lives in onNodesChange.
       const hits = getIntersectingNodes(node).filter((item) => item.id !== node.id)
       let nextTarget: string | null = null
       for (const hit of hits) {
@@ -610,6 +687,7 @@ function CanvasInner({
       draggingRef.current = false
       const targetId = dropTargetId
       setDropTargetId(null)
+      setSmartGuides([])
 
       if (targetId) {
         const target = resolveContainerTarget(node.id, targetId)
@@ -623,8 +701,12 @@ function CanvasInner({
         }
       }
 
+      // Prefer graph nodes (include smart-snap) and fall back to RF callback nodes.
       const positions: Record<string, { x: number; y: number }> = {}
       for (const item of allNodes) {
+        positions[item.id] = { x: item.position.x, y: item.position.y }
+      }
+      for (const item of graphNodesRef.current) {
         positions[item.id] = { x: item.position.x, y: item.position.y }
       }
       onPositionsChange(positions)
@@ -875,6 +957,35 @@ function CanvasInner({
         proOptions={PRO_OPTIONS}
         deleteKeyCode={null}
       >
+        {smartGuides.length ? (
+          <ViewportPortal>
+            <div className="wf-smart-guides" aria-hidden>
+              {smartGuides.map((guide, index) =>
+                guide.orientation === 'v' ? (
+                  <div
+                    key={`v-${guide.pos}-${index}`}
+                    className="wf-smart-guide wf-smart-guide--v"
+                    style={{
+                      left: guide.pos,
+                      top: guide.start,
+                      height: Math.max(1, guide.end - guide.start),
+                    }}
+                  />
+                ) : (
+                  <div
+                    key={`h-${guide.pos}-${index}`}
+                    className="wf-smart-guide wf-smart-guide--h"
+                    style={{
+                      top: guide.pos,
+                      left: guide.start,
+                      width: Math.max(1, guide.end - guide.start),
+                    }}
+                  />
+                )
+              )}
+            </div>
+          </ViewportPortal>
+        ) : null}
         <Background
           variant={BackgroundVariant.Dots}
           gap={18}

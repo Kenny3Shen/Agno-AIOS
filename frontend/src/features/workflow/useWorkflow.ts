@@ -25,9 +25,6 @@ import { appendRunLog, applyNodeRunStatusEvent, historyStatusFromEvent } from '.
 import {
   addChildToNode,
   applyAutoLayout,
-  alignSelectedPositions,
-  snapPosition,
-  type AlignMode,
   cloneNodeDeep,
   createNode,
   defaultTriggers,
@@ -356,30 +353,6 @@ export function useWorkflow() {
     withHistory((current) => {
       let steps = current.steps
       for (const [id, position] of Object.entries(positions)) {
-        const snapped = snapPosition(position)
-        steps = updateNodeInTree(steps, id, (node) => ({ ...node, position: snapped }))
-      }
-      return { ...current, steps, dirty: true }
-    })
-  }
-
-  const alignSelected = (mode: AlignMode) => {
-    withHistory((current) => {
-      const ids = current.selectedIds.length
-        ? current.selectedIds
-        : current.selectedId
-          ? [current.selectedId]
-          : []
-      if (ids.length < 2) return current
-      const positions: Record<string, { x: number; y: number }> = {}
-      for (const id of ids) {
-        const node = findNode(current.steps, id)
-        if (node?.position) positions[id] = node.position
-      }
-      if (Object.keys(positions).length < 2) return current
-      const next = alignSelectedPositions(positions, ids, mode)
-      let steps = current.steps
-      for (const [id, position] of Object.entries(next)) {
         steps = updateNodeInTree(steps, id, (node) => ({ ...node, position }))
       }
       return { ...current, steps, dirty: true }
@@ -923,7 +896,6 @@ export function useWorkflow() {
     connectSequence,
     connectBranch,
     organizeLayout,
-    alignSelected,
     copySelected,
     pasteClipboard,
     duplicateSelected,

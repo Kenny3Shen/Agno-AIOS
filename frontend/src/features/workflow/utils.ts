@@ -465,97 +465,132 @@ export const pickConnectionHandles = (
   return { sourceHandle, targetHandle, horizontal }
 }
 
-/** Canvas snap grid (px) for drag-end and align. */
-export const SNAP_GRID = 20
+/** Drag smart-guide snap threshold (px, flow space) — draw.io style. */
+export const SMART_SNAP_THRESHOLD = 8
 
-export const snapCoord = (value: number, grid = SNAP_GRID): number =>
-  Math.round(value / grid) * grid
+export type SmartGuideBox = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 
-export const snapPosition = (
-  position: { x: number; y: number },
-  grid = SNAP_GRID
-): { x: number; y: number } => ({
-  x: snapCoord(position.x, grid),
-  y: snapCoord(position.y, grid),
-})
+/** Vertical guide at x=pos, or horizontal guide at y=pos (flow coordinates). */
+export type SmartGuideLine = {
+  orientation: 'v' | 'h'
+  pos: number
+  /** Extent along the other axis for drawing. */
+  start: number
+  end: number
+}
 
-export type AlignMode =
-  | 'left'
-  | 'right'
-  | 'top'
-  | 'bottom'
-  | 'center-h'
-  | 'center-v'
-  | 'distribute-h'
-  | 'distribute-v'
+export type SmartSnapResult = {
+  x: number
+  y: number
+  guides: SmartGuideLine[]
+}
 
 /**
- * Align or distribute selected node positions (by id).
- * Uses estimated node size so right/bottom/center match visual edges.
+ * Snap a dragged box to nearby peers (left/center/right × top/center/bottom).
+ * Returns adjusted top-left and active guide lines for overlay rendering.
  */
-export const alignSelectedPositions = (
-  positions: Record<string, { x: number; y: number }>,
-  selectedIds: string[],
-  mode: AlignMode,
-  sizeById?: Record<string, { width?: number; height?: number }>
-): Record<string, { x: number; y: number }> => {
-  const ids = selectedIds.filter((id) => positions[id] != null)
-  if (ids.length < 2) return positions
+type SmartAnchor = { pos: number; kind: 'start' | 'mid' | 'end' }
 
-  const widthOf = (id: string) => sizeById?.[id]?.width ?? NODE_LAYOUT_WIDTH
-  const heightOf = (id: string) => sizeById?.[id]?.height ?? NODE_LAYOUT_HEIGHT
-  const boxes = ids.map((id) => {
-    const p = positions[id]!
-    const w = widthOf(id)
-    const h = heightOf(id)
-    return { id, x: p.x, y: p.y, w, h, cx: p.x + w / 2, cy: p.y + h / 2, r: p.x + w, b: p.y + h }
-  })
+const smartXAnchors = (box: SmartGuideBox): SmartAnchor[] => [
+  { pos: box.x, kind: 'start' },
+  { pos: box.x + box.width / 2, kind: 'mid' },
+  { pos: box.x + box.width, kind: 'end' },
+]
 
-  const next = { ...positions }
-  if (mode === 'left') {
-    const edge = Math.min(...boxes.map((b) => b.x))
-    for (const b of boxes) next[b.id] = { x: edge, y: b.y }
-  } else if (mode === 'right') {
-    const edge = Math.max(...boxes.map((b) => b.r))
-    for (const b of boxes) next[b.id] = { x: edge - b.w, y: b.y }
-  } else if (mode === 'top') {
-    const edge = Math.min(...boxes.map((b) => b.y))
-    for (const b of boxes) next[b.id] = { x: b.x, y: edge }
-  } else if (mode === 'bottom') {
-    const edge = Math.max(...boxes.map((b) => b.b))
-    for (const b of boxes) next[b.id] = { x: b.x, y: edge - b.h }
-  } else if (mode === 'center-h') {
-    const mid = boxes.reduce((s, b) => s + b.cx, 0) / boxes.length
-    for (const b of boxes) next[b.id] = { x: mid - b.w / 2, y: b.y }
-  } else if (mode === 'center-v') {
-    const mid = boxes.reduce((s, b) => s + b.cy, 0) / boxes.length
-    for (const b of boxes) next[b.id] = { x: b.x, y: mid - b.h / 2 }
-  } else if (mode === 'distribute-h') {
-    const ordered = [...boxes].sort((a, b) => a.x - b.x)
-    if (ordered.length < 3) return positions
-    const first = ordered[0]!
-    const last = ordered[ordered.length - 1]!
-    const span = last.x - first.x
-    const step = span / (ordered.length - 1)
-    ordered.forEach((b, i) => {
-      next[b.id] = { x: first.x + step * i, y: b.y }
+const smartYAnchors = (box: SmartGuideBox): SmartAnchor[] => [
+  { pos: box.y, kind: 'start' },
+  { pos: box.y + box.height / 2, kind: 'mid' },
+  { pos: box.y + box.height, kind: 'end' },
+]
+
+export const computeSmartSnap = (
+  dragged: SmartGuideBox,
+  peers: SmartGuideBox[],
+  threshold = SMART_SNAP_THRESHOLD
+): SmartSnapResult => {
+  if (!peers.length) {
+    return { x: dragged.x, y: dragged.y, guides: [] }
+  }
+
+  const peerX = peers.flatMap((p) => smartXAnchors(p).map((a) => ({ ...a, box: p })))
+  const peerY = peers.flatMap((p) => smartYAnchors(p).map((a) => ({ ...a, box: p })))
+  const dragX = smartXAnchors(dragged)
+  const dragY = smartYAnchors(dragged)
+
+  let bestDx: number | null = null
+  let bestDxAbs = threshold + 1
+  let bestXGuide: { pos: number; boxes: SmartGuideBox[] } | null = null
+
+  for (const da of dragX) {
+    for (const pa of peerX) {
+      const delta = pa.pos - da.pos
+      const abs = Math.abs(delta)
+      if (abs <= threshold && abs < bestDxAbs) {
+        bestDxAbs = abs
+        bestDx = delta
+        bestXGuide = { pos: pa.pos, boxes: [dragged, pa.box] }
+      } else if (abs <= threshold && abs === bestDxAbs && bestDx === delta && bestXGuide) {
+        if (!bestXGuide.boxes.includes(pa.box)) bestXGuide.boxes.push(pa.box)
+      }
+    }
+  }
+
+  let bestDy: number | null = null
+  let bestDyAbs = threshold + 1
+  let bestYGuide: { pos: number; boxes: SmartGuideBox[] } | null = null
+
+  for (const da of dragY) {
+    for (const pa of peerY) {
+      const delta = pa.pos - da.pos
+      const abs = Math.abs(delta)
+      if (abs <= threshold && abs < bestDyAbs) {
+        bestDyAbs = abs
+        bestDy = delta
+        bestYGuide = { pos: pa.pos, boxes: [dragged, pa.box] }
+      } else if (abs <= threshold && abs === bestDyAbs && bestDy === delta && bestYGuide) {
+        if (!bestYGuide.boxes.includes(pa.box)) bestYGuide.boxes.push(pa.box)
+      }
+    }
+  }
+
+  const x = bestDx != null ? dragged.x + bestDx : dragged.x
+  const y = bestDy != null ? dragged.y + bestDy : dragged.y
+  const snapped: SmartGuideBox = { ...dragged, x, y }
+  const guides: SmartGuideLine[] = []
+
+  const extentPad = 40
+  if (bestXGuide) {
+    const boxes = [...bestXGuide.boxes]
+    // include snapped drag box for extent
+    boxes[0] = snapped
+    const tops = boxes.map((b) => b.y)
+    const bottoms = boxes.map((b) => b.y + b.height)
+    guides.push({
+      orientation: 'v',
+      pos: bestXGuide.pos,
+      start: Math.min(...tops) - extentPad,
+      end: Math.max(...bottoms) + extentPad,
     })
-  } else if (mode === 'distribute-v') {
-    const ordered = [...boxes].sort((a, b) => a.y - b.y)
-    if (ordered.length < 3) return positions
-    const first = ordered[0]!
-    const last = ordered[ordered.length - 1]!
-    const span = last.y - first.y
-    const step = span / (ordered.length - 1)
-    ordered.forEach((b, i) => {
-      next[b.id] = { x: b.x, y: first.y + step * i }
+  }
+  if (bestYGuide) {
+    const boxes = [...bestYGuide.boxes]
+    boxes[0] = snapped
+    const lefts = boxes.map((b) => b.x)
+    const rights = boxes.map((b) => b.x + b.width)
+    guides.push({
+      orientation: 'h',
+      pos: bestYGuide.pos,
+      start: Math.min(...lefts) - extentPad,
+      end: Math.max(...rights) + extentPad,
     })
   }
 
-  for (const id of Object.keys(next)) {
-    next[id] = snapPosition(next[id]!)
-  }
-  return next
+  return { x, y, guides }
 }
 
 export const emptySlotsFor = (node: WorkflowNode): EmptySlot[] => {
