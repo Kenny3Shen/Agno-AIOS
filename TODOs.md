@@ -136,6 +136,18 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Overview 延迟 / series SQL 聚合
+
+- 窗口 p50/p95：`percentile_cont` over `duration_ms`（无 duration 时 end-start），全量窗口不落内存
+- series：SQL `date_trunc` 分桶 + runs/failed_runs/p50/p95；token 仍用采样 spans 叠加到同 bucket
+- distributions：agent/workflow/team SQL `GROUP BY`
+- SQL 失败时回退既有 capped sample 路径；`sample_size`/`truncated` 仍描述 token 样本
+- 失败计数与 recent_failures 继续走窗口 ERROR 查询
+
+相关：`overview_service.py` / `test_overview.py`
+
+---
+
 ## 已完成：Trace sessions SQL 分组分页
 
 - `list_trace_sessions` 优先对 `agno_traces` 做 SQL `GROUP BY session_id`（count / distinct run / error_count / max start_time）

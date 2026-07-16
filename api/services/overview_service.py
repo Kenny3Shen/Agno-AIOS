@@ -8,7 +8,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import and_, case, cast, func, select
+from sqlalchemy.types import DateTime, Float
 
 from api.auth.claims import ActorLike, has_scope, scope_user_id
 from api.services.postgres_store import get_async_agno_postgres_db
@@ -319,6 +320,252 @@ async def _fetch_recent_failures(
     return failures[:safe_limit]
 
 
+def _trace_window_filters(table, *, start: datetime, end: datetime, user_id: str | None):
+    """Shared WHERE clauses for overview SQL over ``agno_traces``."""
+    filters = [
+        table.c.start_time >= start.isoformat(),
+        table.c.start_time <= end.isoformat(),
+    ]
+    if user_id:
+        filters.append(table.c.user_id == user_id)
+    return and_(*filters)
+
+
+def _duration_ms_expr(table):
+    """Prefer stored duration_ms; fall back to end-start when present."""
+    # start_time / end_time are ISO strings in Agno Postgres storage.
+    start_ts = cast(table.c.start_time, DateTime(timezone=True))
+    end_ts = cast(table.c.end_time, DateTime(timezone=True))
+    computed = func.extract("epoch", end_ts - start_ts) * 1000.0
+    return cast(
+        func.coalesce(table.c.duration_ms, computed),
+        Float,
+    )
+
+
+def _bucket_trunc_unit(range_name: OverviewRange) -> str:
+    if range_name == "7d":
+        return "day"
+    if range_name == "24h":
+        return "hour"
+    return "minute"
+
+
+def _sql_bucket_timestamp_expr(table, *, range_name: OverviewRange, timezone_key: str):
+    """Local wall-clock bucket start (timestamp without tz) for date_trunc."""
+    start_ts = cast(table.c.start_time, DateTime(timezone=True))
+    # timestamptz AT TIME ZONE zone → local timestamp without time zone
+    local_ts = func.timezone(timezone_key, start_ts)
+    return func.date_trunc(_bucket_trunc_unit(range_name), local_ts)
+
+
+def _format_sql_bucket_timestamp(value: Any, *, timezone: ZoneInfo) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        local = value
+        if local.tzinfo is None:
+            local = local.replace(tzinfo=timezone)
+        else:
+            local = local.astimezone(timezone)
+        # Match Python path: already truncated by SQL date_trunc.
+        return local.isoformat()
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone)
+    else:
+        parsed = parsed.astimezone(timezone)
+    return parsed.isoformat()
+
+
+async def _sql_window_latency(
+    *, start: datetime, end: datetime, user_id: str | None
+) -> dict[str, Any] | None:
+    """Full-window p50/p95 over duration_ms (no row materialization)."""
+    db = get_async_agno_postgres_db()
+    table = await db._get_table(table_type="traces")
+    if table is None:
+        return None
+
+    duration = _duration_ms_expr(table)
+    where_clause = _trace_window_filters(table, start=start, end=end, user_id=user_id)
+    # Only rows with a positive/finite duration contribute to latency KPIs.
+    duration_filter = and_(where_clause, duration.isnot(None), duration >= 0)
+    stmt = select(
+        func.count().label("n"),
+        func.percentile_cont(0.5).within_group(duration).label("p50"),
+        func.percentile_cont(0.95).within_group(duration).label("p95"),
+    ).where(duration_filter)
+
+    async with db.async_session_factory() as session:
+        row = (await session.execute(stmt)).mappings().one()
+
+    n = int(row.get("n") or 0)
+    if n <= 0:
+        return {"n": 0, "p50_duration_ms": None, "p95_duration_ms": None}
+
+    def _round_ms(value: Any) -> float | None:
+        if value is None:
+            return None
+        try:
+            return round(float(value), 2)
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "n": n,
+        "p50_duration_ms": _round_ms(row.get("p50")),
+        "p95_duration_ms": _round_ms(row.get("p95")),
+    }
+
+
+async def _sql_series(
+    *,
+    start: datetime,
+    end: datetime,
+    user_id: str | None,
+    range_name: OverviewRange,
+    timezone: ZoneInfo,
+) -> list[dict[str, Any]] | None:
+    """Bucket runs/failures/latency with SQL (tokens filled later from sample)."""
+    db = get_async_agno_postgres_db()
+    table = await db._get_table(table_type="traces")
+    if table is None:
+        return None
+
+    duration = _duration_ms_expr(table)
+    where_clause = _trace_window_filters(table, start=start, end=end, user_id=user_id)
+    timezone_key = getattr(timezone, "key", None) or str(timezone)
+    bucket = _sql_bucket_timestamp_expr(
+        table, range_name=range_name, timezone_key=timezone_key
+    ).label("bucket")
+    error_case = case(
+        (func.upper(table.c.status).in_(("ERROR", "FAILED", "FAILURE")), 1),
+        else_=0,
+    )
+    stmt = (
+        select(
+            bucket,
+            func.count().label("runs"),
+            func.coalesce(func.sum(error_case), 0).label("failed_runs"),
+            func.percentile_cont(0.5).within_group(duration).label("p50"),
+            func.percentile_cont(0.95).within_group(duration).label("p95"),
+        )
+        .where(where_clause)
+        .group_by(bucket)
+        .order_by(bucket)
+    )
+
+    async with db.async_session_factory() as session:
+        rows = (await session.execute(stmt)).mappings().all()
+
+    series: list[dict[str, Any]] = []
+    for row in rows:
+        timestamp = _format_sql_bucket_timestamp(row.get("bucket"), timezone=timezone)
+        if not timestamp:
+            continue
+
+        def _round_ms(value: Any) -> float | None:
+            if value is None:
+                return None
+            try:
+                return round(float(value), 2)
+            except (TypeError, ValueError):
+                return None
+
+        series.append(
+            {
+                "timestamp": timestamp,
+                "bucket_end": _bucket_end(
+                    timestamp, range_name=range_name, timezone=timezone
+                ),
+                "runs": int(row.get("runs") or 0),
+                "failed_runs": int(row.get("failed_runs") or 0),
+                "p50_duration_ms": _round_ms(row.get("p50")),
+                "p95_duration_ms": _round_ms(row.get("p95")),
+            }
+        )
+    return series
+
+
+async def _sql_distributions(
+    *, start: datetime, end: datetime, user_id: str | None
+) -> dict[str, list[dict[str, Any]]] | None:
+    """Full-window agent/workflow/team counts via SQL GROUP BY."""
+    db = get_async_agno_postgres_db()
+    table = await db._get_table(table_type="traces")
+    if table is None:
+        return None
+
+    where_clause = _trace_window_filters(table, start=start, end=end, user_id=user_id)
+    result: dict[str, list[dict[str, Any]]] = {}
+    async with db.async_session_factory() as session:
+        for field in ("agent_id", "workflow_id", "team_id"):
+            col = getattr(table.c, field)
+            stmt = (
+                select(col.label("name"), func.count().label("value"))
+                .where(and_(where_clause, col.isnot(None), col != ""))
+                .group_by(col)
+                .order_by(func.count().desc())
+            )
+            rows = (await session.execute(stmt)).mappings().all()
+            key = field.removesuffix("_id")
+            result[key] = [
+                {"name": str(row["name"]), "value": int(row["value"] or 0)}
+                for row in rows
+                if row.get("name")
+            ]
+    return result
+
+
+
+async def _safe_sql_window_latency(
+    *, start: datetime, end: datetime, user_id: str | None
+) -> dict[str, Any] | None:
+    try:
+        return await _sql_window_latency(start=start, end=end, user_id=user_id)
+    except Exception:
+        logger.exception("overview SQL latency aggregates failed; using sample path")
+        return None
+
+
+async def _safe_sql_series(
+    *,
+    start: datetime,
+    end: datetime,
+    user_id: str | None,
+    range_name: OverviewRange,
+    timezone: ZoneInfo,
+) -> list[dict[str, Any]] | None:
+    try:
+        return await _sql_series(
+            start=start,
+            end=end,
+            user_id=user_id,
+            range_name=range_name,
+            timezone=timezone,
+        )
+    except Exception:
+        logger.exception("overview SQL series failed; using sample path")
+        return None
+
+
+async def _safe_sql_distributions(
+    *, start: datetime, end: datetime, user_id: str | None
+) -> dict[str, list[dict[str, Any]]] | None:
+    try:
+        return await _sql_distributions(start=start, end=end, user_id=user_id)
+    except Exception:
+        logger.exception("overview SQL distributions failed; using sample path")
+        return None
+
+
 async def _fetch_traces(
     *, start: datetime, end: datetime, user_id: str | None
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -493,11 +740,40 @@ async def get_runtime_overview(
         start, end = generated_at - _RANGE_WINDOWS[range_name], generated_at
     bucket_range = _bucket_range(start, end)
     owner_user_id = scope_user_id(actor, None)
-    (traces, trace_sample), window_failed_total, recent_error_traces, snapshots = await asyncio.gather(
+    gathered = await asyncio.gather(
         _fetch_traces(start=start, end=end, user_id=owner_user_id),
         _count_traces(start=start, end=end, user_id=owner_user_id, status="ERROR"),
         _fetch_recent_failures(start=start, end=end, user_id=owner_user_id, limit=10),
         _snapshots(actor),
+        _safe_sql_window_latency(start=start, end=end, user_id=owner_user_id),
+        _safe_sql_series(
+            start=start,
+            end=end,
+            user_id=owner_user_id,
+            range_name=bucket_range,
+            timezone=display_timezone,
+        ),
+        _safe_sql_distributions(start=start, end=end, user_id=owner_user_id),
+    )
+    traces_bundle = gathered[0]
+    if not isinstance(traces_bundle, tuple) or len(traces_bundle) != 2:
+        raise RuntimeError("overview _fetch_traces returned unexpected shape")
+    traces = list(traces_bundle[0])  # type: ignore[arg-type]
+    trace_sample = dict(traces_bundle[1])  # type: ignore[arg-type]
+    failed_raw = gathered[1]
+    window_failed_total = int(failed_raw) if isinstance(failed_raw, int | float) else 0
+    recent_error_traces: list[dict[str, Any]] = (
+        list(gathered[2]) if isinstance(gathered[2], list) else []  # type: ignore[arg-type]
+    )
+    snapshots: dict[str, Any] = dict(gathered[3]) if isinstance(gathered[3], dict) else {}  # type: ignore[arg-type]
+    sql_latency: dict[str, Any] | None = (
+        dict(gathered[4]) if isinstance(gathered[4], dict) else None  # type: ignore[arg-type]
+    )
+    sql_series: list[dict[str, Any]] | None = (
+        list(gathered[5]) if isinstance(gathered[5], list) else None  # type: ignore[arg-type]
+    )
+    sql_distributions: dict[str, list[dict[str, Any]]] | None = (
+        dict(gathered[6]) if isinstance(gathered[6], dict) else None  # type: ignore[arg-type]
     )
     span_token_counts = await _fetch_span_token_counts(
         [str(trace.get("trace_id") or trace.get("id") or "") for trace in traces if trace.get("trace_id") or trace.get("id")]
@@ -509,10 +785,17 @@ async def get_runtime_overview(
     input_tokens = 0
     output_tokens = 0
     total_tokens = 0
+    sample_tokens_by_bucket: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    )
     for trace in traces:
         timestamp = _as_datetime(trace.get("start_time"))
+        bucket_key: str | None = None
         if timestamp is not None:
-            buckets[_bucket_timestamp(timestamp, range_name=bucket_range, timezone=display_timezone)].append(trace)
+            bucket_key = _bucket_timestamp(
+                timestamp, range_name=bucket_range, timezone=display_timezone
+            )
+            buckets[bucket_key].append(trace)
         duration = _duration_ms(trace)
         if duration is not None:
             durations.append(duration)
@@ -524,33 +807,65 @@ async def get_runtime_overview(
         input_tokens += tokens["input_tokens"]
         output_tokens += tokens["output_tokens"]
         total_tokens += tokens["total_tokens"]
-
-    series: list[dict[str, Any]] = []
-    for timestamp in sorted(buckets):
-        bucket = buckets[timestamp]
-        bucket_durations = [duration for trace in bucket if (duration := _duration_ms(trace)) is not None]
-        bucket_tokens = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
-        for trace in bucket:
-            trace_id = str(trace.get("trace_id") or trace.get("id") or "")
-            bucket_tokens = _add_token_counts(
-                bucket_tokens,
-                span_token_counts.get(trace_id) or _token_counts(trace),
+        if bucket_key is not None:
+            sample_tokens_by_bucket[bucket_key] = _add_token_counts(
+                sample_tokens_by_bucket[bucket_key],
+                tokens,
             )
-        series.append(
-            {
-                "timestamp": timestamp,
-                "bucket_end": _bucket_end(
-                    timestamp, range_name=bucket_range, timezone=display_timezone
-                ),
-                "runs": len(bucket),
-                "failed_runs": sum(_is_failure(trace) for trace in bucket),
-                "p50_duration_ms": _percentile(bucket_durations, 0.5),
-                "p95_duration_ms": _percentile(bucket_durations, 0.95),
-                **bucket_tokens,
-                # Kept for existing consumers; new clients should use total_tokens.
-                "tokens": bucket_tokens["total_tokens"],
-            }
-        )
+
+    if sql_series is not None:
+        series: list[dict[str, Any]] = []
+        for item in sql_series:
+            bucket_tokens = sample_tokens_by_bucket.get(
+                item["timestamp"],
+                {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+            )
+            series.append(
+                {
+                    **item,
+                    **bucket_tokens,
+                    # Kept for existing consumers; new clients should use total_tokens.
+                    "tokens": bucket_tokens["total_tokens"],
+                }
+            )
+    else:
+        series = []
+        for timestamp in sorted(buckets):
+            bucket = buckets[timestamp]
+            bucket_durations = [
+                duration for trace in bucket if (duration := _duration_ms(trace)) is not None
+            ]
+            bucket_tokens = sample_tokens_by_bucket.get(
+                timestamp,
+                {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+            )
+            series.append(
+                {
+                    "timestamp": timestamp,
+                    "bucket_end": _bucket_end(
+                        timestamp, range_name=bucket_range, timezone=display_timezone
+                    ),
+                    "runs": len(bucket),
+                    "failed_runs": sum(_is_failure(trace) for trace in bucket),
+                    "p50_duration_ms": _percentile(bucket_durations, 0.5),
+                    "p95_duration_ms": _percentile(bucket_durations, 0.95),
+                    **bucket_tokens,
+                    "tokens": bucket_tokens["total_tokens"],
+                }
+            )
+
+    if sql_latency is not None:
+        p50_duration_ms = sql_latency.get("p50_duration_ms")
+        p95_duration_ms = sql_latency.get("p95_duration_ms")
+    else:
+        p50_duration_ms = _percentile(durations, 0.5)
+        p95_duration_ms = _percentile(durations, 0.95)
+
+    distributions = sql_distributions or {
+        "agent": _distribution(traces, "agent_id"),
+        "workflow": _distribution(traces, "workflow_id"),
+        "team": _distribution(traces, "team_id"),
+    }
 
     response: dict[str, Any] = {
         "generated_at": generated_at.isoformat(),
@@ -559,7 +874,8 @@ async def get_runtime_overview(
         "end_time": end.isoformat(),
         "health": {"status": "ready"},
         "metrics": {
-            # Counts prefer Agno window totals; latency/tokens remain sample-based.
+            # Counts + latency prefer full-window SQL/Agno totals; tokens remain
+            # sample-based (span attributes) with truncated sample_size when capped.
             "total_runs": int(trace_sample.get("window_total") or len(traces)),
             "failed_runs": int(window_failed_total),
             "failure_rate": (
@@ -567,8 +883,8 @@ async def get_runtime_overview(
                 if int(trace_sample.get("window_total") or 0)
                 else 0.0
             ),
-            "p50_duration_ms": _percentile(durations, 0.5),
-            "p95_duration_ms": _percentile(durations, 0.95),
+            "p50_duration_ms": p50_duration_ms,
+            "p95_duration_ms": p95_duration_ms,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "total_tokens": total_tokens,
@@ -578,11 +894,7 @@ async def get_runtime_overview(
             "sample_failed_runs": failed_runs,
         },
         "series": series,
-        "distributions": {
-            "agent": _distribution(traces, "agent_id"),
-            "workflow": _distribution(traces, "workflow_id"),
-            "team": _distribution(traces, "team_id"),
-        },
+        "distributions": distributions,
         "recent_failures": [_recent_failure(trace) for trace in recent_error_traces],
         "snapshots": snapshots,
     }

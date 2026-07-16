@@ -49,6 +49,9 @@ async def test_overview_aggregates_scoped_traces_into_stable_payload():
     failed_only = [trace for trace in traces if trace.get("status") == "ERROR"]
     with (
         patch.object(overview_service, "_fetch_traces", AsyncMock(return_value=(traces, {"sample_size": len(traces), "window_total": len(traces), "truncated": False}))) as fetch,
+        patch.object(overview_service, "_safe_sql_window_latency", AsyncMock(return_value=None)),
+        patch.object(overview_service, "_safe_sql_series", AsyncMock(return_value=None)),
+        patch.object(overview_service, "_safe_sql_distributions", AsyncMock(return_value=None)),
         patch.object(overview_service, "_count_traces", AsyncMock(return_value=1)),
         patch.object(overview_service, "_fetch_recent_failures", AsyncMock(return_value=failed_only)),
         patch.object(overview_service, "_snapshots", AsyncMock(return_value={"memories": 3})),
@@ -150,6 +153,9 @@ async def test_overview_uses_window_error_count_and_native_recent_failures():
             "_fetch_traces",
             AsyncMock(return_value=(sample, {"sample_size": 1, "window_total": 100, "truncated": True})),
         ),
+        patch.object(overview_service, "_safe_sql_window_latency", AsyncMock(return_value=None)),
+        patch.object(overview_service, "_safe_sql_series", AsyncMock(return_value=None)),
+        patch.object(overview_service, "_safe_sql_distributions", AsyncMock(return_value=None)),
         patch.object(overview_service, "_count_traces", AsyncMock(return_value=17)) as count_errors,
         patch.object(
             overview_service,
@@ -233,6 +239,9 @@ async def test_overview_uses_span_usage_instead_of_empty_trace_rows():
     }]
     with (
         patch.object(overview_service, "_fetch_traces", AsyncMock(return_value=(traces, {"sample_size": len(traces), "window_total": len(traces), "truncated": False}))),
+        patch.object(overview_service, "_safe_sql_window_latency", AsyncMock(return_value=None)),
+        patch.object(overview_service, "_safe_sql_series", AsyncMock(return_value=None)),
+        patch.object(overview_service, "_safe_sql_distributions", AsyncMock(return_value=None)),
         patch.object(overview_service, "_count_traces", AsyncMock(return_value=0)),
         patch.object(overview_service, "_fetch_recent_failures", AsyncMock(return_value=[])),
         patch.object(overview_service, "_snapshots", AsyncMock(return_value={})),
@@ -346,6 +355,9 @@ async def test_overview_fetch_reconciles_audit_failures_before_metrics() -> None
 async def test_admin_overview_includes_audit_summary():
     with (
         patch.object(overview_service, "_fetch_traces", AsyncMock(return_value=([], {"sample_size": 0, "window_total": 0, "truncated": False}))),
+        patch.object(overview_service, "_safe_sql_window_latency", AsyncMock(return_value=None)),
+        patch.object(overview_service, "_safe_sql_series", AsyncMock(return_value=None)),
+        patch.object(overview_service, "_safe_sql_distributions", AsyncMock(return_value=None)),
         patch.object(overview_service, "_count_traces", AsyncMock(return_value=0)),
         patch.object(overview_service, "_fetch_recent_failures", AsyncMock(return_value=[])),
         patch.object(overview_service, "_snapshots", AsyncMock(return_value={})),
@@ -429,6 +441,9 @@ async def test_overview_custom_range_uses_requested_window_and_adaptive_buckets(
     ]
     with (
         patch.object(overview_service, "_fetch_traces", AsyncMock(return_value=(traces, {"sample_size": len(traces), "window_total": len(traces), "truncated": False}))) as fetch,
+        patch.object(overview_service, "_safe_sql_window_latency", AsyncMock(return_value=None)),
+        patch.object(overview_service, "_safe_sql_series", AsyncMock(return_value=None)),
+        patch.object(overview_service, "_safe_sql_distributions", AsyncMock(return_value=None)),
         patch.object(overview_service, "_count_traces", AsyncMock(return_value=0)),
         patch.object(overview_service, "_fetch_recent_failures", AsyncMock(return_value=[])),
         patch.object(overview_service, "_fetch_span_token_counts", AsyncMock(return_value={})),
@@ -539,3 +554,123 @@ async def test_overview_snapshot_failures_are_logged(monkeypatch):
 
     assert snapshots == {}
     assert any("overview snapshot failed: memories" in message for message in logged)
+
+
+@pytest.mark.asyncio
+async def test_overview_prefers_sql_latency_and_series_over_sample():
+    """Full-window SQL aggregates drive p50/p95 and series runs; tokens stay sample-based."""
+    sample = [
+        {
+            "trace_id": "s1",
+            "start_time": "2026-07-12T11:10:00+00:00",
+            "status": "OK",
+            "duration_ms": 10,
+            "agent_id": "from-sample",
+        },
+    ]
+    sql_series = [
+        {
+            "timestamp": "2026-07-12T11:00:00+00:00",
+            "bucket_end": "2026-07-12T12:00:00+00:00",
+            "runs": 42,
+            "failed_runs": 3,
+            "p50_duration_ms": 50.0,
+            "p95_duration_ms": 200.0,
+        }
+    ]
+    with (
+        patch.object(
+            overview_service,
+            "_fetch_traces",
+            AsyncMock(return_value=(sample, {"sample_size": 1, "window_total": 42, "truncated": True})),
+        ),
+        patch.object(overview_service, "_count_traces", AsyncMock(return_value=3)),
+        patch.object(overview_service, "_fetch_recent_failures", AsyncMock(return_value=[])),
+        patch.object(overview_service, "_snapshots", AsyncMock(return_value={})),
+        patch.object(
+            overview_service,
+            "_fetch_span_token_counts",
+            AsyncMock(return_value={"s1": {"input_tokens": 1, "output_tokens": 2, "total_tokens": 3}}),
+        ),
+        patch.object(
+            overview_service,
+            "_safe_sql_window_latency",
+            AsyncMock(return_value={"n": 42, "p50_duration_ms": 55.5, "p95_duration_ms": 210.0}),
+        ),
+        patch.object(overview_service, "_safe_sql_series", AsyncMock(return_value=sql_series)),
+        patch.object(
+            overview_service,
+            "_safe_sql_distributions",
+            AsyncMock(return_value={"agent": [{"name": "sql-agent", "value": 9}], "workflow": [], "team": []}),
+        ),
+    ):
+        result = await overview_service.get_runtime_overview(
+            actor("u1"),
+            range_name="24h",
+            timezone="UTC",
+            now=datetime(2026, 7, 12, 12, tzinfo=UTC),
+        )
+
+    assert result["metrics"]["p50_duration_ms"] == 55.5
+    assert result["metrics"]["p95_duration_ms"] == 210.0
+    assert result["metrics"]["total_runs"] == 42
+    assert result["metrics"]["failed_runs"] == 3
+    assert result["metrics"]["input_tokens"] == 1
+    assert result["metrics"]["total_tokens"] == 3
+    assert result["metrics"]["truncated"] is True
+    assert result["series"][0]["runs"] == 42
+    assert result["series"][0]["failed_runs"] == 3
+    assert result["series"][0]["p50_duration_ms"] == 50.0
+    assert result["series"][0]["total_tokens"] == 3
+    assert result["distributions"]["agent"] == [{"name": "sql-agent", "value": 9}]
+
+
+@pytest.mark.asyncio
+async def test_sql_window_latency_builds_percentile_query():
+    from sqlalchemy import Column, Float, MetaData, String, Table
+
+    meta = MetaData()
+    table = Table(
+        "agno_traces",
+        meta,
+        Column("start_time", String),
+        Column("end_time", String),
+        Column("duration_ms", Float),
+        Column("user_id", String),
+        Column("status", String),
+    )
+
+    class MappingResult:
+        def mappings(self):
+            return self
+
+        def one(self):
+            return {"n": 2, "p50": 100.123, "p95": 250.999}
+
+    class FakeSession:
+        def __init__(self):
+            self.stmt = None
+
+        async def execute(self, stmt):
+            self.stmt = stmt
+            return MappingResult()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return False
+
+    session = FakeSession()
+    db = overview_service.get_async_agno_postgres_db()
+    with (
+        patch.object(db, "_get_table", AsyncMock(return_value=table)),
+        patch.object(db, "async_session_factory", lambda: session),
+    ):
+        result = await overview_service._sql_window_latency(
+            start=datetime(2026, 7, 12, 11, tzinfo=UTC),
+            end=datetime(2026, 7, 12, 12, tzinfo=UTC),
+            user_id="u1",
+        )
+    assert result == {"n": 2, "p50_duration_ms": 100.12, "p95_duration_ms": 251.0}
+    assert session.stmt is not None
