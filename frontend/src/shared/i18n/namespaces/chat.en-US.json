@@ -61,5 +61,6 @@
   "stoppedGenerating": "Generation stopped",
   "cancelServerFailed": "Stopped locally, but server cancel failed",
   "openTrace": "Open Trace",
-  "openApproval": "Open approvals"
+  "openApproval": "Open approvals",
+  "errorRequestFailed": "Chat request failed"
 }

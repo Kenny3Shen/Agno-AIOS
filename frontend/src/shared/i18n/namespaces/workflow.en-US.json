@@ -134,5 +134,11 @@
   "runBannerFailed": "Latest run failed",
   "runBannerCompleted": "Latest run completed",
   "runBannerCancelled": "Latest run cancelled",
-  "openRunLog": "Open run log"
+  "openRunLog": "Open run log",
+  "errorSaveFailed": "Save failed",
+  "errorPublishFailed": "Publish failed",
+  "errorRestoreFailed": "Restore failed",
+  "errorRunFailed": "Run failed",
+  "errorLoadFailed": "Load failed",
+  "errorDeleteFailed": "Delete failed"
 }

@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Workflow/Chat 失败兜底文案 i18n
+
+- `useWorkflow` 保存/发布/恢复/运行失败兜底文案走 i18n。
+- Chat `network-error` 兜底文案走 i18n。
+
 ## 已完成：Approvals 详情/列表 i18n + Studio 运行态值班横幅
 
 - Approvals：表格列、详情分区/字段标签、状态文案、Raw/Markdown 视图标签接入 i18n。

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { getModels } from '@/features/settings/api'
@@ -94,6 +95,7 @@ const snapOf = (state: Pick<WorkflowState, 'steps' | 'selectedId' | 'selectedIds
 })
 
 export function useWorkflow() {
+  const { t } = useTranslation('workflow')
   const [state, setState] = useState<WorkflowState>(initialState)
   const abortRef = useRef<AbortController | null>(null)
   const pastRef = useRef<HistorySnap[]>([])
@@ -667,7 +669,7 @@ export function useWorkflow() {
       setState((current) => ({
         ...current,
         saving: false,
-        error: error instanceof Error ? error.message : 'Save failed',
+        error: error instanceof Error ? error.message : t('errorSaveFailed'),
       }))
     }
   }
@@ -720,7 +722,7 @@ export function useWorkflow() {
       setState((current) => ({
         ...current,
         saving: false,
-        error: error instanceof Error ? error.message : 'Save failed',
+        error: error instanceof Error ? error.message : t('errorSaveFailed'),
       }))
     }
   }
@@ -752,7 +754,7 @@ export function useWorkflow() {
       setState((current) => ({
         ...current,
         saving: false,
-        error: error instanceof Error ? error.message : 'Publish failed',
+        error: error instanceof Error ? error.message : t('errorPublishFailed'),
       }))
     }
   }
@@ -777,7 +779,7 @@ export function useWorkflow() {
     } catch (error) {
       setState((current) => ({
         ...current,
-        error: error instanceof Error ? error.message : 'Restore failed',
+        error: error instanceof Error ? error.message : t('errorRestoreFailed'),
       }))
     }
   }
@@ -885,7 +887,7 @@ export function useWorkflow() {
       setState((current) => ({
         ...current,
         running: false,
-        error: error instanceof Error ? error.message : 'Run failed',
+        error: error instanceof Error ? error.message : t('errorRunFailed'),
       }))
     }
   }

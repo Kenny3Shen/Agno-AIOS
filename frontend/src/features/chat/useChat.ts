@@ -173,7 +173,7 @@ export function useChat() {
         dispatch({
           type: 'network-error',
           id: assistantId,
-          message: error instanceof Error ? error.message : 'Chat request failed',
+          message: error instanceof Error ? error.message : t('errorRequestFailed'),
         })
       }
     } finally {
