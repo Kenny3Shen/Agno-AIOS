@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：MCP 签发令牌 / 连接测试失败显性化
+
+- 签发 Token 表单 `onFinish`：try/catch + `issueTokenFailed`。
+- 添加 Server「连接测试」：try/catch + `testConnectionFailed`（表单校验失败不 toast）。
+
 ## 已完成：Memory 编辑 / Evaluations 运行失败显性化
 
 - Memory 编辑表单 `onFinish`：try/catch + `updateFailed` toast（原先成功才提示）。

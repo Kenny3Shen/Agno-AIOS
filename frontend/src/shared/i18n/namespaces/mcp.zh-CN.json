@@ -38,5 +38,7 @@
   "issue": "签发",
   "save": "保存",
   "testConnection": "连接测试",
-  "tryCallShort": "试调用"
+  "tryCallShort": "试调用",
+  "issueTokenFailed": "签发 MCP 令牌失败，请稍后重试。",
+  "testConnectionFailed": "MCP 连接测试失败，请检查配置后重试。"
 }

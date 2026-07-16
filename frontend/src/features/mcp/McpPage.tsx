@@ -412,11 +412,15 @@ export function McpPage() {
           layout="vertical"
           initialValues={{ expires_in: 86400 }}
           onFinish={async (values: { name: string; expires_in: number }) => {
-            const result = await issueToken(values.name, values.expires_in)
-            await copyToClipboard(result.token)
-            message.success(t('tokenIssued'))
-            setIssueOpen(false)
-            await refresh()
+            try {
+              const result = await issueToken(values.name, values.expires_in)
+              await copyToClipboard(result.token)
+              message.success(t('tokenIssued'))
+              setIssueOpen(false)
+              await refresh()
+            } catch (error) {
+              message.error(error instanceof Error ? error.message : t('issueTokenFailed'))
+            }
           }}
         >
           <Form.Item name="name" label={t('common:name')} rules={[{ required: true }]}>
@@ -469,9 +473,15 @@ export function McpPage() {
             </Button>
             <Button
               onClick={async () => {
-                const values = await serverForm.validateFields()
-                const result = await testServer(values)
-                message.success(t('connectDiscovered', { count: result.tools.length }))
+                try {
+                  const values = await serverForm.validateFields()
+                  const result = await testServer(values)
+                  message.success(t('connectDiscovered', { count: result.tools.length }))
+                } catch (error) {
+                  // validateFields reject is user-facing form state; only toast transport errors.
+                  if (error && typeof error === 'object' && 'errorFields' in error) return
+                  message.error(error instanceof Error ? error.message : t('testConnectionFailed'))
+                }
               }}
             >
               {t('testConnection')}

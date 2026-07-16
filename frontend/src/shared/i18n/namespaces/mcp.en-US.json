@@ -38,5 +38,7 @@
   "issue": "Issue",
   "save": "Save",
   "testConnection": "Test connection",
-  "tryCallShort": "Try call"
+  "tryCallShort": "Try call",
+  "issueTokenFailed": "Unable to issue the MCP token. Please try again.",
+  "testConnectionFailed": "MCP connection test failed. Check the configuration and try again."
 }

@@ -72,3 +72,49 @@ describe('McpPage component permissions', () => {
     expect(componentSwitch.getAttribute('aria-checked')).toBe('true')
   })
 })
+
+describe('McpPage token issue failures', () => {
+  beforeEach(() => {
+    server.use(
+      http.get('/api/mcp/config', () =>
+        HttpResponse.json({
+          services: {},
+          mcp_servers: [],
+          mcp_url: '',
+          fastmcp: '',
+          config_store: 'postgresql',
+        })
+      ),
+      http.get('/api/mcp/components', () =>
+        HttpResponse.json({
+          data: [],
+          meta: { page: 1, limit: 1, total_pages: 0, total_count: 0, search_time_ms: 0 },
+        })
+      ),
+      http.get('/api/mcp/tokens', () =>
+        HttpResponse.json({
+          data: [],
+          meta: { page: 1, limit: 1, total_pages: 0, total_count: 0, search_time_ms: 0 },
+        })
+      )
+    )
+  })
+
+  it('surfaces issue-token API failures to the operator', async () => {
+    server.use(
+      http.post('/api/mcp/tokens/issue', () =>
+        HttpResponse.json({ detail: 'token mint denied' }, { status: 500 })
+      )
+    )
+
+    renderWithQuery(<McpPage />)
+    await user.click(await screen.findByRole('button', { name: /签发令牌|Issue token/i }))
+    const dialog = await screen.findByRole('dialog')
+    const nameInput = dialog.querySelector('input') as HTMLInputElement
+    await user.clear(nameInput)
+    await user.type(nameInput, 'ops-token')
+    // Modal form uses htmlType=submit with i18n key issue ("签发" / "Issue")
+    await user.click(dialog.querySelector('button[type="submit"]') as HTMLButtonElement)
+    expect(await screen.findByText('token mint denied')).toBeTruthy()
+  })
+})
