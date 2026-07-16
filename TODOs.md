@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Trace 树与筛选更多 i18n
+
+- Run/Span 树标签、状态筛选、Duration/Started 等接入 trace 命名空间。
+- 单测按 zh-CN 文案匹配 Sessions/Runs/Detail/Run 根。
+
 ## 已完成：Trace/Dashboard 口径 i18n + Studio 取消选择 + Memory 回退日志
 
 - Trace：状态筛选截断提示与 Sessions/Runs/Detail 等硬编码文案接入 i18n。

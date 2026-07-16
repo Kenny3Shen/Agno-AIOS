@@ -24,5 +24,14 @@
   "spanId": "Span ID",
   "parentSpanId": "Parent Span ID",
   "operation": "Operation",
-  "status": "Status"
+  "status": "Status",
+  "spanLabel": "Span · {{name}}",
+  "runRootLabel": "Run root · {{name}}",
+  "unnamed": "Unnamed",
+  "allStatus": "All status",
+  "duration": "Duration",
+  "started": "Started",
+  "statusOk": "OK",
+  "statusError": "ERROR",
+  "statusUnset": "UNSET"
 }

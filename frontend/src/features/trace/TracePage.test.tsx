@@ -201,7 +201,7 @@ describe('TracePage interactions', () => {
 
     await user.click(await screen.findByRole('button', { name: /Session 1/ }))
     const runsCard = cardByTitle('运行与 Span')
-    const root = await within(runsCard).findByText('Run root · Run 1')
+    const root = await within(runsCard).findByText('Run 根 · Run 1')
     expect(within(runsCard).queryByText('Run · Run 1')).toBeNull()
     const rootRow = root.closest('.run-tree-node')
     expect(rootRow?.textContent).toContain('OK')

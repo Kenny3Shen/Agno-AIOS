@@ -65,7 +65,12 @@ function initialRange(start: string, end: string): [Dayjs, Dayjs] | null {
   return startValue.isValid() && endValue.isValid() ? [startValue, endValue] : null
 }
 
-function spanNodes(nodes: SpanTreeNode[], traceId: string, runId: string): RunSpanTreeNode[] {
+function spanNodes(
+  nodes: SpanTreeNode[],
+  traceId: string,
+  runId: string,
+  t: (key: string, options?: Record<string, unknown>) => string
+): RunSpanTreeNode[] {
   return nodes.map((node) => {
     const input = previewSpanValue(node.span.parsed?.input)
     return {
@@ -77,7 +82,7 @@ function spanNodes(nodes: SpanTreeNode[], traceId: string, runId: string): RunSp
       title: (
         <div className="span-tree-node">
           <div className="span-tree-copy">
-            <strong>Span · {node.span.name || 'Unnamed'}</strong>
+            <strong>{t('spanLabel', { name: node.span.name || t('unnamed') })}</strong>
             {input && <small>{input}</small>}
           </div>
           <span>
@@ -86,12 +91,17 @@ function spanNodes(nodes: SpanTreeNode[], traceId: string, runId: string): RunSp
           </span>
         </div>
       ),
-      children: spanNodes(node.children ?? [], traceId, runId),
+      children: spanNodes(node.children ?? [], traceId, runId, t),
     }
   })
 }
 
-function runSpanTree(runs: TraceRun[], detailsByTraceId: Map<string, SpanTreeNode[]>, formatDate: (value?: string | number | null) => string): RunSpanTreeNode[] {
+function runSpanTree(
+  runs: TraceRun[],
+  detailsByTraceId: Map<string, SpanTreeNode[]>,
+  formatDate: (value?: string | number | null) => string,
+  t: (key: string, options?: Record<string, unknown>) => string
+): RunSpanTreeNode[] {
   return runs.flatMap((run) => {
     const root = detailsByTraceId.get(run.traceId)?.[0]
     if (!root) return []
@@ -105,7 +115,9 @@ function runSpanTree(runs: TraceRun[], detailsByTraceId: Map<string, SpanTreeNod
         title: (
           <div className="run-tree-node">
             <div>
-              <strong>Run root · {root.span.name || run.name || 'Unnamed'}</strong>
+              <strong>
+                {t('runRootLabel', { name: root.span.name || run.name || t('unnamed') })}
+              </strong>
               <small>{formatDate(run.startTime)}</small>
             </div>
             <span>
@@ -114,7 +126,7 @@ function runSpanTree(runs: TraceRun[], detailsByTraceId: Map<string, SpanTreeNod
             </span>
           </div>
         ),
-        children: spanNodes(root.children ?? [], run.traceId, run.runId),
+        children: spanNodes(root.children ?? [], run.traceId, run.runId, t),
         isLeaf: false,
       },
     ]
@@ -271,7 +283,7 @@ export function TracePage() {
     () => new Map(detailTraceIds.map((traceId, index) => [traceId, detailQueries[index]?.data?.tree ?? []])),
     [detailQueries, detailTraceIds]
   )
-  const runTreeData = useMemo(() => runSpanTree(visibleRuns, treeData, formatDate), [formatDate, treeData, visibleRuns])
+  const runTreeData = useMemo(() => runSpanTree(visibleRuns, treeData, formatDate, t), [formatDate, t, treeData, visibleRuns])
   const activeDetail = detailsByTraceId.get(activeTraceId)
   const selectedSpan = activeDetail?.spans.find((span) => span.span_id === selectedSpanId) ?? null
 
@@ -408,7 +420,7 @@ export function TracePage() {
             <Select
               value={status}
               onChange={setStatus}
-              options={[{ value: '', label: 'All status' }, { value: 'OK' }, { value: 'ERROR' }, { value: 'UNSET' }]}
+              options={[{ value: '', label: t('allStatus') }, { value: 'OK', label: t('statusOk') }, { value: 'ERROR', label: t('statusError') }, { value: 'UNSET', label: t('statusUnset') }]}
             />
           </div>
           <div className="trace-filter-actions">
@@ -591,8 +603,8 @@ function SpanDetailTabs({ span }: { span: Span }) {
                   label: t('status'),
                   children: <Tag color={span.status_code === 'ERROR' ? 'error' : 'success'}>{span.status_code}</Tag>,
                 },
-                { key: 'duration', label: 'Duration', children: span.duration || '-' },
-                { key: 'started', label: 'Started', children: formatDate(span.start_time) },
+                { key: 'duration', label: t('duration'), children: span.duration || '-' },
+                { key: 'started', label: t('started'), children: formatDate(span.start_time) },
               ]}
               value={metadata}
             />

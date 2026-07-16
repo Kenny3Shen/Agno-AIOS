@@ -24,5 +24,14 @@
   "spanId": "Span ID",
   "parentSpanId": "Parent Span ID",
   "operation": "操作",
-  "status": "状态"
+  "status": "状态",
+  "spanLabel": "Span · {{name}}",
+  "runRootLabel": "Run 根 · {{name}}",
+  "unnamed": "未命名",
+  "allStatus": "全部状态",
+  "duration": "耗时",
+  "started": "开始时间",
+  "statusOk": "OK",
+  "statusError": "ERROR",
+  "statusUnset": "UNSET"
 }
