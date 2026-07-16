@@ -378,6 +378,14 @@ frontend/src/app/shell/AppFrame.tsx       # 通知 stream、重连和 Query 刷�
 
 ## 开发与验证
 
+前端关键路径浏览器 smoke：
+
+```bash
+cd frontend && bun run test:e2e
+```
+
+使用 Playwright + 页内 `/api` mock，不依赖本地后端与开发库数据；覆盖登录、侧栏分组/权限过滤、智能体清 session、深链展开与侧栏折叠。
+
 前端 Ant Design 6 使用 `classNames` / `styles` 语义化 API（例如 `Popover`/`Cascader` 的 popup class），避免 `overlayClassName` / `popupClassName` 等已弃用 props。
 
 

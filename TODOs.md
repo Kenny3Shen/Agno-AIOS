@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Playwright shell 关键路径 smoke
+
+- `frontend/playwright.config.ts` + `frontend/e2e/shell.smoke.spec.ts`（API route mock，不依赖开发库）。
+- 覆盖：登录 → `/dashboard`；Logo 为运行概览入口且侧栏无「运行概览」；权限不足空分组消失；智能体清除 `session`；深链 `/trace` 展开治理分组；侧栏折叠隐藏最近对话。
+- 脚本：`cd frontend && bun run test:e2e`。
+
 ## 已完成：导航深链自动展开分组
 
 - 深链进入 `/trace`、`/approvals`、`/cve` 等时，侧栏自动展开所属导航分组（桌面 + 移动 openKeys）。
@@ -1254,7 +1260,7 @@ P0.4 审批值班薄入口        ✅
 
 ## P1：建立关键流程 E2E
 
-仓库已安装 `@playwright/test`，但目前没有提交到仓库的 Playwright spec。手工 CLI 验证无法持续保护导航与跨页面流程。
+已落地 shell 关键路径 Playwright smoke（`frontend/e2e/shell.smoke.spec.ts`）；Knowledge 进度与 Trace 三级深链仍可继续加 spec。
 
 建议首先覆盖：
 
