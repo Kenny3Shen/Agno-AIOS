@@ -184,8 +184,8 @@ export function WorkflowPage() {
   const step = workflow.selected
   const executors = workflow.executorsQuery.data ?? []
   const models = workflow.modelsQuery.data?.models ?? []
-  const saved = workflow.workflowsQuery.data?.data ?? []
-  const workflowListMeta = workflow.workflowsQuery.data?.meta
+  const saved = workflow.workflowRecords
+  const workflowListMeta = workflow.workflowListMeta
   const versions = workflow.versionsQuery.data ?? []
 
   const currentWorkflowId = workflow.state.workflowId
@@ -337,7 +337,9 @@ export function WorkflowPage() {
           ) : null}
         </Space>
       </header>
-      {workflowListMeta && workflowListMeta.total_count > saved.length ? (
+      {workflowListMeta &&
+      workflowListMeta.total_count > saved.length &&
+      !workflow.workflowsQuery.hasNextPage ? (
         <Alert
           type="info"
           showIcon
@@ -460,7 +462,11 @@ export function WorkflowPage() {
                 const q = input.trim().toLowerCase()
                 return !q || label.includes(q) || value.includes(q)
               }}
-              loading={workflow.state.loading || workflow.workflowsQuery.isLoading}
+              loading={
+                workflow.state.loading ||
+                workflow.workflowsQuery.isLoading ||
+                workflow.workflowsQuery.isFetchingNextPage
+              }
               disabled={workflow.state.loading}
               options={saved.map((item) => ({
                 value: item.id,
@@ -471,6 +477,20 @@ export function WorkflowPage() {
                 else workflow.reset()
               }}
             />
+            {workflow.workflowsQuery.hasNextPage ? (
+              <Button
+                type="link"
+                size="small"
+                style={{ paddingInline: 0, marginTop: 2 }}
+                loading={Boolean(workflow.workflowsQuery.isFetchingNextPage)}
+                onClick={() => void workflow.workflowsQuery.fetchNextPage()}
+              >
+                {t('libraryLoadMore', {
+                  shown: saved.length,
+                  total: workflowListMeta?.total_count ?? saved.length,
+                })}
+              </Button>
+            ) : null}
             {workflow.state.workflowId ? (
               <Button
                 danger

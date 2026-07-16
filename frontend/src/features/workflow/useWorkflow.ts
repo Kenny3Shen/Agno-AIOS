@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { getModels } from '@/features/settings/api'
 import {
   createWorkflow,
@@ -99,10 +99,27 @@ export function useWorkflow() {
   const clipboardRef = useRef<WorkflowNode[]>([])
   const [historyTick, setHistoryTick] = useState(0)
 
-  const workflowsQuery = useQuery({
+  const workflowsQuery = useInfiniteQuery({
     queryKey: ['workflows', 'list'],
-    queryFn: () => listWorkflows(1, 100),
+    queryFn: ({ pageParam }) => listWorkflows(pageParam, 100),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const page = lastPage.meta.page
+      const limit = Math.max(1, lastPage.meta.limit)
+      const totalPages = lastPage.meta.total_pages
+      const totalCount = lastPage.meta.total_count
+      if (totalPages > 0) return page < totalPages ? page + 1 : undefined
+      if (totalCount > 0) {
+        const loadedApprox = (page - 1) * limit + lastPage.data.length
+        return loadedApprox < totalCount ? page + 1 : undefined
+      }
+      // Fallback when meta totals missing: full page implies another may exist.
+      if (lastPage.data.length >= limit) return page + 1
+      return undefined
+    },
   })
+  const workflowRecords = workflowsQuery.data?.pages.flatMap((page) => page.data) ?? []
+  const workflowListMeta = workflowsQuery.data?.pages.at(-1)?.meta
   const executorsQuery = useQuery({
     queryKey: ['workflows', 'executors'],
     queryFn: listExecutors,
@@ -505,7 +522,7 @@ export function useWorkflow() {
 
   const load = useCallback(
     (id: string) => {
-      const cached = (workflowsQuery.data?.data ?? []).find((item) => item.id === id)
+      const cached = workflowRecords.find((item) => item.id === id)
       if (cached) {
         applyRecord(fromRecord(cached))
         return
@@ -523,7 +540,7 @@ export function useWorkflow() {
           setState((current) => ({ ...current, loading: false }))
         })
     },
-    [applyRecord, workflowsQuery.data],
+    [applyRecord, workflowRecords],
   )
 
   const applyTemplate = (templateId: string) => {
@@ -888,6 +905,8 @@ export function useWorkflow() {
     canUndo,
     canRedo,
     workflowsQuery,
+    workflowRecords,
+    workflowListMeta,
     executorsQuery,
     modelsQuery,
     versionsQuery,

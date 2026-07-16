@@ -118,5 +118,6 @@
   "listTruncated": "工作流列表显示 {{shown}} / {{total}}（达到页上限，深链仍可按 ID 打开）",
   "loadingWorkflow": "正在打开工作流…",
   "latestOutput": "最新输出",
-  "librarySearchPlaceholder": "搜索工作流名称或 ID"
+  "librarySearchPlaceholder": "搜索工作流名称或 ID",
+  "libraryLoadMore": "加载更多（已显示 {{shown}} / {{total}}）"
 }

@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Workflow 库无限分页 + Chat「回到最新」布局
+
+- Workflow 库：`useInfiniteQuery` 按页拉列表，侧栏「加载更多」；截断 Alert 仅在无法继续翻页时显示。
+- Chat「回到最新」：水平居中，并用 ResizeObserver 按输入区高度设置 `--chat-sender-offset`，避免挡住 Sender。
+
 ## 已完成：Chat 流式粘底去抖 + Workflow 库搜索 / Run 日志滚动
 
 - Chat：流式期间 `scrollTo` 使用 `auto`（非 smooth），增大贴底阈值，减少 delta 抖动；「回到最新」仍 smooth。

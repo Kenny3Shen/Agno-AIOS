@@ -118,5 +118,6 @@
   "listTruncated": "Showing {{shown}} of {{total}} workflows (page cap; deep links still open by id)",
   "loadingWorkflow": "Opening workflow…",
   "latestOutput": "Latest output",
-  "librarySearchPlaceholder": "Search name or id"
+  "librarySearchPlaceholder": "Search name or id",
+  "libraryLoadMore": "Load more ({{shown}} / {{total}})"
 }

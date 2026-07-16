@@ -330,6 +330,8 @@ export function ChatPage() {
   const { t } = useTranslation('chat')
   const chat = useChat()
   const scrollRef = useRef<HTMLDivElement>(null)
+  const senderShellRef = useRef<HTMLDivElement>(null)
+  const workspaceRef = useRef<HTMLDivElement>(null)
   const [followLatest, setFollowLatest] = useState(true)
   const activeSession = useMemo(
     () => (chat.sessions.data ?? []).find((session) => session.session_id === chat.sessionId),
@@ -400,9 +402,23 @@ export function ChatPage() {
     setFollowLatest(true)
   }, [chat.sessionId])
 
+  useEffect(() => {
+    const shell = senderShellRef.current
+    const workspace = workspaceRef.current
+    if (!shell || !workspace) return
+    const apply = () => {
+      const height = Math.ceil(shell.getBoundingClientRect().height)
+      workspace.style.setProperty('--chat-sender-offset', `${Math.max(height, 72)}px`)
+    }
+    apply()
+    const observer = new ResizeObserver(apply)
+    observer.observe(shell)
+    return () => observer.disconnect()
+  }, [])
+
   return (
     <main className="chat-page">
-      <section className="chat-workspace">
+      <section className="chat-workspace" ref={workspaceRef}>
         <header className="chat-context-bar">
           <div>
             <SafetyCertificateOutlined />
@@ -487,7 +503,7 @@ export function ChatPage() {
             {t('jumpToLatest')}
           </Button>
         )}
-        <div className="sender-shell">
+        <div className="sender-shell" ref={senderShellRef}>
           <div className="sender-context">
             <SafetyCertificateOutlined />
             {activeSession?.title || t('workspace')}

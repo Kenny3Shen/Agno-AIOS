@@ -402,10 +402,16 @@
 }
 .latest-button {
   position: absolute;
-  right: clamp(12px, 3vw, 36px);
-  bottom: 76px;
-  z-index: 2;
-  box-shadow: 0 3px 12px color-mix(in srgb, #000 18%, transparent);
+  left: 50%;
+  right: auto;
+  bottom: calc(var(--chat-sender-offset, 88px) + 12px);
+  z-index: 3;
+  transform: translateX(-50%);
+  box-shadow: 0 4px 16px color-mix(in srgb, #000 16%, transparent);
+  pointer-events: auto;
+}
+.chat-workspace {
+  --chat-sender-offset: 88px;
 }
 .chat-error {
   display: flex;
@@ -486,7 +492,7 @@
 .sender-actions .ant-btn:not(:disabled):active,
 .sender-extension:not(:disabled):active,
 .latest-button:active {
-  transform: translateY(1px);
+  transform: translate(-50%, 1px);
 }
 .thought-content {
   animation: thought-expand var(--motion-fast) var(--motion-enter-ease) both;
@@ -499,7 +505,7 @@
     box-shadow var(--motion-fast) var(--motion-ease);
 }
 .latest-button:hover {
-  transform: translateY(-1px);
+  transform: translate(-50%, -1px);
 }
 @media (prefers-reduced-motion: reduce) {
   .status-dot.active {
@@ -1039,8 +1045,10 @@ html.dark {
   font-size: 11px;
 }
 .latest-button {
-  right: clamp(18px, 5vw, 76px);
-  bottom: 108px;
+  bottom: calc(var(--chat-sender-offset, 108px) + 10px);
+}
+.chat-workspace {
+  --chat-sender-offset: 108px;
 }
 .chat-page .agent-avatar {
   background: var(--tais-orange) !important;
