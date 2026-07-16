@@ -317,10 +317,10 @@ async def test_overview_caps_trace_pages_when_window_is_huge():
             user_id="u1",
         )
 
-    assert calls == [1, 2, 3, 4, 5]
-    assert len(traces) == 5
+    assert calls == [1, 2]
+    assert len(traces) == 2
     assert meta["truncated"] is True
-    assert meta["sample_size"] == 5
+    assert meta["sample_size"] == 2
     assert meta["window_total"] == 50_000
 
 

@@ -24,8 +24,8 @@ _RANGE_WINDOWS: dict[OverviewRange, timedelta] = {
     "7d": timedelta(days=7),
 }
 _PAGE_LIMIT = 1_000
-# Cap dashboard materialization so 7d windows cannot load unbounded history.
-_MAX_OVERVIEW_TRACE_PAGES = 5  # 5 * 1000 = 5000 traces max per overview request
+# Token/distributions sample only (latency/series/counts use SQL window aggregates).
+_MAX_OVERVIEW_TRACE_PAGES = 2  # 2 * 1000 = 2000 traces max for span token sample
 _MAX_OVERVIEW_TRACES = _PAGE_LIMIT * _MAX_OVERVIEW_TRACE_PAGES
 
 
@@ -572,7 +572,7 @@ async def _fetch_traces(
     """Load traces for dashboard metrics with a hard row/page cap.
 
     Full-window scans are unbounded on busy tenants; metrics and series use the
-    most recent capped sample. Returns ``(traces, sample_meta)`` where meta has
+    most recent capped sample (tokens / SQL fallback). Returns ``(traces, sample_meta)`` where meta has
     ``sample_size``, ``window_total``, and ``truncated``.
     """
     db = get_async_agno_postgres_db()

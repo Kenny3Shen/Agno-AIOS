@@ -244,7 +244,7 @@ async def resume_workflow_run(approval_id: str) -> str:
     if requirements:
         active = requirements[-1]
         if status == "rejected":
-            note = resolution.get("note") or resolution.get("rejection_reason")
+            note = resolution.get("note")
             if hasattr(active, "reject"):
                 active.reject(str(note) if note else None)
             else:

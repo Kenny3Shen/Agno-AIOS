@@ -659,11 +659,12 @@ async def test_security_run_request_drives_provider_block_fallback():
 
 
 def test_rejection_confirmation_note_uses_resolution_data():
+    # Legacy resolution_data.rejection_reason is ignored; only note is used.
     assert (
         security_run_runtime._rejection_confirmation_note(
             {"rejection_reason": "证据不足，暂不封禁"}
         )
-        == "Rejected by administrator: 证据不足，暂不封禁"
+        == "Rejected by administrator"
     )
     assert (
         security_run_runtime._rejection_confirmation_note({"note": "policy"})

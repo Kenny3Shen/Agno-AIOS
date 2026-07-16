@@ -136,6 +136,16 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：HITL 拒绝理由只读 note + Overview token 采样收窄
+
+- HITL 读路径只使用 `resolution_data.note`：`chat_run_events` / `security_run_runtime` / `workflow_run_runtime` 去掉 `rejection_reason` 双读
+- 写路径本就只写 `note`；upload submissions 顶层 `rejection_reason` 不变
+- Overview `_fetch_traces` 采样上限 5×1000→2×1000（token / SQL 回退）；p50/p95/series/失败数仍走窗口 SQL
+
+相关：`chat_run_events.py` / `security_run_runtime.py` / `workflow_run_runtime.py` / `overview_service.py`
+
+---
+
 ## 已完成：Knowledge 注入路径真分页
 
 - `list_documents_page_async` 在注入 `knowledge_content_rows_async` 时不再 `list_documents_async` 全量再内存 slice

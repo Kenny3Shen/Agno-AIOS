@@ -115,10 +115,8 @@ def approval_rejection_reason(run: object) -> str:
     metadata = to_mapping(run_data.get("metadata"))
     approval = to_mapping(metadata.get("approval"))
     resolution = to_mapping(approval.get("resolution_data"))
-    return _text(
-        resolution.get("note") or resolution.get("rejection_reason"),
-        limit=2000,
-    )
+    # Agno HITL store: only ``note`` (write path no longer dual-writes rejection_reason).
+    return _text(resolution.get("note"), limit=2000)
 
 
 def _rejection_reason_from_note(value: Any) -> str:

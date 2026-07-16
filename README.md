@@ -86,7 +86,7 @@ uv run update-cve
 
 ## 架构
 
-React 工作台通过共享 API client 携带 token 请求 FastAPI；后端检查权限和资源归属后，按模型、MCP、Skills、Knowledge 与 Memory 配置创建 Agno 运行时。Chat 通过 SSE 返回流式输出（含模型层 `run.retrying` 重试提示）；Markdown 启用 KaTeX（`$` / `$$` / `\\[ \\]`）渲染公式；`GET /api/chat/sessions` 使用 Agno 风格 `data`/`meta`（默认 `limit=100`、硬顶 500；DB 真分页 + 归档 SQL 过滤；前端最近对话侧栏 infinite load more）。Overview 评估快照用近期样本（`sample_size`）算 pass_rate；文档数走 paged total（注入依赖亦透传 page/limit，避免全量 list）；traces 延迟 p50/p95 与 series 优先 SQL 全窗聚合，token 仍最多采样 5000；失败数与 recent_failures 走窗口 `status=ERROR` 查询；submissions 为 data/meta。Trace、Memory 和 Knowledge 等视图通过 Query 刷新读取最新数据。
+React 工作台通过共享 API client 携带 token 请求 FastAPI；后端检查权限和资源归属后，按模型、MCP、Skills、Knowledge 与 Memory 配置创建 Agno 运行时。Chat 通过 SSE 返回流式输出（含模型层 `run.retrying` 重试提示）；Markdown 启用 KaTeX（`$` / `$$` / `\\[ \\]`）渲染公式；`GET /api/chat/sessions` 使用 Agno 风格 `data`/`meta`（默认 `limit=100`、硬顶 500；DB 真分页 + 归档 SQL 过滤；前端最近对话侧栏 infinite load more）。Overview 评估快照用近期样本（`sample_size`）算 pass_rate；文档数走 paged total（注入依赖亦透传 page/limit，避免全量 list）；traces 延迟 p50/p95 与 series 优先 SQL 全窗聚合，token 最多采样 2000；失败数与 recent_failures 走窗口 `status=ERROR` 查询；submissions 为 data/meta。Trace、Memory 和 Knowledge 等视图通过 Query 刷新读取最新数据。
 
 Memory API 仅使用 `/api/memories`（Agno 风格 `data`/`meta`，查询参数 `search_content`，主键字段 `memory_id`）。 列表行仅认 `memory_id`/`memory`/`topics` 等 Agno 字段，不再兼容 `id`/`content`/`topic` 别名。
 

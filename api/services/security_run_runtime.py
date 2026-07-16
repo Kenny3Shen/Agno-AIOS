@@ -1008,11 +1008,8 @@ def cancel_security_run(*, user_id: str, run_id: str) -> bool:
 def _approval_rejection_reason(resolution_data: object) -> str:
     if not isinstance(resolution_data, dict):
         return ""
-    return str(
-        resolution_data.get("note")
-        or resolution_data.get("rejection_reason")
-        or ""
-    ).strip()
+    # Agno convention: rejection text lives only in ``note``.
+    return str(resolution_data.get("note") or "").strip()
 
 
 def _rejection_confirmation_note(resolution_data: object) -> str:

@@ -68,6 +68,30 @@ def test_approval_rejection_reason_prefers_agno_requirement_note():
     assert approval_rejection_reason(run) == "保留取证后再处理"
 
 
+
+def test_approval_rejection_reason_ignores_legacy_resolution_rejection_reason():
+    run = {
+        "requirements": [],
+        "tools": [],
+        "metadata": {
+            "approval": {
+                "resolution_data": {
+                    "rejection_reason": "legacy only",
+                    "note": "canonical note",
+                }
+            }
+        },
+    }
+    assert approval_rejection_reason(run) == "canonical note"
+
+    legacy_only = {
+        "requirements": [],
+        "tools": [],
+        "metadata": {"approval": {"resolution_data": {"rejection_reason": "legacy only"}}},
+    }
+    assert approval_rejection_reason(legacy_only) == ""
+
+
 @pytest.mark.asyncio
 async def test_get_all_sessions_async_projects_sorted_archived_session_rows():
     # Rows arrive newest-first from SQL; service keeps order when already_sorted.
