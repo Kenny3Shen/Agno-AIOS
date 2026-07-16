@@ -63,7 +63,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
       const messages = updateMessage(state.messages, action.id, (message) => {
         switch (event.type) {
           case 'run.started':
-            return { ...message, run_id: event.runId, session_id: event.sessionId ?? message.session_id, status: 'streaming', retry: null, error: null, leanMode: event.leanMode, skillNames: event.skillNames }
+            return { ...message, run_id: event.runId, session_id: event.sessionId ?? message.session_id, status: 'streaming', retry: null, error: null, leanMode: event.leanMode, enableTools: event.enableTools, skillNames: event.skillNames }
           case 'content.delta':
             return {
               ...message,
@@ -291,6 +291,7 @@ export const normalizeMessages = (value: unknown): Message[] =>
             ? source.followups.filter((followup): followup is string => typeof followup === 'string')
             : [],
           leanMode: typeof source.lean_mode === 'boolean' ? source.lean_mode : undefined,
+          enableTools: typeof source.enable_tools === 'boolean' ? source.enable_tools : undefined,
           skillNames: Array.isArray(source.skill_names)
             ? source.skill_names.filter((item): item is string => typeof item === 'string')
             : source.skill_names === null

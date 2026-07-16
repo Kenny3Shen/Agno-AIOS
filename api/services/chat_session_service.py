@@ -344,21 +344,24 @@ def _project_session_rows(
 _MISSING = object()
 
 
-def _history_runtime_tool_surface(run: dict[str, object]) -> tuple[bool | None, list[str] | None | object]:
-    """Extract lean_mode / skill_names from T.A.I.S run metadata when present.
+def _history_runtime_tool_surface(
+    run: dict[str, object],
+) -> tuple[bool | None, bool | None, list[str] | None | object]:
+    """Extract enable_tools / lean_mode / skill_names from T.A.I.S run metadata.
 
     Returns:
-        (lean_mode, skill_names) where skill_names uses a sentinel object for missing:
-        - missing key → ``_MISSING``
-        - explicit null → all enabled skills (``None``)
-        - list → filter / empty
+        (enable_tools, lean_mode, skill_names)
+        skill_names uses ``_MISSING`` when runtime metadata is absent.
+        lean_mode is **auto-intent lite only** (tools on + empty skill list), not tools-off.
     """
     metadata = coerce_json_value(run.get("metadata") or {})
     if not isinstance(metadata, dict):
-        return None, _MISSING
+        return None, None, _MISSING
     context = metadata.get("tais_runtime")
     if not isinstance(context, dict):
-        return None, _MISSING
+        return None, None, _MISSING
+
+    enable_tools = bool(context.get("enable_tools", True))
     raw_skills = context.get("skill_names", _MISSING)
     skill_names: list[str] | None | object
     if raw_skills is _MISSING:
@@ -370,17 +373,16 @@ def _history_runtime_tool_surface(run: dict[str, object]) -> tuple[bool | None, 
     else:
         skill_names = _MISSING
 
-    enable_tools = bool(context.get("enable_tools", True))
-    lean_mode: bool | None
-    if skill_names is _MISSING:
+    # Auto-lite only when tools are enabled and intent attached no skills.
+    if not enable_tools:
+        lean_mode = False
+    elif skill_names is _MISSING:
         lean_mode = None
-    elif not enable_tools:
-        lean_mode = True
     elif isinstance(skill_names, list) and len(skill_names) == 0:
         lean_mode = True
     else:
         lean_mode = False
-    return lean_mode, skill_names
+    return enable_tools, lean_mode, skill_names
 
 
 
@@ -567,7 +569,11 @@ async def get_session_messages_async(
             approval_id = _history_approval_id(raw_tools)
             if approval_id:
                 message["approval_id"] = approval_id
-            lean_mode, skill_names = _history_runtime_tool_surface(cast(dict[str, object], run))
+            enable_tools, lean_mode, skill_names = _history_runtime_tool_surface(
+                cast(dict[str, object], run)
+            )
+            if enable_tools is not None:
+                message["enable_tools"] = enable_tools
             if lean_mode is not None:
                 message["lean_mode"] = lean_mode
             if skill_names is not _MISSING:

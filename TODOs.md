@@ -1,5 +1,13 @@
 # 下一步工作
 
+## 已完成：Chat tools-off 与自动轻量语义分离
+
+- `is_lean_tool_surface` 仅表示「工具开启 + 意图未挂 Skill」的自动轻量；`enable_tools=false` 不再标 lean。
+- `from_chat_args(enable_tools=False)` 固定 `skill_names=[]`，跳过意图推断。
+- 历史投影与消息级 chip：`enable_tools` / `lean_mode` / `skill_names` 三分；消息条与顶栏区分「轻量（无工具）」与「本轮自动轻量」。
+- Skills 列表 `scripts` Tag 走 i18n。
+
+
 ## 已完成：Chat 历史重载保留 lean_mode / skill_names
 
 - `get_session_messages_async` 从 run `metadata.tais_runtime` 投影 `lean_mode` 与 `skill_names`（null=全量、[]=轻量、列表=部分）。

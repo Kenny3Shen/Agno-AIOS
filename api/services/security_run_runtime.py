@@ -283,8 +283,14 @@ def is_lean_tool_surface(
     *,
     enable_tools: bool,
 ) -> bool:
-    """True when this turn runs without MCP tools and without Local Skills."""
-    return not should_connect_mcp(skill_names, enable_tools=enable_tools)
+    """True for **auto-intent lite** only: tools switch on, intent attached no skills.
+
+    User tools-off (``enable_tools=False``) is a separate UI mode and must not set
+    ``lean_mode`` — clients use ``enable_tools`` for that badge.
+    """
+    if not enable_tools:
+        return False
+    return skill_names is not None and len(skill_names) == 0
 
 
 def mcp_prefixes_for_skills(skill_names: list[str] | None) -> set[str] | None:
@@ -374,9 +380,13 @@ class SecurityRunRequest:
         *,
         infer_skills: bool = True,
     ) -> "SecurityRunRequest":
-        resolved_skills = skill_names
-        if skill_names is None and infer_skills:
-            resolved_skills = infer_chat_skill_names(message)
+        if not enable_tools:
+            # Tools-off is an explicit lite path; do not attach or invent skill filters.
+            resolved_skills: list[str] | None = []
+        else:
+            resolved_skills = skill_names
+            if skill_names is None and infer_skills:
+                resolved_skills = infer_chat_skill_names(message)
         return cls(
             message=message,
             session_id=session_id,

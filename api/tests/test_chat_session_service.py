@@ -486,6 +486,19 @@ async def test_session_history_projects_lean_mode_and_skill_names():
                         }
                     },
                 },
+                {
+                    "run_id": "run-tools-off",
+                    "input": {"input_content": "hello"},
+                    "content": "hi",
+                    "status": "COMPLETED",
+                    "metadata": {
+                        "tais_runtime": {
+                            "version": 1,
+                            "enable_tools": False,
+                            "skill_names": [],
+                        }
+                    },
+                },
             ],
         },
     )
@@ -507,9 +520,15 @@ async def test_session_history_projects_lean_mode_and_skill_names():
         messages = await chat_session_service.get_session_messages_async("session-1")
 
     assistants = {message["run_id"]: message for message in messages if message["role"] == "assistant"}
+    assert assistants["run-lean"]["enable_tools"] is True
     assert assistants["run-lean"]["lean_mode"] is True
     assert assistants["run-lean"]["skill_names"] == []
+    assert assistants["run-skills"]["enable_tools"] is True
     assert assistants["run-skills"]["lean_mode"] is False
     assert assistants["run-skills"]["skill_names"] == ["cve-intel-skill"]
+    assert assistants["run-all"]["enable_tools"] is True
     assert assistants["run-all"]["lean_mode"] is False
     assert assistants["run-all"]["skill_names"] is None
+    assert assistants["run-tools-off"]["enable_tools"] is False
+    assert assistants["run-tools-off"]["lean_mode"] is False
+    assert assistants["run-tools-off"]["skill_names"] == []

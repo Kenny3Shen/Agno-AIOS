@@ -345,17 +345,21 @@ function MessageBody({ message, retry, sessionId }: { message: Message; retry: (
             failed: t('status.failed'),
           } as const)[message.status ?? 'completed']}
         </span>
-        {message.leanMode ? (
+        {message.enableTools === false ? (
+          <Tooltip title={t('toolsSkillsHelp')}>
+            <span className="run-metric run-metric--lean">{t('toolsOffBadge')}</span>
+          </Tooltip>
+        ) : message.leanMode ? (
           <Tooltip title={t('autoLeanHelp')}>
             <span className="run-metric run-metric--lean">{t('autoLeanBadge')}</span>
           </Tooltip>
         ) : null}
-        {!message.leanMode && message.skillNames === null ? (
+        {message.enableTools !== false && !message.leanMode && message.skillNames === null ? (
           <Tooltip title={t('skillsAllEnabled')}>
             <span className="run-metric run-metric--skills">{t('skillsAllEnabledBadge')}</span>
           </Tooltip>
         ) : null}
-        {Array.isArray(message.skillNames) && message.skillNames.length > 0 ? (
+        {message.enableTools !== false && Array.isArray(message.skillNames) && message.skillNames.length > 0 ? (
           <Tooltip title={t('skillsAttached', { names: message.skillNames.join(', ') })}>
             <span className="run-metric run-metric--skills">{t('skillsAttachedBadge', { count: message.skillNames.length })}</span>
           </Tooltip>
@@ -513,14 +517,26 @@ export function ChatPage() {
           <div className="context-status">
             <span className={activeRun ? 'status-dot active' : pausedRun ? 'status-dot paused' : 'status-dot'} />
             {activeRun ? t('agentRunning') : pausedRun ? t('awaitingApproval') : chat.sessionId ? t('sessionReady') : t('newAnalysis')}
-            {!chat.state.enableTools ? (
-              <Tag className="context-mode-tag" color="default">
-                {t('toolsOffBadge')}
-              </Tag>
-            ) : (() => {
+            {(() => {
+              if (!chat.state.enableTools) {
+                return (
+                  <Tag className="context-mode-tag" color="default">
+                    {t('toolsOffBadge')}
+                  </Tag>
+                )
+              }
               const latestAssistant = [...chat.state.messages]
                 .reverse()
                 .find((item) => item.role === 'assistant')
+              if (latestAssistant?.enableTools === false) {
+                return (
+                  <Tooltip title={t('toolsSkillsHelp')}>
+                    <Tag className="context-mode-tag" color="default">
+                      {t('toolsOffBadge')}
+                    </Tag>
+                  </Tooltip>
+                )
+              }
               if (latestAssistant?.leanMode) {
                 return (
                   <Tooltip title={t('autoLeanHelp')}>
@@ -531,7 +547,7 @@ export function ChatPage() {
                 )
               }
               const names = latestAssistant?.skillNames
-              if (names === null && !latestAssistant?.leanMode) {
+              if (names === null) {
                 return (
                   <Tooltip title={t('skillsAllEnabled')}>
                     <Tag className="context-mode-tag" color="blue">

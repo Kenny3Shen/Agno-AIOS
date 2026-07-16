@@ -34,5 +34,6 @@
   "colEnabled": "Enabled",
   "colActions": "Actions",
   "contentTab": "SKILL.md",
-  "metadataTab": "Metadata"
+  "metadataTab": "Metadata",
+  "scriptsTag": "scripts"
 }

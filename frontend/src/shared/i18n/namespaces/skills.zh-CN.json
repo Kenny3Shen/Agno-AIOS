@@ -34,5 +34,6 @@
   "colEnabled": "启用",
   "colActions": "操作",
   "contentTab": "SKILL.md",
-  "metadataTab": "元数据"
+  "metadataTab": "元数据",
+  "scriptsTag": "脚本"
 }

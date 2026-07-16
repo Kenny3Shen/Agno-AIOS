@@ -52,6 +52,8 @@ export interface Message {
   error?: { code?: string; message: string; retryable?: boolean } | null
   retry?: { attempt: number; maxAttempts: number; delaySeconds?: number; message?: string } | null
   leanMode?: boolean
+  /** Explicit tools switch for this run; false = user tools-off, distinct from auto-lite. */
+  enableTools?: boolean
   skillNames?: string[] | null
   raw_run?: JsonRecord | null
   tools?: unknown[] | null

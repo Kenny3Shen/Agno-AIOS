@@ -182,6 +182,7 @@ describe('chat behavior', () => {
     expect(next.messages[0]).toMatchObject({
       run_id: 'run-lean',
       leanMode: true,
+      enableTools: true,
       skillNames: [],
       status: 'streaming',
     })
@@ -229,7 +230,7 @@ describe('chat behavior', () => {
     })
   })
 
-  it('normalizeMessages projects lean_mode and skill_names from history', () => {
+  it('normalizeMessages projects lean_mode, enable_tools and skill_names from history', () => {
     const messages = normalizeMessages([
       {
         id: 'run-1',
@@ -237,6 +238,7 @@ describe('chat behavior', () => {
         content: 'pong',
         status: 'completed',
         lean_mode: true,
+        enable_tools: true,
         skill_names: [],
       },
       {
@@ -245,6 +247,7 @@ describe('chat behavior', () => {
         content: 'ok',
         status: 'completed',
         lean_mode: false,
+        enable_tools: true,
         skill_names: ['cve-intel-skill'],
       },
       {
@@ -253,12 +256,23 @@ describe('chat behavior', () => {
         content: 'full',
         status: 'completed',
         lean_mode: false,
+        enable_tools: true,
         skill_names: null,
       },
+      {
+        id: 'run-4',
+        role: 'assistant',
+        content: 'hi',
+        status: 'completed',
+        lean_mode: false,
+        enable_tools: false,
+        skill_names: [],
+      },
     ])
-    expect(messages[0]).toMatchObject({ leanMode: true, skillNames: [] })
-    expect(messages[1]).toMatchObject({ leanMode: false, skillNames: ['cve-intel-skill'] })
-    expect(messages[2]).toMatchObject({ leanMode: false, skillNames: null })
+    expect(messages[0]).toMatchObject({ leanMode: true, enableTools: true, skillNames: [] })
+    expect(messages[1]).toMatchObject({ leanMode: false, enableTools: true, skillNames: ['cve-intel-skill'] })
+    expect(messages[2]).toMatchObject({ leanMode: false, enableTools: true, skillNames: null })
+    expect(messages[3]).toMatchObject({ leanMode: false, enableTools: false, skillNames: [] })
   })
 
 })

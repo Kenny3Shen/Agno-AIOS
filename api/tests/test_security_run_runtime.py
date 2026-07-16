@@ -749,7 +749,8 @@ def test_security_run_request_round_trips_versioned_run_metadata():
     assert restored.store_raw_tool_io is True
     assert restored.enable_tools is False
     assert restored.search_knowledge is False
-    assert restored.skill_names == original.skill_names
+    assert original.skill_names == []
+    assert restored.skill_names == []
 
     with pytest.raises(ValueError, match="version is unsupported"):
         security_run_runtime.SecurityRunRequest.from_run_metadata(
@@ -1257,6 +1258,14 @@ def test_from_chat_args_infers_and_preserves_skill_names():
     )
     assert no_infer.skill_names is None
 
+    tools_off = security_run_runtime.SecurityRunRequest.from_chat_args(
+        "CVE-2024-9999 分析",
+        enable_tools=False,
+    )
+    assert tools_off.skill_names == []
+    assert tools_off.runtime_metadata()["skill_names"] == []
+    assert tools_off.runtime_metadata()["enable_tools"] is False
+
 
 @pytest.mark.asyncio
 async def test_build_security_agent_filters_skills_by_inference():
@@ -1470,7 +1479,9 @@ async def test_trivial_turn_skips_mcp_connect_even_when_tools_enabled():
 
 def test_is_lean_tool_surface():
     assert security_run_runtime.is_lean_tool_surface([], enable_tools=True) is True
-    assert security_run_runtime.is_lean_tool_surface(None, enable_tools=False) is True
+    # tools-off is not auto-lite; clients badge via enable_tools
+    assert security_run_runtime.is_lean_tool_surface(None, enable_tools=False) is False
+    assert security_run_runtime.is_lean_tool_surface([], enable_tools=False) is False
     assert security_run_runtime.is_lean_tool_surface(None, enable_tools=True) is False
     assert security_run_runtime.is_lean_tool_surface(
         ["cve-intel-skill"], enable_tools=True

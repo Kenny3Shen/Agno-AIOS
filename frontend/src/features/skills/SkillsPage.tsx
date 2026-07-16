@@ -96,7 +96,7 @@ export function SkillsPage() {
               render: (value, row) => (
                 <Space>
                   <strong>{value}</strong>
-                  {row.has_scripts && <Tag>scripts</Tag>}
+                  {row.has_scripts && <Tag>{t('scriptsTag')}</Tag>}
                 </Space>
               ),
             },
