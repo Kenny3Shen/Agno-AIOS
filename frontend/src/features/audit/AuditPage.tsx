@@ -171,19 +171,19 @@ export function AuditPage() {
           </Space>
         </Form>
       </Card>
-      <Card className="workbench-card audit-table-card" title="Audit events" extra={<Tag>{logsQuery.data?.total ?? 0}</Tag>}>
+      <Card className="workbench-card audit-table-card" title="Audit events" extra={<Tag>{logsQuery.data?.meta.total_count ?? 0}</Tag>}>
         <Table<AuditLog>
           rowKey={(row) => String(row.id)}
           size="small"
           loading={logsQuery.isLoading}
-          dataSource={logsQuery.data?.items ?? []}
+          dataSource={logsQuery.data?.data ?? []}
           columns={columns}
           scroll={{ x: 1200 }}
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={false} /> }}
           pagination={{
-            current: query.page ?? logsQuery.data?.page ?? 1,
-            pageSize: query.limit ?? logsQuery.data?.limit ?? DEFAULT_LIMIT,
-            total: logsQuery.data?.total ?? 0,
+            current: query.page ?? logsQuery.data?.meta.page ?? 1,
+            pageSize: query.limit ?? logsQuery.data?.meta.limit ?? DEFAULT_LIMIT,
+            total: logsQuery.data?.meta.total_count ?? 0,
             showSizeChanger: true,
             showTotal: (total) => `${total} events`,
           }}

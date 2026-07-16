@@ -30,10 +30,14 @@ export interface AuditLogQuery {
 }
 
 export interface AuditLogResponse {
-  items: AuditLog[]
-  total: number
-  page: number
-  limit: number
+  data: AuditLog[]
+  meta: {
+    page: number
+    limit: number
+    total_pages: number
+    total_count: number
+    search_time_ms?: number
+  }
 }
 
 export interface AuditFilterValues {

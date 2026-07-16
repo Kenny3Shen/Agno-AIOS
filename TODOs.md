@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Audit 列表 data/meta 对齐
+
+- `GET /api/audit/logs` 从 `{items,total,page,limit}` 改为 Agno 风格 `{data, meta}`（`pagination_meta`）。
+- 前端 `AuditLogResponse` / 页面 / 单测同步；无兼容旧 envelope。
+
 ## 已完成：antd Alert title + tracing 解析失败可观测
 
 - Dashboard / Trace 残留 `Alert.message` → antd 6 `title`（全站 `Alert` 无 `message` prop）。

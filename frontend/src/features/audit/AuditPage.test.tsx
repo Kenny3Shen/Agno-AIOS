@@ -23,10 +23,14 @@ const auditEvent = (page: number): AuditLog => ({
 })
 
 const response = (page: number, limit: number): AuditLogResponse => ({
-  items: [auditEvent(page)],
-  total: 40,
-  page,
-  limit,
+  data: [auditEvent(page)],
+  meta: {
+    page,
+    limit,
+    total_pages: Math.ceil(40 / limit),
+    total_count: 40,
+    search_time_ms: 0,
+  },
 })
 
 describe('audit page workflow', () => {

@@ -138,10 +138,10 @@ async def test_admin_list_audit_logs_delegates_to_service():
             created_to=created_to,
             user=admin,
         )
-    assert result["items"] == rows
-    assert result["total"] == 1
-    assert result["page"] == 3
-    assert result["limit"] == 10
+    assert result["data"] == rows
+    assert result["meta"]["total_count"] == 1
+    assert result["meta"]["page"] == 3
+    assert result["meta"]["limit"] == 10
     mocked.assert_awaited_once_with(
         page=3,
         limit=10,

@@ -5,7 +5,7 @@ import { AUTH_TOKEN_STORAGE_KEY } from '@/shared/auth/storage'
 import { getAuditLogs } from './api'
 import type { AuditLogResponse } from './types'
 
-const emptyResponse: AuditLogResponse = { items: [], total: 0, page: 2, limit: 25 }
+const emptyResponse: AuditLogResponse = { data: [], meta: { page: 2, limit: 25, total_pages: 0, total_count: 0, search_time_ms: 0 } }
 
 describe('audit log API', () => {
   it('sends authenticated audit filters as query parameters', async () => {
@@ -43,6 +43,6 @@ describe('audit log API', () => {
       created_to: '2026-01-02T00:00:00.000Z',
     })
 
-    expect(result.total).toBe(0)
+    expect(result.meta.total_count).toBe(0)
   })
 })
