@@ -339,30 +339,46 @@ export type ResolveApprovalOptions = {
   resolutionData?: Record<string, unknown>
 }
 
-export const resolveApproval = (
+const requireApproval = (row: unknown, context: string): Approval => {
+  const normalized = normalizeApproval(row)
+  if (!normalized) {
+    throw new Error(`${context}: invalid approval payload`)
+  }
+  return normalized
+}
+
+export const resolveApproval = async (
   id: string,
   status: 'approved' | 'rejected',
-  options: ResolveApprovalOptions = {}
-) =>
-  requestJson<Approval>(
+  options: ResolveApprovalOptions = {},
+): Promise<Approval> => {
+  const row = await requestJson<unknown>(
     `/approvals/${encodeURIComponent(id)}/resolve`,
     jsonInit('POST', {
       status,
       ...(options.rejectionReason ? { rejection_reason: options.rejectionReason } : {}),
       ...(options.resolutionData ? { resolution_data: options.resolutionData } : {}),
-    })
-  ).then((row) => normalizeApproval(row) ?? (row as Approval))
-
-export const resumeApproval = (id: string) =>
-  requestJson<Approval>(`/approvals/${encodeURIComponent(id)}/resume`, jsonInit('POST')).then(
-    (row) => normalizeApproval(row) ?? (row as Approval)
+    }),
   )
+  return requireApproval(row, 'resolveApproval')
+}
 
-export const resolveSubmissionApproval = (id: string, status: 'approved' | 'rejected', rejectionReason?: string) =>
-  requestJson<Approval>(
+export const resumeApproval = async (id: string): Promise<Approval> => {
+  const row = await requestJson<unknown>(`/approvals/${encodeURIComponent(id)}/resume`, jsonInit('POST'))
+  return requireApproval(row, 'resumeApproval')
+}
+
+export const resolveSubmissionApproval = async (
+  id: string,
+  status: 'approved' | 'rejected',
+  rejectionReason?: string,
+): Promise<Approval> => {
+  const row = await requestJson<unknown>(
     `/approvals/submissions/${encodeURIComponent(id)}/resolve`,
-    jsonInit('POST', { status, ...(rejectionReason ? { rejection_reason: rejectionReason } : {}) })
-  ).then((row) => normalizeApproval(row) ?? (row as Approval))
+    jsonInit('POST', { status, ...(rejectionReason ? { rejection_reason: rejectionReason } : {}) }),
+  )
+  return requireApproval(row, 'resolveSubmissionApproval')
+}
 
 export const getSkillSubmissionPreview = (id: string) =>
   requestJson<SkillSubmissionPreview>(`/approvals/submissions/${encodeURIComponent(id)}/skill-preview`)

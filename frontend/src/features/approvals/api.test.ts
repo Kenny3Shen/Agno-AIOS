@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
-import { getApprovals } from './api'
+import { getApprovals, resolveApproval, resolveSubmissionApproval, resumeApproval } from './api'
 
 const submission = (id: string) => ({
   id,
@@ -76,5 +76,50 @@ describe('getApprovals', () => {
     const result = await getApprovals({ status: 'pending', kind: 'all', page: 1, limit: 10 })
     expect(result.data.map((item) => item.id)).toEqual(['u0', 'u1', 'h0', 'h1'])
     expect(result.meta.total_count).toBe(4)
+  })
+})
+
+describe('resolve/resume normalization', () => {
+  it('returns normalized approval without casting invalid payloads', async () => {
+    server.use(
+      http.post('/api/approvals/appr-1/resolve', () =>
+        HttpResponse.json({
+          id: 'appr-1',
+          status: 'approved',
+          source_type: 'workflow',
+          created_at: 1,
+        }),
+      ),
+    )
+    const row = await resolveApproval('appr-1', 'approved')
+    expect(row).toMatchObject({ id: 'appr-1', status: 'approved', source_type: 'workflow' })
+  })
+
+  it('throws when resolve payload is missing id', async () => {
+    server.use(http.post('/api/approvals/appr-1/resolve', () => HttpResponse.json({ status: 'approved' })))
+    await expect(resolveApproval('appr-1', 'approved')).rejects.toThrow(/invalid approval payload/)
+  })
+
+  it('normalizes resume and submission resolve responses', async () => {
+    server.use(
+      http.post('/api/approvals/appr-2/resume', () =>
+        HttpResponse.json({ id: 'appr-2', status: 'approved', source_type: 'agent', created_at: 1 }),
+      ),
+      http.post('/api/approvals/submissions/sub-1/resolve', () =>
+        HttpResponse.json({
+          id: 'sub-1',
+          status: 'rejected',
+          resource_type: 'skill',
+          rejection_reason: 'bad zip',
+          created_at: 1,
+        }),
+      ),
+    )
+    await expect(resumeApproval('appr-2')).resolves.toMatchObject({ id: 'appr-2', status: 'approved' })
+    await expect(resolveSubmissionApproval('sub-1', 'rejected', 'bad zip')).resolves.toMatchObject({
+      id: 'sub-1',
+      status: 'rejected',
+      rejection_reason: 'bad zip',
+    })
   })
 })

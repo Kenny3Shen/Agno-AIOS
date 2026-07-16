@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Approvals resolve 严格归一化 + Dashboard 失败深链 e2e
+
+- `resolveApproval` / `resumeApproval` / `resolveSubmissionApproval`：去掉 `normalize ?? (row as Approval)` 强制断言；无效载荷直接抛错。
+- 单测覆盖成功归一化、缺 id 抛错、resume / submission resolve。
+- Playwright `dashboard.smoke.spec.ts`：运行概览「最近失败」点击 → Trace 规范 query（`session_id`/`run_id`/`selected_session`/`trace`）并打开对应 Run/Span 详情。
+
 ## 已完成：静默异常可观测 + 死 CSS 清理
 
 - `workflow_service._row_payload`：`next_cron_at` 计算失败改 `logger.debug(..., exc_info=True)`。
