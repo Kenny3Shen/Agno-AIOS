@@ -296,6 +296,8 @@ export function ApprovalsPage() {
       message.success(t('resolved', { status: row.status }))
       await refresh()
     },
+    onError: (error) =>
+      message.error(error instanceof Error ? error.message : t('resolveFailed')),
   })
   const retryResume = useMutation({
     mutationFn: (approval: Approval) => resumeApproval(approval.id),

@@ -44,6 +44,8 @@ export function MemoryPage() {
       if (selected?.id === row.id) setSelected(null)
       await refresh()
     },
+    onError: (error) =>
+      message.error(error instanceof Error ? error.message : t('deleteFailed')),
   })
 
   const memoryInput = parseMemoryInput(selected?.input)

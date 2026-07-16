@@ -5,5 +5,7 @@
   "searchPlaceholder": "CVE ID, product, or keyword; leave empty for latest",
   "allSources": "All sources",
   "total": "{{total}} results",
-  "updateDb": "Update database"
+  "updateDb": "Update database",
+  "searchFailed": "CVE search failed. Please try again.",
+  "updateFailed": "Unable to update the CVE database. Please try again."
 }

@@ -20,6 +20,7 @@
   "retryResume": "重试恢复",
   "resumeRetryStarted": "已开始重试恢复运行。",
   "resumeRetryFailed": "无法恢复运行，请稍后重试。",
+  "resolveFailed": "审批处理失败，请稍后重试。",
   "resumeFailed": "运行恢复失败",
   "resumeFailedDescription": "该操作已决议，但原对话尚未恢复。",
   "approveUserInput": "填写用户输入",

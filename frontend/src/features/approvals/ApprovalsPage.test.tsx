@@ -225,4 +225,48 @@ describe('ApprovalsPage', () => {
     await user.click(screen.getByRole('button', { name: '重试恢复' }))
     expect(await screen.findByText('已开始重试恢复运行。')).toBeTruthy()
   })
+  it('surfaces resolve failures to the operator', async () => {
+    server.use(
+      http.get('/api/auth/users/me', () =>
+        HttpResponse.json({ id: 'admin-1', email: 'admin@example.com', role: 'admin', scopes: ['admin'] })
+      ),
+      http.get('/api/approvals', () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: 'appr-fail-1',
+              status: 'pending',
+              source_type: 'workflow',
+              source_name: 'IR',
+              tool_name: 'workflow.step:confirm',
+              pause_type: 'confirmation',
+              workflow_id: 'wf-1',
+              run_id: 'run-1',
+              session_id: 'sess-1',
+              tool_args: { message: 'Confirm failure path?' },
+              created_at: '2026-07-16T12:00:00Z',
+            },
+          ],
+          meta: { page: 1, limit: 20, total_pages: 1, total_count: 1, search_time_ms: 0 },
+        })
+      ),
+      http.get('/api/approvals/submissions', () =>
+        HttpResponse.json({
+          data: [],
+          meta: { page: 1, limit: 20, total_pages: 0, total_count: 0, search_time_ms: 0 },
+        })
+      ),
+      http.post('/api/approvals/appr-fail-1/resolve', () =>
+        HttpResponse.json({ detail: 'downstream continue failed' }, { status: 500 })
+      )
+    )
+
+    renderWithQuery(<ApprovalsPage />)
+    await user.click(await screen.findByText('workflow.step:confirm'))
+    await user.click(screen.getByRole('button', { name: /批\s*准|Approve/ }))
+    expect(
+      await screen.findByText(/审批处理失败|Unable to resolve the approval|downstream continue failed/i)
+    ).toBeTruthy()
+  })
+
 })

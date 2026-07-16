@@ -5,5 +5,7 @@
   "searchPlaceholder": "CVE ID、产品或关键词；留空查看最近入库",
   "allSources": "全部来源",
   "total": "共 {{total}} 条",
-  "updateDb": "更新数据库"
+  "updateDb": "更新数据库",
+  "searchFailed": "CVE 搜索失败，请稍后重试。",
+  "updateFailed": "CVE 库更新失败，请稍后重试。"
 }

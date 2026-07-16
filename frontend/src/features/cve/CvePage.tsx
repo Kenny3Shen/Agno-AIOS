@@ -18,8 +18,17 @@ export function CvePage() {
   const [query, setQuery] = useState('')
   const [source, setSource] = useState<string>()
   const [pagination, setPagination] = useState({ page: 1, size: 20 })
-  const search = useMutation({ mutationFn: searchCves })
-  const update = useMutation({ mutationFn: updateCves, onSuccess: () => message.success(t('updated')) })
+  const search = useMutation({
+    mutationFn: searchCves,
+    onError: (error) =>
+      message.error(error instanceof Error ? error.message : t('searchFailed')),
+  })
+  const update = useMutation({
+    mutationFn: updateCves,
+    onSuccess: () => message.success(t('updated')),
+    onError: (error) =>
+      message.error(error instanceof Error ? error.message : t('updateFailed')),
+  })
   const runSearch = (page = 1, size = pagination.size) => {
     setPagination({ page, size })
     search.mutate({ query, source, page, size })

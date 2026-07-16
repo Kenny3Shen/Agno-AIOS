@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：关键 mutation 失败显性化
+
+- Approvals `resolve`：`onError` toast（`resolveFailed`），与 resume 失败路径对称。
+- Memory 删除、CVE 搜索/库更新：失败时 `message.error`，不再静默。
+- 单测：Approvals resolve 5xx 时展示错误文案。
+
 ## 已完成：Workflow pause → Approvals resolve 闭环 e2e
 
 - `frontend/e2e/workflow.smoke.spec.ts`：Studio Run SSE 收到 `workflow.paused`（含 `approval_id`）→ 「打开审批」深链 → Drawer 批准 → `POST /api/approvals/{id}/resolve`。
