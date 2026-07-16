@@ -702,6 +702,9 @@ const toDefinitionNode = (node: WorkflowNode): WorkflowDefinitionNode => {
     instructions: node.instructions || '',
     ...basePos,
   }
+  if (node.skills?.length) {
+    step.skills = [...node.skills]
+  }
   if (node.requiresConfirmation) {
     step.requires_confirmation = true
     if (node.confirmationMessage) step.confirmation_message = node.confirmationMessage
@@ -790,6 +793,7 @@ const fromDefinitionNode = (node: WorkflowDefinitionNode): WorkflowNode => {
     targetId: node.executor?.ref || 'security-operations',
     name: node.name || '',
     instructions: node.instructions || '',
+    skills: Array.isArray(node.skills) ? node.skills.map(String).filter(Boolean) : [],
     requiresConfirmation: Boolean(node.requires_confirmation),
     confirmationMessage: node.confirmation_message || '',
     requiresUserInput: Boolean(node.requires_user_input),

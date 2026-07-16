@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any, AsyncIterator
 from uuid import uuid4
 
@@ -12,7 +13,12 @@ from loguru import logger
 
 from api.services.chat_run_events import event_value
 from api.services.postgres_store import get_async_agno_postgres_db
-from api.services.workflow_compiler import compile_workflow
+from api.services.workflow_compiler import (
+    collect_workflow_skill_names,
+    compile_workflow,
+)
+from api.services.skill_service import resolve_enabled_skill_dirs
+from api.services.audit_service import record_audit_event_async
 from api.persistence import workflows as workflow_store
 
 
@@ -312,11 +318,41 @@ async def stream_workflow_run(
     """Compile definition and stream workflow lifecycle events."""
     active_run_id = (run_id or "").strip() or str(uuid4())
     active_session_id = (session_id or "").strip() or str(uuid4())
+    bound_skill_names = collect_workflow_skill_names(definition)
+    loaded_skill_dirs = resolve_enabled_skill_dirs(bound_skill_names)
+    loaded_skill_names = [
+        path.name for path in loaded_skill_dirs
+    ]
     workflow = await compile_workflow(
         definition,
         workflow_id=workflow_id,
         model_id=model_id,
     )
+
+    if bound_skill_names:
+        try:
+            await record_audit_event_async(
+                actor=SimpleNamespace(
+                    id=user_id or "system",
+                    email="",
+                    role="user",
+                    is_superuser=False,
+                ),
+                action="skill.load",
+                resource_type="workflow",
+                resource_id=workflow_id,
+                status="success",
+                metadata={
+                    "workflow_id": workflow_id,
+                    "run_id": active_run_id,
+                    "session_id": active_session_id,
+                    "skill_names": bound_skill_names,
+                    "loaded_skill_names": loaded_skill_names,
+                    "source": "workflow_run",
+                },
+            )
+        except Exception:
+            logger.debug("skill.load audit failed for workflow {}", workflow_id)
 
     yield WorkflowRunEventOut(
         "workflow.started",
@@ -325,6 +361,8 @@ async def stream_workflow_run(
             "run_id": active_run_id,
             "session_id": active_session_id,
             "name": getattr(workflow, "name", None) or definition.get("name") or "",
+            "skills": bound_skill_names,
+            "loaded_skills": loaded_skill_names,
         },
     )
 

@@ -330,3 +330,54 @@ def test_validate_workflow_ref():
         }
     )
     assert normalized["steps"][0]["workflow_id"] == "wf-other"
+
+
+def test_step_skills_normalized_unique():
+    normalized = validate_and_normalize_definition(
+        {
+            "name": "with-skills",
+            "steps": [
+                {
+                    "id": "s1",
+                    "type": "step",
+                    "executor": {"ref": "security-operations"},
+                    "skills": [" playbook-skill ", "cve-intel-skill", "playbook-skill", ""],
+                }
+            ],
+        }
+    )
+    assert normalized["steps"][0]["skills"] == ["playbook-skill", "cve-intel-skill"]
+
+
+def test_step_without_skills_omits_field():
+    normalized = validate_and_normalize_definition(
+        {
+            "steps": [
+                {
+                    "id": "s1",
+                    "type": "step",
+                    "executor": {"ref": "safe-fallback"},
+                }
+            ],
+        }
+    )
+    assert "skills" not in normalized["steps"][0]
+
+
+def test_collect_workflow_skill_names_nested():
+    from api.services.workflow_compiler import collect_workflow_skill_names
+
+    names = collect_workflow_skill_names(
+        {
+            "steps": [
+                {"type": "step", "skills": ["a"]},
+                {
+                    "type": "condition",
+                    "then": [{"type": "step", "skills": ["b", "a"]}],
+                    "else": [{"type": "step", "skills": ["c"]}],
+                },
+            ]
+        }
+    )
+    assert names == ["a", "b", "c"]
+

@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any, Awaitable, Callable, cast
 
 from agno.agent import Agent
+from agno.skills import LocalSkills, Skills
 from agno.workflow import Condition, Loop, Parallel, Router, Step, Steps, Workflow
 from agno.workflow.cel import CEL_AVAILABLE, validate_cel_expression
 from agno.workflow.workflow import WorkflowSteps
@@ -16,6 +17,7 @@ from agno.workflow.workflow import WorkflowSteps
 from api.services.model_config_service import get_model_for_run
 from api.services.model_factory import build_agno_model
 from api.services.postgres_store import get_async_agno_postgres_db
+from api.services.skill_service import resolve_enabled_skill_dirs
 
 # Built-in executor registry. Nested/team executors arrive in later PRs.
 BUILTIN_AGENT_REFS: dict[str, dict[str, str]] = {
@@ -302,6 +304,16 @@ def _normalize_step(
     schema = item.get("user_input_schema")
     if isinstance(schema, list) and schema:
         payload["user_input_schema"] = schema
+    # optional skill directory names (bound ∩ globally enabled at run time)
+    raw_skills = item.get("skills")
+    if isinstance(raw_skills, list):
+        skills: list[str] = []
+        for entry in raw_skills:
+            name = str(entry or "").strip()
+            if name and name not in skills:
+                skills.append(name)
+        if skills:
+            payload["skills"] = skills
     # optional layout for canvas
     position = item.get("position")
     if isinstance(position, dict):
@@ -658,12 +670,58 @@ def _count_leaf_steps(nodes: list[dict[str, Any]]) -> int:
     return total
 
 
+def collect_workflow_skill_names(definition: dict[str, Any] | list[Any] | None) -> list[str]:
+    """Unique skill names bound on any step (depth-first)."""
+    names: list[str] = []
+    seen: set[str] = set()
+
+    def walk(nodes: object) -> None:
+        if not isinstance(nodes, list):
+            return
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            node_type = str(node.get("type") or "step")
+            if node_type == "step":
+                skills = node.get("skills")
+                if isinstance(skills, list):
+                    for entry in skills:
+                        name = str(entry or "").strip()
+                        if name and name not in seen:
+                            seen.add(name)
+                            names.append(name)
+            walk(node.get("steps"))
+            walk(node.get("then"))
+            walk(node.get("else"))
+            walk(node.get("then_steps"))
+            walk(node.get("else_steps"))
+            choices = node.get("choices")
+            if isinstance(choices, list):
+                for choice in choices:
+                    if isinstance(choice, dict):
+                        walk(choice.get("steps"))
+
+    if isinstance(definition, dict):
+        walk(definition.get("steps"))
+    elif isinstance(definition, list):
+        walk(definition)
+    return names
+
+
+def _load_skills_for_names(skill_names: list[str]) -> Skills | None:
+    dirs = resolve_enabled_skill_dirs(skill_names)
+    if not dirs:
+        return None
+    return Skills(loaders=[LocalSkills(str(path)) for path in dirs])
+
+
 async def _build_agent(
     *,
     ref: str,
     step_name: str,
     instructions: str,
     model_id: str | None,
+    skill_names: list[str] | None = None,
 ) -> Agent:
     meta = BUILTIN_AGENT_REFS[ref]
     config = await get_model_for_run(model_id)
@@ -674,6 +732,7 @@ async def _build_agent(
     ]
     if instructions:
         instruction_parts.append(instructions)
+    skills = _load_skills_for_names(list(skill_names or []))
     return Agent(
         id=meta["id"],
         name=meta["name"],
@@ -683,8 +742,9 @@ async def _build_agent(
         model=model,
         db=get_async_agno_postgres_db(),
         markdown=True,
-        # Keep PR1/PR2 steps tool-free for predictable orchestration.
+        # Steps stay MCP/tool-free; optional Skills bind via DSL skills[].
         tools=[],
+        skills=skills,
     )
 
 
@@ -701,11 +761,18 @@ async def _compile_node(
     if node_type == "step":
         ref = str(node["executor"]["ref"])
         instructions = str(node.get("instructions") or "")
+        raw_skills = node.get("skills")
+        skill_names = (
+            [str(s).strip() for s in raw_skills if str(s).strip()]
+            if isinstance(raw_skills, list)
+            else []
+        )
         agent = await _build_agent(
             ref=ref,
             step_name=name,
             instructions=instructions,
             model_id=model_id,
+            skill_names=skill_names,
         )
         return Step(
             name=name,

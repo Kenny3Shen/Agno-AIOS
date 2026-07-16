@@ -49,6 +49,7 @@ import {
 } from './utils'
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
 import { listWorkflowTriggerHistory } from './api'
+import { listSkills } from '@/features/skills/api'
 import { CelExpressionField } from './CelExpressionField'
 import { currentUserQuery } from '@/features/auth'
 import { hasScope } from '@/shared/auth/permissions'
@@ -167,6 +168,17 @@ export function WorkflowPage() {
     enabled: Boolean(workflow.state.workflowId),
     refetchInterval: 30_000,
   })
+  const skillsQuery = useQuery({
+    queryKey: ['skills', 'workflow-bind'],
+    queryFn: listSkills,
+    staleTime: 60_000,
+  })
+  const enabledSkillOptions = (skillsQuery.data ?? [])
+    .filter((skill) => skill.enabled)
+    .map((skill) => ({
+      value: skill.name,
+      label: skill.description ? `${skill.name} — ${skill.description}` : skill.name,
+    }))
   const step = workflow.selected
   const executors = workflow.executorsQuery.data ?? []
   const models = workflow.modelsQuery.data?.models ?? []
@@ -563,6 +575,36 @@ export function WorkflowPage() {
                       placeholder={t('instructionsPlaceholder')}
                       rows={4}
                     />
+                    <Typography.Text
+                      type="secondary"
+                      style={{ fontSize: 11, display: 'block', marginTop: 8 }}
+                    >
+                      {t('stepSkills')}
+                    </Typography.Text>
+                    <Select
+                      mode="multiple"
+                      allowClear
+                      size="small"
+                      style={{ width: '100%', marginTop: 4 }}
+                      placeholder={t('stepSkillsPlaceholder')}
+                      options={enabledSkillOptions}
+                      value={step.skills ?? []}
+                      loading={skillsQuery.isLoading}
+                      getPopupContainer={studioPopupContainer}
+                      onChange={(value) =>
+                        workflow.update({
+                          ...step,
+                          skills: Array.isArray(value) ? value.map(String) : [],
+                        })
+                      }
+                      maxTagCount="responsive"
+                    />
+                    <Typography.Paragraph
+                      type="secondary"
+                      style={{ fontSize: 11, marginTop: 4, marginBottom: 0 }}
+                    >
+                      {t('stepSkillsHint')}
+                    </Typography.Paragraph>
                     <div className="workflow-inspector__switch">
                       <Switch
                         size="small"

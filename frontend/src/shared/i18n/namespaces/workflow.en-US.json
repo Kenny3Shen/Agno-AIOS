@@ -114,5 +114,8 @@
   "cronNever": "Never",
   "cronNextUnknown": "Save to refresh",
   "cronNextNeedsPublish": "Publish required",
-  "triggerFailed": "failed"
+  "triggerFailed": "failed",
+  "stepSkills": "Bound skills",
+  "stepSkillsPlaceholder": "Select enabled skills (multi)",
+  "stepSkillsHint": "At run time loads global-enabled ∩ bound names. Empty means no skills."
 }

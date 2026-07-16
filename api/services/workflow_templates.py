@@ -27,6 +27,7 @@ def list_workflow_templates() -> list[dict[str, Any]]:
                             "Summarize the alert, list IOCs, and state severity as one of: "
                             "critical, high, medium, low. Put severity token in the reply."
                         ),
+                        "skills": ["playbook-skill", "cve-intel-skill"],
                         "position": {"x": 80, "y": 80},
                     },
                     {
@@ -41,6 +42,7 @@ def list_workflow_templates() -> list[dict[str, Any]]:
                                 "name": "Contain",
                                 "executor": {"kind": "agent", "ref": "security-operations"},
                                 "instructions": "Propose containment steps for critical severity.",
+                                "skills": ["hitl-containment-skill", "playbook-skill"],
                                 "requires_confirmation": True,
                                 "confirmation_message": "Approve containment actions for this incident?",
                                 "position": {"x": 420, "y": 40},
@@ -81,6 +83,7 @@ def list_workflow_templates() -> list[dict[str, Any]]:
                                 "id": "cve",
                                 "type": "step",
                                 "name": "CVE context",
+                                "skills": ["cve-intel-skill"],
                                 "executor": {"kind": "agent", "ref": "security-operations"},
                                 "instructions": "Map any CVEs or product versions mentioned in the alert.",
                                 "position": {"x": 320, "y": 40},
@@ -89,6 +92,7 @@ def list_workflow_templates() -> list[dict[str, Any]]:
                                 "id": "asset",
                                 "type": "step",
                                 "name": "Asset impact",
+                                "skills": ["intranet-ip-skill"],
                                 "executor": {"kind": "agent", "ref": "safe-fallback"},
                                 "instructions": "Infer likely affected assets and blast radius.",
                                 "position": {"x": 320, "y": 180},

@@ -315,6 +315,27 @@ def get_enabled_skill_dirs() -> list[Path]:
     return enabled_dirs
 
 
+def resolve_enabled_skill_dirs(skill_names: list[str] | None = None) -> list[Path]:
+    """Return enabled skill dirs, optionally filtered by bound names.
+
+    - ``None``: all enabled (Chat default).
+    - ``[]`` or only blanks: empty (Workflow step with no binding).
+    - non-empty list: enabled ∩ requested (by metadata name or directory name).
+    """
+    enabled = get_enabled_skill_dirs()
+    if skill_names is None:
+        return enabled
+    wanted = {str(name).strip() for name in skill_names if str(name).strip()}
+    if not wanted:
+        return []
+    matched: list[Path] = []
+    for skill_dir in enabled:
+        metadata = parse_skill_metadata(skill_dir)
+        if metadata.name in wanted or skill_dir.name in wanted:
+            matched.append(skill_dir)
+    return matched
+
+
 def _safe_dir_name(value: str) -> str:
     safe = re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip(".-")
     return safe or "skill"

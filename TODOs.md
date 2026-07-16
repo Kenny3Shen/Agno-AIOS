@@ -67,22 +67,25 @@
 
 ---
 
-### PR-P0.3 Step 级 Skill 绑定（Chat/Workflow 对齐）
+### PR-P0.3 Step 级 Skill 绑定（Chat/Workflow 对齐） ✅
 
 **用户价值**：编排步骤可用与 Chat 相同的安全 Skill，模板可声明依赖。
 
 | 项 | 说明 |
 |----|------|
-| DSL | Step：`skills?: string[]`（skill 目录名）；默认 `[]` = 不挂 skill |
-| 编译/运行 | Workflow run 按 step 或 run 级过滤 `get_enabled_skill_dirs` ∩ 绑定（最小：run 级并集，文档写清） |
-| Chat（最小） | 保持全局 enabled；可选后续 session 覆盖（本 PR 可不做） |
-| Studio | Step Inspector：多选已启用 Skill；模板 JSON 带推荐 `skills` |
-| 审计 | `skill.load` metadata：workflow_id / run_id / skill names |
-| 验收 | IR 模板某步绑定 skill 后，run 日志/审计可见加载；未绑定则不加载该 skill |
+| DSL | Step：`skills?: string[]`；默认省略/空 = 不挂 skill ✅ |
+| 编译/运行 | **Step 级**：Agent `skills=` = `resolve_enabled_skill_dirs(bound)`（启用 ∩ 绑定）✅ |
+| Chat（最小） | 仍全局 `get_enabled_skill_dirs()`；本 PR 不改 session 覆盖 ✅ |
+| Studio | Step Inspector 多选已启用 Skill；IR/fan-out 模板带推荐 skills ✅ |
+| 审计 | `skill.load`：workflow_id / run_id / skill_names / loaded_skill_names ✅ |
+| 验收 | 绑定后 Agent 可加载 skill；未绑定 steps `skills=None`；审计可见 |
 
 **主要路径**：`workflow_compiler` / `workflow_run_runtime` / `skill_service` / Inspector / templates
 
-**风险**：Skill 脚本安全面 — 本 PR 只绑定已启用 skill，不扩大脚本权限。
+**语义**：
+- 未声明或 `[]` → 该 step 不加载任何 skill（与 Chat 全局启用不同）
+- 声明 `["playbook-skill"]` → 仅当全局 enabled 时加载
+- run 级并集仅用于审计 `skill.load`；实际挂载按 step 独立编译
 
 ---
 
@@ -106,7 +109,7 @@
 ```
 P0.1 状态机 + 空态引导     ✅
 P0.2 触发器运维 + 失败通知 ✅
-P0.3 Step Skill 绑定       （能力对齐，模板含依赖）
+P0.3 Step Skill 绑定       ✅
 P0.4 审批值班薄入口        （可与 P0.2 通知并行）
 ```
 
@@ -120,6 +123,17 @@ P0.4 审批值班薄入口        （可与 P0.2 通知并行）
 
 ---
 
+
+## 已完成：产品 P0.3 Step 级 Skill 绑定
+
+- DSL `skills: string[]` 规范化；编译时按 step 加载 `enabled ∩ bound`
+- `resolve_enabled_skill_dirs`；`skill.load` 审计 + `workflow.started` 携带 skills
+- Studio Inspector 多选已启用 Skill；IR / alert-fanout 模板推荐绑定
+- Chat 路径不变（全局 enabled）
+
+相关：`workflow_compiler.py` / `skill_service.py` / `workflow_run_runtime.py` / `WorkflowPage.tsx`
+
+---
 
 ## 已完成：产品 P0.2 触发器运维（Webhook / Cron）
 

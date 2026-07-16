@@ -156,6 +156,36 @@ describe('workflow behavior', () => {
     expect(triggerEnableBlocked({ hasPublished: true, dirty: false })).toBeNull()
   })
 
+  it('round-trips step skills on definition', () => {
+    const withSkills: WorkflowState = {
+      ...state,
+      steps: [
+        {
+          id: 's1',
+          type: 'step',
+          name: 'T',
+          targetId: 'security-operations',
+          instructions: 'x',
+          skills: ['playbook-skill', 'cve-intel-skill'],
+        },
+      ],
+    }
+    const def = toDefinition(withSkills)
+    expect(def.steps[0]?.skills).toEqual(['playbook-skill', 'cve-intel-skill'])
+    const restored = fromRecord({
+      id: 'wf',
+      name: 'n',
+      description: '',
+      owner_user_id: 'u',
+      definition: def,
+      enabled: true,
+      version: 1,
+      created_at: 1,
+      updated_at: 1,
+    })
+    expect(restored.steps?.[0]?.skills).toEqual(['playbook-skill', 'cve-intel-skill'])
+  })
+
   it('builds webhook URL and curl sample', () => {
     expect(workflowWebhookUrl('wf-1', 'https://app.example')).toBe(
       'https://app.example/api/workflows/wf-1/hooks/webhook'

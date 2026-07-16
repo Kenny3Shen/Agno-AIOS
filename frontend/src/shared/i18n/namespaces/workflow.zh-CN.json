@@ -114,5 +114,8 @@
   "cronNever": "尚未触发",
   "cronNextUnknown": "保存后刷新可见",
   "cronNextNeedsPublish": "需先发布",
-  "triggerFailed": "失败"
+  "triggerFailed": "失败",
+  "stepSkills": "绑定 Skill",
+  "stepSkillsPlaceholder": "选择已启用的 Skill（可多选）",
+  "stepSkillsHint": "运行时仅加载「全局启用 ∩ 本步绑定」。不选则不挂 Skill。"
 }

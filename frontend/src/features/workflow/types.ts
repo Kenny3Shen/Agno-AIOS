@@ -20,6 +20,8 @@ export type WorkflowNode = {
   kind?: 'agent'
   targetId?: string
   instructions?: string
+  /** Bound skill directory/metadata names (enabled ∩ bound at run). */
+  skills?: string[]
   steps?: WorkflowNode[]
   evaluatorCel?: string
   thenSteps?: WorkflowNode[]
@@ -52,6 +54,7 @@ export type WorkflowDefinitionNode = {
   name: string
   executor?: { kind: 'agent'; ref: string }
   instructions?: string
+  skills?: string[]
   steps?: WorkflowDefinitionNode[]
   evaluator?: { cel?: string; value?: boolean }
   then_steps?: WorkflowDefinitionNode[]
