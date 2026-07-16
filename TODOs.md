@@ -124,6 +124,17 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：best-effort 静默 except 日志
+
+- workflow 版本快照失败写 warning（仍不阻断 save）
+- upload approval 归档删除失败写 warning
+- knowledge upload 父目录 rmdir 失败写 debug
+- `test_upload_approval_service` 对齐 list `page/limit` 断言（实现已真分页）
+
+相关：`workflow_service.py` / `upload_approval_service.py` / `knowledge_upload_service.py`
+
+---
+
 ## 已完成：model_config 残留 JSON 归档 + coerce_json 收窄
 
 - 表非空时归档残留 `model_config.json` → `*.imported`（与 MCP `.migrated` 对齐），避免日后空表误回灌陈旧密钥

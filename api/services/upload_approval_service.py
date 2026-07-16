@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from anyio import to_thread
 from fastapi import HTTPException
+from loguru import logger
 
 from api.config import get_settings
 from api.persistence.upload_approvals import (
@@ -70,7 +71,7 @@ def _delete_archive(approval_id: str) -> None:
     try:
         path.unlink(missing_ok=True)
     except OSError:
-        pass
+        logger.warning("failed to delete upload approval archive {}", path, exc_info=True)
 
 
 def _public(record: dict[str, Any]) -> dict[str, Any]:

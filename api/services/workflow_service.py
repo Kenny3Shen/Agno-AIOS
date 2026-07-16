@@ -7,6 +7,8 @@ import time
 from typing import Any
 from uuid import uuid4
 
+from loguru import logger
+
 from api.auth.claims import ADMIN_SCOPE, ActorLike, actor_id, has_scope
 from api.persistence import workflows as workflow_store
 from api.services.workflow_compiler import (
@@ -152,7 +154,12 @@ async def _snapshot_version(
         )
     except Exception:
         # Version history is best-effort; do not fail saves.
-        pass
+        logger.warning(
+            "workflow version snapshot failed workflow_id={} version={}",
+            row.get("id"),
+            row.get("version"),
+            exc_info=True,
+        )
 
 
 async def create_workflow_for_actor(

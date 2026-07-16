@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from anyio import Path as AsyncPath
 from anyio import open_file, to_thread
+from loguru import logger
 
 from api.config import get_settings
 from api.services.knowledge_ingest_service import SUPPORTED_FILE_SUFFIXES
@@ -109,7 +110,7 @@ async def _remove_known_upload_path_async(path: Path, upload_root: Path) -> None
             try:
                 path.parent.rmdir()
             except OSError:
-                pass
+                logger.debug("knowledge upload parent dir not empty: {}", path.parent)
 
     await to_thread.run_sync(remove)
 
