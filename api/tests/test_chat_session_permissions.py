@@ -159,7 +159,7 @@ async def test_list_sessions_uses_current_user_as_owner_filter():
         include_archived: bool = False,
         include_runs: bool = False,
         page: int = 1,
-        limit: int = 500,
+        limit: int = 100,
     ):
         captured["owner_user_id"] = owner_user_id
         captured["include_archived"] = str(include_archived)
@@ -183,6 +183,7 @@ async def test_list_sessions_uses_current_user_as_owner_filter():
     assert result["meta"]["total_count"] == 0
     assert captured["owner_user_id"] == "u1"
     assert captured["include_archived"] == "True"
+    assert captured["limit"] == 100
 
 
 @pytest.mark.asyncio

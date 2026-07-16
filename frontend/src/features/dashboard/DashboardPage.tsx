@@ -334,7 +334,12 @@ export function DashboardPage() {
               value={percent(data?.snapshots?.evaluation?.pass_rate)}
               note={
                 data?.snapshots?.evaluation
-                  ? `${data.snapshots.evaluation.passed} passed · ${data.snapshots.evaluation.failed} failed`
+                  ? t('evalSampleNote', {
+                      passed: data.snapshots.evaluation.passed,
+                      failed: data.snapshots.evaluation.failed,
+                      sample: data.snapshots.evaluation.sample_size ?? data.snapshots.evaluation.passed + data.snapshots.evaluation.failed,
+                      total: data.snapshots.evaluation.total,
+                    })
                   : t('noEvalData')
               }
             />

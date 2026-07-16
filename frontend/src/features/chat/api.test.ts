@@ -10,7 +10,7 @@ describe('chat API', () => {
     server.use(
       http.get('/api/chat/sessions', ({ request }) => {
         expect(request.headers.get('authorization')).toBe('Bearer token')
-        return HttpResponse.json({ data: [{ session_id: 's1', preview: 'run', created_at: 1, updated_at: 2 }], meta: { page: 1, limit: 500, total_pages: 1, total_count: 1, search_time_ms: 0 } })
+        return HttpResponse.json({ data: [{ session_id: 's1', preview: 'run', created_at: 1, updated_at: 2 }], meta: { page: 1, limit: 100, total_pages: 1, total_count: 1, search_time_ms: 0 } })
       })
     )
     expect((await listSessions())[0]?.session_id).toBe('s1')
@@ -21,7 +21,7 @@ describe('chat API', () => {
       http.get('/api/chat/sessions', () =>
         HttpResponse.json({
           data: [{ session_id: 's2', preview: 'p', created_at: 3, updated_at: 4 }],
-          meta: { page: 1, limit: 500, total_pages: 1, total_count: 1, search_time_ms: 0 },
+          meta: { page: 1, limit: 100, total_pages: 1, total_count: 1, search_time_ms: 0 },
         })
       )
     )
@@ -36,7 +36,7 @@ describe('chat API', () => {
         const params = new URL(request.url).searchParams
         expect(params.get('include_archived')).toBe('true')
         expect(params.get('page')).toBe('1')
-        return HttpResponse.json({ data: [], meta: { page: 1, limit: 500, total_pages: 0, total_count: 0, search_time_ms: 0 } })
+        return HttpResponse.json({ data: [], meta: { page: 1, limit: 100, total_pages: 0, total_count: 0, search_time_ms: 0 } })
       })
     )
 

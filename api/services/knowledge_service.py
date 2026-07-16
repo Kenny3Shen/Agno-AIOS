@@ -1647,7 +1647,13 @@ class KnowledgeBaseLifecycle:
     ) -> dict[str, Any]:
         docs = documents
         if docs is None and document_count is None:
-            docs = await self.list_documents_async(owner_user_id=owner_user_id)
+            # Count via paged total; do not materialize every document for status.
+            _page, document_count = await self.list_documents_page_async(
+                owner_user_id=owner_user_id,
+                page=1,
+                limit=1,
+            )
+            docs = []
         docs = docs or []
         visible_chunk_count = sum(_int_value(document.get("chunks")) for document in docs)
         chunk_count = max(await self._chunk_count_async(owner_user_id), visible_chunk_count)

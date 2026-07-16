@@ -202,7 +202,7 @@ async def get_all_sessions_async(
     owner_user_id: str | None = None,
     include_runs: bool = False,
     page: int = 1,
-    limit: int = 500,
+    limit: int = 100,
 ) -> dict[str, Any]:
     """Read session summaries with DB-level page/limit.
 
@@ -212,7 +212,7 @@ async def get_all_sessions_async(
     """
     await ensure_agno_postgres_tables_async()
     safe_page = max(1, int(page or 1))
-    safe_limit = max(1, min(int(limit or 500), 500))
+    safe_limit = max(1, min(int(limit or 100), 500))
     rows, total_count = await _query_sessions_page(
         include_archived=include_archived,
         owner_user_id=owner_user_id,

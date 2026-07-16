@@ -254,7 +254,7 @@ async def test_admin_overview_includes_audit_summary():
 @pytest.mark.asyncio
 async def test_overview_adds_evaluation_snapshot_for_authorized_actor(monkeypatch):
     async def fake_list_runs(*, limit: int, page: int):
-        assert (limit, page) == (100, 1)
+        assert (limit, page) == (20, 1)
         return {
             "data": [
                 {"passed": True},
@@ -263,7 +263,7 @@ async def test_overview_adds_evaluation_snapshot_for_authorized_actor(monkeypatc
             ],
             "meta": {
                 "page": 1,
-                "limit": 100,
+                "limit": 20,
                 "total_pages": 1,
                 "total_count": 4,
                 "search_time_ms": 0.0,
@@ -280,6 +280,7 @@ async def test_overview_adds_evaluation_snapshot_for_authorized_actor(monkeypatc
         "passed": 1,
         "failed": 1,
         "pass_rate": 0.5,
+        "sample_size": 3,
     }
 
 

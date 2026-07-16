@@ -1378,6 +1378,32 @@ async def test_list_documents_treats_completed_markdown_as_ready_when_count_miss
 
 
 @pytest.mark.asyncio
+async def test_knowledge_status_uses_paged_document_count_without_full_list() -> None:
+    def fail_runtime(_search_type=None):
+        raise AssertionError("status must not load Knowledge runtime")
+
+    calls: list[dict[str, object]] = []
+
+    async def fake_page(*, owner_user_id=None, page=1, limit=100, **_kwargs):
+        calls.append({"owner_user_id": owner_user_id, "page": page, "limit": limit})
+        return [{"id": "should-not-materialize"}], 42
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            get_async_knowledge_base=fail_runtime,
+            chunk_count_async=lambda _owner_user_id=None: 9,
+        )
+    )
+    lifecycle.list_documents_page_async = fake_page  # type: ignore[method-assign]
+
+    status = await lifecycle.knowledge_status_async(owner_user_id="u1")
+
+    assert calls == [{"owner_user_id": "u1", "page": 1, "limit": 1}]
+    assert status["documents"] == 42
+    assert status["chunks"] == 9
+
+
+@pytest.mark.asyncio
 async def test_knowledge_status_uses_prefetched_documents_without_runtime() -> None:
     def fail_runtime(_search_type=None):
         raise AssertionError("status must not load Knowledge runtime")

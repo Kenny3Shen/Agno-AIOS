@@ -39,5 +39,6 @@
   "noAudit": "No audit activity",
   "seriesRuns": "Runs",
   "seriesInputTokens": "Input tokens",
-  "seriesOutputTokens": "Output tokens"
+  "seriesOutputTokens": "Output tokens",
+  "evalSampleNote": "{{passed}} passed · {{failed}} failed (sample {{sample}} of {{total}})"
 }

@@ -98,7 +98,7 @@ describe('TracePage interactions', () => {
       http.get('/api/auth/users/me', () =>
         HttpResponse.json({ id: 'user-1', email: 'user@example.com', role: 'user', scopes: ['traces:read'], is_active: true })
       ),
-      http.get('/api/chat/sessions', () => HttpResponse.json({ data: [], meta: { page: 1, limit: 500, total_pages: 0, total_count: 0, search_time_ms: 0 } })),
+      http.get('/api/chat/sessions', () => HttpResponse.json({ data: [], meta: { page: 1, limit: 100, total_pages: 0, total_count: 0, search_time_ms: 0 } })),
       http.get('/api/traces/sessions', () =>
         HttpResponse.json({
           data: traceSessions,

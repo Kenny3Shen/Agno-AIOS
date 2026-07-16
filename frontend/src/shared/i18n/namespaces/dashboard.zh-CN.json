@@ -39,5 +39,6 @@
   "noAudit": "暂无审计活动",
   "seriesRuns": "运行",
   "seriesInputTokens": "输入 Token",
-  "seriesOutputTokens": "输出 Token"
+  "seriesOutputTokens": "输出 Token",
+  "evalSampleNote": "{{passed}} 通过 · {{failed}} 失败（样本 {{sample}} / 共 {{total}}）"
 }

@@ -136,6 +136,16 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：热路径收紧（eval 采样 / knowledge status / sessions limit）
+
+- Overview 评估快照：`list_agno_eval_runs(limit=20)`；`pass_rate` 基于近期样本，payload 含 `sample_size`；Dashboard 文案标注样本/总数
+- Knowledge status：无预取时用 `list_documents_page_async(limit=1)` 取 total，不再 `list_documents_async` 全量
+- Chat sessions 默认 `page/limit`：**100**（API / service / 前端 `listSessions` 一致；硬顶仍 500）
+
+相关：`overview_service.py` / `knowledge_service.py` / `chat_session_service.py` / `routes/chat.py` / Dashboard i18n
+
+---
+
 ## 已完成：技术债收紧（Memory / Overview / 兼容）
 
 - Memory 列表 `get_user_memory_stats` 按当前 user 作用域查询（`limit=1`），避免普通用户/单用户筛选触发 500 用户 stats 扫

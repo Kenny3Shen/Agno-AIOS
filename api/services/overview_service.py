@@ -361,7 +361,9 @@ async def _snapshots(actor: ActorLike) -> dict[str, Any]:
         try:
             from api.services.agent_eval_result_service import list_agno_eval_runs
 
-            evaluation_runs = await list_agno_eval_runs(limit=100, page=1)
+            # Cheap dashboard signal: total from meta; pass/fail from a small
+            # recent sample (not a full-history scan).
+            evaluation_runs = await list_agno_eval_runs(limit=20, page=1)
             items = evaluation_runs.get("data") or []
             meta = evaluation_runs.get("meta") or {}
             passed = sum(item.get("passed") is True for item in items)
@@ -372,6 +374,7 @@ async def _snapshots(actor: ActorLike) -> dict[str, Any]:
                 "passed": passed,
                 "failed": failed,
                 "pass_rate": round(passed / completed, 4) if completed else 0.0,
+                "sample_size": len(items),
             }
         except Exception:
             logger.exception("overview snapshot failed: evaluation")

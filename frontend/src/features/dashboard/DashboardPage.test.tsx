@@ -51,7 +51,7 @@ const overview = (audit = false): import('./types').RuntimeOverview => ({
   distributions: { agent: [{ name: 'security-agent', value: 4 }], workflow: [], team: [] },
   recent_failures: [],
   snapshots: {
-    evaluation: { total: 2, passed: 1, failed: 1, pass_rate: 0.5 },
+    evaluation: { total: 2, passed: 1, failed: 1, pass_rate: 0.5, sample_size: 2 },
     approvals: { pending: 2, approved: 5, rejected: 1 },
   },
   ...(audit

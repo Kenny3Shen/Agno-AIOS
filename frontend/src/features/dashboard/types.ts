@@ -62,6 +62,8 @@ export interface OverviewEvaluation {
   passed: number
   failed: number
   pass_rate: number | null
+  /** Recent sample size used for passed/failed/pass_rate (total may be larger). */
+  sample_size?: number | null
 }
 
 export interface OverviewApprovalCounts {

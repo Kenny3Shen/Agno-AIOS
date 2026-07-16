@@ -70,15 +70,8 @@ def test_approval_rejection_reason_prefers_agno_requirement_note():
 
 @pytest.mark.asyncio
 async def test_get_all_sessions_async_projects_sorted_archived_session_rows():
+    # Rows arrive newest-first from SQL; service keeps order when already_sorted.
     rows = [
-        {
-            "session_id": "older",
-            "created_at": 1,
-            "updated_at": 2,
-            "user_id": "u1",
-            "runs": [{"input": {"input_content": "older preview"}}],
-            "metadata": {},
-        },
         {
             "session_id": "newer",
             "created_at": 3,
@@ -87,13 +80,21 @@ async def test_get_all_sessions_async_projects_sorted_archived_session_rows():
             "runs": [{"input": "newer preview"}],
             "metadata": {"agno_aios_archived": True},
         },
+        {
+            "session_id": "older",
+            "created_at": 1,
+            "updated_at": 2,
+            "user_id": "u1",
+            "runs": [{"input": {"input_content": "older preview"}}],
+            "metadata": {},
+        },
     ]
 
     async def fake_query(**kwargs):
         assert kwargs["include_archived"] is True
         assert kwargs["owner_user_id"] == "u1"
         assert kwargs["page"] == 1
-        assert kwargs["limit"] == 500
+        assert kwargs["limit"] == 100
         return rows, 2
 
     with (
@@ -107,7 +108,7 @@ async def test_get_all_sessions_async_projects_sorted_archived_session_rows():
     sessions = result["data"]
     assert result["meta"]["total_count"] == 2
     assert result["meta"]["page"] == 1
-    assert result["meta"]["limit"] == 500
+    assert result["meta"]["limit"] == 100
     assert [session["session_id"] for session in sessions] == ["newer", "older"]
     assert sessions[0]["preview"] == "newer preview"
     assert sessions[0]["archived"]
