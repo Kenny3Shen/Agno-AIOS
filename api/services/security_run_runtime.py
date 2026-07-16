@@ -1144,14 +1144,24 @@ class SecurityRunRuntime:
             else None
         )
         # Lean surface when tools off or intent filter attached nothing.
-        # Cost path: skip MCP/Skills, use lite prompt, shorter history, and do
-        # not inject long-term memories into the model context (still may write
-        # memories after the run when memory_enabled).
+        # Cost path: skip MCP/Skills, use lite prompt, no datetime injection,
+        # shorter/no history on new sessions, and do not inject long-term
+        # memories into the model context (still may write memories after the
+        # run when memory_enabled).
         tool_surface = bool(tools) or skills is not None
         prompt_name = (
             SECURITY_OPERATIONS_PROMPT if tool_surface else SECURITY_OPERATIONS_LITE_PROMPT
         )
-        history_runs = 5 if tool_surface else 2
+        has_session = bool(str(request.session_id or "").strip())
+        if tool_surface:
+            history_runs = 5
+            add_history = True
+            add_datetime = True
+        else:
+            # Brand-new chat has no prior turns; avoid history lookup overhead.
+            history_runs = 2 if has_session else 0
+            add_history = has_session
+            add_datetime = False
         session_summaries = tool_surface
         inject_memories = bool(request.memory_enabled) and tool_surface
         return self.dependencies.agent_factory(
@@ -1175,14 +1185,14 @@ class SecurityRunRuntime:
             db=self.dependencies.get_db(),
             dependencies=await _run_sync_dependency(_agent_dependencies),
             add_dependencies_to_context=False,
-            add_history_to_context=True,
+            add_history_to_context=add_history,
             update_memory_on_run=request.memory_enabled,
             add_memories_to_context=inject_memories,
             store_tool_messages=request.store_raw_tool_io if tool_surface else False,
             enable_session_summaries=session_summaries,
             session_summary_manager=_session_summary_manager(model) if session_summaries else None,
             num_history_runs=history_runs,
-            add_datetime_to_context=True,
+            add_datetime_to_context=add_datetime,
             markdown=True,
         )
 

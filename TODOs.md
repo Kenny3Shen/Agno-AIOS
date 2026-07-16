@@ -1,9 +1,19 @@
 # 下一步工作
 
+
+## 已完成：Chat 轻量轮次跳过 datetime + 空会话 history
+
+- `_build_security_agent`：`tool_surface=False` 时 `add_datetime_to_context=False`。
+- 轻量 + 无 `session_id`：`add_history_to_context=False`、`num_history_runs=0`（新会话无历史可拉）。
+- 轻量 + 已有 `session_id`：仍 `num_history_runs=2`、注入 history，便于续聊。
+- 全量工具面不变：`num_history_runs=5` + datetime + history。
+- 单测：空会话 lean / 续聊 lean / 全量 surface 分别锁定 history 与 datetime 开关。
+
+
 ## 已完成：Chat 轻量轮次跳过 Memory 上下文注入
 
 - `_build_security_agent`：`tool_surface=False`（tools-off 或意图未挂 Skill）时 `add_memories_to_context=False`，`store_tool_messages=False`；仍可在 `memory_enabled` 时后台写入 memory。
-- 保留 lite prompt + `num_history_runs=2` + 关闭 session summaries。
+- 保留 lite prompt + 关闭 session summaries；history/datetime 见「跳过 datetime + 空会话 history」。
 - 单测：trivial `ping` / tools-off / 显式 `memory_enabled=True` 轻量路径均断言不注入 memories。
 
 
