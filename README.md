@@ -538,6 +538,7 @@ frontend/src/features/workflow/*      # 工作流画布（reparent / 快捷键 /
 | **PR7** ✅ | Publish + Cron 真调度（published 修订 / webhook·cron 只用线上版） |
 | **PR6** ✅ | 画布 run 状态 / Run 历史 / Approvals↔Studio 深链 / user_input_schema 表单 |
 | **PR5** ✅ | 画布 reparent / undo·redo·多选 / auto-layout / Approvals user_input·output_review 表单 |
+| **Paste** ✅ | 粘贴进选中容器默认槽 / 同级插入；Parallel 内 HITL 粘贴回退根级 + 客户端校验与 Inspector 禁用 |
 | **PR4** ✅ | Router / 嵌套 Workflow / 版本 / 触发器 + 画布编辑 + 完整 Step HITL | 见下 |
 
 **PR2 嵌套 DSL 示例**

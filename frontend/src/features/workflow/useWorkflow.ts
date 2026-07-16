@@ -34,6 +34,8 @@ import {
   fromDefinition,
   fromRecord,
   insertChild,
+  isInsideParallel,
+  pasteNodesIntoSelection,
   triggerEnableBlocked,
   moveNodeAfter,
   moveStep,
@@ -329,11 +331,28 @@ export function useWorkflow() {
         inspectorHistoryNodeRef.current = null
         inspectorHistoryTimerRef.current = null
       }, 600)
+      let nextNode = node
+      // Agno Parallel cannot pause for step HITL — strip flags if nested under Parallel.
+      if (
+        nextNode.type === 'step' &&
+        isInsideParallel(current.steps, nextNode.id) &&
+        (nextNode.requiresConfirmation || nextNode.requiresUserInput || nextNode.requiresOutputReview)
+      ) {
+        nextNode = {
+          ...nextNode,
+          requiresConfirmation: false,
+          requiresUserInput: false,
+          requiresOutputReview: false,
+          confirmationMessage: undefined,
+          userInputMessage: undefined,
+          outputReviewMessage: undefined,
+        }
+      }
       return {
         ...current,
         dirty: true,
         validationIssues: [],
-        steps: updateNodeInTree(current.steps, node.id, () => node),
+        steps: updateNodeInTree(current.steps, nextNode.id, () => nextNode),
       }
     })
   }
@@ -363,9 +382,22 @@ export function useWorkflow() {
         inspectorHistoryTimerRef.current = null
       }, 600)
       let steps = current.steps
+      const hitlPatch =
+        patch.requiresConfirmation === true ||
+        patch.requiresUserInput === true ||
+        patch.requiresOutputReview === true
       for (const id of ids) {
         const node = findNode(steps, id)
         if (!node || node.type !== 'step') continue
+        if (hitlPatch && isInsideParallel(steps, id)) {
+          // Skip enabling HITL under Parallel; allow clearing flags.
+          const cleared = { ...patch }
+          if (patch.requiresConfirmation === true) cleared.requiresConfirmation = false
+          if (patch.requiresUserInput === true) cleared.requiresUserInput = false
+          if (patch.requiresOutputReview === true) cleared.requiresOutputReview = false
+          steps = updateNodeInTree(steps, id, (item) => ({ ...item, ...cleared }))
+          continue
+        }
         steps = updateNodeInTree(steps, id, (item) => ({ ...item, ...patch }))
       }
       return {
@@ -498,10 +530,17 @@ export function useWorkflow() {
       // refresh clipboard offsets for repeated paste
       clipboardRef.current = clones.map(cloneNodeDeep)
       const ids = clones.map((c) => c.id)
+      const steps = pasteNodesIntoSelection(
+        current.steps,
+        clones,
+        current.selectedIds,
+        current.selectedId,
+      )
+
       return {
         ...current,
         dirty: true,
-        steps: [...current.steps, ...clones],
+        steps,
         selectedId: ids[ids.length - 1] ?? null,
         selectedIds: ids,
       }

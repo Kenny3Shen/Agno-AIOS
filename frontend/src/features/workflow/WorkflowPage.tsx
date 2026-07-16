@@ -53,6 +53,7 @@ import {
   workflowWebhookCurl,
   workflowWebhookUrl,
   findNode,
+  isInsideParallel,
   summarizeSelectedAgentSteps,
 } from './utils'
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
@@ -226,6 +227,9 @@ export function WorkflowPage() {
       return { value: skill.name, label }
     })
   const step = workflow.selected
+  const stepInsideParallel = Boolean(
+    step && isInsideParallel(workflow.state.steps, step.id),
+  )
   const executors = workflow.executorsQuery.data ?? []
   const executorNames = useMemo(() => {
     const map = new Map<string, string>()
@@ -987,6 +991,14 @@ export function WorkflowPage() {
                           </Typography.Paragraph>
                         ) : null}
                       </div>
+                      {agentSteps.some((node) => isInsideParallel(workflow.state.steps, node.id)) ? (
+                        <Typography.Paragraph
+                          type="secondary"
+                          style={{ fontSize: 11, marginBottom: 4 }}
+                        >
+                          {t('multiSelectHitlParallelHint')}
+                        </Typography.Paragraph>
+                      ) : null}
                       <Checkbox
                         className="nodrag"
                         checked={allConfirm}
@@ -1161,9 +1173,10 @@ export function WorkflowPage() {
                     >
                       {t('stepSkillsHint')}
                     </Typography.Paragraph>
-                    <div className="workflow-inspector__switch">
+                    <div className="workflow-inspector__switch" data-inspector-field="hitl">
                       <Switch
                         size="small"
+                        disabled={stepInsideParallel}
                         checked={Boolean(step.requiresConfirmation)}
                         onChange={(checked) =>
                           workflow.update({ ...step, requiresConfirmation: checked })
@@ -1171,6 +1184,14 @@ export function WorkflowPage() {
                       />
                       <span>{t('requiresConfirmation')}</span>
                     </div>
+                    {stepInsideParallel ? (
+                      <Typography.Paragraph
+                        type="secondary"
+                        style={{ fontSize: 11, marginTop: 0, marginBottom: 8 }}
+                      >
+                        {t('hitlBlockedInParallel')}
+                      </Typography.Paragraph>
+                    ) : null}
                     {step.requiresConfirmation ? (
                       <Input.TextArea
                         value={step.confirmationMessage || ''}
@@ -1184,6 +1205,7 @@ export function WorkflowPage() {
                     <div className="workflow-inspector__switch" data-inspector-field="userInput">
                       <Switch
                         size="small"
+                        disabled={stepInsideParallel}
                         checked={Boolean(step.requiresUserInput)}
                         onChange={(checked) =>
                           workflow.update({
@@ -1398,6 +1420,7 @@ export function WorkflowPage() {
                     <div className="workflow-inspector__switch">
                       <Switch
                         size="small"
+                        disabled={stepInsideParallel}
                         checked={Boolean(step.requiresOutputReview)}
                         onChange={(checked) =>
                           workflow.update({ ...step, requiresOutputReview: checked })

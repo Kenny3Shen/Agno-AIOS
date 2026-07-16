@@ -170,6 +170,7 @@
   "subtitleMaxIter": "max {{count}}",
   "validationEmptyWorkflow": "Add at least one node before saving",
   "validationEmptyParallel": "{{path}}: Parallel needs at least one branch",
+  "validationHitlInParallel": "{{path}}: Step HITL is not allowed inside Parallel (Agno constraint)",
   "validationEmptyLoop": "{{path}}: Loop body is empty",
   "validationEmptyCondition": "{{path}}: Condition needs then and/or else steps",
   "validationEmptyRouter": "{{path}}: Router has no choices",
@@ -264,5 +265,7 @@
   "skillsBadge": "Skills · {{count}}",
   "instructionsLabel": "Step instructions",
   "multiSelectInstructionsMixed": "Selected steps have different instructions; typing replaces all…",
-  "multiSelectInstructionsHint": "Instructions differ across selection; edits apply to every selected Agent step."
+  "multiSelectInstructionsHint": "Instructions differ across selection; edits apply to every selected Agent step.",
+  "hitlBlockedInParallel": "Parallel branches cannot pause for step HITL. Move the step out of Parallel or clear HITL.",
+  "multiSelectHitlParallelHint": "HITL cannot be enabled on steps inside Parallel; those selections are skipped."
 }

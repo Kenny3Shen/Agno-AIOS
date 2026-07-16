@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Studio 粘贴进容器 / 同级 + Parallel 内 HITL 防护
+
+- `pasteNodesIntoSelection`：单选容器 → `defaultDropTarget` 默认槽；单选普通步骤 → `locateNode` + `insertAfterLocation` 同级插入；多选/无选中 → 根级追加。
+- Parallel（含嵌套）粘贴 HITL 树时回退到根级，对齐 Agno「Parallel 内不可 HITL」。
+- 抽取 `nodeTreeHasHitl` / `locateNode` / `isInsideParallel` / `insertAfterLocation`；`reparentNode` 复用 HITL 检测。
+- 客户端校验 `hitl_in_parallel`；Inspector / 多选批量开启 HITL 在 Parallel 内禁用或跳过。
+- 单测：粘贴进 condition/parallel、同级顺序、HITL 回退根级、校验码。
 
 ## 已完成：Chat 自动轻量后 Knowledge/Live 开关去高亮
 

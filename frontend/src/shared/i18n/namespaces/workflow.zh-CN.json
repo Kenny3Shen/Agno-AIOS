@@ -170,6 +170,7 @@
   "subtitleMaxIter": "最多 {{count}} 次",
   "validationEmptyWorkflow": "保存前请至少添加一个节点",
   "validationEmptyParallel": "{{path}}：并行节点至少需要一个分支",
+  "validationHitlInParallel": "{{path}}：并行节点内不能开启步骤人工确认/输入/复核（引擎限制）",
   "validationEmptyLoop": "{{path}}：循环体为空",
   "validationEmptyCondition": "{{path}}：条件节点需要「成立」和/或「否则」步骤",
   "validationEmptyRouter": "{{path}}：路由节点没有分支",
@@ -264,5 +265,7 @@
   "skillsBadge": "Skill · {{count}}",
   "instructionsLabel": "步骤指令",
   "multiSelectInstructionsMixed": "所选步骤指令不一致，输入将统一覆盖…",
-  "multiSelectInstructionsHint": "当前指令不一致；编辑内容会写入全部选中的 Agent 步骤。"
+  "multiSelectInstructionsHint": "当前指令不一致；编辑内容会写入全部选中的 Agent 步骤。",
+  "hitlBlockedInParallel": "并行分支内不能暂停等待步骤人工确认。请移出并行节点或关闭 HITL。",
+  "multiSelectHitlParallelHint": "并行内的步骤无法开启 HITL，相关勾选会被跳过。"
 }

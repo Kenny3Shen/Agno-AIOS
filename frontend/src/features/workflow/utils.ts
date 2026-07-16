@@ -200,6 +200,123 @@ export const isDescendantOf = (
   return collectNodeIds([ancestor]).includes(maybeDescendantId)
 }
 
+/** True if this node or any nested step requests HITL. */
+export const nodeTreeHasHitl = (node: WorkflowNode): boolean => {
+  if (node.requiresConfirmation || node.requiresUserInput || node.requiresOutputReview) {
+    return true
+  }
+  return collectNodeIds([node]).some((id) => {
+    if (id === node.id) return false
+    const nested = findNode([node], id)
+    return Boolean(
+      nested?.requiresConfirmation || nested?.requiresUserInput || nested?.requiresOutputReview,
+    )
+  })
+}
+
+/**
+ * Locate a node among roots or nested branches.
+ * Returns parent context for sibling insertion (root / branch / choice).
+ */
+export type NodeLocation =
+  | { kind: 'root'; index: number }
+  | { kind: 'branch'; parentId: string; branch: BranchKey; index: number }
+  | { kind: 'choice'; parentId: string; choiceId: string; index: number }
+
+export const locateNode = (nodes: WorkflowNode[], id: string): NodeLocation | null => {
+  const rootIndex = nodes.findIndex((node) => node.id === id)
+  if (rootIndex >= 0) return { kind: 'root', index: rootIndex }
+
+  const walk = (list: WorkflowNode[]): NodeLocation | null => {
+    for (const node of list) {
+      if (node.steps) {
+        const idx = node.steps.findIndex((child) => child.id === id)
+        if (idx >= 0) {
+          return { kind: 'branch', parentId: node.id, branch: 'steps', index: idx }
+        }
+        const nested = walk(node.steps)
+        if (nested) return nested
+      }
+      if (node.thenSteps) {
+        const idx = node.thenSteps.findIndex((child) => child.id === id)
+        if (idx >= 0) {
+          return { kind: 'branch', parentId: node.id, branch: 'thenSteps', index: idx }
+        }
+        const nested = walk(node.thenSteps)
+        if (nested) return nested
+      }
+      if (node.elseSteps) {
+        const idx = node.elseSteps.findIndex((child) => child.id === id)
+        if (idx >= 0) {
+          return { kind: 'branch', parentId: node.id, branch: 'elseSteps', index: idx }
+        }
+        const nested = walk(node.elseSteps)
+        if (nested) return nested
+      }
+      for (const choice of node.choices ?? []) {
+        const idx = choice.steps.findIndex((child) => child.id === id)
+        if (idx >= 0) {
+          return { kind: 'choice', parentId: node.id, choiceId: choice.id, index: idx }
+        }
+        const nested = walk(choice.steps)
+        if (nested) return nested
+      }
+    }
+    return null
+  }
+  return walk(nodes)
+}
+
+/** True when `nodeId` is nested under any Parallel (including itself). */
+export const isInsideParallel = (nodes: WorkflowNode[], nodeId: string): boolean => {
+  const self = findNode(nodes, nodeId)
+  if (self?.type === 'parallel') return true
+  let current: string | null = nodeId
+  const seen = new Set<string>()
+  while (current && !seen.has(current)) {
+    seen.add(current)
+    const location = locateNode(nodes, current)
+    if (!location || location.kind === 'root') return false
+    const parent = findNode(nodes, location.parentId)
+    if (!parent) return false
+    if (parent.type === 'parallel') return true
+    current = parent.id
+  }
+  return false
+}
+
+/** Insert a child after the given location index (or append when index is last). */
+export const insertAfterLocation = (
+  nodes: WorkflowNode[],
+  location: NodeLocation,
+  child: WorkflowNode,
+): WorkflowNode[] => {
+  if (location.kind === 'root') {
+    const next = [...nodes]
+    next.splice(location.index + 1, 0, child)
+    return next
+  }
+  if (location.kind === 'choice') {
+    return updateNodeInTree(nodes, location.parentId, (parent) => {
+      if (parent.type !== 'router') return parent
+      return {
+        ...parent,
+        choices: (parent.choices ?? []).map((choice) => {
+          if (choice.id !== location.choiceId) return choice
+          const steps = [...choice.steps]
+          steps.splice(location.index + 1, 0, child)
+          return { ...choice, steps }
+        }),
+      }
+    })
+  }
+  return updateNodeInTree(nodes, location.parentId, (parent) => {
+    const current = [...(parent[location.branch] ?? [])]
+    current.splice(location.index + 1, 0, child)
+    return { ...parent, [location.branch]: current }
+  })
+}
+
 /** Deep-clone a node tree with fresh ids (for copy/paste). */
 export const cloneNodeDeep = (node: WorkflowNode): WorkflowNode => {
   const id = crypto.randomUUID()
@@ -313,16 +430,8 @@ export const reparentNode = (
     const parent = findNode(remaining, target.parentId) ?? findNode(nodes, target.parentId)
     if (!parent || !isContainerType(parent.type)) return nodes
     // Agno: no HITL inside Parallel
-    if (parent.type === 'parallel') {
-      const hitl = Boolean(
-        node.requiresConfirmation || node.requiresUserInput || node.requiresOutputReview
-      )
-      if (hitl || collectNodeIds([node]).some((id) => {
-        const n = findNode([node], id)
-        return Boolean(n?.requiresConfirmation || n?.requiresUserInput || n?.requiresOutputReview)
-      })) {
-        return nodes
-      }
+    if (parent.type === 'parallel' && nodeTreeHasHitl(node)) {
+      return nodes
     }
   }
 
@@ -668,6 +777,8 @@ export const fieldForValidationIssue = (issue: Pick<WorkflowValidationIssue, 'co
     case 'empty_router':
     case 'empty_router_choice':
       return 'children'
+    case 'hitl_in_parallel':
+      return 'hitl'
     default:
       return 'name'
   }
@@ -714,6 +825,8 @@ export const validateWorkflowDraft = (
         return `${path}: router expression is required`
       case 'validationSelfWorkflowRef':
         return `${path}: nested workflow cannot reference itself`
+      case 'validationHitlInParallel':
+        return `${path}: step HITL is not allowed inside Parallel`
       default:
         return key
     }
@@ -730,10 +843,22 @@ export const validateWorkflowDraft = (
     return issues
   }
 
-  const walk = (nodes: WorkflowNode[], path: string) => {
+  const walk = (nodes: WorkflowNode[], path: string, insideParallel = false) => {
     for (const node of nodes) {
       const label = node.name?.trim() || node.type
       const here = `${path}/${label}`
+      const nestedParallel = insideParallel || node.type === 'parallel'
+      if (
+        node.type === 'step' &&
+        insideParallel &&
+        (node.requiresConfirmation || node.requiresUserInput || node.requiresOutputReview)
+      ) {
+        issues.push({
+          nodeId: node.id,
+          code: 'hitl_in_parallel',
+          message: t('validationHitlInParallel', { path: here }),
+        })
+      }
       if (node.type === 'parallel') {
         if (!(node.steps ?? []).length) {
           issues.push({
@@ -845,10 +970,12 @@ export const validateWorkflowDraft = (
         }
       }
       for (const list of [node.steps, node.thenSteps, node.elseSteps]) {
-        if (list?.length) walk(list, here)
+        if (list?.length) walk(list, here, nestedParallel)
       }
       for (const choice of node.choices ?? []) {
-        if (choice.steps.length) walk(choice.steps, `${here}/${choice.name || 'choice'}`)
+        if (choice.steps.length) {
+          walk(choice.steps, `${here}/${choice.name || 'choice'}`, nestedParallel)
+        }
       }
     }
   }
@@ -1560,5 +1687,74 @@ export const summarizeSelectedAgentSteps = (
     allOutputReview: agentCount > 0 && agentSteps.every((node) => node.requiresOutputReview),
     noneOutputReview: agentCount > 0 && agentSteps.every((node) => !node.requiresOutputReview),
   }
+}
+
+/**
+ * Insert cloned nodes relative to the current selection:
+ * - single container selected → default empty/primary branch
+ * - single non-container selected → sibling after that node
+ * - multi-select / none → append at roots
+ *
+ * Parallel never receives HITL trees (Agno constraint); those clones fall back to root.
+ */
+export const pasteNodesIntoSelection = (
+  steps: WorkflowNode[],
+  clones: WorkflowNode[],
+  selectedIds: string[],
+  selectedId: string | null,
+): WorkflowNode[] => {
+  if (!clones.length) return steps
+  const soleId =
+    selectedIds.length === 1
+      ? selectedIds[0]
+      : selectedId && selectedIds.length <= 1
+        ? selectedId
+        : null
+  const host = soleId ? findNode(steps, soleId) : null
+
+  // Multi-select or empty selection: root append.
+  if (!host) return [...steps, ...clones]
+
+  // Container: paste into default slot (then/else/steps/choice).
+  if (isContainerType(host.type)) {
+    const drop = defaultDropTarget(host)
+    if (!drop || drop.kind === 'root') return [...steps, ...clones]
+    const intoParallel = isInsideParallel(steps, host.id)
+
+    let next = steps
+    const rootFallback: WorkflowNode[] = []
+    for (const clone of clones) {
+      if (clone.id === drop.parentId) continue
+      if (isDescendantOf([clone], drop.parentId, clone.id)) continue
+      if (intoParallel && nodeTreeHasHitl(clone)) {
+        rootFallback.push(clone)
+        continue
+      }
+      next = insertChild(next, drop, clone)
+    }
+    return rootFallback.length ? [...next, ...rootFallback] : next
+  }
+
+  // Non-container: insert as siblings after the selected node.
+  const location = locateNode(steps, host.id)
+  if (!location) return [...steps, ...clones]
+
+  // Sibling under a Parallel (or deeper) cannot receive HITL trees.
+  const siblingUnderParallel = isInsideParallel(steps, host.id)
+
+  let next = steps
+  const rootFallback: WorkflowNode[] = []
+  // insertAfterLocation shifts indexes; insert in reverse so order is preserved.
+  const ordered = [...clones].reverse()
+  for (const clone of ordered) {
+    if (siblingUnderParallel && nodeTreeHasHitl(clone)) {
+      rootFallback.push(clone)
+      continue
+    }
+    next = insertAfterLocation(next, location, clone)
+  }
+  // rootFallback was collected in reverse order too
+  rootFallback.reverse()
+  return rootFallback.length ? [...next, ...rootFallback] : next
 }
 

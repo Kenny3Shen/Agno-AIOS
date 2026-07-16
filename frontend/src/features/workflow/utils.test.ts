@@ -25,6 +25,8 @@ import {
   findNode,
   summarizeSelectedAgentSteps,
   cloneNodeDeep,
+  pasteNodesIntoSelection,
+  locateNode,
   triggerEnableBlocked,
   workflowWebhookCurl,
   workflowWebhookUrl,
@@ -581,6 +583,19 @@ describe('fieldForValidationIssue', () => {
     expect(validateWorkflowName('  IR  ')).toBeNull()
   })
 
+  it('flags HITL steps nested under Parallel', () => {
+    const hitl = createNode('step')
+    hitl.id = 'h'
+    hitl.requiresConfirmation = true
+    hitl.targetId = 'security-operations'
+    const parallel = createNode('parallel')
+    parallel.id = 'p'
+    parallel.steps = [hitl]
+    const issues = validateWorkflowDraft([parallel])
+    expect(issues.some((issue) => issue.code === 'hitl_in_parallel')).toBe(true)
+    expect(fieldForValidationIssue({ code: 'hitl_in_parallel' })).toBe('hitl')
+  })
+
 
   it('flags empty condition/router CEL', () => {
     const condition = createNode('condition')
@@ -841,3 +856,118 @@ describe('cloneNodeDeep', () => {
   })
 })
 
+describe('pasteNodesIntoSelection', () => {
+  it('pastes into an empty condition then-branch when selected', () => {
+    const condition = createNode('condition')
+    condition.id = 'cond'
+    condition.thenSteps = []
+    condition.elseSteps = []
+    const agent = createNode('step')
+    agent.id = 'agent'
+    const pasted = pasteNodesIntoSelection([condition], [cloneNodeDeep(agent)], ['cond'], 'cond')
+    const host = findNode(pasted, 'cond')
+    expect(host?.thenSteps?.length).toBe(1)
+    expect(pasted).toHaveLength(1)
+  })
+
+  it('appends to roots when no container selected', () => {
+    const a = createNode('step')
+    a.id = 'a'
+    const b = createNode('step')
+    b.id = 'b'
+    const pasted = pasteNodesIntoSelection([a], [cloneNodeDeep(b)], [], null)
+    expect(pasted.map((n) => n.id)).toEqual(['a', expect.any(String)])
+    expect(pasted).toHaveLength(2)
+  })
+
+  it('pastes into parallel body when selected', () => {
+    const parallel = createNode('parallel')
+    parallel.id = 'par'
+    parallel.steps = []
+    const agent = createNode('step')
+    agent.id = 'agent'
+    const pasted = pasteNodesIntoSelection([parallel], [cloneNodeDeep(agent)], ['par'], 'par')
+    const host = findNode(pasted, 'par')
+    expect(host?.steps?.length).toBe(1)
+    expect(pasted).toHaveLength(1)
+  })
+
+  it('appends to roots when multi-select is active', () => {
+    const a = createNode('step')
+    a.id = 'a'
+    const cond = createNode('condition')
+    cond.id = 'cond'
+    cond.thenSteps = []
+    cond.elseSteps = []
+    const b = createNode('step')
+    b.id = 'b'
+    const pasted = pasteNodesIntoSelection([a, cond], [cloneNodeDeep(b)], ['a', 'cond'], 'cond')
+    expect(pasted).toHaveLength(3)
+    expect(findNode(pasted, 'cond')?.thenSteps?.length ?? 0).toBe(0)
+  })
+
+  it('pastes as sibling after a selected agent step', () => {
+    const a = createNode('step')
+    a.id = 'a'
+    const b = createNode('step')
+    b.id = 'b'
+    const c = createNode('step')
+    c.id = 'c'
+    const pasted = pasteNodesIntoSelection([a, b], [cloneNodeDeep(c)], ['a'], 'a')
+    expect(pasted.map((n) => n.id === 'a' || n.id === 'b' || n.id !== 'a')).toBeTruthy()
+    expect(pasted).toHaveLength(3)
+    expect(pasted[0]?.id).toBe('a')
+    expect(pasted[2]?.id).toBe('b')
+    expect(pasted[1]?.id).not.toBe('a')
+    expect(pasted[1]?.id).not.toBe('b')
+  })
+
+  it('pastes multiple clones after sibling preserving order', () => {
+    const a = createNode('step')
+    a.id = 'a'
+    const x = createNode('step')
+    x.id = 'x'
+    x.name = 'X'
+    const y = createNode('step')
+    y.id = 'y'
+    y.name = 'Y'
+    const pasted = pasteNodesIntoSelection(
+      [a],
+      [cloneNodeDeep(x), cloneNodeDeep(y)],
+      ['a'],
+      'a',
+    )
+    expect(pasted).toHaveLength(3)
+    expect(pasted[0]?.id).toBe('a')
+    expect(pasted[1]?.name).toBe('X')
+    expect(pasted[2]?.name).toBe('Y')
+  })
+
+  it('routes HITL paste out of parallel to root', () => {
+    const parallel = createNode('parallel')
+    parallel.id = 'par'
+    parallel.steps = []
+    const hitl = createNode('step')
+    hitl.id = 'hitl'
+    hitl.requiresConfirmation = true
+    const pasted = pasteNodesIntoSelection([parallel], [cloneNodeDeep(hitl)], ['par'], 'par')
+    expect(findNode(pasted, 'par')?.steps?.length ?? 0).toBe(0)
+    expect(pasted).toHaveLength(2)
+    expect(pasted.some((n) => n.requiresConfirmation)).toBe(true)
+  })
+
+  it('locateNode finds nested then-branch index', () => {
+    const agent = createNode('step')
+    agent.id = 't1'
+    const cond = createNode('condition')
+    cond.id = 'cond'
+    cond.thenSteps = [agent]
+    cond.elseSteps = []
+    expect(locateNode([cond], 't1')).toEqual({
+      kind: 'branch',
+      parentId: 'cond',
+      branch: 'thenSteps',
+      index: 0,
+    })
+  })
+})
