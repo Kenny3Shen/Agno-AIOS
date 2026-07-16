@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：抽取 ``batch_traces_by_run_ids`` 公共查找
+
+- 新增 `api/services/trace_lookup_service.py`：按 run_id 批量查最新 trace 行（DISTINCT ON）。
+- Trace ERROR 补充与 Overview recent_failures 共用，去掉 overview → tracing_service 私有导入。
+- 单测覆盖空 ID / 缺表 / 批量映射。
+
 ## 已完成：Dashboard recent_failures 合并 chat-audit ERROR
 
 - `_fetch_recent_failures`：原生 `status=ERROR` + 近期 chat audit 失败 run 批量补 trace（有界），避免「审计终态失败不在 ERROR 列表」。

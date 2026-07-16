@@ -13,6 +13,7 @@ from sqlalchemy.types import DateTime, Float
 
 from api.auth.claims import ActorLike, has_scope, scope_user_id
 from api.services.postgres_store import get_async_agno_postgres_db
+from api.services.trace_lookup_service import batch_traces_by_run_ids
 from api.services.trace_status_service import reconcile_trace_statuses
 
 OverviewRange = Literal["1h", "24h", "7d"]
@@ -325,7 +326,6 @@ async def _fetch_recent_failures(
     }
     try:
         from api.persistence.audit_logs import recent_failed_chat_run_ids_async
-        from api.services.tracing_service import _batch_traces_by_run_ids
 
         failed_ids = await recent_failed_chat_run_ids_async(
             limit=max(safe_limit * 2, 20),
@@ -334,7 +334,7 @@ async def _fetch_recent_failures(
         candidates = [run_id for run_id in failed_ids if run_id not in present]
         remaining = max(0, safe_limit - len(failures))
         if candidates and remaining > 0:
-            traces_by_run = await _batch_traces_by_run_ids(candidates[: remaining * 2])
+            traces_by_run = await batch_traces_by_run_ids(candidates[: remaining * 2])
             extras: list[dict[str, Any]] = []
             for run_id in candidates:
                 raw = traces_by_run.get(run_id)

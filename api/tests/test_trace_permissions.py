@@ -868,7 +868,7 @@ async def test_list_traces_error_filter_supplements_audit_failures() -> None:
 
     with (
         patch.object(tracing_service._trace_db, "get_traces", fake_get_traces),
-        patch.object(tracing_service, "_batch_traces_by_run_ids", fake_batch_traces),
+        patch.object(tracing_service, "batch_traces_by_run_ids", fake_batch_traces),
         patch.object(tracing_service, "reconcile_trace_statuses", fake_reconcile),
         patch.object(tracing_service, "_attach_list_inputs", fake_inputs),
         patch(
@@ -918,7 +918,7 @@ async def test_list_traces_error_audit_batch_loads_missing_runs_once() -> None:
 
     with (
         patch.object(tracing_service._trace_db, "get_traces", fake_get_traces),
-        patch.object(tracing_service, "_batch_traces_by_run_ids", fake_batch_traces),
+        patch.object(tracing_service, "batch_traces_by_run_ids", fake_batch_traces),
         patch.object(tracing_service, "reconcile_trace_statuses", side_effect=lambda items, **_: list(items)),
         patch.object(tracing_service, "_attach_list_inputs", side_effect=lambda items: items),
         patch(

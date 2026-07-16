@@ -9,6 +9,7 @@ from loguru import logger
 from api.auth.ownership import assert_owned_resource
 from api.services.chat_run_events import approval_rejection_reason
 from api.services.postgres_store import coerce_json_value, get_async_agno_postgres_db
+from api.services.trace_lookup_service import batch_traces_by_run_ids
 from api.services.trace_status_service import reconcile_trace_statuses, trace_has_status
 from api.utils.json import JSONDecodeError, dumps, loads
 from api.utils.pagination import pagination_meta
@@ -205,42 +206,6 @@ async def _root_inputs_for_trace_ids(trace_ids: list[str]) -> dict[str, str | No
         inputs[trace_id] = _root_input_from_spans(spans_by_trace.get(trace_id) or [])
     return inputs
 
-
-
-async def _batch_traces_by_run_ids(run_ids: list[str]) -> dict[str, dict[str, Any]]:
-    """Load one trace row per run_id in a single traces-table query.
-
-    Prefer the newest ``start_time`` when a run has multiple traces. Returns
-    plain dict rows suitable for list projection (no Agno model objects).
-    """
-    safe_ids = [str(run_id).strip() for run_id in run_ids if str(run_id or "").strip()]
-    if not safe_ids:
-        return {}
-
-    from sqlalchemy import select
-
-    table = await _trace_db._get_table(table_type="traces")
-    if table is None:
-        return {}
-
-    # DISTINCT ON (run_id): one row per run, newest start first.
-    stmt = (
-        select(table)
-        .where(table.c.run_id.in_(safe_ids))
-        .distinct(table.c.run_id)
-        .order_by(table.c.run_id, table.c.start_time.desc())
-    )
-
-    by_run: dict[str, dict[str, Any]] = {}
-    async with _trace_db.async_session_factory() as session:
-        result = await session.execute(stmt)
-        for row in result.mappings():
-            data = dict(row)
-            run_key = str(data.get("run_id") or "").strip()
-            if not run_key:
-                continue
-            by_run[run_key] = data
-    return by_run
 
 
 async def _attach_list_inputs(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -630,7 +595,7 @@ async def _merge_audit_error_traces(
     candidates = candidates[: max(remaining_slots, _AUDIT_ERROR_SUPPLEMENT_LIMIT)]
 
     try:
-        traces_by_run = await _batch_traces_by_run_ids(candidates)
+        traces_by_run = await batch_traces_by_run_ids(candidates)
     except Exception:
         logger.exception("Unable to batch-load audit-supplement traces")
         return items, total_count

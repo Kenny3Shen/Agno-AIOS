@@ -730,7 +730,7 @@ async def test_recent_failures_includes_audit_only_chat_errors():
             AsyncMock(return_value=["run-audit", "run-native"]),
         ),
         patch(
-            "api.services.tracing_service._batch_traces_by_run_ids",
+            "api.services.overview_service.batch_traces_by_run_ids",
             AsyncMock(return_value={"run-audit": audit_trace}),
         ),
     ):
