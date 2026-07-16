@@ -57,9 +57,46 @@ async def test_list_skill_workflow_references_filters_matches():
     ]
 
     async def fake_list(**kwargs):
-        return rows, 2
+        assert kwargs["skill_name"] == "playbook-skill"
+        return rows
 
     actor = SimpleNamespace(id="u1", role="user", is_superuser=False)
-    with patch.object(refs.workflow_store, "list_workflows", new=AsyncMock(side_effect=fake_list)):
+    with patch.object(
+        refs.workflow_store,
+        "list_workflows_referencing_skill_text",
+        new=AsyncMock(side_effect=fake_list),
+    ):
         matches = await refs.list_skill_workflow_references(actor, "playbook-skill")
     assert matches == [{"workflow_id": "wf-1", "name": "IR", "version": "2"}]
+
+
+@pytest.mark.asyncio
+async def test_list_skill_workflow_references_ignores_incidental_text_matches():
+    rows = [
+        {
+            "id": "wf-1",
+            "name": "Mentions only",
+            "version": 1,
+            "definition": {
+                "steps": [
+                    {
+                        "id": "a",
+                        "instructions": "use playbook-skill carefully",
+                        "skills": [],
+                    }
+                ]
+            },
+        }
+    ]
+
+    async def fake_list(**_kwargs):
+        return rows
+
+    actor = SimpleNamespace(id="u1", role="user", is_superuser=False)
+    with patch.object(
+        refs.workflow_store,
+        "list_workflows_referencing_skill_text",
+        new=AsyncMock(side_effect=fake_list),
+    ):
+        matches = await refs.list_skill_workflow_references(actor, "playbook-skill")
+    assert matches == []

@@ -217,7 +217,7 @@ export function SkillsPage() {
                             type="link"
                             size="small"
                             style={{ paddingInline: 0 }}
-                            href={`#/workflows?workflow_id=${encodeURIComponent(row.workflow_id)}`}
+                            href={`#/workflow?workflow_id=${encodeURIComponent(row.workflow_id)}`}
                           >
                             {t('openWorkflow')}
                           </Button>

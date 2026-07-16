@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    cast,
     delete,
     func,
     or_,
@@ -345,6 +346,38 @@ async def get_workflow_version(workflow_id: str, version: int) -> dict[str, Any]
             .first()
         )
     return dict(row) if row else None
+
+
+
+
+async def list_workflows_referencing_skill_text(
+    *,
+    skill_name: str,
+    owner_user_id: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """Prefilter workflows whose definition JSON text mentions ``skill_name``.
+
+    Callers must still walk the definition tree — this is only a bounded
+    candidate filter (ILIKE on ``definition`` cast to text).
+    """
+    await ensure_workflows_table_async()
+    table = workflows_table()
+    needle = (skill_name or "").strip()
+    if not needle:
+        return []
+    safe_limit = max(1, min(int(limit or 100), 200))
+    # Coarse candidate filter; tree walk confirms real skill bindings.
+    pattern = f"%{needle}%"
+    filters = [cast(table.c.definition, String).ilike(pattern)]
+    if owner_user_id is not None:
+        filters.append(table.c.owner_user_id == owner_user_id)
+    stmt = select(table).order_by(table.c.updated_at.desc()).limit(safe_limit)
+    for clause in filters:
+        stmt = stmt.where(clause)
+    async with get_async_control_plane_engine().begin() as conn:
+        rows = (await conn.execute(stmt)).mappings().all()
+    return [dict(row) for row in rows]
 
 
 async def list_workflows_for_cron(*, limit: int = 200) -> list[dict[str, Any]]:

@@ -122,5 +122,7 @@
   "libraryLoadMore": "加载更多（已显示 {{shown}} / {{total}}）",
   "librarySearchEmpty": "没有匹配的工作流",
   "libraryEmpty": "还没有已保存的工作流",
-  "librarySearching": "搜索中…"
+  "librarySearching": "搜索中…",
+  "keyboardHints": "快捷键：Ctrl/⌘Z 撤销 · Y 重做 · C/V 复制粘贴 · A 全选 · L 整理布局 · Esc 取消选择 · Del 删除",
+  "keyboardHintsTitle": "快捷键"
 }

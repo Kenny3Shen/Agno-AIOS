@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Skill 引用 SQL 预筛 + 深链修复 + Studio 快捷键提示
+
+- Skill 引用：`definition` 文本 ILIKE 预筛候选，再 DSL 树确认真实 `skills` 绑定（去掉全库分页扫）。
+- Skill「打开」深链改为 `#/workflow?workflow_id=`（原先误写 workflows）。
+- Studio 工具栏快捷键 Tooltip；Chat 新建会话清空搜索词。
+
 ## 已完成：Chat 预览搜索 / Escape 取消选择 / soft-error 自动关闭 / Skill 被引用
 
 - Chat `q`：SQL 额外匹配 `runs` JSON 文本（预览输入）；占位文案同步。

@@ -33,6 +33,7 @@ import {
   CloudUploadOutlined,
   CopyOutlined,
   ReloadOutlined,
+  QuestionCircleOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { Markdown } from '@/shared/ui/Markdown'
@@ -339,6 +340,9 @@ export function WorkflowPage() {
             <Button icon={<ApartmentOutlined />} onClick={workflow.organizeLayout}>
               {t('organize')}
             </Button>
+          </Tooltip>
+          <Tooltip title={t('keyboardHints')} getPopupContainer={studioPopupContainer}>
+            <Button type="text" icon={<QuestionCircleOutlined />} aria-label={t('keyboardHintsTitle')} />
           </Tooltip>
           <Button
             icon={<SaveOutlined />}

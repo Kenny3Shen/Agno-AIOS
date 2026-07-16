@@ -122,5 +122,7 @@
   "libraryLoadMore": "Load more ({{shown}} / {{total}})",
   "librarySearchEmpty": "No workflows match this search",
   "libraryEmpty": "No saved workflows yet",
-  "librarySearching": "Searching…"
+  "librarySearching": "Searching…",
+  "keyboardHints": "Shortcuts: Ctrl/⌘Z undo · Y redo · C/V copy/paste · A select all · L auto-layout · Esc clear · Del delete",
+  "keyboardHintsTitle": "Keyboard"
 }

@@ -46,40 +46,32 @@ async def list_skill_workflow_references(
 ) -> list[dict[str, str]]:
     """Return workflows visible to actor that bind ``skill_name`` on any step.
 
-    Scans saved draft definitions (not only published). Bounded page walk.
+    Uses a SQL text prefilter on ``definition``, then walks the DSL tree so
+    incidental string matches in instructions do not count as bindings.
     """
     needle = (skill_name or "").strip()
     if not needle:
         return []
     owner = None if has_scope(actor, ADMIN_SCOPE) else actor_id(actor)
     safe_limit = max(1, min(int(limit or 50), 100))
+    # Fetch more candidates than we return — text ILIKE is a coarse filter.
+    candidates = await workflow_store.list_workflows_referencing_skill_text(
+        skill_name=needle,
+        owner_user_id=owner,
+        limit=min(200, max(safe_limit * 4, 50)),
+    )
     matches: list[dict[str, str]] = []
-    page = 1
-    # Cap scan so a huge catalog cannot hang the request.
-    max_pages = 20
-    while page <= max_pages and len(matches) < safe_limit:
-        rows, total = await workflow_store.list_workflows(
-            owner_user_id=owner,
-            page=page,
-            limit=100,
+    for row in candidates:
+        names = skill_names_in_definition(row.get("definition"))
+        if needle not in names:
+            continue
+        matches.append(
+            {
+                "workflow_id": str(row.get("id") or ""),
+                "name": str(row.get("name") or ""),
+                "version": str(row.get("version") or ""),
+            }
         )
-        if not rows:
+        if len(matches) >= safe_limit:
             break
-        for row in rows:
-            definition = row.get("definition")
-            names = skill_names_in_definition(definition)
-            if needle not in names:
-                continue
-            matches.append(
-                {
-                    "workflow_id": str(row.get("id") or ""),
-                    "name": str(row.get("name") or ""),
-                    "version": str(row.get("version") or ""),
-                }
-            )
-            if len(matches) >= safe_limit:
-                break
-        if page * 100 >= int(total or 0):
-            break
-        page += 1
     return matches

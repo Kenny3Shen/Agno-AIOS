@@ -195,6 +195,7 @@ export function useChat() {
   const setLiveSearch = (value: boolean) => dispatch({ type: 'live-search', value })
   const newChat = () => {
     dispatch({ type: 'reasoning-effort', value: defaultReasoningEffort(selectedModel) })
+    setSessionSearch('')
     setSession(null)
   }
   return {
