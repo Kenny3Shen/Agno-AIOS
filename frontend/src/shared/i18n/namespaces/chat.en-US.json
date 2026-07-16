@@ -73,6 +73,7 @@
   "tokensMetricTitle": "{{count}} tokens",
   "skillsAttachedBadge": "Skills · {{count}}",
   "skillsAttachedHelp": "Local Skills attached for this turn by intent.",
-  "skillsAllEnabled": "All enabled Skills this turn",
-  "skillsNone": "No Skills attached this turn"
+  "skillsAllEnabled": "General security intent; all enabled Local Skills are attached.",
+  "skillsNone": "No Skills attached this turn",
+  "skillsAllEnabledBadge": "All Skills"
 }

@@ -350,6 +350,11 @@ function MessageBody({ message, retry, sessionId }: { message: Message; retry: (
             <span className="run-metric run-metric--lean">{t('autoLeanBadge')}</span>
           </Tooltip>
         ) : null}
+        {!message.leanMode && message.skillNames === null ? (
+          <Tooltip title={t('skillsAllEnabled')}>
+            <span className="run-metric run-metric--skills">{t('skillsAllEnabledBadge')}</span>
+          </Tooltip>
+        ) : null}
         {Array.isArray(message.skillNames) && message.skillNames.length > 0 ? (
           <Tooltip title={t('skillsAttached', { names: message.skillNames.join(', ') })}>
             <span className="run-metric run-metric--skills">{t('skillsAttachedBadge', { count: message.skillNames.length })}</span>
@@ -526,6 +531,15 @@ export function ChatPage() {
                 )
               }
               const names = latestAssistant?.skillNames
+              if (names === null && !latestAssistant?.leanMode) {
+                return (
+                  <Tooltip title={t('skillsAllEnabled')}>
+                    <Tag className="context-mode-tag" color="blue">
+                      {t('skillsAllEnabledBadge')}
+                    </Tag>
+                  </Tooltip>
+                )
+              }
               if (Array.isArray(names) && names.length > 0) {
                 return (
                   <Tooltip title={t('skillsAttached', { names: names.join(', ') })}>

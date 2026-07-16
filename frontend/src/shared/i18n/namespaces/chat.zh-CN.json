@@ -73,6 +73,7 @@
   "tokensMetricTitle": "{{count}} tokens",
   "skillsAttachedBadge": "Skills · {{count}}",
   "skillsAttachedHelp": "本轮按意图挂载的 Local Skills。",
-  "skillsAllEnabled": "本轮全量已启用 Skills",
-  "skillsNone": "本轮未挂载 Skill"
+  "skillsAllEnabled": "本轮通用安全意图，已挂载全部已启用 Local Skills。",
+  "skillsNone": "本轮未挂载 Skill",
+  "skillsAllEnabledBadge": "全量 Skills"
 }

@@ -11,7 +11,7 @@
 - Skills Drawer：内容 Tab / 元数据 Tab i18n。
 - Dashboard 时延图：`P50`/`P95`/纵轴 `ms` 走 dashboard i18n。
 - Knowledge 入库 strategy 选项短标签 i18n。
-- Chat：消息条与顶栏在 `skillNames.length > 0` 时展示「Skills · N」chip（Tooltip 列出名称）；`leanMode` 仍显示「本轮自动轻量」。
+- Chat：消息条与顶栏在 `skillNames.length > 0` 时展示「Skills · N」chip（Tooltip 列出名称）；`skillNames === null` 展示「全量 Skills」；`leanMode` 仍显示「本轮自动轻量」。
 
 ## 已完成：Workflow 运行历史/触发历史状态 i18n + Grok 自动轻量冒烟
 

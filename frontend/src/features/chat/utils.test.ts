@@ -208,4 +208,25 @@ describe('chat behavior', () => {
     })
   })
 
+  it('stores null skillNames for all-enabled skills', () => {
+    const assistant: Message = { id: 'a', role: 'assistant', content: '', final: false, status: 'streaming' }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    const next = chatReducer(started, {
+      type: 'event',
+      id: 'a',
+      event: {
+        type: 'run.started',
+        runId: 'run-all',
+        leanMode: false,
+        skillNames: null,
+        enableTools: true,
+      },
+    })
+    expect(next.messages[0]).toMatchObject({
+      run_id: 'run-all',
+      leanMode: false,
+      skillNames: null,
+    })
+  })
+
 })
