@@ -124,6 +124,16 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：死代码删除 + progress/middleware 类型卫生
+
+- 删除已无调用的 `KnowledgeBaseLifecycle._collect_all_content_rows_async`（clear 已流式）
+- `knowledge_progress.emit_progress` 用 `isinstance(..., Awaitable)`；`stage_index` 线性匹配，去掉 type-ignore
+- `main.py` CORS/JWT `add_middleware` 用 `cast(Any, ...)` 替代 type-ignore
+
+相关：`knowledge_service.py` / `knowledge_progress.py` / `main.py`
+
+---
+
 ## 已完成：Knowledge clear 流式删除
 
 - `clear_knowledge_base_async` 不再 `_collect_all_content_rows_async` 全量装载；按 page 流式删除，删除后同页重取

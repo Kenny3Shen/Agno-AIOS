@@ -926,39 +926,6 @@ class KnowledgeBaseLifecycle:
                 return document
         raise RuntimeError("知识写入完成但未能读取内容登记记录")
 
-    async def _collect_all_content_rows_async(self, *, page_size: int = 200) -> list[Any]:
-        """Page through contents DB with a hard page ceiling (safety net).
-
-        Prefer streaming callers (e.g. clear) that never hold the full corpus.
-        """
-        safe_page_size = max(1, min(int(page_size or 200), 500))
-        max_pages = 50
-        page = 1
-        collected: list[Any] = []
-        while page <= max_pages:
-            contents, total_count = await self._knowledge_content_rows_async(
-                limit=safe_page_size,
-                page=page,
-                sort_by="updated_at",
-                sort_order="desc",
-            )
-            if not contents:
-                break
-            collected.extend(contents)
-            if total_count is not None and len(collected) >= int(total_count):
-                break
-            if len(contents) < safe_page_size:
-                break
-            page += 1
-        else:
-            logger.warning(
-                "collect_all_content_rows truncated at {} rows (page_size={}, max_pages={})",
-                len(collected),
-                safe_page_size,
-                max_pages,
-            )
-        return collected
-
     async def list_documents_async(self, owner_user_id: str | None = None) -> list[KnowledgeDocumentPayload]:
         """Compatibility full list via paged reads (not a single unbounded dump).
 

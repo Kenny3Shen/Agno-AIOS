@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+from typing import Any, cast
 
 from anyio import Lock, Path as AsyncPath
 from fastapi import FastAPI
@@ -163,8 +164,9 @@ app = FastAPI(
     lifespan=combine_lifespans(lifespan, mcp_app.lifespan),
 )
 
+# Starlette middleware typing expects pure ASGI; FastAPI classes are compatible at runtime.
 app.add_middleware(
-    CORSMiddleware,  # type: ignore[arg-type]
+    cast(Any, CORSMiddleware),
     allow_origins=app_settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
@@ -198,7 +200,7 @@ app.include_router(notifications.router)
 
 app.state.cors_allowed_origins = app_settings.cors_origins
 app.add_middleware(
-    JWTMiddleware,  # type: ignore[arg-type]
+    cast(Any, JWTMiddleware),
     verification_keys=[app_settings.auth_jwt_secret.get_secret_value()],
     algorithm="HS256",
     authorization=True,

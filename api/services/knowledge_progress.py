@@ -94,15 +94,15 @@ async def emit_progress(
         error=error,
     )
     result = callback(event)
-    if hasattr(result, "__await__"):
-        await result  # type: ignore[misc]
+    if isinstance(result, Awaitable):
+        await result
 
 
 def stage_index(stage: str) -> int:
-    try:
-        return KNOWLEDGE_PROGRESS_STAGES.index(stage)  # type: ignore[arg-type]
-    except ValueError:
-        return -1
+    for index, known in enumerate(KNOWLEDGE_PROGRESS_STAGES):
+        if known == stage:
+            return index
+    return -1
 
 
 def active_stage_from_events(events: Sequence[Mapping[str, Any]]) -> str | None:
