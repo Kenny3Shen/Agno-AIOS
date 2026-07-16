@@ -541,7 +541,7 @@ export function useWorkflow() {
           applyRecord(fromRecord(record))
         })
         .catch((error: unknown) => {
-          const message = error instanceof Error ? error.message : 'Failed to load workflow'
+          const message = error instanceof Error ? error.message : t('errorLoadFailed')
           setState((current) => ({ ...current, loading: false, error: message }))
         })
         .finally(() => {
