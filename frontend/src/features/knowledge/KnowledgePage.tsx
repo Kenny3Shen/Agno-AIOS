@@ -16,18 +16,16 @@ import { effectiveKnowledgeIngestDefaults, resolveRetrievalContent, SEARCH_TYPE_
 import { useTranslation } from 'react-i18next'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 
-const renderModeOptions: Array<{ value: RetrievalRenderMode; label: string }> = [
-  { value: 'auto', label: 'Auto' },
-  { value: 'markdown', label: 'Markdown' },
-  { value: 'json', label: 'JSON' },
-  { value: 'text', label: 'Text' },
-]
-
-const searchTypeOptions = SEARCH_TYPE_OPTIONS.map((value) => ({ value, label: value }))
-
 function RetrievalResultCard({ result }: { result: SearchResult }) {
+  const { t } = useTranslation('knowledge')
   const [renderMode, setRenderMode] = useState<RetrievalRenderMode>('auto')
   const content = resolveRetrievalContent(result, renderMode)
+  const renderModeOptions: Array<{ value: RetrievalRenderMode; label: string }> = [
+    { value: 'auto', label: t('renderModeAuto') },
+    { value: 'markdown', label: t('renderModeMarkdown') },
+    { value: 'json', label: t('renderModeJson') },
+    { value: 'text', label: t('renderModeText') },
+  ]
   return (
     <Card
       size="small"
@@ -36,7 +34,7 @@ function RetrievalResultCard({ result }: { result: SearchResult }) {
       extra={
         <Space size={6} wrap>
           <Select
-            aria-label={`Render ${result.title}`}
+            aria-label={t('renderAria', { title: result.title })}
             size="small"
             value={renderMode}
             options={renderModeOptions}
@@ -54,18 +52,18 @@ function RetrievalResultCard({ result }: { result: SearchResult }) {
         size="small"
         column={1}
         items={[
-          { key: 'source', label: 'Source', children: result.source || '-' },
-          { key: 'chunk', label: 'Chunk', children: result.chunk_index },
+          { key: 'source', label: t('resultSource'), children: result.source || '-' },
+          { key: 'chunk', label: t('resultChunk'), children: result.chunk_index },
           {
             key: 'document',
-            label: 'Document',
+            label: t('resultDocument'),
             children: <Typography.Text copyable={{ text: result.doc_id }}>{result.doc_id}</Typography.Text>,
           },
         ]}
       />
       <div className="retrieval-result-content">
         {content.kind === 'json' ? (
-          <JsonValueCard value={content.value} title="Content" />
+          <JsonValueCard value={content.value} title={t('resultContent')} />
         ) : content.kind === 'markdown' ? (
           <Markdown content={String(content.value)} openLinksInNewTab escapeRawHtml />
         ) : (
@@ -78,6 +76,7 @@ function RetrievalResultCard({ result }: { result: SearchResult }) {
 
 export function KnowledgePage() {
   const { t } = useTranslation('knowledge')
+  const searchTypeOptions = SEARCH_TYPE_OPTIONS.map((value) => ({ value, label: value }))
   const { message } = App.useApp()
   const screens = Grid.useBreakpoint()
   const vertical = screens.md === false
@@ -203,7 +202,7 @@ export function KnowledgePage() {
           },
           {
             key: 'retrieval',
-            label: 'Retrieval playground',
+            label: t('tabRetrieval'),
             children: (
               <Card className="workbench-card retrieval-playground">
                 <Space className="retrieval-toolbar" align="start" wrap>
@@ -230,7 +229,7 @@ export function KnowledgePage() {
                     <Form.Item name="query" rules={[{ required: true }]} style={{ flex: 1 }}>
                       <Input prefix={<SearchOutlined />} placeholder={t('searchPlaceholder')} />
                     </Form.Item>
-                    <Form.Item name="search_type" label="Search type">
+                    <Form.Item name="search_type" label={t('searchType')}>
                       <Select options={searchTypeOptions} style={{ width: 120 }} />
                     </Form.Item>
                     <Form.Item name="limit">

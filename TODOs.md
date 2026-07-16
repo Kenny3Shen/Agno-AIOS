@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Workflow 画布运行态/节点类型 i18n + Knowledge 检索台文案
+
+- Studio 节点：运行态 pill（运行中/成功/失败/暂停）与类型标签走 workflow i18n。
+- Knowledge：检索试验台 Tab、检索类型、结果 Source/Chunk/Document、渲染模式选项 i18n；元数据 ID 标签。
+- 相关 Knowledge 单测按 zh-CN 文案断言。
+
 ## 已完成：Chat 意图过滤 MCP 工具面 + Skills/Audit/Eval 表头 i18n
 
 - trivial / 非安全句：`skill_names=[]` 时**不连接 MCP**，走 lite 提示词与短历史。

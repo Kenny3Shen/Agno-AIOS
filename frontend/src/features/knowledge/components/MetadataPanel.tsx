@@ -32,7 +32,7 @@ export function MetadataPanel({
         <MetadataDescriptions
           items={[
             { key: 'title', label: t('columns.title'), children: <Typography.Text strong>{document.title}</Typography.Text> },
-            { key: 'id', label: 'ID', children: <CopyableValue value={document.id} /> },
+            { key: 'id', label: t('metaId'), children: <CopyableValue value={document.id} /> },
             { key: 'source', label: t('columns.source'), children: document.source || '-' },
             { key: 'created', label: t('created'), children: formatDate(document.created_at) },
             { key: 'updated', label: t('updated'), children: formatDate(document.updated_at || document.created_at) },

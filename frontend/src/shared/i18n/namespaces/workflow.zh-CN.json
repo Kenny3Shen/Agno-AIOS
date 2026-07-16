@@ -200,5 +200,15 @@
   "validationEmptyRouterCel": "{{path}}：请填写路由表达式",
   "validationSelfWorkflowRef": "{{path}}：嵌套工作流不能引用自身",
   "canvasEmptyHint": "从左侧面板拖入节点",
-  "canvasEmptyDrop": "放到画布上，或拖入容器节点以嵌套"
+  "canvasEmptyDrop": "放到画布上，或拖入容器节点以嵌套",
+  "runStatusRunning": "运行中",
+  "runStatusOk": "成功",
+  "runStatusError": "失败",
+  "runStatusPaused": "已暂停",
+  "nodeType_step": "Agent",
+  "nodeType_parallel": "并行",
+  "nodeType_condition": "条件",
+  "nodeType_loop": "循环",
+  "nodeType_router": "路由",
+  "nodeType_workflow_ref": "嵌套"
 }

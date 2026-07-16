@@ -122,5 +122,18 @@
   "updateTab": "Update",
   "textTab": "Text",
   "uploadTab": "Upload",
-  "searchFailed": "Knowledge search failed. Please try again."
+  "searchFailed": "Knowledge search failed. Please try again.",
+  "tabRetrieval": "Retrieval playground",
+  "searchType": "Search type",
+  "renderMode": "Render mode",
+  "renderModeAuto": "Auto",
+  "renderModeMarkdown": "Markdown",
+  "renderModeJson": "JSON",
+  "renderModeText": "Text",
+  "resultSource": "Source",
+  "resultChunk": "Chunk",
+  "resultDocument": "Document",
+  "resultContent": "Content",
+  "renderAria": "Render {{title}}",
+  "metaId": "ID"
 }

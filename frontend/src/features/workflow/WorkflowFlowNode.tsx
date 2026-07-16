@@ -49,13 +49,6 @@ const TYPE_META: Record<
   workflow_ref: { color: '#389e0d', bg: 'rgba(82,196,26,0.1)', icon: 'W' },
 }
 
-const RUN_LABEL: Record<WorkflowNodeRunStatus, string> = {
-  running: 'RUNNING',
-  ok: 'OK',
-  error: 'ERROR',
-  paused: 'PAUSED',
-}
-
 function handleLeftPercent(index: number, total: number): string {
   if (total <= 1) return '50%'
   return `${((index + 1) / (total + 1)) * 100}%`
@@ -83,6 +76,18 @@ function WorkflowFlowNodeComponent({
     '--wf-node-bg': meta.bg,
   } as CSSProperties
   const runClass = payload.runStatus ? `is-run-${payload.runStatus}` : ''
+  const runLabelKey =
+    payload.runStatus === 'running'
+      ? 'runStatusRunning'
+      : payload.runStatus === 'ok'
+        ? 'runStatusOk'
+        : payload.runStatus === 'error'
+          ? 'runStatusError'
+          : payload.runStatus === 'paused'
+            ? 'runStatusPaused'
+            : null
+  const runLabel = runLabelKey ? t(runLabelKey) : null
+  const typeLabel = t(`nodeType_${payload.nodeType}`)
   const branches = payload.branchHandles ?? []
   const multiOut = branches.length > 0
   const branchLabel = (label: string) => (BRANCH_I18N_KEYS.has(label) ? t(label) : label)
@@ -162,14 +167,14 @@ function WorkflowFlowNodeComponent({
       <div className="wf-flow-node__badge" aria-hidden>
         {meta.icon}
         {payload.invalid ? <span className="wf-flow-node__invalid-pill">!</span> : null}
-        {payload.runStatus ? (
+        {payload.runStatus && runLabel ? (
           <span className={`wf-flow-node__run-pill is-${payload.runStatus}`}>
-            {RUN_LABEL[payload.runStatus]}
+            {runLabel}
           </span>
         ) : null}
       </div>
       <div className="wf-flow-node__body">
-        <div className="wf-flow-node__type">{payload.nodeType}</div>
+        <div className="wf-flow-node__type">{typeLabel}</div>
         <div className="wf-flow-node__title">{payload.label}</div>
         {payload.subtitle ? <div className="wf-flow-node__sub">{payload.subtitle}</div> : null}
         {payload.hitl ? <div className="wf-flow-node__hitl">{t('hitlBadge')}</div> : null}

@@ -200,5 +200,15 @@
   "validationEmptyRouterCel": "{{path}}: router expression is required",
   "validationSelfWorkflowRef": "{{path}}: nested workflow cannot reference itself",
   "canvasEmptyHint": "Drag nodes from the left palette",
-  "canvasEmptyDrop": "Drop onto the canvas — or onto a container to nest"
+  "canvasEmptyDrop": "Drop onto the canvas — or onto a container to nest",
+  "runStatusRunning": "RUNNING",
+  "runStatusOk": "OK",
+  "runStatusError": "ERROR",
+  "runStatusPaused": "PAUSED",
+  "nodeType_step": "Agent",
+  "nodeType_parallel": "Parallel",
+  "nodeType_condition": "Condition",
+  "nodeType_loop": "Loop",
+  "nodeType_router": "Router",
+  "nodeType_workflow_ref": "Nested"
 }

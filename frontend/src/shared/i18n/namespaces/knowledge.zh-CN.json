@@ -122,5 +122,18 @@
   "updateTab": "更新",
   "textTab": "文本",
   "uploadTab": "上传",
-  "searchFailed": "知识库检索失败，请稍后重试。"
+  "searchFailed": "知识库检索失败，请稍后重试。",
+  "tabRetrieval": "检索试验台",
+  "searchType": "检索类型",
+  "renderMode": "渲染方式",
+  "renderModeAuto": "自动",
+  "renderModeMarkdown": "Markdown",
+  "renderModeJson": "JSON",
+  "renderModeText": "纯文本",
+  "resultSource": "来源",
+  "resultChunk": "分块",
+  "resultDocument": "文档",
+  "resultContent": "内容",
+  "renderAria": "渲染 {{title}}",
+  "metaId": "ID"
 }

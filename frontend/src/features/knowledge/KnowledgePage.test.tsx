@@ -272,10 +272,10 @@ describe('knowledge document workflow', () => {
     server.use(http.get('/api/knowledge', () => HttpResponse.json(response(oldDocument))))
     renderWithQuery(<KnowledgePage />)
 
-    fireEvent.click(await screen.findByRole('tab', { name: 'Retrieval playground' }))
+    fireEvent.click(await screen.findByRole('tab', { name: '检索试验台' }))
 
     expect(screen.getByPlaceholderText('测试检索查询')).toBeTruthy()
-    expect(screen.getByRole('combobox', { name: 'Search type' })).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: '检索类型' })).toBeTruthy()
     expect(screen.getByText('hybrid')).toBeTruthy()
     expect(screen.queryByRole('combobox', { name: 'Result render mode' })).toBeNull()
   })
@@ -295,12 +295,12 @@ describe('knowledge document workflow', () => {
     )
     renderWithQuery(<KnowledgePage />)
 
-    fireEvent.click(await screen.findByRole('tab', { name: 'Retrieval playground' }))
+    fireEvent.click(await screen.findByRole('tab', { name: '检索试验台' }))
     fireEvent.change(screen.getByPlaceholderText('测试检索查询'), { target: { value: 'policy' } })
     fireEvent.click(screen.getByRole('button', { name: /检\s*索/ }))
 
-    expect(await screen.findByRole('combobox', { name: 'Render JSON result' })).toBeTruthy()
-    expect(screen.getByRole('combobox', { name: 'Render Markdown result' })).toBeTruthy()
+    expect(await screen.findByRole('combobox', { name: '渲染 JSON result' })).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: '渲染 Markdown result' })).toBeTruthy()
     expect(screen.getByText(/risk/)).toBeTruthy()
     expect(screen.getByText(/high/)).toBeTruthy()
   })
