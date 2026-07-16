@@ -140,5 +140,22 @@
   "errorRestoreFailed": "Restore failed",
   "errorRunFailed": "Run failed",
   "errorLoadFailed": "Load failed",
-  "errorDeleteFailed": "Delete failed"
+  "errorDeleteFailed": "Delete failed",
+  "slotAddBranch": "Add branch",
+  "slotAddBodyStep": "Add body step",
+  "slotAddThen": "Add then",
+  "slotAddElse": "Add else",
+  "slotAddPath": "Add {{name}}",
+  "slotPathDefault": "path",
+  "hitlBadge": "HITL",
+  "branchThen": "then",
+  "branchElse": "else",
+  "branchBody": "body",
+  "branchOut": "branch",
+  "branchNext": "next",
+  "toolbarCopy": "Copy",
+  "toolbarDuplicate": "Duplicate",
+  "toolbarDup": "Dup",
+  "toolbarDelete": "Delete",
+  "toolbarDel": "Del"
 }

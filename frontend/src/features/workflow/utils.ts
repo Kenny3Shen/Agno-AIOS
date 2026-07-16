@@ -165,7 +165,9 @@ export type ReparentTarget =
 
 export type EmptySlot = {
   key: string
-  label: string
+  /** i18n key under workflow namespace (or literal for router path name via params). */
+  labelKey: string
+  labelParams?: Record<string, string>
   branch?: BranchKey
   choiceId?: string
 }
@@ -347,8 +349,8 @@ export const branchHandlesFor = (
 ): Array<{ id: string; label: string }> => {
   if (node.type === 'condition') {
     return [
-      { id: 'then', label: 'then' },
-      { id: 'else', label: 'else' },
+      { id: 'then', label: 'branchThen' },
+      { id: 'else', label: 'branchElse' },
     ]
   }
   if (node.type === 'router') {
@@ -358,10 +360,10 @@ export const branchHandlesFor = (
     }))
   }
   if (node.type === 'parallel') {
-    return [{ id: 'out', label: 'branch' }]
+    return [{ id: 'out', label: 'branchOut' }]
   }
   if (node.type === 'loop') {
-    return [{ id: 'out', label: 'body' }]
+    return [{ id: 'out', label: 'branchBody' }]
   }
   return []
 }
@@ -583,19 +585,19 @@ export const computeSmartSnap = (
 export const emptySlotsFor = (node: WorkflowNode): EmptySlot[] => {
   if (node.type === 'parallel') {
     if ((node.steps ?? []).length) return []
-    return [{ key: 'steps', label: 'Add branch', branch: 'steps' }]
+    return [{ key: 'steps', labelKey: 'slotAddBranch', branch: 'steps' }]
   }
   if (node.type === 'loop') {
     if ((node.steps ?? []).length) return []
-    return [{ key: 'steps', label: 'Add body step', branch: 'steps' }]
+    return [{ key: 'steps', labelKey: 'slotAddBodyStep', branch: 'steps' }]
   }
   if (node.type === 'condition') {
     const slots: EmptySlot[] = []
     if (!(node.thenSteps ?? []).length) {
-      slots.push({ key: 'thenSteps', label: 'Add then', branch: 'thenSteps' })
+      slots.push({ key: 'thenSteps', labelKey: 'slotAddThen', branch: 'thenSteps' })
     }
     if (!(node.elseSteps ?? []).length) {
-      slots.push({ key: 'elseSteps', label: 'Add else', branch: 'elseSteps' })
+      slots.push({ key: 'elseSteps', labelKey: 'slotAddElse', branch: 'elseSteps' })
     }
     return slots
   }
@@ -604,7 +606,8 @@ export const emptySlotsFor = (node: WorkflowNode): EmptySlot[] => {
       .filter((c) => c.steps.length === 0)
       .map((c) => ({
         key: `choice:${c.id}`,
-        label: `Add ${c.name || 'path'}`,
+        labelKey: 'slotAddPath',
+        labelParams: { name: c.name || 'path' },
         choiceId: c.id,
       }))
   }

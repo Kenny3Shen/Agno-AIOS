@@ -1,4 +1,5 @@
 import { memo, type CSSProperties, type MouseEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Handle,
   NodeToolbar,
@@ -67,11 +68,14 @@ function handleTopPercent(index: number, total: number): string {
   return `${start + ((end - start) * index) / (total - 1)}%`
 }
 
+const BRANCH_I18N_KEYS = new Set(['branchThen', 'branchElse', 'branchBody', 'branchOut', 'branchNext'])
+
 function WorkflowFlowNodeComponent({
   data,
   selected,
   isConnectable,
 }: NodeProps<WorkflowCanvasNode>) {
+  const { t } = useTranslation('workflow')
   const payload = data
   const meta = TYPE_META[payload.nodeType] ?? TYPE_META.step
   const style = {
@@ -81,6 +85,9 @@ function WorkflowFlowNodeComponent({
   const runClass = payload.runStatus ? `is-run-${payload.runStatus}` : ''
   const branches = payload.branchHandles ?? []
   const multiOut = branches.length > 0
+  const branchLabel = (label: string) => (BRANCH_I18N_KEYS.has(label) ? t(label) : label)
+  const slotLabel = (slot: EmptySlot) =>
+    slot.labelParams ? t(slot.labelKey, slot.labelParams) : t(slot.labelKey)
 
   const onSlotClick = (event: MouseEvent, key: string) => {
     event.stopPropagation()
@@ -107,9 +114,9 @@ function WorkflowFlowNodeComponent({
             e.stopPropagation()
             payload.onToolbarCopy?.()
           }}
-          title="Copy"
+          title={t('toolbarCopy')}
         >
-          Copy
+          {t('toolbarCopy')}
         </button>
         <button
           type="button"
@@ -118,9 +125,9 @@ function WorkflowFlowNodeComponent({
             e.stopPropagation()
             payload.onToolbarDuplicate?.()
           }}
-          title="Duplicate"
+          title={t('toolbarDuplicate')}
         >
-          Dup
+          {t('toolbarDup')}
         </button>
         <button
           type="button"
@@ -129,9 +136,9 @@ function WorkflowFlowNodeComponent({
             e.stopPropagation()
             payload.onToolbarDelete?.()
           }}
-          title="Delete"
+          title={t('toolbarDelete')}
         >
-          Del
+          {t('toolbarDel')}
         </button>
       </NodeToolbar>
 
@@ -165,7 +172,7 @@ function WorkflowFlowNodeComponent({
         <div className="wf-flow-node__type">{payload.nodeType}</div>
         <div className="wf-flow-node__title">{payload.label}</div>
         {payload.subtitle ? <div className="wf-flow-node__sub">{payload.subtitle}</div> : null}
-        {payload.hitl ? <div className="wf-flow-node__hitl">HITL</div> : null}
+        {payload.hitl ? <div className="wf-flow-node__hitl">{t('hitlBadge')}</div> : null}
         {payload.invalid && payload.invalidMessage ? (
           <div className="wf-flow-node__error">{payload.invalidMessage}</div>
         ) : null}
@@ -178,7 +185,7 @@ function WorkflowFlowNodeComponent({
                 className="wf-flow-node__cta nodrag nopan"
                 onClick={(event) => onSlotClick(event, slot.key)}
               >
-                + {slot.label}
+                + {slotLabel(slot)}
               </button>
             ))}
           </div>
@@ -187,7 +194,7 @@ function WorkflowFlowNodeComponent({
           <div className="wf-flow-node__branch-labels" aria-hidden>
             {branches.map((branch) => (
               <span key={branch.id} className="wf-flow-node__branch-label">
-                {branch.label}
+                {branchLabel(branch.label)}
               </span>
             ))}
           </div>
@@ -205,7 +212,7 @@ function WorkflowFlowNodeComponent({
               isConnectable={isConnectable}
               className="wf-handle wf-handle--branch wf-handle--bottom"
               style={{ left: handleLeftPercent(index, branches.length) }}
-              title={`${branch.label} (bottom)`}
+              title={`${branchLabel(branch.label)} (bottom)`}
             />
           ))}
           {branches.map((branch, index) => (
@@ -217,7 +224,7 @@ function WorkflowFlowNodeComponent({
               isConnectable={isConnectable}
               className="wf-handle wf-handle--branch wf-handle--right"
               style={{ top: handleTopPercent(index, branches.length) }}
-              title={`${branch.label} (right)`}
+              title={`${branchLabel(branch.label)} (right)`}
             />
           ))}
         </>

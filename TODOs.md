@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：画布空槽/分支/工具栏 i18n + Grok 4.5 Chat 冒烟
+
+- 空容器 CTA（添加分支/循环体/成立/否则/路径）与分支把手、节点工具栏、HITL 徽标接入 workflow i18n。
+- 本机 `xai-grok-4.5`：`POST /api/chat` SSE `run.started → content.delta(pong) → run.completed` 通过。
+
 ## 已完成：Workflow/Chat 失败兜底文案 i18n
 
 - `useWorkflow` 保存/发布/恢复/运行失败兜底文案走 i18n。

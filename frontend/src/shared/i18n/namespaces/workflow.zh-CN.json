@@ -140,5 +140,22 @@
   "errorRestoreFailed": "版本恢复失败",
   "errorRunFailed": "运行失败",
   "errorLoadFailed": "加载失败",
-  "errorDeleteFailed": "删除失败"
+  "errorDeleteFailed": "删除失败",
+  "slotAddBranch": "添加分支",
+  "slotAddBodyStep": "添加循环体步骤",
+  "slotAddThen": "添加「成立」步骤",
+  "slotAddElse": "添加「否则」步骤",
+  "slotAddPath": "添加路径 {{name}}",
+  "slotPathDefault": "路径",
+  "hitlBadge": "人工确认",
+  "branchThen": "成立",
+  "branchElse": "否则",
+  "branchBody": "循环体",
+  "branchOut": "分支",
+  "branchNext": "下一步",
+  "toolbarCopy": "复制",
+  "toolbarDuplicate": "复制副本",
+  "toolbarDup": "副本",
+  "toolbarDelete": "删除",
+  "toolbarDel": "删除"
 }
