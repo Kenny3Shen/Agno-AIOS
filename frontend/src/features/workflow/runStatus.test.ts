@@ -3,6 +3,7 @@ import {
   appendRunLog,
   applyNodeRunStatusEvent,
   reduceNodeRunStatus,
+  runEventLabelKey,
 } from './runStatus'
 import type { WorkflowNode, WorkflowNodeRunStatus, WorkflowRunLogItem } from './types'
 
@@ -77,5 +78,19 @@ describe('runStatus performance helpers', () => {
     }
     expect(log).toHaveLength(3)
     expect(log.map((item) => item.message)).toEqual(['2', '3', '4'])
+  })
+})
+
+
+describe('runEventLabelKey', () => {
+  it('maps known event types to i18n keys', () => {
+    expect(runEventLabelKey('workflow.started')).toBe('runEvent_workflow_started')
+    expect(runEventLabelKey('step.completed')).toBe('runEvent_step_completed')
+    expect(runEventLabelKey('loop.iteration.started')).toBe('runEvent_loop_iteration_started')
+  })
+
+  it('returns null for unknown types', () => {
+    expect(runEventLabelKey('custom.event')).toBeNull()
+    expect(runEventLabelKey('')).toBeNull()
   })
 })

@@ -1,5 +1,10 @@
 # 下一步工作
 
+## 已完成：Workflow Run Log 事件类型 i18n + Chat 消息级自动轻量标记
+
+- Run 日志 Tag 将 `workflow.*` / `step.*` / `parallel|condition|loop|router.*` 映射为 workflow 命名空间文案（未知类型仍显示原始 type）。
+- Chat 助手消息元信息在 `leanMode` 时显示「本轮自动轻量」chip（与顶栏徽标一致）。
+
 ## 已完成：Workflow 默认路径文案 + Chat 轻量徽标与 token 本地化
 
 - Router 未命名分支 handle 用 `defaultPathName` i18n；空路径空槽用 `slotAddPathDefault`。

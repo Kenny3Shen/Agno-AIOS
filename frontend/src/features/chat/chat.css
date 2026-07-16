@@ -302,6 +302,11 @@
   background: currentColor;
   content: '';
 }
+.run-metric--lean {
+  color: var(--ant-color-primary, #1677ff);
+  cursor: help;
+}
+
 .run-metric {
   border-left: 1px solid var(--tais-border);
   padding-left: 6px;

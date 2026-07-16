@@ -139,3 +139,33 @@ export const appendRunLog = (
   const keepFrom = Math.max(0, log.length - limit + 1)
   return [...log.slice(keepFrom), item]
 }
+
+
+/** i18n key for a run-log event type, or null to show raw type. */
+export const runEventLabelKey = (type: string): string | null => {
+  const normalized = type.trim()
+  if (!normalized) return null
+  const key = `runEvent_${normalized.replace(/\./g, '_')}`
+  // Known event prefixes only — avoid inventing keys for unknown strings.
+  const known = new Set([
+    'runEvent_workflow_started',
+    'runEvent_workflow_completed',
+    'runEvent_workflow_failed',
+    'runEvent_workflow_cancelled',
+    'runEvent_workflow_paused',
+    'runEvent_step_started',
+    'runEvent_step_completed',
+    'runEvent_step_error',
+    'runEvent_parallel_started',
+    'runEvent_parallel_completed',
+    'runEvent_condition_started',
+    'runEvent_condition_completed',
+    'runEvent_loop_started',
+    'runEvent_loop_completed',
+    'runEvent_loop_iteration_started',
+    'runEvent_loop_iteration_completed',
+    'runEvent_router_started',
+    'runEvent_router_completed',
+  ])
+  return known.has(key) ? key : null
+}

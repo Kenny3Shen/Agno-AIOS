@@ -345,6 +345,11 @@ function MessageBody({ message, retry, sessionId }: { message: Message; retry: (
             failed: t('status.failed'),
           } as const)[message.status ?? 'completed']}
         </span>
+        {message.leanMode ? (
+          <Tooltip title={t('autoLeanHelp')}>
+            <span className="run-metric run-metric--lean">{t('autoLeanBadge')}</span>
+          </Tooltip>
+        ) : null}
         {message.metrics?.duration != null && (
           <span className="run-metric" title={t('duration')}>
             {message.metrics.duration.toFixed(1)}s

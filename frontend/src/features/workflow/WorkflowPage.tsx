@@ -41,6 +41,7 @@ import { Markdown } from '@/shared/ui/Markdown'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { useWorkflow } from './useWorkflow'
+import { runEventLabelKey } from './runStatus'
 import { WorkflowCanvas, paletteDragStart } from './WorkflowCanvas'
 import type { WorkflowNodeType } from './types'
 import {
@@ -1405,7 +1406,10 @@ export function WorkflowPage() {
                                   }
                                   style={{ margin: 0 }}
                                 >
-                                  {item.type}
+                                  {(() => {
+                                    const key = runEventLabelKey(item.type)
+                                    return key ? t(key) : item.type
+                                  })()}
                                 </Tag>
                                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                                   {item.stepName || item.message}
