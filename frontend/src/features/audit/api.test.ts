@@ -45,4 +45,40 @@ describe('audit log API', () => {
 
     expect(result.meta.total_count).toBe(0)
   })
+
+  it('normalizes data/meta and drops unmapped rows', async () => {
+    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, 'token')
+    server.use(
+      http.get('/api/audit/logs', () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: 9,
+              actor_user_id: 'u1',
+              actor_email: 'a@example.test',
+              actor_role: 'admin',
+              action: 'auth.login',
+              resource_type: 'auth',
+              resource_id: 's1',
+              status: 'success',
+              ip_address: '1.1.1.1',
+              user_agent: 'vitest',
+              metadata: { ok: true },
+              created_at: '2026-01-01T00:00:00Z',
+            },
+            { not_an_audit: true },
+          ],
+          meta: { page: 1, limit: 20, total_count: 1 },
+        }),
+      ),
+    )
+
+    const result = await getAuditLogs({ page: 1, limit: 20 })
+    expect(result.data).toHaveLength(1)
+    expect(result.data[0]?.id).toBe(9)
+    expect(result.data[0]?.metadata).toEqual({ ok: true })
+    expect(result.meta.total_pages).toBe(1)
+    expect(result.meta.search_time_ms).toBe(0)
+  })
+
 })

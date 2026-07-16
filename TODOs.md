@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Workflow / Audit / Eval failures 列表 normalizer 收口
+
+- `listWorkflows` 经 `normalizePaginatedList` + `normalizeWorkflow`（调用方仍要 `WorkflowRecord[]`）。
+- Audit `getAuditLogs` 归一化 data/meta，丢弃畸形行；`AuditLogResponse.meta` 对齐 `ListPaginationMeta`。
+- Eval `listFailures` 与 `EvalListMeta` 复用共享分页类型。
+
 ## 已完成：共享列表 normalizer 扩面（CVE / 通知 / Collect / Approvals / Knowledge）
 
 - `normalizePaginatedList` extras 支持 `unread_count`（通知角标 meta）。

@@ -200,12 +200,13 @@ const normalizeWorkflow = (value: unknown): WorkflowRecord | null => {
 }
 
 export const listWorkflows = async (page = 1, limit = 50) => {
-  const payload = asRecord(await requestJson<unknown>(`/workflows?page=${page}&limit=${limit}`))
-  const data = Array.isArray(payload?.data) ? payload.data : []
-  return data.flatMap((item) => {
-    const row = normalizeWorkflow(item)
-    return row ? [row] : []
+  const raw = await requestJson<unknown>(`/workflows?page=${page}&limit=${limit}`)
+  const { data } = normalizePaginatedList(raw, {
+    page,
+    limit,
+    mapItem: normalizeWorkflow,
   })
+  return data
 }
 
 export const createWorkflow = async (body: {

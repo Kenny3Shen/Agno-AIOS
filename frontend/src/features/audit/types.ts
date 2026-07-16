@@ -1,3 +1,4 @@
+import type { ListPaginationMeta } from '@/shared/lib/pagination'
 import type { JsonRecord } from '@/shared/types/common'
 
 export interface AuditLog {
@@ -29,15 +30,9 @@ export interface AuditLogQuery {
   created_to?: string
 }
 
-export interface AuditLogResponse {
+export type AuditLogResponse = {
   data: AuditLog[]
-  meta: {
-    page: number
-    limit: number
-    total_pages: number
-    total_count: number
-    search_time_ms?: number
-  }
+  meta: ListPaginationMeta
 }
 
 export interface AuditFilterValues {

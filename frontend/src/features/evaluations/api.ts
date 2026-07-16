@@ -1,6 +1,6 @@
 import { requestJson } from '@/shared/api/client'
 import { asRecord } from '@/shared/lib/format'
-import { normalizePaginatedList } from '@/shared/lib/pagination'
+import { normalizePaginatedList, type ListPaginationMeta } from '@/shared/lib/pagination'
 
 export interface Suite {
   id: string
@@ -92,13 +92,7 @@ export const listCases = async (suite = '') =>
     )
   ).data ?? []
 
-export type EvalListMeta = {
-  page: number
-  limit: number
-  total_count: number
-  total_pages: number
-  search_time_ms: number
-}
+export type EvalListMeta = ListPaginationMeta
 
 export type EvalListResult = {
   data: EvalRun[]
@@ -119,9 +113,13 @@ export const listRuns = async (params: { page?: number; limit?: number } = {}): 
 
 export const listFailures = async (params: { limit?: number } = {}): Promise<EvalRun[]> => {
   const limit = Math.min(100, Math.max(1, params.limit ?? 50))
-  const payload = asRecord(await requestJson<unknown>(`/agent-evals/failures?limit=${limit}`))
-  const rows = Array.isArray(payload.data) ? payload.data : []
-  return rows.map((row) => normalizeEvalRun(row)).filter((row): row is EvalRun => row != null)
+  const raw = await requestJson<unknown>(`/agent-evals/failures?limit=${limit}`)
+  const { data } = normalizePaginatedList(raw, {
+    page: 1,
+    limit,
+    mapItem: normalizeEvalRun,
+  })
+  return data
 }
 
 export const runSuite = (id: string) =>
