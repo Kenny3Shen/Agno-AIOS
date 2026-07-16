@@ -1,6 +1,11 @@
 # 下一步工作
 
 
+## 已完成：Chat 关工具时禁用 Knowledge / Live Search 开关
+
+- `enableTools=false` 时禁用并取消高亮 Knowledge / Live Search 开关（与后端 lean 忽略一致）。
+- Tooltip 提示需先打开「工具/Skill」。
+
 ## 已完成：Studio 多选批量 Skills + 画布 Skill 徽标
 
 - 多选 Inspector：批量绑定 Skill（覆盖写；清空 = 全部不挂）；不一致时提示并显示空选择。

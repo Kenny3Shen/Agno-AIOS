@@ -87,5 +87,7 @@
     "get_skill_reference": "Read skill reference",
     "get_skill_script": "Read skill script"
   },
-  "knowledgeOffBadge": "Knowledge off"
+  "knowledgeOffBadge": "Knowledge off",
+  "liveSearchNeedsTools": "Turn on Tools/Skills first; lite and tools-off turns ignore Live Search.",
+  "knowledgeSearchNeedsTools": "Turn on Tools/Skills first; lite and tools-off turns do not mount knowledge search."
 }

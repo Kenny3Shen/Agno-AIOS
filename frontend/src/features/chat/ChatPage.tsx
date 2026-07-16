@@ -730,27 +730,40 @@ export function ChatPage() {
                     {t('toolsSkills')}
                   </Button>
                   <Button
-                    className={chat.state.liveSearch ? 'sender-toggle active' : 'sender-toggle'}
+                    className={chat.state.liveSearch && chat.state.enableTools ? 'sender-toggle active' : 'sender-toggle'}
                     type="text"
                     size="small"
                     icon={<GlobalOutlined />}
                     aria-pressed={chat.state.liveSearch}
                     aria-label={t('liveSearch')}
-                    title={t('liveSearchHelp')}
-                    disabled={chat.state.requesting || Boolean(pausedRun) || !liveSearchSupported}
+                    title={
+                      !chat.state.enableTools
+                        ? t('liveSearchNeedsTools')
+                        : t('liveSearchHelp')
+                    }
+                    disabled={
+                      chat.state.requesting ||
+                      Boolean(pausedRun) ||
+                      !liveSearchSupported ||
+                      !chat.state.enableTools
+                    }
                     onClick={() => chat.setLiveSearch(!chat.state.liveSearch)}
                   >
                     {t('liveSearch')}
                   </Button>
                   <Button
-                    className={chat.state.searchKnowledge ? 'sender-toggle active' : 'sender-toggle'}
+                    className={chat.state.searchKnowledge && chat.state.enableTools ? 'sender-toggle active' : 'sender-toggle'}
                     type="text"
                     size="small"
                     icon={<BookOutlined />}
                     aria-pressed={chat.state.searchKnowledge}
                     aria-label={t('knowledgeSearch')}
-                    title={t('knowledgeSearchHelp')}
-                    disabled={chat.state.requesting || Boolean(pausedRun)}
+                    title={
+                      !chat.state.enableTools
+                        ? t('knowledgeSearchNeedsTools')
+                        : t('knowledgeSearchHelp')
+                    }
+                    disabled={chat.state.requesting || Boolean(pausedRun) || !chat.state.enableTools}
                     onClick={() => chat.setSearchKnowledge(!chat.state.searchKnowledge)}
                   >
                     {t('knowledgeSearch')}

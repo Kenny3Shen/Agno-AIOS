@@ -87,5 +87,7 @@
     "get_skill_reference": "读取 Skill 参考",
     "get_skill_script": "读取 Skill 脚本"
   },
-  "knowledgeOffBadge": "知识库未挂载"
+  "knowledgeOffBadge": "知识库未挂载",
+  "liveSearchNeedsTools": "请先打开「工具/Skill」；轻量/关工具轮次不会启用 Live Search。",
+  "knowledgeSearchNeedsTools": "请先打开「工具/Skill」；轻量/关工具轮次不会挂载知识库检索。"
 }
