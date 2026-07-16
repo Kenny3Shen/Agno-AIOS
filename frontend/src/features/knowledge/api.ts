@@ -1,7 +1,6 @@
 import { apiFetch, jsonInit, requestJson } from '@/shared/api/client'
 import { buildKnowledgeSearchPayload } from './utils'
 import type {
-  AddPathPayload,
   AddTextPayload,
   Document,
   KnowledgeIngestOptions,
@@ -113,23 +112,6 @@ export const addText = (
   }
   return (async () => {
     const response = await apiFetch('/knowledge/documents/text?stream=true', {
-      ...jsonInit('POST', payload),
-      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-    })
-    if (!response.ok) throw new Error(await readHttpError(response))
-    if (!response.body) throw new Error('Progress stream unavailable')
-    return consumeKnowledgeSse(response.body, options?.onProgress ?? (() => undefined))
-  })()
-}
-export const addFilePath = (
-  payload: AddPathPayload,
-  options?: { stream?: boolean; onProgress?: (event: KnowledgeProgressEvent) => void }
-) => {
-  if (!options?.stream) {
-    return requestJson<Document>('/knowledge/documents/file', jsonInit('POST', payload))
-  }
-  return (async () => {
-    const response = await apiFetch('/knowledge/documents/file?stream=true', {
       ...jsonInit('POST', payload),
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     })

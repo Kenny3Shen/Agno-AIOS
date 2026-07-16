@@ -590,6 +590,13 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：前后端无引用 API/helper 清理
+
+- 后端 `page_payloads` 仅保留 `iso` / `now_utc` / `row_dict`，删除未用的 `metric`/`record`/`compact` 与 TypedDict。
+- 前端删除未使用导出：`asArray`、`isAgentHitlApproval`、`mergeRunMetadata`、`getWorkflow`、`createSuite`/`createCase`、`getArticle`、`addFilePath`（及 `AddPathPayload` 类型）。
+
+相关：`api/services/page_payloads.py` / `frontend/src/shared/lib/format.ts` / 各 feature `api.ts`
+
 ## 已完成：删除无引用 helpers + 去掉 TAIS_MODEL_CONFIG_FILE
 
 - 删除死代码：`stage_index`/`active_stage_from_events`、`get_suite_run`/`get_suite_run_row_async`、`get_submission_approval`、`ensure_audit_log_table_async`、`server_rows()`、`count_collect_articles`、`upsert_cve_row`/`reset_cve_id_sequence`、`reset_token_id_sequence`、CVE `_process_codes`/`_process_file`。

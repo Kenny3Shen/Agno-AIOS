@@ -65,13 +65,6 @@ export interface AddTextPayload {
   ingest_options?: KnowledgeIngestOptions
 }
 
-export interface AddPathPayload {
-  path: string
-  title?: string
-  source?: string
-  visibility: ResourceVisibility
-  ingest_options?: KnowledgeIngestOptions
-}
 
 export interface UploadDocumentPayload {
   file: File

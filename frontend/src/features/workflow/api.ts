@@ -207,12 +207,6 @@ export const listWorkflows = async (page = 1, limit = 50) => {
   })
 }
 
-export const getWorkflow = async (id: string) => {
-  const row = normalizeWorkflow(await requestJson<unknown>(`/workflows/${encodeURIComponent(id)}`))
-  if (!row) throw new Error('Invalid workflow payload')
-  return row
-}
-
 export const createWorkflow = async (body: {
   name: string
   description: string

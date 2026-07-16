@@ -31,5 +31,3 @@ export const compareTimestamp = (a?: string | number | null, b?: string | number
 
 export const asRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
-
-export const asArray = <T = Record<string, unknown>>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : [])

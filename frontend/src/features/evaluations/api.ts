@@ -1,4 +1,4 @@
-import { jsonInit, requestJson } from '@/shared/api/client'
+import { requestJson } from '@/shared/api/client'
 import { asRecord } from '@/shared/lib/format'
 
 export interface Suite {
@@ -125,8 +125,3 @@ export const runCase = (id: string) =>
 export const replay = (id: string) =>
   requestJson(`/agent-evals/case-runs/${encodeURIComponent(id)}/replay`, { method: 'POST' })
 
-export const createSuite = (payload: Partial<Suite>) =>
-  requestJson<Suite>('/agent-evals/suites', jsonInit('POST', payload))
-
-export const createCase = (payload: Partial<EvalCase>) =>
-  requestJson<EvalCase>('/agent-evals/cases', jsonInit('POST', payload))

@@ -2,23 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import TypedDict
-
-
-class PageMetric(TypedDict):
-    label: str
-    value: str | int | float
-    hint: str
-    tone: str
-
-
-class PageRecord(TypedDict):
-    id: str
-    title: str
-    subtitle: str
-    status: str
-    meta: Mapping[str, object]
-    updated_at: str
 
 
 def now_utc() -> datetime:
@@ -38,36 +21,6 @@ def iso(value: object) -> str:
         except (OSError, ValueError):
             return str(value)
     return str(value)
-
-
-def compact(value: object, limit: int = 96) -> str:
-    text = str(value or "").strip()
-    if len(text) <= limit:
-        return text
-    return f"{text[: limit - 3]}..."
-
-
-def metric(label: str, value: str | int | float, hint: str = "", tone: str = "blue") -> PageMetric:
-    return {"label": label, "value": value, "hint": hint, "tone": tone}
-
-
-def record(
-    *,
-    record_id: object,
-    title: str,
-    subtitle: str = "",
-    status: str = "ready",
-    meta: Mapping[str, object] | None = None,
-    updated_at: object = "",
-) -> PageRecord:
-    return {
-        "id": str(record_id or title),
-        "title": title,
-        "subtitle": subtitle,
-        "status": status,
-        "meta": meta or {},
-        "updated_at": iso(updated_at),
-    }
 
 
 def row_dict(raw_row: object) -> dict[str, object]:

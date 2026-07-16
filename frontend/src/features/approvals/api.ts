@@ -65,10 +65,6 @@ export const isSubmissionApproval = (approval: Approval) =>
 export const isWorkflowHitlApproval = (approval: Approval) =>
   approval.source_type === 'workflow' || Boolean(approval.workflow_id)
 
-/** Chat / agent tool HITL. */
-export const isAgentHitlApproval = (approval: Approval) =>
-  !isSubmissionApproval(approval) && !isWorkflowHitlApproval(approval)
-
 const asActor = (value: unknown): ApprovalActor | string | undefined => {
   if (value == null) return undefined
   if (typeof value === 'string') return value

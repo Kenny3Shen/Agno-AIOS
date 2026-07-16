@@ -1,6 +1,6 @@
 import { apiFetch, jsonInit, requestJson } from '@/shared/api/client'
 import type { ModelConfigResponse, ReasoningEffort } from '@/shared/types/common'
-import type { ChatRunEvent, ChatSession, Message } from './types'
+import type { ChatRunEvent, ChatSession } from './types'
 import { consumeSse, normalizeMessages } from './utils'
 
 const normalizeSession = (value: unknown): ChatSession | null => {
@@ -232,9 +232,3 @@ export const streamMessage = async (
   if (!terminal) throw new Error('Chat stream ended before a terminal event')
 }
 
-export const mergeRunMetadata = (messages: Message[], history: Message[]) =>
-  messages.map((message) => {
-    if (message.role !== 'assistant' || !message.content.trim()) return message
-    const persisted = [...history].reverse().find((item) => item.role === 'assistant' && item.content.trim() === message.content.trim())
-    return persisted ? { ...message, ...persisted, content: message.content, final: true } : message
-  })

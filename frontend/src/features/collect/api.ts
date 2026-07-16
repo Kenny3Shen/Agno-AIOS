@@ -46,11 +46,6 @@ export const searchArticles = (payload: {
     })
   )
 
-export const getArticle = (id: number) =>
-  requestJson<{ item?: CollectArticle; status: number; message?: string }>(
-    `/url2md/articles/${id}`
-  )
-
 export const listSources = () =>
   requestJson<{ items: CollectSource[] }>('/url2md/sources')
 
