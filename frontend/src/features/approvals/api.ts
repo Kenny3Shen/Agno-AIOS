@@ -1,5 +1,6 @@
 import { jsonInit, requestJson } from '@/shared/api/client'
 import { asRecord } from '@/shared/lib/format'
+import { listPaginationMeta } from '@/shared/lib/pagination'
 
 export interface ApprovalActor {
   id: string
@@ -131,23 +132,6 @@ export const normalizeApproval = (value: unknown): Approval | null => {
 const normalizeRows = (rows: unknown[]): Approval[] =>
   rows.map((row) => normalizeApproval(row)).filter((row): row is Approval => row != null)
 
-const listMeta = (
-  page: number,
-  limit: number,
-  totalCount: number,
-  searchTimeMs = 0
-): ApprovalListMeta => {
-  const safePage = Math.max(1, page)
-  const safeLimit = Math.max(1, limit)
-  const total = Math.max(0, totalCount)
-  return {
-    page: safePage,
-    limit: safeLimit,
-    total_count: total,
-    total_pages: total ? Math.ceil(total / safeLimit) : 0,
-    search_time_ms: searchTimeMs,
-  }
-}
 
 const fetchHitlPage = async (
   status: string,
@@ -205,7 +189,7 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
     const submissions = await fetchSubmissionsPage(status, page, limit)
     return {
       data: submissions.data,
-      meta: listMeta(page, limit, submissions.total_count),
+      meta: listPaginationMeta(page, limit, submissions.total_count),
     }
   }
 
@@ -213,7 +197,7 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
     const hitl = await fetchHitlPage(status, page, limit, kind)
     return {
       data: hitl.data,
-      meta: listMeta(page, limit, hitl.total_count),
+      meta: listPaginationMeta(page, limit, hitl.total_count),
     }
   }
 
@@ -228,7 +212,7 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
   const total = Number(meta.total_count ?? data.length) || 0
   return {
     data,
-    meta: listMeta(page, limit, total, Number(meta.search_time_ms ?? 0) || 0),
+    meta: listPaginationMeta(page, limit, total, Number(meta.search_time_ms ?? 0) || 0),
   }
 }
 

@@ -1,5 +1,6 @@
 import { requestJson } from '@/shared/api/client'
 import { asRecord } from '@/shared/lib/format'
+import { normalizePaginatedList } from '@/shared/lib/pagination'
 
 export interface Suite {
   id: string
@@ -108,23 +109,12 @@ export const listRuns = async (params: { page?: number; limit?: number } = {}): 
   const page = Math.max(1, params.page ?? 1)
   const limit = Math.min(100, Math.max(1, params.limit ?? 20))
   const search = new URLSearchParams({ page: String(page), limit: String(limit) })
-  const payload = asRecord(await requestJson<unknown>(`/agent-evals/agno-runs?${search}`))
-  const meta = asRecord(payload.meta)
-  const rows = Array.isArray(payload.data) ? payload.data : []
-  const data = rows.map((row) => normalizeEvalRun(row)).filter((row): row is EvalRun => row != null)
-  const totalCount = Number(meta.total_count ?? data.length) || 0
-  const resolvedPage = Number(meta.page ?? page) || page
-  const resolvedLimit = Number(meta.limit ?? limit) || limit
-  return {
-    data,
-    meta: {
-      page: resolvedPage,
-      limit: resolvedLimit,
-      total_count: totalCount,
-      total_pages: Number(meta.total_pages ?? (totalCount ? Math.ceil(totalCount / Math.max(resolvedLimit, 1)) : 0)) || 0,
-      search_time_ms: Number(meta.search_time_ms ?? 0) || 0,
-    },
-  }
+  const payload = await requestJson<unknown>(`/agent-evals/agno-runs?${search}`)
+  return normalizePaginatedList(payload, {
+    page,
+    limit,
+    mapItem: normalizeEvalRun,
+  })
 }
 
 export const listFailures = async (params: { limit?: number } = {}): Promise<EvalRun[]> => {

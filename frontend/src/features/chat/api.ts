@@ -1,4 +1,5 @@
 import { apiFetch, jsonInit, requestJson } from '@/shared/api/client'
+import { normalizePaginatedList } from '@/shared/lib/pagination'
 import type { ModelConfigResponse, ReasoningEffort } from '@/shared/types/common'
 import type { ChatRunEvent, ChatSession } from './types'
 import { consumeSse, normalizeMessages } from './utils'
@@ -33,17 +34,6 @@ export type SessionListResult = {
   meta: SessionListMeta
 }
 
-const normalizeSessionListMeta = (value: unknown, page: number, limit: number, itemCount: number): SessionListMeta => {
-  const meta = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
-  return {
-    page: Number(meta.page ?? page) || page,
-    limit: Number(meta.limit ?? limit) || limit,
-    total_pages: Number(meta.total_pages ?? 0) || 0,
-    total_count: Number(meta.total_count ?? itemCount) || 0,
-    search_time_ms: Number(meta.search_time_ms ?? 0) || 0,
-  }
-}
-
 export type ListSessionsOptions = {
   includeArchived?: boolean
   /** When true, only archived sessions (server SQL filter). */
@@ -70,13 +60,11 @@ export const listSessions = async (options: ListSessionsOptions = {}): Promise<S
   search.set('page', String(page))
   search.set('limit', String(limit))
   const payload = await requestJson<unknown>(`/chat/sessions?${search.toString()}`)
-  const envelope = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}
-  const rows = Array.isArray(envelope.data) ? envelope.data : []
-  const data = rows.map(normalizeSession).filter((row): row is ChatSession => row != null)
-  return {
-    data,
-    meta: normalizeSessionListMeta(envelope.meta, page, limit, data.length),
-  }
+  return normalizePaginatedList(payload, {
+    page,
+    limit,
+    mapItem: normalizeSession,
+  })
 }
 export const getHistory = async (sessionId: string) =>
   normalizeMessages(await requestJson<unknown>(`/chat/sessions/${encodeURIComponent(sessionId)}`))

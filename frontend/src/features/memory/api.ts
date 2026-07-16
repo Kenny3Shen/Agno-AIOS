@@ -1,5 +1,6 @@
 import { jsonInit, requestJson } from '@/shared/api/client'
 import { asRecord } from '@/shared/lib/format'
+import { normalizePaginatedList } from '@/shared/lib/pagination'
 
 export interface Memory {
   /** UI key; always mirrored from API ``memory_id``. */
@@ -72,25 +73,12 @@ export const getMemories = async (params: MemoryListParams = {}): Promise<Memory
   if (params.page != null) search.set('page', String(params.page))
   if (params.limit != null) search.set('limit', String(params.limit))
   const query = search.toString()
-  const data = asRecord(await requestJson<unknown>(`/memories${query ? `?${query}` : ''}`))
-  const meta = asRecord(data.meta)
-  const rows = Array.isArray(data.data) ? data.data : []
-  const dataRows = rows
-    .map((row) => normalizeMemory(row))
-    .filter((row): row is Memory => row != null)
-  const page = Number(meta.page ?? params.page ?? 1) || 1
-  const limit = Number(meta.limit ?? params.limit ?? 20) || 20
-  const totalCount = Number(meta.total_count ?? dataRows.length) || 0
-  return {
-    data: dataRows,
-    meta: {
-      page,
-      limit,
-      total_count: totalCount,
-      total_pages: Number(meta.total_pages ?? (totalCount ? Math.ceil(totalCount / Math.max(limit, 1)) : 0)) || 0,
-      search_time_ms: Number(meta.search_time_ms ?? 0) || 0,
-    },
-  }
+  const payload = await requestJson<unknown>(`/memories${query ? `?${query}` : ''}`)
+  return normalizePaginatedList(payload, {
+    page: params.page ?? 1,
+    limit: params.limit ?? 20,
+    mapItem: normalizeMemory,
+  })
 }
 
 export const updateMemory = (id: string, memory: string, topics: string[]) =>

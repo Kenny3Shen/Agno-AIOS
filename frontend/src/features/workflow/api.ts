@@ -1,4 +1,5 @@
 import { apiFetch, jsonInit, requestJson } from '@/shared/api/client'
+import { normalizePaginatedList } from '@/shared/lib/pagination'
 import { consumeSse } from '@/features/chat/utils'
 import type {
   ExecutorOption,
@@ -427,40 +428,30 @@ export type WorkflowTriggerHistoryItem = {
 export const listWorkflowTriggerHistory = async (
   id: string,
   opts?: { page?: number; limit?: number }
-) => {
+): Promise<{ data: WorkflowTriggerHistoryItem[]; meta: import('@/shared/lib/pagination').ListPaginationMeta }> => {
   const page = opts?.page ?? 1
   const limit = opts?.limit ?? 20
   const raw = await requestJson<unknown>(
     `/workflows/${encodeURIComponent(id)}/triggers/history?page=${page}&limit=${limit}`
   )
-  const row = asRecord(raw) ?? {}
-  const data = Array.isArray(row.data) ? row.data : []
-  const meta = asRecord(row.meta) ?? {}
-  return {
-    data: data.flatMap((item) => {
+  return normalizePaginatedList(raw, {
+    page,
+    limit,
+    mapItem: (item: unknown) => {
       const r = asRecord(item)
-      if (!r) return []
-      return [
-        {
-          id: (r.id as string | number) ?? '',
-          action: String(r.action ?? ''),
-          status: String(r.status ?? ''),
-          source: String(r.source ?? ''),
-          run_id: String(r.run_id ?? ''),
-          session_id: String(r.session_id ?? ''),
-          expression: r.expression != null ? String(r.expression) : '',
-          created_at: String(r.created_at ?? ''),
-        } satisfies WorkflowTriggerHistoryItem,
-      ]
-    }),
-    meta: {
-      page: Number(meta.page ?? page) || page,
-      limit: Number(meta.limit ?? limit) || limit,
-      total_count: Number(meta.total_count ?? data.length) || 0,
-      total_pages: Number(meta.total_pages ?? 0) || 0,
-      search_time_ms: Number(meta.search_time_ms ?? 0) || 0,
+      if (!r) return null
+      return {
+        id: (r.id as string | number) ?? '',
+        action: String(r.action ?? ''),
+        status: String(r.status ?? ''),
+        source: String(r.source ?? ''),
+        run_id: String(r.run_id ?? ''),
+        session_id: String(r.session_id ?? ''),
+        expression: r.expression != null ? String(r.expression) : '',
+        created_at: String(r.created_at ?? ''),
+      } satisfies WorkflowTriggerHistoryItem
     },
-  }
+  })
 }
 
 export type WorkflowTemplate = {

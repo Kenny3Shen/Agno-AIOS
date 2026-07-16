@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：前端共享 ``normalizePaginatedList``
+
+- 新增 `frontend/src/shared/lib/pagination.ts`：`normalizePaginatedList` / `listPaginationMeta`。
+- Memory / Chat sessions / Eval runs / Trace lists / Approvals listMeta / Workflow trigger history 复用，去掉各 feature 内重复 meta 推导。
+- 单测覆盖映射丢弃行、total_pages 推导、truncated extras。
+
 ## 已完成：listSessions 选项对象 API
 
 - `listSessions(options)` 替代位置参数（`includeArchived` / `archivedOnly` / `page` / `limit` / `userId`）。

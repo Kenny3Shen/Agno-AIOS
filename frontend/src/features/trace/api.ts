@@ -1,5 +1,6 @@
 import { requestJson } from '@/shared/api/client'
 import { asRecord } from '@/shared/lib/format'
+import { normalizePaginatedList } from '@/shared/lib/pagination'
 import type {
   Span,
   SpanTreeNode,
@@ -83,27 +84,8 @@ const normalizeTree = (nodes: unknown): SpanTreeNode[] => {
     .filter((node): node is SpanTreeNode => node != null)
 }
 
-const normalizePaginated = <T>(payload: unknown, mapItem: (row: unknown) => T | null) => {
-  const envelope = asRecord(payload)
-  const meta = asRecord(envelope.meta)
-  const rows = Array.isArray(envelope.data) ? envelope.data : []
-  const data = rows.map((row) => mapItem(row)).filter((row): row is T => row != null)
-  const page = Number(meta.page ?? 1) || 1
-  const limit = Number(meta.limit ?? 20) || 20
-  const totalCount = Number(meta.total_count ?? data.length) || 0
-  return {
-    data,
-    meta: {
-      page,
-      limit,
-      total_count: totalCount,
-      total_pages: Number(meta.total_pages ?? (totalCount ? Math.ceil(totalCount / Math.max(limit, 1)) : 0)) || 0,
-      search_time_ms: meta.search_time_ms != null ? Number(meta.search_time_ms) || 0 : undefined,
-      truncated: Boolean(meta.truncated),
-      scanned_count: meta.scanned_count != null ? Number(meta.scanned_count) || 0 : undefined,
-    },
-  }
-}
+const normalizePaginated = <T>(payload: unknown, mapItem: (row: unknown) => T | null) =>
+  normalizePaginatedList(payload, { mapItem, extras: true })
 
 const normalizeSession = (value: unknown): TraceSessionSummary | null => {
   const row = asRecord(value)
