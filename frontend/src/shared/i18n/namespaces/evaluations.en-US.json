@@ -5,5 +5,8 @@
   "suiteSubmitted": "Evaluation suite submitted",
   "evalSubmitted": "Evaluation submitted",
   "replaySubmitted": "Replay submitted",
-  "runSuite": "Run suite"
+  "runSuite": "Run suite",
+  "suiteFailed": "Unable to submit the evaluation suite. Please try again.",
+  "evalFailed": "Unable to submit the evaluation. Please try again.",
+  "replayFailed": "Unable to submit the replay. Please try again."
 }

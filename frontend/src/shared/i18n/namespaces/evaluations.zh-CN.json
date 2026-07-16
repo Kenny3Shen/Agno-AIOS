@@ -5,5 +5,8 @@
   "suiteSubmitted": "评估套件已提交",
   "evalSubmitted": "评估已提交",
   "replaySubmitted": "Replay 已提交",
-  "runSuite": "运行套件"
+  "runSuite": "运行套件",
+  "suiteFailed": "评估套件提交失败，请稍后重试。",
+  "evalFailed": "评估提交失败，请稍后重试。",
+  "replayFailed": "Replay 提交失败，请稍后重试。"
 }

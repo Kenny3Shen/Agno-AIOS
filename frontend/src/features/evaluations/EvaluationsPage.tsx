@@ -107,9 +107,13 @@ export function EvaluationsPage() {
               icon={<PlayCircleOutlined />}
               disabled={!suite}
               onClick={async () => {
-                await runSuite(suite)
-                message.success(t('suiteSubmitted'))
-                await refresh()
+                try {
+                  await runSuite(suite)
+                  message.success(t('suiteSubmitted'))
+                  await refresh()
+                } catch (error) {
+                  message.error(error instanceof Error ? error.message : t('suiteFailed'))
+                }
               }}
             >
               {t('runSuite')}
@@ -139,9 +143,13 @@ export function EvaluationsPage() {
                         <Button
                           icon={<PlayCircleOutlined />}
                           onClick={async () => {
-                            await runCase(row.id)
-                            message.success(t('evalSubmitted'))
-                            await refresh()
+                            try {
+                              await runCase(row.id)
+                              message.success(t('evalSubmitted'))
+                              await refresh()
+                            } catch (error) {
+                              message.error(error instanceof Error ? error.message : t('evalFailed'))
+                            }
                           }}
                         >
                           Run
@@ -173,9 +181,13 @@ export function EvaluationsPage() {
                   loading={failures.isLoading}
                   pagination={false}
                   onReplay={async (id) => {
-                    await replay(id)
-                    message.success(t('replaySubmitted'))
-                    await refresh()
+                    try {
+                      await replay(id)
+                      message.success(t('replaySubmitted'))
+                      await refresh()
+                    } catch (error) {
+                      message.error(error instanceof Error ? error.message : t('replayFailed'))
+                    }
                   }}
                 />
               ),

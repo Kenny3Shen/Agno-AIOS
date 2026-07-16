@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Memory 编辑 / Evaluations 运行失败显性化
+
+- Memory 编辑表单 `onFinish`：try/catch + `updateFailed` toast（原先成功才提示）。
+- Evaluations：run suite / run case / replay 提交失败 `message.error`（`suiteFailed` / `evalFailed` / `replayFailed`）。
+- 补齐 `App.useApp()` message 与 i18n 键。
+
 ## 已完成：关键 mutation 失败显性化
 
 - Approvals `resolve`：`onError` toast（`resolveFailed`），与 resume 失败路径对称。

@@ -9,5 +9,6 @@
   "selectForDetails": "Select a memory for details",
   "editMemory": "Edit memory",
   "updated": "Memory updated",
-  "deleteFailed": "Unable to delete the memory. Please try again."
+  "deleteFailed": "Unable to delete the memory. Please try again.",
+  "updateFailed": "Unable to update the memory. Please try again."
 }

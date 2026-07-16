@@ -215,18 +215,22 @@ export function MemoryPage() {
             layout="vertical"
             initialValues={{ memory: editing.memory, topics: editing.topics?.join(', ') }}
             onFinish={async ({ memory, topics }: { memory: string; topics: string }) => {
-              await updateMemory(
-                editing.id,
-                memory,
-                topics
-                  .split(',')
-                  .map((value) => value.trim())
-                  .filter(Boolean)
-              )
-              message.success(t('updated'))
-              setEditing(null)
-              setSelected(null)
-              await refresh()
+              try {
+                await updateMemory(
+                  editing.id,
+                  memory,
+                  topics
+                    .split(',')
+                    .map((value) => value.trim())
+                    .filter(Boolean)
+                )
+                message.success(t('updated'))
+                setEditing(null)
+                setSelected(null)
+                await refresh()
+              } catch (error) {
+                message.error(error instanceof Error ? error.message : t('updateFailed'))
+              }
             }}
           >
             <Form.Item name="memory" label="Memory" rules={[{ required: true }]}>

@@ -9,5 +9,6 @@
   "selectForDetails": "选择一条记忆查看详情",
   "editMemory": "编辑记忆",
   "updated": "记忆已更新",
-  "deleteFailed": "删除记忆失败，请稍后重试。"
+  "deleteFailed": "删除记忆失败，请稍后重试。",
+  "updateFailed": "更新记忆失败，请稍后重试。"
 }
