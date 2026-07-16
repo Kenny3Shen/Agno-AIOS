@@ -399,7 +399,7 @@ export function TracePage() {
           type="warning"
           showIcon
           style={{ marginBottom: 12 }}
-          message="Status filter scanned a bounded recent window; older matching runs may be missing."
+          title="Status filter scanned a bounded recent window; older matching runs may be missing."
         />
       ) : null}
       <Splitter className="trace-workbench-splitter" orientation={vertical ? 'vertical' : 'horizontal'}>

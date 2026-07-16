@@ -238,7 +238,7 @@ export function DashboardPage() {
           className="dashboard-error"
           type="error"
           showIcon
-          message={t('loadFailed')}
+          title={t('loadFailed')}
           description={t('loadFailedHint')}
         />
       )}

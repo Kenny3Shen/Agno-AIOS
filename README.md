@@ -388,7 +388,7 @@ cd frontend && bun run test:e2e
 
 使用 Playwright + 页内 `/api` mock，不依赖本地后端与开发库数据；覆盖登录、侧栏分组/权限过滤、智能体清 session、深链展开与侧栏折叠；以及 Trace 深链 Session→Run→Span、Knowledge 文本入库 SSE 完成路径、Approvals 值班列表与 `approval_id` 深链。
 
-前端 Ant Design 6 使用 `classNames` / `styles` 语义化 API（例如 `Popover`/`Cascader` 的 popup class），避免 `overlayClassName` / `popupClassName` 等已弃用 props。
+前端 Ant Design 6 使用 `classNames` / `styles` 语义化 API（例如 `Popover`/`Cascader` 的 popup class），避免 `overlayClassName` / `popupClassName` 等已弃用 props；`Alert` 使用 `title` 而非已弃用 `message`。
 
 
 Python：

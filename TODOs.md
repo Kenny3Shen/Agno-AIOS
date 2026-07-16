@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：antd Alert title + tracing 解析失败可观测
+
+- Dashboard / Trace 残留 `Alert.message` → antd 6 `title`（全站 `Alert` 无 `message` prop）。
+- `tracing_service`：JSON/时间解析失败改 `logger.debug`（取消静默 `pass`；`CancelledError` 仍忽略）。
+
 ## 已完成：model_factory 重试字段可观测 + Approvals on-call smoke
 
 - `_retry_kwargs`：非法 `retries` / `delay_between_retries` 打 debug 并回退默认；非法 `http_max_retries` 打 warning 且不设置 `max_retries`（不再静默 `pass`）。

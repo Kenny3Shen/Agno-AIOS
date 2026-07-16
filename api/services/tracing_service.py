@@ -290,7 +290,7 @@ def _json_or_text(value: Any) -> dict[str, Any]:
                 "data": data,
             }
         except JSONDecodeError:
-            pass
+            logger.debug("trace payload not JSON; treating as text")
 
     markdown_markers = ("# ", "## ", "- ", "* ", "```", "|", "> ")
     fmt = "markdown" if any(marker in stripped for marker in markdown_markers) else "text"
@@ -660,7 +660,7 @@ async def _merge_audit_error_traces(
                 if end_time and ts > end_time:
                     continue
             except ValueError:
-                pass
+                logger.debug("trace start_time not parseable: {!r}", raw_start)
         row["status"] = "ERROR"
         extras.append(row)
         present.add(failed_run_id)
@@ -1031,7 +1031,7 @@ def _format_tool_result(result: object) -> str:
         try:
             return dumps(loads(text_value), indent=True)
         except JSONDecodeError:
-            pass
+            logger.debug("tool result not JSON; keeping raw text")
     return text_value
 
 
