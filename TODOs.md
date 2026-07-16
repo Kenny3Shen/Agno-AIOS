@@ -1,6 +1,13 @@
 # 下一步工作
 
 
+## 已完成：多选摘要抽取 + clone 深拷贝 + 单步指令标签
+
+- `summarizeSelectedAgentSteps`：多选 Inspector 混合态可测纯函数。
+- `cloneNodeDeep`：深拷贝 `skills` / `userInputSchema`，避免复制/粘贴共享数组。
+- 单步 Inspector：步骤指令补 `instructionsLabel` 标签。
+- Grok lean 冒烟：`input_tokens≈2064`（search/live 开启但有效挂载仍为 false）。
+
 ## 已完成：Chat 关工具时请求体不发 Knowledge / Live Search
 
 - `streamMessage`：`enable_tools=false` 时强制 `search_knowledge=false`、`live_search=false`，避免 UI 偏好残留误导服务端。

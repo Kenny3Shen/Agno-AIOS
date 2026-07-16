@@ -203,7 +203,15 @@ export const isDescendantOf = (
 /** Deep-clone a node tree with fresh ids (for copy/paste). */
 export const cloneNodeDeep = (node: WorkflowNode): WorkflowNode => {
   const id = crypto.randomUUID()
-  const base = { ...node, id, position: node.position ? { ...node.position } : undefined }
+  const base: WorkflowNode = {
+    ...node,
+    id,
+    position: node.position ? { ...node.position } : undefined,
+    skills: node.skills ? [...node.skills] : node.skills,
+    userInputSchema: node.userInputSchema
+      ? node.userInputSchema.map((field) => ({ ...field }))
+      : node.userInputSchema,
+  }
   if (node.type === 'condition') {
     return {
       ...base,
@@ -1500,5 +1508,57 @@ export const isKeyboardTargetEditable = (target: EventTarget | null): boolean =>
     return true
   }
   return false
+}
+
+export type MultiSelectAgentSummary = {
+  agentCount: number
+  sharedTargetId: string | undefined
+  skillsMixed: boolean
+  sharedSkills: string[]
+  instructionsMixed: boolean
+  sharedInstructions: string
+  allConfirm: boolean
+  noneConfirm: boolean
+  allUserInput: boolean
+  noneUserInput: boolean
+  allOutputReview: boolean
+  noneOutputReview: boolean
+}
+
+const skillKey = (skills: string[] | undefined) =>
+  JSON.stringify([...(skills ?? [])].map(String).sort())
+
+/** Derive multi-select Inspector controls from currently selected Agent steps. */
+export const summarizeSelectedAgentSteps = (
+  agentSteps: WorkflowNode[],
+): MultiSelectAgentSummary => {
+  const agentCount = agentSteps.length
+  const first = agentSteps[0]
+  const sharedTargetId =
+    agentCount > 0 && agentSteps.every((node) => node.targetId === first?.targetId)
+      ? first?.targetId
+      : undefined
+  const skillsMixed =
+    agentCount > 0 &&
+    !agentSteps.every((node) => skillKey(node.skills) === skillKey(first?.skills))
+  const sharedSkills = skillsMixed ? [] : [...(first?.skills ?? [])]
+  const instructionsMixed =
+    agentCount > 0 &&
+    !agentSteps.every((node) => (node.instructions ?? '') === (first?.instructions ?? ''))
+  const sharedInstructions = instructionsMixed ? '' : (first?.instructions ?? '')
+  return {
+    agentCount,
+    sharedTargetId,
+    skillsMixed,
+    sharedSkills,
+    instructionsMixed,
+    sharedInstructions,
+    allConfirm: agentCount > 0 && agentSteps.every((node) => node.requiresConfirmation),
+    noneConfirm: agentCount > 0 && agentSteps.every((node) => !node.requiresConfirmation),
+    allUserInput: agentCount > 0 && agentSteps.every((node) => node.requiresUserInput),
+    noneUserInput: agentCount > 0 && agentSteps.every((node) => !node.requiresUserInput),
+    allOutputReview: agentCount > 0 && agentSteps.every((node) => node.requiresOutputReview),
+    noneOutputReview: agentCount > 0 && agentSteps.every((node) => !node.requiresOutputReview),
+  }
 }
 

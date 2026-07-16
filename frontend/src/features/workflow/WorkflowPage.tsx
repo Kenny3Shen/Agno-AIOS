@@ -53,6 +53,7 @@ import {
   workflowWebhookCurl,
   workflowWebhookUrl,
   findNode,
+  summarizeSelectedAgentSteps,
 } from './utils'
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
 import { listWorkflowTriggerHistory } from './api'
@@ -849,11 +850,25 @@ export function WorkflowPage() {
                   style={{ marginBottom: 12 }}
                 />
                 {(() => {
-                  const selectedNodes = workflow.state.selectedIds
+                  const agentSteps = workflow.state.selectedIds
                     .map((id) => findNode(workflow.state.steps, id))
                     .filter((node): node is NonNullable<typeof node> => Boolean(node))
-                  const agentSteps = selectedNodes.filter((node) => node.type === 'step')
-                  const agentCount = agentSteps.length
+                    .filter((node) => node.type === 'step')
+                  const summary = summarizeSelectedAgentSteps(agentSteps)
+                  const {
+                    agentCount,
+                    sharedTargetId: sharedTarget,
+                    skillsMixed,
+                    sharedSkills,
+                    instructionsMixed,
+                    sharedInstructions,
+                    allConfirm,
+                    noneConfirm,
+                    allUserInput,
+                    noneUserInput,
+                    allOutputReview,
+                    noneOutputReview,
+                  } = summary
                   if (!agentCount) {
                     return (
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -861,29 +876,6 @@ export function WorkflowPage() {
                       </Typography.Text>
                     )
                   }
-                  const sharedTarget = agentSteps.every(
-                    (node) => node.targetId === agentSteps[0]?.targetId,
-                  )
-                    ? agentSteps[0]?.targetId
-                    : undefined
-                  const allConfirm = agentSteps.every((node) => node.requiresConfirmation)
-                  const noneConfirm = agentSteps.every((node) => !node.requiresConfirmation)
-                  const allUserInput = agentSteps.every((node) => node.requiresUserInput)
-                  const noneUserInput = agentSteps.every((node) => !node.requiresUserInput)
-                  const allOutputReview = agentSteps.every((node) => node.requiresOutputReview)
-                  const noneOutputReview = agentSteps.every((node) => !node.requiresOutputReview)
-                  const skillKey = (skills: string[] | undefined) =>
-                    JSON.stringify([...(skills ?? [])].map(String).sort())
-                  const skillsMixed = !agentSteps.every(
-                    (node) => skillKey(node.skills) === skillKey(agentSteps[0]?.skills),
-                  )
-                  const sharedSkills = skillsMixed ? [] : [...(agentSteps[0]?.skills ?? [])]
-                  const instructionsMixed = !agentSteps.every(
-                    (node) => (node.instructions ?? '') === (agentSteps[0]?.instructions ?? ''),
-                  )
-                  const sharedInstructions = instructionsMixed
-                    ? ''
-                    : (agentSteps[0]?.instructions ?? '')
                   return (
                     <Space orientation="vertical" style={{ width: '100%' }} size={10}>
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -1123,8 +1115,14 @@ export function WorkflowPage() {
                         )
                       })()}
                     </div>
+                    <Typography.Text
+                      type="secondary"
+                      style={{ fontSize: 11, display: 'block', marginTop: 8 }}
+                    >
+                      {t('instructionsLabel')}
+                    </Typography.Text>
                     <Input.TextArea
-                      style={{ marginTop: 8 }}
+                      style={{ marginTop: 4 }}
                       value={step.instructions}
                       onChange={(e) =>
                         workflow.update({ ...step, instructions: e.target.value })

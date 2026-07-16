@@ -23,6 +23,8 @@ import {
   isKeyboardTargetEditable,
   updateNodeInTree,
   findNode,
+  summarizeSelectedAgentSteps,
+  cloneNodeDeep,
   triggerEnableBlocked,
   workflowWebhookCurl,
   workflowWebhookUrl,
@@ -769,6 +771,73 @@ describe('updateNodeInTree bulk HITL flags', () => {
       requiresUserInput: true,
       requiresOutputReview: true,
     })
+  })
+})
+
+describe('summarizeSelectedAgentSteps', () => {
+  it('detects mixed skills, instructions, and HITL flags', () => {
+    const a = createNode('step')
+    a.id = 'a'
+    a.targetId = 'security-operations'
+    a.skills = ['cve-intel-skill']
+    a.instructions = 'one'
+    a.requiresConfirmation = true
+    a.requiresUserInput = false
+    a.requiresOutputReview = false
+    const b = createNode('step')
+    b.id = 'b'
+    b.targetId = 'safe-fallback'
+    b.skills = ['playbook-skill']
+    b.instructions = 'two'
+    b.requiresConfirmation = false
+    b.requiresUserInput = true
+    b.requiresOutputReview = true
+    const summary = summarizeSelectedAgentSteps([a, b])
+    expect(summary.agentCount).toBe(2)
+    expect(summary.sharedTargetId).toBeUndefined()
+    expect(summary.skillsMixed).toBe(true)
+    expect(summary.sharedSkills).toEqual([])
+    expect(summary.instructionsMixed).toBe(true)
+    expect(summary.sharedInstructions).toBe('')
+    expect(summary.allConfirm).toBe(false)
+    expect(summary.noneConfirm).toBe(false)
+    expect(summary.allUserInput).toBe(false)
+    expect(summary.noneUserInput).toBe(false)
+    expect(summary.allOutputReview).toBe(false)
+    expect(summary.noneOutputReview).toBe(false)
+  })
+
+  it('shares values when agents match', () => {
+    const a = createNode('step')
+    a.targetId = 'security-operations'
+    a.skills = ['playbook-skill']
+    a.instructions = 'shared'
+    a.requiresConfirmation = true
+    a.requiresUserInput = true
+    a.requiresOutputReview = false
+    const b = { ...a, id: 'b' }
+    const summary = summarizeSelectedAgentSteps([a, b])
+    expect(summary.sharedTargetId).toBe('security-operations')
+    expect(summary.skillsMixed).toBe(false)
+    expect(summary.sharedSkills).toEqual(['playbook-skill'])
+    expect(summary.instructionsMixed).toBe(false)
+    expect(summary.sharedInstructions).toBe('shared')
+    expect(summary.allConfirm).toBe(true)
+    expect(summary.noneConfirm).toBe(false)
+    expect(summary.allUserInput).toBe(true)
+    expect(summary.noneOutputReview).toBe(true)
+  })
+})
+
+describe('cloneNodeDeep', () => {
+  it('cloneNodeDeep isolates skills arrays', () => {
+    const a = createNode('step')
+    a.skills = ['playbook-skill']
+    const clone = cloneNodeDeep(a)
+    clone.skills?.push('cve-intel-skill')
+    expect(a.skills).toEqual(['playbook-skill'])
+    expect(clone.skills).toEqual(['playbook-skill', 'cve-intel-skill'])
+    expect(clone.id).not.toBe(a.id)
   })
 })
 
