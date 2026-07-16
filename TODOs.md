@@ -590,6 +590,13 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：删除死代码 + sessions 列表命名
+
+- 删除未引用：`tracing_service._all_trace_items`、`knowledge_service._document_status_async`、`chat_session_service.is_session_archived_async`、`workflow_service.mark_cron_last_run`（cron 仅用原子 `try_claim_cron_run`）。
+- `get_all_sessions_async` 重命名为 `list_sessions_async`（真实 SQL 分页，不再暗示全量扫描）；路由与测试同步。
+
+相关：`tracing_service.py` / `knowledge_service.py` / `chat_session_service.py` / `workflow_service.py` / `routes/chat.py`
+
 ## 已完成：Knowledge SSE 进度去重 + 后台 task 命名
 
 - `update` / `update/upload` 流式路径复用 `_run_progress_sse`（含 LookupError 阶段可选 `lookup_failed_stage`），去掉两段重复 worker/event_generator。

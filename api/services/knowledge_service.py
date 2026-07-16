@@ -516,14 +516,6 @@ async def _latest_inserted_content_async(
     return None
 
 
-async def _document_status_async(content_id: str) -> KnowledgeDocumentPayload | None:
-    await _ensure_knowledge_contents_storage_async()
-    content = await _knowledge_content_by_id_async(content_id)
-    if content is None:
-        return None
-    return _content_to_document(content)
-
-
 @dataclass(frozen=True)
 class KnowledgeBaseLifecycleDependencies:
     get_async_knowledge_base: Callable[[SearchType | None], Any] | None = None

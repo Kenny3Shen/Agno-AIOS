@@ -29,17 +29,6 @@ TITLE_METADATA_KEY = "agno_aios_title"
 
 
 
-async def is_session_archived_async(session_id: str) -> bool:
-    await ensure_agno_postgres_tables_async()
-    session = await get_async_agno_postgres_db().get_session(
-        session_id,
-        deserialize=False,
-    )
-    if not isinstance(session, dict):
-        return False
-    return _is_archived_metadata(session.get("metadata"))
-
-
 async def get_session_owner_async(session_id: str) -> str | None:
     await ensure_agno_postgres_tables_async()
     session = await get_async_agno_postgres_db().get_session(
@@ -196,7 +185,7 @@ async def _query_sessions_page(
     return rows, total_count
 
 
-async def get_all_sessions_async(
+async def list_sessions_async(
     *,
     include_archived: bool = False,
     owner_user_id: str | None = None,
@@ -204,7 +193,7 @@ async def get_all_sessions_async(
     page: int = 1,
     limit: int = 40,
 ) -> dict[str, Any]:
-    """Read session summaries with DB-level page/limit.
+    """Read a page of session summaries (Agno-style data/meta).
 
     Returns Agno-style ``{data, meta}``. Archive filtering uses
     ``metadata @> {"agno_aios_archived": true}`` so totals stay accurate beyond

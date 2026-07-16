@@ -11,7 +11,7 @@ from api.auth.ownership import assert_owned_resource
 from api.auth.scopes import require_scope
 from api.services.chat_session_service import (
     archive_session,
-    get_all_sessions_async,
+    list_sessions_async,
     get_session_messages_async,
     get_session_owner_async,
     rename_session,
@@ -233,7 +233,7 @@ async def list_sessions(
     """List chat sessions as Agno-style ``{data, meta}``."""
     try:
         owner_user_id = scope_user_id(user, user_id)
-        return await get_all_sessions_async(
+        return await list_sessions_async(
             owner_user_id=owner_user_id,
             include_runs=include_runs,
             include_archived=include_archived,

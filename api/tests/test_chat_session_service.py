@@ -93,7 +93,7 @@ def test_approval_rejection_reason_ignores_legacy_resolution_rejection_reason():
 
 
 @pytest.mark.asyncio
-async def test_get_all_sessions_async_projects_sorted_archived_session_rows():
+async def test_list_sessions_async_projects_sorted_archived_session_rows():
     # Rows arrive newest-first from SQL; service keeps order when already_sorted.
     rows = [
         {
@@ -125,7 +125,7 @@ async def test_get_all_sessions_async_projects_sorted_archived_session_rows():
         patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
         patch.object(chat_session_service, "_query_sessions_page", fake_query),
     ):
-        result = await chat_session_service.get_all_sessions_async(
+        result = await chat_session_service.list_sessions_async(
             include_archived=True, owner_user_id="u1", include_runs=True
         )
     assert set(result.keys()) == {"data", "meta"}
@@ -143,7 +143,7 @@ async def test_get_all_sessions_async_projects_sorted_archived_session_rows():
 
 
 @pytest.mark.asyncio
-async def test_get_all_sessions_filters_archived_by_default():
+async def test_list_sessions_filters_archived_by_default():
     async def fake_query(**kwargs):
         assert kwargs["include_archived"] is False
         return [{"session_id": "active", "metadata": {}, "runs": [], "updated_at": 1}], 1
@@ -152,14 +152,14 @@ async def test_get_all_sessions_filters_archived_by_default():
         patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
         patch.object(chat_session_service, "_query_sessions_page", fake_query),
     ):
-        result = await chat_session_service.get_all_sessions_async()
+        result = await chat_session_service.list_sessions_async()
     assert [session["session_id"] for session in result["data"]] == ["active"]
     assert result["meta"]["total_count"] == 1
 
 
 
 @pytest.mark.asyncio
-async def test_get_all_sessions_paginates_filtered_rows():
+async def test_list_sessions_paginates_filtered_rows():
     async def fake_query(**kwargs):
         assert kwargs["page"] == 2
         assert kwargs["limit"] == 1
@@ -178,7 +178,7 @@ async def test_get_all_sessions_paginates_filtered_rows():
         patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
         patch.object(chat_session_service, "_query_sessions_page", fake_query),
     ):
-        result = await chat_session_service.get_all_sessions_async(
+        result = await chat_session_service.list_sessions_async(
             owner_user_id="u1", page=2, limit=1
         )
     assert [row["session_id"] for row in result["data"]] == ["s2"]

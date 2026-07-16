@@ -46,7 +46,7 @@ async def test_session_list_service_passes_owner_filter_to_query():
         patch.object(chat_session_service, "ensure_agno_postgres_tables_async", new_callable=AsyncMock),
         patch.object(chat_session_service, "_query_sessions_page", fake_query),
     ):
-        result = await chat_session_service.get_all_sessions_async(owner_user_id="u1")
+        result = await chat_session_service.list_sessions_async(owner_user_id="u1")
 
     assert result["data"] == []
     assert result["meta"]["total_count"] == 0
@@ -153,13 +153,13 @@ async def test_cancel_chat_run_records_audit_event():
 async def test_list_sessions_uses_current_user_as_owner_filter():
     captured: dict[str, str | None] = {}
 
-    async def fake_get_all_sessions(
+    async def fake_list_sessions(
         *,
         owner_user_id: str | None,
         include_archived: bool = False,
         include_runs: bool = False,
         page: int = 1,
-        limit: int = 100,
+        limit: int = 40,
     ):
         captured["owner_user_id"] = owner_user_id
         captured["include_archived"] = str(include_archived)
@@ -177,20 +177,20 @@ async def test_list_sessions_uses_current_user_as_owner_filter():
             },
         }
 
-    with patch.object(chat, "get_all_sessions_async", fake_get_all_sessions):
+    with patch.object(chat, "list_sessions_async", fake_list_sessions):
         result = await chat.list_sessions(include_archived=True, user=actor("u1"))
     assert result["data"] == []
     assert result["meta"]["total_count"] == 0
     assert captured["owner_user_id"] == "u1"
     assert captured["include_archived"] == "True"
-    assert captured["limit"] == 100
+    assert captured["limit"] == 40
 
 
 @pytest.mark.asyncio
 async def test_list_sessions_honors_admin_user_filter():
     captured: dict[str, str | None] = {}
 
-    async def fake_get_all_sessions(*, owner_user_id: str | None, **_kwargs):
+    async def fake_list_sessions(*, owner_user_id: str | None, **_kwargs):
         captured["owner_user_id"] = owner_user_id
         return {
             "data": [],
@@ -203,7 +203,7 @@ async def test_list_sessions_honors_admin_user_filter():
             },
         }
 
-    with patch.object(chat, "get_all_sessions_async", fake_get_all_sessions):
+    with patch.object(chat, "list_sessions_async", fake_list_sessions):
         await chat.list_sessions(user_id="u2", user=actor("admin", "admin"))
     assert captured["owner_user_id"] == "u2"
 

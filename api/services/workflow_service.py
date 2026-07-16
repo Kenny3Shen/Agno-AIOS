@@ -394,19 +394,6 @@ async def publish_workflow_for_actor(actor: ActorLike, workflow_id: str) -> dict
     return _row_payload(updated)
 
 
-async def mark_cron_last_run(workflow_id: str, ts: float) -> None:
-    """Best-effort last_run stamp (non-atomic). Prefer try_claim_cron_run."""
-    row = await workflow_store.get_workflow(workflow_id)
-    if row is None:
-        return
-    triggers = _normalize_triggers(row.get("triggers"))
-    triggers["cron"]["last_run_at"] = float(ts)
-    await workflow_store.update_workflow(
-        workflow_id,
-        values={"triggers": triggers, "updated_at": workflow_store.now_ts()},
-    )
-
-
 async def try_claim_cron_run(
     workflow_id: str,
     *,

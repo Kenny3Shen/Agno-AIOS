@@ -463,33 +463,6 @@ _STATUS_FILTER_PAGE_SIZE = 200
 _AUDIT_ERROR_SUPPLEMENT_LIMIT = 50
 
 
-async def _all_trace_items(
-    *,
-    run_id: str | None,
-    session_id: str | None,
-    user_id: str | None,
-    agent_id: str | None,
-    team_id: str | None,
-    workflow_id: str | None,
-    start_time: datetime | None,
-    end_time: datetime | None,
-) -> list[dict[str, Any]]:
-    """Load (status-filtered optional) traces for grouping with a hard scan cap."""
-    items, _scanned, _truncated = await _scan_trace_items(
-        run_id=run_id,
-        session_id=session_id,
-        user_id=user_id,
-        agent_id=agent_id,
-        team_id=team_id,
-        workflow_id=workflow_id,
-        start_time=start_time,
-        end_time=end_time,
-        status=None,
-        keep_all=True,
-    )
-    return items
-
-
 async def _scan_trace_items(
     *,
     run_id: str | None,
