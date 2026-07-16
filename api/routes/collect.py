@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.auth.claims import ADMIN_SCOPE
@@ -8,6 +8,7 @@ from api.models.schemas import Url2MdRequest
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.collect_service import get_article, list_sources, run_crawl, search_articles
 from api.services.collect_crawl_service import parse_and_store_url
+from api.utils.pagination import pagination_meta
 from loguru import logger
 
 router = APIRouter(prefix="/api/url2md", tags=["URL2MD"])
@@ -35,7 +36,11 @@ async def collect_sources(
     _user: User = Depends(require_scope("collect:read")),
 ) -> dict:
     """List configured news source domains for Collect."""
-    return {"status": 200, "items": await list_sources()}
+    items = await list_sources()
+    return {
+        "data": items,
+        "meta": pagination_meta(page=1, limit=max(len(items), 1), total_count=len(items)),
+    }
 
 
 @router.post("/articles/search")
@@ -52,15 +57,12 @@ async def search_collect_articles_route(
             size=request.size,
         )
         return {
-            "status": 200,
-            "items": items,
-            "total": total,
-            "page": request.page,
-            "size": request.size,
+            "data": items,
+            "meta": pagination_meta(page=request.page, limit=request.size, total_count=total),
         }
     except Exception as e:
         logger.error("Collect search error: {}", e)
-        return {"status": 400, "message": f"错误:{e}"}
+        raise HTTPException(status_code=400, detail=f"错误:{e}") from e
 
 
 @router.get("/articles/{article_id}")

@@ -56,12 +56,12 @@ export function CvePage() {
         </Space>
         <Table<Cve>
           rowKey="id"
-          dataSource={search.data?.items ?? []}
+          dataSource={search.data?.data ?? []}
           loading={search.isPending}
           pagination={{
             current: pagination.page,
             pageSize: pagination.size,
-            total: search.data?.total,
+            total: search.data?.meta.total_count,
             showSizeChanger: true,
             showTotal: (total) => t('total', { total }),
           }}

@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：CVE / Collect 列表 data/meta 对齐
+
+- `POST /api/cve/search`、`POST /api/url2md/articles/search`、`GET /api/url2md/sources` 改为 `{data, meta}`；错误改 HTTPException（不再 `{status:400,message}` 包一层）。
+- 前端 CVE/Collect 页与 api 类型同步；无旧 envelope 兼容。
+
 ## 已完成：Audit 列表 data/meta 对齐
 
 - `GET /api/audit/logs` 从 `{items,total,page,limit}` 改为 Agno 风格 `{data, meta}`（`pagination_meta`）。

@@ -102,15 +102,15 @@ export function CollectPage() {
     onError: (err: Error) => message.error(err.message || t('crawlFailed')),
   })
 
-  const items = articlesQuery.data?.items ?? []
-  const total = articlesQuery.data?.total ?? 0
+  const items = articlesQuery.data?.data ?? []
+  const total = articlesQuery.data?.meta.total_count ?? 0
   const sourceOptions = useMemo(
     () =>
-      (sourcesQuery.data?.items ?? []).map((item) => ({
+      (sourcesQuery.data?.data ?? []).map((item) => ({
         value: item.domain,
         label: item.has_articles ? item.domain : `${item.domain}`,
       })),
-    [sourcesQuery.data?.items]
+    [sourcesQuery.data?.data]
   )
 
   const activeMarkdown = selected?.markdown ?? ''

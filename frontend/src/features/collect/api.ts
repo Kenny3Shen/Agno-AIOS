@@ -30,13 +30,21 @@ export const parseUrl = (url: string) =>
     message?: string
   }>('/url2md/parse', jsonInit('POST', { url }))
 
+export interface CollectListMeta {
+  page: number
+  limit: number
+  total_pages: number
+  total_count: number
+  search_time_ms?: number
+}
+
 export const searchArticles = (payload: {
   query?: string
   source_domain?: string
   page?: number
   size?: number
 }) =>
-  requestJson<{ items: CollectArticle[]; total: number; page: number; size: number }>(
+  requestJson<{ data: CollectArticle[]; meta: CollectListMeta }>(
     '/url2md/articles/search',
     jsonInit('POST', {
       query: payload.query ?? '',
@@ -47,7 +55,7 @@ export const searchArticles = (payload: {
   )
 
 export const listSources = () =>
-  requestJson<{ items: CollectSource[] }>('/url2md/sources')
+  requestJson<{ data: CollectSource[]; meta: CollectListMeta }>('/url2md/sources')
 
 export const crawlSources = (payload?: {
   domains?: string[]
