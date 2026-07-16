@@ -34,5 +34,6 @@
   "labelUpdated": "Updated",
   "labelMemoryId": "Memory ID",
   "additionalContext": "Additional context",
-  "statusStored": "stored"
+  "statusStored": "stored",
+  "metadataTitle": "Metadata"
 }

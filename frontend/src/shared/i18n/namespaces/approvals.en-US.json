@@ -77,5 +77,6 @@
   "statusRejected": "Rejected",
   "outputPreview": "Output preview",
   "fieldYes": "Yes",
-  "fieldNo": "No"
+  "fieldNo": "No",
+  "detailTitle": "Approval detail"
 }

@@ -153,7 +153,7 @@ function WorkflowFlowNodeComponent({
         id="in"
         isConnectable={isConnectable}
         className="wf-handle wf-handle--in wf-handle--top"
-        title="In (top)"
+        title={t('handleInTop')}
       />
       <Handle
         type="target"
@@ -161,7 +161,7 @@ function WorkflowFlowNodeComponent({
         id="in-left"
         isConnectable={isConnectable}
         className="wf-handle wf-handle--in wf-handle--left"
-        title="In (left)"
+        title={t('handleInLeft')}
       />
 
       <div className="wf-flow-node__badge" aria-hidden>
@@ -217,7 +217,7 @@ function WorkflowFlowNodeComponent({
               isConnectable={isConnectable}
               className="wf-handle wf-handle--branch wf-handle--bottom"
               style={{ left: handleLeftPercent(index, branches.length) }}
-              title={`${branchLabel(branch.label)} (bottom)`}
+              title={t('handleBranchBottom', { label: branchLabel(branch.label) })}
             />
           ))}
           {branches.map((branch, index) => (
@@ -229,7 +229,7 @@ function WorkflowFlowNodeComponent({
               isConnectable={isConnectable}
               className="wf-handle wf-handle--branch wf-handle--right"
               style={{ top: handleTopPercent(index, branches.length) }}
-              title={`${branchLabel(branch.label)} (right)`}
+              title={t('handleBranchRight', { label: branchLabel(branch.label) })}
             />
           ))}
         </>
@@ -241,7 +241,7 @@ function WorkflowFlowNodeComponent({
             id="out"
             isConnectable={isConnectable}
             className="wf-handle wf-handle--out wf-handle--bottom"
-            title="Out (bottom)"
+            title={t('handleOutBottom')}
           />
           <Handle
             type="source"
@@ -249,7 +249,7 @@ function WorkflowFlowNodeComponent({
             id="out-right"
             isConnectable={isConnectable}
             className="wf-handle wf-handle--out wf-handle--right"
-            title="Out (right)"
+            title={t('handleOutRight')}
           />
         </>
       )}

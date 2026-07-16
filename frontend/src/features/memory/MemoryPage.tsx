@@ -200,7 +200,7 @@ export function MemoryPage() {
         size={520}
         open={Boolean(selected)}
         onClose={() => setSelected(null)}
-        title="Metadata"
+        title={t('metadataTitle')}
         destroyOnHidden
       >
         {selected ? (

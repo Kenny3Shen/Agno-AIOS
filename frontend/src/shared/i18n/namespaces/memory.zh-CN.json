@@ -34,5 +34,6 @@
   "labelUpdated": "更新时间",
   "labelMemoryId": "记忆 ID",
   "additionalContext": "附加上下文",
-  "statusStored": "已存储"
+  "statusStored": "已存储",
+  "metadataTitle": "元数据"
 }

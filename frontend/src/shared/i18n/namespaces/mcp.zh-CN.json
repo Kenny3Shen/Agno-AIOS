@@ -65,5 +65,8 @@
   "fieldConfigStore": "配置存储",
   "fieldTitle": "标题",
   "fieldDescription": "描述",
-  "fieldMetadata": "元数据"
+  "fieldMetadata": "元数据",
+  "inputSchema": "输入 Schema",
+  "outputSchema": "输出 Schema",
+  "callResult": "调用结果"
 }

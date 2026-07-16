@@ -520,7 +520,7 @@ export function ApprovalsPage() {
           columns={columns}
         />
       </Card>
-      <Drawer size={760} open={Boolean(selected)} onClose={() => setSelected(null)} title="Approval detail" extra={approvalActions}>
+      <Drawer size={760} open={Boolean(selected)} onClose={() => setSelected(null)} title={t('detailTitle')} extra={approvalActions}>
         {selected && (
           <>
             {selected.status === 'approved' && <Alert type="success" showIcon title={t('approved')} style={{ marginBottom: 16 }} />}

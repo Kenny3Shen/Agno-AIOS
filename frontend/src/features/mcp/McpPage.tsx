@@ -395,8 +395,8 @@ export function McpPage() {
                 label: t('tabSchemas'),
                 children: (
                   <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
-                    <FormattedContentCard title="Input schema" value={component.input_schema} />
-                    <FormattedContentCard title="Output schema" value={component.output_schema} />
+                    <FormattedContentCard title={t('inputSchema')} value={component.input_schema} />
+                    <FormattedContentCard title={t('outputSchema')} value={component.output_schema} />
                   </Space>
                 ),
               },
@@ -493,7 +493,7 @@ export function McpPage() {
       <Modal open={callOpen} onCancel={() => setCallOpen(false)} title={t('tryCall', { name: component?.name ?? '' })} onOk={runTool} okText={t('call')}>
         <Typography.Paragraph type="secondary">{t('callHint')}</Typography.Paragraph>
         <Input.TextArea rows={8} value={callArgs} onChange={(event) => setCallArgs(event.target.value)} />
-        {callResult !== undefined && <FormattedContentCard title="Result" value={callResult} />}
+        {callResult !== undefined && <FormattedContentCard title={t('callResult')} value={callResult} />}
       </Modal>
     </main>
   )

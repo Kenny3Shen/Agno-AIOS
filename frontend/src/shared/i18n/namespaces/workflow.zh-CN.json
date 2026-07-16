@@ -242,5 +242,11 @@
   "triggerStatus_paused": "已暂停",
   "triggerStatus_started": "已启动",
   "triggerSource_cron": "Cron",
-  "triggerSource_webhook": "Webhook"
+  "triggerSource_webhook": "Webhook",
+  "handleInTop": "入口（上）",
+  "handleInLeft": "入口（左）",
+  "handleOutBottom": "出口（下）",
+  "handleOutRight": "出口（右）",
+  "handleBranchBottom": "{{label}}（下）",
+  "handleBranchRight": "{{label}}（右）"
 }

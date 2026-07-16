@@ -242,5 +242,11 @@
   "triggerStatus_paused": "paused",
   "triggerStatus_started": "started",
   "triggerSource_cron": "cron",
-  "triggerSource_webhook": "webhook"
+  "triggerSource_webhook": "webhook",
+  "handleInTop": "In (top)",
+  "handleInLeft": "In (left)",
+  "handleOutBottom": "Out (bottom)",
+  "handleOutRight": "Out (right)",
+  "handleBranchBottom": "{{label}} (bottom)",
+  "handleBranchRight": "{{label}} (right)"
 }

@@ -77,5 +77,6 @@
   "statusRejected": "已拒绝",
   "outputPreview": "输出预览",
   "fieldYes": "是",
-  "fieldNo": "否"
+  "fieldNo": "否",
+  "detailTitle": "审批详情"
 }

@@ -65,5 +65,8 @@
   "fieldConfigStore": "Config store",
   "fieldTitle": "Title",
   "fieldDescription": "Description",
-  "fieldMetadata": "Metadata"
+  "fieldMetadata": "Metadata",
+  "inputSchema": "Input schema",
+  "outputSchema": "Output schema",
+  "callResult": "Result"
 }

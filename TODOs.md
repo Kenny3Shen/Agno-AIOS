@@ -1,5 +1,9 @@
 # 下一步工作
 
+## 已完成：Approvals/Memory/MCP Schema/Workflow Handle 文案收口
+
+- Approvals Drawer 标题、Memory 元数据标题、MCP Input/Output Schema 与调用结果、画布 Handle tooltip 走 i18n。
+
 ## 已完成：运维面 i18n 残差 + Chat 本轮 Skills 可见性
 
 - Audit：筛选表单、列表卡标题、详情 Descriptions、元数据标题走 audit i18n（测试按 zh-CN）。
