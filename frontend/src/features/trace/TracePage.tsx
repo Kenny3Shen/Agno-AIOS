@@ -21,7 +21,7 @@ import {
   type TreeDataNode,
   type TreeProps,
 } from 'antd'
-import { ReloadOutlined, SearchOutlined } from '@ant-design/icons'
+import { DeploymentUnitOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import { currentUserQuery } from '@/features/auth'
 import { listSessions, sessionsQuery } from '@/features/chat'
 import { roleOf } from '@/shared/auth/permissions'
@@ -367,6 +367,15 @@ export function TracePage() {
   const refresh = () => {
     void Promise.all([chatSessions.refetch(), summaries.refetch(), selectedTraceList.refetch()])
   }
+  const selectedSessionMeta = useMemo(
+    () => sessions.find((session) => session.sessionId === selectedSession) ?? null,
+    [selectedSession, sessions],
+  )
+  const openSelectedWorkflow = () => {
+    const workflowId = String(selectedSessionMeta?.workflowId || '').trim()
+    if (!workflowId) return
+    void router.history.push(`/workflow?workflow_id=${encodeURIComponent(workflowId)}`)
+  }
   const changeSessionPage = (page: number) => {
     setSessionPage(page)
   }
@@ -395,13 +404,20 @@ export function TracePage() {
         title={t('title')}
         description={t('description')}
         actions={
-          <Button
-            icon={<ReloadOutlined />}
-            loading={chatSessions.isFetching || summaries.isFetching || selectedTraceList.isFetching}
-            onClick={refresh}
-          >
-            {t('common:refresh')}
-          </Button>
+          <Space size={8} wrap>
+            {selectedSessionMeta?.workflowId ? (
+              <Button icon={<DeploymentUnitOutlined />} onClick={openSelectedWorkflow}>
+                {t('openWorkflow')}
+              </Button>
+            ) : null}
+            <Button
+              icon={<ReloadOutlined />}
+              loading={chatSessions.isFetching || summaries.isFetching || selectedTraceList.isFetching}
+              onClick={refresh}
+            >
+              {t('common:refresh')}
+            </Button>
+          </Space>
         }
       />
       <Card className="workbench-card trace-toolbar">
@@ -485,10 +501,15 @@ export function TracePage() {
                       aria-pressed={session.sessionId === selectedSession}
                       onClick={() => selectSession(session.sessionId)}
                     >
-                      <strong>{session.name}</strong>
+                      <strong>
+                        {session.workflowId ? '[WF] ' : ''}
+                        {session.name}
+                      </strong>
                       <span>
                         {session.archived && <Tag>{t('archivedTag')}</Tag>}
-                        {t('runsCount', { count: session.runCount })}{session.context ? ` · ${session.context}` : ''}
+                        {session.workflowId ? <Tag color="blue">{t('workflowTag')}</Tag> : null}
+                        {t('runsCount', { count: session.runCount })}
+                        {session.context ? ` · ${session.context}` : ''}
                       </span>
                       <small>{formatDate(session.latestAt)}</small>
                     </button>

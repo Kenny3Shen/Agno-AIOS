@@ -533,3 +533,20 @@ describe('fieldForValidationIssue', () => {
     })
     expect(restored.steps?.[0]?.name).toBe('')
   })
+
+
+  it('flags user_input without named fields', () => {
+    const issues = validateWorkflowDraft([
+      {
+        id: 's1',
+        type: 'step',
+        name: 'Ask',
+        targetId: 'security-operations',
+        requiresUserInput: true,
+        userInputSchema: [{ name: '', field_type: 'str' }],
+      },
+    ])
+    expect(issues.some((i) => i.code === 'user_input_schema_empty' || i.code === 'user_input_schema_field')).toBe(
+      true,
+    )
+  })

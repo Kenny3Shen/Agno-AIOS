@@ -186,5 +186,7 @@
   "fieldTypeStr": "Short text",
   "fieldTypeText": "Long text",
   "fieldTypeNumber": "Number",
-  "fieldTypeBool": "Yes/No"
+  "fieldTypeBool": "Yes/No",
+  "validationUserInputSchemaEmpty": "{{path}}: user input needs at least one named field",
+  "validationUserInputSchemaField": "{{path}}: field #{{index}} needs a name"
 }

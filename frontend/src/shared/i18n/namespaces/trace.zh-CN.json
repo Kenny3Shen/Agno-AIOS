@@ -33,5 +33,7 @@
   "started": "开始时间",
   "statusOk": "OK",
   "statusError": "ERROR",
-  "statusUnset": "UNSET"
+  "statusUnset": "UNSET",
+  "openWorkflow": "打开工作流",
+  "workflowTag": "工作流"
 }

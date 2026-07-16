@@ -424,7 +424,7 @@ export function DashboardPage() {
             locale={{ emptyText: t('noFailures') }}
             onRow={(record) => ({ onClick: () => openTrace(record), className: 'dashboard-trace-row' })}
             columns={[
-              { title: t('run'), dataIndex: 'name', ellipsis: true, render: (value) => value || 'Unnamed run' },
+              { title: t('run'), dataIndex: 'name', ellipsis: true, render: (value) => value || t('unnamedRun') },
               { title: t('subject'), render: (_, item) => item.agent_id || item.workflow_id || '—', ellipsis: true },
               { title: t('latency'), dataIndex: 'duration_ms', width: 106, sorter: (a, b) => (a.duration_ms ?? 0) - (b.duration_ms ?? 0), render: duration },
               { title: t('startTime'), dataIndex: 'start_time', width: 164, defaultSortOrder: 'descend' as const, sorter: (a, b) => compareTimestamp(a.start_time, b.start_time), render: formatDate },

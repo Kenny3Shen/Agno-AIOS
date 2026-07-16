@@ -63,6 +63,7 @@ export function groupSessions(
         traces: items,
         runCount: new Set(items.map((trace) => trace.run_id || trace.trace_id)).size,
         latestAt: latest.start_time,
+        workflowId: latest.workflow_id || null,
       }
     })
     .sort((left, right) => timestamp(right.latestAt) - timestamp(left.latestAt))
@@ -86,6 +87,7 @@ export function mergeTraceSessions(chatSessions: ChatSession[], summaries: Trace
         traces: [],
         runCount: summary.run_count,
         latestAt: summary.latest_start_time,
+        workflowId: summary.workflow_id || chatSession?.workflow_id || null,
       }
     })
     .sort((left, right) => timestamp(right.latestAt) - timestamp(left.latestAt))

@@ -33,5 +33,7 @@
   "started": "Started",
   "statusOk": "OK",
   "statusError": "ERROR",
-  "statusUnset": "UNSET"
+  "statusUnset": "UNSET",
+  "openWorkflow": "Open workflow",
+  "workflowTag": "Workflow"
 }

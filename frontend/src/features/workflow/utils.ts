@@ -639,6 +639,9 @@ export const fieldForValidationIssue = (issue: Pick<WorkflowValidationIssue, 'co
   switch (issue.code) {
     case 'missing_executor':
       return 'executor'
+    case 'user_input_schema_empty':
+    case 'user_input_schema_field':
+      return 'userInput'
     case 'missing_workflow_ref':
       return 'workflow_ref'
     case 'empty_parallel':
@@ -681,6 +684,10 @@ export const validateWorkflowDraft = (
         return `${path}: Nested workflow id is required`
       case 'validationMissingExecutor':
         return `${path}: Agent executor is required`
+      case 'validationUserInputSchemaEmpty':
+        return `${path}: user input needs at least one named field`
+      case 'validationUserInputSchemaField':
+        return `${path}: field #${options?.index ?? ''} needs a name`
       default:
         return key
     }
@@ -762,6 +769,30 @@ export const validateWorkflowDraft = (
           code: 'missing_executor',
           message: t('validationMissingExecutor', { path: here }),
         })
+      }
+      if (node.type === 'step' && node.requiresUserInput) {
+        const schema = node.userInputSchema ?? []
+        const named = schema.filter((field) => (field.name || '').trim())
+        if (!named.length) {
+          issues.push({
+            nodeId: node.id,
+            code: 'user_input_schema_empty',
+            message: t('validationUserInputSchemaEmpty', { path: here }),
+          })
+        } else {
+          schema.forEach((field, index) => {
+            if (!(field.name || '').trim()) {
+              issues.push({
+                nodeId: node.id,
+                code: 'user_input_schema_field',
+                message: t('validationUserInputSchemaField', {
+                  path: here,
+                  index: index + 1,
+                }),
+              })
+            }
+          })
+        }
       }
       for (const list of [node.steps, node.thenSteps, node.elseSteps]) {
         if (list?.length) walk(list, here)

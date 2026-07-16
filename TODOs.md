@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Trace 打开 Studio + user_input 校验 + Dashboard 文案
+
+- Trace：session 投影 `workflowId`；列表标 `[WF]`；选中工作流会话时顶栏「打开工作流」→ Studio。
+- Studio 保存：开启用户输入但无有效字段名时校验失败，并聚焦 Inspector。
+- Dashboard 最近失败「未命名运行」走 i18n。
+
 ## 已完成：Workflow 空节点名保留 + Chat 轻量上下文 + [WF] 进 Studio
 
 - `toDefinition`/`fromRecord` 不再把空控制流名写成 Parallel/Condition 等英文；画布仍用 `defaultName_*` i18n。

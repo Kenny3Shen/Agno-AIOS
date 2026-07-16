@@ -97,6 +97,7 @@ export interface TraceSession {
   traces: Trace[]
   runCount: number
   latestAt: string
+  workflowId?: string | null
 }
 export interface TraceRun {
   runId: string

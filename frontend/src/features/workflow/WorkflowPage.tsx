@@ -888,12 +888,26 @@ export function WorkflowPage() {
                         rows={2}
                       />
                     ) : null}
-                    <div className="workflow-inspector__switch">
+                    <div className="workflow-inspector__switch" data-inspector-field="userInput">
                       <Switch
                         size="small"
                         checked={Boolean(step.requiresUserInput)}
                         onChange={(checked) =>
-                          workflow.update({ ...step, requiresUserInput: checked })
+                          workflow.update({
+                            ...step,
+                            requiresUserInput: checked,
+                            userInputSchema:
+                              checked && !(step.userInputSchema?.length)
+                                ? [
+                                    {
+                                      name: 'response',
+                                      field_type: 'str',
+                                      description: '',
+                                      required: true,
+                                    },
+                                  ]
+                                : step.userInputSchema,
+                          })
                         }
                       />
                       <span>{t('requiresUserInput')}</span>
