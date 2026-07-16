@@ -134,6 +134,16 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+---
+
+## 已完成：xAI 官方 Agno 接入
+
+- `provider=xai` → `agno.models.xai.xAI`（默认 `https://api.x.ai/v1`，Chat Completions）
+- 内置模型 `xai-grok-4.5`；旧 Grok / `api.x.ai` 配置自动迁移，不再用 OpenAI Responses
+- 设置页可选 xAI；不暴露 reasoning_effort
+
+相关：`model_factory.py` / `model_config_service.py` / `SettingsPage.tsx`
+
 ## 已完成：Collect 规则修复与爬取性能
 
 - 停用 `botcrawl.com` / `go.theregister.com` / `www.securitylab.ru`（`DISABLED_COLLECT_DOMAINS` + 从 `domain_rules` 移除）

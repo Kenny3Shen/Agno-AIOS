@@ -5,7 +5,7 @@ export interface ModelConfig {
   id: string
   name: string
   model_id: string
-  provider: 'deepseek' | 'openai' | 'openai-compatible'
+  provider: 'deepseek' | 'openai' | 'openai-compatible' | 'xai'
   api_protocol: 'chat-completions' | 'responses'
   structured_output_mode: 'native' | 'json'
   default_reasoning_effort?: ReasoningEffort | null

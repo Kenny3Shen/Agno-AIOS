@@ -226,3 +226,55 @@ def test_model_config_normalizes_retry_fields():
     assert defaults.delay_between_retries == 1
     assert defaults.exponential_backoff is True
     assert defaults.http_max_retries is None
+
+
+
+def test_legacy_grok_openai_compatible_migrates_to_xai():
+    model = model_config_service.ModelConfig.normalized(
+        {
+            "id": "grok",
+            "name": "Grok",
+            "model_id": "grok-4.5",
+            "provider": "openai-compatible",
+            "api_protocol": "responses",
+            "structured_output_mode": "native",
+            "default_reasoning_effort": "high",
+            "base_url": "https://api.x.ai/v1",
+            "api_key": "xai-key",
+        },
+        "fallback",
+    )
+    assert model.provider == "xai"
+    assert model.api_protocol == "chat-completions"
+    assert model.structured_output_mode == "json"
+    assert model.default_reasoning_effort is None
+    assert model.base_url == "https://api.x.ai/v1"
+
+
+def test_xai_provider_defaults_and_strips_reasoning_effort():
+    model = model_config_service.ModelConfig.normalized(
+        {"id": "xai", "provider": "xai", "model_id": "grok-4.5"},
+        "fallback",
+    )
+    assert model.api_protocol == "chat-completions"
+    assert model.structured_output_mode == "json"
+    assert model.default_reasoning_effort is None
+    assert model.base_url == "https://api.x.ai/v1"
+
+    # xAI does not support reasoning_effort; explicit values are dropped (legacy Grok Responses).
+    stripped = model_config_service.ModelConfig(
+        id="xai-bad",
+        provider="xai",
+        model_id="grok-4.5",
+        default_reasoning_effort="high",
+    )
+    assert stripped.default_reasoning_effort is None
+
+
+def test_default_models_include_xai_grok():
+    store = model_config_service.ModelConfigStore.default()
+    ids = {model.id for model in store.models}
+    assert "xai-grok-4.5" in ids
+    grok = next(model for model in store.models if model.id == "xai-grok-4.5")
+    assert grok.provider == "xai"
+    assert grok.builtin is True

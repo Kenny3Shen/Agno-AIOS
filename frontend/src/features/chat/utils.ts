@@ -303,7 +303,7 @@ export const previousPrompt = (messages: Message[], assistantId: string) => {
 }
 
 export const supportedReasoningEfforts = (model: ModelConfig | null): ReasoningEffort[] => {
-  if (!model || model.provider === 'openai-compatible') return []
+  if (!model || model.provider === 'openai-compatible' || model.provider === 'xai') return []
   if (model.provider === 'deepseek') return DEEPSEEK_REASONING_EFFORTS
   return openaiReasoningEfforts(model.api_protocol)
 }

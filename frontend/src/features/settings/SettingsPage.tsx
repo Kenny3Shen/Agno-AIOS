@@ -13,15 +13,33 @@ import './settings.css'
 
 const providerDefaults = (provider: ModelConfig['provider']) => {
   if (provider === 'deepseek')
-    return { api_protocol: 'chat-completions' as const, structured_output_mode: 'json' as const, default_reasoning_effort: 'max' as const }
+    return {
+      api_protocol: 'chat-completions' as const,
+      structured_output_mode: 'json' as const,
+      default_reasoning_effort: 'max' as const,
+      base_url: 'https://api.deepseek.com',
+    }
   if (provider === 'openai')
-    return { api_protocol: 'responses' as const, structured_output_mode: 'native' as const, default_reasoning_effort: 'high' as const }
+    return {
+      api_protocol: 'responses' as const,
+      structured_output_mode: 'native' as const,
+      default_reasoning_effort: 'high' as const,
+      base_url: '',
+    }
+  if (provider === 'xai')
+    return {
+      api_protocol: 'chat-completions' as const,
+      structured_output_mode: 'json' as const,
+      default_reasoning_effort: null,
+      base_url: 'https://api.x.ai/v1',
+    }
   return { api_protocol: 'chat-completions' as const, structured_output_mode: 'json' as const, default_reasoning_effort: null }
 }
 
 const providerOptions = [
   { value: 'deepseek', label: 'DeepSeek (native)' },
   { value: 'openai', label: 'OpenAI (native)' },
+  { value: 'xai', label: 'xAI / Grok (native)' },
   { value: 'openai-compatible', label: 'OpenAI-compatible' },
 ]
 const protocolOptions = [
@@ -372,7 +390,15 @@ export function SettingsPage() {
                       { type: 'url', message: t('urlInvalid') },
                     ]}
                   >
-                    <Input placeholder="https://api.example.com/v1" />
+                    <Input
+                      placeholder={
+                        getFieldValue('provider') === 'xai'
+                          ? 'https://api.x.ai/v1'
+                          : getFieldValue('provider') === 'deepseek'
+                            ? 'https://api.deepseek.com'
+                            : 'https://api.example.com/v1'
+                      }
+                    />
                   </Form.Item>
                 )
               }}
@@ -392,7 +418,7 @@ export function SettingsPage() {
                           <Form.Item name="api_protocol" label="API protocol" rules={[{ required: true }]}>
                             <Select
                               options={protocolOptions}
-                              disabled={getFieldValue('provider') === 'deepseek'}
+                              disabled={getFieldValue('provider') === 'deepseek' || getFieldValue('provider') === 'xai'}
                               onChange={(protocol: ModelConfig['api_protocol']) => {
                                 if (
                                   getFieldValue('provider') === 'openai' &&
@@ -408,7 +434,7 @@ export function SettingsPage() {
                       <Form.Item noStyle shouldUpdate={(previous, current) => previous.provider !== current.provider}>
                         {({ getFieldValue }) => (
                           <Form.Item name="structured_output_mode" label="Structured output" rules={[{ required: true }]}>
-                            <Select options={outputModeOptions} disabled={getFieldValue('provider') === 'deepseek'} />
+                            <Select options={outputModeOptions} disabled={getFieldValue('provider') === 'deepseek' || getFieldValue('provider') === 'xai'} />
                           </Form.Item>
                         )}
                       </Form.Item>
@@ -421,7 +447,7 @@ export function SettingsPage() {
                         {({ getFieldValue }) => {
                           const provider = getFieldValue('provider') as ModelConfig['provider']
                           const protocol = getFieldValue('api_protocol') as ModelConfig['api_protocol']
-                          if (provider === 'openai-compatible') return null
+                          if (provider === 'openai-compatible' || provider === 'xai') return null
                           return (
                             <Form.Item name="default_reasoning_effort" label="Default reasoning effort" rules={[{ required: true }]}>
                               <Select options={reasoningOptions(provider, protocol)} />

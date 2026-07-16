@@ -46,7 +46,7 @@ def _optional_bool(value: Any, *, default: bool) -> bool:
     return default
 
 
-ModelProvider = Literal["deepseek", "openai", "openai-compatible"]
+ModelProvider = Literal["deepseek", "openai", "openai-compatible", "xai"]
 ModelApiProtocol = Literal["chat-completions", "responses"]
 StructuredOutputMode = Literal["native", "json"]
 ReasoningEffort = Literal["minimal", "low", "medium", "high", "max"]
@@ -57,7 +57,18 @@ def _provider_defaults(provider: str) -> tuple[str, str, str | None]:
         return "chat-completions", "json", "max"
     if provider == "openai":
         return "responses", "native", "high"
+    if provider == "xai":
+        # Official Agno xAI uses Chat Completions only.
+        return "chat-completions", "json", None
     return "chat-completions", "json", None
+
+
+def _looks_like_xai(base_url: str, model_id: str) -> bool:
+    base = (base_url or "").strip().lower()
+    mid = (model_id or "").strip().lower()
+    if "api.x.ai" in base:
+        return True
+    return mid.startswith("grok")
 
 
 class ModelConfig(BaseModel):
@@ -107,11 +118,29 @@ class ModelConfig(BaseModel):
         if not isinstance(value, Mapping):
             return value
         raw = dict(value)
-        provider = str(raw.get("provider") or "openai-compatible").strip()
+        base_url = str(raw.get("base_url") or "").strip()
+        model_id = str(raw.get("model_id") or "").strip()
+        provider = str(raw.get("provider") or "").strip()
+        # Migrate legacy Grok entries that used OpenAI-compatible + api.x.ai / Responses.
+        if provider in {"", "openai-compatible"} and _looks_like_xai(base_url, model_id):
+            provider = "xai"
+            raw["provider"] = "xai"
+        if not provider:
+            provider = "openai-compatible"
+            raw["provider"] = provider
         protocol, output_mode, reasoning_effort = _provider_defaults(provider)
-        if provider == "deepseek":
+        if provider in {"deepseek", "xai"}:
             raw["api_protocol"] = protocol
-            raw["structured_output_mode"] = output_mode
+            raw["structured_output_mode"] = raw.get("structured_output_mode") or output_mode
+            if provider == "deepseek":
+                raw["structured_output_mode"] = output_mode
+            if provider == "xai":
+                raw["api_protocol"] = "chat-completions"
+                raw["structured_output_mode"] = "json"
+                if not base_url:
+                    raw["base_url"] = "https://api.x.ai/v1"
+                # Drop unsupported reasoning_effort from legacy Responses Grok configs.
+                raw["default_reasoning_effort"] = None
         else:
             raw.setdefault("api_protocol", protocol)
             raw.setdefault("structured_output_mode", output_mode)
@@ -121,9 +150,10 @@ class ModelConfig(BaseModel):
     @model_validator(mode="after")
     def _validate_reasoning_effort(self) -> Self:
         effort = self.default_reasoning_effort
-        if self.provider == "openai-compatible":
+        if self.provider in {"openai-compatible", "xai"}:
             if effort is not None:
-                raise ValueError("OpenAI-compatible 模型不支持 reasoning_effort")
+                label = "xAI" if self.provider == "xai" else "OpenAI-compatible"
+                raise ValueError(f"{label} 模型不支持 reasoning_effort")
             return self
         if self.provider == "deepseek":
             if effort not in {"high", "max"}:
@@ -146,12 +176,14 @@ class ModelConfig(BaseModel):
         base_url = str(raw.get("base_url") or "").strip()
         provider = str(raw.get("provider") or "").strip()
         if not provider:
-            provider = (
-                "deepseek"
-                if configured_model_id.startswith("deepseek-")
-                or "api.deepseek.com" in base_url
-                else "openai-compatible"
-            )
+            if configured_model_id.startswith("deepseek-") or "api.deepseek.com" in base_url:
+                provider = "deepseek"
+            elif _looks_like_xai(base_url, configured_model_id):
+                provider = "xai"
+            else:
+                provider = "openai-compatible"
+        elif provider == "openai-compatible" and _looks_like_xai(base_url, configured_model_id):
+            provider = "xai"
 
         default_protocol, default_output_mode, default_reasoning_effort = _provider_defaults(provider)
         api_protocol = str(raw.get("api_protocol") or default_protocol).strip()
@@ -198,7 +230,7 @@ class ModelConfig(BaseModel):
         return bool(
             self.api_key
             and self.model_id
-            and (self.base_url or self.provider != "openai-compatible")
+            and (self.base_url or self.provider not in {"openai-compatible"})
         )
 
     def to_public_dict(self) -> dict[str, Any]:
@@ -236,6 +268,18 @@ DEFAULT_MODELS: tuple[ModelConfig, ...] = (
         default_reasoning_effort="max",
         base_url="https://api.deepseek.com",
         description="复杂推理与深度研判模型",
+        builtin=True,
+    ),
+    ModelConfig(
+        id="xai-grok-4.5",
+        name="Grok 4.5 (xAI)",
+        model_id="grok-4.5",
+        provider="xai",
+        api_protocol="chat-completions",
+        structured_output_mode="json",
+        default_reasoning_effort=None,
+        base_url="https://api.x.ai/v1",
+        description="xAI 官方 Agno 接入（Chat Completions）",
         builtin=True,
     ),
 )
@@ -346,6 +390,7 @@ class ModelConfigStore(BaseModel):
         required = [("API Key", "api_key"), ("Model ID", "model_id")]
         if model.provider == "openai-compatible":
             required.append(("Base URL", "base_url"))
+        # xAI uses official default base_url when empty.
         missing = [label for label, key in required if not getattr(model, key)]
         if missing:
             raise ValueError(
@@ -398,6 +443,28 @@ def _rows_need_persist(rows: Iterable[Mapping[str, Any]]) -> bool:
     return active_count != 1 or invalid_output_mode
 
 
+def _rows_need_provider_migration(
+    rows: Iterable[Mapping[str, Any]],
+    store: ModelConfigStore,
+) -> bool:
+    """Rewrite DB when host/model_id heuristics remapped provider (e.g. Grok → xai)."""
+    by_id = {model.id: model for model in store.models}
+    for row in rows:
+        model_id = str(row.get("id") or "")
+        model = by_id.get(model_id)
+        if model is None:
+            continue
+        if str(row.get("provider") or "") != model.provider:
+            return True
+        if str(row.get("api_protocol") or "") != model.api_protocol:
+            return True
+        if (row.get("default_reasoning_effort") or None) != (model.default_reasoning_effort or None):
+            # xAI migration clears legacy reasoning_effort
+            if model.provider == "xai" and row.get("default_reasoning_effort"):
+                return True
+    return False
+
+
 def _store_to_rows(
     store: ModelConfigStore,
     existing_rows: Iterable[Mapping[str, Any]] = (),
@@ -446,7 +513,11 @@ async def load_model_config_store() -> ModelConfigStore:
 
     base_store = ModelConfigStore.from_rows(rows)
     store = base_store.with_defaults().with_valid_active_model()
-    if store.to_storage_dict() != base_store.to_storage_dict() or _rows_need_persist(rows):
+    if (
+        store.to_storage_dict() != base_store.to_storage_dict()
+        or _rows_need_persist(rows)
+        or _rows_need_provider_migration(rows, store)
+    ):
         await replace_model_config_rows(_store_to_rows(store, rows))
     return store
 

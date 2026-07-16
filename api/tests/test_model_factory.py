@@ -236,3 +236,38 @@ def test_default_retries_when_config_omits_retry_fields():
     assert model.delay_between_retries == 1
     assert model.exponential_backoff is True
     assert getattr(model, "max_retries", None) is None
+
+
+def test_xai_provider_uses_official_agno_class():
+    from agno.models.xai import xAI
+
+    model = build_agno_model(
+        config(
+            provider="xai",
+            model_id="grok-4.5",
+            base_url="",
+            api_protocol="responses",  # ignored; xAI is Chat Completions
+            structured_output_mode="json",
+        )
+    )
+    assert isinstance(model, xAI)
+    assert model.id == "grok-4.5"
+    assert str(model.base_url).rstrip("/") == "https://api.x.ai/v1"
+    assert model.retries == 4
+    assert get_structured_output_mode(model) == "json"
+    assert getattr(model, "metadata", None) in (None, {})
+
+
+def test_xai_respects_custom_base_url_and_parallel_tools():
+    from agno.models.xai import xAI
+
+    model = build_agno_model(
+        config(
+            provider="xai",
+            model_id="grok-4.5",
+            base_url="https://api.x.ai/v1",
+            parallel_tool_calls=False,
+        )
+    )
+    assert isinstance(model, xAI)
+    assert model.request_params == {"parallel_tool_calls": False}

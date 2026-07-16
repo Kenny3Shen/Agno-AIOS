@@ -5,6 +5,7 @@ from typing import Any, cast
 from agno.models.base import Model
 from agno.models.deepseek import DeepSeek
 from agno.models.openai import OpenAIChat, OpenAILike, OpenAIResponses
+from agno.models.xai import xAI
 
 # App-private attribute on Agno Model instances. Must NOT use model.metadata:
 # OpenAIResponses/OpenAIChat put model.metadata into the HTTP request body, and
@@ -85,6 +86,21 @@ def build_agno_model(
                 "parallel_tool_calls": parallel_tool_calls,
             }
         return _with_output_mode(OpenAIChat(**kwargs), output_mode)
+
+    if provider == "xai":
+        # Official Agno xAI uses Chat Completions (OpenAI-compatible) at api.x.ai.
+        kwargs: dict[str, Any] = {
+            "id": model_id or "grok-4-1-fast-non-reasoning-latest",
+            "api_key": api_key,
+            "base_url": base_url or "https://api.x.ai/v1",
+            "supports_native_structured_outputs": native_outputs,
+            **_retry_kwargs(config),
+        }
+        if parallel_tool_calls is not None:
+            kwargs["request_params"] = {
+                "parallel_tool_calls": parallel_tool_calls,
+            }
+        return _with_output_mode(xAI(**kwargs), output_mode)
 
     if provider == "openai-compatible":
         if not base_url:
