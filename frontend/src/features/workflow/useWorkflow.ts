@@ -459,14 +459,16 @@ export function useWorkflow() {
   }
 
   const reparent = (nodeId: string, target: ReparentTarget): ReparentBlockedReason | null => {
-    let blocked: ReparentBlockedReason | null = null
+    // Precompute against current state so Strict Mode double-invoke cannot clear the reason.
+    const preview = reparentNode(state.steps, nodeId, target)
+    if (preview.blocked) return preview.blocked
+    if (preview.steps === state.steps) return null
     withHistory((current) => {
-      const outcome = reparentNode(current.steps, nodeId, target)
-      if (outcome.blocked) {
-        blocked = outcome.blocked
-        return current
-      }
-      if (outcome.steps === current.steps) return current
+      const outcome =
+        current.steps === state.steps
+          ? preview
+          : reparentNode(current.steps, nodeId, target)
+      if (outcome.blocked || outcome.steps === current.steps) return current
       return {
         ...current,
         steps: outcome.steps,
@@ -475,7 +477,7 @@ export function useWorkflow() {
         selectedIds: [nodeId],
       }
     })
-    return blocked
+    return null
   }
 
   const connectSequence = (sourceId: string, targetId: string) => {
@@ -492,18 +494,23 @@ export function useWorkflow() {
     targetId: string,
     sourceHandle?: string | null,
   ): ReparentBlockedReason | null => {
-    let blocked: ReparentBlockedReason | null = null
+    const source = findNode(state.steps, sourceId)
+    if (!source) return null
+    const target = reparentTargetFromHandle(source, sourceHandle)
+    if (!target) return null
+    const preview = reparentNode(state.steps, targetId, target)
+    if (preview.blocked) return preview.blocked
+    if (preview.steps === state.steps) return null
     withHistory((current) => {
-      const source = findNode(current.steps, sourceId)
-      if (!source) return current
-      const target = reparentTargetFromHandle(source, sourceHandle)
-      if (!target) return current
-      const outcome = reparentNode(current.steps, targetId, target)
-      if (outcome.blocked) {
-        blocked = outcome.blocked
-        return current
-      }
-      if (outcome.steps === current.steps) return current
+      const liveSource = findNode(current.steps, sourceId)
+      if (!liveSource) return current
+      const liveTarget = reparentTargetFromHandle(liveSource, sourceHandle)
+      if (!liveTarget) return current
+      const outcome =
+        current.steps === state.steps
+          ? preview
+          : reparentNode(current.steps, targetId, liveTarget)
+      if (outcome.blocked || outcome.steps === current.steps) return current
       return {
         ...current,
         dirty: true,
@@ -512,7 +519,7 @@ export function useWorkflow() {
         selectedIds: [targetId],
       }
     })
-    return blocked
+    return null
   }
 
   const organizeLayout = () => {
