@@ -57,17 +57,17 @@
   "liveSearch": "联网搜索",
   "liveSearchHelp": "启用模型 Live Search（xAI search_parameters；兼容网关经 extra_body）。需模型/网关支持。",
   "knowledgeSearch": "知识库",
-  "knowledgeSearchHelp": "允许本轮检索 Knowledge 知识库。关闭后不挂载知识检索。",
+  "knowledgeSearchHelp": "允许本轮检索 Knowledge 知识库。关闭后不挂载知识检索。在自动轻量轮次（无工具意图）下即使开启也不会挂载，需命中安全任务意图或关闭工具开关以外的全量路径。",
   "stoppedGenerating": "已停止生成",
   "cancelServerFailed": "已停止本地输出，但服务端取消失败",
   "openTrace": "打开 Trace",
   "openApproval": "打开审批",
   "errorRequestFailed": "对话请求失败",
   "toolsSkills": "工具/Skill",
-  "toolsSkillsHelp": "开启后按消息意图连接 MCP 与 Skills：闲聊不连工具；CVE/隔离/剧本等只挂相关 Skill 与对应 MCP；通用安全任务挂全量。关闭则为轻量模式。",
+  "toolsSkillsHelp": "开启后按消息意图连接 MCP 与 Skills：闲聊不连工具且不挂知识库检索；CVE/隔离/剧本等只挂相关 Skill 与对应 MCP；通用安全任务挂全量。关闭则为轻量模式。",
   "toolsOffBadge": "轻量（无工具）",
   "autoLeanBadge": "本轮自动轻量",
-  "autoLeanHelp": "本轮未命中安全工具意图（如 CVE、隔离、剧本、内网资产等关键词），已跳过 MCP/Skills 以节省上下文。需要工具时直接写相关任务即可。",
+  "autoLeanHelp": "本轮未命中安全工具意图（如 CVE、隔离、剧本、内网资产等关键词），已跳过 MCP/Skills、知识库检索与 Memory 注入以节省上下文。需要工具时直接写相关任务即可。",
   "skillsAttached": "本轮 Skills：{{names}}",
   "tokensMetric": "{{value}} tokens",
   "tokensMetricTitle": "{{count}} tokens",
@@ -86,5 +86,6 @@
     "get_skill_instructions": "读取 Skill 说明",
     "get_skill_reference": "读取 Skill 参考",
     "get_skill_script": "读取 Skill 脚本"
-  }
+  },
+  "knowledgeOffBadge": "知识库未挂载"
 }

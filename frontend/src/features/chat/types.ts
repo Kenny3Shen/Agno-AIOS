@@ -54,6 +54,8 @@ export interface Message {
   leanMode?: boolean
   /** Explicit tools switch for this run; false = user tools-off, distinct from auto-lite. */
   enableTools?: boolean
+  /** Effective knowledge mount for this run (false on lean/tools-off). */
+  searchKnowledge?: boolean
   skillNames?: string[] | null
   raw_run?: JsonRecord | null
   tools?: unknown[] | null
@@ -86,7 +88,7 @@ export interface ChatState {
 }
 
 export type ChatRunEvent =
-  | { type: 'run.started'; runId: string; sessionId?: string; model?: string; provider?: string; enableTools?: boolean; leanMode?: boolean; skillNames?: string[] | null }
+  | { type: 'run.started'; runId: string; sessionId?: string; model?: string; provider?: string; enableTools?: boolean; leanMode?: boolean; searchKnowledge?: boolean; skillNames?: string[] | null }
   | { type: 'content.delta'; runId?: string; delta: string }
   | { type: 'tool.update'; runId?: string; tool: ToolStep }
   | { type: 'reasoning.delta'; runId?: string; delta: string }

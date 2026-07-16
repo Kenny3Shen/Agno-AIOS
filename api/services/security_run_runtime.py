@@ -906,6 +906,10 @@ class SecurityRunRuntime:
                         request.skill_names,
                         enable_tools=bool(request.enable_tools),
                     )
+                    # Prefer the agent flag set in _build_security_agent (lean skips KB).
+                    search_knowledge_active = bool(
+                        getattr(agent, "search_knowledge", False)
+                    )
                     yield ChatRunEvent(
                         "run.started",
                         {
@@ -922,6 +926,7 @@ class SecurityRunRuntime:
                             ),
                             "enable_tools": bool(request.enable_tools),
                             "lean_mode": lean,
+                            "search_knowledge": search_knowledge_active,
                             "skill_names": list(request.skill_names)
                             if request.skill_names is not None
                             else None,

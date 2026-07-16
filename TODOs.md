@@ -1,6 +1,13 @@
 # 下一步工作
 
 
+## 已完成：Chat 有效 Knowledge 挂载可见性 + 文案对齐
+
+- `run.started` / 历史投影携带 **有效** `search_knowledge`（与 agent 实际挂载一致；lean/tools-off 为 false）。
+- 消息条与顶栏：全量工具面且用户关闭知识库时显示「知识库未挂载」chip。
+- lite prompt 与 `autoLeanHelp` / `toolsSkillsHelp` / `knowledgeSearchHelp` 说明 lean 轮次不挂 Knowledge。
+- 单测：history 投影、chat reducer、normalizeMessages。
+
 ## 已完成：Chat 轻量轮次跳过 Knowledge 注入
 
 - `_build_security_agent`：仅在 `tool_surface=True` 时挂载 Knowledge / `search_knowledge` 指令；lean / tools-off 忽略请求里的 `search_knowledge=true`，避免 trivial 轮次加载检索工具与说明。

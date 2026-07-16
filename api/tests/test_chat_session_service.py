@@ -523,12 +523,16 @@ async def test_session_history_projects_lean_mode_and_skill_names():
     assert assistants["run-lean"]["enable_tools"] is True
     assert assistants["run-lean"]["lean_mode"] is True
     assert assistants["run-lean"]["skill_names"] == []
+    assert assistants["run-lean"]["search_knowledge"] is False
     assert assistants["run-skills"]["enable_tools"] is True
     assert assistants["run-skills"]["lean_mode"] is False
     assert assistants["run-skills"]["skill_names"] == ["cve-intel-skill"]
+    assert assistants["run-skills"]["search_knowledge"] is True
     assert assistants["run-all"]["enable_tools"] is True
     assert assistants["run-all"]["lean_mode"] is False
     assert assistants["run-all"]["skill_names"] is None
+    assert assistants["run-all"]["search_knowledge"] is True
     assert assistants["run-tools-off"]["enable_tools"] is False
     assert assistants["run-tools-off"]["lean_mode"] is False
     assert assistants["run-tools-off"]["skill_names"] == []
+    assert assistants["run-tools-off"]["search_knowledge"] is False

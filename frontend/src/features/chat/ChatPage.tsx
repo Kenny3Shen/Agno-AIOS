@@ -367,6 +367,11 @@ function MessageBody({ message, retry, sessionId }: { message: Message; retry: (
             <span className="run-metric run-metric--skills">{t('skillsAttachedBadge', { count: message.skillNames.length })}</span>
           </Tooltip>
         ) : null}
+        {message.enableTools !== false && !message.leanMode && message.searchKnowledge === false ? (
+          <Tooltip title={t('knowledgeSearchHelp')}>
+            <span className="run-metric run-metric--lean">{t('knowledgeOffBadge')}</span>
+          </Tooltip>
+        ) : null}
         {message.metrics?.duration != null && (
           <span className="run-metric" title={t('duration')}>
             {message.metrics.duration.toFixed(1)}s
@@ -565,6 +570,15 @@ export function ChatPage() {
                   <Tooltip title={t('skillsAttached', { names: formatSkillLabels(names) })}>
                     <Tag className="context-mode-tag" color="blue">
                       {t('skillsAttachedBadge', { count: names.length })}
+                    </Tag>
+                  </Tooltip>
+                )
+              }
+              if (latestAssistant?.searchKnowledge === false) {
+                return (
+                  <Tooltip title={t('knowledgeSearchHelp')}>
+                    <Tag className="context-mode-tag" color="default">
+                      {t('knowledgeOffBadge')}
                     </Tag>
                   </Tooltip>
                 )

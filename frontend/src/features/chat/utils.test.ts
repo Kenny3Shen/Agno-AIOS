@@ -151,6 +151,32 @@ describe('chat behavior', () => {
     expect(resumed.messages[0]).toMatchObject({ content: 'final answer', status: 'streaming', retry: null })
   })
 
+  it('records effective searchKnowledge on run.started', () => {
+    const started = chatReducer(initialChatState, {
+      type: 'start',
+      assistant: { id: 'a', role: 'assistant', content: '', final: false },
+      modelId: 'm1',
+    })
+    const next = chatReducer(started, {
+      type: 'event',
+      id: 'a',
+      event: {
+        type: 'run.started',
+        runId: 'run-1',
+        leanMode: true,
+        enableTools: true,
+        searchKnowledge: false,
+        skillNames: [],
+      },
+    })
+    expect(next.messages[0]).toMatchObject({
+      leanMode: true,
+      enableTools: true,
+      searchKnowledge: false,
+      skillNames: [],
+    })
+  })
+
   it('sets a soft error without failing messages', () => {
     const next = chatReducer(initialChatState, { type: 'soft-error', message: 'server cancel failed' })
     expect(next.error).toBe('server cancel failed')
@@ -251,6 +277,7 @@ describe('chat behavior', () => {
         status: 'completed',
         lean_mode: true,
         enable_tools: true,
+        search_knowledge: false,
         skill_names: [],
       },
       {
@@ -260,6 +287,7 @@ describe('chat behavior', () => {
         status: 'completed',
         lean_mode: false,
         enable_tools: true,
+        search_knowledge: true,
         skill_names: ['cve-intel-skill'],
       },
       {
@@ -269,6 +297,7 @@ describe('chat behavior', () => {
         status: 'completed',
         lean_mode: false,
         enable_tools: true,
+        search_knowledge: true,
         skill_names: null,
       },
       {
@@ -278,13 +307,14 @@ describe('chat behavior', () => {
         status: 'completed',
         lean_mode: false,
         enable_tools: false,
+        search_knowledge: false,
         skill_names: [],
       },
     ])
-    expect(messages[0]).toMatchObject({ leanMode: true, enableTools: true, skillNames: [] })
-    expect(messages[1]).toMatchObject({ leanMode: false, enableTools: true, skillNames: ['cve-intel-skill'] })
-    expect(messages[2]).toMatchObject({ leanMode: false, enableTools: true, skillNames: null })
-    expect(messages[3]).toMatchObject({ leanMode: false, enableTools: false, skillNames: [] })
+    expect(messages[0]).toMatchObject({ leanMode: true, enableTools: true, searchKnowledge: false, skillNames: [] })
+    expect(messages[1]).toMatchObject({ leanMode: false, enableTools: true, searchKnowledge: true, skillNames: ['cve-intel-skill'] })
+    expect(messages[2]).toMatchObject({ leanMode: false, enableTools: true, searchKnowledge: true, skillNames: null })
+    expect(messages[3]).toMatchObject({ leanMode: false, enableTools: false, searchKnowledge: false, skillNames: [] })
   })
 
 })
