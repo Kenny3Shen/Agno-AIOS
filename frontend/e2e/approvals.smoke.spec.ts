@@ -80,4 +80,67 @@ test.describe('approvals critical path', () => {
     await expect(drawer.getByText('E2E approve this step?')).toBeVisible()
     expect(listCalls).toBeGreaterThan(0)
   })
+
+  test('approves a pending workflow HITL from the detail drawer', async ({ page }) => {
+    let resolveCalls = 0
+    let listStatus = 'pending'
+
+    await openAuthed(page, '/dashboard', {
+      handleApi: async ({ method, path, url, route }) => {
+        if (method === 'GET' && path.endsWith('/api/approvals/count')) {
+          await fulfillJson(route, { count: listStatus === 'pending' ? 1 : 0 })
+          return true
+        }
+        if (method === 'GET' && path.endsWith('/api/approvals')) {
+          expect(url.searchParams.get('status')).toBe('pending')
+          expect(url.searchParams.get('source_type')).toBe('workflow')
+          await fulfillJson(route, listStatus === 'pending' ? hitlEnvelope : emptyEnvelope)
+          return true
+        }
+        if (method === 'GET' && path.endsWith(`/api/approvals/${workflowPending.id}`)) {
+          await fulfillJson(
+            route,
+            listStatus === 'pending'
+              ? workflowPending
+              : {
+                  ...workflowPending,
+                  status: 'approved',
+                  resolved_by: { id: 'user-1', email: 'admin@example.com' },
+                  resolved_at: '2026-07-16T12:05:00Z',
+                },
+          )
+          return true
+        }
+        if (method === 'GET' && path.endsWith('/api/approvals/submissions')) {
+          await fulfillJson(route, emptyEnvelope)
+          return true
+        }
+        if (method === 'POST' && path.endsWith(`/api/approvals/${workflowPending.id}/resolve`)) {
+          resolveCalls += 1
+          const body = route.request().postDataJSON() as { status?: string }
+          expect(body.status).toBe('approved')
+          listStatus = 'approved'
+          await fulfillJson(route, {
+            ...workflowPending,
+            status: 'approved',
+            resolved_by: { id: 'user-1', email: 'admin@example.com' },
+            resolved_at: '2026-07-16T12:05:00Z',
+          })
+          return true
+        }
+        return false
+      },
+    })
+
+    await page.goto(`/#/approvals?approval_id=${workflowPending.id}`, { waitUntil: 'domcontentloaded' })
+    const drawer = page.getByRole('dialog', { name: 'Approval detail' })
+    await expect(drawer).toBeVisible({ timeout: 10_000 })
+    await expect(drawer.getByText('E2E approve this step?')).toBeVisible()
+
+    // Confirmation pause_type approves immediately (no user_input modal).
+    await drawer.getByRole('button', { name: /批\s*准/ }).click()
+
+    await expect.poll(() => resolveCalls, { timeout: 10_000 }).toBe(1)
+    await expect(page.getByText(/审批已approved|Approval approved/i)).toBeVisible({ timeout: 10_000 })
+  })
 })

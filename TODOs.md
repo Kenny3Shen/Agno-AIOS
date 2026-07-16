@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Approvals resolve Playwright smoke
+
+- `frontend/e2e/approvals.smoke.spec.ts`：Drawer 中对 confirmation HITL 点「批准」→ `POST /api/approvals/{id}/resolve`。
+- 与既有 on-call 列表 + `approval_id` 深链 smoke 并列。
+
 ## 已完成：Trace sessions 真分页（去客户端多页 walk）
 
 - `listTraceSessions`：去掉 200×5 客户端翻页 walk，单次透传 `page`/`limit`。
