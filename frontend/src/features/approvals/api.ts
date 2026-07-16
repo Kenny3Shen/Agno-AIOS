@@ -59,7 +59,7 @@ export interface ApprovalListMeta {
   search_time_ms: number
 }
 
-/** Combined Approvals list (Agno-style ``{data, meta}``; virtual merge for kind=all). */
+/** Combined Approvals list (Agno-style ``{data, meta}``; server merge for kind=all). */
 export interface ApprovalListResult {
   data: Approval[]
   meta: ApprovalListMeta
@@ -253,7 +253,7 @@ const fetchSubmissionsSlice = async (status: string, offset: number, limit: numb
 
 /**
  * Combined Approvals list with real pagination.
- * Virtual order: upload submissions first, then Agno HITL rows.
+ * ``kind=all`` uses server ``combined=true`` (uploads then HITL).
  */
 export const getApprovals = async (params: ApprovalListParams = {}): Promise<ApprovalListResult> => {
   const status = params.status ?? ''
@@ -262,7 +262,7 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
   const limit = Math.min(100, Math.max(1, Number(params.limit ?? 20) || 20))
   const start = (page - 1) * limit
 
-  // Upload-only tab: skip Agno HITL merge.
+  // Upload-only tab: submissions API.
   if (kind === 'upload') {
     const submissions = await fetchSubmissionsSlice(status, start, limit)
     return {
@@ -271,63 +271,31 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
     }
   }
 
-  // Workflow HITL only (source_type=workflow).
-  if (kind === 'workflow') {
-    const hitl = await fetchHitlSlice(status, start, limit, 'workflow')
+  // Workflow / agent HITL: single Agno list with source_type.
+  if (kind === 'workflow' || kind === 'agent') {
+    const hitl = await fetchHitlSlice(status, start, limit, kind)
     return {
       data: hitl.data,
       meta: listMeta(page, limit, hitl.total_count),
     }
   }
 
-  // Chat/agent HITL: Agno source_type=agent (true page/limit, no client density scan).
-  if (kind === 'agent') {
-    const hitl = await fetchHitlSlice(status, start, limit, 'agent')
-    return {
-      data: hitl.data,
-      meta: listMeta(page, limit, hitl.total_count),
-    }
-  }
-
-  // kind === 'all': virtual merge uploads first, then Agno HITL.
-  // Page 1 loads both sources in parallel (common on-call path). Later pages
-  // skip upload rows once past submissionCount.
-  if (start === 0) {
-    const [submissions, hitl] = await Promise.all([
-      fetchSubmissionsSlice(status, 0, limit),
-      fetchHitlSlice(status, 0, limit),
-    ])
-    const pageSubmissions = submissions.data
-    const hitlNeed = Math.max(0, limit - pageSubmissions.length)
-    return {
-      data: [...pageSubmissions, ...hitl.data.slice(0, hitlNeed)],
-      meta: listMeta(page, limit, submissions.total_count + hitl.total_count),
-    }
-  }
-
-  // Later pages: probe upload total first; pure-HITL pages skip uploads entirely.
-  const uploadProbe = await fetchSubmissionsPage(status, 1, 1)
-  const submissionCount = uploadProbe.total_count
-  if (start >= submissionCount) {
-    const hitl = await fetchHitlSlice(status, start - submissionCount, limit)
-    return {
-      data: hitl.data,
-      meta: listMeta(page, limit, submissionCount + hitl.total_count),
-    }
-  }
-
-  // Still inside the upload window: load both sources in parallel.
-  const [submissions, hitl] = await Promise.all([
-    fetchSubmissionsSlice(status, start, limit),
-    fetchHitlSlice(status, 0, limit),
-  ])
-  const pageSubmissions = submissions.data
-  const hitlNeed = Math.max(0, limit - pageSubmissions.length)
+  // kind === 'all': server concatenates uploads then HITL (combined=true).
+  const search = new URLSearchParams()
+  if (status) search.set('status', status)
+  search.set('combined', 'true')
+  search.set('page', String(page))
+  search.set('limit', String(limit))
+  const payload = asRecord(await requestJson<unknown>(`/approvals?${search.toString()}`))
+  const meta = asRecord(payload.meta)
+  const data = normalizeRows(Array.isArray(payload.data) ? payload.data : [])
+  const total = Number(meta.total_count ?? data.length) || 0
   return {
-    data: [...pageSubmissions, ...hitl.data.slice(0, hitlNeed)],
-    meta: listMeta(page, limit, submissions.total_count + hitl.total_count),
+    data,
+    meta: listMeta(page, limit, total, Number(meta.search_time_ms ?? 0) || 0),
   }
 }
+
 
 export const getApproval = async (id: string): Promise<Approval | null> => {
   const row = await requestJson<unknown>(`/approvals/${encodeURIComponent(id)}`)

@@ -536,3 +536,52 @@ async def test_get_approval_status_counts_returns_pending_approved_rejected():
         "total": 9,
     }
 
+
+import pytest
+from unittest.mock import AsyncMock, patch
+
+from api.services import approvals_service
+
+
+@pytest.mark.asyncio
+async def test_list_combined_approvals_native_uploads_then_hitl():
+    upload_rows = [{"id": "u0", "status": "pending", "resource_type": "skill"}]
+    hitl_rows = [
+        {"id": "h0", "status": "pending", "source_type": "agent"},
+        {"id": "h1", "status": "pending", "source_type": "agent"},
+    ]
+
+    async def fake_sub_page(status=None, *, submitted_by=None, page=1, limit=50):
+        return {
+            "data": upload_rows[:limit],
+            "meta": {"page": page, "limit": limit, "total_count": 1, "total_pages": 1, "search_time_ms": 0},
+        }
+
+    async def fake_sub_list(status=None, *, submitted_by=None, page=1, limit=100):
+        return upload_rows
+
+    async def fake_list_approvals(*, params=None, actor=None):
+        # probe limit=1 and full pages
+        page = getattr(params, "page", 1) or 1
+        limit = getattr(params, "limit", 50) or 50
+        if limit == 1 and page == 1:
+            return hitl_rows[:1], 2, {"page": 1, "limit": 1}
+        return hitl_rows, 2, {"page": page, "limit": limit}
+
+    with (
+        patch(
+            "api.services.upload_approval_service.list_submission_approvals_page",
+            fake_sub_page,
+        ),
+        patch(
+            "api.services.upload_approval_service.list_submission_approvals",
+            fake_sub_list,
+        ),
+        patch.object(approvals_service, "list_approvals", fake_list_approvals),
+    ):
+        result = await approvals_service.list_combined_approvals_native(
+            status="pending", page=1, limit=10, actor=None
+        )
+    assert [row["id"] for row in result["data"]] == ["u0", "h0", "h1"]
+    assert result["meta"]["total_count"] == 3
+

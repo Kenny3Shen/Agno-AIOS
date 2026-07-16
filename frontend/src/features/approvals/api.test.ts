@@ -42,35 +42,34 @@ describe('getApprovals', () => {
     )
   })
 
-  it('merges uploads before HITL on the all tab (page 1)', async () => {
+  it('loads kind=all via server combined list', async () => {
     server.use(
-      http.get('/api/approvals/submissions', () =>
-        HttpResponse.json({
-          data: [submission('u0'), submission('u1')],
-          meta: { page: 1, limit: 10, total_count: 2, total_pages: 1 },
-        }),
-      ),
-      http.get('/api/approvals', () =>
-        HttpResponse.json({
+      http.get('/api/approvals', ({ request }) => {
+        const url = new URL(request.url)
+        expect(url.searchParams.get('combined')).toBe('true')
+        expect(url.searchParams.get('status')).toBe('pending')
+        expect(url.searchParams.get('page')).toBe('1')
+        expect(url.searchParams.get('limit')).toBe('10')
+        return HttpResponse.json({
           data: [
+            submission('u0'),
+            submission('u1'),
             {
               id: 'h0',
-              kind: 'hitl',
               status: 'pending',
               source_type: 'agent',
               created_at: 1,
             },
             {
               id: 'h1',
-              kind: 'hitl',
               status: 'pending',
               source_type: 'agent',
               created_at: 1,
             },
           ],
-          meta: { page: 1, limit: 10, total_count: 2, total_pages: 1 },
-        }),
-      ),
+          meta: { page: 1, limit: 10, total_count: 4, total_pages: 1, search_time_ms: 0 },
+        })
+      }),
     )
 
     const result = await getApprovals({ status: 'pending', kind: 'all', page: 1, limit: 10 })

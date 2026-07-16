@@ -17,6 +17,7 @@ from api.services.approvals_service import (
     get_approval_record,
     get_pending_approval_count,
     list_approvals_native,
+    list_combined_approvals_native,
     resolve_approval_record,
 )
 from api.services.security_policy import PolicyAuditEvent, record_policy_event
@@ -151,12 +152,24 @@ async def list_approvals(
     user_id: str | None = None,
     schedule_id: str | None = None,
     run_id: str | None = None,
+    combined: bool = False,
     page: int = 1,
     limit: int = 50,
     user: User = Depends(require_scope("approvals:read")),
 ):
-    """List HITL approvals with Agno-native ``data`` / ``meta`` pagination envelope."""
+    """List approvals with Agno-native ``data`` / ``meta``.
+
+    ``combined=true``: upload submissions first, then HITL (workbench kind=all).
+    Otherwise HITL-only (optional ``source_type`` etc.).
+    """
     try:
+        if combined:
+            return await list_combined_approvals_native(
+                status=status,
+                page=page,
+                limit=limit,
+                actor=user,
+            )
         return await list_approvals_native(
             params=ApprovalListParams(
                 status=status,

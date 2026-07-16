@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Approvals kind=all 服务端合并分页
+
+- `GET /api/approvals?combined=true`：upload submissions 优先，再 HITL；offset 真分页 + `data`/`meta`。
+- 前端 `getApprovals({ kind: 'all' })` 改为单请求 `combined=true`，去掉客户端双源虚拟 merge。
+- 单测：后端 uploads→HITL 顺序；前端 combined query 契约。
+
 ## 已完成：Chat sessions ``archived_only`` + Trace 归档窗
 
 - `GET /api/chat/sessions?archived_only=true`：SQL 只返回 `metadata @> {agno_aios_archived:true}`。

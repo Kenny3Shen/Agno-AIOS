@@ -295,6 +295,108 @@ async def list_approvals_native(
 
 
 
+
+async def list_combined_approvals_native(
+    *,
+    status: str | None = None,
+    page: int = 1,
+    limit: int = 50,
+    actor: ActorLike | None = None,
+) -> dict[str, Any]:
+    """Upload submissions first, then HITL (workbench ``kind=all`` order).
+
+    Concatenated offset pagination: uploads occupy ``[0, upload_total)``,
+    HITL occupies ``[upload_total, upload_total + hitl_total)``.
+    """
+    from api.auth.claims import actor_id, actor_role
+    from api.services.upload_approval_service import (
+        list_submission_approvals,
+        list_submission_approvals_page,
+    )
+
+    safe_page = max(1, int(page or 1))
+    safe_limit = max(1, min(int(limit or 50), 100))
+    start = (safe_page - 1) * safe_limit
+
+    is_admin = actor is not None and actor_role(actor) == "admin"
+    submitted_by = None if is_admin else (actor_id(actor) if actor is not None else None)
+
+    upload_probe = await list_submission_approvals_page(
+        status,
+        submitted_by=submitted_by,
+        page=1,
+        limit=1,
+    )
+    upload_total = int((upload_probe.get("meta") or {}).get("total_count") or 0)
+
+    _probe_rows, hitl_total, _kw = await list_approvals(
+        params=ApprovalListParams(status=status, page=1, limit=1),
+        actor=actor,
+    )
+    hitl_total_i = int(hitl_total or 0)
+    total = upload_total + hitl_total_i
+
+    if start >= total or safe_limit <= 0:
+        return {
+            "data": [],
+            "meta": pagination_meta(page=safe_page, limit=safe_limit, total_count=total),
+        }
+
+    rows: list[Any] = []
+    remaining = safe_limit
+    cursor = start
+
+    if cursor < upload_total and remaining > 0:
+        take = min(remaining, upload_total - cursor)
+        # Fetch covering page(s) for absolute upload offset ``cursor``.
+        page_size = safe_limit
+        first_page = cursor // page_size + 1
+        skip = cursor % page_size
+        first = await list_submission_approvals(
+            status,
+            submitted_by=submitted_by,
+            page=first_page,
+            limit=page_size,
+        )
+        chunk = first[skip : skip + take]
+        if len(chunk) < take and len(first) >= page_size:
+            second = await list_submission_approvals(
+                status,
+                submitted_by=submitted_by,
+                page=first_page + 1,
+                limit=page_size,
+            )
+            chunk = chunk + second[: take - len(chunk)]
+        rows.extend(chunk)
+        remaining -= len(chunk)
+        cursor += len(chunk)
+
+    if remaining > 0 and cursor >= upload_total:
+        hitl_offset = cursor - upload_total
+        page_size = safe_limit
+        first_page = hitl_offset // page_size + 1
+        skip = hitl_offset % page_size
+        first, _t, _k = await list_approvals(
+            params=ApprovalListParams(status=status, page=first_page, limit=page_size),
+            actor=actor,
+        )
+        chunk = first[skip : skip + remaining]
+        if len(chunk) < remaining and len(first) >= page_size:
+            more, _t2, _k2 = await list_approvals(
+                params=ApprovalListParams(
+                    status=status, page=first_page + 1, limit=page_size
+                ),
+                actor=actor,
+            )
+            chunk = chunk + more[: remaining - len(chunk)]
+        rows.extend(chunk)
+
+    return {
+        "data": rows,
+        "meta": pagination_meta(page=safe_page, limit=safe_limit, total_count=total),
+    }
+
+
 async def get_pending_approval_count(
     *,
     actor: ActorLike | None = None,
