@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：antd 6 classNames + loguru 惰性格式
+
+- Chat 模型选择器：`Popover.overlayClassName` / `Cascader.popupClassName` → antd 6 `classNames`（CSS 类名不变）。
+- CVE 任务与数据源：去掉 logger f-string，统一 loguru `"{}"` 惰性格式。
+- `api/main.py` 后台 Task 失败日志参数提取，避免在 logger 调用内嵌 f-string。
+
 ## 已完成：死代码删除 + progress/middleware 类型卫生
 
 - 删除已无调用的 `KnowledgeBaseLifecycle._collect_all_content_rows_async`（clear 已流式）

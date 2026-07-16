@@ -85,8 +85,11 @@ class CVEDataSource(ABC):
         )
 
         logger.info(
-            f"数据对比: 本地={df_old.height}, 远程={df_new.height}, "
-            f"增量={df_increment.height}, 待删除={df_deleted.height}"
+            "数据对比: 本地={}, 远程={}, 增量={}, 待删除={}",
+            df_old.height,
+            df_new.height,
+            df_increment.height,
+            df_deleted.height,
         )
 
         return df_increment, df_deleted
@@ -247,7 +250,8 @@ class ExploitDBSource(CVEDataSource):
         """
         if not isinstance(raw_data, str) or not raw_data:
             logger.warning(
-                f"意外的 raw_data 类型: 预期 CSV 文本，实际 {type(raw_data)}"
+                "意外的 raw_data 类型: 预期 CSV 文本，实际 {}",
+                type(raw_data),
             )
             return pl.DataFrame()
 

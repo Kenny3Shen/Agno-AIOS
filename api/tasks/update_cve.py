@@ -320,12 +320,15 @@ async def main() -> tuple[int, int]:
         duration = (end_time - start_time).total_seconds()
 
         logger.info(
-            f"CVE 更新完成: 新增={add_count}, 删除={del_count}, 耗时={duration:.2f}秒"
+            "CVE 更新完成: 新增={}, 删除={}, 耗时={:.2f}秒",
+            add_count,
+            del_count,
+            duration,
         )
         return (add_count, del_count)
 
     except Exception as e:
-        logger.exception(f"CVE 更新失败: {e}")
+        logger.exception("CVE 更新失败: {}", e)
         raise
 
 

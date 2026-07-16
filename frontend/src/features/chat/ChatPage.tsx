@@ -155,13 +155,13 @@ function ModelSettings({
       open={open}
       onOpenChange={setOpen}
       placement="topRight"
-      overlayClassName="model-settings-popover"
+      classNames={{ root: 'model-settings-popover' }}
       content={
         <div className="model-settings-cascader-host">
           <Cascader
             key={selectedPathKey}
             className="model-settings-cascader"
-            popupClassName="model-settings-cascader-popup"
+            classNames={{ popup: { root: 'model-settings-cascader-popup' } }}
             options={options}
             value={selectedPath}
             open={open}
