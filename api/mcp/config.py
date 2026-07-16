@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from loguru import logger
 import re
 import secrets
 import time
@@ -72,8 +73,14 @@ async def _migrate_legacy_file_if_needed() -> None:
     try:
         raw = loads(await path.read_text(encoding="utf-8"))
     except Exception:
+        logger.warning(
+            "legacy MCP config unreadable at {}; skip file migrate",
+            path,
+            exc_info=True,
+        )
         return
     if not isinstance(raw, dict):
+        logger.warning("legacy MCP config at {} is not an object; skip file migrate", path)
         return
     now = int(time.time())
     flags = raw.get("mcp") if isinstance(raw.get("mcp"), dict) else {}

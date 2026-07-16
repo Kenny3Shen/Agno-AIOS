@@ -136,6 +136,15 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：配置加载失败可观测 + Overview token 采样 200
+
+- skills / legacy model_config JSON / MCP 文件迁移：解析失败写 warning，不再静默空配置
+- Overview token 样本 `_PAGE_LIMIT` 1000→200（latency/series 已 SQL；失败回退样本也更小）
+
+相关：`skill_service.py` / `model_config_service.py` / `mcp/config.py` / `overview_service.py`
+
+---
+
 ## 已完成：MCP/知识库吞异常日志 + Overview token 样本去 reconcile
 
 - Octomation playbook 参数拉取降级路径：`except pass` → warning/info 日志

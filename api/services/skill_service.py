@@ -17,6 +17,8 @@ from api.auth.visibility import (
     normalize_visibility,
     visibility_metadata,
 )
+from loguru import logger
+
 from api.config import get_settings
 from api.services.runtime_paths import CONFIG_DIR, PROJECT_ROOT, resolve_project_path
 from api.utils.json import dumps, loads
@@ -74,6 +76,11 @@ def load_skills_config() -> dict[str, bool]:
     try:
         return loads(config_file.read_text(encoding="utf-8"))
     except Exception:
+        logger.warning(
+            "skills config unreadable at {}; treating all skills as enabled",
+            config_file,
+            exc_info=True,
+        )
         return {}
 
 

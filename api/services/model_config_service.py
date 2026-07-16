@@ -5,6 +5,8 @@ from typing import Any, Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from loguru import logger
+
 from api.config import get_settings
 from api.persistence.model_configs import list_model_config_rows, replace_model_config_rows
 from api.services.runtime_paths import CONFIG_DIR, resolve_project_path
@@ -434,6 +436,11 @@ def _load_legacy_or_default_store() -> ModelConfigStore:
     try:
         raw = loads(config_file.read_text(encoding="utf-8"))
     except Exception:
+        logger.warning(
+            "legacy model config unreadable at {}; using defaults",
+            config_file,
+            exc_info=True,
+        )
         return ModelConfigStore.default()
     return ModelConfigStore.from_raw(raw)
 
