@@ -189,6 +189,7 @@ async def test_trace_sessions_group_before_paginating_and_skip_empty_session_ids
     assert captured["user_id"] == "u1"
     assert captured["run_id"] == "run-1"
     assert captured["session_id"] == "one"
+    assert captured["status"] == "ERROR"
     assert captured["limit"] == 200
 
 
@@ -251,20 +252,20 @@ async def test_list_traces_passes_all_filters_to_agno_db():
             limit=25,
             page=2,
         )
-    assert result == {"data": [], "meta": {"page": 2, "limit": 25, "total_pages": 0, "total_count": 0, "search_time_ms": 0.0, "scanned_count": 0}}
+    assert result == {"data": [], "meta": {"page": 2, "limit": 25, "total_pages": 0, "total_count": 0, "search_time_ms": 0.0}}
     assert captured["run_id"] == "run-1"
     assert captured["session_id"] == "session-1"
     assert captured["user_id"] == "u1"
     assert captured["agent_id"] == "agent-1"
     assert captured["team_id"] == "team-1"
     assert captured["workflow_id"] == "workflow-1"
-    assert "status" not in captured
+    assert captured["status"] == "OK"
     assert captured["start_time"] == datetime(2026, 2, 12, 0, 0, tzinfo=timezone.utc)
     assert captured["end_time"] == datetime(
         2026, 2, 12, 23, 59, 59, tzinfo=timezone.utc
     )
-    assert captured["limit"] == 200
-    assert captured["page"] == 1
+    assert captured["limit"] == 25
+    assert captured["page"] == 2
 
 
 @pytest.mark.asyncio
@@ -654,8 +655,8 @@ async def test_root_inputs_leave_null_when_batch_fails() -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_traces_status_filter_streams_batches_and_marks_truncated() -> None:
-    """Status filter reconciles per page and does not retain non-matching rows."""
+async def test_list_traces_passes_status_to_agno_native_filter() -> None:
+    """ERROR/OK filters use Agno SQL status pagination, not a client-side scan."""
     class FakeTrace:
         def __init__(self, **data):
             self.data = data
@@ -663,23 +664,13 @@ async def test_list_traces_status_filter_streams_batches_and_marks_truncated() -
         def to_dict(self):
             return self.data
 
-    calls: list[dict[str, object]] = []
+    captured: list[dict[str, object]] = []
 
     async def fake_get_traces(**kwargs):
-        calls.append(kwargs)
-        page = int(kwargs["page"])
-        if page == 1:
-            batch = [
-                FakeTrace(trace_id="ok-1", run_id="r-ok", status="OK", session_id="s1"),
-                FakeTrace(trace_id="err-1", run_id="r-err", status="ERROR", session_id="s1"),
-            ]
-            return batch, 2500
-        if page == 2:
-            batch = [
-                FakeTrace(trace_id="err-2", run_id="r-err-2", status="ERROR", session_id="s2"),
-            ]
-            return batch, 2500
-        return [], 2500
+        captured.append(kwargs)
+        return [
+            FakeTrace(trace_id="err-1", run_id="r-err", status="ERROR", session_id="s1"),
+        ], 42
 
     async def fake_reconcile(items, *, actor_user_id=None):
         return list(items)
@@ -691,20 +682,26 @@ async def test_list_traces_status_filter_streams_batches_and_marks_truncated() -
         patch.object(tracing_service._trace_db, "get_traces", fake_get_traces),
         patch.object(tracing_service, "reconcile_trace_statuses", fake_reconcile),
         patch.object(tracing_service, "_attach_list_inputs", fake_inputs),
-        patch.object(tracing_service, "_STATUS_FILTER_MAX_TRACES", 3),
-        patch.object(tracing_service, "_STATUS_FILTER_PAGE_SIZE", 2),
+        patch.object(
+            tracing_service,
+            "_merge_audit_error_traces",
+            AsyncMock(side_effect=lambda items, **_kwargs: (items, 42)),
+        ),
     ):
-        result = await tracing_service.list_traces(user_id="u1", status="ERROR", page=1, limit=20)
+        result = await tracing_service.list_traces(
+            user_id="u1", status="ERROR", page=2, limit=10
+        )
 
-    assert [item["trace_id"] for item in result["data"]] == ["err-1", "err-2"]
-    assert result["meta"]["total_count"] == 2
-    assert result["meta"]["truncated"] is True
-    assert result["meta"]["scanned_count"] == 3
-    assert [call["page"] for call in calls] == [1, 2]
+    assert captured[0]["status"] == "ERROR"
+    assert captured[0]["page"] == 2
+    assert captured[0]["limit"] == 10
+    assert [item["trace_id"] for item in result["data"]] == ["err-1"]
+    assert result["meta"]["total_count"] == 42
+    assert "truncated" not in result["meta"]
 
 
 @pytest.mark.asyncio
-async def test_list_traces_status_filter_keeps_only_matches_without_truncation() -> None:
+async def test_list_traces_error_filter_supplements_audit_failures() -> None:
     class FakeTrace:
         def __init__(self, **data):
             self.data = data
@@ -713,10 +710,21 @@ async def test_list_traces_status_filter_keeps_only_matches_without_truncation()
             return self.data
 
     async def fake_get_traces(**kwargs):
+        assert kwargs.get("status") == "ERROR"
         return [
-            FakeTrace(trace_id="ok-1", run_id="r1", status="OK", session_id="s1"),
-            FakeTrace(trace_id="err-1", run_id="r2", status="ERROR", session_id="s1"),
-        ], 2
+            FakeTrace(trace_id="err-db", run_id="run-db", status="ERROR", session_id="s1"),
+        ], 1
+
+    async def fake_get_trace(*, run_id: str):
+        assert run_id == "run-audit"
+        return FakeTrace(
+            trace_id="err-audit",
+            run_id="run-audit",
+            status="OK",
+            session_id="s1",
+            user_id="u1",
+            start_time="2026-07-12T12:00:00Z",
+        )
 
     async def fake_reconcile(items, *, actor_user_id=None):
         return list(items)
@@ -726,12 +734,17 @@ async def test_list_traces_status_filter_keeps_only_matches_without_truncation()
 
     with (
         patch.object(tracing_service._trace_db, "get_traces", fake_get_traces),
+        patch.object(tracing_service._trace_db, "get_trace", fake_get_trace),
         patch.object(tracing_service, "reconcile_trace_statuses", fake_reconcile),
         patch.object(tracing_service, "_attach_list_inputs", fake_inputs),
+        patch(
+            "api.persistence.audit_logs.recent_failed_chat_run_ids_async",
+            AsyncMock(return_value=["run-audit"]),
+        ),
     ):
         result = await tracing_service.list_traces(user_id="u1", status="ERROR", page=1, limit=20)
 
-    assert [item["trace_id"] for item in result["data"]] == ["err-1"]
-    assert result["meta"]["total_count"] == 1
-    assert "truncated" not in result["meta"]
-    assert result["meta"]["scanned_count"] == 2
+    ids = [item["trace_id"] for item in result["data"]]
+    assert "err-db" in ids
+    assert "err-audit" in ids
+    assert all(item["status"] == "ERROR" for item in result["data"])

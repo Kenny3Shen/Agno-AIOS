@@ -215,6 +215,42 @@ async def failed_chat_run_ids_async(
     return {str(run_id) for run_id in rows if run_id}
 
 
+async def recent_failed_chat_run_ids_async(
+    *,
+    limit: int = 50,
+    actor_user_id: str | None = None,
+) -> list[str]:
+    """Return recent failed chat run IDs (newest first) for ERROR list supplements."""
+    await ensure_audit_logs_table_async()
+    table = audit_logs_table()
+    safe_limit = max(1, min(int(limit or 50), 200))
+    filters = [
+        table.c.action == "chat.run",
+        table.c.resource_type == "chat_run",
+        table.c.status == "error",
+    ]
+    if actor_user_id:
+        filters.append(table.c.actor_user_id == actor_user_id)
+    stmt = (
+        select(table.c.resource_id)
+        .where(and_(*filters))
+        .order_by(desc(table.c.created_at), desc(table.c.id))
+        .limit(safe_limit)
+    )
+    async with get_async_control_plane_engine().begin() as conn:
+        rows = (await conn.execute(stmt)).scalars().all()
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for run_id in rows:
+        value = str(run_id or "").strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        ordered.append(value)
+    return ordered
+
+
+
 async def repair_failed_chat_trace_statuses_async(
     traces_table: Table,
     *,

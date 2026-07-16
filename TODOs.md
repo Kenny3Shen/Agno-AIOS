@@ -136,6 +136,17 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Trace 原生 status 过滤 + Approvals agent 真分页
+
+- `list_traces(status=)` 走 Agno `get_traces(status=..., page/limit)` SQL 分页，不再全窗扫描
+- ERROR 列表首页可补充 audit 中失败但 traces 仍为 OK/UNSET 的 run（`recent_failed_chat_run_ids_async`）
+- sessions 分组扫描在 status 时也 SQL 预过滤，缩小窗口
+- Approvals `kind=agent` 用 `source_type=agent` 真分页，去掉客户端密度扫描（最多 20 页）
+
+相关：`tracing_service.py` / `audit_logs.py` / `approvals/api.ts`
+
+---
+
 ## 已完成：Overview metrics 样本元数据
 
 - `_fetch_traces` 返回 `(rows, {sample_size, window_total, truncated})`

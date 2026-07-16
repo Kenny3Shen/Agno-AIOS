@@ -243,32 +243,12 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
     }
   }
 
-  // Chat/agent HITL: client-filter non-workflow HITL (bounded scan).
+  // Chat/agent HITL: Agno source_type=agent (true page/limit, no client density scan).
   if (kind === 'agent') {
-    const window: Approval[] = []
-    let apiPage = 1
-    let totalSeen = 0
-    let hitlTotal = 0
-    while (window.length < start + limit && apiPage <= 20) {
-      const batch = await fetchHitlPage(status, apiPage, 50)
-      hitlTotal = batch.total
-      if (!batch.items.length) break
-      for (const row of batch.items) {
-        totalSeen += 1
-        if (!isAgentHitlApproval(row)) continue
-        window.push(row)
-        if (window.length >= start + limit) break
-      }
-      if (batch.items.length < 50) break
-      apiPage += 1
-    }
-    // Rough total: filtered density on scanned pages applied to overall HITL total.
-    const scanned = Math.max(totalSeen, 1)
-    const density = window.length / scanned
-    const total = Math.max(window.length, Math.round(hitlTotal * density))
+    const hitl = await fetchHitlSlice(status, start, limit, 'agent')
     return {
-      items: window.slice(start, start + limit),
-      total,
+      items: hitl.items,
+      total: hitl.total,
       page,
       limit,
     }

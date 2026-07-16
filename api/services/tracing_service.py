@@ -409,8 +409,35 @@ async def list_traces(
     st, et = _validate_trace_time_range(start_time, end_time)
     normalized_status = _normalize_trace_status(status)
 
-    if normalized_status is None:
-        traces, total_count = await _trace_db.get_traces(
+    # Agno AsyncPostgresDb.get_traces supports SQL ``status`` (OK/ERROR/UNSET).
+    # Prefer native pagination over a post-hoc full-window scan.
+    traces, total_count = await _trace_db.get_traces(
+        run_id=run_id,
+        session_id=session_id,
+        user_id=user_id,
+        agent_id=agent_id,
+        team_id=team_id,
+        workflow_id=workflow_id,
+        status=normalized_status,
+        start_time=st,
+        end_time=et,
+        limit=limit,
+        page=page,
+    )
+    items = await reconcile_trace_statuses(
+        [jsonable_encoder(trace.to_dict()) for trace in traces],
+        actor_user_id=user_id,
+    )
+    # Audit may flip OK→ERROR after fetch; re-apply the requested status.
+    if normalized_status is not None:
+        items = [item for item in items if trace_has_status(item, normalized_status)]
+    # ERROR filter: also surface chat-audit failures still stored as OK/UNSET.
+    if normalized_status == "ERROR":
+        items, total_count = await _merge_audit_error_traces(
+            items,
+            total_count=int(total_count),
+            page=page,
+            limit=limit,
             run_id=run_id,
             session_id=session_id,
             user_id=user_id,
@@ -419,79 +446,21 @@ async def list_traces(
             workflow_id=workflow_id,
             start_time=st,
             end_time=et,
-            limit=limit,
-            page=page,
         )
-        items = await reconcile_trace_statuses(
-            [jsonable_encoder(trace.to_dict()) for trace in traces],
-            actor_user_id=user_id,
-        )
-        items = await _attach_list_inputs(items)
-        return _trace_list_response(
-            items,
-            page=page,
-            limit=limit,
-            total_count=int(total_count),
-        )
-
-    filtered, scanned_count, truncated = await _status_filtered_trace_items(
-        run_id=run_id,
-        session_id=session_id,
-        user_id=user_id,
-        agent_id=agent_id,
-        team_id=team_id,
-        workflow_id=workflow_id,
-        start_time=st,
-        end_time=et,
-        status=normalized_status,
-    )
-    offset = (page - 1) * limit
-    page_items = filtered[offset : offset + limit]
-    page_items = await _attach_list_inputs(page_items)
+    items = await _attach_list_inputs(items)
     return _trace_list_response(
-        page_items,
+        items,
         page=page,
         limit=limit,
-        total_count=len(filtered),
-        truncated=truncated,
-        scanned_count=scanned_count,
+        total_count=int(total_count),
     )
 
 
-# Status filtering is not native on Agno get_traces; scan a bounded window only.
+# Session grouping still needs a bounded multi-page scan (no native session page
+# that includes per-session error counts + latest run). Cap the window.
 _STATUS_FILTER_MAX_TRACES = 2_000
 _STATUS_FILTER_PAGE_SIZE = 200
-
-
-async def _status_filtered_trace_items(
-    *,
-    run_id: str | None,
-    session_id: str | None,
-    user_id: str | None,
-    agent_id: str | None,
-    team_id: str | None,
-    workflow_id: str | None,
-    start_time: datetime | None,
-    end_time: datetime | None,
-    status: str | None,
-) -> tuple[list[dict[str, Any]], int, bool]:
-    """Scan traces in pages, reconcile, and keep only status matches.
-
-    Returns ``(filtered_items, scanned_count, truncated)``. Only matching rows are
-    retained so ERROR/OK filters do not materialize the full 2k-row window.
-    """
-    filtered, scanned_count, truncated = await _scan_trace_items(
-        run_id=run_id,
-        session_id=session_id,
-        user_id=user_id,
-        agent_id=agent_id,
-        team_id=team_id,
-        workflow_id=workflow_id,
-        start_time=start_time,
-        end_time=end_time,
-        status=status,
-    )
-    return filtered, scanned_count, truncated
+_AUDIT_ERROR_SUPPLEMENT_LIMIT = 50
 
 
 async def _all_trace_items(
@@ -551,6 +520,8 @@ async def _scan_trace_items(
             agent_id=agent_id,
             team_id=team_id,
             workflow_id=workflow_id,
+            # Native SQL status when filtering; keep_all session scans leave this None.
+            status=None if keep_all else status,
             start_time=start_time,
             end_time=end_time,
             limit=_STATUS_FILTER_PAGE_SIZE,
@@ -571,9 +542,10 @@ async def _scan_trace_items(
             raw_items,
             actor_user_id=user_id,
         )
-        if keep_all or status is None:
+        if status is None or keep_all:
             kept.extend(reconciled)
         else:
+            # Status was SQL-prefiltered; reconcile may flip OK→ERROR (and vice versa).
             kept.extend(item for item in reconciled if trace_has_status(item, status))
         if truncated or scanned >= _STATUS_FILTER_MAX_TRACES:
             if int(total_count or 0) > scanned:
@@ -590,6 +562,97 @@ async def _scan_trace_items(
             break
         trace_page += 1
     return kept, scanned, truncated
+
+
+
+async def _merge_audit_error_traces(
+    items: list[dict[str, Any]],
+    *,
+    total_count: int,
+    page: int,
+    limit: int,
+    run_id: str | None,
+    session_id: str | None,
+    user_id: str | None,
+    agent_id: str | None,
+    team_id: str | None,
+    workflow_id: str | None,
+    start_time: datetime | None,
+    end_time: datetime | None,
+) -> tuple[list[dict[str, Any]], int]:
+    """Append chat-audit failures that are still OK/UNSET in the traces table.
+
+    Only on the first page (and when the page still has room) so ERROR lists stay
+    paginated via Agno while not hiding unrepaired audit failures.
+    """
+    if page != 1 or len(items) >= limit:
+        return items, total_count
+
+    present = {
+        str(item.get("run_id") or "").strip()
+        for item in items
+        if str(item.get("run_id") or "").strip()
+    }
+    try:
+        from api.persistence.audit_logs import recent_failed_chat_run_ids_async
+
+        failed_ids = await recent_failed_chat_run_ids_async(
+            limit=_AUDIT_ERROR_SUPPLEMENT_LIMIT,
+            actor_user_id=user_id,
+        )
+    except Exception:
+        logger.exception("Unable to load recent failed chat run ids for ERROR filter")
+        return items, total_count
+
+    extras: list[dict[str, Any]] = []
+    for failed_run_id in failed_ids:
+        if failed_run_id in present:
+            continue
+        if run_id and failed_run_id != run_id:
+            continue
+        try:
+            trace = await _trace_db.get_trace(run_id=failed_run_id)
+        except Exception:
+            continue
+        if trace is None:
+            continue
+        row = jsonable_encoder(trace.to_dict() if hasattr(trace, "to_dict") else dict(trace))
+        if session_id and str(row.get("session_id") or "") != session_id:
+            continue
+        if user_id and str(row.get("user_id") or "") != user_id:
+            continue
+        if agent_id and str(row.get("agent_id") or "") != agent_id:
+            continue
+        if team_id and str(row.get("team_id") or "") != team_id:
+            continue
+        if workflow_id and str(row.get("workflow_id") or "") != workflow_id:
+            continue
+        raw_start = str(row.get("start_time") or row.get("created_at") or "")
+        if (start_time or end_time) and raw_start:
+            try:
+                ts = datetime.fromisoformat(raw_start.replace("Z", "+00:00"))
+                if start_time and ts < start_time:
+                    continue
+                if end_time and ts > end_time:
+                    continue
+            except ValueError:
+                pass
+        row["status"] = "ERROR"
+        extras.append(row)
+        present.add(failed_run_id)
+        if len(items) + len(extras) >= limit:
+            break
+
+    if not extras:
+        return items, total_count
+
+    merged = items + extras
+    merged.sort(
+        key=lambda item: str(item.get("start_time") or item.get("created_at") or ""),
+        reverse=True,
+    )
+    merged = merged[:limit]
+    return merged, max(int(total_count), len(merged))
 
 
 async def list_trace_sessions(
@@ -617,31 +680,25 @@ async def list_trace_sessions(
     st, et = _validate_trace_time_range(start_time, end_time)
     normalized_status = _normalize_trace_status(status)
 
-    if normalized_status is None:
-        trace_items, scanned_count, truncated = await _scan_trace_items(
-            run_id=run_id,
-            session_id=session_id,
-            user_id=user_id,
-            agent_id=agent_id,
-            team_id=team_id,
-            workflow_id=workflow_id,
-            start_time=st,
-            end_time=et,
-            status=None,
-            keep_all=True,
-        )
-    else:
-        trace_items, scanned_count, truncated = await _status_filtered_trace_items(
-            run_id=run_id,
-            session_id=session_id,
-            user_id=user_id,
-            agent_id=agent_id,
-            team_id=team_id,
-            workflow_id=workflow_id,
-            start_time=st,
-            end_time=et,
-            status=normalized_status,
-        )
+    # Grouping still requires a multi-page window (session rows ≠ trace rows).
+    # When status is set, prefilter via Agno SQL status to shrink the window.
+    trace_items, scanned_count, truncated = await _scan_trace_items(
+        run_id=run_id,
+        session_id=session_id,
+        user_id=user_id,
+        agent_id=agent_id,
+        team_id=team_id,
+        workflow_id=workflow_id,
+        start_time=st,
+        end_time=et,
+        status=normalized_status,
+        keep_all=normalized_status is None,
+    )
+    if normalized_status is not None:
+        # Reconcile already applied in scan; ensure final status filter.
+        trace_items = [
+            item for item in trace_items if trace_has_status(item, normalized_status)
+        ]
 
     grouped: dict[str, list[dict[str, Any]]] = {}
     for item in trace_items:
