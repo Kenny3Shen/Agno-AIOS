@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from typing import TypedDict, cast
 
@@ -193,26 +194,38 @@ async def list_memories_native(
         raw_memories = raw_result
         total_memories = len(raw_memories)
 
-    # Growth badge uses per-user totals (unfiltered). Scope stats to the same
-    # user as the list when possible so we never pull a 500-user stats dump for
-    # ordinary actors or admin single-user filters.
+    # Growth badge uses per-user totals (unfiltered by topic/search). Never dump
+    # global stats (old limit=500): resolve only users on this page / list scope.
+    page_user_ids: set[str] = set()
     if scoped_user_id:
+        page_user_ids.add(scoped_user_id)
+    else:
+        for raw_row in raw_memories:
+            row = _memory_row(raw_row)
+            uid = str(row.get("user_id") or "").strip()
+            if uid:
+                page_user_ids.add(uid)
+
+    async def _stats_for_user(uid: str) -> tuple[str, str]:
         user_stats, _total_users = await db.get_user_memory_stats(
-            user_id=scoped_user_id,
+            user_id=uid,
             limit=1,
             page=1,
         )
+        total = 0
+        for row in user_stats or []:
+            if str(row.get("user_id") or "") == uid:
+                total = int(row.get("total_memories") or 0)
+                break
+            if not total and row.get("total_memories") is not None:
+                total = int(row.get("total_memories") or 0)
+        return uid, _memory_status_for_count(total)
+
+    if page_user_ids:
+        status_pairs = await asyncio.gather(*[_stats_for_user(uid) for uid in sorted(page_user_ids)])
+        user_status_by_id = dict(status_pairs)
     else:
-        user_stats, _total_users = await db.get_user_memory_stats(
-            limit=500,
-            page=1,
-        )
-    user_status_by_id = {
-        str(row.get("user_id") or "default"): _memory_status_for_count(
-            int(row.get("total_memories") or 0)
-        )
-        for row in user_stats
-    }
+        user_status_by_id = {}
 
     items: list[MemoryItemPayload] = []
     for raw_row in raw_memories:

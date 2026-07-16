@@ -127,9 +127,6 @@ const statusLabel = (status: string) => status ? `${status.slice(0, 1).toUpperCa
 const rejectionReason = (approval: Approval) => {
   const note = approval.resolution_data?.note
   if (typeof note === 'string' && note.trim()) return note
-  // Historical HITL rows may still store rejection_reason inside resolution_data.
-  const legacy = approval.resolution_data?.rejection_reason
-  if (typeof legacy === 'string' && legacy.trim()) return legacy
   return approval.rejection_reason?.trim() || ''
 }
 

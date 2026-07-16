@@ -136,6 +136,24 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Approvals 拒绝理由字段收窄
+
+- 前端 `rejectionReason` 只读 `resolution_data.note`（HITL）与顶层 `rejection_reason`（upload submissions）
+- 不再读历史 `resolution_data.rejection_reason` 别名（写路径已只写 note）
+
+相关：`ApprovalsPage.tsx`
+
+---
+
+## 已完成：Memory 列表 stats 去全局扫
+
+- 管理端未指定 user 时，按当前页出现的 user_id 并发 `get_user_memory_stats(limit=1)`，不再 `limit=500` 全站 stats
+- 有 user 作用域时仍单次 scoped stats
+
+相关：`memory_service.py` / `test_memory_approval_permissions.py`
+
+---
+
 ## 已完成：Knowledge 全量列表翻页
 
 - `list_documents_async` / `clear_knowledge_base_async` 经 `_collect_all_content_rows_async` 按页拉取（page_size 200），去掉硬顶 500 窗口遗漏

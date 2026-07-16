@@ -457,6 +457,29 @@ def test_memory_item_requires_memory_id_and_rejects_legacy_aliases():
 
 
 @pytest.mark.asyncio
+async def test_list_memories_admin_unscoped_stats_uses_page_users_only():
+    """Admin all-users list must not dump global memory stats (old limit=500)."""
+    db = FakeMemoryDb()
+    stats_calls: list[dict[str, object]] = []
+
+    async def tracking_stats(**kwargs):
+        stats_calls.append(kwargs)
+        return (
+            [{"user_id": kwargs.get("user_id") or "u1", "total_memories": 12, "last_memory_updated_at": 1}],
+            1,
+        )
+
+    db.get_user_memory_stats = tracking_stats  # type: ignore[method-assign]
+    with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
+        payload = await memory_service.list_memories_native(actor("admin", "admin"))
+    assert payload["data"][0]["user_id"] == "u1"
+    assert len(stats_calls) == 1
+    assert stats_calls[0].get("user_id") == "u1"
+    assert stats_calls[0].get("limit") == 1
+    assert all(call.get("limit") != 500 for call in stats_calls)
+
+
+@pytest.mark.asyncio
 async def test_list_memories_scopes_stats_to_actor_user():
     """Ordinary actors must not trigger unscoped memory stats scans."""
     db = FakeMemoryDb()
