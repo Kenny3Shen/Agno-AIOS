@@ -29,7 +29,7 @@
   "nameRequired": "Enter a model name",
   "namePlaceholder": "e.g. OpenAI production",
   "modelIdRequired": "Enter a Model ID",
-  "modelIdPlaceholder": "e.g. gpt-4.1-mini",
+  "modelIdPlaceholder": "e.g. gpt-4.1-mini, deepseek-v4-flash, grok-4.5",
   "apiKeyRequired": "Enter an API key",
   "baseUrlRequired": "Base URL is required for OpenAI-compatible services",
   "urlInvalid": "Enter a valid URL",
@@ -59,5 +59,12 @@
   "liveSearch": "Live Search",
   "liveSearchHelp": "Sends search_parameters when supported (native xAI; OpenAI-compatible via extra_body). Ignored for DeepSeek and native OpenAI.",
   "liveSearchUnsupported": "Live Search is only applied for xAI and OpenAI-compatible gateways.",
-  "xaiReasoningHint": "xAI does not use reasoning_effort; pick a reasoning or non-reasoning model id."
+  "xaiReasoningHint": "xAI does not use reasoning_effort; pick a reasoning or non-reasoning model id.",
+  "provider": "Provider",
+  "nameLabel": "Display name",
+  "modelIdLabel": "Model ID",
+  "apiKeyLabel": "API Key",
+  "enabledLabel": "Enabled",
+  "baseUrlOptional": "Optional for native providers (uses official default)",
+  "autoDefaultsHint": "Protocol, structured output, reasoning, retries, and Live Search use optimal provider defaults. Toggle Live Search / Knowledge per turn in Chat."
 }

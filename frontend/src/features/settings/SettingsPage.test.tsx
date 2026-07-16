@@ -92,25 +92,27 @@ describe('model settings editor', () => {
     renderWithQuery(<SettingsPage />)
 
     fireEvent.click(await screen.findByLabelText('编辑 First model'))
-    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('First model')
+    expect((screen.getByLabelText('显示名称') as HTMLInputElement).value).toBe('First model')
     const cancelButton = document.querySelector<HTMLButtonElement>('.ant-modal-footer .ant-btn-default')
     expect(cancelButton).toBeTruthy()
     fireEvent.click(cancelButton!)
 
     fireEvent.click(screen.getByLabelText('编辑 Second model'))
-    expect(((await screen.findByLabelText('Name')) as HTMLInputElement).value).toBe('Second model')
+    expect(((await screen.findByLabelText('显示名称')) as HTMLInputElement).value).toBe('Second model')
   })
 
-  it('shows an optional parallel tool calls setting for supported models', async () => {
+  it('shows a simplified connection form without advanced runtime knobs', async () => {
     mockSettings()
     renderWithQuery(<SettingsPage />)
 
     fireEvent.click(await screen.findByLabelText('编辑 Second model'))
-    expect(await screen.findByText('并行工具调用')).toBeTruthy()
-    expect(await screen.findByText('请求重试次数')).toBeTruthy()
-    // Help copy lives in compact label tooltips (no Form.Item extra text).
-    const tips = document.querySelectorAll('.ant-form-item-tooltip')
-    expect(tips.length).toBeGreaterThanOrEqual(2)
+    expect(await screen.findByLabelText('显示名称')).toBeTruthy()
+    expect(await screen.findByLabelText('Model ID')).toBeTruthy()
+    expect(await screen.findByLabelText('API Key')).toBeTruthy()
+    expect(screen.queryByText('并行工具调用')).toBeNull()
+    expect(screen.queryByText('请求重试次数')).toBeNull()
+    expect(screen.queryByText('API protocol')).toBeNull()
+    expect(await screen.findByText(/按供应商最优默认自动配置/)).toBeTruthy()
   })
 
   it('deletes a custom model and keeps the active model valid', async () => {

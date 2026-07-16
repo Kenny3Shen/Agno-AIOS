@@ -136,6 +136,16 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：模型设置精简
+
+- 设置表单只保留：名称 / 供应商 / Model ID / API Key / Base URL / 启用
+- 协议、structured output、reasoning、重试、parallel tools、Live Search 等走能力画像默认
+- 保存时合并既有高级字段；切换供应商时重套最优默认
+
+相关：`SettingsPage.tsx` / `model_capabilities.py`
+
+---
+
 ## 已完成：模型能力画像（optimal + fallback）
 
 - `model_capabilities.py`：各 provider 最优协议/structured/reasoning/Live Search

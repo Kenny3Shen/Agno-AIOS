@@ -29,7 +29,7 @@
   "nameRequired": "请输入模型名称",
   "namePlaceholder": "例如：OpenAI production",
   "modelIdRequired": "请输入 Model ID",
-  "modelIdPlaceholder": "例如：gpt-4.1-mini",
+  "modelIdPlaceholder": "例如：gpt-4.1-mini、deepseek-v4-flash、grok-4.5",
   "apiKeyRequired": "请输入 API key",
   "baseUrlRequired": "OpenAI-compatible 服务需要 Base URL",
   "urlInvalid": "请输入有效的 URL",
@@ -59,5 +59,12 @@
   "liveSearch": "Live Search",
   "liveSearchHelp": "启用后向支持的网关发送 search_parameters（xAI 原生；OpenAI-compatible 经 extra_body）。DeepSeek / OpenAI 官方接口会忽略此项。",
   "liveSearchUnsupported": "当前供应商不支持 Live Search（仅 xAI / OpenAI-compatible 网关）。",
-  "xaiReasoningHint": "xAI 不使用 reasoning_effort；请选择推理型号或 non-reasoning 型号。"
+  "xaiReasoningHint": "xAI 不使用 reasoning_effort；请选择推理型号或 non-reasoning 型号。",
+  "provider": "供应商",
+  "nameLabel": "显示名称",
+  "modelIdLabel": "Model ID",
+  "apiKeyLabel": "API Key",
+  "enabledLabel": "启用",
+  "baseUrlOptional": "原生供应商可留空，使用官方默认地址",
+  "autoDefaultsHint": "协议、结构化输出、推理强度、重试与 Live Search 等按供应商最优默认自动配置；Chat 内可临时开关联网搜索与知识库。"
 }

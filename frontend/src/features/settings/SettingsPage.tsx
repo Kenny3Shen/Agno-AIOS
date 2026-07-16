@@ -1,67 +1,81 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Card, Collapse, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
+import { App, Button, Card, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
 import { ApiOutlined, CheckCircleOutlined, DeleteOutlined, EditOutlined, PlusOutlined, QuestionCircleOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { currentUserQuery } from '@/features/auth'
 import { roleOf } from '@/shared/auth/permissions'
-import { DEEPSEEK_REASONING_EFFORTS, openaiReasoningEfforts, reasoningEffortLabel } from '@/shared/lib/reasoning'
 import { getChatSettings, getModels, saveChatSettings, saveModels, testModel, type ChatSettings } from './api'
 import type { ModelConfig, ModelConfigResponse } from '@/shared/types/common'
 import { useTranslation } from 'react-i18next'
 import './settings.css'
 
-const providerDefaults = (provider: ModelConfig['provider']) => {
+/** Optimal runtime knobs from capability profile — not shown in the simple form. */
+const providerDefaults = (provider: ModelConfig['provider']): Partial<ModelConfig> => {
   if (provider === 'deepseek')
     return {
-      api_protocol: 'chat-completions' as const,
-      structured_output_mode: 'json' as const,
-      default_reasoning_effort: 'max' as const,
+      api_protocol: 'chat-completions',
+      structured_output_mode: 'json',
+      default_reasoning_effort: 'max',
       base_url: 'https://api.deepseek.com',
+      parallel_tool_calls: null,
+      live_search_enabled: false,
+      retries: 4,
+      delay_between_retries: 1,
+      exponential_backoff: true,
+      http_max_retries: null,
     }
   if (provider === 'openai')
     return {
-      api_protocol: 'responses' as const,
-      structured_output_mode: 'native' as const,
-      default_reasoning_effort: 'high' as const,
+      api_protocol: 'responses',
+      structured_output_mode: 'native',
+      default_reasoning_effort: 'high',
       base_url: '',
+      parallel_tool_calls: null,
+      live_search_enabled: false,
+      retries: 4,
+      delay_between_retries: 1,
+      exponential_backoff: true,
+      http_max_retries: null,
     }
   if (provider === 'xai')
     return {
-      api_protocol: 'chat-completions' as const,
-      structured_output_mode: 'json' as const,
+      api_protocol: 'chat-completions',
+      structured_output_mode: 'json',
       default_reasoning_effort: null,
       base_url: 'https://api.x.ai/v1',
+      parallel_tool_calls: null,
+      live_search_enabled: false,
+      retries: 4,
+      delay_between_retries: 1,
+      exponential_backoff: true,
+      http_max_retries: null,
     }
-  return { api_protocol: 'chat-completions' as const, structured_output_mode: 'json' as const, default_reasoning_effort: null }
+  return {
+    api_protocol: 'chat-completions',
+    structured_output_mode: 'json',
+    default_reasoning_effort: null,
+    parallel_tool_calls: null,
+    live_search_enabled: false,
+    retries: 4,
+    delay_between_retries: 1,
+    exponential_backoff: true,
+    http_max_retries: null,
+  }
 }
 
 const providerOptions = [
-  { value: 'deepseek', label: 'DeepSeek (native)' },
-  { value: 'openai', label: 'OpenAI (native)' },
-  { value: 'xai', label: 'xAI / Grok (native)' },
+  { value: 'deepseek', label: 'DeepSeek' },
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'xai', label: 'xAI / Grok' },
   { value: 'openai-compatible', label: 'OpenAI-compatible' },
 ]
-const protocolOptions = [
-  { value: 'chat-completions', label: 'Chat Completions' },
-  { value: 'responses', label: 'Responses' },
-]
-const outputModeOptions = [
-  { value: 'native', label: 'Native schema' },
-  { value: 'json', label: 'JSON mode' },
-]
 
-const parallelToolCallsOptions = [
-  { value: true, label: 'Enabled' },
-  { value: false, label: 'Disabled' },
-]
-
-
-const reasoningOptions = (provider: ModelConfig['provider'], protocol: ModelConfig['api_protocol']) => {
-  if (provider === 'deepseek') return DEEPSEEK_REASONING_EFFORTS.map((value) => ({ value, label: reasoningEffortLabel(value) }))
-  if (provider === 'openai') return openaiReasoningEfforts(protocol).map((value) => ({ value, label: reasoningEffortLabel(value) }))
-  // xAI / compatible: no reasoning_effort (xAI uses reasoning vs non-reasoning model ids)
-  return []
+const baseUrlPlaceholder = (provider: ModelConfig['provider']) => {
+  if (provider === 'xai') return 'https://api.x.ai/v1'
+  if (provider === 'deepseek') return 'https://api.deepseek.com'
+  if (provider === 'openai') return 'https://api.openai.com/v1'
+  return 'https://api.example.com/v1'
 }
 
 export function SettingsPage() {
@@ -92,11 +106,9 @@ export function SettingsPage() {
   const openEditor = (model: ModelConfig) => {
     form.resetFields()
     form.setFieldsValue({
-      retries: 4,
-      delay_between_retries: 1,
-      exponential_backoff: true,
-      http_max_retries: null,
+      ...providerDefaults(model.provider),
       ...model,
+      enabled: model.enabled ?? true,
     })
     setEditing(model)
   }
@@ -112,8 +124,48 @@ export function SettingsPage() {
   }
 
   const saveModel = async (model: ModelConfig) => {
-    const normalized = { ...model, name: model.name.trim(), model_id: model.model_id.trim(), base_url: model.base_url.trim() }
-    const current = models.data ?? { active_model_id: normalized.id, models: [] }
+    const current = models.data ?? { active_model_id: model.id, models: [] }
+    const previous = current.models.find((item) => item.id === model.id)
+    const defaults = providerDefaults(model.provider)
+    // Form only edits connection fields; keep optimal runtime knobs unless already stored.
+    const normalized: ModelConfig = {
+      ...defaults,
+      ...previous,
+      ...model,
+      name: model.name.trim(),
+      model_id: model.model_id.trim(),
+      base_url: (model.base_url ?? '').trim(),
+      api_protocol: (previous?.api_protocol ?? defaults.api_protocol ?? 'chat-completions') as ModelConfig['api_protocol'],
+      structured_output_mode: (previous?.structured_output_mode ??
+        defaults.structured_output_mode ??
+        'json') as ModelConfig['structured_output_mode'],
+      default_reasoning_effort:
+        previous?.default_reasoning_effort !== undefined
+          ? previous.default_reasoning_effort
+          : (defaults.default_reasoning_effort ?? null),
+      parallel_tool_calls: previous?.parallel_tool_calls ?? defaults.parallel_tool_calls ?? null,
+      live_search_enabled: previous?.live_search_enabled ?? defaults.live_search_enabled ?? false,
+      retries: previous?.retries ?? defaults.retries ?? 4,
+      delay_between_retries: previous?.delay_between_retries ?? defaults.delay_between_retries ?? 1,
+      exponential_backoff: previous?.exponential_backoff ?? defaults.exponential_backoff ?? true,
+      http_max_retries: previous?.http_max_retries ?? defaults.http_max_retries ?? null,
+      description: previous?.description ?? '',
+      enabled: model.enabled ?? true,
+      builtin: previous?.builtin ?? model.builtin ?? false,
+    }
+    // Switching provider: re-apply optimal knobs for the new provider.
+    if (previous && previous.provider !== model.provider) {
+      Object.assign(normalized, defaults, {
+        id: model.id,
+        name: normalized.name,
+        model_id: normalized.model_id,
+        api_key: model.api_key,
+        base_url: normalized.base_url || String(defaults.base_url ?? ''),
+        enabled: normalized.enabled,
+        builtin: normalized.builtin,
+        provider: model.provider,
+      })
+    }
     const next = current.models.some((item) => item.id === normalized.id)
       ? current.models.map((item) => (item.id === normalized.id ? normalized : item))
       : [...current.models, normalized]
@@ -129,27 +181,29 @@ export function SettingsPage() {
     }
   }
 
-  const addModel = () =>
+  const addModel = () => {
+    const defaults = providerDefaults('openai-compatible')
     openEditor({
       id: crypto.randomUUID(),
       name: '',
       model_id: '',
       provider: 'openai-compatible',
-      api_protocol: 'chat-completions',
-      structured_output_mode: 'json',
-      default_reasoning_effort: null,
-      parallel_tool_calls: null,
-      live_search_enabled: false,
-      retries: 4,
-      delay_between_retries: 1,
-      exponential_backoff: true,
-      http_max_retries: null,
-      base_url: '',
+      api_protocol: defaults.api_protocol ?? 'chat-completions',
+      structured_output_mode: defaults.structured_output_mode ?? 'json',
+      default_reasoning_effort: defaults.default_reasoning_effort ?? null,
+      base_url: defaults.base_url ?? '',
       api_key: '',
       description: '',
       enabled: true,
       builtin: false,
+      parallel_tool_calls: defaults.parallel_tool_calls ?? null,
+      live_search_enabled: defaults.live_search_enabled ?? false,
+      retries: defaults.retries ?? 4,
+      delay_between_retries: defaults.delay_between_retries ?? 1,
+      exponential_backoff: defaults.exponential_backoff ?? true,
+      http_max_retries: defaults.http_max_retries ?? null,
     })
+  }
 
   const setActiveModel = async (model: ModelConfig) => {
     const current = models.data
@@ -236,7 +290,7 @@ export function SettingsPage() {
       rowKey="id"
       dataSource={models.data?.models ?? []}
       loading={models.isLoading}
-      scroll={{ x: 1240 }}
+      scroll={{ x: 960 }}
       columns={[
         {
           title: 'Name',
@@ -250,27 +304,19 @@ export function SettingsPage() {
             </Space>
           ),
         },
-        { title: 'Model ID', dataIndex: 'model_id', width: 190, ellipsis: true },
+        { title: 'Model ID', dataIndex: 'model_id', width: 200, ellipsis: true },
         {
-          title: 'Runtime',
+          title: t('provider'),
           dataIndex: 'provider',
-          width: 230,
-          render: (value, row) => (
-            <Space orientation="vertical" size={2}>
-              <Space size={[4, 4]} wrap>
-                <Tag>{value}</Tag>
-                <Tag color="blue">{row.api_protocol}</Tag>
-              </Space>
-              <Tag color={row.structured_output_mode === 'json' ? 'green' : 'purple'}>{row.structured_output_mode}</Tag>
-            </Space>
-          ),
+          width: 140,
+          render: (value: ModelConfig['provider']) => <Tag>{value}</Tag>,
         },
         {
           title: 'Base URL',
           dataIndex: 'base_url',
-          width: 260,
+          width: 240,
           ellipsis: { showTitle: false },
-          render: (value) => <Typography.Text ellipsis={{ tooltip: value }}>{value || '-'}</Typography.Text>,
+          render: (value) => <Typography.Text ellipsis={{ tooltip: value }}>{value || '—'}</Typography.Text>,
         },
         {
           title: 'Configured',
@@ -417,7 +463,7 @@ export function SettingsPage() {
         />
       </Card>
       <Modal
-        width={560}
+        width={480}
         open={Boolean(editing)}
         onCancel={closeEditor}
         onOk={() => form.submit()}
@@ -428,181 +474,100 @@ export function SettingsPage() {
         destroyOnHidden
       >
         {editing && (
-          <Form form={form} layout="vertical" onFinish={saveModel}>
+          <Form form={form} layout="vertical" onFinish={saveModel} requiredMark="optional">
             <Form.Item name="id" hidden>
               <Input />
             </Form.Item>
-            <Form.Item name="name" label="Name" rules={[{ required: true, whitespace: true, message: t('nameRequired') }]}>
+            <Form.Item name="builtin" hidden valuePropName="checked">
+              <Switch />
+            </Form.Item>
+            {/* Hidden optimal knobs — filled by providerDefaults / save merge */}
+            <Form.Item name="api_protocol" hidden>
+              <Input />
+            </Form.Item>
+            <Form.Item name="structured_output_mode" hidden>
+              <Input />
+            </Form.Item>
+            <Form.Item name="default_reasoning_effort" hidden>
+              <Input />
+            </Form.Item>
+            <Form.Item name="retries" hidden>
+              <Input />
+            </Form.Item>
+            <Form.Item name="delay_between_retries" hidden>
+              <Input />
+            </Form.Item>
+            <Form.Item name="exponential_backoff" hidden valuePropName="checked">
+              <Switch />
+            </Form.Item>
+            <Form.Item name="http_max_retries" hidden>
+              <Input />
+            </Form.Item>
+            <Form.Item name="parallel_tool_calls" hidden>
+              <Input />
+            </Form.Item>
+            <Form.Item name="live_search_enabled" hidden valuePropName="checked">
+              <Switch />
+            </Form.Item>
+            <Form.Item name="description" hidden>
+              <Input />
+            </Form.Item>
+
+            <Form.Item name="name" label={t('nameLabel')} rules={[{ required: true, whitespace: true, message: t('nameRequired') }]}>
               <Input placeholder={t('namePlaceholder')} />
             </Form.Item>
-            <Form.Item name="provider" label="Provider" rules={[{ required: true }]}>
+            <Form.Item name="provider" label={t('provider')} rules={[{ required: true }]}>
               <Select
                 options={providerOptions}
-                onChange={(provider: ModelConfig['provider']) => form.setFieldsValue(providerDefaults(provider))}
+                onChange={(provider: ModelConfig['provider']) => {
+                  const defaults = providerDefaults(provider)
+                  form.setFieldsValue({
+                    ...defaults,
+                    base_url: defaults.base_url ?? '',
+                  })
+                }}
               />
             </Form.Item>
-            <Form.Item name="model_id" label="Model ID" rules={[{ required: true, whitespace: true, message: t('modelIdRequired') }]}>
-              <Input placeholder={t('modelIdPlaceholder')} />
+            <Form.Item noStyle shouldUpdate={(previous, current) => previous.provider !== current.provider}>
+              {({ getFieldValue }) => (
+                <Form.Item
+                  name="model_id"
+                  label={t('modelIdLabel')}
+                  tooltip={getFieldValue('provider') === 'xai' ? t('xaiReasoningHint') : undefined}
+                  rules={[{ required: true, whitespace: true, message: t('modelIdRequired') }]}
+                >
+                  <Input placeholder={t('modelIdPlaceholder')} />
+                </Form.Item>
+              )}
             </Form.Item>
-            <Form.Item name="api_key" label="API key" rules={[{ required: true, whitespace: true, message: t('apiKeyRequired') }]}>
-              <Input.Password placeholder="sk-..." />
+            <Form.Item name="api_key" label={t('apiKeyLabel')} rules={[{ required: true, whitespace: true, message: t('apiKeyRequired') }]}>
+              <Input.Password placeholder="sk-..." autoComplete="off" />
             </Form.Item>
             <Form.Item noStyle shouldUpdate={(previous, current) => previous.provider !== current.provider}>
               {({ getFieldValue }) => {
-                const baseUrlRequired = getFieldValue('provider') === 'openai-compatible'
+                const provider = getFieldValue('provider') as ModelConfig['provider']
+                const baseUrlRequired = provider === 'openai-compatible'
                 return (
                   <Form.Item
                     name="base_url"
                     label="Base URL"
+                    tooltip={baseUrlRequired ? t('baseUrlRequired') : t('baseUrlOptional')}
                     rules={[
                       { required: baseUrlRequired, whitespace: true, message: t('baseUrlRequired') },
-                      { type: 'url', message: t('urlInvalid') },
+                      { type: 'url', warningOnly: !baseUrlRequired, message: t('urlInvalid') },
                     ]}
                   >
-                    <Input
-                      placeholder={
-                        getFieldValue('provider') === 'xai'
-                          ? 'https://api.x.ai/v1'
-                          : getFieldValue('provider') === 'deepseek'
-                            ? 'https://api.deepseek.com'
-                            : 'https://api.example.com/v1'
-                      }
-                    />
+                    <Input placeholder={baseUrlPlaceholder(provider)} />
                   </Form.Item>
                 )
               }}
             </Form.Item>
-            <Collapse
-              ghost
-              size="small"
-              items={[
-                {
-                  key: 'advanced',
-                  label: 'Advanced',
-                  forceRender: true,
-                  children: (
-                    <>
-                      <Form.Item noStyle shouldUpdate={(previous, current) => previous.provider !== current.provider}>
-                        {({ getFieldValue }) => (
-                          <Form.Item name="api_protocol" label="API protocol" rules={[{ required: true }]}>
-                            <Select
-                              options={protocolOptions}
-                              disabled={getFieldValue('provider') === 'deepseek'}
-                              onChange={(protocol: ModelConfig['api_protocol']) => {
-                                if (
-                                  getFieldValue('provider') === 'openai' &&
-                                  protocol === 'chat-completions' &&
-                                  getFieldValue('default_reasoning_effort') === 'minimal'
-                                )
-                                  form.setFieldValue('default_reasoning_effort', 'high')
-                              }}
-                            />
-                          </Form.Item>
-                        )}
-                      </Form.Item>
-                      <Form.Item noStyle shouldUpdate={(previous, current) => previous.provider !== current.provider}>
-                        {({ getFieldValue }) => (
-                          <Form.Item name="structured_output_mode" label="Structured output" rules={[{ required: true }]}>
-                            <Select options={outputModeOptions} disabled={getFieldValue('provider') === 'deepseek'} />
-                          </Form.Item>
-                        )}
-                      </Form.Item>
-                      <Form.Item
-                        noStyle
-                        shouldUpdate={(previous, current) =>
-                          previous.provider !== current.provider || previous.api_protocol !== current.api_protocol
-                        }
-                      >
-                        {({ getFieldValue }) => {
-                          const provider = getFieldValue('provider') as ModelConfig['provider']
-                          const protocol = getFieldValue('api_protocol') as ModelConfig['api_protocol']
-                          if (provider === 'openai-compatible' || provider === 'xai') return null
-                          return (
-                            <Form.Item name="default_reasoning_effort" label="Default reasoning effort" rules={[{ required: true }]}>
-                              <Select options={reasoningOptions(provider, protocol)} />
-                            </Form.Item>
-                          )
-                        }}
-                      </Form.Item>
-                      <Form.Item
-                        noStyle
-                        shouldUpdate={(previous, current) =>
-                          previous.provider !== current.provider || previous.api_protocol !== current.api_protocol
-                        }
-                      >
-                        {({ getFieldValue }) => {
-                          if (getFieldValue('provider') === 'deepseek') return null
-                          return (
-                            <Form.Item
-                              name="parallel_tool_calls"
-                              label={t('parallelToolCalls')}
-                              tooltip={t('parallelToolCallsHelp')}
-                            >
-                              <Select
-                                allowClear
-                                placeholder={t('providerDefault')}
-                                options={parallelToolCallsOptions}
-                              />
-                            </Form.Item>
-                          )
-                        }}
-                      </Form.Item>
-                      <Form.Item noStyle shouldUpdate={(previous, current) => previous.provider !== current.provider}>
-                        {({ getFieldValue }) => {
-                          const provider = getFieldValue('provider') as ModelConfig['provider']
-                          const liveSupported = provider === 'xai' || provider === 'openai-compatible'
-                          return (
-                            <Form.Item
-                              name="live_search_enabled"
-                              label={t('liveSearch')}
-                              tooltip={liveSupported ? t('liveSearchHelp') : t('liveSearchUnsupported')}
-                              valuePropName="checked"
-                            >
-                              <Switch disabled={!liveSupported} />
-                            </Form.Item>
-                          )
-                        }}
-                      </Form.Item>
-                      <Form.Item name="retries" label={t('retries')}
-                        tooltip={t('retriesHelp')}>
-                        <InputNumber min={0} max={10} style={{ width: '100%' }} />
-                      </Form.Item>
-                      <Form.Item
-                        name="delay_between_retries"
-                        label={t('delayBetweenRetries')}
-                        tooltip={t('delayBetweenRetriesHelp')}
-                      >
-                        <InputNumber min={0} max={60} style={{ width: '100%' }} />
-                      </Form.Item>
-                      <Form.Item
-                        name="exponential_backoff"
-                        label={t('exponentialBackoff')}
-                        tooltip={t('exponentialBackoffHelp')}
-                        valuePropName="checked"
-                      >
-                        <Switch />
-                      </Form.Item>
-                      <Form.Item
-                        name="http_max_retries"
-                        label={t('httpMaxRetries')}
-                        tooltip={t('httpMaxRetriesHelp')}
-                      >
-                        <InputNumber min={0} max={10} style={{ width: '100%' }} placeholder={t('providerDefault')} />
-                      </Form.Item>
-                      <Form.Item name="description" label="Description">
-                        <Input placeholder={t('purposeOptional')} />
-                      </Form.Item>
-                      <Form.Item name="enabled" label="Enabled" valuePropName="checked">
-                        <Switch />
-                      </Form.Item>
-                    </>
-                  ),
-                },
-              ]}
-            />
-            <Form.Item name="builtin" hidden valuePropName="checked">
+            <Form.Item name="enabled" label={t('enabledLabel')} valuePropName="checked">
               <Switch />
             </Form.Item>
+            <Typography.Paragraph type="secondary" className="settings-model-hint" style={{ marginBottom: 0 }}>
+              {t('autoDefaultsHint')}
+            </Typography.Paragraph>
           </Form>
         )}
       </Modal>
