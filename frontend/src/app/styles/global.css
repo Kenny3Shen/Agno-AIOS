@@ -2611,6 +2611,12 @@ html.dark .wf-smart-guide {
   line-height: 1.5;
 }
 
+.workflow-run-log-list {
+  max-height: 280px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
 .workflow-run-log-content {
   margin-top: 6px;
   padding: 6px 8px;

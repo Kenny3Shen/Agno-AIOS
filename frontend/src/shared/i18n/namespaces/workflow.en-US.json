@@ -117,5 +117,6 @@
   "canvasTips": "Drag to reorder; connect edges to resequence root steps. Router, nested workflows, version restore, and triggers are available.",
   "listTruncated": "Showing {{shown}} of {{total}} workflows (page cap; deep links still open by id)",
   "loadingWorkflow": "Opening workflow…",
-  "latestOutput": "Latest output"
+  "latestOutput": "Latest output",
+  "librarySearchPlaceholder": "Search name or id"
 }

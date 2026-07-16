@@ -56,7 +56,7 @@ import { currentUserQuery } from '@/features/auth'
 import { hasScope } from '@/shared/auth/permissions'
 import { useFormatDate } from '@/shared/lib/format'
 import { copyToClipboard } from '@/shared/lib/clipboard'
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 
 const PALETTE: Array<{
   type: WorkflowNodeType
@@ -80,6 +80,7 @@ export function WorkflowPage() {
   const formatDate = useFormatDate()
   const routerNav = useRouter()
   const workflow = useWorkflow()
+  const runLogListRef = useRef<HTMLDivElement>(null)
   const currentUser = useQuery(currentUserQuery())
   const canRun =
     hasScope(currentUser.data, 'workflows:run') ||
@@ -196,6 +197,13 @@ export function WorkflowPage() {
     if (!id || currentWorkflowId === id) return
     loadWorkflow(id)
   }, [currentWorkflowId, loadWorkflow])
+
+  useEffect(() => {
+    if (!workflow.state.running && !workflow.state.runLog.length) return
+    const node = runLogListRef.current
+    if (!node) return
+    node.scrollTop = node.scrollHeight
+  }, [workflow.state.runLog, workflow.state.running])
 
   const paletteLabel = (type: WorkflowNodeType) => {
     const map: Record<WorkflowNodeType, string> = {
@@ -444,6 +452,14 @@ export function WorkflowPage() {
               placeholder={t('loadPlaceholder')}
               value={workflow.state.workflowId ?? undefined}
               allowClear
+              showSearch
+              optionFilterProp="label"
+              filterOption={(input, option) => {
+                const label = String(option?.label ?? '').toLowerCase()
+                const value = String(option?.value ?? '').toLowerCase()
+                const q = input.trim().toLowerCase()
+                return !q || label.includes(q) || value.includes(q)
+              }}
               loading={workflow.state.loading || workflow.workflowsQuery.isLoading}
               disabled={workflow.state.loading}
               options={saved.map((item) => ({
@@ -974,7 +990,7 @@ export function WorkflowPage() {
                         ) : null
                       })()}
                       {workflow.state.runLog.length ? (
-                        <div className="workflow-compact-list">
+                        <div className="workflow-compact-list workflow-run-log-list" ref={runLogListRef}>
                           {[...workflow.state.runLog].reverse().slice(0, 40).map((item) => (
                             <div key={item.id} className="workflow-compact-list__item">
                               <Space size={4} wrap>

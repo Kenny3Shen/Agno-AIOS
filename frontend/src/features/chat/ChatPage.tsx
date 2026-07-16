@@ -360,14 +360,42 @@ export function ChatPage() {
   const inputDisabled = !chat.selectedModel?.enabled || !chat.selectedModel.configured
   const liveSearchSupported = Boolean(chat.selectedModel?.capabilities?.supports_live_search)
   const sendDisabled = inputDisabled || Boolean(pausedRun) || !chat.state.input.trim()
-  const scrollToLatest = useCallback(() => {
+  const scrollToLatest = useCallback((behavior: ScrollBehavior = 'smooth') => {
     const node = scrollRef.current
-    if (node) node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' })
+    if (!node) return
+    node.scrollTo({ top: node.scrollHeight, behavior })
     setFollowLatest(true)
   }, [])
+
+  // Prefer instant scroll while streaming to avoid smooth-scroll jank on every delta.
+  const lastAssistant = chat.state.messages.at(-1)
+  const streamTick = useMemo(() => {
+    if (!lastAssistant || lastAssistant.role !== 'assistant') {
+      return `${chat.state.messages.length}:idle`
+    }
+    return [
+      chat.state.messages.length,
+      lastAssistant.status ?? 'done',
+      lastAssistant.content.length,
+      lastAssistant.tool_steps?.length ?? 0,
+      lastAssistant.thought_chain?.length ?? 0,
+    ].join(':')
+  }, [chat.state.messages, lastAssistant])
+
   useEffect(() => {
-    if (followLatest) requestAnimationFrame(scrollToLatest)
-  }, [chat.sessionId, chat.state.messages, followLatest, scrollToLatest])
+    if (!followLatest) return
+    const streaming =
+      lastAssistant?.role === 'assistant' &&
+      (lastAssistant.status === 'streaming' || lastAssistant.status === 'retrying')
+    const behavior: ScrollBehavior = streaming ? 'auto' : 'smooth'
+    const id = requestAnimationFrame(() => {
+      const node = scrollRef.current
+      if (!node) return
+      node.scrollTo({ top: node.scrollHeight, behavior })
+    })
+    return () => cancelAnimationFrame(id)
+  }, [chat.sessionId, followLatest, streamTick, lastAssistant?.role, lastAssistant?.status])
+
   useEffect(() => {
     setFollowLatest(true)
   }, [chat.sessionId])
@@ -392,7 +420,9 @@ export function ChatPage() {
           ref={scrollRef}
           onScroll={(event) => {
             const node = event.currentTarget
-            setFollowLatest(node.scrollHeight - node.scrollTop - node.clientHeight < 48)
+            // Larger threshold while content grows so minor layout thrash doesn't unpin.
+            const threshold = chat.state.requesting ? 96 : 48
+            setFollowLatest(node.scrollHeight - node.scrollTop - node.clientHeight < threshold)
           }}
         >
           {!bubbles.length ? (
@@ -448,7 +478,12 @@ export function ChatPage() {
           )}
         </div>
         {!followLatest && (
-          <Button className="latest-button" shape="round" icon={<ArrowDownOutlined />} onClick={scrollToLatest}>
+          <Button
+            className="latest-button"
+            shape="round"
+            icon={<ArrowDownOutlined />}
+            onClick={() => scrollToLatest('smooth')}
+          >
             {t('jumpToLatest')}
           </Button>
         )}

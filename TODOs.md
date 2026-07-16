@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Chat 流式粘底去抖 + Workflow 库搜索 / Run 日志滚动
+
+- Chat：流式期间 `scrollTo` 使用 `auto`（非 smooth），增大贴底阈值，减少 delta 抖动；「回到最新」仍 smooth。
+- Workflow 库 Select：`showSearch` 按名称/ID 过滤；Run 日志列表限高并在运行时自动滚到底。
+
 ## 已完成：Workflow 校验聚焦节点 + Chat 会话搜索
 
 - 保存校验失败：自动 `fitView` 到无效节点；重复保存用 `validationEpoch` 重新聚焦；列表点击节点同样居中。
