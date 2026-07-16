@@ -465,6 +465,99 @@ export const pickConnectionHandles = (
   return { sourceHandle, targetHandle, horizontal }
 }
 
+/** Canvas snap grid (px) for drag-end and align. */
+export const SNAP_GRID = 20
+
+export const snapCoord = (value: number, grid = SNAP_GRID): number =>
+  Math.round(value / grid) * grid
+
+export const snapPosition = (
+  position: { x: number; y: number },
+  grid = SNAP_GRID
+): { x: number; y: number } => ({
+  x: snapCoord(position.x, grid),
+  y: snapCoord(position.y, grid),
+})
+
+export type AlignMode =
+  | 'left'
+  | 'right'
+  | 'top'
+  | 'bottom'
+  | 'center-h'
+  | 'center-v'
+  | 'distribute-h'
+  | 'distribute-v'
+
+/**
+ * Align or distribute selected node positions (by id).
+ * Uses estimated node size so right/bottom/center match visual edges.
+ */
+export const alignSelectedPositions = (
+  positions: Record<string, { x: number; y: number }>,
+  selectedIds: string[],
+  mode: AlignMode,
+  sizeById?: Record<string, { width?: number; height?: number }>
+): Record<string, { x: number; y: number }> => {
+  const ids = selectedIds.filter((id) => positions[id] != null)
+  if (ids.length < 2) return positions
+
+  const widthOf = (id: string) => sizeById?.[id]?.width ?? NODE_LAYOUT_WIDTH
+  const heightOf = (id: string) => sizeById?.[id]?.height ?? NODE_LAYOUT_HEIGHT
+  const boxes = ids.map((id) => {
+    const p = positions[id]!
+    const w = widthOf(id)
+    const h = heightOf(id)
+    return { id, x: p.x, y: p.y, w, h, cx: p.x + w / 2, cy: p.y + h / 2, r: p.x + w, b: p.y + h }
+  })
+
+  const next = { ...positions }
+  if (mode === 'left') {
+    const edge = Math.min(...boxes.map((b) => b.x))
+    for (const b of boxes) next[b.id] = { x: edge, y: b.y }
+  } else if (mode === 'right') {
+    const edge = Math.max(...boxes.map((b) => b.r))
+    for (const b of boxes) next[b.id] = { x: edge - b.w, y: b.y }
+  } else if (mode === 'top') {
+    const edge = Math.min(...boxes.map((b) => b.y))
+    for (const b of boxes) next[b.id] = { x: b.x, y: edge }
+  } else if (mode === 'bottom') {
+    const edge = Math.max(...boxes.map((b) => b.b))
+    for (const b of boxes) next[b.id] = { x: b.x, y: edge - b.h }
+  } else if (mode === 'center-h') {
+    const mid = boxes.reduce((s, b) => s + b.cx, 0) / boxes.length
+    for (const b of boxes) next[b.id] = { x: mid - b.w / 2, y: b.y }
+  } else if (mode === 'center-v') {
+    const mid = boxes.reduce((s, b) => s + b.cy, 0) / boxes.length
+    for (const b of boxes) next[b.id] = { x: b.x, y: mid - b.h / 2 }
+  } else if (mode === 'distribute-h') {
+    const ordered = [...boxes].sort((a, b) => a.x - b.x)
+    if (ordered.length < 3) return positions
+    const first = ordered[0]!
+    const last = ordered[ordered.length - 1]!
+    const span = last.x - first.x
+    const step = span / (ordered.length - 1)
+    ordered.forEach((b, i) => {
+      next[b.id] = { x: first.x + step * i, y: b.y }
+    })
+  } else if (mode === 'distribute-v') {
+    const ordered = [...boxes].sort((a, b) => a.y - b.y)
+    if (ordered.length < 3) return positions
+    const first = ordered[0]!
+    const last = ordered[ordered.length - 1]!
+    const span = last.y - first.y
+    const step = span / (ordered.length - 1)
+    ordered.forEach((b, i) => {
+      next[b.id] = { x: b.x, y: first.y + step * i }
+    })
+  }
+
+  for (const id of Object.keys(next)) {
+    next[id] = snapPosition(next[id]!)
+  }
+  return next
+}
+
 export const emptySlotsFor = (node: WorkflowNode): EmptySlot[] => {
   if (node.type === 'parallel') {
     if ((node.steps ?? []).length) return []

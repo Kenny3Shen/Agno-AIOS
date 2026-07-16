@@ -42,7 +42,11 @@ export function buildConversationItems(sessions: ChatSession[], now = Date.now()
     .sort((left, right) => right.updated_at - left.updated_at)
     .map((session) => {
       const daysAgo = today.diff(dayjs.unix(session.updated_at).startOf('day'), 'day')
-      const label = session.title || session.preview || ''
+      const base = session.title || session.preview || ''
+      const label =
+        session.session_type === 'workflow' && base && !base.startsWith('[WF]')
+          ? `[WF] ${base}`
+          : base
       return {
         key: session.session_id,
         label,

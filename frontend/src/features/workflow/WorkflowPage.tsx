@@ -30,6 +30,14 @@ import {
   UndoOutlined,
   RedoOutlined,
   ApartmentOutlined,
+  AlignLeftOutlined,
+  AlignRightOutlined,
+  AlignCenterOutlined,
+  VerticalAlignTopOutlined,
+  VerticalAlignMiddleOutlined,
+  VerticalAlignBottomOutlined,
+  ColumnWidthOutlined,
+  ColumnHeightOutlined,
   CloudUploadOutlined,
   CopyOutlined,
   ReloadOutlined,
@@ -48,6 +56,7 @@ import {
   workflowWebhookUrl,
 } from './utils'
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
+import { Markdown } from '@/shared/ui/Markdown'
 import { listWorkflowTriggerHistory } from './api'
 import { listSkills } from '@/features/skills/api'
 import { CelExpressionField } from './CelExpressionField'
@@ -284,6 +293,28 @@ export function WorkflowPage() {
               {t('organize')}
             </Button>
           </Tooltip>
+          <Space.Compact size="small" className="workflow-studio__align">
+            {(
+              [
+                ['left', <AlignLeftOutlined key="l" />, t('alignLeft')],
+                ['center-h', <AlignCenterOutlined key="ch" />, t('alignCenterH')],
+                ['right', <AlignRightOutlined key="r" />, t('alignRight')],
+                ['top', <VerticalAlignTopOutlined key="t" />, t('alignTop')],
+                ['center-v', <VerticalAlignMiddleOutlined key="cv" />, t('alignCenterV')],
+                ['bottom', <VerticalAlignBottomOutlined key="b" />, t('alignBottom')],
+                ['distribute-h', <ColumnWidthOutlined key="dh" />, t('distributeH')],
+                ['distribute-v', <ColumnHeightOutlined key="dv" />, t('distributeV')],
+              ] as const
+            ).map(([mode, icon, title]) => (
+              <Tooltip key={mode} title={title} getPopupContainer={studioPopupContainer}>
+                <Button
+                  icon={icon}
+                  disabled={(workflow.state.selectedIds?.length ?? 0) < 2}
+                  onClick={() => workflow.alignSelected(mode)}
+                />
+              </Tooltip>
+            ))}
+          </Space.Compact>
           <Button
             icon={<SaveOutlined />}
             type="primary"
@@ -930,12 +961,39 @@ export function WorkflowPage() {
                           />
                         </div>
                       ) : null}
+                      {(() => {
+                        const outputs = [...workflow.state.runLog]
+                          .filter(
+                            (item) =>
+                              Boolean(item.content?.trim()) &&
+                              (item.type === 'step.completed' ||
+                                item.type === 'workflow.completed')
+                          )
+                          .reverse()
+                        const latestOutput = outputs[0]
+                        return latestOutput?.content ? (
+                          <div className="workflow-run-output" style={{ marginBottom: 12 }}>
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                              {t('runOutput')}
+                              {latestOutput.stepName ? ` · ${latestOutput.stepName}` : ''}
+                            </Typography.Text>
+                            <div className="workflow-run-output__md message-body" style={{ marginTop: 6 }}>
+                              <Markdown content={latestOutput.content} openLinksInNewTab escapeRawHtml />
+                            </div>
+                          </div>
+                        ) : null
+                      })()}
                       {workflow.state.runLog.length ? (
                         <List
                           size="small"
                           dataSource={[...workflow.state.runLog].reverse().slice(0, 40)}
                           renderItem={(item) => (
-                            <List.Item style={{ padding: '4px 0' }}>
+                            <List.Item
+                              style={{
+                                padding: '6px 0',
+                                display: 'block',
+                              }}
+                            >
                               <Space size={4} wrap>
                                 <Tag
                                   color={
@@ -967,6 +1025,15 @@ export function WorkflowPage() {
                                   </Button>
                                 ) : null}
                               </Space>
+                              {item.content?.trim() &&
+                              (item.type === 'step.completed' || item.type === 'workflow.completed') ? (
+                                <div
+                                  className="workflow-run-log__content message-body"
+                                  style={{ marginTop: 6, maxHeight: 220, overflow: 'auto' }}
+                                >
+                                  <Markdown content={item.content} openLinksInNewTab escapeRawHtml />
+                                </div>
+                              ) : null}
                             </List.Item>
                           )}
                         />

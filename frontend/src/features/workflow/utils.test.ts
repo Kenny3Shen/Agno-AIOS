@@ -6,6 +6,8 @@ import {
   createNode,
   fromRecord,
   layoutCanvas,
+  alignSelectedPositions,
+  snapPosition,
   moveNodeAfter,
   moveStep,
   reparentNode,
@@ -465,5 +467,35 @@ describe('draft validation', () => {
     const step = createNode('step')
     step.targetId = 'security-operations'
     expect(validateWorkflowDraft([step])).toEqual([])
+  })
+})
+
+describe('align and snap', () => {
+  it('snaps coordinates to grid', () => {
+    expect(snapPosition({ x: 23, y: 47 })).toEqual({ x: 20, y: 40 })
+  })
+
+  it('aligns selected nodes to the left', () => {
+    const positions = {
+      a: { x: 100, y: 10 },
+      b: { x: 40, y: 80 },
+      c: { x: 200, y: 40 },
+    }
+    const next = alignSelectedPositions(positions, ['a', 'b', 'c'], 'left')
+    expect(next.a?.x).toBe(40)
+    expect(next.b?.x).toBe(40)
+    expect(next.c?.x).toBe(40)
+  })
+
+  it('distributes horizontally', () => {
+    const positions = {
+      a: { x: 0, y: 0 },
+      b: { x: 50, y: 10 },
+      c: { x: 200, y: 20 },
+    }
+    const next = alignSelectedPositions(positions, ['a', 'b', 'c'], 'distribute-h')
+    expect(next.a?.x).toBe(0)
+    expect(next.c?.x).toBe(200)
+    expect(next.b?.x).toBe(100)
   })
 })

@@ -9,6 +9,7 @@ import {
   CaretRightOutlined,
   CodeOutlined,
   CopyOutlined,
+  NumberOutlined,
   DownOutlined,
   PaperClipOutlined,
   ReloadOutlined,
@@ -191,7 +192,12 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
   const [thoughtOpen, setThoughtOpen] = useState(message.status === 'streaming' || message.status === 'retrying')
   const motionState = message.role === 'assistant' ? (message.status ?? 'completed') : 'sent'
   const actions = [
-    { key: 'copy', label: t('common:copy'), icon: <CopyOutlined />, onItemClick: () => void copyToClipboard(message.content) },
+    {
+      key: 'copy',
+      label: t('common:copy'),
+      icon: <CopyOutlined />,
+      onItemClick: () => void copyToClipboard(message.content),
+    },
     ...(message.role === 'assistant'
       ? [
           { key: 'retry', label: t('regenerate'), icon: <ReloadOutlined />, onItemClick: retry },
@@ -200,7 +206,7 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
                 {
                   key: 'copy-run-id',
                   label: t('copyRunId'),
-                  icon: <CopyOutlined />,
+                  icon: <NumberOutlined />,
                   onItemClick: () => {
                     void copyToClipboard(message.run_id ?? '').then((copied) =>
                       copied ? toast.success(t('runIdCopied')) : toast.error(t('runIdCopyFailed'))
@@ -216,7 +222,7 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
     return (
       <div className={`message-body message-body--${motionState}`}>
         <p>{message.content}</p>
-        <Actions items={actions} />
+        <Actions className="message-actions" items={actions} />
       </div>
     )
   const chain = [...(message.thought_chain ?? []).map(thoughtNode), ...(message.tool_steps ?? []).map((tool) => toolNode(tool, { input: t('rawToolInput'), output: t('rawToolOutput'), copy: t('common:copy') }))]
@@ -311,7 +317,7 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
           {message.error.message}
         </div>
       )}
-      {message.final && <Actions items={actions} />}
+      {message.final && <Actions className="message-actions" items={actions} />}
     </div>
   )
 }

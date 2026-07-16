@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { chatKeys } from '@/features/chat/queries'
 import { getModels } from '@/features/settings/api'
 import {
   createWorkflow,
@@ -24,6 +25,9 @@ import { appendRunLog, applyNodeRunStatusEvent, historyStatusFromEvent } from '.
 import {
   addChildToNode,
   applyAutoLayout,
+  alignSelectedPositions,
+  snapPosition,
+  type AlignMode,
   cloneNodeDeep,
   createNode,
   defaultTriggers,
@@ -37,7 +41,6 @@ import {
   parseEmptySlot,
   removeNodeInTree,
   removeNodesInTree,
-  reorderRootsByPositions,
   reparentNode,
   reparentTargetFromHandle,
   toDefinition,
@@ -91,6 +94,7 @@ const snapOf = (state: Pick<WorkflowState, 'steps' | 'selectedId' | 'selectedIds
 
 export function useWorkflow() {
   const [state, setState] = useState<WorkflowState>(initialState)
+  const queryClient = useQueryClient()
   const abortRef = useRef<AbortController | null>(null)
   const pastRef = useRef<HistorySnap[]>([])
   const futureRef = useRef<HistorySnap[]>([])
@@ -349,13 +353,35 @@ export function useWorkflow() {
     }))
 
   const applyPositions = (positions: Record<string, { x: number; y: number }>) => {
-    // Position-only updates: no history spam while dragging ends once.
     withHistory((current) => {
       let steps = current.steps
       for (const [id, position] of Object.entries(positions)) {
+        const snapped = snapPosition(position)
+        steps = updateNodeInTree(steps, id, (node) => ({ ...node, position: snapped }))
+      }
+      return { ...current, steps, dirty: true }
+    })
+  }
+
+  const alignSelected = (mode: AlignMode) => {
+    withHistory((current) => {
+      const ids = current.selectedIds.length
+        ? current.selectedIds
+        : current.selectedId
+          ? [current.selectedId]
+          : []
+      if (ids.length < 2) return current
+      const positions: Record<string, { x: number; y: number }> = {}
+      for (const id of ids) {
+        const node = findNode(current.steps, id)
+        if (node?.position) positions[id] = node.position
+      }
+      if (Object.keys(positions).length < 2) return current
+      const next = alignSelectedPositions(positions, ids, mode)
+      let steps = current.steps
+      for (const [id, position] of Object.entries(next)) {
         steps = updateNodeInTree(steps, id, (node) => ({ ...node, position }))
       }
-      steps = reorderRootsByPositions(steps)
       return { ...current, steps, dirty: true }
     })
   }
@@ -825,6 +851,15 @@ export function useWorkflow() {
                   : current.running,
             }
           })
+          if (
+            item.type === 'workflow.started' ||
+            item.type === 'workflow.completed' ||
+            item.type === 'workflow.failed' ||
+            item.type === 'workflow.paused' ||
+            item.type === 'workflow.cancelled'
+          ) {
+            void queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
+          }
         },
         controller.signal
       )
@@ -888,6 +923,7 @@ export function useWorkflow() {
     connectSequence,
     connectBranch,
     organizeLayout,
+    alignSelected,
     copySelected,
     pasteClipboard,
     duplicateSelected,

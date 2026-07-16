@@ -57,6 +57,7 @@ export interface Message {
 
 export interface ChatSession {
   session_id: string
+  session_type?: string | null
   user_id?: string | null
   preview: string
   title?: string | null
