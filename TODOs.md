@@ -1,5 +1,13 @@
 # 下一步工作
 
+## 已完成：Executor 目录产品化 + Playbook 内容库
+
+- 内置执行器目录扩展字段：`category` / `capabilities` / `recommended_for` / `role`（`security-operations` 运营 vs `safe-fallback` 轻量）。
+- Studio Inspector：执行器下拉展示名称、说明与适用场景；选中后显示描述摘要。
+- `playbook-skill`：补齐七类处置场景、标准作业流程、异常表与输出模板；`references/scenarios.md` 速查。
+- Grok 冒烟：剧本列表意图 → `skill_names=["playbook-skill"]`，并 progressive 加载扩充后的 SKILL.md。
+
+
 ## 已完成：P1 角色预设（分析师 / 作者 / 审批 / 审计）
 
 - `ROLE_SCOPES` 扩展：`analyst` / `author` / `approver` / `auditor`（保留 `admin`/`user`/`guest` 兼容）。
@@ -253,8 +261,8 @@ P0.4 审批值班薄入口        ✅
 ### P1（本阶段后，不阻塞 P0）
 
 - Dashboard 聚合下推 / 可信失败列表  
-- Playbook 内容库扩充 + Executor 目录产品化  
-- 角色预设（分析师 / 作者 / 审批 / 审计）  
+- ~~Playbook 内容库扩充 + Executor 目录产品化~~ ✅（见上）  
+- ~~角色预设（分析师 / 作者 / 审批 / 审计）~~ ✅  
 - Skill 版本与「被引用」只读视图  
 - i18n 与静默失败显性化（模型/Memory 后台错误）
 
