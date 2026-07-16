@@ -229,4 +229,36 @@ describe('chat behavior', () => {
     })
   })
 
+  it('normalizeMessages projects lean_mode and skill_names from history', () => {
+    const messages = normalizeMessages([
+      {
+        id: 'run-1',
+        role: 'assistant',
+        content: 'pong',
+        status: 'completed',
+        lean_mode: true,
+        skill_names: [],
+      },
+      {
+        id: 'run-2',
+        role: 'assistant',
+        content: 'ok',
+        status: 'completed',
+        lean_mode: false,
+        skill_names: ['cve-intel-skill'],
+      },
+      {
+        id: 'run-3',
+        role: 'assistant',
+        content: 'full',
+        status: 'completed',
+        lean_mode: false,
+        skill_names: null,
+      },
+    ])
+    expect(messages[0]).toMatchObject({ leanMode: true, skillNames: [] })
+    expect(messages[1]).toMatchObject({ leanMode: false, skillNames: ['cve-intel-skill'] })
+    expect(messages[2]).toMatchObject({ leanMode: false, skillNames: null })
+  })
+
 })

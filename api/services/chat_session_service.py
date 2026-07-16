@@ -340,6 +340,50 @@ def _project_session_rows(
 
 
 
+
+_MISSING = object()
+
+
+def _history_runtime_tool_surface(run: dict[str, object]) -> tuple[bool | None, list[str] | None | object]:
+    """Extract lean_mode / skill_names from T.A.I.S run metadata when present.
+
+    Returns:
+        (lean_mode, skill_names) where skill_names uses a sentinel object for missing:
+        - missing key → ``_MISSING``
+        - explicit null → all enabled skills (``None``)
+        - list → filter / empty
+    """
+    metadata = coerce_json_value(run.get("metadata") or {})
+    if not isinstance(metadata, dict):
+        return None, _MISSING
+    context = metadata.get("tais_runtime")
+    if not isinstance(context, dict):
+        return None, _MISSING
+    raw_skills = context.get("skill_names", _MISSING)
+    skill_names: list[str] | None | object
+    if raw_skills is _MISSING:
+        skill_names = _MISSING
+    elif raw_skills is None:
+        skill_names = None
+    elif isinstance(raw_skills, list):
+        skill_names = [str(item).strip() for item in raw_skills if str(item).strip()]
+    else:
+        skill_names = _MISSING
+
+    enable_tools = bool(context.get("enable_tools", True))
+    lean_mode: bool | None
+    if skill_names is _MISSING:
+        lean_mode = None
+    elif not enable_tools:
+        lean_mode = True
+    elif isinstance(skill_names, list) and len(skill_names) == 0:
+        lean_mode = True
+    else:
+        lean_mode = False
+    return lean_mode, skill_names
+
+
+
 def _history_run_status(value: object, tools: object) -> str:
     """Map Agno run status values onto chat UI statuses."""
     raw = str(value or "").strip()
@@ -523,6 +567,11 @@ async def get_session_messages_async(
             approval_id = _history_approval_id(raw_tools)
             if approval_id:
                 message["approval_id"] = approval_id
+            lean_mode, skill_names = _history_runtime_tool_surface(cast(dict[str, object], run))
+            if lean_mode is not None:
+                message["lean_mode"] = lean_mode
+            if skill_names is not _MISSING:
+                message["skill_names"] = skill_names
             if chat_settings.show_raw_reasoning:
                 reasoning = run.get("reasoning") or run.get("reasoning_content")
                 if isinstance(reasoning, str) and reasoning.strip():

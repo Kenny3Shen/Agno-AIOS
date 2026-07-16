@@ -438,3 +438,78 @@ async def test_list_sessions_forwards_q():
     ):
         await chat_session_service.list_sessions_async(q="risk")
     assert captured["q"] == "risk"
+
+
+@pytest.mark.asyncio
+async def test_session_history_projects_lean_mode_and_skill_names():
+    db = AsyncFakeAgnoDb(
+        rows=[],
+        session_row={
+            "session_id": "session-1",
+            "runs": [
+                {
+                    "run_id": "run-lean",
+                    "input": {"input_content": "ping"},
+                    "content": "pong",
+                    "status": "COMPLETED",
+                    "metadata": {
+                        "tais_runtime": {
+                            "version": 1,
+                            "enable_tools": True,
+                            "skill_names": [],
+                        }
+                    },
+                },
+                {
+                    "run_id": "run-skills",
+                    "input": {"input_content": "CVE-2024-1234"},
+                    "content": "analysis",
+                    "status": "COMPLETED",
+                    "metadata": {
+                        "tais_runtime": {
+                            "version": 1,
+                            "enable_tools": True,
+                            "skill_names": ["cve-intel-skill"],
+                        }
+                    },
+                },
+                {
+                    "run_id": "run-all",
+                    "input": {"input_content": "full security ops"},
+                    "content": "report",
+                    "status": "COMPLETED",
+                    "metadata": {
+                        "tais_runtime": {
+                            "version": 1,
+                            "enable_tools": True,
+                            "skill_names": None,
+                        }
+                    },
+                },
+            ],
+        },
+    )
+    with (
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
+        patch.object(
+            chat_session_service,
+            "get_chat_settings_async",
+            new=AsyncMock(
+                return_value=SimpleNamespace(
+                    show_raw_tool_io=False,
+                    show_thought_chain=False,
+                    show_raw_reasoning=False,
+                )
+            ),
+        ),
+    ):
+        messages = await chat_session_service.get_session_messages_async("session-1")
+
+    assistants = {message["run_id"]: message for message in messages if message["role"] == "assistant"}
+    assert assistants["run-lean"]["lean_mode"] is True
+    assert assistants["run-lean"]["skill_names"] == []
+    assert assistants["run-skills"]["lean_mode"] is False
+    assert assistants["run-skills"]["skill_names"] == ["cve-intel-skill"]
+    assert assistants["run-all"]["lean_mode"] is False
+    assert assistants["run-all"]["skill_names"] is None

@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Chat 历史重载保留 lean_mode / skill_names
+
+- `get_session_messages_async` 从 run `metadata.tais_runtime` 投影 `lean_mode` 与 `skill_names`（null=全量、[]=轻量、列表=部分）。
+- 前端 `normalizeMessages` 映射为 `leanMode` / `skillNames`，历史会话仍显示工具面 chip。
+
+
 ## 已完成：Approvals/Memory/MCP Schema/Workflow Handle 文案收口
 
 - Approvals Drawer 标题、Memory 元数据标题、MCP Input/Output Schema 与调用结果、画布 Handle tooltip 走 i18n。

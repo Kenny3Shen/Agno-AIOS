@@ -290,6 +290,12 @@ export const normalizeMessages = (value: unknown): Message[] =>
           followups: Array.isArray(source.followups)
             ? source.followups.filter((followup): followup is string => typeof followup === 'string')
             : [],
+          leanMode: typeof source.lean_mode === 'boolean' ? source.lean_mode : undefined,
+          skillNames: Array.isArray(source.skill_names)
+            ? source.skill_names.filter((item): item is string => typeof item === 'string')
+            : source.skill_names === null
+              ? null
+              : undefined,
         }
       })
     : []
