@@ -594,7 +594,7 @@ export function useWorkflow() {
     return pasted.divertedHitlCount
   }
 
-  const duplicateSelected = () => {
+  const duplicateSelected = (): number => {
     // snapshot selection into clipboard then paste with offset
     const ids = state.selectedIds.length
       ? state.selectedIds
@@ -608,7 +608,7 @@ export function useWorkflow() {
       (node) => !nodes.some((other) => other.id !== node.id && Boolean(findNode([other], node.id)))
     )
     clipboardRef.current = (tops.length ? tops : nodes).map(cloneNodeDeep)
-    pasteClipboard()
+    return pasteClipboard()
   }
 
   const patchTriggers = (triggers: WorkflowTriggers) => {

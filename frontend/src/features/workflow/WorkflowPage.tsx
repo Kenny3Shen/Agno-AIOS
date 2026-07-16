@@ -88,6 +88,18 @@ export function WorkflowPage() {
   const formatDate = useFormatDate()
   const routerNav = useRouter()
   const workflow = useWorkflow()
+  const pasteWithHitlGuard = () => {
+    const diverted = workflow.pasteClipboard()
+    if (diverted > 0) {
+      message.warning(t('pasteHitlDiverted', { count: diverted }))
+    }
+  }
+  const duplicateWithHitlGuard = () => {
+    const diverted = workflow.duplicateSelected()
+    if (diverted > 0) {
+      message.warning(t('pasteHitlDiverted', { count: diverted }))
+    }
+  }
   const runLogListRef = useRef<HTMLDivElement>(null)
   const inspectorPanelRef = useRef<HTMLElement | null>(null)
   const focusFieldRef = useRef<string | null>(null)
@@ -750,14 +762,9 @@ export function WorkflowPage() {
             onUndo={workflow.undo}
             onRedo={workflow.redo}
             onCopy={workflow.copySelected}
-            onPaste={() => {
-              const diverted = workflow.pasteClipboard()
-              if (diverted > 0) {
-                message.warning(t('pasteHitlDiverted', { count: diverted }))
-              }
-            }}
+            onPaste={pasteWithHitlGuard}
             onOrganize={workflow.organizeLayout}
-            onDuplicateSelected={workflow.duplicateSelected}
+            onDuplicateSelected={duplicateWithHitlGuard}
             nodeRunStatus={workflow.state.nodeRunStatus}
             validationIssues={workflow.state.validationIssues}
             validationEpoch={workflow.state.validationEpoch}
