@@ -65,5 +65,8 @@
   "errorRequestFailed": "对话请求失败",
   "toolsSkills": "工具/Skill",
   "toolsSkillsHelp": "开启后按消息意图连接 MCP 与 Skills：闲聊不连工具；CVE/隔离/剧本等只挂相关 Skill 与对应 MCP；通用安全任务挂全量。关闭则为轻量模式。",
-  "toolsOffBadge": "轻量（无工具）"
+  "toolsOffBadge": "轻量（无工具）",
+  "autoLeanBadge": "本轮自动轻量",
+  "autoLeanHelp": "本轮未命中安全工具意图，已跳过 MCP/Skills 以节省上下文。",
+  "skillsAttached": "Skills: {{names}}"
 }

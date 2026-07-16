@@ -103,6 +103,13 @@ const parseEvent = (event: string, data: string): ChatRunEvent | null => {
             sessionId: stringValue(value, 'session_id'),
             model: stringValue(value, 'model'),
             provider: stringValue(value, 'provider'),
+            enableTools: typeof value.enable_tools === 'boolean' ? value.enable_tools : undefined,
+            leanMode: typeof value.lean_mode === 'boolean' ? value.lean_mode : undefined,
+            skillNames: Array.isArray(value.skill_names)
+              ? value.skill_names.filter((item): item is string => typeof item === 'string')
+              : value.skill_names === null
+                ? null
+                : undefined,
           }
         : null
     case 'content.delta':

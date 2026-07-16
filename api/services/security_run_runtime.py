@@ -278,6 +278,15 @@ def should_connect_mcp(skill_names: list[str] | None, *, enable_tools: bool) -> 
     return True
 
 
+def is_lean_tool_surface(
+    skill_names: list[str] | None,
+    *,
+    enable_tools: bool,
+) -> bool:
+    """True when this turn runs without MCP tools and without Local Skills."""
+    return not should_connect_mcp(skill_names, enable_tools=enable_tools)
+
+
 def mcp_prefixes_for_skills(skill_names: list[str] | None) -> set[str] | None:
     """Return allowed builtin MCP prefixes, or None for no filter (all tools).
 
@@ -883,6 +892,10 @@ class SecurityRunRuntime:
                     self.register_run(
                         user_id=request.agent_user_id, run_id=run_id, agent=agent
                     )
+                    lean = is_lean_tool_surface(
+                        request.skill_names,
+                        enable_tools=bool(request.enable_tools),
+                    )
                     yield ChatRunEvent(
                         "run.started",
                         {
@@ -897,6 +910,11 @@ class SecurityRunRuntime:
                             "provider": str(
                                 event_value(event, "model_provider", "") or ""
                             ),
+                            "enable_tools": bool(request.enable_tools),
+                            "lean_mode": lean,
+                            "skill_names": list(request.skill_names)
+                            if request.skill_names is not None
+                            else None,
                         },
                     )
                 elif event_type == RunEvent.run_content.value:

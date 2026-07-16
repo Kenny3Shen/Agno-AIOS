@@ -51,6 +51,8 @@ export interface Message {
   approval_id?: string | null
   error?: { code?: string; message: string; retryable?: boolean } | null
   retry?: { attempt: number; maxAttempts: number; delaySeconds?: number; message?: string } | null
+  leanMode?: boolean
+  skillNames?: string[] | null
   raw_run?: JsonRecord | null
   tools?: unknown[] | null
 }
@@ -82,7 +84,7 @@ export interface ChatState {
 }
 
 export type ChatRunEvent =
-  | { type: 'run.started'; runId: string; sessionId?: string; model?: string; provider?: string }
+  | { type: 'run.started'; runId: string; sessionId?: string; model?: string; provider?: string; enableTools?: boolean; leanMode?: boolean; skillNames?: string[] | null }
   | { type: 'content.delta'; runId?: string; delta: string }
   | { type: 'tool.update'; runId?: string; tool: ToolStep }
   | { type: 'reasoning.delta'; runId?: string; delta: string }

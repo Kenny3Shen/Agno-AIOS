@@ -1465,3 +1465,13 @@ async def test_trivial_turn_skips_mcp_connect_even_when_tools_enabled():
     assert created["skills"] is None
     assert created["instructions"] == ["lite"]
     assert created["num_history_runs"] == 2
+
+
+
+def test_is_lean_tool_surface():
+    assert security_run_runtime.is_lean_tool_surface([], enable_tools=True) is True
+    assert security_run_runtime.is_lean_tool_surface(None, enable_tools=False) is True
+    assert security_run_runtime.is_lean_tool_surface(None, enable_tools=True) is False
+    assert security_run_runtime.is_lean_tool_surface(
+        ["cve-intel-skill"], enable_tools=True
+    ) is False

@@ -63,7 +63,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
       const messages = updateMessage(state.messages, action.id, (message) => {
         switch (event.type) {
           case 'run.started':
-            return { ...message, run_id: event.runId, session_id: event.sessionId ?? message.session_id, status: 'streaming', retry: null, error: null }
+            return { ...message, run_id: event.runId, session_id: event.sessionId ?? message.session_id, status: 'streaming', retry: null, error: null, leanMode: event.leanMode, skillNames: event.skillNames }
           case 'content.delta':
             return {
               ...message,

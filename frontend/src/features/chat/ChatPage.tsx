@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Actions, Bubble, Prompts, Sender, Sources, ThoughtChain } from '@ant-design/x'
 import { Markdown } from '@/shared/ui/Markdown'
-import { App, Avatar, Button, Cascader, Popover, Tag } from 'antd'
+import { App, Avatar, Button, Cascader, Popover, Tag, Tooltip } from 'antd'
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
@@ -494,7 +494,18 @@ export function ChatPage() {
               <Tag className="context-mode-tag" color="default">
                 {t('toolsOffBadge')}
               </Tag>
-            ) : null}
+            ) : (() => {
+              const leanMsg = [...chat.state.messages]
+                .reverse()
+                .find((item) => item.role === 'assistant' && item.leanMode)
+              return leanMsg ? (
+                <Tooltip title={t('autoLeanHelp')}>
+                  <Tag className="context-mode-tag" color="processing">
+                    {t('autoLeanBadge')}
+                  </Tag>
+                </Tooltip>
+              ) : null
+            })()}
             {pausedRun?.approval_id ? (
               <Button
                 type="link"

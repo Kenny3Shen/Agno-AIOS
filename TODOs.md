@@ -1,5 +1,10 @@
 # 下一步工作
 
+## 已完成：Chat 自动轻量模式可见性（run.started lean_mode）
+
+- `run.started` SSE 携带 `lean_mode` / `skill_names` / `enable_tools`，前端消息与顶栏「本轮自动轻量」徽标（Tooltip 说明意图过滤跳过 MCP/Skills）。
+- `is_lean_tool_surface` 与 `should_connect_mcp` 对齐；单测覆盖 lean 判定与 reducer。
+
 ## 已完成：Workflow 画布运行态/节点类型 i18n + Knowledge 检索台文案
 
 - Studio 节点：运行态 pill（运行中/成功/失败/暂停）与类型标签走 workflow i18n。

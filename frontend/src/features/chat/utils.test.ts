@@ -164,4 +164,26 @@ describe('chat behavior', () => {
     expect(cancelled.requesting).toBe(false)
     expect(cancelled.messages[0]).toMatchObject({ status: 'cancelled', final: true })
   })
+
+  it('stores leanMode from run.started', () => {
+    const assistant: Message = { id: 'a', role: 'assistant', content: '', final: false, status: 'streaming' }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    const next = chatReducer(started, {
+      type: 'event',
+      id: 'a',
+      event: {
+        type: 'run.started',
+        runId: 'run-lean',
+        leanMode: true,
+        skillNames: [],
+        enableTools: true,
+      },
+    })
+    expect(next.messages[0]).toMatchObject({
+      run_id: 'run-lean',
+      leanMode: true,
+      skillNames: [],
+      status: 'streaming',
+    })
+  })
 })
