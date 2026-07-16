@@ -14,7 +14,8 @@ export const chatKeys = {
 export const sessionsQuery = (includeArchived = false, userId?: string) =>
   infiniteQueryOptions({
     queryKey: chatKeys.sessions(includeArchived, userId),
-    queryFn: ({ pageParam }) => listSessions(includeArchived, userId, pageParam, SESSION_PAGE_SIZE),
+    queryFn: ({ pageParam }) =>
+      listSessions({ includeArchived, userId, page: pageParam, limit: SESSION_PAGE_SIZE }),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       const { page, total_pages } = lastPage.meta

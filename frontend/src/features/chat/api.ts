@@ -44,7 +44,6 @@ const normalizeSessionListMeta = (value: unknown, page: number, limit: number, i
   }
 }
 
-/** Parse Agno-style ``{data, meta}`` chat session list. */
 export type ListSessionsOptions = {
   includeArchived?: boolean
   /** When true, only archived sessions (server SQL filter). */
@@ -54,13 +53,13 @@ export type ListSessionsOptions = {
   limit?: number
 }
 
-export const listSessions = async (
-  includeArchived = false,
-  userId?: string,
-  page = 1,
-  limit = 40,
-  archivedOnly = false,
-): Promise<SessionListResult> => {
+/** Parse Agno-style ``{data, meta}`` chat session list. */
+export const listSessions = async (options: ListSessionsOptions = {}): Promise<SessionListResult> => {
+  const includeArchived = Boolean(options.includeArchived)
+  const archivedOnly = Boolean(options.archivedOnly)
+  const userId = options.userId
+  const page = Math.max(1, Number(options.page ?? 1) || 1)
+  const limit = Math.max(1, Number(options.limit ?? 40) || 40)
   const search = new URLSearchParams()
   if (archivedOnly) {
     search.set('archived_only', 'true')
@@ -68,9 +67,9 @@ export const listSessions = async (
     search.set('include_archived', 'true')
   }
   if (userId) search.set('user_id', userId)
-  if (page != null) search.set('page', String(page))
-  if (limit != null) search.set('limit', String(limit))
-  const payload = await requestJson<unknown>(`/chat/sessions${search.size ? `?${search}` : ''}`)
+  search.set('page', String(page))
+  search.set('limit', String(limit))
+  const payload = await requestJson<unknown>(`/chat/sessions?${search.toString()}`)
   const envelope = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}
   const rows = Array.isArray(envelope.data) ? envelope.data : []
   const data = rows.map(normalizeSession).filter((row): row is ChatSession => row != null)

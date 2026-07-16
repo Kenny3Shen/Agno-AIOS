@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：listSessions 选项对象 API
+
+- `listSessions(options)` 替代位置参数（`includeArchived` / `archivedOnly` / `page` / `limit` / `userId`）。
+- Chat infinite query、Trace 归档窗与单测同步；去掉易错的五参数调用。
+
 ## 已完成：Approvals 前端去 offset-slice 死代码 + Workflow version 类型收窄
 
 - `getApprovals`：upload/HITL 单页直调 page/limit；删除 `fetch*Slice` 虚拟 merge 残留。

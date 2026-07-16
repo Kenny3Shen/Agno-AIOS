@@ -41,7 +41,7 @@ describe('chat API', () => {
       })
     )
 
-    await listSessions(true)
+    await listSessions({ includeArchived: true })
   })
 
   it('requests the requested page and returns meta for load-more', async () => {
@@ -56,7 +56,7 @@ describe('chat API', () => {
         })
       })
     )
-    const result = await listSessions(false, undefined, 2, 40)
+    const result = await listSessions({ page: 2, limit: 40 })
     expect(result.data[0]?.session_id).toBe('s3')
     expect(result.meta).toMatchObject({ page: 2, total_pages: 3, total_count: 250 })
   })
@@ -159,7 +159,7 @@ describe('listSessions archived_only', () => {
         })
       }),
     )
-    const result = await listSessions(false, undefined, 1, 40, true)
+    const result = await listSessions({ archivedOnly: true, page: 1, limit: 40 })
     expect(result.data[0]?.session_id).toBe('a1')
     expect(result.data[0]?.archived).toBe(true)
   })

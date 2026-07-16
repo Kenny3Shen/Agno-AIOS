@@ -173,13 +173,13 @@ export function TracePage() {
     ],
     enabled: archiveScoped,
     queryFn: () =>
-      listSessions(
-        archiveFilter === 'archived',
-        effectiveUserId || undefined,
-        1,
-        ARCHIVE_SESSION_FETCH_LIMIT,
-        archiveFilter === 'archived',
-      ),
+      listSessions({
+        includeArchived: archiveFilter === 'archived',
+        archivedOnly: archiveFilter === 'archived',
+        userId: effectiveUserId || undefined,
+        page: 1,
+        limit: ARCHIVE_SESSION_FETCH_LIMIT,
+      }),
   })
   const chatSessionPageCount = chatSessions.data?.pages.length ?? 0
   const {
