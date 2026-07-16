@@ -655,6 +655,11 @@ export function WorkflowPage() {
             ) : null}
             <div className="workflow-studio__panel-title">
               {t('inspector')}
+              {workflow.state.selectedIds.length > 1 ? (
+                <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
+                  {t('selectedCount', { count: workflow.state.selectedIds.length })}
+                </Typography.Text>
+              ) : null}
               {step ? (
                 <Tooltip title={t('deleteNode')} getPopupContainer={studioPopupContainer}>
                   <Button

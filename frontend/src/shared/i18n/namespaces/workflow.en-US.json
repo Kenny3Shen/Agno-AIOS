@@ -124,5 +124,6 @@
   "libraryEmpty": "No saved workflows yet",
   "librarySearching": "Searching…",
   "keyboardHints": "Shortcuts: Ctrl/⌘Z undo · Y redo · C/V copy/paste · A select all · L auto-layout · Esc clear · Del delete",
-  "keyboardHintsTitle": "Keyboard"
+  "keyboardHintsTitle": "Keyboard",
+  "selectedCount": "{{count}} selected"
 }

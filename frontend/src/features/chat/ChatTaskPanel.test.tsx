@@ -22,6 +22,7 @@ const chat = {
   sessionId: null as string | null,
   sessions,
   sessionSearch: '',
+  debouncedSessionSearch: '',
   setSessionSearch: vi.fn<(value: string) => void>(),
   setSession: vi.fn<(sessionId: string) => void>(),
   newChat: vi.fn<() => void>(),
@@ -97,6 +98,7 @@ describe('ChatTaskPanel', () => {
     sessions.refetch.mockReset()
     chat.sessionId = null
     chat.sessionSearch = ''
+    chat.debouncedSessionSearch = ''
     chat.setSession.mockReset()
     chat.setSessionSearch.mockReset()
     chat.newChat.mockReset()
@@ -181,6 +183,7 @@ describe('ChatTaskPanel', () => {
   it('keeps search input when server results are empty', async () => {
     sessions.data = []
     chat.sessionSearch = 'no-match-xyz'
+    chat.debouncedSessionSearch = 'no-match-xyz'
     renderWithQuery(<ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} variant="sider" />)
     expect(screen.getByLabelText(i18n.t('shell:conversations.searchPlaceholder'))).toBeTruthy()
     expect(screen.getByText(i18n.t('shell:conversations.emptySearch'))).toBeTruthy()

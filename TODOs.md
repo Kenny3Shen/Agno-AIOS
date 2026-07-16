@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Chat 搜索 debounce 闪烁修复 + 多选计数
+
+- 最近对话：仅在 `sessionSearch` 与 debounced 一致时做本地二次过滤，避免输入过程中列表被滤空。
+- Studio Inspector：多选时显示「已选 N 个」。
+
 ## 已完成：Skill 引用 SQL 预筛 + 深链修复 + Studio 快捷键提示
 
 - Skill 引用：`definition` 文本 ILIKE 预筛候选，再 DSL 树确认真实 `skills` 绑定（去掉全库分页扫）。

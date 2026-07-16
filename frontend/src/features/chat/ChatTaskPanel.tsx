@@ -83,10 +83,13 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
       })),
     [chat.sessions.data, t]
   )
-  const filteredConversations = useMemo(
-    () => filterConversationItems(conversations, chat.sessionSearch),
-    [conversations, chat.sessionSearch],
-  )
+  // Only client-filter once the server query has caught up (avoid empty flash while typing).
+  const filteredConversations = useMemo(() => {
+    if (chat.sessionSearch.trim() !== (chat.debouncedSessionSearch ?? '').trim()) {
+      return conversations
+    }
+    return filterConversationItems(conversations, chat.sessionSearch)
+  }, [conversations, chat.sessionSearch, chat.debouncedSessionSearch])
   const conversationGroups = useMemo(
     () => Array.from(new Set(filteredConversations.map((item) => item.group))),
     [filteredConversations],

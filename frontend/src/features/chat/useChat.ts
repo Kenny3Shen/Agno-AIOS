@@ -205,6 +205,7 @@ export function useChat() {
     sessions,
     sessionSearch,
     setSessionSearch,
+    debouncedSessionSearch,
     history,
     models,
     selectedModel,
