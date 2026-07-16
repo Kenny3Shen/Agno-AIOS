@@ -639,10 +639,10 @@ class SecurityRunRuntime:
             _produce_agent_events(), name="security-run-agent-events"
         )
         agent_waiter: asyncio.Task[tuple[str, Any]] | None = asyncio.create_task(
-            agent_queue.get()
+            agent_queue.get(), name="security-run-agent-wait"
         )
         retry_waiter: asyncio.Task[dict[str, Any] | None] | None = asyncio.create_task(
-            retry_queue.get()
+            retry_queue.get(), name="security-run-retry-wait"
         )
         try:
             while True:
@@ -652,7 +652,7 @@ class SecurityRunRuntime:
                 )
                 if retry_waiter is not None and retry_waiter in done:
                     retry_info = retry_waiter.result()
-                    retry_waiter = asyncio.create_task(retry_queue.get())
+                    retry_waiter = asyncio.create_task(retry_queue.get(), name="security-run-retry-wait")
                     if isinstance(retry_info, dict):
                         yield _retry_event(retry_info)
                 if agent_waiter is None or agent_waiter not in done:
@@ -664,7 +664,7 @@ class SecurityRunRuntime:
                 if kind == "error":
                     agent_waiter = None
                     raise payload
-                agent_waiter = asyncio.create_task(agent_queue.get())
+                agent_waiter = asyncio.create_task(agent_queue.get(), name="security-run-agent-wait")
                 event = payload
                 event_type = str(event_value(event, "event", ""))
                 run_id = str(event_value(event, "run_id", "") or "")

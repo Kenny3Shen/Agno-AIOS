@@ -14,6 +14,7 @@ from api.auth.visibility import can_manage_resource
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.knowledge_document_service import KnowledgeDocumentPayload
 from api.services.knowledge_progress import (
+    KnowledgeProgressStage,
     emit_progress,
     initial_progress_stages,
     knowledge_progress_event,
@@ -91,6 +92,8 @@ async def _run_progress_sse(
     *,
     include_upload: bool,
     work,
+    task_name: str = "knowledge-progress",
+    lookup_failed_stage: KnowledgeProgressStage | None = None,
 ) -> EventSourceResponse:
     """Run an async work(on_progress) coroutine and stream stage events."""
     queue: asyncio.Queue[dict[str, object] | None] = asyncio.Queue()
@@ -116,7 +119,9 @@ async def _run_progress_sse(
                 }
             )
         except TimeoutError:
-            message = f"知识入库超时（>{KNOWLEDGE_INGEST_TIMEOUT_SECONDS // 60} 分钟）"
+            message = (
+                f"知识入库超时（>{KNOWLEDGE_INGEST_TIMEOUT_SECONDS // 60} 分钟）"
+            )
             await queue.put(
                 {
                     "stage": "done",
@@ -147,6 +152,15 @@ async def _run_progress_sse(
                 }
             )
         except LookupError as exc:
+            if lookup_failed_stage:
+                await queue.put(
+                    knowledge_progress_event(
+                        lookup_failed_stage,
+                        "failed",
+                        message=str(exc),
+                        error=str(exc),
+                    )
+                )
             await queue.put(
                 {
                     "stage": "done",
@@ -172,7 +186,7 @@ async def _run_progress_sse(
             await queue.put(None)
 
     async def event_generator() -> AsyncIterator[dict[str, str]]:
-        task = asyncio.create_task(worker())
+        task = asyncio.create_task(worker(), name=task_name)
         try:
             while True:
                 item = await queue.get()
@@ -197,6 +211,7 @@ async def _run_progress_sse(
                 pass
 
     return EventSourceResponse(event_generator())
+
 
 
 class KnowledgeIngestOptionsRequest(BaseModel):
@@ -416,7 +431,7 @@ async def create_text_document(
             return await run_create()
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return await _run_progress_sse(include_upload=False, work=run_create)
+    return await _run_progress_sse(include_upload=False, work=run_create, task_name="knowledge-create")
 
 
 @router.post("/documents/file", response_model=None)
@@ -464,7 +479,7 @@ async def create_file_document(
             return await run_create()
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return await _run_progress_sse(include_upload=False, work=run_create)
+    return await _run_progress_sse(include_upload=False, work=run_create, task_name="knowledge-create")
 
 
 @router.post("/documents/upload", response_model=None)
@@ -564,7 +579,7 @@ async def upload_document(
             raise HTTPException(status_code=413, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return await _run_progress_sse(include_upload=True, work=run_create)
+    return await _run_progress_sse(include_upload=True, work=run_create, task_name="knowledge-create-upload")
 
 
 @router.delete("/documents/{doc_id}")
@@ -704,99 +719,12 @@ async def update_document(
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    queue: asyncio.Queue[dict[str, object] | None] = asyncio.Queue()
-
-    async def on_progress(event: Mapping[str, object]) -> None:
-        await _queue_progress(queue, event)
-
-    async def worker() -> None:
-        try:
-            for stage_event in initial_progress_stages(include_upload=False):
-                await queue.put(stage_event)
-            document = await asyncio.wait_for(
-                run_update(on_progress=on_progress),
-                timeout=KNOWLEDGE_INGEST_TIMEOUT_SECONDS,
-            )
-            await queue.put(
-                {
-                    "stage": "done",
-                    "status": "completed",
-                    "label": "完成",
-                    "message": "完成",
-                    "document": document,
-                }
-            )
-        except TimeoutError:
-            message = f"知识入库超时（>{KNOWLEDGE_INGEST_TIMEOUT_SECONDS // 60} 分钟）"
-            await queue.put(
-                {
-                    "stage": "done",
-                    "status": "failed",
-                    "label": "失败",
-                    "message": message,
-                    "error": message,
-                    "code": 504,
-                }
-            )
-        except LookupError as exc:
-            await queue.put(
-                knowledge_progress_event(
-                    "cleanup",
-                    "failed",
-                    message=str(exc),
-                    error=str(exc),
-                )
-            )
-            await queue.put(
-                {
-                    "stage": "done",
-                    "status": "failed",
-                    "label": "失败",
-                    "message": str(exc),
-                    "error": str(exc),
-                    "code": 404,
-                }
-            )
-        except Exception as exc:
-            await queue.put(
-                {
-                    "stage": "done",
-                    "status": "failed",
-                    "label": "失败",
-                    "message": str(exc),
-                    "error": str(exc),
-                    "code": 400,
-                }
-            )
-        finally:
-            await queue.put(None)
-
-    async def event_generator() -> AsyncIterator[dict[str, str]]:
-        task = asyncio.create_task(worker())
-        try:
-            while True:
-                item = await queue.get()
-                if item is None:
-                    break
-                status = str(item.get("status") or "")
-                stage = str(item.get("stage") or "")
-                if stage == "done":
-                    yield _sse_payload(
-                        "progress.completed" if status == "completed" else "progress.failed",
-                        item,
-                    )
-                    break
-                event_name = "progress.failed" if status == "failed" else "progress"
-                yield _sse_payload(event_name, item)
-        finally:
-            if not task.done():
-                task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-
-    return EventSourceResponse(event_generator())
+    return await _run_progress_sse(
+        include_upload=False,
+        work=run_update,
+        task_name=f"knowledge-update:{doc_id}",
+        lookup_failed_stage="cleanup",
+    )
 
 
 @router.post("/documents/{doc_id}/update/upload", response_model=None)
@@ -908,110 +836,15 @@ async def update_document_upload(
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    queue: asyncio.Queue[dict[str, object] | None] = asyncio.Queue()
+    async def _stream_upload(on_progress=None):
+        document, _stored = await run_upload(on_progress=on_progress)
+        return document
 
-    async def on_progress(event: Mapping[str, object]) -> None:
-        await _queue_progress(queue, event)
-
-    async def worker() -> None:
-        try:
-            for stage_event in initial_progress_stages(include_upload=True):
-                await queue.put(stage_event)
-            document, _stored = await asyncio.wait_for(
-                run_upload(on_progress=on_progress),
-                timeout=KNOWLEDGE_INGEST_TIMEOUT_SECONDS,
-            )
-            await queue.put(
-                {
-                    "stage": "done",
-                    "status": "completed",
-                    "label": "完成",
-                    "message": "完成",
-                    "document": document,
-                }
-            )
-        except TimeoutError:
-            message = f"知识入库超时（>{KNOWLEDGE_INGEST_TIMEOUT_SECONDS // 60} 分钟）"
-            await queue.put(
-                {
-                    "stage": "done",
-                    "status": "failed",
-                    "label": "失败",
-                    "message": message,
-                    "error": message,
-                    "code": 504,
-                }
-            )
-        except KnowledgeUploadTooLargeError as exc:
-            await queue.put(
-                knowledge_progress_event(
-                    "upload",
-                    "failed",
-                    message=str(exc),
-                    error=str(exc),
-                )
-            )
-            await queue.put(
-                {
-                    "stage": "done",
-                    "status": "failed",
-                    "label": "失败",
-                    "message": str(exc),
-                    "error": str(exc),
-                    "code": 413,
-                }
-            )
-        except LookupError as exc:
-            await queue.put(
-                {
-                    "stage": "done",
-                    "status": "failed",
-                    "label": "失败",
-                    "message": str(exc),
-                    "error": str(exc),
-                    "code": 404,
-                }
-            )
-        except Exception as exc:
-            await queue.put(
-                {
-                    "stage": "done",
-                    "status": "failed",
-                    "label": "失败",
-                    "message": str(exc),
-                    "error": str(exc),
-                    "code": 400,
-                }
-            )
-        finally:
-            await queue.put(None)
-
-    async def event_generator() -> AsyncIterator[dict[str, str]]:
-        task = asyncio.create_task(worker())
-        try:
-            while True:
-                item = await queue.get()
-                if item is None:
-                    break
-                status = str(item.get("status") or "")
-                stage = str(item.get("stage") or "")
-                if stage == "done":
-                    yield _sse_payload(
-                        "progress.completed" if status == "completed" else "progress.failed",
-                        item,
-                    )
-                    break
-                event_name = "progress.failed" if status == "failed" else "progress"
-                yield _sse_payload(event_name, item)
-        finally:
-            if not task.done():
-                task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-
-    return EventSourceResponse(event_generator())
+    return await _run_progress_sse(
+        include_upload=True,
+        work=_stream_upload,
+        task_name=f"knowledge-update-upload:{doc_id}",
+    )
 
 
 @router.post("/search")

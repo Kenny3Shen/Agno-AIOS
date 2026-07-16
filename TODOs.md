@@ -590,6 +590,13 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Knowledge SSE 进度去重 + 后台 task 命名
+
+- `update` / `update/upload` 流式路径复用 `_run_progress_sse`（含 LookupError 阶段可选 `lookup_failed_stage`），去掉两段重复 worker/event_generator。
+- Knowledge 与 security run 的 `asyncio.create_task` 补充 `name=`，便于 asyncio 异常处理定位。
+
+相关：`api/routes/knowledge.py` / `api/services/security_run_runtime.py`
+
 ## 已完成：TTL 缓存共用 + Approvals slice 对齐 + Eval 列表安全上限
 
 - 新增 `api/utils/ttl_cache.TtlCache`；`chat_settings` / `model_config` 短 TTL 缓存改用同一实现。
