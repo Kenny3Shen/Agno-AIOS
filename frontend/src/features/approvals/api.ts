@@ -41,8 +41,12 @@ export interface SkillSubmissionPreview {
   entry_count: number
 }
 
+export type ApprovalKind = 'all' | 'workflow' | 'upload' | 'agent'
+
 export interface ApprovalListParams {
   status?: string
+  /** On-call filter: workflow HITL vs upload submissions vs chat agent HITL. */
+  kind?: ApprovalKind
   page?: number
   limit?: number
 }
@@ -56,6 +60,14 @@ export interface ApprovalListResult {
 
 export const isSubmissionApproval = (approval: Approval) =>
   approval.resource_type === 'skill' || approval.resource_type === 'mcp'
+
+/** Workflow Studio step HITL (not chat agent HITL, not upload). */
+export const isWorkflowHitlApproval = (approval: Approval) =>
+  approval.source_type === 'workflow' || Boolean(approval.workflow_id)
+
+/** Chat / agent tool HITL. */
+export const isAgentHitlApproval = (approval: Approval) =>
+  !isSubmissionApproval(approval) && !isWorkflowHitlApproval(approval)
 
 const asActor = (value: unknown): ApprovalActor | string | undefined => {
   if (value == null) return undefined
@@ -116,11 +128,17 @@ export const normalizeApproval = (value: unknown): Approval | null => {
 const normalizeRows = (rows: unknown[]): Approval[] =>
   rows.map((row) => normalizeApproval(row)).filter((row): row is Approval => row != null)
 
-const fetchHitlPage = async (status: string, page: number, limit: number) => {
+const fetchHitlPage = async (
+  status: string,
+  page: number,
+  limit: number,
+  sourceType?: string
+) => {
   const search = new URLSearchParams()
   search.set('page', String(page))
   search.set('limit', String(limit))
   if (status) search.set('status', status)
+  if (sourceType) search.set('source_type', sourceType)
   const payload = asRecord(await requestJson<unknown>(`/approvals?${search.toString()}`))
   const meta = asRecord(payload.meta)
   const rows = Array.isArray(payload.data) ? payload.data : []
@@ -136,19 +154,24 @@ const fetchHitlPage = async (status: string, page: number, limit: number) => {
  * Fetch a HITL slice by absolute offset (for merging with submissions).
  * Uses Agno page/limit and local slice when offset is not page-aligned.
  */
-const fetchHitlSlice = async (status: string, offset: number, count: number) => {
+const fetchHitlSlice = async (
+  status: string,
+  offset: number,
+  count: number,
+  sourceType?: string
+) => {
   if (count <= 0) {
-    const probe = await fetchHitlPage(status, 1, 1)
+    const probe = await fetchHitlPage(status, 1, 1, sourceType)
     return { items: [] as Approval[], total: probe.total }
   }
   const safeOffset = Math.max(0, offset)
   const pageSize = count
   const apiPage = Math.floor(safeOffset / pageSize) + 1
   const skip = safeOffset % pageSize
-  const first = await fetchHitlPage(status, apiPage, pageSize)
+  const first = await fetchHitlPage(status, apiPage, pageSize, sourceType)
   let rows = first.items.slice(skip)
   if (rows.length < count && safeOffset + rows.length < first.total) {
-    const second = await fetchHitlPage(status, apiPage + 1, pageSize)
+    const second = await fetchHitlPage(status, apiPage + 1, pageSize, sourceType)
     rows = [...rows, ...second.items].slice(0, count)
   } else {
     rows = rows.slice(0, count)
@@ -196,18 +219,70 @@ const fetchSubmissionsSlice = async (status: string, offset: number, limit: numb
  */
 export const getApprovals = async (params: ApprovalListParams = {}): Promise<ApprovalListResult> => {
   const status = params.status ?? ''
+  const kind: ApprovalKind = params.kind ?? 'all'
   const page = Math.max(1, Number(params.page ?? 1) || 1)
   const limit = Math.min(100, Math.max(1, Number(params.limit ?? 20) || 20))
   const start = (page - 1) * limit
 
-  // First page of submissions is enough for total; slice by absolute offset.
+  // Upload-only tab: skip Agno HITL merge.
+  if (kind === 'upload') {
+    const submissions = await fetchSubmissionsSlice(status, start, limit)
+    return {
+      items: submissions.items,
+      total: submissions.total,
+      page,
+      limit,
+    }
+  }
+
+  // Workflow HITL only (source_type=workflow).
+  if (kind === 'workflow') {
+    const hitl = await fetchHitlSlice(status, start, limit, 'workflow')
+    return {
+      items: hitl.items,
+      total: hitl.total,
+      page,
+      limit,
+    }
+  }
+
+  // Chat/agent HITL: client-filter non-workflow HITL (bounded scan).
+  if (kind === 'agent') {
+    const window: Approval[] = []
+    let apiPage = 1
+    let totalSeen = 0
+    let hitlTotal = 0
+    while (window.length < start + limit && apiPage <= 20) {
+      const batch = await fetchHitlPage(status, apiPage, 50)
+      hitlTotal = batch.total
+      if (!batch.items.length) break
+      for (const row of batch.items) {
+        totalSeen += 1
+        if (!isAgentHitlApproval(row)) continue
+        window.push(row)
+        if (window.length >= start + limit) break
+      }
+      if (batch.items.length < 50) break
+      apiPage += 1
+    }
+    // Rough total: filtered density on scanned pages applied to overall HITL total.
+    const scanned = Math.max(totalSeen, 1)
+    const density = window.length / scanned
+    const total = Math.max(window.length, Math.round(hitlTotal * density))
+    return {
+      items: window.slice(start, start + limit),
+      total,
+      page,
+      limit,
+    }
+  }
+
+  // kind === 'all': virtual merge uploads first, then all HITL.
   const submissions = await fetchSubmissionsSlice(status, start, limit)
   const submissionCount = submissions.total
   const pageSubmissions = submissions.items
   const hitlNeed = limit - pageSubmissions.length
   const hitlOffset = Math.max(0, start - submissionCount)
-
-  // Always request HITL slice (limit 0 still returns meta.total_count for the pager).
   const hitl = await fetchHitlSlice(status, hitlOffset, Math.max(hitlNeed, 0))
 
   return {

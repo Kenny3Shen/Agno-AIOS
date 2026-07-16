@@ -19,6 +19,7 @@ from api.services.workflow_compiler import (
 )
 from api.services.skill_service import resolve_enabled_skill_dirs
 from api.services.audit_service import record_audit_event_async
+from api.services.notification_service import notify_workflow_hitl_pending
 from api.persistence import workflows as workflow_store
 
 
@@ -163,12 +164,24 @@ async def _create_workflow_step_approval(
     }
     try:
         await get_async_agno_postgres_db().create_approval(payload)
-        return approval_id
     except Exception:
         logger.exception(
             "Failed to create workflow step approval for run {}", run_id
         )
         return None
+    try:
+        await notify_workflow_hitl_pending(
+            approval_id=approval_id,
+            workflow_id=workflow_id,
+            step_name=step_name,
+            submitter_user_id=user_id,
+            run_id=run_id,
+            session_id=session_id,
+            pause_type=pause_type,
+        )
+    except Exception:
+        logger.debug("workflow HITL notify failed for approval {}", approval_id)
+    return approval_id
 
 
 def is_workflow_step_approval(approval: dict[str, Any]) -> bool:

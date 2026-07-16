@@ -135,3 +135,29 @@ async def test_notify_workflow_trigger_failure_targets_owner_and_admins():
     assert owner_call.kwargs["data"]["path"].startswith("/trace?")
     assert owner_call.kwargs["data"]["source"] == "cron"
 
+
+@pytest.mark.asyncio
+async def test_notify_workflow_hitl_pending_targets_admins():
+    with (
+        patch.object(notification_service, "_admin_user_ids", new=AsyncMock(return_value=["admin-1"])),
+        patch.object(notification_service, "_user_email", new=AsyncMock(return_value="ops@example.com")),
+        patch.object(notification_service, "create_notifications", new=AsyncMock()) as create,
+    ):
+        await notification_service.notify_workflow_hitl_pending(
+            approval_id="appr-1",
+            workflow_id="wf-1",
+            step_name="Contain",
+            submitter_user_id="user-1",
+            run_id="run-1",
+            session_id="session-1",
+            pause_type="confirmation",
+        )
+    create.assert_awaited_once()
+    call = create.await_args
+    assert call is not None
+    assert call.args[0] == ["admin-1"]
+    assert "Contain" in call.kwargs["title"]
+    assert call.kwargs["data"]["approval_id"] == "appr-1"
+    assert call.kwargs["data"]["path"] == "/approvals?approval_id=appr-1"
+    assert call.kwargs["data"]["resource_type"] == "workflow_hitl"
+

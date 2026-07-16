@@ -501,7 +501,7 @@ frontend/src/features/workflow/*      # 画布优先 Studio（reparent / 快捷�
 | **PR1** ✅ | 线性 Step + Save/Run SSE | 本版 |
 | **PR2** ✅ | `Parallel` / `Condition(CEL)` / `Loop` | 表单级嵌套控制流；CEL 依赖 `cel-python`；编译期禁止 Parallel 内 HITL |
 | **PR3** ✅ | 画布 + Step HITL | React Flow 只读布局选中；Step `requires_confirmation` → Approvals；`workflows:read/write` |
-| **P0 产品** | P0.1–P0.3 ✅；P0.4 审批值班（见 TODOs） |
+| **P0 产品** | P0.1–P0.4 ✅ 黄金路径闭环（见 TODOs） |
 | **Perf** ✅ | Studio SSE 增量 runStatus + 选中/高亮 patch + runLog 上限 |
 | **P0 UI** ✅ | Studio：`updateNodeData` 运行态 + antd-in-canvas（nodrag/popup） |
 | **PR9** ✅ | 安全模板库 / `workflows:run` / Inspector CEL 自动完成 |

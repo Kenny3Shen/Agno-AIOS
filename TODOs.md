@@ -89,18 +89,18 @@
 
 ---
 
-### PR-P0.4 审批值班入口（薄）
+### PR-P0.4 审批值班入口（薄） ✅
 
 **用户价值**：HITL 从「列表功能」变成「待办」。
 
 | 项 | 说明 |
 |----|------|
-| Approvals | Tab 或筛选：**工作流 HITL** vs **上传审批**；默认进 pending |
-| 通知 | 新 pending workflow approval → 通知审批人/admin（已有部分则补齐 deep link） |
-| Studio | paused 态 CTA 保持「打开审批」；通知点击进同一 deep link |
-| 验收 | 暂停 run → 通知 → 打开表单 → 批准后 continue；列表能只看 workflow |
+| Approvals | Segmented：**工作流 HITL** / 上传 / Chat HITL / 全部；默认 **pending + 工作流** ✅ |
+| 通知 | `notify_workflow_hitl_pending` → admins，path=`/approvals?approval_id=` ✅ |
+| Studio | paused CTA「打开审批」保留；通知中心同深链 ✅ |
+| 验收 | 暂停 run → 通知 → 打开表单 → 批准后 continue；列表可只看 workflow |
 
-**主要路径**：`ApprovalsPage` / `notification_service` / `workflow_run_runtime` pause
+**主要路径**：`ApprovalsPage` / `getApprovals(kind)` / `notification_service` / `workflow_run_runtime`
 
 ---
 
@@ -110,7 +110,7 @@
 P0.1 状态机 + 空态引导     ✅
 P0.2 触发器运维 + 失败通知 ✅
 P0.3 Step Skill 绑定       ✅
-P0.4 审批值班薄入口        （可与 P0.2 通知并行）
+P0.4 审批值班薄入口        ✅
 ```
 
 ### P1（本阶段后，不阻塞 P0）
@@ -123,6 +123,17 @@ P0.4 审批值班薄入口        （可与 P0.2 通知并行）
 
 ---
 
+
+## 已完成：产品 P0.4 审批值班入口
+
+- Approvals 默认：`kind=workflow` + `status=pending`
+- Tab：工作流 HITL / 上传 / Chat HITL / 全部
+- 工作流暂停创建审批时通知 admins（深链 `approval_id`）
+- Studio openApproval + 通知中心深链不变
+
+相关：`ApprovalsPage.tsx` / `approvals/api.ts` / `notification_service.py` / `workflow_run_runtime.py`
+
+---
 
 ## 已完成：产品 P0.3 Step 级 Skill 绑定
 

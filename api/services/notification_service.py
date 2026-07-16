@@ -246,3 +246,47 @@ async def notify_workflow_trigger_failure(
     except Exception:
         logger.exception("Failed to create workflow trigger failure notifications")
 
+
+async def notify_workflow_hitl_pending(
+    *,
+    approval_id: str,
+    workflow_id: str,
+    step_name: str = "",
+    submitter_user_id: str = "",
+    run_id: str = "",
+    session_id: str = "",
+    pause_type: str = "confirmation",
+) -> None:
+    """Alert admins when a workflow step pauses for HITL (Approvals on-call)."""
+    approval = (approval_id or "").strip()
+    if not approval:
+        return
+    try:
+        label = (step_name or "workflow step").strip() or "workflow step"
+        submitter_email = await _user_email(submitter_user_id) if submitter_user_id else ""
+        body_parts = [f"Step: {label}"]
+        if submitter_email or submitter_user_id:
+            body_parts.append(
+                f"Submitted by {submitter_email or submitter_user_id}"
+            )
+        if pause_type:
+            body_parts.append(f"pause={pause_type}")
+        await create_notifications(
+            await _admin_user_ids(),
+            title=f"Workflow HITL required: {label}",
+            body="; ".join(body_parts),
+            data={
+                "approval_id": approval,
+                "resource_type": "workflow_hitl",
+                "workflow_id": workflow_id,
+                "tool_name": f"workflow.step:{label}",
+                "status": "pending",
+                "run_id": run_id,
+                "session_id": session_id,
+                "pause_type": pause_type,
+                "path": f"/approvals?approval_id={approval}",
+            },
+        )
+    except Exception:
+        logger.exception("Failed to create workflow HITL pending notifications")
+

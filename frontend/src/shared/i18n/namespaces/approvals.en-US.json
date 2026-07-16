@@ -26,5 +26,11 @@
   "approveOutputReview": "Review step output",
   "userInputPlaceholder": "Type the response for the workflow step",
   "editedOutputPlaceholder": "Edit the step output before continuing",
-  "openWorkflow": "Open workflow"
+  "openWorkflow": "Open workflow",
+  "descriptionOnCall": "On-call inbox: prioritize paused workflow steps; uploads and chat HITL are separate tabs",
+  "kindWorkflow": "Workflow HITL",
+  "kindUpload": "Uploads",
+  "kindAgent": "Chat HITL",
+  "kindAll": "All",
+  "workflowOnCallHint": "Workflow step pauses only (pending). Notification center deep-links open the same approval."
 }

@@ -13,10 +13,12 @@ import {
   getApprovals,
   getSkillSubmissionPreview,
   isSubmissionApproval,
+  isWorkflowHitlApproval,
   resolveApproval,
   resumeApproval,
   resolveSubmissionApproval,
   type Approval,
+  type ApprovalKind,
 } from './api'
 import { compactId, compareTimestamp, useFormatDate } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
@@ -203,7 +205,8 @@ export function ApprovalsPage() {
   const openedNotificationApprovalId = useRef<string | null>(null)
   const currentUser = useQuery(currentUserQuery())
   const canResolve = hasScope(currentUser.data, 'approvals:write')
-  const [status, setStatus] = useState('')
+  const [status, setStatus] = useState('pending')
+  const [kind, setKind] = useState<ApprovalKind>('workflow')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [selected, setSelected] = useState<Approval | null>(null)
@@ -215,8 +218,8 @@ export function ApprovalsPage() {
   const [editedOutput, setEditedOutput] = useState('')
   const [markdownPreviewModes, setMarkdownPreviewModes] = useState<Record<string, 'raw' | 'markdown'>>({})
   const query = useQuery({
-    queryKey: ['approvals', 'list', status, page, pageSize],
-    queryFn: () => getApprovals({ status, page, limit: pageSize }),
+    queryKey: ['approvals', 'list', kind, status, page, pageSize],
+    queryFn: () => getApprovals({ status, kind, page, limit: pageSize }),
     placeholderData: (previous) => previous,
   })
   const rows = useMemo(() => query.data?.items ?? [], [query.data?.items])
@@ -233,12 +236,14 @@ export function ApprovalsPage() {
   }, [])
   useEffect(() => {
     setPage(1)
-  }, [status])
+  }, [status, kind])
   useEffect(() => {
     if (!notificationApprovalId || openedNotificationApprovalId.current === notificationApprovalId) return
     const approval = rows.find((item) => item.id === notificationApprovalId)
     if (approval) {
       openedNotificationApprovalId.current = notificationApprovalId
+      if (isWorkflowHitlApproval(approval)) setKind('workflow')
+      else if (isSubmissionApproval(approval)) setKind('upload')
       setSelected(approval)
       return
     }
@@ -247,6 +252,9 @@ export function ApprovalsPage() {
       .then((row) => {
         if (cancelled || !row) return
         openedNotificationApprovalId.current = notificationApprovalId
+        if (isWorkflowHitlApproval(row)) setKind('workflow')
+        else if (isSubmissionApproval(row)) setKind('upload')
+        else setKind('all')
         setSelected(row)
       })
       .catch(() => {
@@ -447,19 +455,43 @@ export function ApprovalsPage() {
     <main className="page">
       <PageHeader
         title={t('title')}
-        description={t('description')}
+        description={t('descriptionOnCall')}
         actions={
-          <Select
-            value={status}
-            onChange={setStatus}
-            options={[
-              { value: '', label: t('allStatuses') },
-              ...['pending', 'approved', 'rejected'].map((value) => ({ value, label: statusLabel(value) })),
-            ]}
-          />
+          <Space wrap>
+            <Segmented
+              value={kind}
+              onChange={(value) => setKind(value as ApprovalKind)}
+              options={[
+                { value: 'workflow', label: t('kindWorkflow') },
+                { value: 'upload', label: t('kindUpload') },
+                { value: 'agent', label: t('kindAgent') },
+                { value: 'all', label: t('kindAll') },
+              ]}
+            />
+            <Select
+              value={status}
+              onChange={setStatus}
+              style={{ minWidth: 140 }}
+              options={[
+                { value: '', label: t('allStatuses') },
+                ...['pending', 'approved', 'rejected'].map((value) => ({
+                  value,
+                  label: statusLabel(value),
+                })),
+              ]}
+            />
+          </Space>
         }
       />
       <Card className="workbench-card">
+        {kind === 'workflow' && status === 'pending' ? (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message={t('workflowOnCallHint')}
+          />
+        ) : null}
         <Table<Approval>
           rowKey="id"
           dataSource={rows}
