@@ -128,6 +128,7 @@ P0.4 审批值班薄入口        ✅
 
 - 助手消息操作栏：有 `run_id`/`session_id` 时增加「打开 Trace」，深链与 Dashboard 一致（`session_id`/`run_id`/`selected_session`/`trace`）。
 - 复制 Run ID 仍保留；操作栏 gap 略增并允许换行，降低图标拥挤。
+- 暂停（HITL）消息不展示「重新生成」，避免绕过审批重跑。
 
 ## 已完成：Chat context bar 审批入口 + 多选 Inspector 收敛
 

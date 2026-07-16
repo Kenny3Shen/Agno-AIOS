@@ -219,7 +219,10 @@ function MessageBody({ message, retry, sessionId }: { message: Message; retry: (
     },
     ...(message.role === 'assistant'
       ? [
-          { key: 'retry', label: t('regenerate'), icon: <ReloadOutlined />, onItemClick: retry },
+          // HITL pause: regenerate would re-fire tools; route through Approvals instead.
+          ...(message.final && message.status !== 'paused'
+            ? [{ key: 'retry', label: t('regenerate'), icon: <ReloadOutlined />, onItemClick: retry }]
+            : []),
           ...(traceRunId || traceSessionId
             ? [
                 {
