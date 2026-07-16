@@ -1,6 +1,12 @@
 # 下一步工作
 
 
+## 已完成：Studio 多选批量编辑 Agent 执行器/确认
+
+- 多选 Inspector：对选中的 Agent 步骤批量设置 `targetId` 执行器与 `requiresConfirmation`。
+- `useWorkflow.updateSelectedSteps` + undo 历史；控制流节点自动跳过。
+- 文案：`multiSelectAgentHint` / `multiSelectAgentCount` / 无 Agent 提示。
+
 ## 已完成：Lean 跳过 Live Search + Studio 快捷键/双击聚焦
 
 - Chat lean / tools-off：`live_search` 强制关闭（与 Knowledge 一致），全量工具面仍透传请求开关。

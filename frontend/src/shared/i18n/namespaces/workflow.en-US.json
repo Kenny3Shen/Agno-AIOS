@@ -254,5 +254,9 @@
   "stepNameHint": "When empty, Run Log uses the executor display name (e.g. Security Operations).",
   "edgeNext": "next",
   "edgeThen": "then",
-  "edgeElse": "else"
+  "edgeElse": "else",
+  "multiSelectAgentHint": "Bulk-edit executor and confirmation for selected Agent steps.",
+  "multiSelectNoAgents": "No Agent steps in the current multi-selection (control-flow only).",
+  "multiSelectAgentCount": "{{count}} Agent steps selected",
+  "multiSelectExecutorPlaceholder": "Set executor for selected agents"
 }

@@ -21,6 +21,8 @@ import {
   validateWorkflowName,
   fieldForValidationIssue,
   isKeyboardTargetEditable,
+  updateNodeInTree,
+  findNode,
   triggerEnableBlocked,
   workflowWebhookCurl,
   workflowWebhookUrl,
@@ -664,6 +666,40 @@ describe('isKeyboardTargetEditable', () => {
     const div = document.createElement('div')
     expect(isKeyboardTargetEditable(div)).toBe(false)
     expect(isKeyboardTargetEditable(null)).toBe(false)
+  })
+})
+
+describe('updateNodeInTree bulk agent patch', () => {
+  it('bulk-patches only agent steps', () => {
+    const a = createNode('step')
+    a.id = 'a'
+    a.targetId = 'security-operations'
+    a.requiresConfirmation = false
+    const b = createNode('step')
+    b.id = 'b'
+    b.targetId = 'security-operations'
+    b.requiresConfirmation = false
+    const c = createNode('parallel')
+    c.id = 'c'
+    let steps = [a, b, c]
+    for (const id of ['a', 'b', 'c']) {
+      const node = findNode(steps, id)
+      if (!node || node.type !== 'step') continue
+      steps = updateNodeInTree(steps, id, (item) => ({
+        ...item,
+        targetId: 'safe-fallback',
+        requiresConfirmation: true,
+      }))
+    }
+    expect(findNode(steps, 'a')).toMatchObject({
+      targetId: 'safe-fallback',
+      requiresConfirmation: true,
+    })
+    expect(findNode(steps, 'b')).toMatchObject({
+      targetId: 'safe-fallback',
+      requiresConfirmation: true,
+    })
+    expect(findNode(steps, 'c')?.type).toBe('parallel')
   })
 })
 

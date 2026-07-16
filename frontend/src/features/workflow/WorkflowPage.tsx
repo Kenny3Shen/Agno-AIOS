@@ -2,6 +2,7 @@ import {
   Alert,
   App,
   Button,
+  Checkbox,
   Collapse,
   Empty,
   Input,
@@ -51,6 +52,7 @@ import {
   triggerEnableBlocked,
   workflowWebhookCurl,
   workflowWebhookUrl,
+  findNode,
 } from './utils'
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
 import { listWorkflowTriggerHistory } from './api'
@@ -837,22 +839,108 @@ export function WorkflowPage() {
             </div>
 
             {workflow.state.selectedIds.length > 1 ? (
-              <Alert
-                type="info"
-                showIcon
-                className="workflow-studio__validation"
-                title={t('multiSelectHint', { count: workflow.state.selectedIds.length })}
-                description={
-                  <Space size={8} wrap>
-                    <Button size="small" onClick={() => workflow.select(null)}>
-                      {t('clearSelection')}
-                    </Button>
-                    <Button size="small" danger onClick={() => workflow.removeSelected()}>
-                      {t('deleteSelected')}
-                    </Button>
-                  </Space>
-                }
-              />
+              <div className="workflow-inspector nodrag nowheel">
+                <Alert
+                  type="info"
+                  showIcon
+                  className="workflow-studio__validation"
+                  title={t('multiSelectHint', { count: workflow.state.selectedIds.length })}
+                  description={t('multiSelectAgentHint')}
+                  style={{ marginBottom: 12 }}
+                />
+                {(() => {
+                  const selectedNodes = workflow.state.selectedIds
+                    .map((id) => findNode(workflow.state.steps, id))
+                    .filter((node): node is NonNullable<typeof node> => Boolean(node))
+                  const agentSteps = selectedNodes.filter((node) => node.type === 'step')
+                  const agentCount = agentSteps.length
+                  if (!agentCount) {
+                    return (
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        {t('multiSelectNoAgents')}
+                      </Typography.Text>
+                    )
+                  }
+                  const sharedTarget = agentSteps.every(
+                    (node) => node.targetId === agentSteps[0]?.targetId,
+                  )
+                    ? agentSteps[0]?.targetId
+                    : undefined
+                  const allConfirm = agentSteps.every((node) => node.requiresConfirmation)
+                  const noneConfirm = agentSteps.every((node) => !node.requiresConfirmation)
+                  return (
+                    <Space orientation="vertical" style={{ width: '100%' }} size={10}>
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        {t('multiSelectAgentCount', { count: agentCount })}
+                      </Typography.Text>
+                      <div data-inspector-field="executor">
+                        <Typography.Text
+                          type="secondary"
+                          style={{ fontSize: 11, display: 'block', marginBottom: 4 }}
+                        >
+                          {t('executorLabel')}
+                        </Typography.Text>
+                        <Select
+                          getPopupContainer={studioPopupContainer}
+                          style={{ width: '100%' }}
+                          placeholder={t('multiSelectExecutorPlaceholder')}
+                          value={sharedTarget}
+                          optionLabelProp="label"
+                          options={executors.map((item) => ({
+                            value: item.ref,
+                            label: item.name,
+                            title: item.description,
+                            item,
+                          }))}
+                          optionRender={(option) => {
+                            const item = (option.data as { item?: (typeof executors)[number] }).item
+                            if (!item) return option.label
+                            return (
+                              <div className="workflow-executor-option">
+                                <div className="workflow-executor-option__title">
+                                  <strong>{item.name}</strong>
+                                </div>
+                                {item.description ? (
+                                  <Typography.Text
+                                    type="secondary"
+                                    style={{ fontSize: 11, display: 'block' }}
+                                  >
+                                    {item.description}
+                                  </Typography.Text>
+                                ) : null}
+                              </div>
+                            )
+                          }}
+                          onChange={(value) => {
+                            if (!value) return
+                            workflow.updateSelectedSteps({ targetId: value })
+                          }}
+                        />
+                      </div>
+                      <Checkbox
+                        className="nodrag"
+                        checked={allConfirm}
+                        indeterminate={!allConfirm && !noneConfirm}
+                        onChange={(e) =>
+                          workflow.updateSelectedSteps({
+                            requiresConfirmation: e.target.checked,
+                          })
+                        }
+                      >
+                        {t('requiresConfirmation')}
+                      </Checkbox>
+                      <Space size={8} wrap>
+                        <Button size="small" onClick={() => workflow.select(null)}>
+                          {t('clearSelection')}
+                        </Button>
+                        <Button size="small" danger onClick={() => workflow.removeSelected()}>
+                          {t('deleteSelected')}
+                        </Button>
+                      </Space>
+                    </Space>
+                  )
+                })()}
+              </div>
             ) : !step ? (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('selectStep')} />
             ) : (

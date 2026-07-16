@@ -338,6 +338,35 @@ export function useWorkflow() {
     })
   }
 
+
+  /** Apply a patch to every selected Agent step (multi-select bulk edit). */
+  const updateSelectedSteps = (
+    patch: Partial<Pick<WorkflowNode, 'targetId' | 'skills' | 'requiresConfirmation' | 'instructions'>>,
+  ) => {
+    withHistory((current) => {
+      const ids = new Set(
+        current.selectedIds.length
+          ? current.selectedIds
+          : current.selectedId
+            ? [current.selectedId]
+            : [],
+      )
+      if (!ids.size) return current
+      let steps = current.steps
+      for (const id of ids) {
+        const node = findNode(steps, id)
+        if (!node || node.type !== 'step') continue
+        steps = updateNodeInTree(steps, id, (item) => ({ ...item, ...patch }))
+      }
+      return {
+        ...current,
+        dirty: true,
+        validationIssues: [],
+        steps,
+      }
+    })
+  }
+
   const remove = (id: string) =>
     withHistory((current) => {
       const selectedIds = current.selectedIds.filter((item) => item !== id)
@@ -938,6 +967,7 @@ export function useWorkflow() {
     addChild,
     addToSlot,
     update,
+    updateSelectedSteps,
     remove,
     removeSelected,
     move,
