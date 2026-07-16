@@ -13,12 +13,26 @@ def user(role: str = "user"):
 def test_readonly_security_data_permissions_are_available_to_guest():
     guest = user("guest")
     assert has_scope(guest, "cve:read")
+    assert has_scope(guest, "collect:read")
     assert not has_scope(guest, "collect:write")
 
 
 def test_user_can_run_collect_but_guest_cannot():
+    assert has_scope(user("user"), "collect:read")
     assert has_scope(user("user"), "collect:write")
     assert not has_scope(user("guest"), "collect:write")
+
+
+def test_collect_search_allows_guest_reader():
+    dependency = route_dependency(collect.router, "search_collect_articles_route")
+    assert dependency(user=user("guest")).role == "guest"
+
+
+def test_collect_crawl_rejects_non_admin_user():
+    dependency = route_dependency(collect.router, "crawl_collect_sources")
+    with pytest.raises(HTTPException) as exc:
+        dependency(user=user("user"))
+    assert exc.value.status_code == 403
 
 
 def route_dependency(router, endpoint_name: str):

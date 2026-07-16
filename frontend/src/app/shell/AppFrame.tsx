@@ -116,7 +116,7 @@ const navigationGroups: NavigationGroup<NavigationItem>[] = [
     labelKey: 'intelligence',
     items: [
       { key: '/cve', icon: <BugOutlined />, labelKey: 'cve', scope: 'cve:read' },
-      { key: '/collect', icon: <CloudDownloadOutlined />, labelKey: 'collect', scope: 'collect:write' },
+      { key: '/collect', icon: <CloudDownloadOutlined />, labelKey: 'collect', scope: 'collect:read' },
     ],
   },
 ]

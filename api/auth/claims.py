@@ -32,6 +32,7 @@ ROLE_SCOPES: dict[Role, set[str]] = {
         "memories:write",
         "memories:delete",
         "metrics:read",
+        "collect:read",
         "collect:write",
         "cve:read",
         "knowledge:read",
@@ -51,6 +52,7 @@ ROLE_SCOPES: dict[Role, set[str]] = {
         "memories:read",
         "metrics:read",
         "cve:read",
+        "collect:read",
         "knowledge:read",
     },
 }

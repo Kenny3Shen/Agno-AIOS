@@ -1,5 +1,20 @@
 {
   "title": "Collect",
-  "description": "Convert web pages into reviewable Markdown assets",
-  "action": "Collect"
+  "description": "Security news library crawled from configured sources; search or collect a single URL",
+  "action": "Collect URL",
+  "searchPlaceholder": "Search title, summary, or URL",
+  "allSources": "All sources",
+  "crawlSources": "Sync sources",
+  "crawlOk": "Sync done: discovered {{discovered}}, ok {{ok}}, saved {{saved}}",
+  "crawlFailed": "Sync failed",
+  "parseOk": "Collected and saved",
+  "parseFailed": "Collect failed",
+  "urlPlaceholder": "https://example.com/security-advisory",
+  "library": "Article library",
+  "total": "{{total}} articles",
+  "emptyLibrary": "No articles yet — admins can Sync sources, or paste a URL to collect",
+  "loading": "Loading…",
+  "preview": "Preview",
+  "selectArticle": "Select an article on the left to preview Markdown",
+  "openSource": "Source"
 }

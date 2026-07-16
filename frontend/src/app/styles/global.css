@@ -2577,3 +2577,12 @@ html.dark .wf-smart-guide {
 .workflow-studio__right .ant-tag {
   line-height: 18px;
 }
+
+.collect-article-item.is-selected {
+  background: color-mix(in srgb, var(--ant-color-primary, #1677ff) 10%, transparent);
+  border-radius: 8px;
+}
+.collect-article-item:hover {
+  background: var(--tais-soft);
+  border-radius: 8px;
+}

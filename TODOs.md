@@ -124,6 +124,16 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Collect 源站爬虫入库
+
+- `domain_rules` 配置站作为采集源；管理员「同步源站」爬列表页链接并解析 Markdown
+- Postgres `collect_articles`；Collect 页以库检索为主，单 URL 采集仍写入库
+- API：`GET /sources`、`POST /articles/search`、`GET /articles/{id}`、`POST /crawl`、`POST /parse`
+
+相关：`collect_articles.py` / `collect_crawl_service.py` / `routes/collect.py` / `CollectPage`
+
+---
+
 ## 已完成：React Flow skill 对齐（Studio canvas）
 
 - Typed `WorkflowCanvasNode` + `NodeProps<…>`；Handles 透传 `isConnectable`

@@ -111,6 +111,7 @@ async def ensure_app_tables_async() -> None:
     from api.persistence.audit_logs import ensure_audit_logs_table_async
     from api.persistence.chat_settings import ensure_chat_settings_table_async
     from api.persistence.cves import ensure_cves_table
+    from api.persistence.collect_articles import ensure_collect_articles_table
     from api.persistence.database import get_async_control_plane_engine
     from api.persistence.knowledge_sources import ensure_knowledge_sources_table_async
     from api.persistence.model_configs import ensure_model_configs_table_async
@@ -123,6 +124,7 @@ async def ensure_app_tables_async() -> None:
             await conn.execute(CreateSchema(schema, if_not_exists=True))
 
     await ensure_cves_table()
+    await ensure_collect_articles_table()
     await ensure_audit_logs_table_async()
     await ensure_chat_settings_table_async()
     await ensure_knowledge_sources_table_async()
