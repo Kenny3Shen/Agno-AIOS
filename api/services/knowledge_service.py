@@ -927,11 +927,15 @@ class KnowledgeBaseLifecycle:
         raise RuntimeError("知识写入完成但未能读取内容登记记录")
 
     async def _collect_all_content_rows_async(self, *, page_size: int = 200) -> list[Any]:
-        """Page through contents DB until total is covered (no hard 500-row window)."""
+        """Page through contents DB with a hard page ceiling (safety net).
+
+        Prefer streaming callers (e.g. clear) that never hold the full corpus.
+        """
         safe_page_size = max(1, min(int(page_size or 200), 500))
+        max_pages = 50
         page = 1
         collected: list[Any] = []
-        while True:
+        while page <= max_pages:
             contents, total_count = await self._knowledge_content_rows_async(
                 limit=safe_page_size,
                 page=page,
@@ -946,8 +950,13 @@ class KnowledgeBaseLifecycle:
             if len(contents) < safe_page_size:
                 break
             page += 1
-            if page > 10_000:
-                break
+        else:
+            logger.warning(
+                "collect_all_content_rows truncated at {} rows (page_size={}, max_pages={})",
+                len(collected),
+                safe_page_size,
+                max_pages,
+            )
         return collected
 
     async def list_documents_async(self, owner_user_id: str | None = None) -> list[KnowledgeDocumentPayload]:
@@ -1708,38 +1717,84 @@ class KnowledgeBaseLifecycle:
         owner_user_id: str | None = None,
         user: ActorLike | None = None,
     ) -> dict[str, Any]:
+        """Delete managed contents without materializing the full corpus first.
+
+        Streams content pages. After successful deletes, re-fetches the same page
+        so later rows can fill the OFFSET window. Skips already-deleted / failed
+        ids (lagging indexes or test doubles) and stops when the reported total is
+        covered.
+        """
         await self._ensure_contents_storage_async()
-        contents = await self._collect_all_content_rows_async()
-        managed_contents = [
-            (content.id, _safe_metadata(getattr(content, "metadata", None)))
-            for content in contents
-            if content.id
-            and (
-                can_manage_resource(user, _safe_metadata(getattr(content, "metadata", None)))
-                if user is not None
-                else _content_visible_to_owner(content, owner_user_id)
-            )
-        ]
-        knowledge = (
-            await self._async_knowledge_async()
-            if managed_contents and self.dependencies.delete_content_async is None
-            else None
-        )
+        page_size = 200
+        max_rounds = 10_000
+        page = 1
+        knowledge: Any | None = None
         deleted_ids: list[str] = []
         failed_ids: list[str] = []
-        for content_id, metadata in managed_contents:
-            try:
-                await self._delete_content_async(knowledge, content_id)
-                await remove_managed_upload_async(metadata)
-                deleted_ids.append(content_id)
-            except Exception:
-                logger.warning(
-                    "knowledge clear failed for content {}",
-                    content_id,
-                    exc_info=True,
-                )
-                failed_ids.append(content_id)
-        remaining_documents = len(managed_contents) - len(deleted_ids)
+        deleted_set: set[str] = set()
+        failed_set: set[str] = set()
+
+        for _round in range(max_rounds):
+            contents, total = await self._knowledge_content_rows_async(
+                limit=page_size,
+                page=page,
+                sort_by="updated_at",
+                sort_order="desc",
+            )
+            if not contents:
+                break
+            total_count = int(total or 0)
+
+            managed: list[tuple[str, dict[str, object]]] = []
+            for content in contents:
+                content_id = str(getattr(content, "id", "") or "").strip()
+                if not content_id or content_id in deleted_set or content_id in failed_set:
+                    continue
+                metadata = _safe_metadata(getattr(content, "metadata", None))
+                if user is not None:
+                    if can_manage_resource(user, metadata):
+                        managed.append((content_id, metadata))
+                elif _content_visible_to_owner(content, owner_user_id):
+                    managed.append((content_id, metadata))
+
+            if managed:
+                if knowledge is None and self.dependencies.delete_content_async is None:
+                    knowledge = await self._async_knowledge_async()
+                deleted_this_page = 0
+                for content_id, metadata in managed:
+                    try:
+                        await self._delete_content_async(knowledge, content_id)
+                        await remove_managed_upload_async(metadata)
+                        deleted_ids.append(content_id)
+                        deleted_set.add(content_id)
+                        deleted_this_page += 1
+                    except Exception:
+                        logger.warning(
+                            "knowledge clear failed for content {}",
+                            content_id,
+                            exc_info=True,
+                        )
+                        failed_ids.append(content_id)
+                        failed_set.add(content_id)
+                if deleted_this_page > 0:
+                    # Re-fetch same page so subsequent rows fill the gap.
+                    continue
+                # All managed rows on this page failed — fall through to advance.
+
+            # No remaining managed work on this page.
+            if len(contents) < page_size:
+                break
+            if total_count and page * page_size >= total_count:
+                break
+            page += 1
+        else:
+            logger.warning(
+                "knowledge clear stopped after {} rounds (deleted={})",
+                max_rounds,
+                len(deleted_ids),
+            )
+
+        remaining_documents = len(failed_ids)
         return {
             "documents": remaining_documents,
             "chunks": 0 if remaining_documents == 0 else await self._chunk_count_async(owner_user_id),

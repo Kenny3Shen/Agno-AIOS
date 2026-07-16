@@ -1527,9 +1527,17 @@ async def test_clear_knowledge_base_deletes_all_visible_content_with_async_depen
 
     async def delete_content_async(_knowledge, content_id: str) -> None:
         deleted.append(content_id)
+        contents[:] = [row for row in contents if str(row.id) != content_id]
 
-    async def content_rows_async(**_kwargs: object):
-        return contents, len(contents)
+    calls: list[dict[str, object]] = []
+
+    async def content_rows_async(**kwargs: object):
+        calls.append(dict(kwargs))
+        page = int(kwargs.get("page") or 1)
+        limit = int(kwargs.get("limit") or 200)
+        start = (page - 1) * limit
+        end = start + limit
+        return contents[start:end], len(contents)
 
     def fail_runtime(_search_type=None):
         raise AssertionError("clear must not load Knowledge runtime")
@@ -1553,6 +1561,8 @@ async def test_clear_knowledge_base_deletes_all_visible_content_with_async_depen
         "failed_ids": [],
     }
     assert deleted == ["doc-1", "doc-2"]
+    assert calls  # streamed pages instead of one full dump helper
+    assert all(int(call.get("limit") or 0) > 0 for call in calls)
 
 
 @pytest.mark.asyncio
@@ -1589,14 +1599,22 @@ async def test_clear_knowledge_only_deletes_resources_managed_by_user() -> None:
     ]
     deleted: list[str] = []
 
-    async def content_rows_async(**_kwargs: object):
-        return contents, len(contents)
+    async def content_rows_async(**kwargs: object):
+        page = int(kwargs.get("page") or 1)
+        limit = int(kwargs.get("limit") or 200)
+        start = (page - 1) * limit
+        end = start + limit
+        return contents[start:end], len(contents)
+
+    async def delete_content_async(_knowledge, content_id: str) -> None:
+        deleted.append(content_id)
+        contents[:] = [row for row in contents if str(row.id) != content_id]
 
     lifecycle = knowledge_service.KnowledgeBaseLifecycle(
         knowledge_service.KnowledgeBaseLifecycleDependencies(
             ensure_contents_storage_async=lambda: None,
             knowledge_content_rows_async=content_rows_async,
-            delete_content_async=lambda _knowledge, content_id: deleted.append(content_id),
+            delete_content_async=delete_content_async,
         )
     )
     user = SimpleNamespace(id="u1", role="user", is_superuser=False)

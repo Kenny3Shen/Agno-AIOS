@@ -124,6 +124,16 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Knowledge clear 流式删除
+
+- `clear_knowledge_base_async` 不再 `_collect_all_content_rows_async` 全量装载；按 page 流式删除，删除后同页重取
+- 跳过已删/失败 id；以 total 覆盖结束扫描，避免 mock/索引滞后死循环
+- `_collect_all_content_rows_async` 加 50 页硬顶（其它潜在调用的安全网）
+
+相关：`knowledge_service.py` / `test_knowledge_lifecycle.py`
+
+---
+
 ## 已完成：Overview 去 type-ignore + Knowledge 全量 list 有界
 
 - `get_runtime_overview` 对 `asyncio.gather` 结构化解包，去掉 7 处 `type: ignore[arg-type]`
