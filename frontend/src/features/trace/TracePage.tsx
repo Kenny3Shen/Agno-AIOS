@@ -155,19 +155,24 @@ export function TracePage() {
   const chatSessions = useInfiniteQuery(sessionsQuery(true, effectiveUserId || undefined))
   // Archive/preview merge only needs a bounded chat-session window (not the full history).
   const chatSessionPageCount = chatSessions.data?.pages.length ?? 0
+  const {
+    hasNextPage: chatSessionsHasNextPage,
+    isFetchingNextPage: chatSessionsFetchingNext,
+    fetchNextPage: fetchNextChatSessionPage,
+  } = chatSessions
   useEffect(() => {
     if (
       chatSessionPageCount < MAX_CHAT_SESSION_PAGES &&
-      chatSessions.hasNextPage &&
-      !chatSessions.isFetchingNextPage
+      chatSessionsHasNextPage &&
+      !chatSessionsFetchingNext
     ) {
-      void chatSessions.fetchNextPage()
+      void fetchNextChatSessionPage()
     }
   }, [
     chatSessionPageCount,
-    chatSessions.fetchNextPage,
-    chatSessions.hasNextPage,
-    chatSessions.isFetchingNextPage,
+    chatSessionsHasNextPage,
+    chatSessionsFetchingNext,
+    fetchNextChatSessionPage,
   ])
   const summaries = useQuery(
     traceSessionsQuery({

@@ -197,7 +197,8 @@ async def _root_inputs_for_trace_ids(trace_ids: list[str]) -> dict[str, str | No
     try:
         spans_by_trace = await _batch_root_spans_by_trace_ids(safe_ids)
     except Exception:
-        logger.debug("batch root span input load failed; leaving list inputs null")
+        # List path must stay O(1) queries: never fall back to per-trace get_spans.
+        logger.exception("batch root span input load failed; leaving list inputs null")
         return inputs
 
     for trace_id in safe_ids:

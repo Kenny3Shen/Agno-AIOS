@@ -124,6 +124,13 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：oxlint 清零 + Trace list input 失败可观测
+
+- `ChatPage.test`：`setSearchKnowledge` / `setLiveSearch` 补全 `vi.fn` 泛型，满足 `require-mock-type-parameters`。
+- `TracePage`：session 预取 `useEffect` 解构 `hasNextPage`/`fetchNextPage` 等稳定字段，消除 exhaustive-deps 误报。
+- Trace 列表 root input 批量查询失败：`logger.exception`（仍 `input=null`，不回退 N+1）。
+- `bun run lint` 在上述修复后通过。
+
 ## 已完成：Playwright shell 关键路径 smoke
 
 - `frontend/playwright.config.ts` + `frontend/e2e/shell.smoke.spec.ts`（API route mock，不依赖开发库）。
