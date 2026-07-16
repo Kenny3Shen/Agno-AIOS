@@ -55,7 +55,7 @@
   "current": "Current",
   "retryingDetail": "Model temporarily unavailable; retry {{attempt}}/{{max}}…",
   "liveSearch": "Live Search",
-  "liveSearchHelp": "Enable model live search (xAI search_parameters; compatible gateways via extra_body).",
+  "liveSearchHelp": "Enable model live search (xAI search_parameters; compatible gateways via extra_body). Ignored on auto-lite turns. Requires model/gateway support.",
   "knowledgeSearch": "Knowledge",
   "knowledgeSearchHelp": "Allow Knowledge base retrieval for this turn. When off, knowledge tools are not attached. On auto-lite turns (no tool intent) this is ignored until a security-task message attaches tools.",
   "stoppedGenerating": "Generation stopped",

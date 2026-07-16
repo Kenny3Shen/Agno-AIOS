@@ -1751,3 +1751,103 @@ async def test_full_tool_surface_loads_knowledge_when_requested():
     assert created["knowledge_filters"] == {"user_id": "owner-1"}
     assert created["add_search_knowledge_instructions"] is True
 
+
+@pytest.mark.asyncio
+async def test_lean_surface_disables_live_search_even_when_requested():
+    created: dict = {}
+    models: list = []
+
+    def agent_factory(**kwargs):
+        created.update(kwargs)
+        return SimpleNamespace()
+
+    async def build_model(model_id=None, reasoning_effort=None, live_search=None):
+        models.append({"live_search": live_search, "model_id": model_id})
+        return object()
+
+    with TemporaryDirectory() as temp_dir:
+        prompt_dir = Path(temp_dir)
+        (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_PROMPT).write_text(
+            "full", encoding="utf-8"
+        )
+        (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_LITE_PROMPT).write_text(
+            "lite", encoding="utf-8"
+        )
+        runtime = security_run_runtime.SecurityRunRuntime(
+            security_run_runtime.SecurityRunRuntimeDependencies(
+                build_model=build_model,
+                get_db=lambda: object(),
+                get_async_knowledge_base=lambda: object(),
+                get_enabled_skill_dirs=lambda: [],
+                agent_factory=agent_factory,
+            )
+        )
+        with patch.object(security_run_runtime, "PROMPT_DIR", prompt_dir):
+            await runtime._build_security_agent(
+                None,
+                security_run_runtime.SecurityRunRequest.from_chat_args(
+                    "ping",
+                    enable_tools=True,
+                    live_search=True,
+                    search_knowledge=True,
+                ),
+            )
+    assert created["instructions"] == ["lite"]
+    assert models and models[0]["live_search"] is False
+
+
+@pytest.mark.asyncio
+async def test_full_tool_surface_forwards_live_search():
+    models: list = []
+    skill_dirs = [Path("/skills/cve-intel-skill")]
+
+    def agent_factory(**kwargs):
+        return SimpleNamespace()
+
+    async def build_model(model_id=None, reasoning_effort=None, live_search=None):
+        models.append({"live_search": live_search})
+        return object()
+
+    def resolve(names=None):
+        if names is None:
+            return skill_dirs
+        wanted = set(names)
+        return [p for p in skill_dirs if p.name in wanted]
+
+    with TemporaryDirectory() as temp_dir:
+        prompt_dir = Path(temp_dir)
+        (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_PROMPT).write_text(
+            "full", encoding="utf-8"
+        )
+        (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_LITE_PROMPT).write_text(
+            "lite", encoding="utf-8"
+        )
+        runtime = security_run_runtime.SecurityRunRuntime(
+            security_run_runtime.SecurityRunRuntimeDependencies(
+                build_model=build_model,
+                get_db=lambda: object(),
+                get_async_knowledge_base=lambda: object(),
+                get_enabled_skill_dirs=lambda: skill_dirs,
+                resolve_enabled_skill_dirs=resolve,
+                agent_factory=agent_factory,
+            )
+        )
+        with (
+            patch.object(security_run_runtime, "PROMPT_DIR", prompt_dir),
+            patch.object(
+                security_run_runtime,
+                "_load_local_skills",
+                side_effect=lambda dirs: ("skills", list(dirs)),
+            ),
+        ):
+            await runtime._build_security_agent(
+                None,
+                security_run_runtime.SecurityRunRequest.from_chat_args(
+                    "分析 CVE-2024-1234",
+                    enable_tools=True,
+                    live_search=True,
+                    search_knowledge=False,
+                ),
+            )
+    assert models and models[0]["live_search"] is True
+

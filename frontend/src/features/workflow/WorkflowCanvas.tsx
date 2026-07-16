@@ -49,6 +49,7 @@ import {
   NODE_LAYOUT_HEIGHT,
   type ReparentTarget,
   type SmartGuideLine,
+  isKeyboardTargetEditable,
 } from './utils'
 import {
   WorkflowFlowNode,
@@ -97,6 +98,8 @@ type Props = {
   onReparent: (nodeId: string, target: ReparentTarget) => void
   onEmptySlot: (parentId: string, slotKey: string) => void
   onDeleteSelected: () => void
+  /** Double-click a node to open/focus the inspector name field. */
+  onFocusInspector?: (nodeId: string) => void
   onUndo: () => void
   onRedo: () => void
   onCopy: () => void
@@ -247,6 +250,7 @@ function CanvasInner({
   onReparent,
   onEmptySlot,
   onDeleteSelected,
+  onFocusInspector,
   onUndo,
   onRedo,
   onCopy,
@@ -696,6 +700,14 @@ function CanvasInner({
     [onSelect]
   )
 
+  const onNodeDoubleClick: NodeMouseHandler = useCallback(
+    (_event, node) => {
+      onSelect(node.id, false)
+      onFocusInspector?.(node.id)
+    },
+    [onSelect, onFocusInspector]
+  )
+
   const onPaneClick = useCallback(() => onSelect(null), [onSelect])
 
   const onSelectionChange: OnSelectionChangeFunc = useCallback(
@@ -958,14 +970,7 @@ function CanvasInner({
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      if (
-        target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable)
-      ) {
+      if (isKeyboardTargetEditable(event.target)) {
         return
       }
       const root = wrapperRef.current
@@ -998,6 +1003,7 @@ function CanvasInner({
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
         onPaneClick={onPaneClick}
         onSelectionChange={onSelectionChange}
         onNodeDragStart={onNodeDragStart}

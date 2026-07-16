@@ -55,7 +55,7 @@
   "current": "当前",
   "retryingDetail": "模型暂时不可用，正在第 {{attempt}}/{{max}} 次重试…",
   "liveSearch": "联网搜索",
-  "liveSearchHelp": "启用模型 Live Search（xAI search_parameters；兼容网关经 extra_body）。需模型/网关支持。",
+  "liveSearchHelp": "启用模型 Live Search（xAI search_parameters；兼容网关经 extra_body）。自动轻量轮次会忽略此开关。需模型/网关支持。",
   "knowledgeSearch": "知识库",
   "knowledgeSearchHelp": "允许本轮检索 Knowledge 知识库。关闭后不挂载知识检索。在自动轻量轮次（无工具意图）下即使开启也不会挂载，需命中安全任务意图或关闭工具开关以外的全量路径。",
   "stoppedGenerating": "已停止生成",

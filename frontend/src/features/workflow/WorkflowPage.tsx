@@ -60,7 +60,7 @@ import { currentUserQuery } from '@/features/auth'
 import { hasScope } from '@/shared/auth/permissions'
 import { useFormatDate } from '@/shared/lib/format'
 import { copyToClipboard } from '@/shared/lib/clipboard'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 const PALETTE: Array<{
   type: WorkflowNodeType
@@ -292,6 +292,37 @@ export function WorkflowPage() {
     }, 80)
     return () => window.clearTimeout(timer)
   }, [workflow.state.validationEpoch, workflow.state.validationIssues, workflow.state.selectedId])
+
+  const focusInspectorForNode = useCallback(
+    (nodeId: string) => {
+      focusFieldRef.current = 'name'
+      workflow.select(nodeId)
+      // Direct focus (validation effect only runs when issues exist).
+      window.setTimeout(() => {
+        const panel = inspectorPanelRef.current
+        if (!panel) return
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        const field = focusFieldRef.current ?? 'name'
+        focusFieldRef.current = null
+        const target =
+          panel.querySelector<HTMLElement>(`[data-inspector-field="${field}"]`) ??
+          panel.querySelector<HTMLElement>('[data-inspector-field="name"]')
+        if (!target) return
+        target.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        const focusable = target.matches('input, textarea, button, [tabindex]')
+          ? target
+          : target.querySelector<HTMLElement>('input, textarea, button, .ant-select-selector')
+        if (focusable && typeof focusable.focus === 'function') {
+          try {
+            focusable.focus({ preventScroll: true })
+          } catch {
+            focusable.focus()
+          }
+        }
+      }, 80)
+    },
+    [workflow.select],
+  )
 
   // Expand run log when a run starts so output is visible without manual open.
   useEffect(() => {
@@ -708,6 +739,7 @@ export function WorkflowPage() {
             onReparent={workflow.reparent}
             onEmptySlot={(parentId, slotKey) => workflow.addToSlot(parentId, slotKey)}
             onDeleteSelected={workflow.removeSelected}
+            onFocusInspector={focusInspectorForNode}
             onUndo={workflow.undo}
             onRedo={workflow.redo}
             onCopy={workflow.copySelected}

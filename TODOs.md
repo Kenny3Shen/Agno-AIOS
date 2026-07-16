@@ -1,6 +1,13 @@
 # 下一步工作
 
 
+## 已完成：Lean 跳过 Live Search + Studio 快捷键/双击聚焦
+
+- Chat lean / tools-off：`live_search` 强制关闭（与 Knowledge 一致），全量工具面仍透传请求开关。
+- Studio：快捷键忽略 Ant Design 可编辑宿主（Select/Picker/CEL 等），避免 Inspector 输入时误删节点。
+- 双击画布节点：选中并聚焦 Inspector 名称字段；快捷键/调色板提示补充「双击聚焦配置」。
+- 单测：lean/full live_search 转发；`isKeyboardTargetEditable`。
+
 ## 已完成：Chat 有效 Knowledge 挂载可见性 + 文案对齐
 
 - `run.started` / 历史投影携带 **有效** `search_knowledge`（与 agent 实际挂载一致；lean/tools-off 为 false）。

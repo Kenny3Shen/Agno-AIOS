@@ -20,6 +20,7 @@ import {
   validateWorkflowDraft,
   validateWorkflowName,
   fieldForValidationIssue,
+  isKeyboardTargetEditable,
   triggerEnableBlocked,
   workflowWebhookCurl,
   workflowWebhookUrl,
@@ -643,6 +644,26 @@ describe('resolveNodeCanvasSubtitle', () => {
 
   it('executorNamesKey is order-stable', () => {
     expect(executorNamesKey({ b: 'B', a: 'A' })).toBe(executorNamesKey(new Map([['a', 'A'], ['b', 'B']])))
+  })
+})
+
+describe('isKeyboardTargetEditable', () => {
+  it('treats input and ant-select hosts as editable', () => {
+    const input = document.createElement('input')
+    expect(isKeyboardTargetEditable(input)).toBe(true)
+    const host = document.createElement('div')
+    host.className = 'ant-select'
+    const inner = document.createElement('span')
+    host.appendChild(inner)
+    document.body.appendChild(host)
+    expect(isKeyboardTargetEditable(inner)).toBe(true)
+    host.remove()
+  })
+
+  it('allows canvas shortcuts on plain elements', () => {
+    const div = document.createElement('div')
+    expect(isKeyboardTargetEditable(div)).toBe(false)
+    expect(isKeyboardTargetEditable(null)).toBe(false)
   })
 })
 
