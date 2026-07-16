@@ -136,6 +136,16 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Overview 窗口失败计数 + 原生 recent failures
+
+- `failed_runs` / `failure_rate` / `total_runs` 用 Agno 窗口 total（含 `status=ERROR` count），不再依赖采样切片
+- `recent_failures` 直接 `get_traces(status=ERROR, limit=10)` + reconcile，避免「样本里碰巧没失败」
+- metrics 仍带 `sample_size` / `truncated` / `sample_failed_runs`（延迟与 token 仍基于采样）
+
+相关：`overview_service.py` / Dashboard types
+
+---
+
 ## 已完成：Trace sessions 前端翻页上限
 
 - `listTraceSessions` 客户端最多拉 5 页 ×200（1000 sessions），避免无界 while 打满大库

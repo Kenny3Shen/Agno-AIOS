@@ -46,8 +46,11 @@ async def test_overview_aggregates_scoped_traces_into_stable_payload():
             "metadata": {"tokens": {"input": 3, "output": 5}},
         },
     ]
+    failed_only = [trace for trace in traces if trace.get("status") == "ERROR"]
     with (
         patch.object(overview_service, "_fetch_traces", AsyncMock(return_value=(traces, {"sample_size": len(traces), "window_total": len(traces), "truncated": False}))) as fetch,
+        patch.object(overview_service, "_count_traces", AsyncMock(return_value=1)),
+        patch.object(overview_service, "_fetch_recent_failures", AsyncMock(return_value=failed_only)),
         patch.object(overview_service, "_snapshots", AsyncMock(return_value={"memories": 3})),
         patch.object(
             overview_service,
@@ -82,6 +85,7 @@ async def test_overview_aggregates_scoped_traces_into_stable_payload():
         "sample_size": 2,
         "window_total": 2,
         "truncated": False,
+        "sample_failed_runs": 1,
     }
     assert [item["runs"] for item in result["series"]] == [2]
     assert result["series"][0] == {
@@ -126,6 +130,99 @@ def test_overview_extracts_token_aliases_and_falls_back_to_input_plus_output(tra
 
 
 @pytest.mark.asyncio
+async def test_overview_uses_window_error_count_and_native_recent_failures():
+    """Failed totals and recent_failures come from Agno ERROR queries, not sample scan."""
+    sample = [
+        {"trace_id": "ok-sample", "start_time": "2026-07-12T11:10:00+00:00", "status": "OK", "duration_ms": 100},
+    ]
+    remote_failure = {
+        "trace_id": "err-remote",
+        "run_id": "run-x",
+        "session_id": "s1",
+        "start_time": "2026-07-12T10:00:00+00:00",
+        "status": "ERROR",
+        "duration_ms": 50,
+        "name": "failed remote",
+    }
+    with (
+        patch.object(
+            overview_service,
+            "_fetch_traces",
+            AsyncMock(return_value=(sample, {"sample_size": 1, "window_total": 100, "truncated": True})),
+        ),
+        patch.object(overview_service, "_count_traces", AsyncMock(return_value=17)) as count_errors,
+        patch.object(
+            overview_service,
+            "_fetch_recent_failures",
+            AsyncMock(return_value=[remote_failure]),
+        ) as recent,
+        patch.object(overview_service, "_fetch_span_token_counts", AsyncMock(return_value={})),
+        patch.object(overview_service, "_snapshots", AsyncMock(return_value={})),
+    ):
+        result = await overview_service.get_runtime_overview(
+            actor("u1"),
+            range_name="24h",
+            timezone="UTC",
+            now=datetime(2026, 7, 12, 12, tzinfo=UTC),
+        )
+
+    assert count_errors.await_args is not None
+    assert count_errors.await_args.kwargs["status"] == "ERROR"
+    assert recent.await_args is not None
+    assert result["metrics"]["total_runs"] == 100
+    assert result["metrics"]["failed_runs"] == 17
+    assert result["metrics"]["failure_rate"] == 0.17
+    assert result["metrics"]["sample_size"] == 1
+    assert result["metrics"]["sample_failed_runs"] == 0
+    assert result["metrics"]["truncated"] is True
+    assert result["recent_failures"][0]["trace_id"] == "err-remote"
+
+
+@pytest.mark.asyncio
+async def test_count_traces_and_recent_failures_pass_status_to_agno():
+    captured: list[dict[str, object]] = []
+
+    async def get_traces(**kwargs):
+        captured.append(kwargs)
+        if kwargs.get("status") == "ERROR" and kwargs.get("limit") == 10:
+            return [
+                SimpleNamespace(
+                    to_dict=lambda: {
+                        "trace_id": "e1",
+                        "run_id": "r1",
+                        "status": "ERROR",
+                        "start_time": "2026-07-12T11:00:00+00:00",
+                    }
+                )
+            ], 3
+        return [], 9
+
+    with (
+        patch.object(overview_service.get_async_agno_postgres_db(), "get_traces", get_traces),
+        patch.object(overview_service, "reconcile_trace_statuses", AsyncMock(side_effect=lambda rows, **_k: list(rows))),
+    ):
+        total = await overview_service._count_traces(
+            start=datetime(2026, 7, 12, 0, tzinfo=UTC),
+            end=datetime(2026, 7, 12, 12, tzinfo=UTC),
+            user_id="u1",
+            status="ERROR",
+        )
+        failures = await overview_service._fetch_recent_failures(
+            start=datetime(2026, 7, 12, 0, tzinfo=UTC),
+            end=datetime(2026, 7, 12, 12, tzinfo=UTC),
+            user_id="u1",
+            limit=10,
+        )
+
+    assert total == 9
+    assert failures[0]["trace_id"] == "e1"
+    assert captured[0]["status"] == "ERROR"
+    assert captured[0]["limit"] == 1
+    assert captured[1]["status"] == "ERROR"
+    assert captured[1]["limit"] == 10
+
+
+@pytest.mark.asyncio
 async def test_overview_uses_span_usage_instead_of_empty_trace_rows():
     traces = [{
         "trace_id": "chat-run",
@@ -136,6 +233,8 @@ async def test_overview_uses_span_usage_instead_of_empty_trace_rows():
     }]
     with (
         patch.object(overview_service, "_fetch_traces", AsyncMock(return_value=(traces, {"sample_size": len(traces), "window_total": len(traces), "truncated": False}))),
+        patch.object(overview_service, "_count_traces", AsyncMock(return_value=0)),
+        patch.object(overview_service, "_fetch_recent_failures", AsyncMock(return_value=[])),
         patch.object(overview_service, "_snapshots", AsyncMock(return_value={})),
         patch.object(
             overview_service,
@@ -247,6 +346,8 @@ async def test_overview_fetch_reconciles_audit_failures_before_metrics() -> None
 async def test_admin_overview_includes_audit_summary():
     with (
         patch.object(overview_service, "_fetch_traces", AsyncMock(return_value=([], {"sample_size": 0, "window_total": 0, "truncated": False}))),
+        patch.object(overview_service, "_count_traces", AsyncMock(return_value=0)),
+        patch.object(overview_service, "_fetch_recent_failures", AsyncMock(return_value=[])),
         patch.object(overview_service, "_snapshots", AsyncMock(return_value={})),
         patch.object(
             overview_service,
@@ -328,6 +429,8 @@ async def test_overview_custom_range_uses_requested_window_and_adaptive_buckets(
     ]
     with (
         patch.object(overview_service, "_fetch_traces", AsyncMock(return_value=(traces, {"sample_size": len(traces), "window_total": len(traces), "truncated": False}))) as fetch,
+        patch.object(overview_service, "_count_traces", AsyncMock(return_value=0)),
+        patch.object(overview_service, "_fetch_recent_failures", AsyncMock(return_value=[])),
         patch.object(overview_service, "_fetch_span_token_counts", AsyncMock(return_value={})),
         patch.object(overview_service, "_snapshots", AsyncMock(return_value={})),
     ):

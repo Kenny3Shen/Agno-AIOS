@@ -60,6 +60,8 @@ export interface OverviewKpis {
   /** Agno window total before sample cap. */
   window_total?: number | null
   truncated?: boolean | null
+  /** Failures observed inside the loaded sample (latency series). */
+  sample_failed_runs?: number | null
 }
 
 export interface OverviewEvaluation {

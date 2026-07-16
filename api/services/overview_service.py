@@ -267,6 +267,58 @@ def _recent_failure(trace: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+async def _count_traces(
+    *,
+    start: datetime,
+    end: datetime,
+    user_id: str | None,
+    status: str | None = None,
+) -> int:
+    """Cheap window total via Agno ``get_traces`` total (limit=1)."""
+    db = get_async_agno_postgres_db()
+    _rows, total = await db.get_traces(
+        start_time=start,
+        end_time=end,
+        user_id=user_id,
+        status=status,
+        limit=1,
+        page=1,
+    )
+    return max(0, int(total or 0))
+
+
+async def _fetch_recent_failures(
+    *,
+    start: datetime,
+    end: datetime,
+    user_id: str | None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Load recent ERROR traces via native status filter (not sample slice)."""
+    safe_limit = max(1, min(int(limit or 10), 50))
+    db = get_async_agno_postgres_db()
+    traces, _total = await db.get_traces(
+        start_time=start,
+        end_time=end,
+        user_id=user_id,
+        status="ERROR",
+        limit=safe_limit,
+        page=1,
+    )
+    rows: list[dict[str, Any]] = []
+    for trace in traces:
+        dumped = trace if isinstance(trace, dict) else trace.to_dict()
+        rows.append(jsonable_encoder(dumped))
+    reconciled = await reconcile_trace_statuses(rows, actor_user_id=user_id)
+    # Keep ERROR after audit overlay; drop flipped non-failures.
+    failures = [row for row in reconciled if _is_failure(row)]
+    failures.sort(
+        key=lambda item: _as_datetime(item.get("start_time")) or datetime.min.replace(tzinfo=UTC),
+        reverse=True,
+    )
+    return failures[:safe_limit]
+
+
 async def _fetch_traces(
     *, start: datetime, end: datetime, user_id: str | None
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -440,8 +492,11 @@ async def get_runtime_overview(
     else:
         start, end = generated_at - _RANGE_WINDOWS[range_name], generated_at
     bucket_range = _bucket_range(start, end)
-    (traces, trace_sample), snapshots = await asyncio.gather(
-        _fetch_traces(start=start, end=end, user_id=scope_user_id(actor, None)),
+    owner_user_id = scope_user_id(actor, None)
+    (traces, trace_sample), window_failed_total, recent_error_traces, snapshots = await asyncio.gather(
+        _fetch_traces(start=start, end=end, user_id=owner_user_id),
+        _count_traces(start=start, end=end, user_id=owner_user_id, status="ERROR"),
+        _fetch_recent_failures(start=start, end=end, user_id=owner_user_id, limit=10),
         _snapshots(actor),
     )
     span_token_counts = await _fetch_span_token_counts(
@@ -504,9 +559,14 @@ async def get_runtime_overview(
         "end_time": end.isoformat(),
         "health": {"status": "ready"},
         "metrics": {
-            "total_runs": len(traces),
-            "failed_runs": failed_runs,
-            "failure_rate": round(failed_runs / len(traces), 4) if traces else 0.0,
+            # Counts prefer Agno window totals; latency/tokens remain sample-based.
+            "total_runs": int(trace_sample.get("window_total") or len(traces)),
+            "failed_runs": int(window_failed_total),
+            "failure_rate": (
+                round(int(window_failed_total) / int(trace_sample.get("window_total") or 0), 4)
+                if int(trace_sample.get("window_total") or 0)
+                else 0.0
+            ),
             "p50_duration_ms": _percentile(durations, 0.5),
             "p95_duration_ms": _percentile(durations, 0.95),
             "input_tokens": input_tokens,
@@ -515,6 +575,7 @@ async def get_runtime_overview(
             "sample_size": int(trace_sample.get("sample_size") or len(traces)),
             "window_total": int(trace_sample.get("window_total") or len(traces)),
             "truncated": bool(trace_sample.get("truncated")),
+            "sample_failed_runs": failed_runs,
         },
         "series": series,
         "distributions": {
@@ -522,14 +583,7 @@ async def get_runtime_overview(
             "workflow": _distribution(traces, "workflow_id"),
             "team": _distribution(traces, "team_id"),
         },
-        "recent_failures": [
-            _recent_failure(trace)
-            for trace in sorted(
-                (trace for trace in traces if _is_failure(trace)),
-                key=lambda item: _as_datetime(item.get("start_time")) or datetime.min.replace(tzinfo=UTC),
-                reverse=True,
-            )[:10]
-        ],
+        "recent_failures": [_recent_failure(trace) for trace in recent_error_traces],
         "snapshots": snapshots,
     }
     if has_scope(actor, "audit:read"):
