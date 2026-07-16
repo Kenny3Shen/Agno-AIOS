@@ -137,10 +137,20 @@ P0.4 审批值班薄入口        ✅
 
 ## 已完成：拖拽智能对齐 + Chat 操作位
 
-- 拖拽时 draw.io 式智能辅助线（左右/中/上下边对齐吸附）
+- 拖拽时智能辅助线（左右/中/上下边对齐吸附）
 - Chat 消息 Actions：右下角；复制内容 / 复制 Run ID 图标区分
 
 相关：`utils.computeSmartSnap` / `WorkflowCanvas` / `ChatPage`
+
+---
+
+## 已完成：Workflow 文案与 Studio 布局 / antd 清理
+
+- 中英文文案去 PR / 第三方产品名，聚焦安全运营业务用语
+- Studio 顶栏与左右栏更紧凑；节点面板双列
+- antd 6：Alert `title`/`closable.onClose`；AutoComplete `onOpenChange`；Collapse `destroyOnHidden`
+
+相关：`workflow.*.json` / `WorkflowPage` / `CelExpressionField` / `global.css`
 
 ---
 
@@ -314,7 +324,7 @@ P0.4 审批值班薄入口        ✅
 - React Flow `colorMode` 跟随应用主题开关。
 
 
-## 已完成：Workflow 画布优先 Studio（Dify/Coze 风格）
+## 已完成：Workflow 画布优先 Studio（画布优先编排）
 
 - 主区域为全高 React Flow 画布；左侧节点面板拖入/双击添加，右侧 Inspector + 运行日志。
 - 自定义节点卡片、拖放落点坐标、顶栏 Save/Run/模型。

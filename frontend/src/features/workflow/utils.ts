@@ -429,7 +429,7 @@ export type PortPoint = { x: number; y: number; width?: number; height?: number 
 
 /**
  * Pick source/target handles from node geometry.
- * - Prefer left↔right when the target is clearly to the right (Dify-like flow).
+ * - Prefer left↔right when the target is clearly to the right.
  * - Otherwise use top/bottom. We only render top+left targets and bottom+right sources.
  * - Branch semantics keep the logical id (`then` / `else` / `choice:…`) and only swap the side alias.
  */
@@ -803,7 +803,7 @@ export const applyAutoLayout = (roots: WorkflowNode[]): WorkflowNode[] => {
     return Math.max(selfH, kidsBlockH)
   }
 
-  // Roots: horizontal sequence (Dify-like).
+  // Roots: horizontal sequence.
   let cursorX = 40
   let maxBottom = 0
   for (const root of roots) {
@@ -1303,7 +1303,7 @@ export const buildWorkflowCode = (state: WorkflowState) => {
   return [
     'from agno.workflow import Workflow, Step, Parallel, Condition, Loop, Router, Steps',
     '',
-    `# Compiled from workbench definition (PR4)`,
+    `# Compiled from workbench workflow definition`,
     `# workflow_id=${JSON.stringify(state.workflowId ?? '')}`,
     `workflow = Workflow(`,
     `    name=${JSON.stringify(definition.name)},`,

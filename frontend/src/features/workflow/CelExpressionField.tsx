@@ -48,7 +48,7 @@ export function CelExpressionField({
       style={{ width: '100%', marginTop: 4 }}
       options={options}
       open={open}
-      onDropdownVisibleChange={setOpen}
+      onOpenChange={setOpen}
       value={value}
       onChange={(next) => onChange(String(next ?? ''))}
       onSelect={(next) => {

@@ -1,4 +1,4 @@
-/** CEL autocomplete hints for workflow Inspector (PR9). */
+/** CEL autocomplete hints for the workflow inspector. */
 
 export type CelHint = {
   value: string

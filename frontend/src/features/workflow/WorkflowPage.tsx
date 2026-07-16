@@ -216,7 +216,7 @@ export function WorkflowPage() {
         <div className="workflow-studio__brand">
           <NodeIndexOutlined />
           <div>
-            <Typography.Title level={4} style={{ margin: 0 }}>
+            <Typography.Title level={5} className="workflow-studio__title">
               {t('title')}
             </Typography.Title>
             <Typography.Text type="secondary" className="workflow-studio__subtitle">
@@ -304,11 +304,6 @@ export function WorkflowPage() {
                   ? 'primary'
                   : 'default'
               }
-              ghost={
-                Boolean(workflow.state.workflowId) &&
-                !workflow.state.dirty &&
-                !workflow.state.hasPublished
-              }
               loading={workflow.state.saving}
               disabled={!canWrite || !workflow.state.workflowId || workflow.state.dirty}
               onClick={() => void workflow.publish()}
@@ -340,10 +335,9 @@ export function WorkflowPage() {
         <Alert
           type="error"
           showIcon
-          closable
-          style={{ margin: '0 12px 8px' }}
-          message={workflow.state.error}
-          onClose={() => workflow.patchMeta({ error: null })}
+          className="workflow-studio__banner"
+          title={workflow.state.error}
+          closable={{ onClose: () => workflow.patchMeta({ error: null }) }}
         />
       ) : null}
 
@@ -503,8 +497,8 @@ export function WorkflowPage() {
               <Alert
                 type="error"
                 showIcon
-                style={{ marginBottom: 10 }}
-                message={t('validationTitle')}
+                className="workflow-studio__validation"
+                title={t('validationTitle')}
                 description={
                   <ul className="workflow-validation-list">
                     {workflow.state.validationIssues.slice(0, 8).map((issue, index) => (
@@ -811,7 +805,9 @@ export function WorkflowPage() {
           <section className="workflow-studio__panel">
             <Collapse
               size="small"
+              bordered={false}
               defaultActiveKey={['run']}
+              destroyOnHidden
               items={[
                 {
                   key: 'run',
