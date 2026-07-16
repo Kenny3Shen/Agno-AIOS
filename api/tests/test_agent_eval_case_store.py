@@ -374,15 +374,62 @@ async def test_list_and_get_helpers_normalize_rows():
 
 
 @pytest.mark.asyncio
-async def test_list_suite_and_case_runs_default_limit():
+async def test_list_suite_and_case_runs_return_data_meta():
+    suite_row = {
+        "id": "sr-1",
+        "suite_id": "s1",
+        "status": "completed",
+        "started_by": "user-1",
+        "error_summary": "",
+        "summary": {},
+        "started_at": "2026-07-06T00:00:00Z",
+        "finished_at": "2026-07-06T00:01:00Z",
+    }
+    case_row = {
+        "id": "cr-1",
+        "suite_run_id": "",
+        "case_id": "c1",
+        "status": "failed",
+        "agent_run_id": "",
+        "session_id": "",
+        "trace_id": "",
+        "agno_eval_run_ids": [],
+        "error_type": "",
+        "error_summary": "boom",
+        "replay_of_case_run_id": "",
+        "started_at": "2026-07-06T00:00:00Z",
+        "finished_at": "2026-07-06T00:01:00Z",
+    }
     with (
-        patch.object(store, "list_suite_run_rows_async", new=AsyncMock(return_value=[])) as suite_list,
-        patch.object(store, "list_case_run_rows_async", new=AsyncMock(return_value=[])) as case_list,
+        patch.object(
+            store,
+            "list_suite_run_rows_async",
+            new=AsyncMock(return_value=([suite_row], 3)),
+        ) as suite_list,
+        patch.object(
+            store,
+            "list_case_run_rows_async",
+            new=AsyncMock(return_value=([case_row], 2)),
+        ) as case_list,
     ):
-        await store.list_suite_runs(suite_id="s1", status="completed")
-        await store.list_case_runs(case_id="c1", status="failed")
+        suite_payload = await store.list_suite_runs(suite_id="s1", status="completed", page=2, limit=10)
+        case_payload = await store.list_case_runs(case_id="c1", status="failed", page=1, limit=25)
 
     assert suite_list.await_args is not None
-    assert suite_list.await_args.kwargs["limit"] == 100
+    assert suite_list.await_args.kwargs == {
+        "suite_id": "s1",
+        "status": "completed",
+        "page": 2,
+        "limit": 10,
+    }
+    assert set(suite_payload.keys()) == {"data", "meta"}
+    assert suite_payload["meta"]["page"] == 2
+    assert suite_payload["meta"]["limit"] == 10
+    assert suite_payload["meta"]["total_count"] == 3
+    assert suite_payload["data"][0]["id"] == "sr-1"
+
     assert case_list.await_args is not None
-    assert case_list.await_args.kwargs["limit"] == 100
+    assert case_list.await_args.kwargs["page"] == 1
+    assert case_list.await_args.kwargs["limit"] == 25
+    assert case_payload["meta"]["total_count"] == 2
+    assert case_payload["data"][0]["id"] == "cr-1"

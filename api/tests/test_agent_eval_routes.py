@@ -149,3 +149,53 @@ def test_case_request_rejects_invalid_eval_type_and_threshold():
             threshold=11,
             eval_types=cast(Any, ["unsupported"]),
         )
+
+
+
+@pytest.mark.asyncio
+async def test_list_eval_suite_and_case_runs_forwards_pagination():
+    suite_payload = {"data": [], "meta": {"page": 2, "limit": 10, "total_count": 0, "total_pages": 0, "search_time_ms": 0.0}}
+    case_payload = {"data": [], "meta": {"page": 1, "limit": 25, "total_count": 0, "total_pages": 0, "search_time_ms": 0.0}}
+    with (
+        patch.object(
+            agent_evals.case_store,
+            "list_suite_runs",
+            new=AsyncMock(return_value=suite_payload),
+        ) as suite_mock,
+        patch.object(
+            agent_evals.case_store,
+            "list_case_runs",
+            new=AsyncMock(return_value=case_payload),
+        ) as case_mock,
+    ):
+        suite = await agent_evals.list_eval_suite_runs(
+            suite_id="s1",
+            status="completed",
+            page=2,
+            limit=10,
+            user=actor(),
+        )
+        case = await agent_evals.list_eval_case_runs(
+            case_id="c1",
+            status="failed",
+            page=1,
+            limit=25,
+            user=actor(),
+        )
+
+    assert suite is suite_payload
+    assert case is case_payload
+    assert suite_mock.await_args is not None
+    assert suite_mock.await_args.kwargs == {
+        "suite_id": "s1",
+        "status": "completed",
+        "page": 2,
+        "limit": 10,
+    }
+    assert case_mock.await_args is not None
+    assert case_mock.await_args.kwargs == {
+        "case_id": "c1",
+        "status": "failed",
+        "page": 1,
+        "limit": 25,
+    }

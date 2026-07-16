@@ -124,6 +124,16 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Eval suite/case run 真分页 data/meta
+
+- `list_suite_run_rows_async` / `list_case_run_rows_async` 返回 `(rows, total)`，SQL `LIMIT/OFFSET` + count
+- `list_suite_runs` / `list_case_runs` 统一 Agno 风格 `{data, meta}`（默认 page=1 limit=50，上限 100）
+- 路由 `GET .../suites/{id}/runs` 与 `GET .../cases/{id}/runs` 接受 `page`/`limit` query
+
+相关：`agent_evals.py` / `agent_eval_case_store.py` / `routes/agent_evals.py`
+
+---
+
 ## 已完成：列表硬顶与 MCP enabled SQL 过滤
 
 - `enabled_mcp_servers` 用 `list_server_rows(enabled=True)` 下推 SQL，避免全表再 Python filter

@@ -6,6 +6,7 @@ from typing import Any
 from uuid import uuid4
 
 from api.auth.claims import actor_id
+from api.utils.pagination import pagination_meta
 from api.persistence.agent_evals import (
     create_case_row_async,
     create_case_run_row_async,
@@ -317,10 +318,22 @@ async def list_suite_runs(
     suite_id: str | None = None,
     status: str | None = None,
     *,
-    limit: int = 100,
-) -> list[dict[str, Any]]:
-    rows = await list_suite_run_rows_async(suite_id=suite_id, status=status, limit=limit)
-    return [normalize_suite_run(row) for row in rows]
+    page: int = 1,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Agno-style ``{data, meta}`` for suite run history."""
+    safe_page = max(1, int(page or 1))
+    safe_limit = max(1, min(int(limit or 50), 100))
+    rows, total = await list_suite_run_rows_async(
+        suite_id=suite_id,
+        status=status,
+        page=safe_page,
+        limit=safe_limit,
+    )
+    return {
+        "data": [normalize_suite_run(row) for row in rows],
+        "meta": pagination_meta(page=safe_page, limit=safe_limit, total_count=total),
+    }
 
 
 async def create_case_run(
@@ -373,15 +386,23 @@ async def list_case_runs(
     case_id: str | None = None,
     status: str | None = None,
     *,
-    limit: int = 100,
-) -> list[dict[str, Any]]:
-    rows = await list_case_run_rows_async(
+    page: int = 1,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Agno-style ``{data, meta}`` for case run history."""
+    safe_page = max(1, int(page or 1))
+    safe_limit = max(1, min(int(limit or 50), 100))
+    rows, total = await list_case_run_rows_async(
         suite_run_id=suite_run_id,
         case_id=case_id,
         status=status,
-        limit=limit,
+        page=safe_page,
+        limit=safe_limit,
     )
-    return [normalize_case_run(row) for row in rows]
+    return {
+        "data": [normalize_case_run(row) for row in rows],
+        "meta": pagination_meta(page=safe_page, limit=safe_limit, total_count=total),
+    }
 
 
 async def mark_case_run(case_run_id: str, status: str, values: dict[str, Any]) -> dict[str, Any] | None:

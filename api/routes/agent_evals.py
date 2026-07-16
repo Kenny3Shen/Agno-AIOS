@@ -237,10 +237,17 @@ async def update_eval_case(
 async def list_eval_suite_runs(
     suite_id: str,
     status: str | None = None,
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=100),
     user: User = Depends(require_scope("evals:read")),
 ):
     del user
-    return await case_store.list_suite_runs(suite_id=suite_id, status=status)
+    return await case_store.list_suite_runs(
+        suite_id=suite_id,
+        status=status,
+        page=page,
+        limit=limit,
+    )
 
 
 @router.post("/suites/{suite_id}/runs")
@@ -261,10 +268,17 @@ async def run_eval_suite(
 async def list_eval_case_runs(
     case_id: str,
     status: str | None = None,
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=100),
     user: User = Depends(require_scope("evals:read")),
 ):
     del user
-    return await case_store.list_case_runs(case_id=case_id, status=status)
+    return await case_store.list_case_runs(
+        case_id=case_id,
+        status=status,
+        page=page,
+        limit=limit,
+    )
 
 
 @router.post("/cases/{case_id}/runs")

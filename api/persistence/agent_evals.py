@@ -272,6 +272,33 @@ async def _list_rows_async(
     return [_row_dict(row) for row in rows]
 
 
+async def _list_rows_page_async(
+    table: Table,
+    filters: list[Any],
+    order_by: list[Any],
+    *,
+    page: int = 1,
+    limit: int = 50,
+) -> tuple[list[dict[str, Any]], int]:
+    """SQL page + total for growing history tables."""
+    await ensure_agent_eval_tables_async()
+    safe_page = max(1, int(page or 1))
+    safe_limit = max(1, min(int(limit or 50), 100))
+    count_stmt = select(func.count()).select_from(table)
+    list_stmt = select(table)
+    if filters:
+        condition = and_(*filters)
+        count_stmt = count_stmt.where(condition)
+        list_stmt = list_stmt.where(condition)
+    if order_by:
+        list_stmt = list_stmt.order_by(*order_by)
+    list_stmt = list_stmt.limit(safe_limit).offset((safe_page - 1) * safe_limit)
+    async with get_async_control_plane_engine().begin() as conn:
+        total = int((await conn.execute(count_stmt)).scalar_one())
+        rows = (await conn.execute(list_stmt)).mappings().all()
+    return [_row_dict(row) for row in rows], total
+
+
 async def _get_row_async(table: Table, row_id: str) -> dict[str, Any] | None:
     await ensure_agent_eval_tables_async()
     async with get_async_control_plane_engine().begin() as conn:
@@ -362,19 +389,21 @@ async def list_suite_run_rows_async(
     suite_id: str | None = None,
     status: str | None = None,
     *,
-    limit: int = 100,
-) -> list[dict[str, Any]]:
-    """Recent suite runs only (newest first). History tables grow without bound."""
+    page: int = 1,
+    limit: int = 50,
+) -> tuple[list[dict[str, Any]], int]:
+    """Paginated suite runs (newest first). Returns ``(rows, total_count)``."""
     table = agent_eval_suite_runs_table()
     filters = []
     if suite_id is not None:
         filters.append(table.c.suite_id == suite_id)
     if status is not None:
         filters.append(table.c.status == status)
-    return await _list_rows_async(
+    return await _list_rows_page_async(
         table,
         filters,
         [desc(table.c.started_at), table.c.id],
+        page=page,
         limit=limit,
     )
 
@@ -398,9 +427,10 @@ async def list_case_run_rows_async(
     case_id: str | None = None,
     status: str | None = None,
     *,
-    limit: int = 100,
-) -> list[dict[str, Any]]:
-    """Recent case runs only (newest first). History tables grow without bound."""
+    page: int = 1,
+    limit: int = 50,
+) -> tuple[list[dict[str, Any]], int]:
+    """Paginated case runs (newest first). Returns ``(rows, total_count)``."""
     table = agent_eval_case_runs_table()
     filters = []
     if suite_run_id is not None:
@@ -409,10 +439,11 @@ async def list_case_run_rows_async(
         filters.append(table.c.case_id == case_id)
     if status is not None:
         filters.append(table.c.status == status)
-    return await _list_rows_async(
+    return await _list_rows_page_async(
         table,
         filters,
         [desc(table.c.started_at), table.c.id],
+        page=page,
         limit=limit,
     )
 
