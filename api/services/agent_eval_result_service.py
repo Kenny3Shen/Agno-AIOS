@@ -209,5 +209,29 @@ def build_eval_trends(runs: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 async def list_failed_eval_runs(limit: int = 50) -> list[dict[str, Any]]:
-    result = await list_agno_eval_runs(limit=limit, page=1)
-    return [item for item in result["data"] if item.get("passed") is False]
+    """Return recent failed eval runs (newest first).
+
+    Agno list has no native ``passed=false`` filter, so we page recent runs
+    until we collect ``limit`` failures or exhaust a small scan window.
+    """
+    safe_limit = max(1, min(int(limit or 50), 100))
+    page_size = 50
+    max_pages = 10
+    failed: list[dict[str, Any]] = []
+    for page in range(1, max_pages + 1):
+        result = await list_agno_eval_runs(limit=page_size, page=page)
+        rows = result.get("data") or []
+        if not rows:
+            break
+        for item in rows:
+            if item.get("passed") is False:
+                failed.append(item)
+                if len(failed) >= safe_limit:
+                    return failed[:safe_limit]
+        meta = result.get("meta") or {}
+        total_count = int(meta.get("total_count") or 0)
+        if total_count and page * page_size >= total_count:
+            break
+        if len(rows) < page_size:
+            break
+    return failed[:safe_limit]

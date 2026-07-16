@@ -124,6 +124,15 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Evals failures 有界多页扫描
+
+- `list_failed_eval_runs` 不再只取第一页后过滤；在最多 10 页 × page_size=50 的窗口内收集失败项直至 `limit`
+- 覆盖「近期大量通过、失败落在后续页」的场景；仍无原生 `passed=false` 过滤时保持有界
+
+相关：`agent_eval_result_service.py` / `test_agent_eval_result_service.py`
+
+---
+
 ## 已完成：通知 SSE 缓存上限 + Overview token 采样 100 + README 对齐
 
 - 通知中心 SSE 增量写入 Query 缓存时截断至 100 条，与 `list_notifications` 默认上限一致，避免长会话无界膨胀
