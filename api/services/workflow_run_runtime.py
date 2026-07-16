@@ -181,7 +181,7 @@ async def _create_workflow_step_approval(
             pause_type=pause_type,
         )
     except Exception:
-        logger.debug("workflow HITL notify failed for approval {}", approval_id)
+        logger.exception("workflow HITL notify failed for approval {}", approval_id)
     return approval_id
 
 

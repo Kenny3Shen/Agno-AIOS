@@ -124,6 +124,13 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：工作流会话从最近对话进 Trace + Approvals 类型 i18n
+
+- Session 投影 `workflow_id`/`agent_id`/`team_id`；历史 user 输入复用更宽的 preview 解析。
+- 最近对话点击 `session_type=workflow` → Trace（`session_id`），不再误开空 Chat 转录。
+- 直接打开 `/chat?session=` 若为 workflow：replace 到 Trace。
+- Approvals 类型/标题/Workflow ID 标签接入 i18n；HITL notify 失败改 `logger.exception`。
+
 ## 已完成：Chat 最近对话 [WF] + 错误横幅 Trace + 预览/类型投影
 
 - Session 列表投影 `session_type`；工作流空预览默认「工作流运行」；输入兼容 content/input_content。

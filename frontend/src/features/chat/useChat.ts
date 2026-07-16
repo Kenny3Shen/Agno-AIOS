@@ -9,6 +9,7 @@ import type { SessionListResult } from './api'
 import type { ChatRunEvent, ChatSession, Message } from './types'
 import type { ReasoningEffort } from '@/shared/types/common'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
+import { buildTraceSearch, emptyTraceFilters } from '@/features/trace/utils'
 
 export function useChat() {
   const { t } = useTranslation('chat')
@@ -37,6 +38,16 @@ export function useChat() {
     if (sessionId && history.data) dispatch({ type: 'history', messages: history.data })
     else if (!sessionId) dispatch({ type: 'reset' })
   }, [history.data, sessionId])
+
+  // Workflow sessions are not agent transcripts — bounce deep links to Trace.
+  useEffect(() => {
+    if (!sessionId || !sessionItems.length) return
+    const session = sessionItems.find((item) => item.session_id === sessionId)
+    if (String(session?.session_type || '').toLowerCase() !== 'workflow') return
+    const filters = { ...emptyTraceFilters(), session_id: sessionId }
+    const search = buildTraceSearch(filters, sessionId, '')
+    void router.history.replace(`/trace${search ? `?${search}` : ''}`)
+  }, [router.history, sessionId, sessionItems])
   const hasPausedRun = state.messages.some((message) => message.role === 'assistant' && message.status === 'paused')
   useEffect(() => {
     if (!sessionId || !hasPausedRun) return

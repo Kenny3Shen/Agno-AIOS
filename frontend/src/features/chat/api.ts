@@ -10,10 +10,17 @@ const normalizeSession = (value: unknown): ChatSession | null => {
   const sessionId = String(row.session_id ?? '').trim()
   if (!sessionId) return null
   const sessionType = row.session_type != null ? String(row.session_type).trim().toLowerCase() : ''
+  const optionalId = (value: unknown) => {
+    const text = value != null ? String(value).trim() : ''
+    return text || null
+  }
   return {
     session_id: sessionId,
     user_id: row.user_id != null ? String(row.user_id) : null,
     session_type: sessionType || null,
+    workflow_id: optionalId(row.workflow_id),
+    agent_id: optionalId(row.agent_id),
+    team_id: optionalId(row.team_id),
     preview: String(row.preview ?? '新对话'),
     title: row.title != null ? String(row.title) : null,
     created_at: Number(row.created_at ?? 0) || 0,

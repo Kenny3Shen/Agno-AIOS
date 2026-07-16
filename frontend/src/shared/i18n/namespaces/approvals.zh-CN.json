@@ -33,5 +33,13 @@
   "kindUpload": "上传审批",
   "kindAgent": "Chat HITL",
   "kindAll": "全部",
-  "workflowOnCallHint": "仅显示工作流步骤暂停（pending）。通知中心点击可深链打开同一审批。"
+  "workflowOnCallHint": "仅显示工作流步骤暂停（pending）。通知中心点击可深链打开同一审批。",
+  "typeSkillUpload": "Skill 上传",
+  "typeMcpUpload": "MCP 上传",
+  "typeWorkflowUserInput": "工作流用户输入",
+  "typeWorkflowOutputReview": "工作流输出审核",
+  "typeWorkflowConfirmation": "工作流确认",
+  "labelWorkflowId": "工作流 ID",
+  "typeMcpServerUpload": "MCP 服务上传",
+  "typeWorkflowStep": "工作流步骤"
 }

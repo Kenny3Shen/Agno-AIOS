@@ -22,15 +22,18 @@ import {
 } from './api'
 import { compactId, compareTimestamp, useFormatDate } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
+import i18n from '@/shared/i18n'
 
 const uploadPayload = (approval: Approval) => approval.payload ?? {}
 
 const approvalTitle = (approval: Approval) => {
   const name = uploadPayload(approval).name
   if (typeof name === 'string' && name.trim()) return name
-  if (approval.resource_type === 'skill') return 'Skill upload'
-  if (approval.resource_type === 'mcp') return 'MCP server upload'
-  if (approval.source_type === 'workflow') return approval.tool_name ?? approval.source_name ?? 'Workflow step'
+  if (approval.resource_type === 'skill') return i18n.t('approvals:typeSkillUpload')
+  if (approval.resource_type === 'mcp') return i18n.t('approvals:typeMcpServerUpload')
+  if (approval.source_type === 'workflow') {
+    return approval.tool_name ?? approval.source_name ?? i18n.t('approvals:typeWorkflowStep')
+  }
   return approval.tool_name ?? approval.source_name ?? '-'
 }
 
@@ -87,13 +90,13 @@ const workflowOutputSeed = (approval: Approval): string => {
 
 
 const approvalType = (approval: Approval) => {
-  if (approval.resource_type === 'skill') return 'Skill upload'
-  if (approval.resource_type === 'mcp') return 'MCP upload'
+  if (approval.resource_type === 'skill') return i18n.t('approvals:typeSkillUpload')
+  if (approval.resource_type === 'mcp') return i18n.t('approvals:typeMcpUpload')
   if (approval.source_type === 'workflow') {
     const pause = workflowPauseType(approval)
-    if (pause === 'user_input') return 'Workflow user input'
-    if (pause === 'output_review') return 'Workflow output review'
-    return 'Workflow confirmation'
+    if (pause === 'user_input') return i18n.t('approvals:typeWorkflowUserInput')
+    if (pause === 'output_review') return i18n.t('approvals:typeWorkflowOutputReview')
+    return i18n.t('approvals:typeWorkflowConfirmation')
   }
   return approval.approval_type ?? approval.source_type ?? '-'
 }
@@ -166,7 +169,7 @@ function detailItems(approval: Approval, formatDate: (value?: string | number | 
       { key: 'session', label: 'Session ID', children: optionalCopyable(approval.session_id) },
       { key: 'agent', label: 'Agent ID', children: optionalCopyable(approval.agent_id) },
       { key: 'team', label: 'Team ID', children: optionalCopyable(approval.team_id) },
-      { key: 'workflow', label: 'Workflow ID', children: optionalCopyable(approval.workflow_id) },
+      { key: 'workflow', label: i18n.t('approvals:labelWorkflowId'), children: optionalCopyable(approval.workflow_id) },
       { key: 'schedule', label: 'Schedule ID', children: optionalCopyable(approval.schedule_id) }
     )
   }

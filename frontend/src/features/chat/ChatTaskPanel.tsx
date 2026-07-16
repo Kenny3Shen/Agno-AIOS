@@ -19,6 +19,8 @@ import { chatKeys } from './queries'
 import { useChat } from './useChat'
 import type { ChatSession } from './types'
 import { copyToClipboard } from '@/shared/lib/clipboard'
+import { useRouter } from '@tanstack/react-router'
+import { buildTraceSearch, emptyTraceFilters } from '@/features/trace/utils'
 
 export type ConversationGroupKey = 'today' | 'yesterday' | 'earlier'
 
@@ -68,6 +70,7 @@ export function filterConversationItems(items: ConversationListItem[], query: st
 export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate }: ChatTaskPanelProps) {
   const { message: toast } = App.useApp()
   const { t } = useTranslation()
+  const router = useRouter()
   const chat = useChat()
   const queryClient = useQueryClient()
   const contentId = useId()
@@ -161,6 +164,19 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
     }
   }
   const openSession = (sessionId: string) => {
+    const session = (chat.sessions.data ?? []).find((item) => item.session_id === sessionId)
+    const isWorkflow = String(session?.session_type || '').toLowerCase() === 'workflow'
+    if (isWorkflow) {
+      // Workflow runs are not Chat agent transcripts — open Trace for this session.
+      const filters = {
+        ...emptyTraceFilters(),
+        session_id: sessionId,
+      }
+      const search = buildTraceSearch(filters, sessionId, '')
+      void router.history.push(`/trace${search ? `?${search}` : ''}`)
+      onNavigate?.()
+      return
+    }
     chat.setSession(sessionId)
     onNavigate?.()
   }

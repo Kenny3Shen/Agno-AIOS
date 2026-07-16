@@ -179,8 +179,10 @@ async def test_list_sessions_projects_workflow_session_preview_and_type():
     sessions = result["data"]
     assert sessions[0]["session_type"] == "workflow"
     assert sessions[0]["preview"] == "triage phishing alert"
+    assert sessions[0]["workflow_id"] == "w-1"
     assert sessions[1]["session_type"] == "workflow"
     assert sessions[1]["preview"] == "工作流运行"
+    assert sessions[1]["workflow_id"] == "w-2"
 
 
 

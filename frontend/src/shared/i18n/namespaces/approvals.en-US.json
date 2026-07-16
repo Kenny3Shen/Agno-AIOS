@@ -33,5 +33,13 @@
   "kindUpload": "Uploads",
   "kindAgent": "Chat HITL",
   "kindAll": "All",
-  "workflowOnCallHint": "Workflow step pauses only (pending). Notification center deep-links open the same approval."
+  "workflowOnCallHint": "Workflow step pauses only (pending). Notification center deep-links open the same approval.",
+  "typeSkillUpload": "Skill upload",
+  "typeMcpUpload": "MCP upload",
+  "typeWorkflowUserInput": "Workflow user input",
+  "typeWorkflowOutputReview": "Workflow output review",
+  "typeWorkflowConfirmation": "Workflow confirmation",
+  "labelWorkflowId": "Workflow ID",
+  "typeMcpServerUpload": "MCP server upload",
+  "typeWorkflowStep": "Workflow step"
 }

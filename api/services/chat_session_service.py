@@ -316,10 +316,16 @@ def _project_session_rows(
         preview = _preview_from_runs(runs).strip()
         if not preview:
             preview = "工作流运行" if session_type == "workflow" else "新对话"
+        workflow_id = str(row.get("workflow_id") or "").strip() or None
+        agent_id = str(row.get("agent_id") or "").strip() or None
+        team_id = str(row.get("team_id") or "").strip() or None
         session = {
             "session_id": row.get("session_id"),
             "user_id": row.get("user_id"),
             "session_type": session_type,
+            "workflow_id": workflow_id,
+            "agent_id": agent_id,
+            "team_id": team_id,
             "preview": preview,
             "title": _title_metadata(row.get("metadata")),
             "created_at": row.get("created_at"),
@@ -466,12 +472,7 @@ async def get_session_messages_async(
     for index, run in enumerate(runs):
         if not isinstance(run, dict):
             continue
-        inp = run.get("input", {})
-        user_text = ""
-        if isinstance(inp, dict):
-            user_text = str(inp.get("input_content") or "")
-        elif isinstance(inp, str):
-            user_text = inp
+        user_text = _preview_from_runs([run])
         run_id = str(run.get("run_id") or f"history-{index}")
         if user_text.strip():
             messages.append({"id": f"{run_id}:user", "role": "user", "content": user_text.strip(), "final": True, "session_id": session_id})
