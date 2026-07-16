@@ -246,7 +246,8 @@ def test_legacy_grok_openai_compatible_migrates_to_xai():
     )
     assert model.provider == "xai"
     assert model.api_protocol == "chat-completions"
-    assert model.structured_output_mode == "json"
+    # Legacy structured mode is kept when present (xAI supports native + json)
+    assert model.structured_output_mode == "native"
     assert model.default_reasoning_effort is None
     assert model.base_url == "https://api.x.ai/v1"
 
@@ -278,3 +279,19 @@ def test_default_models_include_xai_grok():
     grok = next(model for model in store.models if model.id == "xai-grok-4.5")
     assert grok.provider == "xai"
     assert grok.builtin is True
+
+
+
+def test_live_search_enabled_normalized():
+    model = model_config_service.ModelConfig.normalized(
+        {
+            "id": "xai",
+            "provider": "xai",
+            "model_id": "grok-4.5",
+            "live_search_enabled": "true",
+            "structured_output_mode": "native",
+        },
+        "fallback",
+    )
+    assert model.live_search_enabled is True
+    assert model.structured_output_mode == "native"

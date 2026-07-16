@@ -53,5 +53,9 @@
   "awaitingApproval": "This action is waiting for an administrator in the approvals center.",
   "welcomeDescription": "Connect vulnerability intel, asset context, and runtime records for a traceable security analysis.",
   "current": "Current",
-  "retryingDetail": "Model temporarily unavailable; retry {{attempt}}/{{max}}…"
+  "retryingDetail": "Model temporarily unavailable; retry {{attempt}}/{{max}}…",
+  "liveSearch": "Live Search",
+  "liveSearchHelp": "Enable model live search (xAI search_parameters; compatible gateways via extra_body).",
+  "knowledgeSearch": "Knowledge",
+  "knowledgeSearchHelp": "Allow this turn to search the Knowledge base. Off skips knowledge retrieval."
 }

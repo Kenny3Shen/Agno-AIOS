@@ -138,6 +138,7 @@ export function SettingsPage() {
       structured_output_mode: 'json',
       default_reasoning_effort: null,
       parallel_tool_calls: null,
+      live_search_enabled: false,
       retries: 4,
       delay_between_retries: 1,
       exponential_backoff: true,
@@ -485,7 +486,7 @@ export function SettingsPage() {
                           <Form.Item name="api_protocol" label="API protocol" rules={[{ required: true }]}>
                             <Select
                               options={protocolOptions}
-                              disabled={getFieldValue('provider') === 'deepseek' || getFieldValue('provider') === 'xai'}
+                              disabled={getFieldValue('provider') === 'deepseek'}
                               onChange={(protocol: ModelConfig['api_protocol']) => {
                                 if (
                                   getFieldValue('provider') === 'openai' &&
@@ -501,7 +502,7 @@ export function SettingsPage() {
                       <Form.Item noStyle shouldUpdate={(previous, current) => previous.provider !== current.provider}>
                         {({ getFieldValue }) => (
                           <Form.Item name="structured_output_mode" label="Structured output" rules={[{ required: true }]}>
-                            <Select options={outputModeOptions} disabled={getFieldValue('provider') === 'deepseek' || getFieldValue('provider') === 'xai'} />
+                            <Select options={outputModeOptions} disabled={getFieldValue('provider') === 'deepseek'} />
                           </Form.Item>
                         )}
                       </Form.Item>
@@ -544,6 +545,14 @@ export function SettingsPage() {
                             </Form.Item>
                           )
                         }}
+                      </Form.Item>
+                      <Form.Item
+                        name="live_search_enabled"
+                        label={t('liveSearch')}
+                        tooltip={t('liveSearchHelp')}
+                        valuePropName="checked"
+                      >
+                        <Switch />
                       </Form.Item>
                       <Form.Item name="retries" label={t('retries')}
                         tooltip={t('retriesHelp')}>

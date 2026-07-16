@@ -53,5 +53,9 @@
   "awaitingApproval": "此操作正在等待管理员在审批中心处理。",
   "welcomeDescription": "连接漏洞情报、资产上下文和运行记录，发起一项可追溯的安全分析。",
   "current": "当前",
-  "retryingDetail": "模型暂时不可用，正在第 {{attempt}}/{{max}} 次重试…"
+  "retryingDetail": "模型暂时不可用，正在第 {{attempt}}/{{max}} 次重试…",
+  "liveSearch": "联网搜索",
+  "liveSearchHelp": "启用模型 Live Search（xAI search_parameters；兼容网关经 extra_body）。需模型/网关支持。",
+  "knowledgeSearch": "知识库",
+  "knowledgeSearchHelp": "允许本轮检索 Knowledge 知识库。关闭后不挂载知识检索。"
 }

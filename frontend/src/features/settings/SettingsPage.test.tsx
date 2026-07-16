@@ -4,6 +4,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
 import { SettingsPage } from './SettingsPage'
+import type { ModelConfigResponse } from '@/shared/types/common'
 
 const admin = { id: 'admin-1', email: 'admin@example.com', role: 'admin', scopes: [], is_active: true }
 const chatSettings = {
@@ -24,6 +25,7 @@ const models = {
       structured_output_mode: 'json',
       default_reasoning_effort: 'max',
       parallel_tool_calls: null,
+      live_search_enabled: false,
       retries: 4,
       delay_between_retries: 1,
       exponential_backoff: true,
@@ -44,6 +46,7 @@ const models = {
       structured_output_mode: 'native',
       default_reasoning_effort: 'high',
       parallel_tool_calls: false,
+      live_search_enabled: false,
       retries: 4,
       delay_between_retries: 1,
       exponential_backoff: true,
@@ -56,7 +59,7 @@ const models = {
       configured: true,
     },
   ],
-}
+} satisfies ModelConfigResponse
 
 const mockSettings = () =>
   server.use(
@@ -109,29 +112,26 @@ describe('model settings editor', () => {
     const tips = document.querySelectorAll('.ant-form-item-tooltip')
     expect(tips.length).toBeGreaterThanOrEqual(2)
   })
-})
 
   it('deletes a custom model and keeps the active model valid', async () => {
-    let saved: unknown
+    let saved: ModelConfigResponse | undefined
     mockSettings()
     server.use(
       http.put('/api/models', async ({ request }) => {
-        saved = await request.json()
+        saved = (await request.json()) as ModelConfigResponse
         return HttpResponse.json(saved)
       })
     )
     renderWithQuery(<SettingsPage />)
 
     fireEvent.click(await screen.findByLabelText('删除 Second model'))
-    // Popconfirm OK
     const ok = await screen.findByRole('button', { name: '删除模型' })
     fireEvent.click(ok)
 
     await waitFor(() => {
       expect(saved).toBeTruthy()
-      const body = saved as { active_model_id: string; models: { id: string }[] }
-      expect(body.models.map((m) => m.id)).toEqual(['first'])
-      expect(body.active_model_id).toBe('first')
+      expect(saved!.models.map((m) => m.id)).toEqual(['first'])
+      expect(saved!.active_model_id).toBe('first')
     })
   })
 
@@ -141,3 +141,4 @@ describe('model settings editor', () => {
     const btn = await screen.findByLabelText('删除 First model')
     expect(btn.hasAttribute('disabled') || btn.getAttribute('disabled') === '').toBe(true)
   })
+})

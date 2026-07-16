@@ -44,6 +44,7 @@ def model_configs_table(metadata: MetaData | None = None) -> Table:
         Column("structured_output_mode", String(32), nullable=False),
         Column("default_reasoning_effort", String(16), nullable=True),
         Column("parallel_tool_calls", Boolean, nullable=True),
+        Column("live_search_enabled", Boolean, nullable=False, server_default="false"),
         Column("retries", BigInteger, nullable=False, server_default="4"),
         Column("delay_between_retries", BigInteger, nullable=False, server_default="1"),
         Column("exponential_backoff", Boolean, nullable=False, server_default="true"),
@@ -81,6 +82,12 @@ async def ensure_model_configs_table_async() -> None:
             text(
                 f"ALTER TABLE {schema}.{table_name} "
                 "ADD COLUMN IF NOT EXISTS parallel_tool_calls BOOLEAN"
+            )
+        )
+        await conn.execute(
+            text(
+                f"ALTER TABLE {schema}.{table_name} "
+                "ADD COLUMN IF NOT EXISTS live_search_enabled BOOLEAN NOT NULL DEFAULT false"
             )
         )
         await conn.execute(

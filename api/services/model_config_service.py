@@ -82,6 +82,7 @@ class ModelConfig(BaseModel):
     structured_output_mode: StructuredOutputMode = "json"
     default_reasoning_effort: ReasoningEffort | None = None
     parallel_tool_calls: bool | None = None
+    live_search_enabled: bool = False
     retries: int = Field(default=4, ge=0, le=10)
     delay_between_retries: int = Field(default=1, ge=0, le=60)
     exponential_backoff: bool = True
@@ -131,12 +132,12 @@ class ModelConfig(BaseModel):
         protocol, output_mode, reasoning_effort = _provider_defaults(provider)
         if provider in {"deepseek", "xai"}:
             raw["api_protocol"] = protocol
-            raw["structured_output_mode"] = raw.get("structured_output_mode") or output_mode
             if provider == "deepseek":
                 raw["structured_output_mode"] = output_mode
             if provider == "xai":
                 raw["api_protocol"] = "chat-completions"
-                raw["structured_output_mode"] = "json"
+                # Allow native | json; default json if unset
+                raw.setdefault("structured_output_mode", output_mode)
                 if not base_url:
                     raw["base_url"] = "https://api.x.ai/v1"
                 # Drop unsupported reasoning_effort from legacy Responses Grok configs.
@@ -205,6 +206,7 @@ class ModelConfig(BaseModel):
             structured_output_mode=cast(StructuredOutputMode, structured_output_mode),
             default_reasoning_effort=cast(ReasoningEffort | None, configured_reasoning_effort),
             parallel_tool_calls=raw.get("parallel_tool_calls"),
+            live_search_enabled=_optional_bool(raw.get("live_search_enabled"), default=False),
             retries=_optional_int(raw.get("retries"), default=4, minimum=0, maximum=10) or 0,
             delay_between_retries=_optional_int(
                 raw.get("delay_between_retries"), default=1, minimum=0, maximum=60
@@ -486,6 +488,7 @@ def _store_to_rows(
                 "structured_output_mode": model.structured_output_mode,
                 "default_reasoning_effort": model.default_reasoning_effort,
                 "parallel_tool_calls": model.parallel_tool_calls,
+                "live_search_enabled": model.live_search_enabled,
                 "retries": model.retries,
                 "delay_between_retries": model.delay_between_retries,
                 "exponential_backoff": model.exponential_backoff,

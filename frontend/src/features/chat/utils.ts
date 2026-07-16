@@ -9,6 +9,8 @@ export const initialChatState: ChatState = {
   error: null,
   selectedModelId: localStorage.getItem('agno-aios-chat-model-id'),
   reasoningEffort: null,
+  searchKnowledge: true,
+  liveSearch: false,
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object'
@@ -28,6 +30,10 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
       return { ...state, selectedModelId: action.value, reasoningEffort: action.reasoningEffort }
     case 'reasoning-effort':
       return { ...state, reasoningEffort: action.value }
+    case 'search-knowledge':
+      return { ...state, searchKnowledge: action.value }
+    case 'live-search':
+      return { ...state, liveSearch: action.value }
     case 'start':
       return {
         ...state,

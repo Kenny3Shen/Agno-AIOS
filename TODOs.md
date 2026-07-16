@@ -136,6 +136,16 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：xAI Structured Output + Live Search / Knowledge 开关
+
+- xAI 放开 `structured_output_mode`（native/json）；设置页可配 `live_search_enabled`
+- Chat 输入区：联网搜索（Live Search）与知识库检索开关；Run 透传 `live_search` / `search_knowledge`
+- 模型工厂：xAI `search_parameters`；OpenAI-compatible `extra_body.search_parameters`
+
+相关：`model_factory.py` / `security_run_runtime.py` / `ChatPage.tsx` / `SettingsPage.tsx`
+
+---
+
 ## 已完成：设置页删除模型
 
 - 模型列表支持删除自定义模型（内置不可删、至少保留一个）

@@ -11,6 +11,8 @@ export interface ModelConfig {
   default_reasoning_effort?: ReasoningEffort | null
   /** Leave unset to use the provider default. */
   parallel_tool_calls?: boolean | null
+  /** xAI / compatible live search (search_parameters). */
+  live_search_enabled?: boolean
   /** Agno Model retries for 429/5xx (0 disables). */
   retries?: number
   delay_between_retries?: number

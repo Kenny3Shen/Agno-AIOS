@@ -55,5 +55,7 @@
   "modelDeleted": "{{name}} deleted",
   "modelDeleteFailed": "Failed to delete model",
   "cannotDeleteBuiltin": "Built-in models cannot be deleted; disable them instead",
-  "cannotDeleteLastModel": "Keep at least one model"
+  "cannotDeleteLastModel": "Keep at least one model",
+  "liveSearch": "Live Search",
+  "liveSearchHelp": "Sends search_parameters when supported (native xAI; OpenAI-compatible via extra_body). Ignored for DeepSeek and native OpenAI."
 }

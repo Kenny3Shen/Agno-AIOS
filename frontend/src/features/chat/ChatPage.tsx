@@ -11,6 +11,8 @@ import {
   CopyOutlined,
   NumberOutlined,
   DownOutlined,
+  BookOutlined,
+  GlobalOutlined,
   PaperClipOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
@@ -463,7 +465,35 @@ export function ChatPage() {
             autoSize={{ minRows: 1, maxRows: 5 }}
             footer={
               <div className="sender-controls">
-                <Button className="sender-extension" type="text" icon={<PaperClipOutlined />} disabled aria-label={t('attachmentsComing')} />
+                <div className="sender-toggles">
+                  <Button
+                    className={chat.state.liveSearch ? 'sender-toggle active' : 'sender-toggle'}
+                    type="text"
+                    size="small"
+                    icon={<GlobalOutlined />}
+                    aria-pressed={chat.state.liveSearch}
+                    aria-label={t('liveSearch')}
+                    title={t('liveSearchHelp')}
+                    disabled={chat.state.requesting || Boolean(pausedRun)}
+                    onClick={() => chat.setLiveSearch(!chat.state.liveSearch)}
+                  >
+                    {t('liveSearch')}
+                  </Button>
+                  <Button
+                    className={chat.state.searchKnowledge ? 'sender-toggle active' : 'sender-toggle'}
+                    type="text"
+                    size="small"
+                    icon={<BookOutlined />}
+                    aria-pressed={chat.state.searchKnowledge}
+                    aria-label={t('knowledgeSearch')}
+                    title={t('knowledgeSearchHelp')}
+                    disabled={chat.state.requesting || Boolean(pausedRun)}
+                    onClick={() => chat.setSearchKnowledge(!chat.state.searchKnowledge)}
+                  >
+                    {t('knowledgeSearch')}
+                  </Button>
+                  <Button className="sender-extension" type="text" icon={<PaperClipOutlined />} disabled aria-label={t('attachmentsComing')} />
+                </div>
                 <div className="sender-actions">
                   <ModelSettings
                     models={chat.models.data?.models ?? []}

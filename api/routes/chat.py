@@ -39,6 +39,8 @@ class ChatRequest(BaseModel):
     session_id: str
     model_id: str | None = None
     reasoning_effort: Literal["minimal", "low", "medium", "high", "max"] | None = None
+    search_knowledge: bool = True
+    live_search: bool | None = None
 
 
 class SessionRenameRequest(BaseModel):
@@ -170,6 +172,8 @@ async def chat_agent(
             else actor_id(user),
             memory_enabled=chat_settings["memory_enabled"],
             store_raw_tool_io=chat_settings["show_raw_tool_io"],
+            search_knowledge=request.search_knowledge,
+            live_search=request.live_search,
         )
         return EventSourceResponse(
             _event_generator(

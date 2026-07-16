@@ -45,8 +45,11 @@ from api.services.chat_run_events import (
 async def _build_model(
     model_id: str | None = None,
     reasoning_effort: str | None = None,
+    live_search: bool | None = None,
 ) -> Any:
     config = await get_model_for_run(model_id)
+    if live_search is not None:
+        config = {**config, "live_search_enabled": bool(live_search)}
     if reasoning_effort is None:
         return build_agno_model(config)
     return build_agno_model(config, reasoning_effort=reasoning_effort)
@@ -173,6 +176,8 @@ class SecurityRunRequest:
     knowledge_owner_user_id: str | None
     memory_enabled: bool = True
     store_raw_tool_io: bool = False
+    search_knowledge: bool = True
+    live_search: bool | None = None
 
     @classmethod
     def from_chat_args(
@@ -185,6 +190,8 @@ class SecurityRunRequest:
         knowledge_owner_user_id: str | None = None,
         memory_enabled: bool = True,
         store_raw_tool_io: bool = False,
+        search_knowledge: bool = True,
+        live_search: bool | None = None,
     ) -> "SecurityRunRequest":
         return cls(
             message=message,
@@ -195,6 +202,8 @@ class SecurityRunRequest:
             knowledge_owner_user_id=knowledge_owner_user_id,
             memory_enabled=memory_enabled,
             store_raw_tool_io=store_raw_tool_io,
+            search_knowledge=search_knowledge,
+            live_search=live_search,
         )
 
     @property
@@ -209,6 +218,8 @@ class SecurityRunRequest:
             "knowledge_owner_user_id": self.knowledge_owner_user_id or "",
             "memory_enabled": self.memory_enabled,
             "store_raw_tool_io": self.store_raw_tool_io,
+            "search_knowledge": self.search_knowledge,
+            "live_search": self.live_search,
         }
 
     @classmethod
@@ -226,6 +237,12 @@ class SecurityRunRequest:
         version = context.get("version")
         if not isinstance(version, int) or version != RUNTIME_METADATA_VERSION:
             raise ValueError("Paused run runtime metadata version is unsupported")
+        live_raw = context.get("live_search")
+        live_search: bool | None
+        if live_raw is None:
+            live_search = None
+        else:
+            live_search = bool(live_raw)
         return cls.from_chat_args(
             "Continue the approved security operation.",
             session_id=session_id,
@@ -235,6 +252,8 @@ class SecurityRunRequest:
             knowledge_owner_user_id=str(context.get("knowledge_owner_user_id") or "") or None,
             memory_enabled=bool(context.get("memory_enabled", True)),
             store_raw_tool_io=bool(context.get("store_raw_tool_io", False)),
+            search_knowledge=bool(context.get("search_knowledge", True)),
+            live_search=live_search,
         )
 
 
@@ -551,13 +570,13 @@ class SecurityRunRuntime:
         self,
         model_id: str | None,
         reasoning_effort: str | None,
+        live_search: bool | None = None,
     ) -> Any:
-        if reasoning_effort is None:
-            return await _run_sync_dependency(self.dependencies.build_model, model_id)
         return await _run_sync_dependency(
             self.dependencies.build_model,
             model_id,
             reasoning_effort,
+            live_search,
         )
 
     async def _build_enabled_skills(self) -> Skills | None:
@@ -848,8 +867,9 @@ class SecurityRunRuntime:
         model_id: str | None = None,
         reasoning_effort: str | None = None,
         memory_enabled: bool = True,
+        live_search: bool | None = None,
     ) -> Agent:
-        model = await self._build_model(model_id, reasoning_effort)
+        model = await self._build_model(model_id, reasoning_effort, live_search=live_search)
         return self.dependencies.agent_factory(
             id="security-operations",
             name="安全防御助手",
@@ -872,7 +892,15 @@ class SecurityRunRuntime:
         mcp_tools: Any,
         request: SecurityRunRequest,
     ) -> Agent:
-        model = await self._build_model(request.model_id, request.reasoning_effort)
+        model = await self._build_model(
+            request.model_id,
+            request.reasoning_effort,
+            live_search=request.live_search,
+        )
+        knowledge = None
+        search_knowledge = bool(request.search_knowledge)
+        if search_knowledge:
+            knowledge = await _maybe_await(self.dependencies.get_async_knowledge_base())
         return self.dependencies.agent_factory(
             id="security-operations",
             name="安全运营助手",
@@ -881,12 +909,12 @@ class SecurityRunRuntime:
             instructions=[await _load_prompt_async(SECURITY_OPERATIONS_PROMPT)],
             model=model,
             tools=[mcp_tools],
-            knowledge=await _maybe_await(self.dependencies.get_async_knowledge_base()),
+            knowledge=knowledge,
             knowledge_filters={"user_id": request.knowledge_owner_user_id}
-            if request.knowledge_owner_user_id
+            if request.knowledge_owner_user_id and search_knowledge
             else None,
-            search_knowledge=True,
-            add_search_knowledge_instructions=True,
+            search_knowledge=search_knowledge,
+            add_search_knowledge_instructions=search_knowledge,
             skills=await self._build_enabled_skills(),
             db=self.dependencies.get_db(),
             dependencies=await _run_sync_dependency(_agent_dependencies),
@@ -939,13 +967,16 @@ class SecurityRunRuntime:
             yield ChatRunEvent("content.delta", {"run_id": "", "delta": "模型服务拦截了完整 Agent 上下文，已切换到无工具安全模式。\n\n"})
             fallback_agent = await _maybe_await(
                 self.build_fallback_agent(
-                    request.model_id, memory_enabled=request.memory_enabled
+                    request.model_id,
+                    memory_enabled=request.memory_enabled,
+                    live_search=request.live_search,
                 )
                 if request.reasoning_effort is None
                 else self.build_fallback_agent(
                     request.model_id,
                     request.reasoning_effort,
                     memory_enabled=request.memory_enabled,
+                    live_search=request.live_search,
                 )
             )
             async for event in self._stream_agent_events(

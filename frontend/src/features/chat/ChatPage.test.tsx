@@ -7,7 +7,7 @@ import { ChatPage } from './ChatPage'
 const longModelName = 'enterprise-security-analysis-model-with-an-intentionally-long-display-name'
 
 const chat = {
-  state: { messages: [], input: '', requesting: false, error: null, selectedModelId: 'long', reasoningEffort: null },
+  state: { messages: [], input: '', requesting: false, error: null, selectedModelId: 'long', reasoningEffort: null, searchKnowledge: true, liveSearch: false },
   sessionId: null,
   sessions: { data: [] },
   history: { data: [] },
@@ -64,6 +64,8 @@ const chat = {
   dispatch: vi.fn<(action: unknown) => void>(),
   setSession: vi.fn<(sessionId: string) => void>(),
   setModel: vi.fn<(modelId: string) => void>(),
+  setSearchKnowledge: vi.fn(),
+  setLiveSearch: vi.fn(),
   setReasoningEffort: vi.fn<(effort: string) => void>(),
   submit: vi.fn<(value?: string) => void>(),
   retry: vi.fn<(messageId: string) => void>(),

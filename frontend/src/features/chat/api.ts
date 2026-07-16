@@ -184,7 +184,7 @@ const parseEvent = (event: string, data: string): ChatRunEvent | null => {
 }
 
 export const streamMessage = async (
-  payload: { message: string; session_id: string; model_id: string | null; reasoning_effort?: ReasoningEffort },
+  payload: { message: string; session_id: string; model_id: string | null; reasoning_effort?: ReasoningEffort; search_knowledge?: boolean; live_search?: boolean | null },
   onEvent: (event: ChatRunEvent) => void,
   signal: AbortSignal
 ) => {

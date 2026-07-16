@@ -42,6 +42,54 @@ def _retry_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     return params
 
 
+
+def _live_search_kwargs(config: dict[str, Any], *, provider: str) -> dict[str, Any]:
+    """Enable xAI-style live search when configured for this run/model."""
+    enabled = config.get("live_search_enabled")
+    if isinstance(enabled, str):
+        enabled = enabled.strip().lower() in {"1", "true", "yes", "on"}
+    if not enabled:
+        return {}
+    search_parameters = {
+        "mode": "on",
+        "max_search_results": 20,
+        "return_citations": True,
+    }
+    if provider == "xai":
+        return {"search_parameters": search_parameters}
+    # OpenAI-compatible Chat Completions gateways (incl. custom xAI base_url)
+    if provider == "openai-compatible":
+        return {
+            "request_params": {
+                "extra_body": {"search_parameters": search_parameters},
+            }
+        }
+    # Native OpenAI / DeepSeek: no Agno live-search hook; ignore.
+    return {}
+
+
+def _merge_request_params(kwargs: dict[str, Any], extra: dict[str, Any]) -> None:
+    if not extra:
+        return
+    if "search_parameters" in extra:
+        kwargs["search_parameters"] = extra["search_parameters"]
+    extra_rp = extra.get("request_params")
+    if not isinstance(extra_rp, dict):
+        return
+    existing = kwargs.get("request_params")
+    if not isinstance(existing, dict):
+        kwargs["request_params"] = dict(extra_rp)
+        return
+    merged = dict(existing)
+    for key, value in extra_rp.items():
+        if key == "extra_body" and isinstance(value, dict):
+            body = dict(merged.get("extra_body") or {})
+            body.update(value)
+            merged["extra_body"] = body
+        else:
+            merged[key] = value
+    kwargs["request_params"] = merged
+
 def build_agno_model(
     config: dict[str, Any], *, reasoning_effort: str | None = None
 ) -> Model:
@@ -100,6 +148,7 @@ def build_agno_model(
             kwargs["request_params"] = {
                 "parallel_tool_calls": parallel_tool_calls,
             }
+        _merge_request_params(kwargs, _live_search_kwargs(config, provider=provider))
         return _with_output_mode(xAI(**kwargs), output_mode)
 
     if provider == "openai-compatible":
@@ -115,6 +164,7 @@ def build_agno_model(
             }
             if parallel_tool_calls is not None:
                 kwargs["parallel_tool_calls"] = parallel_tool_calls
+            # Live search is Chat Completions / xAI-style only.
             return _with_output_mode(
                 OpenAIResponses(**kwargs),
                 output_mode,
@@ -130,6 +180,7 @@ def build_agno_model(
             kwargs["request_params"] = {
                 "parallel_tool_calls": parallel_tool_calls,
             }
+        _merge_request_params(kwargs, _live_search_kwargs(config, provider=provider))
         return _with_output_mode(OpenAILike(**kwargs), output_mode)
 
     raise ValueError(f"Unsupported model provider: {provider}")

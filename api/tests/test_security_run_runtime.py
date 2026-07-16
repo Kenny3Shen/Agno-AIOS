@@ -85,7 +85,7 @@ class BlockingRuntime(security_run_runtime.SecurityRunRuntime):
     def _build_security_agent(self, mcp_tools, request):
         return BlockingAgent()
 
-    def build_fallback_agent(self, model_id=None, reasoning_effort=None, memory_enabled=True):
+    def build_fallback_agent(self, model_id=None, reasoning_effort=None, memory_enabled=True, live_search=None):
         return FallbackAgent()
 
 
@@ -136,7 +136,7 @@ async def test_security_agent_loads_prompt_when_agent_is_built():
         prompt_file.write_text("第一次运行时能力", encoding="utf-8")
         runtime = security_run_runtime.SecurityRunRuntime(
             security_run_runtime.SecurityRunRuntimeDependencies(
-                build_model=lambda _model_id: object(),
+                build_model=lambda *_args, **_kwargs: object(),
                 get_db=lambda: object(),
                 get_async_knowledge_base=lambda: object(),
                 get_enabled_skill_dirs=lambda: [],
@@ -189,7 +189,7 @@ async def test_fallback_agent_loads_prompt_when_agent_is_built():
         prompt_file.write_text("降级提示词", encoding="utf-8")
         runtime = security_run_runtime.SecurityRunRuntime(
             security_run_runtime.SecurityRunRuntimeDependencies(
-                build_model=lambda _model_id: object(),
+                build_model=lambda *_args, **_kwargs: object(),
                 get_db=lambda: object(),
                 agent_factory=agent_factory,
             )
@@ -209,7 +209,7 @@ async def test_fallback_agent_keeps_memory_and_summary():
 
     runtime = security_run_runtime.SecurityRunRuntime(
         security_run_runtime.SecurityRunRuntimeDependencies(
-            build_model=lambda _model_id: object(),
+            build_model=lambda *_args, **_kwargs: object(),
             get_db=lambda: object(),
             agent_factory=agent_factory,
         )
@@ -230,7 +230,7 @@ async def test_security_agent_disables_long_term_memory_when_requested():
     created: dict = {}
     runtime = security_run_runtime.SecurityRunRuntime(
         security_run_runtime.SecurityRunRuntimeDependencies(
-            build_model=lambda _model_id: object(),
+            build_model=lambda *_args, **_kwargs: object(),
             get_db=lambda: object(),
             get_async_knowledge_base=lambda: object(),
             get_enabled_skill_dirs=lambda: [],
@@ -314,7 +314,7 @@ async def test_build_model_dependency_runs_off_event_loop():
     build_model_thread_id: int | None = None
     created: dict = {}
 
-    def build_model(_model_id: str | None):
+    def build_model(_model_id: str | None, reasoning_effort=None, live_search=None):
         nonlocal build_model_thread_id
         build_model_thread_id = threading.get_ident()
         return object()
@@ -348,7 +348,7 @@ async def test_build_model_dependency_runs_off_event_loop():
 async def test_runtime_passes_reasoning_effort_override_to_model_builder():
     captured: list[tuple[str | None, str | None]] = []
 
-    def build_model(model_id: str | None, reasoning_effort: str | None):
+    def build_model(model_id: str | None, reasoning_effort: str | None = None, live_search=None):
         captured.append((model_id, reasoning_effort))
         return object()
 
@@ -365,7 +365,7 @@ async def test_runtime_passes_reasoning_effort_override_to_model_builder():
 async def test_fallback_agent_preserves_reasoning_effort_override():
     captured: list[tuple[str | None, str | None]] = []
 
-    def build_model(model_id: str | None, reasoning_effort: str | None):
+    def build_model(model_id: str | None, reasoning_effort: str | None = None, live_search=None):
         captured.append((model_id, reasoning_effort))
         return object()
 
@@ -443,7 +443,7 @@ async def test_agent_dependencies_are_built_off_event_loop():
         )
         runtime = security_run_runtime.SecurityRunRuntime(
             security_run_runtime.SecurityRunRuntimeDependencies(
-                build_model=lambda _model_id: object(),
+                build_model=lambda *_args, **_kwargs: object(),
                 get_db=lambda: object(),
                 get_async_knowledge_base=lambda: object(),
                 get_enabled_skill_dirs=lambda: [],
@@ -546,6 +546,8 @@ async def test_stream_agent_events_persists_and_projects_required_approval_pause
             "knowledge_owner_user_id": "",
             "memory_enabled": True,
             "store_raw_tool_io": False,
+            "search_knowledge": True,
+            "live_search": None,
         }
     }
     notify.assert_awaited_once_with(

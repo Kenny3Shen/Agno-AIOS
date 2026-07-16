@@ -1117,3 +1117,20 @@ html.dark {
 .message-body--sent .ant-actions {
   justify-content: flex-end;
 }
+
+.sender-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.sender-toggle {
+  color: var(--tais-muted) !important;
+  border-radius: 999px !important;
+  font-size: 12px !important;
+}
+.sender-toggle.active {
+  color: var(--tais-orange) !important;
+  background: color-mix(in srgb, var(--tais-orange) 12%, transparent) !important;
+}

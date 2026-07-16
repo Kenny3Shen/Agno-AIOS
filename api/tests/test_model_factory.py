@@ -271,3 +271,34 @@ def test_xai_respects_custom_base_url_and_parallel_tools():
     )
     assert isinstance(model, xAI)
     assert model.request_params == {"parallel_tool_calls": False}
+
+
+
+def test_xai_live_search_sets_search_parameters():
+    from agno.models.xai import xAI
+
+    model = build_agno_model(
+        config(
+            provider="xai",
+            model_id="grok-4.5",
+            live_search_enabled=True,
+        )
+    )
+    assert isinstance(model, xAI)
+    assert model.search_parameters == {
+        "mode": "on",
+        "max_search_results": 20,
+        "return_citations": True,
+    }
+
+
+def test_compatible_live_search_uses_extra_body():
+    model = build_agno_model(
+        config(
+            provider="openai-compatible",
+            api_protocol="chat-completions",
+            live_search_enabled=True,
+        )
+    )
+    assert isinstance(model, OpenAILike)
+    assert model.request_params["extra_body"]["search_parameters"]["mode"] == "on"
