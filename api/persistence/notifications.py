@@ -125,7 +125,7 @@ async def list_notifications_after(
 ) -> list[dict[str, Any]]:
     await _ensure()
     table = _table()
-    safe_limit = max(1, min(int(limit), 500))
+    safe_limit = max(1, min(int(limit or 100), 200))
     stmt = (
         select(table)
         .where(table.c.user_id == user_id, table.c.id > max(0, int(after_id)))

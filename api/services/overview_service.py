@@ -24,7 +24,7 @@ _RANGE_WINDOWS: dict[OverviewRange, timedelta] = {
     "7d": timedelta(days=7),
 }
 # Token sample (+ SQL-fallback latency sample). Window KPIs use SQL aggregates.
-_PAGE_LIMIT = 100
+_PAGE_LIMIT = 50
 _MAX_OVERVIEW_TRACES = _PAGE_LIMIT
 
 

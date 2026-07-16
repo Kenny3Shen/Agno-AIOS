@@ -276,7 +276,7 @@ async def test_overview_uses_trace_database_time_and_owner_filter():
             user_id="u1",
         )
     assert captured["user_id"] == "u1"
-    assert captured["limit"] == 100
+    assert captured["limit"] == 50
     assert captured["page"] == 1
 
 

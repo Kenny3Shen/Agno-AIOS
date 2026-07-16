@@ -124,6 +124,17 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：model_config 一次性导入归档 + Overview 采样 50 + SSE after 上限
+
+- 空表 bootstrap：从 `model_config.json` 导入后重命名为 `model_config.json.imported`，避免反复空表回灌
+- 无 legacy 文件时直接种子 defaults 并写库
+- Overview token 样本 `_PAGE_LIMIT` 100→50
+- `list_notifications_after` 单次上限与列表一致（max 200）
+
+相关：`model_config_service.py` / `overview_service.py` / `notifications.py`
+
+---
+
 ## 已完成：Knowledge getKnowledge 去掉 string 重载
 
 - `getKnowledge` 仅接受 `GetKnowledgeParams` 对象；全站唯一调用方已是对象形式

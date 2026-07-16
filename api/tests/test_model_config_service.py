@@ -44,6 +44,26 @@ async def test_load_model_config_store_imports_legacy_json_when_postgres_is_empt
     rows = await_args.args[0]
     assert any(row["id"] == "custom" and row["active"] for row in rows)
     assert {row["structured_output_mode"] for row in rows} <= {"native", "json"}
+    # One-shot bootstrap: original file is renamed so empty-table restarts do not re-import.
+    assert not legacy_file.exists()
+    assert (tmp_path / "model_config.json.imported").exists()
+
+
+@pytest.mark.asyncio
+async def test_load_model_config_store_seeds_defaults_when_empty_without_legacy_file(tmp_path):
+    missing = tmp_path / "missing-model-config.json"
+    replace = AsyncMock()
+
+    with (
+        patch.object(model_config_service, "model_config_file", return_value=missing),
+        patch.object(model_config_service, "list_model_config_rows", AsyncMock(return_value=[])),
+        patch.object(model_config_service, "replace_model_config_rows", replace),
+    ):
+        store = await model_config_service.load_model_config_store()
+
+    assert store.models
+    replace.assert_awaited_once()
+    assert not missing.exists()
 
 
 @pytest.mark.asyncio

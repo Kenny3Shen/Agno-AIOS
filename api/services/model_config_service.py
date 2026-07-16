@@ -429,10 +429,33 @@ def _mask_secret(value: str) -> str:
     return value[:4] + "*" * (len(value) - 8) + value[-4:]
 
 
-def _load_legacy_or_default_store() -> ModelConfigStore:
+def _archive_legacy_model_config_file(config_file: Path) -> None:
+    """Rename one-shot JSON bootstrap so empty-table import is not re-applied."""
+    try:
+        archived = config_file.with_name(f"{config_file.name}.imported")
+        # Avoid clobbering a previous archive; keep the first successful import.
+        if archived.exists():
+            config_file.unlink(missing_ok=True)
+            return
+        config_file.rename(archived)
+        logger.info("archived legacy model config to {}", archived)
+    except OSError:
+        logger.warning(
+            "unable to archive legacy model config at {}",
+            config_file,
+            exc_info=True,
+        )
+
+
+def _load_legacy_or_default_store() -> tuple[ModelConfigStore, Path | None]:
+    """Bootstrap store from legacy JSON once, else built-in defaults.
+
+    Returns ``(store, legacy_path_if_used)`` so callers can archive the file
+    after a successful Postgres seed.
+    """
     config_file = model_config_file()
     if not config_file.exists():
-        return ModelConfigStore.default()
+        return ModelConfigStore.default(), None
     try:
         raw = loads(config_file.read_text(encoding="utf-8"))
     except Exception:
@@ -441,8 +464,8 @@ def _load_legacy_or_default_store() -> ModelConfigStore:
             config_file,
             exc_info=True,
         )
-        return ModelConfigStore.default()
-    return ModelConfigStore.from_raw(raw)
+        return ModelConfigStore.default(), None
+    return ModelConfigStore.from_raw(raw), config_file
 
 
 def _rows_need_persist(rows: Iterable[Mapping[str, Any]]) -> bool:
@@ -521,12 +544,16 @@ def _store_to_rows(
 async def load_model_config_store() -> ModelConfigStore:
     rows = await list_model_config_rows()
     if not rows:
-        store = _load_legacy_or_default_store()
+        store, legacy_path = _load_legacy_or_default_store()
+        source = "legacy file" if legacy_path is not None else "defaults"
         logger.info(
-            "model config table empty; imported {} model(s) from legacy file/defaults",
+            "model config table empty; seeding {} model(s) from {}",
             len(store.models),
+            source,
         )
         await replace_model_config_rows(_store_to_rows(store))
+        if legacy_path is not None:
+            _archive_legacy_model_config_file(legacy_path)
         return store
 
     base_store = ModelConfigStore.from_rows(rows)
