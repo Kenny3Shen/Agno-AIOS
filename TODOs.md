@@ -13,6 +13,11 @@
 - `pasteClipboard`：有选中宿主时把新节点锚在宿主旁（容器 +220/+40），避免粘贴进嵌套后飞到旧坐标。
 - `nodeLabel`：空 Agent 步不再回退 `targetId`；校验路径文案与默认画布名一致（Agent step / Parallel / …）。
 
+## 已完成：HITL 粘贴分流提示
+
+- `pasteNodesIntoSelection` 返回 `{ steps, divertedHitlCount }`。
+- Studio 粘贴时若 Parallel 内 HITL 被改放到根级，Toast 提示数量。
+
 ## 已完成：Chat 自动轻量后 Knowledge/Live 开关去高亮
 
 - 上一轮 `leanMode` 时，即使偏好仍开，Knowledge / Live Search 开关不再显示 active，改用 muted + Tooltip 说明「偏好保留，下一轮有工具意图再生效」。

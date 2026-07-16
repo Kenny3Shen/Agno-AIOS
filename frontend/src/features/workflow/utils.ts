@@ -1711,13 +1711,27 @@ export const summarizeSelectedAgentSteps = (
  *
  * Parallel never receives HITL trees (Agno constraint); those clones fall back to root.
  */
+export type PasteSelectionResult = {
+  steps: WorkflowNode[]
+  /** Clones that could not enter Parallel because of HITL (appended at root). */
+  divertedHitlCount: number
+}
+
+/**
+ * Insert cloned nodes relative to the current selection:
+ * - single container selected → default empty/primary branch
+ * - single non-container selected → sibling after that node
+ * - multi-select / none → append at roots
+ *
+ * Parallel never receives HITL trees (Agno constraint); those clones fall back to root.
+ */
 export const pasteNodesIntoSelection = (
   steps: WorkflowNode[],
   clones: WorkflowNode[],
   selectedIds: string[],
   selectedId: string | null,
-): WorkflowNode[] => {
-  if (!clones.length) return steps
+): PasteSelectionResult => {
+  if (!clones.length) return { steps, divertedHitlCount: 0 }
   const soleId =
     selectedIds.length === 1
       ? selectedIds[0]
@@ -1727,12 +1741,14 @@ export const pasteNodesIntoSelection = (
   const host = soleId ? findNode(steps, soleId) : null
 
   // Multi-select or empty selection: root append.
-  if (!host) return [...steps, ...clones]
+  if (!host) return { steps: [...steps, ...clones], divertedHitlCount: 0 }
 
   // Container: paste into default slot (then/else/steps/choice).
   if (isContainerType(host.type)) {
     const drop = defaultDropTarget(host)
-    if (!drop || drop.kind === 'root') return [...steps, ...clones]
+    if (!drop || drop.kind === 'root') {
+      return { steps: [...steps, ...clones], divertedHitlCount: 0 }
+    }
     const intoParallel = isInsideParallel(steps, host.id)
 
     let next = steps
@@ -1746,12 +1762,15 @@ export const pasteNodesIntoSelection = (
       }
       next = insertChild(next, drop, clone)
     }
-    return rootFallback.length ? [...next, ...rootFallback] : next
+    return {
+      steps: rootFallback.length ? [...next, ...rootFallback] : next,
+      divertedHitlCount: rootFallback.length,
+    }
   }
 
   // Non-container: insert as siblings after the selected node.
   const location = locateNode(steps, host.id)
-  if (!location) return [...steps, ...clones]
+  if (!location) return { steps: [...steps, ...clones], divertedHitlCount: 0 }
 
   // Sibling under a Parallel (or deeper) cannot receive HITL trees.
   const siblingUnderParallel = isInsideParallel(steps, host.id)
@@ -1769,6 +1788,9 @@ export const pasteNodesIntoSelection = (
   }
   // rootFallback was collected in reverse order too
   rootFallback.reverse()
-  return rootFallback.length ? [...next, ...rootFallback] : next
+  return {
+    steps: rootFallback.length ? [...next, ...rootFallback] : next,
+    divertedHitlCount: rootFallback.length,
+  }
 }
 

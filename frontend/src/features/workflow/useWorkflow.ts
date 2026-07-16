@@ -516,61 +516,82 @@ export function useWorkflow() {
     clipboardRef.current = (tops.length ? tops : nodes).map(cloneNodeDeep)
   }
 
-  const pasteClipboard = () => {
+  const pasteClipboard = (): number => {
     const items = clipboardRef.current
-    if (!items.length) return
-    withHistory((current) => {
-      const soleId =
-        current.selectedIds.length === 1
-          ? current.selectedIds[0]
-          : current.selectedId && current.selectedIds.length <= 1
-            ? current.selectedId
-            : null
-      const host = soleId ? findNode(current.steps, soleId) : null
-      // Anchor near selected host so paste into container/sibling doesn't jump to old coords.
-      let anchor: { x: number; y: number } | null = null
-      if (host?.position) {
-        anchor = { x: host.position.x + 220, y: host.position.y + 40 }
-      } else if (host) {
-        const parentLoc = locateNode(current.steps, host.id)
-        if (parentLoc && parentLoc.kind !== 'root') {
-          const parent = findNode(current.steps, parentLoc.parentId)
-          if (parent?.position) {
-            anchor = { x: parent.position.x + 220, y: parent.position.y + 40 }
-          }
+    if (!items.length) return 0
+
+    const soleId =
+      state.selectedIds.length === 1
+        ? state.selectedIds[0]
+        : state.selectedId && state.selectedIds.length <= 1
+          ? state.selectedId
+          : null
+    const host = soleId ? findNode(state.steps, soleId) : null
+    let anchor: { x: number; y: number } | null = null
+    if (host?.position) {
+      anchor = { x: host.position.x + 220, y: host.position.y + 40 }
+    } else if (host) {
+      const parentLoc = locateNode(state.steps, host.id)
+      if (parentLoc && parentLoc.kind !== 'root') {
+        const parent = findNode(state.steps, parentLoc.parentId)
+        if (parent?.position) {
+          anchor = { x: parent.position.x + 220, y: parent.position.y + 40 }
         }
       }
+    }
 
-      const clones = items.map((node, index) => {
-        const clone = cloneNodeDeep(node)
-        if (anchor) {
-          clone.position = { x: anchor.x, y: anchor.y + index * 100 }
-        } else {
-          const pos = clone.position
-          clone.position = pos
-            ? { x: pos.x + 40, y: pos.y + 40 }
-            : { x: 80 + index * 40, y: 80 + index * 40 }
+    const clones = items.map((node, index) => {
+      const clone = cloneNodeDeep(node)
+      if (anchor) {
+        clone.position = { x: anchor.x, y: anchor.y + index * 100 }
+      } else {
+        const pos = clone.position
+        clone.position = pos
+          ? { x: pos.x + 40, y: pos.y + 40 }
+          : { x: 80 + index * 40, y: 80 + index * 40 }
+      }
+      return clone
+    })
+    // refresh clipboard offsets for repeated paste
+    clipboardRef.current = clones.map(cloneNodeDeep)
+    const ids = clones.map((c) => c.id)
+    const pasted = pasteNodesIntoSelection(
+      state.steps,
+      clones,
+      state.selectedIds,
+      state.selectedId,
+    )
+
+    withHistory((current) => {
+      // If state raced, re-paste against latest tree with same clones/selection intent.
+      if (
+        current.steps !== state.steps ||
+        current.selectedId !== state.selectedId ||
+        current.selectedIds.join() !== state.selectedIds.join()
+      ) {
+        const again = pasteNodesIntoSelection(
+          current.steps,
+          clones.map(cloneNodeDeep),
+          current.selectedIds,
+          current.selectedId,
+        )
+        return {
+          ...current,
+          dirty: true,
+          steps: again.steps,
+          selectedId: ids[ids.length - 1] ?? null,
+          selectedIds: ids,
         }
-        return clone
-      })
-      // refresh clipboard offsets for repeated paste
-      clipboardRef.current = clones.map(cloneNodeDeep)
-      const ids = clones.map((c) => c.id)
-      const steps = pasteNodesIntoSelection(
-        current.steps,
-        clones,
-        current.selectedIds,
-        current.selectedId,
-      )
-
+      }
       return {
         ...current,
         dirty: true,
-        steps,
+        steps: pasted.steps,
         selectedId: ids[ids.length - 1] ?? null,
         selectedIds: ids,
       }
     })
+    return pasted.divertedHitlCount
   }
 
   const duplicateSelected = () => {

@@ -866,9 +866,9 @@ describe('pasteNodesIntoSelection', () => {
     const agent = createNode('step')
     agent.id = 'agent'
     const pasted = pasteNodesIntoSelection([condition], [cloneNodeDeep(agent)], ['cond'], 'cond')
-    const host = findNode(pasted, 'cond')
+    const host = findNode(pasted.steps, 'cond')
     expect(host?.thenSteps?.length).toBe(1)
-    expect(pasted).toHaveLength(1)
+    expect(pasted.steps).toHaveLength(1)
   })
 
   it('appends to roots when no container selected', () => {
@@ -877,8 +877,8 @@ describe('pasteNodesIntoSelection', () => {
     const b = createNode('step')
     b.id = 'b'
     const pasted = pasteNodesIntoSelection([a], [cloneNodeDeep(b)], [], null)
-    expect(pasted.map((n) => n.id)).toEqual(['a', expect.any(String)])
-    expect(pasted).toHaveLength(2)
+    expect(pasted.steps.map((n) => n.id)).toEqual(['a', expect.any(String)])
+    expect(pasted.steps).toHaveLength(2)
   })
 
   it('pastes into parallel body when selected', () => {
@@ -888,9 +888,9 @@ describe('pasteNodesIntoSelection', () => {
     const agent = createNode('step')
     agent.id = 'agent'
     const pasted = pasteNodesIntoSelection([parallel], [cloneNodeDeep(agent)], ['par'], 'par')
-    const host = findNode(pasted, 'par')
+    const host = findNode(pasted.steps, 'par')
     expect(host?.steps?.length).toBe(1)
-    expect(pasted).toHaveLength(1)
+    expect(pasted.steps).toHaveLength(1)
   })
 
   it('appends to roots when multi-select is active', () => {
@@ -903,8 +903,8 @@ describe('pasteNodesIntoSelection', () => {
     const b = createNode('step')
     b.id = 'b'
     const pasted = pasteNodesIntoSelection([a, cond], [cloneNodeDeep(b)], ['a', 'cond'], 'cond')
-    expect(pasted).toHaveLength(3)
-    expect(findNode(pasted, 'cond')?.thenSteps?.length ?? 0).toBe(0)
+    expect(pasted.steps).toHaveLength(3)
+    expect(findNode(pasted.steps, 'cond')?.thenSteps?.length ?? 0).toBe(0)
   })
 
   it('pastes as sibling after a selected agent step', () => {
@@ -915,12 +915,11 @@ describe('pasteNodesIntoSelection', () => {
     const c = createNode('step')
     c.id = 'c'
     const pasted = pasteNodesIntoSelection([a, b], [cloneNodeDeep(c)], ['a'], 'a')
-    expect(pasted.map((n) => n.id === 'a' || n.id === 'b' || n.id !== 'a')).toBeTruthy()
-    expect(pasted).toHaveLength(3)
-    expect(pasted[0]?.id).toBe('a')
-    expect(pasted[2]?.id).toBe('b')
-    expect(pasted[1]?.id).not.toBe('a')
-    expect(pasted[1]?.id).not.toBe('b')
+    expect(pasted.steps).toHaveLength(3)
+    expect(pasted.steps[0]?.id).toBe('a')
+    expect(pasted.steps[2]?.id).toBe('b')
+    expect(pasted.steps[1]?.id).not.toBe('a')
+    expect(pasted.steps[1]?.id).not.toBe('b')
   })
 
   it('pastes multiple clones after sibling preserving order', () => {
@@ -938,10 +937,10 @@ describe('pasteNodesIntoSelection', () => {
       ['a'],
       'a',
     )
-    expect(pasted).toHaveLength(3)
-    expect(pasted[0]?.id).toBe('a')
-    expect(pasted[1]?.name).toBe('X')
-    expect(pasted[2]?.name).toBe('Y')
+    expect(pasted.steps).toHaveLength(3)
+    expect(pasted.steps[0]?.id).toBe('a')
+    expect(pasted.steps[1]?.name).toBe('X')
+    expect(pasted.steps[2]?.name).toBe('Y')
   })
 
   it('routes HITL paste out of parallel to root', () => {
@@ -952,9 +951,10 @@ describe('pasteNodesIntoSelection', () => {
     hitl.id = 'hitl'
     hitl.requiresConfirmation = true
     const pasted = pasteNodesIntoSelection([parallel], [cloneNodeDeep(hitl)], ['par'], 'par')
-    expect(findNode(pasted, 'par')?.steps?.length ?? 0).toBe(0)
-    expect(pasted).toHaveLength(2)
-    expect(pasted.some((n) => n.requiresConfirmation)).toBe(true)
+    expect(findNode(pasted.steps, 'par')?.steps?.length ?? 0).toBe(0)
+    expect(pasted.steps).toHaveLength(2)
+    expect(pasted.divertedHitlCount).toBe(1)
+    expect(pasted.steps.some((n) => n.requiresConfirmation)).toBe(true)
   })
 
   it('locateNode finds nested then-branch index', () => {

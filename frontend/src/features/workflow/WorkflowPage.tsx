@@ -750,7 +750,12 @@ export function WorkflowPage() {
             onUndo={workflow.undo}
             onRedo={workflow.redo}
             onCopy={workflow.copySelected}
-            onPaste={workflow.pasteClipboard}
+            onPaste={() => {
+              const diverted = workflow.pasteClipboard()
+              if (diverted > 0) {
+                message.warning(t('pasteHitlDiverted', { count: diverted }))
+              }
+            }}
             onOrganize={workflow.organizeLayout}
             onDuplicateSelected={workflow.duplicateSelected}
             nodeRunStatus={workflow.state.nodeRunStatus}
