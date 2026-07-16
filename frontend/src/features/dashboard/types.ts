@@ -55,6 +55,11 @@ export interface OverviewKpis {
   input_tokens?: number | null
   output_tokens?: number | null
   total_tokens: number | null
+  /** Rows used for metrics/series (capped sample). */
+  sample_size?: number | null
+  /** Agno window total before sample cap. */
+  window_total?: number | null
+  truncated?: boolean | null
 }
 
 export interface OverviewEvaluation {

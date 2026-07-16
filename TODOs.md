@@ -136,6 +136,15 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Overview metrics 样本元数据
+
+- `_fetch_traces` 返回 `(rows, {sample_size, window_total, truncated})`
+- Dashboard metrics 暴露采样规模；截断时 KPI 旁标注 sample/window
+
+相关：`overview_service.py` / Dashboard types+i18n
+
+---
+
 ## 已完成：Trace status 流式过滤 + 后台 Task 失败通知
 
 - Trace `status=` 列表按批 `get_traces` → reconcile → 只保留匹配行，避免整窗 2k 全量常驻

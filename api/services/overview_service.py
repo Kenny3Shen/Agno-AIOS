@@ -269,11 +269,12 @@ def _recent_failure(trace: dict[str, Any]) -> dict[str, Any]:
 
 async def _fetch_traces(
     *, start: datetime, end: datetime, user_id: str | None
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Load traces for dashboard metrics with a hard row/page cap.
 
     Full-window scans are unbounded on busy tenants; metrics and series use the
-    most recent capped sample. ``total_count`` from Agno is not exposed here.
+    most recent capped sample. Returns ``(traces, sample_meta)`` where meta has
+    ``sample_size``, ``window_total``, and ``truncated``.
     """
     db = get_async_agno_postgres_db()
     traces, total = await db.get_traces(
@@ -301,7 +302,8 @@ async def _fetch_traces(
         if len(rows) >= _MAX_OVERVIEW_TRACES:
             rows = rows[:_MAX_OVERVIEW_TRACES]
             break
-    if total_count > len(rows):
+    truncated = total_count > len(rows)
+    if truncated:
         logger.warning(
             "overview truncated traces: loaded {} of {} in window",
             len(rows),
@@ -311,10 +313,16 @@ async def _fetch_traces(
     for trace in rows:
         dumped = trace if isinstance(trace, dict) else trace.to_dict()
         result.append(jsonable_encoder(dumped))
-    return await reconcile_trace_statuses(
+    reconciled = await reconcile_trace_statuses(
         result,
         actor_user_id=user_id,
     )
+    sample_meta = {
+        "sample_size": len(reconciled),
+        "window_total": total_count,
+        "truncated": truncated,
+    }
+    return reconciled, sample_meta
 
 
 async def _snapshots(actor: ActorLike) -> dict[str, Any]:
@@ -432,7 +440,7 @@ async def get_runtime_overview(
     else:
         start, end = generated_at - _RANGE_WINDOWS[range_name], generated_at
     bucket_range = _bucket_range(start, end)
-    traces, snapshots = await asyncio.gather(
+    (traces, trace_sample), snapshots = await asyncio.gather(
         _fetch_traces(start=start, end=end, user_id=scope_user_id(actor, None)),
         _snapshots(actor),
     )
@@ -504,6 +512,9 @@ async def get_runtime_overview(
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "total_tokens": total_tokens,
+            "sample_size": int(trace_sample.get("sample_size") or len(traces)),
+            "window_total": int(trace_sample.get("window_total") or len(traces)),
+            "truncated": bool(trace_sample.get("truncated")),
         },
         "series": series,
         "distributions": {

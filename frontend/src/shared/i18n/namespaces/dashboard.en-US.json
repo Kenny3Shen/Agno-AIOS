@@ -40,5 +40,6 @@
   "seriesRuns": "Runs",
   "seriesInputTokens": "Input tokens",
   "seriesOutputTokens": "Output tokens",
-  "evalSampleNote": "{{passed}} passed · {{failed}} failed (sample {{sample}} of {{total}})"
+  "evalSampleNote": "{{passed}} passed · {{failed}} failed (sample {{sample}} of {{total}})",
+  "sampleOfWindow": "sample {{sample}}/{{total}}"
 }

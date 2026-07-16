@@ -47,7 +47,7 @@ async def test_overview_aggregates_scoped_traces_into_stable_payload():
         },
     ]
     with (
-        patch.object(overview_service, "_fetch_traces", AsyncMock(return_value=traces)) as fetch,
+        patch.object(overview_service, "_fetch_traces", AsyncMock(return_value=(traces, {"sample_size": len(traces), "window_total": len(traces), "truncated": False}))) as fetch,
         patch.object(overview_service, "_snapshots", AsyncMock(return_value={"memories": 3})),
         patch.object(
             overview_service,
@@ -79,6 +79,9 @@ async def test_overview_aggregates_scoped_traces_into_stable_payload():
         "input_tokens": 10,
         "output_tokens": 10,
         "total_tokens": 20,
+        "sample_size": 2,
+        "window_total": 2,
+        "truncated": False,
     }
     assert [item["runs"] for item in result["series"]] == [2]
     assert result["series"][0] == {
@@ -132,7 +135,7 @@ async def test_overview_uses_span_usage_instead_of_empty_trace_rows():
         "attributes": {},
     }]
     with (
-        patch.object(overview_service, "_fetch_traces", AsyncMock(return_value=traces)),
+        patch.object(overview_service, "_fetch_traces", AsyncMock(return_value=(traces, {"sample_size": len(traces), "window_total": len(traces), "truncated": False}))),
         patch.object(overview_service, "_snapshots", AsyncMock(return_value={})),
         patch.object(
             overview_service,
@@ -180,7 +183,7 @@ async def test_overview_reads_every_trace_page_inside_the_selected_window():
         return [{"trace_id": "second"}], 1_001
 
     with patch.object(overview_service.get_async_agno_postgres_db(), "get_traces", get_traces):
-        traces = await overview_service._fetch_traces(
+        traces, meta = await overview_service._fetch_traces(
             start=datetime(2026, 7, 12, 11, tzinfo=UTC),
             end=datetime(2026, 7, 12, 12, tzinfo=UTC),
             user_id="u1",
@@ -188,6 +191,7 @@ async def test_overview_reads_every_trace_page_inside_the_selected_window():
 
     assert calls == [1, 2]
     assert [trace["trace_id"] for trace in traces] == ["first", "second"]
+    assert meta == {"sample_size": 2, "window_total": 1001, "truncated": True}
 
 
 @pytest.mark.asyncio
@@ -199,7 +203,7 @@ async def test_overview_caps_trace_pages_when_window_is_huge():
         return [{"trace_id": f"t{kwargs['page']}"}], 50_000
 
     with patch.object(overview_service.get_async_agno_postgres_db(), "get_traces", get_traces):
-        traces = await overview_service._fetch_traces(
+        traces, meta = await overview_service._fetch_traces(
             start=datetime(2026, 7, 12, 11, tzinfo=UTC),
             end=datetime(2026, 7, 12, 12, tzinfo=UTC),
             user_id="u1",
@@ -207,6 +211,9 @@ async def test_overview_caps_trace_pages_when_window_is_huge():
 
     assert calls == [1, 2, 3, 4, 5]
     assert len(traces) == 5
+    assert meta["truncated"] is True
+    assert meta["sample_size"] == 5
+    assert meta["window_total"] == 50_000
 
 
 @pytest.mark.asyncio
@@ -225,7 +232,7 @@ async def test_overview_fetch_reconciles_audit_failures_before_metrics() -> None
         patch.object(overview_service.get_async_agno_postgres_db(), "get_traces", get_traces),
         patch.object(overview_service, "reconcile_trace_statuses", reconcile),
     ):
-        traces = await overview_service._fetch_traces(
+        traces, meta = await overview_service._fetch_traces(
             start=datetime(2026, 7, 12, 11, tzinfo=UTC),
             end=datetime(2026, 7, 12, 12, tzinfo=UTC),
             user_id="u1",
@@ -239,7 +246,7 @@ async def test_overview_fetch_reconciles_audit_failures_before_metrics() -> None
 @pytest.mark.asyncio
 async def test_admin_overview_includes_audit_summary():
     with (
-        patch.object(overview_service, "_fetch_traces", AsyncMock(return_value=[])),
+        patch.object(overview_service, "_fetch_traces", AsyncMock(return_value=([], {"sample_size": 0, "window_total": 0, "truncated": False}))),
         patch.object(overview_service, "_snapshots", AsyncMock(return_value={})),
         patch.object(
             overview_service,
@@ -320,7 +327,7 @@ async def test_overview_custom_range_uses_requested_window_and_adaptive_buckets(
         {"trace_id": "inside", "start_time": "2026-07-11T04:00:00+00:00", "status": "OK"},
     ]
     with (
-        patch.object(overview_service, "_fetch_traces", AsyncMock(return_value=traces)) as fetch,
+        patch.object(overview_service, "_fetch_traces", AsyncMock(return_value=(traces, {"sample_size": len(traces), "window_total": len(traces), "truncated": False}))) as fetch,
         patch.object(overview_service, "_fetch_span_token_counts", AsyncMock(return_value={})),
         patch.object(overview_service, "_snapshots", AsyncMock(return_value={})),
     ):

@@ -258,7 +258,19 @@ export function DashboardPage() {
       <Row gutter={[12, 12]} className="dashboard-kpis dashboard-motion-group">
         <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
           <Card className="workbench-card dashboard-kpi" loading={query.isLoading}>
-            <Statistic title={t('totalRuns')} value={data?.metrics.total_runs ?? 0} prefix={<CheckCircleOutlined />} />
+            <Statistic
+              title={t('totalRuns')}
+              value={data?.metrics.total_runs ?? 0}
+              prefix={<CheckCircleOutlined />}
+              suffix={
+                data?.metrics.truncated
+                  ? t('sampleOfWindow', {
+                      sample: data.metrics.sample_size ?? data.metrics.total_runs,
+                      total: data.metrics.window_total ?? data.metrics.total_runs,
+                    })
+                  : undefined
+              }
+            />
           </Card>
         </Col>
         <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
