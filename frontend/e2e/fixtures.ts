@@ -51,6 +51,13 @@ const emptyPage = {
 
 type MockOptions = {
   user?: typeof adminUser
+  /** Optional custom API handler; return true when fulfilled/aborted. */
+  handleApi?: (args: {
+    method: string
+    path: string
+    url: URL
+    route: import('@playwright/test').Route
+  }) => Promise<boolean> | boolean
 }
 
 /**
@@ -77,6 +84,11 @@ export async function mockApis(page: Page, options: MockOptions = {}) {
     if (path.includes('/notifications/stream')) {
       await route.abort('failed')
       return
+    }
+
+    if (options.handleApi) {
+      const handled = await options.handleApi({ method, path, url, route })
+      if (handled) return
     }
 
     if (method === 'POST' && path.endsWith('/api/auth/jwt/login')) {

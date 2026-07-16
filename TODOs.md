@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Playwright Trace Session→Run→Span smoke
+
+- `frontend/e2e/trace.smoke.spec.ts`：深链 `selected_session` + `trace` 打开观测页，Session 选中、Runs/Spans 树与 Detail Input 可见；点 child span 切换详情。
+- 忽略 legacy `session`/`run` query（输入框保持空）。
+- `fixtures.mockApis` 支持 `handleApi` 覆盖特定 `/api/*` 响应。
+
 ## 已完成：Trace ERROR audit 补充批量查
 
 - `_merge_audit_error_traces` 不再对每个 failed `run_id` 调 `get_trace`（N 次）。
@@ -1273,7 +1279,7 @@ P0.4 审批值班薄入口        ✅
 
 ## P1：建立关键流程 E2E
 
-已落地 shell 关键路径 Playwright smoke（`frontend/e2e/shell.smoke.spec.ts`）；Knowledge 进度与 Trace 三级深链仍可继续加 spec。
+已落地 shell + Trace Session→Run→Span Playwright smoke（`frontend/e2e/shell.smoke.spec.ts`、`trace.smoke.spec.ts`）；Knowledge 进度流仍可继续加 spec。
 
 建议首先覆盖：
 
