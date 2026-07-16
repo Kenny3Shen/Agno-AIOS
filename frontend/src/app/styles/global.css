@@ -2586,3 +2586,41 @@ html.dark .wf-smart-guide {
   background: var(--tais-soft);
   border-radius: 8px;
 }
+
+/* Compact event/history rows (replaces deprecated antd List in Studio). */
+.workflow-compact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.workflow-compact-list__item {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--ant-color-split, rgba(0, 0, 0, 0.06));
+}
+.workflow-compact-list__item:last-child {
+  border-bottom: none;
+}
+
+.collect-article-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+button.collect-article-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  padding: 8px 10px;
+  cursor: pointer;
+  color: inherit;
+}
+button.collect-article-item:hover {
+  background: var(--ant-color-fill-tertiary, rgba(0, 0, 0, 0.04));
+}
+button.collect-article-item.is-selected {
+  border-color: var(--ant-color-primary-border, #91caff);
+  background: var(--ant-color-primary-bg, #e6f4ff);
+}

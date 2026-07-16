@@ -6,7 +6,6 @@ import {
   Empty,
   Input,
   InputNumber,
-  List,
   Select,
   Space,
   Switch,
@@ -864,11 +863,9 @@ export function WorkflowPage() {
                           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                             {t('runHistory')}
                           </Typography.Text>
-                          <List
-                            size="small"
-                            dataSource={workflow.state.runHistory.slice(0, 8)}
-                            renderItem={(item) => (
-                              <List.Item style={{ padding: '4px 0' }}>
+                          <div className="workflow-compact-list">
+                            {workflow.state.runHistory.slice(0, 8).map((item) => (
+                              <div key={item.id} className="workflow-compact-list__item">
                                 <Space size={4} wrap>
                                   <Tag
                                     color={
@@ -920,17 +917,15 @@ export function WorkflowPage() {
                                     </Button>
                                   ) : null}
                                 </Space>
-                              </List.Item>
-                            )}
-                          />
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       ) : null}
                       {workflow.state.runLog.length ? (
-                        <List
-                          size="small"
-                          dataSource={[...workflow.state.runLog].reverse().slice(0, 40)}
-                          renderItem={(item) => (
-                            <List.Item style={{ padding: '4px 0' }}>
+                        <div className="workflow-compact-list">
+                          {[...workflow.state.runLog].reverse().slice(0, 40).map((item) => (
+                            <div key={item.id} className="workflow-compact-list__item">
                               <Space size={4} wrap>
                                 <Tag
                                   color={
@@ -962,9 +957,9 @@ export function WorkflowPage() {
                                   </Button>
                                 ) : null}
                               </Space>
-                            </List.Item>
-                          )}
-                        />
+                            </div>
+                          ))}
+                        </div>
                       ) : (
                         <Empty
                           image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -1178,12 +1173,9 @@ export function WorkflowPage() {
                             {t('triggerHistory')}
                           </Typography.Text>
                           {(triggerHistoryQuery.data?.data?.length ?? 0) > 0 ? (
-                            <List
-                              size="small"
-                              loading={triggerHistoryQuery.isLoading}
-                              dataSource={triggerHistoryQuery.data?.data ?? []}
-                              renderItem={(item) => (
-                                <List.Item style={{ padding: '4px 0' }}>
+                            <div className="workflow-compact-list">
+                              {(triggerHistoryQuery.data?.data ?? []).map((item) => (
+                                <div key={String(item.id)} className="workflow-compact-list__item">
                                   <Space size={4} wrap>
                                     <Tag
                                       color={
@@ -1231,9 +1223,9 @@ export function WorkflowPage() {
                                       </Button>
                                     ) : null}
                                   </Space>
-                                </List.Item>
-                              )}
-                            />
+                                </div>
+                              ))}
+                            </div>
                           ) : (
                             <Typography.Paragraph type="secondary" style={{ fontSize: 11, marginTop: 4 }}>
                               {triggerHistoryQuery.isLoading ? '…' : t('triggerHistoryEmpty')}

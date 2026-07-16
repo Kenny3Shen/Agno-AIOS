@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：去掉 antd 废弃 List（Workflow / Collect）
+
+- Studio 运行历史 / 运行记录 / 触发历史：`List` → 轻量 `div` 列表 + CSS。
+- Collect 文库列表：`List` → button 行 + `Pagination`。
+- 消除 Playwright/Vite 中 `[antd: List] deprecated` 警告。
+
 ## 已完成：Workflow run SSE Playwright smoke
 
 - `frontend/e2e/workflow.smoke.spec.ts`：深链加载后填写输入 → 点运行 → mock SSE（`workflow.started` / `step.completed` / `workflow.completed`）→ 运行记录出现 step/terminal 事件。

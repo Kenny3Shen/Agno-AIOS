@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { App, Button, Card, Empty, Input, List, Select, Space, Splitter, Tag, Typography } from 'antd'
+import { App, Button, Card, Empty, Input, Pagination, Select, Space, Splitter, Tag, Typography } from 'antd'
 import { Markdown } from '@/shared/ui/Markdown'
 import {
   CloudDownloadOutlined,
@@ -187,54 +187,47 @@ export function CollectPage() {
               }
             >
               {items.length ? (
-                <List
-                  size="small"
-                  dataSource={items}
-                  pagination={{
-                    size: 'small',
-                    current: page,
-                    pageSize: 20,
-                    total,
-                    onChange: setPage,
-                    showSizeChanger: false,
-                  }}
-                  renderItem={(item) => (
-                    <List.Item
+                <div className="collect-article-list">
+                  {items.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
                       className={
                         selected?.id === item.id
                           ? 'collect-article-item is-selected'
                           : 'collect-article-item'
                       }
                       onClick={() => setSelected(item)}
-                      style={{ cursor: 'pointer', alignItems: 'flex-start' }}
                     >
-                      <List.Item.Meta
-                        title={
-                          <Space size={6} wrap>
-                            <span>{item.title || item.url}</span>
-                            {item.source_domain ? (
-                              <Tag style={{ margin: 0 }}>{item.source_domain}</Tag>
-                            ) : null}
-                          </Space>
-                        }
-                        description={
-                          <div>
-                            <Typography.Paragraph
-                              type="secondary"
-                              ellipsis={{ rows: 2 }}
-                              style={{ marginBottom: 4, fontSize: 12 }}
-                            >
-                              {item.summary || item.url}
-                            </Typography.Paragraph>
-                            <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                              {item.fetched_at ? formatDate(item.fetched_at) : ''}
-                            </Typography.Text>
-                          </div>
-                        }
-                      />
-                    </List.Item>
-                  )}
-                />
+                      <Space size={6} wrap>
+                        <span>{item.title || item.url}</span>
+                        {item.source_domain ? (
+                          <Tag style={{ margin: 0 }}>{item.source_domain}</Tag>
+                        ) : null}
+                      </Space>
+                      <Typography.Paragraph
+                        type="secondary"
+                        ellipsis={{ rows: 2 }}
+                        style={{ marginBottom: 4, fontSize: 12, textAlign: 'left' }}
+                      >
+                        {item.summary || item.url}
+                      </Typography.Paragraph>
+                      <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                        {item.fetched_at ? formatDate(item.fetched_at) : ''}
+                      </Typography.Text>
+                    </button>
+                  ))}
+                  <Pagination
+                    size="small"
+                    align="center"
+                    current={page}
+                    pageSize={20}
+                    total={total}
+                    onChange={setPage}
+                    showSizeChanger={false}
+                    style={{ marginTop: 8 }}
+                  />
+                </div>
               ) : (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
