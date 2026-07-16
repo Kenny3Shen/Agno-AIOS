@@ -919,6 +919,7 @@ export function WorkflowPage() {
                       style={{ width: '100%', marginTop: 4 }}
                       placeholder={t('stepSkillsPlaceholder')}
                       options={enabledSkillOptions}
+                      optionFilterProp="label"
                       value={step.skills ?? []}
                       loading={skillsQuery.isLoading}
                       getPopupContainer={studioPopupContainer}

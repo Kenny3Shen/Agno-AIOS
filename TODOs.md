@@ -5,6 +5,7 @@
 - Chat：`formatSkillLabel(s)` 把 `cve-intel-skill` 等目录 id 显示为 `CVE Intel`；消息条与顶栏 Skills Tooltip 使用友好名。
 - Chat：`autoLeanHelp` 文案补充可触发意图的关键词示例（CVE/隔离/剧本等）。
 - Workflow Inspector：Agent 步骤名为空时提示「运行日志将显示执行器显示名」；Skill 多选选项改为「描述 (短名)」。
+- Chat：`--chat-sender-offset` 测量高度做 `Number.isFinite` 守卫，避免 jsdom/异常布局写出 `height: NaN`。
 
 
 ## 已完成：画布 Step 副标题映射 Executor 显示名

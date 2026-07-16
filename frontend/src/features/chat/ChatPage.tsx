@@ -495,7 +495,8 @@ export function ChatPage() {
     const workspace = workspaceRef.current
     if (!shell || !workspace) return
     const apply = () => {
-      const height = Math.ceil(shell.getBoundingClientRect().height)
+      const measured = shell.getBoundingClientRect().height
+      const height = Number.isFinite(measured) ? Math.ceil(measured) : 72
       workspace.style.setProperty('--chat-sender-offset', `${Math.max(height, 72)}px`)
     }
     apply()
