@@ -256,6 +256,79 @@ def mark_hitl_mcp_tools(mcp_tools: Any) -> list[str]:
     return marked
 
 
+# Built-in MCP namespaces (FastMCP mount prefixes). External tools use other prefixes.
+_BUILTIN_MCP_PREFIXES = ("basic_", "hitl_", "playbook_")
+_SKILL_TO_MCP_PREFIXES: dict[str, tuple[str, ...]] = {
+    "hitl-containment-skill": ("hitl_",),
+    "playbook-skill": ("playbook_",),
+    # cve-intel-skill / intranet-ip-skill are Local Skills only.
+}
+
+
+def should_connect_mcp(skill_names: list[str] | None, *, enable_tools: bool) -> bool:
+    """Skip MCP session when tools are off or this turn attaches no skills at all.
+
+    Trivial / non-ops turns set ``skill_names=[]``; connecting would still inject
+    every MCP tool schema into the model context.
+    """
+    if not enable_tools:
+        return False
+    if skill_names is not None and len(skill_names) == 0:
+        return False
+    return True
+
+
+def mcp_prefixes_for_skills(skill_names: list[str] | None) -> set[str] | None:
+    """Return allowed builtin MCP prefixes, or None for no filter (all tools).
+
+    - ``None`` skill_names → all tools (general security ops)
+    - ``[]`` → empty set (caller should skip connect)
+    - named skills → union of mapped prefixes + always ``basic_`` for notify
+    """
+    if skill_names is None:
+        return None
+    if not skill_names:
+        return set()
+    prefixes: set[str] = {"basic_"}
+    for name in skill_names:
+        prefixes.update(_SKILL_TO_MCP_PREFIXES.get(str(name).strip(), ()))
+    return prefixes
+
+
+def filter_mcp_tools_by_prefixes(
+    mcp_tools: Any,
+    allowed_prefixes: set[str] | None,
+) -> list[str]:
+    """Drop builtin tools outside ``allowed_prefixes``; keep external tool names.
+
+    Returns removed tool names. ``allowed_prefixes is None`` means keep all.
+    """
+    if allowed_prefixes is None:
+        return []
+    removed: list[str] = []
+    registries = (
+        getattr(mcp_tools, "functions", None),
+        getattr(mcp_tools, "async_functions", None),
+    )
+    for registry in registries:
+        if not isinstance(registry, dict):
+            continue
+        drop: list[str] = []
+        for name in list(registry.keys()):
+            tool_name = str(name)
+            is_builtin = any(tool_name.startswith(p) for p in _BUILTIN_MCP_PREFIXES)
+            if not is_builtin:
+                continue
+            if any(tool_name.startswith(p) for p in allowed_prefixes):
+                continue
+            drop.append(tool_name)
+        for tool_name in drop:
+            registry.pop(tool_name, None)
+            if tool_name not in removed:
+                removed.append(tool_name)
+    return removed
+
+
 @dataclass(frozen=True)
 class SecurityRunRequest:
     """Security Operations Assistant 的一次 Run 请求。"""
@@ -1036,18 +1109,19 @@ class SecurityRunRuntime:
         if search_knowledge:
             knowledge = await _maybe_await(self.dependencies.get_async_knowledge_base())
         enable_tools = bool(request.enable_tools)
-        prompt_name = (
-            SECURITY_OPERATIONS_PROMPT if enable_tools else SECURITY_OPERATIONS_LITE_PROMPT
-        )
-        tools = [mcp_tools] if enable_tools and mcp_tools is not None else []
+        tools = [mcp_tools] if mcp_tools is not None else []
         skills = (
             await self._build_enabled_skills(request.skill_names)
             if enable_tools
             else None
         )
-        # Lean mode: shorter history, no session-summary manager (extra model work).
-        history_runs = 5 if enable_tools else 2
-        session_summaries = enable_tools
+        # Lean surface when tools off or intent filter attached nothing.
+        tool_surface = bool(tools) or skills is not None
+        prompt_name = (
+            SECURITY_OPERATIONS_PROMPT if tool_surface else SECURITY_OPERATIONS_LITE_PROMPT
+        )
+        history_runs = 5 if tool_surface else 2
+        session_summaries = tool_surface
         return self.dependencies.agent_factory(
             id="security-operations",
             name="安全运营助手",
@@ -1078,7 +1152,10 @@ class SecurityRunRuntime:
 
     @asynccontextmanager
     async def security_agent_context(self, request: SecurityRunRequest) -> AsyncIterator[Agent]:
-        if not request.enable_tools:
+        if not should_connect_mcp(
+            request.skill_names, enable_tools=bool(request.enable_tools)
+        ):
+            # Tools off, or trivial/non-ops turn with empty skill list: no MCP session.
             security_agent = await _maybe_await(
                 self._build_security_agent(None, request)
             )
@@ -1095,6 +1172,14 @@ class SecurityRunRuntime:
             timeout_seconds=20,
             header_provider=_mcp_header_provider(token),
         ) as mcp_tools:
+            allowed = mcp_prefixes_for_skills(request.skill_names)
+            removed = filter_mcp_tools_by_prefixes(mcp_tools, allowed)
+            if removed:
+                logger.debug(
+                    "MCP tools filtered for skill intent skill_names={} removed={}",
+                    request.skill_names,
+                    removed,
+                )
             marked = mark_hitl_mcp_tools(mcp_tools)
             if marked:
                 logger.debug("Agno required approval applied to MCP tools: {}", marked)

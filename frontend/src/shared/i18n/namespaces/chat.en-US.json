@@ -64,6 +64,6 @@
   "openApproval": "Open approvals",
   "errorRequestFailed": "Chat request failed",
   "toolsSkills": "Tools/Skills",
-  "toolsSkillsHelp": "When on, connects MCP and Local Skills. Trivial turns skip Skills; CVE/containment/playbook/intranet keywords attach matching Skills only; other security turns load all enabled Skills. Off is lite mode (no tools).",
+  "toolsSkillsHelp": "When on, connects MCP and Skills by intent: trivial turns skip tools; CVE/containment/playbook attach matching Skills and MCP namespaces; general security turns load all. Off is lite mode.",
   "toolsOffBadge": "Lite (no tools)"
 }

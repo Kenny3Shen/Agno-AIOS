@@ -91,7 +91,7 @@ export function SkillsPage() {
           })}
           columns={[
             {
-              title: 'Skill',
+              title: t('colSkill'),
               dataIndex: 'name',
               render: (value, row) => (
                 <Space>
@@ -100,9 +100,9 @@ export function SkillsPage() {
                 </Space>
               ),
             },
-            { title: 'Description', dataIndex: 'description', ellipsis: true },
+            { title: t('colDescription'), dataIndex: 'description', ellipsis: true },
             {
-              title: 'Visibility',
+              title: t('colVisibility'),
               dataIndex: 'visibility',
               width: 150,
               render: (value, row) => (
@@ -115,7 +115,7 @@ export function SkillsPage() {
               ),
             },
             {
-              title: 'Enabled',
+              title: t('colEnabled'),
               dataIndex: 'enabled',
               width: 100,
               render: (value, row) => {
@@ -132,7 +132,7 @@ export function SkillsPage() {
               },
             },
             {
-              title: 'Actions',
+              title: t('colActions'),
               key: 'actions',
               width: 88,
               render: (_, row) =>

@@ -406,7 +406,7 @@ async def test_security_agent_context_builds_mcp_url_off_event_loop():
             agent_factory=lambda **_kwargs: SimpleNamespace(),
         )
     )
-    request = security_run_runtime.SecurityRunRequest.from_chat_args("hello")
+    request = security_run_runtime.SecurityRunRequest.from_chat_args("帮我做一次威胁研判")
 
     with patch.object(
         runtime,
@@ -1199,13 +1199,14 @@ async def test_enable_tools_true_connects_mcp():
             )
         )
         request = security_run_runtime.SecurityRunRequest.from_chat_args(
-            "hello", enable_tools=True
+            "帮我做一次威胁研判", enable_tools=True
         )
         with patch.object(security_run_runtime, "PROMPT_DIR", prompt_dir):
             async with runtime.security_agent_context(request):
                 pass
 
     assert mcp_entered["value"] is True
+    assert request.skill_names is None
 
 
 
@@ -1329,6 +1330,9 @@ async def test_build_security_agent_skips_skills_on_trivial_turn():
         (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_PROMPT).write_text(
             "full", encoding="utf-8"
         )
+        (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_LITE_PROMPT).write_text(
+            "lite", encoding="utf-8"
+        )
         runtime = security_run_runtime.SecurityRunRuntime(
             security_run_runtime.SecurityRunRuntimeDependencies(
                 build_model=lambda *_a, **_k: object(),
@@ -1351,3 +1355,113 @@ async def test_build_security_agent_skips_skills_on_trivial_turn():
 
     assert request.skill_names == []
     assert created["skills"] is None
+    assert created["instructions"] == ["lite"]
+    assert created["num_history_runs"] == 2
+
+
+
+def test_should_connect_mcp_and_prefix_filter():
+    assert security_run_runtime.should_connect_mcp(None, enable_tools=True) is True
+    assert security_run_runtime.should_connect_mcp([], enable_tools=True) is False
+    assert security_run_runtime.should_connect_mcp(["cve-intel-skill"], enable_tools=True) is True
+    assert security_run_runtime.should_connect_mcp(None, enable_tools=False) is False
+
+    assert security_run_runtime.mcp_prefixes_for_skills(None) is None
+    assert security_run_runtime.mcp_prefixes_for_skills([]) == set()
+    assert security_run_runtime.mcp_prefixes_for_skills(["cve-intel-skill"]) == {"basic_"}
+    assert security_run_runtime.mcp_prefixes_for_skills(["hitl-containment-skill"]) == {
+        "basic_",
+        "hitl_",
+    }
+    assert security_run_runtime.mcp_prefixes_for_skills(["playbook-skill"]) == {
+        "basic_",
+        "playbook_",
+    }
+    assert security_run_runtime.mcp_prefixes_for_skills(
+        ["hitl-containment-skill", "playbook-skill"]
+    ) == {"basic_", "hitl_", "playbook_"}
+
+
+def test_filter_mcp_tools_by_prefixes_keeps_external():
+    from agno.tools.function import Function
+
+    hitl = Function(name="hitl_simulate_containment", entrypoint=lambda: None)
+    play = Function(name="playbook_list_workflows", entrypoint=lambda: None)
+    basic = Function(name="basic_send_feishu_notify", entrypoint=lambda: None)
+    external = Function(name="custom_scan", entrypoint=lambda: None)
+    mcp_tools = SimpleNamespace(
+        functions={
+            hitl.name: hitl,
+            play.name: play,
+            basic.name: basic,
+            external.name: external,
+        },
+        async_functions={},
+    )
+    removed = security_run_runtime.filter_mcp_tools_by_prefixes(
+        mcp_tools, {"basic_", "hitl_"}
+    )
+    assert "playbook_list_workflows" in removed
+    assert set(mcp_tools.functions) == {
+        "hitl_simulate_containment",
+        "basic_send_feishu_notify",
+        "custom_scan",
+    }
+
+
+@pytest.mark.asyncio
+async def test_trivial_turn_skips_mcp_connect_even_when_tools_enabled():
+    mcp_entered = {"value": False}
+
+    class TrackingMcp:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            mcp_entered["value"] = True
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+    created: dict = {}
+
+    def agent_factory(**kwargs):
+        created.update(kwargs)
+        return SimpleNamespace()
+
+    with TemporaryDirectory() as temp_dir:
+        prompt_dir = Path(temp_dir)
+        (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_PROMPT).write_text(
+            "full", encoding="utf-8"
+        )
+        (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_LITE_PROMPT).write_text(
+            "lite", encoding="utf-8"
+        )
+        runtime = security_run_runtime.SecurityRunRuntime(
+            security_run_runtime.SecurityRunRuntimeDependencies(
+                build_model=lambda *_a, **_k: object(),
+                get_db=lambda: object(),
+                get_async_knowledge_base=lambda: object(),
+                get_enabled_skill_dirs=lambda: [Path("/skills/cve-intel-skill")],
+                get_mcp_url=lambda: "http://example/mcp",
+                get_mcp_token=lambda: "tok",
+                mcp_tools_factory=TrackingMcp,
+                agent_factory=agent_factory,
+            )
+        )
+        request = security_run_runtime.SecurityRunRequest.from_chat_args(
+            "ping",
+            enable_tools=True,
+            search_knowledge=False,
+        )
+        with patch.object(security_run_runtime, "PROMPT_DIR", prompt_dir):
+            async with runtime.security_agent_context(request):
+                pass
+
+    assert request.skill_names == []
+    assert mcp_entered["value"] is False
+    assert created["tools"] == []
+    assert created["skills"] is None
+    assert created["instructions"] == ["lite"]
+    assert created["num_history_runs"] == 2

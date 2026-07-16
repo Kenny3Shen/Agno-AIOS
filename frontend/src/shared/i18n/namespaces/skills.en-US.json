@@ -27,5 +27,10 @@
   "version": "Version",
   "openWorkflow": "Open",
   "referencesEmpty": "No saved workflows bind this skill yet",
-  "referencesTruncated": "Showing a partial list — more workflows may bind this skill"
+  "referencesTruncated": "Showing a partial list — more workflows may bind this skill",
+  "colSkill": "Skill",
+  "colDescription": "Description",
+  "colVisibility": "Visibility",
+  "colEnabled": "Enabled",
+  "colActions": "Actions"
 }

@@ -12,6 +12,7 @@ const RunTable = ({
   loading,
   pagination,
   onReplay,
+  t,
 }: {
   rows: EvalRun[]
   loading?: boolean
@@ -22,6 +23,7 @@ const RunTable = ({
     onChange: (page: number) => void
   }
   onReplay?: (id: string) => void
+  t: (key: string, options?: Record<string, unknown>) => string
 }) => (
   <Table<EvalRun>
     rowKey="id"
@@ -29,16 +31,16 @@ const RunTable = ({
     loading={loading}
     pagination={pagination === undefined ? false : pagination}
     columns={[
-      { title: 'Run', dataIndex: 'id', render: compactId },
-      { title: 'Name', dataIndex: 'name' },
-      { title: 'Type', dataIndex: 'eval_type', render: (v) => <Tag>{v}</Tag> },
+      { title: t('colRun'), dataIndex: 'id', render: compactId },
+      { title: t('colName'), dataIndex: 'name' },
+      { title: t('colType'), dataIndex: 'eval_type', render: (v) => <Tag>{v}</Tag> },
       {
-        title: 'Result',
+        title: t('colResult'),
         dataIndex: 'passed',
         filters: [
-          { text: 'passed', value: 'true' },
-          { text: 'failed', value: 'false' },
-          { text: 'unknown', value: 'unknown' },
+          { text: t('resultPassed'), value: 'true' },
+          { text: t('resultFailed'), value: 'false' },
+          { text: t('resultUnknown'), value: 'unknown' },
         ],
         onFilter: (value, row) => {
           if (value === 'true') return row.passed === true
@@ -47,19 +49,19 @@ const RunTable = ({
         },
         render: (v) => (
           <Tag color={v === true ? 'success' : v === false ? 'error' : 'default'}>
-            {v === true ? 'passed' : v === false ? 'failed' : 'unknown'}
+            {v === true ? t('resultPassed') : v === false ? t('resultFailed') : t('resultUnknown')}
           </Tag>
         ),
       },
-      { title: 'Score', dataIndex: 'score' },
-      { title: 'Created', dataIndex: 'created_at', defaultSortOrder: 'descend' as const, sorter: (a: EvalRun, b: EvalRun) => compareTimestamp(a.created_at, b.created_at), render: (value) => formatDate(value) },
+      { title: t('colScore'), dataIndex: 'score' },
+      { title: t('colCreated'), dataIndex: 'created_at', defaultSortOrder: 'descend' as const, sorter: (a: EvalRun, b: EvalRun) => compareTimestamp(a.created_at, b.created_at), render: (value) => formatDate(value) },
       ...(onReplay
         ? [
             {
-              title: 'Actions',
+              title: t('colActions'),
               render: (_: unknown, row: EvalRun) => (
                 <Button icon={<ReloadOutlined />} onClick={() => onReplay(row.id)}>
-                  Replay
+                  {t('replay')}
                 </Button>
               ),
             },
@@ -126,19 +128,19 @@ export function EvaluationsPage() {
           items={[
             {
               key: 'cases',
-              label: 'Cases',
+              label: t('tabCases'),
               children: (
                 <Table<EvalCase>
                   rowKey="id"
                   dataSource={cases.data ?? []}
                   loading={cases.isLoading}
                   columns={[
-                    { title: 'Case', dataIndex: 'name' },
-                    { title: 'Input', dataIndex: 'input', ellipsis: true },
-                    { title: 'Criteria', dataIndex: 'criteria', ellipsis: true },
-                    { title: 'Enabled', dataIndex: 'enabled', render: (v) => <Tag color={v ? 'success' : 'default'}>{String(v)}</Tag> },
+                    { title: t('colCase'), dataIndex: 'name' },
+                    { title: t('colInput'), dataIndex: 'input', ellipsis: true },
+                    { title: t('colCriteria'), dataIndex: 'criteria', ellipsis: true },
+                    { title: t('colEnabled'), dataIndex: 'enabled', render: (v) => <Tag color={v ? 'success' : 'default'}>{String(v)}</Tag> },
                     {
-                      title: 'Actions',
+                      title: t('colActions'),
                       render: (_, row) => (
                         <Button
                           icon={<PlayCircleOutlined />}
@@ -152,7 +154,7 @@ export function EvaluationsPage() {
                             }
                           }}
                         >
-                          Run
+                          {t('runCase')}
                         </Button>
                       ),
                     },
@@ -160,8 +162,9 @@ export function EvaluationsPage() {
                 />
               ),
             },
-            { key: 'runs', label: 'Runs', children: (
+            { key: 'runs', label: t('tabRuns'), children: (
                 <RunTable
+                  t={t}
                   rows={runs.data?.data ?? []}
                   loading={runs.isLoading}
                   pagination={{
@@ -174,9 +177,10 @@ export function EvaluationsPage() {
               ) },
             {
               key: 'failures',
-              label: `Failures (${failures.data?.length ?? 0})`,
+              label: t('tabFailures', { count: failures.data?.length ?? 0 }),
               children: (
                 <RunTable
+                  t={t}
                   rows={failures.data ?? []}
                   loading={failures.isLoading}
                   pagination={false}

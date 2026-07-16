@@ -104,14 +104,14 @@ export function AuditPage() {
   const logsQuery = useQuery({ queryKey: auditKeys.list(query), queryFn: () => getAuditLogs(query) })
 
   const columns: TableProps<AuditLog>['columns'] = [
-    { title: 'Time', dataIndex: 'created_at', width: 190, render: formatDate },
-    { title: 'Actor', key: 'actor', width: 240, render: (_, row) => <ActorCell row={row} /> },
-    { title: 'Action', dataIndex: 'action', width: 190, render: (value: string) => <Typography.Text code>{value || '-'}</Typography.Text> },
-    { title: 'Resource', key: 'resource', width: 220, render: (_, row) => <ResourceCell row={row} /> },
-    { title: 'Status', dataIndex: 'status', width: 110, render: (value: string) => <StatusTag status={value} /> },
-    { title: 'IP', dataIndex: 'ip_address', width: 140, render: (value: string) => value || '-' },
+    { title: t('colTime'), dataIndex: 'created_at', width: 190, render: formatDate },
+    { title: t('colActor'), key: 'actor', width: 240, render: (_, row) => <ActorCell row={row} /> },
+    { title: t('colAction'), dataIndex: 'action', width: 190, render: (value: string) => <Typography.Text code>{value || '-'}</Typography.Text> },
+    { title: t('colResource'), key: 'resource', width: 220, render: (_, row) => <ResourceCell row={row} /> },
+    { title: t('colStatus'), dataIndex: 'status', width: 110, render: (value: string) => <StatusTag status={value} /> },
+    { title: t('colIp'), dataIndex: 'ip_address', width: 140, render: (value: string) => value || '-' },
     {
-      title: 'Metadata',
+      title: t('colMetadata'),
       dataIndex: 'metadata',
       width: 110,
       render: (value: unknown) => (hasAuditMetadata(value) ? <Tag color="processing">JSON</Tag> : '-'),

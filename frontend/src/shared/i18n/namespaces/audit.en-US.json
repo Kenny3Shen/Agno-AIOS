@@ -1,4 +1,11 @@
 {
   "title": "Audit",
-  "description": "Track backend operations by user, resource, and time"
+  "description": "Track backend operations by user, resource, and time",
+  "colTime": "Time",
+  "colActor": "Actor",
+  "colAction": "Action",
+  "colResource": "Resource",
+  "colStatus": "Status",
+  "colIp": "IP",
+  "colMetadata": "Metadata"
 }

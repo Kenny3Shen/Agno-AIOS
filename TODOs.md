@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Chat 意图过滤 MCP 工具面 + Skills/Audit/Eval 表头 i18n
+
+- trivial / 非安全句：`skill_names=[]` 时**不连接 MCP**，走 lite 提示词与短历史。
+- 关键词 skill：只保留对应内置 MCP 前缀（`hitl_` / `playbook_`）+ 始终保留 `basic_`；外部 MCP 工具名保留。
+- 通用安全句：仍全量 MCP + 全量 enabled skills。
+- Skills / Audit / Evaluations 列表表头 i18n；Chat 工具开关帮助文案更新。
+
 ## 已完成：Chat 按意图挂载 Local Skills（对齐 Workflow skills[]）
 
 - `infer_chat_skill_names`：闲聊/指令类消息不挂 Skill；CVE / 隔离封禁 / 剧本 / 内网关键词只挂对应 skill；其它安全运营句挂全部已启用 skill。
