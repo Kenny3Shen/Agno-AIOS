@@ -685,7 +685,7 @@ export function useWorkflow() {
 
   const save = async () => {
     const translate = (key: string, options?: Record<string, string | number>) => t(key, options)
-    const issues = validateWorkflowDraft(state.steps, translate)
+    const issues = validateWorkflowDraft(state.steps, translate, state.workflowId)
     const nameIssue = validateWorkflowName(state.name, translate)
     if (nameIssue) issues.unshift(nameIssue)
     if (issues.length) {

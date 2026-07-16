@@ -571,3 +571,12 @@ describe('fieldForValidationIssue', () => {
     expect(fieldForValidationIssue({ code: 'empty_condition_cel' })).toBe('evaluator')
     expect(fieldForValidationIssue({ code: 'empty_router_cel' })).toBe('selector')
   })
+
+
+  it('flags self-referencing nested workflow', () => {
+    const nested = createNode('workflow_ref')
+    nested.workflowId = 'wf-1'
+    const issues = validateWorkflowDraft([nested], (key) => key, 'wf-1')
+    expect(issues.some((i) => i.code === 'self_workflow_ref')).toBe(true)
+    expect(fieldForValidationIssue({ code: 'self_workflow_ref' })).toBe('workflow_ref')
+  })

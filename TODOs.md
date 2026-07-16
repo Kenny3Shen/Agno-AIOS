@@ -1,5 +1,10 @@
 # 下一步工作
 
+## 已完成：嵌套工作流禁止自引用 + Trace 会话名回退
+
+- Studio 保存：`workflow_ref` 引用当前工作流自身时校验失败并聚焦嵌套选择器。
+- Trace session 无 title/preview 时用 session_id，不再硬编码英文 `Session`。
+
 ## 已完成：Workflow 运行/发布/触发器错误 i18n + 空 CEL 校验
 
 - `useWorkflow`：发布/运行/启用触发器的英文硬编码改为 workflow i18n。

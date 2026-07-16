@@ -649,6 +649,7 @@ export const fieldForValidationIssue = (issue: Pick<WorkflowValidationIssue, 'co
     case 'empty_router_cel':
       return 'selector'
     case 'missing_workflow_ref':
+    case 'self_workflow_ref':
       return 'workflow_ref'
     case 'empty_parallel':
     case 'empty_loop':
@@ -700,10 +701,13 @@ export const validateWorkflowDraft = (
         return `${path}: condition expression is required`
       case 'validationEmptyRouterCel':
         return `${path}: router expression is required`
+      case 'validationSelfWorkflowRef':
+        return `${path}: nested workflow cannot reference itself`
       default:
         return key
     }
   },
+  currentWorkflowId: string | null = null,
 ): WorkflowValidationIssue[] => {
   const issues: WorkflowValidationIssue[] = []
   if (!roots.length) {
@@ -782,12 +786,21 @@ export const validateWorkflowDraft = (
           }
         }
       }
-      if (node.type === 'workflow_ref' && !(node.workflowId || '').trim()) {
-        issues.push({
-          nodeId: node.id,
-          code: 'missing_workflow_ref',
-          message: t('validationMissingWorkflowRef', { path: here }),
-        })
+      if (node.type === 'workflow_ref') {
+        const nestedId = (node.workflowId || '').trim()
+        if (!nestedId) {
+          issues.push({
+            nodeId: node.id,
+            code: 'missing_workflow_ref',
+            message: t('validationMissingWorkflowRef', { path: here }),
+          })
+        } else if (currentWorkflowId && nestedId === currentWorkflowId) {
+          issues.push({
+            nodeId: node.id,
+            code: 'self_workflow_ref',
+            message: t('validationSelfWorkflowRef', { path: here }),
+          })
+        }
       }
       if (node.type === 'step' && !(node.targetId || '').trim()) {
         issues.push({

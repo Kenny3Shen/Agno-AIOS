@@ -197,5 +197,6 @@
   "errorTriggerNeedsPublish": "Publish the workflow before enabling webhook or cron triggers",
   "errorTriggerNeedsSavePublish": "Save and publish the current draft before enabling triggers",
   "validationEmptyConditionCel": "{{path}}: condition expression is required",
-  "validationEmptyRouterCel": "{{path}}: router expression is required"
+  "validationEmptyRouterCel": "{{path}}: router expression is required",
+  "validationSelfWorkflowRef": "{{path}}: nested workflow cannot reference itself"
 }

@@ -57,7 +57,7 @@ export function groupSessions(
       const latest = [...items].sort((left, right) => timestamp(right.start_time) - timestamp(left.start_time))[0]!
       return {
         sessionId,
-        name: previews[sessionId] || latest.name || 'Session',
+        name: previews[sessionId] || latest.name || sessionId,
         context: latest.workflow_id || latest.agent_id || latest.team_id || latest.user_id || '',
         archived: archived[sessionId] === true || (inferMissingArchived && !(sessionId in archived)),
         traces: items,
@@ -81,7 +81,7 @@ export function mergeTraceSessions(chatSessions: ChatSession[], summaries: Trace
       const chatSession = chatSessionById.get(summary.session_id)
       return {
         sessionId: summary.session_id,
-        name: chatSession?.title || chatSession?.preview || summary.name || 'Session',
+        name: chatSession?.title || chatSession?.preview || summary.name || summary.session_id,
         context: summary.workflow_id || summary.agent_id || summary.team_id || summary.user_id || chatSession?.user_id || '',
         archived: chatSession?.archived === true,
         traces: [],

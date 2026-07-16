@@ -197,5 +197,6 @@
   "errorTriggerNeedsPublish": "请先发布工作流再启用 Webhook / 定时触发",
   "errorTriggerNeedsSavePublish": "请先保存并重新发布当前草稿，再启用触发器",
   "validationEmptyConditionCel": "{{path}}：请填写条件表达式",
-  "validationEmptyRouterCel": "{{path}}：请填写路由表达式"
+  "validationEmptyRouterCel": "{{path}}：请填写路由表达式",
+  "validationSelfWorkflowRef": "{{path}}：嵌套工作流不能引用自身"
 }
