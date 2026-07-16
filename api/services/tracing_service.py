@@ -206,6 +206,43 @@ async def _root_inputs_for_trace_ids(trace_ids: list[str]) -> dict[str, str | No
     return inputs
 
 
+
+async def _batch_traces_by_run_ids(run_ids: list[str]) -> dict[str, dict[str, Any]]:
+    """Load one trace row per run_id in a single traces-table query.
+
+    Prefer the newest ``start_time`` when a run has multiple traces. Returns
+    plain dict rows suitable for list projection (no Agno model objects).
+    """
+    safe_ids = [str(run_id).strip() for run_id in run_ids if str(run_id or "").strip()]
+    if not safe_ids:
+        return {}
+
+    from sqlalchemy import select
+
+    table = await _trace_db._get_table(table_type="traces")
+    if table is None:
+        return {}
+
+    # DISTINCT ON (run_id): one row per run, newest start first.
+    stmt = (
+        select(table)
+        .where(table.c.run_id.in_(safe_ids))
+        .distinct(table.c.run_id)
+        .order_by(table.c.run_id, table.c.start_time.desc())
+    )
+
+    by_run: dict[str, dict[str, Any]] = {}
+    async with _trace_db.async_session_factory() as session:
+        result = await session.execute(stmt)
+        for row in result.mappings():
+            data = dict(row)
+            run_key = str(data.get("run_id") or "").strip()
+            if not run_key:
+                continue
+            by_run[run_key] = data
+    return by_run
+
+
 async def _attach_list_inputs(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if not items:
         return items
@@ -578,24 +615,32 @@ async def _merge_audit_error_traces(
         logger.exception("Unable to load recent failed chat run ids for ERROR filter")
         return items, total_count
 
+    candidates = [
+        failed_run_id
+        for failed_run_id in failed_ids
+        if failed_run_id not in present and (not run_id or failed_run_id == run_id)
+    ]
+    if not candidates:
+        return items, total_count
+
+    # Cap candidates to remaining page slots to keep the batch bounded.
+    remaining_slots = max(0, limit - len(items))
+    if remaining_slots <= 0:
+        return items, total_count
+    candidates = candidates[: max(remaining_slots, _AUDIT_ERROR_SUPPLEMENT_LIMIT)]
+
+    try:
+        traces_by_run = await _batch_traces_by_run_ids(candidates)
+    except Exception:
+        logger.exception("Unable to batch-load audit-supplement traces")
+        return items, total_count
+
     extras: list[dict[str, Any]] = []
-    for failed_run_id in failed_ids:
-        if failed_run_id in present:
+    for failed_run_id in candidates:
+        raw = traces_by_run.get(failed_run_id)
+        if not raw:
             continue
-        if run_id and failed_run_id != run_id:
-            continue
-        try:
-            trace = await _trace_db.get_trace(run_id=failed_run_id)
-        except Exception:
-            logger.debug(
-                "Unable to load audit-supplement trace for run {}",
-                failed_run_id,
-                exc_info=True,
-            )
-            continue
-        if trace is None:
-            continue
-        row = jsonable_encoder(trace.to_dict() if hasattr(trace, "to_dict") else dict(trace))
+        row = jsonable_encoder(raw)
         if session_id and str(row.get("session_id") or "") != session_id:
             continue
         if user_id and str(row.get("user_id") or "") != user_id:

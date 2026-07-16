@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Trace ERROR audit 补充批量查
+
+- `_merge_audit_error_traces` 不再对每个 failed `run_id` 调 `get_trace`（N 次）。
+- 新增 `_batch_traces_by_run_ids`：`run_id IN (...)` + `DISTINCT ON (run_id)` 一次取最新 trace 行。
+- 失败打 `logger.exception`；列表仍只在 page=1 且有空位时补充。
+
 ## 已完成：oxlint 清零 + Trace list input 失败可观测
 
 - `ChatPage.test`：`setSearchKnowledge` / `setLiveSearch` 补全 `vi.fn` 泛型，满足 `require-mock-type-parameters`。

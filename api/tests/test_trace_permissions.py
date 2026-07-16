@@ -847,16 +847,18 @@ async def test_list_traces_error_filter_supplements_audit_failures() -> None:
             FakeTrace(trace_id="err-db", run_id="run-db", status="ERROR", session_id="s1"),
         ], 1
 
-    async def fake_get_trace(*, run_id: str):
-        assert run_id == "run-audit"
-        return FakeTrace(
-            trace_id="err-audit",
-            run_id="run-audit",
-            status="OK",
-            session_id="s1",
-            user_id="u1",
-            start_time="2026-07-12T12:00:00Z",
-        )
+    async def fake_batch_traces(run_ids: list[str]):
+        assert run_ids == ["run-audit"]
+        return {
+            "run-audit": {
+                "trace_id": "err-audit",
+                "run_id": "run-audit",
+                "status": "OK",
+                "session_id": "s1",
+                "user_id": "u1",
+                "start_time": "2026-07-12T12:00:00Z",
+            }
+        }
 
     async def fake_reconcile(items, *, actor_user_id=None):
         return list(items)
@@ -866,7 +868,7 @@ async def test_list_traces_error_filter_supplements_audit_failures() -> None:
 
     with (
         patch.object(tracing_service._trace_db, "get_traces", fake_get_traces),
-        patch.object(tracing_service._trace_db, "get_trace", fake_get_trace),
+        patch.object(tracing_service, "_batch_traces_by_run_ids", fake_batch_traces),
         patch.object(tracing_service, "reconcile_trace_statuses", fake_reconcile),
         patch.object(tracing_service, "_attach_list_inputs", fake_inputs),
         patch(
@@ -880,3 +882,53 @@ async def test_list_traces_error_filter_supplements_audit_failures() -> None:
     assert "err-db" in ids
     assert "err-audit" in ids
     assert all(item["status"] == "ERROR" for item in result["data"])
+
+
+@pytest.mark.asyncio
+async def test_list_traces_error_audit_batch_loads_missing_runs_once() -> None:
+    """Audit supplements must batch-load candidate run_ids (no per-run get_trace)."""
+
+    class FakeTrace:
+        def __init__(self, **data):
+            self.data = data
+
+        def to_dict(self):
+            return self.data
+
+    async def fake_get_traces(**kwargs):
+        return [
+            FakeTrace(trace_id="err-db", run_id="run-db", status="ERROR", session_id="s1"),
+        ], 1
+
+    calls: list[list[str]] = []
+
+    async def fake_batch_traces(run_ids: list[str]):
+        calls.append(list(run_ids))
+        return {
+            rid: {
+                "trace_id": f"err-{rid}",
+                "run_id": rid,
+                "status": "OK",
+                "session_id": "s1",
+                "user_id": "u1",
+                "start_time": "2026-07-12T12:00:00Z",
+            }
+            for rid in run_ids
+        }
+
+    with (
+        patch.object(tracing_service._trace_db, "get_traces", fake_get_traces),
+        patch.object(tracing_service, "_batch_traces_by_run_ids", fake_batch_traces),
+        patch.object(tracing_service, "reconcile_trace_statuses", side_effect=lambda items, **_: list(items)),
+        patch.object(tracing_service, "_attach_list_inputs", side_effect=lambda items: items),
+        patch(
+            "api.persistence.audit_logs.recent_failed_chat_run_ids_async",
+            AsyncMock(return_value=["run-db", "run-a", "run-b"]),
+        ),
+    ):
+        result = await tracing_service.list_traces(user_id="u1", status="ERROR", page=1, limit=20)
+
+    # Present run-db skipped; remaining candidates batched once.
+    assert calls == [["run-a", "run-b"]]
+    ids = {item["trace_id"] for item in result["data"]}
+    assert {"err-db", "err-run-a", "err-run-b"} <= ids

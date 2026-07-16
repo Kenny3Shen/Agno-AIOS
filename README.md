@@ -384,7 +384,7 @@ frontend/src/app/shell/AppFrame.tsx       # 通知 stream、重连和 Query 刷�
 cd frontend && bun run test:e2e
 ```
 
-前端门禁：`bun run lint`（oxlint deny-warnings）、`bun run typecheck`、`bun run test`；Trace 列表 root `input` 批量失败会打 exception 日志并返回 `input=null`（不 N+1）。
+前端门禁：`bun run lint`（oxlint deny-warnings）、`bun run typecheck`、`bun run test`；Trace 列表 root `input` 批量失败会打 exception 日志并返回 `input=null`（不 N+1）。 ERROR 列表在 page=1 用 audit 失败 run 补充时，按 `run_id` 批量查 traces（非 per-run `get_trace`）。
 
 使用 Playwright + 页内 `/api` mock，不依赖本地后端与开发库数据；覆盖登录、侧栏分组/权限过滤、智能体清 session、深链展开与侧栏折叠。
 
