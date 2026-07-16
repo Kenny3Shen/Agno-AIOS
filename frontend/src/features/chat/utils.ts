@@ -11,6 +11,7 @@ export const initialChatState: ChatState = {
   reasoningEffort: null,
   searchKnowledge: true,
   liveSearch: false,
+  enableTools: true,
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object'
@@ -34,6 +35,8 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
       return { ...state, searchKnowledge: action.value }
     case 'live-search':
       return { ...state, liveSearch: action.value }
+    case 'enable-tools':
+      return { ...state, enableTools: action.value }
     case 'start':
       return {
         ...state,

@@ -41,6 +41,7 @@ class ChatRequest(BaseModel):
     reasoning_effort: Literal["minimal", "low", "medium", "high", "max"] | None = None
     search_knowledge: bool = True
     live_search: bool | None = None
+    enable_tools: bool = True
 
 
 class SessionRenameRequest(BaseModel):
@@ -187,6 +188,7 @@ async def chat_agent(
             store_raw_tool_io=chat_settings["show_raw_tool_io"],
             search_knowledge=request.search_knowledge,
             live_search=request.live_search,
+            enable_tools=request.enable_tools,
         )
         return EventSourceResponse(
             _event_generator(

@@ -71,6 +71,7 @@ def _build_mcp_token() -> str:
 
 PROMPT_DIR = Path(__file__).resolve().parents[1] / "agent" / "prompts"
 SECURITY_OPERATIONS_PROMPT = "security_operations.md"
+SECURITY_OPERATIONS_LITE_PROMPT = "security_operations_lite.md"
 SAFE_FALLBACK_PROMPT = "safe_fallback.md"
 HITL_MCP_TOOL_PREFIX = "hitl_"
 RUNTIME_METADATA_KEY = "tais_runtime"
@@ -181,6 +182,7 @@ class SecurityRunRequest:
     store_raw_tool_io: bool = False
     search_knowledge: bool = True
     live_search: bool | None = None
+    enable_tools: bool = True
 
     @classmethod
     def from_chat_args(
@@ -195,6 +197,7 @@ class SecurityRunRequest:
         store_raw_tool_io: bool = False,
         search_knowledge: bool = True,
         live_search: bool | None = None,
+        enable_tools: bool = True,
     ) -> "SecurityRunRequest":
         return cls(
             message=message,
@@ -207,6 +210,7 @@ class SecurityRunRequest:
             store_raw_tool_io=store_raw_tool_io,
             search_knowledge=search_knowledge,
             live_search=live_search,
+            enable_tools=enable_tools,
         )
 
     @property
@@ -223,6 +227,7 @@ class SecurityRunRequest:
             "store_raw_tool_io": self.store_raw_tool_io,
             "search_knowledge": self.search_knowledge,
             "live_search": self.live_search,
+            "enable_tools": self.enable_tools,
         }
 
     @classmethod
@@ -257,6 +262,7 @@ class SecurityRunRequest:
             store_raw_tool_io=bool(context.get("store_raw_tool_io", False)),
             search_knowledge=bool(context.get("search_knowledge", True)),
             live_search=live_search,
+            enable_tools=bool(context.get("enable_tools", True)),
         )
 
 
@@ -892,7 +898,7 @@ class SecurityRunRuntime:
 
     async def _build_security_agent(
         self,
-        mcp_tools: Any,
+        mcp_tools: Any | None,
         request: SecurityRunRequest,
     ) -> Agent:
         model = await self._build_model(
@@ -904,20 +910,26 @@ class SecurityRunRuntime:
         search_knowledge = bool(request.search_knowledge)
         if search_knowledge:
             knowledge = await _maybe_await(self.dependencies.get_async_knowledge_base())
+        enable_tools = bool(request.enable_tools)
+        prompt_name = (
+            SECURITY_OPERATIONS_PROMPT if enable_tools else SECURITY_OPERATIONS_LITE_PROMPT
+        )
+        tools = [mcp_tools] if enable_tools and mcp_tools is not None else []
+        skills = await self._build_enabled_skills() if enable_tools else None
         return self.dependencies.agent_factory(
             id="security-operations",
             name="安全运营助手",
             description="安全运营助手：研判、知识检索、剧本与 HITL 处置。",
-            instructions=[await _load_prompt_async(SECURITY_OPERATIONS_PROMPT)],
+            instructions=[await _load_prompt_async(prompt_name)],
             model=model,
-            tools=[mcp_tools],
+            tools=tools,
             knowledge=knowledge,
             knowledge_filters={"user_id": request.knowledge_owner_user_id}
             if request.knowledge_owner_user_id and search_knowledge
             else None,
             search_knowledge=search_knowledge,
             add_search_knowledge_instructions=search_knowledge,
-            skills=await self._build_enabled_skills(),
+            skills=skills,
             db=self.dependencies.get_db(),
             dependencies=await _run_sync_dependency(_agent_dependencies),
             add_dependencies_to_context=False,
@@ -934,6 +946,13 @@ class SecurityRunRuntime:
 
     @asynccontextmanager
     async def security_agent_context(self, request: SecurityRunRequest) -> AsyncIterator[Agent]:
+        if not request.enable_tools:
+            security_agent = await _maybe_await(
+                self._build_security_agent(None, request)
+            )
+            yield security_agent
+            return
+
         token = await _run_sync_dependency(self.dependencies.get_mcp_token)
         server_params = StreamableHTTPClientParams(
             url=await _run_sync_dependency(self.dependencies.get_mcp_url),

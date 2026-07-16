@@ -78,6 +78,7 @@ export interface ChatState {
   reasoningEffort: ReasoningEffort | null
   searchKnowledge: boolean
   liveSearch: boolean
+  enableTools: boolean
 }
 
 export type ChatRunEvent =
@@ -113,6 +114,7 @@ export type ChatAction =
   | { type: 'reasoning-effort'; value: ReasoningEffort | null }
   | { type: 'search-knowledge'; value: boolean }
   | { type: 'live-search'; value: boolean }
+  | { type: 'enable-tools'; value: boolean }
   | { type: 'reset' }
 
 export type { ModelConfig }

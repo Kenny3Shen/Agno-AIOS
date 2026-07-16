@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Chat 工具/Skill 开关 + Workflow 校验 i18n
+
+- Chat 请求新增 `enable_tools`（默认 true）；关闭时跳过 MCP 连接与 Local Skills，改用 `security_operations_lite.md`。
+- 输入区开关「工具/Skill」与联网/知识库并列；runtime metadata 可 round-trip（HITL resume 保留）。
+- Grok 4.5 `pong`：`enable_tools=true` ~4825 input_tokens；`false` ~**2689**（约 −44%）。
+- Workflow `validateWorkflowDraft` 消息走 i18n（`validationEmpty*` / `validationMissing*`）；保存失败兜底 `validationFixBeforeSave`。
+
 ## 已完成：Chat 上下文瘦身（prompt 卫生 + 密钥不进模型）
 
 - `security_operations.md`：去掉未安装 skill 路由与重复 SOP，改指向 progressive discovery（`get_skill_instructions`）；体量 ~2105→~1063 字符。

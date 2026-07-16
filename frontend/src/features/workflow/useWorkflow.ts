@@ -683,13 +683,13 @@ export function useWorkflow() {
   }
 
   const save = async () => {
-    const issues = validateWorkflowDraft(state.steps)
+    const issues = validateWorkflowDraft(state.steps, (key, options) => t(key, options))
     if (issues.length) {
       setState((current) => ({
         ...current,
         validationIssues: issues,
         validationEpoch: current.validationEpoch + 1,
-        error: issues[0]?.message ?? 'Fix validation errors before saving',
+        error: issues[0]?.message ?? t('validationFixBeforeSave'),
         selectedId: issues[0]?.nodeId ?? current.selectedId,
         selectedIds: issues[0]?.nodeId ? [issues[0].nodeId] : current.selectedIds,
       }))

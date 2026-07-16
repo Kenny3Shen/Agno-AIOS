@@ -653,13 +653,45 @@ export const fieldForValidationIssue = (issue: Pick<WorkflowValidationIssue, 'co
 }
 
 /** Client-side save checks (mirrors compiler empty-branch rules). */
-export const validateWorkflowDraft = (roots: WorkflowNode[]): WorkflowValidationIssue[] => {
+export type WorkflowValidationTranslate = (
+  key: string,
+  options?: Record<string, string | number>,
+) => string
+
+/** Optional translator; falls back to English keys when omitted (tests). */
+export const validateWorkflowDraft = (
+  roots: WorkflowNode[],
+  t: WorkflowValidationTranslate = (key, options) => {
+    const path = String(options?.path ?? '')
+    const choice = String(options?.choice ?? '')
+    switch (key) {
+      case 'validationEmptyWorkflow':
+        return 'Add at least one node before saving'
+      case 'validationEmptyParallel':
+        return `${path}: Parallel needs at least one branch`
+      case 'validationEmptyLoop':
+        return `${path}: Loop body is empty`
+      case 'validationEmptyCondition':
+        return `${path}: Condition needs then and/or else steps`
+      case 'validationEmptyRouter':
+        return `${path}: Router has no choices`
+      case 'validationEmptyRouterChoice':
+        return `${path}: choice "${choice}" is empty`
+      case 'validationMissingWorkflowRef':
+        return `${path}: Nested workflow id is required`
+      case 'validationMissingExecutor':
+        return `${path}: Agent executor is required`
+      default:
+        return key
+    }
+  },
+): WorkflowValidationIssue[] => {
   const issues: WorkflowValidationIssue[] = []
   if (!roots.length) {
     issues.push({
       nodeId: null,
       code: 'empty_workflow',
-      message: 'Add at least one node before saving',
+      message: t('validationEmptyWorkflow'),
     })
     return issues
   }
@@ -673,7 +705,7 @@ export const validateWorkflowDraft = (roots: WorkflowNode[]): WorkflowValidation
           issues.push({
             nodeId: node.id,
             code: 'empty_parallel',
-            message: `${here}: Parallel needs at least one branch`,
+            message: t('validationEmptyParallel', { path: here }),
           })
         }
       }
@@ -682,7 +714,7 @@ export const validateWorkflowDraft = (roots: WorkflowNode[]): WorkflowValidation
           issues.push({
             nodeId: node.id,
             code: 'empty_loop',
-            message: `${here}: Loop body is empty`,
+            message: t('validationEmptyLoop', { path: here }),
           })
         }
       }
@@ -691,7 +723,7 @@ export const validateWorkflowDraft = (roots: WorkflowNode[]): WorkflowValidation
           issues.push({
             nodeId: node.id,
             code: 'empty_condition',
-            message: `${here}: Condition needs then and/or else steps`,
+            message: t('validationEmptyCondition', { path: here }),
           })
         }
       }
@@ -701,7 +733,7 @@ export const validateWorkflowDraft = (roots: WorkflowNode[]): WorkflowValidation
           issues.push({
             nodeId: node.id,
             code: 'empty_router',
-            message: `${here}: Router has no choices`,
+            message: t('validationEmptyRouter', { path: here }),
           })
         }
         for (const choice of choices) {
@@ -709,7 +741,10 @@ export const validateWorkflowDraft = (roots: WorkflowNode[]): WorkflowValidation
             issues.push({
               nodeId: node.id,
               code: 'empty_router_choice',
-              message: `${here}: choice "${choice.name || choice.id}" is empty`,
+              message: t('validationEmptyRouterChoice', {
+                path: here,
+                choice: choice.name || choice.id,
+              }),
             })
           }
         }
@@ -718,14 +753,14 @@ export const validateWorkflowDraft = (roots: WorkflowNode[]): WorkflowValidation
         issues.push({
           nodeId: node.id,
           code: 'missing_workflow_ref',
-          message: `${here}: Nested workflow id is required`,
+          message: t('validationMissingWorkflowRef', { path: here }),
         })
       }
       if (node.type === 'step' && !(node.targetId || '').trim()) {
         issues.push({
           nodeId: node.id,
           code: 'missing_executor',
-          message: `${here}: Agent executor is required`,
+          message: t('validationMissingExecutor', { path: here }),
         })
       }
       for (const list of [node.steps, node.thenSteps, node.elseSteps]) {

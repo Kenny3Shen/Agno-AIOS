@@ -62,5 +62,7 @@
   "cancelServerFailed": "已停止本地输出，但服务端取消失败",
   "openTrace": "打开 Trace",
   "openApproval": "打开审批",
-  "errorRequestFailed": "对话请求失败"
+  "errorRequestFailed": "对话请求失败",
+  "toolsSkills": "工具/Skill",
+  "toolsSkillsHelp": "关闭后本轮不挂载 MCP 工具与 Local Skills，适合闲聊与纯文本分析，显著降低 token。需要 CVE/剧本/HITL 时请打开。"
 }

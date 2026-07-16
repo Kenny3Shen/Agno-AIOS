@@ -149,6 +149,7 @@ export function useChat() {
           ...(state.reasoningEffort ? { reasoning_effort: state.reasoningEffort } : {}),
           search_knowledge: state.searchKnowledge,
           live_search: state.liveSearch,
+          enable_tools: state.enableTools,
         },
         (event: ChatRunEvent) => {
           if (event.type === 'run.started') activeRunIdRef.current = event.runId
@@ -206,6 +207,7 @@ export function useChat() {
   }
   const setReasoningEffort = (value: ReasoningEffort | null) => dispatch({ type: 'reasoning-effort', value })
   const setSearchKnowledge = (value: boolean) => dispatch({ type: 'search-knowledge', value })
+  const setEnableTools = (value: boolean) => dispatch({ type: 'enable-tools', value })
   const setLiveSearch = (value: boolean) => dispatch({ type: 'live-search', value })
   const newChat = () => {
     dispatch({ type: 'reasoning-effort', value: defaultReasoningEffort(selectedModel) })
@@ -227,6 +229,7 @@ export function useChat() {
     setModel,
     setReasoningEffort,
     setSearchKnowledge,
+    setEnableTools,
     setLiveSearch,
     submit,
     retry,

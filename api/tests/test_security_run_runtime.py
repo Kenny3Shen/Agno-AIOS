@@ -547,6 +547,7 @@ async def test_stream_agent_events_persists_and_projects_required_approval_pause
             "store_raw_tool_io": False,
             "search_knowledge": True,
             "live_search": None,
+            "enable_tools": True,
         }
     }
     notify.assert_awaited_once_with(
@@ -732,6 +733,8 @@ def test_security_run_request_round_trips_versioned_run_metadata():
         knowledge_owner_user_id="owner-1",
         memory_enabled=False,
         store_raw_tool_io=True,
+        enable_tools=False,
+        search_knowledge=False,
     )
     restored = security_run_runtime.SecurityRunRequest.from_run_metadata(
         {"tais_runtime": original.runtime_metadata()},
@@ -743,6 +746,8 @@ def test_security_run_request_round_trips_versioned_run_metadata():
     assert restored.knowledge_owner_user_id == "owner-1"
     assert restored.memory_enabled is False
     assert restored.store_raw_tool_io is True
+    assert restored.enable_tools is False
+    assert restored.search_knowledge is False
 
     with pytest.raises(ValueError, match="version is unsupported"):
         security_run_runtime.SecurityRunRequest.from_run_metadata(
@@ -1097,3 +1102,102 @@ async def test_send_feishu_notify_uses_server_webhook_when_omitted(monkeypatch):
     result = await basic_tools.send_feishu_notify(title="t", content_md="c")
     assert result == {"code": 0, "msg": "success"}
     assert posted["url"] == "https://feishu.example/hook"
+
+
+
+@pytest.mark.asyncio
+async def test_enable_tools_false_skips_mcp_and_skills():
+    created: dict = {}
+    mcp_entered = {"value": False}
+
+    class TrackingMcp:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            mcp_entered["value"] = True
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+    def agent_factory(**kwargs):
+        created.update(kwargs)
+        return SimpleNamespace()
+
+    with TemporaryDirectory() as temp_dir:
+        prompt_dir = Path(temp_dir)
+        (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_PROMPT).write_text(
+            "full", encoding="utf-8"
+        )
+        (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_LITE_PROMPT).write_text(
+            "lite", encoding="utf-8"
+        )
+        runtime = security_run_runtime.SecurityRunRuntime(
+            security_run_runtime.SecurityRunRuntimeDependencies(
+                build_model=lambda *_a, **_k: object(),
+                get_db=lambda: object(),
+                get_async_knowledge_base=lambda: object(),
+                get_enabled_skill_dirs=lambda: [Path(temp_dir) / "skill"],
+                get_mcp_url=lambda: "http://example/mcp",
+                get_mcp_token=lambda: "tok",
+                mcp_tools_factory=TrackingMcp,
+                agent_factory=agent_factory,
+            )
+        )
+        request = security_run_runtime.SecurityRunRequest.from_chat_args(
+            "hello",
+            enable_tools=False,
+            search_knowledge=False,
+        )
+        with patch.object(security_run_runtime, "PROMPT_DIR", prompt_dir):
+            async with runtime.security_agent_context(request):
+                pass
+
+    assert mcp_entered["value"] is False
+    assert created["tools"] == []
+    assert created["skills"] is None
+    assert created["instructions"] == ["lite"]
+    assert request.runtime_metadata()["enable_tools"] is False
+
+
+@pytest.mark.asyncio
+async def test_enable_tools_true_connects_mcp():
+    mcp_entered = {"value": False}
+
+    class TrackingMcp:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            mcp_entered["value"] = True
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+    with TemporaryDirectory() as temp_dir:
+        prompt_dir = Path(temp_dir)
+        (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_PROMPT).write_text(
+            "full", encoding="utf-8"
+        )
+        runtime = security_run_runtime.SecurityRunRuntime(
+            security_run_runtime.SecurityRunRuntimeDependencies(
+                build_model=lambda *_a, **_k: object(),
+                get_db=lambda: object(),
+                get_async_knowledge_base=lambda: object(),
+                get_enabled_skill_dirs=lambda: [],
+                get_mcp_url=lambda: "http://example/mcp",
+                get_mcp_token=lambda: "tok",
+                mcp_tools_factory=TrackingMcp,
+                agent_factory=lambda **_k: SimpleNamespace(),
+            )
+        )
+        request = security_run_runtime.SecurityRunRequest.from_chat_args(
+            "hello", enable_tools=True
+        )
+        with patch.object(security_run_runtime, "PROMPT_DIR", prompt_dir):
+            async with runtime.security_agent_context(request):
+                pass
+
+    assert mcp_entered["value"] is True

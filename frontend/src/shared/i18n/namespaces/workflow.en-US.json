@@ -167,5 +167,14 @@
   "subtitleAgent": "agent",
   "subtitleNested": "nested",
   "subtitleBranches": "{{count}} branches",
-  "subtitleMaxIter": "max {{count}}"
+  "subtitleMaxIter": "max {{count}}",
+  "validationEmptyWorkflow": "Add at least one node before saving",
+  "validationEmptyParallel": "{{path}}: Parallel needs at least one branch",
+  "validationEmptyLoop": "{{path}}: Loop body is empty",
+  "validationEmptyCondition": "{{path}}: Condition needs then and/or else steps",
+  "validationEmptyRouter": "{{path}}: Router has no choices",
+  "validationEmptyRouterChoice": "{{path}}: choice \"{{choice}}\" is empty",
+  "validationMissingWorkflowRef": "{{path}}: Nested workflow is required",
+  "validationMissingExecutor": "{{path}}: Agent executor is required",
+  "validationFixBeforeSave": "Fix validation errors before saving"
 }

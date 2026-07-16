@@ -14,6 +14,7 @@ import {
   NodeIndexOutlined,
   DownOutlined,
   BookOutlined,
+  ToolOutlined,
   GlobalOutlined,
   PaperClipOutlined,
   ReloadOutlined,
@@ -620,6 +621,19 @@ export function ChatPage() {
             footer={
               <div className="sender-controls">
                 <div className="sender-toggles">
+                  <Button
+                    className={chat.state.enableTools ? 'sender-toggle active' : 'sender-toggle'}
+                    type="text"
+                    size="small"
+                    icon={<ToolOutlined />}
+                    aria-pressed={chat.state.enableTools}
+                    aria-label={t('toolsSkills')}
+                    title={t('toolsSkillsHelp')}
+                    disabled={chat.state.requesting || Boolean(pausedRun)}
+                    onClick={() => chat.setEnableTools(!chat.state.enableTools)}
+                  >
+                    {t('toolsSkills')}
+                  </Button>
                   <Button
                     className={chat.state.liveSearch ? 'sender-toggle active' : 'sender-toggle'}
                     type="text"

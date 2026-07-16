@@ -167,5 +167,14 @@
   "subtitleAgent": "Agent",
   "subtitleNested": "嵌套",
   "subtitleBranches": "{{count}} 个分支",
-  "subtitleMaxIter": "最多 {{count}} 次"
+  "subtitleMaxIter": "最多 {{count}} 次",
+  "validationEmptyWorkflow": "保存前请至少添加一个节点",
+  "validationEmptyParallel": "{{path}}：并行节点至少需要一个分支",
+  "validationEmptyLoop": "{{path}}：循环体为空",
+  "validationEmptyCondition": "{{path}}：条件节点需要「成立」和/或「否则」步骤",
+  "validationEmptyRouter": "{{path}}：路由节点没有分支",
+  "validationEmptyRouterChoice": "{{path}}：分支「{{choice}}」为空",
+  "validationMissingWorkflowRef": "{{path}}：请选择嵌套工作流",
+  "validationMissingExecutor": "{{path}}：请选择 Agent 执行器",
+  "validationFixBeforeSave": "请先修复校验问题再保存"
 }
