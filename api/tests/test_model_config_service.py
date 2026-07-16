@@ -5,6 +5,14 @@ import pytest
 from api.services import model_config_service
 
 
+@pytest.fixture(autouse=True)
+def _clear_model_config_cache():
+    model_config_service._invalidate_model_config_cache()
+    yield
+    model_config_service._invalidate_model_config_cache()
+
+
+
 @pytest.mark.asyncio
 async def test_load_model_config_store_imports_legacy_json_when_postgres_is_empty(tmp_path):
     legacy_file = tmp_path / "model_config.json"
@@ -349,3 +357,24 @@ def test_capability_profiles_resolve_optimal_and_fallback():
     assert filled["api_protocol"] == "responses"
     assert filled["structured_output_mode"] == "native"
     assert filled["default_reasoning_effort"] == "high"
+
+
+@pytest.mark.asyncio
+async def test_load_model_config_store_uses_short_ttl_cache():
+    model_config_service._invalidate_model_config_cache()
+    rows = model_config_service._store_to_rows(
+        model_config_service.ModelConfigStore.default()
+    )
+    list_rows = AsyncMock(return_value=rows)
+
+    with (
+        patch.object(model_config_service, "list_model_config_rows", list_rows),
+        patch.object(model_config_service, "replace_model_config_rows", AsyncMock()),
+    ):
+        first = await model_config_service.load_model_config_store()
+        second = await model_config_service.load_model_config_store()
+
+    assert first is second
+    assert list_rows.await_count == 1
+    model_config_service._invalidate_model_config_cache()
+

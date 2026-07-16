@@ -124,6 +124,15 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：model_config 进程内短缓存
+
+- `load_model_config_store` 5s TTL 内存缓存，减轻 Chat/Settings 热路径重复读库与 normalize
+- `save_model_config` / 测试 fixture 主动 invalidate
+
+相关：`model_config_service.py` / `test_model_config_service.py`
+
+---
+
 ## 已完成：MCP 按 name 定点查询
 
 - 新增 `get_server_row_by_name` / `server_name_exists`，toggle/upload 查重/visibility 不再 `list_mcp_servers` 全表扫

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 import time
@@ -17,6 +19,25 @@ from api.services.model_capabilities import (
     provider_defaults as _capability_provider_defaults,
     resolve_reasoning_effort,
 )
+
+# Short-lived process cache for hot chat/settings reads; cleared on save/seed rewrite.
+_STORE_CACHE: ModelConfigStore | None = None
+_STORE_CACHE_AT: float = 0.0
+_STORE_CACHE_TTL_SEC = 5.0
+
+
+def _invalidate_model_config_cache() -> None:
+    global _STORE_CACHE, _STORE_CACHE_AT
+    _STORE_CACHE = None
+    _STORE_CACHE_AT = 0.0
+
+
+def _cache_model_config_store(store: ModelConfigStore) -> ModelConfigStore:
+    global _STORE_CACHE, _STORE_CACHE_AT
+    _STORE_CACHE = store
+    _STORE_CACHE_AT = time.time()
+    return store
+
 
 
 
@@ -542,6 +563,11 @@ def _store_to_rows(
 
 
 async def load_model_config_store() -> ModelConfigStore:
+    global _STORE_CACHE, _STORE_CACHE_AT
+    now = time.time()
+    if _STORE_CACHE is not None and (now - _STORE_CACHE_AT) < _STORE_CACHE_TTL_SEC:
+        return _STORE_CACHE
+
     rows = await list_model_config_rows()
     if not rows:
         store, legacy_path = _load_legacy_or_default_store()
@@ -554,7 +580,7 @@ async def load_model_config_store() -> ModelConfigStore:
         await replace_model_config_rows(_store_to_rows(store))
         if legacy_path is not None:
             _archive_legacy_model_config_file(legacy_path)
-        return store
+        return _cache_model_config_store(store)
 
     base_store = ModelConfigStore.from_rows(rows)
     store = base_store.with_defaults().with_valid_active_model()
@@ -564,7 +590,7 @@ async def load_model_config_store() -> ModelConfigStore:
         or _rows_need_provider_migration(rows, store)
     ):
         await replace_model_config_rows(_store_to_rows(store, rows))
-    return store
+    return _cache_model_config_store(store)
 
 
 async def load_model_config() -> dict[str, Any]:
@@ -586,6 +612,7 @@ async def save_model_config(
     )
     existing_rows = await list_model_config_rows()
     await replace_model_config_rows(_store_to_rows(store, existing_rows))
+    _invalidate_model_config_cache()
     return store.to_public_dict()
 
 
