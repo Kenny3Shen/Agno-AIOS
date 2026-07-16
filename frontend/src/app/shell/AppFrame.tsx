@@ -67,8 +67,10 @@ import { usePreferences } from '@/app/providers/AppProviders'
 import {
   defaultOpenNavigationGroupKeys,
   filterNavigationGroups,
+  navigationGroupKeyForItemPath,
   navigationGroupMenuKey,
   readRecentConversationsExpanded,
+  withOpenNavigationGroup,
   writeRecentConversationsExpanded,
   type NavigationGroup,
 } from './utils'
@@ -160,6 +162,12 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const lastNotificationIdRef = useRef(0)
   const path = useRouterState({ select: (state) => state.location.pathname })
   const searchStr = useRouterState({ select: (state) => state.location.searchStr })
+  // Deep links (e.g. /trace, /cve): ensure the owning group is open on desktop without collapsing others.
+  useEffect(() => {
+    const groupMenuKey = navigationGroupKeyForItemPath(navigationGroups, path)
+    if (!groupMenuKey) return
+    setOpenNavigationGroups((current) => withOpenNavigationGroup(current, groupMenuKey))
+  }, [path])
   const currentNextPath = nextPathFromLocation({ pathname: path, searchStr })
   const nextPathRef = useRef<string | null>(currentNextPath)
   const token = getToken()
@@ -294,7 +302,13 @@ export function AppFrame({ children }: { children: ReactNode }) {
   }
   const openMobileNavigation = () => {
     setMobileRecentConversationsExpanded(false)
-    setMobileOpenNavigationGroups([...defaultOpenNavigationGroups])
+    // Predictable mobile defaults + current route group so deep links stay visible.
+    setMobileOpenNavigationGroups(
+      withOpenNavigationGroup(
+        defaultOpenNavigationGroups,
+        navigationGroupKeyForItemPath(navigationGroups, path),
+      ),
+    )
     setMobileOpen(true)
   }
   const openNotification = async (notification: Notification) => {
@@ -339,7 +353,12 @@ export function AppFrame({ children }: { children: ReactNode }) {
   useEffect(() => {
     setMobileOpen(false)
     setMobileRecentConversationsExpanded(false)
-    setMobileOpenNavigationGroups([...defaultOpenNavigationGroups])
+    setMobileOpenNavigationGroups(
+      withOpenNavigationGroup(
+        defaultOpenNavigationGroups,
+        navigationGroupKeyForItemPath(navigationGroups, path),
+      ),
+    )
   }, [path])
   useEffect(() => {
     if (currentNextPath) nextPathRef.current = currentNextPath
@@ -558,7 +577,12 @@ export function AppFrame({ children }: { children: ReactNode }) {
         onClose={() => {
           setMobileOpen(false)
           setMobileRecentConversationsExpanded(false)
-          setMobileOpenNavigationGroups([...defaultOpenNavigationGroups])
+          setMobileOpenNavigationGroups(
+            withOpenNavigationGroup(
+              defaultOpenNavigationGroups,
+              navigationGroupKeyForItemPath(navigationGroups, path),
+            ),
+          )
         }}
         title="T.A.I.S"
         styles={{ body: { padding: 8 } }}

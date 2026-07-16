@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：导航深链自动展开分组
+
+- 深链进入 `/trace`、`/approvals`、`/cve` 等时，侧栏自动展开所属导航分组（桌面 + 移动 openKeys）。
+- 纯函数：`navigationGroupKeyForItemPath` / `withOpenNavigationGroup`；默认仍展开前两个分组；不持久化 openKeys；移动端打开/路由切换 = 默认两组 + 当前路由分组。
+
 ## 已完成：antd 6 classNames + loguru 惰性格式
 
 - Chat 模型选择器：`Popover.overlayClassName` / `Cascader.popupClassName` → antd 6 `classNames`（CSS 类名不变）。
@@ -1263,7 +1268,7 @@ P0.4 审批值班薄入口        ✅
 
 ## P2：导航与治理能力补强
 
-- 深链进入 `/trace`、`/approvals`、`/cve` 等页面时，在默认两个分组之外自动展开当前路由所属分组。
+- 深链进入 `/trace`、`/approvals`、`/cve` 等页面时，在默认两个分组之外自动展开当前路由所属分组。 ✅
 - 决定桌面导航分组状态是否需要跨刷新持久化；移动端继续保持每次打开的可预测默认值。
 - 审计能力按“导出 → 规则告警 → Webhook → SIEM”顺序评估，任何外发接口都必须包含 scope、租户/owner 边界、脱敏和审计闭环。
 

@@ -3,8 +3,10 @@ import {
   RECENT_CONVERSATIONS_STORAGE_KEY,
   defaultOpenNavigationGroupKeys,
   filterNavigationGroups,
+  navigationGroupKeyForItemPath,
   navigationGroupMenuKey,
   readRecentConversationsExpanded,
+  withOpenNavigationGroup,
   writeRecentConversationsExpanded,
   type NavigationGroup,
 } from './utils'
@@ -58,3 +60,51 @@ describe('recent conversation preference', () => {
     expect(setItem).toHaveBeenCalledWith(RECENT_CONVERSATIONS_STORAGE_KEY, 'true')
   })
 })
+
+describe('deep-link navigation group expansion', () => {
+  const fullGroups: NavigationGroup<{ key: string; scope?: string }>[] = [
+    {
+      key: 'workspace',
+      labelKey: 'workspace',
+      items: [
+        { key: '/chat', scope: 'sessions:write' },
+        { key: '/workflow', scope: 'workflows:read' },
+      ],
+    },
+    {
+      key: 'capabilities',
+      labelKey: 'capabilities',
+      items: [{ key: '/knowledge', scope: 'knowledge:read' }],
+    },
+    {
+      key: 'governance',
+      labelKey: 'governance',
+      items: [
+        { key: '/trace', scope: 'traces:read' },
+        { key: '/approvals', scope: 'approvals:read' },
+      ],
+    },
+    {
+      key: 'intelligence',
+      labelKey: 'intelligence',
+      items: [{ key: '/cve', scope: 'cve:read' }],
+    },
+  ]
+
+  it('resolves the group menu key for a deep-linked path', () => {
+    expect(navigationGroupKeyForItemPath(fullGroups, '/trace')).toBe(navigationGroupMenuKey('governance'))
+    expect(navigationGroupKeyForItemPath(fullGroups, '/cve')).toBe(navigationGroupMenuKey('intelligence'))
+    expect(navigationGroupKeyForItemPath(fullGroups, '/chat')).toBe(navigationGroupMenuKey('workspace'))
+    expect(navigationGroupKeyForItemPath(fullGroups, '/settings')).toBeNull()
+    expect(navigationGroupKeyForItemPath(fullGroups, '/dashboard')).toBeNull()
+  })
+
+  it('adds the target group to open keys without reordering existing ones', () => {
+    const open = [navigationGroupMenuKey('workspace'), navigationGroupMenuKey('capabilities')]
+    const governance = navigationGroupMenuKey('governance')
+    expect(withOpenNavigationGroup(open, governance)).toEqual([...open, governance])
+    expect(withOpenNavigationGroup(open, navigationGroupMenuKey('workspace'))).toEqual(open)
+    expect(withOpenNavigationGroup(open, null)).toEqual(open)
+  })
+})
+
