@@ -389,6 +389,12 @@ async def _reassign_vectors_content_id_async(
     try:
         await asyncio.to_thread(_sync_reassign)
     except Exception:
+        logger.debug(
+            "vector content_id reassign failed {} -> {}",
+            from_content_id,
+            to_content_id,
+            exc_info=True,
+        )
         return False
     return True
 
@@ -418,6 +424,11 @@ async def _best_effort_remove_content_async(
         await _delete_vectors_by_content_id_async(knowledge, content_id)
         await _delete_contents_registration_async(knowledge, content_id)
     except Exception:
+        logger.warning(
+            "best-effort knowledge content remove failed for {}",
+            content_id,
+            exc_info=True,
+        )
         return
 
 

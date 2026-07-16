@@ -326,7 +326,8 @@ async def test_overview_caps_trace_pages_when_window_is_huge():
 
 
 @pytest.mark.asyncio
-async def test_overview_fetch_reconciles_audit_failures_before_metrics() -> None:
+async def test_overview_token_sample_skips_status_reconcile() -> None:
+    """Token sample stays raw; failure UX uses recent_failures + window ERROR count."""
     trace = SimpleNamespace(
         to_dict=lambda: {"trace_id": "trace-1", "run_id": "run-1", "status": "OK"}
     )
@@ -347,9 +348,9 @@ async def test_overview_fetch_reconciles_audit_failures_before_metrics() -> None
             user_id="u1",
         )
 
-    assert traces[0]["status"] == "ERROR"
-    assert reconcile.await_args is not None
-    assert reconcile.await_args.kwargs["actor_user_id"] == "u1"
+    assert traces[0]["status"] == "OK"
+    assert meta["sample_size"] == 1
+    reconcile.assert_not_awaited()
 
 
 @pytest.mark.asyncio

@@ -3,6 +3,8 @@ from fastmcp import FastMCP
 import httpx
 from mcp.types import ToolAnnotations
 
+from loguru import logger
+
 from api.config import get_settings
 from api.services.runtime_env import load_runtime_env_async
 
@@ -108,7 +110,7 @@ class OctomationAdapter:
         }
 
     async def get_method_params(self, method_id: str) -> dict:
-        # 优先尝试从剧本详情获取参数定义
+        # Prefer playbook detail paramCefSet; fall back to legacy param API.
         try:
             detail_resp = await self.client.get(
                 f"{self.api_base}/api/playbook/{method_id}",
@@ -131,9 +133,13 @@ class OctomationAdapter:
                             )
                     return {"code": 0, "msg": "ok", "data": formatted}
         except Exception:
-            pass
+            logger.warning(
+                "Octomation playbook detail params failed for {}",
+                method_id,
+                exc_info=True,
+            )
 
-        # 降级尝试旧的 param 接口（可能返回502）
+        # Legacy param endpoint (often 502 on older Octomation builds).
         try:
             resp = await self.client.get(
                 f"{self.api_base}/api/playbook/param",
@@ -145,9 +151,17 @@ class OctomationAdapter:
             if data.get("code") == 200:
                 return {"code": 0, "msg": "ok", "data": data.get("result", [])}
         except Exception:
-            pass
+            logger.warning(
+                "Octomation legacy playbook param API failed for {}",
+                method_id,
+                exc_info=True,
+            )
 
-        # 最后的降级：返回空参数列表，允许用户手动填写
+        # Final degrade: empty list so operators can fill params manually.
+        logger.info(
+            "Octomation playbook params unavailable for {}; returning empty schema",
+            method_id,
+        )
         return {"code": 0, "msg": "ok", "data": []}
 
     async def invoke_method(self, method_id: str, params: dict | None = None) -> dict:

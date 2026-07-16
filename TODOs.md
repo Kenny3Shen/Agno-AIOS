@@ -136,6 +136,17 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：MCP/知识库吞异常日志 + Overview token 样本去 reconcile
+
+- Octomation playbook 参数拉取降级路径：`except pass` → warning/info 日志
+- Feishu webhook 请求失败写 warning（仍返回错误码）
+- knowledge chunk count / hydrate、vector reassign、best-effort remove：debug/warning 日志
+- Overview `_fetch_traces` token 采样不再 `reconcile_trace_statuses`（失败数走窗口 ERROR + recent_failures）
+
+相关：`playbook.py` / `basic.py` / `knowledge_service.py` / `knowledge_source_service.py` / `overview_service.py`
+
+---
+
 ## 已完成：吞异常日志 + Overview token 采样 1k + resolveApproval 收窄
 
 - `workflows` 列迁移、`knowledge_source` 选择性向量删除、workflow resume 终态写回：`except pass` → debug/warning/exception 日志

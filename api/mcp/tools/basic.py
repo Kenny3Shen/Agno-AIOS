@@ -1,6 +1,8 @@
 from fastmcp import FastMCP
 import httpx
 import asyncio
+
+from loguru import logger
 from mcp.types import ToolAnnotations
 
 from api.utils.json import dumps_bytes
@@ -90,5 +92,11 @@ async def send_feishu_notify(
                 return {"code": -1, "msg": f"发送失败，响应：{resp_json}"}
 
         except Exception:
+            logger.warning(
+                "Feishu webhook request failed (attempt {}/{})",
+                attempt + 1,
+                max_retries,
+                exc_info=True,
+            )
             return {"code": -1, "msg": "请求异常，发送失败"}
     return {"code": -1, "msg": "发送失败，重试次数用尽"}

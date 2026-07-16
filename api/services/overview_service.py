@@ -571,9 +571,10 @@ async def _fetch_traces(
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Load traces for dashboard metrics with a hard row/page cap.
 
-    Full-window scans are unbounded on busy tenants; metrics and series use the
-    most recent capped sample (tokens / SQL fallback). Returns ``(traces, sample_meta)`` where meta has
-    ``sample_size``, ``window_total``, and ``truncated``.
+    Capped sample for span-token totals (and SQL aggregate fallback). Latency,
+    series, distributions, and window failure counts do not depend on this path.
+    Returns ``(traces, sample_meta)`` with ``sample_size`` / ``window_total`` /
+    ``truncated``.
     """
     db = get_async_agno_postgres_db()
     traces, total = await db.get_traces(
@@ -612,16 +613,14 @@ async def _fetch_traces(
     for trace in rows:
         dumped = trace if isinstance(trace, dict) else trace.to_dict()
         result.append(jsonable_encoder(dumped))
-    reconciled = await reconcile_trace_statuses(
-        result,
-        actor_user_id=user_id,
-    )
+    # Token sample only: skip audit status reconcile (recent_failures already
+    # reconciles; window failed_runs uses native ERROR counts).
     sample_meta = {
-        "sample_size": len(reconciled),
+        "sample_size": len(result),
         "window_total": total_count,
         "truncated": truncated,
     }
-    return reconciled, sample_meta
+    return result, sample_meta
 
 
 async def _snapshots(actor: ActorLike) -> dict[str, Any]:

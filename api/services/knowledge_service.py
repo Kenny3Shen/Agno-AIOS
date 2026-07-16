@@ -19,6 +19,8 @@ from agno.vectordb.search import SearchType
 from sqlalchemy import Column, Integer, MetaData, Table, Text, cast as sql_cast, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 
+from loguru import logger
+
 from api.auth.claims import ActorLike
 from api.auth.visibility import can_manage_resource, normalize_visibility
 from api.config import get_settings
@@ -443,6 +445,7 @@ async def _chunk_counts_by_content_id_async(owner_user_id: str | None = None) ->
         async with get_async_control_plane_engine().begin() as conn:
             rows = (await conn.execute(stmt)).all()
     except Exception:
+        logger.debug("knowledge chunk counts by content_id failed", exc_info=True)
         return {}
     return {str(content_id): int(count) for content_id, count in rows if content_id}
 
@@ -457,6 +460,7 @@ async def _chunk_count_async(owner_user_id: str | None = None) -> int:
         async with get_async_control_plane_engine().begin() as conn:
             count = (await conn.execute(stmt)).scalar()
     except Exception:
+        logger.debug("knowledge chunk count failed", exc_info=True)
         return 0
     return int(count or 0)
 
@@ -471,6 +475,7 @@ async def _hydrate_content_ids_async(documents: list[Document]) -> None:
         async with get_async_control_plane_engine().begin() as conn:
             rows = (await conn.execute(stmt)).all()
     except Exception:
+        logger.debug("knowledge content_id hydrate failed", exc_info=True)
         return
     content_ids = {str(row_id): str(content_id) for row_id, content_id in rows if content_id}
     for document in documents:
