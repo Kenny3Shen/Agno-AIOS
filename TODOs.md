@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Workflow 深链 deps + Knowledge 进度 smoke
+
+- `useWorkflow.load` 改为 `useCallback`；Studio 深链 `workflow_id` effect 去掉 `eslint-disable`。
+- `frontend/e2e/knowledge.smoke.spec.ts`：文本入库 `stream=true` SSE 完成后关 Drawer，列表出现文档（阶段 UI 由 unit test 覆盖）。
+
 ## 已完成：Playwright Trace Session→Run→Span smoke
 
 - `frontend/e2e/trace.smoke.spec.ts`：深链 `selected_session` + `trace` 打开观测页，Session 选中、Runs/Spans 树与 Detail Input 可见；点 child span 切换详情。
@@ -1279,7 +1284,7 @@ P0.4 审批值班薄入口        ✅
 
 ## P1：建立关键流程 E2E
 
-已落地 shell + Trace Session→Run→Span Playwright smoke（`frontend/e2e/shell.smoke.spec.ts`、`trace.smoke.spec.ts`）；Knowledge 进度流仍可继续加 spec。
+已落地 shell / Trace / Knowledge 进度 Playwright smoke（`frontend/e2e/*.smoke.spec.ts`）。
 
 建议首先覆盖：
 

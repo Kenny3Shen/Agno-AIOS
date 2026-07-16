@@ -187,16 +187,15 @@ export function WorkflowPage() {
 
   const savedList = workflow.workflowsQuery.data
   const currentWorkflowId = workflow.state.workflowId
+  const loadWorkflow = workflow.load
   // Deep link: #/workflow?workflow_id=...
   useEffect(() => {
     const raw = window.location.hash.split('?')[1] ?? ''
     const id = new URLSearchParams(raw).get('workflow_id')
     if (!id || currentWorkflowId === id) return
     const known = (savedList ?? []).some((item) => item.id === id)
-    if (known) workflow.load(id)
-    // Intentionally omit workflow.load identity; list + current id gate loads.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedList, currentWorkflowId])
+    if (known) loadWorkflow(id)
+  }, [savedList, currentWorkflowId, loadWorkflow])
 
   const paletteLabel = (type: WorkflowNodeType) => {
     const map: Record<WorkflowNodeType, string> = {

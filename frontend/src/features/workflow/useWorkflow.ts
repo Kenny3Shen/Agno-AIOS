@@ -482,7 +482,7 @@ export function useWorkflow() {
     })
   }
 
-  const load = (id: string) => {
+  const load = useCallback((id: string) => {
     const record = (workflowsQuery.data ?? []).find((item) => item.id === id)
     if (!record) return
     pastRef.current = []
@@ -500,7 +500,7 @@ export function useWorkflow() {
       validationIssues: [],
       dirty: false,
     }))
-  }
+  }, [workflowsQuery.data])
 
   const applyTemplate = (templateId: string) => {
     const template = (templatesQuery.data ?? []).find((item) => item.id === templateId)
