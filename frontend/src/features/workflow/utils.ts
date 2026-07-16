@@ -373,9 +373,8 @@ export const reparentTargetFromHandle = (
   sourceHandle: string | null | undefined
 ): ReparentTarget | null => {
   // Normalize side aliases: "then-right" → "then", "out-right" → "out"
-  let handle = (sourceHandle || '').trim()
-  if (handle.endsWith('-right')) handle = handle.slice(0, -'-right'.length)
-  if (handle.endsWith('-left')) handle = handle.slice(0, -'-left'.length)
+  // Note: normalizeHandleBase is defined below; call-time binding is fine.
+  const handle = normalizeHandleBase(sourceHandle)
 
   if (source.type === 'condition') {
     if (handle === 'then' || handle === 'thenSteps') {
@@ -407,6 +406,63 @@ export const isEntranceHandle = (handle: string | null | undefined): boolean => 
 export const isDefaultExitHandle = (handle: string | null | undefined): boolean => {
   const h = (handle || '').trim()
   return !h || h === 'out' || h === 'out-right'
+}
+
+/** Approximate node width used for geometry-based port picking (matches .wf-flow-node). */
+export const NODE_LAYOUT_WIDTH = 200
+
+/** Approximate default node height when no type-specific estimate is available. */
+export const NODE_LAYOUT_HEIGHT = 96
+
+/**
+ * Strip side aliases so semantic branch ids stay stable.
+ * "then-right" → "then", "out-right" → "out", "choice:x-right" stays "choice:x".
+ */
+export const normalizeHandleBase = (handle: string | null | undefined): string => {
+  let h = (handle || '').trim()
+  if (h.endsWith('-right')) h = h.slice(0, -'-right'.length)
+  if (h.endsWith('-left')) h = h.slice(0, -'-left'.length)
+  return h
+}
+
+export type PortPoint = { x: number; y: number; width?: number; height?: number }
+
+/**
+ * Pick source/target handles from node geometry.
+ * - Prefer left↔right when the target is clearly to the right (Dify-like flow).
+ * - Otherwise use top/bottom. We only render top+left targets and bottom+right sources.
+ * - Branch semantics keep the logical id (`then` / `else` / `choice:…`) and only swap the side alias.
+ */
+export const pickConnectionHandles = (
+  source: PortPoint,
+  target: PortPoint,
+  logicalSourceHandle?: string | null
+): { sourceHandle: string; targetHandle: string; horizontal: boolean } => {
+  const sw = source.width ?? NODE_LAYOUT_WIDTH
+  const sh = source.height ?? NODE_LAYOUT_HEIGHT
+  const tw = target.width ?? NODE_LAYOUT_WIDTH
+  const th = target.height ?? NODE_LAYOUT_HEIGHT
+  const scx = source.x + sw / 2
+  const scy = source.y + sh / 2
+  const tcx = target.x + tw / 2
+  const tcy = target.y + th / 2
+  const dx = tcx - scx
+  const dy = tcy - scy
+
+  // Only use side ports when the target is to the right; we have no left source handle.
+  const horizontal = dx >= 48 && Math.abs(dx) >= Math.abs(dy) * 0.85
+
+  const base = normalizeHandleBase(logicalSourceHandle)
+  const isDefaultOut = !base || base === 'out' || base === 'body' || base === 'steps'
+  const sourceHandle = horizontal
+    ? isDefaultOut
+      ? 'out-right'
+      : `${base}-right`
+    : isDefaultOut
+      ? 'out'
+      : base
+  const targetHandle = horizontal ? 'in-left' : 'in'
+  return { sourceHandle, targetHandle, horizontal }
 }
 
 export const emptySlotsFor = (node: WorkflowNode): EmptySlot[] => {
@@ -976,12 +1032,14 @@ export const layoutCanvas = (
     depth: number,
     parentId: string | null,
     edgeLabel?: string,
-    edgeSourceHandle?: string
+    edgeSourceHandle?: string,
+    rootIndex = 0
   ) => {
-    const autoY = row * 90
-    const autoX = depth * 220
-    const x = forceAuto ? autoX : (node.position?.x ?? autoX)
-    const y = forceAuto ? autoY : (node.position?.y ?? autoY)
+    // Roots without saved positions flow left→right; nested use depth/row fallback.
+    const autoY = parentId == null ? 40 : row * 90
+    const autoX = parentId == null ? rootIndex * 280 : depth * 220
+    const x = forceAuto ? (parentId == null ? rootIndex * 280 : depth * 220) : (node.position?.x ?? autoX)
+    const y = forceAuto ? (parentId == null ? 40 : row * 90) : (node.position?.y ?? autoY)
     nodes.push({
       id: node.id,
       type: node.type,
@@ -996,6 +1054,7 @@ export const layoutCanvas = (
         source: parentId,
         target: node.id,
         label: edgeLabel,
+        // Logical handle only; geometry pass below picks side vs top/bottom.
         sourceHandle: edgeSourceHandle,
         targetHandle: 'in',
       })
@@ -1016,18 +1075,33 @@ export const layoutCanvas = (
       for (const child of node.steps ?? []) visit(child, depth + 1, node.id, undefined, 'out')
     }
   }
-  for (const root of roots) visit(root, 0, null)
+  for (let i = 0; i < roots.length; i += 1) visit(roots[i]!, 0, null, undefined, undefined, i)
   for (let i = 0; i < roots.length - 1; i += 1) {
     edges.push({
       id: `seq-${roots[i]!.id}->${roots[i + 1]!.id}`,
       source: roots[i]!.id,
       target: roots[i + 1]!.id,
       label: 'next',
-      // Root sequence prefers left→right ports for Dify-like flow.
-      sourceHandle: 'out-right',
-      targetHandle: 'in-left',
+      sourceHandle: 'out',
+      targetHandle: 'in',
     })
   }
+
+  // Geometry-aware ports: L/R when target is to the right, else top/bottom.
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  for (const edge of edges) {
+    const src = byId.get(edge.source)
+    const tgt = byId.get(edge.target)
+    if (!src || !tgt) continue
+    const picked = pickConnectionHandles(
+      { x: src.x, y: src.y },
+      { x: tgt.x, y: tgt.y },
+      edge.sourceHandle
+    )
+    edge.sourceHandle = picked.sourceHandle
+    edge.targetHandle = picked.targetHandle
+  }
+
   return { nodes, edges }
 }
 

@@ -15,6 +15,7 @@ import {
   emptySlotsFor,
   branchHandlesFor,
   reparentTargetFromHandle,
+  pickConnectionHandles,
   validateWorkflowDraft,
   triggerEnableBlocked,
   workflowWebhookCurl,
@@ -335,17 +336,49 @@ describe('multi-handle branches', () => {
   it('layouts edges with sourceHandle for branches', () => {
     const condition = createNode('condition')
     condition.id = 'c1'
-    condition.thenSteps = [{ id: 't1', type: 'step', name: 'T', targetId: 'security-operations' }]
-    condition.elseSteps = [{ id: 'e1', type: 'step', name: 'E', targetId: 'safe-fallback' }]
+    // Child placed to the right of parent → side ports + branch -right alias.
+    condition.position = { x: 0, y: 40 }
+    condition.thenSteps = [
+      {
+        id: 't1',
+        type: 'step',
+        name: 'T',
+        targetId: 'security-operations',
+        position: { x: 280, y: 0 },
+      },
+    ]
+    condition.elseSteps = [
+      {
+        id: 'e1',
+        type: 'step',
+        name: 'E',
+        targetId: 'safe-fallback',
+        position: { x: 280, y: 120 },
+      },
+    ]
     const layout = layoutCanvas([condition])
     const thenEdge = layout.edges.find((e) => e.target === 't1')
     const elseEdge = layout.edges.find((e) => e.target === 'e1')
-    expect(thenEdge?.sourceHandle).toBe('then')
-    expect(elseEdge?.sourceHandle).toBe('else')
-    expect(thenEdge?.targetHandle).toBe('in')
+    expect(thenEdge?.sourceHandle).toBe('then-right')
+    expect(elseEdge?.sourceHandle).toBe('else-right')
+    expect(thenEdge?.targetHandle).toBe('in-left')
+    expect(elseEdge?.targetHandle).toBe('in-left')
   })
 
-  it('uses left-right ports for root sequence edges', () => {
+  it('uses left-right ports for horizontally placed root sequence', () => {
+    const a = createNode('step')
+    a.id = 'a'
+    a.position = { x: 0, y: 0 }
+    const b = createNode('step')
+    b.id = 'b'
+    b.position = { x: 280, y: 0 }
+    const layout = layoutCanvas([a, b])
+    const next = layout.edges.find((e) => e.label === 'next')
+    expect(next?.sourceHandle).toBe('out-right')
+    expect(next?.targetHandle).toBe('in-left')
+  })
+
+  it('defaults root sequence without positions to left-right ports', () => {
     const a = createNode('step')
     a.id = 'a'
     const b = createNode('step')
@@ -354,6 +387,55 @@ describe('multi-handle branches', () => {
     const next = layout.edges.find((e) => e.label === 'next')
     expect(next?.sourceHandle).toBe('out-right')
     expect(next?.targetHandle).toBe('in-left')
+  })
+
+  it('uses side ports for nested child placed to the right of parent', () => {
+    const parent = createNode('parallel')
+    parent.id = 'p1'
+    parent.position = { x: 0, y: 0 }
+    parent.steps = [
+      {
+        id: 'c1',
+        type: 'step',
+        name: 'Child',
+        targetId: 'security-operations',
+        position: { x: 280, y: 20 },
+      },
+    ]
+    const layout = layoutCanvas([parent])
+    const edge = layout.edges.find((e) => e.target === 'c1')
+    expect(edge?.sourceHandle).toBe('out-right')
+    expect(edge?.targetHandle).toBe('in-left')
+  })
+
+  it('uses top-bottom ports when sequence is stacked vertically', () => {
+    const a = createNode('step')
+    a.id = 'a'
+    a.position = { x: 0, y: 0 }
+    const b = createNode('step')
+    b.id = 'b'
+    b.position = { x: 0, y: 160 }
+    const layout = layoutCanvas([a, b])
+    const next = layout.edges.find((e) => e.label === 'next')
+    expect(next?.sourceHandle).toBe('out')
+    expect(next?.targetHandle).toBe('in')
+  })
+
+  it('pickConnectionHandles prefers side ports for rightward targets', () => {
+    const side = pickConnectionHandles({ x: 0, y: 0 }, { x: 280, y: 20 }, 'out')
+    expect(side).toMatchObject({
+      sourceHandle: 'out-right',
+      targetHandle: 'in-left',
+      horizontal: true,
+    })
+    const branch = pickConnectionHandles({ x: 0, y: 0 }, { x: 300, y: 10 }, 'then')
+    expect(branch.sourceHandle).toBe('then-right')
+    const vertical = pickConnectionHandles({ x: 0, y: 0 }, { x: 20, y: 200 }, 'out')
+    expect(vertical).toMatchObject({
+      sourceHandle: 'out',
+      targetHandle: 'in',
+      horizontal: false,
+    })
   })
 
   it('normalizes side handle aliases for reparent', () => {

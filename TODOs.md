@@ -135,6 +135,17 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：几何感知连线端口（L/R vs Top/Bottom）
+
+- `pickConnectionHandles`：目标在右侧 → `out-right`/`*-right` + `in-left`；否则 top/bottom
+- `layoutCanvas` 在节点坐标确定后二次选择 handle；根序列无坐标时默认横向排布
+- 分支语义 id（`then`/`else`/`choice:…`）保留，仅切换 side alias
+- 不改 DSL；用户拖拽连线仍以抓取的 handle 为准
+
+相关：`utils.ts` / `utils.test.ts`
+
+---
+
 ## 已完成：自动布局防重叠（pixel tree packer）
 
 - `applyAutoLayout` 按节点高度 + sibling gap 堆叠 then/else
