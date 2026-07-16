@@ -124,6 +124,15 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：通知列表索引 + Trace audit 补充可观测
+
+- `notifications` 表补 `user_id+created_at` / `user_id+id` / `user_id+read` 索引，覆盖抽屉列表、SSE 游标与未读计数
+- Trace ERROR 列表 audit 补充路径：`get_trace` 失败写 debug 日志，不再静默 `continue`
+
+相关：`api/persistence/notifications.py` / `tracing_service.py`
+
+---
+
 ## 已完成：Evals failures 有界多页扫描
 
 - `list_failed_eval_runs` 不再只取第一页后过滤；在最多 10 页 × page_size=50 的窗口内收集失败项直至 `limit`

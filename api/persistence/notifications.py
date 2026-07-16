@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from sqlalchemy import BigInteger, Boolean, Column, MetaData, String, Table, Text, delete, func, select, update
+from sqlalchemy import BigInteger, Boolean, Column, Index, MetaData, String, Table, Text, delete, desc, func, select, text, update
 from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.schema import CreateSchema
 
@@ -13,14 +13,42 @@ from api.persistence.database import get_async_control_plane_engine
 
 def _table() -> Table:
     metadata = MetaData(schema=get_settings().agno_app_schema)
-    return Table("notifications", metadata, Column("id", BigInteger, primary_key=True, autoincrement=True), Column("user_id", String(255), nullable=False), Column("title", Text, nullable=False), Column("body", Text, nullable=False), Column("data", JSONB, nullable=False), Column("read", Boolean, nullable=False, server_default="false"), Column("created_at", BigInteger, nullable=False), Column("read_at", BigInteger))
+    table = Table(
+        "notifications",
+        metadata,
+        Column("id", BigInteger, primary_key=True, autoincrement=True),
+        Column("user_id", String(255), nullable=False),
+        Column("title", Text, nullable=False),
+        Column("body", Text, nullable=False),
+        Column("data", JSONB, nullable=False),
+        Column("read", Boolean, nullable=False, server_default="false"),
+        Column("created_at", BigInteger, nullable=False),
+        Column("read_at", BigInteger),
+    )
+    # Hot paths: drawer list (user + created_at) and SSE cursor (user + id).
+    Index("idx_notifications_user_created", table.c.user_id, desc(table.c.created_at))
+    Index("idx_notifications_user_id", table.c.user_id, table.c.id)
+    Index("idx_notifications_user_unread", table.c.user_id, table.c.read)
+    return table
 
 
 async def _ensure() -> None:
     table = _table()
+    schema = get_settings().agno_app_schema
     async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(CreateSchema(get_settings().agno_app_schema, if_not_exists=True))
+        await conn.execute(CreateSchema(schema, if_not_exists=True))
         await conn.run_sync(table.create, checkfirst=True)
+        # Best-effort index evolve for existing deployments (create checkfirst
+        # alone does not add indexes to tables that already exist).
+        for ddl in (
+            f'CREATE INDEX IF NOT EXISTS idx_notifications_user_created '
+            f'ON "{schema}".notifications (user_id, created_at DESC)',
+            f'CREATE INDEX IF NOT EXISTS idx_notifications_user_id '
+            f'ON "{schema}".notifications (user_id, id)',
+            f'CREATE INDEX IF NOT EXISTS idx_notifications_user_unread '
+            f'ON "{schema}".notifications (user_id, read)',
+        ):
+            await conn.execute(text(ddl))
 
 
 async def create_notifications(

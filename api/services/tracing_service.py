@@ -613,6 +613,11 @@ async def _merge_audit_error_traces(
         try:
             trace = await _trace_db.get_trace(run_id=failed_run_id)
         except Exception:
+            logger.debug(
+                "Unable to load audit-supplement trace for run {}",
+                failed_run_id,
+                exc_info=True,
+            )
             continue
         if trace is None:
             continue
