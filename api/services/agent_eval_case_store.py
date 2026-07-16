@@ -316,8 +316,10 @@ async def get_suite_run(suite_run_id: str) -> dict[str, Any] | None:
 async def list_suite_runs(
     suite_id: str | None = None,
     status: str | None = None,
+    *,
+    limit: int = 100,
 ) -> list[dict[str, Any]]:
-    rows = await list_suite_run_rows_async(suite_id=suite_id, status=status)
+    rows = await list_suite_run_rows_async(suite_id=suite_id, status=status, limit=limit)
     return [normalize_suite_run(row) for row in rows]
 
 
@@ -370,8 +372,15 @@ async def list_case_runs(
     suite_run_id: str | None = None,
     case_id: str | None = None,
     status: str | None = None,
+    *,
+    limit: int = 100,
 ) -> list[dict[str, Any]]:
-    rows = await list_case_run_rows_async(suite_run_id=suite_run_id, case_id=case_id, status=status)
+    rows = await list_case_run_rows_async(
+        suite_run_id=suite_run_id,
+        case_id=case_id,
+        status=status,
+        limit=limit,
+    )
     return [normalize_case_run(row) for row in rows]
 
 

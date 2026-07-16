@@ -256,6 +256,8 @@ async def _list_rows_async(
     table: Table,
     filters: list[Any],
     order_by: list[Any],
+    *,
+    limit: int | None = None,
 ) -> list[dict[str, Any]]:
     await ensure_agent_eval_tables_async()
     stmt = select(table)
@@ -263,6 +265,8 @@ async def _list_rows_async(
         stmt = stmt.where(and_(*filters))
     if order_by:
         stmt = stmt.order_by(*order_by)
+    if limit is not None:
+        stmt = stmt.limit(max(1, min(int(limit), 500)))
     async with get_async_control_plane_engine().begin() as conn:
         rows = (await conn.execute(stmt)).mappings().all()
     return [_row_dict(row) for row in rows]
@@ -357,7 +361,10 @@ async def create_suite_run_row_async(values: dict[str, Any]) -> dict[str, Any]:
 async def list_suite_run_rows_async(
     suite_id: str | None = None,
     status: str | None = None,
+    *,
+    limit: int = 100,
 ) -> list[dict[str, Any]]:
+    """Recent suite runs only (newest first). History tables grow without bound."""
     table = agent_eval_suite_runs_table()
     filters = []
     if suite_id is not None:
@@ -365,7 +372,10 @@ async def list_suite_run_rows_async(
     if status is not None:
         filters.append(table.c.status == status)
     return await _list_rows_async(
-        table, filters, [desc(table.c.started_at), table.c.id]
+        table,
+        filters,
+        [desc(table.c.started_at), table.c.id],
+        limit=limit,
     )
 
 
@@ -387,7 +397,10 @@ async def list_case_run_rows_async(
     suite_run_id: str | None = None,
     case_id: str | None = None,
     status: str | None = None,
+    *,
+    limit: int = 100,
 ) -> list[dict[str, Any]]:
+    """Recent case runs only (newest first). History tables grow without bound."""
     table = agent_eval_case_runs_table()
     filters = []
     if suite_run_id is not None:
@@ -397,7 +410,10 @@ async def list_case_run_rows_async(
     if status is not None:
         filters.append(table.c.status == status)
     return await _list_rows_async(
-        table, filters, [desc(table.c.started_at), table.c.id]
+        table,
+        filters,
+        [desc(table.c.started_at), table.c.id],
+        limit=limit,
     )
 
 

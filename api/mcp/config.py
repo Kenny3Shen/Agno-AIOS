@@ -158,7 +158,8 @@ async def list_mcp_servers() -> list[dict[str, Any]]:
 
 
 async def enabled_mcp_servers() -> list[dict[str, Any]]:
-    return [row for row in await list_mcp_servers() if row["enabled"]]
+    await bootstrap_mcp_config()
+    return await list_server_rows(enabled=True)
 
 
 async def component_overrides() -> list[dict[str, Any]]:

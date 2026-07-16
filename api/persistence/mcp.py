@@ -115,11 +115,15 @@ async def ensure_mcp_tables() -> None:
     await _mcp_tables_once.run(_create_mcp_tables)
 
 
-async def list_server_rows() -> list[dict[str, Any]]:
+async def list_server_rows(*, enabled: bool | None = None) -> list[dict[str, Any]]:
+    """List MCP servers. Optional ``enabled`` is applied in SQL (not Python filter)."""
     await ensure_mcp_tables()
     table = mcp_servers_table()
+    stmt = select(table).order_by(table.c.id)
+    if enabled is not None:
+        stmt = stmt.where(table.c.enabled.is_(bool(enabled)))
     async with get_async_control_plane_engine().begin() as conn:
-        rows = (await conn.execute(select(table).order_by(table.c.id))).mappings().all()
+        rows = (await conn.execute(stmt)).mappings().all()
     return [dict(row) for row in rows]
 
 

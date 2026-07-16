@@ -124,6 +124,16 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：列表硬顶与 MCP enabled SQL 过滤
+
+- `enabled_mcp_servers` 用 `list_server_rows(enabled=True)` 下推 SQL，避免全表再 Python filter
+- upload approvals 无 `limit` 时硬顶 500，防止无界 dump
+- eval suite/case **run 历史** list 默认 limit=100（可传；上限 500），suite/case 定义表仍全量（配置规模小）
+
+相关：`api/persistence/mcp.py` / `upload_approvals.py` / `agent_evals.py` / `agent_eval_case_store.py`
+
+---
+
 ## 已完成：model_config 空表不再 JSON 导入
 
 - 空表只 seed `DEFAULT_MODELS`；存在 `model_config.json` 仅归档为 `*.imported`（warning），不写进 Postgres

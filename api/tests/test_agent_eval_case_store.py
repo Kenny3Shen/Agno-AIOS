@@ -370,3 +370,19 @@ async def test_list_and_get_helpers_normalize_rows():
     assert get_call is not None
     assert list_call.kwargs["enabled"] is True
     assert get_call.args == ("suite-1",)
+
+
+
+@pytest.mark.asyncio
+async def test_list_suite_and_case_runs_default_limit():
+    with (
+        patch.object(store, "list_suite_run_rows_async", new=AsyncMock(return_value=[])) as suite_list,
+        patch.object(store, "list_case_run_rows_async", new=AsyncMock(return_value=[])) as case_list,
+    ):
+        await store.list_suite_runs(suite_id="s1", status="completed")
+        await store.list_case_runs(case_id="c1", status="failed")
+
+    assert suite_list.await_args is not None
+    assert suite_list.await_args.kwargs["limit"] == 100
+    assert case_list.await_args is not None
+    assert case_list.await_args.kwargs["limit"] == 100

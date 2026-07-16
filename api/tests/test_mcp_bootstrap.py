@@ -70,3 +70,16 @@ async def test_migrate_archives_empty_leftover_when_servers_exist(tmp_path, monk
     assert not legacy.exists()
     assert (tmp_path / "mcp_config.json.migrated").exists()
     upsert.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_enabled_mcp_servers_filters_in_sql():
+    list_rows = AsyncMock(return_value=[{"name": "playbook", "enabled": True}])
+    with (
+        patch.object(mcp_config, "bootstrap_mcp_config", AsyncMock()),
+        patch.object(mcp_config, "list_server_rows", list_rows),
+    ):
+        rows = await mcp_config.enabled_mcp_servers()
+
+    assert rows == [{"name": "playbook", "enabled": True}]
+    list_rows.assert_awaited_once_with(enabled=True)

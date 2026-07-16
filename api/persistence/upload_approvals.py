@@ -109,10 +109,13 @@ async def list_upload_approvals(
         stmt = stmt.where(table.c.status == status)
     if submitted_by is not None:
         stmt = stmt.where(table.c.submitted_by == submitted_by)
+    # Always bound the result set: explicit page/limit or a safety ceiling.
     if limit is not None:
         safe_page = max(1, int(page or 1))
         safe_limit = max(1, min(int(limit), 200))
         stmt = stmt.limit(safe_limit).offset((safe_page - 1) * safe_limit)
+    else:
+        stmt = stmt.limit(500)
     async with get_async_control_plane_engine().begin() as conn:
         rows = (await conn.execute(stmt)).mappings().all()
     return [dict(row) for row in rows]
