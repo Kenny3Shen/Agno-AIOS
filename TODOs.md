@@ -136,6 +136,17 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Trace sessions SQL 分组分页
+
+- `list_trace_sessions` 优先对 `agno_traces` 做 SQL `GROUP BY session_id`（count / distinct run / error_count / max start_time）
+- 当前页用 `DISTINCT ON (session_id)` 投影最新 trace 行；仅对页内 latest run 做 status reconcile
+- 表不可用或 SQL 异常时回退有界扫描 + Python group（`meta.truncated` 仍可能出现）
+- 大窗口 sessions 列表不再必须把匹配 traces 全量载入内存
+
+相关：`tracing_service.py` / `test_trace_permissions.py`
+
+---
+
 ## 已完成：Trace 页 chat sessions 自动翻页上限
 
 - Trace 合并归档/预览时后台 `listSessions` 最多 5 页（约 500 会话），避免用户会话很多时无限拉取

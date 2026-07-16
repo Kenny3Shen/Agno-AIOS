@@ -157,7 +157,9 @@ async def test_trace_session_list_forces_current_user_and_passes_filters():
 
 
 @pytest.mark.asyncio
-async def test_trace_sessions_group_before_paginating_and_skip_empty_session_ids():
+async def test_trace_sessions_scan_fallback_groups_before_paginating():
+    """When SQL grouping fails, fall back to bounded get_traces scan + Python group."""
+
     class FakeTrace:
         def __init__(self, **data):
             self.data = data
@@ -177,7 +179,14 @@ async def test_trace_sessions_group_before_paginating_and_skip_empty_session_ids
         captured.update(kwargs)
         return traces, len(traces)
 
-    with patch.object(tracing_service._trace_db, "get_traces", fake_get_traces):
+    with (
+        patch.object(
+            tracing_service,
+            "_list_trace_sessions_sql",
+            AsyncMock(side_effect=RuntimeError("force fallback")),
+        ),
+        patch.object(tracing_service._trace_db, "get_traces", fake_get_traces),
+    ):
         result = await tracing_service.list_trace_sessions(
             run_id="run-1", session_id="one", user_id="u1", status="ERROR", limit=1, page=1
         )
@@ -191,6 +200,129 @@ async def test_trace_sessions_group_before_paginating_and_skip_empty_session_ids
     assert captured["session_id"] == "one"
     assert captured["status"] == "ERROR"
     assert captured["limit"] == 200
+
+
+@pytest.mark.asyncio
+async def test_trace_sessions_sql_groups_with_aggregates_and_latest_row():
+    """SQL path pages session aggregates and projects latest row fields."""
+
+    class MappingResult:
+        def __init__(self, *, scalar=None, rows=None):
+            self._scalar = scalar
+            self._rows = rows or []
+
+        def scalar_one(self):
+            return self._scalar
+
+        def mappings(self):
+            return self
+
+        def all(self):
+            return self._rows
+
+    class FakeAsyncSession:
+        def __init__(self, results):
+            self._results = list(results)
+            self.execute_count = 0
+
+        async def execute(self, _stmt):
+            self.execute_count += 1
+            if not self._results:
+                raise AssertionError("unexpected extra SQL execute")
+            return self._results.pop(0)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+    from sqlalchemy import Column, MetaData, String, Table
+
+    meta = MetaData()
+    table = Table(
+        "agno_traces",
+        meta,
+        Column("session_id", String),
+        Column("run_id", String),
+        Column("trace_id", String),
+        Column("name", String),
+        Column("status", String),
+        Column("start_time", String),
+        Column("end_time", String),
+        Column("user_id", String),
+        Column("agent_id", String),
+        Column("team_id", String),
+        Column("workflow_id", String),
+    )
+
+    agg_row = {
+        "session_id": "sess-a",
+        "trace_count": 3,
+        "run_count": 2,
+        "error_count": 1,
+        "latest_start_time": "2026-07-01T12:00:00Z",
+    }
+    latest_row = {
+        "session_id": "sess-a",
+        "trace_id": "tr-latest",
+        "run_id": "run-latest",
+        "name": "agent-run",
+        "status": "OK",
+        "start_time": "2026-07-01T12:00:00Z",
+        "end_time": "2026-07-01T12:01:00Z",
+        "user_id": "u1",
+        "agent_id": "agent-1",
+        "team_id": None,
+        "workflow_id": None,
+    }
+    fake_session = FakeAsyncSession(
+        [
+            MappingResult(scalar=1),
+            MappingResult(rows=[agg_row]),
+            MappingResult(rows=[latest_row]),
+        ]
+    )
+
+    async def fake_reconcile(items, **_kwargs):
+        return items
+
+    with (
+        patch.object(
+            tracing_service._trace_db,
+            "_get_table",
+            AsyncMock(return_value=table),
+        ),
+        patch.object(
+            tracing_service._trace_db,
+            "async_session_factory",
+            lambda: fake_session,
+        ),
+        patch.object(
+            tracing_service,
+            "reconcile_trace_statuses",
+            AsyncMock(side_effect=fake_reconcile),
+        ),
+    ):
+        result = await tracing_service.list_trace_sessions(
+            user_id="u1", status="ERROR", limit=20, page=1
+        )
+
+    assert result["meta"]["total_count"] == 1
+    assert result["meta"]["page"] == 1
+    assert result["meta"]["limit"] == 20
+    assert len(result["data"]) == 1
+    session = result["data"][0]
+    assert session["session_id"] == "sess-a"
+    assert session["trace_count"] == 3
+    assert session["run_count"] == 2
+    assert session["error_count"] == 1
+    assert session["status"] == "ERROR"
+    assert session["latest_trace_id"] == "tr-latest"
+    assert session["latest_run_id"] == "run-latest"
+    assert session["name"] == "agent-run"
+    assert session["user_id"] == "u1"
+    assert fake_session.execute_count == 3
 
 
 @pytest.mark.asyncio
