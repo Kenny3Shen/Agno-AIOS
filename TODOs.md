@@ -136,6 +136,16 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Knowledge 过滤防抖 + Feishu payload 日志
+
+- `useDebouncedValue`：Knowledge 列表 filter 300ms 防抖后再请求
+- 过滤变更通过 debounced 值重置 page；搜索框仍即时更新输入
+- Feishu `_payload_size` 失败 debug 日志（仍按 oversized 截断）
+
+相关：`useDebouncedValue.ts` / `KnowledgePage` / `DocumentsTable` / `basic.py`
+
+---
+
 ## 已完成：Knowledge 服务端分页 + Overview 单页采样
 
 - Knowledge 列表：`getKnowledge({ page, limit })` + Table 受控分页，默认 limit=12；过滤重置到第 1 页

@@ -56,6 +56,7 @@ async def send_feishu_notify(
         try:
             return len(dumps_bytes(_make_payload(content)))
         except Exception:
+            logger.debug("Feishu payload size estimate failed; treating as oversized", exc_info=True)
             return 10**9
 
     limit_bytes = 30 * 1024

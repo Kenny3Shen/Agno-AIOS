@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { App, Button, Card, Descriptions, Form, Grid, Input, InputNumber, Select, Space, Tabs, Tag, Typography } from 'antd'
 import { PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
@@ -14,6 +14,7 @@ import { DocumentDrawer } from './components/DocumentDrawer'
 import { UpdateDocumentDrawer } from './components/UpdateDocumentDrawer'
 import { effectiveKnowledgeIngestDefaults, resolveRetrievalContent, SEARCH_TYPE_OPTIONS } from './utils'
 import { useTranslation } from 'react-i18next'
+import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 
 const renderModeOptions: Array<{ value: RetrievalRenderMode; label: string }> = [
   { value: 'auto', label: 'Auto' },
@@ -82,6 +83,7 @@ export function KnowledgePage() {
   const vertical = screens.md === false
   const client = useQueryClient()
   const [filter, setFilter] = useState('')
+  const debouncedFilter = useDebouncedValue(filter, 300)
   const [page, setPage] = useState(1)
   const pageSize = 12
   const [selectedId, setSelectedId] = useState('')
@@ -89,9 +91,12 @@ export function KnowledgePage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [updateOpen, setUpdateOpen] = useState(false)
   const [results, setResults] = useState<SearchResult[]>([])
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedFilter])
   const query = useQuery({
-    queryKey: ['knowledge', filter, page, pageSize],
-    queryFn: () => getKnowledge({ query: filter, page, limit: pageSize }),
+    queryKey: ['knowledge', debouncedFilter, page, pageSize],
+    queryFn: () => getKnowledge({ query: debouncedFilter, page, limit: pageSize }),
   })
   const documents = query.data?.documents ?? []
   const ingestDefaults = useMemo(() => effectiveKnowledgeIngestDefaults(query.data?.status.rag_settings), [query.data?.status.rag_settings])
@@ -99,7 +104,7 @@ export function KnowledgePage() {
   const refresh = () => client.invalidateQueries({ queryKey: ['knowledge'] })
 
   const syncUpdatedDocument = async (document: Document, previousId = selectedId, selectDocument = true) => {
-    const currentKey = ['knowledge', filter, page, pageSize]
+    const currentKey = ['knowledge', debouncedFilter, page, pageSize]
     client.setQueryData<KnowledgeResponse>(currentKey, (current) =>
       current
         ? {
@@ -167,10 +172,7 @@ export function KnowledgePage() {
                 loading={query.isLoading}
                 selectedId={selectedId}
                 vertical={vertical}
-                onFilterChange={(value) => {
-                  setFilter(value)
-                  setPage(1)
-                }}
+                onFilterChange={setFilter}
                 onSelect={openMetadata}
                 onUpdate={openUpdate}
                 onDelete={(document) => remove.mutate(document.id)}

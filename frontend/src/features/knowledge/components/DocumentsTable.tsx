@@ -53,7 +53,15 @@ export function DocumentsTable({
     <Card
       className="workbench-card splitter-panel-card"
       title={t('documents')}
-      extra={<Input.Search value={filter} onChange={(event) => onFilterChange(event.target.value)} allowClear placeholder={t('filterDocuments')} />}
+      extra={
+        <Input.Search
+          value={filter}
+          allowClear
+          placeholder={t('filterDocuments')}
+          onChange={(event) => onFilterChange(event.target.value)}
+          onSearch={(value) => onFilterChange(value)}
+        />
+      }
     >
       <Table<Document>
         rowKey="id"
