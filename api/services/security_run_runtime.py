@@ -109,9 +109,12 @@ PROVIDER_BLOCK_MARKERS = (
 
 
 def _agent_dependencies() -> dict[str, str]:
-    return {
-        "feishu_webhook_url": get_settings().feishu_webhook_url.get_secret_value(),
-    }
+    """Runtime tool deps for Agno.
+
+    Secrets (e.g. Feishu webhook) stay server-side in MCP tools and must not be
+    injected into the model context via ``add_dependencies_to_context``.
+    """
+    return {}
 
 
 def _load_local_skills(enabled_dirs: list[str]) -> Skills:
@@ -904,8 +907,7 @@ class SecurityRunRuntime:
         return self.dependencies.agent_factory(
             id="security-operations",
             name="安全运营助手",
-            role="安全运营综合专家",
-            description="集威胁情报分析与安全剧本执行于一体的安全运营助手，可完成情报检索、深度分析和自动化处置全流程。",
+            description="安全运营助手：研判、知识检索、剧本与 HITL 处置。",
             instructions=[await _load_prompt_async(SECURITY_OPERATIONS_PROMPT)],
             model=model,
             tools=[mcp_tools],
@@ -918,7 +920,7 @@ class SecurityRunRuntime:
             skills=await self._build_enabled_skills(),
             db=self.dependencies.get_db(),
             dependencies=await _run_sync_dependency(_agent_dependencies),
-            add_dependencies_to_context=True,
+            add_dependencies_to_context=False,
             add_history_to_context=True,
             update_memory_on_run=request.memory_enabled,
             add_memories_to_context=request.memory_enabled,

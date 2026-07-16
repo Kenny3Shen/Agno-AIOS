@@ -429,7 +429,7 @@ async def test_agent_dependencies_are_built_off_event_loop():
     def fake_agent_dependencies():
         nonlocal dependency_thread_id
         dependency_thread_id = threading.get_ident()
-        return {"feishu_webhook_url": "https://feishu.example/hook"}
+        return {}
 
     def agent_factory(**kwargs):
         created.update(kwargs)
@@ -461,9 +461,8 @@ async def test_agent_dependencies_are_built_off_event_loop():
         ):
             await runtime._build_security_agent(FakeMcpTools(), request)
 
-    assert created["dependencies"] == {
-        "feishu_webhook_url": "https://feishu.example/hook"
-    }
+    assert created["dependencies"] == {}
+    assert created["add_dependencies_to_context"] is False
     assert dependency_thread_id is not None
     assert dependency_thread_id != event_loop_thread_id
 
@@ -1047,3 +1046,54 @@ async def test_stream_agent_events_emits_run_retrying_and_clears_partial_content
     assert retry_events[0].data["max_attempts"] == 3
     assert any(c.event == "content.delta" and c.data.get("delta") == "recovered" for c in chunks)
 
+
+
+def test_security_operations_prompt_hygiene():
+    """Base prompt must not advertise missing skills or full skill SOPs."""
+    prompt = (
+        Path(security_run_runtime.PROMPT_DIR)
+        / security_run_runtime.SECURITY_OPERATIONS_PROMPT
+    ).read_text(encoding="utf-8")
+    assert "threat-trace-skill" not in prompt
+    assert "darknet-trace-skill" not in prompt
+    assert "get_skill_instructions" in prompt
+    # Keep prompt lean relative to progressive skill loading.
+    assert len(prompt) < 3500
+
+
+@pytest.mark.asyncio
+async def test_send_feishu_notify_uses_server_webhook_when_omitted(monkeypatch):
+    from api.mcp.tools import basic as basic_tools
+    from pydantic import SecretStr
+
+    class _Settings:
+        feishu_webhook_url = SecretStr("https://feishu.example/hook")
+
+    posted: dict = {}
+
+    class _Resp:
+        status_code = 200
+
+        def json(self):
+            return {"code": 0}
+
+    class _Client:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return None
+
+        async def post(self, url, headers=None, content=None):
+            posted["url"] = url
+            posted["content"] = content
+            return _Resp()
+
+    monkeypatch.setattr(basic_tools, "httpx", type("H", (), {"AsyncClient": _Client}))
+    monkeypatch.setattr("api.config.get_settings", lambda: _Settings())
+    result = await basic_tools.send_feishu_notify(title="t", content_md="c")
+    assert result == {"code": 0, "msg": "success"}
+    assert posted["url"] == "https://feishu.example/hook"

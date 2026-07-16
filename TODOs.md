@@ -1,5 +1,14 @@
 # 下一步工作
 
+## 已完成：Chat 上下文瘦身（prompt 卫生 + 密钥不进模型）
+
+- `security_operations.md`：去掉未安装 skill 路由与重复 SOP，改指向 progressive discovery（`get_skill_instructions`）；体量 ~2105→~1063 字符。
+- Agent `role` 去掉冗余（description + prompt 已覆盖）；`add_dependencies_to_context=False`，飞书 Webhook **不再**注入每条 user 消息。
+- `basic_send_feishu_notify`：`feishu_webhook_url` 可选，缺省读服务端配置；修复 `code == 0` 因 `or` 被当成 falsy 的成功判定 bug。
+- 冒烟（xai-grok-4.5，`Reply with exactly: pong`，`search_knowledge=false`）：`input_tokens` ~5234 → **~4585**（仍含 Skills 摘要 + MCP 工具 schema + 模型侧开销）。
+- 后续可继续：trivial turn 不挂 MCP/Skills、按意图绑定 skill（对齐 Workflow step skills）、MCP 工具表裁剪。
+
+
 ## 下一阶段（产品 P0，已对齐）
 
 > 目标：把「安全模板 → 保存 → 发布 → Webhook/Cron → HITL → Trace/通知」做成 **10 分钟默认可走通路径**；并补齐 Workflow 与 Chat 的能力对齐（Step 级 Skill）。

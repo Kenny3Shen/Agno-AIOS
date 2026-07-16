@@ -22,19 +22,27 @@ basic_mcp = FastMCP("Basic")
     meta={"category": "notification"},
 )
 async def send_feishu_notify(
-    feishu_webhook_url: str,
     title: str,
     content_md: str,
     template: str = "blue",
+    feishu_webhook_url: str | None = None,
 ) -> dict:
     """发送飞书机器人通知
+
     Args:
-        feishu_webhook_url: 飞书机器人 Webhook URL
         title: 标题
         content_md: 内容
+        template: 卡片颜色模板
+        feishu_webhook_url: 可选；缺省时使用服务端配置的飞书 Webhook
     Returns:
         dict: 发送结果
     """
+    if not (feishu_webhook_url or "").strip():
+        from api.config import get_settings
+
+        feishu_webhook_url = get_settings().feishu_webhook_url.get_secret_value().strip()
+    if not feishu_webhook_url:
+        return {"code": -1, "msg": "飞书 Webhook 未配置"}
 
     def _make_payload(content: str) -> dict:
         payload = {
@@ -88,7 +96,9 @@ async def send_feishu_notify(
                 )
                 return {"code": -1, "msg": "响应解析失败"}
 
-            code = resp_json.get("code") or resp_json.get("StatusCode")
+            code = resp_json.get("code")
+            if code is None:
+                code = resp_json.get("StatusCode")
             if r.status_code == 200 and code == 0:
                 return {"code": 0, "msg": "success"}
             elif code == 11232:
