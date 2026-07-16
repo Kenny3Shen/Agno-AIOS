@@ -136,6 +136,16 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Approvals 后续页并行 + 配置/skill 可观测
+
+- `getApprovals(kind=all)` 上传窗口内后续页也 `Promise.all` 并行 submissions + HITL
+- model config 表空时从 legacy 导入写 `info` 日志
+- intranet-ip-skill 外部查询失败写 `warning`（仍返回空列表）
+
+相关：`approvals/api.ts` / `model_config_service.py` / `intranet-ip-skill/agent.py`
+
+---
+
 ## 已完成：Approvals all 并行 + status counts 并行
 
 - `getApprovals(kind=all)` 首页 `Promise.all` 并行拉 submissions + HITL；后续页先 probe upload total，越过上传区则只打 HITL

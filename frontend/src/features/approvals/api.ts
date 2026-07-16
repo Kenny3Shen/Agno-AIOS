@@ -272,7 +272,7 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
     }
   }
 
-  // Cheap totals when not on the first page so we can jump straight to HITL.
+  // Later pages: probe upload total first; pure-HITL pages skip uploads entirely.
   const uploadProbe = await fetchSubmissionsPage(status, 1, 1)
   const submissionCount = uploadProbe.total
   if (start >= submissionCount) {
@@ -285,20 +285,13 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
     }
   }
 
-  const submissions = await fetchSubmissionsSlice(status, start, limit)
+  // Still inside the upload window: load both sources in parallel.
+  const [submissions, hitl] = await Promise.all([
+    fetchSubmissionsSlice(status, start, limit),
+    fetchHitlSlice(status, 0, limit),
+  ])
   const pageSubmissions = submissions.items
   const hitlNeed = Math.max(0, limit - pageSubmissions.length)
-  if (hitlNeed === 0) {
-    const hitlProbe = await fetchHitlPage(status, 1, 1)
-    return {
-      items: pageSubmissions,
-      total: submissions.total + hitlProbe.total,
-      page,
-      limit,
-    }
-  }
-  // Still inside the upload window: HITL rows start at offset 0.
-  const hitl = await fetchHitlSlice(status, 0, hitlNeed)
   return {
     items: [...pageSubmissions, ...hitl.items.slice(0, hitlNeed)],
     total: submissions.total + hitl.total,

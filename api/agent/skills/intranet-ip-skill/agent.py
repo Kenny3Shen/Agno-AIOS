@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import time
 
@@ -8,6 +9,8 @@ from agno.models.openai import OpenAILike
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
+
+logger = logging.getLogger(__name__)
 
 instructions = """
 你是一位网络安全专家，专注于网络流量分析和入侵检测系统（NDR）告警研判。
@@ -169,7 +172,9 @@ async def search_alarm_list(
         data = res_json.get("result", {}).get("data")
         return data or []
     except Exception:
+        logger.warning("intranet IP skill lookup failed", exc_info=True)
         return []
+
 
 
 class VerdictAgent(Agent):

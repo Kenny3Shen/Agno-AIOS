@@ -522,6 +522,10 @@ async def load_model_config_store() -> ModelConfigStore:
     rows = await list_model_config_rows()
     if not rows:
         store = _load_legacy_or_default_store()
+        logger.info(
+            "model config table empty; imported {} model(s) from legacy file/defaults",
+            len(store.models),
+        )
         await replace_model_config_rows(_store_to_rows(store))
         return store
 
