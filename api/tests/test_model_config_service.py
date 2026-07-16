@@ -211,6 +211,34 @@ def test_model_config_strips_reasoning_effort_for_unsupported_providers():
 
 
 @pytest.mark.asyncio
+async def test_load_model_config_store_does_not_rewrite_for_provider_heuristic_only():
+    """Grok→xai stays on the read path; load must not rewrite rows for provider alone."""
+    store = model_config_service.ModelConfigStore.default()
+    rows = model_config_service._store_to_rows(store)
+    # Simulate pre-migration row still stored as openai-compatible + grok id.
+    for row in rows:
+        if row["id"] == "xai-grok-4.5":
+            row["provider"] = "openai-compatible"
+            row["api_protocol"] = "responses"
+            row["default_reasoning_effort"] = "high"
+            break
+    else:
+        raise AssertionError("expected default xai-grok-4.5 row")
+    replace = AsyncMock()
+
+    with (
+        patch.object(model_config_service, "list_model_config_rows", AsyncMock(return_value=rows)),
+        patch.object(model_config_service, "replace_model_config_rows", replace),
+    ):
+        loaded = await model_config_service.load_model_config_store()
+
+    grok = next(model for model in loaded.models if model.id == "xai-grok-4.5")
+    assert grok.provider == "xai"
+    replace.assert_not_awaited()
+    model_config_service._invalidate_model_config_cache()
+
+
+@pytest.mark.asyncio
 async def test_load_model_config_store_rewrites_multiple_active_rows():
     store = model_config_service.ModelConfigStore.default()
     rows = model_config_service._store_to_rows(store)

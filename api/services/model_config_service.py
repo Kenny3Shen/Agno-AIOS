@@ -500,28 +500,6 @@ def _rows_need_persist(rows: Iterable[Mapping[str, Any]]) -> bool:
     return active_count != 1 or invalid_output_mode
 
 
-def _rows_need_provider_migration(
-    rows: Iterable[Mapping[str, Any]],
-    store: ModelConfigStore,
-) -> bool:
-    """Rewrite DB when host/model_id heuristics remapped provider (e.g. Grok → xai)."""
-    by_id = {model.id: model for model in store.models}
-    for row in rows:
-        model_id = str(row.get("id") or "")
-        model = by_id.get(model_id)
-        if model is None:
-            continue
-        if str(row.get("provider") or "") != model.provider:
-            return True
-        if str(row.get("api_protocol") or "") != model.api_protocol:
-            return True
-        if (row.get("default_reasoning_effort") or None) != (model.default_reasoning_effort or None):
-            # xAI migration clears legacy reasoning_effort
-            if model.provider == "xai" and row.get("default_reasoning_effort"):
-                return True
-    return False
-
-
 def _store_to_rows(
     store: ModelConfigStore,
     existing_rows: Iterable[Mapping[str, Any]] = (),
@@ -584,14 +562,16 @@ async def load_model_config_store() -> ModelConfigStore:
 
     base_store = ModelConfigStore.from_rows(rows)
     store = base_store.with_defaults().with_valid_active_model()
+    # Integrity only: multi-active / invalid output mode / missing builtins / bad active.
+    # Provider heuristics (e.g. Grok→xai) stay read-path via ModelConfig.normalized;
+    # persist on explicit save, not every hot load.
     needs_rewrite = (
         store.to_storage_dict() != base_store.to_storage_dict()
         or _rows_need_persist(rows)
-        or _rows_need_provider_migration(rows, store)
     )
     if needs_rewrite:
         logger.info(
-            "rewriting model config rows (normalize/provider migrate); count={}",
+            "rewriting model config rows (integrity normalize); count={}",
             len(store.models),
         )
         await replace_model_config_rows(_store_to_rows(store, rows))

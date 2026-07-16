@@ -124,6 +124,16 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：删除 chat_settings re-export + 停 provider 热路径 rewrite
+
+- 删除 `api/services/chat_settings.py` re-export；运行时仅 `chat_settings_service`
+- `load_model_config_store` 不再因 Grok→xai / reasoning 启发式触发 `replace_model_config_rows`
+- 读路径仍 `ModelConfig.normalized` 纠正 provider；显式 save / 完整性（多 active、非法 output mode、缺 builtin）仍会写库
+
+相关：`chat_settings_service.py` / `model_config_service.py` / `test_model_config_service.py`
+
+---
+
 ## 已完成：Chat settings 模块合并 + Trace 会话合并页数
 
 - `ChatSettings` / `get_chat_settings_async` 并入 `chat_settings_service`；`chat_settings.py` 仅 re-export
