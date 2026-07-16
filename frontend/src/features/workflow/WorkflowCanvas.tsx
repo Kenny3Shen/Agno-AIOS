@@ -7,6 +7,7 @@ import {
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   ReactFlow,
   Background,
@@ -112,6 +113,8 @@ type Props = {
 
 type FlowGraph = { nodes: WorkflowCanvasNode[]; edges: Edge[] }
 
+type TranslateFn = (key: string, options?: Record<string, unknown>) => string
+
 function buildGraph(
   steps: WorkflowNode[],
   selectedIds: string[],
@@ -126,7 +129,8 @@ function buildGraph(
     onDelete: (id: string) => void
     onCopy: () => void
     onDuplicate: () => void
-  } | null = null
+  } | null = null,
+  t: TranslateFn = (key) => key
 ): FlowGraph {
   const layout = layoutCanvas(steps)
   const prevById = new Map(prevNodes.map((item) => [item.id, item]))
@@ -141,12 +145,19 @@ function buildGraph(
         source?.requiresOutputReview
     )
     let subtitle: string = item.type
-    if (source?.type === 'step') subtitle = source.targetId || 'agent'
+    if (source?.type === 'step') subtitle = source.targetId || t('subtitleAgent')
     else if (source?.type === 'condition') subtitle = source.evaluatorCel || 'CEL'
     else if (source?.type === 'router') subtitle = source.selectorCel || 'selector'
-    else if (source?.type === 'workflow_ref') subtitle = source.workflowId || 'nested'
-    else if (source?.type === 'loop') subtitle = `max ${source.maxIterations ?? 3}`
-    else if (source?.type === 'parallel') subtitle = `${source.steps?.length ?? 0} branches`
+    else if (source?.type === 'workflow_ref') subtitle = source.workflowId || t('subtitleNested')
+    else if (source?.type === 'loop') {
+      subtitle = t('subtitleMaxIter', { count: source.maxIterations ?? 3 })
+    } else if (source?.type === 'parallel') {
+      subtitle = t('subtitleBranches', { count: source.steps?.length ?? 0 })
+    }
+    const displayLabel =
+      source?.name?.trim() ||
+      t(`defaultName_${item.type}`) ||
+      item.label
 
     const prev = prevById.get(item.id)
     const isNew = animateNew && !prevIds.has(item.id)
@@ -157,7 +168,7 @@ function buildGraph(
       type: 'workflow',
       position: { x: item.x, y: item.y },
       data: {
-        label: item.label,
+        label: displayLabel,
         nodeType: item.type,
         subtitle,
         hitl,
@@ -243,6 +254,7 @@ function CanvasInner({
   emptyActionLabel,
   onEmptyAction,
 }: Props) {
+  const { t } = useTranslation('workflow')
   const wrapperRef = useRef<HTMLDivElement>(null)
   const { dark } = usePreferences()
   const { screenToFlowPosition, fitView, getIntersectingNodes, updateNodeData } = useReactFlow()
@@ -347,8 +359,8 @@ function CanvasInner({
       const animateNew = bootstrappedRef.current
       const next = buildGraph(
         liveSteps,
-        // selection applied via post-pass / selection effect (avoids layout on click)
-        [],
+        // selection applied via post-pass / selection effect (avoids layout on click).
+        effectiveSelectedIds,
         prev.nodes,
         animateNew,
         null,
@@ -360,7 +372,8 @@ function CanvasInner({
           onDelete: () => onDeleteRef.current(),
           onCopy: () => onCopyRef.current(),
           onDuplicate: () => onDupRef.current(),
-        }
+        },
+        t,
       )
       // Preserve runStatus + apply current selection/highlights (refs, not deps).
       const prevStatus = new Map(
@@ -384,7 +397,7 @@ function CanvasInner({
       bootstrappedRef.current = true
       return next
     })
-  }, [topologyKey, invalidById, invalidKey])
+  }, [topologyKey, invalidById, invalidKey, t])
 
   // Selection only: patch `selected` without layoutCanvas / edge rebuild.
   useEffect(() => {

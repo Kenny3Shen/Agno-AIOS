@@ -157,5 +157,15 @@
   "toolbarDuplicate": "Duplicate",
   "toolbarDup": "Dup",
   "toolbarDelete": "Delete",
-  "toolbarDel": "Del"
+  "toolbarDel": "Del",
+  "defaultName_step": "Agent step",
+  "defaultName_parallel": "Parallel",
+  "defaultName_condition": "Condition",
+  "defaultName_loop": "Loop",
+  "defaultName_router": "Router",
+  "defaultName_workflow_ref": "Nested workflow",
+  "subtitleAgent": "agent",
+  "subtitleNested": "nested",
+  "subtitleBranches": "{{count}} branches",
+  "subtitleMaxIter": "max {{count}}"
 }

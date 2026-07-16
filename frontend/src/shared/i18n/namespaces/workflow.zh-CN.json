@@ -157,5 +157,15 @@
   "toolbarDuplicate": "复制副本",
   "toolbarDup": "副本",
   "toolbarDelete": "删除",
-  "toolbarDel": "删除"
+  "toolbarDel": "删除",
+  "defaultName_step": "Agent 步骤",
+  "defaultName_parallel": "并行",
+  "defaultName_condition": "条件",
+  "defaultName_loop": "循环",
+  "defaultName_router": "路由",
+  "defaultName_workflow_ref": "嵌套工作流",
+  "subtitleAgent": "Agent",
+  "subtitleNested": "嵌套",
+  "subtitleBranches": "{{count}} 个分支",
+  "subtitleMaxIter": "最多 {{count}} 次"
 }

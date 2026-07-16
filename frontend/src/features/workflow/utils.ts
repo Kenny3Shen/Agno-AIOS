@@ -22,7 +22,7 @@ export const createNode = (type: WorkflowNodeType = 'step'): WorkflowNode => {
     return {
       id,
       type: 'parallel',
-      name: 'Parallel',
+      name: '',
       steps: [],
     }
   }
@@ -30,7 +30,7 @@ export const createNode = (type: WorkflowNodeType = 'step'): WorkflowNode => {
     return {
       id,
       type: 'condition',
-      name: 'Condition',
+      name: '',
       evaluatorCel: 'input.contains("critical")',
       thenSteps: [],
       elseSteps: [],
@@ -40,7 +40,7 @@ export const createNode = (type: WorkflowNodeType = 'step'): WorkflowNode => {
     return {
       id,
       type: 'loop',
-      name: 'Loop',
+      name: '',
       maxIterations: 3,
       endConditionCel: 'current_iteration >= 1',
       steps: [],
@@ -50,7 +50,7 @@ export const createNode = (type: WorkflowNodeType = 'step'): WorkflowNode => {
     return {
       id,
       type: 'router',
-      name: 'Router',
+      name: '',
       selectorCel: 'input.contains("critical") ? "path_a" : "path_b"',
       choices: [
         { id: crypto.randomUUID(), name: 'path_a', steps: [] },
@@ -62,7 +62,7 @@ export const createNode = (type: WorkflowNodeType = 'step'): WorkflowNode => {
     return {
       id,
       type: 'workflow_ref',
-      name: 'Nested workflow',
+      name: '',
       workflowId: '',
     }
   }
