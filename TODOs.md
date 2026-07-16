@@ -124,6 +124,17 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：React Flow skill 对齐（Studio canvas）
+
+- Typed `WorkflowCanvasNode` + `NodeProps<…>`；Handles 透传 `isConnectable`
+- 模块级稳定 `nodeTypes` / `defaultEdgeOptions` / `fitViewOptions` / MiniMap color
+- `IsValidConnection` 校验 targetHandle；`onlyRenderVisibleElements` + `elevateNodesOnSelect`
+- 首节点 drop 才 fitView；Controls 开 zoom/fitView
+
+相关：`WorkflowCanvas.tsx` / `WorkflowFlowNode.tsx`
+
+---
+
 ## 已完成：自动布局防重叠（pixel tree packer）
 
 - `applyAutoLayout` 按节点高度 + sibling gap 堆叠 then/else

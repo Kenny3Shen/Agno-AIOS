@@ -15,8 +15,8 @@ import {
   ReactFlowProvider,
   useReactFlow,
   applyNodeChanges,
-  type Node,
   type Edge,
+  type IsValidConnection,
   type NodeMouseHandler,
   type OnNodeDrag,
   type OnNodesChange,
@@ -42,13 +42,35 @@ import {
   reparentTargetFromHandle,
   type ReparentTarget,
 } from './utils'
-import { WorkflowFlowNode } from './WorkflowFlowNode'
+import {
+  WorkflowFlowNode,
+  type WorkflowCanvasNode,
+} from './WorkflowFlowNode'
 
-const nodeTypes = { workflow: WorkflowFlowNode }
+/** Module-scope map (skill gate: stable nodeTypes). */
+const nodeTypes = { workflow: WorkflowFlowNode } as const
 
 const PALETTE_MIME = 'application/x-workflow-node'
 
 const NODE_SETTLE_MS = 220
+
+const FIT_VIEW_OPTIONS = { padding: 0.2, duration: NODE_SETTLE_MS, maxZoom: 1.5 } as const
+
+const DEFAULT_EDGE_OPTIONS = {
+  type: 'smoothstep' as const,
+  style: { strokeWidth: 1.5 },
+}
+
+const PRO_OPTIONS = { hideAttribution: true } as const
+
+const MINIMAP_NODE_COLOR = (node: WorkflowCanvasNode) => {
+  const status = node.data?.runStatus
+  if (status === 'running') return '#1677ff'
+  if (status === 'ok') return '#52c41a'
+  if (status === 'error') return '#ff4d4f'
+  if (status === 'paused') return '#faad14'
+  return 'var(--tais-muted, #c0c0c0)'
+}
 
 type Props = {
   steps: WorkflowNode[]
@@ -80,12 +102,12 @@ type Props = {
   onEmptyAction?: () => void
 }
 
-type FlowGraph = { nodes: Node[]; edges: Edge[] }
+type FlowGraph = { nodes: WorkflowCanvasNode[]; edges: Edge[] }
 
 function buildGraph(
   steps: WorkflowNode[],
   selectedIds: string[],
-  prevNodes: Node[],
+  prevNodes: WorkflowCanvasNode[],
   animateNew: boolean,
   dropTargetId: string | null,
   onEmptySlot: (parentId: string, slotKey: string) => void,
@@ -103,7 +125,7 @@ function buildGraph(
   const prevIds = new Set(prevNodes.map((item) => item.id))
   const selected = new Set(selectedIds)
 
-  const flowNodes: Node[] = layout.nodes.map((item) => {
+  const flowNodes: WorkflowCanvasNode[] = layout.nodes.map((item) => {
     const source = findNode(steps, item.id)
     const hitl = Boolean(
       source?.requiresConfirmation ||
@@ -329,22 +351,21 @@ function CanvasInner({
       )
       // Preserve runStatus + apply current selection/highlights (refs, not deps).
       const prevStatus = new Map(
-        prev.nodes.map((n) => [n.id, (n.data as { runStatus?: string | null })?.runStatus ?? null])
+        prev.nodes.map((n) => [n.id, n.data.runStatus ?? null])
       )
       const liveStatus = nodeRunStatusRef.current
       const selectedSet = new Set(effectiveSelectedIds)
       next.nodes = next.nodes.map((n) => {
         const status = liveStatus[n.id] ?? prevStatus.get(n.id) ?? null
-        const data = {
-          ...(n.data as object),
-          ...(status ? { runStatus: status } : {}),
-          dropHighlight: dropId === n.id,
-          connectHighlight: connectId === n.id,
-        }
         return {
           ...n,
           selected: selectedSet.has(n.id),
-          data,
+          data: {
+            ...n.data,
+            runStatus: status,
+            dropHighlight: dropId === n.id,
+            connectHighlight: connectId === n.id,
+          },
         }
       })
       bootstrappedRef.current = true
@@ -376,22 +397,18 @@ function CanvasInner({
       if (!current.nodes.length) return current
       let changed = false
       const nodes = current.nodes.map((node) => {
-        const data = node.data as {
-          dropHighlight?: boolean
-          connectHighlight?: boolean
-        }
         const dropHighlight = dropTargetId === node.id
         const connectHighlight = connectTargetId === node.id
         if (
-          Boolean(data.dropHighlight) === dropHighlight &&
-          Boolean(data.connectHighlight) === connectHighlight
+          Boolean(node.data.dropHighlight) === dropHighlight &&
+          Boolean(node.data.connectHighlight) === connectHighlight
         ) {
           return node
         }
         changed = true
         return {
           ...node,
-          data: { ...data, dropHighlight, connectHighlight },
+          data: { ...node.data, dropHighlight, connectHighlight },
         }
       })
       return changed ? { ...current, nodes } : current
@@ -422,13 +439,16 @@ function CanvasInner({
         else if (source.type === 'loop') subtitle = `max ${source.maxIterations ?? 3}`
         else if (source.type === 'parallel') subtitle = `${source.steps?.length ?? 0} branches`
         const label = source.name?.trim() || subtitle
-        const data = node.data as {
-          label?: string
-          subtitle?: string
-          hitl?: boolean
-          branchHandles?: unknown
+        const branchHandles = branchHandlesFor(source)
+        const data = node.data
+        if (
+          data.label === label &&
+          data.subtitle === subtitle &&
+          data.hitl === hitl
+        ) {
+          return node
         }
-        const branchHandles = source ? (branchHandlesFor(source) as unknown) : data.branchHandles
+        changed = true
         const nextData = {
           ...data,
           label,
@@ -436,14 +456,6 @@ function CanvasInner({
           hitl,
           branchHandles,
         }
-        if (
-          data.label === nextData.label &&
-          data.subtitle === nextData.subtitle &&
-          data.hitl === nextData.hitl
-        ) {
-          return node
-        }
-        changed = true
         return { ...node, data: nextData }
       })
       return changed ? { ...current, nodes } : current
@@ -473,12 +485,12 @@ function CanvasInner({
       const nodes = current.nodes.map((node) => {
         if (!changedIds.has(node.id)) return node
         const nextStatus = live[node.id] ?? null
-        const prevStatus = (node.data as { runStatus?: string | null })?.runStatus ?? null
+        const prevStatus = node.data.runStatus ?? null
         if (nextStatus === prevStatus) return node
         changed = true
         return {
           ...node,
-          data: { ...(node.data as object), runStatus: nextStatus },
+          data: { ...node.data, runStatus: nextStatus },
         }
       })
       return changed ? { ...current, nodes } : current
@@ -530,7 +542,7 @@ function CanvasInner({
     []
   )
 
-  const onNodesChange: OnNodesChange = useCallback((changes) => {
+  const onNodesChange: OnNodesChange<WorkflowCanvasNode> = useCallback((changes) => {
     setGraph((current) => ({
       ...current,
       nodes: applyNodeChanges(changes, current.nodes),
@@ -672,18 +684,18 @@ function CanvasInner({
     setConnectTargetId(null)
   }, [])
 
-  const isValidConnection = useCallback(
-    (connection: {
-      source: string | null
-      target: string | null
-      sourceHandle?: string | null
-      targetHandle?: string | null
-    }) => {
-      if (!connection.source || !connection.target) return false
-      if (connection.source === connection.target) return false
+  const isValidConnection = useCallback<IsValidConnection<Edge>>(
+    (connection) => {
+      const source = connection.source
+      const target = connection.target
+      if (!source || !target) return false
+      if (source === target) return false
       // Prevent nesting a node under its own descendant via edge.
-      if (isDescendantOf(steps, connection.target, connection.source)) return false
-      const sourceNode = findNode(steps, connection.source)
+      if (isDescendantOf(steps, target, source)) return false
+      // Only accept known target handles when specified.
+      const th = connection.targetHandle
+      if (th && th !== 'in' && th !== 'in-left') return false
+      const sourceNode = findNode(steps, source)
       if (sourceNode && isContainerType(sourceNode.type)) {
         // Container sources must use a branch handle (not a bare out for condition/router).
         if (sourceNode.type === 'condition' || sourceNode.type === 'router') {
@@ -740,7 +752,10 @@ function CanvasInner({
       const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
       const hit = findContainerAtPoint(position)
       onDropNode(type, position, hit?.target ?? null)
-      requestAnimationFrame(() => fitView({ padding: 0.2, duration: NODE_SETTLE_MS }))
+      // Only nudge viewport when dropping into empty canvas (first node).
+      if (!stepsRef.current.length) {
+        requestAnimationFrame(() => void fitView({ ...FIT_VIEW_OPTIONS }))
+      }
     },
     [screenToFlowPosition, onDropNode, fitView, findContainerAtPoint]
   )
@@ -822,7 +837,7 @@ function CanvasInner({
       onDrop={onDrop}
       onDragOver={onDragOver}
     >
-      <ReactFlow
+      <ReactFlow<WorkflowCanvasNode, Edge>
         nodes={graph.nodes}
         edges={graph.edges}
         nodeTypes={nodeTypes}
@@ -842,18 +857,22 @@ function CanvasInner({
         nodesDraggable
         nodesConnectable
         elementsSelectable
+        selectNodesOnDrag={false}
         selectionOnDrag
         multiSelectionKeyCode="Shift"
         panOnScroll
+        zoomOnDoubleClick={false}
+        elevateNodesOnSelect
+        onlyRenderVisibleElements
         connectionMode={ConnectionMode.Loose}
         colorMode={dark ? 'dark' : 'light'}
         fitView
-        fitViewOptions={{ padding: 0.2, duration: NODE_SETTLE_MS }}
+        fitViewOptions={FIT_VIEW_OPTIONS}
         defaultMarkerColor="var(--wf-edge-stroke)"
-        minZoom={0.25}
+        minZoom={0.2}
         maxZoom={1.75}
-        defaultEdgeOptions={{ type: 'smoothstep' }}
-        proOptions={{ hideAttribution: true }}
+        defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
+        proOptions={PRO_OPTIONS}
         deleteKeyCode={null}
       >
         <Background
@@ -867,16 +886,14 @@ function CanvasInner({
           zoomable
           nodeStrokeWidth={2}
           className="wf-minimap"
-          nodeColor={(node) => {
-            const status = (node.data as { runStatus?: string | null })?.runStatus
-            if (status === 'running') return '#1677ff'
-            if (status === 'ok') return '#52c41a'
-            if (status === 'error') return '#ff4d4f'
-            if (status === 'paused') return '#faad14'
-            return dark ? '#444' : '#c0c0c0'
-          }}
+          nodeColor={MINIMAP_NODE_COLOR}
         />
-        <Controls showInteractive={false} className="wf-controls" />
+        <Controls
+          showInteractive={false}
+          showFitView
+          showZoom
+          className="wf-controls"
+        />
       </ReactFlow>
       {!steps.length ? (
         <div className="workflow-canvas__empty-overlay">

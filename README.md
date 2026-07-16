@@ -504,6 +504,7 @@ frontend/src/features/workflow/*      # 画布优先 Studio（reparent / 快捷�
 | **P0 产品** | P0.1–P0.4 ✅ 黄金路径闭环（见 TODOs） |
 | **Perf** ✅ | Studio SSE 增量 runStatus + 选中/高亮 patch + runLog 上限 |
 | **Layout** ✅ | `applyAutoLayout` 像素级树打包，防 then/else 节点重叠 |
+| **RF skill** ✅ | typed nodes / stable props / onlyRenderVisible / isValidConnection |
 | **P0 UI** ✅ | Studio：`updateNodeData` 运行态 + antd-in-canvas（nodrag/popup） |
 | **PR9** ✅ | 安全模板库 / `workflows:run` / Inspector CEL 自动完成 |
 | **P0.1** ✅ | Studio 状态机：draft/published 顶栏、触发器发布守卫、空态模板 CTA |

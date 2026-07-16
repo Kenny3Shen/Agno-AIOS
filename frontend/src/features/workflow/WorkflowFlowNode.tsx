@@ -1,5 +1,11 @@
 import { memo, type CSSProperties, type MouseEvent } from 'react'
-import { Handle, NodeToolbar, Position, type NodeProps } from '@xyflow/react'
+import {
+  Handle,
+  NodeToolbar,
+  Position,
+  type Node,
+  type NodeProps,
+} from '@xyflow/react'
 import type { WorkflowNodeRunStatus, WorkflowNodeType } from './types'
 import type { EmptySlot } from './utils'
 
@@ -26,6 +32,9 @@ export type WorkflowFlowNodeData = {
   onToolbarCopy?: () => void
   onToolbarDuplicate?: () => void
 }
+
+/** Typed React Flow node for Studio (skill: Node<data, type>). */
+export type WorkflowCanvasNode = Node<WorkflowFlowNodeData, 'workflow'>
 
 const TYPE_META: Record<
   WorkflowNodeType,
@@ -58,8 +67,12 @@ function handleTopPercent(index: number, total: number): string {
   return `${start + ((end - start) * index) / (total - 1)}%`
 }
 
-function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
-  const payload = data as unknown as WorkflowFlowNodeData
+function WorkflowFlowNodeComponent({
+  data,
+  selected,
+  isConnectable,
+}: NodeProps<WorkflowCanvasNode>) {
+  const payload = data
   const meta = TYPE_META[payload.nodeType] ?? TYPE_META.step
   const style = {
     '--wf-node-color': meta.color,
@@ -126,6 +139,7 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
         type="target"
         position={Position.Top}
         id="in"
+        isConnectable={isConnectable}
         className="wf-handle wf-handle--in wf-handle--top"
         title="In (top)"
       />
@@ -133,6 +147,7 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
         type="target"
         position={Position.Left}
         id="in-left"
+        isConnectable={isConnectable}
         className="wf-handle wf-handle--in wf-handle--left"
         title="In (left)"
       />
@@ -187,6 +202,7 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
               type="source"
               position={Position.Bottom}
               id={branch.id}
+              isConnectable={isConnectable}
               className="wf-handle wf-handle--branch wf-handle--bottom"
               style={{ left: handleLeftPercent(index, branches.length) }}
               title={`${branch.label} (bottom)`}
@@ -198,6 +214,7 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
               type="source"
               position={Position.Right}
               id={`${branch.id}-right`}
+              isConnectable={isConnectable}
               className="wf-handle wf-handle--branch wf-handle--right"
               style={{ top: handleTopPercent(index, branches.length) }}
               title={`${branch.label} (right)`}
@@ -210,6 +227,7 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
             type="source"
             position={Position.Bottom}
             id="out"
+            isConnectable={isConnectable}
             className="wf-handle wf-handle--out wf-handle--bottom"
             title="Out (bottom)"
           />
@@ -217,6 +235,7 @@ function WorkflowFlowNodeComponent({ data, selected }: NodeProps) {
             type="source"
             position={Position.Right}
             id="out-right"
+            isConnectable={isConnectable}
             className="wf-handle wf-handle--out wf-handle--right"
             title="Out (right)"
           />
