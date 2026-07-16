@@ -2,7 +2,25 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TypedDict
+
+
+class PaginationMeta(TypedDict, total=False):
+    """Agno-native list ``meta`` fields.
+
+    Required keys are always populated by :func:`pagination_meta`.
+    Optional keys (``truncated``, ``scanned_count``, ``unread_count``, domain
+    filters, …) may be merged via ``**extra``.
+    """
+
+    page: int
+    limit: int
+    total_pages: int
+    total_count: int
+    search_time_ms: float
+    truncated: bool
+    scanned_count: int
+    unread_count: int
 
 
 def pagination_meta(

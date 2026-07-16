@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：后端 PaginationMeta 共享 + Knowledge 列表 normalize
+
+- `api/utils/pagination.PaginationMeta` TypedDict；Memory/Approvals 去掉重复 meta TypedDict。
+- Knowledge `getKnowledge` 经 `normalizePaginatedList` 投影 Document，并保留 `status` 与 query/sort meta 扩展。
+- 前端 `KnowledgeListMeta` 基于 `ListPaginationMeta`。
+
 ## 已完成：Catalog 列表与 meta 类型对齐共享 normalizer
 
 - Chat / Memory / Approvals 的 `*ListMeta` 改为 `ListPaginationMeta` 别名。

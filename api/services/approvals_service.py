@@ -16,7 +16,7 @@ from api.auth.database import async_session_maker
 from api.auth.models import User
 from api.services.page_payloads import row_dict
 from api.services.postgres_store import get_async_agno_postgres_db
-from api.utils.pagination import pagination_meta
+from api.utils.pagination import PaginationMeta, pagination_meta
 
 
 class ApprovalRecord(TypedDict):
@@ -63,17 +63,9 @@ class ApprovalQueryKwargs(TypedDict):
     page: int
 
 
-class ApprovalPaginationMeta(TypedDict):
-    page: int
-    limit: int
-    total_pages: int
-    total_count: int
-    search_time_ms: float
-
-
 class ApprovalListNativeResponse(TypedDict):
     data: list[ApprovalRecord]
-    meta: ApprovalPaginationMeta
+    meta: PaginationMeta
 
 
 class ApprovalResolveConflictError(Exception):
@@ -283,7 +275,7 @@ async def list_approvals_native(
     return {
         "data": approvals,
         "meta": cast(
-            ApprovalPaginationMeta,
+            PaginationMeta,
             pagination_meta(
                 page=int(kwargs["page"]),
                 limit=int(kwargs["limit"]),

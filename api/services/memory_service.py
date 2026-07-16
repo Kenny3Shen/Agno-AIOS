@@ -10,7 +10,7 @@ from api.auth.claims import ActorLike
 from api.services.actor_scope import scoped_requested_user_id
 from api.services.page_payloads import iso, now_utc, row_dict
 from api.services.postgres_store import coerce_json_value, get_async_agno_postgres_db
-from api.utils.pagination import pagination_meta
+from api.utils.pagination import PaginationMeta, pagination_meta
 
 MEMORY_OPTIMIZATION_REVIEW_THRESHOLD = 50
 MEMORY_ABNORMAL_GROWTH_THRESHOLD = 500
@@ -30,17 +30,9 @@ class MemoryItemPayload(TypedDict):
     status: str
 
 
-class MemoryPaginationMeta(TypedDict):
-    page: int
-    limit: int
-    total_pages: int
-    total_count: int
-    search_time_ms: float
-
-
 class MemoryListNativeResponse(TypedDict):
     data: list[MemoryItemPayload]
-    meta: MemoryPaginationMeta
+    meta: PaginationMeta
 
 
 class MemoryMutationNotFound(ValueError):
@@ -241,7 +233,7 @@ async def list_memories_native(
     return {
         "data": items,
         "meta": cast(
-            MemoryPaginationMeta,
+            PaginationMeta,
             pagination_meta(
                 page=safe_page,
                 limit=safe_limit,
