@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：工作流名称必填 + Chat 轻量徽标 + Dashboard 失败行打开 Studio
+
+- Studio 保存：空名称校验 `empty_name`，名称输入框 error 状态。
+- Chat 顶栏：关闭「工具/Skill」时显示「轻量（无工具）」徽标。
+- Dashboard 最近失败：subject 为 workflow_id 时可点进 Studio（不拦截整行进 Trace）。
+
 ## 已完成：Trace 打开 Studio + user_input 校验 + Dashboard 文案
 
 - Trace：session 投影 `workflowId`；列表标 `[WF]`；选中工作流会话时顶栏「打开工作流」→ Studio。

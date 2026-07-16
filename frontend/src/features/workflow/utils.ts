@@ -642,6 +642,8 @@ export const fieldForValidationIssue = (issue: Pick<WorkflowValidationIssue, 'co
     case 'user_input_schema_empty':
     case 'user_input_schema_field':
       return 'userInput'
+    case 'empty_name':
+      return 'workflowName'
     case 'missing_workflow_ref':
       return 'workflow_ref'
     case 'empty_parallel':
@@ -688,6 +690,8 @@ export const validateWorkflowDraft = (
         return `${path}: user input needs at least one named field`
       case 'validationUserInputSchemaField':
         return `${path}: field #${options?.index ?? ''} needs a name`
+      case 'validationEmptyName':
+        return 'Workflow name is required'
       default:
         return key
     }
@@ -804,6 +808,19 @@ export const validateWorkflowDraft = (
   }
   walk(roots, 'workflow')
   return issues
+}
+
+export const validateWorkflowName = (
+  name: string,
+  t: WorkflowValidationTranslate = (key) =>
+    key === 'validationEmptyName' ? 'Workflow name is required' : key,
+): WorkflowValidationIssue | null => {
+  if (name.trim()) return null
+  return {
+    nodeId: null,
+    code: 'empty_name',
+    message: t('validationEmptyName'),
+  }
 }
 
 /** Estimated rendered node height (matches ~.wf-flow-node content + HITL). */

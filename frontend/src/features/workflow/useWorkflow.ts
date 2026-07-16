@@ -45,6 +45,7 @@ import {
   toDefinition,
   updateNodeInTree,
   validateWorkflowDraft,
+  validateWorkflowName,
   type ReparentTarget,
 } from './utils'
 
@@ -683,7 +684,10 @@ export function useWorkflow() {
   }
 
   const save = async () => {
-    const issues = validateWorkflowDraft(state.steps, (key, options) => t(key, options))
+    const translate = (key: string, options?: Record<string, string | number>) => t(key, options)
+    const issues = validateWorkflowDraft(state.steps, translate)
+    const nameIssue = validateWorkflowName(state.name, translate)
+    if (nameIssue) issues.unshift(nameIssue)
     if (issues.length) {
       setState((current) => ({
         ...current,

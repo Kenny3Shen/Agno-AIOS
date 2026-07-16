@@ -188,5 +188,6 @@
   "fieldTypeNumber": "Number",
   "fieldTypeBool": "Yes/No",
   "validationUserInputSchemaEmpty": "{{path}}: user input needs at least one named field",
-  "validationUserInputSchemaField": "{{path}}: field #{{index}} needs a name"
+  "validationUserInputSchemaField": "{{path}}: field #{{index}} needs a name",
+  "validationEmptyName": "Workflow name is required"
 }

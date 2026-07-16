@@ -18,6 +18,7 @@ import {
   reparentTargetFromHandle,
   pickConnectionHandles,
   validateWorkflowDraft,
+  validateWorkflowName,
   fieldForValidationIssue,
   triggerEnableBlocked,
   workflowWebhookCurl,
@@ -549,4 +550,10 @@ describe('fieldForValidationIssue', () => {
     expect(issues.some((i) => i.code === 'user_input_schema_empty' || i.code === 'user_input_schema_field')).toBe(
       true,
     )
+  })
+
+
+  it('requires a workflow name', () => {
+    expect(validateWorkflowName('')?.code).toBe('empty_name')
+    expect(validateWorkflowName('  IR  ')).toBeNull()
   })

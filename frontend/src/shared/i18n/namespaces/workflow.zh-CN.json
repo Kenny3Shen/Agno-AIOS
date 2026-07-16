@@ -188,5 +188,6 @@
   "fieldTypeNumber": "数字",
   "fieldTypeBool": "是/否",
   "validationUserInputSchemaEmpty": "{{path}}：用户输入至少需要一个有效字段名",
-  "validationUserInputSchemaField": "{{path}}：字段 #{{index}} 需要名称"
+  "validationUserInputSchemaField": "{{path}}：字段 #{{index}} 需要名称",
+  "validationEmptyName": "请填写工作流名称"
 }

@@ -316,10 +316,16 @@ export function WorkflowPage() {
         <div className="workflow-studio__toolbar-main">
           <Input
             className="workflow-studio__name"
+            data-inspector-field="workflowName"
             value={workflow.state.name}
             onChange={(e) => workflow.patch({ name: e.target.value })}
             placeholder={t('namePlaceholder')}
             variant="borderless"
+            status={
+              workflow.state.validationIssues.some((issue) => issue.code === 'empty_name')
+                ? 'error'
+                : undefined
+            }
           />
           <Select
             getPopupContainer={studioPopupContainer}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Actions, Bubble, Prompts, Sender, Sources, ThoughtChain } from '@ant-design/x'
 import { Markdown } from '@/shared/ui/Markdown'
-import { App, Avatar, Button, Cascader, Popover } from 'antd'
+import { App, Avatar, Button, Cascader, Popover, Tag } from 'antd'
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
@@ -490,6 +490,11 @@ export function ChatPage() {
           <div className="context-status">
             <span className={activeRun ? 'status-dot active' : pausedRun ? 'status-dot paused' : 'status-dot'} />
             {activeRun ? t('agentRunning') : pausedRun ? t('awaitingApproval') : chat.sessionId ? t('sessionReady') : t('newAnalysis')}
+            {!chat.state.enableTools ? (
+              <Tag className="context-mode-tag" color="default">
+                {t('toolsOffBadge')}
+              </Tag>
+            ) : null}
             {pausedRun?.approval_id ? (
               <Button
                 type="link"
