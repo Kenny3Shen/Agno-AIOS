@@ -356,7 +356,7 @@ export const branchHandlesFor = (
   if (node.type === 'router') {
     return (node.choices ?? []).map((choice) => ({
       id: `choice:${choice.id}`,
-      label: choice.name || 'path',
+      label: choice.name || 'defaultPathName',
     }))
   }
   if (node.type === 'parallel') {
@@ -604,12 +604,15 @@ export const emptySlotsFor = (node: WorkflowNode): EmptySlot[] => {
   if (node.type === 'router') {
     return (node.choices ?? [])
       .filter((c) => c.steps.length === 0)
-      .map((c) => ({
-        key: `choice:${c.id}`,
-        labelKey: 'slotAddPath',
-        labelParams: { name: c.name || 'path' },
-        choiceId: c.id,
-      }))
+      .map((c) => {
+        const name = (c.name || '').trim()
+        return {
+          key: `choice:${c.id}`,
+          labelKey: name ? 'slotAddPath' : 'slotAddPathDefault',
+          labelParams: name ? { name } : undefined,
+          choiceId: c.id,
+        }
+      })
   }
   return []
 }

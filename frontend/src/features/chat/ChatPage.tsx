@@ -351,8 +351,16 @@ function MessageBody({ message, retry, sessionId }: { message: Message; retry: (
           </span>
         )}
         {message.metrics?.total_tokens != null && (
-          <span className="run-metric" title={`${message.metrics.total_tokens.toLocaleString()} tokens`}>
-            {Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(message.metrics.total_tokens)} tokens
+          <span
+            className="run-metric"
+            title={t('tokensMetricTitle', { count: message.metrics.total_tokens.toLocaleString() })}
+          >
+            {t('tokensMetric', {
+              value: Intl.NumberFormat(undefined, {
+                notation: 'compact',
+                maximumFractionDigits: 1,
+              }).format(message.metrics.total_tokens),
+            })}
           </span>
         )}
       </div>
@@ -495,10 +503,10 @@ export function ChatPage() {
                 {t('toolsOffBadge')}
               </Tag>
             ) : (() => {
-              const leanMsg = [...chat.state.messages]
+              const latestAssistant = [...chat.state.messages]
                 .reverse()
-                .find((item) => item.role === 'assistant' && item.leanMode)
-              return leanMsg ? (
+                .find((item) => item.role === 'assistant')
+              return latestAssistant?.leanMode ? (
                 <Tooltip title={t('autoLeanHelp')}>
                   <Tag className="context-mode-tag" color="processing">
                     {t('autoLeanBadge')}

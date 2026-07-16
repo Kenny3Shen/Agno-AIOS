@@ -61,7 +61,7 @@ function handleTopPercent(index: number, total: number): string {
   return `${start + ((end - start) * index) / (total - 1)}%`
 }
 
-const BRANCH_I18N_KEYS = new Set(['branchThen', 'branchElse', 'branchBody', 'branchOut', 'branchNext'])
+const BRANCH_I18N_KEYS = new Set(['branchThen', 'branchElse', 'branchBody', 'branchOut', 'branchNext', 'defaultPathName'])
 
 function WorkflowFlowNodeComponent({
   data,

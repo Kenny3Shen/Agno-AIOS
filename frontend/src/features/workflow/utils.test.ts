@@ -321,6 +321,13 @@ describe('multi-handle branches', () => {
     expect(handles.every((h) => h.id.startsWith('choice:'))).toBe(true)
   })
 
+  it('uses defaultPathName for unnamed router choices', () => {
+    const router = createNode('router')
+    router.choices = router.choices?.map((c, i) => ({ ...c, name: i === 0 ? '' : c.name }))
+    const handles = branchHandlesFor(router)
+    expect(handles[0]?.label).toBe('defaultPathName')
+  })
+
   it('maps handle to reparent target', () => {
     const condition = createNode('condition')
     condition.id = 'c1'

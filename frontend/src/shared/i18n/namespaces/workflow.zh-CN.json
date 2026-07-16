@@ -210,5 +210,7 @@
   "nodeType_condition": "条件",
   "nodeType_loop": "循环",
   "nodeType_router": "路由",
-  "nodeType_workflow_ref": "嵌套"
+  "nodeType_workflow_ref": "嵌套",
+  "defaultPathName": "路径",
+  "slotAddPathDefault": "添加路径"
 }

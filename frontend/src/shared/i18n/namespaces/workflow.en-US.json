@@ -210,5 +210,7 @@
   "nodeType_condition": "Condition",
   "nodeType_loop": "Loop",
   "nodeType_router": "Router",
-  "nodeType_workflow_ref": "Nested"
+  "nodeType_workflow_ref": "Nested",
+  "defaultPathName": "path",
+  "slotAddPathDefault": "Add path"
 }

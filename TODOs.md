@@ -1,5 +1,10 @@
 # 下一步工作
 
+## 已完成：Workflow 默认路径文案 + Chat 轻量徽标与 token 本地化
+
+- Router 未命名分支 handle 用 `defaultPathName` i18n；空路径空槽用 `slotAddPathDefault`。
+- Chat 自动轻量徽标仅看**最近一条**助手消息；token 指标用 `Intl` 默认 locale + i18n。
+
 ## 已完成：Chat 自动轻量模式可见性（run.started lean_mode）
 
 - `run.started` SSE 携带 `lean_mode` / `skill_names` / `enable_tools`，前端消息与顶栏「本轮自动轻量」徽标（Tooltip 说明意图过滤跳过 MCP/Skills）。
