@@ -444,7 +444,9 @@ export const listWorkflowTriggerHistory = async (
     meta: {
       page: Number(meta.page ?? page) || page,
       limit: Number(meta.limit ?? limit) || limit,
-      total: Number(meta.total ?? data.length) || 0,
+      total_count: Number(meta.total_count ?? data.length) || 0,
+      total_pages: Number(meta.total_pages ?? 0) || 0,
+      search_time_ms: Number(meta.search_time_ms ?? 0) || 0,
     },
   }
 }

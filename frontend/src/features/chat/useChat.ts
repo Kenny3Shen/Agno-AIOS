@@ -178,8 +178,10 @@ export function useChat() {
     if (!runId) return
     try {
       await cancelRun(runId)
-    } catch {
+    } catch (error) {
       // Best-effort server cancel; client stream is already aborted.
+      const message = error instanceof Error ? error.message : String(error)
+      console.warn(`[chat] server cancel failed for run ${runId}: ${message}`)
     }
   }
   const setReasoningEffort = (value: ReasoningEffort | null) => dispatch({ type: 'reasoning-effort', value })

@@ -110,7 +110,9 @@ async def test_trigger_history_requires_read_and_returns_data():
         result = await workflows.list_workflow_trigger_history(
             workflow_id="wf-1", page=1, limit=20, user=actor()
         )
-    assert result["meta"]["total"] == 1
+    assert result["meta"]["total_count"] == 1
+    assert result["meta"]["page"] == 1
+    assert result["meta"]["limit"] == 20
     assert result["data"][0]["run_id"] == "r1"
     assert result["data"][0]["source"] == "cron"
 

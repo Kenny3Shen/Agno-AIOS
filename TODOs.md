@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Workflow trigger history meta + Chat cancel 可观测
+
+- `GET /api/workflows/{id}/triggers/history`：`meta.total` → 标准 `pagination_meta`（`total_count`/`total_pages`/`search_time_ms`）。
+- 前端 `listWorkflowTriggerHistory` 同步；无 `meta.total` 兼容。
+- Chat `useChat.cancel`：server cancel 失败时 `console.warn`（客户端 SSE 仍先 abort）。
+
 ## 已完成：Knowledge search / Eval failures data/meta + Chat cancel e2e
 
 - `POST /api/knowledge/search`：`{results}` → `{data, meta}`（`pagination_meta`，total=本批命中数）。

@@ -36,6 +36,7 @@ from api.services.workflow_service import (
     verify_webhook_secret,
 )
 from api.persistence import workflows as workflow_store
+from api.utils.pagination import pagination_meta
 
 router = APIRouter(prefix="/api/workflows", tags=["Workflows"])
 
@@ -451,7 +452,10 @@ async def list_workflow_trigger_history(
                 "created_at": created_at,
             }
         )
-    return {"data": data, "meta": {"page": page, "limit": limit, "total": total}}
+    return {
+        "data": data,
+        "meta": pagination_meta(page=page, limit=limit, total_count=total),
+    }
 
 
 @router.post("/{workflow_id}/runs")
