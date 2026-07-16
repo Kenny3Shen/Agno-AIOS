@@ -136,6 +136,15 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Trace sessions 前端翻页上限
+
+- `listTraceSessions` 客户端最多拉 5 页 ×200（1000 sessions），避免无界 while 打满大库
+- 触顶时 `truncated=true`，与后端 sessions 有界扫描一致
+
+相关：`trace/api.ts`
+
+---
+
 ## 已完成：Trace 原生 status 过滤 + Approvals agent 真分页
 
 - `list_traces(status=)` 走 Agno `get_traces(status=..., page/limit)` SQL 分页，不再全窗扫描

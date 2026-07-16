@@ -128,6 +128,9 @@ const listTraceSessionsPage = async (params: TraceParams): Promise<TraceSessionL
   return normalizePaginated(raw, normalizeSession)
 }
 
+/** Hard cap client walk of /traces/sessions (200 × 5 = 1000 sessions). */
+const MAX_TRACE_SESSION_PAGES = 5
+
 export const listTraceSessions = async (params: TraceParams) => {
   const limit = 200
   let page = 1
@@ -136,24 +139,30 @@ export const listTraceSessions = async (params: TraceParams) => {
   let scannedCount: number | undefined
   const items: TraceSessionSummary[] = []
 
-  while (true) {
+  while (page <= MAX_TRACE_SESSION_PAGES) {
     const response = await listTraceSessionsPage({ ...params, page, limit })
     totalCount = response.total_count
     truncated = truncated || Boolean(response.truncated)
     if (response.scanned_count != null) scannedCount = response.scanned_count
     items.push(...response.items)
     if (items.length >= totalCount || response.items.length === 0) {
-      return {
-        ...response,
-        items,
-        total_count: totalCount,
-        page: 1,
-        limit,
-        truncated,
-        scanned_count: scannedCount,
-      }
+      break
+    }
+    if (page >= MAX_TRACE_SESSION_PAGES) {
+      truncated = true
+      break
     }
     page += 1
+  }
+
+  return {
+    items,
+    total_count: totalCount,
+    page: 1,
+    limit,
+    total_pages: Math.ceil(totalCount / limit) || 0,
+    truncated,
+    scanned_count: scannedCount,
   }
 }
 

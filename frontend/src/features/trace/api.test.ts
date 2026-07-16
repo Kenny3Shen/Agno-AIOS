@@ -128,4 +128,25 @@ describe('trace API', () => {
     expect(result.items).toHaveLength(205)
     expect(result.total_count).toBe(205)
   })
+  it('stops walking trace session pages after the client cap', async () => {
+    const requestedPages: string[] = []
+    server.use(
+      http.get('/api/traces/sessions', ({ request }) => {
+        const url = new URL(request.url)
+        const page = Number(url.searchParams.get('page') ?? '1')
+        requestedPages.push(String(page))
+        return HttpResponse.json({
+          data: Array.from({ length: 200 }, (_, index) => summary((page - 1) * 200 + index + 1)),
+          meta: { page, limit: 200, total_count: 2000, total_pages: 10, search_time_ms: 0 },
+        })
+      }),
+    )
+
+    const result = await listTraceSessions({ status: 'OK' })
+    expect(requestedPages).toEqual(['1', '2', '3', '4', '5'])
+    expect(result.items).toHaveLength(1000)
+    expect(result.truncated).toBe(true)
+    expect(result.total_count).toBe(2000)
+  })
+
 })
