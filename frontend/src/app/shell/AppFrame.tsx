@@ -2,6 +2,7 @@ import { Suspense, useEffect, useMemo, useRef, useState, type MouseEvent, type R
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 import {
+  App,
   Avatar,
   Badge,
   Button,
@@ -147,6 +148,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const { t } = useTranslation(['shell', 'common'])
   const router = useRouter()
   const queryClient = useQueryClient()
+  const { message } = App.useApp()
   const preferences = usePreferences()
   const screens = Grid.useBreakpoint()
   const mobile = !screens.lg
@@ -331,6 +333,9 @@ export function AppFrame({ children }: { children: ReactNode }) {
     try {
       await markNotificationRead(notification.id)
       await queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    } catch (error) {
+      // Still navigate; mark-read is best-effort for deep links.
+      message.error(error instanceof Error ? error.message : t('shell:notificationsMarkReadFailed'))
     } finally {
       const approvalId = typeof notification.data.approval_id === 'string' ? notification.data.approval_id : ''
       const targetPath = typeof notification.data.path === 'string' && notification.data.path.startsWith('/') ? notification.data.path : ''
@@ -348,6 +353,8 @@ export function AppFrame({ children }: { children: ReactNode }) {
     try {
       await markAllNotificationsRead()
       await queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('shell:notificationsMarkAllFailed'))
     } finally {
       setMarkingAllNotifications(false)
     }
@@ -361,6 +368,8 @@ export function AppFrame({ children }: { children: ReactNode }) {
     try {
       await deleteNotification(notification.id)
       await queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('shell:notificationsDeleteFailed'))
     } finally {
       setDeletingNotificationId(null)
     }
@@ -557,9 +566,13 @@ export function AppFrame({ children }: { children: ReactNode }) {
                     icon: <SafetyCertificateOutlined />,
                     label: t('shell:logout'),
                     onClick: async () => {
-                      await logout()
-                      queryClient.clear()
-                      window.location.reload()
+                      try {
+                        await logout()
+                        queryClient.clear()
+                        window.location.reload()
+                      } catch (error) {
+                        message.error(error instanceof Error ? error.message : t('shell:logoutFailed'))
+                      }
                     },
                   },
                 ],

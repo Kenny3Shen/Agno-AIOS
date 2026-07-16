@@ -4,5 +4,7 @@
   "email": "邮箱",
   "password": "密码",
   "signIn": "登录",
-  "failed": "登录失败"
+  "failed": "登录失败",
+  "ssoLoadFailed": "无法加载 SSO 提供方，请稍后重试。",
+  "ssoStartFailed": "无法启动 SSO 登录，请稍后重试。"
 }

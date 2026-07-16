@@ -63,5 +63,9 @@
     "yesterday": "Yesterday",
     "daysAgo": "{{count}} days ago"
   },
-  "deleteNotification": "Delete notification"
+  "deleteNotification": "Delete notification",
+  "notificationsMarkReadFailed": "Unable to mark the notification as read",
+  "notificationsMarkAllFailed": "Unable to mark all notifications as read",
+  "notificationsDeleteFailed": "Unable to delete the notification",
+  "logoutFailed": "Unable to sign out. Please try again."
 }

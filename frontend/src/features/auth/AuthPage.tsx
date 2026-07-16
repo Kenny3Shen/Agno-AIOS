@@ -27,8 +27,9 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: () => Promise<v
   const loadProviders = async () => {
     try {
       setProviders(await getOAuthProviders())
-    } catch {
+    } catch (error) {
       setProviders([])
+      message.error(error instanceof Error ? error.message : t('auth:ssoLoadFailed'))
     }
   }
 
@@ -81,7 +82,11 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: () => Promise<v
               key={provider}
               icon={<GithubOutlined />}
               onClick={async () => {
-                window.location.assign(await getOAuthAuthorization(provider))
+                try {
+                  window.location.assign(await getOAuthAuthorization(provider))
+                } catch (error) {
+                  message.error(error instanceof Error ? error.message : t('auth:ssoStartFailed'))
+                }
               }}
             >
               {provider}

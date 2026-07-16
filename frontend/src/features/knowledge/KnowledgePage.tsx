@@ -218,7 +218,13 @@ export function KnowledgePage() {
                       query: string
                       limit: number
                       search_type: KnowledgeSearchType
-                    }) => setResults(await searchKnowledge(text, limit, search_type))}
+                    }) => {
+                      try {
+                        setResults(await searchKnowledge(text, limit, search_type))
+                      } catch (error) {
+                        message.error(error instanceof Error ? error.message : t('searchFailed'))
+                      }
+                    }}
                     initialValues={{ limit: 5, search_type: ingestDefaults.search_type }}
                   >
                     <Form.Item name="query" rules={[{ required: true }]} style={{ flex: 1 }}>

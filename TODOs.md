@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Auth SSO / 通知中心 / Knowledge 检索失败显性化
+
+- Auth：加载 SSO 提供方、启动 OAuth 失败 toast（`ssoLoadFailed` / `ssoStartFailed`）。
+- Shell 通知：标已读 / 全部已读 / 删除 / 退出登录失败 toast；标已读失败仍继续深链导航。
+- Knowledge Retrieval playground：搜索失败 `searchFailed` toast。
+
 ## 已完成：MCP 签发令牌 / 连接测试失败显性化
 
 - 签发 Token 表单 `onFinish`：try/catch + `issueTokenFailed`。

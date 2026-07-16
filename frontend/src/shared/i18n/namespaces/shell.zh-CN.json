@@ -63,5 +63,9 @@
     "yesterday": "昨天",
     "daysAgo": "{{count}} 天前"
   },
-  "deleteNotification": "删除通知"
+  "deleteNotification": "删除通知",
+  "notificationsMarkReadFailed": "标记通知已读失败",
+  "notificationsMarkAllFailed": "全部标为已读失败",
+  "notificationsDeleteFailed": "删除通知失败",
+  "logoutFailed": "退出登录失败，请稍后重试"
 }

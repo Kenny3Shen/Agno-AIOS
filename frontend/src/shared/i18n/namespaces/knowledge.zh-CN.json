@@ -121,5 +121,6 @@
   "currentSourceFile": "当前源文件",
   "updateTab": "更新",
   "textTab": "文本",
-  "uploadTab": "上传"
+  "uploadTab": "上传",
+  "searchFailed": "知识库检索失败，请稍后重试。"
 }

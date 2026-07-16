@@ -121,5 +121,6 @@
   "currentSourceFile": "Current source file",
   "updateTab": "Update",
   "textTab": "Text",
-  "uploadTab": "Upload"
+  "uploadTab": "Upload",
+  "searchFailed": "Knowledge search failed. Please try again."
 }

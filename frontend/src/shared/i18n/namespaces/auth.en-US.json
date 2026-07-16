@@ -4,5 +4,7 @@
   "email": "Email",
   "password": "Password",
   "signIn": "Sign in",
-  "failed": "Sign in failed"
+  "failed": "Sign in failed",
+  "ssoLoadFailed": "Unable to load SSO providers. Please try again.",
+  "ssoStartFailed": "Unable to start SSO sign-in. Please try again."
 }
