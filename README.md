@@ -100,7 +100,7 @@ Approvals HITL 列表 `GET /api/approvals` 使用 Agno 风格 `data`/`meta`；�
 
 列表分页 `meta` 由共用 `api/utils/pagination.pagination_meta` 生成（Memory/Trace/Approvals/Chat sessions/Evals）。
 
-Agent Evals 的 Agno 结果读路径 `GET /api/agent-evals/agno-runs` 使用 Agno 风格 `data`/`meta`，行字段对齐 `id` + `eval_data`（保留 `passed`/`score` 投影）；suites/cases/runs/replay 与 `/failures`/`/trends` 仍为工作台自研。
+Agent Evals 的 Agno 结果读路径 `GET /api/agent-evals/agno-runs` 使用 Agno 风格 `data`/`meta`，行字段对齐 `id` + `eval_data`（保留 `passed`/`score` 投影）；前端 Runs 表按 `page`/`limit` 受控分页，Failures 默认取近期 50 条；suites/cases/runs/replay 与 `/failures`/`/trends` 仍为工作台自研。
 
 ```mermaid
 flowchart LR
@@ -325,7 +325,7 @@ RUNNING ──hitl tool──► PAUSED ──resolve──► RUNNING ──aco
 
 - **审批中心**（`/approvals`）：列表 HITL 与上传审批；展示提交者邮箱、工具名/参数和 Agno `run_status`；拒绝弹窗强制填写原因；`run_status=ERROR` 时显示「重试恢复」。
 - **Chat**：SSE `run.paused` 展示等待审批；历史刷新后根据 tool `confirmed` / `confirmation_note` 显示最终结果或拒绝说明；消息可携带 `approval_id` 便于跳转审批详情。
-- **通知**：`GET /api/notifications/stream?after_id=` 按 ID 游标升序推送 `notification.created`；前端使用 Authorization fetch stream，并按 1/2/5/10 秒退避重连，30 秒 REST 轮询兜底。
+- **通知**：`GET /api/notifications` 返回最近通知（默认 100、上限 200）与全量 `unread_count`；`GET /api/notifications/stream?after_id=` 按 ID 游标升序推送 `notification.created`；前端使用 Authorization fetch stream，并按 1/2/5/10 秒退避重连，30 秒 REST 轮询兜底。
 - **双向刷新**：暂停通知管理员并链接具体 approval；继续完成后通知提交者并链接 `/chat?session=...`；失败同时通知双方。事件会刷新通知、审批、对应 Chat history 和会话列表。
 - i18n：`frontend/src/shared/i18n/namespaces/approvals.*` 与 `chat.*`。
 

@@ -86,15 +86,32 @@ export const listSuites = () => requestJson<Suite[]>('/agent-evals/suites')
 export const listCases = (suite = '') =>
   requestJson<EvalCase[]>(`/agent-evals/cases${suite ? `?suite_id=${encodeURIComponent(suite)}` : ''}`)
 
-export const listRuns = async () => {
-  const payload = asRecord(await requestJson<unknown>('/agent-evals/agno-runs?limit=100&page=1'))
-  const rows = Array.isArray(payload.data) ? payload.data : []
-  return rows.map((row) => normalizeEvalRun(row)).filter((row): row is EvalRun => row != null)
+export type EvalListResult = {
+  items: EvalRun[]
+  total: number
+  page: number
+  limit: number
 }
 
-export const listFailures = async () => {
+export const listRuns = async (params: { page?: number; limit?: number } = {}): Promise<EvalListResult> => {
+  const page = Math.max(1, params.page ?? 1)
+  const limit = Math.min(100, Math.max(1, params.limit ?? 20))
+  const search = new URLSearchParams({ page: String(page), limit: String(limit) })
+  const payload = asRecord(await requestJson<unknown>(`/agent-evals/agno-runs?${search}`))
+  const meta = asRecord(payload.meta)
+  const rows = Array.isArray(payload.data) ? payload.data : []
+  return {
+    items: rows.map((row) => normalizeEvalRun(row)).filter((row): row is EvalRun => row != null),
+    total: Number(meta.total_count ?? rows.length) || 0,
+    page: Number(meta.page ?? page) || page,
+    limit: Number(meta.limit ?? limit) || limit,
+  }
+}
+
+export const listFailures = async (params: { limit?: number } = {}): Promise<EvalRun[]> => {
   // Workbench failure list remains a plain array (not Agno paginated envelope).
-  const payload = await requestJson<unknown>('/agent-evals/failures?limit=100')
+  const limit = Math.min(100, Math.max(1, params.limit ?? 50))
+  const payload = await requestJson<unknown>(`/agent-evals/failures?limit=${limit}`)
   const rows = Array.isArray(payload) ? payload : []
   return rows.map((row) => normalizeEvalRun(row)).filter((row): row is EvalRun => row != null)
 }

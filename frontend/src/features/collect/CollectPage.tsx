@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { App, Button, Card, Empty, Input, List, Select, Space, Splitter, Tag, Typography } from 'antd'
 import { Markdown } from '@/shared/ui/Markdown'
@@ -19,6 +19,7 @@ import {
 } from './api'
 import { useTranslation } from 'react-i18next'
 import { useFormatDate } from '@/shared/lib/format'
+import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 
 export function CollectPage() {
   const { t } = useTranslation('collect')
@@ -29,6 +30,7 @@ export function CollectPage() {
 
   const [url, setUrl] = useState('')
   const [query, setQuery] = useState('')
+  const debouncedQuery = useDebouncedValue(query, 300)
   const [sourceDomain, setSourceDomain] = useState<string>()
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<CollectArticle | null>(null)
@@ -38,11 +40,15 @@ export function CollectPage() {
     queryFn: listSources,
   })
 
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedQuery, sourceDomain])
+
   const articlesQuery = useQuery({
-    queryKey: ['collect', 'articles', query, sourceDomain, page],
+    queryKey: ['collect', 'articles', debouncedQuery, sourceDomain, page],
     queryFn: () =>
       searchArticles({
-        query,
+        query: debouncedQuery,
         source_domain: sourceDomain,
         page,
         size: 20,
@@ -120,7 +126,6 @@ export function CollectPage() {
               onChange={(event) => setQuery(event.target.value)}
               onPressEnter={() => {
                 setPage(1)
-                void articlesQuery.refetch()
               }}
               placeholder={t('searchPlaceholder')}
               allowClear
@@ -131,7 +136,6 @@ export function CollectPage() {
               loading={articlesQuery.isFetching}
               onClick={() => {
                 setPage(1)
-                void articlesQuery.refetch()
               }}
             >
               {t('common:search')}

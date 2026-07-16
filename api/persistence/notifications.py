@@ -53,15 +53,39 @@ async def create_notifications(
     return [dict(row) for row in rows]
 
 
-async def list_notifications(user_id: str, unread_only: bool) -> tuple[list[dict[str, Any]], int]:
+async def list_notifications(
+    user_id: str,
+    unread_only: bool,
+    *,
+    limit: int = 100,
+) -> tuple[list[dict[str, Any]], int]:
+    """Return recent notifications for a user (newest first) with unread total.
+
+    Caps the returned list so the notification drawer cannot materialize an
+    unbounded history; ``unread_count`` remains a full-table count.
+    """
     await _ensure()
     table = _table()
-    stmt = select(table).where(table.c.user_id == user_id).order_by(table.c.created_at.desc())
+    safe_limit = max(1, min(int(limit or 100), 200))
+    stmt = (
+        select(table)
+        .where(table.c.user_id == user_id)
+        .order_by(table.c.created_at.desc())
+        .limit(safe_limit)
+    )
     if unread_only:
         stmt = stmt.where(table.c.read.is_(False))
     async with get_async_control_plane_engine().begin() as conn:
         rows = [dict(row) for row in (await conn.execute(stmt)).mappings().all()]
-        unread = int((await conn.execute(select(func.count()).select_from(table).where(table.c.user_id == user_id, table.c.read.is_(False)))).scalar_one())
+        unread = int(
+            (
+                await conn.execute(
+                    select(func.count())
+                    .select_from(table)
+                    .where(table.c.user_id == user_id, table.c.read.is_(False))
+                )
+            ).scalar_one()
+        )
     return rows, unread
 
 

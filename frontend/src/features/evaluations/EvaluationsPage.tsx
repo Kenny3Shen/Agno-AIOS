@@ -7,10 +7,27 @@ import { listCases, listFailures, listRuns, listSuites, replay, runCase, runSuit
 import { compactId, compareTimestamp, formatDate } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
 
-const RunTable = ({ rows, onReplay }: { rows: EvalRun[]; onReplay?: (id: string) => void }) => (
+const RunTable = ({
+  rows,
+  loading,
+  pagination,
+  onReplay,
+}: {
+  rows: EvalRun[]
+  loading?: boolean
+  pagination?: false | {
+    current: number
+    pageSize: number
+    total: number
+    onChange: (page: number) => void
+  }
+  onReplay?: (id: string) => void
+}) => (
   <Table<EvalRun>
     rowKey="id"
     dataSource={rows}
+    loading={loading}
+    pagination={pagination === undefined ? false : pagination}
     columns={[
       { title: 'Run', dataIndex: 'id', render: compactId },
       { title: 'Name', dataIndex: 'name' },
@@ -58,9 +75,17 @@ export function EvaluationsPage() {
   const client = useQueryClient()
   const suites = useQuery({ queryKey: ['evals', 'suites'], queryFn: listSuites })
   const [suite, setSuite] = useState('')
+  const [runsPage, setRunsPage] = useState(1)
+  const runsPageSize = 20
   const cases = useQuery({ queryKey: ['evals', 'cases', suite], queryFn: () => listCases(suite) })
-  const runs = useQuery({ queryKey: ['evals', 'runs'], queryFn: listRuns })
-  const failures = useQuery({ queryKey: ['evals', 'failures'], queryFn: listFailures })
+  const runs = useQuery({
+    queryKey: ['evals', 'runs', runsPage, runsPageSize],
+    queryFn: () => listRuns({ page: runsPage, limit: runsPageSize }),
+  })
+  const failures = useQuery({
+    queryKey: ['evals', 'failures'],
+    queryFn: () => listFailures({ limit: 50 }),
+  })
   const refresh = () => client.invalidateQueries({ queryKey: ['evals'] })
   return (
     <main className="page">
@@ -127,13 +152,26 @@ export function EvaluationsPage() {
                 />
               ),
             },
-            { key: 'runs', label: 'Runs', children: <RunTable rows={runs.data ?? []} /> },
+            { key: 'runs', label: 'Runs', children: (
+                <RunTable
+                  rows={runs.data?.items ?? []}
+                  loading={runs.isLoading}
+                  pagination={{
+                    current: runsPage,
+                    pageSize: runsPageSize,
+                    total: runs.data?.total ?? 0,
+                    onChange: setRunsPage,
+                  }}
+                />
+              ) },
             {
               key: 'failures',
               label: `Failures (${failures.data?.length ?? 0})`,
               children: (
                 <RunTable
                   rows={failures.data ?? []}
+                  loading={failures.isLoading}
+                  pagination={false}
                   onReplay={async (id) => {
                     await replay(id)
                     message.success(t('replaySubmitted'))

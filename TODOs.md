@@ -124,6 +124,16 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：通知列表上限 + Evals 分页 + Collect 搜索防抖
+
+- 通知：`list_notifications` 默认 LIMIT 100（上限 200），`unread_count` 仍全表计数，避免抽屉无界物化历史
+- Evaluations：`listRuns({ page, limit })` 返回 `{ items, total, page, limit }`，Runs 表受控分页（20）；Failures 默认 limit=50
+- Collect：检索词 300ms 防抖（`useDebouncedValue`），防抖/来源变更重置页码，去掉多余手动 refetch
+
+相关：`api/persistence/notifications.py` / `frontend/src/features/evaluations/*` / `CollectPage.tsx`
+
+---
+
 ## 已完成：Collect 源站爬虫入库
 
 - `domain_rules` 配置站作为采集源；管理员「同步源站」爬列表页链接并解析 Markdown
