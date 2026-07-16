@@ -4,5 +4,6 @@
   "allSessions": "All sessions",
   "activeSessions": "Active sessions",
   "archivedSessions": "Archived sessions",
-  "ownOnly": "You can only view your own traces"
+  "ownOnly": "You can only view your own traces",
+  "archiveWindowTruncated": "Archive filter scanned a bounded recent session window; older archived sessions may be missing."
 }

@@ -23,7 +23,7 @@ import {
 } from 'antd'
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import { currentUserQuery } from '@/features/auth'
-import { sessionsQuery } from '@/features/chat'
+import { listSessions, sessionsQuery } from '@/features/chat'
 import { roleOf } from '@/shared/auth/permissions'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { CopyableValue, MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
@@ -154,8 +154,33 @@ export function TracePage() {
   const [sessionPage, setSessionPage] = useState(1)
   const [runPage, setRunPage] = useState(1)
   const effectiveUserId = isAdmin ? filters.user_id : (currentUser.data?.id ?? '')
-  const chatSessions = useInfiniteQuery(sessionsQuery(true, effectiveUserId || undefined))
-  // Archive/preview merge only needs a bounded chat-session window (not the full history).
+  const archiveScoped = archiveFilter !== 'all'
+  // "all": infinite chat walk for titles (existing). Archive tabs: one SQL page of
+  // active-or-archived chat rows (archived_only / default exclude) so filter flags
+  // are accurate without multi-page client walks.
+  const chatSessions = useInfiniteQuery({
+    ...sessionsQuery(true, effectiveUserId || undefined),
+    enabled: !archiveScoped,
+  })
+  const chatArchiveWindow = useQuery({
+    queryKey: [
+      'chat',
+      'sessions',
+      'trace-archive-window',
+      archiveFilter,
+      effectiveUserId,
+      ARCHIVE_SESSION_FETCH_LIMIT,
+    ],
+    enabled: archiveScoped,
+    queryFn: () =>
+      listSessions(
+        archiveFilter === 'archived',
+        effectiveUserId || undefined,
+        1,
+        ARCHIVE_SESSION_FETCH_LIMIT,
+        archiveFilter === 'archived',
+      ),
+  })
   const chatSessionPageCount = chatSessions.data?.pages.length ?? 0
   const {
     hasNextPage: chatSessionsHasNextPage,
@@ -163,6 +188,7 @@ export function TracePage() {
     fetchNextPage: fetchNextChatSessionPage,
   } = chatSessions
   useEffect(() => {
+    if (archiveScoped) return
     if (
       chatSessionPageCount < MAX_CHAT_SESSION_PAGES &&
       chatSessionsHasNextPage &&
@@ -171,14 +197,13 @@ export function TracePage() {
       void fetchNextChatSessionPage()
     }
   }, [
+    archiveScoped,
     chatSessionPageCount,
     chatSessionsHasNextPage,
     chatSessionsFetchingNext,
     fetchNextChatSessionPage,
   ])
-  // Default: true server page/limit. Archive tabs need chat-session flags, so
-  // load a bounded window once and paginate after client archive filter.
-  const archiveScoped = archiveFilter !== 'all'
+  // Default: true server page/limit. Archive tabs: bounded summaries + chat archive window.
   const summaries = useQuery(
     traceSessionsQuery({
       session_id: filters.session_id,
@@ -199,10 +224,10 @@ export function TracePage() {
     ...tracesQuery({ ...filters, user_id: effectiveUserId, session_id: selectedSession, page: runPage, limit: RUN_PAGE_SIZE }),
     enabled: hasRunSelection,
   })
-  const chatSessionItems = useMemo(
-    () => chatSessions.data?.pages.flatMap((page) => page.data) ?? [],
-    [chatSessions.data]
-  )
+  const chatSessionItems = useMemo(() => {
+    if (archiveScoped) return chatArchiveWindow.data?.data ?? []
+    return chatSessions.data?.pages.flatMap((page) => page.data) ?? []
+  }, [archiveScoped, chatArchiveWindow.data, chatSessions.data])
   const sessions = useMemo(
     () => filterSessionsByArchive(mergeTraceSessions(chatSessionItems, summaries.data?.data ?? []), archiveFilter),
     [archiveFilter, chatSessionItems, summaries.data?.data]
@@ -211,6 +236,17 @@ export function TracePage() {
     if (!archiveScoped) return sessions
     return sessions.slice((sessionPage - 1) * SESSION_PAGE_SIZE, sessionPage * SESSION_PAGE_SIZE)
   }, [archiveScoped, sessionPage, sessions])
+  const chatArchiveTruncated = Boolean(
+    archiveScoped &&
+      chatArchiveWindow.data &&
+      chatArchiveWindow.data.meta.total_count > chatArchiveWindow.data.data.length
+  )
+  const summariesTruncated = Boolean(
+    archiveScoped &&
+      summaries.data &&
+      (summaries.data.meta.total_count ?? 0) > (summaries.data.data?.length ?? 0)
+  )
+  const archiveWindowTruncated = chatArchiveTruncated || summariesTruncated
   const sessionTotal = archiveScoped
     ? sessions.length
     : (summaries.data?.meta.total_count ?? sessions.length)
@@ -413,6 +449,14 @@ export function TracePage() {
           showIcon
           style={{ marginBottom: 12 }}
           title="Status filter scanned a bounded recent window; older matching runs may be missing."
+        />
+      ) : null}
+      {archiveWindowTruncated ? (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          title={t('archiveWindowTruncated')}
         />
       ) : null}
       <Splitter className="trace-workbench-splitter" orientation={vertical ? 'vertical' : 'horizontal'}>

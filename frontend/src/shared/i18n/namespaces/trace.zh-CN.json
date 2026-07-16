@@ -4,5 +4,6 @@
   "allSessions": "全部 Session",
   "activeSessions": "活跃 Session",
   "archivedSessions": "已归档 Session",
-  "ownOnly": "仅可查看自己的 Trace"
+  "ownOnly": "仅可查看自己的 Trace",
+  "archiveWindowTruncated": "归档筛选仅扫描最近会话窗口；更早的归档会话可能未显示。"
 }

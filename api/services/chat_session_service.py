@@ -146,6 +146,7 @@ async def rename_session(
 async def _query_sessions_page(
     *,
     include_archived: bool,
+    archived_only: bool = False,
     owner_user_id: str | None,
     page: int,
     limit: int,
@@ -161,7 +162,10 @@ async def _query_sessions_page(
     stmt = select(table)
     if owner_user_id is not None:
         stmt = stmt.where(table.c.user_id == owner_user_id)
-    if not include_archived:
+    if archived_only:
+        # Only sessions explicitly marked archived in metadata.
+        stmt = stmt.where(table.c.metadata.contains({"agno_aios_archived": True}))
+    elif not include_archived:
         # JSONB bool/string/missing -> treat only explicit true as archived.
         stmt = stmt.where(
             or_(
@@ -188,6 +192,7 @@ async def _query_sessions_page(
 async def list_sessions_async(
     *,
     include_archived: bool = False,
+    archived_only: bool = False,
     owner_user_id: str | None = None,
     include_runs: bool = False,
     page: int = 1,
@@ -197,13 +202,17 @@ async def list_sessions_async(
 
     Returns Agno-style ``{data, meta}``. Archive filtering uses
     ``metadata @> {"agno_aios_archived": true}`` so totals stay accurate beyond
-    the previous 500-row window.
+    the previous 500-row window. ``archived_only`` returns only archived rows
+    (implies archive filter; ignores ``include_archived``).
     """
     await ensure_agno_postgres_tables_async()
     safe_page = max(1, int(page or 1))
     safe_limit = max(1, min(int(limit or 40), 500))
+    # archived_only wins over include_archived for explicit archived inbox pages.
+    effective_include = True if archived_only else include_archived
     rows, total_count = await _query_sessions_page(
-        include_archived=include_archived,
+        include_archived=effective_include,
+        archived_only=archived_only,
         owner_user_id=owner_user_id,
         page=safe_page,
         limit=safe_limit,

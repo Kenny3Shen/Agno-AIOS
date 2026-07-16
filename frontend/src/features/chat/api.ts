@@ -45,14 +45,28 @@ const normalizeSessionListMeta = (value: unknown, page: number, limit: number, i
 }
 
 /** Parse Agno-style ``{data, meta}`` chat session list. */
+export type ListSessionsOptions = {
+  includeArchived?: boolean
+  /** When true, only archived sessions (server SQL filter). */
+  archivedOnly?: boolean
+  userId?: string
+  page?: number
+  limit?: number
+}
+
 export const listSessions = async (
   includeArchived = false,
   userId?: string,
   page = 1,
-  limit = 40
+  limit = 40,
+  archivedOnly = false,
 ): Promise<SessionListResult> => {
   const search = new URLSearchParams()
-  if (includeArchived) search.set('include_archived', 'true')
+  if (archivedOnly) {
+    search.set('archived_only', 'true')
+  } else if (includeArchived) {
+    search.set('include_archived', 'true')
+  }
   if (userId) search.set('user_id', userId)
   if (page != null) search.set('page', String(page))
   if (limit != null) search.set('limit', String(limit))

@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Chat sessions ``archived_only`` + Trace 归档窗
+
+- `GET /api/chat/sessions?archived_only=true`：SQL 只返回 `metadata @> {agno_aios_archived:true}`。
+- Trace 归档/活跃 Tab：单次有界 chat 窗口（`archived_only` 或默认排除归档）替代无限翻页 walk；窗口截断时 Alert。
+- 列表合并仍以 Trace summaries 为主，chat 提供归档标记与标题。
+
 ## 已完成：Auth SSO / 通知中心 / Knowledge 检索失败显性化
 
 - Auth：加载 SSO 提供方、启动 OAuth 失败 toast（`ssoLoadFailed` / `ssoStartFailed`）。

@@ -145,3 +145,22 @@ describe('chat API', () => {
     await expect(cancelRun('run-1')).resolves.toEqual({ success: true })
   })
 })
+
+describe('listSessions archived_only', () => {
+  it('sends archived_only without include_archived', async () => {
+    server.use(
+      http.get('/api/chat/sessions', ({ request }) => {
+        const params = new URL(request.url).searchParams
+        expect(params.get('archived_only')).toBe('true')
+        expect(params.get('include_archived')).toBeNull()
+        return HttpResponse.json({
+          data: [{ session_id: 'a1', preview: 'archived', archived: true, created_at: 1, updated_at: 2 }],
+          meta: { page: 1, limit: 40, total_pages: 1, total_count: 1, search_time_ms: 0 },
+        })
+      }),
+    )
+    const result = await listSessions(false, undefined, 1, 40, true)
+    expect(result.data[0]?.session_id).toBe('a1')
+    expect(result.data[0]?.archived).toBe(true)
+  })
+})

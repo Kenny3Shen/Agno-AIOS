@@ -225,6 +225,7 @@ async def cancel_chat_run(
 async def list_sessions(
     include_runs: bool = False,
     include_archived: bool = False,
+    archived_only: bool = False,
     user_id: str | None = None,
     page: int = 1,
     limit: int = 40,
@@ -237,6 +238,7 @@ async def list_sessions(
             owner_user_id=owner_user_id,
             include_runs=include_runs,
             include_archived=include_archived,
+            archived_only=archived_only,
             page=page,
             limit=limit,
         )

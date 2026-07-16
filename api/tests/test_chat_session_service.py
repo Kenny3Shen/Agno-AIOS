@@ -350,3 +350,31 @@ async def test_session_history_uses_approval_resolution_note_for_full_rejection_
     assert assistant["status"] == "completed"
     assert "证据不足，暂不封禁该目标，保留观察。" in assistant["content"]
     assert [message["id"] for message in messages].count("run-rejected") == 1
+
+@pytest.mark.asyncio
+async def test_list_sessions_archived_only_filters_sql():
+    async def fake_query(**kwargs):
+        assert kwargs["archived_only"] is True
+        assert kwargs["include_archived"] is True
+        return [
+            {
+                "session_id": "archived-1",
+                "created_at": 2,
+                "updated_at": 2,
+                "user_id": "u1",
+                "runs": [],
+                "metadata": {"agno_aios_archived": True},
+            }
+        ], 1
+
+    with (
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(chat_session_service, "_query_sessions_page", fake_query),
+    ):
+        result = await chat_session_service.list_sessions_async(
+            archived_only=True, owner_user_id="u1"
+        )
+    assert [row["session_id"] for row in result["data"]] == ["archived-1"]
+    assert result["data"][0]["archived"] is True
+    assert result["meta"]["total_count"] == 1
+
