@@ -2,16 +2,19 @@ from api.services.collect_crawl_service import (
     _looks_like_article,
     _summary_from_markdown,
     _title_from_markdown,
-    extract_article_links,
     configured_source_domains,
+    extract_article_links,
 )
-from api.utils.url2md_utils import domain_rules
+from api.utils.url2md_utils import active_domain_rules
 
 
 def test_configured_sources_match_domain_rules():
     domains = configured_source_domains()
     assert domains
-    assert set(domains) == set(domain_rules.keys())
+    assert set(domains) == set(active_domain_rules().keys())
+    assert "botcrawl.com" not in domains
+    assert "go.theregister.com" not in domains
+    assert "www.securitylab.ru" not in domains
 
 
 def test_looks_like_article_filters_noise():

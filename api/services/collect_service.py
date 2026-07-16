@@ -10,7 +10,7 @@ from api.persistence.collect_articles import (
     search_collect_articles,
 )
 from api.services.collect_crawl_service import configured_source_domains, crawl_and_persist
-from api.utils.url2md_utils import domain_rules
+from api.utils.url2md_utils import active_domain_rules
 
 
 async def search_articles(
@@ -40,7 +40,7 @@ async def list_sources() -> list[dict[str, Any]]:
         items.append(
             {
                 "domain": domain,
-                "has_rule": domain in domain_rules,
+                "has_rule": domain in active_domain_rules(),
                 "has_articles": domain in domains_in_db,
             }
         )

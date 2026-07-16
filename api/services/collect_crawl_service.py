@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from datetime import UTC, datetime
 from typing import Any
@@ -11,17 +12,24 @@ import httpx
 from bs4 import BeautifulSoup
 from loguru import logger
 
-from api.persistence.collect_articles import bulk_upsert_collect_articles, ensure_collect_articles_table
+from api.persistence.collect_articles import (
+    bulk_upsert_collect_articles,
+    ensure_collect_articles_table,
+    list_existing_ok_urls,
+)
 from api.services.url2md_service import (
     UnsafeUrlError,
     _get_public_url,
     fetch_and_parse_url,
 )
-from api.utils.url2md_utils import domain_rules
+from api.utils.url2md_utils import (
+    active_domain_rules,
+    resolve_domain_rule_key,
+)
 
-# Prefer HTTPS home pages for each configured domain rule.
+# Prefer HTTPS home pages for each active domain rule.
 SOURCE_HOME_URLS: dict[str, str] = {
-    domain: f"https://{domain}/" for domain in domain_rules
+    domain: f"https://{domain}/" for domain in active_domain_rules()
 }
 
 # Extra seeds when home alone is thin (optional list pages).
@@ -35,9 +43,13 @@ SOURCE_EXTRA_SEEDS: dict[str, list[str]] = {
     "securityonline.info": ["https://securityonline.info/"],
     "thecyberexpress.com": ["https://thecyberexpress.com/"],
     "www.csoonline.com": ["https://www.csoonline.com/"],
-    "go.theregister.com": ["https://www.theregister.com/security/"],
+    "dailydarkweb.net": ["https://dailydarkweb.net/"],
     "mp.weixin.qq.com": [],  # WeChat articles need explicit URLs; home is not listable
 }
+
+# Concurrent HTTP/parse workers for article body fetch.
+FETCH_CONCURRENCY = 6
+DISCOVER_CONCURRENCY = 4
 
 DEFAULT_HEADERS = {
     "User-Agent": (
@@ -73,7 +85,7 @@ ARTICLE_PATH_HINTS = re.compile(
 
 
 def configured_source_domains() -> list[str]:
-    return sorted(domain_rules.keys())
+    return sorted(active_domain_rules().keys())
 
 
 def _normalize_url(url: str) -> str:
@@ -91,16 +103,24 @@ def _normalize_url(url: str) -> str:
 
 
 def _domain_of(url: str) -> str:
-    host = (urlsplit(url).hostname or "").lower()
-    return host
+    rule_key = resolve_domain_rule_key(url)
+    if rule_key:
+        return rule_key
+    return (urlsplit(url).hostname or "").lower()
 
 
 def _is_same_source(url: str, source_domain: str) -> bool:
-    host = _domain_of(url)
-    if not host:
+    raw_host = (urlsplit(url).hostname or "").lower()
+    if not raw_host:
         return False
     source = source_domain.lower()
-    return host == source or host.endswith("." + source) or source.endswith("." + host)
+    rule_key = resolve_domain_rule_key(url) or ""
+    for host in {raw_host, rule_key}:
+        if not host:
+            continue
+        if host == source or host.endswith("." + source) or source.endswith("." + host):
+            return True
+    return False
 
 
 def _looks_like_article(url: str, source_domain: str) -> bool:
@@ -169,48 +189,72 @@ def extract_article_links(html: str, base_url: str, source_domain: str) -> list[
     return found
 
 
+async def _discover_one_domain(
+    client: httpx.AsyncClient,
+    domain: str,
+    *,
+    max_links_per_source: int,
+    semaphore: asyncio.Semaphore,
+) -> tuple[str, list[str]]:
+    active = active_domain_rules()
+    if domain not in active:
+        return domain, []
+    seeds = list(SOURCE_EXTRA_SEEDS.get(domain) or [])
+    home = SOURCE_HOME_URLS.get(domain)
+    if home and home not in seeds:
+        seeds.insert(0, home)
+    links: list[str] = []
+    seen: set[str] = set()
+    async with semaphore:
+        for seed in seeds:
+            try:
+                resp = await _get_public_url(client, seed)
+                if resp.status_code != 200:
+                    logger.warning("collect crawl seed HTTP {}: {}", resp.status_code, seed)
+                    continue
+                for link in extract_article_links(resp.text, str(resp.url), domain):
+                    if link in seen:
+                        continue
+                    seen.add(link)
+                    links.append(link)
+                    if len(links) >= max_links_per_source:
+                        break
+            except (UnsafeUrlError, httpx.HTTPError) as exc:
+                logger.warning("collect crawl seed failed {}: {}", seed, exc)
+            if len(links) >= max_links_per_source:
+                break
+    logger.info("collect crawl discovered {} links for {}", len(links), domain)
+    return domain, links
+
+
 async def discover_article_urls(
     *,
     domains: list[str] | None = None,
     max_links_per_source: int = 25,
 ) -> dict[str, list[str]]:
     """Fetch list pages for each source and collect article URLs."""
-    selected = domains or configured_source_domains()
-    result: dict[str, list[str]] = {}
+    active = set(active_domain_rules())
+    selected = [d for d in (domains or configured_source_domains()) if d in active]
+    if not selected:
+        return {}
+    semaphore = asyncio.Semaphore(DISCOVER_CONCURRENCY)
     async with httpx.AsyncClient(
         headers=DEFAULT_HEADERS,
         timeout=25,
         follow_redirects=False,
     ) as client:
-        for domain in selected:
-            if domain not in domain_rules:
-                continue
-            seeds = list(SOURCE_EXTRA_SEEDS.get(domain) or [])
-            home = SOURCE_HOME_URLS.get(domain)
-            if home and home not in seeds:
-                seeds.insert(0, home)
-            links: list[str] = []
-            seen: set[str] = set()
-            for seed in seeds:
-                try:
-                    resp = await _get_public_url(client, seed)
-                    if resp.status_code != 200:
-                        logger.warning("collect crawl seed HTTP {}: {}", resp.status_code, seed)
-                        continue
-                    for link in extract_article_links(resp.text, str(resp.url), domain):
-                        if link in seen:
-                            continue
-                        seen.add(link)
-                        links.append(link)
-                        if len(links) >= max_links_per_source:
-                            break
-                except (UnsafeUrlError, httpx.HTTPError) as exc:
-                    logger.warning("collect crawl seed failed {}: {}", seed, exc)
-                if len(links) >= max_links_per_source:
-                    break
-            result[domain] = links
-            logger.info("collect crawl discovered {} links for {}", len(links), domain)
-    return result
+        pairs = await asyncio.gather(
+            *[
+                _discover_one_domain(
+                    client,
+                    domain,
+                    max_links_per_source=max_links_per_source,
+                    semaphore=semaphore,
+                )
+                for domain in selected
+            ]
+        )
+    return {domain: links for domain, links in pairs}
 
 
 async def fetch_article_record(url: str) -> dict[str, Any]:
@@ -263,6 +307,8 @@ async def crawl_and_persist(
     domains: list[str] | None = None,
     max_links_per_source: int = 20,
     max_articles_total: int = 80,
+    skip_existing: bool = True,
+    fetch_concurrency: int = FETCH_CONCURRENCY,
 ) -> dict[str, Any]:
     """Discover, fetch, and upsert articles. Returns crawl stats."""
     await ensure_collect_articles_table()
@@ -279,21 +325,31 @@ async def crawl_and_persist(
         if len(urls) >= max_articles_total:
             break
 
-    records: list[dict[str, Any]] = []
-    ok = 0
-    err = 0
-    for url in urls:
-        record = await fetch_article_record(url)
-        records.append(record)
-        if record.get("status") == "ok":
-            ok += 1
-        else:
-            err += 1
+    skipped = 0
+    if skip_existing and urls:
+        existing = await list_existing_ok_urls(urls)
+        if existing:
+            before = len(urls)
+            urls = [u for u in urls if u not in existing]
+            skipped = before - len(urls)
 
+    semaphore = asyncio.Semaphore(max(1, int(fetch_concurrency or FETCH_CONCURRENCY)))
+
+    async def _bounded(url: str) -> dict[str, Any]:
+        async with semaphore:
+            return await fetch_article_record(url)
+
+    records: list[dict[str, Any]] = []
+    if urls:
+        records = list(await asyncio.gather(*[_bounded(url) for url in urls]))
+
+    ok = sum(1 for record in records if record.get("status") == "ok")
+    err = len(records) - ok
     saved = await bulk_upsert_collect_articles(records)
     stats = {
         "sources": len(discovered),
         "discovered": sum(len(v) for v in discovered.values()),
+        "skipped_existing": skipped,
         "fetched": len(records),
         "saved": saved,
         "ok": ok,

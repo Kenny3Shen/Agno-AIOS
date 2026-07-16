@@ -134,6 +134,17 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Collect 规则修复与爬取性能
+
+- 停用 `botcrawl.com` / `go.theregister.com` / `www.securitylab.ru`（`DISABLED_COLLECT_DOMAINS` + 从 `domain_rules` 移除）
+- `resolve_domain_rule_key`：`www` 别名与 host 归一化，修复 `cybersecuritynews.com` / `dailydarkweb.net` 等「Rules not found」
+- 多 class 正文选择器（BS4 `class_` 列表语义）+ debug 日志替代 print
+- 列表发现 / 正文抓取并发（semaphore）；已入库 `status=ok` URL 跳过；批量 upsert
+
+相关：`url2md_utils.py` / `url2md_service.py` / `collect_crawl_service.py` / `collect_articles.py`
+
+---
+
 ## 已完成：React Flow skill 对齐（Studio canvas）
 
 - Typed `WorkflowCanvasNode` + `NodeProps<…>`；Handles 透传 `isConnectable`

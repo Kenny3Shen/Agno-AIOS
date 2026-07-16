@@ -208,14 +208,82 @@ async def upsert_collect_article(record: dict[str, Any]) -> dict[str, Any]:
     return _row_to_dict(row)
 
 
+async def list_existing_ok_urls(urls: Sequence[str]) -> set[str]:
+    """Return the subset of *urls* already stored with status=ok."""
+    cleaned = [str(u).strip() for u in urls if str(u).strip()]
+    if not cleaned:
+        return set()
+    await ensure_collect_articles_table()
+    table = collect_articles_table()
+    # Cap IN clause size for very large batches
+    found: set[str] = set()
+    chunk_size = 500
+    async with get_async_control_plane_engine().begin() as conn:
+        for i in range(0, len(cleaned), chunk_size):
+            chunk = cleaned[i : i + chunk_size]
+            rows = (
+                await conn.execute(
+                    select(table.c.url).where(
+                        table.c.url.in_(chunk),
+                        table.c.status == "ok",
+                    )
+                )
+            ).scalars().all()
+            found.update(str(item) for item in rows if item)
+    return found
+
+
 async def bulk_upsert_collect_articles(records: Sequence[dict[str, Any]]) -> int:
+    """Upsert many rows in one statement when possible."""
     if not records:
         return 0
-    count = 0
+    await ensure_collect_articles_table()
+    table = collect_articles_table()
+    now = datetime.now(UTC)
+    rows: list[dict[str, Any]] = []
     for record in records:
-        await upsert_collect_article(record)
-        count += 1
-    return count
+        url = str(record.get("url") or "").strip()
+        if not url:
+            continue
+        rows.append(
+            {
+                "url": url,
+                "source_domain": str(record.get("source_domain") or ""),
+                "title": str(record.get("title") or "")[:500],
+                "markdown": str(record.get("markdown") or ""),
+                "summary": str(record.get("summary") or "")[:1000],
+                "status": str(record.get("status") or "ok"),
+                "error_message": str(record.get("error_message") or "")[:2000],
+                "fetched_at": record.get("fetched_at") or now,
+                "updated_at": now,
+            }
+        )
+    if not rows:
+        return 0
+
+    # De-dupe by url (last wins) to satisfy unique index in one INSERT
+    by_url: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        by_url[row["url"]] = row
+    values = list(by_url.values())
+
+    stmt = insert(table).values(values)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[table.c.url],
+        set_={
+            "source_domain": stmt.excluded.source_domain,
+            "title": stmt.excluded.title,
+            "markdown": stmt.excluded.markdown,
+            "summary": stmt.excluded.summary,
+            "status": stmt.excluded.status,
+            "error_message": stmt.excluded.error_message,
+            "fetched_at": stmt.excluded.fetched_at,
+            "updated_at": stmt.excluded.updated_at,
+        },
+    )
+    async with get_async_control_plane_engine().begin() as conn:
+        await conn.execute(stmt)
+    return len(values)
 
 
 async def count_collect_articles(*, status: str | None = "ok") -> int:

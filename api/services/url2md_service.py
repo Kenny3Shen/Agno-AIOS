@@ -7,7 +7,12 @@ from urllib.parse import urljoin, urlsplit
 import anyio
 import httpx
 from bs4 import BeautifulSoup
-from api.utils.url2md_utils import domain_rules, title_suffixes
+from api.utils.url2md_utils import (
+    domain_rules,
+    resolve_domain_rule_key,
+    title_suffixes,
+)
+from loguru import logger
 
 USE_PLAYWRIGHT = False  # 是否使用 Playwright 绕过 WAF
 MAX_REDIRECTS = 5
@@ -179,6 +184,51 @@ def parse_to_markdown(elements, truncate_marker: str = "", skip_title: str = "")
     return "".join(markdown_lines).strip()
 
 
+def _class_tokens(class_spec: str) -> list[str]:
+    """Split a space-separated HTML class list into tokens for BS4 matching."""
+    return [part for part in (class_spec or "").split() if part]
+
+
+def _class_set(value: object) -> set[str]:
+    """Normalize BS4 class attribute (str | list | None) to a token set."""
+    if value is None or value is False:
+        return set()
+    if isinstance(value, str):
+        return {part for part in value.split() if part}
+    if isinstance(value, (list, tuple, set)):
+        return {str(part) for part in value if part}
+    return {str(value)}
+
+
+def _find_content_container(soup: BeautifulSoup, main_class_name: str):
+    """Locate the article body div using multi-class-safe matching."""
+    tokens = _class_tokens(main_class_name)
+    if not tokens:
+        return None
+    if len(tokens) == 1:
+        return soup.find("div", class_=tokens[0])
+    # Multi-class: require all tokens present on the same element
+    return soup.find(
+        "div",
+        class_=lambda value, t=tokens: bool(value) and set(t).issubset(_class_set(value)),
+    )
+
+
+def _exclude_by_class(container, exclude_classes: list[str]) -> None:
+    for exclude_class in exclude_classes:
+        tokens = _class_tokens(exclude_class)
+        if not tokens:
+            continue
+        if len(tokens) == 1:
+            for elem in container.find_all(class_=tokens[0]):
+                elem.decompose()
+            continue
+        for elem in container.find_all(
+            class_=lambda value, t=tokens: bool(value) and set(t).issubset(_class_set(value))
+        ):
+            elem.decompose()
+
+
 def get_markdown_text(soup: BeautifulSoup, url: str) -> str:
     """
     从 HTML 中提取标题和主要文本内容，转换为 Markdown 格式。
@@ -190,35 +240,36 @@ def get_markdown_text(soup: BeautifulSoup, url: str) -> str:
     Returns:
         包含标题和正文的 Markdown 格式文本
     """
-    # 提取标题
     title = _get_title_text(soup)
     tags_to_extract = ["h2", "h3", "p", "strong", "li", "table", "code"]
 
-    domain_pattern = re.compile(r"https?://([^/]+)/")
-    match = domain_pattern.search(url)
-    domain = match.group(1) if match else ""
+    domain_key = resolve_domain_rule_key(url)
     container = None
-    truncate_marker = ""  # 截断标记
+    truncate_marker = ""
+    exclude_classes: list[str] = []
 
-    if domain in domain_rules:
-        rule = domain_rules[domain]
-        main_class_name, exclude_classes, truncate_marker = rule[0], rule[1], rule[2]
-        container = soup.find("div", class_=main_class_name)
+    if domain_key:
+        main_class_name, exclude_classes, truncate_marker = domain_rules[domain_key]
+        container = _find_content_container(soup, main_class_name)
+        if container is None:
+            logger.debug(
+                "Content container not found for domain={} url={} class={!r}",
+                domain_key,
+                url,
+                main_class_name,
+            )
+    else:
+        host = (urlsplit(url).hostname or "").lower()
+        logger.debug("Rules not found for domain: {} url={}", host, url)
 
-    if container:
-        # 排除不需要的标签
-        for exclude_class in exclude_classes:
-            for elem in container.find_all(class_=exclude_class):
-                elem.decompose()
-        if domain == "www.anquanke.com":
+    if container is not None:
+        _exclude_by_class(container, exclude_classes)
+        if domain_key == "www.anquanke.com":
             tags_to_extract.append("div")
         elements = container.find_all(tags_to_extract)
-    # 未设置规则时，仅提取 <p> 标签
     else:
-        print(f"Rules not found for domain: {domain}")
         elements = soup.find_all(["p"])
 
-    # 使用提取函数转换为 Markdown，跳过与标题相同的标签
     main_paragraphs = parse_to_markdown(elements, truncate_marker, title)
 
     if len(main_paragraphs) < 200:
