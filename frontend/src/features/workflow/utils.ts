@@ -76,7 +76,6 @@ export const createNode = (type: WorkflowNodeType = 'step'): WorkflowNode => {
   }
 }
 
-export const createStep = () => createNode('step')
 
 export const moveStep = (steps: WorkflowNode[], id: string, direction: -1 | 1) => {
   const index = steps.findIndex((step) => step.id === id)
@@ -394,18 +393,6 @@ export const reparentTargetFromHandle = (
     return { kind: 'branch', parentId: source.id, branch: 'steps' }
   }
   return null
-}
-
-/** True if handle is a node entrance (top or left). */
-export const isEntranceHandle = (handle: string | null | undefined): boolean => {
-  const h = (handle || '').trim()
-  return !h || h === 'in' || h === 'in-left'
-}
-
-/** True if handle is a default (non-branch) exit. */
-export const isDefaultExitHandle = (handle: string | null | undefined): boolean => {
-  const h = (handle || '').trim()
-  return !h || h === 'out' || h === 'out-right'
 }
 
 /** Approximate node width used for geometry-based port picking (matches .wf-flow-node). */

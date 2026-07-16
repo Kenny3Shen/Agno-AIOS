@@ -54,7 +54,7 @@ async def api_list_traces(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"获取 traces 失败: {e}")
+        logger.error("获取 traces 失败: {}", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -95,7 +95,7 @@ async def api_list_trace_sessions(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"获取 trace sessions 失败: {e}")
+        logger.error("获取 trace sessions 失败: {}", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -113,5 +113,5 @@ async def api_get_trace(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"获取 trace 详情失败: {e}")
+        logger.error("获取 trace 详情失败: {}", e)
         raise HTTPException(status_code=500, detail=str(e))

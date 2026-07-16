@@ -138,15 +138,15 @@ async def _write_text(path: str, value: str) -> None:
 async def _read_csv_if_exists(path: str) -> pl.DataFrame:
     async_path = AsyncPath(path)
     if not await async_path.exists():
-        logger.info(f"本地缓存文件不存在: {path}，按全量更新处理")
+        logger.info("本地缓存文件不存在: {}，按全量更新处理", path)
         return pl.DataFrame()
-    logger.info(f"从本地缓存加载数据: {path}")
+    logger.info("从本地缓存加载数据: {}", path)
     try:
         df_local = await to_thread.run_sync(pl.read_csv, path)
     except Exception as e:
-        logger.warning(f"加载本地缓存失败: {e}，按全量更新处理")
+        logger.warning("加载本地缓存失败: {}，按全量更新处理", e)
         return pl.DataFrame()
-    logger.info(f"从本地缓存加载了 {df_local.height} 条记录")
+    logger.info("从本地缓存加载了 {} 条记录", df_local.height)
     return df_local
 
 
@@ -165,7 +165,7 @@ async def _write_csv(path: str, dataframe: pl.DataFrame) -> None:
 async def _commit_source_state(delta: CVESourceDelta) -> None:
     if delta.should_update_cache:
         await _write_csv(delta.local_cache_path, delta.remote_dataframe)
-        logger.info(f"已更新本地缓存: {delta.local_cache_path}")
+        logger.info("已更新本地缓存: {}", delta.local_cache_path)
     if delta.should_update_commit and delta.remote_commit:
         await _write_text(delta.local_commit_path, delta.remote_commit)
 
@@ -218,15 +218,15 @@ async def get_add_del_data(
     source_class = DATA_SOURCES[source_name]
     source = source_class(source_config)
 
-    logger.info(f"开始从数据源更新CVE: {source_name}")
+    logger.info("开始从数据源更新CVE: {}", source_name)
 
     # 1. 获取远程 commit 并比较本地commit，如果相同则跳过
     remote_commit = None
     try:
         remote_commit = await source.get_remote_commit()
-        logger.info(f"数据源 {source_name} 远程 commit: {remote_commit}")
+        logger.info("数据源 {} 远程 commit: {}", source_name, remote_commit)
     except Exception as e:
-        logger.warning(f"无法获取数据源 {source_name} 的远程 commit: {e}，继续拉取数据")
+        logger.warning("无法获取数据源 {} 的远程 commit: {}，继续拉取数据", source_name, e)
 
     local_commit_path = getattr(source, "commit_cache", None)
     if not local_commit_path:
@@ -238,7 +238,7 @@ async def get_add_del_data(
         local_commit = await _read_text_if_exists(local_commit_path)
 
     if remote_commit and local_commit == remote_commit:
-        logger.info(f"数据源 {source_name} 无变化，跳过拉取")
+        logger.info("数据源 {} 无变化，跳过拉取", source_name)
         return CVESourceDelta(
             source_name=source_name,
             increment_data=[],
@@ -297,7 +297,7 @@ async def main() -> tuple[int, int]:
     try:
         await _configure_file_logging_async()
         start_time = datetime.now()
-        logger.info(f"CVE 更新开始: {start_time}")
+        logger.info("CVE 更新开始: {}", start_time)
 
         async with _cve_update_lock(settings.cve_update_lock_path):
             need_add_data, need_del_data = [], []

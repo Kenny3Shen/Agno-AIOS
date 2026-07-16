@@ -102,7 +102,7 @@ async def load_cve_source_config() -> dict[str, Any]:
     try:
         data = tomllib.loads(content)
     except tomllib.TOMLDecodeError:
-        logger.warning(f"无法解析 CVE 数据源配置: {config_path}")
+        logger.warning("无法解析 CVE 数据源配置: {}", config_path)
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -128,7 +128,7 @@ class GitHubPocExpSource(CVEDataSource):
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(self.remote_url)
             resp.raise_for_status()
-            logger.info(f"成功从 {self.remote_url} 获取数据")
+            logger.info("成功从 {} 获取数据", self.remote_url)
             return resp.text
 
     def parse_data(self, raw_data: Any) -> pl.DataFrame:
@@ -189,7 +189,7 @@ class GitHubPocExpSource(CVEDataSource):
             else pl.DataFrame()
         )
 
-        logger.info(f"从数据中解析了 {df_remote_cve.height} 条有效的 CVE 记录")
+        logger.info("从数据中解析了 {} 条有效的 CVE 记录", df_remote_cve.height)
         return df_remote_cve
 
     def get_local_cache_path(self) -> str:
@@ -233,7 +233,7 @@ class ExploitDBSource(CVEDataSource):
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(self.remote_url)
             resp.raise_for_status()
-            logger.info(f"成功从 {self.remote_url} 获取数据")
+            logger.info("成功从 {} 获取数据", self.remote_url)
             return resp.text
 
     def parse_data(self, raw_data: Any) -> pl.DataFrame:
@@ -278,7 +278,7 @@ class ExploitDBSource(CVEDataSource):
             .collect()
         )
 
-        logger.info(f"去重后: {df_remote_cve.height} 条唯一 CVE 记录）")
+        logger.info("去重后: {} 条唯一 CVE 记录）", df_remote_cve.height)
         return df_remote_cve
 
     def get_local_cache_path(self) -> str:

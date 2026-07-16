@@ -59,7 +59,7 @@ async def search_collect_articles_route(
             "size": request.size,
         }
     except Exception as e:
-        logger.error(f"Collect search error: {e}")
+        logger.error("Collect search error: {}", e)
         return {"status": 400, "message": f"错误:{e}"}
 
 
@@ -97,7 +97,7 @@ async def crawl_collect_sources(
         )
         return {"status": 200, "message": "crawl completed", **stats}
     except Exception as e:
-        logger.error(f"Collect crawl error: {e}")
+        logger.error("Collect crawl error: {}", e)
         await record_audit_event_async(
             user,
             action="collect.crawl",
@@ -144,7 +144,7 @@ async def parse_url_to_markdown(
             "id": record.get("id"),
         }
     except Exception as e:
-        logger.error(f"URL to Markdown parsing error: {e}")
+        logger.error("URL to Markdown parsing error: {}", e)
         await record_audit_event_async(
             user,
             action="collect.parse",

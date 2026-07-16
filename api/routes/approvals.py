@@ -175,7 +175,7 @@ async def list_approvals(
             actor=user,
         )
     except Exception as exc:
-        logger.error(f"获取 Agno 审批列表失败: {exc}")
+        logger.error("获取 Agno 审批列表失败: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to load approvals") from exc
 
 
@@ -193,7 +193,7 @@ async def get_approval_count(
     try:
         count = await get_pending_approval_count(actor=user, user_id=user_id)
     except Exception as exc:
-        logger.error(f"获取 Agno 待审批数量失败: {exc}")
+        logger.error("获取 Agno 待审批数量失败: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to load approval count") from exc
     return {"count": count}
 
@@ -206,7 +206,7 @@ async def get_approval(
     try:
         approval = await get_approval_record(approval_id)
     except Exception as exc:
-        logger.error(f"获取 Agno 审批详情失败: {exc}")
+        logger.error("获取 Agno 审批详情失败: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to load approval") from exc
     if approval is None:
         raise HTTPException(status_code=404, detail="Approval not found")
@@ -239,7 +239,7 @@ async def resolve_approval(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
-        logger.error(f"处理 Agno 审批失败: {exc}")
+        logger.error("处理 Agno 审批失败: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to resolve approval") from exc
     if approval is None:
         raise HTTPException(status_code=404, detail="Approval not found")

@@ -142,7 +142,7 @@ async def create_eval_suite(
     except ValueError as exc:
         raise _http_from_value_error(exc) from exc
     except Exception as exc:
-        logger.error(f"创建 Agent Eval 套件失败: {exc}")
+        logger.error("创建 Agent Eval 套件失败: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to create eval suite") from exc
 
 
@@ -170,7 +170,7 @@ async def update_eval_suite(
     except ValueError as exc:
         raise _http_from_value_error(exc) from exc
     except Exception as exc:
-        logger.error(f"更新 Agent Eval 套件失败: {exc}")
+        logger.error("更新 Agent Eval 套件失败: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to update eval suite") from exc
     if suite is None:
         raise _not_found("Eval suite")
@@ -198,7 +198,7 @@ async def create_eval_case(
     except ValueError as exc:
         raise _http_from_value_error(exc) from exc
     except Exception as exc:
-        logger.error(f"创建 Agent Eval 用例失败: {exc}")
+        logger.error("创建 Agent Eval 用例失败: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to create eval case") from exc
 
 
@@ -226,7 +226,7 @@ async def update_eval_case(
     except ValueError as exc:
         raise _http_from_value_error(exc) from exc
     except Exception as exc:
-        logger.error(f"更新 Agent Eval 用例失败: {exc}")
+        logger.error("更新 Agent Eval 用例失败: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to update eval case") from exc
     if case is None:
         raise _not_found("Eval case")
@@ -260,7 +260,7 @@ async def run_eval_suite(
     except ValueError as exc:
         raise _http_from_value_error(exc) from exc
     except Exception as exc:
-        logger.error(f"运行 Agent Eval 套件失败: {exc}")
+        logger.error("运行 Agent Eval 套件失败: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to run eval suite") from exc
 
 
@@ -291,7 +291,7 @@ async def run_eval_case(
     except ValueError as exc:
         raise _http_from_value_error(exc) from exc
     except Exception as exc:
-        logger.error(f"运行 Agent Eval 用例失败: {exc}")
+        logger.error("运行 Agent Eval 用例失败: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to run eval case") from exc
 
 
@@ -305,7 +305,7 @@ async def replay_eval_case_run(
     except ValueError as exc:
         raise _http_from_value_error(exc) from exc
     except Exception as exc:
-        logger.error(f"重放 Agent Eval 用例运行失败: {exc}")
+        logger.error("重放 Agent Eval 用例运行失败: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to replay eval case run") from exc
 
 

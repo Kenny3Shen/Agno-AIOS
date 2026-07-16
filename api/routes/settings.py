@@ -249,7 +249,7 @@ async def update_settings(
             continue
         os.environ[key] = value
         get_settings.cache_clear()
-        logger.info(f"配置已更新: {key}")
+        logger.info("配置已更新: {}", key)
         updated[key] = _mask_secret(key, value)
 
     # 返回完整配置

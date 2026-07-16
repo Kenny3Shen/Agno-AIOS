@@ -33,7 +33,7 @@ async def search_cve(
             "size": request.size,
         }
     except Exception as e:
-        logger.error(f"搜索 CVE 错误: {e}")
+        logger.error("搜索 CVE 错误: {}", e)
         return {"status": 400, "message": f"错误:{e}"}
 
 
@@ -63,7 +63,7 @@ async def update_cve_database(
             "del_count": del_count,
         }
     except Exception as e:
-        logger.error(f"更新 CVE 数据库错误: {e}")
+        logger.error("更新 CVE 数据库错误: {}", e)
         await record_audit_event_async(
             user,
             action="admin.cve.update",

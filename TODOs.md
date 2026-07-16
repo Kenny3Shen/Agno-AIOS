@@ -590,6 +590,13 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：workflow 死导出 + loguru 惰性日志
+
+- 删除未使用的 `createStep` / `isEntranceHandle` / `isDefaultExitHandle`。
+- `api/routes` 与 `api/tasks` 中 42 处 `logger.*(f"...")` 改为 loguru 惰性 `"{}", arg` 格式（避免无谓 f-string 求值/风格债）。
+
+相关：`frontend/src/features/workflow/utils.ts` / `api/routes/*` / `api/tasks/*`
+
 ## 已完成：前后端无引用 API/helper 清理
 
 - 后端 `page_payloads` 仅保留 `iso` / `now_utc` / `row_dict`，删除未用的 `metric`/`record`/`compact` 与 TypedDict。

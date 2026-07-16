@@ -200,7 +200,7 @@ async def chat_agent(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"处理聊天错误: {e}")
+        logger.error("处理聊天错误: {}", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -241,7 +241,7 @@ async def list_sessions(
             limit=limit,
         )
     except Exception as e:
-        logger.error(f"获取会话列表失败: {e}")
+        logger.error("获取会话列表失败: {}", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -256,7 +256,7 @@ async def get_session(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"获取会话记录失败: {e}")
+        logger.error("获取会话记录失败: {}", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -289,5 +289,5 @@ async def remove_session(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"归档会话失败: {e}")
+        logger.error("归档会话失败: {}", e)
         raise HTTPException(status_code=500, detail=str(e))

@@ -67,7 +67,7 @@ async def list_memories(
             limit=limit,
         )
     except Exception as exc:
-        logger.error(f"获取 Agno memory list 失败: {exc}")
+        logger.error("获取 Agno memory list 失败: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to load memories") from exc
 
 
@@ -85,7 +85,7 @@ async def delete_memory(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
-        logger.error(f"删除 Agno memory 失败: {exc}")
+        logger.error("删除 Agno memory 失败: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to delete memory") from exc
     await record_policy_event(
         user,
@@ -120,7 +120,7 @@ async def update_memory(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
-        logger.error(f"更新 Agno memory 失败: {exc}")
+        logger.error("更新 Agno memory 失败: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to update memory") from exc
     result_topics = result.get("topics")
     await record_policy_event(
