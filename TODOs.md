@@ -136,6 +136,15 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：设置页删除模型
+
+- 模型列表支持删除自定义模型（内置不可删、至少保留一个）
+- 删除当前模型时自动切换到其它可用模型
+
+相关：`SettingsPage.tsx`
+
+---
+
 ## 已完成：xAI 官方 Agno 接入
 
 - `provider=xai` → `agno.models.xai.xAI`（默认 `https://api.x.ai/v1`，Chat Completions）

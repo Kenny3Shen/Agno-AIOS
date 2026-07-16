@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Card, Collapse, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
-import { ApiOutlined, CheckCircleOutlined, EditOutlined, PlusOutlined, QuestionCircleOutlined } from '@ant-design/icons'
+import { App, Button, Card, Collapse, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
+import { ApiOutlined, CheckCircleOutlined, DeleteOutlined, EditOutlined, PlusOutlined, QuestionCircleOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { currentUserQuery } from '@/features/auth'
 import { roleOf } from '@/shared/auth/permissions'
@@ -177,6 +177,42 @@ export function SettingsPage() {
     }
   }
 
+  const deleteModel = async (model: ModelConfig) => {
+    const current = models.data
+    if (!current) return
+    if (model.builtin) {
+      message.warning(t('cannotDeleteBuiltin'))
+      return
+    }
+    if (current.models.length <= 1) {
+      message.warning(t('cannotDeleteLastModel'))
+      return
+    }
+    const remaining = current.models.filter((item) => item.id !== model.id)
+    if (!remaining.length) {
+      message.warning(t('cannotDeleteLastModel'))
+      return
+    }
+    let active_model_id = current.active_model_id
+    if (active_model_id === model.id) {
+      const next =
+        remaining.find((item) => item.enabled && item.configured !== false) ??
+        remaining.find((item) => item.enabled) ??
+        remaining[0]
+      active_model_id = next.id
+    }
+    setUpdatingId(model.id)
+    try {
+      await persist({ active_model_id, models: remaining })
+      message.success(t('modelDeleted', { name: model.name }))
+      if (editing?.id === model.id) closeEditor()
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('modelDeleteFailed'))
+    } finally {
+      setUpdatingId(null)
+    }
+  }
+
   const runConnectivityTest = async (model: ModelConfig) => {
     setTestingId(model.id)
     try {
@@ -277,6 +313,37 @@ export function SettingsPage() {
                   aria-label={t('setCurrentModelNamed', { name: row.name })}
                   onClick={() => void setActiveModel(row)}
                 />
+              </Tooltip>
+              <Tooltip
+                title={
+                  row.builtin
+                    ? t('cannotDeleteBuiltin')
+                    : (models.data?.models.length ?? 0) <= 1
+                      ? t('cannotDeleteLastModel')
+                      : t('deleteModel')
+                }
+              >
+                <Popconfirm
+                  title={t('deleteModelConfirm', { name: row.name })}
+                  description={
+                    models.data?.active_model_id === row.id
+                      ? t('deleteActiveModelHint')
+                      : undefined
+                  }
+                  okText={t('deleteModel')}
+                  cancelText={t('common:cancel')}
+                  okButtonProps={{ danger: true }}
+                  disabled={row.builtin || (models.data?.models.length ?? 0) <= 1}
+                  onConfirm={() => void deleteModel(row)}
+                >
+                  <Button
+                    danger
+                    icon={<DeleteOutlined />}
+                    disabled={row.builtin || (models.data?.models.length ?? 0) <= 1}
+                    loading={updatingId === row.id}
+                    aria-label={t('deleteModelNamed', { name: row.name })}
+                  />
+                </Popconfirm>
               </Tooltip>
             </Space>
           ),

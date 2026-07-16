@@ -47,5 +47,13 @@
   "exponentialBackoffHelp": "重试间隔按 2^n 放大，减轻网关抖动。",
   "httpMaxRetries": "HTTP 客户端重试",
   "httpMaxRetriesHelp": "OpenAI SDK 连接层 max_retries。留空使用 SDK 默认；一般优先依赖上面的请求重试。",
-  "privacyNoteShort": "隐私与记忆说明"
+  "privacyNoteShort": "隐私与记忆说明",
+  "deleteModel": "删除模型",
+  "deleteModelNamed": "删除 {{name}}",
+  "deleteModelConfirm": "确定删除模型「{{name}}」？",
+  "deleteActiveModelHint": "当前正在使用该模型，删除后将自动切换到其它模型。",
+  "modelDeleted": "已删除 {{name}}",
+  "modelDeleteFailed": "删除模型失败",
+  "cannotDeleteBuiltin": "内置模型不可删除，可禁用",
+  "cannotDeleteLastModel": "至少保留一个模型"
 }

@@ -110,3 +110,34 @@ describe('model settings editor', () => {
     expect(tips.length).toBeGreaterThanOrEqual(2)
   })
 })
+
+  it('deletes a custom model and keeps the active model valid', async () => {
+    let saved: unknown
+    mockSettings()
+    server.use(
+      http.put('/api/models', async ({ request }) => {
+        saved = await request.json()
+        return HttpResponse.json(saved)
+      })
+    )
+    renderWithQuery(<SettingsPage />)
+
+    fireEvent.click(await screen.findByLabelText('删除 Second model'))
+    // Popconfirm OK
+    const ok = await screen.findByRole('button', { name: '删除模型' })
+    fireEvent.click(ok)
+
+    await waitFor(() => {
+      expect(saved).toBeTruthy()
+      const body = saved as { active_model_id: string; models: { id: string }[] }
+      expect(body.models.map((m) => m.id)).toEqual(['first'])
+      expect(body.active_model_id).toBe('first')
+    })
+  })
+
+  it('does not allow deleting built-in models', async () => {
+    mockSettings()
+    renderWithQuery(<SettingsPage />)
+    const btn = await screen.findByLabelText('删除 First model')
+    expect(btn.hasAttribute('disabled') || btn.getAttribute('disabled') === '').toBe(true)
+  })

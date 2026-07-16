@@ -47,5 +47,13 @@
   "exponentialBackoffHelp": "Double the delay after each failed attempt.",
   "httpMaxRetries": "HTTP client retries",
   "httpMaxRetriesHelp": "OpenAI SDK max_retries. Leave empty for the SDK default; prefer request retries above.",
-  "privacyNoteShort": "Privacy & memory notes"
+  "privacyNoteShort": "Privacy & memory notes",
+  "deleteModel": "Delete model",
+  "deleteModelNamed": "Delete {{name}}",
+  "deleteModelConfirm": "Delete model “{{name}}”?",
+  "deleteActiveModelHint": "This is the active model. Another model will be selected after deletion.",
+  "modelDeleted": "{{name}} deleted",
+  "modelDeleteFailed": "Failed to delete model",
+  "cannotDeleteBuiltin": "Built-in models cannot be deleted; disable them instead",
+  "cannotDeleteLastModel": "Keep at least one model"
 }
