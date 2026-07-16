@@ -52,6 +52,8 @@ interface RunSpanTreeNode extends TreeDataNode {
 }
 
 const SESSION_PAGE_SIZE = 8
+/** When archive filter is on, fetch a bounded window then filter client-side. */
+const ARCHIVE_SESSION_FETCH_LIMIT = 200
 /** Cap background chat-session walk (chat sessionsQuery pages) for archive/preview merge. */
 const MAX_CHAT_SESSION_PAGES = 3
 const RUN_PAGE_SIZE = 6
@@ -174,6 +176,9 @@ export function TracePage() {
     chatSessionsFetchingNext,
     fetchNextChatSessionPage,
   ])
+  // Default: true server page/limit. Archive tabs need chat-session flags, so
+  // load a bounded window once and paginate after client archive filter.
+  const archiveScoped = archiveFilter !== 'all'
   const summaries = useQuery(
     traceSessionsQuery({
       session_id: filters.session_id,
@@ -182,6 +187,8 @@ export function TracePage() {
       status: filters.status,
       start_time: filters.start_time,
       end_time: filters.end_time,
+      page: archiveScoped ? 1 : sessionPage,
+      limit: archiveScoped ? ARCHIVE_SESSION_FETCH_LIMIT : SESSION_PAGE_SIZE,
     })
   )
   // A selected run is a UI detail state, not a trace-list filter.  Filtering
@@ -200,10 +207,13 @@ export function TracePage() {
     () => filterSessionsByArchive(mergeTraceSessions(chatSessionItems, summaries.data?.data ?? []), archiveFilter),
     [archiveFilter, chatSessionItems, summaries.data?.data]
   )
-  const visibleSessions = useMemo(
-    () => sessions.slice((sessionPage - 1) * SESSION_PAGE_SIZE, sessionPage * SESSION_PAGE_SIZE),
-    [sessionPage, sessions]
-  )
+  const visibleSessions = useMemo(() => {
+    if (!archiveScoped) return sessions
+    return sessions.slice((sessionPage - 1) * SESSION_PAGE_SIZE, sessionPage * SESSION_PAGE_SIZE)
+  }, [archiveScoped, sessionPage, sessions])
+  const sessionTotal = archiveScoped
+    ? sessions.length
+    : (summaries.data?.meta.total_count ?? sessions.length)
   const runs = useMemo(
     () => groupRuns(selectedTraceList.data?.data ?? [], selectedSession),
     [selectedSession, selectedTraceList.data?.data]
@@ -369,7 +379,10 @@ export function TracePage() {
             <Select<SessionArchiveFilter>
               aria-label="Session archive filter"
               value={archiveFilter}
-              onChange={setArchiveFilter}
+              onChange={(value) => {
+                setArchiveFilter(value)
+                setSessionPage(1)
+              }}
               options={[
                 { value: 'all', label: t('allSessions') },
                 { value: 'active', label: t('activeSessions') },
@@ -433,7 +446,7 @@ export function TracePage() {
                 align="center"
                 current={sessionPage}
                 pageSize={SESSION_PAGE_SIZE}
-                total={sessions.length}
+                total={sessionTotal}
                 showSizeChanger={false}
                 onChange={changeSessionPage}
               />

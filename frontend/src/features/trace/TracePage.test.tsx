@@ -99,12 +99,22 @@ describe('TracePage interactions', () => {
         HttpResponse.json({ id: 'user-1', email: 'user@example.com', role: 'user', scopes: ['traces:read'], is_active: true })
       ),
       http.get('/api/chat/sessions', () => HttpResponse.json({ data: [], meta: { page: 1, limit: 40, total_pages: 0, total_count: 0, search_time_ms: 0 } })),
-      http.get('/api/traces/sessions', () =>
-        HttpResponse.json({
-          data: traceSessions,
-          meta: { page: 1, limit: 200, total_count: traceSessions.length, total_pages: 1, search_time_ms: 0 },
+      http.get('/api/traces/sessions', ({ request }) => {
+        const url = new URL(request.url)
+        const page = Number(url.searchParams.get('page') ?? '1')
+        const limit = Number(url.searchParams.get('limit') ?? '8')
+        const start = (page - 1) * limit
+        return HttpResponse.json({
+          data: traceSessions.slice(start, start + limit),
+          meta: {
+            page,
+            limit,
+            total_count: traceSessions.length,
+            total_pages: Math.ceil(traceSessions.length / limit),
+            search_time_ms: 0,
+          },
         })
-      ),
+      }),
       http.get('/api/traces', ({ request }) => {
         const url = new URL(request.url)
         const params = new URLSearchParams(url.search)

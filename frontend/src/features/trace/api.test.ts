@@ -103,50 +103,47 @@ describe('trace API', () => {
     expect(detail.tree[0]?.span.duration).toBe('1.00s')
   })
 
-  it('fetches all trace session pages from data/meta envelope', async () => {
-    const requestedPages: string[] = []
-
+  it('requests a single sessions page with page/limit', async () => {
+    const requested: string[] = []
     server.use(
       http.get('/api/traces/sessions', ({ request }) => {
         const url = new URL(request.url)
-        requestedPages.push(`${url.searchParams.get('page')}:${url.searchParams.get('limit')}`)
-        const page = Number(url.searchParams.get('page') ?? '1')
-        const data =
-          page === 1
-            ? Array.from({ length: 200 }, (_, index) => summary(index + 1))
-            : Array.from({ length: 5 }, (_, index) => summary(201 + index))
+        requested.push(`${url.searchParams.get('page')}:${url.searchParams.get('limit')}`)
         return HttpResponse.json({
-          data,
-          meta: { page, limit: 200, total_count: 205, total_pages: 2, search_time_ms: 0 },
+          data: [summary(1), summary(2)],
+          meta: { page: 2, limit: 8, total_count: 20, total_pages: 3, search_time_ms: 0 },
         })
       }),
     )
 
-    const result = await listTraceSessions({ status: 'OK' })
-
-    expect(requestedPages).toEqual(['1:200', '2:200'])
-    expect(result.data).toHaveLength(205)
-    expect(result.meta.total_count).toBe(205)
+    const result = await listTraceSessions({ status: 'OK', page: 2, limit: 8 })
+    expect(requested).toEqual(['2:8'])
+    expect(result.data).toHaveLength(2)
+    expect(result.meta).toMatchObject({ page: 2, limit: 8, total_count: 20, total_pages: 3 })
   })
-  it('stops walking trace session pages after the client cap', async () => {
-    const requestedPages: string[] = []
-    server.use(
-      http.get('/api/traces/sessions', ({ request }) => {
-        const url = new URL(request.url)
-        const page = Number(url.searchParams.get('page') ?? '1')
-        requestedPages.push(String(page))
-        return HttpResponse.json({
-          data: Array.from({ length: 200 }, (_, index) => summary((page - 1) * 200 + index + 1)),
-          meta: { page, limit: 200, total_count: 2000, total_pages: 10, search_time_ms: 0 },
-        })
-      }),
-    )
 
-    const result = await listTraceSessions({ status: 'OK' })
-    expect(requestedPages).toEqual(['1', '2', '3', '4', '5'])
-    expect(result.data).toHaveLength(1000)
+  it('propagates truncated meta from a single sessions response', async () => {
+    server.use(
+      http.get('/api/traces/sessions', () =>
+        HttpResponse.json({
+          data: Array.from({ length: 8 }, (_, index) => summary(index + 1)),
+          meta: {
+            page: 1,
+            limit: 8,
+            total_count: 50,
+            total_pages: 7,
+            search_time_ms: 0,
+            truncated: true,
+            scanned_count: 200,
+          },
+        }),
+      ),
+    )
+    const result = await listTraceSessions({ status: 'ERROR', page: 1, limit: 8 })
+    expect(result.data).toHaveLength(8)
     expect(result.meta.truncated).toBe(true)
-    expect(result.meta.total_count).toBe(2000)
+    expect(result.meta.scanned_count).toBe(200)
+    expect(result.meta.total_count).toBe(50)
   })
 
 })

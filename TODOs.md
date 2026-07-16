@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Trace sessions 真分页（去客户端多页 walk）
+
+- `listTraceSessions`：去掉 200×5 客户端翻页 walk，单次透传 `page`/`limit`。
+- `TracePage`：默认用服务端 `page` + `total_count` 分页；归档筛选仍有界拉 200 后本地过滤。
+- unit/api/Playwright smoke 同步。
+
 ## 已完成：Trace 前端列表 data/meta 收口
 
 - `listTraces` / `listTraceSessions` 归一化结果 `items`+扁平字段 → `{data, meta}`（含 `truncated`/`scanned_count`）。

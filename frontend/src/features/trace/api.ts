@@ -129,49 +129,10 @@ export const listTraces = async (params: TraceParams): Promise<TraceList> => {
   return normalizePaginated(raw, normalizeTrace)
 }
 
-const listTraceSessionsPage = async (params: TraceParams): Promise<TraceSessionList> => {
+/** Single-page Agno sessions list (server-side page/limit; no client multi-page walk). */
+export const listTraceSessions = async (params: TraceParams): Promise<TraceSessionList> => {
   const raw = await requestJson<TraceSessionListNative>(`/traces/sessions?${traceSearch(params)}`)
   return normalizePaginated(raw, normalizeSession)
-}
-
-/** Hard cap client walk of /traces/sessions (200 × 5 = 1000 sessions). */
-const MAX_TRACE_SESSION_PAGES = 5
-
-export const listTraceSessions = async (params: TraceParams): Promise<TraceSessionList> => {
-  const limit = 200
-  let page = 1
-  let totalCount = 0
-  let truncated = false
-  let scannedCount: number | undefined
-  const data: TraceSessionSummary[] = []
-
-  while (page <= MAX_TRACE_SESSION_PAGES) {
-    const response = await listTraceSessionsPage({ ...params, page, limit })
-    totalCount = response.meta.total_count
-    truncated = truncated || Boolean(response.meta.truncated)
-    if (response.meta.scanned_count != null) scannedCount = response.meta.scanned_count
-    data.push(...response.data)
-    if (data.length >= totalCount || response.data.length === 0) {
-      break
-    }
-    if (page >= MAX_TRACE_SESSION_PAGES) {
-      truncated = true
-      break
-    }
-    page += 1
-  }
-
-  return {
-    data,
-    meta: {
-      page: 1,
-      limit,
-      total_count: totalCount,
-      total_pages: Math.ceil(totalCount / limit) || 0,
-      truncated,
-      scanned_count: scannedCount,
-    },
-  }
 }
 
 export const getTrace = async (id: string): Promise<TraceDetail> => {
