@@ -11,6 +11,7 @@ const sessions = {
   data: [] as ChatSession[],
   isLoading: false,
   isError: false,
+  isFetching: false,
   hasNextPage: false,
   isFetchingNextPage: false,
   fetchNextPage: vi.fn<() => Promise<unknown>>(),
@@ -89,6 +90,7 @@ describe('ChatTaskPanel', () => {
     sessions.data = []
     sessions.isLoading = false
     sessions.isError = false
+    sessions.isFetching = false
     sessions.hasNextPage = false
     sessions.isFetchingNextPage = false
     sessions.fetchNextPage.mockReset()
@@ -174,6 +176,14 @@ describe('ChatTaskPanel', () => {
     renderWithQuery(<ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} variant="sider" />)
     await user.click(screen.getByRole('button', { name: '加载更多' }))
     expect(sessions.fetchNextPage).toHaveBeenCalledOnce()
+  })
+
+  it('keeps search input when server results are empty', async () => {
+    sessions.data = []
+    chat.sessionSearch = 'no-match-xyz'
+    renderWithQuery(<ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} variant="sider" />)
+    expect(screen.getByLabelText(i18n.t('shell:conversations.searchPlaceholder'))).toBeTruthy()
+    expect(screen.getByText(i18n.t('shell:conversations.emptySearch'))).toBeTruthy()
   })
 
 })

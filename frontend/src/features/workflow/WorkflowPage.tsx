@@ -518,6 +518,13 @@ export function WorkflowPage() {
                 value: item.id,
                 label: `${item.name} (v${item.version})`,
               }))}
+              notFoundContent={
+                workflow.workflowsQuery.isFetching
+                  ? t('librarySearching')
+                  : workflow.librarySearch.trim()
+                    ? t('librarySearchEmpty')
+                    : t('libraryEmpty')
+              }
               onChange={(value) => {
                 if (value) {
                   workflow.setLibrarySearch('')

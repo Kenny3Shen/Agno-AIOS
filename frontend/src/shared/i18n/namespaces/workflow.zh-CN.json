@@ -119,5 +119,8 @@
   "loadingWorkflow": "正在打开工作流…",
   "latestOutput": "最新输出",
   "librarySearchPlaceholder": "搜索工作流名称或 ID",
-  "libraryLoadMore": "加载更多（已显示 {{shown}} / {{total}}）"
+  "libraryLoadMore": "加载更多（已显示 {{shown}} / {{total}}）",
+  "librarySearchEmpty": "没有匹配的工作流",
+  "libraryEmpty": "还没有已保存的工作流",
+  "librarySearching": "搜索中…"
 }

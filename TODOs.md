@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Chat/Workflow 搜索空态与加载反馈
+
+- 最近对话：无匹配时仍保留搜索框；`isFetching` 时 Search loading；`keepPreviousData` 避免切 q 闪空白。
+- 区分「无对话」与「搜索无结果」空态。
+- Workflow 库 Select：`notFoundContent` 区分搜索中 / 无匹配 / 库空；列表 query 同样 `keepPreviousData`。
+
 ## 已完成：Chat / Workflow 库服务端搜索
 
 - `GET /api/chat/sessions?q=`：SQL 匹配 `session_id` 与 `metadata.agno_aios_title`；前端最近对话搜索 debounce 后走服务端分页，命中组自动展开。

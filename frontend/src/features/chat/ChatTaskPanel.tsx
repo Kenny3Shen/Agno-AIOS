@@ -178,7 +178,7 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
         </button>
         {expanded ? (
           <div id={contentId} className="chat-task-panel-content">
-            {chat.sessions.isLoading ? (
+            {chat.sessions.isLoading && !chat.sessions.data?.length && !chat.sessionSearch ? (
               <div className="chat-task-panel-loading" aria-label={t('common:loading')}>
                 <Skeleton active title={false} paragraph={{ rows: 3 }} />
               </div>
@@ -197,7 +197,7 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
               </div>
             ) : (
               <>
-                {conversations.length ? (
+                {conversations.length || chat.sessionSearch.trim() || chat.sessions.isFetching ? (
                   <Input.Search
                     allowClear
                     size="small"
@@ -205,6 +205,7 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
                     placeholder={t('shell:conversations.searchPlaceholder')}
                     value={chat.sessionSearch}
                     onChange={(event) => chat.setSessionSearch(event.target.value)}
+                    loading={Boolean(chat.sessions.isFetching && !chat.sessions.isFetchingNextPage)}
                     aria-label={t('shell:conversations.searchPlaceholder')}
                   />
                 ) : null}
@@ -266,7 +267,7 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
                     </Button>
                   </div>
                 ) : null}
-                {!conversations.length ? (
+                {!conversations.length && !chat.sessionSearch.trim() ? (
                   <Empty
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
                     description={t('shell:conversations.empty')}

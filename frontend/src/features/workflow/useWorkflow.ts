@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { getModels } from '@/features/settings/api'
 import {
   createWorkflow,
@@ -106,6 +106,7 @@ export function useWorkflow() {
     queryKey: ['workflows', 'list', debouncedLibrarySearch.trim()],
     queryFn: ({ pageParam }) => listWorkflows(pageParam, 100, debouncedLibrarySearch.trim()),
     initialPageParam: 1,
+    placeholderData: keepPreviousData,
     getNextPageParam: (lastPage) => {
       const page = lastPage.meta.page
       const limit = Math.max(1, lastPage.meta.limit)

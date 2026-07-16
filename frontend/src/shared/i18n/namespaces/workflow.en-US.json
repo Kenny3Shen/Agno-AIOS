@@ -119,5 +119,8 @@
   "loadingWorkflow": "Opening workflow…",
   "latestOutput": "Latest output",
   "librarySearchPlaceholder": "Search name or id",
-  "libraryLoadMore": "Load more ({{shown}} / {{total}})"
+  "libraryLoadMore": "Load more ({{shown}} / {{total}})",
+  "librarySearchEmpty": "No workflows match this search",
+  "libraryEmpty": "No saved workflows yet",
+  "librarySearching": "Searching…"
 }

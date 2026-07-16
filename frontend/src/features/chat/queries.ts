@@ -1,4 +1,4 @@
-import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
+import { infiniteQueryOptions, keepPreviousData, queryOptions } from '@tanstack/react-query'
 import { getHistory, getModels, listSessions } from './api'
 
 export const SESSION_PAGE_SIZE = 40
@@ -18,6 +18,7 @@ export const sessionsQuery = (includeArchived = false, userId?: string, q = '') 
     queryFn: ({ pageParam }) =>
       listSessions({ includeArchived, userId, page: pageParam, limit: SESSION_PAGE_SIZE, q: q || undefined }),
     initialPageParam: 1,
+    placeholderData: keepPreviousData,
     getNextPageParam: (lastPage) => {
       const { page, total_pages } = lastPage.meta
       if (total_pages > 0 && page < total_pages) return page + 1
