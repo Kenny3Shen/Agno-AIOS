@@ -27,6 +27,10 @@ export const sessionsQuery = (includeArchived = false, userId?: string, q = '') 
     },
   })
 
-export const historyQuery = (id: string) =>
-  queryOptions({ queryKey: chatKeys.history(id), queryFn: () => getHistory(id), enabled: Boolean(id) })
+export const historyQuery = (id: string, enabled = true) =>
+  queryOptions({
+    queryKey: chatKeys.history(id),
+    queryFn: () => getHistory(id),
+    enabled: Boolean(id) && enabled,
+  })
 export const modelsQuery = () => queryOptions({ queryKey: chatKeys.models, queryFn: getModels, staleTime: 60_000 })

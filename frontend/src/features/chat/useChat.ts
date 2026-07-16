@@ -31,7 +31,12 @@ export function useChat() {
     ...sessionsQueryResult,
     data: sessionItems,
   }
-  const history = useQuery(historyQuery(sessionId ?? ''))
+  const activeSessionMeta = useMemo(
+    () => (sessionId ? sessionItems.find((item) => item.session_id === sessionId) : undefined),
+    [sessionId, sessionItems]
+  )
+  const isWorkflowSession = String(activeSessionMeta?.session_type || '').toLowerCase() === 'workflow'
+  const history = useQuery(historyQuery(sessionId ?? '', !isWorkflowSession))
   const models = useQuery(modelsQuery())
 
   useEffect(() => {
@@ -41,20 +46,18 @@ export function useChat() {
 
   // Workflow sessions are not agent transcripts — bounce deep links to Trace.
   useEffect(() => {
-    if (!sessionId || !sessionItems.length) return
-    const session = sessionItems.find((item) => item.session_id === sessionId)
-    if (String(session?.session_type || '').toLowerCase() !== 'workflow') return
+    if (!sessionId || !isWorkflowSession) return
     const filters = { ...emptyTraceFilters(), session_id: sessionId }
     const search = buildTraceSearch(filters, sessionId, '')
     void router.history.replace(`/trace${search ? `?${search}` : ''}`)
-  }, [router.history, sessionId, sessionItems])
+  }, [isWorkflowSession, router.history, sessionId])
   const hasPausedRun = state.messages.some((message) => message.role === 'assistant' && message.status === 'paused')
   useEffect(() => {
-    if (!sessionId || !hasPausedRun) return
+    if (!sessionId || !hasPausedRun || isWorkflowSession) return
     const refreshHistory = () => void queryClient.invalidateQueries({ queryKey: chatKeys.history(sessionId) })
     const interval = window.setInterval(refreshHistory, 2_000)
     return () => window.clearInterval(interval)
-  }, [hasPausedRun, queryClient, sessionId])
+  }, [hasPausedRun, isWorkflowSession, queryClient, sessionId])
   useEffect(() => {
     if (!models.data?.models.length) return
     const selected =
