@@ -124,6 +124,15 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Knowledge getKnowledge 去掉 string 重载
+
+- `getKnowledge` 仅接受 `GetKnowledgeParams` 对象；全站唯一调用方已是对象形式
+- 去掉 “legacy string query” 兼容注释与分支
+
+相关：`frontend/src/features/knowledge/api.ts`
+
+---
+
 ## 已完成：Skills 列表去 markdown + 详情按需
 
 - `list_skill_infos(include_detail=False)` 默认不读 SKILL.md / scripts / attachments；`has_scripts` 仅看 scripts 目录是否非空

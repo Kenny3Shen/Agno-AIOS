@@ -82,16 +82,14 @@ export type GetKnowledgeParams = {
   sortOrder?: 'asc' | 'desc'
 }
 
-export const getKnowledge = (params: GetKnowledgeParams | string = {}) => {
-  // Accept legacy string query for call sites still passing filter text only.
-  const options: GetKnowledgeParams = typeof params === 'string' ? { query: params } : params
+export const getKnowledge = (params: GetKnowledgeParams = {}) => {
   const search = new URLSearchParams()
-  const query = (options.query || '').trim()
+  const query = (params.query || '').trim()
   if (query) search.set('query', query)
-  search.set('page', String(Math.max(1, options.page ?? 1)))
-  search.set('limit', String(Math.min(100, Math.max(1, options.limit ?? 12))))
-  if (options.sortBy) search.set('sort_by', options.sortBy)
-  if (options.sortOrder) search.set('sort_order', options.sortOrder)
+  search.set('page', String(Math.max(1, params.page ?? 1)))
+  search.set('limit', String(Math.min(100, Math.max(1, params.limit ?? 12))))
+  if (params.sortBy) search.set('sort_by', params.sortBy)
+  if (params.sortOrder) search.set('sort_order', params.sortOrder)
   return requestJson<KnowledgeResponse>(`/knowledge?${search.toString()}`)
 }
 const readHttpError = async (response: Response) => {
