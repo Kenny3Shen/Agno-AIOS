@@ -4,15 +4,6 @@ import type { KnowledgeIngestDefaults } from '../utils'
 import { inferKnowledgeReaderProfile, selectedUploadFile } from '../utils'
 import { useTranslation } from 'react-i18next'
 
-const readerStrategies = [
-  { value: 'markdown', label: 'Markdown' },
-  { value: 'semantic', label: 'Semantic text' },
-  { value: 'code', label: 'Code' },
-  { value: 'csv_row', label: 'CSV rows' },
-  { value: 'json', label: 'JSON' },
-  { value: 'document', label: 'Document' },
-]
-
 const tokenizerOptions = [
   { value: 'character', label: 'character' },
   { value: 'gpt2', label: 'gpt2' },
@@ -79,6 +70,14 @@ function SwitchField({ name, label, tooltip, defaultChecked }: { name: string; l
 
 export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDefaults }) {
   const { t } = useTranslation('knowledge')
+  const readerStrategies = [
+    { value: 'markdown', label: t('strategyMarkdown') },
+    { value: 'semantic', label: t('strategySemantic') },
+    { value: 'code', label: t('strategyCode') },
+    { value: 'csv_row', label: t('strategyCsv') },
+    { value: 'json', label: t('strategyJson') },
+    { value: 'document', label: t('strategyDocument') },
+  ]
   const tooltips = {
     reader_strategy: t('ingest.strategyHint'),
     chunk_size: t('ingest.chunkSizeHint'),
@@ -273,7 +272,7 @@ export function IngestOptionsFields({ defaults }: { defaults?: KnowledgeIngestDe
           label: (
             <Space wrap>
               <span>{t('advancedChunking')}</span>
-              <Tag>{profile.label}</Tag>
+              <Tag>{t(profile.labelKey)}</Tag>
               <Typography.Text type="secondary">{t(profile.descriptionKey)}</Typography.Text>
             </Space>
           ),

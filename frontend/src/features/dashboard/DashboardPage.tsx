@@ -147,13 +147,13 @@ export function DashboardPage() {
       tooltip: { trigger: 'axis' },
       grid: { top: 24, right: 24, bottom: 26, left: 52 },
       xAxis: { type: 'category', data: timeline.map((item) => item.time), axisLabel: { formatter: (value: string) => formatDate(value) } },
-      yAxis: { type: 'value', name: 'ms' },
+      yAxis: { type: 'value', name: t('axisMs') },
       series: [
-        { name: 'P50', type: 'line', data: timeline.map((item) => item.p50), smooth: true, symbol: 'none' },
-        { name: 'P95', type: 'line', data: timeline.map((item) => item.p95), smooth: true, symbol: 'none', lineStyle: { width: 3 } },
+        { name: t('seriesP50'), type: 'line', data: timeline.map((item) => item.p50), smooth: true, symbol: 'none' },
+        { name: t('seriesP95'), type: 'line', data: timeline.map((item) => item.p95), smooth: true, symbol: 'none', lineStyle: { width: 3 } },
       ],
     }),
-    [common, formatDate, timeline, token.colorInfo, token.colorWarning]
+    [common, formatDate, t, timeline, token.colorInfo, token.colorWarning]
   )
 
   const distributionOption = useMemo<EChartsOption>(

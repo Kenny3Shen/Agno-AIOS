@@ -1,5 +1,14 @@
 # 下一步工作
 
+## 已完成：运维面 i18n 残差 + Chat 本轮 Skills 可见性
+
+- Audit：筛选表单、列表卡标题、详情 Descriptions、元数据标题走 audit i18n（测试按 zh-CN）。
+- MCP Drawer：`服务与组件` / 概览 / Schema 与字段标签 i18n。
+- Skills Drawer：内容 Tab / 元数据 Tab i18n。
+- Dashboard 时延图：`P50`/`P95`/纵轴 `ms` 走 dashboard i18n。
+- Knowledge 入库 strategy 选项短标签 i18n。
+- Chat：消息条与顶栏在 `skillNames.length > 0` 时展示「Skills · N」chip（Tooltip 列出名称）；`leanMode` 仍显示「本轮自动轻量」。
+
 ## 已完成：Workflow 运行历史/触发历史状态 i18n + Grok 自动轻量冒烟
 
 - 运行历史 Tag：`historyStatus_*`（运行中/已完成/失败/已取消/已暂停）。

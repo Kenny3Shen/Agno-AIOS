@@ -68,7 +68,11 @@
   "toolsOffBadge": "Lite (no tools)",
   "autoLeanBadge": "Auto lite this turn",
   "autoLeanHelp": "No security-tool intent detected; MCP/Skills skipped to save context.",
-  "skillsAttached": "Skills: {{names}}",
+  "skillsAttached": "Skills this turn: {{names}}",
   "tokensMetric": "{{value}} tokens",
-  "tokensMetricTitle": "{{count}} tokens"
+  "tokensMetricTitle": "{{count}} tokens",
+  "skillsAttachedBadge": "Skills · {{count}}",
+  "skillsAttachedHelp": "Local Skills attached for this turn by intent.",
+  "skillsAllEnabled": "All enabled Skills this turn",
+  "skillsNone": "No Skills attached this turn"
 }

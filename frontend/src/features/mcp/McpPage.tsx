@@ -166,7 +166,7 @@ export function McpPage() {
         items={[
           {
             key: 'components',
-            label: 'Servers & Components',
+            label: t('tabServersComponents'),
             children: (
               <Card className="workbench-card">
                 <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
@@ -359,10 +359,10 @@ export function McpPage() {
         {!component && selectedServer ? (
           <MetadataDescriptions
             items={[
-              { key: 'name', label: 'Name', children: selectedServer.name },
-              { key: 'namespace', label: 'Namespace', children: selectedServer.namespace },
-              { key: 'transport', label: 'Transport', children: selectedServer.transport },
-              { key: 'store', label: 'Config store', children: config.data?.config_store },
+              { key: 'name', label: t('fieldName'), children: selectedServer.name },
+              { key: 'namespace', label: t('fieldNamespace'), children: selectedServer.namespace },
+              { key: 'transport', label: t('fieldTransport'), children: selectedServer.transport },
+              { key: 'store', label: t('fieldConfigStore'), children: config.data?.config_store },
             ]}
             value={selectedServer.manifest}
             prefix="Manifest"
@@ -377,14 +377,14 @@ export function McpPage() {
             items={[
               {
                 key: 'overview',
-                label: 'Overview',
+                label: t('tabOverview'),
                 children: (
                   <MetadataDescriptions
                     items={[
-                      { key: 'name', label: 'Name', children: component.name },
-                      { key: 'title', label: 'Title', children: component.title || '-' },
-                      { key: 'namespace', label: 'Namespace', children: component.namespace || '-' },
-                      { key: 'description', label: 'Description', children: component.description || '-' },
+                      { key: 'name', label: t('fieldName'), children: component.name },
+                      { key: 'title', label: t('fieldTitle'), children: component.title || '-' },
+                      { key: 'namespace', label: t('fieldNamespace'), children: component.namespace || '-' },
+                      { key: 'description', label: t('fieldDescription'), children: component.description || '-' },
                     ]}
                     value={{ tags: component.tags, annotations: component.annotations }}
                   />
@@ -392,7 +392,7 @@ export function McpPage() {
               },
               {
                 key: 'schemas',
-                label: 'Schemas',
+                label: t('tabSchemas'),
                 children: (
                   <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
                     <FormattedContentCard title="Input schema" value={component.input_schema} />
@@ -400,7 +400,7 @@ export function McpPage() {
                   </Space>
                 ),
               },
-              { key: 'metadata', label: 'Metadata', children: <MetadataDescriptions value={component.meta} /> },
+              { key: 'metadata', label: t('fieldMetadata'), children: <MetadataDescriptions value={component.meta} /> },
             ]}
           />
         ) : null}

@@ -350,6 +350,11 @@ function MessageBody({ message, retry, sessionId }: { message: Message; retry: (
             <span className="run-metric run-metric--lean">{t('autoLeanBadge')}</span>
           </Tooltip>
         ) : null}
+        {Array.isArray(message.skillNames) && message.skillNames.length > 0 ? (
+          <Tooltip title={t('skillsAttached', { names: message.skillNames.join(', ') })}>
+            <span className="run-metric run-metric--skills">{t('skillsAttachedBadge', { count: message.skillNames.length })}</span>
+          </Tooltip>
+        ) : null}
         {message.metrics?.duration != null && (
           <span className="run-metric" title={t('duration')}>
             {message.metrics.duration.toFixed(1)}s
@@ -511,13 +516,26 @@ export function ChatPage() {
               const latestAssistant = [...chat.state.messages]
                 .reverse()
                 .find((item) => item.role === 'assistant')
-              return latestAssistant?.leanMode ? (
-                <Tooltip title={t('autoLeanHelp')}>
-                  <Tag className="context-mode-tag" color="processing">
-                    {t('autoLeanBadge')}
-                  </Tag>
-                </Tooltip>
-              ) : null
+              if (latestAssistant?.leanMode) {
+                return (
+                  <Tooltip title={t('autoLeanHelp')}>
+                    <Tag className="context-mode-tag" color="processing">
+                      {t('autoLeanBadge')}
+                    </Tag>
+                  </Tooltip>
+                )
+              }
+              const names = latestAssistant?.skillNames
+              if (Array.isArray(names) && names.length > 0) {
+                return (
+                  <Tooltip title={t('skillsAttached', { names: names.join(', ') })}>
+                    <Tag className="context-mode-tag" color="blue">
+                      {t('skillsAttachedBadge', { count: names.length })}
+                    </Tag>
+                  </Tooltip>
+                )
+              }
+              return null
             })()}
             {pausedRun?.approval_id ? (
               <Button

@@ -306,6 +306,10 @@
   color: var(--ant-color-primary, #1677ff);
   cursor: help;
 }
+.run-metric--skills {
+  color: var(--ant-color-info, #1677ff);
+  cursor: help;
+}
 
 .run-metric {
   border-left: 1px solid var(--tais-border);

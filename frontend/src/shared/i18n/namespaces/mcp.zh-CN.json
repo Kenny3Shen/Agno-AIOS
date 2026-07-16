@@ -55,5 +55,15 @@
   "colExpires": "过期时间",
   "colTokenActions": "操作",
   "colComponentEnabled": "启用",
-  "tabTokens": "令牌"
+  "tabTokens": "令牌",
+  "tabServersComponents": "服务与组件",
+  "tabOverview": "概览",
+  "tabSchemas": "Schema",
+  "fieldName": "名称",
+  "fieldNamespace": "命名空间",
+  "fieldTransport": "传输",
+  "fieldConfigStore": "配置存储",
+  "fieldTitle": "标题",
+  "fieldDescription": "描述",
+  "fieldMetadata": "元数据"
 }

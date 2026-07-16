@@ -173,7 +173,7 @@ export function SkillsPage() {
             items={[
               {
                 key: 'content',
-                label: 'SKILL.md',
+                label: t('contentTab'),
                 children: body ? (
                   <Markdown content={body} openLinksInNewTab escapeRawHtml />
                 ) : (
@@ -182,7 +182,7 @@ export function SkillsPage() {
               },
               {
                 key: 'metadata',
-                label: 'Metadata',
+                label: t('metadataTab'),
                 children: <MetadataDescriptions value={detailMetadata} />,
               },
               {

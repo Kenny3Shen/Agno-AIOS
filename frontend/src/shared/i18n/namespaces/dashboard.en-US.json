@@ -51,5 +51,8 @@
   "chartErrorPct": "Error %",
   "chartTokens": "Tokens",
   "chartErrorRate": "Error rate",
-  "chartRuns": "Runs"
+  "chartRuns": "Runs",
+  "seriesP50": "P50",
+  "seriesP95": "P95",
+  "axisMs": "ms"
 }

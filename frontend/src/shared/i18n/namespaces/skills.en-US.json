@@ -32,5 +32,7 @@
   "colDescription": "Description",
   "colVisibility": "Visibility",
   "colEnabled": "Enabled",
-  "colActions": "Actions"
+  "colActions": "Actions",
+  "contentTab": "SKILL.md",
+  "metadataTab": "Metadata"
 }

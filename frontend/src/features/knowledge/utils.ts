@@ -80,17 +80,17 @@ export type KnowledgeReaderStrategy = 'markdown' | 'semantic' | 'code' | 'csv_ro
 
 export interface KnowledgeReaderProfile {
   strategy: KnowledgeReaderStrategy
-  label: string
+  labelKey: string
   descriptionKey: string
 }
 
 export const knowledgeReaderProfiles: Record<KnowledgeReaderStrategy, KnowledgeReaderProfile> = {
-  markdown: { strategy: 'markdown', label: 'Markdown', descriptionKey: 'profiles.markdown' },
-  semantic: { strategy: 'semantic', label: 'Semantic text', descriptionKey: 'profiles.semantic' },
-  code: { strategy: 'code', label: 'Code', descriptionKey: 'profiles.code' },
-  csv_row: { strategy: 'csv_row', label: 'CSV rows', descriptionKey: 'profiles.csv_row' },
-  json: { strategy: 'json', label: 'JSON', descriptionKey: 'profiles.json' },
-  document: { strategy: 'document', label: 'Document', descriptionKey: 'profiles.document' },
+  markdown: { strategy: 'markdown', labelKey: 'strategyMarkdown', descriptionKey: 'profiles.markdown' },
+  semantic: { strategy: 'semantic', labelKey: 'strategySemantic', descriptionKey: 'profiles.semantic' },
+  code: { strategy: 'code', labelKey: 'strategyCode', descriptionKey: 'profiles.code' },
+  csv_row: { strategy: 'csv_row', labelKey: 'strategyCsv', descriptionKey: 'profiles.csv_row' },
+  json: { strategy: 'json', labelKey: 'strategyJson', descriptionKey: 'profiles.json' },
+  document: { strategy: 'document', labelKey: 'strategyDocument', descriptionKey: 'profiles.document' },
 }
 
 export function effectiveKnowledgeIngestDefaults(ragSettings?: KnowledgeRagSettings): KnowledgeIngestDefaults {

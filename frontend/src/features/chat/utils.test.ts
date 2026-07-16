@@ -186,4 +186,26 @@ describe('chat behavior', () => {
       status: 'streaming',
     })
   })
+  it('stores skillNames from run.started', () => {
+    const assistant: Message = { id: 'a', role: 'assistant', content: '', final: false, status: 'streaming' }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    const next = chatReducer(started, {
+      type: 'event',
+      id: 'a',
+      event: {
+        type: 'run.started',
+        runId: 'run-skills',
+        leanMode: false,
+        skillNames: ['cve-intel-skill', 'playbook-skill'],
+        enableTools: true,
+      },
+    })
+    expect(next.messages[0]).toMatchObject({
+      run_id: 'run-skills',
+      leanMode: false,
+      skillNames: ['cve-intel-skill', 'playbook-skill'],
+      status: 'streaming',
+    })
+  })
+
 })

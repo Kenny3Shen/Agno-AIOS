@@ -55,5 +55,15 @@
   "colExpires": "Expires",
   "colTokenActions": "Actions",
   "colComponentEnabled": "Enabled",
-  "tabTokens": "Tokens"
+  "tabTokens": "Tokens",
+  "tabServersComponents": "Servers & Components",
+  "tabOverview": "Overview",
+  "tabSchemas": "Schemas",
+  "fieldName": "Name",
+  "fieldNamespace": "Namespace",
+  "fieldTransport": "Transport",
+  "fieldConfigStore": "Config store",
+  "fieldTitle": "Title",
+  "fieldDescription": "Description",
+  "fieldMetadata": "Metadata"
 }

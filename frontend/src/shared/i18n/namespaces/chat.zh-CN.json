@@ -68,7 +68,11 @@
   "toolsOffBadge": "轻量（无工具）",
   "autoLeanBadge": "本轮自动轻量",
   "autoLeanHelp": "本轮未命中安全工具意图，已跳过 MCP/Skills 以节省上下文。",
-  "skillsAttached": "Skills: {{names}}",
+  "skillsAttached": "本轮 Skills：{{names}}",
   "tokensMetric": "{{value}} tokens",
-  "tokensMetricTitle": "{{count}} tokens"
+  "tokensMetricTitle": "{{count}} tokens",
+  "skillsAttachedBadge": "Skills · {{count}}",
+  "skillsAttachedHelp": "本轮按意图挂载的 Local Skills。",
+  "skillsAllEnabled": "本轮全量已启用 Skills",
+  "skillsNone": "本轮未挂载 Skill"
 }

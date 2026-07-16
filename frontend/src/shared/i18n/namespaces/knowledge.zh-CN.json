@@ -135,5 +135,11 @@
   "resultDocument": "文档",
   "resultContent": "内容",
   "renderAria": "渲染 {{title}}",
-  "metaId": "ID"
+  "metaId": "ID",
+  "strategyMarkdown": "Markdown",
+  "strategySemantic": "语义文本",
+  "strategyCode": "代码",
+  "strategyCsv": "CSV 行",
+  "strategyJson": "JSON",
+  "strategyDocument": "文档"
 }

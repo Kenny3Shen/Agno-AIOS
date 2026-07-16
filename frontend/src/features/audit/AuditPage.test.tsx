@@ -50,7 +50,7 @@ describe('audit page workflow', () => {
     renderWithQuery(<AuditPage />)
 
     await screen.findByText('u1@example.test')
-    await user.type(screen.getByLabelText('User ID'), 'target-user')
+    await user.type(screen.getByLabelText('用户 ID'), 'target-user')
     await user.click(screen.getByRole('button', { name: /查询/ }))
 
     await waitFor(() => expect(requests.some((url) => url.searchParams.get('actor_user_id') === 'target-user')).toBe(true))
@@ -60,7 +60,7 @@ describe('audit page workflow', () => {
 
     await user.click(await screen.findByText('auth.login'))
 
-    expect(await screen.findByLabelText('Copy Metadata')).toBeTruthy()
+    expect(await screen.findByLabelText('Copy 元数据')).toBeTruthy()
     expect(screen.getByText(/"risk": "low"/)).toBeTruthy()
   })
 })

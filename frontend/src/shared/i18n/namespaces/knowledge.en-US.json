@@ -135,5 +135,11 @@
   "resultDocument": "Document",
   "resultContent": "Content",
   "renderAria": "Render {{title}}",
-  "metaId": "ID"
+  "metaId": "ID",
+  "strategyMarkdown": "Markdown",
+  "strategySemantic": "Semantic text",
+  "strategyCode": "Code",
+  "strategyCsv": "CSV rows",
+  "strategyJson": "JSON",
+  "strategyDocument": "Document"
 }

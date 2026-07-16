@@ -51,5 +51,8 @@
   "chartErrorPct": "错误率 %",
   "chartTokens": "Tokens",
   "chartErrorRate": "错误率",
-  "chartRuns": "运行数"
+  "chartRuns": "运行数",
+  "seriesP50": "P50",
+  "seriesP95": "P95",
+  "axisMs": "毫秒"
 }

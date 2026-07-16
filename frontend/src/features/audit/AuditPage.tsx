@@ -73,19 +73,23 @@ function ActorCell({ row }: { row: AuditLog }) {
   )
 }
 
-function detailItems(row: AuditLog, formatDate: (value?: string | number | null) => string): DescriptionsProps['items'] {
+function detailItems(
+  row: AuditLog,
+  formatDate: (value?: string | number | null) => string,
+  t: (key: string) => string,
+): DescriptionsProps['items'] {
   return [
-    { key: 'id', label: 'ID', children: <CopyableValue value={String(row.id)} /> },
-    { key: 'user', label: 'User ID', children: <CopyableValue value={row.actor_user_id} /> },
-    { key: 'email', label: 'Email', children: row.actor_email || '-' },
-    { key: 'role', label: 'Role', children: row.actor_role || '-' },
-    { key: 'action', label: 'Action', children: row.action || '-' },
-    { key: 'resource_type', label: 'Resource Type', children: row.resource_type || '-' },
-    { key: 'resource_id', label: 'Resource ID', children: <CopyableValue value={row.resource_id} /> },
-    { key: 'status', label: 'Status', children: <StatusTag status={row.status} /> },
-    { key: 'ip', label: 'IP', children: row.ip_address || '-' },
-    { key: 'user_agent', label: 'User Agent', children: row.user_agent || '-' },
-    { key: 'created', label: 'Created At', children: formatDate(row.created_at) },
+    { key: 'id', label: t('fieldId'), children: <CopyableValue value={String(row.id)} /> },
+    { key: 'user', label: t('fieldUserId'), children: <CopyableValue value={row.actor_user_id} /> },
+    { key: 'email', label: t('fieldEmail'), children: row.actor_email || '-' },
+    { key: 'role', label: t('fieldRole'), children: row.actor_role || '-' },
+    { key: 'action', label: t('fieldAction'), children: row.action || '-' },
+    { key: 'resource_type', label: t('fieldResourceType'), children: row.resource_type || '-' },
+    { key: 'resource_id', label: t('fieldResourceId'), children: <CopyableValue value={row.resource_id} /> },
+    { key: 'status', label: t('fieldStatus'), children: <StatusTag status={row.status} /> },
+    { key: 'ip', label: t('fieldIp'), children: row.ip_address || '-' },
+    { key: 'user_agent', label: t('fieldUserAgent'), children: row.user_agent || '-' },
+    { key: 'created', label: t('fieldCreatedAt'), children: formatDate(row.created_at) },
   ]
 }
 
@@ -135,28 +139,28 @@ export function AuditPage() {
       <Card className="workbench-card audit-filter-card">
         <Form<AuditFilterValues> form={form} layout="vertical" initialValues={{ actor_user_id: initialUserId }} onFinish={applyFilters}>
           <div className="audit-filter-grid">
-            <Form.Item name="actor_user_id" label="User ID">
-              <Input allowClear placeholder="user id" />
+            <Form.Item name="actor_user_id" label={t('filterUserId')}>
+              <Input allowClear placeholder={t('placeholderUserId')} />
             </Form.Item>
-            <Form.Item name="actor_email" label="Email">
-              <Input allowClear placeholder="user@example.com" />
+            <Form.Item name="actor_email" label={t('filterEmail')}>
+              <Input allowClear placeholder={t('placeholderEmail')} />
             </Form.Item>
-            <Form.Item name="action" label="Action">
-              <Input allowClear placeholder="auth.login" />
+            <Form.Item name="action" label={t('filterAction')}>
+              <Input allowClear placeholder={t('placeholderAction')} />
             </Form.Item>
-            <Form.Item name="resource_type" label="Resource">
-              <Input allowClear placeholder="knowledge" />
+            <Form.Item name="resource_type" label={t('filterResource')}>
+              <Input allowClear placeholder={t('placeholderResource')} />
             </Form.Item>
-            <Form.Item name="resource_id" label="Resource ID">
-              <Input allowClear placeholder="resource id" />
+            <Form.Item name="resource_id" label={t('filterResourceId')}>
+              <Input allowClear placeholder={t('placeholderResourceId')} />
             </Form.Item>
-            <Form.Item name="status" label="Status">
-              <Select allowClear options={statusOptions} placeholder="status" />
+            <Form.Item name="status" label={t('filterStatus')}>
+              <Select allowClear options={statusOptions} placeholder={t('placeholderStatus')} />
             </Form.Item>
-            <Form.Item name="ip_address" label="IP">
-              <Input allowClear placeholder="10.0.0.8" />
+            <Form.Item name="ip_address" label={t('filterIp')}>
+              <Input allowClear placeholder={t('placeholderIp')} />
             </Form.Item>
-            <Form.Item name="time_range" label="Time range">
+            <Form.Item name="time_range" label={t('filterTimeRange')}>
               <RangePicker showTime className="audit-range-picker" />
             </Form.Item>
           </div>
@@ -171,7 +175,7 @@ export function AuditPage() {
           </Space>
         </Form>
       </Card>
-      <Card className="workbench-card audit-table-card" title="Audit events" extra={<Tag>{logsQuery.data?.meta.total_count ?? 0}</Tag>}>
+      <Card className="workbench-card audit-table-card" title={t('eventsTitle')} extra={<Tag>{logsQuery.data?.meta.total_count ?? 0}</Tag>}>
         <Table<AuditLog>
           rowKey={(row) => String(row.id)}
           size="small"
@@ -185,7 +189,7 @@ export function AuditPage() {
             pageSize: query.limit ?? logsQuery.data?.meta.limit ?? DEFAULT_LIMIT,
             total: logsQuery.data?.meta.total_count ?? 0,
             showSizeChanger: true,
-            showTotal: (total) => `${total} events`,
+            showTotal: (total) => t('eventsTotal', { count: total }),
           }}
           onChange={(pagination) => {
             setQuery((previous) => ({
@@ -208,14 +212,14 @@ export function AuditPage() {
       <Drawer
         open={Boolean(selected)}
         onClose={() => setSelected(null)}
-        title="Audit detail"
+        title={t('detailTitle')}
         size={screens.lg ? 720 : 'calc(100vw - 32px)'}
         destroyOnHidden
       >
         {selected ? (
           <div className="audit-drawer-stack">
-            <Descriptions column={1} size="small" bordered items={detailItems(selected, formatDate)} />
-            <JsonValueCard value={selected.metadata ?? {}} title="Metadata" />
+            <Descriptions column={1} size="small" bordered items={detailItems(selected, formatDate, t)} />
+            <JsonValueCard value={selected.metadata ?? {}} title={t('metadataTitle')} />
           </div>
         ) : null}
       </Drawer>
