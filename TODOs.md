@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Chat 按意图挂载 Local Skills（对齐 Workflow skills[]）
+
+- `infer_chat_skill_names`：闲聊/指令类消息不挂 Skill；CVE / 隔离封禁 / 剧本 / 内网关键词只挂对应 skill；其它安全运营句挂全部已启用 skill。
+- `SecurityRunRequest.skill_names` 写入 runtime metadata，HITL resume 原样恢复；Eval 关闭意图过滤以保持稳定工具面。
+- `_build_enabled_skills` 走 `resolve_enabled_skill_dirs`（enabled ∩ names）；MCP 仍随 `enable_tools` 全量连接。
+- Chat 开关帮助文案与 `security_operations.md` 边界说明同步。
+
 ## 已完成：后端 workflow_ref 自引用拦截 + 表头/画布 i18n 收口
 
 - `validate_and_normalize_definition(..., forbid_self_workflow_id=)`：update / publish / compile 拒绝指向当前工作流的 `workflow_ref`（嵌套深度与 condition 分支均覆盖）。

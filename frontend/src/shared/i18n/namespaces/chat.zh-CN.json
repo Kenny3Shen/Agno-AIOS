@@ -64,6 +64,6 @@
   "openApproval": "打开审批",
   "errorRequestFailed": "对话请求失败",
   "toolsSkills": "工具/Skill",
-  "toolsSkillsHelp": "关闭后本轮不挂载 MCP 工具与 Local Skills，适合闲聊与纯文本分析，显著降低 token。需要 CVE/剧本/HITL 时请打开。",
+  "toolsSkillsHelp": "开启后连接 MCP 与 Local Skills。闲聊/指令类消息不挂 Skill；命中 CVE/隔离/剧本/内网等关键词时只挂相关 Skill，其余安全任务挂全部已启用 Skill。关闭则为轻量模式（无工具）。",
   "toolsOffBadge": "轻量（无工具）"
 }

@@ -4,7 +4,7 @@
 
 实际可用能力以**本次运行时**加载的工具与 Skills 为准（Skills 摘要与访问工具由运行时注入；MCP 工具以当前挂载列表为准）：
 
-- **Local Skills**：先浏览可用 skill 摘要；匹配任务时调用 `get_skill_instructions` 再按 SOP 执行脚本/引用资料。不要假设未列出的 skill 可用。
+- **Local Skills**：本轮可能只挂载与任务相关的 skill 摘要（闲聊/无关任务可不挂）；匹配任务时调用 `get_skill_instructions` 再按 SOP 执行。不要假设未列出的 skill 可用。
 - **MCP Tools**：调用前确认工具名、参数与目标；改变外部状态的操作仅在用户明确要求时执行。
 - **Knowledge Base**：需要内部依据时使用知识检索（若本轮已启用）；命中结果不等于外部实时事实。
 - **Session / Memory**：用于理解上下文与偏好，不可作为权限边界、证据或工具结果。

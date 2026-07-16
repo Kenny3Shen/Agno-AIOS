@@ -1,4 +1,5 @@
 import asyncio
+import re
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from inspect import isawaitable, iscoroutinefunction
@@ -25,7 +26,7 @@ from api.services.knowledge_service import get_async_knowledge_base_async
 from api.services.model_config_service import get_model_for_run
 from api.services.model_factory import build_agno_model
 from api.services.postgres_store import get_async_agno_postgres_db
-from api.services.skill_service import get_enabled_skill_dirs
+from api.services.skill_service import get_enabled_skill_dirs, resolve_enabled_skill_dirs
 from api.services.notification_service import (
     notify_admins_of_hitl_approval,
     notify_hitl_resume_failure,
@@ -75,7 +76,94 @@ SECURITY_OPERATIONS_LITE_PROMPT = "security_operations_lite.md"
 SAFE_FALLBACK_PROMPT = "safe_fallback.md"
 HITL_MCP_TOOL_PREFIX = "hitl_"
 RUNTIME_METADATA_KEY = "tais_runtime"
+
 RUNTIME_METADATA_VERSION = 1
+
+# Chat skill attach: align with Workflow step skills[] (enabled ∩ wanted).
+# None = all enabled; [] = none; non-empty = filter by skill dir/metadata name.
+_TRIVIAL_TURN_RE = re.compile(
+    r"^(?:hi|hello|hey|yo|thanks?|thank\s+you|thx|pong|ping|ok|okay|test|"
+    r"你好|您好|在吗|谢谢|多谢|嗯+|好的|收到|测试)"
+    r"[\s!.。！？~～]*$",
+    re.IGNORECASE,
+)
+_INSTRUCTION_ONLY_RE = re.compile(
+    r"^(?:reply with|say |output |print |respond with|只回复|仅回复|回答)[\s\S]{0,48}$",
+    re.IGNORECASE,
+)
+_CVE_SKILL_RE = re.compile(
+    r"cve-\d{4}-\d+|\bcve\b|漏洞|poc\b|exploit|0-?day|cve情报",
+    re.IGNORECASE,
+)
+_HITL_SKILL_RE = re.compile(
+    r"隔离|封禁|containment|\bisolat(?:e|ion)\b|\bblock(?:ed|ing)?\b|"
+    r"模拟.*(?:隔离|封禁)|(?:隔离|封禁).*模拟",
+    re.IGNORECASE,
+)
+
+_PLAYBOOK_SKILL_RE = re.compile(
+    r"剧本|playbook|自动化.?处置|octomation",
+    re.IGNORECASE,
+)
+_INTRANET_SKILL_RE = re.compile(
+    r"内网|\bndr\b|intranet|doc_id|ndr告警",
+    re.IGNORECASE,
+)
+_SECURITY_SIGNAL_RE = re.compile(
+    r"cve|漏洞|poc|exploit|告警|威胁|研判|隔离|封禁|剧本|playbook|"
+    r"内网|ndr|hitl|mcp|skill|知识库|情报|资产|攻击|malware|ransomware|"
+    r"phishing|siem|soc|incident|ir\b|contain",
+    re.IGNORECASE,
+)
+
+
+def _is_trivial_chat_turn(message: str) -> bool:
+    text = message.strip()
+    if not text:
+        return True
+    if _TRIVIAL_TURN_RE.match(text):
+        return True
+    if _INSTRUCTION_ONLY_RE.match(text):
+        return True
+    if len(text) <= 2 and not any(ch.isdigit() for ch in text):
+        return True
+    return False
+
+
+def infer_chat_skill_names(message: str) -> list[str] | None:
+    """Pick Local Skills for this Chat turn.
+
+    Returns:
+      - ``[]``: attach no skills (trivial / instruction-only / no security signal)
+      - ``[names…]``: enabled ∩ these names
+      - ``None``: keep all enabled skills (general security ops turn)
+    """
+    text = (message or "").strip()
+    if not text or _is_trivial_chat_turn(text):
+        return []
+    matched: list[str] = []
+    if _CVE_SKILL_RE.search(text):
+        matched.append("cve-intel-skill")
+    if _HITL_SKILL_RE.search(text):
+        matched.append("hitl-containment-skill")
+    if _PLAYBOOK_SKILL_RE.search(text):
+        matched.append("playbook-skill")
+    if _INTRANET_SKILL_RE.search(text):
+        matched.append("intranet-ip-skill")
+    if matched:
+        # preserve stable order, unique
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for name in matched:
+            if name not in seen:
+                seen.add(name)
+                ordered.append(name)
+        return ordered
+    if not _SECURITY_SIGNAL_RE.search(text):
+        # General Q&A / non-ops: skip skill schemas (MCP still available when tools on).
+        return []
+    return None
+
 
 
 async def _load_prompt_async(filename: str) -> str:
@@ -183,6 +271,8 @@ class SecurityRunRequest:
     search_knowledge: bool = True
     live_search: bool | None = None
     enable_tools: bool = True
+    # None = all enabled skills; list = enabled ∩ names (Workflow-style).
+    skill_names: list[str] | None = None
 
     @classmethod
     def from_chat_args(
@@ -198,7 +288,13 @@ class SecurityRunRequest:
         search_knowledge: bool = True,
         live_search: bool | None = None,
         enable_tools: bool = True,
+        skill_names: list[str] | None = None,
+        *,
+        infer_skills: bool = True,
     ) -> "SecurityRunRequest":
+        resolved_skills = skill_names
+        if skill_names is None and infer_skills:
+            resolved_skills = infer_chat_skill_names(message)
         return cls(
             message=message,
             session_id=session_id,
@@ -211,6 +307,7 @@ class SecurityRunRequest:
             search_knowledge=search_knowledge,
             live_search=live_search,
             enable_tools=enable_tools,
+            skill_names=resolved_skills,
         )
 
     @property
@@ -228,6 +325,9 @@ class SecurityRunRequest:
             "search_knowledge": self.search_knowledge,
             "live_search": self.live_search,
             "enable_tools": self.enable_tools,
+            "skill_names": list(self.skill_names)
+            if self.skill_names is not None
+            else None,
         }
 
     @classmethod
@@ -251,6 +351,14 @@ class SecurityRunRequest:
             live_search = None
         else:
             live_search = bool(live_raw)
+        raw_skills = context.get("skill_names")
+        skill_names: list[str] | None
+        if raw_skills is None:
+            skill_names = None
+        elif isinstance(raw_skills, list):
+            skill_names = [str(item).strip() for item in raw_skills if str(item).strip()]
+        else:
+            skill_names = None
         return cls.from_chat_args(
             "Continue the approved security operation.",
             session_id=session_id,
@@ -263,6 +371,8 @@ class SecurityRunRequest:
             search_knowledge=bool(context.get("search_knowledge", True)),
             live_search=live_search,
             enable_tools=bool(context.get("enable_tools", True)),
+            skill_names=skill_names,
+            infer_skills=False,
         )
 
 
@@ -272,6 +382,7 @@ class SecurityRunRuntimeDependencies:
     get_db: Callable[[], Any] = get_async_agno_postgres_db
     get_async_knowledge_base: Callable[[], Any] = get_async_knowledge_base_async
     get_enabled_skill_dirs: Callable[[], Any] = get_enabled_skill_dirs
+    resolve_enabled_skill_dirs: Callable[..., Any] = resolve_enabled_skill_dirs
     get_mcp_url: Callable[[], str] = _build_mcp_url
     get_mcp_token: Callable[[], str] = _build_mcp_token
     mcp_tools_factory: Callable[..., Any] = MCPTools
@@ -588,13 +699,27 @@ class SecurityRunRuntime:
             live_search,
         )
 
-    async def _build_enabled_skills(self) -> Skills | None:
-        enabled_dirs = [
-            str(skill_dir)
-            for skill_dir in await _run_sync_dependency(
+    async def _build_enabled_skills(
+        self,
+        skill_names: list[str] | None = None,
+    ) -> Skills | None:
+        """Load Local Skills.
+
+        ``skill_names`` mirrors Workflow step binding:
+        None → all enabled; [] → none; list → enabled ∩ names.
+        """
+        if skill_names is not None and not skill_names:
+            return None
+        if skill_names is None:
+            dirs_raw = await _run_sync_dependency(
                 self.dependencies.get_enabled_skill_dirs
             )
-        ]
+        else:
+            dirs_raw = await _run_sync_dependency(
+                self.dependencies.resolve_enabled_skill_dirs,
+                skill_names,
+            )
+        enabled_dirs = [str(skill_dir) for skill_dir in dirs_raw]
         if not enabled_dirs:
             return None
         return await to_thread.run_sync(_load_local_skills, enabled_dirs)
@@ -915,7 +1040,11 @@ class SecurityRunRuntime:
             SECURITY_OPERATIONS_PROMPT if enable_tools else SECURITY_OPERATIONS_LITE_PROMPT
         )
         tools = [mcp_tools] if enable_tools and mcp_tools is not None else []
-        skills = await self._build_enabled_skills() if enable_tools else None
+        skills = (
+            await self._build_enabled_skills(request.skill_names)
+            if enable_tools
+            else None
+        )
         # Lean mode: shorter history, no session-summary manager (extra model work).
         history_runs = 5 if enable_tools else 2
         session_summaries = enable_tools

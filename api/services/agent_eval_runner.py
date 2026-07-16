@@ -94,6 +94,8 @@ async def run_case(
             str(case.get("input", "")),
             session_id=session_id,
             user_id=actor_id(actor),
+            # Evals need a stable tool surface; do not intent-filter skills.
+            infer_skills=False,
         )
         async with deps.security_runtime.security_agent_context(request) as agent:
             if "accuracy" in enabled_eval_types:

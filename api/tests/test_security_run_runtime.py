@@ -548,6 +548,7 @@ async def test_stream_agent_events_persists_and_projects_required_approval_pause
             "search_knowledge": True,
             "live_search": None,
             "enable_tools": True,
+            "skill_names": ["hitl-containment-skill"],
         }
     }
     notify.assert_awaited_once_with(
@@ -748,6 +749,7 @@ def test_security_run_request_round_trips_versioned_run_metadata():
     assert restored.store_raw_tool_io is True
     assert restored.enable_tools is False
     assert restored.search_knowledge is False
+    assert restored.skill_names == original.skill_names
 
     with pytest.raises(ValueError, match="version is unsupported"):
         security_run_runtime.SecurityRunRequest.from_run_metadata(
@@ -1204,3 +1206,148 @@ async def test_enable_tools_true_connects_mcp():
                 pass
 
     assert mcp_entered["value"] is True
+
+
+
+def test_infer_chat_skill_names_trivial_and_targeted():
+    assert security_run_runtime.infer_chat_skill_names("ping") == []
+    assert security_run_runtime.infer_chat_skill_names("Reply with exactly: pong") == []
+    assert security_run_runtime.infer_chat_skill_names("hello") == []
+    assert security_run_runtime.infer_chat_skill_names("CVE-2024-1234 风险如何") == [
+        "cve-intel-skill"
+    ]
+    assert security_run_runtime.infer_chat_skill_names(
+        "对主机 10.0.0.1 模拟隔离"
+    ) == ["hitl-containment-skill"]
+    assert security_run_runtime.infer_chat_skill_names("执行安全剧本排查") == [
+        "playbook-skill"
+    ]
+    assert security_run_runtime.infer_chat_skill_names("查一下内网 NDR 告警") == [
+        "intranet-ip-skill"
+    ]
+    # multi-match
+    skills = security_run_runtime.infer_chat_skill_names(
+        "CVE-2024-1 并用剧本处置"
+    )
+    assert skills == ["cve-intel-skill", "playbook-skill"]
+    # general security ops → all enabled (None)
+    assert security_run_runtime.infer_chat_skill_names("帮我做一次威胁研判") is None
+    # non-security prose → no skills
+    assert security_run_runtime.infer_chat_skill_names("用 Markdown 写一首短诗") == []
+
+
+def test_from_chat_args_infers_and_preserves_skill_names():
+    inferred = security_run_runtime.SecurityRunRequest.from_chat_args(
+        "CVE-2024-9999 分析"
+    )
+    assert inferred.skill_names == ["cve-intel-skill"]
+    assert inferred.runtime_metadata()["skill_names"] == ["cve-intel-skill"]
+
+    explicit = security_run_runtime.SecurityRunRequest.from_chat_args(
+        "CVE-2024-9999 分析",
+        skill_names=["playbook-skill"],
+    )
+    assert explicit.skill_names == ["playbook-skill"]
+
+    no_infer = security_run_runtime.SecurityRunRequest.from_chat_args(
+        "CVE-2024-9999 分析",
+        skill_names=None,
+        infer_skills=False,
+    )
+    assert no_infer.skill_names is None
+
+
+@pytest.mark.asyncio
+async def test_build_security_agent_filters_skills_by_inference():
+    created: dict = {}
+    skill_dirs = [
+        Path("/skills/cve-intel-skill"),
+        Path("/skills/playbook-skill"),
+        Path("/skills/hitl-containment-skill"),
+    ]
+
+    def agent_factory(**kwargs):
+        created.update(kwargs)
+        return SimpleNamespace()
+
+    def resolve(names=None):
+        if names is None:
+            return skill_dirs
+        wanted = set(names)
+        return [p for p in skill_dirs if p.name in wanted]
+
+    with TemporaryDirectory() as temp_dir:
+        prompt_dir = Path(temp_dir)
+        (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_PROMPT).write_text(
+            "full", encoding="utf-8"
+        )
+        (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_LITE_PROMPT).write_text(
+            "lite", encoding="utf-8"
+        )
+        runtime = security_run_runtime.SecurityRunRuntime(
+            security_run_runtime.SecurityRunRuntimeDependencies(
+                build_model=lambda *_a, **_k: object(),
+                get_db=lambda: object(),
+                get_async_knowledge_base=lambda: object(),
+                get_enabled_skill_dirs=lambda: skill_dirs,
+                resolve_enabled_skill_dirs=resolve,
+                get_mcp_url=lambda: "http://example/mcp",
+                get_mcp_token=lambda: "tok",
+                mcp_tools_factory=lambda **_k: SimpleNamespace(),
+                agent_factory=agent_factory,
+            )
+        )
+        request = security_run_runtime.SecurityRunRequest.from_chat_args(
+            "分析 CVE-2024-1234",
+            enable_tools=True,
+            search_knowledge=False,
+        )
+        with (
+            patch.object(security_run_runtime, "PROMPT_DIR", prompt_dir),
+            patch.object(
+                security_run_runtime,
+                "_load_local_skills",
+                side_effect=lambda dirs: ("skills", list(dirs)),
+            ),
+        ):
+            agent = await runtime._build_security_agent(None, request)
+
+    assert request.skill_names == ["cve-intel-skill"]
+    assert created["skills"] == ("skills", ["/skills/cve-intel-skill"])
+
+
+@pytest.mark.asyncio
+async def test_build_security_agent_skips_skills_on_trivial_turn():
+    created: dict = {}
+
+    def agent_factory(**kwargs):
+        created.update(kwargs)
+        return SimpleNamespace()
+
+    with TemporaryDirectory() as temp_dir:
+        prompt_dir = Path(temp_dir)
+        (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_PROMPT).write_text(
+            "full", encoding="utf-8"
+        )
+        runtime = security_run_runtime.SecurityRunRuntime(
+            security_run_runtime.SecurityRunRuntimeDependencies(
+                build_model=lambda *_a, **_k: object(),
+                get_db=lambda: object(),
+                get_async_knowledge_base=lambda: object(),
+                get_enabled_skill_dirs=lambda: [Path("/skills/cve-intel-skill")],
+                get_mcp_url=lambda: "http://example/mcp",
+                get_mcp_token=lambda: "tok",
+                mcp_tools_factory=lambda **_k: SimpleNamespace(),
+                agent_factory=agent_factory,
+            )
+        )
+        request = security_run_runtime.SecurityRunRequest.from_chat_args(
+            "ping",
+            enable_tools=True,
+            search_knowledge=False,
+        )
+        with patch.object(security_run_runtime, "PROMPT_DIR", prompt_dir):
+            await runtime._build_security_agent(None, request)
+
+    assert request.skill_names == []
+    assert created["skills"] is None
