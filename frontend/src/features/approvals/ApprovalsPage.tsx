@@ -486,7 +486,7 @@ export function ApprovalsPage() {
             type="info"
             showIcon
             style={{ marginBottom: 12 }}
-            message={t('workflowOnCallHint')}
+            title={t('workflowOnCallHint')}
           />
         ) : null}
         <Table<Approval>

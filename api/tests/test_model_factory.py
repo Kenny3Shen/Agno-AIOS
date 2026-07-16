@@ -238,6 +238,19 @@ def test_default_retries_when_config_omits_retry_fields():
     assert getattr(model, "max_retries", None) is None
 
 
+def test_invalid_retry_fields_fall_back_without_max_retries():
+    model = build_agno_model(
+        config(
+            retries="nope",
+            delay_between_retries="slow",
+            http_max_retries="many",
+        )
+    )
+    assert model.retries == 4
+    assert model.delay_between_retries == 1
+    assert getattr(model, "max_retries", None) is None
+
+
 def test_xai_provider_uses_official_agno_class():
     from agno.models.xai import xAI
 

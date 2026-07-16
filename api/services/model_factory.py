@@ -6,6 +6,7 @@ from agno.models.base import Model
 from agno.models.deepseek import DeepSeek
 from agno.models.openai import OpenAIChat, OpenAILike, OpenAIResponses
 from agno.models.xai import xAI
+from loguru import logger
 
 from api.services.model_capabilities import resolve_reasoning_effort
 
@@ -21,11 +22,13 @@ def _retry_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     try:
         retries_i = max(0, min(10, int(retries)))
     except (TypeError, ValueError):
+        logger.debug("invalid model retries={!r}; using default 4", retries)
         retries_i = 4
     delay = config.get("delay_between_retries", 1)
     try:
         delay_i = max(0, min(60, int(delay)))
     except (TypeError, ValueError):
+        logger.debug("invalid model delay_between_retries={!r}; using default 1", delay)
         delay_i = 1
     backoff = config.get("exponential_backoff", True)
     if not isinstance(backoff, bool):
@@ -40,7 +43,10 @@ def _retry_kwargs(config: dict[str, Any]) -> dict[str, Any]:
         try:
             params["max_retries"] = max(0, min(10, int(http_max)))
         except (TypeError, ValueError):
-            pass
+            logger.warning(
+                "invalid model http_max_retries={!r}; omitting OpenAI max_retries",
+                http_max,
+            )
     return params
 
 

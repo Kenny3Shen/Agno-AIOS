@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：model_factory 重试字段可观测 + Approvals on-call smoke
+
+- `_retry_kwargs`：非法 `retries` / `delay_between_retries` 打 debug 并回退默认；非法 `http_max_retries` 打 warning 且不设置 `max_retries`（不再静默 `pass`）。
+- Approvals 值班提示 `Alert`：`message` → antd 6 `title`。
+- `frontend/e2e/approvals.smoke.spec.ts`：默认 pending + workflow HITL 列表；`approval_id` 深链打开 Drawer 与 `tool_args.message`。
+
 ## 已完成：Workflow 深链 deps + Knowledge 进度 smoke
 
 - `useWorkflow.load` 改为 `useCallback`；Studio 深链 `workflow_id` effect 去掉 `eslint-disable`。
@@ -1284,7 +1290,7 @@ P0.4 审批值班薄入口        ✅
 
 ## P1：建立关键流程 E2E
 
-已落地 shell / Trace / Knowledge 进度 Playwright smoke（`frontend/e2e/*.smoke.spec.ts`）。
+已落地 shell / Trace / Knowledge / Approvals on-call Playwright smoke（`frontend/e2e/*.smoke.spec.ts`）。
 
 建议首先覆盖：
 
