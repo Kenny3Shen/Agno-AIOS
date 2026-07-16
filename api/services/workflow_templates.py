@@ -1,4 +1,4 @@
-"""Built-in security workflow templates for Studio (PR9)."""
+"""Built-in security workflow templates for Studio."""
 
 from __future__ import annotations
 

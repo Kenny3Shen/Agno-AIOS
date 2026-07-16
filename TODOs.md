@@ -590,6 +590,15 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：生产路径 type-ignore 清理
+
+- `security_run_runtime` 流式重试 patch 改用 `setattr`，去掉 `# type: ignore[method-assign]`。
+- `workflow_run_runtime` 对 `workflow.arun(stream=True)` 统一 `isawaitable` + `cast(AsyncIterator)`，去掉 `# type: ignore[union-attr]`。
+- 生产 `api/` 包内不再有 `# type: ignore`（测试仍可用 method-assign mock）。
+- 顺手去掉 workflow 相关模块 docstring 中的内部 PR 编号噪音。
+
+相关：`api/services/security_run_runtime.py` / `workflow_run_runtime.py` / workflow 模块 docstring
+
 ## 已完成：技术债收紧（Memory / Overview / 兼容）
 
 - Memory 列表 `get_user_memory_stats` 按当前 user 作用域查询（`limit=1`），避免普通用户/单用户筛选触发 500 用户 stats 扫

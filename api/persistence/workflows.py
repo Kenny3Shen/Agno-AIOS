@@ -71,7 +71,7 @@ async def _create_workflows_table_async() -> None:
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(CreateSchema(_schema(), if_not_exists=True))
         await conn.run_sync(table.create, checkfirst=True)
-    # Best-effort schema evolution for PR4 triggers JSONB.
+    # Best-effort schema evolution for triggers JSONB.
     schema = _schema()
     ddl = (
         f'ALTER TABLE "{schema}"."{WORKFLOWS_TABLE}" '

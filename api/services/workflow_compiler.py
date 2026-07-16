@@ -1,6 +1,6 @@
 """Compile workbench workflow definitions into Agno Workflow instances.
 
-PR4: step | parallel | condition | loop | router | workflow_ref
+Supported steps: step | parallel | condition | loop | router | workflow_ref
 + step HITL (confirmation / user_input / output_review).
 """
 
@@ -122,7 +122,7 @@ def _assert_valid_cel(expression: str, path: str) -> None:
 
 
 def _reject_advanced_hitl_flags(item: dict[str, Any], path: str) -> None:
-    """PR4: step HITL fields are handled on steps; block opaque human_review blobs."""
+    """Step HITL fields are handled on steps; block opaque human_review blobs."""
     if item.get("human_review"):
         raise WorkflowDefinitionError(
             f"{path}.human_review blob is not supported; use requires_confirmation / "
@@ -509,7 +509,7 @@ def _normalize_loop(
 
 
 def validate_and_normalize_definition(raw: object) -> dict[str, Any]:
-    """Validate PR2 nested DSL and return a normalized definition dict."""
+    """Validate nested workflow DSL and return a normalized definition dict."""
     if not isinstance(raw, dict):
         raise WorkflowDefinitionError("definition must be an object")
     name = str(raw.get("name") or "").strip() or "Untitled workflow"

@@ -1,4 +1,4 @@
-"""Cron trigger ticker for published workflows (PR7 / PR8c)."""
+"""Cron trigger ticker for published workflows."""
 
 from __future__ import annotations
 

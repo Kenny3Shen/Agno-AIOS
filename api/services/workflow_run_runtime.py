@@ -1,11 +1,12 @@
-"""Stream Agno Workflow runs as workbench SSE events (PR3 HITL + control flow)."""
+"""Stream Agno Workflow runs as workbench SSE events (HITL + control flow)."""
 
 from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from inspect import isawaitable
 from types import SimpleNamespace
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, cast
 from uuid import uuid4
 
 from agno.run.workflow import WorkflowRunEvent
@@ -380,7 +381,7 @@ async def stream_workflow_run(
     )
 
     try:
-        stream = workflow.arun(
+        stream_result = workflow.arun(
             input=input_text,
             user_id=user_id,
             session_id=active_session_id,
@@ -388,7 +389,12 @@ async def stream_workflow_run(
             stream=True,
             stream_events=True,
         )
-        async for event in stream:  # type: ignore[union-attr]
+        # Agno Workflow.arun is overloaded: stream=True -> AsyncIterator; the
+        # untyped implementation still types as a union, so normalize here.
+        if isawaitable(stream_result):
+            stream_result = await stream_result
+        stream = cast(AsyncIterator[Any], stream_result)
+        async for event in stream:
             event_name = str(event_value(event, "event", "") or "")
             run_id_value = str(event_value(event, "run_id", active_run_id) or active_run_id)
             session_value = str(

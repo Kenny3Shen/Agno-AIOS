@@ -334,10 +334,10 @@ def _install_stream_retry_notifier(model: Any, queue: asyncio.Queue[dict[str, An
         raise RuntimeError("Model stream retry exhausted without an exception")
 
     bound = _ainvoke_stream_with_retry_notifying.__get__(model, type(model))
-    model._ainvoke_stream_with_retry = bound  # type: ignore[method-assign]
+    setattr(model, "_ainvoke_stream_with_retry", bound)
 
     def restore() -> None:
-        model._ainvoke_stream_with_retry = original  # type: ignore[method-assign]
+        setattr(model, "_ainvoke_stream_with_retry", original)
 
     return restore
 

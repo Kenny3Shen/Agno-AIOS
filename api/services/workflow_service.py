@@ -1,4 +1,4 @@
-"""CRUD + projection for workbench workflow definitions (PR4 versions/triggers)."""
+"""CRUD + projection for workbench workflow definitions (versions/triggers)."""
 
 from __future__ import annotations
 

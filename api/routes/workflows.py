@@ -62,7 +62,7 @@ async def list_executors(user: User = Depends(require_scope("workflows:read"))):
 
 @router.get("/templates")
 async def list_templates(user: User = Depends(require_scope("workflows:read"))):
-    """Built-in security workflow templates (PR9)."""
+    """Built-in security workflow templates."""
     return {"data": list_workflow_templates()}
 
 
