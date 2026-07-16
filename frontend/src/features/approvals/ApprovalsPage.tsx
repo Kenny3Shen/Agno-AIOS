@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Card, Collapse, Descriptions, Drawer, Input, Modal, Segmented, Select, Space, Table, Tag, Typography, type DescriptionsProps, type TableProps } from 'antd'
+import { Alert, App, Button, Card, Collapse, Descriptions, Drawer, Input, InputNumber, Modal, Segmented, Select, Space, Switch, Table, Tag, Typography, type DescriptionsProps, type TableProps } from 'antd'
 import { CheckOutlined, CloseOutlined } from '@ant-design/icons'
 import { Markdown } from '@/shared/ui/Markdown'
 import { currentUserQuery } from '@/features/auth'
@@ -20,6 +20,13 @@ import {
   type Approval,
   type ApprovalKind,
 } from './api'
+import {
+  buildUserInputPayload,
+  isUserInputFieldFilled,
+  normalizeFieldType,
+  parseUserInputSchema as parseSchemaRaw,
+  seedUserInputValues,
+} from './userInput'
 import { compactId, compareTimestamp, useFormatDate } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/shared/i18n'
@@ -52,32 +59,6 @@ const workflowPrompt = (approval: Approval): string => {
 }
 
 
-type UserInputField = {
-  name: string
-  field_type?: string
-  description?: string
-  required?: boolean
-}
-
-const parseUserInputSchema = (approval: Approval): UserInputField[] => {
-  const raw = approval.tool_args?.user_input_schema
-  if (!Array.isArray(raw)) return []
-  return raw.flatMap((item) => {
-    if (!item || typeof item !== 'object') return []
-    const row = item as Record<string, unknown>
-    const name = String(row.name ?? row.key ?? '').trim()
-    if (!name) return []
-    return [
-      {
-        name,
-        field_type: row.field_type != null ? String(row.field_type) : row.type != null ? String(row.type) : 'str',
-        description: row.description != null ? String(row.description) : '',
-        required: Boolean(row.required ?? true),
-      },
-    ]
-  })
-}
-
 const workflowOutputSeed = (approval: Approval): string => {
   const args = approval.tool_args
   if (!args) return ''
@@ -87,6 +68,9 @@ const workflowOutputSeed = (approval: Approval): string => {
   }
   return ''
 }
+
+const parseUserInputSchema = (approval: Approval) => parseSchemaRaw(approval.tool_args?.user_input_schema)
+
 
 
 const approvalType = (approval: Approval) => {
@@ -420,9 +404,7 @@ export function ApprovalsPage() {
               if (pause === 'user_input' || pause === 'output_review') {
                 setUserInputText('')
                 const schema = parseUserInputSchema(selected)
-                const seed: Record<string, string> = {}
-                for (const field of schema) seed[field.name] = ''
-                setUserInputValues(seed)
+                setUserInputValues(seedUserInputValues(schema))
                 setEditedOutput(workflowOutputSeed(selected))
                 setApproveOpen(true)
                 return
@@ -665,13 +647,15 @@ export function ApprovalsPage() {
             const schema = parseUserInputSchema(selected)
             if (!schema.length) return !userInputText.trim()
             return schema.some(
-              (field) => field.required !== false && !(userInputValues[field.name] ?? '').trim()
+              (field) =>
+                field.required !== false && !isUserInputFieldFilled(field, userInputValues[field.name]),
             )
           })(),
         }}
         onCancel={() => {
           setApproveOpen(false)
           setUserInputText('')
+          setUserInputValues({})
           setEditedOutput('')
         }}
         onOk={() => {
@@ -679,11 +663,7 @@ export function ApprovalsPage() {
           const pause = workflowPauseType(selected)
           if (pause === 'user_input') {
             const schema = parseUserInputSchema(selected)
-            const user_input = schema.length
-              ? Object.fromEntries(
-                  schema.map((field) => [field.name, (userInputValues[field.name] ?? '').trim()])
-                )
-              : { response: userInputText.trim() }
+            const user_input = buildUserInputPayload(schema, userInputValues, userInputText)
             resolve.mutate({
               approval: selected,
               decision: 'approved',
@@ -721,17 +701,63 @@ export function ApprovalsPage() {
                           {field.description}
                         </Typography.Paragraph>
                       ) : null}
-                      <Input.TextArea
-                        rows={field.field_type === 'str' || !field.field_type ? 3 : 2}
-                        value={userInputValues[field.name] ?? ''}
-                        onChange={(event) =>
-                          setUserInputValues((current) => ({
-                            ...current,
-                            [field.name]: event.target.value,
-                          }))
-                        }
-                        placeholder={field.description || field.name}
-                      />
+                      {normalizeFieldType(field.field_type) === 'bool' ? (
+                        <div>
+                          <Switch
+                            checked={(userInputValues[field.name] ?? 'false') === 'true'}
+                            onChange={(checked) =>
+                              setUserInputValues((current) => ({
+                                ...current,
+                                [field.name]: checked ? 'true' : 'false',
+                              }))
+                            }
+                          />
+                          <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
+                            {(userInputValues[field.name] ?? 'false') === 'true'
+                              ? t('fieldYes')
+                              : t('fieldNo')}
+                          </Typography.Text>
+                        </div>
+                      ) : normalizeFieldType(field.field_type) === 'number' ? (
+                        <InputNumber
+                          style={{ width: '100%' }}
+                          value={
+                            userInputValues[field.name] === '' || userInputValues[field.name] == null
+                              ? null
+                              : Number(userInputValues[field.name])
+                          }
+                          onChange={(value) =>
+                            setUserInputValues((current) => ({
+                              ...current,
+                              [field.name]: value == null || Number.isNaN(Number(value)) ? '' : String(value),
+                            }))
+                          }
+                          placeholder={field.description || field.name}
+                        />
+                      ) : normalizeFieldType(field.field_type) === 'text' ? (
+                        <Input.TextArea
+                          rows={4}
+                          value={userInputValues[field.name] ?? ''}
+                          onChange={(event) =>
+                            setUserInputValues((current) => ({
+                              ...current,
+                              [field.name]: event.target.value,
+                            }))
+                          }
+                          placeholder={field.description || field.name}
+                        />
+                      ) : (
+                        <Input
+                          value={userInputValues[field.name] ?? ''}
+                          onChange={(event) =>
+                            setUserInputValues((current) => ({
+                              ...current,
+                              [field.name]: event.target.value,
+                            }))
+                          }
+                          placeholder={field.description || field.name}
+                        />
+                      )}
                     </div>
                   ))}
                 </Space>
@@ -744,12 +770,19 @@ export function ApprovalsPage() {
                 />
               )
             ) : (
-              <Input.TextArea
-                rows={8}
-                value={editedOutput}
-                onChange={(event) => setEditedOutput(event.target.value)}
-                placeholder={t('editedOutputPlaceholder')}
-              />
+              <Space orientation="vertical" style={{ width: '100%' }} size={8}>
+                <Input.TextArea
+                  rows={8}
+                  value={editedOutput}
+                  onChange={(event) => setEditedOutput(event.target.value)}
+                  placeholder={t('editedOutputPlaceholder')}
+                />
+                {editedOutput.trim() ? (
+                  <Card size="small" title={t('outputPreview')}>
+                    <Markdown content={editedOutput} openLinksInNewTab escapeRawHtml />
+                  </Card>
+                ) : null}
+              </Space>
             )}
           </>
         ) : null}

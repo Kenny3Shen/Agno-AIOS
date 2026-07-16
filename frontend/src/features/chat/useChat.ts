@@ -206,9 +206,30 @@ export function useChat() {
     }
   }
   const setReasoningEffort = (value: ReasoningEffort | null) => dispatch({ type: 'reasoning-effort', value })
-  const setSearchKnowledge = (value: boolean) => dispatch({ type: 'search-knowledge', value })
-  const setEnableTools = (value: boolean) => dispatch({ type: 'enable-tools', value })
-  const setLiveSearch = (value: boolean) => dispatch({ type: 'live-search', value })
+  const setSearchKnowledge = (value: boolean) => {
+    try {
+      localStorage.setItem('agno-aios-chat-search-knowledge', String(value))
+    } catch {
+      // ignore
+    }
+    dispatch({ type: 'search-knowledge', value })
+  }
+  const setEnableTools = (value: boolean) => {
+    try {
+      localStorage.setItem('agno-aios-chat-enable-tools', String(value))
+    } catch {
+      // ignore
+    }
+    dispatch({ type: 'enable-tools', value })
+  }
+  const setLiveSearch = (value: boolean) => {
+    try {
+      localStorage.setItem('agno-aios-chat-live-search', String(value))
+    } catch {
+      // ignore
+    }
+    dispatch({ type: 'live-search', value })
+  }
   const newChat = () => {
     dispatch({ type: 'reasoning-effort', value: defaultReasoningEffort(selectedModel) })
     setSessionSearch('')

@@ -908,44 +908,184 @@ export function WorkflowPage() {
                           placeholder={t('userInputMessagePlaceholder')}
                           rows={2}
                         />
-                        <Input.TextArea
-                          style={{ marginTop: 8 }}
-                          value={JSON.stringify(
-                            step.userInputSchema ?? [
-                              {
-                                name: 'response',
-                                field_type: 'str',
-                                description: 'User response',
-                                required: true,
-                              },
-                            ],
-                            null,
-                            2
-                          )}
-                          onChange={(e) => {
-                            try {
-                              const parsed = JSON.parse(e.target.value) as unknown
-                              if (Array.isArray(parsed)) {
+                        <div className="workflow-inspector__schema" style={{ marginTop: 8 }}>
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            {t('userInputSchemaLabel')}
+                          </Typography.Text>
+                          <Space orientation="vertical" style={{ width: '100%', marginTop: 6 }} size={8}>
+                            {(
+                              step.userInputSchema ?? [
+                                {
+                                  name: 'response',
+                                  field_type: 'str',
+                                  description: '',
+                                  required: true,
+                                },
+                              ]
+                            ).map((field, index) => (
+                              <div
+                                key={`schema-${index}`}
+                                style={{
+                                  border: '1px solid var(--ant-color-border-secondary, #f0f0f0)',
+                                  borderRadius: 8,
+                                  padding: 8,
+                                }}
+                              >
+                                <Space wrap style={{ width: '100%' }} size={6}>
+                                  <Input
+                                    style={{ width: 120 }}
+                                    value={field.name}
+                                    placeholder={t('userInputFieldName')}
+                                    onChange={(e) => {
+                                      const next = [
+                                        ...(step.userInputSchema ?? [
+                                          {
+                                            name: 'response',
+                                            field_type: 'str',
+                                            description: '',
+                                            required: true,
+                                          },
+                                        ]),
+                                      ]
+                                      next[index] = { ...next[index], name: e.target.value }
+                                      workflow.update({ ...step, userInputSchema: next })
+                                    }}
+                                  />
+                                  <Select
+                                    style={{ width: 110 }}
+                                    value={field.field_type || 'str'}
+                                    options={[
+                                      { value: 'str', label: t('fieldTypeStr') },
+                                      { value: 'text', label: t('fieldTypeText') },
+                                      { value: 'number', label: t('fieldTypeNumber') },
+                                      { value: 'bool', label: t('fieldTypeBool') },
+                                    ]}
+                                    onChange={(value) => {
+                                      const base =
+                                        step.userInputSchema ??
+                                        [
+                                          {
+                                            name: 'response',
+                                            field_type: 'str',
+                                            description: '',
+                                            required: true,
+                                          },
+                                        ]
+                                      const next = base.map((item, i) =>
+                                        i === index ? { ...item, field_type: value } : item,
+                                      )
+                                      workflow.update({ ...step, userInputSchema: next })
+                                    }}
+                                  />
+                                  <Switch
+                                    size="small"
+                                    checked={field.required !== false}
+                                    onChange={(checked) => {
+                                      const base =
+                                        step.userInputSchema ??
+                                        [
+                                          {
+                                            name: 'response',
+                                            field_type: 'str',
+                                            description: '',
+                                            required: true,
+                                          },
+                                        ]
+                                      const next = base.map((item, i) =>
+                                        i === index ? { ...item, required: checked } : item,
+                                      )
+                                      workflow.update({ ...step, userInputSchema: next })
+                                    }}
+                                  />
+                                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                                    {t('userInputFieldRequired')}
+                                  </Typography.Text>
+                                  <Button
+                                    type="text"
+                                    danger
+                                    size="small"
+                                    disabled={
+                                      (step.userInputSchema ?? [{ name: 'response' }]).length <= 1
+                                    }
+                                    onClick={() => {
+                                      const base =
+                                        step.userInputSchema ??
+                                        [
+                                          {
+                                            name: 'response',
+                                            field_type: 'str',
+                                            description: '',
+                                            required: true,
+                                          },
+                                        ]
+                                      workflow.update({
+                                        ...step,
+                                        userInputSchema: base.filter((_, i) => i !== index),
+                                      })
+                                    }}
+                                  >
+                                    {t('userInputFieldRemove')}
+                                  </Button>
+                                </Space>
+                                <Input
+                                  style={{ marginTop: 6 }}
+                                  value={field.description || ''}
+                                  placeholder={t('userInputFieldDescription')}
+                                  onChange={(e) => {
+                                    const base =
+                                      step.userInputSchema ??
+                                      [
+                                        {
+                                          name: 'response',
+                                          field_type: 'str',
+                                          description: '',
+                                          required: true,
+                                        },
+                                      ]
+                                    const next = base.map((item, i) =>
+                                      i === index ? { ...item, description: e.target.value } : item,
+                                    )
+                                    workflow.update({ ...step, userInputSchema: next })
+                                  }}
+                                />
+                              </div>
+                            ))}
+                            <Button
+                              size="small"
+                              type="dashed"
+                              block
+                              onClick={() => {
+                                const base =
+                                  step.userInputSchema ??
+                                  [
+                                    {
+                                      name: 'response',
+                                      field_type: 'str',
+                                      description: '',
+                                      required: true,
+                                    },
+                                  ]
                                 workflow.update({
                                   ...step,
-                                  userInputSchema: parsed as Array<{
-                                    name: string
-                                    field_type?: string
-                                    description?: string
-                                    required?: boolean
-                                  }>,
+                                  userInputSchema: [
+                                    ...base,
+                                    {
+                                      name: `field_${base.length + 1}`,
+                                      field_type: 'str',
+                                      description: '',
+                                      required: true,
+                                    },
+                                  ],
                                 })
-                              }
-                            } catch {
-                              // ignore partial JSON while typing
-                            }
-                          }}
-                          placeholder={t('userInputSchemaPlaceholder')}
-                          rows={5}
-                        />
-                        <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                          {t('userInputSchemaHint')}
-                        </Typography.Text>
+                              }}
+                            >
+                              {t('userInputFieldAdd')}
+                            </Button>
+                          </Space>
+                          <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 6 }}>
+                            {t('userInputSchemaHint')}
+                          </Typography.Text>
+                        </div>
                       </>
                     ) : null}
                     <div className="workflow-inspector__switch">

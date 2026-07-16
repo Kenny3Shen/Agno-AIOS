@@ -381,3 +381,46 @@ def test_collect_workflow_skill_names_nested():
     )
     assert names == ["a", "b", "c"]
 
+
+
+def test_user_input_schema_normalized():
+    normalized = validate_and_normalize_definition(
+        {
+            "steps": [
+                {
+                    "id": "u",
+                    "type": "step",
+                    "executor": {"ref": "security-operations"},
+                    "requires_user_input": True,
+                    "user_input_schema": [
+                        {"name": "severity", "type": "integer", "description": "1-5"},
+                        {"key": "ack", "field_type": "boolean", "required": False},
+                    ],
+                }
+            ]
+        }
+    )
+    assert normalized["steps"][0]["user_input_schema"] == [
+        {"name": "severity", "field_type": "number", "required": True, "description": "1-5"},
+        {"name": "ack", "field_type": "bool", "required": False},
+    ]
+
+
+def test_user_input_schema_rejects_duplicate_names():
+    with pytest.raises(WorkflowDefinitionError, match="duplicate field name"):
+        validate_and_normalize_definition(
+            {
+                "steps": [
+                    {
+                        "id": "u",
+                        "type": "step",
+                        "executor": {"ref": "security-operations"},
+                        "requires_user_input": True,
+                        "user_input_schema": [
+                            {"name": "x", "field_type": "str"},
+                            {"name": "x", "field_type": "str"},
+                        ],
+                    }
+                ]
+            }
+        )

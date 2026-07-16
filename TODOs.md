@@ -1,5 +1,13 @@
 # 下一步工作
 
+## 已完成：Approvals HITL 表单类型化 + Studio schema 编辑器 + Chat 开关持久化
+
+- Approvals `user_input`：按 `field_type`（str/text/number/bool）渲染 Input / TextArea / InputNumber / Switch；提交时 coerce 为 bool/number；取消时清空表单状态。
+- `output_review`：编辑区下方 Markdown 预览。
+- Studio：用户输入字段由 JSON 文本改为结构化编辑（增删字段、类型、必填、说明）。
+- 后端 `user_input_schema` 校验归一化（type 别名、重名拒绝）。
+- Chat：`enable_tools` / `search_knowledge` / `live_search` 写入 localStorage，刷新保留偏好。
+
 ## 已完成：Chat 工具/Skill 开关 + Workflow 校验 i18n
 
 - Chat 请求新增 `enable_tools`（默认 true）；关闭时跳过 MCP 连接与 Local Skills，改用 `security_operations_lite.md`。

@@ -74,5 +74,8 @@
   "viewMarkdown": "Markdown",
   "statusPending": "Pending",
   "statusApproved": "Approved",
-  "statusRejected": "Rejected"
+  "statusRejected": "Rejected",
+  "outputPreview": "Output preview",
+  "fieldYes": "Yes",
+  "fieldNo": "No"
 }

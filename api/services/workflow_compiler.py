@@ -300,9 +300,11 @@ def _normalize_step(
         payload["user_input_message"] = user_input_message
     if output_review_message:
         payload["output_review_message"] = output_review_message
-    # optional free-form schema for user_input
-    schema = item.get("user_input_schema")
-    if isinstance(schema, list) and schema:
+    # optional structured schema for user_input HITL
+    schema = _normalize_user_input_schema(
+        item.get("user_input_schema"), path=path
+    )
+    if schema:
         payload["user_input_schema"] = schema
     # optional skill directory names (bound ∩ globally enabled at run time)
     raw_skills = item.get("skills")
@@ -322,6 +324,49 @@ def _normalize_step(
             "y": float(position.get("y") or 0),
         }
     return payload
+
+
+
+def _normalize_user_input_schema(raw: object, *, path: str) -> list[dict[str, Any]]:
+    """Validate and normalize Agno-style user_input_schema fields."""
+    if not isinstance(raw, list) or not raw:
+        return []
+    normalized: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise WorkflowDefinitionError(
+                f"{path}.user_input_schema[{index}] must be an object"
+            )
+        name = str(item.get("name") or item.get("key") or "").strip()
+        if not name:
+            raise WorkflowDefinitionError(
+                f"{path}.user_input_schema[{index}].name is required"
+            )
+        if name in seen:
+            raise WorkflowDefinitionError(
+                f"{path}.user_input_schema duplicate field name {name!r}"
+            )
+        seen.add(name)
+        raw_type = str(item.get("field_type") or item.get("type") or "str").strip().lower()
+        if raw_type in {"bool", "boolean", "checkbox", "switch"}:
+            field_type = "bool"
+        elif raw_type in {"int", "integer", "number", "float", "double", "num"}:
+            field_type = "number"
+        elif raw_type in {"text", "textarea", "markdown", "long_text"}:
+            field_type = "text"
+        else:
+            field_type = "str"
+        entry: dict[str, Any] = {
+            "name": name,
+            "field_type": field_type,
+            "required": bool(item.get("required", True)),
+        }
+        description = str(item.get("description") or "").strip()
+        if description:
+            entry["description"] = description
+        normalized.append(entry)
+    return normalized
 
 
 def _normalize_children(

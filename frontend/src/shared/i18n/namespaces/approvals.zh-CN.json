@@ -74,5 +74,8 @@
   "viewMarkdown": "Markdown",
   "statusPending": "待处理",
   "statusApproved": "已批准",
-  "statusRejected": "已拒绝"
+  "statusRejected": "已拒绝",
+  "outputPreview": "输出预览",
+  "fieldYes": "是",
+  "fieldNo": "否"
 }

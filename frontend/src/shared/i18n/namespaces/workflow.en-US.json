@@ -67,7 +67,7 @@
   "openApproval": "Open approval",
   "runHistory": "Recent runs",
   "userInputSchemaPlaceholder": "User-input fields JSON array",
-  "userInputSchemaHint": "Fields: {name, field_type, description, required} for Approvals forms",
+  "userInputSchemaHint": "Approvals renders typed controls; field names go into resolution_data.user_input",
   "publish": "Publish",
   "publishHint": "Publish this draft as the live revision for webhook/schedule",
   "publishTriggersHint": "Webhook and schedule always run the published revision. Save, then publish.",
@@ -176,5 +176,15 @@
   "validationEmptyRouterChoice": "{{path}}: choice \"{{choice}}\" is empty",
   "validationMissingWorkflowRef": "{{path}}: Nested workflow is required",
   "validationMissingExecutor": "{{path}}: Agent executor is required",
-  "validationFixBeforeSave": "Fix validation errors before saving"
+  "validationFixBeforeSave": "Fix validation errors before saving",
+  "userInputSchemaLabel": "Input fields",
+  "userInputFieldName": "Field name",
+  "userInputFieldDescription": "Help text for approvers",
+  "userInputFieldRequired": "Required",
+  "userInputFieldAdd": "Add field",
+  "userInputFieldRemove": "Remove",
+  "fieldTypeStr": "Short text",
+  "fieldTypeText": "Long text",
+  "fieldTypeNumber": "Number",
+  "fieldTypeBool": "Yes/No"
 }

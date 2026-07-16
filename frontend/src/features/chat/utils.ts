@@ -2,6 +2,17 @@ import type { ModelConfig, ReasoningEffort } from '@/shared/types/common'
 import { DEEPSEEK_REASONING_EFFORTS, openaiReasoningEfforts } from '@/shared/lib/reasoning'
 import type { ChatAction, ChatRunEvent, ChatSource, ChatState, Message, RunMetrics, RunStatus, ThoughtStep, ToolStatus, ToolStep } from './types'
 
+const readStoredBool = (key: string, fallback: boolean): boolean => {
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw === 'true') return true
+    if (raw === 'false') return false
+  } catch {
+    // ignore
+  }
+  return fallback
+}
+
 export const initialChatState: ChatState = {
   messages: [],
   input: '',
@@ -9,9 +20,9 @@ export const initialChatState: ChatState = {
   error: null,
   selectedModelId: localStorage.getItem('agno-aios-chat-model-id'),
   reasoningEffort: null,
-  searchKnowledge: true,
-  liveSearch: false,
-  enableTools: true,
+  searchKnowledge: readStoredBool('agno-aios-chat-search-knowledge', true),
+  liveSearch: readStoredBool('agno-aios-chat-live-search', false),
+  enableTools: readStoredBool('agno-aios-chat-enable-tools', true),
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object'
