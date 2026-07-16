@@ -16,15 +16,15 @@ const document = {
 }
 
 const emptyList = {
+  data: [],
+  meta: { page: 1, limit: 12, total_pages: 0, total_count: 0, search_time_ms: 0 },
   status: { rag_settings: { search_type: 'hybrid' } },
-  documents: [],
-  pagination: { page: 1, limit: 12, total: 0 },
 }
 
 const listed = {
+  data: [document],
+  meta: { page: 1, limit: 12, total_pages: 1, total_count: 1, search_time_ms: 0 },
   status: { rag_settings: { search_type: 'hybrid' } },
-  documents: [document],
-  pagination: { page: 1, limit: 12, total: 1 },
 }
 
 async function fulfillJson(route: Route, body: unknown) {

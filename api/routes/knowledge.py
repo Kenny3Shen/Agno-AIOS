@@ -23,6 +23,7 @@ from api.services.knowledge_service import (
     get_knowledge_base_lifecycle,
     update_rag_settings_async,
 )
+from api.utils.pagination import pagination_meta
 from api.services.knowledge_upload_service import (
     KnowledgeUploadTooLargeError,
     remove_managed_upload_async,
@@ -369,19 +370,20 @@ async def get_knowledge_status(
             limit=1,
         )
     return {
+        "data": with_manage_flags(page_documents, user),
+        "meta": pagination_meta(
+            page=page,
+            limit=limit,
+            total_count=total,
+            query=query,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        ),
+        # Workspace RAG/health snapshot (not list envelope); keep beside data/meta.
         "status": await knowledge_base.knowledge_status_async(
             owner_user_id=owner_user_id,
             document_count=document_count,
         ),
-        "documents": with_manage_flags(page_documents, user),
-        "pagination": {
-            "page": page,
-            "limit": limit,
-            "total": total,
-            "query": query,
-            "sort_by": sort_by,
-            "sort_order": sort_order,
-        },
     }
 
 

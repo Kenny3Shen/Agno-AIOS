@@ -26,9 +26,19 @@ export interface KnowledgeStatus extends JsonRecord {
   rag_settings?: KnowledgeRagSettings
 }
 export interface KnowledgeResponse {
+  data: Document[]
+  meta: {
+    page: number
+    limit: number
+    total_pages: number
+    total_count: number
+    search_time_ms?: number
+    query?: string
+    sort_by?: string
+    sort_order?: string
+  }
+  /** RAG/health snapshot for the workspace (not list envelope). */
   status: KnowledgeStatus
-  documents: Document[]
-  pagination: { page: number; limit: number; total: number }
 }
 export interface SearchResult {
   content: string

@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Knowledge 列表 data/meta + Collect 错误收口
+
+- `GET /api/knowledge`：`documents`/`pagination` → `data`/`meta`（`pagination_meta`，保留 query/sort 于 meta）；`status` 仍为 RAG/健康快照旁路字段。
+- Collect：`GET articles/{id}` 直接返回行或 404；`crawl`/`parse` 失败改 `HTTPException`，成功体去掉包一层 `status`。
+- 前端 Knowledge/Collect 与 e2e mock 同步；无旧 envelope 兼容。
+
 ## 已完成：CVE / Collect 列表 data/meta 对齐
 
 - `POST /api/cve/search`、`POST /api/url2md/articles/search`、`GET /api/url2md/sources` 改为 `{data, meta}`；错误改 HTTPException（不再 `{status:400,message}` 包一层）。

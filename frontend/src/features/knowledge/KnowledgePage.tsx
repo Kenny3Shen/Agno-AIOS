@@ -107,7 +107,7 @@ export function KnowledgePage() {
         sortOrder,
       }),
   })
-  const documents = query.data?.documents ?? []
+  const documents = query.data?.data ?? []
   const ingestDefaults = useMemo(() => effectiveKnowledgeIngestDefaults(query.data?.status.rag_settings), [query.data?.status.rag_settings])
   const selected = documents.find((document) => document.id === selectedId) ?? null
   const refresh = () => client.invalidateQueries({ queryKey: ['knowledge'] })
@@ -118,9 +118,9 @@ export function KnowledgePage() {
       current
         ? {
             ...current,
-            documents: previousId
-              ? current.documents.map((item) => (item.id === previousId ? document : item))
-              : [document, ...current.documents],
+            data: previousId
+              ? current.data.map((item) => (item.id === previousId ? document : item))
+              : [document, ...current.data],
           }
         : current
     )
@@ -187,7 +187,7 @@ export function KnowledgePage() {
                 onDelete={(document) => remove.mutate(document.id)}
                 onVisibilityChange={(document, value) => visibility.mutate({ id: document.id, value })}
                 deletingId={remove.isPending ? remove.variables : undefined}
-                paginationTotal={query.data?.pagination.total ?? 0}
+                paginationTotal={query.data?.meta.total_count ?? 0}
                 paginationPage={page}
                 paginationPageSize={pageSize}
                 onPaginationChange={setPage}

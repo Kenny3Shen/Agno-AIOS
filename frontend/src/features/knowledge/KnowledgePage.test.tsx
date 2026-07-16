@@ -22,11 +22,11 @@ const oldDocument: Document = {
 }
 
 const response = (document: Document): KnowledgeResponse => ({
+  data: [document],
+  meta: { page: 1, limit: 100, total_pages: 1, total_count: 1, search_time_ms: 0 },
   status: {
     rag_settings: { search_type: 'hybrid', chunk_size: 1200, chunk_overlap: 160, code_chunk_size: 1800, semantic_threshold: 0.52 },
   },
-  documents: [document],
-  pagination: { page: 1, limit: 100, total: 1 },
 })
 
 async function clickUpdateAction(user: ReturnType<typeof setupUser>) {

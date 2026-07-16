@@ -72,8 +72,8 @@ async def get_collect_article_route(
 ) -> dict:
     row = await get_article(article_id)
     if not row:
-        return {"status": 404, "message": "article not found"}
-    return {"status": 200, "item": row}
+        raise HTTPException(status_code=404, detail="article not found")
+    return row
 
 
 @router.post("/crawl")
@@ -97,7 +97,7 @@ async def crawl_collect_sources(
             metadata=stats,
             **audit_request_context(request_ctx),
         )
-        return {"status": 200, "message": "crawl completed", **stats}
+        return {"message": "crawl completed", **stats}
     except Exception as e:
         logger.error("Collect crawl error: {}", e)
         await record_audit_event_async(
@@ -109,7 +109,7 @@ async def crawl_collect_sources(
             metadata={"error": str(e)},
             **audit_request_context(request_ctx),
         )
-        return {"status": 500, "message": f"crawl failed: {e}"}
+        raise HTTPException(status_code=500, detail=f"crawl failed: {e}") from e
 
 
 @router.post("/parse")
@@ -131,20 +131,19 @@ async def parse_url_to_markdown(
         )
         markdown = record.get("markdown") or ""
         if record.get("status") != "ok":
-            return {
-                "status": 400,
-                "url": request.url,
-                "message": record.get("error_message") or "parse failed",
-                "markdown": [markdown] if markdown else [],
-            }
+            raise HTTPException(
+                status_code=400,
+                detail=record.get("error_message") or "parse failed",
+            )
         return {
-            "status": 200,
             "url": request.url,
             "markdown": [markdown] if markdown else [],
             "title": record.get("title"),
             "source_domain": record.get("source_domain"),
             "id": record.get("id"),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("URL to Markdown parsing error: {}", e)
         await record_audit_event_async(
@@ -156,4 +155,4 @@ async def parse_url_to_markdown(
             metadata={"error": str(e)},
             **audit_request_context(request_ctx),
         )
-        return {"status": 400, "message": f"错误:{e}"}
+        raise HTTPException(status_code=400, detail=f"错误:{e}") from e

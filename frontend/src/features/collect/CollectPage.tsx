@@ -58,10 +58,6 @@ export function CollectPage() {
   const parseMutation = useMutation({
     mutationFn: () => parseUrl(url),
     onSuccess: async (data) => {
-      if (data.status && data.status >= 400) {
-        message.error(data.message || t('parseFailed'))
-        return
-      }
       message.success(t('parseOk'))
       setUrl('')
       await articlesQuery.refetch()
@@ -86,10 +82,6 @@ export function CollectPage() {
   const crawlMutation = useMutation({
     mutationFn: () => crawlSources({ max_links_per_source: 15, max_articles_total: 60 }),
     onSuccess: async (data) => {
-      if (data.status && data.status >= 400) {
-        message.error(data.message || t('crawlFailed'))
-        return
-      }
       message.success(
         t('crawlOk', {
           ok: data.ok ?? 0,

@@ -26,8 +26,7 @@ export const parseUrl = (url: string) =>
     title?: string
     source_domain?: string
     id?: number
-    status?: number
-    message?: string
+    url?: string
   }>('/url2md/parse', jsonInit('POST', { url }))
 
 export interface CollectListMeta {
@@ -63,7 +62,6 @@ export const crawlSources = (payload?: {
   max_articles_total?: number
 }) =>
   requestJson<{
-    status: number
     message?: string
     sources?: number
     discovered?: number

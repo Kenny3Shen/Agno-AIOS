@@ -92,7 +92,7 @@ Memory API 仅使用 `/api/memories`（Agno 风格 `data`/`meta`，查询参数 
 
 Trace 列表/会话 `GET /api/traces` 与 `GET /api/traces/sessions` 使用 Agno 风格 `data`/`meta`（status 走 Agno SQL 过滤；sessions 优先 SQL 按 session_id 聚合分页，失败时回退有界扫描并可 `meta.truncated`）；list/detail 对外只暴露 Agno 风格 `duration`（由存储层 `duration_ms` 投影，不改 Agno 表结构），list 尽量附带 root `input`（页面内一次 spans 批量查询，避免 per-trace N+1）。detail 仍为工作台自研契约。 Trace 深链 query 仅使用 `session_id`/`run_id`/`selected_session`/`trace`（不再识别 `session`/`run`）；Dashboard 最近失败亦走该契约。
 
-Approvals HITL 列表 `GET /api/approvals` 使用 Agno 风格 `data`/`meta`；详情/resolve/resume 与 Skill/MCP `submissions` 仍为工作台自研契约（身份 enrich、拒绝理由、Run 恢复）。HITL 响应仅 enrich `submitted_by`/`resolved_by` 对象（无 `*_email` 双字段）；拒绝理由写入 `resolution_data.note`（Agno 约定），请求体仍用 `rejection_reason`。 审批中心表格对 HITL 与上传审批 submissions 均走服务端 `page`/`limit`；`kind=all` 时按「submissions 在前」虚拟合并两路分页结果。Audit `GET /api/audit/logs` 同样使用 `data`/`meta`。 CVE `POST /api/cve/search` 与 Collect `POST /api/url2md/articles/search`（及 sources）亦同。
+Approvals HITL 列表 `GET /api/approvals` 使用 Agno 风格 `data`/`meta`；详情/resolve/resume 与 Skill/MCP `submissions` 仍为工作台自研契约（身份 enrich、拒绝理由、Run 恢复）。HITL 响应仅 enrich `submitted_by`/`resolved_by` 对象（无 `*_email` 双字段）；拒绝理由写入 `resolution_data.note`（Agno 约定），请求体仍用 `rejection_reason`。 审批中心表格对 HITL 与上传审批 submissions 均走服务端 `page`/`limit`；`kind=all` 时按「submissions 在前」虚拟合并两路分页结果。Audit `GET /api/audit/logs` 同样使用 `data`/`meta`。 CVE `POST /api/cve/search` 与 Collect `POST /api/url2md/articles/search`（及 sources）亦同。 Knowledge `GET /api/knowledge` 列表行为 `data`/`meta`（另附 `status` RAG 快照）。
 
 `GET /api/approvals/count` 返回 Agno 风格 `{ count }`（pending HITL），供导航 badge 与 dashboard 快照复用。 Dashboard `snapshots.approvals` 提供 `{ pending, approved, rejected }`（不再输出 `pending_approvals` 别名）。
 
