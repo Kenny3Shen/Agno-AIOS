@@ -1,9 +1,26 @@
 from __future__ import annotations
 
+from api.utils.async_once import AsyncOnce
+
 import time
 from typing import Any
 
-from sqlalchemy import BigInteger, Boolean, Column, Index, MetaData, String, Table, Text, delete, desc, func, select, text, update
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Column,
+    Index,
+    MetaData,
+    String,
+    Table,
+    Text,
+    delete,
+    desc,
+    func,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.schema import CreateSchema
 
@@ -32,7 +49,10 @@ def _table() -> Table:
     return table
 
 
-async def _ensure() -> None:
+_notifications_ensure_once = AsyncOnce()
+
+
+async def _create_notifications_table() -> None:
     table = _table()
     schema = get_settings().agno_app_schema
     async with get_async_control_plane_engine().begin() as conn:
@@ -41,14 +61,18 @@ async def _ensure() -> None:
         # Best-effort index evolve for existing deployments (create checkfirst
         # alone does not add indexes to tables that already exist).
         for ddl in (
-            f'CREATE INDEX IF NOT EXISTS idx_notifications_user_created '
+            f"CREATE INDEX IF NOT EXISTS idx_notifications_user_created "
             f'ON "{schema}".notifications (user_id, created_at DESC)',
-            f'CREATE INDEX IF NOT EXISTS idx_notifications_user_id '
+            f"CREATE INDEX IF NOT EXISTS idx_notifications_user_id "
             f'ON "{schema}".notifications (user_id, id)',
-            f'CREATE INDEX IF NOT EXISTS idx_notifications_user_unread '
+            f"CREATE INDEX IF NOT EXISTS idx_notifications_user_unread "
             f'ON "{schema}".notifications (user_id, read)',
         ):
             await conn.execute(text(ddl))
+
+
+async def _ensure() -> None:
+    await _notifications_ensure_once.run(_create_notifications_table)
 
 
 async def create_notifications(
@@ -77,7 +101,11 @@ async def create_notifications(
     if not records:
         return []
     async with get_async_control_plane_engine().begin() as conn:
-        rows = (await conn.execute(insert(table).returning(table), records)).mappings().all()
+        rows = (
+            (await conn.execute(insert(table).returning(table), records))
+            .mappings()
+            .all()
+        )
     return [dict(row) for row in rows]
 
 
@@ -141,7 +169,11 @@ async def mark_notification_read(notification_id: int, user_id: str) -> bool:
     await _ensure()
     table = _table()
     async with get_async_control_plane_engine().begin() as conn:
-        result = await conn.execute(update(table).where(table.c.id == notification_id, table.c.user_id == user_id).values(read=True, read_at=int(time.time())))
+        result = await conn.execute(
+            update(table)
+            .where(table.c.id == notification_id, table.c.user_id == user_id)
+            .values(read=True, read_at=int(time.time()))
+        )
     return bool(result.rowcount)
 
 
@@ -161,6 +193,7 @@ async def mark_all_notifications_read(user_id: str) -> int:
         )
     return int(result.rowcount or 0)
 
+
 async def delete_notification(notification_id: int, user_id: str) -> bool:
     """Delete one notification owned by the given user.
 
@@ -170,5 +203,9 @@ async def delete_notification(notification_id: int, user_id: str) -> bool:
     await _ensure()
     table = _table()
     async with get_async_control_plane_engine().begin() as conn:
-        result = await conn.execute(delete(table).where(table.c.id == notification_id, table.c.user_id == user_id))
+        result = await conn.execute(
+            delete(table).where(
+                table.c.id == notification_id, table.c.user_id == user_id
+            )
+        )
     return bool(result.rowcount)

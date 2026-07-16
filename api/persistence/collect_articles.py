@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from api.utils.async_once import AsyncOnce
+
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
@@ -49,9 +51,24 @@ def collect_articles_table() -> Table:
         Column("summary", Text, nullable=False, server_default=""),
         Column("status", Text, nullable=False, server_default="ok"),
         Column("error_message", Text, nullable=False, server_default=""),
-        Column("fetched_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
-        Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
-        Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+        Column(
+            "fetched_at",
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+        ),
+        Column(
+            "created_at",
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+        ),
+        Column(
+            "updated_at",
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+        ),
         UniqueConstraint("url", name="uq_collect_articles_url"),
     )
     Index("idx_collect_articles_domain", table.c.source_domain)
@@ -60,13 +77,20 @@ def collect_articles_table() -> Table:
     return table
 
 
-async def ensure_collect_articles_table() -> None:
+_collect_articles_table_once = AsyncOnce()
+
+
+async def _create_collect_articles_table() -> None:
     table = collect_articles_table()
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(CreateSchema(_app_schema(), if_not_exists=True))
         await conn.run_sync(table.create, checkfirst=True)
         for index in table.indexes:
             await conn.run_sync(index.create, checkfirst=True)
+
+
+async def ensure_collect_articles_table() -> None:
+    await _collect_articles_table_once.run(_create_collect_articles_table)
 
 
 def _row_to_dict(row: Any) -> dict[str, Any]:
@@ -127,7 +151,10 @@ async def search_collect_articles(
 
     async with get_async_control_plane_engine().begin() as conn:
         total = int((await conn.execute(count_stmt)).scalar_one())
-        rows = [_row_to_dict(row) for row in (await conn.execute(rows_stmt)).mappings().all()]
+        rows = [
+            _row_to_dict(row)
+            for row in (await conn.execute(rows_stmt)).mappings().all()
+        ]
     return rows, total
 
 
@@ -136,10 +163,14 @@ async def get_collect_article(article_id: int) -> dict[str, Any] | None:
     table = collect_articles_table()
     async with get_async_control_plane_engine().begin() as conn:
         row = (
-            await conn.execute(
-                select(table).where(table.c.id == int(article_id)).limit(1)
+            (
+                await conn.execute(
+                    select(table).where(table.c.id == int(article_id)).limit(1)
+                )
             )
-        ).mappings().first()
+            .mappings()
+            .first()
+        )
     return _row_to_dict(row) if row else None
 
 
@@ -222,13 +253,17 @@ async def list_existing_ok_urls(urls: Sequence[str]) -> set[str]:
         for i in range(0, len(cleaned), chunk_size):
             chunk = cleaned[i : i + chunk_size]
             rows = (
-                await conn.execute(
-                    select(table.c.url).where(
-                        table.c.url.in_(chunk),
-                        table.c.status == "ok",
+                (
+                    await conn.execute(
+                        select(table.c.url).where(
+                            table.c.url.in_(chunk),
+                            table.c.status == "ok",
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             found.update(str(item) for item in rows if item)
     return found
 

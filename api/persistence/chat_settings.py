@@ -1,9 +1,21 @@
 from __future__ import annotations
 
+from api.utils.async_once import AsyncOnce
+
 from time import time
 from typing import Any, Mapping
 
-from sqlalchemy import BigInteger, Boolean, Column, MetaData, String, Table, insert, select, update
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Column,
+    MetaData,
+    String,
+    Table,
+    insert,
+    select,
+    update,
+)
 from sqlalchemy.schema import CreateSchema
 
 from api.config import get_settings
@@ -36,11 +48,18 @@ def chat_settings_table(metadata: MetaData | None = None) -> Table:
     )
 
 
-async def ensure_chat_settings_table_async() -> None:
+_chat_settings_table_once = AsyncOnce()
+
+
+async def _create_chat_settings_table_async() -> None:
     table = chat_settings_table()
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(CreateSchema(_app_schema(), if_not_exists=True))
         await conn.run_sync(table.create, checkfirst=True)
+
+
+async def ensure_chat_settings_table_async() -> None:
+    await _chat_settings_table_once.run(_create_chat_settings_table_async)
 
 
 async def get_chat_settings_row() -> dict[str, Any]:
@@ -48,10 +67,14 @@ async def get_chat_settings_row() -> dict[str, Any]:
     table = chat_settings_table()
     async with get_async_control_plane_engine().begin() as conn:
         row = (
-            await conn.execute(
-                select(table).where(table.c.id == GLOBAL_CHAT_SETTINGS_ID)
+            (
+                await conn.execute(
+                    select(table).where(table.c.id == GLOBAL_CHAT_SETTINGS_ID)
+                )
             )
-        ).mappings().first()
+            .mappings()
+            .first()
+        )
         if row is None:
             values = {
                 "id": GLOBAL_CHAT_SETTINGS_ID,
@@ -66,7 +89,9 @@ async def get_chat_settings_row() -> dict[str, Any]:
 async def update_chat_settings_row(values: Mapping[str, bool]) -> dict[str, Any]:
     current = await get_chat_settings_row()
     updates: dict[str, Any] = {
-        key: bool(value) for key, value in values.items() if key in DEFAULT_CHAT_SETTINGS
+        key: bool(value)
+        for key, value in values.items()
+        if key in DEFAULT_CHAT_SETTINGS
     }
     if not updates:
         return current
@@ -74,8 +99,6 @@ async def update_chat_settings_row(values: Mapping[str, bool]) -> dict[str, Any]
     table = chat_settings_table()
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(
-            update(table)
-            .where(table.c.id == GLOBAL_CHAT_SETTINGS_ID)
-            .values(**updates)
+            update(table).where(table.c.id == GLOBAL_CHAT_SETTINGS_ID).values(**updates)
         )
     return {**current, **updates}

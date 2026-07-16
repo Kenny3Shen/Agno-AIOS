@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from api.utils.async_once import AsyncOnce
+
 from functools import lru_cache
 from typing import Any
 
@@ -84,11 +86,18 @@ def get_async_knowledge_postgres_db() -> AsyncPostgresDb:
     )
 
 
-async def ensure_agno_postgres_tables_async() -> None:
+_agno_postgres_tables_once = AsyncOnce()
+
+
+async def _create_agno_postgres_tables_async() -> None:
     db = get_async_agno_postgres_db()
     get_table = getattr(db, "_get_table")
     for table_type in ("versions", "sessions", "memories", "traces", "spans"):
         await get_table(table_type=table_type, create_table_if_not_found=True)
+
+
+async def ensure_agno_postgres_tables_async() -> None:
+    await _agno_postgres_tables_once.run(_create_agno_postgres_tables_async)
 
 
 def coerce_json_value(value: Any) -> Any:
@@ -103,7 +112,10 @@ def coerce_json_value(value: Any) -> Any:
     return current
 
 
-async def ensure_app_tables_async() -> None:
+_app_tables_once = AsyncOnce()
+
+
+async def _create_app_tables_async() -> None:
     from sqlalchemy import text
     from sqlalchemy.schema import CreateSchema
 
@@ -138,3 +150,7 @@ async def ensure_app_tables_async() -> None:
         await conn.execute(
             text(f'DROP TABLE IF EXISTS "{app_schema()}"."hitl_paused_runs"')
         )
+
+
+async def ensure_app_tables_async() -> None:
+    await _app_tables_once.run(_create_app_tables_async)

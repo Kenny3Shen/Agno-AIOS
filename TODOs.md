@@ -124,6 +124,16 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：ensure_*_table 进程内 AsyncOnce
+
+- 抽取 `api/utils/async_once.AsyncOnce`（双检锁一次执行）
+- 热路径 ensure：notifications / chat_settings / model_configs / audit / collect / cves / mcp / knowledge_sources / upload_approvals / workflows / agno postgres / app tables / agent_evals
+- 避免每次 list/read 重复 `CREATE SCHEMA/TABLE/INDEX IF NOT EXISTS`
+
+相关：`async_once.py` / 各 `api/persistence/*` / `postgres_store.py`
+
+---
+
 ## 已完成：Chat settings / Skills config 短缓存
 
 - `get_chat_settings` 5s TTL 进程缓存，update 时刷新；减轻 Chat 热路径重复读库

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from api.utils.async_once import AsyncOnce
+
 import time
 from typing import Any
 from uuid import uuid4
@@ -61,7 +63,10 @@ def workflows_table(metadata: MetaData | None = None) -> Table:
     return table
 
 
-async def ensure_workflows_table_async() -> None:
+_workflows_table_once = AsyncOnce()
+
+
+async def _create_workflows_table_async() -> None:
     table = workflows_table()
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(CreateSchema(_schema(), if_not_exists=True))
@@ -93,13 +98,19 @@ async def ensure_workflows_table_async() -> None:
             logger.debug("workflows publish-column migrate skipped", exc_info=True)
 
 
+async def ensure_workflows_table_async() -> None:
+    await _workflows_table_once.run(_create_workflows_table_async)
+
+
 async def insert_workflow(record: dict[str, Any]) -> dict[str, Any]:
     await ensure_workflows_table_async()
     table = workflows_table()
     async with get_async_control_plane_engine().begin() as conn:
         row = (
-            await conn.execute(insert(table).values(record).returning(table))
-        ).mappings().one()
+            (await conn.execute(insert(table).values(record).returning(table)))
+            .mappings()
+            .one()
+        )
     return dict(row)
 
 
@@ -108,8 +119,10 @@ async def get_workflow(workflow_id: str) -> dict[str, Any] | None:
     table = workflows_table()
     async with get_async_control_plane_engine().begin() as conn:
         row = (
-            await conn.execute(select(table).where(table.c.id == workflow_id))
-        ).mappings().first()
+            (await conn.execute(select(table).where(table.c.id == workflow_id)))
+            .mappings()
+            .first()
+        )
     return dict(row) if row else None
 
 
@@ -155,7 +168,6 @@ async def update_workflow(
     return dict(row) if row else None
 
 
-
 async def claim_cron_last_run(
     workflow_id: str,
     *,
@@ -168,10 +180,14 @@ async def claim_cron_last_run(
     expected = float(expected_last_run_at or 0)
     async with get_async_control_plane_engine().begin() as conn:
         row = (
-            await conn.execute(
-                select(table).where(table.c.id == workflow_id).with_for_update()
+            (
+                await conn.execute(
+                    select(table).where(table.c.id == workflow_id).with_for_update()
+                )
             )
-        ).mappings().first()
+            .mappings()
+            .first()
+        )
         if row is None:
             return False
         triggers_raw = row.get("triggers")
@@ -182,7 +198,9 @@ async def claim_cron_last_run(
         )
         cron_raw = triggers.get("cron")
         cron: dict[str, Any] = (
-            {str(k): v for k, v in cron_raw.items()} if isinstance(cron_raw, dict) else {}
+            {str(k): v for k, v in cron_raw.items()}
+            if isinstance(cron_raw, dict)
+            else {}
         )
         current = float(cron.get("last_run_at") or 0)
         # Another worker advanced last_run_at past our snapshot → lose claim.
@@ -244,11 +262,18 @@ def workflow_versions_table(metadata: MetaData | None = None) -> Table:
     return table
 
 
-async def ensure_workflow_versions_table_async() -> None:
+_workflow_versions_table_once = AsyncOnce()
+
+
+async def _create_workflow_versions_table_async() -> None:
     table = workflow_versions_table()
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(CreateSchema(_schema(), if_not_exists=True))
         await conn.run_sync(table.create, checkfirst=True)
+
+
+async def ensure_workflow_versions_table_async() -> None:
+    await _workflow_versions_table_once.run(_create_workflow_versions_table_async)
 
 
 async def insert_workflow_version(record: dict[str, Any]) -> dict[str, Any]:
@@ -256,8 +281,10 @@ async def insert_workflow_version(record: dict[str, Any]) -> dict[str, Any]:
     table = workflow_versions_table()
     async with get_async_control_plane_engine().begin() as conn:
         row = (
-            await conn.execute(insert(table).values(record).returning(table))
-        ).mappings().one()
+            (await conn.execute(insert(table).values(record).returning(table)))
+            .mappings()
+            .one()
+        )
     return dict(row)
 
 
@@ -289,20 +316,22 @@ async def list_workflow_versions(
     return [dict(row) for row in rows], total
 
 
-async def get_workflow_version(
-    workflow_id: str, version: int
-) -> dict[str, Any] | None:
+async def get_workflow_version(workflow_id: str, version: int) -> dict[str, Any] | None:
     await ensure_workflow_versions_table_async()
     table = workflow_versions_table()
     async with get_async_control_plane_engine().begin() as conn:
         row = (
-            await conn.execute(
-                select(table).where(
-                    table.c.workflow_id == workflow_id,
-                    table.c.version == version,
+            (
+                await conn.execute(
+                    select(table).where(
+                        table.c.workflow_id == workflow_id,
+                        table.c.version == version,
+                    )
                 )
             )
-        ).mappings().first()
+            .mappings()
+            .first()
+        )
     return dict(row) if row else None
 
 

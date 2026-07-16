@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from api.utils.async_once import AsyncOnce
+
 from datetime import datetime
 from typing import Any
 
@@ -51,7 +53,12 @@ def audit_logs_table() -> Table:
         Column("ip_address", Text, nullable=False, server_default=""),
         Column("user_agent", Text, nullable=False, server_default=""),
         Column("metadata", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
-        Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+        Column(
+            "created_at",
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+        ),
     )
     Index(
         "idx_audit_logs_actor_time",
@@ -92,13 +99,20 @@ def audit_logs_table() -> Table:
     return table
 
 
-async def ensure_audit_logs_table_async() -> None:
+_audit_logs_table_once = AsyncOnce()
+
+
+async def _create_audit_logs_table_async() -> None:
     table = audit_logs_table()
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(CreateSchema(_app_schema(), if_not_exists=True))
         await conn.run_sync(table.create, checkfirst=True)
         for index in table.indexes:
             await conn.run_sync(index.create, checkfirst=True)
+
+
+async def ensure_audit_logs_table_async() -> None:
+    await _audit_logs_table_once.run(_create_audit_logs_table_async)
 
 
 async def insert_audit_log_async(
@@ -250,7 +264,6 @@ async def recent_failed_chat_run_ids_async(
     return ordered
 
 
-
 async def repair_failed_chat_trace_statuses_async(
     traces_table: Table,
     *,
@@ -278,19 +291,27 @@ async def repair_failed_chat_trace_statuses_async(
     )
     async with get_async_control_plane_engine().begin() as conn:
         failed_count = int(
-            (await conn.execute(select(func.count()).select_from(failed_ids.subquery()))).scalar_one()
+            (
+                await conn.execute(
+                    select(func.count()).select_from(failed_ids.subquery())
+                )
+            ).scalar_one()
         )
         matched_count = int(
             (
                 await conn.execute(
-                    select(func.count()).select_from(matched_failed_ids.distinct().subquery())
+                    select(func.count()).select_from(
+                        matched_failed_ids.distinct().subquery()
+                    )
                 )
             ).scalar_one()
         )
         candidate_count = int(
             (
                 await conn.execute(
-                    select(func.count()).select_from(traces_table).where(candidate_filter)
+                    select(func.count())
+                    .select_from(traces_table)
+                    .where(candidate_filter)
                 )
             ).scalar_one()
         )

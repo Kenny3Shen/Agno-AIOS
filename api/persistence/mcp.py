@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from api.utils.async_once import AsyncOnce
+
 from typing import Any
 
 from sqlalchemy import (
@@ -93,7 +95,10 @@ def mcp_component_overrides_table(metadata: MetaData | None = None) -> Table:
     )
 
 
-async def ensure_mcp_tables() -> None:
+_mcp_tables_once = AsyncOnce()
+
+
+async def _create_mcp_tables() -> None:
     metadata = _metadata()
     tables = (
         mcp_tokens_table(metadata),
@@ -104,6 +109,10 @@ async def ensure_mcp_tables() -> None:
         await conn.execute(CreateSchema(_mcp_schema(), if_not_exists=True))
         for table in tables:
             await conn.run_sync(table.create, checkfirst=True)
+
+
+async def ensure_mcp_tables() -> None:
+    await _mcp_tables_once.run(_create_mcp_tables)
 
 
 async def list_server_rows() -> list[dict[str, Any]]:
@@ -118,7 +127,11 @@ async def get_server_row(server_id: int) -> dict[str, Any] | None:
     await ensure_mcp_tables()
     table = mcp_servers_table()
     async with get_async_control_plane_engine().begin() as conn:
-        row = (await conn.execute(select(table).where(table.c.id == server_id))).mappings().first()
+        row = (
+            (await conn.execute(select(table).where(table.c.id == server_id)))
+            .mappings()
+            .first()
+        )
     return dict(row) if row else None
 
 
@@ -127,8 +140,10 @@ async def get_server_row_by_name(name: str) -> dict[str, Any] | None:
     table = mcp_servers_table()
     async with get_async_control_plane_engine().begin() as conn:
         row = (
-            await conn.execute(select(table).where(table.c.name == name))
-        ).mappings().first()
+            (await conn.execute(select(table).where(table.c.name == name)))
+            .mappings()
+            .first()
+        )
     return dict(row) if row else None
 
 
@@ -145,14 +160,36 @@ async def server_name_exists(name: str) -> bool:
 async def upsert_server_row(record: dict[str, Any]) -> dict[str, Any]:
     await ensure_mcp_tables()
     table = mcp_servers_table()
-    values = {key: record[key] for key in (
-        "name", "namespace", "description", "server_type", "transport", "enabled",
-        "visibility", "owner_user_id", "config", "created_at", "updated_at",
-    ) if key in record}
-    stmt = insert(table).values(values).on_conflict_do_update(
-        index_elements=[table.c.name],
-        set_={key: value for key, value in values.items() if key not in {"name", "created_at"}},
-    ).returning(table)
+    values = {
+        key: record[key]
+        for key in (
+            "name",
+            "namespace",
+            "description",
+            "server_type",
+            "transport",
+            "enabled",
+            "visibility",
+            "owner_user_id",
+            "config",
+            "created_at",
+            "updated_at",
+        )
+        if key in record
+    }
+    stmt = (
+        insert(table)
+        .values(values)
+        .on_conflict_do_update(
+            index_elements=[table.c.name],
+            set_={
+                key: value
+                for key, value in values.items()
+                if key not in {"name", "created_at"}
+            },
+        )
+        .returning(table)
+    )
     async with get_async_control_plane_engine().begin() as conn:
         row = (await conn.execute(stmt)).mappings().one()
     return dict(row)
@@ -164,20 +201,46 @@ async def insert_server_row(record: dict[str, Any]) -> dict[str, Any]:
     values = {
         key: record[key]
         for key in (
-            "name", "namespace", "description", "server_type", "transport", "enabled",
-            "visibility", "owner_user_id", "config", "created_at", "updated_at",
+            "name",
+            "namespace",
+            "description",
+            "server_type",
+            "transport",
+            "enabled",
+            "visibility",
+            "owner_user_id",
+            "config",
+            "created_at",
+            "updated_at",
         )
     }
     async with get_async_control_plane_engine().begin() as conn:
-        row = (await conn.execute(insert(table).values(values).returning(table))).mappings().one()
+        row = (
+            (await conn.execute(insert(table).values(values).returning(table)))
+            .mappings()
+            .one()
+        )
     return dict(row)
 
 
-async def update_server_row(server_id: int, values: dict[str, Any]) -> dict[str, Any] | None:
+async def update_server_row(
+    server_id: int, values: dict[str, Any]
+) -> dict[str, Any] | None:
     await ensure_mcp_tables()
     table = mcp_servers_table()
     async with get_async_control_plane_engine().begin() as conn:
-        row = (await conn.execute(update(table).where(table.c.id == server_id).values(**values).returning(table))).mappings().first()
+        row = (
+            (
+                await conn.execute(
+                    update(table)
+                    .where(table.c.id == server_id)
+                    .values(**values)
+                    .returning(table)
+                )
+            )
+            .mappings()
+            .first()
+        )
     return dict(row) if row else None
 
 
@@ -185,7 +248,11 @@ async def delete_server_row(server_id: int) -> bool:
     await ensure_mcp_tables()
     table = mcp_servers_table()
     async with get_async_control_plane_engine().begin() as conn:
-        result = await conn.execute(delete(table).where(table.c.id == server_id, table.c.server_type == "external"))
+        result = await conn.execute(
+            delete(table).where(
+                table.c.id == server_id, table.c.server_type == "external"
+            )
+        )
     return int(result.rowcount or 0) > 0
 
 
@@ -200,9 +267,13 @@ async def list_component_override_rows() -> list[dict[str, Any]]:
 async def upsert_component_override_row(record: dict[str, Any]) -> None:
     await ensure_mcp_tables()
     table = mcp_component_overrides_table()
-    stmt = insert(table).values(record).on_conflict_do_update(
-        constraint="uq_mcp_component_override",
-        set_={"enabled": record["enabled"], "updated_at": record["updated_at"]},
+    stmt = (
+        insert(table)
+        .values(record)
+        .on_conflict_do_update(
+            constraint="uq_mcp_component_override",
+            set_={"enabled": record["enabled"], "updated_at": record["updated_at"]},
+        )
     )
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(stmt)
@@ -219,7 +290,9 @@ async def list_token_rows(*, limit: int = 100) -> list[dict[str, Any]]:
 
 
 def _token_insert_values(record: dict[str, Any]) -> dict[str, Any]:
-    values = {key: record.get(key) for key in ("name", "token", "created_at", "expires_at")}
+    values = {
+        key: record.get(key) for key in ("name", "token", "created_at", "expires_at")
+    }
     if record.get("id") is not None:
         values["id"] = record["id"]
     return values
@@ -231,7 +304,11 @@ async def upsert_token_row(record: dict[str, Any]) -> None:
     stmt = insert(table).values(_token_insert_values(record))
     stmt = stmt.on_conflict_do_update(
         index_elements=[table.c.token],
-        set_={"name": stmt.excluded.name, "created_at": stmt.excluded.created_at, "expires_at": stmt.excluded.expires_at},
+        set_={
+            "name": stmt.excluded.name,
+            "created_at": stmt.excluded.created_at,
+            "expires_at": stmt.excluded.expires_at,
+        },
     )
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(stmt)
@@ -255,7 +332,11 @@ async def find_token_row(token: str) -> dict[str, Any] | None:
     await ensure_mcp_tables()
     table = mcp_tokens_table()
     async with get_async_control_plane_engine().begin() as conn:
-        row = (await conn.execute(select(table).where(table.c.token == token))).mappings().first()
+        row = (
+            (await conn.execute(select(table).where(table.c.token == token)))
+            .mappings()
+            .first()
+        )
     return dict(row) if row else None
 
 
@@ -264,4 +345,14 @@ async def reset_token_id_sequence() -> None:
     table = mcp_tokens_table()
     async with get_async_control_plane_engine().begin() as conn:
         max_id = (await conn.execute(select(func.max(table.c.id)))).scalar()
-        await conn.execute(select(func.setval(func.pg_get_serial_sequence(f"{_mcp_schema()}.{MCP_TOKENS_TABLE}", "id"), max(int(max_id or 1), 1), True)))
+        await conn.execute(
+            select(
+                func.setval(
+                    func.pg_get_serial_sequence(
+                        f"{_mcp_schema()}.{MCP_TOKENS_TABLE}", "id"
+                    ),
+                    max(int(max_id or 1), 1),
+                    True,
+                )
+            )
+        )

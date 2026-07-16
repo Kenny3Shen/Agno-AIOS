@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from api.utils.async_once import AsyncOnce
+
 from typing import Any
 
 from sqlalchemy import BigInteger, Column, MetaData, String, Table, select, text, update
@@ -35,22 +37,47 @@ def upload_approvals_table(metadata: MetaData | None = None) -> Table:
     )
 
 
-async def ensure_upload_approvals_table() -> None:
+_upload_approvals_table_once = AsyncOnce()
+
+
+async def _create_upload_approvals_table() -> None:
     metadata = _metadata()
     table = upload_approvals_table(metadata)
     async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(CreateSchema(get_settings().agno_app_schema, if_not_exists=True))
+        await conn.execute(
+            CreateSchema(get_settings().agno_app_schema, if_not_exists=True)
+        )
         await conn.run_sync(table.create, checkfirst=True)
-        await conn.execute(text(f'ALTER TABLE {get_settings().agno_app_schema}.{UPLOAD_APPROVALS_TABLE} ADD COLUMN IF NOT EXISTS submitted_by_email VARCHAR(320) NOT NULL DEFAULT \'\''))
-        await conn.execute(text(f'ALTER TABLE {get_settings().agno_app_schema}.{UPLOAD_APPROVALS_TABLE} ADD COLUMN IF NOT EXISTS resolved_by_email VARCHAR(320)'))
-        await conn.execute(text(f'ALTER TABLE {get_settings().agno_app_schema}.{UPLOAD_APPROVALS_TABLE} ADD COLUMN IF NOT EXISTS rejection_reason VARCHAR(2000)'))
+        await conn.execute(
+            text(
+                f"ALTER TABLE {get_settings().agno_app_schema}.{UPLOAD_APPROVALS_TABLE} ADD COLUMN IF NOT EXISTS submitted_by_email VARCHAR(320) NOT NULL DEFAULT ''"
+            )
+        )
+        await conn.execute(
+            text(
+                f"ALTER TABLE {get_settings().agno_app_schema}.{UPLOAD_APPROVALS_TABLE} ADD COLUMN IF NOT EXISTS resolved_by_email VARCHAR(320)"
+            )
+        )
+        await conn.execute(
+            text(
+                f"ALTER TABLE {get_settings().agno_app_schema}.{UPLOAD_APPROVALS_TABLE} ADD COLUMN IF NOT EXISTS rejection_reason VARCHAR(2000)"
+            )
+        )
+
+
+async def ensure_upload_approvals_table() -> None:
+    await _upload_approvals_table_once.run(_create_upload_approvals_table)
 
 
 async def insert_upload_approval(record: dict[str, Any]) -> dict[str, Any]:
     await ensure_upload_approvals_table()
     table = upload_approvals_table()
     async with get_async_control_plane_engine().begin() as conn:
-        row = (await conn.execute(insert(table).values(record).returning(table))).mappings().one()
+        row = (
+            (await conn.execute(insert(table).values(record).returning(table)))
+            .mappings()
+            .one()
+        )
     return dict(row)
 
 
@@ -58,7 +85,11 @@ async def get_upload_approval(approval_id: str) -> dict[str, Any] | None:
     await ensure_upload_approvals_table()
     table = upload_approvals_table()
     async with get_async_control_plane_engine().begin() as conn:
-        row = (await conn.execute(select(table).where(table.c.id == approval_id))).mappings().first()
+        row = (
+            (await conn.execute(select(table).where(table.c.id == approval_id)))
+            .mappings()
+            .first()
+        )
     return dict(row) if row else None
 
 
@@ -119,20 +150,24 @@ async def resolve_upload_approval(
     table = upload_approvals_table()
     async with get_async_control_plane_engine().begin() as conn:
         row = (
-            await conn.execute(
-                update(table)
-                .where(table.c.id == approval_id, table.c.status == "resolving")
-                .values(
-                    status=status,
-                    resolved_by=resolved_by,
-                    resolved_by_email=resolved_by_email,
-                    rejection_reason=rejection_reason,
-                    resolved_at=resolved_at,
-                    updated_at=resolved_at,
+            (
+                await conn.execute(
+                    update(table)
+                    .where(table.c.id == approval_id, table.c.status == "resolving")
+                    .values(
+                        status=status,
+                        resolved_by=resolved_by,
+                        resolved_by_email=resolved_by_email,
+                        rejection_reason=rejection_reason,
+                        resolved_at=resolved_at,
+                        updated_at=resolved_at,
+                    )
+                    .returning(table)
                 )
-                .returning(table)
             )
-        ).mappings().first()
+            .mappings()
+            .first()
+        )
     return dict(row) if row else None
 
 
@@ -144,13 +179,22 @@ async def claim_upload_approval(
     table = upload_approvals_table()
     async with get_async_control_plane_engine().begin() as conn:
         row = (
-            await conn.execute(
-                update(table)
-                .where(table.c.id == approval_id, table.c.status == "pending")
-                .values(status="resolving", resolved_by=resolved_by, resolved_by_email=resolved_by_email, updated_at=updated_at)
-                .returning(table)
+            (
+                await conn.execute(
+                    update(table)
+                    .where(table.c.id == approval_id, table.c.status == "pending")
+                    .values(
+                        status="resolving",
+                        resolved_by=resolved_by,
+                        resolved_by_email=resolved_by_email,
+                        updated_at=updated_at,
+                    )
+                    .returning(table)
+                )
             )
-        ).mappings().first()
+            .mappings()
+            .first()
+        )
     return dict(row) if row else None
 
 
@@ -162,5 +206,10 @@ async def release_upload_approval(approval_id: str, *, updated_at: int) -> None:
         await conn.execute(
             update(table)
             .where(table.c.id == approval_id, table.c.status == "resolving")
-            .values(status="pending", resolved_by=None, resolved_by_email=None, updated_at=updated_at)
+            .values(
+                status="pending",
+                resolved_by=None,
+                resolved_by_email=None,
+                updated_at=updated_at,
+            )
         )

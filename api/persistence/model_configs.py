@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from api.utils.async_once import AsyncOnce
+
 from typing import Any
 
 from sqlalchemy import (
@@ -64,7 +66,10 @@ def model_configs_table(metadata: MetaData | None = None) -> Table:
     return table
 
 
-async def ensure_model_configs_table_async() -> None:
+_model_configs_table_once = AsyncOnce()
+
+
+async def _create_model_configs_table_async() -> None:
     table = model_configs_table()
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(CreateSchema(_app_schema(), if_not_exists=True))
@@ -116,6 +121,10 @@ async def ensure_model_configs_table_async() -> None:
         )
         for index in table.indexes:
             await conn.run_sync(index.create, checkfirst=True)
+
+
+async def ensure_model_configs_table_async() -> None:
+    await _model_configs_table_once.run(_create_model_configs_table_async)
 
 
 async def list_model_config_rows() -> list[dict[str, Any]]:

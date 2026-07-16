@@ -112,3 +112,22 @@ async def test_notification_stream_replays_rows_in_cursor_order_without_duplicat
         ("user-1", 3),
         ("user-1", 5),
     ]
+
+
+@pytest.mark.asyncio
+async def test_notifications_ensure_runs_once(monkeypatch) -> None:
+    from api.persistence import notifications as store
+
+    store._notifications_ensure_once.reset()
+    calls = 0
+
+    async def fake_create() -> None:
+        nonlocal calls
+        calls += 1
+
+    monkeypatch.setattr(store, "_create_notifications_table", fake_create)
+    await store._ensure()
+    await store._ensure()
+    assert calls == 1
+    store._notifications_ensure_once.reset()
+

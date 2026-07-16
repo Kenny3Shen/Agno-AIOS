@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from api.utils.async_once import AsyncOnce
+
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
@@ -47,8 +49,18 @@ def cves_table() -> Table:
         Column("github_url", Text, nullable=False),
         Column("source", Text, nullable=False),
         Column("create_time", DateTime(timezone=True)),
-        Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
-        Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+        Column(
+            "created_at",
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+        ),
+        Column(
+            "updated_at",
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+        ),
         UniqueConstraint("cve_id", "github_url", name="uq_cves_cve_url"),
     )
     Index("idx_cves_cve_id", table.c.cve_id)
@@ -57,20 +69,29 @@ def cves_table() -> Table:
         "idx_cves_search",
         func.to_tsvector(
             "simple",
-            table.c.cve_id.concat(literal(" ")).concat(func.coalesce(table.c.description, "")),
+            table.c.cve_id.concat(literal(" ")).concat(
+                func.coalesce(table.c.description, "")
+            ),
         ),
         postgresql_using="gin",
     )
     return table
 
 
-async def ensure_cves_table() -> None:
+_cves_table_once = AsyncOnce()
+
+
+async def _create_cves_table() -> None:
     table = cves_table()
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(CreateSchema(_app_schema(), if_not_exists=True))
         await conn.run_sync(table.create, checkfirst=True)
         for index in table.indexes:
             await conn.run_sync(index.create, checkfirst=True)
+
+
+async def ensure_cves_table() -> None:
+    await _cves_table_once.run(_create_cves_table)
 
 
 async def search_cve_rows(
@@ -135,8 +156,10 @@ async def insert_new_cve_rows(rows: Sequence[dict[str, Any]]) -> int:
         }
         for row in rows
     ]
-    stmt = insert(table).values(values).on_conflict_do_nothing(
-        index_elements=[table.c.cve_id, table.c.github_url]
+    stmt = (
+        insert(table)
+        .values(values)
+        .on_conflict_do_nothing(index_elements=[table.c.cve_id, table.c.github_url])
     )
     async with get_async_control_plane_engine().begin() as conn:
         result = await conn.execute(stmt)
@@ -165,7 +188,9 @@ async def count_cve_rows() -> int:
     await ensure_cves_table()
     table = cves_table()
     async with get_async_control_plane_engine().begin() as conn:
-        return int((await conn.execute(select(func.count()).select_from(table))).scalar_one())
+        return int(
+            (await conn.execute(select(func.count()).select_from(table))).scalar_one()
+        )
 
 
 async def upsert_cve_row(record: dict[str, Any]) -> None:

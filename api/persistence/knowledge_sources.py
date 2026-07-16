@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from api.utils.async_once import AsyncOnce
+
 from collections.abc import Mapping
 from typing import Any
 
@@ -28,7 +30,12 @@ def knowledge_sources_table() -> Table:
         _metadata(),
         Column("content_id", Text, primary_key=True),
         Column("source", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
-        Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+        Column(
+            "created_at",
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+        ),
         Column(
             "updated_at",
             DateTime(timezone=True),
@@ -40,11 +47,18 @@ def knowledge_sources_table() -> Table:
     return table
 
 
-async def ensure_knowledge_sources_table_async() -> None:
+_knowledge_sources_table_once = AsyncOnce()
+
+
+async def _create_knowledge_sources_table_async() -> None:
     table = knowledge_sources_table()
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(CreateSchema(_app_schema(), if_not_exists=True))
         await conn.run_sync(table.create, checkfirst=True)
+
+
+async def ensure_knowledge_sources_table_async() -> None:
+    await _knowledge_sources_table_once.run(_create_knowledge_sources_table_async)
 
 
 async def upsert_knowledge_source_async(
