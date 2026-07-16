@@ -3,9 +3,9 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi_users import schemas
-from pydantic import computed_field
+from pydantic import Field, computed_field, field_validator
 
-from api.auth.claims import scope_claims
+from api.auth.claims import normalize_role, scope_claims
 
 
 class UserRead(schemas.BaseUser[UUID]):
@@ -18,8 +18,25 @@ class UserRead(schemas.BaseUser[UUID]):
 
 
 class UserCreate(schemas.BaseUserCreate):
-    pass
+    role: str = Field(default="user")
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str) -> str:
+        role = normalize_role(value)
+        if role == "admin":
+            # Non-admin registration cannot self-promote; bootstrap/admin API only.
+            return "user"
+        return role
 
 
 class UserUpdate(schemas.BaseUserUpdate):
-    pass
+    role: str | None = None
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        role = normalize_role(value)
+        return role

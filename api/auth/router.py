@@ -1,15 +1,24 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from httpx_oauth.clients.github import GitHubOAuth2
 from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.clients.microsoft import MicrosoftGraphOAuth2
+from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import func, select
 
+from api.auth.claims import ADMIN_SCOPE, KNOWN_ROLES, ROLE_SCOPES, Role, normalize_role
+from api.auth.database import async_session_maker
 from api.auth.models import User
+from api.auth.models import User as AuthUser
 from api.auth.schemas import UserCreate, UserRead, UserUpdate
+from api.auth.scopes import require_scope
 from api.auth.users import auth_backend, current_active_user, fastapi_users
 from api.config import get_settings
 from api.services.audit_service import audit_request_context, record_audit_event_async
+from api.utils.pagination import pagination_meta
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 settings = get_settings()
@@ -104,3 +113,86 @@ async def audited_logout(
         **audit_request_context(request),
     )
     return {"success": True}
+
+
+class AdminRoleUpdate(BaseModel):
+    role: str = Field(..., description="Product role preset")
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str) -> str:
+        role = normalize_role(value)
+        if role not in KNOWN_ROLES:
+            raise ValueError(f"Unknown role: {value}")
+        return role
+
+
+@router.get("/admin/users", name="users:list")
+async def list_users_for_admin(
+    page: int = 1,
+    limit: int = 50,
+    _admin: User = Depends(require_scope(ADMIN_SCOPE)),
+):
+    """List auth users for role assignment (admin only)."""
+    page = max(1, page)
+    limit = max(1, min(limit, 100))
+    async with async_session_maker() as session:
+        total_count = int(
+            (await session.execute(select(func.count()).select_from(AuthUser))).scalar_one()
+        )
+        stmt = (
+            select(AuthUser)
+            .order_by(AuthUser.email)
+            .offset((page - 1) * limit)
+            .limit(limit)
+        )
+        rows = (await session.execute(stmt)).scalars().unique().all()
+        data = [UserRead.model_validate(row) for row in rows]
+    return {
+        "data": data,
+        "meta": pagination_meta(page=page, limit=limit, total_count=total_count),
+    }
+
+
+@router.patch("/admin/users/{user_id}/role", name="users:set_role")
+async def set_user_role(
+    user_id: UUID,
+    body: AdminRoleUpdate,
+    request: Request,
+    admin: User = Depends(require_scope(ADMIN_SCOPE)),
+):
+    """Assign a product role preset to a user (admin only)."""
+    async with async_session_maker() as session:
+        row = await session.get(AuthUser, user_id)
+        if row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        if row.is_superuser and body.role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot demote a superuser via role preset; clear superuser first.",
+            )
+        previous = row.role
+        row.role = body.role
+        if body.role == "admin":
+            row.is_superuser = True
+        session.add(row)
+        await session.commit()
+        await session.refresh(row)
+        await record_audit_event_async(
+            admin,
+            action="auth.role_update",
+            resource_type="user",
+            resource_id=str(user_id),
+            metadata={"from": previous, "to": body.role, "email": row.email},
+            **audit_request_context(request),
+        )
+        return UserRead.model_validate(row)
+
+
+@router.get("/roles", name="users:role_presets")
+async def list_role_presets(_user: User = Depends(current_active_user)):
+    """Role preset catalog with scopes for admin UI."""
+    order: list[Role] = ["admin", "user", "analyst", "author", "approver", "auditor", "guest"]
+    return {
+        "data": [{"role": role, "scopes": sorted(ROLE_SCOPES[role])} for role in order]
+    }

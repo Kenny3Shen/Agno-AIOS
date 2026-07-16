@@ -5,7 +5,18 @@ import { ApiOutlined, CheckCircleOutlined, DeleteOutlined, EditOutlined, PlusOut
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { currentUserQuery } from '@/features/auth'
 import { roleOf } from '@/shared/auth/permissions'
-import { getChatSettings, getModels, saveChatSettings, saveModels, testModel, type ChatSettings } from './api'
+import {
+  getChatSettings,
+  getModels,
+  listAdminUsers,
+  listRolePresets,
+  saveChatSettings,
+  saveModels,
+  setUserRole,
+  testModel,
+  type ChatSettings,
+} from './api'
+import type { AuthUser } from '@/shared/types/auth'
 import type { ModelConfig, ModelConfigResponse } from '@/shared/types/common'
 import { useTranslation } from 'react-i18next'
 import './settings.css'
@@ -92,6 +103,45 @@ export function SettingsPage() {
   const [testingId, setTestingId] = useState<string | null>(null)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('models')
+  const usersQuery = useQuery({
+    queryKey: ['settings', 'admin-users'],
+    queryFn: () => listAdminUsers(1, 100),
+    enabled: isAdmin && activeTab === 'users',
+  })
+  const rolePresetsQuery = useQuery({
+    queryKey: ['settings', 'role-presets'],
+    queryFn: listRolePresets,
+    enabled: isAdmin && activeTab === 'users',
+  })
+  const [roleUpdatingId, setRoleUpdatingId] = useState<string | null>(null)
+
+  const roleLabel = (role: string) => {
+    const key = `role_${role}` as const
+    const translated = t(key)
+    return translated === key ? role : translated
+  }
+
+  const roleOptions = (rolePresetsQuery.data ?? []).map((preset) => ({
+    value: String(preset.role),
+    label: roleLabel(String(preset.role)),
+  }))
+
+  const updateUserRole = async (row: AuthUser, role: string) => {
+    if (row.is_superuser && role !== 'admin') {
+      message.warning(t('cannotDemoteSuperuser'))
+      return
+    }
+    setRoleUpdatingId(row.id)
+    try {
+      await setUserRole(row.id, role)
+      await client.invalidateQueries({ queryKey: ['settings', 'admin-users'] })
+      message.success(t('roleUpdated', { role: roleLabel(role) }))
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('roleUpdateFailed'))
+    } finally {
+      setRoleUpdatingId(null)
+    }
+  }
 
   const setChatSetting = async (key: keyof ChatSettings, value: boolean) => {
     try {
@@ -441,6 +491,46 @@ export function SettingsPage() {
     </div>
   )
 
+  const usersPanel = (
+    <div className="settings-users-panel">
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+        {t('usersHint')}
+      </Typography.Paragraph>
+      <Table<AuthUser>
+        rowKey="id"
+        size="small"
+        loading={usersQuery.isLoading}
+        dataSource={usersQuery.data?.data ?? []}
+        pagination={false}
+        columns={[
+          { title: t('colEmail'), dataIndex: 'email', ellipsis: true },
+          {
+            title: t('colRole'),
+            dataIndex: 'role',
+            width: 200,
+            render: (value: string | undefined, row) => (
+              <Select
+                size="small"
+                style={{ width: '100%' }}
+                value={value || 'user'}
+                options={roleOptions.length ? roleOptions : [{ value: value || 'user', label: roleLabel(value || 'user') }]}
+                loading={roleUpdatingId === row.id}
+                disabled={Boolean(row.is_superuser) && (value || 'user') === 'admin'}
+                onChange={(role) => void updateUserRole(row, role)}
+              />
+            ),
+          },
+          {
+            title: t('colSuperuser'),
+            dataIndex: 'is_superuser',
+            width: 120,
+            render: (value: boolean | undefined) => (value ? t('superuserYes') : t('superuserNo')),
+          },
+        ]}
+      />
+    </div>
+  )
+
   return (
     <main className="page">
       <PageHeader title={t('title')} description={t('description')} />
@@ -458,7 +548,12 @@ export function SettingsPage() {
           }
           items={[
             { key: 'models', label: t('modelConnections'), children: modelConnections },
-            ...(isAdmin ? [{ key: 'chat', label: t('chatSettings'), children: chatControls }] : []),
+            ...(isAdmin
+              ? [
+                  { key: 'chat', label: t('chatSettings'), children: chatControls },
+                  { key: 'users', label: t('usersTab'), children: usersPanel },
+                ]
+              : []),
           ]}
         />
       </Card>

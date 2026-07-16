@@ -184,3 +184,52 @@ def test_main_app_installs_jwt_middleware():
     assert middleware.kwargs["user_isolation"] is True
     assert "/api/auth/*" in JWT_EXCLUDED_ROUTE_PATHS
     assert "/" in JWT_EXCLUDED_ROUTE_PATHS
+
+
+def test_analyst_role_preset():
+    actor = user("analyst")
+    assert has_scope(actor, "sessions:write")
+    assert has_scope(actor, "workflows:run")
+    assert has_scope(actor, "workflows:read")
+    assert not has_scope(actor, "workflows:write")
+    assert not has_scope(actor, "approvals:write")
+    assert not has_scope(actor, "audit:read")
+    assert not has_scope(actor, "mcp:write")
+
+
+def test_author_role_preset():
+    actor = user("author")
+    assert has_scope(actor, "workflows:write")
+    assert has_scope(actor, "knowledge:write")
+    assert has_scope(actor, "skill:submit")
+    assert has_scope(actor, "mcp:submit")
+    assert not has_scope(actor, "approvals:write")
+    assert not has_scope(actor, "audit:read")
+
+
+def test_approver_role_preset():
+    actor = user("approver")
+    assert has_scope(actor, "approvals:read")
+    assert has_scope(actor, "approvals:write")
+    assert has_scope(actor, "sessions:write")
+    assert has_scope(actor, "traces:read")
+    assert not has_scope(actor, "workflows:write")
+    assert not has_scope(actor, "knowledge:write")
+    assert not has_scope(actor, "audit:read")
+
+
+def test_auditor_role_preset():
+    actor = user("auditor")
+    assert has_scope(actor, "audit:read")
+    assert has_scope(actor, "evals:read")
+    assert has_scope(actor, "traces:read")
+    assert has_scope(actor, "approvals:read")
+    assert not has_scope(actor, "sessions:write")
+    assert not has_scope(actor, "approvals:write")
+    assert not has_scope(actor, "workflows:write")
+
+
+def test_unknown_role_falls_back_to_user():
+    actor = user("not-a-real-role")
+    assert actor_role(actor) == "user"
+    assert has_scope(actor, "sessions:write")

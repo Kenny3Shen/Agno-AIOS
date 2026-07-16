@@ -39,6 +39,8 @@ VITE_API_PROXY_TARGET=http://127.0.0.1:8001 /home/shenss/.bun/bin/bun run dev
 ```bash
 TAIS_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
 TAIS_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
+
+产品角色预设：`admin` / `user`（兼容）/ `analyst` / `author` / `approver` / `auditor` / `guest`。管理员在设置页「角色与用户」分配；JWT 含 `role`+`scopes`，改角色后需重新登录。
 ```
 
 ## 配置与运维

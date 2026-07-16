@@ -26,6 +26,22 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, UUID]):
         if len(password) < 8:
             raise exceptions.InvalidPasswordException("密码长度至少需要 8 位。")
 
+    
+    async def update(
+        self,
+        user_update,  # type: ignore[no-untyped-def]
+        user: User,
+        safe: bool = False,
+        request: Request | None = None,
+    ) -> User:
+        """Persist role presets; promote superuser when role is admin (unsafe/admin path)."""
+        role = getattr(user_update, "role", None)
+        if not safe and isinstance(role, str) and role.strip().lower() == "admin":
+            # Superuser flag drives actor_role() for JWT claims.
+            user_update.is_superuser = True  # type: ignore[attr-defined]
+        updated = await super().update(user_update, user, safe=safe, request=request)
+        return updated
+
     async def on_after_register(self, user: User, request: Request | None = None) -> None:
         logger.info("用户注册完成: {}", user.email)
 

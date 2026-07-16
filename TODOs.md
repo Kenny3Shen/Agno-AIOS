@@ -1,5 +1,13 @@
 # 下一步工作
 
+## 已完成：P1 角色预设（分析师 / 作者 / 审批 / 审计）
+
+- `ROLE_SCOPES` 扩展：`analyst` / `author` / `approver` / `auditor`（保留 `admin`/`user`/`guest` 兼容）。
+- `GET /api/auth/roles` 角色目录；`GET/PATCH /api/auth/admin/users` 管理端用户列表与角色赋值（审计 `auth.role_update`）。
+- Settings「角色与用户」Tab（管理员）：下拉分配角色；superuser 不可直接降级。
+- 前端 `UserRole` 类型扩展；RBAC 单测覆盖四类预设。
+
+
 ## 已完成：Chat tools-off 与自动轻量语义分离
 
 - `is_lean_tool_surface` 仅表示「工具开启 + 意图未挂 Skill」的自动轻量；`enable_tools=false` 不再标 lean。

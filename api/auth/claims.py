@@ -1,12 +1,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Literal, Protocol, cast
 
 from agno.os.scopes import AgentOSScope, has_required_scopes
 
-Role = Literal["admin", "user", "guest"]
+# Product roles:
+# - admin: full control (AgentOS admin scope)
+# - user: default operator (existing broad access; backward compatible)
+# - analyst: day-to-day security investigation & chat
+# - author: content / workflow / skill authoring
+# - approver: HITL approval duty desk
+# - auditor: read-only audit & compliance
+# - guest: minimal read-only visitor
+Role = Literal["admin", "user", "analyst", "author", "approver", "auditor", "guest"]
 ADMIN_SCOPE = AgentOSScope.ADMIN.value
+
+KNOWN_ROLES: frozenset[str] = frozenset(
+    {"admin", "user", "analyst", "author", "approver", "auditor", "guest"}
+)
 
 
 class ActorLike(Protocol):
@@ -19,32 +31,94 @@ class ActorLike(Protocol):
     @property
     def is_superuser(self) -> bool: ...
 
+
+# Shared building blocks so presets stay readable and consistent.
+_READ_OPS = {
+    "sessions:read",
+    "traces:read",
+    "memories:read",
+    "metrics:read",
+    "knowledge:read",
+    "cve:read",
+    "collect:read",
+    "skill:read",
+    "mcp:read",
+    "config:read",
+}
+
 ROLE_SCOPES: dict[Role, set[str]] = {
     "admin": {ADMIN_SCOPE},
+    # Backward-compatible full operator (non-admin).
     "user": {
-        "sessions:read",
+        *_READ_OPS,
         "sessions:write",
         "workflows:read",
         "workflows:write",
         "workflows:run",
-        "traces:read",
-        "memories:read",
         "memories:write",
         "memories:delete",
-        "metrics:read",
-        "collect:read",
         "collect:write",
-        "cve:read",
-        "knowledge:read",
         "knowledge:write",
         "knowledge:delete",
-        "mcp:read",
         "mcp:submit",
-        "skill:read",
         "skill:submit",
         "approvals:read",
-        "config:read",
         "evals:read",
+    },
+    # Security analyst: investigate, chat, run published workflows; no system config writes.
+    "analyst": {
+        *_READ_OPS,
+        "sessions:write",
+        "workflows:read",
+        "workflows:run",
+        "memories:write",
+        "memories:delete",
+        "knowledge:write",
+        "collect:write",
+        "approvals:read",
+        "evals:read",
+    },
+    # Content / automation author: build knowledge, skills, workflows; submit MCP.
+    "author": {
+        *_READ_OPS,
+        "sessions:write",
+        "workflows:read",
+        "workflows:write",
+        "workflows:run",
+        "knowledge:write",
+        "knowledge:delete",
+        "skill:submit",
+        "mcp:submit",
+        "collect:write",
+        "memories:write",
+    },
+    # Approval duty: resolve HITL + review context; no content authoring.
+    "approver": {
+        "sessions:read",
+        "sessions:write",
+        "traces:read",
+        "metrics:read",
+        "knowledge:read",
+        "memories:read",
+        "approvals:read",
+        "approvals:write",
+        "workflows:read",
+        "config:read",
+    },
+    # Compliance auditor: read audit trail, traces, evals; no mutations.
+    "auditor": {
+        "sessions:read",
+        "traces:read",
+        "metrics:read",
+        "knowledge:read",
+        "cve:read",
+        "collect:read",
+        "memories:read",
+        "evals:read",
+        "audit:read",
+        "approvals:read",
+        "workflows:read",
+        "config:read",
     },
     "guest": {
         "sessions:read",
@@ -72,10 +146,8 @@ def actor_role(user: ActorLike) -> Role:
     if bool(getattr(user, "is_superuser", False)):
         return "admin"
     role = str(getattr(user, "role", "user") or "user").lower()
-    if role == "admin":
-        return "admin"
-    if role == "guest":
-        return "guest"
+    if role in KNOWN_ROLES:
+        return cast(Role, role)
     return "user"
 
 
@@ -116,3 +188,11 @@ def scope_user_id(
     if actor is not None and has_scope(actor, ADMIN_SCOPE):
         return requested
     return actor_id(actor) if actor is not None else ""
+
+
+def normalize_role(value: object, *, default: Role = "user") -> Role:
+    """Coerce an API/DB role string to a known product role."""
+    role = str(value or default).strip().lower()
+    if role in KNOWN_ROLES:
+        return cast(Role, role)
+    return default
