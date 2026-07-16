@@ -7,9 +7,9 @@ from api.mcp import config as mcp_config
 
 @pytest.fixture(autouse=True)
 def _reset_bootstrap_flag():
-    mcp_config._BOOTSTRAP_DONE = False
+    mcp_config._mcp_bootstrap_once.reset()
     yield
-    mcp_config._BOOTSTRAP_DONE = False
+    mcp_config._mcp_bootstrap_once.reset()
 
 
 @pytest.mark.asyncio

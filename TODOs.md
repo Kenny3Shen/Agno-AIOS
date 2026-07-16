@@ -590,6 +590,20 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Knowledge 列表扫描页数收紧
+
+- free-text / owner-filter list 路径将 content 扫描上限从 10_000 页降到 50 页（与 `list_documents_async` 同量级），超限写 warning。
+- `clear_knowledge_base_async` 仍保留较高 `max_rounds` 以便流式清库扫完。
+
+相关：`api/services/knowledge_service.py`
+
+## 已完成：MCP bootstrap 统一 AsyncOnce
+
+- `bootstrap_mcp_config` 用手写 `_BOOTSTRAP_LOCK/_DONE` 改为共用 `api.utils.async_once.AsyncOnce`。
+- 测试通过 `reset()` 复位；行为仍为进程内只 seed 一次。
+
+相关：`api/mcp/config.py` / `api/tests/test_mcp_bootstrap.py`
+
 ## 已完成：上传审批列表强制分页
 
 - `list_upload_approvals` / `list_submission_approvals` 去掉 `limit=None` 全表回退；默认 `limit=100`，硬顶 200，始终 `LIMIT/OFFSET`。

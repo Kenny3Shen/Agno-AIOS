@@ -1075,7 +1075,12 @@ class KnowledgeBaseLifecycle:
                 if total_count is not None and content_page * fetch_size >= int(total_count):
                     break
                 content_page += 1
-                if content_page > 10_000:
+                # Bound free-text scan (same order of magnitude as list_documents_async).
+                if content_page > 50:
+                    logger.warning(
+                        "knowledge free-text list truncated after {} content pages",
+                        content_page - 1,
+                    )
                     break
             return self.paginate_documents(
                 matches,
@@ -1115,7 +1120,11 @@ class KnowledgeBaseLifecycle:
             if total_count is not None and content_page * fetch_size >= int(total_count):
                 break
             content_page += 1
-            if content_page > 10_000:
+            if content_page > 50:
+                logger.warning(
+                    "knowledge owner-filtered list truncated after {} content pages",
+                    content_page - 1,
+                )
                 break
         return matched_page, total_matched
 

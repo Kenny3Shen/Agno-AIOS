@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import asyncio
-from loguru import logger
 import re
 import secrets
 import time
 from typing import Any
 
 from anyio import Path as AsyncPath
+from loguru import logger
 
 from api.persistence.mcp import (
     delete_token_row,
@@ -21,6 +20,7 @@ from api.persistence.mcp import (
     upsert_token_row,
 )
 from api.services.runtime_paths import CONFIG_DIR
+from api.utils.async_once import AsyncOnce
 from api.utils.json import JSONDecodeError, loads
 
 SERVICE_IDS = ("playbook", "basic", "hitl")
@@ -39,42 +39,38 @@ async def init_mcp_postgres_tables() -> None:
     await ensure_mcp_tables()
 
 
-_BOOTSTRAP_LOCK = asyncio.Lock()
-_BOOTSTRAP_DONE = False
+_mcp_bootstrap_once = AsyncOnce()
+
+
+async def _seed_mcp_bootstrap() -> None:
+    await ensure_mcp_tables()
+    now = int(time.time())
+    rows = await list_server_rows()
+    existing_names = {row["name"] for row in rows}
+    for service_id in SERVICE_IDS:
+        if service_id in existing_names:
+            continue
+        await upsert_server_row(
+            {
+                "name": service_id,
+                "namespace": service_id,
+                "description": f"Built-in {service_id} tools",
+                "server_type": "builtin",
+                "transport": "inprocess",
+                "enabled": True,
+                "visibility": "public",
+                "owner_user_id": "",
+                "config": {},
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+    await _migrate_legacy_file_if_needed()
 
 
 async def bootstrap_mcp_config() -> None:
-    """Idempotent startup seed; cheap after the first successful run in-process."""
-    global _BOOTSTRAP_DONE
-    if _BOOTSTRAP_DONE:
-        return
-    async with _BOOTSTRAP_LOCK:
-        if _BOOTSTRAP_DONE:
-            return
-        await ensure_mcp_tables()
-        now = int(time.time())
-        rows = await list_server_rows()
-        existing_names = {row["name"] for row in rows}
-        for service_id in SERVICE_IDS:
-            if service_id in existing_names:
-                continue
-            await upsert_server_row(
-                {
-                    "name": service_id,
-                    "namespace": service_id,
-                    "description": f"Built-in {service_id} tools",
-                    "server_type": "builtin",
-                    "transport": "inprocess",
-                    "enabled": True,
-                    "visibility": "public",
-                    "owner_user_id": "",
-                    "config": {},
-                    "created_at": now,
-                    "updated_at": now,
-                }
-            )
-        await _migrate_legacy_file_if_needed()
-        _BOOTSTRAP_DONE = True
+    """Idempotent startup seed; runs at most once per process."""
+    await _mcp_bootstrap_once.run(_seed_mcp_bootstrap)
 
 
 async def _archive_legacy_mcp_config_file(path: AsyncPath) -> None:
