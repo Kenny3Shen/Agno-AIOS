@@ -124,6 +124,16 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：MCP bootstrap 进程内只跑一次 + tokens 上限
+
+- `bootstrap_mcp_config` 加 lock + `_BOOTSTRAP_DONE`，避免每次 `list_mcp_servers` 重复种子/扫表
+- legacy `mcp_config.json`：迁移后归档 `.migrated`；若库中已有 external 也归档残留文件
+- MCP tokens 列表默认 LIMIT 100（上限 200）
+
+相关：`api/mcp/config.py` / `api/persistence/mcp.py` / `test_mcp_bootstrap.py`
+
+---
+
 ## 已完成：model_config 进程内短缓存
 
 - `load_model_config_store` 5s TTL 内存缓存，减轻 Chat/Settings 热路径重复读库与 normalize

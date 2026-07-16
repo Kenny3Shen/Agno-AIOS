@@ -208,10 +208,12 @@ async def upsert_component_override_row(record: dict[str, Any]) -> None:
         await conn.execute(stmt)
 
 
-async def list_token_rows() -> list[dict[str, Any]]:
+async def list_token_rows(*, limit: int = 100) -> list[dict[str, Any]]:
+    """Recent MCP tokens (newest first). Capped so admin UI cannot dump unbounded history."""
     await ensure_mcp_tables()
     table = mcp_tokens_table()
-    stmt = select(table).order_by(desc(table.c.created_at))
+    safe_limit = max(1, min(int(limit or 100), 200))
+    stmt = select(table).order_by(desc(table.c.created_at)).limit(safe_limit)
     async with get_async_control_plane_engine().begin() as conn:
         return [dict(row) for row in (await conn.execute(stmt)).mappings().all()]
 

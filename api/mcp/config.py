@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from loguru import logger
 import re
 import secrets
@@ -38,36 +39,65 @@ async def init_mcp_postgres_tables() -> None:
     await ensure_mcp_tables()
 
 
+_BOOTSTRAP_LOCK = asyncio.Lock()
+_BOOTSTRAP_DONE = False
+
+
 async def bootstrap_mcp_config() -> None:
-    await ensure_mcp_tables()
-    now = int(time.time())
-    existing_names = {row["name"] for row in await list_server_rows()}
-    for service_id in SERVICE_IDS:
-        if service_id in existing_names:
-            continue
-        await upsert_server_row(
-            {
-                "name": service_id,
-                "namespace": service_id,
-                "description": f"Built-in {service_id} tools",
-                "server_type": "builtin",
-                "transport": "inprocess",
-                "enabled": True,
-                "visibility": "public",
-                "owner_user_id": "",
-                "config": {},
-                "created_at": now,
-                "updated_at": now,
-            }
-        )
-    await _migrate_legacy_file_if_needed()
+    """Idempotent startup seed; cheap after the first successful run in-process."""
+    global _BOOTSTRAP_DONE
+    if _BOOTSTRAP_DONE:
+        return
+    async with _BOOTSTRAP_LOCK:
+        if _BOOTSTRAP_DONE:
+            return
+        await ensure_mcp_tables()
+        now = int(time.time())
+        rows = await list_server_rows()
+        existing_names = {row["name"] for row in rows}
+        for service_id in SERVICE_IDS:
+            if service_id in existing_names:
+                continue
+            await upsert_server_row(
+                {
+                    "name": service_id,
+                    "namespace": service_id,
+                    "description": f"Built-in {service_id} tools",
+                    "server_type": "builtin",
+                    "transport": "inprocess",
+                    "enabled": True,
+                    "visibility": "public",
+                    "owner_user_id": "",
+                    "config": {},
+                    "created_at": now,
+                    "updated_at": now,
+                }
+            )
+        await _migrate_legacy_file_if_needed()
+        _BOOTSTRAP_DONE = True
+
+
+async def _archive_legacy_mcp_config_file(path: AsyncPath) -> None:
+    migrated_path = AsyncPath(f"{MCP_CONFIG_FILE}.migrated")
+    try:
+        if await migrated_path.exists():
+            if await path.exists():
+                await path.unlink()
+        else:
+            await path.rename(migrated_path)
+            logger.info("archived legacy MCP config to {}", migrated_path)
+    except OSError:
+        logger.warning("unable to archive legacy MCP config at {}", path, exc_info=True)
 
 
 async def _migrate_legacy_file_if_needed() -> None:
     rows = await list_server_rows()
-    if any(row["server_type"] == "external" for row in rows):
-        return
     path = AsyncPath(MCP_CONFIG_FILE)
+    if any(row["server_type"] == "external" for row in rows):
+        # Externals already live in Postgres; drop leftover one-shot file if present.
+        if await path.exists():
+            await _archive_legacy_mcp_config_file(path)
+        return
     if not await path.exists():
         return
     try:
@@ -113,9 +143,7 @@ async def _migrate_legacy_file_if_needed() -> None:
                 "updated_at": now,
             }
         )
-    migrated_path = AsyncPath(f"{MCP_CONFIG_FILE}.migrated")
-    if not await migrated_path.exists():
-        await path.rename(migrated_path)
+    await _archive_legacy_mcp_config_file(path)
 
 
 async def list_mcp_servers() -> list[dict[str, Any]]:
