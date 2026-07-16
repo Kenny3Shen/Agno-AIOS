@@ -811,7 +811,7 @@ export function WorkflowPage() {
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('selectStep')} />
             ) : (
               <div className="workflow-inspector nodrag nowheel">
-                <Tag color="processing">{step.type}</Tag>
+                <Tag color="processing">{t(`nodeType_${step.type}`)}</Tag>
                 <Input
                   className="nodrag nowheel"
                   data-inspector-field="name"
@@ -1324,7 +1324,7 @@ export function WorkflowPage() {
                                     }
                                     style={{ margin: 0 }}
                                   >
-                                    {item.status}
+                                    {t(`historyStatus_${item.status}`)}
                                   </Tag>
                                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                                     {item.summary || item.runId || item.sessionId}
@@ -1667,9 +1667,17 @@ export function WorkflowPage() {
                                       }
                                       style={{ margin: 0 }}
                                     >
-                                      {item.source}
+                                      {item.source === 'cron' || item.source === 'webhook'
+                                        ? t(`triggerSource_${item.source}`)
+                                        : item.source}
                                     </Tag>
-                                    <Tag style={{ margin: 0 }}>{item.status}</Tag>
+                                    <Tag style={{ margin: 0 }}>
+                                      {['success', 'error', 'failed', 'paused', 'started'].includes(
+                                        String(item.status),
+                                      )
+                                        ? t(`triggerStatus_${item.status}`)
+                                        : item.status}
+                                    </Tag>
                                     <Typography.Text type="secondary" style={{ fontSize: 11 }}>
                                       {item.created_at
                                         ? formatDate(item.created_at)

@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Workflow 运行历史/触发历史状态 i18n + Grok 自动轻量冒烟
+
+- 运行历史 Tag：`historyStatus_*`（运行中/已完成/失败/已取消/已暂停）。
+- Inspector 节点类型 Tag 走 `nodeType_*`。
+- 触发历史：source（cron/webhook）与 status（success/error/…）i18n。
+- Grok 4.5 冒烟：`enable_tools=true` + `ping` → `lean_mode=true`、`skill_names=[]`、`input_tokens≈2467`、内容 `pong`。
+
 ## 已完成：Workflow Run Log 事件类型 i18n + Chat 消息级自动轻量标记
 
 - Run 日志 Tag 将 `workflow.*` / `step.*` / `parallel|condition|loop|router.*` 映射为 workflow 命名空间文案（未知类型仍显示原始 type）。

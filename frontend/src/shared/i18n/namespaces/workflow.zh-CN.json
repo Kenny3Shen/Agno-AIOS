@@ -230,5 +230,17 @@
   "runEvent_loop_iteration_started": "循环迭代开始",
   "runEvent_loop_iteration_completed": "循环迭代完成",
   "runEvent_router_started": "路由开始",
-  "runEvent_router_completed": "路由完成"
+  "runEvent_router_completed": "路由完成",
+  "historyStatus_running": "运行中",
+  "historyStatus_completed": "已完成",
+  "historyStatus_failed": "失败",
+  "historyStatus_cancelled": "已取消",
+  "historyStatus_paused": "已暂停",
+  "triggerStatus_success": "成功",
+  "triggerStatus_error": "失败",
+  "triggerStatus_failed": "失败",
+  "triggerStatus_paused": "已暂停",
+  "triggerStatus_started": "已启动",
+  "triggerSource_cron": "Cron",
+  "triggerSource_webhook": "Webhook"
 }

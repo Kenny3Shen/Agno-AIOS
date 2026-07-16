@@ -230,5 +230,17 @@
   "runEvent_loop_iteration_started": "Loop iteration started",
   "runEvent_loop_iteration_completed": "Loop iteration completed",
   "runEvent_router_started": "Router started",
-  "runEvent_router_completed": "Router completed"
+  "runEvent_router_completed": "Router completed",
+  "historyStatus_running": "running",
+  "historyStatus_completed": "completed",
+  "historyStatus_failed": "failed",
+  "historyStatus_cancelled": "cancelled",
+  "historyStatus_paused": "paused",
+  "triggerStatus_success": "success",
+  "triggerStatus_error": "error",
+  "triggerStatus_failed": "failed",
+  "triggerStatus_paused": "paused",
+  "triggerStatus_started": "started",
+  "triggerSource_cron": "cron",
+  "triggerSource_webhook": "webhook"
 }
