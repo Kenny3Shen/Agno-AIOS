@@ -281,7 +281,7 @@ async def test_overview_uses_trace_database_time_and_owner_filter():
 
 
 @pytest.mark.asyncio
-async def test_overview_reads_every_trace_page_inside_the_selected_window():
+async def test_overview_token_sample_stops_at_first_page_when_window_exceeds_cap():
     calls: list[int] = []
 
     async def get_traces(**kwargs):
@@ -297,9 +297,10 @@ async def test_overview_reads_every_trace_page_inside_the_selected_window():
             user_id="u1",
         )
 
-    assert calls == [1, 2]
-    assert [trace["trace_id"] for trace in traces] == ["first", "second"]
-    assert meta == {"sample_size": 2, "window_total": 1001, "truncated": True}
+    # Token sample is capped at one page; latency/series no longer need multi-page walk.
+    assert calls == [1]
+    assert [trace["trace_id"] for trace in traces] == ["first"]
+    assert meta == {"sample_size": 1, "window_total": 1001, "truncated": True}
 
 
 @pytest.mark.asyncio
@@ -317,10 +318,10 @@ async def test_overview_caps_trace_pages_when_window_is_huge():
             user_id="u1",
         )
 
-    assert calls == [1, 2]
-    assert len(traces) == 2
+    assert calls == [1]
+    assert len(traces) == 1
     assert meta["truncated"] is True
-    assert meta["sample_size"] == 2
+    assert meta["sample_size"] == 1
     assert meta["window_total"] == 50_000
 
 

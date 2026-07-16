@@ -22,6 +22,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.schema import CreateSchema
 
+from loguru import logger
+
 from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
 
@@ -74,7 +76,8 @@ async def ensure_workflows_table_async() -> None:
         async with get_async_control_plane_engine().begin() as conn:
             await conn.execute(text(ddl))
     except Exception:
-        pass
+        # Concurrent migrate / already-applied columns are fine.
+        logger.debug("workflows triggers column migrate skipped", exc_info=True)
     for extra_ddl in (
         f'ALTER TABLE "{schema}"."{WORKFLOWS_TABLE}" '
         "ADD COLUMN IF NOT EXISTS published_definition JSONB",
@@ -87,7 +90,7 @@ async def ensure_workflows_table_async() -> None:
             async with get_async_control_plane_engine().begin() as conn:
                 await conn.execute(text(extra_ddl))
         except Exception:
-            pass
+            logger.debug("workflows publish-column migrate skipped", exc_info=True)
 
 
 async def insert_workflow(record: dict[str, Any]) -> dict[str, Any]:

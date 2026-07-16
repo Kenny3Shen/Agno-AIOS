@@ -136,6 +136,16 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：吞异常日志 + Overview token 采样 1k + resolveApproval 收窄
+
+- `workflows` 列迁移、`knowledge_source` 选择性向量删除、workflow resume 终态写回：`except pass` → debug/warning/exception 日志
+- Overview token 采样上限 2×1000→1×1000（latency/series/distributions 已 SQL）
+- 前端 `resolveApproval` 去掉 string 重载，统一 options 对象
+
+相关：`workflows.py` / `knowledge_source_service.py` / `workflow_run_runtime.py` / `overview_service.py` / `approvals/api.ts`
+
+---
+
 ## 已完成：HITL 拒绝理由只读 note + Overview token 采样收窄
 
 - HITL 读路径只使用 `resolution_data.note`：`chat_run_events` / `security_run_runtime` / `workflow_run_runtime` 去掉 `rejection_reason` 双读

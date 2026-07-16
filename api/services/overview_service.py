@@ -24,8 +24,8 @@ _RANGE_WINDOWS: dict[OverviewRange, timedelta] = {
     "7d": timedelta(days=7),
 }
 _PAGE_LIMIT = 1_000
-# Token/distributions sample only (latency/series/counts use SQL window aggregates).
-_MAX_OVERVIEW_TRACE_PAGES = 2  # 2 * 1000 = 2000 traces max for span token sample
+# Token sample only (latency/series/counts/distributions use SQL window aggregates).
+_MAX_OVERVIEW_TRACE_PAGES = 1  # 1 * 1000 = 1000 traces max for span token sample
 _MAX_OVERVIEW_TRACES = _PAGE_LIMIT * _MAX_OVERVIEW_TRACE_PAGES
 
 

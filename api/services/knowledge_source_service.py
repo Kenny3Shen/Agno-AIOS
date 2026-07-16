@@ -10,6 +10,8 @@ from uuid import uuid4
 from agno.knowledge.content import Content, ContentStatus, FileData
 from anyio import Path as AsyncPath
 
+from loguru import logger
+
 from api.services.knowledge_progress import emit_progress
 
 
@@ -461,7 +463,11 @@ async def _delete_vectors_by_content_id_async(
                 await asyncio.to_thread(_sync_delete)
                 return
             except Exception:
-                pass
+                logger.warning(
+                    "selective vector delete by content_hash failed for {}",
+                    content_id,
+                    exc_info=True,
+                )
         # Selective delete unavailable: do not wipe the whole content_id (would
         # remove the revision we just wrote). Leave stale hashes for a later
         # rebuild, or rely on content_hash upsert semantics.

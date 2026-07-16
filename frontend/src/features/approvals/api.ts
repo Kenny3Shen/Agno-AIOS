@@ -283,13 +283,9 @@ export type ResolveApprovalOptions = {
 export const resolveApproval = (
   id: string,
   status: 'approved' | 'rejected',
-  rejectionReasonOrOptions?: string | ResolveApprovalOptions
-) => {
-  const options: ResolveApprovalOptions =
-    typeof rejectionReasonOrOptions === 'string' || rejectionReasonOrOptions == null
-      ? { rejectionReason: rejectionReasonOrOptions }
-      : rejectionReasonOrOptions
-  return requestJson<Approval>(
+  options: ResolveApprovalOptions = {}
+) =>
+  requestJson<Approval>(
     `/approvals/${encodeURIComponent(id)}/resolve`,
     jsonInit('POST', {
       status,
@@ -297,7 +293,6 @@ export const resolveApproval = (
       ...(options.resolutionData ? { resolution_data: options.resolutionData } : {}),
     })
   ).then((row) => normalizeApproval(row) ?? (row as Approval))
-}
 
 export const resumeApproval = (id: string) =>
   requestJson<Approval>(`/approvals/${encodeURIComponent(id)}/resume`, jsonInit('POST')).then(

@@ -287,14 +287,18 @@ async def resume_workflow_run(approval_id: str) -> str:
         try:
             await db.update_approval(approval_id, run_status="COMPLETED")
         except Exception:
-            pass
+            logger.exception(
+                "Could not mark workflow approval {} as COMPLETED", approval_id
+            )
         return "COMPLETED"
     except Exception:
         logger.exception("Workflow continue failed for approval {}", approval_id)
         try:
             await db.update_approval(approval_id, run_status="ERROR")
         except Exception:
-            pass
+            logger.exception(
+                "Could not mark workflow approval {} as ERROR", approval_id
+            )
         raise
 
 
