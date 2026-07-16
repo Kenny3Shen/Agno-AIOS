@@ -48,3 +48,25 @@ async def test_migrate_archives_leftover_file_when_externals_exist(tmp_path, mon
 
     assert not legacy.exists()
     assert (tmp_path / "mcp_config.json.migrated").exists()
+
+
+@pytest.mark.asyncio
+async def test_migrate_archives_empty_leftover_when_servers_exist(tmp_path, monkeypatch):
+    legacy = tmp_path / "mcp_config.json"
+    legacy.write_text("{\"mcp\": {\"playbook\": false}, \"mcp_servers\": []}", encoding="utf-8")
+    monkeypatch.setattr(mcp_config, "MCP_CONFIG_FILE", legacy)
+    upsert = AsyncMock()
+
+    with (
+        patch.object(
+            mcp_config,
+            "list_server_rows",
+            AsyncMock(return_value=[{"name": "playbook", "server_type": "builtin"}]),
+        ),
+        patch.object(mcp_config, "upsert_server_row", upsert),
+    ):
+        await mcp_config._migrate_legacy_file_if_needed()
+
+    assert not legacy.exists()
+    assert (tmp_path / "mcp_config.json.migrated").exists()
+    upsert.assert_not_awaited()

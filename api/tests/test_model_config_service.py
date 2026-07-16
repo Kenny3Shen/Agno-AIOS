@@ -20,7 +20,8 @@ def _clear_model_config_cache(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_load_model_config_store_imports_legacy_json_when_postgres_is_empty(tmp_path):
+async def test_load_model_config_store_archives_leftover_json_without_import_when_empty(tmp_path):
+    """Empty table seeds builtins only; leftover JSON is archived, never imported."""
     legacy_file = tmp_path / "model_config.json"
     legacy_file.write_text(
         """
@@ -49,16 +50,13 @@ async def test_load_model_config_store_imports_legacy_json_when_postgres_is_empt
     ):
         store = await model_config_service.load_model_config_store()
 
-    assert store.active_model_id == "custom"
-    custom = next(model for model in store.models if model.id == "custom")
-    assert custom.structured_output_mode == "json"
+    assert store.active_model_id == model_config_service.DEFAULT_MODELS[0].id
+    assert all(model.id != "custom" for model in store.models)
     replace.assert_awaited_once()
     await_args = replace.await_args
     assert await_args is not None
     rows = await_args.args[0]
-    assert any(row["id"] == "custom" and row["active"] for row in rows)
-    assert {row["structured_output_mode"] for row in rows} <= {"native", "json"}
-    # One-shot bootstrap: original file is renamed so empty-table restarts do not re-import.
+    assert all(row["id"] != "custom" for row in rows)
     assert not legacy_file.exists()
     assert (tmp_path / "model_config.json.imported").exists()
 

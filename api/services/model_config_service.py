@@ -12,7 +12,6 @@ from loguru import logger
 from api.config import get_settings
 from api.persistence.model_configs import list_model_config_rows, replace_model_config_rows
 from api.services.runtime_paths import CONFIG_DIR, resolve_project_path
-from api.utils.json import loads
 from api.services.model_capabilities import (
     apply_optimal_model_defaults,
     capabilities_for,
@@ -451,7 +450,7 @@ def _mask_secret(value: str) -> str:
 
 
 def _archive_legacy_model_config_file(config_file: Path) -> None:
-    """Rename JSON bootstrap to ``*.imported`` (empty seed or leftover after PG seed)."""
+    """Rename leftover ``model_config.json`` to ``*.imported`` (never re-imported)."""
     try:
         archived = config_file.with_name(f"{config_file.name}.imported")
         # Avoid clobbering a previous archive; keep the first successful import.
@@ -466,27 +465,6 @@ def _archive_legacy_model_config_file(config_file: Path) -> None:
             config_file,
             exc_info=True,
         )
-
-
-def _load_legacy_or_default_store() -> tuple[ModelConfigStore, Path | None]:
-    """Bootstrap store from legacy JSON once, else built-in defaults.
-
-    Returns ``(store, legacy_path_if_used)`` so callers can archive the file
-    after a successful Postgres seed.
-    """
-    config_file = model_config_file()
-    if not config_file.exists():
-        return ModelConfigStore.default(), None
-    try:
-        raw = loads(config_file.read_text(encoding="utf-8"))
-    except Exception:
-        logger.warning(
-            "legacy model config unreadable at {}; using defaults",
-            config_file,
-            exc_info=True,
-        )
-        return ModelConfigStore.default(), None
-    return ModelConfigStore.from_raw(raw), config_file
 
 
 def _rows_need_persist(rows: Iterable[Mapping[str, Any]]) -> bool:
@@ -547,24 +525,24 @@ async def load_model_config_store() -> ModelConfigStore:
         return _STORE_CACHE
 
     rows = await list_model_config_rows()
-    if not rows:
-        store, legacy_path = _load_legacy_or_default_store()
-        source = "legacy file" if legacy_path is not None else "defaults"
-        logger.info(
-            "model config table empty; seeding {} model(s) from {}",
-            len(store.models),
-            source,
-        )
-        await replace_model_config_rows(_store_to_rows(store))
-        if legacy_path is not None:
-            _archive_legacy_model_config_file(legacy_path)
-        return _cache_model_config_store(store)
-
-    # Postgres is source of truth once seeded; retire leftover JSON so a later
-    # empty-table restart cannot re-import stale keys (mirrors MCP .migrated).
     leftover = model_config_file()
     if leftover.exists():
+        # Never re-import file content into Postgres (Settings UI is source of truth).
+        # Empty-table boots seed builtins; leftover JSON is retired for forensics only.
+        logger.warning(
+            "retiring leftover model config file at {} (Postgres is source of truth)",
+            leftover,
+        )
         _archive_legacy_model_config_file(leftover)
+
+    if not rows:
+        store = ModelConfigStore.default()
+        logger.info(
+            "model config table empty; seeding {} model(s) from defaults",
+            len(store.models),
+        )
+        await replace_model_config_rows(_store_to_rows(store))
+        return _cache_model_config_store(store)
 
     base_store = ModelConfigStore.from_rows(rows)
     store = base_store.with_defaults().with_valid_active_model()

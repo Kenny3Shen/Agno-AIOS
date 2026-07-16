@@ -103,13 +103,21 @@ async def _migrate_legacy_file_if_needed() -> None:
         raw = loads(await path.read_text(encoding="utf-8"))
     except (JSONDecodeError, OSError, TypeError, ValueError):
         logger.warning(
-            "legacy MCP config unreadable at {}; skip file migrate",
+            "legacy MCP config unreadable at {}; archive leftover and skip",
             path,
             exc_info=True,
         )
+        await _archive_legacy_mcp_config_file(path)
         return
     if not isinstance(raw, dict):
-        logger.warning("legacy MCP config at {} is not an object; skip file migrate", path)
+        logger.warning("legacy MCP config at {} is not an object; archive leftover", path)
+        await _archive_legacy_mcp_config_file(path)
+        return
+    entries = raw.get("mcp_servers") if isinstance(raw.get("mcp_servers"), list) else []
+    # No external entries left to import and builtins already seeded → just retire file.
+    if not entries and rows:
+        logger.info("archiving leftover MCP config with no external servers at {}", path)
+        await _archive_legacy_mcp_config_file(path)
         return
     now = int(time.time())
     flags = raw.get("mcp") if isinstance(raw.get("mcp"), dict) else {}
@@ -118,7 +126,6 @@ async def _migrate_legacy_file_if_needed() -> None:
         row = by_name.get(service_id)
         if row is not None and service_id in flags:
             await upsert_server_row({**row, "enabled": bool(flags[service_id]), "updated_at": now})
-    entries = raw.get("mcp_servers") if isinstance(raw.get("mcp_servers"), list) else []
     for entry in entries:
         if not isinstance(entry, dict) or not str(entry.get("name") or "").strip():
             continue

@@ -124,6 +124,17 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：model_config 空表不再 JSON 导入
+
+- 空表只 seed `DEFAULT_MODELS`；存在 `model_config.json` 仅归档为 `*.imported`（warning），不写进 Postgres
+- 去掉 `_load_legacy_or_default_store`；密钥与连接以 Settings/DB 为准
+- MCP：无 external 条目且库中已有 server 时直接归档 leftover，不重放 builtin flags
+- skills_config / front matter：解析异常类型收窄 + YAML 错误 debug 日志
+
+相关：`model_config_service.py` / `mcp/config.py` / `skill_service.py` / tests
+
+---
+
 ## 已完成：best-effort 静默 except 日志
 
 - workflow 版本快照失败写 warning（仍不阻断 save）

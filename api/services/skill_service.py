@@ -21,7 +21,7 @@ from loguru import logger
 
 from api.config import get_settings
 from api.services.runtime_paths import CONFIG_DIR, PROJECT_ROOT, resolve_project_path
-from api.utils.json import dumps, loads
+from api.utils.json import JSONDecodeError, dumps, loads
 
 DEFAULT_SKILLS_DIR = PROJECT_ROOT / "api" / "agent" / "skills"
 DEFAULT_SKILLS_CONFIG_FILE = CONFIG_DIR / "skills_config.json"
@@ -103,7 +103,7 @@ def load_skills_config() -> dict[str, bool]:
             for key, value in cfg.items()
             if isinstance(key, str)
         }
-    except Exception:
+    except (JSONDecodeError, OSError, TypeError, ValueError):
         logger.warning(
             "skills config unreadable at {}; treating all skills as enabled",
             config_file,
@@ -147,7 +147,8 @@ def _split_skill_markdown(raw: str) -> tuple[dict[str, Any], str]:
         return {}, raw
     try:
         meta = yaml.safe_load(parts[1])
-    except Exception:
+    except yaml.YAMLError:
+        logger.debug("skill front matter YAML unreadable", exc_info=True)
         meta = {}
     return (meta if isinstance(meta, dict) else {}), parts[2].lstrip("\n")
 
