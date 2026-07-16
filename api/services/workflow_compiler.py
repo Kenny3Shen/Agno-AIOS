@@ -19,19 +19,26 @@ from api.services.model_factory import build_agno_model
 from api.services.postgres_store import get_async_agno_postgres_db
 from api.services.skill_service import resolve_enabled_skill_dirs
 
-# Built-in executor registry. Nested/team executors arrive in later PRs.
+# Built-in executor registry (product catalog for Studio Inspector).
+# Nested/team executors remain out of scope; keep refs stable for saved definitions.
 BUILTIN_AGENT_REFS: dict[str, dict[str, str]] = {
     "security-operations": {
         "id": "security-operations",
-        "name": "安全防御助手",
+        "name": "安全运营助手",
         "role": "安全防御运营助手",
-        "description": "工作流步骤使用的安全运营 Agent（无 MCP，降低编排复杂度）。",
+        "description": "标准步骤执行器：挂载步骤绑定的 Local Skills，支持 HITL 确认/用户输入/输出复核。步骤默认不连 MCP（降低编排不确定性）；需要自动化剧本时绑定 playbook-skill。",
+        "category": "operations",
+        "capabilities": "skills,hitl,knowledge",
+        "recommended_for": "研判、隔离确认、剧本编排、报告汇总",
     },
     "safe-fallback": {
         "id": "safe-fallback",
-        "name": "无工具安全助手",
+        "name": "轻量分析助手",
         "role": "安全分析助手",
-        "description": "无工具模式下的轻量步骤执行器。",
+        "description": "无工具轻量步骤：不挂 MCP/Skills，适合纯推理、文案整理、分支兜底与失败降级路径。上下文与 token 成本更低。",
+        "category": "lite",
+        "capabilities": "reasoning",
+        "recommended_for": "条件分支兜底、摘要改写、无外部副作用步骤",
     },
 }
 
@@ -49,12 +56,17 @@ class WorkflowDefinitionError(ValueError):
 
 
 def list_executor_options() -> list[dict[str, str]]:
+    """Product catalog for Studio step executor Select (stable ``ref`` keys)."""
     return [
         {
             "ref": ref,
             "kind": "agent",
             "name": meta["name"],
             "description": meta["description"],
+            "category": meta.get("category", "operations"),
+            "capabilities": meta.get("capabilities", ""),
+            "recommended_for": meta.get("recommended_for", ""),
+            "role": meta.get("role", ""),
         }
         for ref, meta in BUILTIN_AGENT_REFS.items()
     ]

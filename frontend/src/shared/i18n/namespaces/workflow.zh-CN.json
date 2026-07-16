@@ -22,7 +22,7 @@
   "unconfigured": "未配置步骤",
   "emptySteps": "从左侧拖入节点，或选用安全模板",
   "inspector": "节点配置",
-  "executorPlaceholder": "选择执行 Agent",
+  "executorPlaceholder": "选择步骤执行器",
   "stepNamePlaceholder": "显示名称",
   "instructionsPlaceholder": "本步指令（写入 Agent 说明）",
   "evaluatorCel": "条件表达式（CEL，可引用 input 等）",
@@ -248,5 +248,7 @@
   "handleOutBottom": "出口（下）",
   "handleOutRight": "出口（右）",
   "handleBranchBottom": "{{label}}（下）",
-  "handleBranchRight": "{{label}}（右）"
+  "handleBranchRight": "{{label}}（右）",
+  "executorLabel": "执行器",
+  "executorRecommended": "适用：{{text}}"
 }

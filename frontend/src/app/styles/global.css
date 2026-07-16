@@ -2075,6 +2075,19 @@ html.dark .workflow-studio {
   color: var(--tais-text);
 }
 
+
+.workflow-executor-option {
+  max-width: 360px;
+  white-space: normal;
+  line-height: 1.35;
+  padding: 2px 0;
+}
+.workflow-executor-option__title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px;
+}
 .workflow-inspector__switch {
   display: flex;
   align-items: center;

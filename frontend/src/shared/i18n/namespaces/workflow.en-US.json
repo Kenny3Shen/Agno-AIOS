@@ -22,7 +22,7 @@
   "unconfigured": "Unconfigured step",
   "emptySteps": "Drag nodes from the left, or start from a security template",
   "inspector": "Node settings",
-  "executorPlaceholder": "Select agent executor",
+  "executorPlaceholder": "Select step executor",
   "stepNamePlaceholder": "Display name",
   "instructionsPlaceholder": "Step instructions (added to agent instructions)",
   "evaluatorCel": "Condition (CEL; may reference input, …)",
@@ -248,5 +248,7 @@
   "handleOutBottom": "Out (bottom)",
   "handleOutRight": "Out (right)",
   "handleBranchBottom": "{{label}} (bottom)",
-  "handleBranchRight": "{{label}} (right)"
+  "handleBranchRight": "{{label}} (right)",
+  "executorLabel": "Executor",
+  "executorRecommended": "Best for: {{text}}"
 }

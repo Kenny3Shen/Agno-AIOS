@@ -824,17 +824,59 @@ export function WorkflowPage() {
                 {step.type === 'step' ? (
                   <>
                     <div data-inspector-field="executor" style={{ marginTop: 8 }}>
+                      <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
+                        {t('executorLabel')}
+                      </Typography.Text>
                       <Select
                         getPopupContainer={studioPopupContainer}
                         style={{ width: '100%' }}
                         placeholder={t('executorPlaceholder')}
                         value={step.targetId}
+                        optionLabelProp="label"
                         options={executors.map((item) => ({
                           value: item.ref,
-                          label: `${item.name} (${item.ref})`,
+                          label: item.name,
+                          title: item.description,
+                          item,
                         }))}
+                        optionRender={(option) => {
+                          const item = (option.data as { item?: (typeof executors)[number] }).item
+                          if (!item) return option.label
+                          return (
+                            <div className="workflow-executor-option">
+                              <div className="workflow-executor-option__title">
+                                <strong>{item.name}</strong>
+                                <Typography.Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>
+                                  {item.ref}
+                                </Typography.Text>
+                              </div>
+                              {item.description ? (
+                                <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block' }}>
+                                  {item.description}
+                                </Typography.Text>
+                              ) : null}
+                              {item.recommendedFor ? (
+                                <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 2 }}>
+                                  {t('executorRecommended', { text: item.recommendedFor })}
+                                </Typography.Text>
+                              ) : null}
+                            </div>
+                          )
+                        }}
                         onChange={(value) => workflow.update({ ...step, targetId: value })}
                       />
+                      {(() => {
+                        const selected = executors.find((item) => item.ref === step.targetId)
+                        if (!selected?.description) return null
+                        return (
+                          <Typography.Paragraph type="secondary" style={{ fontSize: 11, marginTop: 6, marginBottom: 0 }}>
+                            {selected.description}
+                            {selected.recommendedFor
+                              ? ` · ${t('executorRecommended', { text: selected.recommendedFor })}`
+                              : ''}
+                          </Typography.Paragraph>
+                        )
+                      })()}
                     </div>
                     <Input.TextArea
                       style={{ marginTop: 8 }}

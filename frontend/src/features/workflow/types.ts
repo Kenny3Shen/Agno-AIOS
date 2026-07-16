@@ -120,6 +120,10 @@ export type ExecutorOption = {
   kind: string
   name: string
   description: string
+  category?: string
+  capabilities?: string
+  recommendedFor?: string
+  role?: string
 }
 
 export type WorkflowState = {

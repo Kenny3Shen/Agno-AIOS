@@ -8,9 +8,17 @@ from api.services.workflow_compiler import (
 
 
 def test_executor_catalog_includes_builtin_agents():
-    refs = {item["ref"] for item in list_executor_options()}
+    items = list_executor_options()
+    refs = {item["ref"] for item in items}
     assert "security-operations" in refs
     assert "safe-fallback" in refs
+    by_ref = {item["ref"]: item for item in items}
+    assert by_ref["security-operations"]["name"]
+    assert by_ref["security-operations"]["description"]
+    assert by_ref["security-operations"]["category"] == "operations"
+    assert "hitl" in by_ref["security-operations"]["capabilities"]
+    assert by_ref["safe-fallback"]["category"] == "lite"
+    assert by_ref["safe-fallback"]["recommended_for"]
 
 
 def test_validate_linear_definition_normalizes_legacy_fields():

@@ -272,6 +272,10 @@ export const listExecutors = async () => {
         kind: String(row.kind ?? 'agent'),
         name: String(row.name ?? row.ref),
         description: String(row.description ?? ''),
+        category: row.category != null ? String(row.category) : undefined,
+        capabilities: row.capabilities != null ? String(row.capabilities) : undefined,
+        recommendedFor: row.recommended_for != null ? String(row.recommended_for) : undefined,
+        role: row.role != null ? String(row.role) : undefined,
       }
     },
   })
