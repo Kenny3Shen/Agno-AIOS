@@ -554,6 +554,19 @@ export function WorkflowPage() {
                 })}
               </Button>
             ) : null}
+            {!workflow.librarySearch.trim() &&
+            !workflow.workflowsQuery.isFetching &&
+            (workflowListMeta?.total_count ?? saved.length) === 0 &&
+            canWrite ? (
+              <Button
+                type="link"
+                size="small"
+                style={{ paddingInline: 0, marginTop: 4 }}
+                onClick={() => workflow.startFromTemplate('ir-triage')}
+              >
+                {t('startFromTemplate')}
+              </Button>
+            ) : null}
             {workflow.state.workflowId ? (
               <Button
                 danger

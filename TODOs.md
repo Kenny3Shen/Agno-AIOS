@@ -124,6 +124,10 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Workflow 空库 CTA
+
+- 库 Select 无结果且非搜索态时，提供「从 IR 分诊模板开始」链接，与画布空态引导一致。
+
 ## 已完成：Chat 消息打开 Trace
 
 - 助手消息操作栏：有 `run_id`/`session_id` 时增加「打开 Trace」，深链与 Dashboard 一致（`session_id`/`run_id`/`selected_session`/`trace`）。
