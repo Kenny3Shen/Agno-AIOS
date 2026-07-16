@@ -911,16 +911,19 @@ function CanvasInner({
         return
       }
       if (event.key === 'Escape') {
-        event.preventDefault()
-        onSelectMany([])
+        if (selectedIds.length || selectedId) {
+          event.preventDefault()
+          onSelectMany([])
+        }
         return
       }
       if (event.key === 'Delete' || event.key === 'Backspace') {
+        if (!(selectedIds.length || selectedId)) return
         event.preventDefault()
         onDeleteSelected()
       }
     },
-    [onUndo, onRedo, onCopy, onPaste, onSelectMany, onOrganize, onDeleteSelected, steps]
+    [onUndo, onRedo, onCopy, onPaste, onSelectMany, onOrganize, onDeleteSelected, steps, selectedIds, selectedId]
   )
 
   useEffect(() => {
