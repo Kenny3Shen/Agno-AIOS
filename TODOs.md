@@ -136,6 +136,15 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Approvals all 并行 + status counts 并行
+
+- `getApprovals(kind=all)` 首页 `Promise.all` 并行拉 submissions + HITL；后续页先 probe upload total，越过上传区则只打 HITL
+- `get_approval_status_counts` 并行 pending/approved/rejected；失败写 exception 日志
+
+相关：`approvals/api.ts` / `approvals_service.py`
+
+---
+
 ## 已完成：配置加载失败可观测 + Overview token 采样 200
 
 - skills / legacy model_config JSON / MCP 文件迁移：解析失败写 warning，不再静默空配置

@@ -254,17 +254,54 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
     }
   }
 
-  // kind === 'all': virtual merge uploads first, then all HITL.
-  const submissions = await fetchSubmissionsSlice(status, start, limit)
-  const submissionCount = submissions.total
-  const pageSubmissions = submissions.items
-  const hitlNeed = limit - pageSubmissions.length
-  const hitlOffset = Math.max(0, start - submissionCount)
-  const hitl = await fetchHitlSlice(status, hitlOffset, Math.max(hitlNeed, 0))
+  // kind === 'all': virtual merge uploads first, then Agno HITL.
+  // Page 1 loads both sources in parallel (common on-call path). Later pages
+  // skip upload rows once past submissionCount.
+  if (start === 0) {
+    const [submissions, hitl] = await Promise.all([
+      fetchSubmissionsSlice(status, 0, limit),
+      fetchHitlSlice(status, 0, limit),
+    ])
+    const pageSubmissions = submissions.items
+    const hitlNeed = Math.max(0, limit - pageSubmissions.length)
+    return {
+      items: [...pageSubmissions, ...hitl.items.slice(0, hitlNeed)],
+      total: submissions.total + hitl.total,
+      page,
+      limit,
+    }
+  }
 
+  // Cheap totals when not on the first page so we can jump straight to HITL.
+  const uploadProbe = await fetchSubmissionsPage(status, 1, 1)
+  const submissionCount = uploadProbe.total
+  if (start >= submissionCount) {
+    const hitl = await fetchHitlSlice(status, start - submissionCount, limit)
+    return {
+      items: hitl.items,
+      total: submissionCount + hitl.total,
+      page,
+      limit,
+    }
+  }
+
+  const submissions = await fetchSubmissionsSlice(status, start, limit)
+  const pageSubmissions = submissions.items
+  const hitlNeed = Math.max(0, limit - pageSubmissions.length)
+  if (hitlNeed === 0) {
+    const hitlProbe = await fetchHitlPage(status, 1, 1)
+    return {
+      items: pageSubmissions,
+      total: submissions.total + hitlProbe.total,
+      page,
+      limit,
+    }
+  }
+  // Still inside the upload window: HITL rows start at offset 0.
+  const hitl = await fetchHitlSlice(status, 0, hitlNeed)
   return {
-    items: [...pageSubmissions, ...hitl.items.slice(0, Math.max(hitlNeed, 0))],
-    total: submissionCount + hitl.total,
+    items: [...pageSubmissions, ...hitl.items.slice(0, hitlNeed)],
+    total: submissions.total + hitl.total,
     page,
     limit,
   }

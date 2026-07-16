@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -7,6 +8,7 @@ from typing import Any, NotRequired, TypedDict, cast
 from uuid import UUID
 
 from agno.run.approval import aresolve_approval
+from loguru import logger
 from sqlalchemy import select
 
 from api.auth.claims import ActorLike, scope_user_id
@@ -338,28 +340,40 @@ async def get_approval_status_counts(
 
     Pending uses Agno ``get_pending_approval_count``; approved/rejected use
     ``get_approvals(..., limit=1)`` total. Scope isolation matches list.
+    Queries run in parallel.
     """
     scoped = _scoped_user_id(actor, user_id)
     db = get_async_agno_postgres_db()
-    try:
-        pending_raw = await db.get_pending_approval_count(user_id=scoped)
-        pending = max(0, int(pending_raw or 0))
-    except (TypeError, ValueError):
-        pending = 0
-    except Exception:
-        pending = 0
 
-    approved = 0
-    rejected = 0
-    try:
-        approved = await _status_total(status="approved", user_id=scoped)
-    except Exception:
-        approved = 0
-    try:
-        rejected = await _status_total(status="rejected", user_id=scoped)
-    except Exception:
-        rejected = 0
+    async def _pending() -> int:
+        try:
+            raw = await db.get_pending_approval_count(user_id=scoped)
+            return max(0, int(raw or 0))
+        except (TypeError, ValueError):
+            return 0
+        except Exception:
+            logger.exception("approval pending count failed")
+            return 0
 
+    async def _approved() -> int:
+        try:
+            return await _status_total(status="approved", user_id=scoped)
+        except Exception:
+            logger.exception("approval approved count failed")
+            return 0
+
+    async def _rejected() -> int:
+        try:
+            return await _status_total(status="rejected", user_id=scoped)
+        except Exception:
+            logger.exception("approval rejected count failed")
+            return 0
+
+    pending, approved, rejected = await asyncio.gather(
+        _pending(),
+        _approved(),
+        _rejected(),
+    )
     return {
         "pending": pending,
         "approved": approved,
