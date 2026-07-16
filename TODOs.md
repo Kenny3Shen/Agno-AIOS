@@ -124,6 +124,16 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Overview 去 type-ignore + Knowledge 全量 list 有界
+
+- `get_runtime_overview` 对 `asyncio.gather` 结构化解包，去掉 7 处 `type: ignore[arg-type]`
+- `list_documents_async` 改为分页拼装（100×50 页硬顶），避免单次无界 materialize；API/UI 仍优先 `list_documents_page_async`
+- `TAIS_MODEL_CONFIG_FILE` / `model_config_file` 文档标明仅用于归档残留 JSON，永不导入
+
+相关：`overview_service.py` / `knowledge_service.py` / `config.py` / `model_config_service.py`
+
+---
+
 ## 已完成：Eval suite/case run 真分页 data/meta
 
 - `list_suite_run_rows_async` / `list_case_run_rows_async` 返回 `(rows, total)`，SQL `LIMIT/OFFSET` + count

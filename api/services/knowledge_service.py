@@ -951,16 +951,30 @@ class KnowledgeBaseLifecycle:
         return collected
 
     async def list_documents_async(self, owner_user_id: str | None = None) -> list[KnowledgeDocumentPayload]:
-        await self._ensure_contents_storage_async()
-        contents = await self._collect_all_content_rows_async()
-        chunk_counts = await self._chunk_counts_by_content_id_async(owner_user_id)
-        documents = []
-        for content in contents:
-            if not _content_visible_to_owner(content, owner_user_id):
-                continue
-            document = _content_to_document(content)
-            document["chunks"] = chunk_counts.get(document["id"], document["chunks"])
-            documents.append(document)
+        """Compatibility full list via paged reads (not a single unbounded dump).
+
+        Prefer ``list_documents_page_async`` for API/UI. Hard-caps at 50 pages × 100
+        (matches ``list_documents_page_async`` max page size).
+        """
+        page_size = 100
+        max_pages = 50
+        documents: list[KnowledgeDocumentPayload] = []
+        for page in range(1, max_pages + 1):
+            batch, total = await self.list_documents_page_async(
+                owner_user_id=owner_user_id,
+                page=page,
+                limit=page_size,
+            )
+            documents.extend(batch)
+            if len(batch) < page_size or len(documents) >= total:
+                break
+        else:
+            logger.warning(
+                "list_documents_async truncated at {} documents (page_size={}, max_pages={})",
+                len(documents),
+                page_size,
+                max_pages,
+            )
         return documents
 
     async def list_documents_page_async(

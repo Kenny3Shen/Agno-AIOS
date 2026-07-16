@@ -428,6 +428,7 @@ class ModelConfigStore(BaseModel):
 
 
 def model_config_file() -> Path:
+    """Path checked only to retire leftover JSON (never loaded as config source)."""
     return resolve_project_path(
         get_settings().agno_model_config_file or CONFIG_DIR / "model_config.json"
     )

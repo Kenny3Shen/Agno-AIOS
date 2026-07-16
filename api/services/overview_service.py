@@ -3,12 +3,12 @@ from __future__ import annotations
 import asyncio
 from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
+from typing import Any, Literal, cast as typing_cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
-from sqlalchemy import and_, case, cast, func, select
+from sqlalchemy import and_, case, cast as sa_cast, func, select
 from sqlalchemy.types import DateTime, Float
 
 from api.auth.claims import ActorLike, has_scope, scope_user_id
@@ -333,10 +333,10 @@ def _trace_window_filters(table, *, start: datetime, end: datetime, user_id: str
 def _duration_ms_expr(table):
     """Prefer stored duration_ms; fall back to end-start when present."""
     # start_time / end_time are ISO strings in Agno Postgres storage.
-    start_ts = cast(table.c.start_time, DateTime(timezone=True))
-    end_ts = cast(table.c.end_time, DateTime(timezone=True))
+    start_ts = sa_cast(table.c.start_time, DateTime(timezone=True))
+    end_ts = sa_cast(table.c.end_time, DateTime(timezone=True))
     computed = func.extract("epoch", end_ts - start_ts) * 1000.0
-    return cast(
+    return sa_cast(
         func.coalesce(table.c.duration_ms, computed),
         Float,
     )
@@ -352,7 +352,7 @@ def _bucket_trunc_unit(range_name: OverviewRange) -> str:
 
 def _sql_bucket_timestamp_expr(table, *, range_name: OverviewRange, timezone_key: str):
     """Local wall-clock bucket start (timestamp without tz) for date_trunc."""
-    start_ts = cast(table.c.start_time, DateTime(timezone=True))
+    start_ts = sa_cast(table.c.start_time, DateTime(timezone=True))
     # timestamptz AT TIME ZONE zone → local timestamp without time zone
     local_ts = func.timezone(timezone_key, start_ts)
     return func.date_trunc(_bucket_trunc_unit(range_name), local_ts)
@@ -738,26 +738,18 @@ async def get_runtime_overview(
         ),
         _safe_sql_distributions(start=start, end=end, user_id=owner_user_id),
     )
-    traces_bundle = gathered[0]
-    if not isinstance(traces_bundle, tuple) or len(traces_bundle) != 2:
-        raise RuntimeError("overview _fetch_traces returned unexpected shape")
-    traces = list(traces_bundle[0])  # type: ignore[arg-type]
-    trace_sample = dict(traces_bundle[1])  # type: ignore[arg-type]
-    failed_raw = gathered[1]
-    window_failed_total = int(failed_raw) if isinstance(failed_raw, int | float) else 0
-    recent_error_traces: list[dict[str, Any]] = (
-        list(gathered[2]) if isinstance(gathered[2], list) else []  # type: ignore[arg-type]
+    # asyncio.gather erases heterogeneous return types; cast each slot.
+    traces_bundle = typing_cast(
+        tuple[list[dict[str, Any]], dict[str, Any]],
+        gathered[0],
     )
-    snapshots: dict[str, Any] = dict(gathered[3]) if isinstance(gathered[3], dict) else {}  # type: ignore[arg-type]
-    sql_latency: dict[str, Any] | None = (
-        dict(gathered[4]) if isinstance(gathered[4], dict) else None  # type: ignore[arg-type]
-    )
-    sql_series: list[dict[str, Any]] | None = (
-        list(gathered[5]) if isinstance(gathered[5], list) else None  # type: ignore[arg-type]
-    )
-    sql_distributions: dict[str, list[dict[str, Any]]] | None = (
-        dict(gathered[6]) if isinstance(gathered[6], dict) else None  # type: ignore[arg-type]
-    )
+    traces, trace_sample = traces_bundle
+    window_failed_total = typing_cast(int, gathered[1])
+    recent_error_traces = typing_cast(list[dict[str, Any]], gathered[2])
+    snapshots = typing_cast(dict[str, Any], gathered[3])
+    sql_latency = typing_cast(dict[str, Any] | None, gathered[4])
+    sql_series = typing_cast(list[dict[str, Any]] | None, gathered[5])
+    sql_distributions = typing_cast(dict[str, list[dict[str, Any]]] | None, gathered[6])
     span_token_counts = await _fetch_span_token_counts(
         [str(trace.get("trace_id") or trace.get("id") or "") for trace in traces if trace.get("trace_id") or trace.get("id")]
     )

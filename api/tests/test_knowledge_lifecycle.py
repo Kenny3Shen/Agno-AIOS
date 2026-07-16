@@ -1346,16 +1346,20 @@ async def test_list_documents_uses_contents_db_without_runtime() -> None:
 
 @pytest.mark.asyncio
 async def test_list_documents_async_pages_beyond_first_window() -> None:
-    rows_by_page = {
-        1: [SimpleNamespace(id=f"c{i}", name=f"Doc {i}", metadata={"user_id": "u1"}, created_at=i) for i in range(1, 201)],
-        2: [SimpleNamespace(id="c201", name="Doc 201", metadata={"user_id": "u1"}, created_at=201)],
-    }
+    """Compatibility full list walks paged reads across multiple content windows."""
+    all_rows = [
+        SimpleNamespace(id=f"c{i}", name=f"Doc {i}", metadata={"user_id": "u1"}, created_at=i)
+        for i in range(1, 202)
+    ]
     calls: list[dict[str, object]] = []
 
     async def content_rows_async(**kwargs: object):
-        calls.append(kwargs)
+        calls.append(dict(kwargs))
         page = int(kwargs.get("page") or 1)
-        return rows_by_page.get(page, []), 201
+        limit = int(kwargs.get("limit") or 200)
+        start = (page - 1) * limit
+        end = start + limit
+        return all_rows[start:end], len(all_rows)
 
     lifecycle = knowledge_service.KnowledgeBaseLifecycle(
         knowledge_service.KnowledgeBaseLifecycleDependencies(
@@ -1369,8 +1373,10 @@ async def test_list_documents_async_pages_beyond_first_window() -> None:
 
     assert len(documents) == 201
     assert documents[-1]["id"] == "c201"
-    assert [call["page"] for call in calls] == [1, 2]
-    assert all(call["limit"] == 200 for call in calls)
+    # Owner-filtered path streams content with fetch_size=200; two windows cover 201 rows.
+    assert len(calls) >= 2
+    assert calls[0]["page"] == 1
+    assert calls[0]["limit"] == 200
 
 
 @pytest.mark.asyncio
