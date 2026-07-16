@@ -126,11 +126,11 @@ P0.4 审批值班薄入口        ✅
 
 ## 已完成：Skills 列表去 markdown + 详情按需
 
-- `list_skill_infos(include_markdown=False)` 默认不读整份 SKILL.md；`GET /api/skills/{name}` 按需返回全文
-- Skills 页选中行后 `getSkill` 拉详情；Workflow 绑定只依赖 name/description，首包更小
-- 与 Chat 页大小收紧、Knowledge clear 日志同批
+- `list_skill_infos(include_detail=False)` 默认不读 SKILL.md / scripts / attachments；`has_scripts` 仅看 scripts 目录是否非空
+- `GET /api/skills/{name}` 按需返回全文与文件清单；Skills 页选中后 `getSkill`
+- Chat 会话默认 limit 前后端统一 40（硬顶仍 500）
 
-相关：`skill_service.py` / `routes/skills.py` / `SkillsPage.tsx`
+相关：`skill_service.py` / `routes/skills.py` / `SkillsPage.tsx` / `chat_session_service.py`
 
 ---
 

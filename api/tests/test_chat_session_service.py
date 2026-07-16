@@ -118,7 +118,7 @@ async def test_get_all_sessions_async_projects_sorted_archived_session_rows():
         assert kwargs["include_archived"] is True
         assert kwargs["owner_user_id"] == "u1"
         assert kwargs["page"] == 1
-        assert kwargs["limit"] == 100
+        assert kwargs["limit"] == 40
         return rows, 2
 
     with (
@@ -132,7 +132,7 @@ async def test_get_all_sessions_async_projects_sorted_archived_session_rows():
     sessions = result["data"]
     assert result["meta"]["total_count"] == 2
     assert result["meta"]["page"] == 1
-    assert result["meta"]["limit"] == 100
+    assert result["meta"]["limit"] == 40
     assert [session["session_id"] for session in sessions] == ["newer", "older"]
     assert sessions[0]["preview"] == "newer preview"
     assert sessions[0]["archived"]

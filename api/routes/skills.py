@@ -108,7 +108,7 @@ def list_skills(user: User = Depends(require_scope("skill:read"))):
     return SkillListResponse(
         skills=[
             SkillInfo(**item)
-            for item in list_skill_infos(user, include_markdown=False)
+            for item in list_skill_infos(user, include_detail=False)
         ]
     )
 
@@ -116,7 +116,7 @@ def list_skills(user: User = Depends(require_scope("skill:read"))):
 @router.get("/{skill_name}", response_model=SkillInfo)
 def get_skill(skill_name: str, user: User = Depends(require_scope("skill:read"))):
     """Return one skill including full SKILL.md for the detail drawer."""
-    info = get_skill_info(skill_name, user, include_markdown=True)
+    info = get_skill_info(skill_name, user, include_detail=True)
     if info is None:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' 不存在")
     return SkillInfo(**info)

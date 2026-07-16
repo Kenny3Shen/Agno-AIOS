@@ -227,23 +227,32 @@ def _skill_info_for_dir(
     *,
     cfg: dict[str, bool],
     user: Any | None,
-    include_markdown: bool,
+    include_detail: bool,
 ) -> SkillInfoData | None:
     metadata = parse_skill_metadata(skill_dir)
     visibility_info = metadata.as_visibility_metadata()
     if user is not None and not can_read_resource(user, visibility_info):
         return None
-    scripts = list_skill_scripts(skill_dir)
-    attachments = list_skill_attachments(skill_dir)
+    if include_detail:
+        scripts = list_skill_scripts(skill_dir)
+        attachments = list_skill_attachments(skill_dir)
+        markdown = read_skill_markdown(skill_dir)
+    else:
+        # Cheap list: only presence of scripts/ dir matters for the table badge.
+        scripts = []
+        attachments = []
+        markdown = ""
+        scripts_dir = skill_dir / "scripts"
+        has_scripts_dir = scripts_dir.is_dir() and any(scripts_dir.iterdir())
     return {
         "name": metadata.name,
         "description": metadata.description,
         "enabled": _skill_enabled_from_config(cfg, skill_dir, metadata.name),
-        "has_scripts": len(scripts) > 0,
+        "has_scripts": (len(scripts) > 0) if include_detail else has_scripts_dir,
         "scripts": scripts,
         "attachments": attachments,
-        # List payloads skip body text; detail/get loads markdown on demand.
-        "skill_markdown": read_skill_markdown(skill_dir) if include_markdown else "",
+        # List payloads skip body + file inventory; detail loads on demand.
+        "skill_markdown": markdown,
         "visibility": metadata.visibility,
         "owner_user_id": metadata.owner_user_id,
         "can_manage": user is None or can_manage_resource(user, visibility_info),
@@ -254,7 +263,7 @@ def _skill_info_for_dir(
 def list_skill_infos(
     user: Any | None = None,
     *,
-    include_markdown: bool = False,
+    include_detail: bool = False,
 ) -> list[SkillInfoData]:
     if not get_skills_dir().is_dir():
         return []
@@ -266,7 +275,7 @@ def list_skill_infos(
             skill_dir,
             cfg=cfg,
             user=user,
-            include_markdown=include_markdown,
+            include_detail=include_detail,
         )
         if info is not None:
             skills.append(info)
@@ -277,7 +286,7 @@ def get_skill_info(
     skill_name: str,
     user: Any | None = None,
     *,
-    include_markdown: bool = True,
+    include_detail: bool = True,
 ) -> SkillInfoData | None:
     skill_dir = find_skill_dir(skill_name)
     if skill_dir is None:
@@ -286,7 +295,7 @@ def get_skill_info(
         skill_dir,
         cfg=load_skills_config(),
         user=user,
-        include_markdown=include_markdown,
+        include_detail=include_detail,
     )
 
 

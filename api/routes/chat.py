@@ -227,7 +227,7 @@ async def list_sessions(
     include_archived: bool = False,
     user_id: str | None = None,
     page: int = 1,
-    limit: int = 100,
+    limit: int = 40,
     user: User = Depends(require_scope("sessions:read")),
 ):
     """List chat sessions as Agno-style ``{data, meta}``."""
