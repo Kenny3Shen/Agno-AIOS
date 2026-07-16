@@ -28,6 +28,7 @@ from api.services.mcp_config_service import (
 )
 from api.services.upload_approval_service import submit_mcp_upload
 from api.services.notification_service import notify_admins_of_submission
+from api.utils.pagination import pagination_meta
 
 router = APIRouter(prefix="/api/mcp", tags=["MCP"])
 
@@ -106,7 +107,15 @@ async def get_components(
     _user: User = Depends(require_scope("mcp:read")),
 ):
     components = await list_components(component_type)
-    return [item for item in components if namespace is None or item["namespace"] == namespace]
+    items = [item for item in components if namespace is None or item["namespace"] == namespace]
+    return {
+        "data": items,
+        "meta": pagination_meta(
+            page=1,
+            limit=max(len(items), 1),
+            total_count=len(items),
+        ),
+    }
 
 
 @router.put("/components/{component_type}/{name}/enabled")
@@ -141,7 +150,15 @@ async def invoke_tool(
 
 @router.get("/tokens")
 async def get_tokens(_user: User = Depends(require_scope("mcp:read"))):
-    return [{key: value for key, value in row.items() if key != "token"} for row in await list_tokens()]
+    items = [{key: value for key, value in row.items() if key != "token"} for row in await list_tokens()]
+    return {
+        "data": items,
+        "meta": pagination_meta(
+            page=1,
+            limit=max(len(items), 1),
+            total_count=len(items),
+        ),
+    }
 
 
 @router.post("/tokens/issue")

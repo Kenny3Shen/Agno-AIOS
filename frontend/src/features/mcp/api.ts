@@ -58,8 +58,12 @@ export interface UploadApprovalSubmission {
 }
 
 export const getConfig = () => requestJson<McpConfig>('/mcp/config')
-export const listComponents = (namespace?: string) =>
-  requestJson<McpComponent[]>(`/mcp/components${namespace ? `?namespace=${encodeURIComponent(namespace)}` : ''}`)
+export const listComponents = async (namespace?: string) =>
+  (
+    await requestJson<{ data: McpComponent[] }>(
+      `/mcp/components${namespace ? `?namespace=${encodeURIComponent(namespace)}` : ''}`
+    )
+  ).data ?? []
 export const updateConfig = (id: string, enabled: boolean) => requestJson('/mcp/config', jsonInit('POST', { id, enabled }))
 export const setServerEnabled = (id: number, enabled: boolean) =>
   requestJson(`/mcp/servers/${id}/enabled`, jsonInit('PUT', { server_id: id, enabled }))
@@ -71,7 +75,8 @@ export const setComponentEnabled = (component: McpComponent, enabled: boolean) =
   )
 export const callTool = (name: string, argumentsValue: JsonRecord) =>
   requestJson(`/mcp/tools/${encodeURIComponent(name)}/call`, jsonInit('POST', { arguments: argumentsValue }))
-export const listTokens = () => requestJson<McpToken[]>('/mcp/tokens')
+export const listTokens = async () =>
+  (await requestJson<{ data: McpToken[] }>('/mcp/tokens')).data ?? []
 export const issueToken = (name: string, expires_in: number) =>
   requestJson<{ token: string }>('/mcp/tokens/issue', jsonInit('POST', { name, expires_in }))
 export const deleteToken = (id: number) => requestJson('/mcp/tokens/delete', jsonInit('POST', { id }))

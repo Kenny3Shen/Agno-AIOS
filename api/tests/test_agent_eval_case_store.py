@@ -363,7 +363,8 @@ async def test_list_and_get_helpers_normalize_rows():
         listed = await store.list_suites(enabled=True)
         fetched = await store.get_suite("suite-1")
 
-    assert listed == [fetched]
+    assert listed["data"] == [fetched]
+    assert listed["meta"]["total_count"] == 1
     list_call = list_mock.await_args
     get_call = get_mock.await_args
     assert list_call is not None

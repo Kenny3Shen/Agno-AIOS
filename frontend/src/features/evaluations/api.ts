@@ -81,10 +81,15 @@ export const normalizeEvalRun = (value: unknown): EvalRun | null => {
   }
 }
 
-export const listSuites = () => requestJson<Suite[]>('/agent-evals/suites')
+export const listSuites = async () =>
+  (await requestJson<{ data: Suite[] }>('/agent-evals/suites')).data ?? []
 
-export const listCases = (suite = '') =>
-  requestJson<EvalCase[]>(`/agent-evals/cases${suite ? `?suite_id=${encodeURIComponent(suite)}` : ''}`)
+export const listCases = async (suite = '') =>
+  (
+    await requestJson<{ data: EvalCase[] }>(
+      `/agent-evals/cases${suite ? `?suite_id=${encodeURIComponent(suite)}` : ''}`
+    )
+  ).data ?? []
 
 export type EvalListResult = {
   items: EvalRun[]

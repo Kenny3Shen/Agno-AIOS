@@ -212,9 +212,18 @@ async def create_suite(payload: dict[str, Any], actor: Any) -> dict[str, Any]:
     return normalize_suite(row)
 
 
-async def list_suites(enabled: bool | None = None) -> list[dict[str, Any]]:
+async def list_suites(enabled: bool | None = None) -> dict[str, Any]:
+    """Agno-style ``{data, meta}`` for suite definitions (full list)."""
     rows = await list_suite_rows_async(enabled=enabled)
-    return [normalize_suite(row) for row in rows]
+    items = [normalize_suite(row) for row in rows]
+    return {
+        "data": items,
+        "meta": pagination_meta(
+            page=1,
+            limit=max(len(items), 1),
+            total_count=len(items),
+        ),
+    }
 
 
 async def get_suite(suite_id: str) -> dict[str, Any] | None:
@@ -260,9 +269,18 @@ async def create_case(payload: dict[str, Any]) -> dict[str, Any]:
     return normalize_case(row)
 
 
-async def list_cases(suite_id: str | None = None, enabled: bool | None = None) -> list[dict[str, Any]]:
+async def list_cases(suite_id: str | None = None, enabled: bool | None = None) -> dict[str, Any]:
+    """Agno-style ``{data, meta}`` for case definitions (full list)."""
     rows = await list_case_rows_async(suite_id=suite_id, enabled=enabled)
-    return [normalize_case(row) for row in rows]
+    items = [normalize_case(row) for row in rows]
+    return {
+        "data": items,
+        "meta": pagination_meta(
+            page=1,
+            limit=max(len(items), 1),
+            total_count=len(items),
+        ),
+    }
 
 
 async def get_case(case_id: str) -> dict[str, Any] | None:

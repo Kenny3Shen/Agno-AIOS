@@ -35,22 +35,30 @@ describe('McpPage component permissions', () => {
         })
       ),
       http.get('/api/mcp/components', () =>
-        HttpResponse.json([
-          {
-            key: 'tool:shared.inspect',
-            type: 'tool',
-            name: 'shared.inspect',
-            title: 'Inspect',
-            namespace: 'shared',
-            server_id: 1,
-            tags: [],
-            icons: [],
-            meta: {},
-            enabled: true,
-          },
-        ])
+        HttpResponse.json({
+          data: [
+            {
+              key: 'tool:shared.inspect',
+              type: 'tool',
+              name: 'shared.inspect',
+              title: 'Inspect',
+              namespace: 'shared',
+              server_id: 1,
+              tags: [],
+              icons: [],
+              meta: {},
+              enabled: true,
+            },
+          ],
+          meta: { page: 1, limit: 1, total_pages: 1, total_count: 1, search_time_ms: 0 },
+        })
       ),
-      http.get('/api/mcp/tokens', () => HttpResponse.json([]))
+      http.get('/api/mcp/tokens', () =>
+        HttpResponse.json({
+          data: [],
+          meta: { page: 1, limit: 1, total_pages: 0, total_count: 0, search_time_ms: 0 },
+        })
+      )
     )
   })
 

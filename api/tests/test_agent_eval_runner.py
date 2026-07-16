@@ -22,7 +22,7 @@ async def test_security_runtime_exposes_agent_context_for_evals():
         mcp_tools_factory=lambda **kwargs: FakeMcpTools(),
         get_mcp_url=lambda: "http://127.0.0.1:8000/mcp/",
         get_mcp_token=lambda: "test",
-        build_model=lambda model_id: "model",
+        build_model=lambda *args, **kwargs: "model",
         get_async_knowledge_base=lambda: None,
         get_enabled_skill_dirs=lambda: [],
         get_db=lambda: "db",
@@ -175,7 +175,7 @@ async def test_run_suite_keeps_running_after_case_failure():
 
     with (
         patch.object(runner.case_store, "get_suite", new=AsyncMock(return_value={"id": "suite-1", "enabled": True})),
-        patch.object(runner.case_store, "list_cases", new=AsyncMock(return_value=cases)),
+        patch.object(runner.case_store, "list_cases", new=AsyncMock(return_value={"data": cases, "meta": {"total_count": len(cases)}})),
         patch.object(runner.case_store, "create_suite_run", new=AsyncMock(return_value={"id": "suite-run-1"})),
         patch.object(
             runner.case_store,

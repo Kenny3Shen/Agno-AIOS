@@ -124,6 +124,12 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Eval suites/cases + MCP components/tokens data/meta
+
+- Agent Eval 定义列表 `list_suites` / `list_cases` 改为 `{data, meta}`；runner 读 `data`。
+- MCP `GET /components` 与 `GET /tokens` 改为 `{data, meta}`；前端 list helpers 解包。
+- 无旧裸数组兼容。
+
 ## 已完成：Skills / Notifications 列表 data/meta
 
 - `GET /api/skills`：`{skills}` → `{data, meta}`（全量列表，meta.total_count=len）。
