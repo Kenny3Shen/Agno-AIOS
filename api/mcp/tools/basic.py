@@ -80,6 +80,11 @@ async def send_feishu_notify(
             try:
                 resp_json = r.json()
             except Exception:
+                logger.warning(
+                    "Feishu webhook response is not JSON (status={})",
+                    r.status_code,
+                    exc_info=True,
+                )
                 return {"code": -1, "msg": "响应解析失败"}
 
             code = resp_json.get("code") or resp_json.get("StatusCode")

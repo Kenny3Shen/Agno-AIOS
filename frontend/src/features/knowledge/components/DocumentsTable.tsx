@@ -19,6 +19,10 @@ export function DocumentsTable({
   onDelete,
   onVisibilityChange,
   deletingId,
+  paginationTotal = 0,
+  paginationPage = 1,
+  paginationPageSize = 12,
+  onPaginationChange,
 }: {
   documents: Document[]
   filter: string
@@ -31,6 +35,10 @@ export function DocumentsTable({
   onDelete: (document: Document) => void
   onVisibilityChange: (document: Document, visibility: ResourceVisibility) => void
   deletingId?: string
+  paginationTotal?: number
+  paginationPage?: number
+  paginationPageSize?: number
+  onPaginationChange?: (page: number) => void
 }) {
   const { t } = useTranslation('knowledge')
   const formatDate = useFormatDate()
@@ -51,7 +59,13 @@ export function DocumentsTable({
         rowKey="id"
         dataSource={documents}
         loading={loading}
-        pagination={{ pageSize: 12 }}
+        pagination={{
+          current: paginationPage,
+          pageSize: paginationPageSize,
+          total: paginationTotal,
+          showSizeChanger: false,
+          onChange: (nextPage) => onPaginationChange?.(nextPage),
+        }}
         scroll={vertical ? { x: 1100 } : { x: 1100 }}
         rowClassName={(row) => (row.id === selectedId ? 'selected-table-row' : '')}
         onRow={(row) => ({ onClick: () => onSelect(row) })}

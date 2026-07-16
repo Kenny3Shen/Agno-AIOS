@@ -25,8 +25,7 @@ _RANGE_WINDOWS: dict[OverviewRange, timedelta] = {
 }
 # Token sample (+ SQL-fallback latency sample). Window KPIs use SQL aggregates.
 _PAGE_LIMIT = 200
-_MAX_OVERVIEW_TRACE_PAGES = 1
-_MAX_OVERVIEW_TRACES = _PAGE_LIMIT * _MAX_OVERVIEW_TRACE_PAGES
+_MAX_OVERVIEW_TRACES = _PAGE_LIMIT
 
 
 def _as_datetime(value: Any) -> datetime | None:
@@ -577,6 +576,7 @@ async def _fetch_traces(
     ``truncated``.
     """
     db = get_async_agno_postgres_db()
+    # Single capped page: multi-page walks were only useful before SQL aggregates.
     traces, total = await db.get_traces(
         start_time=start,
         end_time=end,
@@ -584,24 +584,8 @@ async def _fetch_traces(
         limit=_PAGE_LIMIT,
         page=1,
     )
-    rows = list(traces)
+    rows = list(traces)[:_MAX_OVERVIEW_TRACES]
     total_count = int(total or len(rows))
-    max_pages = min(
-        _MAX_OVERVIEW_TRACE_PAGES,
-        max(1, (total_count + _PAGE_LIMIT - 1) // _PAGE_LIMIT),
-    )
-    for page in range(2, max_pages + 1):
-        next_page, _ = await db.get_traces(
-            start_time=start,
-            end_time=end,
-            user_id=user_id,
-            limit=_PAGE_LIMIT,
-            page=page,
-        )
-        rows.extend(next_page)
-        if len(rows) >= _MAX_OVERVIEW_TRACES:
-            rows = rows[:_MAX_OVERVIEW_TRACES]
-            break
     truncated = total_count > len(rows)
     if truncated:
         logger.warning(

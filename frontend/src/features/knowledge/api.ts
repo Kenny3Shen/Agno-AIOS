@@ -74,8 +74,26 @@ const consumeKnowledgeSse = async (
   return document
 }
 
-export const getKnowledge = (query = '') =>
-  requestJson<KnowledgeResponse>(`/knowledge?limit=100${query ? `&query=${encodeURIComponent(query)}` : ''}`)
+export type GetKnowledgeParams = {
+  query?: string
+  page?: number
+  limit?: number
+  sortBy?: 'updated_at' | 'created_at' | 'name' | 'status'
+  sortOrder?: 'asc' | 'desc'
+}
+
+export const getKnowledge = (params: GetKnowledgeParams | string = {}) => {
+  // Accept legacy string query for call sites still passing filter text only.
+  const options: GetKnowledgeParams = typeof params === 'string' ? { query: params } : params
+  const search = new URLSearchParams()
+  const query = (options.query || '').trim()
+  if (query) search.set('query', query)
+  search.set('page', String(Math.max(1, options.page ?? 1)))
+  search.set('limit', String(Math.min(100, Math.max(1, options.limit ?? 12))))
+  if (options.sortBy) search.set('sort_by', options.sortBy)
+  if (options.sortOrder) search.set('sort_order', options.sortOrder)
+  return requestJson<KnowledgeResponse>(`/knowledge?${search.toString()}`)
+}
 const readHttpError = async (response: Response) => {
   const payloadText = await response.text().catch(() => '')
   let message = `Request failed (${response.status})`

@@ -136,6 +136,16 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Knowledge 服务端分页 + Overview 单页采样
+
+- Knowledge 列表：`getKnowledge({ page, limit })` + Table 受控分页，默认 limit=12；过滤重置到第 1 页
+- Overview `_fetch_traces` 去掉无用的多页循环（`_MAX_OVERVIEW_TRACE_PAGES` 已恒为 1）
+- Feishu webhook 非 JSON 响应写 warning
+
+相关：`knowledge/api.ts` / `KnowledgePage` / `DocumentsTable` / `overview_service.py` / `basic.py`
+
+---
+
 ## 已完成：Approvals 后续页并行 + 配置/skill 可观测
 
 - `getApprovals(kind=all)` 上传窗口内后续页也 `Promise.all` 并行 submissions + HITL

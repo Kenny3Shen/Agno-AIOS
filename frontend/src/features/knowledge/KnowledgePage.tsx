@@ -82,19 +82,24 @@ export function KnowledgePage() {
   const vertical = screens.md === false
   const client = useQueryClient()
   const [filter, setFilter] = useState('')
+  const [page, setPage] = useState(1)
+  const pageSize = 12
   const [selectedId, setSelectedId] = useState('')
   const [metaOpen, setMetaOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [updateOpen, setUpdateOpen] = useState(false)
   const [results, setResults] = useState<SearchResult[]>([])
-  const query = useQuery({ queryKey: ['knowledge', filter], queryFn: () => getKnowledge(filter) })
+  const query = useQuery({
+    queryKey: ['knowledge', filter, page, pageSize],
+    queryFn: () => getKnowledge({ query: filter, page, limit: pageSize }),
+  })
   const documents = query.data?.documents ?? []
   const ingestDefaults = useMemo(() => effectiveKnowledgeIngestDefaults(query.data?.status.rag_settings), [query.data?.status.rag_settings])
   const selected = documents.find((document) => document.id === selectedId) ?? null
   const refresh = () => client.invalidateQueries({ queryKey: ['knowledge'] })
 
   const syncUpdatedDocument = async (document: Document, previousId = selectedId, selectDocument = true) => {
-    const currentKey = ['knowledge', filter]
+    const currentKey = ['knowledge', filter, page, pageSize]
     client.setQueryData<KnowledgeResponse>(currentKey, (current) =>
       current
         ? {
@@ -162,12 +167,19 @@ export function KnowledgePage() {
                 loading={query.isLoading}
                 selectedId={selectedId}
                 vertical={vertical}
-                onFilterChange={setFilter}
+                onFilterChange={(value) => {
+                  setFilter(value)
+                  setPage(1)
+                }}
                 onSelect={openMetadata}
                 onUpdate={openUpdate}
                 onDelete={(document) => remove.mutate(document.id)}
                 onVisibilityChange={(document, value) => visibility.mutate({ id: document.id, value })}
                 deletingId={remove.isPending ? remove.variables : undefined}
+                paginationTotal={query.data?.pagination.total ?? 0}
+                paginationPage={page}
+                paginationPageSize={pageSize}
+                onPaginationChange={setPage}
               />
             ),
           },
