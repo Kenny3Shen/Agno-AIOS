@@ -30,6 +30,7 @@ import {
 import { compactId, compareTimestamp, useFormatDate } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/shared/i18n'
+import { formatToolLabel } from '@/features/chat/utils'
 
 const uploadPayload = (approval: Approval) => approval.payload ?? {}
 
@@ -38,10 +39,21 @@ const approvalTitle = (approval: Approval) => {
   if (typeof name === 'string' && name.trim()) return name
   if (approval.resource_type === 'skill') return i18n.t('approvals:typeSkillUpload')
   if (approval.resource_type === 'mcp') return i18n.t('approvals:typeMcpServerUpload')
-  if (approval.source_type === 'workflow') {
-    return approval.tool_name ?? approval.source_name ?? i18n.t('approvals:typeWorkflowStep')
+  const toolLabel = (raw: string | null | undefined) => {
+    const value = (raw || '').trim()
+    if (!value) return ''
+    // workflow.step:* stays readable via source_name; formatToolLabel for MCP ids
+    if (value.startsWith('workflow.step:')) return value
+    return formatToolLabel(value, (key) => i18n.t(`chat:${key}`)) || value
   }
-  return approval.tool_name ?? approval.source_name ?? '-'
+  if (approval.source_type === 'workflow') {
+    return (
+      toolLabel(approval.tool_name) ||
+      approval.source_name ||
+      i18n.t('approvals:typeWorkflowStep')
+    )
+  }
+  return toolLabel(approval.tool_name) || approval.source_name || '-'
 }
 
 const workflowPauseType = (approval: Approval): string => {

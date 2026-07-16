@@ -219,7 +219,7 @@ describe('ApprovalsPage', () => {
     await switchKind(/^全部$|^All$/)
     await setStatus(/全部状态|All statuses/)
 
-    await user.click(await screen.findByText('any_protected_tool'))
+    await user.click(await screen.findByText('Any Protected Tool'))
     expect(screen.getByText('运行恢复失败')).toBeTruthy()
     expect(screen.getByText('运行状态')).toBeTruthy()
     await user.click(screen.getByRole('button', { name: '重试恢复' }))

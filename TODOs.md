@@ -1,5 +1,13 @@
 # 下一步工作
 
+## 已完成：Chat 工具调用可读名 + 会话侧栏测试路由 mock
+
+- `formatToolLabel` / `humanizeToolId`：内置 MCP（`basic_`/`hitl_`/`playbook_`）走 chat i18n `tools.*`，其它 id 去命名空间后 Title Case。
+- ThoughtChain 工具标题使用本地化名称（如「模拟隔离资产」/「Simulate containment」）。
+- Workflow Inspector 空步骤名 placeholder 优先显示当前执行器显示名。
+- `ChatSidebar`/`ChatTaskPanel` 测试 mock `useRouter`，消除 RouterProvider 告警。
+
+
 ## 已完成：Chat Skill 可读名 + 轻量说明 / Workflow 空步骤名提示
 
 - Chat：`formatSkillLabel(s)` 把 `cve-intel-skill` 等目录 id 显示为 `CVE Intel`；消息条与顶栏 Skills Tooltip 使用友好名。

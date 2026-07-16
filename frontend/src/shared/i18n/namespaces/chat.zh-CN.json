@@ -75,5 +75,13 @@
   "skillsAttachedHelp": "本轮按意图挂载的 Local Skills。",
   "skillsAllEnabled": "本轮通用安全意图，已挂载全部已启用 Local Skills。",
   "skillsNone": "本轮未挂载 Skill",
-  "skillsAllEnabledBadge": "全量 Skills"
+  "skillsAllEnabledBadge": "全量 Skills",
+  "tools": {
+    "basic_send_feishu_notify": "发送飞书通知",
+    "hitl_simulate_containment": "模拟隔离资产",
+    "playbook_list_workflows": "列出剧本",
+    "playbook_get_method_params": "剧本方法参数",
+    "playbook_invoke_method": "执行剧本方法",
+    "playbook_get_exec_result": "剧本执行结果"
+  }
 }

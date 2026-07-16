@@ -37,6 +37,70 @@ export const formatSkillLabel = (name: string): string => {
 export const formatSkillLabels = (names: string[]): string =>
   names.map(formatSkillLabel).filter(Boolean).join(', ')
 
+/** Built-in MCP tool ids (namespace_fn) → i18n keys under chat.tools.* */
+export const BUILTIN_TOOL_I18N_KEYS: Record<string, string> = {
+  basic_send_feishu_notify: 'tools.basic_send_feishu_notify',
+  hitl_simulate_containment: 'tools.hitl_simulate_containment',
+  playbook_list_workflows: 'tools.playbook_list_workflows',
+  playbook_get_method_params: 'tools.playbook_get_method_params',
+  playbook_invoke_method: 'tools.playbook_invoke_method',
+  playbook_get_exec_result: 'tools.playbook_get_exec_result',
+}
+
+const TOOL_NS_PREFIXES = ['basic_', 'hitl_', 'playbook_'] as const
+
+/** Title-case unknown tool ids after stripping builtin namespaces. */
+export const humanizeToolId = (name: string): string => {
+  const raw = (name || '').trim()
+  if (!raw) return ''
+  let base = raw
+  for (const prefix of TOOL_NS_PREFIXES) {
+    if (base.startsWith(prefix)) {
+      base = base.slice(prefix.length)
+      break
+    }
+  }
+  base = base.replace(/__/g, '_').replace(/\./g, '_')
+  const parts = base.split(/[-_]+/).filter(Boolean)
+  if (!parts.length) return raw
+  return parts
+    .map((part) => {
+      const lower = part.toLowerCase()
+      if (
+        lower === 'cve' ||
+        lower === 'hitl' ||
+        lower === 'ip' ||
+        lower === 'mcp' ||
+        lower === 'ir' ||
+        lower === 'id' ||
+        lower === 'url' ||
+        lower === 'api'
+      ) {
+        return lower.toUpperCase()
+      }
+      return lower.charAt(0).toUpperCase() + lower.slice(1)
+    })
+    .join(' ')
+}
+
+/**
+ * Humanize MCP / tool call ids for ThoughtChain titles.
+ * Pass `t` from useTranslation('chat') for builtin product titles.
+ */
+export const formatToolLabel = (
+  name: string,
+  t?: (key: string) => string,
+): string => {
+  const raw = (name || '').trim()
+  if (!raw) return ''
+  const i18nKey = BUILTIN_TOOL_I18N_KEYS[raw]
+  if (i18nKey && t) {
+    const translated = t(i18nKey)
+    if (translated && translated !== i18nKey) return translated
+  }
+  return humanizeToolId(raw)
+}
+
 export const initialChatState: ChatState = {
   messages: [],
   input: '',

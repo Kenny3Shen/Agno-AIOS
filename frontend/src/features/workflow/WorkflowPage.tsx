@@ -831,7 +831,11 @@ export function WorkflowPage() {
                   data-inspector-field="name"
                   value={step.name}
                   onChange={(e) => workflow.update({ ...step, name: e.target.value })}
-                  placeholder={t('stepNamePlaceholder')}
+                  placeholder={
+                    step.type === 'step'
+                      ? executorNames.get(step.targetId || '') || t('stepNamePlaceholder')
+                      : t('stepNamePlaceholder')
+                  }
                   style={{ marginTop: 8 }}
                 />
                 {step.type === 'step' && !(step.name || '').trim() ? (

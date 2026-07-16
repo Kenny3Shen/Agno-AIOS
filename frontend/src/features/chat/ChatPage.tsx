@@ -32,7 +32,7 @@ import { useRouter } from '@tanstack/react-router'
 import { buildTraceSearch, emptyTraceFilters } from '@/features/trace/utils'
 import { copyToClipboard } from '@/shared/lib/clipboard'
 import { reasoningEffortLabel } from '@/shared/lib/reasoning'
-import { formatSkillLabels, supportedReasoningEfforts } from './utils'
+import { formatSkillLabels, formatToolLabel, supportedReasoningEfforts } from './utils'
 import './chat.css'
 
 const promptKeys = ['cve', 'exposure', 'runbook'] as const
@@ -64,10 +64,13 @@ function RawDetails({ label, value, copyLabel }: { label: string; value: unknown
     </details>
   )
 }
-function toolNode(tool: ToolStep, labels: { input: string; output: string; copy: string }) {
+function toolNode(
+  tool: ToolStep,
+  labels: { input: string; output: string; copy: string; toolTitle: (name: string) => string },
+) {
   return {
     key: `tool-${tool.id}`,
-    title: tool.name,
+    title: labels.toolTitle(tool.name) || tool.name,
     status: tool.status,
     blink: tool.status === 'loading',
     collapsible: true,
@@ -258,7 +261,7 @@ function MessageBody({ message, retry, sessionId }: { message: Message; retry: (
         <div className="message-actions-bar"><Actions className="message-actions" items={actions} /></div>
       </div>
     )
-  const chain = [...(message.thought_chain ?? []).map(thoughtNode), ...(message.tool_steps ?? []).map((tool) => toolNode(tool, { input: t('rawToolInput'), output: t('rawToolOutput'), copy: t('common:copy') }))]
+  const chain = [...(message.thought_chain ?? []).map(thoughtNode), ...(message.tool_steps ?? []).map((tool) => toolNode(tool, { input: t('rawToolInput'), output: t('rawToolOutput'), copy: t('common:copy'), toolTitle: (name) => formatToolLabel(name, t) }))]
   const hasThoughts = chain.length > 0 || Boolean(message.reasoning)
   return (
     <div className={`message-body message-body--${motionState}`}>

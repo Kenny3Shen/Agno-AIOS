@@ -75,5 +75,13 @@
   "skillsAttachedHelp": "Local Skills attached for this turn by intent.",
   "skillsAllEnabled": "General security intent; all enabled Local Skills are attached.",
   "skillsNone": "No Skills attached this turn",
-  "skillsAllEnabledBadge": "All Skills"
+  "skillsAllEnabledBadge": "All Skills",
+  "tools": {
+    "basic_send_feishu_notify": "Send Feishu notification",
+    "hitl_simulate_containment": "Simulate containment",
+    "playbook_list_workflows": "List playbooks",
+    "playbook_get_method_params": "Playbook method params",
+    "playbook_invoke_method": "Invoke playbook method",
+    "playbook_get_exec_result": "Playbook execution result"
+  }
 }

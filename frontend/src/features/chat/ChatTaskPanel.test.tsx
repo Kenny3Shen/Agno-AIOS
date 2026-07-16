@@ -29,6 +29,10 @@ const chat = {
 }
 
 vi.mock('./useChat', () => ({ useChat: () => chat }))
+vi.mock('@tanstack/react-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-router')>()),
+  useRouter: () => ({ history: { push: vi.fn(), replace: vi.fn() } }),
+}))
 
 describe('conversation list mapping', () => {
   it('filters conversations by title or session id', () => {
