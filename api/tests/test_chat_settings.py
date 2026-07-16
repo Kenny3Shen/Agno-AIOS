@@ -77,3 +77,28 @@ async def test_chat_settings_service_applies_defaults_for_missing_columns() -> N
         "show_thought_chain": True,
         "memory_enabled": True,
     }
+
+
+@pytest.fixture(autouse=True)
+def _clear_chat_settings_cache():
+    chat_settings_service._invalidate_chat_settings_cache()
+    yield
+    chat_settings_service._invalidate_chat_settings_cache()
+
+
+@pytest.mark.asyncio
+async def test_get_chat_settings_uses_short_ttl_cache() -> None:
+    row = {
+        "show_raw_reasoning": True,
+        "show_raw_tool_io": False,
+        "show_thought_chain": True,
+        "memory_enabled": False,
+    }
+    get_row = AsyncMock(return_value=row)
+    with patch.object(chat_settings_service, "get_chat_settings_row", get_row):
+        first = await chat_settings_service.get_chat_settings()
+        second = await chat_settings_service.get_chat_settings()
+    assert first == second
+    assert first["show_raw_reasoning"] is True
+    assert get_row.await_count == 1
+

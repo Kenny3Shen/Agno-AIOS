@@ -124,6 +124,15 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Chat settings / Skills config 短缓存
+
+- `get_chat_settings` 5s TTL 进程缓存，update 时刷新；减轻 Chat 热路径重复读库
+- `load_skills_config` 按文件 mtime 缓存；`save_skills_config` 写后更新缓存
+
+相关：`chat_settings_service.py` / `skill_service.py`
+
+---
+
 ## 已完成：MCP bootstrap 进程内只跑一次 + tokens 上限
 
 - `bootstrap_mcp_config` 加 lock + `_BOOTSTRAP_DONE`，避免每次 `list_mcp_servers` 重复种子/扫表

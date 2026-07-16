@@ -171,3 +171,26 @@ def test_list_skill_infos_omits_detail_payload_by_default(tmp_path, monkeypatch)
     assert "Body" in detail["skill_markdown"]
     assert detail["scripts"] == ["run.py"]
 
+
+def test_load_skills_config_caches_by_mtime(tmp_path, monkeypatch):
+    config_file = tmp_path / "skills_config.json"
+    config_file.write_text('{"Owned": false}', encoding="utf-8")
+    monkeypatch.setattr(skill_service, "get_skills_config_file", lambda: config_file)
+    skill_service._SKILLS_CFG_CACHE = None
+    skill_service._SKILLS_CFG_MTIME = None
+
+    first = skill_service.load_skills_config()
+    # Corrupt file contents without changing mtime so a re-read would fail/differ;
+    # cache should still return the first parse while mtime is unchanged.
+    original_mtime = config_file.stat().st_mtime
+    config_file.write_text('{"Owned": true}', encoding="utf-8")
+    import os
+    os.utime(config_file, (original_mtime, original_mtime))
+    second = skill_service.load_skills_config()
+    assert first == {"Owned": False}
+    assert second == {"Owned": False}
+
+    skill_service.save_skills_config({"Owned": True})
+    third = skill_service.load_skills_config()
+    assert third == {"Owned": True}
+

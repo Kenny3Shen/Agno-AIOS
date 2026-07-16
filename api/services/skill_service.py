@@ -28,6 +28,11 @@ DEFAULT_SKILLS_CONFIG_FILE = CONFIG_DIR / "skills_config.json"
 MAX_SKILL_ARCHIVE_BYTES = 50 * 1024 * 1024
 MAX_SKILL_EXTRACTED_BYTES = 120 * 1024 * 1024
 
+_SKILLS_CFG_CACHE: dict[str, bool] | None = None
+_SKILLS_CFG_MTIME: float | None = None
+
+
+
 
 class SkillInfoData(TypedDict):
     name: str
@@ -69,25 +74,57 @@ def get_skills_config_file() -> Path:
 
 
 def load_skills_config() -> dict[str, bool]:
-    """加载 skills 启用/禁用配置；不存在则返回空 dict（默认全部启用）。"""
+    """加载 skills 启用/禁用配置；不存在则返回空 dict（默认全部启用）。
+
+    Caches by file mtime so list/toggle hot paths avoid re-reading the same JSON.
+    """
+    global _SKILLS_CFG_CACHE, _SKILLS_CFG_MTIME
     config_file = get_skills_config_file()
     if not config_file.exists():
+        _SKILLS_CFG_CACHE = {}
+        _SKILLS_CFG_MTIME = None
         return {}
     try:
-        return loads(config_file.read_text(encoding="utf-8"))
+        mtime = config_file.stat().st_mtime
+    except OSError:
+        mtime = None
+    if (
+        _SKILLS_CFG_CACHE is not None
+        and mtime is not None
+        and mtime == _SKILLS_CFG_MTIME
+    ):
+        return dict(_SKILLS_CFG_CACHE)
+    try:
+        raw = loads(config_file.read_text(encoding="utf-8"))
+        cfg = raw if isinstance(raw, dict) else {}
+        # Normalize to bool map; ignore unexpected shapes.
+        parsed = {
+            str(key): bool(value)
+            for key, value in cfg.items()
+            if isinstance(key, str)
+        }
     except Exception:
         logger.warning(
             "skills config unreadable at {}; treating all skills as enabled",
             config_file,
             exc_info=True,
         )
-        return {}
+        parsed = {}
+    _SKILLS_CFG_CACHE = parsed
+    _SKILLS_CFG_MTIME = mtime
+    return dict(parsed)
 
 
 def save_skills_config(cfg: dict[str, bool]) -> None:
+    global _SKILLS_CFG_CACHE, _SKILLS_CFG_MTIME
     config_file = get_skills_config_file()
     config_file.parent.mkdir(parents=True, exist_ok=True)
     config_file.write_text(dumps(cfg, indent=True), encoding="utf-8")
+    _SKILLS_CFG_CACHE = dict(cfg)
+    try:
+        _SKILLS_CFG_MTIME = config_file.stat().st_mtime
+    except OSError:
+        _SKILLS_CFG_MTIME = None
 
 
 def iter_skill_dirs() -> list[Path]:
