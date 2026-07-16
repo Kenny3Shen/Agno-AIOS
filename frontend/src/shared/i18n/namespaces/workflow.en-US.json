@@ -251,5 +251,8 @@
   "handleBranchRight": "{{label}} (right)",
   "executorLabel": "Executor",
   "executorRecommended": "Best for: {{text}}",
-  "stepNameHint": "When empty, Run Log uses the executor display name (e.g. Security Operations)."
+  "stepNameHint": "When empty, Run Log uses the executor display name (e.g. Security Operations).",
+  "edgeNext": "next",
+  "edgeThen": "then",
+  "edgeElse": "else"
 }

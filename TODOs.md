@@ -1,5 +1,15 @@
 # 下一步工作
 
+## 已完成：画布边标签 i18n + Skill 渐进工具名 + Grok lean 冒烟
+
+- Studio 边标签：`next/then/else` 展示为 i18n（中文「下一步/成立/否则」）；拓扑逻辑仍用英文 raw label。
+- Chat：`get_skill_instructions` / `get_skill_reference` / `get_skill_script` 走 `tools.*` 本地化（渐进加载 Skill 时 ThoughtChain 可读）。
+- Grok 4.5 冒烟（本机）：
+  - tools on + `ping` → `lean_mode=true`、`skill_names=[]`、内容 `pong`
+  - tools off + `ping` → `enable_tools=false`、`lean_mode=false`、`skill_names=[]`、内容 `pong`
+  - tools on +「列出可用的安全剧本」→ `skill_names=["playbook-skill"]`、挂载 playbook 工具
+
+
 ## 已完成：jsdom TextArea autoSize height:NaN 测试环境修复
 
 - 根因：jsdom `getComputedStyle` 返回 `border-*-width: medium` 等非数值，`@rc-component/input` autoSize `parseFloat` → NaN → React 警告。

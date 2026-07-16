@@ -308,12 +308,14 @@ describe('formatToolLabel', () => {
       'tools.hitl_simulate_containment': '模拟隔离资产',
       'tools.basic_send_feishu_notify': '发送飞书通知',
       'tools.playbook_list_workflows': '列出剧本',
+      'tools.get_skill_instructions': '读取 Skill 说明',
     }[key] ?? key)
 
   it('maps builtin MCP tools via i18n', () => {
     expect(formatToolLabel('hitl_simulate_containment', t)).toBe('模拟隔离资产')
     expect(formatToolLabel('basic_send_feishu_notify', t)).toBe('发送飞书通知')
     expect(formatToolLabel('playbook_list_workflows', t)).toBe('列出剧本')
+    expect(formatToolLabel('get_skill_instructions', t)).toBe('读取 Skill 说明')
   })
 
   it('humanizes unknown tool ids', () => {

@@ -191,20 +191,29 @@ function buildGraph(
   })
 
   const flowEdges: Edge[] = layout.edges.map((edge) => {
+    const rawLabel = edge.label || ''
     const isBranch =
-      edge.label === 'then' ||
-      edge.label === 'else' ||
+      rawLabel === 'then' ||
+      rawLabel === 'else' ||
       (edge.sourceHandle != null && edge.sourceHandle.startsWith('choice:'))
+    const displayLabel =
+      rawLabel === 'next'
+        ? t('edgeNext')
+        : rawLabel === 'then'
+          ? t('edgeThen')
+          : rawLabel === 'else'
+            ? t('edgeElse')
+            : rawLabel || undefined
     return {
       id: edge.id,
       source: edge.source,
       target: edge.target,
       sourceHandle: edge.sourceHandle,
       targetHandle: edge.targetHandle ?? 'in',
-      label: edge.label,
+      label: displayLabel,
       type: 'smoothstep',
-      animated: edge.label === 'next',
-      className: isBranch ? 'wf-edge-branch' : edge.label === 'next' ? 'wf-edge-next' : undefined,
+      animated: rawLabel === 'next',
+      className: isBranch ? 'wf-edge-branch' : rawLabel === 'next' ? 'wf-edge-next' : undefined,
       markerEnd: {
         type: MarkerType.ArrowClosed,
         width: 18,

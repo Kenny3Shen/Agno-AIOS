@@ -82,6 +82,9 @@
     "playbook_list_workflows": "列出剧本",
     "playbook_get_method_params": "剧本方法参数",
     "playbook_invoke_method": "执行剧本方法",
-    "playbook_get_exec_result": "剧本执行结果"
+    "playbook_get_exec_result": "剧本执行结果",
+    "get_skill_instructions": "读取 Skill 说明",
+    "get_skill_reference": "读取 Skill 参考",
+    "get_skill_script": "读取 Skill 脚本"
   }
 }

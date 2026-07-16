@@ -82,6 +82,9 @@
     "playbook_list_workflows": "List playbooks",
     "playbook_get_method_params": "Playbook method params",
     "playbook_invoke_method": "Invoke playbook method",
-    "playbook_get_exec_result": "Playbook execution result"
+    "playbook_get_exec_result": "Playbook execution result",
+    "get_skill_instructions": "Read skill instructions",
+    "get_skill_reference": "Read skill reference",
+    "get_skill_script": "Read skill script"
   }
 }

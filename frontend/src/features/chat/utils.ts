@@ -45,6 +45,10 @@ export const BUILTIN_TOOL_I18N_KEYS: Record<string, string> = {
   playbook_get_method_params: 'tools.playbook_get_method_params',
   playbook_invoke_method: 'tools.playbook_invoke_method',
   playbook_get_exec_result: 'tools.playbook_get_exec_result',
+  // Agno Local Skills progressive loaders (not MCP namespace)
+  get_skill_instructions: 'tools.get_skill_instructions',
+  get_skill_reference: 'tools.get_skill_reference',
+  get_skill_script: 'tools.get_skill_script',
 }
 
 const TOOL_NS_PREFIXES = ['basic_', 'hitl_', 'playbook_'] as const

@@ -251,5 +251,8 @@
   "handleBranchRight": "{{label}}（右）",
   "executorLabel": "执行器",
   "executorRecommended": "适用：{{text}}",
-  "stepNameHint": "留空时运行日志显示执行器名称（如「安全运营助手」）。"
+  "stepNameHint": "留空时运行日志显示执行器名称（如「安全运营助手」）。",
+  "edgeNext": "下一步",
+  "edgeThen": "成立",
+  "edgeElse": "否则"
 }
