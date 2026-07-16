@@ -124,6 +124,13 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Trace/Dashboard 口径 i18n + Studio 取消选择 + Memory 回退日志
+
+- Trace：状态筛选截断提示与 Sessions/Runs/Detail 等硬编码文案接入 i18n。
+- Dashboard：Token KPI 增加「有界样本」Tooltip。
+- Studio 多选：Inspector 提供「取消选择」+ 批量删除。
+- Memory 状态 GROUP BY 失败：`logger.debug(..., exc_info=True)` 再回退 per-user stats。
+
 ## 已完成：Workflow 空库 CTA
 
 - 库 Select 无结果且非搜索态时，提供「从 IR 分诊模板开始」链接，与画布空态引导一致。

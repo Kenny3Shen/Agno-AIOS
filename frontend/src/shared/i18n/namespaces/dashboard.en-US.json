@@ -44,5 +44,7 @@
   "sampleOfWindow": "sample {{sample}}/{{total}}",
   "failedRunsCount": "{{count}} failed (native ERROR)",
   "failedRunsNativeHint": "Failure rate and count use Agno trace status=ERROR for the selected window. The list below may also include recent chat-audit failures that never flipped to ERROR.",
-  "recentFailuresHint": "ERROR + chat-audit (bounded)"
+  "recentFailuresHint": "ERROR + chat-audit (bounded)",
+  "tokenSampleHint": "Tokens come from a bounded span sample (not an exact full-window sum). When the window is truncated, KPIs show sample/total.",
+  "tokenSampleNote": "Sampled tokens"
 }

@@ -127,5 +127,6 @@
   "keyboardHintsTitle": "快捷键",
   "selectedCount": "已选 {{count}} 个",
   "deleteSelected": "删除所选",
-  "multiSelectHint": "已选 {{count}} 个节点 — 批量操作可用；单节点属性请只选一个"
+  "multiSelectHint": "已选 {{count}} 个节点 — 批量操作可用；单节点属性请只选一个",
+  "clearSelection": "取消选择"
 }

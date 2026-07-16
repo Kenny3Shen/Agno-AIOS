@@ -299,17 +299,41 @@ export function DashboardPage() {
         </Col>
         <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
           <Card className="workbench-card dashboard-kpi" loading={query.isLoading}>
-            <Statistic title={t('inputTokens')} value={data?.metrics.input_tokens ?? 0} prefix={<DatabaseOutlined />} />
+            <Statistic
+              title={
+                <Tooltip title={t('tokenSampleHint')}>
+                  <span>{t('inputTokens')}</span>
+                </Tooltip>
+              }
+              value={data?.metrics.input_tokens ?? 0}
+              prefix={<DatabaseOutlined />}
+            />
           </Card>
         </Col>
         <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
           <Card className="workbench-card dashboard-kpi" loading={query.isLoading}>
-            <Statistic title={t('outputTokens')} value={data?.metrics.output_tokens ?? 0} prefix={<DatabaseOutlined />} />
+            <Statistic
+              title={
+                <Tooltip title={t('tokenSampleHint')}>
+                  <span>{t('outputTokens')}</span>
+                </Tooltip>
+              }
+              value={data?.metrics.output_tokens ?? 0}
+              prefix={<DatabaseOutlined />}
+            />
           </Card>
         </Col>
         <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
           <Card className="workbench-card dashboard-kpi" loading={query.isLoading}>
-            <Statistic title={t('reportedTokens')} value={data?.metrics.total_tokens ?? 0} prefix={<DatabaseOutlined />} />
+            <Statistic
+              title={
+                <Tooltip title={t('tokenSampleHint')}>
+                  <span>{t('reportedTokens')}</span>
+                </Tooltip>
+              }
+              value={data?.metrics.total_tokens ?? 0}
+              prefix={<DatabaseOutlined />}
+            />
           </Card>
         </Col>
       </Row>

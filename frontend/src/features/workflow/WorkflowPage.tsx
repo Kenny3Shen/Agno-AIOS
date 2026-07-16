@@ -675,15 +675,26 @@ export function WorkflowPage() {
                 </Typography.Text>
               ) : null}
               {workflow.state.selectedIds.length > 1 ? (
-                <Tooltip title={t('deleteSelected')} getPopupContainer={studioPopupContainer}>
-                  <Button
-                    size="small"
-                    type="text"
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={() => workflow.removeSelected()}
-                  />
-                </Tooltip>
+                <>
+                  <Tooltip title={t('clearSelection')} getPopupContainer={studioPopupContainer}>
+                    <Button
+                      size="small"
+                      type="text"
+                      onClick={() => workflow.select(null)}
+                    >
+                      {t('clearSelection')}
+                    </Button>
+                  </Tooltip>
+                  <Tooltip title={t('deleteSelected')} getPopupContainer={studioPopupContainer}>
+                    <Button
+                      size="small"
+                      type="text"
+                      danger
+                      icon={<DeleteOutlined />}
+                      onClick={() => workflow.removeSelected()}
+                    />
+                  </Tooltip>
+                </>
               ) : step ? (
                 <Tooltip title={t('deleteNode')} getPopupContainer={studioPopupContainer}>
                   <Button
@@ -704,9 +715,14 @@ export function WorkflowPage() {
                 className="workflow-studio__validation"
                 title={t('multiSelectHint', { count: workflow.state.selectedIds.length })}
                 description={
-                  <Button size="small" danger onClick={() => workflow.removeSelected()}>
-                    {t('deleteSelected')}
-                  </Button>
+                  <Space size={8} wrap>
+                    <Button size="small" onClick={() => workflow.select(null)}>
+                      {t('clearSelection')}
+                    </Button>
+                    <Button size="small" danger onClick={() => workflow.removeSelected()}>
+                      {t('deleteSelected')}
+                    </Button>
+                  </Space>
                 }
               />
             ) : !step ? (

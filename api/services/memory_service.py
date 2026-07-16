@@ -10,6 +10,8 @@ from api.auth.claims import ActorLike
 from api.services.actor_scope import scoped_requested_user_id
 from api.services.page_payloads import iso, now_utc, row_dict
 from api.services.postgres_store import coerce_json_value, get_async_agno_postgres_db
+from loguru import logger
+
 from api.utils.pagination import PaginationMeta, pagination_meta
 
 MEMORY_OPTIMIZATION_REVIEW_THRESHOLD = 50
@@ -184,7 +186,10 @@ async def _memory_status_by_user_ids(db: Any, user_ids: set[str]) -> dict[str, s
                 return {uid: _memory_status_for_count(totals.get(uid, 0)) for uid in ids}
         except Exception:
             # Fall through to Agno stats convenience API.
-            pass
+            logger.debug(
+                "memory status GROUP BY failed; falling back to per-user stats",
+                exc_info=True,
+            )
 
     async def _stats_for_user(uid: str) -> tuple[str, int]:
         user_stats, _total_users = await db.get_user_memory_stats(

@@ -134,7 +134,7 @@ describe('TracePage interactions', () => {
 
     expect(await screen.findByText('Session 1')).toBeTruthy()
     const sessionInput = screen.getByPlaceholderText('Session ID') as HTMLInputElement
-    await clickPage(cardByTitle('Sessions'), 2)
+    await clickPage(cardByTitle('会话'), 2)
 
     expect(await screen.findByText('Session 9')).toBeTruthy()
     expect(sessionInput.value).toBe('')
@@ -145,7 +145,7 @@ describe('TracePage interactions', () => {
     renderWithQuery(<TracePage />)
 
     expect(await screen.findByText('Session 1')).toBeTruthy()
-    expect(within(cardByTitle('Runs & Spans')).queryByText(/Run 1/)).toBeNull()
+    expect(within(cardByTitle('运行与 Span')).queryByText(/Run 1/)).toBeNull()
     expect(traceRequests).toHaveLength(0)
   })
 
@@ -154,7 +154,7 @@ describe('TracePage interactions', () => {
 
     expect(await screen.findByText('Session 1')).toBeTruthy()
     const sessionInput = screen.getByPlaceholderText('Session ID') as HTMLInputElement
-    await clickPage(cardByTitle('Sessions'), 2)
+    await clickPage(cardByTitle('会话'), 2)
     await user.click(await screen.findByRole('button', { name: /Session 9/ }))
 
     expect(sessionInput.value).toBe('')
@@ -165,7 +165,7 @@ describe('TracePage interactions', () => {
     await user.click(screen.getByRole('button', { name: 'Sync route' }))
 
     expect((await screen.findByRole('button', { name: /Session 9/ })).getAttribute('aria-pressed')).toBe('true')
-    expect(within(cardByTitle('Sessions')).queryByText('Session 1')).toBeNull()
+    expect(within(cardByTitle('会话')).queryByText('Session 1')).toBeNull()
   })
 
   it('submits Session ID searches as filters and clears selected_session', async () => {
@@ -185,9 +185,9 @@ describe('TracePage interactions', () => {
     renderWithQuery(<TracePage />)
 
     await user.click(await screen.findByRole('button', { name: /Session 1/ }))
-    expect(await within(cardByTitle('Runs & Spans')).findByText(/Run 1/)).toBeTruthy()
+    expect(await within(cardByTitle('运行与 Span')).findByText(/Run 1/)).toBeTruthy()
     routerMock.push.mockClear()
-    await clickPage(cardByTitle('Runs & Spans'), 2)
+    await clickPage(cardByTitle('运行与 Span'), 2)
 
     await waitFor(() => expect(traceRequests.some((params) => params.get('page') === '2')).toBe(true))
     const pageTwoRequests = traceRequests.filter((params) => params.get('page') === '2')
@@ -200,7 +200,7 @@ describe('TracePage interactions', () => {
     renderWithQuery(<TracePage />)
 
     await user.click(await screen.findByRole('button', { name: /Session 1/ }))
-    const runsCard = cardByTitle('Runs & Spans')
+    const runsCard = cardByTitle('运行与 Span')
     const root = await within(runsCard).findByText('Run root · Run 1')
     expect(within(runsCard).queryByText('Run · Run 1')).toBeNull()
     const rootRow = root.closest('.run-tree-node')
@@ -215,6 +215,6 @@ describe('TracePage interactions', () => {
     await user.click(switcher)
     const child = await within(runsCard).findByText('Span · Child 1')
     await user.click(child)
-    expect(await within(cardByTitle('Detail')).findByText('child input 1')).toBeTruthy()
+    expect(await within(cardByTitle('详情')).findByText('child input 1')).toBeTruthy()
   })
 })

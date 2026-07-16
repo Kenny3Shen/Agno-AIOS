@@ -127,5 +127,6 @@
   "keyboardHintsTitle": "Keyboard",
   "selectedCount": "{{count}} selected",
   "deleteSelected": "Delete selected",
-  "multiSelectHint": "{{count}} nodes selected — bulk actions only; select one node to edit"
+  "multiSelectHint": "{{count}} nodes selected — bulk actions only; select one node to edit",
+  "clearSelection": "Clear selection"
 }

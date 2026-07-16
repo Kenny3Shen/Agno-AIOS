@@ -395,13 +395,13 @@ export function TracePage() {
       <Card className="workbench-card trace-toolbar">
         <div className="trace-filter-layout">
           <div className="trace-filter-identifiers">
-            <Input value={sessionInput} onChange={(event) => setSessionInput(event.target.value)} placeholder="Session ID" allowClear />
-            <Input value={runInput} onChange={(event) => setRunInput(event.target.value)} placeholder="Run ID" allowClear />
+            <Input value={sessionInput} onChange={(event) => setSessionInput(event.target.value)} placeholder={t('sessionIdPlaceholder')} allowClear />
+            <Input value={runInput} onChange={(event) => setRunInput(event.target.value)} placeholder={t('runIdPlaceholder')} allowClear />
             <Input
               aria-label="User ID"
               value={isAdmin ? userInput : (currentUser.data?.id ?? '')}
               onChange={(event) => setUserInput(event.target.value)}
-              placeholder="User ID"
+              placeholder={t('userIdPlaceholder')}
               disabled={!isAdmin}
               allowClear={isAdmin}
             />
@@ -448,7 +448,7 @@ export function TracePage() {
           type="warning"
           showIcon
           style={{ marginBottom: 12 }}
-          title="Status filter scanned a bounded recent window; older matching runs may be missing."
+          title={t('statusFilterTruncated')}
         />
       ) : null}
       {archiveWindowTruncated ? (
@@ -461,7 +461,7 @@ export function TracePage() {
       ) : null}
       <Splitter className="trace-workbench-splitter" orientation={vertical ? 'vertical' : 'horizontal'}>
         <Splitter.Panel defaultSize={vertical ? '28%' : '24%'} min={vertical ? 180 : 220}>
-          <Card className="workbench-card splitter-panel-card" title="Sessions" extra={<Tag>{sessions.length}</Tag>}>
+          <Card className="workbench-card splitter-panel-card" title={t('sessions')} extra={<Tag>{sessions.length}</Tag>}>
             <div className="trace-paginated-list">
               <div className="trace-choice-list">
                 {visibleSessions.length > 0 ? (
@@ -475,8 +475,8 @@ export function TracePage() {
                     >
                       <strong>{session.name}</strong>
                       <span>
-                        {session.archived && <Tag>Archived</Tag>}
-                        {session.runCount} runs{session.context ? ` · ${session.context}` : ''}
+                        {session.archived && <Tag>{t('archivedTag')}</Tag>}
+                        {t('runsCount', { count: session.runCount })}{session.context ? ` · ${session.context}` : ''}
                       </span>
                       <small>{formatDate(session.latestAt)}</small>
                     </button>
@@ -500,7 +500,7 @@ export function TracePage() {
         <Splitter.Panel defaultSize={vertical ? '34%' : '32%'} min={vertical ? 240 : 340}>
           <Card
             className="workbench-card splitter-panel-card"
-            title="Runs & Spans"
+            title={t('runsAndSpans')}
             extra={<Tag>{selectedTraceList.data?.meta.total_count ?? 0}</Tag>}
           >
             <div className="trace-paginated-list">
@@ -529,7 +529,7 @@ export function TracePage() {
         <Splitter.Panel defaultSize={vertical ? '38%' : '44%'} min={vertical ? 300 : 420}>
           <Card
             className="workbench-card splitter-panel-card"
-            title="Detail"
+            title={t('detail')}
             extra={
               selectedSpan && (
                 <Space>
@@ -548,6 +548,7 @@ export function TracePage() {
 }
 
 function SpanDetailTabs({ span }: { span: Span }) {
+  const { t } = useTranslation('trace')
   const formatDate = useFormatDate()
   const metadata = Object.fromEntries(
     Object.entries({ metadata: span.parsed?.metadata, attributes: span.attributes, events: span.events }).filter(
@@ -562,32 +563,32 @@ function SpanDetailTabs({ span }: { span: Span }) {
       items={[
         {
           key: 'info',
-          label: 'Info',
+          label: t('info'),
           children: (
             <Splitter className="trace-info-splitter" orientation="vertical">
               <Splitter.Panel defaultSize="50%" min="20%">
-                <FormattedContentCard title="Input" value={span.parsed?.input} />
+                <FormattedContentCard title={t('input')} value={span.parsed?.input} />
               </Splitter.Panel>
               <Splitter.Panel defaultSize="50%" min="30%">
-                <FormattedContentCard title="Output" value={span.parsed?.output} />
+                <FormattedContentCard title={t('output')} value={span.parsed?.output} />
               </Splitter.Panel>
             </Splitter>
           ),
         },
         {
           key: 'metadata',
-          label: 'Metadata',
+          label: t('metadata'),
           children: (
             <MetadataDescriptions
               items={[
-                { key: 'session-id', label: 'Session ID', children: <CopyableValue value={span.session_id} /> },
-                { key: 'run-id', label: 'Run ID', children: <CopyableValue value={span.run_id} /> },
-                { key: 'span-id', label: 'Span ID', children: <CopyableValue value={span.span_id} /> },
-                { key: 'parent-span-id', label: 'Parent Span ID', children: <CopyableValue value={span.parent_span_id} /> },
-                { key: 'operation', label: 'Operation', children: span.name || '-' },
+                { key: 'session-id', label: t('sessionId'), children: <CopyableValue value={span.session_id} /> },
+                { key: 'run-id', label: t('runId'), children: <CopyableValue value={span.run_id} /> },
+                { key: 'span-id', label: t('spanId'), children: <CopyableValue value={span.span_id} /> },
+                { key: 'parent-span-id', label: t('parentSpanId'), children: <CopyableValue value={span.parent_span_id} /> },
+                { key: 'operation', label: t('operation'), children: span.name || '-' },
                 {
                   key: 'status',
-                  label: 'Status',
+                  label: t('status'),
                   children: <Tag color={span.status_code === 'ERROR' ? 'error' : 'success'}>{span.status_code}</Tag>,
                 },
                 { key: 'duration', label: 'Duration', children: span.duration || '-' },
