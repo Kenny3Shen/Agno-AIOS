@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：搜索截断提示 + Memory 后台失败跳转
+
+- Workflow 库在搜索态不再显示「列表截断」Alert（总数相对当前 q 分页，避免误导）。
+- `notify_background_task_failure`：task 名含 memory/memories 时通知 path=`/memory`、标题 Memory task failed。
+
 ## 已完成：Chat/Workflow 搜索空态与加载反馈
 
 - 最近对话：无匹配时仍保留搜索框；`isFetching` 时 Search loading；`keepPreviousData` 避免切 q 闪空白。
