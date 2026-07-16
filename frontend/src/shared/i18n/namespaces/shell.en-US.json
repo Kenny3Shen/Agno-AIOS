@@ -49,7 +49,9 @@
     "titleTooLong": "The title cannot exceed 120 characters",
     "renamed": "Conversation renamed",
     "renameFailed": "Unable to rename conversation",
-    "loadMore": "Load more"
+    "loadMore": "Load more",
+    "searchPlaceholder": "Search title or session id",
+    "emptySearch": "No matching conversations"
   },
   "noNotifications": "No notifications",
   "markAllRead": "Mark all as read",

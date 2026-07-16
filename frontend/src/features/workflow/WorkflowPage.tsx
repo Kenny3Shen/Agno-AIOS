@@ -508,6 +508,7 @@ export function WorkflowPage() {
             onDuplicateSelected={workflow.duplicateSelected}
             nodeRunStatus={workflow.state.nodeRunStatus}
             validationIssues={workflow.state.validationIssues}
+            validationEpoch={workflow.state.validationEpoch}
             emptyHint={t('canvasEmpty')}
             emptyActionLabel={canWrite ? t('startFromTemplate') : undefined}
             onEmptyAction={

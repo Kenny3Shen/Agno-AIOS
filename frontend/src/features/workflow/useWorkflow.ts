@@ -79,6 +79,7 @@ const initialState = (): WorkflowState => ({
   runHistory: [],
   error: null,
   validationIssues: [],
+  validationEpoch: 0,
   lastRunId: null,
   lastSessionId: null,
   lastApprovalId: null,
@@ -659,6 +660,7 @@ export function useWorkflow() {
       setState((current) => ({
         ...current,
         validationIssues: issues,
+        validationEpoch: current.validationEpoch + 1,
         error: issues[0]?.message ?? 'Fix validation errors before saving',
         selectedId: issues[0]?.nodeId ?? current.selectedId,
         selectedIds: issues[0]?.nodeId ? [issues[0].nodeId] : current.selectedIds,

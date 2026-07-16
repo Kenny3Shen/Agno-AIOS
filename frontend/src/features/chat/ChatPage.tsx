@@ -268,9 +268,11 @@ function MessageBody({ message, retry }: { message: Message; retry: () => void }
         <div className="response-pending">
           {message.status === 'paused'
             ? t('awaitingApproval')
-            : message.status === 'retrying' && message.retry
-              ? t('retryingDetail', { attempt: message.retry.attempt, max: message.retry.maxAttempts })
-              : t('establishingRun')}
+            : message.status === 'cancelled'
+              ? t('status.cancelled')
+              : message.status === 'retrying' && message.retry
+                ? t('retryingDetail', { attempt: message.retry.attempt, max: message.retry.maxAttempts })
+                : t('establishingRun')}
         </div>
       )}
       {message.status === 'paused' && (

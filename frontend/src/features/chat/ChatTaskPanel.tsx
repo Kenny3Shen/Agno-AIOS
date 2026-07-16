@@ -52,6 +52,17 @@ export function buildConversationItems(sessions: ChatSession[], now = Date.now()
     })
 }
 
+export function filterConversationItems(items: ConversationListItem[], query: string): ConversationListItem[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return items
+  return items.filter((item) => {
+    const label = item.label.toLowerCase()
+    const title = item.title.toLowerCase()
+    const id = item.key.toLowerCase()
+    return label.includes(q) || title.includes(q) || id.includes(q)
+  })
+}
+
 export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate }: ChatTaskPanelProps) {
   const { message: toast } = App.useApp()
   const { t } = useTranslation()
@@ -62,6 +73,7 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
   const [renameForm] = Form.useForm<{ title: string }>()
   const [renaming, setRenaming] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<string[]>([])
+  const [sessionQuery, setSessionQuery] = useState('')
   const expandedGroupsInitialized = useRef(false)
   const conversations = useMemo(
     () =>
@@ -72,7 +84,14 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
       })),
     [chat.sessions.data, t]
   )
-  const conversationGroups = useMemo(() => Array.from(new Set(conversations.map((item) => item.group))), [conversations])
+  const filteredConversations = useMemo(
+    () => filterConversationItems(conversations, sessionQuery),
+    [conversations, sessionQuery],
+  )
+  const conversationGroups = useMemo(
+    () => Array.from(new Set(filteredConversations.map((item) => item.group))),
+    [filteredConversations],
+  )
 
   useEffect(() => {
     if (expandedGroupsInitialized.current || !conversationGroups.length) return
@@ -172,8 +191,19 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
               </div>
             ) : (
               <>
+                {conversations.length ? (
+                  <Input.Search
+                    allowClear
+                    size="small"
+                    className="chat-task-panel-search"
+                    placeholder={t('shell:conversations.searchPlaceholder')}
+                    value={sessionQuery}
+                    onChange={(event) => setSessionQuery(event.target.value)}
+                    aria-label={t('shell:conversations.searchPlaceholder')}
+                  />
+                ) : null}
                 <Conversations
-                  items={conversations}
+                  items={filteredConversations}
                   activeKey={chat.sessionId ?? undefined}
                   onActiveChange={openSession}
                   groupable={{
@@ -234,6 +264,12 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
                   <Empty
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
                     description={t('shell:conversations.empty')}
+                    className="chat-task-panel-empty"
+                  />
+                ) : !filteredConversations.length ? (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description={t('shell:conversations.emptySearch')}
                     className="chat-task-panel-empty"
                   />
                 ) : null}

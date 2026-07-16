@@ -155,6 +155,8 @@ export type WorkflowState = {
   error: string | null
   /** Client-side save validation (node-linked). */
   validationIssues: Array<{ nodeId: string | null; code: string; message: string }>
+  /** Bumped on each failed validation so canvas can re-focus. */
+  validationEpoch: number
   lastRunId: string | null
   lastSessionId: string | null
   lastApprovalId: string | null

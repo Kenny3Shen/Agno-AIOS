@@ -4,7 +4,7 @@ import { setupUser } from '@/test/user'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '@/shared/i18n'
 import { renderWithQuery } from '@/test/render'
-import { buildConversationItems, ChatTaskPanel } from './ChatTaskPanel'
+import { buildConversationItems, filterConversationItems, ChatTaskPanel } from './ChatTaskPanel'
 import type { ChatSession } from './types'
 
 const sessions = {
@@ -27,6 +27,26 @@ const chat = {
 vi.mock('./useChat', () => ({ useChat: () => chat }))
 
 describe('conversation list mapping', () => {
+  it('filters conversations by title or session id', () => {
+    const items = buildConversationItems([
+      {
+        session_id: 'abc-risk',
+        preview: '分析资产风险',
+        created_at: 1,
+        updated_at: 2,
+      },
+      {
+        session_id: 'other',
+        preview: 'Hello',
+        created_at: 1,
+        updated_at: 3,
+      },
+    ])
+    expect(filterConversationItems(items, '风险').map((item) => item.key)).toEqual(['abc-risk'])
+    expect(filterConversationItems(items, 'OTHER').map((item) => item.key)).toEqual(['other'])
+    expect(filterConversationItems(items, '  ').map((item) => item.key)).toEqual(['other', 'abc-risk'])
+  })
+
   it('sorts sessions by update time and assigns stable date group keys', () => {
     const now = dayjs('2026-07-13T12:00:00').valueOf()
     const items = buildConversationItems(

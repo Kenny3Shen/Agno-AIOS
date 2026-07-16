@@ -278,6 +278,14 @@ html.dark .shell-menu .ant-menu-item-selected {
   flex-direction: column;
   padding: 0 8px 8px;
 }
+.chat-task-panel-search {
+  margin: 0 0 6px;
+  flex: 0 0 auto;
+}
+.chat-task-panel-search .ant-input-affix-wrapper,
+.chat-task-panel-search.ant-input-search {
+  border-radius: 8px;
+}
 .chat-task-panel .ant-conversations {
   min-height: 0;
   flex: 1;

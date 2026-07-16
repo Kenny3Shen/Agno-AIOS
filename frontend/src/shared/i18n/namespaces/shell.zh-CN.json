@@ -49,7 +49,9 @@
     "titleTooLong": "标题不能超过 120 个字符",
     "renamed": "会话已重命名",
     "renameFailed": "重命名失败",
-    "loadMore": "加载更多"
+    "loadMore": "加载更多",
+    "searchPlaceholder": "搜索对话标题或 ID",
+    "emptySearch": "没有匹配的对话"
   },
   "noNotifications": "暂无通知",
   "markAllRead": "全部已读",

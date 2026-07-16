@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Workflow 校验聚焦节点 + Chat 会话搜索
+
+- 保存校验失败：自动 `fitView` 到无效节点；重复保存用 `validationEpoch` 重新聚焦；列表点击节点同样居中。
+- Chat 最近对话：标题/ID 本地搜索（`filterConversationItems`），无匹配空态。
+
 ## 已完成：Workflow 加载态 + Run 输出 Markdown / Chat 停止反馈
 
 - Workflow：`loading` 状态（深链/库外 ID 拉取）；Studio 顶栏与库 Select 显示加载；Run 面板展示最新输出 Markdown，完成事件 content 就地渲染。

@@ -102,6 +102,7 @@ type Props = {
   onDuplicateSelected: () => void
   nodeRunStatus?: Record<string, 'running' | 'ok' | 'error' | 'paused'>
   validationIssues?: Array<{ nodeId: string | null; code: string; message: string }>
+  validationEpoch?: number
   emptyHint?: string
   emptyActionLabel?: string
   onEmptyAction?: () => void
@@ -234,6 +235,7 @@ function CanvasInner({
   onDuplicateSelected,
   nodeRunStatus = {},
   validationIssues = [],
+  validationEpoch = 0,
   emptyHint,
   emptyActionLabel,
   onEmptyAction,
@@ -510,8 +512,8 @@ function CanvasInner({
     const focusIds = Object.entries(nodeRunStatus)
       .filter(([, status]) => status === 'running' || status === 'paused')
       .map(([id]) => id)
-    const key = focusIds.slice().sort().join(',')
-    if (!key || key === lastFocusKeyRef.current) return
+    const key = `run:${focusIds.slice().sort().join(',')}`
+    if (key === 'run:' || key === lastFocusKeyRef.current) return
     lastFocusKeyRef.current = key
     requestAnimationFrame(() => {
       void fitView({
@@ -522,6 +524,39 @@ function CanvasInner({
       })
     })
   }, [nodeRunStatus, fitView])
+
+  // Focus invalid nodes when save validation fails (or when user re-triggers).
+  useEffect(() => {
+    const focusIds = Object.keys(invalidById)
+    const key = `invalid:${validationEpoch}:${focusIds.slice().sort().join(',')}`
+    if (key === 'invalid:' || key === lastFocusKeyRef.current) return
+    lastFocusKeyRef.current = key
+    requestAnimationFrame(() => {
+      void fitView({
+        nodes: focusIds.map((id) => ({ id })),
+        padding: 0.4,
+        duration: 280,
+        maxZoom: 1.35,
+      })
+    })
+  }, [invalidKey, invalidById, validationEpoch, fitView])
+
+  // When selecting a single invalid node from the validation list, center it.
+  useEffect(() => {
+    if (!selectedId || !invalidById[selectedId]) return
+    if (selectedIds.length > 1) return
+    const key = `select-invalid:${validationEpoch}:${selectedId}`
+    if (key === lastFocusKeyRef.current) return
+    lastFocusKeyRef.current = key
+    requestAnimationFrame(() => {
+      void fitView({
+        nodes: [{ id: selectedId }],
+        padding: 0.45,
+        duration: 240,
+        maxZoom: 1.4,
+      })
+    })
+  }, [selectedId, selectedIds, invalidById, validationEpoch, fitView])
 
   useEffect(() => {
     if (!graph.nodes.some((node) => node.className?.includes('wf-node-enter'))) return
