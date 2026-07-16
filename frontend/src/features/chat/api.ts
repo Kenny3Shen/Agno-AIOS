@@ -34,11 +34,7 @@ export const listSessions = async (
   if (limit != null) search.set('limit', String(limit))
   const payload = await requestJson<unknown>(`/chat/sessions${search.size ? `?${search}` : ''}`)
   const envelope = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}
-  const rows = Array.isArray(envelope.data)
-    ? envelope.data
-    : Array.isArray(payload)
-      ? payload
-      : []
+  const rows = Array.isArray(envelope.data) ? envelope.data : []
   return rows.map(normalizeSession).filter((row): row is ChatSession => row != null)
 }
 export const getHistory = async (sessionId: string) =>

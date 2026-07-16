@@ -142,6 +142,7 @@ P0.4 审批值班薄入口        ✅
 - Dashboard overview 知识库文档数改为 `list_documents_page_async(limit=1)` 取 total，不再 `list_documents_async` 拉全量
 - Chat sessions SQL 分页结果跳过二次内存排序（`already_sorted=True`）
 - 删除 workflow `_is_workflow_step_approval` 兼容别名；Approvals 前端去掉 legacy `{approvals}` envelope
+- Chat sessions 仅解析 `data/meta`；Live Search 开关只信 `capabilities.supports_live_search`
 
 相关：`memory_service.py` / `overview_service.py` / `chat_session_service.py` / `workflow_run_runtime.py` / `approvals/api.ts`
 
