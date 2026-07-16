@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Chat 轻量轮次跳过 Memory 上下文注入
+
+- `_build_security_agent`：`tool_surface=False`（tools-off 或意图未挂 Skill）时 `add_memories_to_context=False`，`store_tool_messages=False`；仍可在 `memory_enabled` 时后台写入 memory。
+- 保留 lite prompt + `num_history_runs=2` + 关闭 session summaries。
+- 单测：trivial `ping` / tools-off / 显式 `memory_enabled=True` 轻量路径均断言不注入 memories。
+
+
 ## 已完成：画布边标签 i18n + Skill 渐进工具名 + Grok lean 冒烟
 
 - Studio 边标签：`next/then/else` 展示为 i18n（中文「下一步/成立/否则」）；拓扑逻辑仍用英文 raw label。

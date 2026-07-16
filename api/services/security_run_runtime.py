@@ -1144,16 +1144,24 @@ class SecurityRunRuntime:
             else None
         )
         # Lean surface when tools off or intent filter attached nothing.
+        # Cost path: skip MCP/Skills, use lite prompt, shorter history, and do
+        # not inject long-term memories into the model context (still may write
+        # memories after the run when memory_enabled).
         tool_surface = bool(tools) or skills is not None
         prompt_name = (
             SECURITY_OPERATIONS_PROMPT if tool_surface else SECURITY_OPERATIONS_LITE_PROMPT
         )
         history_runs = 5 if tool_surface else 2
         session_summaries = tool_surface
+        inject_memories = bool(request.memory_enabled) and tool_surface
         return self.dependencies.agent_factory(
             id="security-operations",
             name="安全运营助手",
-            description="安全运营助手：研判、知识检索、剧本与 HITL 处置。",
+            description=(
+                "安全运营助手：研判、知识检索、剧本与 HITL 处置。"
+                if tool_surface
+                else "安全运营助手（轻量）：无 MCP/Skills，适合闲聊与概念解答。"
+            ),
             instructions=[await _load_prompt_async(prompt_name)],
             model=model,
             tools=tools,
@@ -1169,8 +1177,8 @@ class SecurityRunRuntime:
             add_dependencies_to_context=False,
             add_history_to_context=True,
             update_memory_on_run=request.memory_enabled,
-            add_memories_to_context=request.memory_enabled,
-            store_tool_messages=request.store_raw_tool_io,
+            add_memories_to_context=inject_memories,
+            store_tool_messages=request.store_raw_tool_io if tool_surface else False,
             enable_session_summaries=session_summaries,
             session_summary_manager=_session_summary_manager(model) if session_summaries else None,
             num_history_runs=history_runs,

@@ -1162,6 +1162,7 @@ async def test_enable_tools_false_skips_mcp_and_skills():
     assert created["skills"] is None
     assert created["instructions"] == ["lite"]
     assert created["num_history_runs"] == 2
+    assert created["add_memories_to_context"] is False
     assert created["enable_session_summaries"] is False
     assert created["session_summary_manager"] is None
     assert request.runtime_metadata()["enable_tools"] is False
@@ -1320,7 +1321,7 @@ async def test_build_security_agent_filters_skills_by_inference():
                 side_effect=lambda dirs: ("skills", list(dirs)),
             ),
         ):
-            agent = await runtime._build_security_agent(None, request)
+            await runtime._build_security_agent(None, request)
 
     assert request.skill_names == ["cve-intel-skill"]
     assert created["skills"] == ("skills", ["/skills/cve-intel-skill"])
@@ -1474,6 +1475,10 @@ async def test_trivial_turn_skips_mcp_connect_even_when_tools_enabled():
     assert created["skills"] is None
     assert created["instructions"] == ["lite"]
     assert created["num_history_runs"] == 2
+    assert created["add_memories_to_context"] is False
+    assert created["enable_session_summaries"] is False
+    assert created["session_summary_manager"] is None
+    assert created["store_tool_messages"] is False
 
 
 
@@ -1486,3 +1491,46 @@ def test_is_lean_tool_surface():
     assert security_run_runtime.is_lean_tool_surface(
         ["cve-intel-skill"], enable_tools=True
     ) is False
+
+
+@pytest.mark.asyncio
+async def test_lean_surface_skips_memory_context_when_memory_enabled():
+    """Auto-lite / tools-off must not inject memories even if memory_enabled."""
+    created: dict = {}
+
+    def agent_factory(**kwargs):
+        created.update(kwargs)
+        return SimpleNamespace()
+
+    with TemporaryDirectory() as temp_dir:
+        prompt_dir = Path(temp_dir)
+        (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_PROMPT).write_text(
+            "full", encoding="utf-8"
+        )
+        (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_LITE_PROMPT).write_text(
+            "lite", encoding="utf-8"
+        )
+        runtime = security_run_runtime.SecurityRunRuntime(
+            security_run_runtime.SecurityRunRuntimeDependencies(
+                build_model=lambda *_a, **_k: object(),
+                get_db=lambda: object(),
+                get_async_knowledge_base=lambda: object(),
+                get_enabled_skill_dirs=lambda: [],
+                agent_factory=agent_factory,
+            )
+        )
+        with patch.object(security_run_runtime, "PROMPT_DIR", prompt_dir):
+            await runtime._build_security_agent(
+                None,
+                security_run_runtime.SecurityRunRequest.from_chat_args(
+                    "ping",
+                    enable_tools=True,
+                    memory_enabled=True,
+                    search_knowledge=False,
+                ),
+            )
+    assert created["instructions"] == ["lite"]
+    assert created["update_memory_on_run"] is True
+    assert created["add_memories_to_context"] is False
+    assert created["num_history_runs"] == 2
+
