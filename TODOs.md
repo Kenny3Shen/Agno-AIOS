@@ -1,5 +1,13 @@
 # 下一步工作
 
+## 已完成：jsdom TextArea autoSize height:NaN 测试环境修复
+
+- 根因：jsdom `getComputedStyle` 返回 `border-*-width: medium` 等非数值，`@rc-component/input` autoSize `parseFloat` → NaN → React 警告。
+- `frontend/src/test/setup.ts`：代理 `getComputedStyle` 将布局关键指标规范为有限 px；`HTMLElement.scrollHeight` 为 textarea 提供稳定行高。
+- 单测 `getComputedStyle.autosize.test.ts` 锁住 finite height；ChatPage 模型设置用例不再刷 `height: NaN`。
+- 测试环境 stub `Notification` + 过滤残留 antdx 警告，Chat 套件 stderr 干净。
+
+
 ## 已完成：Chat 工具调用可读名 + 会话侧栏测试路由 mock
 
 - `formatToolLabel` / `humanizeToolId`：内置 MCP（`basic_`/`hitl_`/`playbook_`）走 chat i18n `tools.*`，其它 id 去命名空间后 Title Case。
