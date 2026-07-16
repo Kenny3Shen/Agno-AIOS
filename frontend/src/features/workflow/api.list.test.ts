@@ -51,4 +51,21 @@ describe('workflow list API', () => {
     expect(row.id).toBe('wf-2')
     expect(row.name).toBe('Two')
   })
+
+  it('forwards library search q', async () => {
+    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, 'token')
+    server.use(
+      http.get('/api/workflows', ({ request }) => {
+        const url = new URL(request.url)
+        expect(url.searchParams.get('q')).toBe('triage')
+        return HttpResponse.json({
+          data: [],
+          meta: { page: 1, limit: 100, total_count: 0, total_pages: 0, search_time_ms: 0 },
+        })
+      }),
+    )
+    const list = await listWorkflows(1, 100, 'triage')
+    expect(list.data).toEqual([])
+  })
+
 })

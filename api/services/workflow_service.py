@@ -107,6 +107,7 @@ async def list_workflows_for_actor(
     user_id: str | None = None,
     page: int = 1,
     limit: int = 20,
+    q: str | None = None,
 ) -> dict[str, Any]:
     started = time.perf_counter()
     owner = _owner_filter(actor, user_id)
@@ -114,6 +115,7 @@ async def list_workflows_for_actor(
         owner_user_id=owner,
         page=page,
         limit=limit,
+        q=q,
     )
     return {
         "data": [_row_payload(row) for row in rows],

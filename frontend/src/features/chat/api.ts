@@ -35,6 +35,8 @@ export type ListSessionsOptions = {
   userId?: string
   page?: number
   limit?: number
+  /** Match session_id or custom title (server-side). */
+  q?: string
 }
 
 /** Parse Agno-style ``{data, meta}`` chat session list. */
@@ -44,6 +46,7 @@ export const listSessions = async (options: ListSessionsOptions = {}): Promise<S
   const userId = options.userId
   const page = Math.max(1, Number(options.page ?? 1) || 1)
   const limit = Math.max(1, Number(options.limit ?? 40) || 40)
+  const q = (options.q ?? '').trim()
   const search = new URLSearchParams()
   if (archivedOnly) {
     search.set('archived_only', 'true')
@@ -51,6 +54,7 @@ export const listSessions = async (options: ListSessionsOptions = {}): Promise<S
     search.set('include_archived', 'true')
   }
   if (userId) search.set('user_id', userId)
+  if (q) search.set('q', q)
   search.set('page', String(page))
   search.set('limit', String(limit))
   const payload = await requestJson<unknown>(`/chat/sessions?${search.toString()}`)

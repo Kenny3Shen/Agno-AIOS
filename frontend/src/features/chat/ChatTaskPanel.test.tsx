@@ -20,6 +20,8 @@ const sessions = {
 const chat = {
   sessionId: null as string | null,
   sessions,
+  sessionSearch: '',
+  setSessionSearch: vi.fn<(value: string) => void>(),
   setSession: vi.fn<(sessionId: string) => void>(),
   newChat: vi.fn<() => void>(),
 }
@@ -92,7 +94,9 @@ describe('ChatTaskPanel', () => {
     sessions.fetchNextPage.mockReset()
     sessions.refetch.mockReset()
     chat.sessionId = null
+    chat.sessionSearch = ''
     chat.setSession.mockReset()
+    chat.setSessionSearch.mockReset()
     chat.newChat.mockReset()
   })
 

@@ -73,7 +73,6 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
   const [renameForm] = Form.useForm<{ title: string }>()
   const [renaming, setRenaming] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<string[]>([])
-  const [sessionQuery, setSessionQuery] = useState('')
   const expandedGroupsInitialized = useRef(false)
   const conversations = useMemo(
     () =>
@@ -85,8 +84,8 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
     [chat.sessions.data, t]
   )
   const filteredConversations = useMemo(
-    () => filterConversationItems(conversations, sessionQuery),
-    [conversations, sessionQuery],
+    () => filterConversationItems(conversations, chat.sessionSearch),
+    [conversations, chat.sessionSearch],
   )
   const conversationGroups = useMemo(
     () => Array.from(new Set(filteredConversations.map((item) => item.group))),
@@ -98,6 +97,13 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
     setExpandedGroups([conversationGroups.includes('today') ? 'today' : conversationGroups[0]])
     expandedGroupsInitialized.current = true
   }, [conversationGroups])
+
+  // When searching, expand every group so matches are visible without clicking.
+  useEffect(() => {
+    if (!chat.sessionSearch.trim() || !conversationGroups.length) return
+    setExpandedGroups(conversationGroups)
+    expandedGroupsInitialized.current = true
+  }, [chat.sessionSearch, conversationGroups])
 
   const startRename = (session: ChatSession) => {
     renameForm.setFieldsValue({ title: session.title || session.preview || '' })
@@ -197,8 +203,8 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
                     size="small"
                     className="chat-task-panel-search"
                     placeholder={t('shell:conversations.searchPlaceholder')}
-                    value={sessionQuery}
-                    onChange={(event) => setSessionQuery(event.target.value)}
+                    value={chat.sessionSearch}
+                    onChange={(event) => chat.setSessionSearch(event.target.value)}
                     aria-label={t('shell:conversations.searchPlaceholder')}
                   />
                 ) : null}

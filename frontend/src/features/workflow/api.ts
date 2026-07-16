@@ -199,10 +199,13 @@ const normalizeWorkflow = (value: unknown): WorkflowRecord | null => {
   }
 }
 
-export const listWorkflows = async (page = 1, limit = 100) => {
+export const listWorkflows = async (page = 1, limit = 100, q = '') => {
   const safePage = Math.max(1, page)
   const safeLimit = Math.min(100, Math.max(1, limit))
-  const raw = await requestJson<unknown>(`/workflows?page=${safePage}&limit=${safeLimit}`)
+  const needle = q.trim()
+  const params = new URLSearchParams({ page: String(safePage), limit: String(safeLimit) })
+  if (needle) params.set('q', needle)
+  const raw = await requestJson<unknown>(`/workflows?${params.toString()}`)
   return normalizePaginatedList(raw, {
     page: safePage,
     limit: safeLimit,

@@ -150,8 +150,9 @@ async def _query_sessions_page(
     owner_user_id: str | None,
     page: int,
     limit: int,
+    q: str | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
-    """SQL page of session rows with optional archive filter."""
+    """SQL page of session rows with optional archive filter and text search."""
     from sqlalchemy import func, or_, select
 
     db = get_async_agno_postgres_db()
@@ -171,6 +172,18 @@ async def _query_sessions_page(
             or_(
                 table.c.metadata.is_(None),
                 ~table.c.metadata.contains({"agno_aios_archived": True}),
+            )
+        )
+
+    needle = (q or "").strip()
+    if needle:
+        pattern = f"%{needle}%"
+        # Title lives in JSONB metadata; session_id is the durable key.
+        title_expr = table.c.metadata[TITLE_METADATA_KEY].astext
+        stmt = stmt.where(
+            or_(
+                table.c.session_id.ilike(pattern),
+                title_expr.ilike(pattern),
             )
         )
 
@@ -197,13 +210,15 @@ async def list_sessions_async(
     include_runs: bool = False,
     page: int = 1,
     limit: int = 40,
+    q: str | None = None,
 ) -> dict[str, Any]:
     """Read a page of session summaries (Agno-style data/meta).
 
     Returns Agno-style ``{data, meta}``. Archive filtering uses
     ``metadata @> {"agno_aios_archived": true}`` so totals stay accurate beyond
     the previous 500-row window. ``archived_only`` returns only archived rows
-    (implies archive filter; ignores ``include_archived``).
+    (implies archive filter; ignores ``include_archived``). Optional ``q``
+    matches session_id or custom title metadata (case-insensitive).
     """
     await ensure_agno_postgres_tables_async()
     safe_page = max(1, int(page or 1))
@@ -216,6 +231,7 @@ async def list_sessions_async(
         owner_user_id=owner_user_id,
         page=safe_page,
         limit=safe_limit,
+        q=q,
     )
     sessions = _project_session_rows(rows, include_runs=include_runs, already_sorted=True)
     return {

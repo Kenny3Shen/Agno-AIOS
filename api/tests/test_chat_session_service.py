@@ -378,3 +378,19 @@ async def test_list_sessions_archived_only_filters_sql():
     assert result["data"][0]["archived"] is True
     assert result["meta"]["total_count"] == 1
 
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_forwards_q():
+    captured: dict = {}
+
+    async def fake_query(**kwargs):
+        captured.update(kwargs)
+        return [], 0
+
+    with (
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(chat_session_service, "_query_sessions_page", fake_query),
+    ):
+        await chat_session_service.list_sessions_async(q="risk")
+    assert captured["q"] == "risk"

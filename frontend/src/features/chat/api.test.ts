@@ -164,3 +164,18 @@ describe('listSessions archived_only', () => {
     expect(result.data[0]?.archived).toBe(true)
   })
 })
+
+describe('listSessions q', () => {
+  it('forwards session search q', async () => {
+    server.use(
+      http.get('/api/chat/sessions', ({ request }) => {
+        const url = new URL(request.url)
+        expect(url.searchParams.get('q')).toBe('risk')
+        return HttpResponse.json({ data: [], meta: { page: 1, limit: 40, total_count: 0, total_pages: 0 } })
+      }),
+    )
+    const result = await listSessions({ q: 'risk' })
+    expect(result.data).toEqual([])
+  })
+})
+

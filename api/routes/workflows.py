@@ -72,10 +72,11 @@ async def list_workflows(
     user_id: str | None = None,
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
+    q: str | None = Query(default=None, max_length=120),
     user: User = Depends(require_scope("workflows:read")),
 ):
     return await list_workflows_for_actor(
-        user, user_id=user_id, page=page, limit=limit
+        user, user_id=user_id, page=page, limit=limit, q=q
     )
 
 

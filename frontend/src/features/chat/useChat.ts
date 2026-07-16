@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useRef } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
@@ -8,6 +8,7 @@ import { chatReducer, defaultReasoningEffort, initialChatState, previousPrompt }
 import type { SessionListResult } from './api'
 import type { ChatRunEvent, ChatSession, Message } from './types'
 import type { ReasoningEffort } from '@/shared/types/common'
+import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 
 export function useChat() {
   const { t } = useTranslation('chat')
@@ -16,9 +17,11 @@ export function useChat() {
   const searchStr = useRouterState({ select: (state) => state.location.searchStr })
   const sessionId = new URLSearchParams(searchStr).get('session')
   const [state, dispatch] = useReducer(chatReducer, initialChatState)
+  const [sessionSearch, setSessionSearch] = useState('')
+  const debouncedSessionSearch = useDebouncedValue(sessionSearch, 300)
   const abortRef = useRef<AbortController | null>(null)
   const activeRunIdRef = useRef<string | null>(null)
-  const sessionsQueryResult = useInfiniteQuery(sessionsQuery())
+  const sessionsQueryResult = useInfiniteQuery(sessionsQuery(false, undefined, debouncedSessionSearch.trim()))
   const sessionItems = useMemo(
     () => sessionsQueryResult.data?.pages.flatMap((page) => page.data) ?? [],
     [sessionsQueryResult.data]
@@ -199,6 +202,8 @@ export function useChat() {
     dispatch,
     sessionId,
     sessions,
+    sessionSearch,
+    setSessionSearch,
     history,
     models,
     selectedModel,

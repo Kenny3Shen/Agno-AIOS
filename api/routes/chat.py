@@ -229,6 +229,7 @@ async def list_sessions(
     user_id: str | None = None,
     page: int = 1,
     limit: int = 40,
+    q: str | None = None,
     user: User = Depends(require_scope("sessions:read")),
 ):
     """List chat sessions as Agno-style ``{data, meta}``."""
@@ -241,6 +242,7 @@ async def list_sessions(
             archived_only=archived_only,
             page=page,
             limit=limit,
+            q=q,
         )
     except Exception as e:
         logger.error("获取会话列表失败: {}", e)

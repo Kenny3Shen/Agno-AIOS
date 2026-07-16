@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { getModels } from '@/features/settings/api'
 import {
@@ -98,10 +99,12 @@ export function useWorkflow() {
   const futureRef = useRef<HistorySnap[]>([])
   const clipboardRef = useRef<WorkflowNode[]>([])
   const [historyTick, setHistoryTick] = useState(0)
+  const [librarySearch, setLibrarySearch] = useState('')
+  const debouncedLibrarySearch = useDebouncedValue(librarySearch, 300)
 
   const workflowsQuery = useInfiniteQuery({
-    queryKey: ['workflows', 'list'],
-    queryFn: ({ pageParam }) => listWorkflows(pageParam, 100),
+    queryKey: ['workflows', 'list', debouncedLibrarySearch.trim()],
+    queryFn: ({ pageParam }) => listWorkflows(pageParam, 100, debouncedLibrarySearch.trim()),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       const page = lastPage.meta.page
@@ -907,6 +910,8 @@ export function useWorkflow() {
     workflowsQuery,
     workflowRecords,
     workflowListMeta,
+    librarySearch,
+    setLibrarySearch,
     executorsQuery,
     modelsQuery,
     versionsQuery,

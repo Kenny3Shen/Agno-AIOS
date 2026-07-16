@@ -504,13 +504,10 @@ export function WorkflowPage() {
               value={workflow.state.workflowId ?? undefined}
               allowClear
               showSearch
-              optionFilterProp="label"
-              filterOption={(input, option) => {
-                const label = String(option?.label ?? '').toLowerCase()
-                const value = String(option?.value ?? '').toLowerCase()
-                const q = input.trim().toLowerCase()
-                return !q || label.includes(q) || value.includes(q)
-              }}
+              filterOption={false}
+              searchValue={workflow.librarySearch}
+              onSearch={workflow.setLibrarySearch}
+              onClear={() => workflow.setLibrarySearch('')}
               loading={
                 workflow.state.loading ||
                 workflow.workflowsQuery.isLoading ||
@@ -522,8 +519,13 @@ export function WorkflowPage() {
                 label: `${item.name} (v${item.version})`,
               }))}
               onChange={(value) => {
-                if (value) workflow.load(value)
-                else workflow.reset()
+                if (value) {
+                  workflow.setLibrarySearch('')
+                  workflow.load(value)
+                } else {
+                  workflow.setLibrarySearch('')
+                  workflow.reset()
+                }
               }}
             />
             {workflow.workflowsQuery.hasNextPage ? (

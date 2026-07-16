@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     delete,
     func,
+    or_,
     select,
     text,
     update,
@@ -131,6 +132,7 @@ async def list_workflows(
     owner_user_id: str | None = None,
     page: int = 1,
     limit: int = 20,
+    q: str | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     await ensure_workflows_table_async()
     table = workflows_table()
@@ -139,6 +141,16 @@ async def list_workflows(
     filters = []
     if owner_user_id is not None:
         filters.append(table.c.owner_user_id == owner_user_id)
+    needle = (q or "").strip()
+    if needle:
+        pattern = f"%{needle}%"
+        filters.append(
+            or_(
+                table.c.name.ilike(pattern),
+                table.c.description.ilike(pattern),
+                table.c.id.ilike(pattern),
+            )
+        )
     count_stmt = select(func.count()).select_from(table)
     list_stmt = select(table).order_by(table.c.updated_at.desc())
     for clause in filters:

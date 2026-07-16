@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Chat / Workflow 库服务端搜索
+
+- `GET /api/chat/sessions?q=`：SQL 匹配 `session_id` 与 `metadata.agno_aios_title`；前端最近对话搜索 debounce 后走服务端分页，命中组自动展开。
+- `GET /api/workflows?q=`：name / description / id ILIKE；Studio 库 Select 受控搜索 + infinite query 按 q 分页（不再只滤已加载页）。
+
 ## 已完成：Chat 错误横幅可关闭且仅失败可重试 / Dashboard 失败口径说明
 
 - Chat soft-error：关闭按钮；仅当最后一条助手消息 failed/retryable 时显示 Retry（cancel soft-error 不再误导重试）。

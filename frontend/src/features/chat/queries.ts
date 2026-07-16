@@ -6,16 +6,17 @@ export const SESSION_PAGE_SIZE = 40
 export const chatKeys = {
   all: ['chat'] as const,
   sessionLists: ['chat', 'sessions'] as const,
-  sessions: (includeArchived = false, userId?: string) => ['chat', 'sessions', { includeArchived, userId }] as const,
+  sessions: (includeArchived = false, userId?: string, q = '') =>
+    ['chat', 'sessions', { includeArchived, userId, q }] as const,
   history: (id: string) => ['chat', 'history', id] as const,
   models: ['settings', 'models'] as const,
 }
 
-export const sessionsQuery = (includeArchived = false, userId?: string) =>
+export const sessionsQuery = (includeArchived = false, userId?: string, q = '') =>
   infiniteQueryOptions({
-    queryKey: chatKeys.sessions(includeArchived, userId),
+    queryKey: chatKeys.sessions(includeArchived, userId, q),
     queryFn: ({ pageParam }) =>
-      listSessions({ includeArchived, userId, page: pageParam, limit: SESSION_PAGE_SIZE }),
+      listSessions({ includeArchived, userId, page: pageParam, limit: SESSION_PAGE_SIZE, q: q || undefined }),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       const { page, total_pages } = lastPage.meta

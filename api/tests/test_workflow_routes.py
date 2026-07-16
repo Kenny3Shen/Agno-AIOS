@@ -133,3 +133,17 @@ async def test_list_templates_returns_security_playbooks():
     # definitions compile-ready
     for item in result["data"]:
         assert item["definition"]["steps"]
+
+
+@pytest.mark.asyncio
+async def test_list_workflows_forwards_q():
+    captured: dict = {}
+
+    async def fake_list(actor, **kwargs):
+        captured.update(kwargs)
+        return {"data": [], "meta": {"page": 1, "limit": 20, "total_count": 0, "total_pages": 0, "search_time_ms": 0}}
+
+    with patch.object(workflows, "list_workflows_for_actor", fake_list):
+        result = await workflows.list_workflows(user=actor(), q=" IR ")
+    assert result["data"] == []
+    assert captured["q"] == " IR "
