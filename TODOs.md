@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Workflow pause → Approvals resolve 闭环 e2e
+
+- `frontend/e2e/workflow.smoke.spec.ts`：Studio Run SSE 收到 `workflow.paused`（含 `approval_id`）→ 「打开审批」深链 → Drawer 批准 → `POST /api/approvals/{id}/resolve`。
+- 覆盖跨页值班主路径（Studio CTA → Approvals），与既有 resolve smoke 互补。
+
 ## 已完成：Approvals resolve 严格归一化 + Dashboard 失败深链 e2e
 
 - `resolveApproval` / `resumeApproval` / `resolveSubmissionApproval`：去掉 `normalize ?? (row as Approval)` 强制断言；无效载荷直接抛错。
