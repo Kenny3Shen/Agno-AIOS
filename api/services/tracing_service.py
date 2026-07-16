@@ -83,11 +83,19 @@ def _trace_list_response(
     page: int,
     limit: int,
     total_count: int,
+    truncated: bool | None = None,
+    scanned_count: int | None = None,
 ) -> dict[str, Any]:
     data = [_project_trace_list_item(item) for item in items]
     return {
         "data": data,
-        "meta": pagination_meta(page=page, limit=limit, total_count=total_count),
+        "meta": pagination_meta(
+            page=page,
+            limit=limit,
+            total_count=total_count,
+            truncated=truncated if truncated else None,
+            scanned_count=scanned_count,
+        ),
     }
 
 
@@ -426,7 +434,7 @@ async def list_traces(
             total_count=int(total_count),
         )
 
-    items = await _all_trace_items(
+    filtered, scanned_count, truncated = await _status_filtered_trace_items(
         run_id=run_id,
         session_id=session_id,
         user_id=user_id,
@@ -435,12 +443,8 @@ async def list_traces(
         workflow_id=workflow_id,
         start_time=st,
         end_time=et,
+        status=normalized_status,
     )
-    items = await reconcile_trace_statuses(
-        items,
-        actor_user_id=user_id,
-    )
-    filtered = [item for item in items if trace_has_status(item, normalized_status)]
     offset = (page - 1) * limit
     page_items = filtered[offset : offset + limit]
     page_items = await _attach_list_inputs(page_items)
@@ -449,12 +453,45 @@ async def list_traces(
         page=page,
         limit=limit,
         total_count=len(filtered),
+        truncated=truncated,
+        scanned_count=scanned_count,
     )
 
 
 # Status filtering is not native on Agno get_traces; scan a bounded window only.
 _STATUS_FILTER_MAX_TRACES = 2_000
 _STATUS_FILTER_PAGE_SIZE = 200
+
+
+async def _status_filtered_trace_items(
+    *,
+    run_id: str | None,
+    session_id: str | None,
+    user_id: str | None,
+    agent_id: str | None,
+    team_id: str | None,
+    workflow_id: str | None,
+    start_time: datetime | None,
+    end_time: datetime | None,
+    status: str | None,
+) -> tuple[list[dict[str, Any]], int, bool]:
+    """Scan traces in pages, reconcile, and keep only status matches.
+
+    Returns ``(filtered_items, scanned_count, truncated)``. Only matching rows are
+    retained so ERROR/OK filters do not materialize the full 2k-row window.
+    """
+    filtered, scanned_count, truncated = await _scan_trace_items(
+        run_id=run_id,
+        session_id=session_id,
+        user_id=user_id,
+        agent_id=agent_id,
+        team_id=team_id,
+        workflow_id=workflow_id,
+        start_time=start_time,
+        end_time=end_time,
+        status=status,
+    )
+    return filtered, scanned_count, truncated
 
 
 async def _all_trace_items(
@@ -468,9 +505,44 @@ async def _all_trace_items(
     start_time: datetime | None,
     end_time: datetime | None,
 ) -> list[dict[str, Any]]:
-    """Load traces for post-hoc status filtering with a hard scan cap."""
+    """Load (status-filtered optional) traces for grouping with a hard scan cap."""
+    items, _scanned, _truncated = await _scan_trace_items(
+        run_id=run_id,
+        session_id=session_id,
+        user_id=user_id,
+        agent_id=agent_id,
+        team_id=team_id,
+        workflow_id=workflow_id,
+        start_time=start_time,
+        end_time=end_time,
+        status=None,
+        keep_all=True,
+    )
+    return items
+
+
+async def _scan_trace_items(
+    *,
+    run_id: str | None,
+    session_id: str | None,
+    user_id: str | None,
+    agent_id: str | None,
+    team_id: str | None,
+    workflow_id: str | None,
+    start_time: datetime | None,
+    end_time: datetime | None,
+    status: str | None = None,
+    keep_all: bool = False,
+) -> tuple[list[dict[str, Any]], int, bool]:
+    """Page through get_traces, reconcile each batch, optionally status-filter.
+
+    When ``keep_all`` is True, every reconciled row is kept (used by session
+    grouping). When False, only ``status`` matches are retained.
+    """
     trace_page = 1
-    items: list[dict[str, Any]] = []
+    kept: list[dict[str, Any]] = []
+    scanned = 0
+    truncated = False
     while True:
         batch, total_count = await _trace_db.get_traces(
             run_id=run_id,
@@ -484,20 +556,40 @@ async def _all_trace_items(
             limit=_STATUS_FILTER_PAGE_SIZE,
             page=trace_page,
         )
-        items.extend(jsonable_encoder(trace.to_dict()) for trace in batch)
-        if len(items) >= _STATUS_FILTER_MAX_TRACES:
-            if int(total_count or 0) > len(items):
+        if not batch:
+            break
+        remaining = _STATUS_FILTER_MAX_TRACES - scanned
+        if remaining <= 0:
+            truncated = True
+            break
+        if len(batch) > remaining:
+            batch = batch[:remaining]
+            truncated = True
+        raw_items = [jsonable_encoder(trace.to_dict()) for trace in batch]
+        scanned += len(raw_items)
+        reconciled = await reconcile_trace_statuses(
+            raw_items,
+            actor_user_id=user_id,
+        )
+        if keep_all or status is None:
+            kept.extend(reconciled)
+        else:
+            kept.extend(item for item in reconciled if trace_has_status(item, status))
+        if truncated or scanned >= _STATUS_FILTER_MAX_TRACES:
+            if int(total_count or 0) > scanned:
+                truncated = True
                 logger.warning(
                     "trace status filter truncated scan: loaded {} of {}",
-                    len(items),
+                    scanned,
                     total_count,
                 )
-            items = items[:_STATUS_FILTER_MAX_TRACES]
             break
-        if len(items) >= total_count or not batch:
+        if scanned >= int(total_count or 0):
+            break
+        if len(batch) < _STATUS_FILTER_PAGE_SIZE:
             break
         trace_page += 1
-    return items
+    return kept, scanned, truncated
 
 
 async def list_trace_sessions(
@@ -525,23 +617,31 @@ async def list_trace_sessions(
     st, et = _validate_trace_time_range(start_time, end_time)
     normalized_status = _normalize_trace_status(status)
 
-    trace_items = await _all_trace_items(
-        run_id=run_id,
-        session_id=session_id,
-        user_id=user_id,
-        agent_id=agent_id,
-        team_id=team_id,
-        workflow_id=workflow_id,
-        start_time=st,
-        end_time=et,
-    )
-    trace_items = await reconcile_trace_statuses(
-        trace_items,
-        actor_user_id=user_id,
-    )
-    trace_items = [
-        item for item in trace_items if trace_has_status(item, normalized_status)
-    ]
+    if normalized_status is None:
+        trace_items, scanned_count, truncated = await _scan_trace_items(
+            run_id=run_id,
+            session_id=session_id,
+            user_id=user_id,
+            agent_id=agent_id,
+            team_id=team_id,
+            workflow_id=workflow_id,
+            start_time=st,
+            end_time=et,
+            status=None,
+            keep_all=True,
+        )
+    else:
+        trace_items, scanned_count, truncated = await _status_filtered_trace_items(
+            run_id=run_id,
+            session_id=session_id,
+            user_id=user_id,
+            agent_id=agent_id,
+            team_id=team_id,
+            workflow_id=workflow_id,
+            start_time=st,
+            end_time=et,
+            status=normalized_status,
+        )
 
     grouped: dict[str, list[dict[str, Any]]] = {}
     for item in trace_items:
@@ -588,6 +688,8 @@ async def list_trace_sessions(
             page=page,
             limit=limit,
             total_count=len(sessions),
+            truncated=truncated if truncated else None,
+            scanned_count=scanned_count,
         ),
     }
 

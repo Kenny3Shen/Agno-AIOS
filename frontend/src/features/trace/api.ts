@@ -94,6 +94,8 @@ const normalizePaginated = <T>(payload: unknown, mapItem: (row: unknown) => T | 
     page: Number(meta.page ?? 1) || 1,
     limit: Number(meta.limit ?? 20) || 20,
     total_pages: Number(meta.total_pages ?? 0) || 0,
+    truncated: Boolean(meta.truncated),
+    scanned_count: meta.scanned_count != null ? Number(meta.scanned_count) || 0 : undefined,
   }
 }
 
@@ -130,14 +132,26 @@ export const listTraceSessions = async (params: TraceParams) => {
   const limit = 200
   let page = 1
   let totalCount = 0
+  let truncated = false
+  let scannedCount: number | undefined
   const items: TraceSessionSummary[] = []
 
   while (true) {
     const response = await listTraceSessionsPage({ ...params, page, limit })
     totalCount = response.total_count
+    truncated = truncated || Boolean(response.truncated)
+    if (response.scanned_count != null) scannedCount = response.scanned_count
     items.push(...response.items)
     if (items.length >= totalCount || response.items.length === 0) {
-      return { ...response, items, total_count: totalCount, page: 1, limit }
+      return {
+        ...response,
+        items,
+        total_count: totalCount,
+        page: 1,
+        limit,
+        truncated,
+        scanned_count: scannedCount,
+      }
     }
     page += 1
   }

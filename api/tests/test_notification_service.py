@@ -161,3 +161,35 @@ async def test_notify_workflow_hitl_pending_targets_admins():
     assert call.kwargs["data"]["path"] == "/approvals?approval_id=appr-1"
     assert call.kwargs["data"]["resource_type"] == "workflow_hitl"
 
+
+@pytest.mark.asyncio
+async def test_notify_background_task_failure_targets_admins_and_optional_user():
+    with (
+        patch.object(notification_service, "_admin_user_ids", new=AsyncMock(return_value=["admin-1"])),
+        patch.object(notification_service, "create_notifications", new=AsyncMock()) as create,
+    ):
+        await notification_service.notify_background_task_failure(
+            task_name="Task-7352",
+            error="Argument not supported: metadata",
+            user_id="user-1",
+        )
+    create.assert_awaited_once()
+    create_call = create.await_args
+    assert create_call is not None
+    assert set(create_call.args[0]) == {"admin-1", "user-1"}
+    assert "Task-7352" in create_call.kwargs["title"]
+    assert create_call.kwargs["data"]["resource_type"] == "background_task"
+    assert create_call.kwargs["data"]["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_notify_background_task_failure_swallows_errors():
+    with (
+        patch.object(notification_service, "_admin_user_ids", new=AsyncMock(side_effect=RuntimeError("db down"))),
+        patch.object(notification_service, "create_notifications", new=AsyncMock()) as create,
+    ):
+        await notification_service.notify_background_task_failure(
+            task_name="amake_memories",
+            error="boom",
+        )
+    create.assert_not_awaited()

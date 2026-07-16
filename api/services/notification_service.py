@@ -290,3 +290,42 @@ async def notify_workflow_hitl_pending(
     except Exception:
         logger.exception("Failed to create workflow HITL pending notifications")
 
+
+async def notify_background_task_failure(
+    *,
+    task_name: str = "",
+    error: str = "",
+    user_id: str = "",
+) -> None:
+    """Alert admins (and optional user) when a fire-and-forget task fails.
+
+    Used by the asyncio exception handler for Agno background work such as
+    ``amake_memories``. Never raises to the event-loop handler.
+    """
+    message = (error or "Background task failed").strip() or "Background task failed"
+    label = (task_name or "background task").strip() or "background task"
+    body = message if len(message) <= 500 else f"{message[:497]}..."
+    data = {
+        "resource_type": "background_task",
+        "status": "error",
+        "task_name": label,
+        "error": body,
+        "path": "/audit",
+    }
+    recipients: list[str] = []
+    try:
+        recipients.extend(await _admin_user_ids())
+        owner = (user_id or "").strip()
+        if owner:
+            recipients.append(owner)
+        if not recipients:
+            return
+        await create_notifications(
+            recipients,
+            title=f"Background task failed: {label}",
+            body=body,
+            data=data,
+        )
+    except Exception:
+        logger.exception("Failed to create background task failure notifications")
+

@@ -39,6 +39,8 @@ export interface TraceList {
   page: number
   limit: number
   total_pages?: number
+  truncated?: boolean
+  scanned_count?: number
 }
 
 /** Wire shape for GET /api/traces (Agno-native envelope). */
@@ -50,6 +52,8 @@ export interface TraceListNative {
     total_pages: number
     total_count: number
     search_time_ms?: number
+    truncated?: boolean
+    scanned_count?: number
   }
 }
 export interface TraceFilters {
@@ -85,6 +89,8 @@ export interface TraceSessionList {
   page: number
   limit: number
   total_pages?: number
+  truncated?: boolean
+  scanned_count?: number
 }
 
 /** Wire shape for GET /api/traces/sessions. */
@@ -96,6 +102,8 @@ export interface TraceSessionListNative {
     total_pages: number
     total_count: number
     search_time_ms?: number
+    truncated?: boolean
+    scanned_count?: number
   }
 }
 export interface SpanTreeNode {

@@ -93,14 +93,27 @@ def _asyncio_exception_handler(loop: asyncio.AbstractEventLoop, context: dict) -
     exception = context.get("exception")
     task = context.get("task") or context.get("future")
     task_name = getattr(task, "get_name", lambda: None)() if task is not None else None
+    error_text = str(exception) if exception is not None else message
     if exception is not None:
         logger.opt(exception=exception).error(
             "Asyncio background failure{}: {}",
             f" [{task_name}]" if task_name else "",
             message,
         )
-        return
-    logger.error("Asyncio background failure{}: {}", f" [{task_name}]" if task_name else "", message)
+    else:
+        logger.error("Asyncio background failure{}: {}", f" [{task_name}]" if task_name else "", message)
+    # Best-effort durable alert; never re-raise into the event loop.
+    try:
+        from api.services.notification_service import notify_background_task_failure
+
+        loop.create_task(
+            notify_background_task_failure(
+                task_name=str(task_name or ""),
+                error=error_text,
+            )
+        )
+    except Exception:
+        logger.exception("Unable to schedule background failure notification")
 
 
 @asynccontextmanager

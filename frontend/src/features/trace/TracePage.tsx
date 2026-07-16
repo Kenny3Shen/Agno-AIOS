@@ -3,6 +3,7 @@ import { useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 import dayjs, { type Dayjs } from 'dayjs'
 import {
+  Alert,
   Button,
   Card,
   DatePicker,
@@ -191,6 +192,9 @@ export function TracePage() {
     [selectedSession, selectedTraceList.data?.items]
   )
   const visibleRuns = runs
+  const statusFilterTruncated = Boolean(
+    filters.status && (selectedTraceList.data?.truncated || summaries.data?.truncated)
+  )
   const detailTraceIds = useMemo(
     () => [...new Set([...visibleRuns.map((run) => run.traceId), activeTraceId].filter(Boolean))],
     [activeTraceId, visibleRuns]
@@ -373,6 +377,14 @@ export function TracePage() {
           )}
         </div>
       </Card>
+      {statusFilterTruncated ? (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="Status filter scanned a bounded recent window; older matching runs may be missing."
+        />
+      ) : null}
       <Splitter className="trace-workbench-splitter" orientation={vertical ? 'vertical' : 'horizontal'}>
         <Splitter.Panel defaultSize={vertical ? '28%' : '24%'} min={vertical ? 180 : 220}>
           <Card className="workbench-card splitter-panel-card" title="Sessions" extra={<Tag>{sessions.length}</Tag>}>

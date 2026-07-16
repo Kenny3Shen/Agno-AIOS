@@ -136,6 +136,17 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Trace status 流式过滤 + 后台 Task 失败通知
+
+- Trace `status=` 列表按批 `get_traces` → reconcile → 只保留匹配行，避免整窗 2k 全量常驻
+- `meta.truncated` / `meta.scanned_count` 在扫描达上限时标记（sessions 列表同样）
+- asyncio 后台异常（如 `amake_memories`）除日志外通知 admins（`notify_background_task_failure`）
+- Trace UI 在 status 过滤且 `meta.truncated` 时显示有界扫描警告
+
+相关：`tracing_service.py` / `pagination.py` / `notification_service.py` / `main.py`
+
+---
+
 ## 已完成：Approvals 拒绝理由字段收窄
 
 - 前端 `rejectionReason` 只读 `resolution_data.note`（HITL）与顶层 `rejection_reason`（upload submissions）

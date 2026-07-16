@@ -251,7 +251,7 @@ async def test_list_traces_passes_all_filters_to_agno_db():
             limit=25,
             page=2,
         )
-    assert result == {"data": [], "meta": {"page": 2, "limit": 25, "total_pages": 0, "total_count": 0, "search_time_ms": 0.0}}
+    assert result == {"data": [], "meta": {"page": 2, "limit": 25, "total_pages": 0, "total_count": 0, "search_time_ms": 0.0, "scanned_count": 0}}
     assert captured["run_id"] == "run-1"
     assert captured["session_id"] == "session-1"
     assert captured["user_id"] == "u1"
@@ -653,3 +653,85 @@ async def test_root_inputs_leave_null_when_batch_fails() -> None:
     get_spans.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_list_traces_status_filter_streams_batches_and_marks_truncated() -> None:
+    """Status filter reconciles per page and does not retain non-matching rows."""
+    class FakeTrace:
+        def __init__(self, **data):
+            self.data = data
+
+        def to_dict(self):
+            return self.data
+
+    calls: list[dict[str, object]] = []
+
+    async def fake_get_traces(**kwargs):
+        calls.append(kwargs)
+        page = int(kwargs["page"])
+        if page == 1:
+            batch = [
+                FakeTrace(trace_id="ok-1", run_id="r-ok", status="OK", session_id="s1"),
+                FakeTrace(trace_id="err-1", run_id="r-err", status="ERROR", session_id="s1"),
+            ]
+            return batch, 2500
+        if page == 2:
+            batch = [
+                FakeTrace(trace_id="err-2", run_id="r-err-2", status="ERROR", session_id="s2"),
+            ]
+            return batch, 2500
+        return [], 2500
+
+    async def fake_reconcile(items, *, actor_user_id=None):
+        return list(items)
+
+    async def fake_inputs(items):
+        return items
+
+    with (
+        patch.object(tracing_service._trace_db, "get_traces", fake_get_traces),
+        patch.object(tracing_service, "reconcile_trace_statuses", fake_reconcile),
+        patch.object(tracing_service, "_attach_list_inputs", fake_inputs),
+        patch.object(tracing_service, "_STATUS_FILTER_MAX_TRACES", 3),
+        patch.object(tracing_service, "_STATUS_FILTER_PAGE_SIZE", 2),
+    ):
+        result = await tracing_service.list_traces(user_id="u1", status="ERROR", page=1, limit=20)
+
+    assert [item["trace_id"] for item in result["data"]] == ["err-1", "err-2"]
+    assert result["meta"]["total_count"] == 2
+    assert result["meta"]["truncated"] is True
+    assert result["meta"]["scanned_count"] == 3
+    assert [call["page"] for call in calls] == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_list_traces_status_filter_keeps_only_matches_without_truncation() -> None:
+    class FakeTrace:
+        def __init__(self, **data):
+            self.data = data
+
+        def to_dict(self):
+            return self.data
+
+    async def fake_get_traces(**kwargs):
+        return [
+            FakeTrace(trace_id="ok-1", run_id="r1", status="OK", session_id="s1"),
+            FakeTrace(trace_id="err-1", run_id="r2", status="ERROR", session_id="s1"),
+        ], 2
+
+    async def fake_reconcile(items, *, actor_user_id=None):
+        return list(items)
+
+    async def fake_inputs(items):
+        return items
+
+    with (
+        patch.object(tracing_service._trace_db, "get_traces", fake_get_traces),
+        patch.object(tracing_service, "reconcile_trace_statuses", fake_reconcile),
+        patch.object(tracing_service, "_attach_list_inputs", fake_inputs),
+    ):
+        result = await tracing_service.list_traces(user_id="u1", status="ERROR", page=1, limit=20)
+
+    assert [item["trace_id"] for item in result["data"]] == ["err-1"]
+    assert result["meta"]["total_count"] == 1
+    assert "truncated" not in result["meta"]
+    assert result["meta"]["scanned_count"] == 2
