@@ -124,6 +124,13 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Workflow 校验→Inspector 聚焦 + Run 自动展开 / Chat soft-error 关闭
+
+- Workflow 保存校验失败或点击 issue：右侧 Inspector 滚入视口，按 issue code 聚焦 executor / workflow_ref / children / name 字段。
+- Run 面板改为受控 `activeKey`；`running` 时自动展开 Run 日志（折叠后重新运行仍可见）。
+- Chat soft-error / 横幅错误：可关闭（`clear-error`），不必点 Retry 或等下次 start。
+- `fieldForValidationIssue` 映射 + 单测；Chat reducer 单测。
+
 ## 已完成：Workflow 库无限分页 + Chat「回到最新」布局
 
 - Workflow 库：`useInfiniteQuery` 按页拉列表，侧栏「加载更多」；截断 Alert 仅在无法继续翻页时显示。

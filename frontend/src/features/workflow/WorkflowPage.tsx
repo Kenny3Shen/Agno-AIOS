@@ -43,6 +43,7 @@ import { WorkflowCanvas, paletteDragStart } from './WorkflowCanvas'
 import type { WorkflowNodeType } from './types'
 import {
   buildWorkflowCode,
+  fieldForValidationIssue,
   rotateWebhookSecret,
   triggerEnableBlocked,
   workflowWebhookCurl,
@@ -56,7 +57,7 @@ import { currentUserQuery } from '@/features/auth'
 import { hasScope } from '@/shared/auth/permissions'
 import { useFormatDate } from '@/shared/lib/format'
 import { copyToClipboard } from '@/shared/lib/clipboard'
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 const PALETTE: Array<{
   type: WorkflowNodeType
@@ -81,6 +82,9 @@ export function WorkflowPage() {
   const routerNav = useRouter()
   const workflow = useWorkflow()
   const runLogListRef = useRef<HTMLDivElement>(null)
+  const inspectorPanelRef = useRef<HTMLElement | null>(null)
+  const focusFieldRef = useRef<string | null>(null)
+  const [runPanelKeys, setRunPanelKeys] = useState<string[]>(['run'])
   const currentUser = useQuery(currentUserQuery())
   const canRun =
     hasScope(currentUser.data, 'workflows:run') ||
@@ -204,6 +208,51 @@ export function WorkflowPage() {
     if (!node) return
     node.scrollTop = node.scrollHeight
   }, [workflow.state.runLog, workflow.state.running])
+
+  // When validation fails (or issue clicked), scroll inspector into view and focus the problem field.
+  useEffect(() => {
+    if (!workflow.state.validationEpoch) return
+    const issues = workflow.state.validationIssues
+    if (!issues.length) return
+    const primary = issues[0]
+    const field = focusFieldRef.current ?? fieldForValidationIssue(primary)
+    focusFieldRef.current = null
+
+    const panel = inspectorPanelRef.current
+    panel?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+
+    const nodeId = workflow.state.selectedId
+    if (!nodeId) return
+    const timer = window.setTimeout(() => {
+      const root = inspectorPanelRef.current
+      if (!root) return
+      const target =
+        root.querySelector<HTMLElement>(`[data-inspector-field="${field}"]`) ??
+        root.querySelector<HTMLElement>('[data-inspector-field="name"]')
+      if (!target) return
+      target.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      const focusable =
+        target.matches('input, textarea, button, [tabindex]')
+          ? target
+          : target.querySelector<HTMLElement>('input, textarea, button, .ant-select-selector')
+      if (focusable && typeof focusable.focus === 'function') {
+        try {
+          focusable.focus({ preventScroll: true })
+        } catch {
+          focusable.focus()
+        }
+      }
+    }, 80)
+    return () => window.clearTimeout(timer)
+  }, [workflow.state.validationEpoch, workflow.state.validationIssues, workflow.state.selectedId])
+
+  // Expand run log when a run starts so output is visible without manual open.
+  useEffect(() => {
+    if (workflow.state.running) {
+      setRunPanelKeys((keys) => (keys.includes('run') ? keys : [...keys, 'run']))
+    }
+  }, [workflow.state.running])
+
 
   const paletteLabel = (type: WorkflowNodeType) => {
     const map: Record<WorkflowNodeType, string> = {
@@ -555,7 +604,10 @@ export function WorkflowPage() {
 
         {/* Right: inspector + run */}
         <aside className="workflow-studio__right">
-          <section className="workflow-studio__panel workflow-studio__panel--grow">
+          <section
+            ref={inspectorPanelRef}
+            className="workflow-studio__panel workflow-studio__panel--grow"
+          >
             {workflow.state.validationIssues.length ? (
               <Alert
                 type="error"
@@ -571,7 +623,12 @@ export function WorkflowPage() {
                           size="small"
                           style={{ paddingInline: 0, height: 'auto' }}
                           onClick={() => {
+                            focusFieldRef.current = fieldForValidationIssue(issue)
                             if (issue.nodeId) workflow.select(issue.nodeId)
+                            // Re-trigger inspector focus even if the node was already selected.
+                            workflow.patchMeta({
+                              validationEpoch: workflow.state.validationEpoch + 1,
+                            })
                           }}
                         >
                           {issue.message}
@@ -604,6 +661,7 @@ export function WorkflowPage() {
                 <Tag color="processing">{step.type}</Tag>
                 <Input
                   className="nodrag nowheel"
+                  data-inspector-field="name"
                   value={step.name}
                   onChange={(e) => workflow.update({ ...step, name: e.target.value })}
                   placeholder={t('stepNamePlaceholder')}
@@ -612,17 +670,19 @@ export function WorkflowPage() {
 
                 {step.type === 'step' ? (
                   <>
-                    <Select
-                      getPopupContainer={studioPopupContainer}
-                      style={{ width: '100%', marginTop: 8 }}
-                      placeholder={t('executorPlaceholder')}
-                      value={step.targetId}
-                      options={executors.map((item) => ({
-                        value: item.ref,
-                        label: `${item.name} (${item.ref})`,
-                      }))}
-                      onChange={(value) => workflow.update({ ...step, targetId: value })}
-                    />
+                    <div data-inspector-field="executor" style={{ marginTop: 8 }}>
+                      <Select
+                        getPopupContainer={studioPopupContainer}
+                        style={{ width: '100%' }}
+                        placeholder={t('executorPlaceholder')}
+                        value={step.targetId}
+                        options={executors.map((item) => ({
+                          value: item.ref,
+                          label: `${item.name} (${item.ref})`,
+                        }))}
+                        onChange={(value) => workflow.update({ ...step, targetId: value })}
+                      />
+                    </div>
                     <Input.TextArea
                       style={{ marginTop: 8 }}
                       value={step.instructions}
@@ -774,22 +834,24 @@ export function WorkflowPage() {
                       onChange={(value) => workflow.update({ ...step, evaluatorCel: value })}
                       placeholder={t('celPlaceholder')}
                     />
-                    <Space wrap style={{ marginTop: 8 }}>
-                      <Button
-                        size="small"
-                        icon={<PlusOutlined />}
-                        onClick={() => workflow.addChild(step.id, 'thenSteps', 'step')}
-                      >
-                        {t('addThenStep')}
-                      </Button>
-                      <Button
-                        size="small"
-                        icon={<PlusOutlined />}
-                        onClick={() => workflow.addChild(step.id, 'elseSteps', 'step')}
-                      >
-                        {t('addElseStep')}
-                      </Button>
-                    </Space>
+                    <div data-inspector-field="children" style={{ marginTop: 8 }}>
+                      <Space wrap>
+                        <Button
+                          size="small"
+                          icon={<PlusOutlined />}
+                          onClick={() => workflow.addChild(step.id, 'thenSteps', 'step')}
+                        >
+                          {t('addThenStep')}
+                        </Button>
+                        <Button
+                          size="small"
+                          icon={<PlusOutlined />}
+                          onClick={() => workflow.addChild(step.id, 'elseSteps', 'step')}
+                        >
+                          {t('addElseStep')}
+                        </Button>
+                      </Space>
+                    </div>
                   </>
                 ) : null}
 
@@ -815,6 +877,7 @@ export function WorkflowPage() {
                     <Button
                       size="small"
                       icon={<PlusOutlined />}
+                      data-inspector-field="children"
                       style={{ marginTop: 8 }}
                       onClick={() => workflow.addChild(step.id, 'steps', 'step')}
                     >
@@ -827,6 +890,7 @@ export function WorkflowPage() {
                   <Button
                     size="small"
                     icon={<PlusOutlined />}
+                    data-inspector-field="children"
                     style={{ marginTop: 8 }}
                     onClick={() => workflow.addChild(step.id, 'steps', 'step')}
                   >
@@ -850,16 +914,18 @@ export function WorkflowPage() {
                 ) : null}
 
                 {step.type === 'workflow_ref' ? (
-                  <Select
-                    getPopupContainer={studioPopupContainer}
-                    style={{ width: '100%', marginTop: 8 }}
-                    placeholder={t('nestedWorkflowPlaceholder')}
-                    value={step.workflowId || undefined}
-                    options={saved
-                      .filter((item) => item.id !== workflow.state.workflowId)
-                      .map((item) => ({ value: item.id, label: item.name }))}
-                    onChange={(value) => workflow.update({ ...step, workflowId: value })}
-                  />
+                  <div data-inspector-field="workflow_ref" style={{ marginTop: 8 }}>
+                    <Select
+                      getPopupContainer={studioPopupContainer}
+                      style={{ width: '100%' }}
+                      placeholder={t('nestedWorkflowPlaceholder')}
+                      value={step.workflowId || undefined}
+                      options={saved
+                        .filter((item) => item.id !== workflow.state.workflowId)
+                        .map((item) => ({ value: item.id, label: item.name }))}
+                      onChange={(value) => workflow.update({ ...step, workflowId: value })}
+                    />
+                  </div>
                 ) : null}
               </div>
             )}
@@ -869,7 +935,10 @@ export function WorkflowPage() {
             <Collapse
               size="small"
               bordered={false}
-              defaultActiveKey={['run']}
+              activeKey={runPanelKeys}
+              onChange={(keys) =>
+                setRunPanelKeys(Array.isArray(keys) ? keys.map(String) : [String(keys)])
+              }
               destroyOnHidden
               items={[
                 {

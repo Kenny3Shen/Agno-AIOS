@@ -417,6 +417,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   width: min(960px, 100%);
   margin: 12px auto;
   border-left: 3px solid #df3f36;
@@ -424,6 +425,16 @@
   padding: 8px 12px;
   color: #df3f36;
   font-size: 12px;
+}
+.chat-error__message {
+  flex: 1;
+  min-width: 0;
+}
+.chat-error__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .message-run-paused {

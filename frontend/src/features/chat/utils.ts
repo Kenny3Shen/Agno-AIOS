@@ -176,6 +176,11 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
         ...state,
         error: action.message,
       }
+    case 'clear-error':
+      return {
+        ...state,
+        error: null,
+      }
     case 'reset':
       return { ...state, messages: [], input: '', requesting: false, error: null, reasoningEffort: null }
   }

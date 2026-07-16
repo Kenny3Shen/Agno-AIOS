@@ -631,6 +631,24 @@ export type WorkflowValidationIssue = {
   message: string
 }
 
+/** Map a validation issue to an inspector field key for scroll/focus. */
+export const fieldForValidationIssue = (issue: Pick<WorkflowValidationIssue, 'code'>): string => {
+  switch (issue.code) {
+    case 'missing_executor':
+      return 'executor'
+    case 'missing_workflow_ref':
+      return 'workflow_ref'
+    case 'empty_parallel':
+    case 'empty_loop':
+    case 'empty_condition':
+    case 'empty_router':
+    case 'empty_router_choice':
+      return 'children'
+    default:
+      return 'name'
+  }
+}
+
 /** Client-side save checks (mirrors compiler empty-branch rules). */
 export const validateWorkflowDraft = (roots: WorkflowNode[]): WorkflowValidationIssue[] => {
   const issues: WorkflowValidationIssue[] = []

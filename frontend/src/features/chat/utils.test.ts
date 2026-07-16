@@ -145,6 +145,13 @@ describe('chat behavior', () => {
     expect(next.messages).toEqual([])
   })
 
+  it('clears a soft error without touching messages', () => {
+    const withError = chatReducer(initialChatState, { type: 'soft-error', message: 'server cancel failed' })
+    const next = chatReducer(withError, { type: 'clear-error' })
+    expect(next.error).toBeNull()
+    expect(next.messages).toEqual([])
+  })
+
   it('marks a run cancelled and clears requesting', () => {
     const assistant: Message = { id: 'a', role: 'assistant', content: 'partial', final: false, status: 'streaming' }
     const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })

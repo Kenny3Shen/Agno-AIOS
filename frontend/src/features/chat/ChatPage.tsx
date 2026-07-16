@@ -6,6 +6,7 @@ import {
   ArrowDownOutlined,
   ArrowUpOutlined,
   CaretDownOutlined,
+  CloseOutlined,
   CaretRightOutlined,
   CodeOutlined,
   CopyOutlined,
@@ -486,10 +487,19 @@ export function ChatPage() {
           ) : null}
           {chat.state.error && (
             <div className="chat-error" role="alert">
-              {chat.state.error}
-              <Button type="link" size="small" onClick={() => chat.retry(chat.state.messages.at(-1)?.id ?? '')}>
-                {t('common:retry')}
-              </Button>
+              <span className="chat-error__message">{chat.state.error}</span>
+              <span className="chat-error__actions">
+                <Button type="link" size="small" onClick={() => chat.retry(chat.state.messages.at(-1)?.id ?? '')}>
+                  {t('common:retry')}
+                </Button>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<CloseOutlined />}
+                  aria-label={t('common:close')}
+                  onClick={() => chat.dispatch({ type: 'clear-error' })}
+                />
+              </span>
             </div>
           )}
         </div>

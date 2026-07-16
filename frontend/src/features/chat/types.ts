@@ -104,6 +104,7 @@ export type ChatAction =
   | { type: 'event'; id: string; event: ChatRunEvent }
   | { type: 'network-error'; id: string; message: string }
   | { type: 'soft-error'; message: string }
+  | { type: 'clear-error' }
   | { type: 'model'; value: string | null; reasoningEffort: ReasoningEffort | null }
   | { type: 'reasoning-effort'; value: ReasoningEffort | null }
   | { type: 'search-knowledge'; value: boolean }

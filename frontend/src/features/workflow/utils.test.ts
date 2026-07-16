@@ -18,6 +18,7 @@ import {
   reparentTargetFromHandle,
   pickConnectionHandles,
   validateWorkflowDraft,
+  fieldForValidationIssue,
   triggerEnableBlocked,
   workflowWebhookCurl,
   workflowWebhookUrl,
@@ -500,5 +501,14 @@ describe('smart snap guides', () => {
     expect(result.x).toBe(0)
     expect(result.y).toBe(0)
     expect(result.guides).toEqual([])
+  })
+})
+
+describe('fieldForValidationIssue', () => {
+  it('maps issue codes to inspector fields', () => {
+    expect(fieldForValidationIssue({ code: 'missing_executor' })).toBe('executor')
+    expect(fieldForValidationIssue({ code: 'missing_workflow_ref' })).toBe('workflow_ref')
+    expect(fieldForValidationIssue({ code: 'empty_parallel' })).toBe('children')
+    expect(fieldForValidationIssue({ code: 'empty_workflow' })).toBe('name')
   })
 })
