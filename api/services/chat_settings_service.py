@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass
 from typing import Mapping
 
@@ -9,11 +8,10 @@ from api.persistence.chat_settings import (
     get_chat_settings_row,
     update_chat_settings_row,
 )
+from api.utils.ttl_cache import TtlCache
 
 # Short-lived process cache for hot chat paths; cleared on update.
-_SETTINGS_CACHE: dict[str, bool] | None = None
-_SETTINGS_CACHE_AT: float = 0.0
-_SETTINGS_CACHE_TTL_SEC = 5.0
+_SETTINGS_CACHE: TtlCache[dict[str, bool]] = TtlCache(ttl_sec=5.0)
 
 
 @dataclass(frozen=True)
@@ -25,9 +23,7 @@ class ChatSettings:
 
 
 def _invalidate_chat_settings_cache() -> None:
-    global _SETTINGS_CACHE, _SETTINGS_CACHE_AT
-    _SETTINGS_CACHE = None
-    _SETTINGS_CACHE_AT = 0.0
+    _SETTINGS_CACHE.clear()
 
 
 def _project_settings(row: Mapping[str, object]) -> dict[str, bool]:
@@ -35,14 +31,12 @@ def _project_settings(row: Mapping[str, object]) -> dict[str, bool]:
 
 
 async def get_chat_settings() -> dict[str, bool]:
-    global _SETTINGS_CACHE, _SETTINGS_CACHE_AT
-    now = time.time()
-    if _SETTINGS_CACHE is not None and (now - _SETTINGS_CACHE_AT) < _SETTINGS_CACHE_TTL_SEC:
-        return dict(_SETTINGS_CACHE)
+    cached = _SETTINGS_CACHE.get()
+    if cached is not None:
+        return dict(cached)
     row = await get_chat_settings_row()
     projected = _project_settings(row)
-    _SETTINGS_CACHE = projected
-    _SETTINGS_CACHE_AT = now
+    _SETTINGS_CACHE.set(projected)
     return dict(projected)
 
 
@@ -54,9 +48,7 @@ async def get_chat_settings_async() -> ChatSettings:
 async def update_chat_settings(values: Mapping[str, bool]) -> dict[str, bool]:
     row = await update_chat_settings_row(values)
     projected = _project_settings(row)
-    global _SETTINGS_CACHE, _SETTINGS_CACHE_AT
-    _SETTINGS_CACHE = projected
-    _SETTINGS_CACHE_AT = time.time()
+    _SETTINGS_CACHE.set(projected)
     return dict(projected)
 
 

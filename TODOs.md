@@ -590,6 +590,15 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：TTL 缓存共用 + Approvals slice 对齐 + Eval 列表安全上限
+
+- 新增 `api/utils/ttl_cache.TtlCache`；`chat_settings` / `model_config` 短 TTL 缓存改用同一实现。
+- 前端 `fetchSubmissionsSlice` 与 HITL slice 对齐：跨页 offset 不足时补拉下一页，避免截断。
+- Eval suite/case 定义列表 persistence 默认 `limit=500`（硬顶沿用 `_list_rows_async`）。
+- `schedule_workflow_resume` 后台 task 命名便于 asyncio 失败日志定位。
+
+相关：`api/utils/ttl_cache.py` / `chat_settings_service.py` / `model_config_service.py` / `agent_evals.py` / `frontend/src/features/approvals/api.ts`
+
 ## 已完成：Knowledge 列表扫描页数收紧
 
 - free-text / owner-filter list 路径将 content 扫描上限从 10_000 页降到 50 页（与 `list_documents_async` 同量级），超限写 warning。

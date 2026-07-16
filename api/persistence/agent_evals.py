@@ -334,11 +334,18 @@ async def create_suite_row_async(values: dict[str, Any]) -> dict[str, Any]:
     return await _create_row_async(agent_eval_suites_table(), values)
 
 
-async def list_suite_rows_async(enabled: bool | None = None) -> list[dict[str, Any]]:
+async def list_suite_rows_async(
+    enabled: bool | None = None,
+    *,
+    limit: int = 500,
+) -> list[dict[str, Any]]:
     table = agent_eval_suites_table()
     filters = [table.c.enabled == enabled] if enabled is not None else []
     return await _list_rows_async(
-        table, filters, [desc(table.c.updated_at), table.c.name]
+        table,
+        filters,
+        [desc(table.c.updated_at), table.c.name],
+        limit=limit,
     )
 
 
@@ -359,6 +366,8 @@ async def create_case_row_async(values: dict[str, Any]) -> dict[str, Any]:
 async def list_case_rows_async(
     suite_id: str | None = None,
     enabled: bool | None = None,
+    *,
+    limit: int = 500,
 ) -> list[dict[str, Any]]:
     table = agent_eval_cases_table()
     filters = []
@@ -367,7 +376,10 @@ async def list_case_rows_async(
     if enabled is not None:
         filters.append(table.c.enabled == enabled)
     return await _list_rows_async(
-        table, filters, [table.c.suite_id, desc(table.c.updated_at), table.c.name]
+        table,
+        filters,
+        [table.c.suite_id, desc(table.c.updated_at), table.c.name],
+        limit=limit,
     )
 
 

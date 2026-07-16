@@ -200,13 +200,22 @@ const fetchSubmissionsPage = async (status: string, page: number, limit: number)
 /** Absolute-offset slice of upload submissions (for virtual merge with HITL). */
 const fetchSubmissionsSlice = async (status: string, offset: number, limit: number) => {
   if (limit <= 0) return { items: [] as Approval[], total: 0 }
+  const safeOffset = Math.max(0, offset)
   const pageSize = Math.min(100, Math.max(limit, 1))
-  const startPage = Math.floor(offset / pageSize) + 1
-  const page = await fetchSubmissionsPage(status, startPage, pageSize)
-  const localStart = offset % pageSize
+  const startPage = Math.floor(safeOffset / pageSize) + 1
+  const localStart = safeOffset % pageSize
+  const first = await fetchSubmissionsPage(status, startPage, pageSize)
+  let rows = first.items.slice(localStart)
+  // When offset is not page-aligned, the first page may not fill `limit`.
+  if (rows.length < limit && safeOffset + rows.length < first.total) {
+    const second = await fetchSubmissionsPage(status, startPage + 1, pageSize)
+    rows = [...rows, ...second.items].slice(0, limit)
+  } else {
+    rows = rows.slice(0, limit)
+  }
   return {
-    items: page.items.slice(localStart, localStart + limit),
-    total: page.total,
+    items: rows,
+    total: first.total,
   }
 }
 

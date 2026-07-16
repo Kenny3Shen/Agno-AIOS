@@ -314,7 +314,7 @@ def schedule_workflow_resume(approval_id: str) -> None:
 
     try:
         loop = asyncio.get_running_loop()
-        loop.create_task(_job())
+        loop.create_task(_job(), name=f"workflow-resume:{approval_id}")
     except RuntimeError:
         asyncio.run(_job())
 

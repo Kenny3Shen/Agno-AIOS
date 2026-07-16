@@ -12,6 +12,7 @@ from loguru import logger
 from api.config import get_settings
 from api.persistence.model_configs import list_model_config_rows, replace_model_config_rows
 from api.services.runtime_paths import CONFIG_DIR, resolve_project_path
+from api.utils.ttl_cache import TtlCache
 from api.services.model_capabilities import (
     apply_optimal_model_defaults,
     capabilities_for,
@@ -20,22 +21,15 @@ from api.services.model_capabilities import (
 )
 
 # Short-lived process cache for hot chat/settings reads; cleared on save/seed rewrite.
-_STORE_CACHE: ModelConfigStore | None = None
-_STORE_CACHE_AT: float = 0.0
-_STORE_CACHE_TTL_SEC = 5.0
+_STORE_CACHE: TtlCache[ModelConfigStore] = TtlCache(ttl_sec=5.0)
 
 
 def _invalidate_model_config_cache() -> None:
-    global _STORE_CACHE, _STORE_CACHE_AT
-    _STORE_CACHE = None
-    _STORE_CACHE_AT = 0.0
+    _STORE_CACHE.clear()
 
 
 def _cache_model_config_store(store: ModelConfigStore) -> ModelConfigStore:
-    global _STORE_CACHE, _STORE_CACHE_AT
-    _STORE_CACHE = store
-    _STORE_CACHE_AT = time.time()
-    return store
+    return _STORE_CACHE.set(store)
 
 
 
@@ -520,10 +514,9 @@ def _store_to_rows(
 
 
 async def load_model_config_store() -> ModelConfigStore:
-    global _STORE_CACHE, _STORE_CACHE_AT
-    now = time.time()
-    if _STORE_CACHE is not None and (now - _STORE_CACHE_AT) < _STORE_CACHE_TTL_SEC:
-        return _STORE_CACHE
+    cached = _STORE_CACHE.get()
+    if cached is not None:
+        return cached
 
     rows = await list_model_config_rows()
     leftover = model_config_file()
