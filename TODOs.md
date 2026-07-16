@@ -124,6 +124,13 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：多选批量删除 / 加载 fitView / 会话搜索限长 / 重命名缓存
+
+- Studio 多选：Inspector 批量删除按钮 + 提示（编辑仍针对最后选中节点）。
+- 加载/模板应用：`focusEpoch` 触发画布 `fitView`。
+- Chat 会话 `q`：`runs` 文本 `left(..., 4000)` 再 ILIKE，降低大 JSON 扫描成本。
+- 重命名会话：`setQueriesData(sessionLists)` 覆盖含搜索 q 的 infinite query 缓存。
+
 ## 已完成：Chat 搜索 debounce 闪烁修复 + 多选计数
 
 - 最近对话：仅在 `sessionSearch` 与 debounced 一致时做本地二次过滤，避免输入过程中列表被滤空。

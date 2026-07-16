@@ -157,6 +157,8 @@ export type WorkflowState = {
   validationIssues: Array<{ nodeId: string | null; code: string; message: string }>
   /** Bumped on each failed validation so canvas can re-focus. */
   validationEpoch: number
+  /** Bumped when a workflow is loaded/template-applied so canvas can fitView. */
+  focusEpoch: number
   lastRunId: string | null
   lastSessionId: string | null
   lastApprovalId: string | null

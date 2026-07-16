@@ -103,6 +103,8 @@ type Props = {
   nodeRunStatus?: Record<string, 'running' | 'ok' | 'error' | 'paused'>
   validationIssues?: Array<{ nodeId: string | null; code: string; message: string }>
   validationEpoch?: number
+  /** Bumped after load/template so viewport fits all nodes. */
+  focusEpoch?: number
   emptyHint?: string
   emptyActionLabel?: string
   onEmptyAction?: () => void
@@ -236,6 +238,7 @@ function CanvasInner({
   nodeRunStatus = {},
   validationIssues = [],
   validationEpoch = 0,
+  focusEpoch = 0,
   emptyHint,
   emptyActionLabel,
   onEmptyAction,
@@ -557,6 +560,17 @@ function CanvasInner({
       })
     })
   }, [selectedId, selectedIds, invalidById, validationEpoch, fitView])
+
+  // Fit whole graph after load / template apply.
+  useEffect(() => {
+    if (!focusEpoch || !steps.length) return
+    const key = `focus:${focusEpoch}`
+    if (key === lastFocusKeyRef.current) return
+    lastFocusKeyRef.current = key
+    requestAnimationFrame(() => {
+      void fitView({ padding: 0.22, duration: 280, maxZoom: 1.15 })
+    })
+  }, [focusEpoch, steps.length, fitView])
 
   useEffect(() => {
     if (!graph.nodes.some((node) => node.className?.includes('wf-node-enter'))) return

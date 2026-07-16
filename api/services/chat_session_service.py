@@ -182,8 +182,9 @@ async def _query_sessions_page(
         pattern = f"%{needle}%"
         # Title lives in JSONB metadata; session_id is the durable key;
         # runs JSON includes first-turn input used for list previews.
+        # Cap runs text to keep ILIKE off multi-MB session payloads.
         title_expr = table.c.metadata[TITLE_METADATA_KEY].astext
-        runs_text = cast(table.c.runs, String)
+        runs_text = func.left(cast(table.c.runs, String), 4000)
         stmt = stmt.where(
             or_(
                 table.c.session_id.ilike(pattern),

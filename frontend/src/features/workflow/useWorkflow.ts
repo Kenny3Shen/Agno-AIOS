@@ -81,6 +81,7 @@ const initialState = (): WorkflowState => ({
   error: null,
   validationIssues: [],
   validationEpoch: 0,
+  focusEpoch: 0,
   lastRunId: null,
   lastSessionId: null,
   lastApprovalId: null,
@@ -521,6 +522,7 @@ export function useWorkflow() {
       validationIssues: [],
       dirty: false,
       loading: false,
+      focusEpoch: current.focusEpoch + 1,
     }))
   }, [])
 
@@ -578,6 +580,7 @@ export function useWorkflow() {
       error: null,
       validationIssues: [],
       dirty: true,
+      focusEpoch: current.focusEpoch + 1,
       lastRunId: null,
       lastSessionId: null,
       lastApprovalId: null,
@@ -630,6 +633,7 @@ export function useWorkflow() {
       validationIssues: [],
       dirty: true,
       saving: true,
+      focusEpoch: current.focusEpoch + 1,
       lastRunId: null,
       lastSessionId: null,
       lastApprovalId: null,
@@ -655,6 +659,7 @@ export function useWorkflow() {
         saving: false,
         dirty: false,
         error: null,
+        focusEpoch: current.focusEpoch + 1,
       }))
       await workflowsQuery.refetch()
       await versionsQuery.refetch()

@@ -608,6 +608,7 @@ export function WorkflowPage() {
             nodeRunStatus={workflow.state.nodeRunStatus}
             validationIssues={workflow.state.validationIssues}
             validationEpoch={workflow.state.validationEpoch}
+            focusEpoch={workflow.state.focusEpoch}
             emptyHint={t('canvasEmpty')}
             emptyActionLabel={canWrite ? t('startFromTemplate') : undefined}
             onEmptyAction={
@@ -660,7 +661,17 @@ export function WorkflowPage() {
                   {t('selectedCount', { count: workflow.state.selectedIds.length })}
                 </Typography.Text>
               ) : null}
-              {step ? (
+              {workflow.state.selectedIds.length > 1 ? (
+                <Tooltip title={t('deleteSelected')} getPopupContainer={studioPopupContainer}>
+                  <Button
+                    size="small"
+                    type="text"
+                    danger
+                    icon={<DeleteOutlined />}
+                    onClick={() => workflow.removeSelected()}
+                  />
+                </Tooltip>
+              ) : step ? (
                 <Tooltip title={t('deleteNode')} getPopupContainer={studioPopupContainer}>
                   <Button
                     size="small"
@@ -672,6 +683,20 @@ export function WorkflowPage() {
                 </Tooltip>
               ) : null}
             </div>
+
+            {workflow.state.selectedIds.length > 1 ? (
+              <Alert
+                type="info"
+                showIcon
+                className="workflow-studio__validation"
+                title={t('multiSelectHint', { count: workflow.state.selectedIds.length })}
+                description={
+                  <Button size="small" danger onClick={() => workflow.removeSelected()}>
+                    {t('deleteSelected')}
+                  </Button>
+                }
+              />
+            ) : null}
 
             {!step ? (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('selectStep')} />

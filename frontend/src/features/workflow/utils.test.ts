@@ -50,6 +50,7 @@ const state: WorkflowState = {
   error: null,
   validationIssues: [],
   validationEpoch: 0,
+  focusEpoch: 0,
   lastApprovalId: null,
   lastRunId: null,
   lastSessionId: null,

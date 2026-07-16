@@ -125,5 +125,7 @@
   "librarySearching": "Searching…",
   "keyboardHints": "Shortcuts: Ctrl/⌘Z undo · Y redo · C/V copy/paste · A select all · L auto-layout · Esc clear · Del delete",
   "keyboardHintsTitle": "Keyboard",
-  "selectedCount": "{{count}} selected"
+  "selectedCount": "{{count}} selected",
+  "deleteSelected": "Delete selected",
+  "multiSelectHint": "{{count}} nodes selected — edits apply to the last selected node"
 }
