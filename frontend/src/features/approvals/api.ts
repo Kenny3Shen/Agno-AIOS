@@ -149,19 +149,12 @@ const listMeta = (
   }
 }
 
-type SourcePage = {
-  data: Approval[]
-  total_count: number
-  page: number
-  limit: number
-}
-
 const fetchHitlPage = async (
   status: string,
   page: number,
   limit: number,
-  sourceType?: string
-): Promise<SourcePage> => {
+  sourceType?: string,
+): Promise<{ data: Approval[]; total_count: number }> => {
   const search = new URLSearchParams()
   search.set('page', String(page))
   search.set('limit', String(limit))
@@ -173,44 +166,17 @@ const fetchHitlPage = async (
   return {
     data: normalizeRows(rows),
     total_count: Number(meta.total_count ?? 0) || 0,
-    page: Number(meta.page ?? page) || page,
-    limit: Number(meta.limit ?? limit) || limit,
   }
 }
 
-/**
- * Fetch a HITL slice by absolute offset (for merging with submissions).
- * Uses Agno page/limit and local slice when offset is not page-aligned.
- */
-const fetchHitlSlice = async (
+const fetchSubmissionsPage = async (
   status: string,
-  offset: number,
-  count: number,
-  sourceType?: string
-): Promise<SourcePage> => {
-  if (count <= 0) {
-    const probe = await fetchHitlPage(status, 1, 1, sourceType)
-    return { data: [], total_count: probe.total_count, page: 1, limit: 1 }
-  }
-  const safeOffset = Math.max(0, offset)
-  const pageSize = count
-  const apiPage = Math.floor(safeOffset / pageSize) + 1
-  const skip = safeOffset % pageSize
-  const first = await fetchHitlPage(status, apiPage, pageSize, sourceType)
-  let rows = first.data.slice(skip)
-  if (rows.length < count && safeOffset + rows.length < first.total_count) {
-    const second = await fetchHitlPage(status, apiPage + 1, pageSize, sourceType)
-    rows = [...rows, ...second.data].slice(0, count)
-  } else {
-    rows = rows.slice(0, count)
-  }
-  return { data: rows, total_count: first.total_count, page: apiPage, limit: pageSize }
-}
-
-const fetchSubmissionsPage = async (status: string, page: number, limit: number): Promise<SourcePage> => {
+  page: number,
+  limit: number,
+): Promise<{ data: Approval[]; total_count: number }> => {
   const shouldFetch = !status || ['pending', 'approved', 'rejected'].includes(status)
   if (!shouldFetch) {
-    return { data: [], total_count: 0, page, limit }
+    return { data: [], total_count: 0 }
   }
   const search = new URLSearchParams()
   if (status) search.set('status', status)
@@ -222,37 +188,11 @@ const fetchSubmissionsPage = async (status: string, page: number, limit: number)
   return {
     data: normalizeRows(rows),
     total_count: Number(meta.total_count ?? rows.length) || 0,
-    page: Number(meta.page ?? page) || page,
-    limit: Number(meta.limit ?? limit) || limit,
-  }
-}
-
-/** Absolute-offset slice of upload submissions (for virtual merge with HITL). */
-const fetchSubmissionsSlice = async (status: string, offset: number, limit: number): Promise<SourcePage> => {
-  if (limit <= 0) return { data: [], total_count: 0, page: 1, limit: 0 }
-  const safeOffset = Math.max(0, offset)
-  const pageSize = Math.min(100, Math.max(limit, 1))
-  const startPage = Math.floor(safeOffset / pageSize) + 1
-  const localStart = safeOffset % pageSize
-  const first = await fetchSubmissionsPage(status, startPage, pageSize)
-  let rows = first.data.slice(localStart)
-  // When offset is not page-aligned, the first page may not fill `limit`.
-  if (rows.length < limit && safeOffset + rows.length < first.total_count) {
-    const second = await fetchSubmissionsPage(status, startPage + 1, pageSize)
-    rows = [...rows, ...second.data].slice(0, limit)
-  } else {
-    rows = rows.slice(0, limit)
-  }
-  return {
-    data: rows,
-    total_count: first.total_count,
-    page: startPage,
-    limit: pageSize,
   }
 }
 
 /**
- * Combined Approvals list with real pagination.
+ * Approvals list with real pagination.
  * ``kind=all`` uses server ``combined=true`` (uploads then HITL).
  */
 export const getApprovals = async (params: ApprovalListParams = {}): Promise<ApprovalListResult> => {
@@ -260,27 +200,23 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
   const kind: ApprovalKind = params.kind ?? 'all'
   const page = Math.max(1, Number(params.page ?? 1) || 1)
   const limit = Math.min(100, Math.max(1, Number(params.limit ?? 20) || 20))
-  const start = (page - 1) * limit
 
-  // Upload-only tab: submissions API.
   if (kind === 'upload') {
-    const submissions = await fetchSubmissionsSlice(status, start, limit)
+    const submissions = await fetchSubmissionsPage(status, page, limit)
     return {
       data: submissions.data,
       meta: listMeta(page, limit, submissions.total_count),
     }
   }
 
-  // Workflow / agent HITL: single Agno list with source_type.
   if (kind === 'workflow' || kind === 'agent') {
-    const hitl = await fetchHitlSlice(status, start, limit, kind)
+    const hitl = await fetchHitlPage(status, page, limit, kind)
     return {
       data: hitl.data,
       meta: listMeta(page, limit, hitl.total_count),
     }
   }
 
-  // kind === 'all': server concatenates uploads then HITL (combined=true).
   const search = new URLSearchParams()
   if (status) search.set('status', status)
   search.set('combined', 'true')

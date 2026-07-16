@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Approvals 前端去 offset-slice 死代码 + Workflow version 类型收窄
+
+- `getApprovals`：upload/HITL 单页直调 page/limit；删除 `fetch*Slice` 虚拟 merge 残留。
+- Workflow `listWorkflowVersions`：去掉 `as never`，用与 `normalizeWorkflow` 一致的 definition 投影。
+
 ## 已完成：Approvals kind=all 服务端合并分页
 
 - `GET /api/approvals?combined=true`：upload submissions 优先，再 HITL；offset 真分页 + `data`/`meta`。

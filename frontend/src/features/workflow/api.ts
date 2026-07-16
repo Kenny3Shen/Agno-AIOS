@@ -382,7 +382,19 @@ export const listWorkflowVersions = async (workflowId: string, page = 1, limit =
         version: Number(row.version ?? 0),
         name: String(row.name ?? ''),
         description: String(row.description ?? ''),
-        definition: (asRecord(row.definition) as never) ?? { name: '', description: '', steps: [] },
+        definition: (() => {
+          const definition = asRecord(row.definition) ?? {}
+          return {
+            name: String(definition.name ?? row.name ?? ''),
+            description: String(definition.description ?? row.description ?? ''),
+            steps: Array.isArray(definition.steps)
+              ? definition.steps.flatMap((step) => {
+                  const node = normalizeNode(step)
+                  return node ? [node] : []
+                })
+              : [],
+          }
+        })(),
         created_at: Number(row.created_at ?? 0),
         created_by: String(row.created_by ?? ''),
       },
