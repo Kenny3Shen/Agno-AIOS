@@ -112,6 +112,37 @@ export function WorkflowPage() {
       ? t('statusDraft', { version: workflow.state.version })
       : t('statusDraftNew')
 
+  const latestRun = workflow.state.runHistory[0] ?? null
+  const runDutyStatus = workflow.state.running
+    ? 'running'
+    : latestRun?.status ?? (workflow.state.error ? 'failed' : null)
+  const openLatestTrace = () => {
+    const sessionId = workflow.state.lastSessionId ?? latestRun?.sessionId
+    const runId = workflow.state.lastRunId ?? latestRun?.runId ?? undefined
+    if (!sessionId && !runId) return
+    void routerNav.navigate({
+      to: '/trace',
+      search: {
+        session_id: sessionId ?? undefined,
+        run_id: runId || undefined,
+        selected_session: sessionId ?? undefined,
+        trace: runId || undefined,
+      },
+    })
+  }
+  const openLatestApproval = () => {
+    const approvalId = workflow.state.lastApprovalId ?? latestRun?.approvalId
+    if (!approvalId) return
+    window.location.hash = `#/approvals?approval_id=${encodeURIComponent(approvalId)}`
+  }
+  const expandRunLog = () => {
+    setRunPanelKeys((keys) => (keys.includes('run') ? keys : [...keys, 'run']))
+    // Scroll run log into view if present
+    window.requestAnimationFrame(() => {
+      runLogListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
+  }
+
   const requestEnableTrigger = (
     kind: 'webhook' | 'cron',
     enabled: boolean
@@ -427,6 +458,49 @@ export function WorkflowPage() {
           className="workflow-studio__banner"
           title={workflow.state.error}
           closable={{ onClose: () => workflow.patchMeta({ error: null }) }}
+        />
+      ) : null}
+
+      {runDutyStatus && runDutyStatus !== 'completed' ? (
+        <Alert
+          type={
+            runDutyStatus === 'failed'
+              ? 'error'
+              : runDutyStatus === 'paused'
+                ? 'warning'
+                : runDutyStatus === 'running'
+                  ? 'info'
+                  : 'warning'
+          }
+          showIcon
+          className="workflow-studio__banner"
+          title={
+            runDutyStatus === 'running'
+              ? t('runBannerRunning')
+              : runDutyStatus === 'paused'
+                ? t('runBannerPaused')
+                : runDutyStatus === 'failed'
+                  ? t('runBannerFailed')
+                  : t('runBannerCancelled')
+          }
+          description={
+            <Space size={8} wrap>
+              {(workflow.state.lastSessionId || latestRun?.sessionId || workflow.state.lastRunId || latestRun?.runId) ? (
+                <Button type="link" size="small" style={{ paddingInline: 0 }} onClick={openLatestTrace}>
+                  {t('openTrace')}
+                </Button>
+              ) : null}
+              {(workflow.state.lastApprovalId || latestRun?.approvalId) &&
+              (runDutyStatus === 'paused' || runDutyStatus === 'failed') ? (
+                <Button type="link" size="small" style={{ paddingInline: 0 }} onClick={openLatestApproval}>
+                  {t('openApproval')}
+                </Button>
+              ) : null}
+              <Button type="link" size="small" style={{ paddingInline: 0 }} onClick={expandRunLog}>
+                {t('openRunLog')}
+              </Button>
+            </Space>
+          }
         />
       ) : null}
 

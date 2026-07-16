@@ -124,7 +124,14 @@ const actorIdentity = (
 const submitter = (approval: Approval) => actorIdentity(approval.submitted_by, approval.user_id)
 const approver = (approval: Approval) => actorIdentity(approval.resolved_by)
 
-const statusLabel = (status: string) => status ? `${status.slice(0, 1).toUpperCase()}${status.slice(1)}` : '-'
+const statusLabel = (status: string) => {
+  const normalized = status.trim().toLowerCase()
+  if (normalized === 'pending') return i18n.t('approvals:statusPending')
+  if (normalized === 'approved') return i18n.t('approvals:statusApproved')
+  if (normalized === 'rejected') return i18n.t('approvals:statusRejected')
+  if (!status) return '-'
+  return `${status.slice(0, 1).toUpperCase()}${status.slice(1)}`
+}
 
 /** HITL: resolution_data.note (Agno). Submissions: top-level rejection_reason. */
 const rejectionReason = (approval: Approval) => {
@@ -151,41 +158,42 @@ function detailItems(approval: Approval, formatDate: (value?: string | number | 
   const resolved = approver(approval)
   const payload = uploadPayload(approval)
   const isUpload = isSubmissionApproval(approval)
+  const notAssigned = t('notAssigned')
   const request: DescriptionsProps['items'] = [
-    { key: 'approval-id', label: 'Approval ID', children: <CopyableValue value={approval.id} /> },
-    { key: 'request-name', label: 'Request', children: approvalTitle(approval) },
-    { key: 'request-type', label: 'Type', children: approvalType(approval) },
+    { key: 'approval-id', label: t('labelApprovalId'), children: <CopyableValue value={approval.id} /> },
+    { key: 'request-name', label: t('labelRequest'), children: approvalTitle(approval) },
+    { key: 'request-type', label: t('labelType'), children: approvalType(approval) },
   ]
   if (isUpload) {
     request.push(
-      { key: 'resource-type', label: 'Resource', children: approval.resource_type?.toUpperCase() || '-' },
-      { key: 'visibility', label: 'Visibility', children: typeof payload.visibility === 'string' ? payload.visibility : '-' },
-      { key: 'archive', label: 'Package', children: typeof payload.filename === 'string' ? payload.filename : '-' }
+      { key: 'resource-type', label: t('labelResource'), children: approval.resource_type?.toUpperCase() || '-' },
+      { key: 'visibility', label: t('labelVisibility'), children: typeof payload.visibility === 'string' ? payload.visibility : '-' },
+      { key: 'archive', label: t('labelPackage'), children: typeof payload.filename === 'string' ? payload.filename : '-' }
     )
   } else {
     request.push(
-      { key: 'source', label: 'Source', children: approval.source_name ?? approval.source_type ?? '-' },
-      { key: 'run', label: 'Run ID', children: optionalCopyable(approval.run_id) },
-      { key: 'session', label: 'Session ID', children: optionalCopyable(approval.session_id) },
-      { key: 'agent', label: 'Agent ID', children: optionalCopyable(approval.agent_id) },
-      { key: 'team', label: 'Team ID', children: optionalCopyable(approval.team_id) },
-      { key: 'workflow', label: i18n.t('approvals:labelWorkflowId'), children: optionalCopyable(approval.workflow_id) },
-      { key: 'schedule', label: 'Schedule ID', children: optionalCopyable(approval.schedule_id) }
+      { key: 'source', label: t('labelSource'), children: approval.source_name ?? approval.source_type ?? '-' },
+      { key: 'run', label: t('labelRunId'), children: optionalCopyable(approval.run_id) },
+      { key: 'session', label: t('labelSessionId'), children: optionalCopyable(approval.session_id) },
+      { key: 'agent', label: t('labelAgentId'), children: optionalCopyable(approval.agent_id) },
+      { key: 'team', label: t('labelTeamId'), children: optionalCopyable(approval.team_id) },
+      { key: 'workflow', label: t('labelWorkflowId'), children: optionalCopyable(approval.workflow_id) },
+      { key: 'schedule', label: t('labelScheduleId'), children: optionalCopyable(approval.schedule_id) }
     )
   }
   return {
     decision: [
-      { key: 'status', label: 'Status', children: statusTag(approval.status) },
+      { key: 'status', label: t('labelStatus'), children: statusTag(approval.status) },
       { key: 'submitted-at', label: t('submittedAt'), children: formatDate(approval.created_at) },
       { key: 'resolved-at', label: t('resolvedAt'), children: formatDate(approval.resolved_at) },
-      ...(approval.status === 'rejected' ? [{ key: 'rejection-reason', label: 'Rejection reason', children: rejectionReason(approval) || '-' }] : []),
+      ...(approval.status === 'rejected' ? [{ key: 'rejection-reason', label: t('labelRejectionReason'), children: rejectionReason(approval) || '-' }] : []),
       ...(runStatus(approval) ? [{ key: 'run-status', label: t('runStatus'), children: statusLabel(runStatus(approval) ?? '') }] : []),
     ],
     people: [
-      { key: 'submitter-email', label: 'Submitter email', children: optionalCopyable(submitted.email) },
-      { key: 'submitter-id', label: 'Submitter ID', children: optionalCopyable(submitted.id) },
-      { key: 'approver-email', label: 'Approver email', children: optionalCopyable(resolved.email, 'Not assigned') },
-      { key: 'approver-id', label: 'Approver ID', children: optionalCopyable(resolved.id, 'Not assigned') },
+      { key: 'submitter-email', label: t('labelSubmitterEmail'), children: optionalCopyable(submitted.email) },
+      { key: 'submitter-id', label: t('labelSubmitterId'), children: optionalCopyable(submitted.id) },
+      { key: 'approver-email', label: t('labelApproverEmail'), children: optionalCopyable(resolved.email, notAssigned) },
+      { key: 'approver-id', label: t('labelApproverId'), children: optionalCopyable(resolved.id, notAssigned) },
     ],
     request,
   }
@@ -319,7 +327,7 @@ export function ApprovalsPage() {
   const columns = useMemo<TableProps<Approval>['columns']>(
     () => [
       {
-        title: 'Request',
+        title: t('colRequest'),
         width: 240,
         sorter: (a, b) => approvalTitle(a).localeCompare(approvalTitle(b)),
         render: (_, row) => (
@@ -334,14 +342,14 @@ export function ApprovalsPage() {
         ),
       },
       {
-        title: 'Type',
+        title: t('colType'),
         width: 150,
         filters: typeFilters,
         onFilter: (value, row) => approvalType(row) === value,
         render: (_, row) => approvalType(row),
       },
       {
-        title: 'Submitter',
+        title: t('colSubmitter'),
         width: 210,
         ellipsis: true,
         sorter: (a, b) => {
@@ -352,7 +360,7 @@ export function ApprovalsPage() {
         render: (_, row) => <IdentityCell identity={submitter(row)} />,
       },
       {
-        title: 'Approver',
+        title: t('colApprover'),
         width: 210,
         ellipsis: true,
         sorter: (a, b) => {
@@ -363,7 +371,7 @@ export function ApprovalsPage() {
         render: (_, row) => <IdentityCell identity={approver(row)} />,
       },
       {
-        title: 'Status',
+        title: t('colStatus'),
         dataIndex: 'status',
         width: 120,
         filters: [
@@ -556,16 +564,16 @@ export function ApprovalsPage() {
               const details = detailItems(selected, formatDate, t)
               return (
                 <Space orientation="vertical" size={16} style={{ width: '100%' }}>
-                  <Card size="small" title="Decision" className="approval-detail-section">
+                  <Card size="small" title={t('sectionDecision')} className="approval-detail-section">
                     <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }} items={details.decision} />
                   </Card>
-                  <Card size="small" title="People" className="approval-detail-section">
+                  <Card size="small" title={t('sectionPeople')} className="approval-detail-section">
                     <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }} items={details.people} />
                   </Card>
-                  <Card size="small" title="Request" className="approval-detail-section">
+                  <Card size="small" title={t('sectionRequest')} className="approval-detail-section">
                     <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }} items={details.request} />
                   </Card>
-                  <Card size="small" title="Request data" className="approval-detail-section">
+                  <Card size="small" title={t('sectionRequestData')} className="approval-detail-section">
                     <PayloadViewer value={approvalPayload(selected)} />
                   </Card>
                 </Space>
@@ -611,8 +619,8 @@ export function ApprovalsPage() {
                                 size="small"
                                 value={mode}
                                 options={[
-                                  { label: 'Raw', value: 'raw' },
-                                  { label: 'Markdown', value: 'markdown' },
+                                  { label: t('viewRaw'), value: 'raw' },
+                                  { label: t('viewMarkdown'), value: 'markdown' },
                                 ]}
                                 onClick={(event) => event.stopPropagation()}
                                 onChange={(value) =>

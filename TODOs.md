@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Approvals 详情/列表 i18n + Studio 运行态值班横幅
+
+- Approvals：表格列、详情分区/字段标签、状态文案、Raw/Markdown 视图标签接入 i18n。
+- Studio：运行中/暂停/失败/取消时顶栏横幅 + Trace / 审批 / 运行记录快捷入口。
+
 ## 已完成：工作流会话从最近对话进 Trace + Approvals 类型 i18n
 
 - Session 投影 `workflow_id`/`agent_id`/`team_id`；历史 user 输入复用更宽的 preview 解析。

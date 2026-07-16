@@ -99,9 +99,9 @@ describe('ApprovalsPage', () => {
 
     expect(await screen.findByText('web-search')).toBeTruthy()
     await user.click(screen.getByText('web-search'))
-    expect(screen.getByText('Decision')).toBeTruthy()
-    expect(screen.getByText('People')).toBeTruthy()
-    expect(screen.getByText('Request data')).toBeTruthy()
+    expect(screen.getByText('决议')).toBeTruthy()
+    expect(screen.getByText('人员')).toBeTruthy()
+    expect(screen.getByText('请求数据')).toBeTruthy()
     expect(screen.getByText('member-1')).toBeTruthy()
     expect((await screen.findAllByText('SKILL.md')).length).toBeGreaterThan(0)
     await user.click(screen.getAllByText('SKILL.md').at(-1)!)
@@ -160,7 +160,7 @@ describe('ApprovalsPage', () => {
     await setStatus(/全部状态|All statuses/)
 
     await user.click(await screen.findByText('approved-server'))
-    expect(screen.getByText('已拒绝')).toBeTruthy()
+    expect(screen.getAllByText('已拒绝').length).toBeGreaterThan(0)
     expect(screen.getAllByText('The server manifest is incomplete.').length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /批准/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /拒绝/ })).toBeNull()

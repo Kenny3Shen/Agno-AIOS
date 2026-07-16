@@ -128,5 +128,11 @@
   "selectedCount": "{{count}} selected",
   "deleteSelected": "Delete selected",
   "multiSelectHint": "{{count}} nodes selected — bulk actions only; select one node to edit",
-  "clearSelection": "Clear selection"
+  "clearSelection": "Clear selection",
+  "runBannerRunning": "Workflow is running…",
+  "runBannerPaused": "Run paused — awaiting approval",
+  "runBannerFailed": "Latest run failed",
+  "runBannerCompleted": "Latest run completed",
+  "runBannerCancelled": "Latest run cancelled",
+  "openRunLog": "Open run log"
 }

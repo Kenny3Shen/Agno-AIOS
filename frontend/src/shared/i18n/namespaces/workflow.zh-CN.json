@@ -128,5 +128,11 @@
   "selectedCount": "已选 {{count}} 个",
   "deleteSelected": "删除所选",
   "multiSelectHint": "已选 {{count}} 个节点 — 批量操作可用；单节点属性请只选一个",
-  "clearSelection": "取消选择"
+  "clearSelection": "取消选择",
+  "runBannerRunning": "工作流运行中…",
+  "runBannerPaused": "运行已暂停，等待审批处理",
+  "runBannerFailed": "最近一次运行失败",
+  "runBannerCompleted": "最近一次运行已完成",
+  "runBannerCancelled": "最近一次运行已取消",
+  "openRunLog": "查看运行记录"
 }
