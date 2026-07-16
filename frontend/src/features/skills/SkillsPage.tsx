@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Card, Drawer, Empty, Form, Input, Popconfirm, Space, Switch, Table, Tabs, Tag, Upload } from 'antd'
+import { App, Button, Card, Drawer, Empty, Form, Input, Popconfirm, Space, Switch, Table, Tabs, Tag, Typography, Upload } from 'antd'
 import { DeleteOutlined, InboxOutlined, UploadOutlined } from '@ant-design/icons'
 import { Markdown } from '@/shared/ui/Markdown'
 import { PageHeader } from '@/shared/ui/PageHeader'
@@ -190,12 +190,18 @@ export function SkillsPage() {
                 label: t('referencesTab'),
                 children: referencesQuery.isLoading ? (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('common:loading')} />
-                ) : referencesQuery.data?.length ? (
+                ) : referencesQuery.data?.data.length ? (
+                  <>
+                  {referencesQuery.data.truncated ? (
+                    <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                      {t('referencesTruncated')}
+                    </Typography.Text>
+                  ) : null}
                   <Table
                     size="small"
                     rowKey="workflow_id"
                     pagination={false}
-                    dataSource={referencesQuery.data}
+                    dataSource={referencesQuery.data.data}
                     columns={[
                       {
                         title: t('referencedWorkflow'),
@@ -225,6 +231,7 @@ export function SkillsPage() {
                       },
                     ]}
                   />
+                  </>
                 ) : (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('referencesEmpty')} />
                 ),

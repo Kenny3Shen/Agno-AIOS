@@ -26,5 +26,6 @@
   "referencedWorkflow": "Workflow",
   "version": "Version",
   "openWorkflow": "Open",
-  "referencesEmpty": "No saved workflows bind this skill yet"
+  "referencesEmpty": "No saved workflows bind this skill yet",
+  "referencesTruncated": "Showing a partial list — more workflows may bind this skill"
 }

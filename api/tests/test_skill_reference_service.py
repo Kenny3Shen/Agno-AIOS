@@ -67,7 +67,8 @@ async def test_list_skill_workflow_references_filters_matches():
         new=AsyncMock(side_effect=fake_list),
     ):
         matches = await refs.list_skill_workflow_references(actor, "playbook-skill")
-    assert matches == [{"workflow_id": "wf-1", "name": "IR", "version": "2"}]
+    assert matches["data"] == [{"workflow_id": "wf-1", "name": "IR", "version": "2"}]
+    assert matches["truncated"] is False
 
 
 @pytest.mark.asyncio
@@ -99,4 +100,5 @@ async def test_list_skill_workflow_references_ignores_incidental_text_matches():
         new=AsyncMock(side_effect=fake_list),
     ):
         matches = await refs.list_skill_workflow_references(actor, "playbook-skill")
-    assert matches == []
+    assert matches["data"] == []
+    assert matches["truncated"] is False

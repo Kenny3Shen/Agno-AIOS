@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Skill 引用截断提示
+
+- `list_skill_workflow_references` 返回 `{data, truncated}`；候选或结果触顶时 `meta.truncated`。
+- Skills Drawer「被引用」在截断时提示「仅显示部分结果」。
+
 ## 已完成：多选批量删除 / 加载 fitView / 会话搜索限长 / 重命名缓存
 
 - Studio 多选：Inspector 批量删除按钮 + 提示（编辑仍针对最后选中节点）。

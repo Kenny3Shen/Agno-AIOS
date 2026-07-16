@@ -26,5 +26,6 @@
   "referencedWorkflow": "工作流",
   "version": "版本",
   "openWorkflow": "打开",
-  "referencesEmpty": "暂无工作流绑定该 Skill"
+  "referencesEmpty": "暂无工作流绑定该 Skill",
+  "referencesTruncated": "仅显示部分结果，可能还有更多工作流绑定了该 Skill"
 }

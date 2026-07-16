@@ -43,23 +43,28 @@ async def list_skill_workflow_references(
     skill_name: str,
     *,
     limit: int = 50,
-) -> list[dict[str, str]]:
+) -> dict[str, Any]:
     """Return workflows visible to actor that bind ``skill_name`` on any step.
 
     Uses a SQL text prefilter on ``definition``, then walks the DSL tree so
     incidental string matches in instructions do not count as bindings.
+
+    Response shape: ``{"data": [...], "truncated": bool}`` where truncated means
+    the candidate prefilter hit its cap (more matches may exist).
     """
     needle = (skill_name or "").strip()
     if not needle:
-        return []
+        return {"data": [], "truncated": False}
     owner = None if has_scope(actor, ADMIN_SCOPE) else actor_id(actor)
     safe_limit = max(1, min(int(limit or 50), 100))
+    candidate_limit = min(200, max(safe_limit * 4, 50))
     # Fetch more candidates than we return — text ILIKE is a coarse filter.
     candidates = await workflow_store.list_workflows_referencing_skill_text(
         skill_name=needle,
         owner_user_id=owner,
-        limit=min(200, max(safe_limit * 4, 50)),
+        limit=candidate_limit,
     )
+    truncated = len(candidates) >= candidate_limit
     matches: list[dict[str, str]] = []
     for row in candidates:
         names = skill_names_in_definition(row.get("definition"))
@@ -73,5 +78,6 @@ async def list_skill_workflow_references(
             }
         )
         if len(matches) >= safe_limit:
+            truncated = True
             break
-    return matches
+    return {"data": matches, "truncated": truncated}

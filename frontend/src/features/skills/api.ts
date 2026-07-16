@@ -55,7 +55,10 @@ export type SkillWorkflowReference = {
 
 export const listSkillReferences = async (name: string) => {
   const raw = await requestJson<unknown>(`/skills/${encodeURIComponent(name)}/references`)
-  const { data } = normalizePaginatedList(raw, {
+  const { data, meta } = normalizePaginatedList(raw, {
+    page: 1,
+    limit: 50,
+    extras: true,
     mapItem: (row) => {
       if (!row || typeof row !== 'object') return null
       const r = row as Record<string, unknown>
@@ -68,5 +71,8 @@ export const listSkillReferences = async (name: string) => {
       } satisfies SkillWorkflowReference
     },
   })
-  return data
+  return {
+    data,
+    truncated: Boolean((meta as { truncated?: boolean } | undefined)?.truncated),
+  }
 }

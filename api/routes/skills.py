@@ -131,11 +131,14 @@ async def skill_references(
     info = get_skill_info(skill_name, user, include_detail=False)
     if info is None:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' 不存在")
-    items = await list_skill_workflow_references(user, skill_name)
-    return {
-        "data": items,
-        "meta": pagination_meta(page=1, limit=max(len(items), 1), total_count=len(items)),
-    }
+    result = await list_skill_workflow_references(user, skill_name)
+    items = result.get("data") if isinstance(result, dict) else result
+    items = items if isinstance(items, list) else []
+    truncated = bool(result.get("truncated")) if isinstance(result, dict) else False
+    meta = pagination_meta(page=1, limit=max(len(items), 1), total_count=len(items))
+    if truncated:
+        meta = {**meta, "truncated": True}
+    return {"data": items, "meta": meta}
 
 @router.get("/{skill_name}", response_model=SkillInfo)
 def get_skill(skill_name: str, user: User = Depends(require_scope("skill:read"))):
