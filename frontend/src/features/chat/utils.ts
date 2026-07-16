@@ -13,6 +13,30 @@ const readStoredBool = (key: string, fallback: boolean): boolean => {
   return fallback
 }
 
+/** Humanize skill directory ids for badges/tooltips (no catalog required). */
+export const formatSkillLabel = (name: string): string => {
+  const raw = (name || '').trim()
+  if (!raw) return ''
+  let base = raw
+  if (base.toLowerCase().endsWith('-skill')) {
+    base = base.slice(0, -'-skill'.length)
+  }
+  const parts = base.split(/[-_]+/).filter(Boolean)
+  if (!parts.length) return raw
+  return parts
+    .map((part) => {
+      const lower = part.toLowerCase()
+      if (lower === 'cve' || lower === 'hitl' || lower === 'ip' || lower === 'mcp' || lower === 'ir') {
+        return lower.toUpperCase()
+      }
+      return lower.charAt(0).toUpperCase() + lower.slice(1)
+    })
+    .join(' ')
+}
+
+export const formatSkillLabels = (names: string[]): string =>
+  names.map(formatSkillLabel).filter(Boolean).join(', ')
+
 export const initialChatState: ChatState = {
   messages: [],
   input: '',

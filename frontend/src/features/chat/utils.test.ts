@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { chatReducer, consumeSse, defaultReasoningEffort, initialChatState, normalizeMessages, previousPrompt, supportedReasoningEfforts } from './utils'
+import {
+  chatReducer,
+  consumeSse,
+  defaultReasoningEffort,
+  formatSkillLabel,
+  formatSkillLabels,
+  initialChatState,
+  normalizeMessages,
+  previousPrompt,
+  supportedReasoningEfforts,
+} from './utils'
 import type { Message } from './types'
 
 describe('chat behavior', () => {
@@ -275,4 +285,17 @@ describe('chat behavior', () => {
     expect(messages[3]).toMatchObject({ leanMode: false, enableTools: false, skillNames: [] })
   })
 
+})
+
+describe('formatSkillLabel', () => {
+  it('strips -skill and title-cases segments', () => {
+    expect(formatSkillLabel('cve-intel-skill')).toBe('CVE Intel')
+    expect(formatSkillLabel('playbook-skill')).toBe('Playbook')
+    expect(formatSkillLabel('hitl-containment-skill')).toBe('HITL Containment')
+    expect(formatSkillLabel('intranet-ip-skill')).toBe('Intranet IP')
+  })
+
+  it('joins multiple labels', () => {
+    expect(formatSkillLabels(['cve-intel-skill', 'playbook-skill'])).toBe('CVE Intel, Playbook')
+  })
 })

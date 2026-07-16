@@ -32,7 +32,7 @@ import { useRouter } from '@tanstack/react-router'
 import { buildTraceSearch, emptyTraceFilters } from '@/features/trace/utils'
 import { copyToClipboard } from '@/shared/lib/clipboard'
 import { reasoningEffortLabel } from '@/shared/lib/reasoning'
-import { supportedReasoningEfforts } from './utils'
+import { formatSkillLabels, supportedReasoningEfforts } from './utils'
 import './chat.css'
 
 const promptKeys = ['cve', 'exposure', 'runbook'] as const
@@ -360,7 +360,7 @@ function MessageBody({ message, retry, sessionId }: { message: Message; retry: (
           </Tooltip>
         ) : null}
         {message.enableTools !== false && Array.isArray(message.skillNames) && message.skillNames.length > 0 ? (
-          <Tooltip title={t('skillsAttached', { names: message.skillNames.join(', ') })}>
+          <Tooltip title={t('skillsAttached', { names: formatSkillLabels(message.skillNames) })}>
             <span className="run-metric run-metric--skills">{t('skillsAttachedBadge', { count: message.skillNames.length })}</span>
           </Tooltip>
         ) : null}
@@ -558,7 +558,7 @@ export function ChatPage() {
               }
               if (Array.isArray(names) && names.length > 0) {
                 return (
-                  <Tooltip title={t('skillsAttached', { names: names.join(', ') })}>
+                  <Tooltip title={t('skillsAttached', { names: formatSkillLabels(names) })}>
                     <Tag className="context-mode-tag" color="blue">
                       {t('skillsAttachedBadge', { count: names.length })}
                     </Tag>

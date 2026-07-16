@@ -67,7 +67,7 @@
   "toolsSkillsHelp": "When on, connects MCP and Skills by intent: trivial turns skip tools; CVE/containment/playbook attach matching Skills and MCP namespaces; general security turns load all. Off is lite mode.",
   "toolsOffBadge": "Lite (no tools)",
   "autoLeanBadge": "Auto lite this turn",
-  "autoLeanHelp": "No security-tool intent detected; MCP/Skills skipped to save context.",
+  "autoLeanHelp": "No security-tool intent (e.g. CVE, containment, playbook, intranet assets). MCP/Skills skipped to save context. Mention those tasks to attach tools.",
   "skillsAttached": "Skills this turn: {{names}}",
   "tokensMetric": "{{value}} tokens",
   "tokensMetricTitle": "{{count}} tokens",

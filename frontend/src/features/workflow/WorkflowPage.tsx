@@ -215,10 +215,13 @@ export function WorkflowPage() {
   })
   const enabledSkillOptions = (skillsQuery.data ?? [])
     .filter((skill) => skill.enabled)
-    .map((skill) => ({
-      value: skill.name,
-      label: skill.description ? `${skill.name} — ${skill.description}` : skill.name,
-    }))
+    .map((skill) => {
+      const short = skill.name.replace(/-skill$/i, '')
+      const label = skill.description
+        ? `${skill.description} (${short})`
+        : short
+      return { value: skill.name, label }
+    })
   const step = workflow.selected
   const executors = workflow.executorsQuery.data ?? []
   const executorNames = useMemo(() => {
@@ -831,6 +834,11 @@ export function WorkflowPage() {
                   placeholder={t('stepNamePlaceholder')}
                   style={{ marginTop: 8 }}
                 />
+                {step.type === 'step' && !(step.name || '').trim() ? (
+                  <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
+                    {t('stepNameHint')}
+                  </Typography.Text>
+                ) : null}
 
                 {step.type === 'step' ? (
                   <>

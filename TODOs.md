@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Chat Skill 可读名 + 轻量说明 / Workflow 空步骤名提示
+
+- Chat：`formatSkillLabel(s)` 把 `cve-intel-skill` 等目录 id 显示为 `CVE Intel`；消息条与顶栏 Skills Tooltip 使用友好名。
+- Chat：`autoLeanHelp` 文案补充可触发意图的关键词示例（CVE/隔离/剧本等）。
+- Workflow Inspector：Agent 步骤名为空时提示「运行日志将显示执行器显示名」；Skill 多选选项改为「描述 (短名)」。
+
+
 ## 已完成：画布 Step 副标题映射 Executor 显示名
 
 - `resolveNodeCanvasSubtitle`：Agent step 副标题优先用 executor catalog `name`（如「安全运营助手」），无匹配回退 `targetId`，空 ref 用 i18n `subtitleAgent`。
