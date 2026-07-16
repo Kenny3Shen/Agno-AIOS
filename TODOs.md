@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：CVE update 去 status 包装 + Workflow 深链 smoke
+
+- `POST /api/cve/update` 成功体去掉 `status: 200`（失败仍 HTTPException）。
+- `frontend/e2e/workflow.smoke.spec.ts`：`workflow_id` 深链加载已保存工作流名称与步骤节点。
+
 ## 已完成：Knowledge 列表 data/meta + Collect 错误收口
 
 - `GET /api/knowledge`：`documents`/`pagination` → `data`/`meta`（`pagination_meta`，保留 query/sort 于 meta）；`status` 仍为 RAG/健康快照旁路字段。
@@ -1311,7 +1316,7 @@ P0.4 审批值班薄入口        ✅
 
 ## P1：建立关键流程 E2E
 
-已落地 shell / Trace / Knowledge / Approvals on-call Playwright smoke（`frontend/e2e/*.smoke.spec.ts`）。
+已落地 shell / Trace / Knowledge / Approvals / Workflow 深链 Playwright smoke（`frontend/e2e/*.smoke.spec.ts`）。
 
 建议首先覆盖：
 

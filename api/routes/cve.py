@@ -54,7 +54,6 @@ async def update_cve_database(
         )
         logger.info("CVE 数据库更新完成")
         return {
-            "status": 200,
             "message": "CVE 数据库更新完成",
             "add_count": add_count,
             "del_count": del_count,

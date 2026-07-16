@@ -23,4 +23,5 @@ export interface CveSearchResponse {
 export const searchCves = (payload: { query: string; source?: string; page: number; size: number }) =>
   requestJson<CveSearchResponse>('/cve/search', jsonInit('POST', payload))
 
-export const updateCves = () => requestJson<Record<string, unknown>>('/cve/update', { method: 'POST' })
+export const updateCves = () =>
+  requestJson<{ message?: string; add_count?: number; del_count?: number }>('/cve/update', { method: 'POST' })
