@@ -64,8 +64,6 @@
   "canvasEmpty": "画布为空 — 从模板开始，或从左侧拖入节点",
   "deleteNode": "删除节点",
   "organize": "整理布局",
-  "runOutput": "运行输出",
-  "emptyRunOutput": "暂无步骤输出",
   "organizeHint": "自动排布节点（Ctrl/Cmd+L）",
   "undoHint": "撤销（Ctrl/Cmd+Z）",
   "redoHint": "重做（Ctrl/Cmd+Y）",

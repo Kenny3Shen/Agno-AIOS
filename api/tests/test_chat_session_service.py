@@ -325,12 +325,3 @@ async def test_session_history_uses_approval_resolution_note_for_full_rejection_
     assert assistant["status"] == "completed"
     assert "证据不足，暂不封禁该目标，保留观察。" in assistant["content"]
     assert [message["id"] for message in messages].count("run-rejected") == 1
-
-
-def test_preview_from_runs_prefers_latest_and_workflow_content():
-    runs = [
-        {"input": "old in", "content": "old out"},
-        {"input": "", "content": "## Workflow result\n- ok"},
-    ]
-    assert chat_session_service._preview_from_runs(runs).startswith("## Workflow")
-    assert chat_session_service._preview_from_runs([{"input": {"input_content": "agent q"}}]) == "agent q"

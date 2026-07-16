@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { chatKeys } from '@/features/chat/queries'
+import { useQuery } from '@tanstack/react-query'
 import { getModels } from '@/features/settings/api'
 import {
   createWorkflow,
@@ -91,7 +90,6 @@ const snapOf = (state: Pick<WorkflowState, 'steps' | 'selectedId' | 'selectedIds
 
 export function useWorkflow() {
   const [state, setState] = useState<WorkflowState>(initialState)
-  const queryClient = useQueryClient()
   const abortRef = useRef<AbortController | null>(null)
   const pastRef = useRef<HistorySnap[]>([])
   const futureRef = useRef<HistorySnap[]>([])
@@ -824,15 +822,6 @@ export function useWorkflow() {
                   : current.running,
             }
           })
-          if (
-            item.type === 'workflow.started' ||
-            item.type === 'workflow.completed' ||
-            item.type === 'workflow.failed' ||
-            item.type === 'workflow.paused' ||
-            item.type === 'workflow.cancelled'
-          ) {
-            void queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
-          }
         },
         controller.signal
       )

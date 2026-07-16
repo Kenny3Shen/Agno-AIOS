@@ -11,7 +11,6 @@ const normalizeSession = (value: unknown): ChatSession | null => {
   return {
     session_id: sessionId,
     user_id: row.user_id != null ? String(row.user_id) : null,
-    session_type: row.session_type != null ? String(row.session_type) : null,
     preview: String(row.preview ?? '新对话'),
     title: row.title != null ? String(row.title) : null,
     created_at: Number(row.created_at ?? 0) || 0,

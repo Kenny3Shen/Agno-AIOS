@@ -48,7 +48,6 @@ import {
   workflowWebhookUrl,
 } from './utils'
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
-import { Markdown } from '@/shared/ui/Markdown'
 import { listWorkflowTriggerHistory } from './api'
 import { listSkills } from '@/features/skills/api'
 import { CelExpressionField } from './CelExpressionField'
@@ -931,39 +930,12 @@ export function WorkflowPage() {
                           />
                         </div>
                       ) : null}
-                      {(() => {
-                        const outputs = [...workflow.state.runLog]
-                          .filter(
-                            (item) =>
-                              Boolean(item.content?.trim()) &&
-                              (item.type === 'step.completed' ||
-                                item.type === 'workflow.completed')
-                          )
-                          .reverse()
-                        const latestOutput = outputs[0]
-                        return latestOutput?.content ? (
-                          <div className="workflow-run-output" style={{ marginBottom: 12 }}>
-                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                              {t('runOutput')}
-                              {latestOutput.stepName ? ` · ${latestOutput.stepName}` : ''}
-                            </Typography.Text>
-                            <div className="workflow-run-output__md message-body" style={{ marginTop: 6 }}>
-                              <Markdown content={latestOutput.content} openLinksInNewTab escapeRawHtml />
-                            </div>
-                          </div>
-                        ) : null
-                      })()}
                       {workflow.state.runLog.length ? (
                         <List
                           size="small"
                           dataSource={[...workflow.state.runLog].reverse().slice(0, 40)}
                           renderItem={(item) => (
-                            <List.Item
-                              style={{
-                                padding: '6px 0',
-                                display: 'block',
-                              }}
-                            >
+                            <List.Item style={{ padding: '4px 0' }}>
                               <Space size={4} wrap>
                                 <Tag
                                   color={
@@ -995,15 +967,6 @@ export function WorkflowPage() {
                                   </Button>
                                 ) : null}
                               </Space>
-                              {item.content?.trim() &&
-                              (item.type === 'step.completed' || item.type === 'workflow.completed') ? (
-                                <div
-                                  className="workflow-run-log__content message-body"
-                                  style={{ marginTop: 6, maxHeight: 220, overflow: 'auto' }}
-                                >
-                                  <Markdown content={item.content} openLinksInNewTab escapeRawHtml />
-                                </div>
-                              ) : null}
                             </List.Item>
                           )}
                         />

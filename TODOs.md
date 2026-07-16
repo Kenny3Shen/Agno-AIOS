@@ -135,14 +135,12 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
-## 已完成：拖拽智能对齐 + Workflow 输出 Markdown + Recents
+## 已完成：拖拽智能对齐 + Chat 操作位
 
 - 拖拽时 draw.io 式智能辅助线（左右/中/上下边对齐吸附）
 - Chat 消息 Actions：右下角；复制内容 / 复制 Run ID 图标区分
-- Studio Run Log 对 `step.completed` / `workflow.completed` 内容做 Markdown 渲染
-- Session preview 支持 workflow content；运行终态 invalidate 最近对话
 
-相关：`utils.computeSmartSnap` / `WorkflowCanvas` / `ChatPage` / `chat_session_service.py`
+相关：`utils.computeSmartSnap` / `WorkflowCanvas` / `ChatPage`
 
 ---
 

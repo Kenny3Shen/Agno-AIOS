@@ -241,48 +241,19 @@ def _sort_time(row: dict[str, Any]) -> float:
         return 0.0
 
 
-def _preview_text(value: Any, limit: int = 80) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        text = value.strip()
-    elif isinstance(value, dict):
-        for key in ("input_content", "content", "message", "text"):
-            if value.get(key) not in (None, ""):
-                text = str(value.get(key)).strip()
-                break
-        else:
-            text = ""
-    else:
-        text = str(value).strip()
-    if not text:
-        return ""
-    return text if len(text) <= limit else text[: limit - 1] + "…"
-
-
 def _preview_from_runs(runs: Any) -> str:
-    """Prefer latest run input; fall back to assistant/workflow content.
-
-    Agent runs store user text under ``input.input_content``. Workflow runs often
-    store a plain string input and put the model answer on ``content`` — without
-    the latter, Recents only shows empty/default titles.
-    """
-    if not isinstance(runs, list) or not runs:
+    if not isinstance(runs, list) or not runs or not isinstance(runs[0], dict):
         return ""
-    # Prefer most recent run (Agno appends new runs at the end).
-    for run in reversed(runs):
-        if not isinstance(run, dict):
-            continue
-        preview = _preview_text(run.get("input"))
-        if preview:
-            return preview
-        preview = _preview_text(run.get("content"))
-        if preview:
-            return preview
+    inp = runs[0].get("input", {})
+    if isinstance(inp, dict):
+        return str(inp.get("input_content") or "")[:80]
+    if isinstance(inp, str):
+        return inp[:80]
     return ""
 
 
 def _project_session_rows(
+
     rows: list[dict[str, Any]],
     *,
     include_runs: bool,
@@ -294,21 +265,10 @@ def _project_session_rows(
     for row in rows:
         runs = coerce_json_value(row.get("runs"))
         preview = _preview_from_runs(runs)
-        session_type = row.get("session_type")
-        if not session_type:
-            if row.get("workflow_id"):
-                session_type = "workflow"
-            elif row.get("team_id"):
-                session_type = "team"
-            else:
-                session_type = "agent"
-        if hasattr(session_type, "value"):
-            session_type = session_type.value
         session = {
             "session_id": row.get("session_id"),
             "user_id": row.get("user_id"),
-            "session_type": str(session_type or "agent"),
-            "preview": preview.strip() or ("工作流运行" if str(session_type) == "workflow" else "新对话"),
+            "preview": preview.strip() or "新对话",
             "title": _title_metadata(row.get("metadata")),
             "created_at": row.get("created_at"),
             "updated_at": row.get("updated_at"),
@@ -465,20 +425,6 @@ async def get_session_messages_async(
             messages.append({"id": f"{run_id}:user", "role": "user", "content": user_text.strip(), "final": True, "session_id": session_id})
 
         content = run.get("content", "")
-        if not (isinstance(content, str) and content.strip()):
-            # Workflow runs may leave top-level content empty; fall back to last step.
-            step_results = run.get("step_results")
-            if isinstance(step_results, list):
-                for step in reversed(step_results):
-                    if not isinstance(step, dict):
-                        continue
-                    step_content = step.get("content")
-                    if isinstance(step_content, str) and step_content.strip():
-                        content = step_content
-                        break
-                    if isinstance(step_content, (dict, list)):
-                        content = str(step_content)
-                        break
         tools_value_for_gate = run.get("tools")
         has_tool_results = isinstance(tools_value_for_gate, list) and any(
             isinstance(tool, dict)

@@ -64,8 +64,6 @@
   "canvasEmpty": "Empty canvas — start from a template or drag a node from the left",
   "deleteNode": "Delete node",
   "organize": "Organize",
-  "runOutput": "Run output",
-  "emptyRunOutput": "No step output yet",
   "organizeHint": "Auto-layout nodes (Ctrl/Cmd+L)",
   "undoHint": "Undo (Ctrl/Cmd+Z)",
   "redoHint": "Redo (Ctrl/Cmd+Y)",

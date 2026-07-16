@@ -2490,24 +2490,6 @@ html.dark .workflow-templates__item {
   z-index: 1100;
 }
 
-/* Workflow Studio run output (Markdown) */
-.workflow-run-output__md,
-.workflow-run-log__content {
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--tais-text);
-  border: 1px solid var(--tais-border);
-  border-radius: 8px;
-  padding: 8px 10px;
-  background: color-mix(in srgb, var(--tais-surface) 92%, var(--tais-bg));
-}
-.workflow-run-output__md .ant-x-markdown,
-.workflow-run-log__content .ant-x-markdown,
-.workflow-run-output__md .x-markdown,
-.workflow-run-log__content .x-markdown {
-  font-size: 13px;
-  line-height: 1.55;
-}
 
 /* Draw.io-style smart alignment guides while dragging */
 .wf-smart-guides {

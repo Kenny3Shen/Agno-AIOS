@@ -514,7 +514,7 @@ frontend/src/features/workflow/*      # 画布优先 Studio（reparent / 快捷�
 | **PR8b** ✅ | 画布打磨：保存校验 / 连线高亮 / run 聚焦 / NodeToolbar |
 | **PR8a** ✅ | 多 Handle 分支边（Condition then/else · Router choices） |
 | **Ports** ✅ | 几何感知 L/R vs top/bottom（`pickConnectionHandles`） |
-| **Align** ✅ | 拖拽智能辅助线（draw.io 式）；Run 输出 Markdown；Recents 含 workflow |
+| **Align** ✅ | 拖拽智能辅助线（draw.io 式）；Chat Actions 右下角 |
 | **PR7** ✅ | Publish + Cron 真调度（published 修订 / webhook·cron 只用线上版） |
 | **PR6** ✅ | 画布 run 状态 / Run 历史 / Approvals↔Studio 深链 / user_input_schema 表单 |
 | **PR5** ✅ | 画布 reparent / undo·redo·多选 / auto-layout / Approvals user_input·output_review 表单 |
