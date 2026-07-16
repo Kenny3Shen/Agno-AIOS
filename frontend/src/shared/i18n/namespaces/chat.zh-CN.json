@@ -89,5 +89,7 @@
   },
   "knowledgeOffBadge": "知识库未挂载",
   "liveSearchNeedsTools": "请先打开「工具/Skill」；轻量/关工具轮次不会启用 Live Search。",
-  "knowledgeSearchNeedsTools": "请先打开「工具/Skill」；轻量/关工具轮次不会挂载知识库检索。"
+  "knowledgeSearchNeedsTools": "请先打开「工具/Skill」；轻量/关工具轮次不会挂载知识库检索。",
+  "liveSearchAutoLeanHint": "上一轮为自动轻量，未启用联网搜索。本开关仍会保留偏好；发送安全任务意图后再生效。",
+  "knowledgeSearchAutoLeanHint": "上一轮为自动轻量，未挂载知识库。本开关仍会保留偏好；发送安全任务意图后再生效。"
 }

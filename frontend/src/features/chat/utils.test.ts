@@ -11,6 +11,9 @@ import {
   normalizeMessages,
   previousPrompt,
   supportedReasoningEfforts,
+  isLastTurnAutoLean,
+  isKnowledgeToggleActive,
+  isLiveSearchToggleActive,
 } from './utils'
 import type { Message } from './types'
 
@@ -362,3 +365,17 @@ describe('formatToolLabel', () => {
     expect(formatToolLabel('hitl_custom_action')).toBe('Custom Action')
   })
 })
+
+describe('lean-aware toggle helpers', () => {
+  it('detects auto-lean last turn and dims dependent toggles', () => {
+    expect(isLastTurnAutoLean(true, { leanMode: true, enableTools: true })).toBe(true)
+    expect(isLastTurnAutoLean(true, { leanMode: false, enableTools: true })).toBe(false)
+    expect(isLastTurnAutoLean(false, { leanMode: true, enableTools: true })).toBe(false)
+    expect(isKnowledgeToggleActive(true, true, true)).toBe(false)
+    expect(isKnowledgeToggleActive(true, true, false)).toBe(true)
+    expect(isLiveSearchToggleActive(true, true, true, true)).toBe(false)
+    expect(isLiveSearchToggleActive(true, true, true, false)).toBe(true)
+    expect(isLiveSearchToggleActive(true, true, false, false)).toBe(false)
+  })
+})
+

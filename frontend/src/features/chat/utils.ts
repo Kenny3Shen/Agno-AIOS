@@ -465,3 +465,24 @@ export const defaultReasoningEffort = (model: ModelConfig | null): ReasoningEffo
   if (fallback && available.includes(fallback)) return fallback
   return available.at(-1) ?? null
 }
+
+/** Tools are on and the latest assistant turn reported auto-lite (no skills). */
+export const isLastTurnAutoLean = (
+  enableTools: boolean,
+  latestAssistant?: Pick<Message, 'enableTools' | 'leanMode'> | null,
+): boolean =>
+  Boolean(enableTools && latestAssistant?.enableTools !== false && latestAssistant?.leanMode)
+
+export const isKnowledgeToggleActive = (
+  searchKnowledge: boolean,
+  enableTools: boolean,
+  lastTurnAutoLean: boolean,
+): boolean => Boolean(searchKnowledge && enableTools && !lastTurnAutoLean)
+
+export const isLiveSearchToggleActive = (
+  liveSearch: boolean,
+  enableTools: boolean,
+  liveSearchSupported: boolean,
+  lastTurnAutoLean: boolean,
+): boolean => Boolean(liveSearch && enableTools && liveSearchSupported && !lastTurnAutoLean)
+

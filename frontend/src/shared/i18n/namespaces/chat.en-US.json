@@ -89,5 +89,7 @@
   },
   "knowledgeOffBadge": "Knowledge off",
   "liveSearchNeedsTools": "Turn on Tools/Skills first; lite and tools-off turns ignore Live Search.",
-  "knowledgeSearchNeedsTools": "Turn on Tools/Skills first; lite and tools-off turns do not mount knowledge search."
+  "knowledgeSearchNeedsTools": "Turn on Tools/Skills first; lite and tools-off turns do not mount knowledge search.",
+  "liveSearchAutoLeanHint": "Last turn was auto-lite; live search was not used. Your preference is kept and applies on the next tool-intent turn.",
+  "knowledgeSearchAutoLeanHint": "Last turn was auto-lite; knowledge search was not mounted. Your preference is kept and applies on the next tool-intent turn."
 }

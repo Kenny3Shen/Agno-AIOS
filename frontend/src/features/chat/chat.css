@@ -1176,6 +1176,11 @@ html.dark {
   color: var(--tais-orange) !important;
   background: color-mix(in srgb, var(--tais-orange) 12%, transparent) !important;
 }
+.sender-toggle.muted {
+  opacity: 0.72;
+  border-style: dashed;
+}
+
 
 .chat-task-panel-load-more {
   display: flex;

@@ -1,6 +1,11 @@
 # 下一步工作
 
 
+## 已完成：Chat 自动轻量后 Knowledge/Live 开关去高亮
+
+- 上一轮 `leanMode` 时，即使偏好仍开，Knowledge / Live Search 开关不再显示 active，改用 muted + Tooltip 说明「偏好保留，下一轮有工具意图再生效」。
+- 纯函数：`isLastTurnAutoLean` / `isKnowledgeToggleActive` / `isLiveSearchToggleActive`。
+
 ## 已完成：多选摘要抽取 + clone 深拷贝 + 单步指令标签
 
 - `summarizeSelectedAgentSteps`：多选 Inspector 混合态可测纯函数。

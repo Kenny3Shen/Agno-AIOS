@@ -32,7 +32,14 @@ import { useRouter } from '@tanstack/react-router'
 import { buildTraceSearch, emptyTraceFilters } from '@/features/trace/utils'
 import { copyToClipboard } from '@/shared/lib/clipboard'
 import { reasoningEffortLabel } from '@/shared/lib/reasoning'
-import { formatSkillLabels, formatToolLabel, supportedReasoningEfforts } from './utils'
+import {
+  formatSkillLabels,
+  formatToolLabel,
+  supportedReasoningEfforts,
+  isLastTurnAutoLean,
+  isKnowledgeToggleActive,
+  isLiveSearchToggleActive,
+} from './utils'
 import './chat.css'
 
 const promptKeys = ['cve', 'exposure', 'runbook'] as const
@@ -440,6 +447,22 @@ export function ChatPage() {
   const availableReasoningOptions = reasoningOptions(chat.selectedModel)
   const inputDisabled = !chat.selectedModel?.enabled || !chat.selectedModel.configured
   const liveSearchSupported = Boolean(chat.selectedModel?.capabilities?.supports_live_search)
+  const latestAssistant = useMemo(
+    () => [...chat.state.messages].reverse().find((item) => item.role === 'assistant'),
+    [chat.state.messages],
+  )
+  const lastTurnAutoLean = isLastTurnAutoLean(chat.state.enableTools, latestAssistant)
+  const knowledgeToggleActive = isKnowledgeToggleActive(
+    chat.state.searchKnowledge,
+    chat.state.enableTools,
+    lastTurnAutoLean,
+  )
+  const liveSearchToggleActive = isLiveSearchToggleActive(
+    chat.state.liveSearch,
+    chat.state.enableTools,
+    liveSearchSupported,
+    lastTurnAutoLean,
+  )
   const sendDisabled = inputDisabled || Boolean(pausedRun) || !chat.state.input.trim()
   const scrollToLatest = useCallback((behavior: ScrollBehavior = 'smooth') => {
     const node = scrollRef.current
@@ -534,9 +557,6 @@ export function ChatPage() {
                   </Tag>
                 )
               }
-              const latestAssistant = [...chat.state.messages]
-                .reverse()
-                .find((item) => item.role === 'assistant')
               if (latestAssistant?.enableTools === false) {
                 return (
                   <Tooltip title={t('toolsSkillsHelp')}>
@@ -730,7 +750,7 @@ export function ChatPage() {
                     {t('toolsSkills')}
                   </Button>
                   <Button
-                    className={chat.state.liveSearch && chat.state.enableTools ? 'sender-toggle active' : 'sender-toggle'}
+                    className={liveSearchToggleActive ? 'sender-toggle active' : chat.state.liveSearch && chat.state.enableTools && lastTurnAutoLean ? 'sender-toggle muted' : 'sender-toggle'}
                     type="text"
                     size="small"
                     icon={<GlobalOutlined />}
@@ -739,7 +759,9 @@ export function ChatPage() {
                     title={
                       !chat.state.enableTools
                         ? t('liveSearchNeedsTools')
-                        : t('liveSearchHelp')
+                        : lastTurnAutoLean
+                          ? t('liveSearchAutoLeanHint')
+                          : t('liveSearchHelp')
                     }
                     disabled={
                       chat.state.requesting ||
@@ -752,7 +774,7 @@ export function ChatPage() {
                     {t('liveSearch')}
                   </Button>
                   <Button
-                    className={chat.state.searchKnowledge && chat.state.enableTools ? 'sender-toggle active' : 'sender-toggle'}
+                    className={knowledgeToggleActive ? 'sender-toggle active' : chat.state.searchKnowledge && chat.state.enableTools && lastTurnAutoLean ? 'sender-toggle muted' : 'sender-toggle'}
                     type="text"
                     size="small"
                     icon={<BookOutlined />}
@@ -761,7 +783,9 @@ export function ChatPage() {
                     title={
                       !chat.state.enableTools
                         ? t('knowledgeSearchNeedsTools')
-                        : t('knowledgeSearchHelp')
+                        : lastTurnAutoLean
+                          ? t('knowledgeSearchAutoLeanHint')
+                          : t('knowledgeSearchHelp')
                     }
                     disabled={chat.state.requesting || Boolean(pausedRun) || !chat.state.enableTools}
                     onClick={() => chat.setSearchKnowledge(!chat.state.searchKnowledge)}
