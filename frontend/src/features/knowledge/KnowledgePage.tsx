@@ -86,6 +86,8 @@ export function KnowledgePage() {
   const debouncedFilter = useDebouncedValue(filter, 300)
   const [page, setPage] = useState(1)
   const pageSize = 12
+  const [sortBy, setSortBy] = useState<'updated_at' | 'created_at' | 'name' | 'status'>('updated_at')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [selectedId, setSelectedId] = useState('')
   const [metaOpen, setMetaOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
@@ -95,8 +97,15 @@ export function KnowledgePage() {
     setPage(1)
   }, [debouncedFilter])
   const query = useQuery({
-    queryKey: ['knowledge', debouncedFilter, page, pageSize],
-    queryFn: () => getKnowledge({ query: debouncedFilter, page, limit: pageSize }),
+    queryKey: ['knowledge', debouncedFilter, page, pageSize, sortBy, sortOrder],
+    queryFn: () =>
+      getKnowledge({
+        query: debouncedFilter,
+        page,
+        limit: pageSize,
+        sortBy,
+        sortOrder,
+      }),
   })
   const documents = query.data?.documents ?? []
   const ingestDefaults = useMemo(() => effectiveKnowledgeIngestDefaults(query.data?.status.rag_settings), [query.data?.status.rag_settings])
@@ -104,7 +113,7 @@ export function KnowledgePage() {
   const refresh = () => client.invalidateQueries({ queryKey: ['knowledge'] })
 
   const syncUpdatedDocument = async (document: Document, previousId = selectedId, selectDocument = true) => {
-    const currentKey = ['knowledge', debouncedFilter, page, pageSize]
+    const currentKey = ['knowledge', debouncedFilter, page, pageSize, sortBy, sortOrder]
     client.setQueryData<KnowledgeResponse>(currentKey, (current) =>
       current
         ? {
@@ -182,6 +191,13 @@ export function KnowledgePage() {
                 paginationPage={page}
                 paginationPageSize={pageSize}
                 onPaginationChange={setPage}
+                sortBy={sortBy}
+                sortOrder={sortOrder}
+                onSortChange={(nextSortBy, nextSortOrder) => {
+                  setSortBy(nextSortBy)
+                  setSortOrder(nextSortOrder)
+                  setPage(1)
+                }}
               />
             ),
           },

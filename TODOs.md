@@ -136,6 +136,15 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Memory 服务端分页 + Knowledge 服务端排序
+
+- Memory 列表：`page/limit=12` 受控分页 + 搜索 300ms 防抖（不再客户端切默认 20 条窗口）
+- Knowledge 列表：title/created/updated 列 sorter 透传 `sort_by`/`sort_order`（去掉跨页不准的客户端 sort）
+
+相关：`MemoryPage` / `KnowledgePage` / `DocumentsTable`
+
+---
+
 ## 已完成：Knowledge 过滤防抖 + Feishu payload 日志
 
 - `useDebouncedValue`：Knowledge 列表 filter 300ms 防抖后再请求

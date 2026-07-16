@@ -3,7 +3,7 @@ import { Button, Card, Input, Popconfirm, Space, Table, Tag, Tooltip } from 'ant
 import { DeleteOutlined, EditOutlined } from '@ant-design/icons'
 import type { ResourceVisibility } from '@/shared/types/common'
 import { VisibilitySelect } from '@/shared/ui/VisibilitySelect'
-import { compareTimestamp, useFormatDate } from '@/shared/lib/format'
+import { useFormatDate } from '@/shared/lib/format'
 import type { Document } from '../types'
 import { useTranslation } from 'react-i18next'
 
@@ -23,6 +23,9 @@ export function DocumentsTable({
   paginationPage = 1,
   paginationPageSize = 12,
   onPaginationChange,
+  sortBy = 'updated_at',
+  sortOrder = 'desc',
+  onSortChange,
 }: {
   documents: Document[]
   filter: string
@@ -39,6 +42,12 @@ export function DocumentsTable({
   paginationPage?: number
   paginationPageSize?: number
   onPaginationChange?: (page: number) => void
+  sortBy?: 'updated_at' | 'created_at' | 'name' | 'status'
+  sortOrder?: 'asc' | 'desc'
+  onSortChange?: (
+    sortBy: 'updated_at' | 'created_at' | 'name' | 'status',
+    sortOrder: 'asc' | 'desc'
+  ) => void
 }) {
   const { t } = useTranslation('knowledge')
   const formatDate = useFormatDate()
@@ -74,6 +83,24 @@ export function DocumentsTable({
           showSizeChanger: false,
           onChange: (nextPage) => onPaginationChange?.(nextPage),
         }}
+        onChange={(_pagination, _filters, sorter) => {
+          if (!onSortChange) return
+          const active = Array.isArray(sorter) ? sorter[0] : sorter
+          if (!active || !active.order) return
+          const field = String(active.field || active.columnKey || '')
+          const mapped =
+            field === 'title'
+              ? 'name'
+              : field === 'created_at'
+                ? 'created_at'
+                : field === 'updated_at'
+                  ? 'updated_at'
+                  : field === 'status'
+                    ? 'status'
+                    : null
+          if (!mapped) return
+          onSortChange(mapped, active.order === 'ascend' ? 'asc' : 'desc')
+        }}
         scroll={vertical ? { x: 1100 } : { x: 1100 }}
         rowClassName={(row) => (row.id === selectedId ? 'selected-table-row' : '')}
         onRow={(row) => ({ onClick: () => onSelect(row) })}
@@ -82,7 +109,8 @@ export function DocumentsTable({
             title: t('columns.title'),
             dataIndex: 'title',
             ellipsis: true,
-            sorter: (a, b) => (a.title ?? '').localeCompare(b.title ?? ''),
+            sorter: true,
+            sortOrder: sortBy === 'name' ? (sortOrder === 'asc' ? 'ascend' : 'descend') : null,
           },
           {
             title: t('columns.source'),
@@ -97,7 +125,6 @@ export function DocumentsTable({
             title: t('columns.chunks'),
             dataIndex: 'chunks',
             width: 96,
-            sorter: (a, b) => (a.chunks ?? 0) - (b.chunks ?? 0),
             onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }),
           },
           {
@@ -116,14 +143,16 @@ export function DocumentsTable({
             title: t('columns.created'),
             dataIndex: 'created_at',
             width: 168,
-            sorter: (a, b) => compareTimestamp(a.created_at, b.created_at),
+            sorter: true,
+            sortOrder: sortBy === 'created_at' ? (sortOrder === 'asc' ? 'ascend' : 'descend') : null,
             render: (value?: string) => formatDate(value),
           },
           {
             title: t('columns.updated'),
             dataIndex: 'updated_at',
             width: 168,
-            sorter: (a, b) => compareTimestamp(a.updated_at ?? a.created_at, b.updated_at ?? b.created_at),
+            sorter: true,
+            sortOrder: sortBy === 'updated_at' ? (sortOrder === 'asc' ? 'ascend' : 'descend') : null,
             render: (_value, row) => formatDate(row.updated_at || row.created_at),
           },
           {

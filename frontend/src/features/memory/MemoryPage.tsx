@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { App, Button, Card, Drawer, Empty, Form, Input, Modal, Popconfirm, Space, Table, Tag, Tooltip, Typography } from 'antd'
 import { DeleteOutlined, EditOutlined, SearchOutlined } from '@ant-design/icons'
@@ -9,6 +9,7 @@ import { deleteMemory, getMemories, updateMemory, type Memory } from './api'
 import { compactId, compareTimestamp, useFormatDate } from '@/shared/lib/format'
 import { parseMemoryInput } from './utils'
 import { useTranslation } from 'react-i18next'
+import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 
 export function MemoryPage() {
   const { t } = useTranslation('memory')
@@ -17,9 +18,25 @@ export function MemoryPage() {
   const client = useQueryClient()
   const [search, setSearch] = useState('')
   const [applied, setApplied] = useState('')
+  const debouncedSearch = useDebouncedValue(search, 300)
+  const [page, setPage] = useState(1)
+  const pageSize = 12
   const [selected, setSelected] = useState<Memory | null>(null)
   const [editing, setEditing] = useState<Memory | null>(null)
-  const query = useQuery({ queryKey: ['memory', applied], queryFn: () => getMemories({ search_content: applied || undefined }) })
+  // Apply debounced typing; explicit Query button still sets applied immediately.
+  useEffect(() => {
+    setApplied(debouncedSearch)
+    setPage(1)
+  }, [debouncedSearch])
+  const query = useQuery({
+    queryKey: ['memory', applied, page, pageSize],
+    queryFn: () =>
+      getMemories({
+        search_content: applied || undefined,
+        page,
+        limit: pageSize,
+      }),
+  })
   const refresh = () => client.invalidateQueries({ queryKey: ['memory'] })
   const remove = useMutation({
     mutationFn: (row: Memory) => deleteMemory(row.id, row.user_id),
@@ -69,11 +86,20 @@ export function MemoryPage() {
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            onPressEnter={() => setApplied(search)}
+            onPressEnter={() => {
+              setApplied(search)
+              setPage(1)
+            }}
             prefix={<SearchOutlined />}
             placeholder={t('searchPlaceholder')}
           />
-          <Button type="primary" onClick={() => setApplied(search)}>
+          <Button
+            type="primary"
+            onClick={() => {
+              setApplied(search)
+              setPage(1)
+            }}
+          >
             {t('common:query')}
           </Button>
         </Space>
@@ -83,7 +109,13 @@ export function MemoryPage() {
           rowKey="id"
           dataSource={query.data?.items ?? []}
           loading={query.isLoading}
-          pagination={{ pageSize: 12 }}
+          pagination={{
+            current: page,
+            pageSize,
+            total: query.data?.total ?? 0,
+            showSizeChanger: false,
+            onChange: setPage,
+          }}
           rowClassName={(row) => (row.id === selected?.id ? 'selected-table-row' : '')}
           onRow={(row) => ({
             tabIndex: 0,
