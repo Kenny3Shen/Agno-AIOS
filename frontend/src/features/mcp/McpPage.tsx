@@ -186,7 +186,7 @@ export function McpPage() {
                     })}
                     columns={[
                       {
-                        title: 'Server / Namespace',
+                        title: t('colServer'),
                         render: (_, row) => (
                           <Space>
                             <strong>{row.name}</strong>
@@ -194,9 +194,9 @@ export function McpPage() {
                           </Space>
                         ),
                       },
-                      { title: 'Transport', dataIndex: 'transport', width: 150, render: (value) => <Tag>{value}</Tag> },
+                      { title: t('colTransport'), dataIndex: 'transport', width: 150, render: (value) => <Tag>{value}</Tag> },
                       {
-                        title: 'Enabled',
+                        title: t('colEnabled'),
                         width: 90,
                         render: (_, row) => {
                           const pending = toggleServer.isPending && toggleServer.variables?.server.id === row.id
@@ -212,7 +212,7 @@ export function McpPage() {
                         },
                       },
                       {
-                        title: 'Visibility',
+                        title: t('colVisibility'),
                         width: 140,
                         render: (_, row) => (
                           <VisibilitySelect
@@ -224,7 +224,7 @@ export function McpPage() {
                         ),
                       },
                       {
-                        title: 'Actions',
+                        title: t('colActions'),
                         width: 76,
                         render: (_, row) =>
                           row.can_delete ? (
@@ -257,7 +257,7 @@ export function McpPage() {
                     })}
                     columns={[
                       {
-                        title: 'Component',
+                        title: t('colComponent'),
                         render: (_, row) => (
                           <Space>
                             <Tag>{row.type}</Tag>
@@ -265,15 +265,15 @@ export function McpPage() {
                           </Space>
                         ),
                       },
-                      { title: 'Title', dataIndex: 'title', ellipsis: true },
-                      { title: 'Namespace', dataIndex: 'namespace', width: 140 },
+                      { title: t('colTitle'), dataIndex: 'title', ellipsis: true },
+                      { title: t('colNamespace'), dataIndex: 'namespace', width: 140 },
                       {
-                        title: 'Risk',
+                        title: t('colRisk'),
                         width: 180,
                         render: (_, row) => <RiskTags item={row} />,
                       },
                       {
-                        title: 'Enabled',
+                        title: t('colComponentEnabled'),
                         width: 90,
                         render: (_, row) => {
                           const pending = toggleComponent.isPending && toggleComponent.variables?.item.key === row.key
@@ -299,7 +299,7 @@ export function McpPage() {
           {
             key: 'tokens',
 
-            label: 'Tokens',
+            label: t('tabTokens'),
             children: (
               <Card className="workbench-card">
                 <Table<McpToken>
@@ -307,11 +307,11 @@ export function McpPage() {
                   loading={tokens.isLoading}
                   dataSource={tokens.data ?? []}
                   columns={[
-                    { title: 'Name', dataIndex: 'name' },
-                    { title: 'Created', dataIndex: 'created_at', render: (value: number) => tokenTime(value, t('neverExpires')) },
-                    { title: 'Expires', dataIndex: 'expires_at', render: (value: number) => tokenTime(value, t('neverExpires')) },
+                    { title: t('colTokenName'), dataIndex: 'name' },
+                    { title: t('colCreated'), dataIndex: 'created_at', render: (value: number) => tokenTime(value, t('neverExpires')) },
+                    { title: t('colExpires'), dataIndex: 'expires_at', render: (value: number) => tokenTime(value, t('neverExpires')) },
                     {
-                      title: 'Actions',
+                      title: t('colTokenActions'),
                       width: 120,
                       render: (_, row) => (
                         <Popconfirm

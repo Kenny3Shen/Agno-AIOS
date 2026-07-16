@@ -66,5 +66,14 @@
   "apiKeyLabel": "API Key",
   "enabledLabel": "Enabled",
   "baseUrlOptional": "Optional for native providers (uses official default)",
-  "autoDefaultsHint": "Protocol, structured output, reasoning, retries, and Live Search use optimal provider defaults. Toggle Live Search / Knowledge per turn in Chat."
+  "autoDefaultsHint": "Protocol, structured output, reasoning, retries, and Live Search use optimal provider defaults. Toggle Live Search / Knowledge per turn in Chat.",
+  "colName": "Name",
+  "colModelId": "Model ID",
+  "colBaseUrl": "Base URL",
+  "colConfigured": "Configured",
+  "colEnabled": "Enabled",
+  "colActions": "Actions",
+  "tagActive": "active",
+  "tagReady": "ready",
+  "tagMissingKey": "missing key"
 }

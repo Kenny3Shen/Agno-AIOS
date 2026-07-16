@@ -40,5 +40,20 @@
   "testConnection": "连接测试",
   "tryCallShort": "试调用",
   "issueTokenFailed": "签发 MCP 令牌失败，请稍后重试。",
-  "testConnectionFailed": "MCP 连接测试失败，请检查配置后重试。"
+  "testConnectionFailed": "MCP 连接测试失败，请检查配置后重试。",
+  "colServer": "服务 / 命名空间",
+  "colTransport": "传输",
+  "colEnabled": "启用",
+  "colVisibility": "可见性",
+  "colActions": "操作",
+  "colComponent": "组件",
+  "colTitle": "标题",
+  "colNamespace": "命名空间",
+  "colRisk": "风险",
+  "colTokenName": "名称",
+  "colCreated": "创建时间",
+  "colExpires": "过期时间",
+  "colTokenActions": "操作",
+  "colComponentEnabled": "启用",
+  "tabTokens": "令牌"
 }

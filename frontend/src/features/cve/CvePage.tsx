@@ -79,7 +79,7 @@ export function CvePage() {
           expandable={{ expandedRowRender: (row) => <p>{row.description}</p> }}
           columns={[
             {
-              title: 'CVE',
+              title: t('colCve'),
               dataIndex: 'cve_id',
               width: 150,
               render: (value, row) => (
@@ -88,9 +88,9 @@ export function CvePage() {
                 </a>
               ),
             },
-            { title: 'Description', dataIndex: 'description', ellipsis: true },
-            { title: 'Source', dataIndex: 'source', width: 130, render: (value) => <Tag>{value}</Tag> },
-            { title: 'Indexed', dataIndex: 'create_time', width: 190, defaultSortOrder: 'descend' as const, sorter: (a, b) => compareTimestamp(a.create_time, b.create_time), render: (value) => formatDate(value) },
+            { title: t('colDescription'), dataIndex: 'description', ellipsis: true },
+            { title: t('colSource'), dataIndex: 'source', width: 130, render: (value) => <Tag>{value}</Tag> },
+            { title: t('colIndexed'), dataIndex: 'create_time', width: 190, defaultSortOrder: 'descend' as const, sorter: (a, b) => compareTimestamp(a.create_time, b.create_time), render: (value) => formatDate(value) },
           ]}
         />
       </Card>

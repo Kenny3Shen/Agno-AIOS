@@ -53,30 +53,30 @@ export function MemoryPage() {
     ? [
         {
           key: 'memory',
-          label: 'Memory',
+          label: t('labelMemory'),
           children: <Typography.Paragraph className="memory-metadata-text">{selected.memory || '-'}</Typography.Paragraph>,
         },
-        { key: 'user', label: 'User', children: <CopyableValue value={selected.user_id} /> },
-        { key: 'agent', label: 'Agent', children: <CopyableValue value={selected.agent_id} /> },
-        { key: 'team', label: 'Team', children: <CopyableValue value={selected.team_id} /> },
-        { key: 'status', label: 'Status', children: <Tag>{selected.status || 'stored'}</Tag> },
+        { key: 'user', label: t('labelUser'), children: <CopyableValue value={selected.user_id} /> },
+        { key: 'agent', label: t('labelAgent'), children: <CopyableValue value={selected.agent_id} /> },
+        { key: 'team', label: t('labelTeam'), children: <CopyableValue value={selected.team_id} /> },
+        { key: 'status', label: t('labelStatus'), children: <Tag>{selected.status || t('statusStored')}</Tag> },
         {
           key: 'topics',
-          label: 'Topics',
+          label: t('labelTopics'),
           children: <Space wrap>{selected.topics?.length ? selected.topics.map((topic) => <Tag key={topic}>{topic}</Tag>) : '-'}</Space>,
         },
         {
           key: 'input',
-          label: 'Input',
+          label: t('labelInput'),
           children: <Typography.Paragraph className="memory-metadata-text">{memoryInput.text || '-'}</Typography.Paragraph>,
         },
         ...(Object.keys(memoryInput.context).length > 0
-          ? [{ key: 'context', label: 'Context', children: <JsonValueCard value={memoryInput.context} title="Additional context" /> }]
+          ? [{ key: 'context', label: t('labelContext'), children: <JsonValueCard value={memoryInput.context} title={t('additionalContext')} /> }]
           : []),
-        { key: 'feedback', label: 'Feedback', children: selected.feedback || '-' },
-        { key: 'created', label: 'Created', children: formatDate(selected.created_at) },
-        { key: 'updated', label: 'Updated', children: formatDate(selected.updated_at) },
-        { key: 'id', label: 'Memory ID', children: <CopyableValue value={selected.id} /> },
+        { key: 'feedback', label: t('labelFeedback'), children: selected.feedback || '-' },
+        { key: 'created', label: t('labelCreated'), children: formatDate(selected.created_at) },
+        { key: 'updated', label: t('labelUpdated'), children: formatDate(selected.updated_at) },
+        { key: 'id', label: t('labelMemoryId'), children: <CopyableValue value={selected.id} /> },
       ]
     : []
 
@@ -106,7 +106,7 @@ export function MemoryPage() {
           </Button>
         </Space>
       </Card>
-      <Card className="workbench-card" title="Memories" extra={<Tag>{query.data?.meta.total_count ?? 0}</Tag>}>
+      <Card className="workbench-card" title={t('listTitle')} extra={<Tag>{query.data?.meta.total_count ?? 0}</Tag>}>
         <Table<Memory>
           rowKey="id"
           dataSource={query.data?.data ?? []}
@@ -132,9 +132,9 @@ export function MemoryPage() {
             },
           })}
           columns={[
-            { title: 'Memory', dataIndex: 'memory', ellipsis: true },
+            { title: t('colMemory'), dataIndex: 'memory', ellipsis: true },
             {
-              title: 'Topics',
+              title: t('colTopics'),
               dataIndex: 'topics',
               width: 220,
               render: (topics: string[]) => (
@@ -145,9 +145,9 @@ export function MemoryPage() {
                 </Space>
               ),
             },
-            { title: 'User', dataIndex: 'user_id', width: 130, render: compactId },
+            { title: t('colUser'), dataIndex: 'user_id', width: 130, render: compactId },
             {
-              title: 'Updated',
+              title: t('colUpdated'),
               dataIndex: 'updated_at',
               width: 170,
               defaultSortOrder: 'descend' as const,
@@ -155,7 +155,7 @@ export function MemoryPage() {
               render: formatDate,
             },
             {
-              title: 'Actions',
+              title: t('colActions'),
               key: 'actions',
               width: 88,
               render: (_, row) => (

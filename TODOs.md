@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：后端 workflow_ref 自引用拦截 + 表头/画布 i18n 收口
+
+- `validate_and_normalize_definition(..., forbid_self_workflow_id=)`：update / publish / compile 拒绝指向当前工作流的 `workflow_ref`（嵌套深度与 condition 分支均覆盖）。
+- 单测：`test_forbid_self_workflow_ref_*`；引用其它 id 仍允许。
+- Settings / Memory / MCP / CVE 列表与详情表头走 i18n；Dashboard 运行量图轴/系列中文化。
+- Studio 画布空态与节点副标题（嵌套/循环/并行）补齐 workflow 命名空间，去掉硬编码英文。
+
 ## 已完成：嵌套工作流禁止自引用 + Trace 会话名回退
 
 - Studio 保存：`workflow_ref` 引用当前工作流自身时校验失败并聚焦嵌套选择器。

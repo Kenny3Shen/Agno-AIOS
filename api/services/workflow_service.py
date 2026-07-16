@@ -247,7 +247,10 @@ async def update_workflow_for_actor(
     if description is not None:
         next_def_source["description"] = description
     try:
-        normalized = validate_and_normalize_definition(next_def_source)
+        normalized = validate_and_normalize_definition(
+            next_def_source,
+            forbid_self_workflow_id=workflow_id,
+        )
     except WorkflowDefinitionError:
         raise
     values: dict[str, Any] = {
@@ -382,7 +385,10 @@ async def publish_workflow_for_actor(actor: ActorLike, workflow_id: str) -> dict
     if not isinstance(definition, dict):
         raise WorkflowDefinitionError("Workflow definition is invalid")
     # re-validate draft before publish
-    normalized = validate_and_normalize_definition(definition)
+    normalized = validate_and_normalize_definition(
+        definition,
+        forbid_self_workflow_id=workflow_id,
+    )
     now = workflow_store.now_ts()
     version = int(row.get("version") or 1)
     updated = await workflow_store.update_workflow(

@@ -66,5 +66,14 @@
   "apiKeyLabel": "API Key",
   "enabledLabel": "启用",
   "baseUrlOptional": "原生供应商可留空，使用官方默认地址",
-  "autoDefaultsHint": "协议、结构化输出、推理强度、重试与 Live Search 等按供应商最优默认自动配置；Chat 内可临时开关联网搜索与知识库。"
+  "autoDefaultsHint": "协议、结构化输出、推理强度、重试与 Live Search 等按供应商最优默认自动配置；Chat 内可临时开关联网搜索与知识库。",
+  "colName": "名称",
+  "colModelId": "Model ID",
+  "colBaseUrl": "Base URL",
+  "colConfigured": "配置状态",
+  "colEnabled": "启用",
+  "colActions": "操作",
+  "tagActive": "当前",
+  "tagReady": "已配置",
+  "tagMissingKey": "缺少密钥"
 }

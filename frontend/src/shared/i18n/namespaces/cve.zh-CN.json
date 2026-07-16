@@ -7,5 +7,9 @@
   "total": "共 {{total}} 条",
   "updateDb": "更新数据库",
   "searchFailed": "CVE 搜索失败，请稍后重试。",
-  "updateFailed": "CVE 库更新失败，请稍后重试。"
+  "updateFailed": "CVE 库更新失败，请稍后重试。",
+  "colCve": "CVE",
+  "colDescription": "描述",
+  "colSource": "来源",
+  "colIndexed": "入库时间"
 }

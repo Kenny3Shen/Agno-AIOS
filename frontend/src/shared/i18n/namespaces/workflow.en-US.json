@@ -198,5 +198,7 @@
   "errorTriggerNeedsSavePublish": "Save and publish the current draft before enabling triggers",
   "validationEmptyConditionCel": "{{path}}: condition expression is required",
   "validationEmptyRouterCel": "{{path}}: router expression is required",
-  "validationSelfWorkflowRef": "{{path}}: nested workflow cannot reference itself"
+  "validationSelfWorkflowRef": "{{path}}: nested workflow cannot reference itself",
+  "canvasEmptyHint": "Drag nodes from the left palette",
+  "canvasEmptyDrop": "Drop onto the canvas — or onto a container to nest"
 }

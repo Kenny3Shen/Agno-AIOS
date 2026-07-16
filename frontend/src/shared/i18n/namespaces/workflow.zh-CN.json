@@ -198,5 +198,7 @@
   "errorTriggerNeedsSavePublish": "请先保存并重新发布当前草稿，再启用触发器",
   "validationEmptyConditionCel": "{{path}}：请填写条件表达式",
   "validationEmptyRouterCel": "{{path}}：请填写路由表达式",
-  "validationSelfWorkflowRef": "{{path}}：嵌套工作流不能引用自身"
+  "validationSelfWorkflowRef": "{{path}}：嵌套工作流不能引用自身",
+  "canvasEmptyHint": "从左侧面板拖入节点",
+  "canvasEmptyDrop": "放到画布上，或拖入容器节点以嵌套"
 }

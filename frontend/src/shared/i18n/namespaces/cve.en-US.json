@@ -7,5 +7,9 @@
   "total": "{{total}} results",
   "updateDb": "Update database",
   "searchFailed": "CVE search failed. Please try again.",
-  "updateFailed": "Unable to update the CVE database. Please try again."
+  "updateFailed": "Unable to update the CVE database. Please try again.",
+  "colCve": "CVE",
+  "colDescription": "Description",
+  "colSource": "Source",
+  "colIndexed": "Indexed"
 }

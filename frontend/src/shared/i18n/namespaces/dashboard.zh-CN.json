@@ -47,5 +47,9 @@
   "recentFailuresHint": "ERROR + chat-audit（有界）",
   "tokenSampleHint": "Token 来自有界 span 样本（非全窗口精确合计）。窗口运行数被截断时以样本/总量提示。",
   "tokenSampleNote": "样本 Token",
-  "unnamedRun": "未命名运行"
+  "unnamedRun": "未命名运行",
+  "chartErrorPct": "错误率 %",
+  "chartTokens": "Tokens",
+  "chartErrorRate": "错误率",
+  "chartRuns": "运行数"
 }

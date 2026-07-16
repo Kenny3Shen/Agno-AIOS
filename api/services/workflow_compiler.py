@@ -553,8 +553,73 @@ def _normalize_loop(
     return _with_position(item, normalized)
 
 
-def validate_and_normalize_definition(raw: object) -> dict[str, Any]:
-    """Validate nested workflow DSL and return a normalized definition dict."""
+def _assert_no_self_workflow_refs(
+    nodes: list[dict[str, Any]],
+    *,
+    forbid_workflow_id: str,
+    path: str = "steps",
+) -> None:
+    """Reject workflow_ref nodes that point at the workflow being saved/published."""
+    target = forbid_workflow_id.strip()
+    if not target:
+        return
+    for index, node in enumerate(nodes):
+        if not isinstance(node, dict):
+            continue
+        here = f"{path}[{index}]"
+        node_type = str(node.get("type") or "step")
+        if node_type == "workflow_ref":
+            ref = str(node.get("workflow_id") or "").strip()
+            if ref == target:
+                raise WorkflowDefinitionError(
+                    f"{here}: workflow_ref cannot reference the current workflow "
+                    f"({target!r})"
+                )
+        elif node_type == "parallel":
+            _assert_no_self_workflow_refs(
+                list(node.get("steps") or []),
+                forbid_workflow_id=target,
+                path=f"{here}.steps",
+            )
+        elif node_type == "condition":
+            _assert_no_self_workflow_refs(
+                list(node.get("then") or []),
+                forbid_workflow_id=target,
+                path=f"{here}.then",
+            )
+            _assert_no_self_workflow_refs(
+                list(node.get("else") or []),
+                forbid_workflow_id=target,
+                path=f"{here}.else",
+            )
+        elif node_type == "loop":
+            _assert_no_self_workflow_refs(
+                list(node.get("steps") or []),
+                forbid_workflow_id=target,
+                path=f"{here}.steps",
+            )
+        elif node_type == "router":
+            for c_idx, choice in enumerate(list(node.get("choices") or [])):
+                if not isinstance(choice, dict):
+                    continue
+                _assert_no_self_workflow_refs(
+                    list(choice.get("steps") or []),
+                    forbid_workflow_id=target,
+                    path=f"{here}.choices[{c_idx}].steps",
+                )
+
+
+def validate_and_normalize_definition(
+    raw: object,
+    *,
+    forbid_self_workflow_id: str | None = None,
+) -> dict[str, Any]:
+    """Validate nested workflow DSL and return a normalized definition dict.
+
+    When ``forbid_self_workflow_id`` is set (update/publish), reject any
+    ``workflow_ref`` that points at that id (API-level self-nest guard;
+    circular refs across distinct workflows are still checked at compile).
+    """
     if not isinstance(raw, dict):
         raise WorkflowDefinitionError("definition must be an object")
     name = str(raw.get("name") or "").strip() or "Untitled workflow"
@@ -585,6 +650,10 @@ def validate_and_normalize_definition(raw: object) -> dict[str, Any]:
         )
     if leaf_count < 1:
         raise WorkflowDefinitionError("definition must include at least one agent step")
+    if forbid_self_workflow_id:
+        _assert_no_self_workflow_refs(
+            steps, forbid_workflow_id=str(forbid_self_workflow_id)
+        )
     return {"name": name, "description": description, "steps": steps}
 
 
@@ -970,7 +1039,10 @@ async def compile_workflow(
     nesting_stack: set[str] | None = None,
 ) -> Workflow:
     """Build an Agno Workflow from a validated nested definition."""
-    normalized = validate_and_normalize_definition(definition)
+    normalized = validate_and_normalize_definition(
+        definition,
+        forbid_self_workflow_id=workflow_id,
+    )
     stack = set(nesting_stack or ())
     if workflow_id:
         stack.add(workflow_id)

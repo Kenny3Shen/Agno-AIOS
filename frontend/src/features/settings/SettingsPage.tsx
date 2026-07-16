@@ -293,18 +293,18 @@ export function SettingsPage() {
       scroll={{ x: 960 }}
       columns={[
         {
-          title: 'Name',
+          title: t('colName'),
           dataIndex: 'name',
           width: 220,
           ellipsis: true,
           render: (value, row) => (
             <Space>
               <strong>{value}</strong>
-              {models.data?.active_model_id === row.id && <Tag color="blue">active</Tag>}
+              {models.data?.active_model_id === row.id && <Tag color="blue">{t('tagActive')}</Tag>}
             </Space>
           ),
         },
-        { title: 'Model ID', dataIndex: 'model_id', width: 200, ellipsis: true },
+        { title: t('colModelId'), dataIndex: 'model_id', width: 200, ellipsis: true },
         {
           title: t('provider'),
           dataIndex: 'provider',
@@ -312,20 +312,20 @@ export function SettingsPage() {
           render: (value: ModelConfig['provider']) => <Tag>{value}</Tag>,
         },
         {
-          title: 'Base URL',
+          title: t('colBaseUrl'),
           dataIndex: 'base_url',
           width: 240,
           ellipsis: { showTitle: false },
           render: (value) => <Typography.Text ellipsis={{ tooltip: value }}>{value || '—'}</Typography.Text>,
         },
         {
-          title: 'Configured',
+          title: t('colConfigured'),
           dataIndex: 'configured',
           width: 130,
-          render: (value) => <Tag color={value ? 'success' : 'warning'}>{value ? 'ready' : 'missing key'}</Tag>,
+          render: (value) => <Tag color={value ? 'success' : 'warning'}>{value ? t('tagReady') : t('tagMissingKey')}</Tag>,
         },
         {
-          title: 'Enabled',
+          title: t('colEnabled'),
           dataIndex: 'enabled',
           width: 110,
           render: (value, row) => (
@@ -338,7 +338,7 @@ export function SettingsPage() {
           ),
         },
         {
-          title: 'Actions',
+          title: t('colActions'),
           width: 170,
           render: (_, row) => (
             <Space>

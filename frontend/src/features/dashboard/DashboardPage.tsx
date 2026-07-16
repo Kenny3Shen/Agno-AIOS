@@ -106,13 +106,13 @@ export function DashboardPage() {
       grid: { top: 24, right: 112, bottom: 26, left: 40 },
       xAxis: { type: 'category', data: timeline.map((item) => item.time), axisLabel: { formatter: (value: string) => formatDate(value) } },
       yAxis: [
-        { type: 'value', name: 'Runs', minInterval: 1 },
-        { type: 'value', name: 'Error %', axisLabel: { formatter: '{value}%' } },
-        { type: 'value', name: 'Tokens', position: 'right', offset: 56, axisLabel: { formatter: (value: number) => integer(value) } },
+        { type: 'value', name: t('chartRuns'), minInterval: 1 },
+        { type: 'value', name: t('chartErrorPct'), axisLabel: { formatter: '{value}%' } },
+        { type: 'value', name: t('chartTokens'), position: 'right', offset: 56, axisLabel: { formatter: (value: number) => integer(value) } },
       ],
       series: [
-        { name: 'Runs', type: 'line', data: timeline.map((item) => item.runs), symbol: 'circle', symbolSize: 6, lineStyle: { width: 2 } },
-        { name: 'Error rate', type: 'line', yAxisIndex: 1, data: timeline.map((item) => item.errorRate), smooth: true, symbol: 'none' },
+        { name: t('chartRuns'), type: 'line', data: timeline.map((item) => item.runs), symbol: 'circle', symbolSize: 6, lineStyle: { width: 2 } },
+        { name: t('chartErrorRate'), type: 'line', yAxisIndex: 1, data: timeline.map((item) => item.errorRate), smooth: true, symbol: 'none' },
         {
           name: t('seriesInputTokens'),
           type: 'bar',

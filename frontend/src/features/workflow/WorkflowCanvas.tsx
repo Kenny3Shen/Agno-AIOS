@@ -319,12 +319,15 @@ function CanvasInner({
             node.requiresConfirmation || node.requiresUserInput || node.requiresOutputReview
           )
           let subtitle: string = node.type
-          if (node.type === 'step') subtitle = node.targetId || 'agent'
+          if (node.type === 'step') subtitle = node.targetId || t('subtitleAgent')
           else if (node.type === 'condition') subtitle = node.evaluatorCel || 'CEL'
           else if (node.type === 'router') subtitle = node.selectorCel || 'selector'
-          else if (node.type === 'workflow_ref') subtitle = node.workflowId || 'nested'
-          else if (node.type === 'loop') subtitle = `max ${node.maxIterations ?? 3}`
-          else if (node.type === 'parallel') subtitle = `${node.steps?.length ?? 0} branches`
+          else if (node.type === 'workflow_ref') subtitle = node.workflowId || t('subtitleNested')
+          else if (node.type === 'loop') {
+            subtitle = t('subtitleMaxIter', { count: node.maxIterations ?? 3 })
+          } else if (node.type === 'parallel') {
+            subtitle = t('subtitleBranches', { count: node.steps?.length ?? 0 })
+          }
           const branches =
             node.type === 'router'
               ? (node.choices ?? []).map((c) => `${c.id}:${c.name}`).join(',')
@@ -332,7 +335,7 @@ function CanvasInner({
           return `${node.id}:${node.name ?? ''}:${subtitle}:${hitl ? 1 : 0}:${branches}`
         })
         .join('#'),
-    [steps]
+    [steps, t]
   )
 
   const selectionKey = selectedIds.length
@@ -458,12 +461,15 @@ function CanvasInner({
             source.requiresOutputReview
         )
         let subtitle: string = source.type
-        if (source.type === 'step') subtitle = source.targetId || 'agent'
+        if (source.type === 'step') subtitle = source.targetId || t('subtitleAgent')
         else if (source.type === 'condition') subtitle = source.evaluatorCel || 'CEL'
         else if (source.type === 'router') subtitle = source.selectorCel || 'selector'
-        else if (source.type === 'workflow_ref') subtitle = source.workflowId || 'nested'
-        else if (source.type === 'loop') subtitle = `max ${source.maxIterations ?? 3}`
-        else if (source.type === 'parallel') subtitle = `${source.steps?.length ?? 0} branches`
+        else if (source.type === 'workflow_ref') subtitle = source.workflowId || t('subtitleNested')
+        else if (source.type === 'loop') {
+          subtitle = t('subtitleMaxIter', { count: source.maxIterations ?? 3 })
+        } else if (source.type === 'parallel') {
+          subtitle = t('subtitleBranches', { count: source.steps?.length ?? 0 })
+        }
         const label = source.name?.trim() || subtitle
         const branchHandles = branchHandlesFor(source)
         const data = node.data
@@ -1079,8 +1085,8 @@ function CanvasInner({
       {!steps.length ? (
         <div className="workflow-canvas__empty-overlay">
           <div className="workflow-canvas__empty-card">
-            <strong>{emptyHint || 'Drag nodes from the left palette'}</strong>
-            <span>Drop onto the canvas — or onto a container to nest</span>
+            <strong>{emptyHint || t('canvasEmptyHint')}</strong>
+            <span>{t('canvasEmptyDrop')}</span>
             {emptyActionLabel && onEmptyAction ? (
               <button
                 type="button"

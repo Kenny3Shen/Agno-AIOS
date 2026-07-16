@@ -40,5 +40,20 @@
   "testConnection": "Test connection",
   "tryCallShort": "Try call",
   "issueTokenFailed": "Unable to issue the MCP token. Please try again.",
-  "testConnectionFailed": "MCP connection test failed. Check the configuration and try again."
+  "testConnectionFailed": "MCP connection test failed. Check the configuration and try again.",
+  "colServer": "Server / Namespace",
+  "colTransport": "Transport",
+  "colEnabled": "Enabled",
+  "colVisibility": "Visibility",
+  "colActions": "Actions",
+  "colComponent": "Component",
+  "colTitle": "Title",
+  "colNamespace": "Namespace",
+  "colRisk": "Risk",
+  "colTokenName": "Name",
+  "colCreated": "Created",
+  "colExpires": "Expires",
+  "colTokenActions": "Actions",
+  "colComponentEnabled": "Enabled",
+  "tabTokens": "Tokens"
 }

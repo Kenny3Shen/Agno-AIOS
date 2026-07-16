@@ -47,5 +47,9 @@
   "recentFailuresHint": "ERROR + chat-audit (bounded)",
   "tokenSampleHint": "Tokens come from a bounded span sample (not an exact full-window sum). When the window is truncated, KPIs show sample/total.",
   "tokenSampleNote": "Sampled tokens",
-  "unnamedRun": "Unnamed run"
+  "unnamedRun": "Unnamed run",
+  "chartErrorPct": "Error %",
+  "chartTokens": "Tokens",
+  "chartErrorRate": "Error rate",
+  "chartRuns": "Runs"
 }

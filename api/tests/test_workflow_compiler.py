@@ -424,3 +424,78 @@ def test_user_input_schema_rejects_duplicate_names():
                 ]
             }
         )
+
+
+def test_forbid_self_workflow_ref_at_normalize():
+    with pytest.raises(WorkflowDefinitionError, match="cannot reference the current workflow"):
+        validate_and_normalize_definition(
+            {
+                "name": "self",
+                "steps": [
+                    {
+                        "id": "nest",
+                        "type": "workflow_ref",
+                        "workflow_id": "wf-self",
+                    },
+                    {
+                        "id": "leaf",
+                        "type": "step",
+                        "executor": {"ref": "safe-fallback"},
+                    },
+                ],
+            },
+            forbid_self_workflow_id="wf-self",
+        )
+
+
+def test_forbid_self_workflow_ref_nested_condition():
+    with pytest.raises(WorkflowDefinitionError, match="cannot reference the current workflow"):
+        validate_and_normalize_definition(
+            {
+                "name": "nested-self",
+                "steps": [
+                    {
+                        "id": "branch",
+                        "type": "condition",
+                        "evaluator": {"cel": "true"},
+                        "then": [
+                            {
+                                "id": "nest",
+                                "type": "workflow_ref",
+                                "workflow_id": "wf-x",
+                            }
+                        ],
+                        "else": [
+                            {
+                                "id": "leaf",
+                                "type": "step",
+                                "executor": {"ref": "safe-fallback"},
+                            }
+                        ],
+                    }
+                ],
+            },
+            forbid_self_workflow_id="wf-x",
+        )
+
+
+def test_other_workflow_ref_allowed_with_forbid_id():
+    normalized = validate_and_normalize_definition(
+        {
+            "name": "ok",
+            "steps": [
+                {
+                    "id": "nest",
+                    "type": "workflow_ref",
+                    "workflow_id": "other-wf",
+                },
+                {
+                    "id": "leaf",
+                    "type": "step",
+                    "executor": {"ref": "safe-fallback"},
+                },
+            ],
+        },
+        forbid_self_workflow_id="wf-self",
+    )
+    assert normalized["steps"][0]["workflow_id"] == "other-wf"
