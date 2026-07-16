@@ -1,6 +1,10 @@
 # 下一步工作
 
 
+## 已完成：Chat 关工具时请求体不发 Knowledge / Live Search
+
+- `streamMessage`：`enable_tools=false` 时强制 `search_knowledge=false`、`live_search=false`，避免 UI 偏好残留误导服务端。
+
 ## 已完成：Studio 多选批量 HITL 开关
 
 - 多选 Inspector：批量 `requiresUserInput` / `requiresOutputReview`（与确认开关一致，支持 indeterminate）。

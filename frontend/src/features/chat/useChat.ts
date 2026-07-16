@@ -152,8 +152,9 @@ export function useChat() {
           session_id: activeSession,
           model_id: selectedModel.id,
           ...(state.reasoningEffort ? { reasoning_effort: state.reasoningEffort } : {}),
-          search_knowledge: state.searchKnowledge,
-          live_search: state.liveSearch,
+          // Tools-off / lean path ignores these server-side; send false for clarity.
+          search_knowledge: state.enableTools ? state.searchKnowledge : false,
+          live_search: state.enableTools ? state.liveSearch : false,
           enable_tools: state.enableTools,
         },
         (event: ChatRunEvent) => {
