@@ -548,49 +548,109 @@ export const validateWorkflowDraft = (roots: WorkflowNode[]): WorkflowValidation
   return issues
 }
 
-const subtreeHeight = (node: WorkflowNode): number => {
-  const children =
-    node.type === 'condition'
-      ? [...(node.thenSteps ?? []), ...(node.elseSteps ?? [])]
-      : node.type === 'router'
-        ? (node.choices ?? []).flatMap((c) => c.steps)
-        : (node.steps ?? [])
-  if (!children.length) return 1
-  return children.reduce((sum, child) => sum + subtreeHeight(child), 0)
+/** Estimated rendered node height (matches ~.wf-flow-node content + HITL). */
+const estimateNodeHeight = (node: WorkflowNode): number => {
+  let h = 96
+  if (node.type === 'condition' || node.type === 'router') h = 112
+  if (node.requiresConfirmation || node.requiresUserInput || node.requiresOutputReview) {
+    h += 22
+  }
+  if ((node.instructions || '').length > 80) h += 12
+  return h
 }
 
-/** Hierarchical auto-layout (tree packer; Dify-like vertical flow). Overwrites positions. */
-export const applyAutoLayout = (roots: WorkflowNode[]): WorkflowNode[] => {
-  const H_GAP = 240
-  const V_GAP = 110
-  const positions = new Map<string, { x: number; y: number }>()
-  let cursorY = 0
+type LayoutBranch = { child: WorkflowNode; label?: string }
 
-  const place = (node: WorkflowNode, depth: number, startY: number): number => {
-    const height = subtreeHeight(node)
-    const y = startY + ((height - 1) * V_GAP) / 2
-    positions.set(node.id, { x: depth * H_GAP, y })
-    let childY = startY
-    const children: Array<{ child: WorkflowNode }> =
-      node.type === 'condition'
-        ? [
-            ...(node.thenSteps ?? []).map((child) => ({ child })),
-            ...(node.elseSteps ?? []).map((child) => ({ child })),
-          ]
-        : node.type === 'router'
-          ? (node.choices ?? []).flatMap((c) => c.steps.map((child) => ({ child })))
-          : (node.steps ?? []).map((child) => ({ child }))
-    for (const { child } of children) {
-      const h = subtreeHeight(child)
-      place(child, depth + 1, childY)
-      childY += h * V_GAP
+const layoutChildrenOf = (node: WorkflowNode): LayoutBranch[] => {
+  if (node.type === 'condition') {
+    return [
+      ...(node.thenSteps ?? []).map((child) => ({ child, label: 'then' as const })),
+      ...(node.elseSteps ?? []).map((child) => ({ child, label: 'else' as const })),
+    ]
+  }
+  if (node.type === 'router') {
+    return (node.choices ?? []).flatMap((choice) =>
+      choice.steps.map((child) => ({ child, label: choice.name }))
+    )
+  }
+  return (node.steps ?? []).map((child) => ({ child }))
+}
+
+/**
+ * Hierarchical auto-layout (pixel tree packer).
+ * - Roots flow left → right (matches out-right / in-left sequence edges).
+ * - Nested branches stack top → bottom with real node-height gaps (no overlap).
+ * - Condition then/else and router choices get extra vertical separation.
+ */
+export const applyAutoLayout = (roots: WorkflowNode[]): WorkflowNode[] => {
+  const COL_GAP = 280
+  const ROOT_GAP = 48
+  const SIBLING_GAP = 36
+  const BRANCH_EXTRA = 16
+  const positions = new Map<string, { x: number; y: number }>()
+
+  /** Place node; returns pixel height of the laid-out subtree. */
+  const place = (node: WorkflowNode, x: number, topY: number): number => {
+    const selfH = estimateNodeHeight(node)
+    const branches = layoutChildrenOf(node)
+    if (!branches.length) {
+      positions.set(node.id, { x, y: topY })
+      return selfH
     }
-    return height
+
+    // Lay children first into a vertical block starting at topY.
+    let childY = topY
+    const childTops: number[] = []
+    const childHeights: number[] = []
+    for (let i = 0; i < branches.length; i += 1) {
+      const { child, label } = branches[i]!
+      const extra =
+        label === 'then' || label === 'else' || Boolean(label) ? BRANCH_EXTRA : 0
+      if (i > 0) childY += SIBLING_GAP + extra
+      childTops.push(childY)
+      const h = place(child, x + COL_GAP, childY)
+      childHeights.push(h)
+      childY += h
+    }
+    const kidsBlockH = childY - topY
+    // Center parent vertically against children block.
+    const parentY = topY + Math.max(0, (kidsBlockH - selfH) / 2)
+    positions.set(node.id, { x, y: parentY })
+    return Math.max(selfH, kidsBlockH)
   }
 
+  // Roots: horizontal sequence (Dify-like).
+  let cursorX = 40
+  let maxBottom = 0
   for (const root of roots) {
-    const h = place(root, 0, cursorY)
-    cursorY += h * V_GAP + 24
+    const h = place(root, cursorX, 40)
+    maxBottom = Math.max(maxBottom, 40 + h)
+    cursorX += COL_GAP + ROOT_GAP
+  }
+
+  // Safety pass: push any same-column overlaps down (defensive).
+  const byCol = new Map<number, Array<{ id: string; y: number; h: number }>>()
+  for (const [id, pos] of positions) {
+    const node = findNode(roots, id)
+    const h = node ? estimateNodeHeight(node) : 96
+    const col = Math.round(pos.x / COL_GAP)
+    const arr = byCol.get(col) ?? []
+    arr.push({ id, y: pos.y, h })
+    byCol.set(col, arr)
+  }
+  for (const arr of byCol.values()) {
+    arr.sort((a, b) => a.y - b.y)
+    let floor = -Infinity
+    for (const item of arr) {
+      if (item.y < floor) {
+        item.y = floor
+        positions.set(item.id, {
+          x: positions.get(item.id)!.x,
+          y: item.y,
+        })
+      }
+      floor = item.y + item.h + SIBLING_GAP
+    }
   }
 
   const stamp = (list: WorkflowNode[]): WorkflowNode[] =>

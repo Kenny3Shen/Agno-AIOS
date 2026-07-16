@@ -124,6 +124,15 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：自动布局防重叠（pixel tree packer）
+
+- `applyAutoLayout` 按节点高度 + sibling gap 堆叠 then/else
+- 根节点横向排布；同列二次分离兜底；模板载入自动 layout
+
+相关：`utils.ts` / `useWorkflow` applyTemplate
+
+---
+
 ## 已完成：产品 P0.4 审批值班入口
 
 - Approvals 默认：`kind=workflow` + `status=pending`

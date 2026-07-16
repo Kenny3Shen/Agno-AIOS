@@ -248,7 +248,39 @@ describe('reparent and auto-layout', () => {
     const laid = applyAutoLayout([a, b])
     expect(laid[0]?.position).toBeTruthy()
     expect(laid[1]?.position).toBeTruthy()
-    expect(laid[0]?.position?.y).not.toEqual(laid[1]?.position?.y)
+    // Roots flow horizontally (left → right).
+    expect(laid[1]!.position!.x).toBeGreaterThan(laid[0]!.position!.x)
+  })
+
+  it('auto-layout separates condition then/else without vertical overlap', () => {
+    const condition = createNode('condition')
+    condition.id = 'c1'
+    condition.thenSteps = [
+      {
+        id: 'contain',
+        type: 'step',
+        name: 'Contain',
+        targetId: 'security-operations',
+        requiresConfirmation: true,
+      },
+    ]
+    condition.elseSteps = [
+      { id: 'report', type: 'step', name: 'Report', targetId: 'safe-fallback' },
+    ]
+    const triage = createNode('step')
+    triage.id = 'triage'
+    triage.name = 'Triage'
+    const laid = applyAutoLayout([triage, condition])
+    const contain = laid[1]?.thenSteps?.[0]
+    const report = laid[1]?.elseSteps?.[0]
+    expect(contain?.position && report?.position).toBeTruthy()
+    // then above else
+    expect(contain!.position!.y).toBeLessThan(report!.position!.y)
+    // No box overlap: contain bottom + gap <= report top (est height ~118 with HITL)
+    const containBottom = contain!.position!.y + 118
+    expect(report!.position!.y).toBeGreaterThanOrEqual(containBottom)
+    // Children to the right of condition
+    expect(contain!.position!.x).toBeGreaterThan(laid[1]!.position!.x)
   })
 })
 

@@ -515,6 +515,9 @@ export function useWorkflow() {
       name: template.definition.name || template.name,
       description: template.definition.description || template.description,
     })
+    if (loaded.steps?.length) {
+      loaded.steps = applyAutoLayout(loaded.steps)
+    }
     setState((current) => ({
       ...current,
       ...loaded,
@@ -560,6 +563,9 @@ export function useWorkflow() {
       name: template.definition.name || template.name,
       description: template.definition.description || template.description,
     })
+    if (loaded.steps?.length) {
+      loaded.steps = applyAutoLayout(loaded.steps)
+    }
     const draftSteps = loaded.steps ?? []
     const draftName = loaded.name || template.name
     const draftDescription = loaded.description || template.description
