@@ -192,6 +192,7 @@ const normalizeWorkflow = (value: unknown): WorkflowRecord | null => {
     published_version: row.published_version != null ? Number(row.published_version) : null,
     published_at: row.published_at != null ? Number(row.published_at) : null,
     has_published: Boolean(row.has_published),
+    next_cron_at: row.next_cron_at != null ? Number(row.next_cron_at) : null,
     created_at: Number(row.created_at ?? 0),
     updated_at: Number(row.updated_at ?? 0),
   }

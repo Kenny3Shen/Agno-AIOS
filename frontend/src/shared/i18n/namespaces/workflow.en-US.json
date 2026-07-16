@@ -99,5 +99,20 @@
   "triggerNeedsSavePublishTitle": "Unsaved draft changes",
   "triggerNeedsSavePublishBody": "This draft differs from the last published revision. Save and Publish again before enabling triggers so live traffic matches Studio.",
   "publishTriggersHintUnpublished": "Not published yet: Publish before enabling webhook/cron. The API returns 409 when unpublished.",
-  "publishTriggersHintDirty": "Draft changed since publish: triggers still run the old published revision — save then Publish."
+  "publishTriggersHintDirty": "Draft changed since publish: triggers still run the old published revision — save then Publish.",
+  "webhookUrl": "Webhook URL",
+  "webhookCurl": "curl example (SSE)",
+  "copyCurl": "Copy curl",
+  "rotateSecret": "Rotate secret",
+  "copied": "Copied",
+  "copyFailed": "Copy failed",
+  "copy": "Copy",
+  "webhookSseHint": "Response is an SSE stream (-N). Events include run_id / session_id for Trace.",
+  "webhookSaveFirst": "Save the workflow first to get a webhook URL.",
+  "cronLastRun": "Last run",
+  "cronNextRun": "Next run",
+  "cronNever": "Never",
+  "cronNextUnknown": "Save to refresh",
+  "cronNextNeedsPublish": "Publish required",
+  "triggerFailed": "failed"
 }

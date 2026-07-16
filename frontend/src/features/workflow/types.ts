@@ -94,6 +94,8 @@ export type WorkflowRecord = {
   published_version?: number | null
   published_at?: number | null
   has_published?: boolean
+  /** Unix seconds for next cron fire when cron enabled (server-computed). */
+  next_cron_at?: number | null
   created_at: number
   updated_at: number
 }
@@ -131,6 +133,8 @@ export type WorkflowState = {
   /** Unix seconds when published revision was set. */
   publishedAt: number | null
   hasPublished: boolean
+  /** Server next cron fire (unix sec); refreshed on load/save. */
+  nextCronAt: number | null
   steps: WorkflowNode[]
   triggers: WorkflowTriggers
   selectedId: string | null

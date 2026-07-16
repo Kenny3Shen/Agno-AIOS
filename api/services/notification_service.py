@@ -193,3 +193,56 @@ async def notify_hitl_resume_failure(
         )
     except Exception:
         logger.exception("Failed to create HITL continuation failure notifications")
+
+
+async def notify_workflow_trigger_failure(
+    *,
+    workflow_id: str,
+    workflow_name: str = "",
+    owner_user_id: str,
+    source: str,
+    run_id: str = "",
+    session_id: str = "",
+    error: str = "",
+) -> None:
+    """Notify workflow owner (and admins) when webhook/cron run ends in error."""
+    owner = (owner_user_id or "").strip()
+    if not owner:
+        return
+    try:
+        label = (workflow_name or workflow_id or "workflow").strip() or "workflow"
+        src = (source or "trigger").strip() or "trigger"
+        failure = (error or "Workflow trigger failed").strip()[:500]
+        path_trace = (
+            f"/trace?session_id={session_id}&run_id={run_id}&selected_session={session_id}&trace={run_id}"
+            if session_id
+            else f"/workflow?workflow_id={workflow_id}"
+        )
+        data = {
+            "workflow_id": workflow_id,
+            "resource_type": "workflow",
+            "source": src,
+            "status": "error",
+            "run_id": run_id,
+            "session_id": session_id,
+            "error": failure,
+            "path": path_trace,
+        }
+        body = f"{src} trigger failed for {label}. {failure}".strip()
+        await create_notifications(
+            [owner],
+            title=f"Workflow trigger failed: {label}",
+            body=body,
+            data=data,
+        )
+        admin_ids = [uid for uid in await _admin_user_ids() if uid != owner]
+        if admin_ids:
+            await create_notifications(
+                admin_ids,
+                title=f"Workflow trigger failed: {label}",
+                body=body,
+                data=data,
+            )
+    except Exception:
+        logger.exception("Failed to create workflow trigger failure notifications")
+

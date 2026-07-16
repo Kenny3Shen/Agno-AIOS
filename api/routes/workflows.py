@@ -21,6 +21,7 @@ from api.services.audit_service import (
 from api.services.workflow_compiler import WorkflowDefinitionError
 from api.services.workflow_run_runtime import stream_workflow_run
 from api.services.workflow_templates import list_workflow_templates
+from api.services.notification_service import notify_workflow_trigger_failure
 from api.services.workflow_service import (
     create_workflow_for_actor,
     delete_workflow_for_actor,
@@ -346,6 +347,16 @@ async def webhook_trigger_workflow(
                 ip_address=ctx["ip_address"],
                 user_agent=ctx["user_agent"],
             )
+            if terminal == "error":
+                await notify_workflow_trigger_failure(
+                    workflow_id=workflow_id,
+                    workflow_name=str(row.get("name") or workflow_id),
+                    owner_user_id=owner,
+                    source="webhook",
+                    run_id=run_id,
+                    session_id=session_id,
+                    error="Webhook workflow run failed",
+                )
 
     return EventSourceResponse(event_generator())
 

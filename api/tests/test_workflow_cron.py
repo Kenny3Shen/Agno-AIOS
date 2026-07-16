@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from api.services.workflow_cron import _cron_due, tick_workflow_crons
+from api.services.workflow_cron import _cron_due, next_cron_timestamp, tick_workflow_crons
 
 
 def test_cron_due_every_minute():
@@ -20,6 +20,14 @@ def test_cron_not_due_future():
 
 def test_invalid_cron():
     assert _cron_due("not a cron", 0, 1_700_000_000) is False
+
+
+def test_next_cron_timestamp_minute():
+    now = datetime(2026, 1, 1, 12, 0, 10, tzinfo=timezone.utc).timestamp()
+    nxt = next_cron_timestamp("* * * * *", last_run_at=0, now=now)
+    assert nxt is not None
+    assert nxt > now
+    assert next_cron_timestamp("not-a-cron", now=now) is None
 
 
 @pytest.mark.asyncio

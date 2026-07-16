@@ -31,6 +31,8 @@ import {
   RedoOutlined,
   ApartmentOutlined,
   CloudUploadOutlined,
+  CopyOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
@@ -38,13 +40,20 @@ import { useRouter } from '@tanstack/react-router'
 import { useWorkflow } from './useWorkflow'
 import { WorkflowCanvas, paletteDragStart } from './WorkflowCanvas'
 import type { WorkflowNodeType } from './types'
-import { buildWorkflowCode, triggerEnableBlocked } from './utils'
+import {
+  buildWorkflowCode,
+  rotateWebhookSecret,
+  triggerEnableBlocked,
+  workflowWebhookCurl,
+  workflowWebhookUrl,
+} from './utils'
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
 import { listWorkflowTriggerHistory } from './api'
 import { CelExpressionField } from './CelExpressionField'
 import { currentUserQuery } from '@/features/auth'
 import { hasScope } from '@/shared/auth/permissions'
 import { useFormatDate } from '@/shared/lib/format'
+import { copyToClipboard } from '@/shared/lib/clipboard'
 import { useEffect, type ReactNode } from 'react'
 
 const PALETTE: Array<{
@@ -65,7 +74,7 @@ const studioPopupContainer = (node: HTMLElement) =>
 
 export function WorkflowPage() {
   const { t } = useTranslation('workflow')
-  const { modal } = App.useApp()
+  const { modal, message } = App.useApp()
   const formatDate = useFormatDate()
   const routerNav = useRouter()
   const workflow = useWorkflow()
@@ -948,22 +957,133 @@ export function WorkflowPage() {
                         />
                         <span>{t('webhookTrigger')}</span>
                       </div>
-                      {workflow.state.triggers.webhook.enabled ? (
-                        <Input
-                          size="small"
-                          style={{ marginTop: 4 }}
-                          value={workflow.state.triggers.webhook.secret}
-                          onChange={(e) =>
-                            workflow.patchTriggers({
-                              ...workflow.state.triggers,
-                              webhook: {
-                                ...workflow.state.triggers.webhook,
-                                secret: e.target.value,
-                              },
-                            })
-                          }
-                          placeholder={t('webhookSecret')}
-                        />
+                      {workflow.state.triggers.webhook.enabled && workflow.state.workflowId ? (
+                        <div className="workflow-trigger-ops" style={{ marginTop: 8 }}>
+                          <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                            {t('webhookUrl')}
+                          </Typography.Text>
+                          <Space.Compact style={{ width: '100%', marginTop: 4 }}>
+                            <Input
+                              size="small"
+                              readOnly
+                              value={workflowWebhookUrl(workflow.state.workflowId)}
+                            />
+                            <Tooltip title={t('copy')}>
+                              <Button
+                                size="small"
+                                icon={<CopyOutlined />}
+                                onClick={() => {
+                                  void copyToClipboard(
+                                    workflowWebhookUrl(workflow.state.workflowId!)
+                                  ).then((ok) =>
+                                    ok
+                                      ? message.success(t('copied'))
+                                      : message.error(t('copyFailed'))
+                                  )
+                                }}
+                              />
+                            </Tooltip>
+                          </Space.Compact>
+                          <Typography.Text
+                            type="secondary"
+                            style={{ fontSize: 11, display: 'block', marginTop: 8 }}
+                          >
+                            {t('webhookSecret')}
+                          </Typography.Text>
+                          <Space.Compact style={{ width: '100%', marginTop: 4 }}>
+                            <Input.Password
+                              size="small"
+                              value={workflow.state.triggers.webhook.secret}
+                              onChange={(e) =>
+                                workflow.patchTriggers({
+                                  ...workflow.state.triggers,
+                                  webhook: {
+                                    ...workflow.state.triggers.webhook,
+                                    secret: e.target.value,
+                                  },
+                                })
+                              }
+                              placeholder={t('webhookSecret')}
+                            />
+                            <Tooltip title={t('rotateSecret')}>
+                              <Button
+                                size="small"
+                                icon={<ReloadOutlined />}
+                                disabled={!canWrite}
+                                onClick={() =>
+                                  workflow.patchTriggers({
+                                    ...workflow.state.triggers,
+                                    webhook: {
+                                      ...workflow.state.triggers.webhook,
+                                      secret: rotateWebhookSecret(),
+                                    },
+                                  })
+                                }
+                              />
+                            </Tooltip>
+                            <Tooltip title={t('copy')}>
+                              <Button
+                                size="small"
+                                icon={<CopyOutlined />}
+                                onClick={() => {
+                                  void copyToClipboard(
+                                    workflow.state.triggers.webhook.secret
+                                  ).then((ok) =>
+                                    ok
+                                      ? message.success(t('copied'))
+                                      : message.error(t('copyFailed'))
+                                  )
+                                }}
+                              />
+                            </Tooltip>
+                          </Space.Compact>
+                          <Typography.Text
+                            type="secondary"
+                            style={{ fontSize: 11, display: 'block', marginTop: 8 }}
+                          >
+                            {t('webhookCurl')}
+                          </Typography.Text>
+                          <Input.TextArea
+                            size="small"
+                            readOnly
+                            autoSize={{ minRows: 3, maxRows: 5 }}
+                            style={{ marginTop: 4, fontFamily: 'monospace', fontSize: 11 }}
+                            value={workflowWebhookCurl(
+                              workflow.state.workflowId,
+                              workflow.state.triggers.webhook.secret
+                            )}
+                          />
+                          <Button
+                            type="link"
+                            size="small"
+                            style={{ paddingInline: 0, marginTop: 4 }}
+                            icon={<CopyOutlined />}
+                            onClick={() => {
+                              void copyToClipboard(
+                                workflowWebhookCurl(
+                                  workflow.state.workflowId!,
+                                  workflow.state.triggers.webhook.secret
+                                )
+                              ).then((ok) =>
+                                ok
+                                  ? message.success(t('copied'))
+                                  : message.error(t('copyFailed'))
+                              )
+                            }}
+                          >
+                            {t('copyCurl')}
+                          </Button>
+                          <Typography.Paragraph
+                            type="secondary"
+                            style={{ fontSize: 11, marginTop: 4, marginBottom: 0 }}
+                          >
+                            {t('webhookSseHint')}
+                          </Typography.Paragraph>
+                        </div>
+                      ) : workflow.state.triggers.webhook.enabled ? (
+                        <Typography.Paragraph type="secondary" style={{ fontSize: 11, marginTop: 4 }}>
+                          {t('webhookSaveFirst')}
+                        </Typography.Paragraph>
                       ) : null}
                       <div className="workflow-inspector__switch" style={{ marginTop: 12 }}>
                         <Switch
@@ -975,21 +1095,38 @@ export function WorkflowPage() {
                         <span>{t('cronTrigger')}</span>
                       </div>
                       {workflow.state.triggers.cron.enabled ? (
-                        <Input
-                          size="small"
-                          style={{ marginTop: 4 }}
-                          value={workflow.state.triggers.cron.expression}
-                          onChange={(e) =>
-                            workflow.patchTriggers({
-                              ...workflow.state.triggers,
-                              cron: {
-                                ...workflow.state.triggers.cron,
-                                expression: e.target.value,
-                              },
-                            })
-                          }
-                          placeholder={t('cronExpression')}
-                        />
+                        <div className="workflow-trigger-ops" style={{ marginTop: 4 }}>
+                          <Input
+                            size="small"
+                            value={workflow.state.triggers.cron.expression}
+                            onChange={(e) =>
+                              workflow.patchTriggers({
+                                ...workflow.state.triggers,
+                                cron: {
+                                  ...workflow.state.triggers.cron,
+                                  expression: e.target.value,
+                                },
+                              })
+                            }
+                            placeholder={t('cronExpression')}
+                          />
+                          <div style={{ marginTop: 8, fontSize: 11, color: 'var(--tais-muted)' }}>
+                            <div>
+                              {t('cronLastRun')}:{' '}
+                              {workflow.state.triggers.cron.last_run_at
+                                ? formatDate(workflow.state.triggers.cron.last_run_at)
+                                : t('cronNever')}
+                            </div>
+                            <div>
+                              {t('cronNextRun')}:{' '}
+                              {workflow.state.nextCronAt
+                                ? formatDate(workflow.state.nextCronAt)
+                                : workflow.state.hasPublished
+                                  ? t('cronNextUnknown')
+                                  : t('cronNextNeedsPublish')}
+                            </div>
+                          </div>
+                        </div>
                       ) : null}
                       <Typography.Paragraph type="secondary" style={{ fontSize: 11, marginTop: 8 }}>
                         {!workflow.state.hasPublished
@@ -1028,9 +1165,14 @@ export function WorkflowPage() {
                                     <Tag style={{ margin: 0 }}>{item.status}</Tag>
                                     <Typography.Text type="secondary" style={{ fontSize: 11 }}>
                                       {item.created_at
-                                        ? new Date(item.created_at).toLocaleString()
+                                        ? formatDate(item.created_at)
                                         : item.run_id || '-'}
                                     </Typography.Text>
+                                    {item.status === 'error' || item.status === 'failed' ? (
+                                      <Tag color="error" style={{ margin: 0 }}>
+                                        {t('triggerFailed')}
+                                      </Tag>
+                                    ) : null}
                                     {item.session_id ? (
                                       <Button
                                         type="link"

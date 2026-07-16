@@ -17,6 +17,9 @@ import {
   reparentTargetFromHandle,
   validateWorkflowDraft,
   triggerEnableBlocked,
+  workflowWebhookCurl,
+  workflowWebhookUrl,
+  rotateWebhookSecret,
 } from './utils'
 import type { WorkflowState } from './types'
 
@@ -31,6 +34,7 @@ const state: WorkflowState = {
   publishedVersion: null,
   publishedAt: null,
   hasPublished: false,
+  nextCronAt: null,
   selectedId: null,
   selectedIds: [],
   dirty: false,
@@ -150,6 +154,17 @@ describe('workflow behavior', () => {
     expect(triggerEnableBlocked({ hasPublished: false, dirty: false })).toBe('unpublished')
     expect(triggerEnableBlocked({ hasPublished: true, dirty: true })).toBe('dirty')
     expect(triggerEnableBlocked({ hasPublished: true, dirty: false })).toBeNull()
+  })
+
+  it('builds webhook URL and curl sample', () => {
+    expect(workflowWebhookUrl('wf-1', 'https://app.example')).toBe(
+      'https://app.example/api/workflows/wf-1/hooks/webhook'
+    )
+    const curl = workflowWebhookCurl('wf-1', 's3cret', 'https://app.example')
+    expect(curl).toContain("secret=s3cret")
+    expect(curl).toContain('-N')
+    expect(curl).toContain('hooks/webhook')
+    expect(rotateWebhookSecret().length).toBeGreaterThan(8)
   })
 
   it('preserves execution settings in exported code', () => {

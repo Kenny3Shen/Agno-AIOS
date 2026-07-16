@@ -14,12 +14,35 @@ from loguru import logger
 
 from api.persistence import workflows as workflow_store
 from api.services.audit_service import record_audit_event_async
+from api.services.notification_service import notify_workflow_trigger_failure
 from api.services.workflow_run_runtime import stream_workflow_run
 from api.services.workflow_service import (
     _normalize_triggers,
     get_published_definition,
     try_claim_cron_run,
 )
+
+
+def next_cron_timestamp(
+    expression: str,
+    *,
+    last_run_at: float = 0,
+    now: float | None = None,
+) -> float | None:
+    """Return next fire unix seconds after max(now, last_run_at), or None if invalid/disabled expr."""
+    expr = (expression or "").strip()
+    if not expr:
+        return None
+    try:
+        wall = float(now if now is not None else time.time())
+        base_ts = max(float(last_run_at or 0), wall)
+        base = datetime.fromtimestamp(base_ts, tz=timezone.utc)
+        itr = croniter(expr, base)
+        nxt = itr.get_next(datetime)
+        return float(nxt.timestamp())
+    except (ValueError, KeyError, TypeError):
+        logger.warning("Invalid cron expression: {!r}", expr)
+        return None
 
 
 def _cron_due(expression: str, last_run_at: float, now: float) -> bool:
@@ -169,6 +192,16 @@ async def _run_cron_workflow(
                 "source": "cron",
             },
         )
+        if terminal == "error":
+            await notify_workflow_trigger_failure(
+                workflow_id=workflow_id,
+                workflow_name=str((definition or {}).get("name") or workflow_id),
+                owner_user_id=owner_user_id,
+                source="cron",
+                run_id=run_id,
+                session_id=session_id,
+                error="Cron workflow run failed",
+            )
 
 
 _cron_task: asyncio.Task[None] | None = None

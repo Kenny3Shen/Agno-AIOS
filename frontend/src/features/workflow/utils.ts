@@ -816,6 +816,7 @@ export const fromDefinition = (
     publishedVersion: null,
     publishedAt: null,
     hasPublished: false,
+    nextCronAt: null,
     steps,
     triggers: defaultTriggers(),
     selectedId: steps[0]?.id ?? null,
@@ -835,11 +836,32 @@ export const fromRecord = (record: WorkflowRecord): Partial<WorkflowState> => {
     publishedVersion,
     publishedAt: record.published_at != null ? Number(record.published_at) : null,
     hasPublished: Boolean(record.has_published) || publishedVersion != null,
+    nextCronAt: record.next_cron_at != null ? Number(record.next_cron_at) : null,
     steps,
     triggers: record.triggers ?? defaultTriggers(),
     selectedId: steps[0]?.id ?? null,
     dirty: false,
   }
+}
+
+/** Absolute webhook URL for the current browser origin. */
+export const workflowWebhookUrl = (workflowId: string, origin = window.location.origin) =>
+  `${origin.replace(/\/$/, '')}/api/workflows/${encodeURIComponent(workflowId)}/hooks/webhook`
+
+export const workflowWebhookCurl = (workflowId: string, secret: string, origin = window.location.origin) => {
+  const url = workflowWebhookUrl(workflowId, origin)
+  const sec = secret || '<secret>'
+  return `curl -N -X POST '${url}?secret=${sec}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{"input":"webhook trigger"}'`
+}
+
+export const rotateWebhookSecret = () => {
+  const bytes = new Uint8Array(18)
+  crypto.getRandomValues(bytes)
+  let bin = ''
+  bytes.forEach((b) => {
+    bin += String.fromCharCode(b)
+  })
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
 /** Whether enabling a live trigger should be blocked/confirmed (unpublished or dirty draft). */

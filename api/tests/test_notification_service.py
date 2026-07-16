@@ -110,3 +110,28 @@ async def test_notify_hitl_resume_failure_targets_submitter_and_admins():
     assert admin_call.args[0] == ["admin-1"]
     assert admin_call.kwargs["data"]["path"] == "/approvals?approval_id=approval-1"
     assert admin_call.kwargs["data"]["run_status"] == "ERROR"
+
+
+@pytest.mark.asyncio
+async def test_notify_workflow_trigger_failure_targets_owner_and_admins():
+    with (
+        patch.object(notification_service, "_admin_user_ids", new=AsyncMock(return_value=["admin-1", "owner-1"])),
+        patch.object(notification_service, "create_notifications", new=AsyncMock()) as create,
+    ):
+        await notification_service.notify_workflow_trigger_failure(
+            workflow_id="wf-1",
+            workflow_name="IR",
+            owner_user_id="owner-1",
+            source="cron",
+            run_id="run-1",
+            session_id="session-1",
+            error="boom",
+        )
+    assert create.await_count == 2
+    owner_call, admin_call = create.await_args_list
+    assert owner_call.args[0] == ["owner-1"]
+    assert admin_call.args[0] == ["admin-1"]
+    assert "IR" in owner_call.kwargs["title"]
+    assert owner_call.kwargs["data"]["path"].startswith("/trace?")
+    assert owner_call.kwargs["data"]["source"] == "cron"
+

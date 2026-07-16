@@ -501,11 +501,12 @@ frontend/src/features/workflow/*      # 画布优先 Studio（reparent / 快捷�
 | **PR1** ✅ | 线性 Step + Save/Run SSE | 本版 |
 | **PR2** ✅ | `Parallel` / `Condition(CEL)` / `Loop` | 表单级嵌套控制流；CEL 依赖 `cel-python`；编译期禁止 Parallel 内 HITL |
 | **PR3** ✅ | 画布 + Step HITL | React Flow 只读布局选中；Step `requires_confirmation` → Approvals；`workflows:read/write` |
-| **P0 产品** | P0.1 ✅ 状态机；P0.2–P0.4 触发器运维 / Step Skill / 审批值班（见 TODOs） |
+| **P0 产品** | P0.1–P0.2 ✅；P0.3 Step Skill / P0.4 审批值班（见 TODOs） |
 | **Perf** ✅ | Studio SSE 增量 runStatus + 选中/高亮 patch + runLog 上限 |
 | **P0 UI** ✅ | Studio：`updateNodeData` 运行态 + antd-in-canvas（nodrag/popup） |
 | **PR9** ✅ | 安全模板库 / `workflows:run` / Inspector CEL 自动完成 |
 | **P0.1** ✅ | Studio 状态机：draft/published 顶栏、触发器发布守卫、空态模板 CTA |
+| **P0.2** ✅ | 触发器运维：Webhook URL/curl、Cron last/next、失败通知 |
 | **PR8c** ✅ | 触发器生产化：cron 原子占坑 / webhook·cron 审计 / Studio 触发历史 |
 | **PR8d** ✅ | 画布性能：runStatus data patch；Inspector undo burst |
 | **PR8b** ✅ | 画布打磨：保存校验 / 连线高亮 / run 聚焦 / NodeToolbar |

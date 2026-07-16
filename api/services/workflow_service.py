@@ -49,13 +49,27 @@ def _row_payload(row: dict[str, Any]) -> dict[str, Any]:
     definition = row.get("definition")
     if not isinstance(definition, dict):
         definition = {"name": row.get("name") or "", "description": "", "steps": []}
+    triggers = _normalize_triggers(row.get("triggers"))
+    next_cron_at: float | None = None
+    cron_cfg = triggers.get("cron") or {}
+    if cron_cfg.get("enabled") and cron_cfg.get("expression"):
+        try:
+            from api.services.workflow_cron import next_cron_timestamp
+
+            next_cron_at = next_cron_timestamp(
+                str(cron_cfg.get("expression") or ""),
+                last_run_at=float(cron_cfg.get("last_run_at") or 0),
+            )
+        except Exception:
+            next_cron_at = None
     return {
         "id": str(row.get("id") or ""),
         "name": str(row.get("name") or definition.get("name") or ""),
         "description": str(row.get("description") or definition.get("description") or ""),
         "owner_user_id": str(row.get("owner_user_id") or ""),
         "definition": definition,
-        "triggers": _normalize_triggers(row.get("triggers")),
+        "triggers": triggers,
+        "next_cron_at": next_cron_at,
         "enabled": bool(row.get("enabled", True)),
         "version": int(row.get("version") or 1),
         "published_version": (

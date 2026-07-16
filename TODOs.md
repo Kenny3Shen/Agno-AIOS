@@ -46,19 +46,24 @@
 
 ---
 
-### PR-P0.2 触发器运维可读（Webhook / Cron）
+### PR-P0.2 触发器运维可读（Webhook / Cron） ✅
 
 **用户价值**：触发器像「服务」而不是「隐藏配置」。
 
 | 项 | 说明 |
 |----|------|
-| Webhook | Studio 展示完整 URL、secret 复制/轮换、`curl` 示例；可选同步响应 `run_id`（已有 SSE 则文档化） |
-| Cron | 展示 `last_run_at`、**下次预计触发**（前端 croniter 或后端字段）、启用前校验已发布 |
-| 历史 | 触发历史保留；失败项一键 Trace |
-| 通知 | `workflow.trigger.*` 终态 `error` → 通知 owner（复用 notification_service） |
+| Webhook | Studio 完整 URL、secret 复制/轮换、`curl -N` SSE 示例 ✅ |
+| Cron | `last_run_at` + 服务端 `next_cron_at`；启用前发布校验（P0.1） ✅ |
+| 历史 | 触发历史 + 失败徽标 + Trace 深链 ✅ |
+| 通知 | webhook/cron 终态 `error` → owner（+admins）通知 + Trace path ✅ |
 | 验收 | 复制 curl 可触发已发布流；失败后通知可见；Cron 卡片能回答「上次/下次」 |
 
 **主要路径**：`workflow_cron` / `routes/workflows` webhook / `WorkflowPage` Definition / `notification_service`
+
+**完成要点**：
+- `next_cron_timestamp` + payload `next_cron_at`
+- `notify_workflow_trigger_failure`（cron/webhook finally）
+- Definition 面板：URL / secret 轮换 / curl / last·next cron
 
 ---
 
@@ -100,7 +105,7 @@
 
 ```
 P0.1 状态机 + 空态引导     ✅
-P0.2 触发器运维 + 失败通知 （依赖已发布语义）
+P0.2 触发器运维 + 失败通知 ✅
 P0.3 Step Skill 绑定       （能力对齐，模板含依赖）
 P0.4 审批值班薄入口        （可与 P0.2 通知并行）
 ```
@@ -115,6 +120,17 @@ P0.4 审批值班薄入口        （可与 P0.2 通知并行）
 
 ---
 
+
+## 已完成：产品 P0.2 触发器运维（Webhook / Cron）
+
+- Studio：Webhook URL、secret 复制/轮换、`curl -N` SSE 示例
+- Cron：上次触发 + 服务端 `next_cron_at` 下次预计
+- 失败通知：`notify_workflow_trigger_failure` → owner + admins，深链 Trace
+- 触发历史失败徽标保留 Trace 跳转
+
+相关：`workflow_cron.py` / `notification_service.py` / `routes/workflows.py` / `WorkflowPage.tsx`
+
+---
 
 ## 已完成：产品 P0.1 Draft/Published 状态机 + 空态引导
 

@@ -99,5 +99,20 @@
   "triggerNeedsSavePublishTitle": "草稿有未保存修改",
   "triggerNeedsSavePublishBody": "当前草稿相对已发布版本已修改。请先保存并重新发布，再启用触发器，避免线上跑旧版。",
   "publishTriggersHintUnpublished": "尚未发布：启用 Webhook/Cron 前请先 Publish。后端未发布时会返回 409。",
-  "publishTriggersHintDirty": "草稿已修改但未重新发布：触发器仍跑旧的已发布版本，建议保存后 Publish。"
+  "publishTriggersHintDirty": "草稿已修改但未重新发布：触发器仍跑旧的已发布版本，建议保存后 Publish。",
+  "webhookUrl": "Webhook URL",
+  "webhookCurl": "curl 示例（SSE）",
+  "copyCurl": "复制 curl",
+  "rotateSecret": "轮换 secret",
+  "copied": "已复制",
+  "copyFailed": "复制失败",
+  "copy": "复制",
+  "webhookSseHint": "响应为 SSE 事件流（-N）。成功时会包含 run_id / session_id，可在 Trace 中打开。",
+  "webhookSaveFirst": "请先保存工作流以生成 Webhook URL。",
+  "cronLastRun": "上次触发",
+  "cronNextRun": "下次预计",
+  "cronNever": "尚未触发",
+  "cronNextUnknown": "保存后刷新可见",
+  "cronNextNeedsPublish": "需先发布",
+  "triggerFailed": "失败"
 }
