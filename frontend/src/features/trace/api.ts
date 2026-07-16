@@ -84,18 +84,24 @@ const normalizeTree = (nodes: unknown): SpanTreeNode[] => {
 }
 
 const normalizePaginated = <T>(payload: unknown, mapItem: (row: unknown) => T | null) => {
-  const data = asRecord(payload)
-  const meta = asRecord(data.meta)
-  const rows = Array.isArray(data.data) ? data.data : []
-  const items = rows.map((row) => mapItem(row)).filter((row): row is T => row != null)
+  const envelope = asRecord(payload)
+  const meta = asRecord(envelope.meta)
+  const rows = Array.isArray(envelope.data) ? envelope.data : []
+  const data = rows.map((row) => mapItem(row)).filter((row): row is T => row != null)
+  const page = Number(meta.page ?? 1) || 1
+  const limit = Number(meta.limit ?? 20) || 20
+  const totalCount = Number(meta.total_count ?? data.length) || 0
   return {
-    items,
-    total_count: Number(meta.total_count ?? items.length) || 0,
-    page: Number(meta.page ?? 1) || 1,
-    limit: Number(meta.limit ?? 20) || 20,
-    total_pages: Number(meta.total_pages ?? 0) || 0,
-    truncated: Boolean(meta.truncated),
-    scanned_count: meta.scanned_count != null ? Number(meta.scanned_count) || 0 : undefined,
+    data,
+    meta: {
+      page,
+      limit,
+      total_count: totalCount,
+      total_pages: Number(meta.total_pages ?? (totalCount ? Math.ceil(totalCount / Math.max(limit, 1)) : 0)) || 0,
+      search_time_ms: meta.search_time_ms != null ? Number(meta.search_time_ms) || 0 : undefined,
+      truncated: Boolean(meta.truncated),
+      scanned_count: meta.scanned_count != null ? Number(meta.scanned_count) || 0 : undefined,
+    },
   }
 }
 
@@ -131,21 +137,21 @@ const listTraceSessionsPage = async (params: TraceParams): Promise<TraceSessionL
 /** Hard cap client walk of /traces/sessions (200 × 5 = 1000 sessions). */
 const MAX_TRACE_SESSION_PAGES = 5
 
-export const listTraceSessions = async (params: TraceParams) => {
+export const listTraceSessions = async (params: TraceParams): Promise<TraceSessionList> => {
   const limit = 200
   let page = 1
   let totalCount = 0
   let truncated = false
   let scannedCount: number | undefined
-  const items: TraceSessionSummary[] = []
+  const data: TraceSessionSummary[] = []
 
   while (page <= MAX_TRACE_SESSION_PAGES) {
     const response = await listTraceSessionsPage({ ...params, page, limit })
-    totalCount = response.total_count
-    truncated = truncated || Boolean(response.truncated)
-    if (response.scanned_count != null) scannedCount = response.scanned_count
-    items.push(...response.items)
-    if (items.length >= totalCount || response.items.length === 0) {
+    totalCount = response.meta.total_count
+    truncated = truncated || Boolean(response.meta.truncated)
+    if (response.meta.scanned_count != null) scannedCount = response.meta.scanned_count
+    data.push(...response.data)
+    if (data.length >= totalCount || response.data.length === 0) {
       break
     }
     if (page >= MAX_TRACE_SESSION_PAGES) {
@@ -156,13 +162,15 @@ export const listTraceSessions = async (params: TraceParams) => {
   }
 
   return {
-    items,
-    total_count: totalCount,
-    page: 1,
-    limit,
-    total_pages: Math.ceil(totalCount / limit) || 0,
-    truncated,
-    scanned_count: scannedCount,
+    data,
+    meta: {
+      page: 1,
+      limit,
+      total_count: totalCount,
+      total_pages: Math.ceil(totalCount / limit) || 0,
+      truncated,
+      scanned_count: scannedCount,
+    },
   }
 }
 

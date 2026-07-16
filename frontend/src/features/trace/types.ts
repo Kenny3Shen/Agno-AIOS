@@ -32,15 +32,21 @@ export interface Span {
   attributes?: JsonRecord
   events?: unknown[]
 }
-/** UI-facing list shape after client normalization. */
-export interface TraceList {
-  items: Trace[]
-  total_count: number
+/** UI-facing list meta after client normalization (Agno-style). */
+export interface TraceListMeta {
   page: number
   limit: number
-  total_pages?: number
+  total_pages: number
+  total_count: number
+  search_time_ms?: number
   truncated?: boolean
   scanned_count?: number
+}
+
+/** UI-facing list shape after client normalization. */
+export interface TraceList {
+  data: Trace[]
+  meta: TraceListMeta
 }
 
 /** Wire shape for GET /api/traces (Agno-native envelope). */
@@ -84,13 +90,8 @@ export interface TraceSessionSummary {
 }
 /** UI-facing session list after client normalization. */
 export interface TraceSessionList {
-  items: TraceSessionSummary[]
-  total_count: number
-  page: number
-  limit: number
-  total_pages?: number
-  truncated?: boolean
-  scanned_count?: number
+  data: TraceSessionSummary[]
+  meta: TraceListMeta
 }
 
 /** Wire shape for GET /api/traces/sessions. */

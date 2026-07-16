@@ -38,15 +38,15 @@ describe('trace API', () => {
     )
 
     const result = await listTraces({ session_id: 's1' })
-    expect(result.items).toHaveLength(1)
-    expect(result.items[0]).toMatchObject({
+    expect(result.data).toHaveLength(1)
+    expect(result.data[0]).toMatchObject({
       trace_id: 't1',
       duration: '1.50s',
       input: 'hello',
       session_id: 's1',
     })
-    expect(result.items[0]).not.toHaveProperty('duration_ms')
-    expect(result.total_count).toBe(1)
+    expect(result.data[0]).not.toHaveProperty('duration_ms')
+    expect(result.meta.total_count).toBe(1)
   })
 
   it('defaults missing duration to 0ms', () => {
@@ -125,8 +125,8 @@ describe('trace API', () => {
     const result = await listTraceSessions({ status: 'OK' })
 
     expect(requestedPages).toEqual(['1:200', '2:200'])
-    expect(result.items).toHaveLength(205)
-    expect(result.total_count).toBe(205)
+    expect(result.data).toHaveLength(205)
+    expect(result.meta.total_count).toBe(205)
   })
   it('stops walking trace session pages after the client cap', async () => {
     const requestedPages: string[] = []
@@ -144,9 +144,9 @@ describe('trace API', () => {
 
     const result = await listTraceSessions({ status: 'OK' })
     expect(requestedPages).toEqual(['1', '2', '3', '4', '5'])
-    expect(result.items).toHaveLength(1000)
-    expect(result.truncated).toBe(true)
-    expect(result.total_count).toBe(2000)
+    expect(result.data).toHaveLength(1000)
+    expect(result.meta.truncated).toBe(true)
+    expect(result.meta.total_count).toBe(2000)
   })
 
 })

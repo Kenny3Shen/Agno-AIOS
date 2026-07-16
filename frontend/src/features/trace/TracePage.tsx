@@ -197,20 +197,20 @@ export function TracePage() {
     [chatSessions.data]
   )
   const sessions = useMemo(
-    () => filterSessionsByArchive(mergeTraceSessions(chatSessionItems, summaries.data?.items ?? []), archiveFilter),
-    [archiveFilter, chatSessionItems, summaries.data?.items]
+    () => filterSessionsByArchive(mergeTraceSessions(chatSessionItems, summaries.data?.data ?? []), archiveFilter),
+    [archiveFilter, chatSessionItems, summaries.data?.data]
   )
   const visibleSessions = useMemo(
     () => sessions.slice((sessionPage - 1) * SESSION_PAGE_SIZE, sessionPage * SESSION_PAGE_SIZE),
     [sessionPage, sessions]
   )
   const runs = useMemo(
-    () => groupRuns(selectedTraceList.data?.items ?? [], selectedSession),
-    [selectedSession, selectedTraceList.data?.items]
+    () => groupRuns(selectedTraceList.data?.data ?? [], selectedSession),
+    [selectedSession, selectedTraceList.data?.data]
   )
   const visibleRuns = runs
   const statusFilterTruncated = Boolean(
-    filters.status && (selectedTraceList.data?.truncated || summaries.data?.truncated)
+    filters.status && (selectedTraceList.data?.meta.truncated || summaries.data?.meta.truncated)
   )
   const detailTraceIds = useMemo(
     () => [...new Set([...visibleRuns.map((run) => run.traceId), activeTraceId].filter(Boolean))],
@@ -444,7 +444,7 @@ export function TracePage() {
           <Card
             className="workbench-card splitter-panel-card"
             title="Runs & Spans"
-            extra={<Tag>{selectedTraceList.data?.total_count ?? 0}</Tag>}
+            extra={<Tag>{selectedTraceList.data?.meta.total_count ?? 0}</Tag>}
           >
             <div className="trace-paginated-list">
               <Tree<RunSpanTreeNode>
@@ -462,7 +462,7 @@ export function TracePage() {
                 align="center"
                 current={runPage}
                 pageSize={RUN_PAGE_SIZE}
-                total={selectedTraceList.data?.total_count ?? 0}
+                total={selectedTraceList.data?.meta.total_count ?? 0}
                 showSizeChanger={false}
                 onChange={changeRunPage}
               />

@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Trace 前端列表 data/meta 收口
+
+- `listTraces` / `listTraceSessions` 归一化结果 `items`+扁平字段 → `{data, meta}`（含 `truncated`/`scanned_count`）。
+- `TracePage` / unit / Playwright smoke 同步；无旧 `items` 兼容。
+
 ## 已完成：Memory / Eval runs 前端列表 data/meta 收口
 
 - `getMemories`：`items`/`total`/`page`/`limit` → `{data, meta}`；`MemoryPage` 同步。
