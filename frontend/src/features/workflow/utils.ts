@@ -812,6 +812,10 @@ export const fromDefinition = (
     workflowId: null,
     name: options?.name ?? definition.name ?? '',
     description: options?.description ?? definition.description ?? '',
+    version: 0,
+    publishedVersion: null,
+    publishedAt: null,
+    hasPublished: false,
     steps,
     triggers: defaultTriggers(),
     selectedId: steps[0]?.id ?? null,
@@ -821,15 +825,31 @@ export const fromDefinition = (
 
 export const fromRecord = (record: WorkflowRecord): Partial<WorkflowState> => {
   const steps = (record.definition?.steps ?? []).map(fromDefinitionNode)
+  const publishedVersion =
+    record.published_version != null ? Number(record.published_version) : null
   return {
     workflowId: record.id,
     name: record.name || record.definition?.name || '',
     description: record.description || record.definition?.description || '',
+    version: Number(record.version ?? 1),
+    publishedVersion,
+    publishedAt: record.published_at != null ? Number(record.published_at) : null,
+    hasPublished: Boolean(record.has_published) || publishedVersion != null,
     steps,
     triggers: record.triggers ?? defaultTriggers(),
     selectedId: steps[0]?.id ?? null,
     dirty: false,
   }
+}
+
+/** Whether enabling a live trigger should be blocked/confirmed (unpublished or dirty draft). */
+export const triggerEnableBlocked = (state: {
+  hasPublished: boolean
+  dirty: boolean
+}): 'unpublished' | 'dirty' | null => {
+  if (!state.hasPublished) return 'unpublished'
+  if (state.dirty) return 'dirty'
+  return null
 }
 
 export const nodeLabel = (node: WorkflowNode): string => {

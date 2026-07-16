@@ -124,6 +124,13 @@ export type WorkflowState = {
   input: string
   sessionId: string
   modelId: string | null
+  /** Draft revision counter from API (bumps on save). */
+  version: number
+  /** Live revision used by webhook/cron; null when never published. */
+  publishedVersion: number | null
+  /** Unix seconds when published revision was set. */
+  publishedAt: number | null
+  hasPublished: boolean
   steps: WorkflowNode[]
   triggers: WorkflowTriggers
   selectedId: string | null

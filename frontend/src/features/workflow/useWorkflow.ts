@@ -31,6 +31,7 @@ import {
   fromDefinition,
   fromRecord,
   insertChild,
+  triggerEnableBlocked,
   moveNodeAfter,
   moveStep,
   parseEmptySlot,
@@ -60,6 +61,10 @@ const initialState = (): WorkflowState => ({
   input: '',
   sessionId: crypto.randomUUID(),
   modelId: null,
+  version: 0,
+  publishedVersion: null,
+  publishedAt: null,
+  hasPublished: false,
   steps: [],
   triggers: defaultTriggers(),
   selectedId: null,
@@ -456,7 +461,27 @@ export function useWorkflow() {
   }
 
   const patchTriggers = (triggers: WorkflowTriggers) => {
-    setState((current) => ({ ...current, triggers, dirty: true }))
+    setState((current) => {
+      const enablingWebhook =
+        triggers.webhook.enabled && !current.triggers.webhook.enabled
+      const enablingCron = triggers.cron.enabled && !current.triggers.cron.enabled
+      if (enablingWebhook || enablingCron) {
+        const block = triggerEnableBlocked(current)
+        if (block === 'unpublished') {
+          return {
+            ...current,
+            error: 'Publish the workflow before enabling webhook or cron triggers',
+          }
+        }
+        if (block === 'dirty') {
+          return {
+            ...current,
+            error: 'Save and publish the current draft before enabling triggers',
+          }
+        }
+      }
+      return { ...current, triggers, dirty: true, error: null }
+    })
   }
 
   const load = (id: string) => {
@@ -492,6 +517,10 @@ export function useWorkflow() {
     setState((current) => ({
       ...current,
       ...loaded,
+      version: 0,
+      publishedVersion: null,
+      publishedAt: null,
+      hasPublished: false,
       selectedIds: loaded.selectedId ? [loaded.selectedId] : [],
       input: current.input,
       sessionId: crypto.randomUUID(),
@@ -506,6 +535,85 @@ export function useWorkflow() {
       lastSessionId: null,
       lastApprovalId: null,
     }))
+  }
+
+  /** Load IR-triage (or first) template into a fresh draft. */
+  const startFromTemplate = (templateId = 'ir-triage') => {
+    const list = templatesQuery.data ?? []
+    const id = list.some((item) => item.id === templateId)
+      ? templateId
+      : list[0]?.id
+    if (!id) return
+    applyTemplate(id)
+  }
+
+  /** Apply template, save immediately, keep Publish path obvious (dirty=false, has id). */
+  const applyTemplateAndSave = async (templateId: string) => {
+    const template = (templatesQuery.data ?? []).find((item) => item.id === templateId)
+    if (!template) return
+    pastRef.current = []
+    futureRef.current = []
+    bumpHistory()
+    const loaded = fromDefinition(template.definition, {
+      name: template.definition.name || template.name,
+      description: template.definition.description || template.description,
+    })
+    const draftSteps = loaded.steps ?? []
+    const draftName = loaded.name || template.name
+    const draftDescription = loaded.description || template.description
+    setState((current) => ({
+      ...current,
+      ...loaded,
+      version: 0,
+      publishedVersion: null,
+      publishedAt: null,
+      hasPublished: false,
+      selectedIds: loaded.selectedId ? [loaded.selectedId] : [],
+      input: current.input,
+      sessionId: crypto.randomUUID(),
+      modelId: current.modelId,
+      runLog: [],
+      nodeRunStatus: {},
+      runHistory: [],
+      error: null,
+      validationIssues: [],
+      dirty: true,
+      saving: true,
+      lastRunId: null,
+      lastSessionId: null,
+      lastApprovalId: null,
+    }))
+    try {
+      const definition = toDefinition({
+        name: draftName,
+        description: draftDescription,
+        steps: draftSteps,
+      })
+      const body = {
+        name: definition.name,
+        description: definition.description,
+        definition,
+        triggers: defaultTriggers(),
+      }
+      const record = await createWorkflow(body)
+      const saved = fromRecord(record)
+      setState((current) => ({
+        ...current,
+        ...saved,
+        selectedIds: saved.selectedId ? [saved.selectedId] : [],
+        saving: false,
+        dirty: false,
+        error: null,
+      }))
+      await workflowsQuery.refetch()
+      await versionsQuery.refetch()
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        saving: false,
+        error: error instanceof Error ? error.message : 'Save failed',
+      }))
+    }
   }
 
   const reset = () => {
@@ -778,6 +886,8 @@ export function useWorkflow() {
     redo,
     load,
     applyTemplate,
+    applyTemplateAndSave,
+    startFromTemplate,
     reset,
     save,
     publish,

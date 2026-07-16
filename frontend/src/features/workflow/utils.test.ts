@@ -16,6 +16,7 @@ import {
   branchHandlesFor,
   reparentTargetFromHandle,
   validateWorkflowDraft,
+  triggerEnableBlocked,
 } from './utils'
 import type { WorkflowState } from './types'
 
@@ -26,6 +27,10 @@ const state: WorkflowState = {
   input: 'alert',
   sessionId: 's1',
   modelId: 'model-1',
+  version: 1,
+  publishedVersion: null,
+  publishedAt: null,
+  hasPublished: false,
   selectedId: null,
   selectedIds: [],
   dirty: false,
@@ -126,12 +131,25 @@ describe('workflow behavior', () => {
       owner_user_id: 'u',
       definition,
       enabled: true,
-      version: 1,
+      version: 3,
+      published_version: 2,
+      published_at: 1_700_000_000,
+      has_published: true,
       created_at: 1,
       updated_at: 1,
     })
     expect(restored.steps?.[0]?.type).toBe('parallel')
     expect(restored.steps?.[0]?.steps).toHaveLength(2)
+    expect(restored.version).toBe(3)
+    expect(restored.publishedVersion).toBe(2)
+    expect(restored.publishedAt).toBe(1_700_000_000)
+    expect(restored.hasPublished).toBe(true)
+  })
+
+  it('blocks trigger enable when unpublished or dirty', () => {
+    expect(triggerEnableBlocked({ hasPublished: false, dirty: false })).toBe('unpublished')
+    expect(triggerEnableBlocked({ hasPublished: true, dirty: true })).toBe('dirty')
+    expect(triggerEnableBlocked({ hasPublished: true, dirty: false })).toBeNull()
   })
 
   it('preserves execution settings in exported code', () => {

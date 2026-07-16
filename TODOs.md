@@ -24,19 +24,25 @@
 
 ---
 
-### PR-P0.1 主路径状态机（Draft / Published / 引导）
+### PR-P0.1 主路径状态机（Draft / Published / 引导） ✅
 
 **用户价值**：知道「线上跑的是哪一版」；空状态默认走模板。
 
 | 项 | 说明 |
 |----|------|
-| Studio 顶栏 | 常驻：`draft vN` / `published vM @ time` / `未发布`；脏草稿徽标 |
-| 未发布拦截 | Cron/Webhook 启用时前端强提示 + 禁用或二次确认；后端 409 文案对齐 |
-| 空状态 | 画布空态 CTA：**从模板开始**（IR triage 默认） |
-| 模板动作 | 「载入草稿」外增加 **保存并打开**（可选：保存后高亮 Publish） |
+| Studio 顶栏 | 常驻：`draft vN` / `published vM @ time` / `未发布`；脏草稿徽标 ✅ |
+| 未发布拦截 | Cron/Webhook 启用时 modal 引导 Publish/Save；`triggerEnableBlocked` + 文案 ✅ |
+| 空状态 | 画布空态 CTA：**从模板开始**（IR triage 默认） ✅ |
+| 模板动作 | 「载入草稿」+ **保存并打开**；未发布时 Publish 按钮高亮 ✅ |
 | 验收 | 未 Publish 开 Cron → 明确错误；Publish 后顶栏版本变化；空画布 1 次点击进模板 |
 
-**主要路径**：`WorkflowPage` / `useWorkflow` / `workflow_templates` / i18n
+**主要路径**：`WorkflowPage` / `useWorkflow` / `utils.fromRecord` / i18n
+
+**完成要点**：
+- `WorkflowState` 投影 `version` / `publishedVersion` / `publishedAt` / `hasPublished`
+- 顶栏 Tag：草稿版本 + 发布状态（脏草稿徽标）
+- 启用 webhook/cron：未发布 / 脏草稿 → warning modal，不直接打开
+- 空画布 CTA → `startFromTemplate('ir-triage')`
 
 ---
 
@@ -93,7 +99,7 @@
 ### 建议实施顺序
 
 ```
-P0.1 状态机 + 空态引导     （1 切片，纯产品可见）
+P0.1 状态机 + 空态引导     ✅
 P0.2 触发器运维 + 失败通知 （依赖已发布语义）
 P0.3 Step Skill 绑定       （能力对齐，模板含依赖）
 P0.4 审批值班薄入口        （可与 P0.2 通知并行）
@@ -109,6 +115,17 @@ P0.4 审批值班薄入口        （可与 P0.2 通知并行）
 
 ---
 
+
+## 已完成：产品 P0.1 Draft/Published 状态机 + 空态引导
+
+- 顶栏：`draft vN` / `published vM @ time` / `未发布` + dirty `*`
+- 触发器启用守卫：`triggerEnableBlocked` + modal 引导 Save/Publish
+- 空画布 CTA：从 IR triage 模板开始；模板「载入草稿 / 保存并打开」
+- Publish 在「已保存未发布」时 primary+ghost 高亮
+
+相关：`types.ts` / `utils.ts` / `useWorkflow.ts` / `WorkflowPage.tsx` / `WorkflowCanvas.tsx` / i18n
+
+---
 
 ## 已完成：Studio 性能（SSE 增量 + 选中/高亮 patch）
 

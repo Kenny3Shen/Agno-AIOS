@@ -1,5 +1,6 @@
 import {
   Alert,
+  App,
   Button,
   Collapse,
   Empty,
@@ -37,12 +38,13 @@ import { useRouter } from '@tanstack/react-router'
 import { useWorkflow } from './useWorkflow'
 import { WorkflowCanvas, paletteDragStart } from './WorkflowCanvas'
 import type { WorkflowNodeType } from './types'
-import { buildWorkflowCode } from './utils'
+import { buildWorkflowCode, triggerEnableBlocked } from './utils'
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
 import { listWorkflowTriggerHistory } from './api'
 import { CelExpressionField } from './CelExpressionField'
 import { currentUserQuery } from '@/features/auth'
 import { hasScope } from '@/shared/auth/permissions'
+import { useFormatDate } from '@/shared/lib/format'
 import { useEffect, type ReactNode } from 'react'
 
 const PALETTE: Array<{
@@ -63,6 +65,8 @@ const studioPopupContainer = (node: HTMLElement) =>
 
 export function WorkflowPage() {
   const { t } = useTranslation('workflow')
+  const { modal } = App.useApp()
+  const formatDate = useFormatDate()
   const routerNav = useRouter()
   const workflow = useWorkflow()
   const currentUser = useQuery(currentUserQuery())
@@ -70,6 +74,83 @@ export function WorkflowPage() {
     hasScope(currentUser.data, 'workflows:run') ||
     hasScope(currentUser.data, 'workflows:write')
   const canWrite = hasScope(currentUser.data, 'workflows:write')
+
+  const publishStatusLabel = (() => {
+    const { publishedVersion, publishedAt, hasPublished, dirty } = workflow.state
+    if (!hasPublished) {
+      return t('statusUnpublished')
+    }
+    const time =
+      publishedAt != null && publishedAt > 0 ? formatDate(publishedAt) : ''
+    const base =
+      publishedVersion != null
+        ? t('statusPublished', { version: publishedVersion, time })
+        : t('statusPublishedUnknown')
+    return dirty ? `${base} · ${t('statusDirtyDraft')}` : base
+  })()
+
+  const draftStatusLabel =
+    workflow.state.workflowId != null && workflow.state.version > 0
+      ? t('statusDraft', { version: workflow.state.version })
+      : t('statusDraftNew')
+
+  const requestEnableTrigger = (
+    kind: 'webhook' | 'cron',
+    enabled: boolean
+  ) => {
+    if (!enabled) {
+      if (kind === 'webhook') {
+        workflow.patchTriggers({
+          ...workflow.state.triggers,
+          webhook: { ...workflow.state.triggers.webhook, enabled: false },
+        })
+      } else {
+        workflow.patchTriggers({
+          ...workflow.state.triggers,
+          cron: { ...workflow.state.triggers.cron, enabled: false },
+        })
+      }
+      return
+    }
+    const block = triggerEnableBlocked(workflow.state)
+    if (block === 'unpublished') {
+      modal.warning({
+        title: t('triggerNeedsPublishTitle'),
+        content: t('triggerNeedsPublishBody'),
+        okText: t('publish'),
+        onOk: () => {
+          if (workflow.state.workflowId && !workflow.state.dirty) {
+            void workflow.publish()
+          } else if (canWrite) {
+            void workflow.save()
+          }
+        },
+      })
+      return
+    }
+    if (block === 'dirty') {
+      modal.warning({
+        title: t('triggerNeedsSavePublishTitle'),
+        content: t('triggerNeedsSavePublishBody'),
+        okText: t('save'),
+        onOk: () => {
+          if (canWrite) void workflow.save()
+        },
+      })
+      return
+    }
+    if (kind === 'webhook') {
+      workflow.patchTriggers({
+        ...workflow.state.triggers,
+        webhook: { ...workflow.state.triggers.webhook, enabled: true },
+      })
+    } else {
+      workflow.patchTriggers({
+        ...workflow.state.triggers,
+        cron: { ...workflow.state.triggers.cron, enabled: true },
+      })
+    }
+  }
 
   const triggerHistoryQuery = useQuery({
     queryKey: ['workflows', 'trigger-history', workflow.state.workflowId],
@@ -143,6 +224,23 @@ export function WorkflowPage() {
               workflow.patchMeta({ modelId: value, dirty: workflow.state.dirty })
             }
           />
+          <div className="workflow-studio__status" aria-label={t('statusAria')}>
+            <Tag className="workflow-studio__status-tag">
+              {draftStatusLabel}
+              {workflow.state.dirty ? (
+                <span className="workflow-studio__dirty-dot" title={t('statusDirty')}>
+                  {' '}
+                  *
+                </span>
+              ) : null}
+            </Tag>
+            <Tag
+              color={workflow.state.hasPublished ? 'success' : 'default'}
+              className="workflow-studio__status-tag"
+            >
+              {publishStatusLabel}
+            </Tag>
+          </div>
         </div>
         <Space wrap className="workflow-studio__actions">
           <Button onClick={workflow.reset}>{t('new')}</Button>
@@ -178,6 +276,18 @@ export function WorkflowPage() {
           <Tooltip title={t('publishHint')} getPopupContainer={studioPopupContainer}>
             <Button
               icon={<CloudUploadOutlined />}
+              type={
+                Boolean(workflow.state.workflowId) &&
+                !workflow.state.dirty &&
+                !workflow.state.hasPublished
+                  ? 'primary'
+                  : 'default'
+              }
+              ghost={
+                Boolean(workflow.state.workflowId) &&
+                !workflow.state.dirty &&
+                !workflow.state.hasPublished
+              }
               loading={workflow.state.saving}
               disabled={!canWrite || !workflow.state.workflowId || workflow.state.dirty}
               onClick={() => void workflow.publish()}
@@ -248,17 +358,36 @@ export function WorkflowPage() {
             <div className="workflow-studio__panel-title">{t('templates')}</div>
             <div className="workflow-templates">
               {(workflow.templatesQuery.data ?? []).map((tpl) => (
-                <button
-                  key={tpl.id}
-                  type="button"
-                  className="workflow-templates__item"
-                  title={tpl.description}
-                  disabled={!canWrite}
-                  onClick={() => workflow.applyTemplate(tpl.id)}
-                >
-                  <strong>{tpl.name}</strong>
-                  <span>{tpl.description}</span>
-                </button>
+                <div key={tpl.id} className="workflow-templates__item">
+                  <button
+                    type="button"
+                    className="workflow-templates__load"
+                    title={tpl.description}
+                    disabled={!canWrite}
+                    onClick={() => workflow.applyTemplate(tpl.id)}
+                  >
+                    <strong>{tpl.name}</strong>
+                    <span>{tpl.description}</span>
+                  </button>
+                  <div className="workflow-templates__actions">
+                    <Button
+                      type="link"
+                      size="small"
+                      disabled={!canWrite || workflow.state.saving}
+                      onClick={() => workflow.applyTemplate(tpl.id)}
+                    >
+                      {t('templateLoadDraft')}
+                    </Button>
+                    <Button
+                      type="link"
+                      size="small"
+                      disabled={!canWrite || workflow.state.saving}
+                      onClick={() => void workflow.applyTemplateAndSave(tpl.id)}
+                    >
+                      {t('templateSaveAndOpen')}
+                    </Button>
+                  </div>
+                </div>
               ))}
               {!workflow.templatesQuery.data?.length && !workflow.templatesQuery.isLoading ? (
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -339,6 +468,10 @@ export function WorkflowPage() {
             nodeRunStatus={workflow.state.nodeRunStatus}
             validationIssues={workflow.state.validationIssues}
             emptyHint={t('canvasEmpty')}
+            emptyActionLabel={canWrite ? t('startFromTemplate') : undefined}
+            onEmptyAction={
+              canWrite ? () => workflow.startFromTemplate('ir-triage') : undefined
+            }
           />
         </section>
 
@@ -810,12 +943,8 @@ export function WorkflowPage() {
                         <Switch
                           size="small"
                           checked={workflow.state.triggers.webhook.enabled}
-                          onChange={(enabled) =>
-                            workflow.patchTriggers({
-                              ...workflow.state.triggers,
-                              webhook: { ...workflow.state.triggers.webhook, enabled },
-                            })
-                          }
+                          disabled={!canWrite}
+                          onChange={(enabled) => requestEnableTrigger('webhook', enabled)}
                         />
                         <span>{t('webhookTrigger')}</span>
                       </div>
@@ -840,12 +969,8 @@ export function WorkflowPage() {
                         <Switch
                           size="small"
                           checked={workflow.state.triggers.cron.enabled}
-                          onChange={(enabled) =>
-                            workflow.patchTriggers({
-                              ...workflow.state.triggers,
-                              cron: { ...workflow.state.triggers.cron, enabled },
-                            })
-                          }
+                          disabled={!canWrite}
+                          onChange={(enabled) => requestEnableTrigger('cron', enabled)}
                         />
                         <span>{t('cronTrigger')}</span>
                       </div>
@@ -867,7 +992,11 @@ export function WorkflowPage() {
                         />
                       ) : null}
                       <Typography.Paragraph type="secondary" style={{ fontSize: 11, marginTop: 8 }}>
-                        {t('publishTriggersHint')}
+                        {!workflow.state.hasPublished
+                          ? t('publishTriggersHintUnpublished')
+                          : workflow.state.dirty
+                            ? t('publishTriggersHintDirty')
+                            : t('publishTriggersHint')}
                       </Typography.Paragraph>
                       {workflow.state.workflowId ? (
                         <div style={{ marginTop: 12 }}>

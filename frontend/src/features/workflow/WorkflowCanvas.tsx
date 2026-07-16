@@ -76,6 +76,8 @@ type Props = {
   nodeRunStatus?: Record<string, 'running' | 'ok' | 'error' | 'paused'>
   validationIssues?: Array<{ nodeId: string | null; code: string; message: string }>
   emptyHint?: string
+  emptyActionLabel?: string
+  onEmptyAction?: () => void
 }
 
 type FlowGraph = { nodes: Node[]; edges: Edge[] }
@@ -206,6 +208,8 @@ function CanvasInner({
   nodeRunStatus = {},
   validationIssues = [],
   emptyHint,
+  emptyActionLabel,
+  onEmptyAction,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const { dark } = usePreferences()
@@ -879,6 +883,18 @@ function CanvasInner({
           <div className="workflow-canvas__empty-card">
             <strong>{emptyHint || 'Drag nodes from the left palette'}</strong>
             <span>Drop onto the canvas — or onto a container to nest</span>
+            {emptyActionLabel && onEmptyAction ? (
+              <button
+                type="button"
+                className="workflow-canvas__empty-action"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onEmptyAction()
+                }}
+              >
+                {emptyActionLabel}
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}
