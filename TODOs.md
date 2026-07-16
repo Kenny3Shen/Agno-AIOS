@@ -148,7 +148,7 @@ P0.4 审批值班薄入口        ✅
 
 - `get_runtime_overview` 对 `asyncio.gather` 结构化解包，去掉 7 处 `type: ignore[arg-type]`
 - `list_documents_async` 改为分页拼装（100×50 页硬顶），避免单次无界 materialize；API/UI 仍优先 `list_documents_page_async`
-- `TAIS_MODEL_CONFIG_FILE` / `model_config_file` 文档标明仅用于归档残留 JSON，永不导入
+- `model_config_file` 仅用于归档残留 JSON，永不导入（`TAIS_MODEL_CONFIG_FILE` 已移除）
 
 相关：`overview_service.py` / `knowledge_service.py` / `config.py` / `model_config_service.py`
 
@@ -589,6 +589,13 @@ P0.4 审批值班薄入口        ✅
 相关：`overview_service.py` / `knowledge_service.py` / `chat_session_service.py` / `routes/chat.py` / Dashboard i18n
 
 ---
+
+## 已完成：删除无引用 helpers + 去掉 TAIS_MODEL_CONFIG_FILE
+
+- 删除死代码：`stage_index`/`active_stage_from_events`、`get_suite_run`/`get_suite_run_row_async`、`get_submission_approval`、`ensure_audit_log_table_async`、`server_rows()`、`count_collect_articles`、`upsert_cve_row`/`reset_cve_id_sequence`、`reset_token_id_sequence`、CVE `_process_codes`/`_process_file`。
+- `model_config_file()` 固定归档 `CONFIG_DIR/model_config.json`；移除 Settings/`TAIS_MODEL_CONFIG_FILE` 覆盖（仍只归档、永不导入）。
+
+相关：`knowledge_progress.py` / `agent_eval*` / `upload_approval_service.py` / `audit_service.py` / `mcp` / `cves` / `collect_articles` / `cve_sources.py` / `config.py` / `model_config_service.py`
 
 ## 已完成：删除死代码 + sessions 列表命名
 

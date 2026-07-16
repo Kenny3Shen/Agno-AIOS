@@ -17,7 +17,6 @@ from sqlalchemy import (
     UniqueConstraint,
     delete,
     desc,
-    func,
     select,
     update,
 )
@@ -343,20 +342,3 @@ async def find_token_row(token: str) -> dict[str, Any] | None:
         )
     return dict(row) if row else None
 
-
-async def reset_token_id_sequence() -> None:
-    await ensure_mcp_tables()
-    table = mcp_tokens_table()
-    async with get_async_control_plane_engine().begin() as conn:
-        max_id = (await conn.execute(select(func.max(table.c.id)))).scalar()
-        await conn.execute(
-            select(
-                func.setval(
-                    func.pg_get_serial_sequence(
-                        f"{_mcp_schema()}.{MCP_TOKENS_TABLE}", "id"
-                    ),
-                    max(int(max_id or 1), 1),
-                    True,
-                )
-            )
-        )

@@ -8,7 +8,6 @@ from loguru import logger
 
 from api.auth.claims import actor_id, actor_role
 from api.persistence.audit_logs import (
-    ensure_audit_logs_table_async,
     insert_audit_log_async,
     list_audit_logs_async,
 )
@@ -24,10 +23,6 @@ def audit_request_context(request: Request | None) -> AuditRequestContext:
         "ip_address": request.client.host if request and request.client else "",
         "user_agent": request.headers.get("user-agent", "") if request else "",
     }
-
-
-async def ensure_audit_log_table_async() -> None:
-    await ensure_audit_logs_table_async()
 
 
 async def record_audit_event_async(

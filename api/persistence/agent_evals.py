@@ -420,10 +420,6 @@ async def list_suite_run_rows_async(
     )
 
 
-async def get_suite_run_row_async(suite_run_id: str) -> dict[str, Any] | None:
-    return await _get_row_async(agent_eval_suite_runs_table(), suite_run_id)
-
-
 async def update_suite_run_row_async(
     suite_run_id: str, values: dict[str, Any]
 ) -> dict[str, Any] | None:

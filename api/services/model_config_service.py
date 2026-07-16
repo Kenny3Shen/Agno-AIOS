@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from loguru import logger
 
-from api.config import get_settings
 from api.persistence.model_configs import list_model_config_rows, replace_model_config_rows
 from api.services.runtime_paths import CONFIG_DIR, resolve_project_path
 from api.utils.ttl_cache import TtlCache
@@ -423,9 +422,7 @@ class ModelConfigStore(BaseModel):
 
 def model_config_file() -> Path:
     """Path checked only to retire leftover JSON (never loaded as config source)."""
-    return resolve_project_path(
-        get_settings().agno_model_config_file or CONFIG_DIR / "model_config.json"
-    )
+    return resolve_project_path(CONFIG_DIR / "model_config.json")
 
 
 def _default_models() -> list[ModelConfig]:

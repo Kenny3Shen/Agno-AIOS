@@ -211,32 +211,6 @@ class GitHubPocExpSource(CVEDataSource):
             return resp.json()[0]["sha"]
 
 
-# Helper functions for ExploitDBSource
-def _process_codes(codes, file_path):
-    if not codes or codes == "":
-        return file_path
-
-    # 优先匹配CVE编号
-    cve_match = re.search(r"CVE-\d{4}-\d+", codes)
-    if cve_match:
-        return cve_match.group(0)
-
-    # 如果没有CVE编号，匹配OSVDB编号
-    osvdb_match = re.search(r"OSVDB-\d+", codes)
-    if osvdb_match:
-        return osvdb_match.group(0)
-
-    return codes
-
-
-def _process_file(file_path):
-    match = re.search(r"/(\d+)\.", file_path)
-    if match:
-        exploit_id = match.group(1)
-        return f"https://www.exploit-db.com/exploits/{exploit_id}"
-    return file_path
-
-
 class ExploitDBSource(CVEDataSource):
     """从Exploit-DB获取CVE数据"""
 

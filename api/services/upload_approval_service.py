@@ -162,12 +162,6 @@ async def list_submission_approvals_page(
     }
 
 
-async def get_submission_approval(approval_id: str) -> dict[str, Any] | None:
-    """Load a public upload approval without exposing its staged payload."""
-    record = await get_upload_approval(approval_id)
-    return _public(record) if record is not None else None
-
-
 async def can_view_submission_approval(approval_id: str, *, submitted_by: str, is_admin: bool) -> bool:
     """Whether an administrator or the submitting user can view an upload approval."""
     if is_admin:

@@ -78,10 +78,6 @@ async def configure_main_mcp() -> None:
     _configured = True
 
 
-def server_rows() -> list[dict[str, Any]]:
-    return list(_server_rows)
-
-
 def _component_namespace(name: str) -> tuple[int | None, str | None]:
     matches = [row for row in _server_rows if name.startswith(f"{row['namespace']}_")]
     if not matches:

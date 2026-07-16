@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping, Sequence
-from typing import Any, Literal
+from collections.abc import Awaitable, Callable, Mapping
+from typing import Literal
 
 KnowledgeProgressStage = Literal["upload", "parse", "vectorize", "cleanup"]
 KnowledgeProgressStatus = Literal["pending", "running", "completed", "failed", "skipped"]
@@ -96,22 +96,3 @@ async def emit_progress(
     result = callback(event)
     if isinstance(result, Awaitable):
         await result
-
-
-def stage_index(stage: str) -> int:
-    for index, known in enumerate(KNOWLEDGE_PROGRESS_STAGES):
-        if known == stage:
-            return index
-    return -1
-
-
-def active_stage_from_events(events: Sequence[Mapping[str, Any]]) -> str | None:
-    active: str | None = None
-    for event in events:
-        stage = str(event.get("stage") or "")
-        status = str(event.get("status") or "")
-        if status == "running":
-            active = stage
-        elif status == "completed" and stage_index(stage) >= 0:
-            active = stage
-    return active

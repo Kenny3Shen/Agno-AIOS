@@ -320,12 +320,3 @@ async def bulk_upsert_collect_articles(records: Sequence[dict[str, Any]]) -> int
         await conn.execute(stmt)
     return len(values)
 
-
-async def count_collect_articles(*, status: str | None = "ok") -> int:
-    await ensure_collect_articles_table()
-    table = collect_articles_table()
-    stmt = select(func.count()).select_from(table)
-    if status:
-        stmt = stmt.where(table.c.status == status)
-    async with get_async_control_plane_engine().begin() as conn:
-        return int((await conn.execute(stmt)).scalar_one())

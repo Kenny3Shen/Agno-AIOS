@@ -154,14 +154,6 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="TAIS_KNOWLEDGE_RERANK_USE_FP16",
     )
-    agno_model_config_file: str | None = Field(
-        default=None,
-        validation_alias="TAIS_MODEL_CONFIG_FILE",
-        description=(
-            "Optional path of a leftover model_config.json to archive on load. "
-            "Never imported into Postgres; Settings/DB is the source of truth."
-        ),
-    )
     agno_skills_dir: str | None = Field(default=None, validation_alias="TAIS_SKILLS_DIR")
     agno_skills_config_file: str | None = Field(
         default=None,
