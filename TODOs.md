@@ -136,6 +136,15 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Knowledge 全量列表翻页
+
+- `list_documents_async` / `clear_knowledge_base_async` 经 `_collect_all_content_rows_async` 按页拉取（page_size 200），去掉硬顶 500 窗口遗漏
+- 注入 `knowledge_content_rows_async` 的依赖路径（测试/假实现）与生产一致；列表 API 仍走 `list_documents_page_async` SQL 分页
+
+相关：`knowledge_service.py` / `test_knowledge_lifecycle.py`
+
+---
+
 ## 已完成：Chat sessions 侧栏 load more
 
 - `listSessions` 返回 `{ data, meta }`；`sessionsQuery` 改为 `useInfiniteQuery`（page size 100）

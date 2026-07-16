@@ -1340,8 +1340,37 @@ async def test_list_documents_uses_contents_db_without_runtime() -> None:
         }
     ]
     assert content_calls == [
-        {"limit": 500, "page": 1, "sort_by": "updated_at", "sort_order": "desc"}
+        {"limit": 200, "page": 1, "sort_by": "updated_at", "sort_order": "desc"}
     ]
+
+
+@pytest.mark.asyncio
+async def test_list_documents_async_pages_beyond_first_window() -> None:
+    rows_by_page = {
+        1: [SimpleNamespace(id=f"c{i}", name=f"Doc {i}", metadata={"user_id": "u1"}, created_at=i) for i in range(1, 201)],
+        2: [SimpleNamespace(id="c201", name="Doc 201", metadata={"user_id": "u1"}, created_at=201)],
+    }
+    calls: list[dict[str, object]] = []
+
+    async def content_rows_async(**kwargs: object):
+        calls.append(kwargs)
+        page = int(kwargs.get("page") or 1)
+        return rows_by_page.get(page, []), 201
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_rows_async=content_rows_async,
+            chunk_counts_by_content_id_async=lambda _owner_user_id=None: {},
+        )
+    )
+
+    documents = await lifecycle.list_documents_async(owner_user_id="u1")
+
+    assert len(documents) == 201
+    assert documents[-1]["id"] == "c201"
+    assert [call["page"] for call in calls] == [1, 2]
+    assert all(call["limit"] == 200 for call in calls)
 
 
 @pytest.mark.asyncio

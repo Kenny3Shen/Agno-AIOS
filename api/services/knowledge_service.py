@@ -921,14 +921,33 @@ class KnowledgeBaseLifecycle:
                 return document
         raise RuntimeError("知识写入完成但未能读取内容登记记录")
 
+    async def _collect_all_content_rows_async(self, *, page_size: int = 200) -> list[Any]:
+        """Page through contents DB until total is covered (no hard 500-row window)."""
+        safe_page_size = max(1, min(int(page_size or 200), 500))
+        page = 1
+        collected: list[Any] = []
+        while True:
+            contents, total_count = await self._knowledge_content_rows_async(
+                limit=safe_page_size,
+                page=page,
+                sort_by="updated_at",
+                sort_order="desc",
+            )
+            if not contents:
+                break
+            collected.extend(contents)
+            if total_count is not None and len(collected) >= int(total_count):
+                break
+            if len(contents) < safe_page_size:
+                break
+            page += 1
+            if page > 10_000:
+                break
+        return collected
+
     async def list_documents_async(self, owner_user_id: str | None = None) -> list[KnowledgeDocumentPayload]:
         await self._ensure_contents_storage_async()
-        contents, _ = await self._knowledge_content_rows_async(
-            limit=500,
-            page=1,
-            sort_by="updated_at",
-            sort_order="desc",
-        )
+        contents = await self._collect_all_content_rows_async()
         chunk_counts = await self._chunk_counts_by_content_id_async(owner_user_id)
         documents = []
         for content in contents:
@@ -1543,7 +1562,7 @@ class KnowledgeBaseLifecycle:
         user: ActorLike | None = None,
     ) -> dict[str, Any]:
         await self._ensure_contents_storage_async()
-        contents, _ = await self._knowledge_content_rows_async()
+        contents = await self._collect_all_content_rows_async()
         managed_contents = [
             (content.id, _safe_metadata(getattr(content, "metadata", None)))
             for content in contents
