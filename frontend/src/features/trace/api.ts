@@ -7,9 +7,7 @@ import type {
   Trace,
   TraceDetail,
   TraceList,
-  TraceListNative,
   TraceSessionList,
-  TraceSessionListNative,
   TraceSessionSummary,
 } from './types'
 
@@ -84,9 +82,6 @@ const normalizeTree = (nodes: unknown): SpanTreeNode[] => {
     .filter((node): node is SpanTreeNode => node != null)
 }
 
-const normalizePaginated = <T>(payload: unknown, mapItem: (row: unknown) => T | null) =>
-  normalizePaginatedList(payload, { mapItem, extras: true })
-
 const normalizeSession = (value: unknown): TraceSessionSummary | null => {
   const row = asRecord(value)
   const sessionId = String(row.session_id ?? '').trim()
@@ -107,14 +102,14 @@ const normalizeSession = (value: unknown): TraceSessionSummary | null => {
 }
 
 export const listTraces = async (params: TraceParams): Promise<TraceList> => {
-  const raw = await requestJson<TraceListNative>(`/traces?${traceSearch(params)}`)
-  return normalizePaginated(raw, normalizeTrace)
+  const raw = await requestJson<unknown>(`/traces?${traceSearch(params)}`)
+  return normalizePaginatedList(raw, { mapItem: normalizeTrace, extras: true })
 }
 
 /** Single-page Agno sessions list (server-side page/limit; no client multi-page walk). */
 export const listTraceSessions = async (params: TraceParams): Promise<TraceSessionList> => {
-  const raw = await requestJson<TraceSessionListNative>(`/traces/sessions?${traceSearch(params)}`)
-  return normalizePaginated(raw, normalizeSession)
+  const raw = await requestJson<unknown>(`/traces/sessions?${traceSearch(params)}`)
+  return normalizePaginatedList(raw, { mapItem: normalizeSession, extras: true })
 }
 
 export const getTrace = async (id: string): Promise<TraceDetail> => {

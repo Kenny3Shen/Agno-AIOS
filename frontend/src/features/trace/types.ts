@@ -1,3 +1,4 @@
+import type { ListPaginationMeta } from '@/shared/lib/pagination'
 import type { JsonRecord } from '@/shared/types/common'
 export interface Trace {
   trace_id: string
@@ -33,35 +34,17 @@ export interface Span {
   events?: unknown[]
 }
 /** UI-facing list meta after client normalization (Agno-style). */
-export interface TraceListMeta {
-  page: number
-  limit: number
-  total_pages: number
-  total_count: number
-  search_time_ms?: number
-  truncated?: boolean
-  scanned_count?: number
-}
+export type TraceListMeta = ListPaginationMeta
 
 /** UI-facing list shape after client normalization. */
-export interface TraceList {
+export type TraceList = {
   data: Trace[]
   meta: TraceListMeta
 }
 
 /** Wire shape for GET /api/traces (Agno-native envelope). */
-export interface TraceListNative {
-  data: Trace[]
-  meta: {
-    page: number
-    limit: number
-    total_pages: number
-    total_count: number
-    search_time_ms?: number
-    truncated?: boolean
-    scanned_count?: number
-  }
-}
+export type TraceListNative = TraceList
+
 export interface TraceFilters {
   session_id: string
   run_id: string
@@ -89,24 +72,14 @@ export interface TraceSessionSummary {
   workflow_id?: string | null
 }
 /** UI-facing session list after client normalization. */
-export interface TraceSessionList {
+export type TraceSessionList = {
   data: TraceSessionSummary[]
   meta: TraceListMeta
 }
 
 /** Wire shape for GET /api/traces/sessions. */
-export interface TraceSessionListNative {
-  data: TraceSessionSummary[]
-  meta: {
-    page: number
-    limit: number
-    total_pages: number
-    total_count: number
-    search_time_ms?: number
-    truncated?: boolean
-    scanned_count?: number
-  }
-}
+export type TraceSessionListNative = TraceSessionList
+
 export interface SpanTreeNode {
   span: Span
   children: SpanTreeNode[]

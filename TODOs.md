@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Trace 列表 meta 类型别名共享 normalizer
+
+- `TraceListMeta` / `TraceList` / `TraceSessionList` 对齐 `ListPaginationMeta`；Native 别名指向 UI 形状。
+- `listTraces` / `listTraceSessions` 直接 `normalizePaginatedList(..., extras: true)`，去掉薄包装。
+
 ## 已完成：后端 PaginationMeta 共享 + Knowledge 列表 normalize
 
 - `api/utils/pagination.PaginationMeta` TypedDict；Memory/Approvals 去掉重复 meta TypedDict。
