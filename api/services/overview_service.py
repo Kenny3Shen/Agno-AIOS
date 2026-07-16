@@ -294,7 +294,12 @@ async def _fetch_recent_failures(
     user_id: str | None,
     limit: int = 10,
 ) -> list[dict[str, Any]]:
-    """Load recent ERROR traces via native status filter (not sample slice)."""
+    """Load recent failures for Dashboard (native ERROR + chat-audit supplements).
+
+    Agno ``status=ERROR`` misses chat runs still stored as OK/UNSET after a
+    durable audit terminal. Supplement from recent failed chat audit run IDs
+    (bounded), same spirit as Trace list ERROR merge.
+    """
     safe_limit = max(1, min(int(limit or 10), 50))
     db = get_async_agno_postgres_db()
     traces, _total = await db.get_traces(
@@ -312,6 +317,45 @@ async def _fetch_recent_failures(
     reconciled = await reconcile_trace_statuses(rows, actor_user_id=user_id)
     # Keep ERROR after audit overlay; drop flipped non-failures.
     failures = [row for row in reconciled if _is_failure(row)]
+
+    present = {
+        str(row.get("run_id") or "").strip()
+        for row in failures
+        if str(row.get("run_id") or "").strip()
+    }
+    try:
+        from api.persistence.audit_logs import recent_failed_chat_run_ids_async
+        from api.services.tracing_service import _batch_traces_by_run_ids
+
+        failed_ids = await recent_failed_chat_run_ids_async(
+            limit=max(safe_limit * 2, 20),
+            actor_user_id=user_id,
+        )
+        candidates = [run_id for run_id in failed_ids if run_id not in present]
+        remaining = max(0, safe_limit - len(failures))
+        if candidates and remaining > 0:
+            traces_by_run = await _batch_traces_by_run_ids(candidates[: remaining * 2])
+            extras: list[dict[str, Any]] = []
+            for run_id in candidates:
+                raw = traces_by_run.get(run_id)
+                if not raw:
+                    continue
+                row = jsonable_encoder(raw)
+                if user_id and str(row.get("user_id") or "") != user_id:
+                    continue
+                ts = _as_datetime(row.get("start_time") or row.get("created_at"))
+                if ts is not None and (ts < start or ts > end):
+                    continue
+                row["status"] = "ERROR"
+                extras.append(row)
+                present.add(run_id)
+                if len(extras) >= remaining:
+                    break
+            if extras:
+                failures = failures + extras
+    except Exception:
+        logger.exception("overview recent_failures audit supplement failed")
+
     failures.sort(
         key=lambda item: _as_datetime(item.get("start_time")) or datetime.min.replace(tzinfo=UTC),
         reverse=True,

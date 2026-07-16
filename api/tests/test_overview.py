@@ -206,6 +206,10 @@ async def test_count_traces_and_recent_failures_pass_status_to_agno():
     with (
         patch.object(overview_service.get_async_agno_postgres_db(), "get_traces", get_traces),
         patch.object(overview_service, "reconcile_trace_statuses", AsyncMock(side_effect=lambda rows, **_k: list(rows))),
+        patch(
+            "api.persistence.audit_logs.recent_failed_chat_run_ids_async",
+            AsyncMock(return_value=[]),
+        ),
     ):
         total = await overview_service._count_traces(
             start=datetime(2026, 7, 12, 0, tzinfo=UTC),
@@ -676,3 +680,72 @@ async def test_sql_window_latency_builds_percentile_query():
         )
     assert result == {"n": 2, "p50_duration_ms": 100.12, "p95_duration_ms": 251.0}
     assert session.stmt is not None
+
+@pytest.mark.asyncio
+async def test_recent_failures_includes_audit_only_chat_errors():
+    """Chat audit ERROR supplements native status=ERROR for Dashboard deep links."""
+    native = [
+        {
+            "trace_id": "native-err",
+            "run_id": "run-native",
+            "session_id": "s-native",
+            "start_time": "2026-07-12T11:00:00+00:00",
+            "status": "ERROR",
+            "duration_ms": 10,
+            "name": "native",
+        }
+    ]
+    audit_trace = {
+        "trace_id": "audit-err",
+        "run_id": "run-audit",
+        "session_id": "s-audit",
+        "user_id": "u1",
+        "start_time": "2026-07-12T11:30:00+00:00",
+        "status": "OK",
+        "duration_ms": 5,
+        "name": "audit only",
+    }
+
+    class _FakeTrace:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def to_dict(self):
+            return self._payload
+
+    async def fake_get_traces(**kwargs):
+        if kwargs.get("status") == "ERROR":
+            return [_FakeTrace(native[0])], 1
+        return [], 0
+
+    with (
+        patch.object(overview_service.get_async_agno_postgres_db(), "get_traces", fake_get_traces),
+        patch.object(
+            overview_service,
+            "reconcile_trace_statuses",
+            AsyncMock(side_effect=lambda rows, **_k: list(rows)),
+        ),
+        patch(
+            "api.persistence.audit_logs.recent_failed_chat_run_ids_async",
+            AsyncMock(return_value=["run-audit", "run-native"]),
+        ),
+        patch(
+            "api.services.tracing_service._batch_traces_by_run_ids",
+            AsyncMock(return_value={"run-audit": audit_trace}),
+        ),
+    ):
+        rows = await overview_service._fetch_recent_failures(
+            start=datetime(2026, 7, 12, 10, tzinfo=UTC),
+            end=datetime(2026, 7, 12, 12, tzinfo=UTC),
+            user_id="u1",
+            limit=10,
+        )
+
+    ids = {row["trace_id"] for row in rows}
+    assert "native-err" in ids
+    assert "audit-err" in ids
+    audit_row = next(row for row in rows if row["trace_id"] == "audit-err")
+    assert audit_row["status"] == "ERROR"
+    assert audit_row["run_id"] == "run-audit"
+    assert audit_row["session_id"] == "s-audit"
+

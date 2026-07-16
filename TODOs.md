@@ -124,6 +124,11 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Dashboard recent_failures 合并 chat-audit ERROR
+
+- `_fetch_recent_failures`：原生 `status=ERROR` + 近期 chat audit 失败 run 批量补 trace（有界），避免「审计终态失败不在 ERROR 列表」。
+- 单测覆盖 audit-only 补充行仍带 `run_id`/`session_id` 供深链。
+
 ## 已完成：Workflow 列表 meta 与深链按 ID 加载
 
 - `listWorkflows` 返回 `{data, meta}`（默认 limit=100，API 硬顶 100），Studio 在 `total_count > 当前页` 时 Alert。
