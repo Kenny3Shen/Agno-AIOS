@@ -189,5 +189,13 @@
   "fieldTypeBool": "Yes/No",
   "validationUserInputSchemaEmpty": "{{path}}: user input needs at least one named field",
   "validationUserInputSchemaField": "{{path}}: field #{{index}} needs a name",
-  "validationEmptyName": "Workflow name is required"
+  "validationEmptyName": "Workflow name is required",
+  "errorPublishNeedsSave": "Save the workflow before publishing",
+  "errorPublishNeedsClean": "Save changes before publishing",
+  "errorRunNeedsSave": "Save the workflow before running",
+  "errorRunNeedsClean": "Save changes before running",
+  "errorTriggerNeedsPublish": "Publish the workflow before enabling webhook or cron triggers",
+  "errorTriggerNeedsSavePublish": "Save and publish the current draft before enabling triggers",
+  "validationEmptyConditionCel": "{{path}}: condition expression is required",
+  "validationEmptyRouterCel": "{{path}}: router expression is required"
 }

@@ -496,13 +496,13 @@ export function useWorkflow() {
         if (block === 'unpublished') {
           return {
             ...current,
-            error: 'Publish the workflow before enabling webhook or cron triggers',
+            error: t('errorTriggerNeedsPublish'),
           }
         }
         if (block === 'dirty') {
           return {
             ...current,
-            error: 'Save and publish the current draft before enabling triggers',
+            error: t('errorTriggerNeedsSavePublish'),
           }
         }
       }
@@ -733,11 +733,11 @@ export function useWorkflow() {
 
   const publish = async () => {
     if (!state.workflowId) {
-      setState((current) => ({ ...current, error: 'Save the workflow before publishing' }))
+      setState((current) => ({ ...current, error: t('errorPublishNeedsSave') }))
       return
     }
     if (state.dirty) {
-      setState((current) => ({ ...current, error: 'Save changes before publishing' }))
+      setState((current) => ({ ...current, error: t('errorPublishNeedsClean') }))
       return
     }
     setState((current) => ({ ...current, saving: true, error: null }))
@@ -797,11 +797,11 @@ export function useWorkflow() {
 
   const run = async () => {
     if (!state.workflowId) {
-      setState((current) => ({ ...current, error: 'Save the workflow before running' }))
+      setState((current) => ({ ...current, error: t('errorRunNeedsSave') }))
       return
     }
     if (state.dirty) {
-      setState((current) => ({ ...current, error: 'Save changes before running' }))
+      setState((current) => ({ ...current, error: t('errorRunNeedsClean') }))
       return
     }
     abortRef.current?.abort()

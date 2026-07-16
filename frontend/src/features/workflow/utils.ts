@@ -644,6 +644,10 @@ export const fieldForValidationIssue = (issue: Pick<WorkflowValidationIssue, 'co
       return 'userInput'
     case 'empty_name':
       return 'workflowName'
+    case 'empty_condition_cel':
+      return 'evaluator'
+    case 'empty_router_cel':
+      return 'selector'
     case 'missing_workflow_ref':
       return 'workflow_ref'
     case 'empty_parallel':
@@ -692,6 +696,10 @@ export const validateWorkflowDraft = (
         return `${path}: field #${options?.index ?? ''} needs a name`
       case 'validationEmptyName':
         return 'Workflow name is required'
+      case 'validationEmptyConditionCel':
+        return `${path}: condition expression is required`
+      case 'validationEmptyRouterCel':
+        return `${path}: router expression is required`
       default:
         return key
     }
@@ -737,8 +745,22 @@ export const validateWorkflowDraft = (
             message: t('validationEmptyCondition', { path: here }),
           })
         }
+        if (!(node.evaluatorCel || '').trim()) {
+          issues.push({
+            nodeId: node.id,
+            code: 'empty_condition_cel',
+            message: t('validationEmptyConditionCel', { path: here }),
+          })
+        }
       }
       if (node.type === 'router') {
+        if (!(node.selectorCel || '').trim()) {
+          issues.push({
+            nodeId: node.id,
+            code: 'empty_router_cel',
+            message: t('validationEmptyRouterCel', { path: here }),
+          })
+        }
         const choices = node.choices ?? []
         if (!choices.length) {
           issues.push({

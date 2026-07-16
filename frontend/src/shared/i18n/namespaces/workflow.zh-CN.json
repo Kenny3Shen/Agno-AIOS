@@ -189,5 +189,13 @@
   "fieldTypeBool": "是/否",
   "validationUserInputSchemaEmpty": "{{path}}：用户输入至少需要一个有效字段名",
   "validationUserInputSchemaField": "{{path}}：字段 #{{index}} 需要名称",
-  "validationEmptyName": "请填写工作流名称"
+  "validationEmptyName": "请填写工作流名称",
+  "errorPublishNeedsSave": "请先保存工作流再发布",
+  "errorPublishNeedsClean": "请先保存修改再发布",
+  "errorRunNeedsSave": "请先保存工作流再运行",
+  "errorRunNeedsClean": "请先保存修改再运行",
+  "errorTriggerNeedsPublish": "请先发布工作流再启用 Webhook / 定时触发",
+  "errorTriggerNeedsSavePublish": "请先保存并重新发布当前草稿，再启用触发器",
+  "validationEmptyConditionCel": "{{path}}：请填写条件表达式",
+  "validationEmptyRouterCel": "{{path}}：请填写路由表达式"
 }

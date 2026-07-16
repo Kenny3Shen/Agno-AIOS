@@ -1,5 +1,10 @@
 # 下一步工作
 
+## 已完成：Workflow 运行/发布/触发器错误 i18n + 空 CEL 校验
+
+- `useWorkflow`：发布/运行/启用触发器的英文硬编码改为 workflow i18n。
+- 保存校验：条件 `evaluatorCel`、路由 `selectorCel` 为空时报错，Inspector 聚焦。
+
 ## 已完成：工作流名称必填 + Chat 轻量徽标 + Dashboard 失败行打开 Studio
 
 - Studio 保存：空名称校验 `empty_name`，名称输入框 error 状态。

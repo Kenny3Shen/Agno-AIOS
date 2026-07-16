@@ -557,3 +557,17 @@ describe('fieldForValidationIssue', () => {
     expect(validateWorkflowName('')?.code).toBe('empty_name')
     expect(validateWorkflowName('  IR  ')).toBeNull()
   })
+
+
+  it('flags empty condition/router CEL', () => {
+    const condition = createNode('condition')
+    condition.evaluatorCel = '   '
+    condition.thenSteps = [{ id: 't', type: 'step', name: 'T', targetId: 'security-operations' }]
+    const router = createNode('router')
+    router.selectorCel = ''
+    const issues = validateWorkflowDraft([condition, router])
+    expect(issues.some((i) => i.code === 'empty_condition_cel')).toBe(true)
+    expect(issues.some((i) => i.code === 'empty_router_cel')).toBe(true)
+    expect(fieldForValidationIssue({ code: 'empty_condition_cel' })).toBe('evaluator')
+    expect(fieldForValidationIssue({ code: 'empty_router_cel' })).toBe('selector')
+  })

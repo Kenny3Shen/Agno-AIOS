@@ -1133,13 +1133,15 @@ export function WorkflowPage() {
 
                 {step.type === 'condition' ? (
                   <>
-                    <Typography.Text type="secondary">{t('evaluatorCel')}</Typography.Text>
-                    <CelExpressionField
-                      mode="condition"
-                      value={step.evaluatorCel}
-                      onChange={(value) => workflow.update({ ...step, evaluatorCel: value })}
-                      placeholder={t('celPlaceholder')}
-                    />
+                    <div data-inspector-field="evaluator">
+                      <Typography.Text type="secondary">{t('evaluatorCel')}</Typography.Text>
+                      <CelExpressionField
+                        mode="condition"
+                        value={step.evaluatorCel}
+                        onChange={(value) => workflow.update({ ...step, evaluatorCel: value })}
+                        placeholder={t('celPlaceholder')}
+                      />
+                    </div>
                     <div data-inspector-field="children" style={{ marginTop: 8 }}>
                       <Space wrap>
                         <Button
@@ -1206,13 +1208,15 @@ export function WorkflowPage() {
 
                 {step.type === 'router' ? (
                   <>
-                    <Typography.Text type="secondary">{t('selectorCel')}</Typography.Text>
-                    <CelExpressionField
-                      mode="router"
-                      value={step.selectorCel}
-                      onChange={(value) => workflow.update({ ...step, selectorCel: value })}
-                      placeholder={t('celPlaceholder')}
-                    />
+                    <div data-inspector-field="selector">
+                      <Typography.Text type="secondary">{t('selectorCel')}</Typography.Text>
+                      <CelExpressionField
+                        mode="router"
+                        value={step.selectorCel}
+                        onChange={(value) => workflow.update({ ...step, selectorCel: value })}
+                        placeholder={t('celPlaceholder')}
+                      />
+                    </div>
                     <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
                       {t('routerChoicesHint')}
                     </Typography.Paragraph>
