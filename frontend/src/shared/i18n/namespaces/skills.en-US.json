@@ -21,5 +21,10 @@
   "namePlaceholder": "e.g. my-skill",
   "zipFile": "ZIP file",
   "selectPackage": "Select skill package",
-  "upload": "Upload"
+  "upload": "Upload",
+  "referencesTab": "Used by",
+  "referencedWorkflow": "Workflow",
+  "version": "Version",
+  "openWorkflow": "Open",
+  "referencesEmpty": "No saved workflows bind this skill yet"
 }

@@ -50,7 +50,7 @@
     "renamed": "Conversation renamed",
     "renameFailed": "Unable to rename conversation",
     "loadMore": "Load more",
-    "searchPlaceholder": "Search title or session id",
+    "searchPlaceholder": "Search title, preview, or session id",
     "emptySearch": "No matching conversations"
   },
   "noNotifications": "No notifications",

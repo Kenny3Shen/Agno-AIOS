@@ -409,6 +409,19 @@ export function ChatPage() {
     setFollowLatest(true)
   }, [chat.sessionId])
 
+  // Soft errors (e.g. server cancel failed) auto-dismiss; keep hard run failures until dismiss/retry.
+  useEffect(() => {
+    if (!chat.state.error) return
+    const hardFailure = chat.state.messages.some(
+      (message) => message.role === 'assistant' && message.status === 'failed',
+    )
+    if (hardFailure) return
+    const timer = window.setTimeout(() => {
+      chat.dispatch({ type: 'clear-error' })
+    }, 8_000)
+    return () => window.clearTimeout(timer)
+  }, [chat.state.error, chat.state.messages, chat.dispatch])
+
   useEffect(() => {
     const shell = senderShellRef.current
     const workspace = workspaceRef.current

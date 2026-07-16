@@ -21,5 +21,10 @@
   "namePlaceholder": "例如：my-skill",
   "zipFile": "ZIP 文件",
   "selectPackage": "选择技能包",
-  "upload": "上传"
+  "upload": "上传",
+  "referencesTab": "被引用",
+  "referencedWorkflow": "工作流",
+  "version": "版本",
+  "openWorkflow": "打开",
+  "referencesEmpty": "暂无工作流绑定该 Skill"
 }

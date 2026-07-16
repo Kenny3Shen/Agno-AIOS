@@ -46,3 +46,27 @@ export const uploadSkill = async (name: string, visibility: ResourceVisibility, 
   body.append('file', file)
   return requestJson<UploadApprovalSubmission>('/skills/upload', { method: 'POST', body })
 }
+
+export type SkillWorkflowReference = {
+  workflow_id: string
+  name: string
+  version: string
+}
+
+export const listSkillReferences = async (name: string) => {
+  const raw = await requestJson<unknown>(`/skills/${encodeURIComponent(name)}/references`)
+  const { data } = normalizePaginatedList(raw, {
+    mapItem: (row) => {
+      if (!row || typeof row !== 'object') return null
+      const r = row as Record<string, unknown>
+      const id = typeof r.workflow_id === 'string' ? r.workflow_id : ''
+      if (!id) return null
+      return {
+        workflow_id: id,
+        name: typeof r.name === 'string' ? r.name : id,
+        version: r.version != null ? String(r.version) : '',
+      } satisfies SkillWorkflowReference
+    },
+  })
+  return data
+}

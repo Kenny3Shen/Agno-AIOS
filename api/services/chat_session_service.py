@@ -177,13 +177,18 @@ async def _query_sessions_page(
 
     needle = (q or "").strip()
     if needle:
+        from sqlalchemy import String, cast
+
         pattern = f"%{needle}%"
-        # Title lives in JSONB metadata; session_id is the durable key.
+        # Title lives in JSONB metadata; session_id is the durable key;
+        # runs JSON includes first-turn input used for list previews.
         title_expr = table.c.metadata[TITLE_METADATA_KEY].astext
+        runs_text = cast(table.c.runs, String)
         stmt = stmt.where(
             or_(
                 table.c.session_id.ilike(pattern),
                 title_expr.ilike(pattern),
+                runs_text.ilike(pattern),
             )
         )
 
@@ -218,7 +223,7 @@ async def list_sessions_async(
     ``metadata @> {"agno_aios_archived": true}`` so totals stay accurate beyond
     the previous 500-row window. ``archived_only`` returns only archived rows
     (implies archive filter; ignores ``include_archived``). Optional ``q``
-    matches session_id or custom title metadata (case-insensitive).
+    matches session_id, custom title metadata, or runs JSON text (preview input).
     """
     await ensure_agno_postgres_tables_async()
     safe_page = max(1, int(page or 1))

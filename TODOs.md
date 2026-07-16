@@ -124,6 +124,13 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Chat 预览搜索 / Escape 取消选择 / soft-error 自动关闭 / Skill 被引用
+
+- Chat `q`：SQL 额外匹配 `runs` JSON 文本（预览输入）；占位文案同步。
+- Workflow 画布：`Escape` 清空多选/选中。
+- Chat soft-error（非 run failed）：8s 自动 `clear-error`；失败 run 横幅仍需手动关闭/重试。
+- Skill 详情「被引用」：`GET /api/skills/{name}/references` 扫描可见工作流 definition 的 step skills；Drawer 表格 + 深链 Studio。
+
 ## 已完成：搜索截断提示 + Memory 后台失败跳转
 
 - Workflow 库在搜索态不再显示「列表截断」Alert（总数相对当前 q 分页，避免误导）。

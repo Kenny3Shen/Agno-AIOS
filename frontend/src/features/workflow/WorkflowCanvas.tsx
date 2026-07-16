@@ -910,6 +910,11 @@ function CanvasInner({
         onOrganize()
         return
       }
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onSelectMany([])
+        return
+      }
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault()
         onDeleteSelected()

@@ -4,7 +4,7 @@ import { App, Button, Card, Drawer, Empty, Form, Input, Popconfirm, Space, Switc
 import { DeleteOutlined, InboxOutlined, UploadOutlined } from '@ant-design/icons'
 import { Markdown } from '@/shared/ui/Markdown'
 import { PageHeader } from '@/shared/ui/PageHeader'
-import { deleteSkill, getSkill, listSkills, setVisibility, toggleSkill, uploadSkill, type Skill } from './api'
+import { deleteSkill, getSkill, listSkillReferences, listSkills, setVisibility, toggleSkill, uploadSkill, type Skill } from './api'
 import { getSkillBody, getSkillDetailMetadata } from './utils'
 import { VisibilitySelect } from '@/shared/ui/VisibilitySelect'
 import { MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
@@ -20,6 +20,11 @@ export function SkillsPage() {
   const detailQuery = useQuery({
     queryKey: ['skills', 'detail', selectedName],
     queryFn: () => getSkill(selectedName!),
+    enabled: Boolean(selectedName),
+  })
+  const referencesQuery = useQuery({
+    queryKey: ['skills', 'references', selectedName],
+    queryFn: () => listSkillReferences(selectedName!),
     enabled: Boolean(selectedName),
   })
   const selected = detailQuery.data ?? query.data?.find((skill) => skill.name === selectedName) ?? null
@@ -179,6 +184,50 @@ export function SkillsPage() {
                 key: 'metadata',
                 label: 'Metadata',
                 children: <MetadataDescriptions value={detailMetadata} />,
+              },
+              {
+                key: 'references',
+                label: t('referencesTab'),
+                children: referencesQuery.isLoading ? (
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('common:loading')} />
+                ) : referencesQuery.data?.length ? (
+                  <Table
+                    size="small"
+                    rowKey="workflow_id"
+                    pagination={false}
+                    dataSource={referencesQuery.data}
+                    columns={[
+                      {
+                        title: t('referencedWorkflow'),
+                        dataIndex: 'name',
+                        ellipsis: true,
+                      },
+                      {
+                        title: t('version'),
+                        dataIndex: 'version',
+                        width: 88,
+                        render: (value: string) => (value ? `v${value}` : '—'),
+                      },
+                      {
+                        title: t('common:actions'),
+                        key: 'open',
+                        width: 100,
+                        render: (_, row) => (
+                          <Button
+                            type="link"
+                            size="small"
+                            style={{ paddingInline: 0 }}
+                            href={`#/workflows?workflow_id=${encodeURIComponent(row.workflow_id)}`}
+                          >
+                            {t('openWorkflow')}
+                          </Button>
+                        ),
+                      },
+                    ]}
+                  />
+                ) : (
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('referencesEmpty')} />
+                ),
               },
             ]}
           />

@@ -28,6 +28,7 @@ from api.services.skill_service import (
 from api.services.upload_approval_service import submit_skill_upload
 from api.services.notification_service import notify_admins_of_submission
 from api.utils.pagination import pagination_meta
+from api.services.skill_reference_service import list_skill_workflow_references
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
@@ -118,6 +119,23 @@ def list_skills(user: User = Depends(require_scope("skill:read"))):
         ),
     }
 
+
+
+
+@router.get("/{skill_name}/references")
+async def skill_references(
+    skill_name: str,
+    user: User = Depends(require_scope("skill:read")),
+):
+    """Workflows that bind this skill on one or more steps (read-only)."""
+    info = get_skill_info(skill_name, user, include_detail=False)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' 不存在")
+    items = await list_skill_workflow_references(user, skill_name)
+    return {
+        "data": items,
+        "meta": pagination_meta(page=1, limit=max(len(items), 1), total_count=len(items)),
+    }
 
 @router.get("/{skill_name}", response_model=SkillInfo)
 def get_skill(skill_name: str, user: User = Depends(require_scope("skill:read"))):
