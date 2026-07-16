@@ -124,6 +124,26 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Skills 列表去 markdown + 详情按需
+
+- `list_skill_infos(include_markdown=False)` 默认不读整份 SKILL.md；`GET /api/skills/{name}` 按需返回全文
+- Skills 页选中行后 `getSkill` 拉详情；Workflow 绑定只依赖 name/description，首包更小
+- 与 Chat 页大小收紧、Knowledge clear 日志同批
+
+相关：`skill_service.py` / `routes/skills.py` / `SkillsPage.tsx`
+
+---
+
+## 已完成：Chat 会话页大小收紧 + Knowledge clear 日志
+
+- Chat / Trace 共用 `SESSION_PAGE_SIZE` 100→40（侧栏与 infinite load-more 首屏更轻；Trace 自动合并窗口 5 页 ≈200 条）
+- `listSessions` 默认 limit 同步 40；相关 api/trace 测试对齐
+- Knowledge `clear_knowledge_base_async` 单条删除失败写 warning（仍收集 `failed_ids`）
+
+相关：`chat/queries.ts` / `chat/api.ts` / `knowledge_service.py`
+
+---
+
 ## 已完成：通知列表索引 + Trace audit 补充可观测
 
 - `notifications` 表补 `user_id+created_at` / `user_id+id` / `user_id+read` 索引，覆盖抽屉列表、SSE 游标与未读计数

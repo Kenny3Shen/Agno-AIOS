@@ -49,7 +49,7 @@ export const listSessions = async (
   includeArchived = false,
   userId?: string,
   page = 1,
-  limit = 100
+  limit = 40
 ): Promise<SessionListResult> => {
   const search = new URLSearchParams()
   if (includeArchived) search.set('include_archived', 'true')

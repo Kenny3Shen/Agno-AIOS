@@ -1,7 +1,7 @@
 import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
 import { getHistory, getModels, listSessions } from './api'
 
-export const SESSION_PAGE_SIZE = 100
+export const SESSION_PAGE_SIZE = 40
 
 export const chatKeys = {
   all: ['chat'] as const,

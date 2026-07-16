@@ -4,7 +4,7 @@ import { App, Button, Card, Drawer, Empty, Form, Input, Popconfirm, Space, Switc
 import { DeleteOutlined, InboxOutlined, UploadOutlined } from '@ant-design/icons'
 import { Markdown } from '@/shared/ui/Markdown'
 import { PageHeader } from '@/shared/ui/PageHeader'
-import { deleteSkill, listSkills, setVisibility, toggleSkill, uploadSkill, type Skill } from './api'
+import { deleteSkill, getSkill, listSkills, setVisibility, toggleSkill, uploadSkill, type Skill } from './api'
 import { getSkillBody, getSkillDetailMetadata } from './utils'
 import { VisibilitySelect } from '@/shared/ui/VisibilitySelect'
 import { MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
@@ -15,8 +15,14 @@ export function SkillsPage() {
   const { message } = App.useApp()
   const client = useQueryClient()
   const query = useQuery({ queryKey: ['skills'], queryFn: listSkills })
-  const [selected, setSelected] = useState<Skill | null>(null)
+  const [selectedName, setSelectedName] = useState<string | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
+  const detailQuery = useQuery({
+    queryKey: ['skills', 'detail', selectedName],
+    queryFn: () => getSkill(selectedName!),
+    enabled: Boolean(selectedName),
+  })
+  const selected = detailQuery.data ?? query.data?.find((skill) => skill.name === selectedName) ?? null
   const refresh = () => client.invalidateQueries({ queryKey: ['skills'] })
   const updateVisibility = async (name: string, visibility: 'private' | 'public') => {
     try {
@@ -30,7 +36,7 @@ export function SkillsPage() {
   const removeSkill = async (skill: Skill) => {
     try {
       await deleteSkill(skill.name)
-      if (selected?.name === skill.name) setSelected(null)
+      if (selectedName === skill.name) setSelectedName(null)
       message.success(t('deleted'))
       await refresh()
     } catch (error) {
@@ -65,16 +71,16 @@ export function SkillsPage() {
           dataSource={query.data ?? []}
           loading={query.isLoading}
           scroll={{ x: 760 }}
-          rowClassName={(row) => (row.name === selected?.name ? 'selected-table-row' : '')}
+          rowClassName={(row) => (row.name === selectedName ? 'selected-table-row' : '')}
           onRow={(row) => ({
             tabIndex: 0,
             role: 'button',
             'aria-label': t('viewSkill', { name: row.name }),
-            onClick: () => setSelected(row),
+            onClick: () => setSelectedName(row.name),
             onKeyDown: (event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault()
-                setSelected(row)
+                setSelectedName(row.name)
               }
             },
           })}
@@ -149,12 +155,14 @@ export function SkillsPage() {
       </Card>
       <Drawer
         size={560}
-        open={Boolean(selected)}
-        onClose={() => setSelected(null)}
-        title={selected?.name ?? 'Skill'}
+        open={Boolean(selectedName)}
+        onClose={() => setSelectedName(null)}
+        title={selected?.name ?? selectedName ?? 'Skill'}
         destroyOnHidden
       >
-        {selected ? (
+        {detailQuery.isLoading && !selected?.skill_markdown ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('common:loading')} />
+        ) : selected ? (
           <Tabs
             destroyOnHidden
             items={[

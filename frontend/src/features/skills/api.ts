@@ -22,6 +22,8 @@ export interface UploadApprovalSubmission {
   status?: string
 }
 export const listSkills = async () => (await requestJson<{ skills: Skill[] }>('/skills')).skills
+export const getSkill = (name: string) =>
+  requestJson<Skill>(`/skills/${encodeURIComponent(name)}`)
 export const toggleSkill = (name: string, enabled: boolean) =>
   requestJson(`/skills/${encodeURIComponent(name)}/toggle`, jsonInit('PUT', { enabled }))
 export const setVisibility = (name: string, visibility: ResourceVisibility) =>

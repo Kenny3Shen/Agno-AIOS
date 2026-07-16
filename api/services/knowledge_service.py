@@ -1719,6 +1719,11 @@ class KnowledgeBaseLifecycle:
                 await remove_managed_upload_async(metadata)
                 deleted_ids.append(content_id)
             except Exception:
+                logger.warning(
+                    "knowledge clear failed for content {}",
+                    content_id,
+                    exc_info=True,
+                )
                 failed_ids.append(content_id)
         remaining_documents = len(managed_contents) - len(deleted_ids)
         return {

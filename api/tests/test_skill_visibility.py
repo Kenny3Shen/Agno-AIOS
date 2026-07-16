@@ -150,3 +150,17 @@ def test_uploaded_skill_name_defaults_to_archive_stem():
     assert skills.uploaded_skill_name("my-skill.zip", "") == "my-skill"
     assert skills.uploaded_skill_name(r"nested\\my-skill.zip", "  ") == "my-skill"
     assert skills.uploaded_skill_name("my-skill.zip", "Custom name") == "Custom name"
+
+
+def test_list_skill_infos_omits_markdown_by_default(tmp_path, monkeypatch):
+    monkeypatch.setattr(skill_service, "get_skills_dir", lambda: tmp_path)
+    monkeypatch.setattr(skill_service, "load_skills_config", lambda: {})
+    write_skill(tmp_path, "owned", name="Owned", visibility="private", owner="u1")
+
+    listed = skill_service.list_skill_infos(actor("u1"))
+    assert listed[0]["skill_markdown"] == ""
+
+    detail = skill_service.get_skill_info("Owned", actor("u1"))
+    assert detail is not None
+    assert "Body" in detail["skill_markdown"]
+

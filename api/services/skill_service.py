@@ -222,35 +222,72 @@ def find_skill_dir(skill_name: str) -> Path | None:
     return None
 
 
-def list_skill_infos(user: Any | None = None) -> list[SkillInfoData]:
+def _skill_info_for_dir(
+    skill_dir: Path,
+    *,
+    cfg: dict[str, bool],
+    user: Any | None,
+    include_markdown: bool,
+) -> SkillInfoData | None:
+    metadata = parse_skill_metadata(skill_dir)
+    visibility_info = metadata.as_visibility_metadata()
+    if user is not None and not can_read_resource(user, visibility_info):
+        return None
+    scripts = list_skill_scripts(skill_dir)
+    attachments = list_skill_attachments(skill_dir)
+    return {
+        "name": metadata.name,
+        "description": metadata.description,
+        "enabled": _skill_enabled_from_config(cfg, skill_dir, metadata.name),
+        "has_scripts": len(scripts) > 0,
+        "scripts": scripts,
+        "attachments": attachments,
+        # List payloads skip body text; detail/get loads markdown on demand.
+        "skill_markdown": read_skill_markdown(skill_dir) if include_markdown else "",
+        "visibility": metadata.visibility,
+        "owner_user_id": metadata.owner_user_id,
+        "can_manage": user is None or can_manage_resource(user, visibility_info),
+        "can_delete": user is not None and actor_role(user) == "admin",
+    }
+
+
+def list_skill_infos(
+    user: Any | None = None,
+    *,
+    include_markdown: bool = False,
+) -> list[SkillInfoData]:
     if not get_skills_dir().is_dir():
         return []
 
     cfg = load_skills_config()
     skills: list[SkillInfoData] = []
     for skill_dir in iter_skill_dirs():
-        metadata = parse_skill_metadata(skill_dir)
-        visibility_info = metadata.as_visibility_metadata()
-        if user is not None and not can_read_resource(user, visibility_info):
-            continue
-        scripts = list_skill_scripts(skill_dir)
-        attachments = list_skill_attachments(skill_dir)
-        skills.append(
-            {
-                "name": metadata.name,
-                "description": metadata.description,
-                "enabled": _skill_enabled_from_config(cfg, skill_dir, metadata.name),
-                "has_scripts": len(scripts) > 0,
-                "scripts": scripts,
-                "attachments": attachments,
-                "skill_markdown": read_skill_markdown(skill_dir),
-                "visibility": metadata.visibility,
-                "owner_user_id": metadata.owner_user_id,
-                "can_manage": user is None or can_manage_resource(user, visibility_info),
-                "can_delete": user is not None and actor_role(user) == "admin",
-            }
+        info = _skill_info_for_dir(
+            skill_dir,
+            cfg=cfg,
+            user=user,
+            include_markdown=include_markdown,
         )
+        if info is not None:
+            skills.append(info)
     return skills
+
+
+def get_skill_info(
+    skill_name: str,
+    user: Any | None = None,
+    *,
+    include_markdown: bool = True,
+) -> SkillInfoData | None:
+    skill_dir = find_skill_dir(skill_name)
+    if skill_dir is None:
+        return None
+    return _skill_info_for_dir(
+        skill_dir,
+        cfg=load_skills_config(),
+        user=user,
+        include_markdown=include_markdown,
+    )
 
 
 def set_skill_enabled(skill_name: str, enabled: bool, user: Any | None = None) -> str:

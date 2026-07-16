@@ -10,7 +10,7 @@ describe('chat API', () => {
     server.use(
       http.get('/api/chat/sessions', ({ request }) => {
         expect(request.headers.get('authorization')).toBe('Bearer token')
-        return HttpResponse.json({ data: [{ session_id: 's1', preview: 'run', created_at: 1, updated_at: 2 }], meta: { page: 1, limit: 100, total_pages: 1, total_count: 1, search_time_ms: 0 } })
+        return HttpResponse.json({ data: [{ session_id: 's1', preview: 'run', created_at: 1, updated_at: 2 }], meta: { page: 1, limit: 40, total_pages: 1, total_count: 1, search_time_ms: 0 } })
       })
     )
     expect((await listSessions()).data[0]?.session_id).toBe('s1')
@@ -21,14 +21,14 @@ describe('chat API', () => {
       http.get('/api/chat/sessions', () =>
         HttpResponse.json({
           data: [{ session_id: 's2', preview: 'p', created_at: 3, updated_at: 4 }],
-          meta: { page: 1, limit: 100, total_pages: 1, total_count: 1, search_time_ms: 0 },
+          meta: { page: 1, limit: 40, total_pages: 1, total_count: 1, search_time_ms: 0 },
         })
       )
     )
     const sessions = await listSessions()
     expect(sessions.data).toHaveLength(1)
     expect(sessions.data[0]?.session_id).toBe('s2')
-    expect(sessions.meta.limit).toBe(100)
+    expect(sessions.meta.limit).toBe(40)
   })
 
   it('requests archived sessions when explicitly enabled', async () => {
@@ -37,7 +37,7 @@ describe('chat API', () => {
         const params = new URL(request.url).searchParams
         expect(params.get('include_archived')).toBe('true')
         expect(params.get('page')).toBe('1')
-        return HttpResponse.json({ data: [], meta: { page: 1, limit: 100, total_pages: 0, total_count: 0, search_time_ms: 0 } })
+        return HttpResponse.json({ data: [], meta: { page: 1, limit: 40, total_pages: 0, total_count: 0, search_time_ms: 0 } })
       })
     )
 
@@ -49,14 +49,14 @@ describe('chat API', () => {
       http.get('/api/chat/sessions', ({ request }) => {
         const params = new URL(request.url).searchParams
         expect(params.get('page')).toBe('2')
-        expect(params.get('limit')).toBe('100')
+        expect(params.get('limit')).toBe('40')
         return HttpResponse.json({
           data: [{ session_id: 's3', preview: 'older', created_at: 5, updated_at: 6 }],
-          meta: { page: 2, limit: 100, total_pages: 3, total_count: 250, search_time_ms: 1 },
+          meta: { page: 2, limit: 40, total_pages: 3, total_count: 250, search_time_ms: 1 },
         })
       })
     )
-    const result = await listSessions(false, undefined, 2, 100)
+    const result = await listSessions(false, undefined, 2, 40)
     expect(result.data[0]?.session_id).toBe('s3')
     expect(result.meta).toMatchObject({ page: 2, total_pages: 3, total_count: 250 })
   })

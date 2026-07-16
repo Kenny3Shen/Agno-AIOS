@@ -19,6 +19,7 @@ from api.services.audit_service import audit_request_context, record_audit_event
 from api.services.skill_service import (
     MAX_SKILL_ARCHIVE_BYTES,
     delete_skill,
+    get_skill_info,
     install_skill_archive,
     list_skill_infos,
     set_skill_enabled,
@@ -103,10 +104,22 @@ class SkillVisibilityRequest(BaseModel):
 
 @router.get("", response_model=SkillListResponse)
 def list_skills(user: User = Depends(require_scope("skill:read"))):
-    """列出所有 Skill 及其元数据和启用状态"""
+    """List skill metadata (no full SKILL.md body; use GET /{name} for detail)."""
     return SkillListResponse(
-        skills=[SkillInfo(**item) for item in list_skill_infos(user)]
+        skills=[
+            SkillInfo(**item)
+            for item in list_skill_infos(user, include_markdown=False)
+        ]
     )
+
+
+@router.get("/{skill_name}", response_model=SkillInfo)
+def get_skill(skill_name: str, user: User = Depends(require_scope("skill:read"))):
+    """Return one skill including full SKILL.md for the detail drawer."""
+    info = get_skill_info(skill_name, user, include_markdown=True)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' 不存在")
+    return SkillInfo(**info)
 
 
 @router.put("/{skill_name}/toggle", response_model=SkillToggleResponse)
