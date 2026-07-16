@@ -124,46 +124,6 @@ export const normalizeApproval = (value: unknown): Approval | null => {
 }
 
 
-const fetchHitlPage = async (
-  status: string,
-  page: number,
-  limit: number,
-  sourceType?: string,
-): Promise<{ data: Approval[]; total_count: number }> => {
-  const search = new URLSearchParams()
-  search.set('page', String(page))
-  search.set('limit', String(limit))
-  if (status) search.set('status', status)
-  if (sourceType) search.set('source_type', sourceType)
-  const result = normalizePaginatedList(await requestJson<unknown>(`/approvals?${search.toString()}`), {
-    page,
-    limit,
-    mapItem: normalizeApproval,
-  })
-  return { data: result.data, total_count: result.meta.total_count }
-}
-
-const fetchSubmissionsPage = async (
-  status: string,
-  page: number,
-  limit: number,
-): Promise<{ data: Approval[]; total_count: number }> => {
-  const shouldFetch = !status || ['pending', 'approved', 'rejected'].includes(status)
-  if (!shouldFetch) {
-    return { data: [], total_count: 0 }
-  }
-  const search = new URLSearchParams()
-  if (status) search.set('status', status)
-  search.set('page', String(page))
-  search.set('limit', String(limit))
-  const result = normalizePaginatedList(await requestJson<unknown>(`/approvals/submissions?${search}`), {
-    page,
-    limit,
-    mapItem: normalizeApproval,
-  })
-  return { data: result.data, total_count: result.meta.total_count }
-}
-
 /**
  * Approvals list with real pagination.
  * ``kind=all`` uses server ``combined=true`` (uploads then HITL).
@@ -175,19 +135,31 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
   const limit = Math.min(100, Math.max(1, Number(params.limit ?? 20) || 20))
 
   if (kind === 'upload') {
-    const submissions = await fetchSubmissionsPage(status, page, limit)
-    return {
-      data: submissions.data,
-      meta: listPaginationMeta(page, limit, submissions.total_count),
+    if (status && !['pending', 'approved', 'rejected'].includes(status)) {
+      return { data: [], meta: listPaginationMeta(page, limit, 0) }
     }
+    const search = new URLSearchParams()
+    if (status) search.set('status', status)
+    search.set('page', String(page))
+    search.set('limit', String(limit))
+    return normalizePaginatedList(await requestJson<unknown>(`/approvals/submissions?${search}`), {
+      page,
+      limit,
+      mapItem: normalizeApproval,
+    })
   }
 
   if (kind === 'workflow' || kind === 'agent') {
-    const hitl = await fetchHitlPage(status, page, limit, kind)
-    return {
-      data: hitl.data,
-      meta: listPaginationMeta(page, limit, hitl.total_count),
-    }
+    const search = new URLSearchParams()
+    search.set('page', String(page))
+    search.set('limit', String(limit))
+    if (status) search.set('status', status)
+    search.set('source_type', kind)
+    return normalizePaginatedList(await requestJson<unknown>(`/approvals?${search.toString()}`), {
+      page,
+      limit,
+      mapItem: normalizeApproval,
+    })
   }
 
   const search = new URLSearchParams()
@@ -195,12 +167,11 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
   search.set('combined', 'true')
   search.set('page', String(page))
   search.set('limit', String(limit))
-  const result = normalizePaginatedList(await requestJson<unknown>(`/approvals?${search.toString()}`), {
+  return normalizePaginatedList(await requestJson<unknown>(`/approvals?${search.toString()}`), {
     page,
     limit,
     mapItem: normalizeApproval,
   })
-  return result
 }
 
 

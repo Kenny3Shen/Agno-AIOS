@@ -199,14 +199,23 @@ const normalizeWorkflow = (value: unknown): WorkflowRecord | null => {
   }
 }
 
-export const listWorkflows = async (page = 1, limit = 50) => {
-  const raw = await requestJson<unknown>(`/workflows?page=${page}&limit=${limit}`)
-  const { data } = normalizePaginatedList(raw, {
-    page,
-    limit,
+export const listWorkflows = async (page = 1, limit = 100) => {
+  const safePage = Math.max(1, page)
+  const safeLimit = Math.min(100, Math.max(1, limit))
+  const raw = await requestJson<unknown>(`/workflows?page=${safePage}&limit=${safeLimit}`)
+  return normalizePaginatedList(raw, {
+    page: safePage,
+    limit: safeLimit,
     mapItem: normalizeWorkflow,
   })
-  return data
+}
+
+export const getWorkflow = async (id: string) => {
+  const row = normalizeWorkflow(
+    await requestJson<unknown>(`/workflows/${encodeURIComponent(id)}`),
+  )
+  if (!row) throw new Error('Invalid workflow payload')
+  return row
 }
 
 export const createWorkflow = async (body: {
@@ -367,13 +376,15 @@ export const streamWorkflowRun = async (
 }
 
 
-export const listWorkflowVersions = async (workflowId: string, page = 1, limit = 20) => {
+export const listWorkflowVersions = async (workflowId: string, page = 1, limit = 100) => {
+  const safePage = Math.max(1, page)
+  const safeLimit = Math.min(100, Math.max(1, limit))
   const raw = await requestJson<unknown>(
-    `/workflows/${encodeURIComponent(workflowId)}/versions?page=${page}&limit=${limit}`,
+    `/workflows/${encodeURIComponent(workflowId)}/versions?page=${safePage}&limit=${safeLimit}`,
   )
   const { data } = normalizePaginatedList(raw, {
-    page,
-    limit,
+    page: safePage,
+    limit: safeLimit,
     mapItem: (item) => {
       const row = asRecord(item)
       if (!row) return null

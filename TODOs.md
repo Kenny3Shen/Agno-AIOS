@@ -124,6 +124,13 @@ P0.4 审批值班薄入口        ✅
 ---
 
 
+## 已完成：Workflow 列表 meta 与深链按 ID 加载
+
+- `listWorkflows` 返回 `{data, meta}`（默认 limit=100，API 硬顶 100），Studio 在 `total_count > 当前页` 时 Alert。
+- 深链 `workflow_id`：列表未命中时 `getWorkflow(id)` 拉取，避免「列表截断导致无法打开」。
+- `listWorkflowVersions` 默认 limit 提到 100（后端 le=100）。
+- Approvals `getApprovals` 去掉中间 `fetch*Page` 薄包装，upload/HITL/combined 直接 `normalizePaginatedList`。
+
 ## 已完成：Trace 列表 meta 类型别名共享 normalizer
 
 - `TraceListMeta` / `TraceList` / `TraceSessionList` 对齐 `ListPaginationMeta`；Native 别名指向 UI 形状。

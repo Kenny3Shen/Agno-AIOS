@@ -181,20 +181,19 @@ export function WorkflowPage() {
   const step = workflow.selected
   const executors = workflow.executorsQuery.data ?? []
   const models = workflow.modelsQuery.data?.models ?? []
-  const saved = workflow.workflowsQuery.data ?? []
+  const saved = workflow.workflowsQuery.data?.data ?? []
+  const workflowListMeta = workflow.workflowsQuery.data?.meta
   const versions = workflow.versionsQuery.data ?? []
 
-  const savedList = workflow.workflowsQuery.data
   const currentWorkflowId = workflow.state.workflowId
   const loadWorkflow = workflow.load
-  // Deep link: #/workflow?workflow_id=...
+  // Deep link: #/workflow?workflow_id=... (load fetches by id when not in first page)
   useEffect(() => {
     const raw = window.location.hash.split('?')[1] ?? ''
     const id = new URLSearchParams(raw).get('workflow_id')
     if (!id || currentWorkflowId === id) return
-    const known = (savedList ?? []).some((item) => item.id === id)
-    if (known) loadWorkflow(id)
-  }, [savedList, currentWorkflowId, loadWorkflow])
+    loadWorkflow(id)
+  }, [currentWorkflowId, loadWorkflow])
 
   const paletteLabel = (type: WorkflowNodeType) => {
     const map: Record<WorkflowNodeType, string> = {
@@ -328,6 +327,18 @@ export function WorkflowPage() {
           ) : null}
         </Space>
       </header>
+      {workflowListMeta && workflowListMeta.total_count > saved.length ? (
+        <Alert
+          type="info"
+          showIcon
+          className="workflow-studio__list-cap"
+          title={t('listTruncated', {
+            shown: saved.length,
+            total: workflowListMeta.total_count,
+          })}
+        />
+      ) : null}
+
 
       {workflow.state.error ? (
         <Alert

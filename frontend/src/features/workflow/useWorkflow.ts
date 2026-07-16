@@ -6,6 +6,7 @@ import {
   deleteWorkflow,
   listExecutors,
   listWorkflowVersions,
+  getWorkflow,
   listWorkflows,
   listWorkflowTemplates,
   restoreWorkflowVersion,
@@ -98,7 +99,7 @@ export function useWorkflow() {
 
   const workflowsQuery = useQuery({
     queryKey: ['workflows', 'list'],
-    queryFn: () => listWorkflows(),
+    queryFn: () => listWorkflows(1, 100),
   })
   const executorsQuery = useQuery({
     queryKey: ['workflows', 'executors'],
@@ -482,17 +483,14 @@ export function useWorkflow() {
     })
   }
 
-  const load = useCallback((id: string) => {
-    const record = (workflowsQuery.data ?? []).find((item) => item.id === id)
-    if (!record) return
+  const applyRecord = useCallback((record: NonNullable<ReturnType<typeof fromRecord>>) => {
     pastRef.current = []
     futureRef.current = []
     bumpHistory()
-    const loaded = fromRecord(record)
     setState((current) => ({
       ...current,
-      ...loaded,
-      selectedIds: loaded.selectedId ? [loaded.selectedId] : [],
+      ...record,
+      selectedIds: record.selectedId ? [record.selectedId] : [],
       input: current.input,
       sessionId: crypto.randomUUID(),
       runLog: [],
@@ -500,7 +498,26 @@ export function useWorkflow() {
       validationIssues: [],
       dirty: false,
     }))
-  }, [workflowsQuery.data])
+  }, [])
+
+  const load = useCallback(
+    (id: string) => {
+      const cached = (workflowsQuery.data?.data ?? []).find((item) => item.id === id)
+      if (cached) {
+        applyRecord(fromRecord(cached))
+        return
+      }
+      void getWorkflow(id)
+        .then((record) => {
+          applyRecord(fromRecord(record))
+        })
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : 'Failed to load workflow'
+          setState((current) => ({ ...current, error: message }))
+        })
+    },
+    [applyRecord, workflowsQuery.data],
+  )
 
   const applyTemplate = (templateId: string) => {
     const template = (templatesQuery.data ?? []).find((item) => item.id === templateId)
