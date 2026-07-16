@@ -986,15 +986,143 @@ class KnowledgeBaseLifecycle:
                 documents.append(document)
             return documents, total
 
-        documents = await self.list_documents_async(owner_user_id=owner_user_id)
-        return self.paginate_documents(
-            documents,
+        # Injected/fake contents source: page content rows instead of materializing
+        # every document via list_documents_async (which walks the full corpus).
+        return await self._list_documents_page_from_content_rows_async(
+            owner_user_id=owner_user_id,
             query=query,
             page=page,
             limit=limit,
             sort_by=sort_by,
             sort_order=sort_order,
         )
+
+    @staticmethod
+    def _document_matches_query(document: KnowledgeDocumentPayload, query: str) -> bool:
+        clean_query = query.strip().casefold()
+        if not clean_query:
+            return True
+        haystack = " ".join(
+            (
+                document["id"],
+                document["title"],
+                document["source"],
+                *document["metadata"].values(),
+            )
+        ).casefold()
+        return clean_query in haystack
+
+    async def _list_documents_page_from_content_rows_async(
+        self,
+        *,
+        owner_user_id: str | None,
+        query: str | None,
+        page: int,
+        limit: int,
+        sort_by: str,
+        sort_order: str,
+    ) -> tuple[list[KnowledgeDocumentPayload], int]:
+        """Page documents from an injected ``knowledge_content_rows_async``.
+
+        Avoids ``list_documents_async`` full-corpus materialization. Free-text
+        query requires collecting matches for client-side sort; owner-only and
+        unfiltered paths stream content pages and keep only the requested window.
+        """
+        await self._ensure_contents_storage_async()
+        safe_page = max(1, page)
+        safe_limit = min(100, max(1, limit))
+        clean_query = (query or "").strip()
+        has_owner = bool((owner_user_id or "").strip())
+        chunk_counts = await self._chunk_counts_by_content_id_async(owner_user_id)
+
+        # Fast path: no owner/query filter — trust dependency page/limit/total.
+        if not clean_query and not has_owner:
+            contents, total = await self._knowledge_content_rows_async(
+                limit=safe_limit,
+                page=safe_page,
+                sort_by=sort_by,
+                sort_order=sort_order,
+            )
+            documents: list[KnowledgeDocumentPayload] = []
+            for content in contents:
+                document = _content_to_document(content)
+                document["chunks"] = chunk_counts.get(document["id"], document["chunks"])
+                documents.append(document)
+            return documents, int(total or len(documents))
+
+        # Free-text query: dependency cannot search metadata fields reliably —
+        # collect matches then paginate/sort in memory.
+        if clean_query:
+            fetch_size = 200
+            content_page = 1
+            matches: list[KnowledgeDocumentPayload] = []
+            while True:
+                contents, total_count = await self._knowledge_content_rows_async(
+                    limit=fetch_size,
+                    page=content_page,
+                    sort_by=sort_by,
+                    sort_order=sort_order,
+                )
+                if not contents:
+                    break
+                for content in contents:
+                    if not _content_visible_to_owner(content, owner_user_id):
+                        continue
+                    document = _content_to_document(content)
+                    if not self._document_matches_query(document, clean_query):
+                        continue
+                    document["chunks"] = chunk_counts.get(
+                        document["id"], document["chunks"]
+                    )
+                    matches.append(document)
+                if len(contents) < fetch_size:
+                    break
+                if total_count is not None and content_page * fetch_size >= int(total_count):
+                    break
+                content_page += 1
+                if content_page > 10_000:
+                    break
+            return self.paginate_documents(
+                matches,
+                query=None,
+                page=safe_page,
+                limit=safe_limit,
+                sort_by=sort_by,
+                sort_order=sort_order,
+            )
+
+        # Owner filter only: preserve dependency sort order among visible rows,
+        # stream pages, keep only the requested window + match total.
+        fetch_size = 200
+        content_page = 1
+        offset = (safe_page - 1) * safe_limit
+        matched_page: list[KnowledgeDocumentPayload] = []
+        total_matched = 0
+        while True:
+            contents, total_count = await self._knowledge_content_rows_async(
+                limit=fetch_size,
+                page=content_page,
+                sort_by=sort_by,
+                sort_order=sort_order,
+            )
+            if not contents:
+                break
+            for content in contents:
+                if not _content_visible_to_owner(content, owner_user_id):
+                    continue
+                document = _content_to_document(content)
+                document["chunks"] = chunk_counts.get(document["id"], document["chunks"])
+                if offset <= total_matched < offset + safe_limit:
+                    matched_page.append(document)
+                total_matched += 1
+            if len(contents) < fetch_size:
+                break
+            if total_count is not None and content_page * fetch_size >= int(total_count):
+                break
+            content_page += 1
+            if content_page > 10_000:
+                break
+        return matched_page, total_matched
 
     @staticmethod
     def paginate_documents(

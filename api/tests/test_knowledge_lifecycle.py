@@ -1655,8 +1655,10 @@ async def test_list_documents_page_filters_sorts_and_reports_total() -> None:
             created_at=3,
         ),
     ]
+    content_calls: list[dict[str, object]] = []
 
-    async def content_rows_async(**_kwargs: object):
+    async def content_rows_async(**kwargs: object):
+        content_calls.append(dict(kwargs))
         return contents, len(contents)
 
     lifecycle = knowledge_service.KnowledgeBaseLifecycle(
@@ -1678,6 +1680,93 @@ async def test_list_documents_page_filters_sorts_and_reports_total() -> None:
 
     assert total == 2
     assert [document["id"] for document in documents] == ["doc-2"]
+    # Injected path streams content rows (not a single unbounded dump via list_documents_async).
+    assert content_calls
+    assert all(call.get("limit") == 200 for call in content_calls)
+
+
+@pytest.mark.asyncio
+async def test_list_documents_page_injected_unfiltered_uses_native_page_limit() -> None:
+    """Admin/unscoped list should pass page/limit through without full collect."""
+    rows = [
+        SimpleNamespace(
+            id=f"doc-{i}",
+            name=f"Doc {i}",
+            metadata={"user_id": "u1"},
+            created_at=i,
+        )
+        for i in range(1, 6)
+    ]
+    calls: list[dict[str, object]] = []
+
+    async def content_rows_async(**kwargs: object):
+        calls.append(dict(kwargs))
+        page = int(kwargs.get("page") or 1)
+        limit = int(kwargs.get("limit") or 50)
+        start = (page - 1) * limit
+        window = rows[start : start + limit]
+        return window, len(rows)
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_rows_async=content_rows_async,
+            chunk_counts_by_content_id_async=lambda _owner: {},
+        )
+    )
+
+    documents, total = await lifecycle.list_documents_page_async(
+        owner_user_id=None,
+        page=2,
+        limit=2,
+        sort_by="updated_at",
+        sort_order="desc",
+    )
+
+    assert total == 5
+    assert [document["id"] for document in documents] == ["doc-3", "doc-4"]
+    assert calls == [
+        {"limit": 2, "page": 2, "sort_by": "updated_at", "sort_order": "desc"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_list_documents_page_owner_filter_streams_without_full_list() -> None:
+    rows = [
+        SimpleNamespace(id="a", name="A", metadata={"user_id": "u1"}, created_at=1),
+        SimpleNamespace(id="b", name="B", metadata={"user_id": "other"}, created_at=2),
+        SimpleNamespace(id="c", name="C", metadata={"user_id": "u1"}, created_at=3),
+        SimpleNamespace(id="d", name="D", metadata={"user_id": "u1"}, created_at=4),
+    ]
+    calls: list[dict[str, object]] = []
+
+    async def content_rows_async(**kwargs: object):
+        calls.append(dict(kwargs))
+        page = int(kwargs.get("page") or 1)
+        limit = int(kwargs.get("limit") or 200)
+        start = (page - 1) * limit
+        return rows[start : start + limit], len(rows)
+
+    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
+        knowledge_service.KnowledgeBaseLifecycleDependencies(
+            ensure_contents_storage_async=lambda: None,
+            knowledge_content_rows_async=content_rows_async,
+            chunk_counts_by_content_id_async=lambda _owner: {},
+        )
+    )
+
+    documents, total = await lifecycle.list_documents_page_async(
+        owner_user_id="u1",
+        page=1,
+        limit=2,
+        sort_by="updated_at",
+        sort_order="desc",
+    )
+
+    assert total == 3
+    assert [document["id"] for document in documents] == ["a", "c"]
+    assert calls
+    assert all(int(call.get("limit") or 0) == 200 for call in calls)
 
 
 

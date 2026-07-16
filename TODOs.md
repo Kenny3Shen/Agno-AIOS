@@ -136,6 +136,18 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
+## 已完成：Knowledge 注入路径真分页
+
+- `list_documents_page_async` 在注入 `knowledge_content_rows_async` 时不再 `list_documents_async` 全量再内存 slice
+- 无 owner/query：透传 `page/limit/total` 给依赖
+- 仅 owner：流式拉 content 页，只保留当前窗口 + 匹配 total
+- 有 query：流式匹配后 `paginate_documents`（搜索仍需扫匹配集）
+- 生产 SQL 路径（无注入）不变，继续 `_knowledge_document_page_rows_async`
+
+相关：`knowledge_service.py` / `test_knowledge_lifecycle.py`
+
+---
+
 ## 已完成：Overview 延迟 / series SQL 聚合
 
 - 窗口 p50/p95：`percentile_cont` over `duration_ms`（无 duration 时 end-start），全量窗口不落内存
