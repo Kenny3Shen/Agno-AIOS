@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import ipaddress
 import re
@@ -501,6 +502,8 @@ async def fetch_and_parse_url(urls: list[str]) -> list[str]:
             except httpx.HTTPError as e:
                 results.append(f"Network error for {url}: {e}")
                 continue
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 results.append(f"Unexpected error for {url}: {e}")
                 continue

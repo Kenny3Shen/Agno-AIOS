@@ -1,5 +1,10 @@
 # 下一步工作
 
+## 已完成：useChat 瘦身 + url2md 取消透传
+
+- `useChat` 不再维护侧栏搜索/归档状态；会话列表只拉 active 页并与侧栏 RQ 缓存对齐。
+- `fetch_and_parse_url` 透传 `CancelledError`，避免停止同步时被记成 Unexpected error。
+
 ## 已完成：Studio 运行前校验 + Run 按钮门闩
 
 - `run()` 在发 SSE 前复用 `validateWorkflowDraft` / `validateWorkflowName`，失败时高亮问题节点并提示。

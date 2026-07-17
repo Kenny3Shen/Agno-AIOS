@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
@@ -15,7 +15,6 @@ import { chatReducer, defaultReasoningEffort, initialChatState, previousPrompt }
 import type { SessionListResult } from './api'
 import type { ChatRunEvent, ChatSession, Message } from './types'
 import type { ReasoningEffort } from '@/shared/types/common'
-import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 import { buildTraceSearch, emptyTraceFilters } from '@/features/trace/utils'
 
 function bestEffortCancelRun(runId: string | null | undefined) {
@@ -35,20 +34,12 @@ export function useChat() {
   const searchStr = useRouterState({ select: (state) => state.location.searchStr })
   const sessionId = new URLSearchParams(searchStr).get('session')
   const [state, dispatch] = useReducer(chatReducer, initialChatState)
-  const [sessionSearch, setSessionSearch] = useState('')
-  const [showArchived, setShowArchived] = useState(false)
-  const debouncedSessionSearch = useDebouncedValue(sessionSearch, 300)
   const abortRef = useRef<AbortController | null>(null)
   const activeRunIdRef = useRef<string | null>(null)
-  // Track URL session so any dual useChat instance aborts the live stream on change
-  // (sidebar may call setSession while only the page instance owns the SSE).
+  // Track URL session for abort-on-change (sidebar navigates URL; this hook owns the SSE).
   const prevSessionIdRef = useRef<string | null>(sessionId)
-  const sessionsQueryResult = useInfiniteQuery(
-    sessionsQuery({
-      archivedOnly: showArchived,
-      q: debouncedSessionSearch.trim(),
-    }),
-  )
+  // Active (non-archived) list only — shares RQ cache with ChatTaskPanel recents.
+  const sessionsQueryResult = useInfiniteQuery(sessionsQuery({}))
   const sessionItems = useMemo(
     () => sessionsQueryResult.data?.pages.flatMap((page) => page.data) ?? [],
     [sessionsQueryResult.data]
@@ -65,8 +56,8 @@ export function useChat() {
   const history = useQuery(historyQuery(sessionId ?? '', !isWorkflowSession))
   const models = useQuery(modelsQuery())
 
-  // URL session changed (sidebar, deep link, or another useChat instance): abort live SSE
-  // so this instance can load history and the server run is cancelled best-effort.
+  // URL session changed (sidebar, deep link, browser history): abort live SSE
+  // so history can load and the server run is cancelled best-effort.
   useEffect(() => {
     const prev = prevSessionIdRef.current
     prevSessionIdRef.current = sessionId
@@ -81,7 +72,7 @@ export function useChat() {
     }
   }, [sessionId])
 
-  // Unmount only aborts the stream this instance registered (sidebar unmount must not kill page stream).
+  // Unmount aborts only the stream registered by this page instance.
   useEffect(() => {
     return () => {
       const local = abortRef.current
@@ -149,8 +140,7 @@ export function useChat() {
     const next = value
     const same =
       (next == null && !sessionId) || (next != null && next === sessionId)
-    // Switching sessions mid-stream aborts the live SSE even if this instance is idle
-    // (ChatTaskPanel vs ChatPage dual useChat).
+    // Switching sessions mid-stream aborts the live SSE (sidebar may change URL first).
     if (!same) {
       const { runId } = abortActiveChatStream()
       abortRef.current = null
@@ -180,46 +170,45 @@ export function useChat() {
         created_at: now,
         updated_at: now,
       }
-      if (!showArchived) {
-        queryClient.setQueryData<{ pages: SessionListResult[]; pageParams: number[] }>(
-          chatKeys.sessions({ archivedOnly: false, q: debouncedSessionSearch.trim() }),
-          (current) => {
-            const pages = current?.pages ?? []
-            if (!pages.length) {
-              return {
-                pages: [
-                  {
-                    data: [optimisticSession],
-                    meta: {
-                      page: 1,
-                      limit: SESSION_PAGE_SIZE,
-                      total_pages: 1,
-                      total_count: 1,
-                      search_time_ms: 0,
-                    },
+      // Seed active recents cache (same key as ChatTaskPanel) so the new thread appears immediately.
+      queryClient.setQueryData<{ pages: SessionListResult[]; pageParams: number[] }>(
+        chatKeys.sessions({}),
+        (current) => {
+          const pages = current?.pages ?? []
+          if (!pages.length) {
+            return {
+              pages: [
+                {
+                  data: [optimisticSession],
+                  meta: {
+                    page: 1,
+                    limit: SESSION_PAGE_SIZE,
+                    total_pages: 1,
+                    total_count: 1,
+                    search_time_ms: 0,
                   },
-                ],
-                pageParams: [1],
-              }
-            }
-            const [first, ...rest] = pages
-            const nextFirst: SessionListResult = {
-              ...first,
-              data: [
-                optimisticSession,
-                ...first.data.filter((item) => item.session_id !== activeSession),
+                },
               ],
-              meta: {
-                ...first.meta,
-                total_count:
-                  Math.max(first.meta.total_count, first.data.length) +
-                  (first.data.some((item) => item.session_id === activeSession) ? 0 : 1),
-              },
+              pageParams: [1],
             }
-            return { pages: [nextFirst, ...rest], pageParams: current?.pageParams ?? [1] }
-          },
-        )
-      }
+          }
+          const [first, ...rest] = pages
+          const nextFirst: SessionListResult = {
+            ...first,
+            data: [
+              optimisticSession,
+              ...first.data.filter((item) => item.session_id !== activeSession),
+            ],
+            meta: {
+              ...first.meta,
+              total_count:
+                Math.max(first.meta.total_count, first.data.length) +
+                (first.data.some((item) => item.session_id === activeSession) ? 0 : 1),
+            },
+          }
+          return { pages: [nextFirst, ...rest], pageParams: current?.pageParams ?? [1] }
+        },
+      )
     }
     const assistantId = crypto.randomUUID()
     const user: Message = { id: crypto.randomUUID(), role: 'user', content: text, final: true, session_id: activeSession }
@@ -355,7 +344,6 @@ export function useChat() {
   }
   const newChat = () => {
     dispatch({ type: 'reasoning-effort', value: defaultReasoningEffort(selectedModel) })
-    setSessionSearch('')
     // setSession aborts any in-flight run before clearing the URL session.
     setSession(null)
   }
@@ -364,11 +352,6 @@ export function useChat() {
     dispatch,
     sessionId,
     sessions,
-    sessionSearch,
-    setSessionSearch,
-    debouncedSessionSearch,
-    showArchived,
-    setShowArchived,
     history,
     models,
     selectedModel,
