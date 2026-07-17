@@ -228,3 +228,28 @@ def test_get_markdown_text_retries_generic_when_domain_body_too_short():
     assert md.startswith("# Teaser vs Body")
     assert "Full incident write-up" in md
     assert "Short teaser" not in md or "Full incident" in md
+
+
+def test_get_markdown_text_extracts_pre_and_blockquote():
+    """Technical posts often put the payload in pre/blockquote, not only p."""
+    body_p = ("Intro paragraph with enough surrounding context. " * 4)
+    code = "SELECT * FROM users WHERE id = 1;\n" * 6
+    quote = ("Analyst note that is long enough to keep. " * 4)
+    html = f"""
+    <html><head><title>Tech Post</title></head>
+    <body>
+      <article>
+        <h1>Section heading in body</h1>
+        <p>{body_p}</p>
+        <pre><code>{code}</code></pre>
+        <blockquote><p>{quote}</p></blockquote>
+      </article>
+    </body></html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    md = get_markdown_text(soup, "https://unknown-news.example/tech")
+    assert md.startswith("# Tech Post")
+    assert "Section heading in body" in md
+    assert "SELECT * FROM users" in md
+    assert "```" in md
+    assert "Analyst note" in md

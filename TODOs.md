@@ -1,5 +1,10 @@
 # 下一步工作
 
+## 已完成：Collect 提取 pre/blockquote/h1–h4 + Chat 归档取消归档
+
+- Collect：`get_markdown_text` 抽取标签扩展 h1/h4/pre/blockquote，技术帖代码块与引用可入库。
+- Chat：归档会话顶栏增加「取消归档」；成功后乐观更新 session-meta `archived=false` 并刷新列表。
+
 ## 已完成：Collect 域名规则正文过短时回退 generic
 
 - `get_markdown_text`：domain 容器提取 <200 字时再试 generic 容器，最后才扫全页 p/li。

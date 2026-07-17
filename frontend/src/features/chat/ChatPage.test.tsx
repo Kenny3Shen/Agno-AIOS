@@ -101,6 +101,14 @@ vi.mock('@tanstack/react-router', async (importOriginal) => ({
   useBlocker: () => undefined,
 }))
 vi.mock('./useChat', () => ({ useChat: () => chat }))
+const { unarchiveSessionMock } = vi.hoisted(() => ({
+  unarchiveSessionMock: vi.fn(async () => ({ success: true, archived: false })),
+}))
+vi.mock('./api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./api')>()),
+  unarchiveSession: unarchiveSessionMock,
+}))
+
 
 describe('chat model settings', () => {
   beforeEach(() => {
@@ -287,10 +295,13 @@ describe('chat archived session header', () => {
     chat.state.requesting = false
   })
 
-  it('shows archived badge in context bar', () => {
+  it('shows archived badge and unarchive action in context bar', async () => {
+    const user = setupUser()
+    unarchiveSessionMock.mockClear()
     renderWithQuery(<ChatPage />)
     expect(screen.getAllByText('Archived case').length).toBeGreaterThan(0)
-    // shell:conversations.archivedInbox — not the session title
     expect(screen.getByText('已归档')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: '取消归档' }))
+    expect(unarchiveSessionMock).toHaveBeenCalled()
   })
 })

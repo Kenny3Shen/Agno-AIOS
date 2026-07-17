@@ -24,7 +24,10 @@ import {
   StopOutlined,
   UserOutlined,
 } from '@ant-design/icons'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useChat } from './useChat'
+import { unarchiveSession } from './api'
+import { chatKeys } from './queries'
 import type { Message, ThoughtStep, ToolStep } from './types'
 import type { ModelConfig, ReasoningEffort } from '@/shared/types/common'
 import { useTranslation } from 'react-i18next'
@@ -431,9 +434,30 @@ function MessageBody({ message, retry, sessionId, requesting = false }: { messag
 
 export function ChatPage() {
   const { t } = useTranslation('chat')
-  const { modal } = App.useApp()
+  const { modal, message: toastMessage } = App.useApp()
   const router = useRouter()
   const chat = useChat()
+  const queryClient = useQueryClient()
+  const unarchiveMutation = useMutation({
+    mutationFn: async () => {
+      const id = chat.sessionId
+      if (!id) throw new Error('missing session')
+      await unarchiveSession(id)
+      return id
+    },
+    onSuccess: async (id) => {
+      queryClient.setQueryData(chatKeys.sessionMeta(id), (current: typeof chat.activeSessionMeta) =>
+        current ? { ...current, archived: false } : current,
+      )
+      await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
+      toastMessage.success(t('shell:conversations.unarchived'))
+    },
+    onError: (error: unknown) => {
+      toastMessage.error(
+        error instanceof Error ? error.message : t('shell:conversations.unarchiveFailed'),
+      )
+    },
+  })
   const scrollRef = useRef<HTMLDivElement>(null)
   const senderShellRef = useRef<HTMLDivElement>(null)
   const workspaceRef = useRef<HTMLDivElement>(null)
@@ -644,9 +668,20 @@ export function ChatPage() {
             <SafetyCertificateOutlined />
             <span>{activeSession?.title || t('securityAnalysis')}</span>
             {activeSession?.archived ? (
-              <Tag className="context-mode-tag" color="default">
-                {t('shell:conversations.archivedInbox')}
-              </Tag>
+              <>
+                <Tag className="context-mode-tag" color="default">
+                  {t('shell:conversations.archivedInbox')}
+                </Tag>
+                <Button
+                  size="small"
+                  type="link"
+                  className="chat-unarchive-link"
+                  loading={unarchiveMutation.isPending}
+                  onClick={() => unarchiveMutation.mutate()}
+                >
+                  {t('shell:conversations.unarchive')}
+                </Button>
+              </>
             ) : null}
             <span className="context-divider" />
             <span>{chat.selectedModel?.name ?? t('noModel')}</span>

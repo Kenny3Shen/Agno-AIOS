@@ -158,10 +158,19 @@ def parse_to_markdown(elements, truncate_marker: str = "", skip_title: str = "")
         if truncate_marker and truncate_marker in text:
             break
 
-        if tag.name == "h2":
+        if tag.name == "h1":
+            text = f"\n# {text}\n\n"
+        elif tag.name == "h2":
             text = f"\n## {text}\n\n"
         elif tag.name == "h3":
             text = f"\n### {text}\n\n"
+        elif tag.name == "h4":
+            text = f"\n#### {text}\n\n"
+        elif tag.name == "blockquote":
+            quoted = "\n".join(f"> {line}" if line else ">" for line in text.splitlines())
+            text = f"\n{quoted}\n\n"
+        elif tag.name == "pre":
+            text = f"\n```\n{text}\n```\n\n"
         elif tag.name == "p":
             if prev_tag_name == "li":
                 text = f"\n{text}\n"
@@ -174,10 +183,8 @@ def parse_to_markdown(elements, truncate_marker: str = "", skip_title: str = "")
         elif tag.name == "table":
             text = f"\n{_table_to_markdown(tag)}\n\n"
         elif tag.name == "code":
-            if tag.parent and tag.parent.name == "pre":
-                text = f"\n```\n{text}\n```\n\n"
-            else:
-                text = f"`{text}`"
+            # When parent pre is also selected, parent-skip drops this node.
+            text = f"`{text}`"
         elif tag.name == "div":
             text = f"{text}\n\n"
 
@@ -355,7 +362,7 @@ def get_markdown_text(soup: BeautifulSoup, url: str) -> str:
         包含标题和正文的 Markdown 格式文本
     """
     title = _get_title_text(soup)
-    tags_to_extract = ["h2", "h3", "p", "strong", "li", "table", "code"]
+    tags_to_extract = ["h1", "h2", "h3", "h4", "p", "strong", "li", "table", "pre", "code", "blockquote"]
 
     domain_key = resolve_domain_rule_key(url)
     domain_container = None
@@ -420,7 +427,7 @@ def get_markdown_text(soup: BeautifulSoup, url: str) -> str:
 
     if len(main_paragraphs) < 200:
         # Last resort: whole-document paragraphs (noisy but better than empty).
-        elements = soup.find_all(["p", "li", "h2", "h3"])
+        elements = soup.find_all(["p", "li", "h1", "h2", "h3", "h4", "pre", "blockquote"])
         main_paragraphs = parse_to_markdown(elements, "", title)
 
     if len(main_paragraphs) < 200:
