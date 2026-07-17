@@ -24,8 +24,11 @@ const chat = {
   sessionSearch: '',
   debouncedSessionSearch: '',
   setSessionSearch: vi.fn<(value: string) => void>(),
+  showArchived: false,
+  setShowArchived: vi.fn<(value: boolean) => void>(),
   setSession: vi.fn<(sessionId: string) => void>(),
   newChat: vi.fn<() => void>(),
+  state: { requesting: false },
 }
 
 vi.mock('./useChat', () => ({ useChat: () => chat }))

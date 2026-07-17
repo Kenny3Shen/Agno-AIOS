@@ -3,20 +3,63 @@ import { getHistory, getModels, listSessions } from './api'
 
 export const SESSION_PAGE_SIZE = 40
 
+export type SessionsQueryOptions = {
+  /** Only archived sessions (SQL archived_only). */
+  archivedOnly?: boolean
+  /** Include archived among active (legacy include_archived). */
+  includeArchived?: boolean
+  userId?: string
+  q?: string
+}
+
 export const chatKeys = {
   all: ['chat'] as const,
   sessionLists: ['chat', 'sessions'] as const,
-  sessions: (includeArchived = false, userId?: string, q = '') =>
-    ['chat', 'sessions', { includeArchived, userId, q }] as const,
+  sessions: (options: SessionsQueryOptions = {}) =>
+    [
+      'chat',
+      'sessions',
+      {
+        archivedOnly: Boolean(options.archivedOnly),
+        includeArchived: Boolean(options.includeArchived),
+        userId: options.userId,
+        q: options.q ?? '',
+      },
+    ] as const,
   history: (id: string) => ['chat', 'history', id] as const,
   models: ['settings', 'models'] as const,
 }
 
-export const sessionsQuery = (includeArchived = false, userId?: string, q = '') =>
-  infiniteQueryOptions({
-    queryKey: chatKeys.sessions(includeArchived, userId, q),
+/** Infinite session list. Prefer object form; boolean first arg is legacy includeArchived. */
+export const sessionsQuery = (
+  options: SessionsQueryOptions | boolean = {},
+  userId?: string,
+  q = '',
+) => {
+  const normalized: SessionsQueryOptions =
+    typeof options === 'boolean'
+      ? { includeArchived: options, userId, q }
+      : options
+  const archivedOnly = Boolean(normalized.archivedOnly)
+  const includeArchived = Boolean(normalized.includeArchived)
+  const scopedUserId = normalized.userId
+  const query = normalized.q ?? ''
+  return infiniteQueryOptions({
+    queryKey: chatKeys.sessions({
+      archivedOnly,
+      includeArchived,
+      userId: scopedUserId,
+      q: query,
+    }),
     queryFn: ({ pageParam }) =>
-      listSessions({ includeArchived, userId, page: pageParam, limit: SESSION_PAGE_SIZE, q: q || undefined }),
+      listSessions({
+        archivedOnly,
+        includeArchived: archivedOnly ? false : includeArchived,
+        userId: scopedUserId,
+        page: pageParam,
+        limit: SESSION_PAGE_SIZE,
+        q: query || undefined,
+      }),
     initialPageParam: 1,
     placeholderData: keepPreviousData,
     getNextPageParam: (lastPage) => {
@@ -26,6 +69,7 @@ export const sessionsQuery = (includeArchived = false, userId?: string, q = '') 
       return undefined
     },
   })
+}
 
 export const historyQuery = (id: string, enabled = true) =>
   queryOptions({

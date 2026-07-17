@@ -20,10 +20,16 @@ export function useChat() {
   const sessionId = new URLSearchParams(searchStr).get('session')
   const [state, dispatch] = useReducer(chatReducer, initialChatState)
   const [sessionSearch, setSessionSearch] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
   const debouncedSessionSearch = useDebouncedValue(sessionSearch, 300)
   const abortRef = useRef<AbortController | null>(null)
   const activeRunIdRef = useRef<string | null>(null)
-  const sessionsQueryResult = useInfiniteQuery(sessionsQuery(false, undefined, debouncedSessionSearch.trim()))
+  const sessionsQueryResult = useInfiniteQuery(
+    sessionsQuery({
+      archivedOnly: showArchived,
+      q: debouncedSessionSearch.trim(),
+    }),
+  )
   const sessionItems = useMemo(
     () => sessionsQueryResult.data?.pages.flatMap((page) => page.data) ?? [],
     [sessionsQueryResult.data]
@@ -127,30 +133,46 @@ export function useChat() {
         created_at: now,
         updated_at: now,
       }
-      queryClient.setQueryData<{ pages: SessionListResult[]; pageParams: number[] }>(chatKeys.sessions(), (current) => {
-        const pages = current?.pages ?? []
-        if (!pages.length) {
-          return {
-            pages: [
-              {
-                data: [optimisticSession],
-                meta: { page: 1, limit: SESSION_PAGE_SIZE, total_pages: 1, total_count: 1, search_time_ms: 0 },
+      if (!showArchived) {
+        queryClient.setQueryData<{ pages: SessionListResult[]; pageParams: number[] }>(
+          chatKeys.sessions({ archivedOnly: false, q: debouncedSessionSearch.trim() }),
+          (current) => {
+            const pages = current?.pages ?? []
+            if (!pages.length) {
+              return {
+                pages: [
+                  {
+                    data: [optimisticSession],
+                    meta: {
+                      page: 1,
+                      limit: SESSION_PAGE_SIZE,
+                      total_pages: 1,
+                      total_count: 1,
+                      search_time_ms: 0,
+                    },
+                  },
+                ],
+                pageParams: [1],
+              }
+            }
+            const [first, ...rest] = pages
+            const nextFirst: SessionListResult = {
+              ...first,
+              data: [
+                optimisticSession,
+                ...first.data.filter((item) => item.session_id !== activeSession),
+              ],
+              meta: {
+                ...first.meta,
+                total_count:
+                  Math.max(first.meta.total_count, first.data.length) +
+                  (first.data.some((item) => item.session_id === activeSession) ? 0 : 1),
               },
-            ],
-            pageParams: [1],
-          }
-        }
-        const [first, ...rest] = pages
-        const nextFirst: SessionListResult = {
-          ...first,
-          data: [optimisticSession, ...first.data.filter((item) => item.session_id !== activeSession)],
-          meta: {
-            ...first.meta,
-            total_count: Math.max(first.meta.total_count, first.data.length) + (first.data.some((item) => item.session_id === activeSession) ? 0 : 1),
+            }
+            return { pages: [nextFirst, ...rest], pageParams: current?.pageParams ?? [1] }
           },
-        }
-        return { pages: [nextFirst, ...rest], pageParams: current?.pageParams ?? [1] }
-      })
+        )
+      }
     }
     const assistantId = crypto.randomUUID()
     const user: Message = { id: crypto.randomUUID(), role: 'user', content: text, final: true, session_id: activeSession }
@@ -286,6 +308,8 @@ export function useChat() {
     sessionSearch,
     setSessionSearch,
     debouncedSessionSearch,
+    showArchived,
+    setShowArchived,
     history,
     models,
     selectedModel,

@@ -51,7 +51,14 @@
     "renameFailed": "Unable to rename conversation",
     "loadMore": "Load more",
     "searchPlaceholder": "Search title, preview, or session id",
-    "emptySearch": "No matching conversations"
+    "emptySearch": "No matching conversations",
+    "archivedTitle": "Archived conversations",
+    "recents": "Recents",
+    "archivedInbox": "Archived",
+    "unarchive": "Unarchive",
+    "unarchived": "Conversation restored",
+    "unarchiveFailed": "Unable to restore conversation",
+    "emptyArchived": "No archived conversations"
   },
   "noNotifications": "No notifications",
   "markAllRead": "Mark all as read",

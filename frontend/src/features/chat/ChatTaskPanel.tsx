@@ -11,10 +11,11 @@ import {
   HistoryOutlined,
   ReloadOutlined,
   RightOutlined,
+  UndoOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { useTranslation } from 'react-i18next'
-import { archiveSession, renameSession, type SessionListResult } from './api'
+import { archiveSession, renameSession, unarchiveSession, type SessionListResult } from './api'
 import { chatKeys } from './queries'
 import { useChat } from './useChat'
 import type { ChatSession } from './types'
@@ -147,6 +148,15 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
       onOk: () => run(),
     })
   }
+  const unarchive = async (sessionId: string) => {
+    try {
+      await unarchiveSession(sessionId)
+      await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
+      toast.success(t('shell:conversations.unarchived'))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('shell:conversations.unarchiveFailed'))
+    }
+  }
   const confirmRename = async () => {
     const { title } = await renameForm.validateFields()
     if (!renameTarget) return
@@ -205,19 +215,25 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
     <>
       <section
         className={`chat-task-panel chat-task-panel-${variant} ${expanded ? 'chat-task-panel-expanded' : 'chat-task-panel-collapsed'}`}
-        aria-label={t('shell:conversations.title')}
+        aria-label={
+          chat.showArchived ? t('shell:conversations.archivedTitle') : t('shell:conversations.title')
+        }
       >
         <button
           type="button"
           className="chat-task-panel-toggle"
           aria-expanded={expanded}
           aria-controls={contentId}
-          aria-label={t('shell:conversations.title')}
+          aria-label={
+            chat.showArchived ? t('shell:conversations.archivedTitle') : t('shell:conversations.title')
+          }
           onClick={() => onExpandedChange(!expanded)}
         >
           <span className="chat-task-panel-toggle-label">
             <HistoryOutlined />
-            {t('shell:conversations.title')}
+            {chat.showArchived
+              ? t('shell:conversations.archivedTitle')
+              : t('shell:conversations.title')}
           </span>
           {expanded ? <DownOutlined /> : <RightOutlined />}
         </button>
@@ -242,6 +258,26 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
               </div>
             ) : (
               <>
+                <div className="chat-task-panel-mode">
+                  <Button
+                    size="small"
+                    type={chat.showArchived ? 'default' : 'primary'}
+                    onClick={() => {
+                      if (chat.showArchived) chat.setShowArchived(false)
+                    }}
+                  >
+                    {t('shell:conversations.recents')}
+                  </Button>
+                  <Button
+                    size="small"
+                    type={chat.showArchived ? 'primary' : 'default'}
+                    onClick={() => {
+                      if (!chat.showArchived) chat.setShowArchived(true)
+                    }}
+                  >
+                    {t('shell:conversations.archivedInbox')}
+                  </Button>
+                </div>
                 {conversations.length || chat.sessionSearch.trim() || chat.sessions.isFetching ? (
                   <Input.Search
                     allowClear
@@ -289,13 +325,20 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
                         label: t('shell:conversations.copySessionId'),
                         onClick: () => copySessionId(item.key),
                       },
-                      {
-                        key: 'archive',
-                        danger: true,
-                        icon: <DeleteOutlined />,
-                        label: t('shell:conversations.archive'),
-                        onClick: () => void archive(item.key),
-                      },
+                      chat.showArchived
+                        ? {
+                            key: 'unarchive',
+                            icon: <UndoOutlined />,
+                            label: t('shell:conversations.unarchive'),
+                            onClick: () => void unarchive(item.key),
+                          }
+                        : {
+                            key: 'archive',
+                            danger: true,
+                            icon: <DeleteOutlined />,
+                            label: t('shell:conversations.archive'),
+                            onClick: () => void archive(item.key),
+                          },
                     ],
                   })}
                 />
@@ -315,7 +358,11 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
                 {!conversations.length && !chat.sessionSearch.trim() ? (
                   <Empty
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description={t('shell:conversations.empty')}
+                    description={
+                      chat.showArchived
+                        ? t('shell:conversations.emptyArchived')
+                        : t('shell:conversations.empty')
+                    }
                     className="chat-task-panel-empty"
                   />
                 ) : !filteredConversations.length ? (

@@ -77,6 +77,11 @@ export const getHistory = async (sessionId: string) =>
   normalizeMessages(await requestJson<unknown>(`/chat/sessions/${encodeURIComponent(sessionId)}`))
 export const archiveSession = (sessionId: string) =>
   requestJson<{ success: boolean }>(`/chat/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' })
+export const unarchiveSession = (sessionId: string) =>
+  requestJson<{ success: boolean; archived?: boolean }>(
+    `/chat/sessions/${encodeURIComponent(sessionId)}/unarchive`,
+    jsonInit('POST'),
+  )
 export const renameSession = (sessionId: string, title: string) =>
   requestJson<ChatSession>(`/chat/sessions/${encodeURIComponent(sessionId)}`, jsonInit('PATCH', { title }))
 export const getModels = () => requestJson<ModelConfigResponse>('/models')

@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Chat 已归档列表 + 取消归档
+
+- `POST /api/chat/sessions/{id}/unarchive` 清除归档元数据并审计 `session.unarchive`。
+- 侧栏最近对话支持「最近 / 已归档」切换；归档项菜单为「取消归档」。
+- 列表查询 `archived_only` 真分页；active 乐观会话只写入非归档列表。
+
+
 ## 已完成：Studio Run Log 时间正序 + 贴底滚动
 
 - Run Log 按时间从旧到新展示（最近 40 条），新事件贴底自动滚动；此前 reverse 展示但 scrollHeight 贴底会滚到旧事件。

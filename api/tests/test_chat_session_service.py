@@ -536,3 +536,37 @@ async def test_session_history_projects_lean_mode_and_skill_names():
     assert assistants["run-tools-off"]["lean_mode"] is False
     assert assistants["run-tools-off"]["skill_names"] == []
     assert assistants["run-tools-off"]["search_knowledge"] is False
+
+
+
+@pytest.mark.asyncio
+async def test_unarchive_session_clears_flags():
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    session = MagicMock()
+    session.metadata = {
+        "agno_aios_archived": True,
+        "agno_aios_archived_by": "u1",
+        "agno_aios_archived_at": "2020-01-01T00:00:00+00:00",
+        "title": "keep-me",
+    }
+    db = MagicMock()
+    db.get_session = AsyncMock(
+        side_effect=[
+            {"session_id": "s1", "user_id": "u1"},
+            session,
+        ]
+    )
+    db.upsert_session = AsyncMock()
+    with (
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async", new_callable=AsyncMock),
+        patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
+    ):
+        ok = await chat_session_service.unarchive_session("s1", user_id="u1")
+    assert ok
+    db.upsert_session.assert_awaited()
+    metadata = session.metadata
+    assert metadata.get("agno_aios_archived") is False
+    assert "agno_aios_archived_by" not in metadata
+    assert "agno_aios_archived_at" not in metadata
+    assert metadata.get("title") == "keep-me"

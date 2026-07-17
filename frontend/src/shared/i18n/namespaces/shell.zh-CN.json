@@ -51,7 +51,14 @@
     "renameFailed": "重命名失败",
     "loadMore": "加载更多",
     "searchPlaceholder": "搜索标题、预览或会话 ID",
-    "emptySearch": "没有匹配的对话"
+    "emptySearch": "没有匹配的对话",
+    "archivedTitle": "已归档对话",
+    "recents": "最近",
+    "archivedInbox": "已归档",
+    "unarchive": "取消归档",
+    "unarchived": "会话已恢复",
+    "unarchiveFailed": "恢复归档失败",
+    "emptyArchived": "暂无已归档对话"
   },
   "noNotifications": "暂无通知",
   "markAllRead": "全部已读",

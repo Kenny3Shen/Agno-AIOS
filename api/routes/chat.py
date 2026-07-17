@@ -11,6 +11,7 @@ from api.auth.ownership import assert_owned_resource
 from api.auth.scopes import require_scope
 from api.services.chat_session_service import (
     archive_session,
+    unarchive_session,
     list_sessions_async,
     get_session_messages_async,
     get_session_owner_async,
@@ -296,4 +297,22 @@ async def remove_session(
         raise
     except Exception as e:
         logger.error("归档会话失败: {}", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/chat/sessions/{session_id}/unarchive")
+async def unarchive_chat_session(
+    session_id: str,
+    user: User = Depends(require_scope("sessions:write")),
+):
+    """恢复已归档会话到最近列表。"""
+    try:
+        success = await unarchive_session(session_id, actor=user)
+        if not success:
+            raise HTTPException(status_code=404, detail="会话不存在")
+        return {"success": True, "archived": False}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("恢复归档会话失败: {}", e)
         raise HTTPException(status_code=500, detail=str(e))

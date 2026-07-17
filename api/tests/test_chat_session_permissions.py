@@ -157,15 +157,19 @@ async def test_list_sessions_uses_current_user_as_owner_filter():
         *,
         owner_user_id: str | None,
         include_archived: bool = False,
+        archived_only: bool = False,
         include_runs: bool = False,
         page: int = 1,
         limit: int = 40,
+        q: str | None = None,
     ):
         captured["owner_user_id"] = owner_user_id
         captured["include_archived"] = str(include_archived)
+        captured["archived_only"] = str(archived_only)
         captured["include_runs"] = str(include_runs)
         captured["page"] = page
         captured["limit"] = limit
+        captured["q"] = q
         return {
             "data": [],
             "meta": {
@@ -387,3 +391,14 @@ async def test_event_generator_marks_trace_error_after_failed_stream_finishes():
 def test_exception_detail_unwraps_task_group():
     error = ExceptionGroup("task group", [ValueError("invalid skill metadata")])
     assert chat._exception_detail(error) == "ValueError: invalid skill metadata"
+
+
+
+@pytest.mark.asyncio
+async def test_unarchive_session_route_returns_payload():
+    current_actor = actor("u1")
+    with patch.object(chat, "unarchive_session", new_callable=AsyncMock) as unarchive_session:
+        unarchive_session.return_value = True
+        result = await chat.unarchive_chat_session(session_id="session-1", user=current_actor)
+    assert result == {"success": True, "archived": False}
+    unarchive_session.assert_awaited_once_with("session-1", actor=current_actor)

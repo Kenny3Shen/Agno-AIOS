@@ -93,6 +93,59 @@ async def archive_session(
     return True
 
 
+async def unarchive_session(
+    session_id: str,
+    user_id: str | None = None,
+    *,
+    actor: Any | None = None,
+) -> bool:
+    """Clear soft-archive flags so the session returns to recents."""
+    await ensure_agno_postgres_tables_async()
+    actor_user = actor_id(actor) if actor is not None else (user_id or "").strip()
+    db = get_async_agno_postgres_db()
+    session_row = await db.get_session(session_id, deserialize=False)
+    if not isinstance(session_row, dict):
+        return False
+
+    session_user_id = str(session_row.get("user_id") or actor_user)
+    if actor is not None:
+        assert_owned_resource(
+            actor,
+            owner_user_id=session_user_id,
+            resource_name="Session",
+        )
+
+    session: Any = await db.get_session(session_id)
+    if not hasattr(session, "metadata"):
+        return False
+    metadata = coerce_json_value(getattr(session, "metadata", None) or {})
+    if not isinstance(metadata, dict):
+        metadata = {}
+    next_meta = {
+        key: value
+        for key, value in metadata.items()
+        if key
+        not in {
+            ARCHIVED_METADATA_KEY,
+            ARCHIVED_BY_METADATA_KEY,
+            ARCHIVED_AT_METADATA_KEY,
+        }
+    }
+    # Explicit false is treated as not archived by list filters (contains true only).
+    next_meta[ARCHIVED_METADATA_KEY] = False
+    session.metadata = next_meta
+    await db.upsert_session(cast(AgentSession | TeamSession | WorkflowSession, session))
+
+    if actor is not None:
+        await record_audit_event_async(
+            actor,
+            action="session.unarchive",
+            resource_type="session",
+            resource_id=session_id,
+        )
+    return True
+
+
 async def rename_session(
     session_id: str,
     title: str,
