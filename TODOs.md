@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Workflow Studio 布局精简与文案收口
+
+- 去掉顶栏副标题、节点区重复操作说明。
+- 模板列表只显示名称 +「保存并打开」；自动布局改为图标按钮。
+- 左右栏变窄、面板/调色板更紧凑，画布占比增大；i18n 文案缩短。
+
+
 ## 已完成：安全情报源扩展 + CVE 标签 + Memory 清空/用户筛选
 
 - Collect：新增 BleepingComputer / Krebs / SecurityWeek / Dark Reading / The Record / Unit 42 / Cloudflare 规则与种子；删除未使用的 `system_prompt`；parse 返回字符串 markdown（去掉数组兼容）。

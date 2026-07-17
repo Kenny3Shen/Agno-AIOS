@@ -1872,7 +1872,7 @@ html.dark .workflow-studio {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(200px, 220px) minmax(0, 1fr) minmax(280px, 340px);
+  grid-template-columns: minmax(168px, 188px) minmax(0, 1fr) minmax(260px, 300px);
   background: var(--tais-bg);
 }
 
@@ -1903,7 +1903,7 @@ html.dark .workflow-studio {
 }
 
 .workflow-studio__panel {
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--wf-panel-border);
 }
 
@@ -2542,7 +2542,7 @@ html.dark .wf-flow-node__badge {
 
 @media (max-width: 1100px) {
   .workflow-studio__body {
-    grid-template-columns: 200px minmax(0, 1fr) 280px;
+    grid-template-columns: 160px minmax(0, 1fr) 260px;
   }
 }
 
@@ -3027,4 +3027,58 @@ html.dark .workflow-canvas--main .react-flow__background pattern line {
 
 .workflow-studio__run-log {
   font-variant-numeric: tabular-nums;
+}
+
+/* Compact templates row (name + save action) */
+.workflow-templates {
+  max-height: 160px;
+  gap: 6px;
+}
+.workflow-templates__item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: space-between;
+}
+.workflow-templates__load {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 4px 2px;
+  cursor: pointer;
+  color: inherit;
+}
+.workflow-templates__load strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workflow-templates__save {
+  flex: 0 0 auto;
+  padding-inline: 4px !important;
+  font-size: 11px !important;
+}
+.workflow-studio__subtitle {
+  display: none;
+}
+.workflow-studio__hint {
+  display: none;
+}
+.workflow-studio__name {
+  max-width: 240px;
+  font-size: 15px;
+}
+.workflow-studio__status {
+  max-width: 280px;
+}
+.workflow-palette__item {
+  min-height: 56px;
+  padding: 8px 4px;
+  font-size: 11px;
 }

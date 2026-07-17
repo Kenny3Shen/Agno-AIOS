@@ -559,14 +559,9 @@ export function WorkflowPage() {
       <header className="workflow-studio__toolbar">
         <div className="workflow-studio__brand">
           <NodeIndexOutlined />
-          <div>
-            <Typography.Title level={5} className="workflow-studio__title">
-              {t('title')}
-            </Typography.Title>
-            <Typography.Text type="secondary" className="workflow-studio__subtitle">
-              {t('studioHint')}
-            </Typography.Text>
-          </div>
+          <Typography.Title level={5} className="workflow-studio__title">
+            {t('title')}
+          </Typography.Title>
         </div>
         <div className="workflow-studio__toolbar-main">
           <Input
@@ -655,9 +650,8 @@ export function WorkflowPage() {
                 icon={<ApartmentOutlined />}
                 disabled={workflow.state.running}
                 onClick={workflow.organizeLayout}
-              >
-                {t('organize')}
-              </Button>
+                aria-label={t('organize')}
+              />
             </Tooltip>
             <Tooltip
               title={t('keyboardHints')}
@@ -880,9 +874,6 @@ export function WorkflowPage() {
                 </div>
               ))}
             </div>
-            <Typography.Paragraph type="secondary" className="workflow-studio__hint">
-              {t('paletteDragHint')}
-            </Typography.Paragraph>
           </section>
 
           <section className="workflow-studio__panel">
@@ -893,31 +884,21 @@ export function WorkflowPage() {
                   <button
                     type="button"
                     className="workflow-templates__load"
-                    title={tpl.description}
+                    title={tpl.description || tpl.name}
                     disabled={!canWrite}
                     onClick={() => confirmLeaveStudio(() => workflow.applyTemplate(tpl.id))}
                   >
                     <strong>{tpl.name}</strong>
-                    <span>{tpl.description}</span>
                   </button>
-                  <div className="workflow-templates__actions">
-                    <Button
-                      type="link"
-                      size="small"
-                      disabled={!canWrite || workflow.state.saving}
-                      onClick={() => confirmLeaveStudio(() => workflow.applyTemplate(tpl.id))}
-                    >
-                      {t('templateLoadDraft')}
-                    </Button>
-                    <Button
-                      type="link"
-                      size="small"
-                      disabled={!canWrite || workflow.state.saving}
-                      onClick={() => confirmLeaveStudio(() => void workflow.applyTemplateAndSave(tpl.id))}
-                    >
-                      {t('templateSaveAndOpen')}
-                    </Button>
-                  </div>
+                  <Button
+                    type="link"
+                    size="small"
+                    className="workflow-templates__save"
+                    disabled={!canWrite || workflow.state.saving}
+                    onClick={() => confirmLeaveStudio(() => void workflow.applyTemplateAndSave(tpl.id))}
+                  >
+                    {t('templateSaveAndOpen')}
+                  </Button>
                 </div>
               ))}
               {!workflow.templatesQuery.data?.length && !workflow.templatesQuery.isLoading ? (
@@ -1076,7 +1057,7 @@ export function WorkflowPage() {
             validationIssues={workflow.state.validationIssues}
             validationEpoch={workflow.state.validationEpoch}
             focusEpoch={workflow.state.focusEpoch}
-            emptyHint={t('canvasEmpty')}
+            emptyHint={t('canvasEmptyHint')}
             emptyActionLabel={canWrite ? t('startFromTemplate') : undefined}
             onEmptyAction={
               canWrite ? () => confirmLeaveStudio(() => workflow.startFromTemplate('ir-triage')) : undefined
