@@ -422,7 +422,18 @@ export function DashboardPage() {
             dataSource={data?.recent_failures ?? []}
             pagination={false}
             locale={{ emptyText: t('noFailures') }}
-            onRow={(record) => ({ onClick: () => openTrace(record), className: 'dashboard-trace-row' })}
+            onRow={(record) => ({
+              onClick: () => openTrace(record),
+              onKeyDown: (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  openTrace(record)
+                }
+              },
+              tabIndex: 0,
+              role: 'link',
+              className: 'dashboard-trace-row',
+            })}
             columns={[
               { title: t('run'), dataIndex: 'name', ellipsis: true, render: (value) => value || t('unnamedRun') },
               { title: t('subject'), ellipsis: true, render: (_, item) => {

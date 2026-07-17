@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from api.persistence.collect_articles import (
@@ -94,8 +95,6 @@ async def reparse_failed_articles(
     concurrency: int = 3,
 ) -> dict[str, Any]:
     """Re-fetch up to *limit* failed articles (newest first)."""
-    import asyncio
-
     ids = await list_error_collect_article_ids(
         source_domain=source_domain,
         limit=limit,

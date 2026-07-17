@@ -106,7 +106,7 @@ export function CollectPage() {
     onSuccess: async (data) => {
       message.success(t('parseOk'))
       setUrl('')
-      await articlesQuery.refetch()
+      await Promise.all([articlesQuery.refetch(), statsQuery.refetch(), sourcesQuery.refetch()])
       const markdown = Array.isArray(data.markdown)
         ? data.markdown.join('\n\n')
         : data.markdown || ''

@@ -1,5 +1,10 @@
 # 下一步工作
 
+## 已完成：Dashboard 失败行键盘可达 + Collect 卫生
+
+- Dashboard 最近失败行：`tabIndex` / Enter·Space 打开 Trace，focus-visible 高亮。
+- Collect：`asyncio` 顶层导入；单 URL 采集成功后同步刷新 stats/sources。
+
 ## 已完成：Collect 失败批量重采 + 源健康计数
 
 - `POST /api/url2md/articles/reparse-failed`：按源/全局重采最近失败文章（默认 10、并发 3）。
