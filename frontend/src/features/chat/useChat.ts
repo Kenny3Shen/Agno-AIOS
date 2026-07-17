@@ -98,7 +98,10 @@ export function useChat() {
       if (runId) {
         void cancelRun(runId).catch((error: unknown) => {
           if (error instanceof ApiError && error.status === 404) return
-          console.warn(`[chat] cancel on session switch failed for ${runId}:`, error)
+          const detail = error instanceof Error ? error.message : String(error)
+          console.warn(`[chat] cancel on session switch failed for ${runId}: ${detail}`)
+          // Stream already aborted; soft banner matches explicit Stop path.
+          dispatch({ type: 'soft-error', message: t('cancelServerFailed') })
         })
       }
     }

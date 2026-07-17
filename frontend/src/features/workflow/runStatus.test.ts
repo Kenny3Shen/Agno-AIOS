@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   appendRunLog,
   applyNodeRunStatusEvent,
+  historyStatusFromEvent,
+  historySummaryFromEvent,
   reduceNodeRunStatus,
   runEventLabelKey,
 } from './runStatus'
@@ -101,5 +103,45 @@ describe('runEventLabelKey', () => {
   it('returns null for unknown types', () => {
     expect(runEventLabelKey('custom.event')).toBeNull()
     expect(runEventLabelKey('')).toBeNull()
+  })
+})
+
+describe('historySummaryFromEvent', () => {
+  it('drops raw event-type messages', () => {
+    expect(
+      historySummaryFromEvent({
+        type: 'workflow.started',
+        message: 'workflow.started',
+      }),
+    ).toBeUndefined()
+  })
+
+  it('prefers content then step name over type-prefixed message', () => {
+    expect(
+      historySummaryFromEvent({
+        type: 'step.completed',
+        message: 'step.completed · Triage',
+        stepName: 'Triage',
+        content: 'triage complete',
+      }),
+    ).toBe('triage complete')
+    expect(
+      historySummaryFromEvent({
+        type: 'step.completed',
+        message: 'step.completed · Triage',
+        stepName: 'Triage',
+      }),
+    ).toBe('Triage')
+    expect(
+      historySummaryFromEvent({
+        type: 'step.completed',
+        message: 'step.completed · Triage',
+      }),
+    ).toBe('Triage')
+  })
+
+  it('maps terminal event types to history status', () => {
+    expect(historyStatusFromEvent('workflow.cancelled')).toBe('cancelled')
+    expect(historyStatusFromEvent('step.completed')).toBeNull()
   })
 })

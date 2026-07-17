@@ -26,7 +26,12 @@ import type {
   WorkflowState,
   WorkflowTriggers,
 } from './types'
-import { appendRunLog, applyNodeRunStatusEvent, historyStatusFromEvent } from './runStatus'
+import {
+  appendRunLog,
+  applyNodeRunStatusEvent,
+  historyStatusFromEvent,
+  historySummaryFromEvent,
+} from './runStatus'
 import {
   addChildToNode,
   applyAutoLayout,
@@ -1069,7 +1074,7 @@ export function useWorkflow() {
                       ? Date.now()
                       : entry.finishedAt,
                   approvalId: item.approvalId ?? entry.approvalId,
-                  summary: item.message || entry.summary,
+                  summary: historySummaryFromEvent(item) || entry.summary,
                 }
               })
             }

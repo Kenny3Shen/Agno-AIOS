@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Studio 运行历史摘要去原始事件名 + Chat 重试中 Esc e2e
+
+- `historySummaryFromEvent`：最近运行摘要优先 content/stepName，过滤 `workflow.started` 等原始 type 文案。
+- 运行历史 Tag：`cancelled` 用 warning（与 Run Log 一致，非 error）。
+- Chat：会话切换时服务端 cancel 非 404 失败也 soft-error；Playwright 覆盖 `run.retrying` 退避中 Esc 取消。
+
+
 ## 已完成：Studio 停止服务端取消失败可见 + 键盘 helper 去 re-export
 
 - Studio `stop`：服务端 `cancel` 非 404 失败时写入可关闭 `state.error`（`cancelServerFailed`），与 Chat soft-error 对齐；本地停止时先清空旧横幅。

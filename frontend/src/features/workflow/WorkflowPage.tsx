@@ -1837,9 +1837,9 @@ export function WorkflowPage() {
                                     color={
                                       item.status === 'completed'
                                         ? 'success'
-                                        : item.status === 'failed' || item.status === 'cancelled'
+                                        : item.status === 'failed'
                                           ? 'error'
-                                          : item.status === 'paused'
+                                          : item.status === 'cancelled' || item.status === 'paused'
                                             ? 'warning'
                                             : 'processing'
                                     }

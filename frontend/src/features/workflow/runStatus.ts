@@ -117,6 +117,7 @@ export const reduceNodeRunStatus = (
   return map
 }
 
+
 export const historyStatusFromEvent = (
   type: string
 ): WorkflowRunHistoryItem['status'] | null => {
@@ -126,6 +127,30 @@ export const historyStatusFromEvent = (
   if (type === 'workflow.cancelled') return 'cancelled'
   if (type === 'workflow.paused') return 'paused'
   return null
+}
+
+/**
+ * Prefer human-readable history snippets over raw SSE type strings
+ * (api often sets message to the event type or ``type · stepName``).
+ */
+export const historySummaryFromEvent = (
+  item: Pick<WorkflowRunLogItem, 'type' | 'message' | 'stepName' | 'content'>,
+): string | undefined => {
+  const content = (item.content || '').trim()
+  if (content) {
+    return content.length > 160 ? `${content.slice(0, 157)}…` : content
+  }
+  const stepName = (item.stepName || '').trim()
+  if (stepName) return stepName
+  const message = (item.message || '').trim()
+  if (!message) return undefined
+  if (message === item.type) return undefined
+  const prefixed = `${item.type} · `
+  if (message.startsWith(prefixed)) {
+    const rest = message.slice(prefixed.length).trim()
+    return rest || undefined
+  }
+  return message
 }
 
 /** Keep the run log bounded for UI memory (newest retained when over cap). */
