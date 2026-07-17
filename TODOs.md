@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Chat 同路径会话切换不重复确认 + Studio Ctrl/⌘S 保存
+
+- Chat `useBlocker`：pathname 不变时（`/chat?session=` 切换）不弹离开确认，由 `setSession` 负责取消流。
+- Studio：Ctrl/⌘S 保存（弹层打开时不抢键）；快捷键说明同步。
+
+
 ## 已完成：SPA 导航离开守卫（useBlocker）
 
 - Chat：生成中侧栏/路由离开弹出确认，确认后 stop 再放行；`enableBeforeUnload` 覆盖关页。

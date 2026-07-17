@@ -567,8 +567,13 @@ export function ChatPage() {
   useBlocker({
     disabled: !chat.state.requesting,
     enableBeforeUnload: chat.state.requesting,
-    shouldBlockFn: async () => {
+    shouldBlockFn: async ({ current, next }) => {
       if (!requestingRef.current) return false
+      // Same-route session switches (/chat?session=…) are handled by setSession cancel
+      // without a second confirm dialog.
+      const curPath = String(current.pathname || '')
+      const nextPath = String(next.pathname || '')
+      if (curPath === nextPath) return false
       const leave = await new Promise<boolean>((resolve) => {
         modal.confirm({
           title: t('leaveWhileGeneratingTitle'),

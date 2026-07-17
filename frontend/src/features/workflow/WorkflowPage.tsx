@@ -246,6 +246,26 @@ export function WorkflowPage() {
     hasScope(currentUser.data, 'workflows:write')
   const canWrite = hasScope(currentUser.data, 'workflows:write')
 
+  // Ctrl/⌘S save from canvas or inspector (not when a modal owns keyboard).
+  const saveRef = useRef(workflow.save)
+  saveRef.current = workflow.save
+  const canWriteSaveRef = useRef(canWrite)
+  canWriteSaveRef.current = canWrite
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return
+      if (event.defaultPrevented) return
+      if (isOverlayEscapeTarget(event.target)) return
+      if (!canWriteSaveRef.current) return
+      if (workflow.state.saving || workflow.state.loading) return
+      event.preventDefault()
+      void saveRef.current()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [workflow.state.saving, workflow.state.loading])
+
+
   const publishStatusLabel = (() => {
     const { publishedVersion, publishedAt, hasPublished, dirty } = workflow.state
     if (!hasPublished) {
