@@ -27,5 +27,6 @@
   "bulkReparse": "重采失败（最多 {{count}}）",
   "bulkReparseOk": "批量重采完成：成功 {{ok}} / 失败 {{error}}（共 {{requested}}）",
   "bulkReparseFailed": "批量重采失败",
-  "errorCountBadge": "失败 {{count}}"
+  "errorCountBadge": "失败 {{count}}",
+  "crawlStarting": "正在同步源站…"
 }

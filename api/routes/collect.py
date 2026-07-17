@@ -1,5 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from __future__ import annotations
+
+import asyncio
+import json
+from collections.abc import AsyncIterator, Mapping
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
+from loguru import logger
+from sse_starlette.sse import EventSourceResponse
 
 from api.auth.claims import ADMIN_SCOPE
 from api.auth.models import User
@@ -20,7 +29,6 @@ from api.services.collect_crawl_service import (
     parse_and_store_url,
 )
 from api.utils.pagination import pagination_meta
-from loguru import logger
 
 router = APIRouter(prefix="/api/url2md", tags=["URL2MD"])
 
@@ -186,13 +194,27 @@ async def reparse_collect_article_route(
         raise HTTPException(status_code=400, detail=f"reparse failed: {e}") from e
 
 
+def _sse_payload(event: str, data: Mapping[str, Any]) -> dict[str, str]:
+    return {
+        "event": event,
+        "data": json.dumps(dict(data), ensure_ascii=False, default=str),
+    }
+
+
 @router.post("/crawl")
 async def crawl_collect_sources(
     request_ctx: Request,
     request: CollectCrawlRequest,
     user: User = Depends(require_scope(ADMIN_SCOPE)),
-) -> dict:
-    """Crawl configured source sites and upsert articles into the database."""
+    stream: bool = Query(False, description="Stream stage progress as SSE"),
+):
+    """Crawl configured source sites and upsert articles into the database.
+
+    With ``stream=true``, emit SSE stage progress (start → discover → select →
+    fetch → database → done). Synchronous JSON response remains the default.
+    """
+    if stream:
+        return await _crawl_collect_stream(request_ctx, request, user)
     try:
         stats = await run_crawl(
             domains=request.domains,
@@ -223,6 +245,91 @@ async def crawl_collect_sources(
             **audit_request_context(request_ctx),
         )
         raise HTTPException(status_code=500, detail=f"crawl failed: {e}") from e
+
+
+async def _crawl_collect_stream(
+    request_ctx: Request,
+    request: CollectCrawlRequest,
+    user: User,
+) -> EventSourceResponse:
+    queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+    async def on_progress(event: Mapping[str, Any]) -> None:
+        await queue.put(dict(event))
+
+    async def worker() -> None:
+        try:
+            stats = await run_crawl(
+                domains=request.domains,
+                max_links_per_source=request.max_links_per_source,
+                max_articles_total=request.max_articles_total,
+                on_progress=on_progress,
+            )
+            await record_audit_event_async(
+                user,
+                action="collect.crawl",
+                resource_type="collect_articles",
+                resource_id="crawl",
+                metadata={**stats, "stream": True},
+                **audit_request_context(request_ctx),
+            )
+        except CollectCrawlAlreadyRunningError as exc:
+            await queue.put(
+                {
+                    "stage": "done",
+                    "status": "failed",
+                    "message": str(exc),
+                    "error": str(exc),
+                    "code": 409,
+                }
+            )
+        except Exception as exc:
+            logger.exception("Collect streamed crawl failed: {}", exc)
+            await record_audit_event_async(
+                user,
+                action="collect.crawl",
+                resource_type="collect_articles",
+                resource_id="crawl",
+                status="failure",
+                metadata={"error": str(exc), "stream": True},
+                **audit_request_context(request_ctx),
+            )
+            await queue.put(
+                {
+                    "stage": "done",
+                    "status": "failed",
+                    "message": str(exc),
+                    "error": str(exc),
+                    "code": 500,
+                }
+            )
+        finally:
+            await queue.put(None)
+
+    async def event_generator() -> AsyncIterator[dict[str, str]]:
+        task = asyncio.create_task(worker(), name="collect-crawl-progress")
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                stage = str(item.get("stage") or "progress")
+                status = str(item.get("status") or "running")
+                if status == "failed":
+                    yield _sse_payload("progress.failed", item)
+                elif stage == "done" and status == "completed":
+                    yield _sse_payload("progress.done", item)
+                else:
+                    yield _sse_payload("progress", item)
+        finally:
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+
+    return EventSourceResponse(event_generator())
 
 
 @router.post("/parse")

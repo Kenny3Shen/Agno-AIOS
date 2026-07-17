@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Collect 同步进度 SSE
+
+- `POST /api/url2md/crawl?stream=true`：阶段进度（start → discover → select → fetch → database → done）。
+- 同步 JSON 路径保留；冲突仍 409。前端 Progress 展示阶段文案与同步结果。
+- `crawl_and_persist(on_progress=…)` / 发现源与抓取完成度回调。
+
+
 ## 已完成：CVE 更新进度 SSE
 
 - `POST /api/cve/update?stream=true`：阶段进度（start → source×N → database → cache → done）。

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urljoin, urlsplit
@@ -290,6 +291,29 @@ class CollectCrawlAlreadyRunningError(RuntimeError):
 
 _CRAWL_LOCK = asyncio.Lock()
 
+ProgressCallback = Callable[[Mapping[str, Any]], Awaitable[None] | None]
+
+
+async def _emit_progress(
+    on_progress: ProgressCallback | None,
+    *,
+    stage: str,
+    status: str = "running",
+    message: str = "",
+    **extra: Any,
+) -> None:
+    if on_progress is None:
+        return
+    payload: dict[str, Any] = {
+        "stage": stage,
+        "status": status,
+        "message": message,
+        **extra,
+    }
+    result = on_progress(payload)
+    if asyncio.iscoroutine(result):
+        await result
+
 
 async def _discover_one_domain(
     client: httpx.AsyncClient,
@@ -369,6 +393,7 @@ async def discover_article_urls(
     *,
     domains: list[str] | None = None,
     max_links_per_source: int = 25,
+    on_progress: ProgressCallback | None = None,
 ) -> dict[str, list[str]]:
     """Fetch list pages for each source and collect article URLs."""
     active = set(active_domain_rules())
@@ -376,23 +401,40 @@ async def discover_article_urls(
     if not selected:
         return {}
     semaphore = asyncio.Semaphore(DISCOVER_CONCURRENCY)
+    discovered: dict[str, list[str]] = {}
+    source_total = len(selected)
     async with httpx.AsyncClient(
         headers=DEFAULT_HEADERS,
         timeout=25,
         follow_redirects=False,
     ) as client:
-        pairs = await asyncio.gather(
-            *[
+        tasks = [
+            asyncio.create_task(
                 _discover_one_domain(
                     client,
                     domain,
                     max_links_per_source=max_links_per_source,
                     semaphore=semaphore,
-                )
-                for domain in selected
-            ]
-        )
-    return {domain: links for domain, links in pairs}
+                ),
+                name=f"collect-discover-{domain}",
+            )
+            for domain in selected
+        ]
+        completed = 0
+        for finished in asyncio.as_completed(tasks):
+            domain, links = await finished
+            discovered[domain] = links
+            completed += 1
+            await _emit_progress(
+                on_progress,
+                stage="discover",
+                message=f"发现源站 {domain}（{len(links)} 篇链接）",
+                source=domain,
+                source_index=completed,
+                source_total=source_total,
+                discovered=sum(len(v) for v in discovered.values()),
+            )
+    return discovered
 
 
 
@@ -523,6 +565,7 @@ async def crawl_and_persist(
     max_articles_total: int = 80,
     skip_existing: bool = True,
     fetch_concurrency: int = FETCH_CONCURRENCY,
+    on_progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     """Discover, fetch, and upsert articles. Returns crawl stats.
 
@@ -541,6 +584,7 @@ async def crawl_and_persist(
             max_articles_total=max_articles_total,
             skip_existing=skip_existing,
             fetch_concurrency=fetch_concurrency,
+            on_progress=on_progress,
         )
 
 
@@ -551,15 +595,33 @@ async def _crawl_and_persist_locked(
     max_articles_total: int,
     skip_existing: bool,
     fetch_concurrency: int,
+    on_progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     await ensure_collect_articles_table()
+    await _emit_progress(
+        on_progress,
+        stage="start",
+        message="开始同步源站",
+    )
+    await _emit_progress(
+        on_progress,
+        stage="discover",
+        message="发现文章链接…",
+    )
     discovered = await discover_article_urls(
         domains=domains,
         max_links_per_source=max_links_per_source,
+        on_progress=on_progress,
     )
     discovered_total = sum(len(links) for links in discovered.values())
     all_urls = [url for links in discovered.values() for url in links]
 
+    await _emit_progress(
+        on_progress,
+        stage="select",
+        message=f"筛选待抓取链接（发现 {discovered_total}）",
+        discovered=discovered_total,
+    )
     existing: set[str] = set()
     if skip_existing and all_urls:
         existing = await list_existing_ok_urls(all_urls)
@@ -575,6 +637,16 @@ async def _crawl_and_persist_locked(
         domain = _domain_of(url)
         selected_by_source[domain] = selected_by_source.get(domain, 0) + 1
 
+    await _emit_progress(
+        on_progress,
+        stage="select",
+        status="completed",
+        message=f"将抓取 {len(urls)} 篇（跳过已入库 {skipped}）",
+        discovered=discovered_total,
+        selected=len(urls),
+        skipped_existing=skipped,
+    )
+
     semaphore = asyncio.Semaphore(max(1, int(fetch_concurrency or FETCH_CONCURRENCY)))
 
     async def _bounded(url: str) -> dict[str, Any]:
@@ -582,11 +654,51 @@ async def _crawl_and_persist_locked(
             return await fetch_article_record(url)
 
     records: list[dict[str, Any]] = []
+    fetch_total = len(urls)
     if urls:
-        records = list(await asyncio.gather(*[_bounded(url) for url in urls]))
+        await _emit_progress(
+            on_progress,
+            stage="fetch",
+            message=f"抓取文章 0/{fetch_total}",
+            fetched=0,
+            selected=fetch_total,
+        )
+        tasks = [
+            asyncio.create_task(_bounded(url), name=f"collect-fetch-{index}")
+            for index, url in enumerate(urls)
+        ]
+        done_count = 0
+        ok_running = 0
+        err_running = 0
+        for finished in asyncio.as_completed(tasks):
+            record = await finished
+            records.append(record)
+            done_count += 1
+            if record.get("status") == "ok":
+                ok_running += 1
+            else:
+                err_running += 1
+            if fetch_total <= 12 or done_count == fetch_total or done_count % 2 == 0:
+                await _emit_progress(
+                    on_progress,
+                    stage="fetch",
+                    message=f"抓取文章 {done_count}/{fetch_total}",
+                    fetched=done_count,
+                    selected=fetch_total,
+                    ok=ok_running,
+                    error=err_running,
+                )
 
     ok = sum(1 for record in records if record.get("status") == "ok")
     err = len(records) - ok
+    await _emit_progress(
+        on_progress,
+        stage="database",
+        message=f"写入数据库（成功 {ok}，失败 {err}）",
+        ok=ok,
+        error=err,
+        selected=len(urls),
+    )
     saved = await bulk_upsert_collect_articles(records)
     stats = {
         "sources": len(discovered),
@@ -602,6 +714,16 @@ async def _crawl_and_persist_locked(
         # Backward-compatible alias (discovered counts).
         "by_source": {k: len(v) for k, v in discovered.items()},
     }
+    await _emit_progress(
+        on_progress,
+        stage="done",
+        status="completed",
+        message=(
+            f"同步完成：发现 {discovered_total}，抓取 {len(urls)}，"
+            f"成功 {ok}，写入 {saved}"
+        ),
+        **stats,
+    )
     logger.info("collect crawl finished: {}", stats)
     return stats
 

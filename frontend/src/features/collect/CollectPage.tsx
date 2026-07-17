@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { App, Button, Card, Empty, Input, Pagination, Select, Space, Splitter, Tag, Typography } from 'antd'
+import { App, Button, Card, Empty, Input, Pagination, Progress, Select, Space, Splitter, Tag, Typography } from 'antd'
 import { Markdown } from '@/shared/ui/Markdown'
 import {
   CloudDownloadOutlined,
@@ -11,7 +11,7 @@ import { PageHeader } from '@/shared/ui/PageHeader'
 import { currentUserQuery } from '@/features/auth'
 import { hasScope, roleOf } from '@/shared/auth/permissions'
 import {
-  crawlSources,
+  crawlSourcesStream,
   getArticle,
   getLibraryStats,
   listSources,
@@ -20,10 +20,31 @@ import {
   reparseFailedArticles,
   searchArticles,
   type CollectArticle,
+  type CollectCrawlProgress,
 } from './api'
 import { useTranslation } from 'react-i18next'
 import { useFormatDate } from '@/shared/lib/format'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
+
+
+function crawlProgressPercent(event: CollectCrawlProgress | null): number {
+  if (!event) return 0
+  if (event.stage === 'done' && event.status === 'completed') return 100
+  if (event.stage === 'database') return 90
+  if (event.stage === 'fetch' && event.selected) {
+    const fetched = Math.max(0, Number(event.fetched || 0))
+    const total = Math.max(1, Number(event.selected || 1))
+    return Math.min(88, 45 + Math.round((fetched / total) * 40))
+  }
+  if (event.stage === 'select') return 40
+  if (event.stage === 'discover' && event.source_total) {
+    const index = Math.max(0, Number(event.source_index || 0))
+    const total = Math.max(1, Number(event.source_total || 1))
+    return Math.min(35, Math.round((index / total) * 30) + 5)
+  }
+  if (event.stage === 'start') return 3
+  return 10
+}
 
 export function CollectPage() {
   const { t } = useTranslation('collect')
@@ -42,6 +63,7 @@ export function CollectPage() {
   const [selected, setSelected] = useState<CollectArticle | null>(null)
   const [previewMarkdown, setPreviewMarkdown] = useState('')
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [crawlProgress, setCrawlProgress] = useState<CollectCrawlProgress | null>(null)
 
   const sourcesQuery = useQuery({
     queryKey: ['collect', 'sources'],
@@ -126,7 +148,15 @@ export function CollectPage() {
   })
 
   const crawlMutation = useMutation({
-    mutationFn: () => crawlSources({ max_links_per_source: 15, max_articles_total: 60 }),
+    mutationFn: async () => {
+      setCrawlProgress({ stage: 'start', status: 'running', message: t('crawlStarting') })
+      return crawlSourcesStream(
+        { max_links_per_source: 15, max_articles_total: 60 },
+        (event) => {
+          setCrawlProgress(event)
+        },
+      )
+    },
     onSuccess: async (data) => {
       message.success(
         t('crawlOk', {
@@ -135,11 +165,37 @@ export function CollectPage() {
           discovered: data.discovered ?? 0,
           selected: data.selected ?? data.fetched ?? 0,
           skipped: data.skipped_existing ?? 0,
-        })
+        }),
+      )
+      setCrawlProgress((prev) =>
+        prev
+          ? {
+              ...prev,
+              stage: 'done',
+              status: 'completed',
+              ok: data.ok,
+              saved: data.saved,
+              discovered: data.discovered,
+              selected: data.selected ?? data.fetched,
+              skipped_existing: data.skipped_existing,
+            }
+          : prev,
       )
       await Promise.all([articlesQuery.refetch(), sourcesQuery.refetch(), statsQuery.refetch()])
     },
-    onError: (err: Error) => message.error(err.message || t('crawlFailed')),
+    onError: (err: Error) => {
+      message.error(err.message || t('crawlFailed'))
+      setCrawlProgress((prev) =>
+        prev
+          ? {
+              ...prev,
+              stage: 'done',
+              status: 'failed',
+              message: err.message || t('crawlFailed'),
+            }
+          : { stage: 'done', status: 'failed', message: t('crawlFailed') },
+      )
+    },
   })
 
   const reparseMutation = useMutation({
@@ -172,6 +228,8 @@ export function CollectPage() {
     onError: (err: Error) => message.error(err.message || t('bulkReparseFailed')),
   })
 
+  const crawlPercent = crawlProgressPercent(crawlProgress)
+  const crawling = crawlMutation.isPending
   const items = articlesQuery.data?.data ?? []
   const total = articlesQuery.data?.meta.total_count ?? 0
   const sourceOptions = useMemo(
@@ -247,7 +305,8 @@ export function CollectPage() {
           {isAdmin ? (
             <Button
               icon={<ReloadOutlined />}
-              loading={crawlMutation.isPending}
+              loading={crawling}
+              disabled={crawling}
               onClick={() => crawlMutation.mutate()}
             >
               {t('crawlSources')}
@@ -274,6 +333,27 @@ export function CollectPage() {
             </Tag>
           ) : null}
         </Space>
+
+        {crawlProgress ? (
+          <div style={{ marginBottom: 12, maxWidth: 640 }}>
+            <Progress
+              percent={crawlPercent}
+              status={
+                crawlProgress.status === 'failed'
+                  ? 'exception'
+                  : crawlProgress.status === 'completed' && crawlProgress.stage === 'done'
+                    ? 'success'
+                    : crawling
+                      ? 'active'
+                      : 'normal'
+              }
+              size="small"
+            />
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {crawlProgress.message || t('crawlStarting')}
+            </Typography.Text>
+          </div>
+        ) : null}
 
         <Space.Compact className="collect-toolbar" style={{ width: '100%', marginBottom: 12 }}>
           <Input

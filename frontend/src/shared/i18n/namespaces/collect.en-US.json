@@ -27,5 +27,6 @@
   "bulkReparse": "Retry failed (max {{count}})",
   "bulkReparseOk": "Bulk re-fetch done: ok {{ok}} / failed {{error}} (of {{requested}})",
   "bulkReparseFailed": "Bulk re-fetch failed",
-  "errorCountBadge": "{{count}} failed"
+  "errorCountBadge": "{{count}} failed",
+  "crawlStarting": "Syncing sources…"
 }

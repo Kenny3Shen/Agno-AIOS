@@ -69,11 +69,13 @@ async def run_crawl(
     domains: list[str] | None = None,
     max_links_per_source: int = 20,
     max_articles_total: int = 80,
+    on_progress=None,
 ) -> dict[str, Any]:
     return await crawl_and_persist(
         domains=domains,
         max_links_per_source=max_links_per_source,
         max_articles_total=max_articles_total,
+        on_progress=on_progress,
     )
 
 
