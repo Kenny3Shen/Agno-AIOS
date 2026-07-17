@@ -748,8 +748,15 @@ def test_resolve_member_identity_tracks_run_and_last():
         "deep-research",
         "深度研究助手",
     )
+    # New run_id without agent_id must not inherit previous member label.
     other = SimpleNamespace(run_id="m2", agent_id="", agent_name="")
     assert _resolve_member_identity(other, by_run=by_run, last=last) == (
+        "member",
+        "member",
+    )
+    # Missing run_id may use last known member (identity-stripped intermediate).
+    no_run = SimpleNamespace(run_id="", agent_id="", agent_name="")
+    assert _resolve_member_identity(no_run, by_run=by_run, last=last) == (
         "deep-research",
         "深度研究助手",
     )
@@ -1091,4 +1098,116 @@ def test_completed_payload_includes_content():
     )
     assert payload["content"] == "final answer"
     assert payload["followups"] == ["next"]
+
+
+@pytest.mark.asyncio
+async def test_member_reasoning_delta_stays_in_thought(monkeypatch):
+    """Member ReasoningContentDelta must not feed the main reasoning panel."""
+    from api.services import security_run_runtime as srr
+
+    monkeypatch.setenv("TAIS_ENABLE_AGNO_TEAM", "1")
+
+    class Runner:
+        async def arun(self, *_a, **_k):
+            yield SimpleNamespace(
+                event="TeamRunStarted",
+                run_id="team-run-r",
+                session_id="s1",
+                team_id="research-analysis-team",
+                model="m",
+                model_provider="p",
+                agent_id="",
+                parent_run_id=None,
+            )
+            yield SimpleNamespace(
+                event="RunStarted",
+                run_id="member-run-r",
+                team_id="",
+                agent_id="deep-research",
+                agent_name="深度研究助手",
+                parent_run_id="team-run-r",
+                model="m",
+                model_provider="p",
+            )
+            yield SimpleNamespace(
+                event="ReasoningContentDelta",
+                run_id="member-run-r",
+                team_id="",
+                agent_id="deep-research",
+                agent_name="深度研究助手",
+                parent_run_id="team-run-r",
+                content="成员内部推理片段",
+            )
+            yield SimpleNamespace(
+                event="RunCompleted",
+                run_id="member-run-r",
+                team_id="",
+                agent_id="deep-research",
+                agent_name="深度研究助手",
+                parent_run_id="team-run-r",
+                content="成员结论",
+                citations=[{"title": "Example", "url": "https://example.com"}],
+            )
+            yield SimpleNamespace(
+                event="TeamRunContent",
+                run_id="team-run-r",
+                team_id="research-analysis-team",
+                content="队长回答",
+            )
+            yield SimpleNamespace(
+                event="TeamRunCompleted",
+                run_id="team-run-r",
+                session_id="s1",
+                team_id="research-analysis-team",
+                content="队长回答",
+                metrics={},
+                citations=[],
+                followups=[],
+            )
+
+        def cancel_run(self, *_a, **_k):
+            return True
+
+    runtime = srr.SecurityRunRuntime()
+    request = srr.SecurityRunRequest.from_chat_args(
+        "x", session_id="s1", user_id="u1", agent_id="research-analysis-team"
+    )
+    settings = SimpleNamespace(
+        show_raw_reasoning=True,
+        show_raw_tool_io=False,
+        show_thought_chain=True,
+    )
+    events = [
+        event
+        async for event in runtime._stream_agent_events(Runner(), request, settings)
+    ]
+    assert not any(e.event == "reasoning.delta" for e in events), events
+    thoughts = [e for e in events if e.event == "thought.update"]
+    assert any(
+        e.data["thought"].get("id") == "member:deep-research:reasoning" for e in thoughts
+    ), thoughts
+    sources = [e for e in events if e.event == "sources"]
+    assert sources, events
+    titles = [item.get("title") for item in sources[0].data.get("items") or []]
+    assert any(isinstance(t, str) and "深度研究助手" in t for t in titles), titles
+
+
+def test_csv_builder_dedupes_stem(tmp_path, monkeypatch):
+    from pathlib import Path
+    from api.services import agent_tools as at
+
+    root = Path(tmp_path)
+    (root / "a.csv").write_text("x\n1\n", encoding="utf-8")
+    nested = root / "sub"
+    nested.mkdir()
+    (nested / "a.csv").write_text("y\n2\n", encoding="utf-8")
+    (root / "b.csv").write_text("z\n3\n", encoding="utf-8")
+
+    monkeypatch.setattr(at, "analysis_work_dir", lambda: root)
+    tools = at._build_csv()
+    stems = [p.stem for p in tools.csvs]
+    assert stems.count("a") == 1
+    assert "b" in stems
+    a_path = next(p for p in tools.csvs if p.stem == "a")
+    assert a_path.parent == root
 

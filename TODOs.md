@@ -7,6 +7,9 @@
 - [x] data-analysis CsvTools 扫描沙箱内全部 CSV；Team 模式 i18n 文案
 - [x] Chat 终态收口：run.completed 将 loading 的 thought/tool 置 success；cancel/fail 同步收口
 - [x] run.completed 带 content 兜底；content.delta 兼容 cumulative snapshot；Team 补 flush 未完成成员 thought
+- [x] 成员 ReasoningContentDelta 不进主 reasoning 面板；成员 citations → sources（带成员前缀）
+- [x] 成员身份解析：新 run_id 不继承上一成员；CsvTools stem 去重；sources 多成员合并
+
 
 
 

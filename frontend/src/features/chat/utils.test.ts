@@ -674,3 +674,22 @@ describe('formatRetryDetail', () => {
     expect(second.messages[0]?.content).toBe('Hello world')
   })
 
+  it('merges sources from multiple team members', () => {
+    const assistant: Message = { id: 'a', role: 'assistant', content: '', final: false, status: 'streaming' }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    const first = chatReducer(started, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'sources', items: [{ id: '1', title: '[深度研究] A', url: 'https://a.example' }] },
+    })
+    const second = chatReducer(first, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'sources', items: [{ id: '2', title: '[数据分析] B', url: 'https://b.example' }] },
+    })
+    expect(second.messages[0]?.sources).toEqual([
+      { id: '1', title: '[深度研究] A', url: 'https://a.example' },
+      { id: '2', title: '[数据分析] B', url: 'https://b.example' },
+    ])
+  })
+

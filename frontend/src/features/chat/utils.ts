@@ -282,13 +282,25 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               return message
             }
             const resumeAfterRetry = message.status === 'retrying'
+            // Team members may each emit sources; merge by id/url/title instead of replace.
+            const prevSources = resumeAfterRetry ? [] : (message.sources ?? [])
+            const merged = [...prevSources]
+            const seen = new Set(
+              prevSources.map((s) => s.id || s.url || s.title).filter(Boolean) as string[],
+            )
+            for (const item of event.items ?? []) {
+              const key = item.id || item.url || item.title
+              if (key && seen.has(key)) continue
+              if (key) seen.add(key)
+              merged.push(item)
+            }
             return {
               ...message,
               content: resumeAfterRetry ? '' : message.content,
               reasoning: resumeAfterRetry ? null : message.reasoning,
               tool_steps: resumeAfterRetry ? [] : message.tool_steps,
               thought_chain: resumeAfterRetry ? [] : message.thought_chain,
-              sources: event.items,
+              sources: merged,
               status: 'streaming',
               retry: null,
               error: null,

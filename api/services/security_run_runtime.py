@@ -181,8 +181,9 @@ def _resolve_member_identity(
 ) -> tuple[str, str]:
     """Resolve member id/name; remember last seen for identity-stripped deltas.
 
-    Agno member Intermediate content often lacks ``agent_id``; map via
-    ``run_id`` or the most recently observed member in this stream.
+    Prefer ``run_id`` mapping (filled from earlier events with ``agent_id``).
+    Fall back to the most recent member only when ``run_id`` is missing — never
+    bind a *new* run_id to the previous member (broadcast/coordinate interleave).
     """
     run_id = str(event_value(event, "run_id", "") or "").strip()
     explicit_id = str(event_value(event, "agent_id", "") or "").strip()
@@ -200,9 +201,11 @@ def _resolve_member_identity(
         identity = by_run[run_id]
         last[0] = identity
         return identity
+    if run_id:
+        # Seen a new member run without identity yet; keep generic until agent_id
+        # arrives so we don't mis-label as the previous member.
+        return "member", "member"
     if last[0] is not None:
-        if run_id:
-            by_run[run_id] = last[0]
         return last[0]
     return "member", "member"
 
@@ -1440,15 +1443,44 @@ class SecurityRunRuntime:
                         "content.delta", {"run_id": run_id, "delta": content}
                     )
                 elif _event_matches(event_type, "reasoning_content_delta"):
-                    if show_raw_reasoning:
-                        reasoning = event_value(
-                            event, "content", event_value(event, "reasoning", "")
-                        )
-                        if isinstance(reasoning, str) and reasoning:
-                            yield ChatRunEvent(
-                                "reasoning.delta",
-                                {"run_id": run_id, "delta": reasoning},
+                    reasoning = event_value(
+                        event, "content", event_value(event, "reasoning", "")
+                    )
+                    if not (isinstance(reasoning, str) and reasoning):
+                        continue
+                    # Team member raw reasoning stays under ThoughtChain; only the
+                    # leader/top-level run feeds the main reasoning panel.
+                    if is_member_event:
+                        if show_thought_chain:
+                            summary = _append_member_content_delta(
+                                member_content_acc,
+                                member_id=member_id or "member",
+                                delta=reasoning,
                             )
+                            if _should_emit_member_thought(
+                                member_thought_emit,
+                                member_id=f"{member_id or 'member'}:reasoning",
+                                summary=summary,
+                            ):
+                                yield ChatRunEvent(
+                                    "thought.update",
+                                    {
+                                        "run_id": display_run_id or run_id,
+                                        "thought": {
+                                            "id": f"member:{member_id or 'member'}:reasoning",
+                                            "type": "reasoning",
+                                            "title": f"成员推理 · {member_name or member_id or 'member'}",
+                                            "status": "running",
+                                            "summary": summary,
+                                        },
+                                    },
+                                )
+                        continue
+                    if show_raw_reasoning:
+                        yield ChatRunEvent(
+                            "reasoning.delta",
+                            {"run_id": run_id, "delta": reasoning},
+                        )
                 elif (
                     _event_matches(event_type, "reasoning_started")
                     or _event_matches(event_type, "reasoning_step")
@@ -1647,6 +1679,24 @@ class SecurityRunRuntime:
                                         "status": "completed",
                                         "summary": summary_text,
                                     },
+                                },
+                            )
+                        # Deep-research members often attach citations; keep them
+                        # visible on the chat message with a member prefix.
+                        member_sources = source_items(
+                            event_value(event, "citations")
+                        ) or source_items(event_value(event, "references"))
+                        if member_sources:
+                            for item in member_sources:
+                                title = str(item.get("title") or "").strip()
+                                prefix = f"[{member_name or member_id}] "
+                                if title and not title.startswith(prefix):
+                                    item["title"] = f"{prefix}{title}"
+                            yield ChatRunEvent(
+                                "sources",
+                                {
+                                    "run_id": display_run_id or run_id,
+                                    "items": member_sources,
                                 },
                             )
                         continue

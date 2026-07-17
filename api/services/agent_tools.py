@@ -201,15 +201,27 @@ def _build_csv() -> Any:
     base = analysis_work_dir()
     # Include nested uploads (if any) while staying inside the sandbox.
     csvs: list[Path] = sorted({*base.glob("*.csv"), *base.glob("**/*.csv")})
-    # De-dupe by resolved path order-preserving.
-    seen: set[Path] = set()
-    unique: list[Path] = []
+    # Agno CsvTools matches by stem only; keep one path per stem (prefer shallower
+    # then newer mtime) so list/read stay consistent.
+    by_stem: dict[str, Path] = {}
     for path in csvs:
-        key = path.resolve()
-        if key in seen:
+        stem = path.stem
+        prev = by_stem.get(stem)
+        if prev is None:
+            by_stem[stem] = path
             continue
-        seen.add(key)
-        unique.append(path)
+        # Prefer files directly in sandbox root over nested duplicates.
+        prev_depth = len(prev.relative_to(base).parts)
+        cur_depth = len(path.relative_to(base).parts)
+        if cur_depth < prev_depth:
+            by_stem[stem] = path
+        elif cur_depth == prev_depth:
+            try:
+                if path.stat().st_mtime >= prev.stat().st_mtime:
+                    by_stem[stem] = path
+            except OSError:
+                by_stem[stem] = path
+    unique = sorted(by_stem.values(), key=lambda p: p.name.lower())
     return CsvTools(
         csvs=list(unique) if unique else None,
         row_limit=500,
