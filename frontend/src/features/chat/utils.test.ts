@@ -152,7 +152,7 @@ describe('chat behavior', () => {
     expect(messages[1]).toMatchObject({ status: 'completed' })
   })
 
-  it('clears partial content when the model provider retries', () => {
+  it('keeps partial content during provider retry and replaces on resume', () => {
     const assistant: Message = { id: 'a', role: 'assistant', content: '', final: false, status: 'streaming' }
     const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
     const partial = chatReducer(started, { type: 'event', id: 'a', event: { type: 'content.delta', delta: 'partial' } })
@@ -163,7 +163,7 @@ describe('chat behavior', () => {
     })
     const resumed = chatReducer(retrying, { type: 'event', id: 'a', event: { type: 'content.delta', delta: 'final answer' } })
     expect(retrying.messages[0]).toMatchObject({
-      content: '',
+      content: 'partial',
       status: 'retrying',
       retry: { attempt: 1, maxAttempts: 4, delaySeconds: 2 },
     })

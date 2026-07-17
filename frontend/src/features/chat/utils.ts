@@ -166,17 +166,21 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
         switch (event.type) {
           case 'run.started':
             return { ...message, run_id: event.runId, session_id: event.sessionId ?? message.session_id, status: 'streaming', retry: null, error: null, leanMode: event.leanMode, enableTools: event.enableTools, searchKnowledge: event.searchKnowledge, skillNames: event.skillNames }
-          case 'content.delta':
+          case 'content.delta': {
             if (message.final && message.status !== 'streaming' && message.status !== 'retrying') {
               return message
             }
+            // After a provider retry, replace stale partials with the new stream.
+            const resumeAfterRetry = message.status === 'retrying'
             return {
               ...message,
-              content: message.content + event.delta,
+              content: resumeAfterRetry ? event.delta : message.content + event.delta,
+              reasoning: resumeAfterRetry ? null : message.reasoning,
               status: 'streaming',
               retry: null,
               error: null,
             }
+          }
           case 'run.retrying':
             if (message.final && message.status !== 'streaming' && message.status !== 'retrying') {
               return message
@@ -184,13 +188,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
             return {
               ...message,
               run_id: event.runId ?? message.run_id,
-              content: '',
-              reasoning: null,
-              tool_steps: [],
-              thought_chain: [],
-              sources: null,
-              metrics: null,
-              followups: null,
+              // Keep partial answer/tools visible during backoff (user can still Esc/stop).
               final: false,
               status: 'retrying',
               error: null,
@@ -205,23 +203,39 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
             if (message.final && message.status !== 'streaming' && message.status !== 'retrying') {
               return message
             }
-            const toolSteps = message.tool_steps ?? []
+            const resumeAfterRetry = message.status === 'retrying'
+            const toolSteps = resumeAfterRetry ? [] : (message.tool_steps ?? [])
             const index = toolSteps.findIndex((step) => step.id === event.tool.id)
             const next =
               index < 0 ? [...toolSteps, event.tool] : toolSteps.map((step, stepIndex) => (stepIndex === index ? event.tool : step))
-            return { ...message, tool_steps: next, status: 'streaming', retry: null, error: null }
-          }
-          case 'reasoning.delta':
-            if (message.final && message.status !== 'streaming' && message.status !== 'retrying') {
-              return message
-            }
             return {
               ...message,
-              reasoning: (message.reasoning ?? '') + event.delta,
+              // New attempt after retry — drop previous partial answer/tools.
+              content: resumeAfterRetry ? '' : message.content,
+              reasoning: resumeAfterRetry ? null : message.reasoning,
+              thought_chain: resumeAfterRetry ? [] : message.thought_chain,
+              tool_steps: next,
               status: 'streaming',
               retry: null,
               error: null,
             }
+          }
+          case 'reasoning.delta': {
+            if (message.final && message.status !== 'streaming' && message.status !== 'retrying') {
+              return message
+            }
+            const resumeAfterRetry = message.status === 'retrying'
+            return {
+              ...message,
+              content: resumeAfterRetry ? '' : message.content,
+              reasoning: resumeAfterRetry ? event.delta : (message.reasoning ?? '') + event.delta,
+              tool_steps: resumeAfterRetry ? [] : message.tool_steps,
+              thought_chain: resumeAfterRetry ? [] : message.thought_chain,
+              status: 'streaming',
+              retry: null,
+              error: null,
+            }
+          }
           case 'thought.update': {
             if (message.final && message.status !== 'streaming' && message.status !== 'retrying') {
               return message
