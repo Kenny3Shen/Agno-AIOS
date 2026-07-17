@@ -2787,8 +2787,25 @@ button.collect-article-item.is-selected {
 }
 
 
-/* ---- Draw.io-inspired Studio chrome (visual only) ---- */
-.workflow-studio__shapes .workflow-studio__panel-title {
+/* ---- Draw.io-inspired Studio chrome (visual only; no behavior) ---- */
+
+/* Menubar-like toolbar */
+.workflow-studio__toolbar {
+  min-height: 48px;
+  padding: 6px 12px;
+  background: color-mix(in srgb, var(--tais-surface) 96%, var(--tais-soft));
+}
+
+/* Left "shapes" rail: slightly cooler surface like diagram tools */
+.workflow-studio__left {
+  background: color-mix(in srgb, var(--tais-surface) 94%, var(--tais-muted));
+}
+
+.workflow-studio__right {
+  background: var(--tais-surface);
+}
+
+.workflow-studio__panel-title {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   font-size: 11px;
@@ -2796,21 +2813,50 @@ button.collect-article-item.is-selected {
   color: var(--tais-muted);
 }
 
+/* Action strip: grouped like draw.io menubar sections */
 .workflow-studio__actions--drawio {
-  gap: 6px !important;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px 0;
+  margin-left: auto;
+}
+
+.workflow-studio__action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.workflow-studio__action-sep {
+  width: 1px;
+  height: 22px;
+  margin: 0 8px;
+  background: var(--tais-border);
+  flex-shrink: 0;
+  align-self: center;
 }
 
 .workflow-studio__actions--drawio .ant-btn {
   border-radius: 6px;
+  height: 32px;
+}
+
+.workflow-studio__actions--drawio .ant-btn-icon-only {
+  width: 32px;
+  padding-inline: 0;
 }
 
 /* Canvas status strip (Panel bottom-center) */
 .wf-status-bar {
   display: flex !important;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 0;
+  max-width: min(720px, calc(100% - 140px));
   margin: 0 0 10px !important;
-  padding: 4px 12px !important;
+  padding: 4px 4px 4px 12px !important;
   border-radius: 999px !important;
   border: 1px solid var(--tais-border) !important;
   background: color-mix(in srgb, var(--tais-surface) 92%, transparent) !important;
@@ -2823,9 +2869,14 @@ button.collect-article-item.is-selected {
   user-select: none;
 }
 
+.wf-status-bar__item {
+  padding: 0 10px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 .wf-status-bar__item + .wf-status-bar__item {
   border-left: 1px solid var(--tais-border);
-  padding-left: 12px;
 }
 
 .wf-status-bar__zoom {
@@ -2850,6 +2901,13 @@ button.collect-article-item.is-selected {
 /* Line grid slightly softer so nodes stay primary */
 .workflow-canvas--main .react-flow__background pattern line {
   stroke: var(--wf-canvas-dot) !important;
+  stroke-width: 1 !important;
+}
+
+/* Marquee selection closer to draw.io (dashed primary) */
+.workflow-canvas--main .react-flow {
+  --xy-selection-background-color: color-mix(in srgb, var(--tais-blue) 10%, transparent);
+  --xy-selection-border: 1px dashed color-mix(in srgb, var(--tais-blue) 75%, transparent);
 }
 
 /* Palette closer to draw.io shape tiles */
@@ -2868,6 +2926,7 @@ button.collect-article-item.is-selected {
   text-align: center;
   font-size: 11px;
   line-height: 1.25;
+  border-radius: 8px;
 }
 
 .workflow-palette__icon {
@@ -2876,7 +2935,26 @@ button.collect-article-item.is-selected {
   border-radius: 8px;
 }
 
+/* Empty canvas card: diagram-tool placeholder */
+.workflow-canvas__empty-card {
+  border-style: dashed;
+  border-radius: 12px;
+}
+
 html.dark .wf-status-bar {
   background: color-mix(in srgb, var(--tais-surface) 88%, transparent) !important;
+}
+
+html.dark .workflow-studio__toolbar {
+  background: color-mix(in srgb, var(--tais-surface) 92%, #000);
+}
+
+html.dark .workflow-studio__left {
+  background: color-mix(in srgb, var(--tais-surface) 90%, #000);
+}
+
+html.dark .workflow-canvas--main .react-flow__background pattern line {
+  stroke: var(--wf-canvas-dot) !important;
+  opacity: 0.9;
 }
 

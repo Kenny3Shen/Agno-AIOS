@@ -1,9 +1,13 @@
 /**
  * Workflow Studio canvas (React Flow).
  *
- * Draw.io–inspired shell: dotted/line grid, minimap, zoom controls, smart-snap
- * guides, and a read-only status strip. Graph mutations stay in parent hooks;
- * this module maps DSL steps ↔ RF nodes/edges and handles drag/connect UI only.
+ * Draw.io–inspired shell only:
+ * - line grid, minimap, zoom controls, smart-snap guides
+ * - read-only status strip (nodes / edges / selection / zoom / running)
+ *
+ * Graph mutations stay in parent hooks (`useWorkflow`).
+ * This module maps DSL steps ↔ RF nodes/edges and owns drag/connect UI only.
+ * Do not put save/run/publish side effects here.
  */
 import { isKeyboardTargetEditable, isOverlayEscapeTarget } from '@/shared/lib/keyboard'
 import {
@@ -88,15 +92,17 @@ const BACKGROUND_GAP = 20
 const BACKGROUND_SIZE = 1
 
 /**
- * Read-only chrome under the canvas (zoom / counts).
- * Must render inside `<ReactFlow>` (uses `useViewport`).
+ * Read-only canvas chrome (counts + zoom). Presentation only.
+ * Must render inside `<ReactFlow>` because it calls `useViewport`.
  */
 function CanvasStatusBar({
   nodeCount,
+  edgeCount,
   selectedCount,
   running,
 }: {
   nodeCount: number
+  edgeCount: number
   selectedCount: number
   running: boolean
 }) {
@@ -107,6 +113,9 @@ function CanvasStatusBar({
     <Panel position="bottom-center" className="wf-status-bar" aria-live="polite">
       <span className="wf-status-bar__item">
         {t('canvasStatusNodes', { count: nodeCount })}
+      </span>
+      <span className="wf-status-bar__item">
+        {t('canvasStatusEdges', { count: edgeCount })}
       </span>
       {selectedCount > 0 ? (
         <span className="wf-status-bar__item">
@@ -132,6 +141,10 @@ const MINIMAP_NODE_COLOR = (node: WorkflowCanvasNode) => {
   if (status === 'paused') return '#faad14'
   return 'var(--tais-muted, #c0c0c0)'
 }
+
+// ---------------------------------------------------------------------------
+// Props & graph types (owned by Studio page / useWorkflow)
+// ---------------------------------------------------------------------------
 
 /** Canvas props: graph state + callbacks owned by `useWorkflow` / Studio page. */
 type Props = {
@@ -1260,6 +1273,7 @@ function CanvasInner({
         />
         <CanvasStatusBar
           nodeCount={steps.length}
+          edgeCount={graph.edges.length}
           selectedCount={selectedIds.length || (selectedId ? 1 : 0)}
           running={Boolean(running)}
         />

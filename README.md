@@ -512,7 +512,7 @@ api/services/workflow_compiler.py     # DSL 校验 + Agno Step/Parallel/Conditio
 api/services/workflow_service.py      # CRUD / 权限投影
 api/services/workflow_run_runtime.py  # arun 流 → SSE
 api/routes/workflows.py               # HTTP + EventSourceResponse
-frontend/src/features/workflow/*      # 工作流画布（draw.io 风格网格与状态条；reparent / 快捷键 / auto-layout / Inspector / SSE）
+frontend/src/features/workflow/*      # 工作流画布（draw.io 风格网格/状态条/分组工具栏；reparent / 快捷键 / auto-layout / Inspector / SSE）
 ```
 
 ### 路线图（PR2+）

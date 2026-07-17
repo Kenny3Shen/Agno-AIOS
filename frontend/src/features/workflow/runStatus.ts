@@ -1,3 +1,7 @@
+/**
+ * Map workflow SSE / history payloads onto per-node run status for canvas pills.
+ * Presentation helper only — does not start or cancel runs.
+ */
 import type {
   WorkflowNode,
   WorkflowNodeRunStatus,

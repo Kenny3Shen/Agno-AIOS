@@ -1,3 +1,7 @@
+/**
+ * Workflow Studio HTTP client (CRUD, templates, run SSE, cancel).
+ * Pure transport: no React state. Parsing stays aligned with Agno-style envelopes.
+ */
 import { apiFetch, jsonInit, requestJson } from '@/shared/api/client'
 import { normalizePaginatedList } from '@/shared/lib/pagination'
 import { consumeSse } from '@/features/chat/utils'

@@ -309,5 +309,10 @@
   "canvasStatusRunning": "Running",
   "canvasMinimapAria": "Canvas minimap",
   "canvasControlsAria": "Zoom and fit view",
-  "toolbarGroupFile": "File"
+  "toolbarGroupFile": "File",
+  "canvasStatusEdges": "{{count}} edges",
+  "toolbarGroupEdit": "Edit",
+  "toolbarGroupLayout": "Layout",
+  "toolbarGroupDeploy": "Deploy",
+  "toolbarGroupRun": "Run"
 }

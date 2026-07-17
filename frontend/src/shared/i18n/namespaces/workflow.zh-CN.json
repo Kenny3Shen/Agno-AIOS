@@ -309,5 +309,10 @@
   "canvasStatusRunning": "运行中",
   "canvasMinimapAria": "画布缩略图",
   "canvasControlsAria": "缩放与适应视图",
-  "toolbarGroupFile": "文件"
+  "toolbarGroupFile": "文件",
+  "canvasStatusEdges": "{{count}} 条连线",
+  "toolbarGroupEdit": "编辑",
+  "toolbarGroupLayout": "布局",
+  "toolbarGroupDeploy": "发布",
+  "toolbarGroupRun": "运行"
 }

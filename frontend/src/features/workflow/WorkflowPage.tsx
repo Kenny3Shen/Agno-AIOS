@@ -1,8 +1,14 @@
 /**
  * Workflow Studio page shell (draw.io-style three-pane layout).
  *
- * Left: palette + templates + library · Center: React Flow canvas · Right: inspector + run log.
- * Orchestration state lives in `useWorkflow`; this file wires UI chrome only.
+ * Layout:
+ * - Left: shapes palette + templates + library
+ * - Center: React Flow canvas
+ * - Right: inspector + run log
+ *
+ * Orchestration state lives in `useWorkflow`. This file wires UI chrome only
+ * (toolbar groups, panels, inspector forms). Keep save/run/publish handlers
+ * delegated to the hook so behavior stays centralized.
  */
 import {
   Alert,
@@ -608,102 +614,137 @@ export function WorkflowPage() {
             </Tag>
           </div>
         </div>
-        <Space wrap className="workflow-studio__actions workflow-studio__actions--drawio">
-          <Button onClick={workflow.reset}>{t('new')}</Button>
-          <Tooltip title={t('undoHint')} getPopupContainer={studioPopupContainer}>
-            <Button
-              icon={<UndoOutlined />}
-              disabled={!workflow.canUndo || workflow.state.running}
-              onClick={workflow.undo}
-            />
-          </Tooltip>
-          <Tooltip title={t('redoHint')} getPopupContainer={studioPopupContainer}>
-            <Button
-              icon={<RedoOutlined />}
-              disabled={!workflow.canRedo || workflow.state.running}
-              onClick={workflow.redo}
-            />
-          </Tooltip>
-          <Tooltip title={t('organizeHint')} getPopupContainer={studioPopupContainer}>
-            <Button
-              icon={<ApartmentOutlined />}
-              disabled={workflow.state.running}
-              onClick={workflow.organizeLayout}
-            >
-              {t('organize')}
-            </Button>
-          </Tooltip>
-          <Tooltip title={t('keyboardHints')} getPopupContainer={studioPopupContainer}>
-            <Button type="text" icon={<QuestionCircleOutlined />} aria-label={t('keyboardHintsTitle')} />
-          </Tooltip>
-          <Button
-            icon={<SaveOutlined />}
-            type="primary"
-            loading={workflow.state.saving}
-            disabled={!canWrite}
-            onClick={() => {
-              void workflow.save().then((ok) => {
-                if (ok) message.success(t('saveSuccess'))
-              })
-            }}
+        {/* Draw.io-style action strip: visual groups only; handlers unchanged. */}
+        <div className="workflow-studio__actions workflow-studio__actions--drawio">
+          <div
+            className="workflow-studio__action-group"
+            role="group"
+            aria-label={t('toolbarGroupFile')}
           >
-            {t('save')}
-            {workflow.state.dirty ? ' *' : ''}
-          </Button>
-          <Tooltip title={t('publishHint')} getPopupContainer={studioPopupContainer}>
+            <Button onClick={workflow.reset}>{t('new')}</Button>
+          </div>
+          <span className="workflow-studio__action-sep" aria-hidden />
+          <div
+            className="workflow-studio__action-group"
+            role="group"
+            aria-label={t('toolbarGroupEdit')}
+          >
+            <Tooltip title={t('undoHint')} getPopupContainer={studioPopupContainer}>
+              <Button
+                icon={<UndoOutlined />}
+                disabled={!workflow.canUndo || workflow.state.running}
+                onClick={workflow.undo}
+              />
+            </Tooltip>
+            <Tooltip title={t('redoHint')} getPopupContainer={studioPopupContainer}>
+              <Button
+                icon={<RedoOutlined />}
+                disabled={!workflow.canRedo || workflow.state.running}
+                onClick={workflow.redo}
+              />
+            </Tooltip>
+          </div>
+          <span className="workflow-studio__action-sep" aria-hidden />
+          <div
+            className="workflow-studio__action-group"
+            role="group"
+            aria-label={t('toolbarGroupLayout')}
+          >
+            <Tooltip title={t('organizeHint')} getPopupContainer={studioPopupContainer}>
+              <Button
+                icon={<ApartmentOutlined />}
+                disabled={workflow.state.running}
+                onClick={workflow.organizeLayout}
+              >
+                {t('organize')}
+              </Button>
+            </Tooltip>
+            <Tooltip title={t('keyboardHints')} getPopupContainer={studioPopupContainer}>
+              <Button type="text" icon={<QuestionCircleOutlined />} aria-label={t('keyboardHintsTitle')} />
+            </Tooltip>
+          </div>
+          <span className="workflow-studio__action-sep" aria-hidden />
+          <div
+            className="workflow-studio__action-group"
+            role="group"
+            aria-label={t('toolbarGroupDeploy')}
+          >
             <Button
-              icon={<CloudUploadOutlined />}
-              type={
-                Boolean(workflow.state.workflowId) &&
-                !workflow.state.dirty &&
-                !workflow.state.hasPublished
-                  ? 'primary'
-                  : 'default'
-              }
+              icon={<SaveOutlined />}
+              type="primary"
               loading={workflow.state.saving}
-              disabled={!canWrite || !workflow.state.workflowId || workflow.state.dirty}
+              disabled={!canWrite}
               onClick={() => {
-                void workflow.publish().then((ok) => {
-                  if (ok) message.success(t('publishSuccess'))
+                void workflow.save().then((ok) => {
+                  if (ok) message.success(t('saveSuccess'))
                 })
               }}
             >
-              {t('publish')}
+              {t('save')}
+              {workflow.state.dirty ? ' *' : ''}
             </Button>
-          </Tooltip>
-          <Tooltip
-            title={
-              !canRun
-                ? t('runScopeHint')
-                : !workflow.state.workflowId
-                  ? t('errorRunNeedsSave')
-                  : workflow.state.dirty
-                    ? t('errorRunNeedsClean')
-                    : undefined
-            }
-            getPopupContainer={studioPopupContainer}
-          >
-            <Button
-              icon={<PlayCircleOutlined />}
-              disabled={
-                workflow.state.running ||
-                !canRun ||
-                !workflow.state.workflowId ||
-                workflow.state.dirty
-              }
-              onClick={() => void workflow.run()}
-            >
-              {t('run')}
-            </Button>
-          </Tooltip>
-          {workflow.state.running ? (
-            <Tooltip title={t('stopRunHint')} getPopupContainer={studioPopupContainer}>
-              <Button danger icon={<StopOutlined />} onClick={workflow.stop}>
-                {t('stop')}
+            <Tooltip title={t('publishHint')} getPopupContainer={studioPopupContainer}>
+              <Button
+                icon={<CloudUploadOutlined />}
+                type={
+                  Boolean(workflow.state.workflowId) &&
+                  !workflow.state.dirty &&
+                  !workflow.state.hasPublished
+                    ? 'primary'
+                    : 'default'
+                }
+                loading={workflow.state.saving}
+                disabled={!canWrite || !workflow.state.workflowId || workflow.state.dirty}
+                onClick={() => {
+                  void workflow.publish().then((ok) => {
+                    if (ok) message.success(t('publishSuccess'))
+                  })
+                }}
+              >
+                {t('publish')}
               </Button>
             </Tooltip>
-          ) : null}
-        </Space>
+          </div>
+          <span className="workflow-studio__action-sep" aria-hidden />
+          <div
+            className="workflow-studio__action-group"
+            role="group"
+            aria-label={t('toolbarGroupRun')}
+          >
+            <Tooltip
+              title={
+                !canRun
+                  ? t('runScopeHint')
+                  : !workflow.state.workflowId
+                    ? t('errorRunNeedsSave')
+                    : workflow.state.dirty
+                      ? t('errorRunNeedsClean')
+                      : undefined
+              }
+              getPopupContainer={studioPopupContainer}
+            >
+              <Button
+                icon={<PlayCircleOutlined />}
+                disabled={
+                  workflow.state.running ||
+                  !canRun ||
+                  !workflow.state.workflowId ||
+                  workflow.state.dirty
+                }
+                onClick={() => void workflow.run()}
+              >
+                {t('run')}
+              </Button>
+            </Tooltip>
+            {workflow.state.running ? (
+              <Tooltip title={t('stopRunHint')} getPopupContainer={studioPopupContainer}>
+                <Button danger icon={<StopOutlined />} onClick={workflow.stop}>
+                  {t('stop')}
+                </Button>
+              </Tooltip>
+            ) : null}
+          </div>
+        </div>
       </header>
       {workflowListMeta &&
       !workflow.librarySearch.trim() &&

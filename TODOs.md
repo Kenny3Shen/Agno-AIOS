@@ -2,9 +2,11 @@
 
 ## 已完成：Workflow Studio draw.io 风格打磨（纯 UI / 注释）
 
-- 画布：线型网格、角标 MiniMap/Controls、底部状态条（节点数 / 选中 / 缩放 / 运行中）。
-- 左侧节点调色板：图块化（仿 shapes 面板）；Studio 文案与模块头注释规范化。
-- **未改** 保存 / 运行 / 编译 / 连线 / 校验等业务逻辑。
+- 画布：线型网格、角标 MiniMap/Controls、底部状态条（节点 / 连线 / 选中 / 缩放 / 运行中）。
+- 顶栏：仿 draw.io 分组按钮条（文件 | 编辑 | 布局 | 发布 | 运行）+ 分隔线；handlers 未改。
+- 左侧节点调色板：图块化（shapes 面板）；左右轨表面与 panel 标题 uppercase；框选虚线样式。
+- 模块头注释：`WorkflowPage` / `WorkflowCanvas` / `api` / `runStatus` 等职责边界写清。
+- **未改** 保存 / 运行 / 编译 / 连线 / 校验 / reparent / SSE 等业务逻辑。
 
 ## 已完成：对话迁入智能体 + 用户详情上移 + 导航自动收缩 + 对话框拖拽上传
 
