@@ -6,7 +6,7 @@ export const SESSION_PAGE_SIZE = 40
 export type SessionsQueryOptions = {
   /** Only archived sessions (SQL archived_only). */
   archivedOnly?: boolean
-  /** Include archived among active (legacy include_archived). */
+  /** Include archived among active sessions. */
   includeArchived?: boolean
   userId?: string
   q?: string
@@ -30,20 +30,12 @@ export const chatKeys = {
   models: ['settings', 'models'] as const,
 }
 
-/** Infinite session list. Prefer object form; boolean first arg is legacy includeArchived. */
-export const sessionsQuery = (
-  options: SessionsQueryOptions | boolean = {},
-  userId?: string,
-  q = '',
-) => {
-  const normalized: SessionsQueryOptions =
-    typeof options === 'boolean'
-      ? { includeArchived: options, userId, q }
-      : options
-  const archivedOnly = Boolean(normalized.archivedOnly)
-  const includeArchived = Boolean(normalized.includeArchived)
-  const scopedUserId = normalized.userId
-  const query = normalized.q ?? ''
+/** Infinite session list (object options only). */
+export const sessionsQuery = (options: SessionsQueryOptions = {}) => {
+  const archivedOnly = Boolean(options.archivedOnly)
+  const includeArchived = Boolean(options.includeArchived)
+  const scopedUserId = options.userId
+  const query = options.q ?? ''
   return infiniteQueryOptions({
     queryKey: chatKeys.sessions({
       archivedOnly,

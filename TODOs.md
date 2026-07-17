@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Collect 发现阶段取消 + 布局高度 + sessionsQuery 收窄
+
+- `discover_article_urls` 在 `CancelledError` 时 cancel sibling domain 任务，避免共享 httpx Client 关闭后悬挂请求。
+- Collect/CVE SSE worker 明确记录 cancel（不审计为失败）。
+- `estimateNodeHeight` 计入 skills、空槽 CTA、长标题，降低自动布局重叠。
+- `sessionsQuery` 仅对象形参，删除 boolean 遗留重载。
+
 ## 已完成：Collect 取消清理 + 正文容器 + Trace sessions 查询
 
 - 同步抓取阶段 `CancelledError` 时 cancel 未完成 sibling fetch tasks，避免悬挂任务占锁。

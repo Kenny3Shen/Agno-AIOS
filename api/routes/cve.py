@@ -129,6 +129,9 @@ async def _update_cve_stream(request: Request, user: User) -> EventSourceRespons
                     "code": 409,
                 }
             )
+        except asyncio.CancelledError:
+            logger.info("CVE streamed update cancelled")
+            raise
         except Exception as exc:
             logger.exception("CVE streamed update failed: {}", exc)
             await record_audit_event_async(

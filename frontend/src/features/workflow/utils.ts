@@ -1030,14 +1030,28 @@ export const validateWorkflowName = (
   }
 }
 
-/** Estimated rendered node height (matches ~.wf-flow-node content + HITL). */
+/** Estimated rendered node height (matches ~.wf-flow-node content + badges). */
 const estimateNodeHeight = (node: WorkflowNode): number => {
   let h = 96
   if (node.type === 'condition' || node.type === 'router') h = 112
   if (node.requiresConfirmation || node.requiresUserInput || node.requiresOutputReview) {
     h += 22
   }
+  // Skill chips and empty-slot CTAs grow the card beyond the base estimate.
+  const skillCount = Array.isArray(node.skills) ? node.skills.length : 0
+  if (skillCount > 0) h += 18
   if ((node.instructions || '').length > 80) h += 12
+  if ((node.name || '').length > 28) h += 10
+  // Container types show empty-slot CTAs when a branch has no children.
+  if (node.type === 'condition') {
+    if (!(node.thenSteps?.length)) h += 28
+    if (!(node.elseSteps?.length)) h += 28
+  } else if (node.type === 'router') {
+    const emptyChoices = (node.choices ?? []).filter((c) => !(c.steps?.length)).length
+    h += emptyChoices * 24
+  } else if (node.type === 'parallel' || node.type === 'loop') {
+    if (!(node.steps?.length)) h += 28
+  }
   return h
 }
 

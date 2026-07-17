@@ -325,6 +325,26 @@ describe('reparent and auto-layout', () => {
     // Children to the right of condition
     expect(contain!.position!.x).toBeGreaterThan(laid[1]!.position!.x)
   })
+
+  it('auto-layout accounts for empty branch CTAs without sibling overlap', () => {
+    const empty = createNode('condition')
+    empty.id = 'empty-cond'
+    empty.thenSteps = []
+    empty.elseSteps = []
+    const withKids = createNode('condition')
+    withKids.id = 'full-cond'
+    withKids.thenSteps = [{ id: 't1', type: 'step', name: 'Then', targetId: 'security-operations' }]
+    withKids.elseSteps = [{ id: 'e1', type: 'step', name: 'Else', targetId: 'safe-fallback' }]
+    // Two root conditions stacked via layout columns; safety pass uses estimated height.
+    const laid = applyAutoLayout([empty, withKids])
+    expect(laid[0]?.position && laid[1]?.position).toBeTruthy()
+    // Roots are horizontal; children of full-cond must not overlap each other.
+    const t1 = laid[1]?.thenSteps?.[0]
+    const e1 = laid[1]?.elseSteps?.[0]
+    expect(t1?.position && e1?.position).toBeTruthy()
+    const t1Bottom = t1!.position!.y + 96
+    expect(e1!.position!.y).toBeGreaterThanOrEqual(t1Bottom)
+  })
 })
 
 describe('run status reduce', () => {

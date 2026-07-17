@@ -283,6 +283,10 @@ async def _crawl_collect_stream(
                     "code": 409,
                 }
             )
+        except asyncio.CancelledError:
+            # Client disconnect / stop button — do not audit as crawl failure.
+            logger.info("Collect streamed crawl cancelled")
+            raise
         except Exception as exc:
             logger.exception("Collect streamed crawl failed: {}", exc)
             await record_audit_event_async(

@@ -421,19 +421,27 @@ async def discover_article_urls(
             for domain in selected
         ]
         completed = 0
-        for finished in asyncio.as_completed(tasks):
-            domain, links = await finished
-            discovered[domain] = links
-            completed += 1
-            await _emit_progress(
-                on_progress,
-                stage="discover",
-                message=f"发现源站 {domain}（{len(links)} 篇链接）",
-                source=domain,
-                source_index=completed,
-                source_total=source_total,
-                discovered=sum(len(v) for v in discovered.values()),
-            )
+        try:
+            for finished in asyncio.as_completed(tasks):
+                domain, links = await finished
+                discovered[domain] = links
+                completed += 1
+                await _emit_progress(
+                    on_progress,
+                    stage="discover",
+                    message=f"发现源站 {domain}（{len(links)} 篇链接）",
+                    source=domain,
+                    source_index=completed,
+                    source_total=source_total,
+                    discovered=sum(len(v) for v in discovered.values()),
+                )
+        except asyncio.CancelledError:
+            # Client abort: cancel sibling discovers before closing the shared client.
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
     return discovered
 
 

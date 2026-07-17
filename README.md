@@ -49,7 +49,7 @@ TAIS_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
 - 前端 i18n：侧栏语言按钮切换 `zh-CN`/`en-US`（`localStorage.locale`），页面/通知中心/Knowledge 入库文案走 feature 命名空间；日期与相对时间跟随当前语言。
 - 环境变量：应用配置使用 `TAIS_*` / 领域名（`POSTGRES_*`、`AUTH_*`、`MCP_*`）；`AGNO_*` 仅用于引擎耦合（如 `AGNO_DB_SCHEMA`）。
 - CVE 情报源配置为仓库根目录 `cve_sources.toml`（可用 `TAIS_CVE_SOURCE_CONFIG_PATH` 覆盖）。
-Collect 按 `api/utils/url2md_utils.domain_rules` 源站爬取文章入库（`collect_articles`），页面默认从库检索。解析侧用 `resolve_domain_rule_key` 归一化 host/`www` 并安全匹配多 class 正文容器（div/article/section/main）；规则未命中或 class 漂移时回退语义容器（article/main 等）；已停用 botcrawl / The Register / securitylab.ru。同步时并发发现与抓取；跨源 round-robin 选取 URL 并跳过已入库成功项后补齐预算；重复同步返回 409。列表默认不带正文、可筛失败并 reparse/批量重采；源健康计数与按失败源快捷筛选；同步可按当前筛选源站；发现阶段跟进分页列表页；CVE 关键词走全文索引，页面进入即检索最近条目；库更新与 Collect 源站同步均支持 `stream=true` 阶段进度；Collect 同步与 CVE 库更新均可前端 Abort 停止（已写入变更保留）。
+Collect 按 `api/utils/url2md_utils.domain_rules` 源站爬取文章入库（`collect_articles`），页面默认从库检索。解析侧用 `resolve_domain_rule_key` 归一化 host/`www` 并安全匹配多 class 正文容器（div/article/section/main）；规则未命中或 class 漂移时回退语义容器（article/main 等）；已停用 botcrawl / The Register / securitylab.ru。同步时并发发现与抓取；跨源 round-robin 选取 URL 并跳过已入库成功项后补齐预算；重复同步返回 409。列表默认不带正文、可筛失败并 reparse/批量重采；源健康计数与按失败源快捷筛选；同步可按当前筛选源站；发现阶段跟进分页列表页；CVE 关键词走全文索引，页面进入即检索最近条目；库更新与 Collect 源站同步均支持 `stream=true` 阶段进度；Collect 同步与 CVE 库更新均可前端 Abort 停止（发现/抓取 sibling 任务一并取消；已写入变更保留）。
 - `POSTGRES_*` / `POSTGRES_URL`：PostgreSQL 连接。
 - `AUTH_JWT_SECRET`：JWT 密钥；生产环境必须替换默认值。
 - `TAIS_BOOTSTRAP_ADMIN_EMAIL`、`TAIS_BOOTSTRAP_ADMIN_PASSWORD`：可选的初始管理员。
