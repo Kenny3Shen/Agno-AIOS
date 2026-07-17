@@ -130,6 +130,7 @@
   "multiSelectHint": "{{count}} nodes selected — bulk actions only; select one node to edit",
   "clearSelection": "Clear selection",
   "runBannerRunning": "Workflow is running…",
+  "runBannerRunningDirty": "Workflow running… (unsaved draft changes; save does not affect this run)",
   "runBannerPaused": "Run paused — awaiting approval",
   "runBannerFailed": "Latest run failed",
   "runBannerCompleted": "Latest run completed",

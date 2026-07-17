@@ -255,11 +255,23 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               error: null,
             }
           }
-          case 'sources':
+          case 'sources': {
             if (message.final && message.status !== 'streaming' && message.status !== 'retrying') {
               return message
             }
-            return { ...message, sources: event.items }
+            const resumeAfterRetry = message.status === 'retrying'
+            return {
+              ...message,
+              content: resumeAfterRetry ? '' : message.content,
+              reasoning: resumeAfterRetry ? null : message.reasoning,
+              tool_steps: resumeAfterRetry ? [] : message.tool_steps,
+              thought_chain: resumeAfterRetry ? [] : message.thought_chain,
+              sources: event.items,
+              status: 'streaming',
+              retry: null,
+              error: null,
+            }
+          }
           case 'run.paused': {
             const toolSteps = message.tool_steps ?? []
             const tool = event.tool
@@ -281,6 +293,8 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               ...message,
               run_id: event.runId,
               session_id: event.sessionId ?? message.session_id,
+              // Leave HITL pause state fully; keep approval link off resumed stream.
+              approval_id: null,
               status: 'streaming',
               final: false,
               retry: null,
@@ -293,6 +307,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               session_id: event.sessionId ?? message.session_id,
               metrics: event.metrics ?? message.metrics,
               followups: event.followups ?? [],
+              approval_id: null,
               status: 'completed',
               final: true,
               retry: null,
@@ -301,6 +316,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
             return {
               ...message,
               run_id: event.runId ?? message.run_id,
+              approval_id: null,
               status: 'cancelled',
               final: true,
               retry: null,
@@ -311,6 +327,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
             return {
               ...message,
               run_id: event.runId ?? message.run_id,
+              approval_id: null,
               status: 'failed',
               final: true,
               retry: null,

@@ -130,6 +130,7 @@
   "multiSelectHint": "已选 {{count}} 个节点 — 批量操作可用；单节点属性请只选一个",
   "clearSelection": "取消选择",
   "runBannerRunning": "工作流运行中…",
+  "runBannerRunningDirty": "工作流运行中…（草稿有未保存修改；保存不影响当前运行）",
   "runBannerPaused": "运行已暂停，等待审批处理",
   "runBannerFailed": "最近一次运行失败",
   "runBannerCompleted": "最近一次运行已完成",

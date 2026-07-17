@@ -722,7 +722,9 @@ export function WorkflowPage() {
           className="workflow-studio__banner"
           title={
             runDutyStatus === 'running'
-              ? t('runBannerRunning')
+              ? workflow.state.dirty
+                ? t('runBannerRunningDirty')
+                : t('runBannerRunning')
               : runDutyStatus === 'paused'
                 ? t('runBannerPaused')
                 : runDutyStatus === 'failed'

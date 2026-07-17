@@ -542,3 +542,66 @@ describe('formatRetryDetail', () => {
     })
     expect(withThought.messages[0]?.thought_chain?.map((t) => t.id)).toEqual(['new'])
   })
+
+  it('clears approval_id when a paused run continues', () => {
+    const assistant: Message = {
+      id: 'a',
+      role: 'assistant',
+      content: 'waiting',
+      final: true,
+      status: 'paused',
+      approval_id: 'appr-1',
+      run_id: 'run-1',
+    }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    // force paused message into state via history so we start from pause
+    const paused = { ...started, messages: [assistant], requesting: false }
+    const continued = chatReducer(paused, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'run.continued', runId: 'run-1', sessionId: 'sess-1' },
+    })
+    expect(continued.messages[0]).toMatchObject({
+      status: 'streaming',
+      final: false,
+      approval_id: null,
+      run_id: 'run-1',
+    })
+    const completed = chatReducer(continued, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'run.completed', runId: 'run-1', sessionId: 'sess-1' },
+    })
+    expect(completed.messages[0]).toMatchObject({ status: 'completed', approval_id: null })
+  })
+
+  it('replaces sources when sources event resumes after provider retry', () => {
+    const assistant: Message = {
+      id: 'a',
+      role: 'assistant',
+      content: 'partial',
+      final: false,
+      status: 'streaming',
+      sources: [{ id: 's0', title: 'old' }],
+    }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    const retrying = chatReducer(started, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'run.retrying', attempt: 1, maxAttempts: 3, delaySeconds: 1 },
+    })
+    const withSources = chatReducer(retrying, {
+      type: 'event',
+      id: 'a',
+      event: {
+        type: 'sources',
+        items: [{ id: 's1', title: 'fresh' }],
+      },
+    })
+    expect(withSources.messages[0]).toMatchObject({
+      status: 'streaming',
+      retry: null,
+      content: '',
+    })
+    expect(withSources.messages[0]?.sources).toEqual([{ id: 's1', title: 'fresh' }])
+  })

@@ -1,5 +1,13 @@
 # 下一步工作
 
+## 已完成：Chat HITL 继续清 approval + 重试 sources + Studio 运行中脏草稿提示
+
+- `run.continued` / completed / cancelled / failed 清空 `approval_id`，避免继续后仍显示「打开审批」。
+- `sources` 事件在 `run.retrying` 后恢复时与 content/tool 一致，替换旧来源。
+- `restoreVersion` 也走 `preserveSelectionAfterReload`。
+- 运行中且草稿 dirty 时顶栏提示保存不影响当前运行。
+
+
 ## 已完成：Studio 保存/发布保留选中 + Chat thought 重试一致
 
 - `preserveSelectionAfterReload`：save/publish/模板保存后不把 Inspector 跳回第一个节点（运行中 Ctrl+S 更稳）。

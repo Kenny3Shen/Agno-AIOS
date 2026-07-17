@@ -1010,13 +1010,22 @@ export function useWorkflow() {
       futureRef.current = []
       bumpHistory()
       const loaded = fromRecord(record)
-      setState((current) => ({
-        ...current,
-        ...loaded,
-        selectedIds: loaded.selectedId ? [loaded.selectedId] : [],
-        dirty: false,
-        error: null,
-      }))
+      setState((current) => {
+        const steps = loaded.steps ?? current.steps
+        const selection = preserveSelectionAfterReload(
+          steps,
+          current.selectedId,
+          current.selectedIds,
+          loaded.selectedId,
+        )
+        return {
+          ...current,
+          ...loaded,
+          ...selection,
+          dirty: false,
+          error: null,
+        }
+      })
       await workflowsQuery.refetch()
       await versionsQuery.refetch()
     } catch (error) {
