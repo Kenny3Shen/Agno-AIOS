@@ -1088,6 +1088,44 @@ async def test_resume_job_marks_agno_run_and_trace_error_and_notifies_both_sides
     assert notify_call.kwargs["submitter_id"] == "user-1"
     assert notify_call.kwargs["error"] == "continuation failed"
 
+
+
+@pytest.mark.asyncio
+async def test_run_completed_falls_back_to_request_session_id():
+    """Agno may omit session_id on RunCompleted; keep the request session for UI/history."""
+    runtime = security_run_runtime.SecurityRunRuntime()
+
+    class NoSessionCompletedAgent:
+        async def arun(self, *_args, **_kwargs):
+            yield {
+                "event": "RunStarted",
+                "run_id": "run-sess",
+                "session_id": "session-client",
+                "model": "test-model",
+                "model_provider": "test",
+            }
+            yield {"event": "RunContent", "run_id": "run-sess", "content": "ok"}
+            # Intentionally omit session_id on completed.
+            yield {
+                "event": "RunCompleted",
+                "run_id": "run-sess",
+                "metrics": {"total_tokens": 1},
+            }
+
+    events = [
+        event
+        async for event in runtime._stream_agent_events(
+            NoSessionCompletedAgent(),
+            security_run_runtime.SecurityRunRequest.from_chat_args(
+                "hello",
+                session_id="session-client",
+                user_id="user-1",
+            ),
+        )
+    ]
+    completed = next(event for event in events if event.event == "run.completed")
+    assert completed.data.get("session_id") == "session-client"
+
 @pytest.mark.asyncio
 async def test_stream_agent_events_emits_run_retrying_and_clears_partial_content_path():
     """Model-layer stream retry publishes run.retrying before the stream restarts."""

@@ -1115,7 +1115,9 @@ class SecurityRunRuntime:
                         {
                             "run_id": run_id,
                             "session_id": str(
-                                event_value(event, "session_id", "") or ""
+                                event_value(event, "session_id", request.session_id or "")
+                                or request.session_id
+                                or ""
                             ),
                         },
                     )
@@ -1127,7 +1129,10 @@ class SecurityRunRuntime:
                         yield ChatRunEvent(
                             "sources", {"run_id": run_id, "items": sources}
                         )
-                    yield ChatRunEvent("run.completed", completed_payload(event))
+                    completed = completed_payload(event)
+                    if not completed.get("session_id"):
+                        completed["session_id"] = str(request.session_id or "")
+                    yield ChatRunEvent("run.completed", completed)
                     self.unregister_run(
                         user_id=request.agent_user_id, run_id=run_id
                     )

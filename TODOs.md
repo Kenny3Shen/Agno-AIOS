@@ -1,5 +1,9 @@
 # 下一步工作
 
+## 已完成：run.completed session_id 回退请求会话
+
+- Agno 终态事件可能省略 `session_id` 时，用 `request.session_id` 填充 `run.completed` / `run.continued`，避免新会话 history 深链丢会话。
+
 ## 已完成：Chat 取消 404 静默 + network-error 清 retry + SSE 结束打断 backoff
 
 - `cancelRun` 返回 404（已结束/竞态）不再 toast「服务端取消失败」。
