@@ -273,6 +273,7 @@
   "pasteMultiSelectRoot": "Multiple nodes selected — paste appended at canvas root",
   "pasteEmptyClipboard": "Nothing to paste — copy a node first (Ctrl/⌘C)",
   "runStoppedByUser": "Stopped by user",
+  "cancelServerFailed": "Stopped locally, but server cancel failed",
   "copyEmptySelection": "Select a node to copy",
   "discardDirtyTitle": "Discard unsaved changes?",
   "discardDirtyContent": "You have unsaved edits. Loading or resetting will discard them.",

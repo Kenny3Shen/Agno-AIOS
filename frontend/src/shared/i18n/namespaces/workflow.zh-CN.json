@@ -273,6 +273,7 @@
   "pasteMultiSelectRoot": "当前多选，粘贴已追加到画布根级",
   "pasteEmptyClipboard": "剪贴板为空 — 请先复制节点（Ctrl/⌘C）",
   "runStoppedByUser": "已由用户停止",
+  "cancelServerFailed": "已停止本地运行，但服务端取消失败",
   "copyEmptySelection": "请先选中要复制的节点",
   "discardDirtyTitle": "放弃未保存的更改？",
   "discardDirtyContent": "当前有未保存编辑，加载或重置会丢弃这些更改。",

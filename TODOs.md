@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Studio 停止服务端取消失败可见 + 键盘 helper 去 re-export
+
+- Studio `stop`：服务端 `cancel` 非 404 失败时写入可关闭 `state.error`（`cancelServerFailed`），与 Chat soft-error 对齐；本地停止时先清空旧横幅。
+- 删除 `workflow/utils` 对 `isKeyboardTargetEditable` 的 deprecated re-export；测试迁至 `shared/lib/keyboard.test.ts`（含 ant-select）。
+- Playwright：`workflow.smoke` 增加挂起 SSE + Stop → `POST .../runs/{run_id}/cancel` 冒烟。
+
+
 ## 已完成：Save/Publish 成功 Toast + 生成中归档确认
 
 - Studio `save`/`publish` 返回 boolean；按钮与 Ctrl/⌘S 成功后 toast。

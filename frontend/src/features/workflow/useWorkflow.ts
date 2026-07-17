@@ -1131,6 +1131,8 @@ export function useWorkflow() {
       return {
         ...current,
         running: false,
+        // Local stop succeeded; clear prior banners until server cancel reports failure.
+        error: null,
         runLog,
         nodeRunStatus: applyNodeRunStatusEvent(
           current.steps,
@@ -1150,6 +1152,11 @@ export function useWorkflow() {
       if (error instanceof ApiError && error.status === 404) return
       const detail = error instanceof Error ? error.message : String(error)
       console.warn(`[workflow] server cancel failed for run ${runId}: ${detail}`)
+      // Local stop already applied; surface server cancel failure as dismissible banner.
+      setState((current) => ({
+        ...current,
+        error: t('cancelServerFailed'),
+      }))
     })
   }
 

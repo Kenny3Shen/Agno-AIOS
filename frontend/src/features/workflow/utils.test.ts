@@ -20,7 +20,6 @@ import {
   validateWorkflowDraft,
   validateWorkflowName,
   fieldForValidationIssue,
-  isKeyboardTargetEditable,
   updateNodeInTree,
   findNode,
   summarizeSelectedAgentSteps,
@@ -684,25 +683,6 @@ describe('resolveNodeCanvasSubtitle', () => {
   })
 })
 
-describe('isKeyboardTargetEditable', () => {
-  it('treats input and ant-select hosts as editable', () => {
-    const input = document.createElement('input')
-    expect(isKeyboardTargetEditable(input)).toBe(true)
-    const host = document.createElement('div')
-    host.className = 'ant-select'
-    const inner = document.createElement('span')
-    host.appendChild(inner)
-    document.body.appendChild(host)
-    expect(isKeyboardTargetEditable(inner)).toBe(true)
-    host.remove()
-  })
-
-  it('allows canvas shortcuts on plain elements', () => {
-    const div = document.createElement('div')
-    expect(isKeyboardTargetEditable(div)).toBe(false)
-    expect(isKeyboardTargetEditable(null)).toBe(false)
-  })
-})
 
 describe('updateNodeInTree bulk agent patch', () => {
   it('bulk-patches only agent steps', () => {

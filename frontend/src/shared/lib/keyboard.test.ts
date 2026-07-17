@@ -15,6 +15,16 @@ describe('isKeyboardTargetEditable', () => {
   it('treats null as non-editable', () => {
     expect(isKeyboardTargetEditable(null)).toBe(false)
   })
+
+  it('treats nested targets inside ant-select as editable', () => {
+    const host = document.createElement('div')
+    host.className = 'ant-select'
+    const inner = document.createElement('span')
+    host.appendChild(inner)
+    document.body.appendChild(host)
+    expect(isKeyboardTargetEditable(inner)).toBe(true)
+    host.remove()
+  })
 })
 
 describe('isOverlayEscapeTarget', () => {

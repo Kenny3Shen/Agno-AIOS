@@ -1648,9 +1648,6 @@ export const buildWorkflowCode = (state: WorkflowState) => {
   ].join('\n')
 }
 
-/** @deprecated Prefer `@/shared/lib/keyboard` — re-exported for existing Studio imports. */
-export { isKeyboardTargetEditable } from '@/shared/lib/keyboard'
-
 export type MultiSelectAgentSummary = {
   agentCount: number
   sharedTargetId: string | undefined

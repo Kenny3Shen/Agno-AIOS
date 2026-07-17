@@ -1,3 +1,5 @@
+import http from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { expect, test, type Route } from '@playwright/test'
 import { openAuthed } from './fixtures'
 
@@ -43,6 +45,92 @@ async function fulfillJson(route: Route, body: unknown) {
     contentType: 'application/json',
     body: JSON.stringify(body),
   })
+}
+
+
+/**
+ * Offline hanging workflow SSE: run.started then keep-alive until client aborts.
+ * Mirrors chat.smoke hanging server so Stop can exercise cancel.
+ */
+async function startHangingWorkflowSseServer() {
+  const server = http.createServer((req, res) => {
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept',
+      })
+      res.end()
+      return
+    }
+
+    const chunks: Buffer[] = []
+    req.on('data', (chunk) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    })
+    req.on('end', () => {
+      let runId = 'run-e2e-wf-stop'
+      let sessionId = 'sess-e2e-wf-stop'
+      try {
+        const raw = Buffer.concat(chunks).toString('utf8')
+        if (raw) {
+          const body = JSON.parse(raw) as { run_id?: string; session_id?: string }
+          if (body.run_id) runId = String(body.run_id)
+          if (body.session_id) sessionId = String(body.session_id)
+        }
+      } catch {
+        // keep defaults
+      }
+
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+      })
+      res.write(
+        `event: workflow.started\ndata: ${JSON.stringify({
+          run_id: runId,
+          session_id: sessionId,
+          name: 'E2E Workflow',
+        })}\n\n`,
+      )
+
+      const keepAlive = setInterval(() => {
+        try {
+          res.write(': keepalive\n\n')
+        } catch {
+          clearInterval(keepAlive)
+        }
+      }, 500)
+
+      // Do not end the response when the request body stream closes — that is
+      // normal after POST body is fully read. Only tear down on response close
+      // (client abort / connection drop).
+      const cleanup = () => {
+        clearInterval(keepAlive)
+        try {
+          res.end()
+        } catch {
+          // already closed
+        }
+      }
+      res.on('close', cleanup)
+    })
+  })
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => resolve())
+  })
+  const { port } = server.address() as AddressInfo
+  return {
+    url: `http://127.0.0.1:${port}/workflow-sse`,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()))
+      }),
+  }
 }
 
 test.describe('workflow critical path', () => {
@@ -214,12 +302,15 @@ test.describe('workflow critical path', () => {
 
     await page.getByRole('button', { name: 'play-circle 运行' }).click()
 
-    // Run log shows terminal + step events from the SSE stream.
+    // Run log shows terminal + step events from the SSE stream (i18n tags).
     await expect.poll(() => runPosts, { timeout: 5_000 }).toBe(1)
-    await expect(page.getByText('workflow.completed').first()).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByText('step.completed').first()).toBeVisible()
+    await expect(page.getByText(/工作流完成|Workflow completed/i).first()).toBeVisible({
+      timeout: 10_000,
+    })
+    await expect(page.getByText(/步骤完成|Step completed/i).first()).toBeVisible()
     // step_name is preferred over content/message in the run log list.
     await expect(page.getByText('Triage').first()).toBeVisible()
+    await expect(page.getByText('triage complete e2e').first()).toBeVisible()
   })
 
   test('pause surfaces approval CTA then resolve closes HITL', async ({ page }) => {
@@ -405,7 +496,9 @@ test.describe('workflow critical path', () => {
     await page.getByRole('button', { name: 'play-circle 运行' }).click()
 
     await expect.poll(() => runPosts, { timeout: 5_000 }).toBe(1)
-    await expect(page.getByText('workflow.paused').first()).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText(/等待审批|Paused for approval/i).first()).toBeVisible({
+      timeout: 10_000,
+    })
     // Top CTA + run-log row both expose Open approval after pause.
     const openApproval = page.getByRole('button', { name: /打开审批|Open approval/ }).first()
     await expect(openApproval).toBeVisible()
@@ -413,7 +506,7 @@ test.describe('workflow critical path', () => {
 
     // 2) Approvals drawer deep-linked by approval_id.
     await expect(page).toHaveURL(new RegExp(`approval_id=${approvalId}`))
-    const drawer = page.getByRole('dialog', { name: 'Approval detail' })
+    const drawer = page.getByRole('dialog', { name: /审批详情|Approval detail/i })
     await expect(drawer).toBeVisible({ timeout: 10_000 })
     await expect(drawer.getByText('E2E HITL confirm step?')).toBeVisible()
     await expect(drawer.getByText('workflow.step:confirm')).toBeVisible()
@@ -423,5 +516,128 @@ test.describe('workflow critical path', () => {
     await expect.poll(() => resolveCalls, { timeout: 10_000 }).toBe(1)
     await expect(page.getByText(/审批已approved|Approval approved/i)).toBeVisible({ timeout: 10_000 })
   })
+
+
+  test('stop button cancels active run', async ({ page }) => {
+    const sse = await startHangingWorkflowSseServer()
+    let runPosts = 0
+    let cancelCalls = 0
+    let cancelRunId = ''
+
+    try {
+      await openAuthed(page, '/dashboard', {
+        handleApi: async ({ method, path, route }) => {
+          if (method === 'GET' && path.endsWith('/api/workflows')) {
+            await fulfillJson(route, listEnvelope)
+            return true
+          }
+          if (method === 'GET' && path.endsWith(`/api/workflows/${workflow.id}`)) {
+            await fulfillJson(route, workflow)
+            return true
+          }
+          if (method === 'GET' && path.endsWith('/api/workflows/executors')) {
+            await fulfillJson(route, {
+              data: [
+                {
+                  ref: 'security-operations',
+                  kind: 'agent',
+                  name: 'Security Operations',
+                  description: '',
+                },
+              ],
+            })
+            return true
+          }
+          if (method === 'GET' && path.endsWith('/api/workflows/templates')) {
+            await fulfillJson(route, { data: [] })
+            return true
+          }
+          if (method === 'GET' && path.endsWith('/api/skills')) {
+            await fulfillJson(route, {
+              data: [],
+              meta: { page: 1, limit: 1, total_pages: 0, total_count: 0, search_time_ms: 0 },
+            })
+            return true
+          }
+          if (method === 'GET' && path.includes(`/api/workflows/${workflow.id}/versions`)) {
+            await fulfillJson(route, {
+              data: [],
+              meta: { page: 1, limit: 20, total_pages: 0, total_count: 0, search_time_ms: 0 },
+            })
+            return true
+          }
+          if (method === 'GET' && path.includes(`/api/workflows/${workflow.id}/triggers/history`)) {
+            await fulfillJson(route, {
+              data: [],
+              meta: { page: 1, limit: 20, total_pages: 0, total_count: 0, search_time_ms: 0 },
+            })
+            return true
+          }
+          if (method === 'GET' && path.endsWith('/api/models')) {
+            await fulfillJson(route, {
+              active_model_id: 'model-1',
+              models: [
+                {
+                  id: 'model-1',
+                  name: 'E2E Model',
+                  provider: 'openai',
+                  model_id: 'gpt-test',
+                  base_url: '',
+                  api_key: 'sk-test',
+                  api_protocol: 'chat-completions',
+                  structured_output_mode: 'native',
+                  description: '',
+                  enabled: true,
+                  builtin: false,
+                  configured: true,
+                },
+              ],
+            })
+            return true
+          }
+          if (method === 'POST' && path.endsWith(`/api/workflows/${workflow.id}/runs`)) {
+            runPosts += 1
+            await route.continue({ url: sse.url })
+            return true
+          }
+          if (method === 'POST' && /\/api\/workflows\/runs\/[^/]+\/cancel$/.test(path)) {
+            cancelCalls += 1
+            cancelRunId = path.split('/').at(-2) ?? ''
+            await fulfillJson(route, { success: true })
+            return true
+          }
+          return false
+        },
+      })
+
+      await page.goto(`/#/workflow?workflow_id=${workflow.id}`, { waitUntil: 'domcontentloaded' })
+      await expect(page.getByRole('heading', { name: '工作流' })).toBeVisible()
+      await expect(page.getByPlaceholder('工作流名称')).toHaveValue('E2E Workflow', { timeout: 10_000 })
+
+      const input = page.getByPlaceholder(/运行输入|告警摘要/)
+      await expect(input).toBeVisible()
+      await input.fill('e2e workflow stop please')
+      await page.getByRole('button', { name: 'play-circle 运行' }).click()
+
+      await expect.poll(() => runPosts, { timeout: 5_000 }).toBe(1)
+      // Wait until Studio is actually streaming (toolbar Stop only mounts while running).
+      await expect(page.getByText(/工作流开始|Workflow started|工作流运行中/i).first()).toBeVisible({
+        timeout: 10_000,
+      })
+      // Client pre-allocates run_id; stop should call cancel for that id.
+      const stop = page.getByRole('button', { name: /stop|停止/i })
+      await expect(stop).toBeVisible({ timeout: 10_000 })
+      await stop.click()
+
+      await expect.poll(() => cancelCalls, { timeout: 10_000 }).toBe(1)
+      expect(cancelRunId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      )
+      await expect(page.getByText(/已由用户停止|Stopped by user/)).toBeVisible({ timeout: 10_000 })
+    } finally {
+      await sse.close().catch(() => undefined)
+    }
+  })
+
 
 })
