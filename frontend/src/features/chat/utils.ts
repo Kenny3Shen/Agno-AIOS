@@ -254,6 +254,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               run_id: event.runId ?? message.run_id,
               status: 'cancelled',
               final: true,
+              retry: null,
               error: event.reason ? { message: event.reason } : null,
               tool_steps: (message.tool_steps ?? []).map((step) => (step.status === 'loading' ? { ...step, status: 'abort' } : step)),
             }
@@ -263,6 +264,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               run_id: event.runId ?? message.run_id,
               status: 'failed',
               final: true,
+              retry: null,
               error: { code: event.code, message: event.message, retryable: event.retryable },
               tool_steps: (message.tool_steps ?? []).map((step) => (step.status === 'loading' ? { ...step, status: 'error' } : step)),
             }

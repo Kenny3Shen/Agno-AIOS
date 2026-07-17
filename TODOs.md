@@ -1,5 +1,10 @@
 # 下一步工作
 
+## 已完成：粘贴后聚焦选中节点 + 取消清理 retry 态
+
+- Studio 粘贴/复制后 `focusEpoch++`；画布 fitView 优先框选当前选中（粘贴结果），无选中再 fit 全图。
+- Chat `run.cancelled` / `run.failed` 清空 `retry`，避免停止后仍显示重试条元数据。
+
 ## 已完成：Chat 重试等待期可中断取消
 
 - `_sleep_interruptible`：模型重试 backoff 按 100ms 切片，可被 `cancel_event` 打断。

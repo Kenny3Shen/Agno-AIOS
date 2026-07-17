@@ -592,16 +592,33 @@ function CanvasInner({
     })
   }, [selectedId, selectedIds, invalidById, validationEpoch, fitView])
 
-  // Fit whole graph after load / template apply.
+  // Fit after load / template / paste. Prefer current selection when present.
   useEffect(() => {
     if (!focusEpoch || !steps.length) return
-    const key = `focus:${focusEpoch}`
+    const selectionKey = selectedIds.length
+      ? selectedIds.slice().sort().join(',')
+      : selectedId ?? ''
+    const key = `focus:${focusEpoch}:${selectionKey}`
     if (key === lastFocusKeyRef.current) return
     lastFocusKeyRef.current = key
+    const targetIds = selectedIds.length
+      ? selectedIds
+      : selectedId
+        ? [selectedId]
+        : []
     requestAnimationFrame(() => {
+      if (targetIds.length) {
+        void fitView({
+          nodes: targetIds.map((id) => ({ id })),
+          padding: 0.35,
+          duration: 280,
+          maxZoom: 1.25,
+        })
+        return
+      }
       void fitView({ padding: 0.22, duration: 280, maxZoom: 1.15 })
     })
-  }, [focusEpoch, steps.length, fitView])
+  }, [focusEpoch, steps.length, selectedId, selectedIds, fitView])
 
   useEffect(() => {
     if (!graph.nodes.some((node) => node.className?.includes('wf-node-enter'))) return

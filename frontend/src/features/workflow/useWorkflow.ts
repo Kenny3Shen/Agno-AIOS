@@ -611,6 +611,7 @@ export function useWorkflow() {
           steps: again.steps,
           selectedId: ids[ids.length - 1] ?? null,
           selectedIds: ids,
+          focusEpoch: current.focusEpoch + 1,
         }
       }
       return {
@@ -619,6 +620,7 @@ export function useWorkflow() {
         steps: pasted.steps,
         selectedId: ids[ids.length - 1] ?? null,
         selectedIds: ids,
+        focusEpoch: current.focusEpoch + 1,
       }
     })
     return pasted.divertedHitlCount

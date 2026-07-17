@@ -417,3 +417,20 @@ describe('formatRetryDetail', () => {
     expect(formatRetryDetail({ attempt: 2, maxAttempts: 4 }, t)).toBe('retry 2/4')
   })
 })
+
+  it('clears retry metadata when cancelled during backoff', () => {
+    const assistant: Message = { id: 'a', role: 'assistant', content: '', final: false, status: 'streaming' }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    const retrying = chatReducer(started, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'run.retrying', attempt: 1, maxAttempts: 4, delaySeconds: 2, message: '503' },
+    })
+    const cancelled = chatReducer(retrying, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'run.cancelled', runId: 'run-1', reason: 'stopped' },
+    })
+    expect(cancelled.messages[0]).toMatchObject({ status: 'cancelled', retry: null })
+    expect(cancelled.requesting).toBe(false)
+  })
