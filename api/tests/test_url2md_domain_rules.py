@@ -206,3 +206,25 @@ def test_get_markdown_text_domain_rule_on_article_tag():
     assert md.startswith("# Article Tag CVE")
     assert "Threat analysis" in md
 
+
+
+def test_get_markdown_text_retries_generic_when_domain_body_too_short():
+    """Domain class may match a teaser; prefer longer generic article body."""
+    teaser = "Short teaser."
+    body = ("Full incident write-up with enough characters for extract. " * 8)
+    html = f"""
+    <html><head><title>Teaser vs Body</title></head>
+    <body>
+      <div class="articlebody clear cf"><p>{teaser}</p></div>
+      <article class="entry-content">
+        <p>{body}</p>
+        <p>{body}</p>
+      </article>
+    </body></html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    # thehackernews rule matches articlebody clear cf (short teaser only)
+    md = get_markdown_text(soup, "https://thehackernews.com/2024/01/teaser.html")
+    assert md.startswith("# Teaser vs Body")
+    assert "Full incident write-up" in md
+    assert "Short teaser" not in md or "Full incident" in md

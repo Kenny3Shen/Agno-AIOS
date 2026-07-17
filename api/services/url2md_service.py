@@ -3,6 +3,8 @@ import importlib
 import ipaddress
 import re
 import socket
+from copy import copy
+from typing import Any
 from urllib.parse import urljoin, urlsplit
 
 import anyio
@@ -322,6 +324,25 @@ def _exclude_by_class(container, exclude_classes: list[str]) -> None:
             elem.decompose()
 
 
+def _markdown_from_container(
+    container,
+    *,
+    title: str,
+    tags_to_extract: list[str],
+    exclude_classes: list[str],
+    truncate_marker: str,
+    extra_div: bool = False,
+) -> str:
+    """Extract markdown body from a copy of *container* (never mutates the live tree)."""
+    work = copy(container)
+    _exclude_by_class(work, exclude_classes)
+    tags = list(tags_to_extract)
+    if extra_div and "div" not in tags:
+        tags.append("div")
+    elements = work.find_all(tags)
+    return parse_to_markdown(elements, truncate_marker, title)
+
+
 def get_markdown_text(soup: BeautifulSoup, url: str) -> str:
     """
     从 HTML 中提取标题和主要文本内容，转换为 Markdown 格式。
@@ -337,14 +358,14 @@ def get_markdown_text(soup: BeautifulSoup, url: str) -> str:
     tags_to_extract = ["h2", "h3", "p", "strong", "li", "table", "code"]
 
     domain_key = resolve_domain_rule_key(url)
-    container = None
+    domain_container = None
     truncate_marker = ""
     exclude_classes: list[str] = []
 
     if domain_key:
         main_class_name, exclude_classes, truncate_marker = domain_rules[domain_key]
-        container = _find_content_container(soup, main_class_name)
-        if container is None:
+        domain_container = _find_content_container(soup, main_class_name)
+        if domain_container is None:
             logger.debug(
                 "Content container not found for domain={} url={} class={!r}",
                 domain_key,
@@ -355,26 +376,52 @@ def get_markdown_text(soup: BeautifulSoup, url: str) -> str:
         host = (urlsplit(url).hostname or "").lower()
         logger.debug("Rules not found for domain: {} url={}", host, url)
 
-    if container is None:
-        container = _find_generic_content_container(soup)
-        if container is not None:
-            logger.debug(
-                "Using generic content container tag={} classes={} url={}",
-                getattr(container, "name", "?"),
-                container.get("class"),
-                url,
-            )
+    candidates: list[tuple[str, Any, list[str], str]] = []
+    # (label, container, excludes, truncate)
+    if domain_container is not None:
+        candidates.append(("domain", domain_container, exclude_classes, truncate_marker))
 
-    if container is not None:
-        _exclude_by_class(container, exclude_classes)
-        if domain_key == "www.anquanke.com":
-            tags_to_extract.append("div")
-        elements = container.find_all(tags_to_extract)
-    else:
+    generic = _find_generic_content_container(soup)
+    if generic is not None and generic is not domain_container:
+        candidates.append(("generic", generic, [], ""))
+
+    main_paragraphs = ""
+    for label, container, excludes, marker in candidates:
+        body = _markdown_from_container(
+            container,
+            title=title,
+            tags_to_extract=tags_to_extract,
+            exclude_classes=excludes,
+            truncate_marker=marker,
+            extra_div=domain_key == "www.anquanke.com" and label == "domain",
+        )
+        if len(body) >= 200:
+            if label == "generic" and domain_container is not None:
+                logger.debug(
+                    "Domain container too short; using generic content container "
+                    "tag={} classes={} url={}",
+                    getattr(container, "name", "?"),
+                    getattr(container, "attrs", {}).get("class")
+                    if isinstance(getattr(container, "attrs", None), dict)
+                    else None,
+                    url,
+                )
+            elif label == "generic":
+                logger.debug(
+                    "Using generic content container tag={} classes={} url={}",
+                    getattr(container, "name", "?"),
+                    getattr(container, "attrs", {}).get("class")
+                    if isinstance(getattr(container, "attrs", None), dict)
+                    else None,
+                    url,
+                )
+            main_paragraphs = body
+            break
+
+    if len(main_paragraphs) < 200:
         # Last resort: whole-document paragraphs (noisy but better than empty).
         elements = soup.find_all(["p", "li", "h2", "h3"])
-
-    main_paragraphs = parse_to_markdown(elements, truncate_marker, title)
+        main_paragraphs = parse_to_markdown(elements, "", title)
 
     if len(main_paragraphs) < 200:
         return ""

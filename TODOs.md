@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Collect 域名规则正文过短时回退 generic
+
+- `get_markdown_text`：domain 容器提取 <200 字时再试 generic 容器，最后才扫全页 p/li。
+- 提取在 container **副本**上 exclude，避免 domain 路径 `decompose` 污染后续 generic。
+- 回归：THN 短 teaser + 长 `article.entry-content` 仍能抽出正文。
+
 ## 已完成：Chat 深链 meta 加载态 + 会话不存在
 
 - meta 解析中显示历史加载 Spin，避免闪欢迎页。
