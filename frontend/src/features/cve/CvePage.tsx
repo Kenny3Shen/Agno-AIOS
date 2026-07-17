@@ -258,6 +258,7 @@ export function CvePage() {
           rowKey="id"
           dataSource={search.data?.data ?? []}
           loading={search.isFetching}
+          locale={{ emptyText: search.isFetching ? t('loading') : t('noResults') }}
           pagination={{
             current: pagination.page,
             pageSize: pagination.size,

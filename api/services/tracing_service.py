@@ -432,8 +432,12 @@ async def list_traces(
         actor_user_id=user_id,
     )
     # Audit may flip OK→ERROR after fetch; re-apply the requested status.
+    # When that thins an OK/UNSET page, totals/pages are approximate — surface truncated.
+    thinned_by_reconcile = False
     if normalized_status is not None:
+        before_filter = len(items)
         items = [item for item in items if trace_has_status(item, normalized_status)]
+        thinned_by_reconcile = len(items) < before_filter
     # ERROR filter: also surface chat-audit failures still stored as OK/UNSET.
     if normalized_status == "ERROR":
         items, total_count = await _merge_audit_error_traces(
@@ -450,12 +454,16 @@ async def list_traces(
             start_time=st,
             end_time=et,
         )
+        # Merge may refill the page; keep truncated only if still short of the request.
+        thinned_by_reconcile = False
     items = await _attach_list_inputs(items)
+    truncated = True if thinned_by_reconcile and normalized_status in {"OK", "UNSET"} else None
     return _trace_list_response(
         items,
         page=page,
         limit=limit,
         total_count=int(total_count),
+        truncated=truncated,
     )
 
 

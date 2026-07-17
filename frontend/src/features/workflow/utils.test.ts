@@ -367,6 +367,31 @@ describe('reparent and auto-layout', () => {
     expect(kids[0]!.position!.x).toBeGreaterThan(laid[0]!.position!.x)
   })
 
+
+  it('auto-layout separates router choice children without vertical overlap', () => {
+    const router = createNode('router')
+    router.id = 'r1'
+    router.choices = [
+      {
+        id: 'c1',
+        name: 'Path A',
+        steps: [{ id: 'a', type: 'step', name: 'A', targetId: 'security-operations' }],
+      },
+      {
+        id: 'c2',
+        name: 'Path B',
+        steps: [{ id: 'b', type: 'step', name: 'B', targetId: 'safe-fallback' }],
+      },
+    ]
+    const laid = applyAutoLayout([router])
+    const a = laid[0]?.choices?.[0]?.steps[0]
+    const b = laid[0]?.choices?.[1]?.steps[0]
+    expect(a?.position && b?.position).toBeTruthy()
+    expect(a!.position!.y).toBeLessThan(b!.position!.y)
+    expect(b!.position!.y).toBeGreaterThanOrEqual(a!.position!.y + 96)
+    expect(a!.position!.x).toBeGreaterThan(laid[0]!.position!.x)
+  })
+
 })
 
 describe('run status reduce', () => {

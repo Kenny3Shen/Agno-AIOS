@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Trace OK 过滤 reconcile 变稀 truncated + CVE 空表 + Router 布局
+
+- `list_traces(status=OK|UNSET)`：audit reconcile 剔除后本页变稀时 `meta.truncated=true`（总数仍为 Agno 近似）。
+- CVE 表：空态/加载文案 i18n（`noResults` / `loading`）。
+- Workflow：router 多路径子节点自动布局无重叠回归。
+
 ## 已完成：Collect 预览空态/加载失败 + Parallel 自动布局回归
 
 - 选中文章后：正文加载失败显示错误 + 重试；成功但无正文显示 emptyOkPreview；不再误用「请选择文章」。

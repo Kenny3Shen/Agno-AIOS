@@ -787,6 +787,43 @@ async def test_root_inputs_leave_null_when_batch_fails() -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_traces_marks_truncated_when_ok_filter_thinned_by_audit() -> None:
+    """Audit may flip OK→ERROR; remaining page is sparse and totals approximate."""
+
+    class FakeTrace:
+        def __init__(self, **data):
+            self.data = data
+
+        def to_dict(self):
+            return self.data
+
+    async def fake_get_traces(**_kwargs):
+        return [
+            FakeTrace(trace_id="ok-1", run_id="r1", status="OK", session_id="s1"),
+            FakeTrace(trace_id="ok-2", run_id="r2", status="OK", session_id="s1"),
+        ], 2
+
+    async def fake_reconcile(items, **_kwargs):
+        out = []
+        for item in items:
+            row = dict(item)
+            if row["run_id"] == "r2":
+                row["status"] = "ERROR"
+            out.append(row)
+        return out
+
+    with (
+        patch.object(tracing_service._trace_db, "get_traces", fake_get_traces),
+        patch.object(tracing_service, "reconcile_trace_statuses", fake_reconcile),
+        patch.object(tracing_service, "_attach_list_inputs", AsyncMock(side_effect=lambda items: items)),
+    ):
+        result = await tracing_service.list_traces(user_id="u1", status="OK", page=1, limit=20)
+
+    assert [item["trace_id"] for item in result["data"]] == ["ok-1"]
+    assert result["meta"].get("truncated") is True
+
+
+@pytest.mark.asyncio
 async def test_list_traces_passes_status_to_agno_native_filter() -> None:
     """ERROR/OK filters use Agno SQL status pagination, not a client-side scan."""
     class FakeTrace:

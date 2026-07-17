@@ -21,5 +21,7 @@
   "updateStageCache": "Updating local cache and commit markers",
   "updateStop": "Stop update",
   "updateStopHint": "Abort the current CVE database update (applied changes are kept)",
-  "updateCancelled": "CVE database update stopped"
+  "updateCancelled": "CVE database update stopped",
+  "noResults": "No matching CVEs",
+  "loading": "Loading…"
 }

@@ -21,5 +21,7 @@
   "updateStageCache": "提交本地缓存与 commit 标记",
   "updateStop": "停止更新",
   "updateStopHint": "中断当前 CVE 库更新（已写入变更保留）",
-  "updateCancelled": "已停止 CVE 库更新"
+  "updateCancelled": "已停止 CVE 库更新",
+  "noResults": "暂无匹配的 CVE",
+  "loading": "加载中…"
 }
