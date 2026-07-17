@@ -643,6 +643,11 @@ export function ChatPage() {
           <div>
             <SafetyCertificateOutlined />
             <span>{activeSession?.title || t('securityAnalysis')}</span>
+            {activeSession?.archived ? (
+              <Tag className="context-mode-tag" color="default">
+                {t('shell:conversations.archivedInbox')}
+              </Tag>
+            ) : null}
             <span className="context-divider" />
             <span>{chat.selectedModel?.name ?? t('noModel')}</span>
           </div>

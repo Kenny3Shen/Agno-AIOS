@@ -6,6 +6,12 @@
 - meta 404（不存在/无权）展示「会话不存在」+ 新建分析；输入禁用。
 - 归档时 `removeQueries(sessionMeta)`，避免陈旧缓存。
 
+
+## 已完成：Chat 归档会话顶栏徽标 + unarchive 清 meta
+
+- 深链/meta 含 `archived` 时顶栏显示「已归档」。
+- unarchive 与 archive 一样 `removeQueries(sessionMeta)`，避免陈旧投影。
+
 ## 已完成：Chat 深链 session meta 按 id 解析
 
 - 后端 `GET /api/chat/sessions/{id}/meta`：与列表同形投影（title / session_type / workflow_id / …），含归属校验。

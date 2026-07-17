@@ -10,7 +10,16 @@ const chat = {
   state: { messages: [], input: '', requesting: false, error: null, selectedModelId: 'long', reasoningEffort: null, searchKnowledge: true, liveSearch: false, enableTools: true },
   sessionId: null as string | null,
   sessions: { data: [] },
-  activeSessionMeta: undefined,
+  activeSessionMeta: undefined as
+    | {
+        session_id: string
+        preview: string
+        title?: string | null
+        created_at: number
+        updated_at: number
+        archived?: boolean
+      }
+    | undefined,
   sessionMetaLoading: false,
   sessionMissing: false,
   history: {
@@ -252,5 +261,36 @@ describe('chat missing session', () => {
     expect(status.textContent || '').toMatch(/not found|不存在|无权/i)
     await user.click(screen.getByRole('button', { name: '新建分析' }))
     expect(chat.newChat).toHaveBeenCalled()
+  })
+})
+
+
+describe('chat archived session header', () => {
+  beforeEach(() => {
+    HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
+    chat.sessionId = 'arch-1'
+    chat.sessionMissing = false
+    chat.sessionMetaLoading = false
+    chat.activeSessionMeta = {
+      session_id: 'arch-1',
+      preview: 'old',
+      title: 'Archived case',
+      created_at: 1,
+      updated_at: 2,
+      archived: true,
+    }
+    chat.history.isError = false
+    chat.history.isLoading = false
+    chat.history.isPending = false
+    chat.history.isFetching = false
+    chat.state.messages = []
+    chat.state.requesting = false
+  })
+
+  it('shows archived badge in context bar', () => {
+    renderWithQuery(<ChatPage />)
+    expect(screen.getAllByText('Archived case').length).toBeGreaterThan(0)
+    // shell:conversations.archivedInbox — not the session title
+    expect(screen.getByText('已归档')).toBeTruthy()
   })
 })

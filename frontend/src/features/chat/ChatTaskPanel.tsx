@@ -200,6 +200,7 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
   const unarchive = async (id: string) => {
     try {
       await unarchiveSession(id)
+      queryClient.removeQueries({ queryKey: chatKeys.sessionMeta(id) })
       await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
       toast.success(t('shell:conversations.unarchived'))
     } catch (error) {
