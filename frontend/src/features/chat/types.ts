@@ -117,7 +117,7 @@ export type ChatRunEvent =
   | { type: 'sources'; runId?: string; items: ChatSource[] }
   | { type: 'run.paused'; runId: string; sessionId?: string; approvalId: string; tool?: ToolStep }
   | { type: 'run.continued'; runId: string; sessionId?: string }
-  | { type: 'run.completed'; runId?: string; sessionId?: string; metrics?: RunMetrics | null; followups?: string[] }
+  | { type: 'run.completed'; runId?: string; sessionId?: string; metrics?: RunMetrics | null; followups?: string[]; content?: string | null }
   | { type: 'run.cancelled'; runId?: string; reason?: string }
   | { type: 'run.failed'; runId?: string; code?: string; message: string; retryable?: boolean }
   | {

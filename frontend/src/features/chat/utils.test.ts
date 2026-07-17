@@ -138,7 +138,8 @@ describe('chat behavior', () => {
       content: '',
       run_id: 'run-1',
       status: 'completed',
-      tool_steps: [{ id: 'lookup', name: 'CVE lookup', status: 'loading' }],
+      // Terminal run finalizes in-flight tool/thought steps (Team beta).
+      tool_steps: [{ id: 'lookup', name: 'CVE lookup', status: 'success' }],
       followups: ['Assess impact'],
     })
   })
@@ -626,3 +627,50 @@ describe('formatRetryDetail', () => {
     })
     expect(withSources.messages[0]?.sources).toEqual([{ id: 's1', title: 'fresh' }])
   })
+
+  it('finalizes loading thoughts and tools on run.completed', () => {
+    const assistant: Message = {
+      id: 'a',
+      role: 'assistant',
+      content: 'hello',
+      final: false,
+      status: 'streaming',
+      thought_chain: [
+        { id: 'member:deep-research', title: '成员 · 深度研究', status: 'loading', summary: 'draft' },
+        { id: 'reasoning', title: '模型推理', status: 'success', summary: 'ok' },
+      ],
+      tool_steps: [
+        { id: 't1', name: 'calc', status: 'loading' },
+        { id: 't2', name: 'done', status: 'success' },
+      ],
+    }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    const completed = chatReducer(started, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'run.completed', runId: 'run-1', content: 'hello world' },
+    })
+    const msg = completed.messages[0]
+    expect(msg?.status).toBe('completed')
+    expect(msg?.content).toBe('hello world')
+    expect(msg?.thought_chain?.find((t) => t.id === 'member:deep-research')?.status).toBe('success')
+    expect(msg?.tool_steps?.find((t) => t.id === 't1')?.status).toBe('success')
+    expect(msg?.tool_steps?.find((t) => t.id === 't2')?.status).toBe('success')
+  })
+
+  it('merges cumulative content.delta snapshots without duplicating', () => {
+    const assistant: Message = { id: 'a', role: 'assistant', content: '', final: false, status: 'streaming' }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    const first = chatReducer(started, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'content.delta', delta: 'Hello' },
+    })
+    const second = chatReducer(first, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'content.delta', delta: 'Hello world' },
+    })
+    expect(second.messages[0]?.content).toBe('Hello world')
+  })
+

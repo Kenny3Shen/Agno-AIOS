@@ -5,6 +5,9 @@
 - [x] Team 成员独立 model deepcopy（broadcast 并发安全）+ session_summary
 - [x] Team share_member_interactions 覆盖 coordinate/broadcast；ThoughtChain 成员工具内嵌
 - [x] data-analysis CsvTools 扫描沙箱内全部 CSV；Team 模式 i18n 文案
+- [x] Chat 终态收口：run.completed 将 loading 的 thought/tool 置 success；cancel/fail 同步收口
+- [x] run.completed 带 content 兜底；content.delta 兼容 cumulative snapshot；Team 补 flush 未完成成员 thought
+
 
 
 

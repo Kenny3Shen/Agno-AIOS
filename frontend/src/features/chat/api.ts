@@ -264,6 +264,7 @@ const parseEvent = (event: string, data: string): ChatRunEvent | null => {
         sessionId: stringValue(value, 'session_id'),
         metrics: isRecord(value.metrics) ? value.metrics : null,
         followups: Array.isArray(value.followups) ? value.followups.filter((item): item is string => typeof item === 'string') : [],
+        content: stringValue(value, 'content'),
       }
     case 'run.cancelled':
       return { type: event, runId, reason: stringValue(value, 'reason') }

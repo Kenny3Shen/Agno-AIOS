@@ -147,12 +147,19 @@ def tool_update(value: Any, status: Literal["running", "completed", "error"], *,
 
 def completed_payload(event: Any) -> dict[str, Any]:
     followups = event_value(event, "followups", [])
-    return {
+    content = event_value(event, "content")
+    payload: dict[str, Any] = {
         "run_id": _text(event_value(event, "run_id"), 128),
         "session_id": _text(event_value(event, "session_id"), 128),
         "metrics": metric_values(event_value(event, "metrics")),
         "followups": [_text(item, 240) for item in followups if _text(item, 240)] if isinstance(followups, list) else [],
     }
+    # Include final content when present so clients can recover empty streams
+    # (e.g. Team route respond_directly edge cases / reconnect).
+    if isinstance(content, str) and content.strip():
+        # Cap to keep SSE payload reasonable for long reports.
+        payload["content"] = content.strip()[:200_000]
+    return payload
 
 
 def paused_payload(event: Any) -> dict[str, Any]:

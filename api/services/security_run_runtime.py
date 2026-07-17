@@ -1657,6 +1657,33 @@ class SecurityRunRuntime:
                         yield ChatRunEvent(
                             "sources", {"run_id": run_id, "items": sources}
                         )
+                    # Close any member thoughts still open (member RunCompleted lost /
+                    # identity-stripped path / early client disconnect mid-member).
+                    if show_thought_chain and member_content_acc:
+                        for open_id, open_summary in list(member_content_acc.items()):
+                            open_name = open_id
+                            # Prefer last known label for this member id.
+                            for _rid, (mid, mname) in member_identity_by_run.items():
+                                if mid == open_id:
+                                    open_name = mname
+                                    break
+                            if last_member_identity[0] and last_member_identity[0][0] == open_id:
+                                open_name = last_member_identity[0][1]
+                            summary_text = (open_summary or "完成")[:280]
+                            yield ChatRunEvent(
+                                "thought.update",
+                                {
+                                    "run_id": display_run_id or run_id,
+                                    "thought": {
+                                        "id": f"member:{open_id}",
+                                        "type": "member",
+                                        "title": f"成员 · {open_name}",
+                                        "status": "completed",
+                                        "summary": summary_text,
+                                    },
+                                },
+                            )
+                        member_content_acc.clear()
                     completed = completed_payload(event)
                     if not completed.get("session_id"):
                         completed["session_id"] = str(request.session_id or "")

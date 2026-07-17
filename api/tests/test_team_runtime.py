@@ -993,3 +993,102 @@ async def test_broadcast_shares_member_interactions(monkeypatch):
     assert captured.get("share_member_interactions") is False
 
 
+@pytest.mark.asyncio
+async def test_leader_completed_flushes_open_member_thoughts(monkeypatch):
+    """If member RunCompleted is missing, leader completion still closes thoughts."""
+    from api.services import security_run_runtime as srr
+
+    monkeypatch.setenv("TAIS_ENABLE_AGNO_TEAM", "1")
+
+    class Runner:
+        async def arun(self, *_a, **_k):
+            yield SimpleNamespace(
+                event="TeamRunStarted",
+                run_id="team-run-f",
+                session_id="s1",
+                team_id="research-analysis-team",
+                model="m",
+                model_provider="p",
+                agent_id="",
+                parent_run_id=None,
+            )
+            yield SimpleNamespace(
+                event="RunStarted",
+                run_id="member-run-f",
+                team_id="",
+                agent_id="deep-research",
+                agent_name="深度研究助手",
+                parent_run_id="team-run-f",
+                model="m",
+                model_provider="p",
+            )
+            yield SimpleNamespace(
+                event="RunContent",
+                run_id="member-run-f",
+                team_id="",
+                agent_id="deep-research",
+                agent_name="深度研究助手",
+                parent_run_id="team-run-f",
+                content="成员草稿未完成",
+            )
+            # No member RunCompleted — only leader completes.
+            yield SimpleNamespace(
+                event="TeamRunContent",
+                run_id="team-run-f",
+                team_id="research-analysis-team",
+                content="队长结论",
+            )
+            yield SimpleNamespace(
+                event="TeamRunCompleted",
+                run_id="team-run-f",
+                session_id="s1",
+                team_id="research-analysis-team",
+                content="队长结论",
+                metrics={},
+                citations=[],
+                followups=[],
+            )
+
+        def cancel_run(self, *_a, **_k):
+            return True
+
+    runtime = srr.SecurityRunRuntime()
+    request = srr.SecurityRunRequest.from_chat_args(
+        "x", session_id="s1", user_id="u1", agent_id="research-analysis-team"
+    )
+    settings = SimpleNamespace(
+        show_raw_reasoning=False, show_raw_tool_io=False, show_thought_chain=True
+    )
+    events = [
+        event
+        async for event in runtime._stream_agent_events(Runner(), request, settings)
+    ]
+    thoughts = [e for e in events if e.event == "thought.update"]
+    completed_member = [
+        e
+        for e in thoughts
+        if e.data["thought"].get("id") == "member:deep-research"
+        and e.data["thought"].get("status") == "completed"
+    ]
+    assert completed_member, thoughts
+    assert "成员草稿" in str(completed_member[-1].data["thought"].get("summary") or "")
+    completed = next(e for e in events if e.event == "run.completed")
+    assert completed.data.get("content") == "队长结论"
+
+
+def test_completed_payload_includes_content():
+    from types import SimpleNamespace
+    from api.services.chat_run_events import completed_payload
+
+    payload = completed_payload(
+        SimpleNamespace(
+            run_id="r1",
+            session_id="s1",
+            content="final answer",
+            metrics={},
+            followups=["next"],
+        )
+    )
+    assert payload["content"] == "final answer"
+    assert payload["followups"] == ["next"]
+

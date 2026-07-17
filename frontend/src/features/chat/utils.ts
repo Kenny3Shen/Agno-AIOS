@@ -188,9 +188,15 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
             }
             // After a provider retry, replace stale partials with the new stream.
             const resumeAfterRetry = message.status === 'retrying'
+            const prev = resumeAfterRetry ? '' : message.content
+            const delta = event.delta
+            // Some providers (and Team show_result) re-send growing snapshots.
+            let nextContent = prev + delta
+            if (prev && delta.startsWith(prev)) nextContent = delta
+            else if (prev && prev.endsWith(delta)) nextContent = prev
             return {
               ...message,
-              content: resumeAfterRetry ? event.delta : message.content + event.delta,
+              content: nextContent,
               reasoning: resumeAfterRetry ? null : message.reasoning,
               status: 'streaming',
               retry: null,
@@ -316,18 +322,34 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               retry: null,
               error: null,
             }
-          case 'run.completed':
+          case 'run.completed': {
+            // Team/Agent streams can leave member thoughts/tools in loading if a
+            // terminal event is skipped; close them when the run completes.
+            const thoughts = (message.thought_chain ?? []).map((step) =>
+              step.status === 'loading' ? { ...step, status: 'success' as const } : step,
+            )
+            const tools = (message.tool_steps ?? []).map((step) =>
+              step.status === 'loading' ? { ...step, status: 'success' as const } : step,
+            )
+            const completedContent =
+              typeof event.content === 'string' && event.content.trim()
+                ? event.content
+                : message.content
             return {
               ...message,
               run_id: event.runId ?? message.run_id,
               session_id: event.sessionId ?? message.session_id,
               metrics: event.metrics ?? message.metrics,
               followups: event.followups ?? [],
+              content: completedContent || message.content,
+              thought_chain: thoughts.length ? thoughts : message.thought_chain,
+              tool_steps: tools.length ? tools : message.tool_steps,
               approval_id: null,
               status: 'completed',
               final: true,
               retry: null,
             }
+          }
           case 'run.cancelled':
             return {
               ...message,
@@ -337,7 +359,12 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               final: true,
               retry: null,
               error: event.reason ? { message: event.reason } : null,
-              tool_steps: (message.tool_steps ?? []).map((step) => (step.status === 'loading' ? { ...step, status: 'abort' } : step)),
+              tool_steps: (message.tool_steps ?? []).map((step) =>
+                step.status === 'loading' ? { ...step, status: 'abort' as const } : step,
+              ),
+              thought_chain: (message.thought_chain ?? []).map((step) =>
+                step.status === 'loading' ? { ...step, status: 'abort' as const } : step,
+              ),
             }
           case 'run.failed':
             return {
@@ -348,7 +375,12 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               final: true,
               retry: null,
               error: { code: event.code, message: event.message, retryable: event.retryable },
-              tool_steps: (message.tool_steps ?? []).map((step) => (step.status === 'loading' ? { ...step, status: 'error' } : step)),
+              tool_steps: (message.tool_steps ?? []).map((step) =>
+                step.status === 'loading' ? { ...step, status: 'error' as const } : step,
+              ),
+              thought_chain: (message.thought_chain ?? []).map((step) =>
+                step.status === 'loading' ? { ...step, status: 'error' as const } : step,
+              ),
             }
         }
       })
