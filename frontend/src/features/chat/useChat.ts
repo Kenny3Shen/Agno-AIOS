@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
-import { cancelRun, streamMessage } from './api'
+import { cancelRun, streamMessage, unarchiveSession } from './api'
 import {
   abortActiveChatStream,
   clearChatStream,
@@ -10,9 +10,9 @@ import {
   updateChatStreamRunId,
 } from './activeChatStream'
 import { ApiError } from '@/shared/api/client'
-import { chatKeys, historyQuery, modelsQuery, SESSION_PAGE_SIZE, sessionMetaQuery, sessionsQuery } from './queries'
+import { chatKeys, historyQuery, modelsQuery, sessionMetaQuery, sessionsQuery } from './queries'
+import { markSessionActiveInCaches } from './sessionCache'
 import { chatReducer, defaultReasoningEffort, initialChatState, previousPrompt } from './utils'
-import type { SessionListResult } from './api'
 import type { ChatRunEvent, ChatSession, Message } from './types'
 import type { ReasoningEffort } from '@/shared/types/common'
 import { buildTraceSearch, emptyTraceFilters } from '@/features/trace/utils'
@@ -26,6 +26,8 @@ function bestEffortCancelRun(runId: string | null | undefined) {
     console.warn(`[chat] cancel on session switch failed for ${runId}: ${detail}`)
   })
 }
+
+
 
 export function useChat() {
   const { t } = useTranslation('chat')
@@ -186,47 +188,22 @@ export function useChat() {
         preview: text,
         created_at: now,
         updated_at: now,
+        archived: false,
       }
-      queryClient.setQueryData(chatKeys.sessionMeta(activeSession), optimisticSession)
-      // Seed active recents cache (same key as ChatTaskPanel) so the new thread appears immediately.
-      queryClient.setQueryData<{ pages: SessionListResult[]; pageParams: number[] }>(
-        chatKeys.sessions({}),
-        (current) => {
-          const pages = current?.pages ?? []
-          if (!pages.length) {
-            return {
-              pages: [
-                {
-                  data: [optimisticSession],
-                  meta: {
-                    page: 1,
-                    limit: SESSION_PAGE_SIZE,
-                    total_pages: 1,
-                    total_count: 1,
-                    search_time_ms: 0,
-                  },
-                },
-              ],
-              pageParams: [1],
-            }
-          }
-          const [first, ...rest] = pages
-          const nextFirst: SessionListResult = {
-            ...first,
-            data: [
-              optimisticSession,
-              ...first.data.filter((item) => item.session_id !== activeSession),
-            ],
-            meta: {
-              ...first.meta,
-              total_count:
-                Math.max(first.meta.total_count, first.data.length) +
-                (first.data.some((item) => item.session_id === activeSession) ? 0 : 1),
-            },
-          }
-          return { pages: [nextFirst, ...rest], pageParams: current?.pageParams ?? [1] }
-        },
-      )
+      markSessionActiveInCaches(queryClient, optimisticSession)
+    } else if (activeSessionMeta?.archived) {
+      // Continuing a thread should bring it back to recents.
+      markSessionActiveInCaches(queryClient, {
+        ...activeSessionMeta,
+        preview: text || activeSessionMeta.preview,
+        updated_at: Date.now() / 1_000,
+      })
+      void unarchiveSession(activeSession).catch((error: unknown) => {
+        const detail = error instanceof Error ? error.message : String(error)
+        console.warn(`[chat] auto-unarchive failed for ${activeSession}: ${detail}`)
+        // Keep optimistic active caches; list invalidate will reconcile.
+        void queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
+      })
     }
     const assistantId = crypto.randomUUID()
     const user: Message = { id: crypto.randomUUID(), role: 'user', content: text, final: true, session_id: activeSession }

@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：归档会话继续对话自动恢复 + 列表缓存
+
+- 在已归档会话上 `submit` 时乐观写回 active 列表并 best-effort `unarchiveSession`。
+- `markSessionActiveInCaches`：session-meta + active recents 种子，并从 archived-only 列表移除。
+- 顶栏/侧栏取消归档共用同一缓存 helper。
+
 ## 已完成：Collect 提取 pre/blockquote/h1–h4 + Chat 归档取消归档
 
 - Collect：`get_markdown_text` 抽取标签扩展 h1/h4/pre/blockquote，技术帖代码块与引用可入库。

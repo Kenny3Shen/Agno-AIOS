@@ -19,6 +19,7 @@ import { useRouter, useRouterState } from '@tanstack/react-router'
 import { archiveSession, cancelRun, renameSession, unarchiveSession, type SessionListResult } from './api'
 import { abortActiveChatStream, getActiveChatStream } from './activeChatStream'
 import { chatKeys, sessionsQuery } from './queries'
+import { markSessionActiveInCaches } from './sessionCache'
 import type { ChatSession } from './types'
 import { copyToClipboard } from '@/shared/lib/clipboard'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
@@ -200,7 +201,12 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
   const unarchive = async (id: string) => {
     try {
       await unarchiveSession(id)
-      queryClient.removeQueries({ queryKey: chatKeys.sessionMeta(id) })
+      const seed = sessionItems.find((item) => item.session_id === id)
+      if (seed) {
+        markSessionActiveInCaches(queryClient, { ...seed, archived: false })
+      } else {
+        queryClient.removeQueries({ queryKey: chatKeys.sessionMeta(id) })
+      }
       await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
       toast.success(t('shell:conversations.unarchived'))
     } catch (error) {

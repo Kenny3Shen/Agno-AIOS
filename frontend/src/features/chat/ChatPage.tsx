@@ -28,6 +28,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useChat } from './useChat'
 import { unarchiveSession } from './api'
 import { chatKeys } from './queries'
+import { markSessionActiveInCaches } from './sessionCache'
 import type { Message, ThoughtStep, ToolStep } from './types'
 import type { ModelConfig, ReasoningEffort } from '@/shared/types/common'
 import { useTranslation } from 'react-i18next'
@@ -446,9 +447,16 @@ export function ChatPage() {
       return id
     },
     onSuccess: async (id) => {
-      queryClient.setQueryData(chatKeys.sessionMeta(id), (current: typeof chat.activeSessionMeta) =>
-        current ? { ...current, archived: false } : current,
-      )
+      const base =
+        chat.activeSessionMeta?.session_id === id
+          ? chat.activeSessionMeta
+          : {
+              session_id: id,
+              preview: chat.activeSessionMeta?.preview || '',
+              created_at: chat.activeSessionMeta?.created_at || Date.now() / 1_000,
+              updated_at: Date.now() / 1_000,
+            }
+      markSessionActiveInCaches(queryClient, { ...base, archived: false })
       await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
       toastMessage.success(t('shell:conversations.unarchived'))
     },
