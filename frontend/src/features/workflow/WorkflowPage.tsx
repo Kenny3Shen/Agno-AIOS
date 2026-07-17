@@ -246,7 +246,19 @@ export function WorkflowPage() {
     hasScope(currentUser.data, 'workflows:write')
   const canWrite = hasScope(currentUser.data, 'workflows:write')
 
+  // Soft banners (e.g. server cancel failed, validation) auto-dismiss; keep hard
+  // run failure visible via run-status Alert while a failed duty banner is shown.
+  useEffect(() => {
+    if (!workflow.state.error) return
+    if (workflow.state.running || workflow.state.saving) return
+    const timer = window.setTimeout(() => {
+      workflow.patchMeta({ error: null })
+    }, 8_000)
+    return () => window.clearTimeout(timer)
+  }, [workflow.state.error, workflow.state.running, workflow.state.saving, workflow.patchMeta])
+
   // Ctrl/⌘S save from canvas or inspector (not when a modal owns keyboard).
+
   const saveRef = useRef(workflow.save)
   saveRef.current = workflow.save
   const canWriteSaveRef = useRef(canWrite)

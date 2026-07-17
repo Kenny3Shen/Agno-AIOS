@@ -58,6 +58,8 @@ export type CveUpdateProgress = {
   source_total?: number
   add_count?: number
   del_count?: number
+  pending_add?: number
+  pending_del?: number
   duration_seconds?: number
   error?: string
   code?: number

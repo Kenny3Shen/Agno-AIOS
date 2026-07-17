@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Collect 同步进度 i18n + Studio 软错误自动消失
+
+- Collect 进度条按 stage/字段本地化展示，不再依赖服务端中文 message。
+- Studio `state.error` 在非 running/saving 时 8s 自动关闭（可手动关）。
+- CVE 更新进度条同样按 stage 本地化。
+
+
 ## 已完成：Chat 历史加载失败可见 + 后台失败通知 Toast
 
 - 会话历史请求失败时在消息区展示错误与重试，不再空白。

@@ -13,5 +13,10 @@
   "colSource": "Source",
   "colIndexed": "Indexed",
   "updatedDetail": "CVE database updated: +{{add}} / −{{del}}",
-  "updateStarting": "Updating CVE database…"
+  "updateStarting": "Updating CVE database…",
+  "updateStageStart": "Starting CVE database update…",
+  "updateStageSource": "Fetching source {{source}} ({{index}}/{{total}})",
+  "updateStageSourceDone": "{{source}}: +{{add}} / −{{del}} ({{index}}/{{total}})",
+  "updateStageDatabase": "Writing database (+{{add}} / −{{del}})",
+  "updateStageCache": "Updating local cache and commit markers"
 }

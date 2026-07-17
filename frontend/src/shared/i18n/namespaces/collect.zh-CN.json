@@ -34,5 +34,13 @@
   "crawlSourceHint": "仅同步筛选中的源站 {{source}}",
   "crawlAllHint": "同步全部已配置源站",
   "sourceHealthLabel": "源健康",
-  "sourceHealthItem": "{{source}} · 失败 {{error}} / 成功 {{ok}}"
+  "sourceHealthItem": "{{source}} · 失败 {{error}} / 成功 {{ok}}",
+  "crawlStageStart": "开始同步源站",
+  "crawlStageDiscover": "发现文章链接…",
+  "crawlStageDiscoverSource": "发现源站 {{source}}（{{links}} 篇链接，{{index}}/{{total}}）",
+  "crawlStageSelect": "筛选待抓取链接（发现 {{discovered}}）",
+  "crawlStageSelectDone": "将抓取 {{selected}} 篇（跳过已入库 {{skipped}}，发现 {{discovered}}）",
+  "crawlStageFetch": "抓取文章 {{fetched}}/{{selected}}（成功 {{ok}}，失败 {{error}}）",
+  "crawlStageDatabase": "写入数据库（成功 {{ok}}，失败 {{error}}）",
+  "crawlStageDone": "同步完成：发现 {{discovered}}，抓取 {{selected}}，成功 {{ok}}，写入 {{saved}}"
 }

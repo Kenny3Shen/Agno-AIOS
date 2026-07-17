@@ -34,5 +34,13 @@
   "crawlSourceHint": "Sync only the filtered source {{source}}",
   "crawlAllHint": "Sync all configured sources",
   "sourceHealthLabel": "Source health",
-  "sourceHealthItem": "{{source}} · {{error}} failed / {{ok}} ok"
+  "sourceHealthItem": "{{source}} · {{error}} failed / {{ok}} ok",
+  "crawlStageStart": "Starting source sync…",
+  "crawlStageDiscover": "Discovering article links…",
+  "crawlStageDiscoverSource": "Discovered {{source}} ({{links}} links, {{index}}/{{total}})",
+  "crawlStageSelect": "Selecting URLs to fetch (discovered {{discovered}})",
+  "crawlStageSelectDone": "Will fetch {{selected}} (skipped {{skipped}} existing, discovered {{discovered}})",
+  "crawlStageFetch": "Fetching articles {{fetched}}/{{selected}} (ok {{ok}}, failed {{error}})",
+  "crawlStageDatabase": "Writing database (ok {{ok}}, failed {{error}})",
+  "crawlStageDone": "Sync done: discovered {{discovered}}, fetched {{selected}}, ok {{ok}}, saved {{saved}}"
 }

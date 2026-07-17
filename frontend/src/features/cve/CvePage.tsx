@@ -29,6 +29,48 @@ function progressPercent(event: CveUpdateProgress | null): number {
   return 15
 }
 
+function formatCveProgressMessage(
+  event: CveUpdateProgress | null,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (!event) return t('updateStarting')
+  if (event.status === 'failed') {
+    return event.error || event.message || t('updateFailed')
+  }
+  const stage = event.stage || ''
+  if (stage === 'start') return t('updateStageStart')
+  if (stage === 'source') {
+    if (event.source) {
+      if (event.status === 'completed') {
+        return t('updateStageSourceDone', {
+          source: event.source,
+          add: event.add_count ?? 0,
+          del: event.del_count ?? 0,
+          index: event.source_index ?? 0,
+          total: event.source_total ?? 0,
+        })
+      }
+      return t('updateStageSource', {
+        source: event.source,
+        index: event.source_index ?? 0,
+        total: event.source_total ?? 0,
+      })
+    }
+    return t('updateStarting')
+  }
+  if (stage === 'database') {
+    return t('updateStageDatabase', {
+      add: event.pending_add ?? event.add_count ?? 0,
+      del: event.pending_del ?? event.del_count ?? 0,
+    })
+  }
+  if (stage === 'cache') return t('updateStageCache')
+  if (stage === 'done' && event.status === 'completed') {
+    return t('updatedDetail', { add: event.add_count ?? 0, del: event.del_count ?? 0 })
+  }
+  return event.message || t('updateStarting')
+}
+
 export function CvePage() {
   const { t } = useTranslation('cve')
   const formatDate = useFormatDate()
@@ -166,7 +208,7 @@ export function CvePage() {
               size="small"
             />
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {updateProgress.message || t('updateStarting')}
+              {formatCveProgressMessage(updateProgress, t)}
             </Typography.Text>
           </div>
         ) : null}

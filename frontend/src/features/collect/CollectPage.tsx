@@ -46,6 +46,67 @@ function crawlProgressPercent(event: CollectCrawlProgress | null): number {
   return 10
 }
 
+/** Prefer structured stage fields so EN/ZH UI does not show server-hardcoded Chinese. */
+function formatCrawlProgressMessage(
+  event: CollectCrawlProgress | null,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (!event) return t('crawlStarting')
+  if (event.status === 'failed') {
+    return (
+      (typeof event.error === 'string' && event.error) ||
+      event.message ||
+      t('crawlFailed')
+    )
+  }
+  const stage = event.stage || ''
+  if (stage === 'start') return t('crawlStageStart')
+  if (stage === 'discover') {
+    if (event.source) {
+      return t('crawlStageDiscoverSource', {
+        source: event.source,
+        links: event.discovered ?? 0,
+        index: event.source_index ?? 0,
+        total: event.source_total ?? 0,
+      })
+    }
+    return t('crawlStageDiscover')
+  }
+  if (stage === 'select') {
+    if (event.status === 'completed' || typeof event.selected === 'number') {
+      return t('crawlStageSelectDone', {
+        selected: event.selected ?? 0,
+        skipped: event.skipped_existing ?? 0,
+        discovered: event.discovered ?? 0,
+      })
+    }
+    return t('crawlStageSelect', { discovered: event.discovered ?? 0 })
+  }
+  if (stage === 'fetch') {
+    return t('crawlStageFetch', {
+      fetched: event.fetched ?? 0,
+      selected: event.selected ?? 0,
+      ok: event.ok ?? 0,
+      error: typeof event.error === 'number' ? event.error : 0,
+    })
+  }
+  if (stage === 'database') {
+    return t('crawlStageDatabase', {
+      ok: event.ok ?? 0,
+      error: typeof event.error === 'number' ? event.error : 0,
+    })
+  }
+  if (stage === 'done' && event.status === 'completed') {
+    return t('crawlStageDone', {
+      discovered: event.discovered ?? 0,
+      selected: event.selected ?? 0,
+      ok: event.ok ?? 0,
+      saved: event.saved ?? 0,
+    })
+  }
+  return event.message || t('crawlStarting')
+}
+
 export function CollectPage() {
   const { t } = useTranslation('collect')
   const formatDate = useFormatDate()
@@ -380,7 +441,7 @@ export function CollectPage() {
               size="small"
             />
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {crawlProgress.message || t('crawlStarting')}
+              {formatCrawlProgressMessage(crawlProgress, t)}
             </Typography.Text>
           </div>
         ) : null}
