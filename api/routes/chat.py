@@ -23,6 +23,8 @@ from api.services.audit_service import (
     audit_request_context,
     record_audit_event_async,
 )
+from api.services.agent_catalog import list_chat_agents, resolve_chat_run_target
+from api.services.team_runtime import list_chat_teams, team_feature_enabled
 from api.services.security_run_runtime import (
     SecurityRunRequest,
     cancel_security_run,
@@ -45,6 +47,7 @@ class ChatRequest(BaseModel):
     search_knowledge: bool = True
     live_search: bool | None = None
     enable_tools: bool = True
+    agent_id: str | None = None
 
 
 class SessionRenameRequest(BaseModel):
@@ -184,6 +187,7 @@ async def _start_chat_stream(
     search_knowledge: bool,
     live_search: bool | None,
     enable_tools: bool,
+    agent_id: str | None = None,
     media_images: tuple = (),
     media_files: tuple = (),
     media_audio: tuple = (),
@@ -222,6 +226,7 @@ async def _start_chat_stream(
         search_knowledge=search_knowledge,
         live_search=live_search,
         enable_tools=enable_tools,
+        agent_id=agent_id,
         images=media_images,
         files=media_files,
         audio=media_audio,
@@ -237,6 +242,20 @@ async def _start_chat_stream(
         headers={"Cache-Control": "no-cache"},
         sep="\n",
     )
+
+
+
+@router.get("/chat/agents")
+async def chat_agents(user: User = Depends(require_scope("sessions:write"))):
+    """Built-in Chat agent (+ optional Team) catalog."""
+    _ = user
+    data = list_chat_agents()
+    if team_feature_enabled():
+        data = [*data, *list_chat_teams()]
+    return {
+        "data": data,
+        "meta": {"team_enabled": team_feature_enabled()},
+    }
 
 
 @router.post("/chat")
@@ -270,6 +289,11 @@ async def chat_agent(
             search_knowledge = _parse_optional_bool(form.get("search_knowledge"), True)  # type: ignore[arg-type]
             live_search = _parse_optional_bool(form.get("live_search"), None)  # type: ignore[arg-type]
             enable_tools = _parse_optional_bool(form.get("enable_tools"), True)  # type: ignore[arg-type]
+            agent_raw = form.get("agent_id")
+            if agent_raw not in (None, ""):
+                _kind, agent_id = resolve_chat_run_target(str(agent_raw).strip())
+            else:
+                agent_id = None
             assert search_knowledge is not None and enable_tools is not None
             uploads: list[Any] = []
             for key in ("files", "file"):
@@ -285,6 +309,7 @@ async def chat_agent(
                 search_knowledge=search_knowledge,
                 live_search=live_search,
                 enable_tools=enable_tools,
+                agent_id=agent_id,
                 media_images=bundle.images,
                 media_files=bundle.files,
                 media_audio=bundle.audio,
@@ -304,6 +329,7 @@ async def chat_agent(
             search_knowledge=request.search_knowledge,
             live_search=request.live_search,
             enable_tools=request.enable_tools,
+            agent_id=request.agent_id,
             user=user,
             raw_request=raw_request,
         )

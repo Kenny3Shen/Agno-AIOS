@@ -540,6 +540,7 @@ async def test_stream_agent_events_persists_and_projects_required_approval_pause
     assert agent.run_kwargs["metadata"] == {
         "tais_runtime": {
             "version": 1,
+            "agent_id": "security-operations",
             "model_id": "model-1",
             "reasoning_effort": "",
             "knowledge_owner_user_id": "",

@@ -95,6 +95,56 @@ export const unarchiveSession = (sessionId: string) =>
 export const renameSession = (sessionId: string, title: string) =>
   requestJson<ChatSession>(`/chat/sessions/${encodeURIComponent(sessionId)}`, jsonInit('PATCH', { title }))
 export const getModels = () => requestJson<ModelConfigResponse>('/models')
+
+export type ChatAgentCatalogItem = {
+  id: string
+  name: string
+  role?: string
+  description?: string
+  category?: string
+  capabilities?: string
+  recommended_for?: string
+  kind?: string
+  /** Server hint: enable Live Search by default for this profile. */
+  prefer_live_search?: boolean
+  /** Team orchestration mode when kind=team. */
+  mode?: string
+}
+
+export const getChatAgents = async (): Promise<ChatAgentCatalogItem[]> => {
+  const payload = await requestJson<{ data?: unknown } | unknown>('/chat/agents')
+  const rows = Array.isArray(payload)
+    ? payload
+    : payload && typeof payload === 'object' && Array.isArray((payload as { data?: unknown }).data)
+      ? ((payload as { data: unknown[] }).data)
+      : []
+  return rows.flatMap((row) => {
+    if (!row || typeof row !== 'object') return []
+    const r = row as Record<string, unknown>
+    const id = String(r.id ?? '').trim()
+    if (!id) return []
+    const preferRaw = r.prefer_live_search
+    const preferLive =
+      preferRaw === true ||
+      preferRaw === 1 ||
+      preferRaw === '1' ||
+      preferRaw === 'true' ||
+      preferRaw === 'True'
+    return [{
+      id,
+      name: String(r.name ?? id),
+      role: r.role != null ? String(r.role) : undefined,
+      description: r.description != null ? String(r.description) : undefined,
+      category: r.category != null ? String(r.category) : undefined,
+      capabilities: r.capabilities != null ? String(r.capabilities) : undefined,
+      recommended_for: r.recommended_for != null ? String(r.recommended_for) : undefined,
+      kind: r.kind != null ? String(r.kind) : undefined,
+      prefer_live_search: preferLive,
+      mode: r.mode != null ? String(r.mode) : undefined,
+    }]
+  })
+}
+
 export const cancelRun = (runId: string) =>
   requestJson<{ success?: boolean }>(`/chat/runs/${encodeURIComponent(runId)}/cancel`, jsonInit('POST'))
 
@@ -118,6 +168,7 @@ const parseEvent = (event: string, data: string): ChatRunEvent | null => {
             sessionId: stringValue(value, 'session_id'),
             model: stringValue(value, 'model'),
             provider: stringValue(value, 'provider'),
+            agentId: stringValue(value, 'agent_id'),
             enableTools: typeof value.enable_tools === 'boolean' ? value.enable_tools : undefined,
             leanMode: typeof value.lean_mode === 'boolean' ? value.lean_mode : undefined,
             searchKnowledge: typeof value.search_knowledge === 'boolean' ? value.search_knowledge : undefined,
@@ -144,6 +195,8 @@ const parseEvent = (event: string, data: string): ChatRunEvent | null => {
           duration: typeof tool.duration === 'number' ? tool.duration : undefined,
           input: tool.input,
           output: tool.output,
+          member_id: stringValue(tool, 'member_id'),
+          member_name: stringValue(tool, 'member_name'),
         },
       }
     }
@@ -242,6 +295,7 @@ export type StreamMessagePayload = {
   message: string
   session_id: string
   model_id: string | null
+  agent_id?: string | null
   reasoning_effort?: ReasoningEffort
   search_knowledge?: boolean
   live_search?: boolean | null
@@ -266,6 +320,7 @@ export const streamMessage = async (
     if (payload.search_knowledge != null) form.set('search_knowledge', String(payload.search_knowledge))
     if (payload.live_search != null) form.set('live_search', String(payload.live_search))
     if (payload.enable_tools != null) form.set('enable_tools', String(payload.enable_tools))
+    if (payload.agent_id) form.set('agent_id', payload.agent_id)
     for (const file of files) form.append('files', file, file.name)
     response = await apiFetch('/chat', {
       method: 'POST',

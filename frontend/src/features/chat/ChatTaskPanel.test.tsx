@@ -83,10 +83,27 @@ describe('conversation list mapping', () => {
         created_at: 1,
         updated_at: 4,
       },
+      {
+        session_id: 'team-1',
+        session_type: 'team',
+        preview: 'research report',
+        created_at: 1,
+        updated_at: 5,
+      },
+      {
+        session_id: 'team-2',
+        session_type: 'team',
+        title: '[Team] already tagged',
+        preview: 'x',
+        created_at: 1,
+        updated_at: 6,
+      },
     ])
     expect(items.find((item) => item.key === 'wf-1')?.label).toBe('[WF] IR triage')
     expect(items.find((item) => item.key === 'agent-1')?.label).toBe('CVE lookup')
     expect(items.find((item) => item.key === 'wf-2')?.label).toBe('[WF] already tagged')
+    expect(items.find((item) => item.key === 'team-1')?.label).toBe('[Team] research report')
+    expect(items.find((item) => item.key === 'team-2')?.label).toBe('[Team] already tagged')
   })
 
   it('sorts sessions by update time and assigns stable date group keys', () => {

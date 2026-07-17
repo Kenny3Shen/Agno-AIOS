@@ -10,7 +10,7 @@ import {
   updateChatStreamRunId,
 } from './activeChatStream'
 import { ApiError } from '@/shared/api/client'
-import { chatKeys, historyQuery, modelsQuery, sessionMetaQuery, sessionsQuery } from './queries'
+import { agentsQuery, chatKeys, historyQuery, modelsQuery, sessionMetaQuery, sessionsQuery } from './queries'
 import { markSessionActiveInCaches } from './sessionCache'
 import { formatAttachmentLimitError, validateChatAttachments } from './attachmentLimits'
 import { chatReducer, defaultReasoningEffort, initialChatState, previousPrompt } from './utils'
@@ -85,6 +85,7 @@ export function useChat() {
     )
   )
   const models = useQuery(modelsQuery())
+  const agents = useQuery(agentsQuery())
 
   // URL session changed (sidebar, deep link, browser history): abort live SSE
   // so history can load and the server run is cancelled best-effort.
@@ -131,6 +132,50 @@ export function useChat() {
     if (state.requesting) return
     dispatch({ type: 'history', messages: history.data })
   }, [history.data, sessionId, state.requesting])
+
+  // Drop stale agent ids (e.g. Team beta off but localStorage still has team id).
+  useEffect(() => {
+    const rows = agents.data
+    if (!rows?.length) return
+    if (rows.some((row) => row.id === state.selectedAgentId)) return
+    const fallback = rows[0]?.id || 'security-operations'
+    try {
+      localStorage.setItem('agno-aios-chat-agent-id', fallback)
+    } catch {
+      // ignore
+    }
+    dispatch({ type: 'agent', value: fallback })
+  }, [agents.data, state.selectedAgentId])
+
+  // Restore agent/team selector when opening an existing session (team_id wins for team sessions).
+  useEffect(() => {
+    if (!sessionId || !activeSessionMeta) return
+    if (state.requesting) return
+    const sessionType = String(activeSessionMeta.session_type || '').toLowerCase()
+    if (sessionType === 'workflow') return
+    const teamId = String(activeSessionMeta.team_id || '').trim()
+    const agentId = String(activeSessionMeta.agent_id || '').trim()
+    const preferred =
+      sessionType === 'team'
+        ? teamId || agentId
+        : agentId || teamId
+    if (!preferred || preferred === state.selectedAgentId) return
+    const known = (agents.data ?? []).some((row) => row.id === preferred)
+    // When Team beta is off, team ids won't be in catalog — keep local preference.
+    if (!known) return
+    try {
+      localStorage.setItem('agno-aios-chat-agent-id', preferred)
+    } catch {
+      // ignore
+    }
+    dispatch({ type: 'agent', value: preferred })
+  }, [
+    activeSessionMeta,
+    agents.data,
+    sessionId,
+    state.requesting,
+    state.selectedAgentId,
+  ])
 
   // Workflow sessions are not agent transcripts — open Studio when known, else Trace.
   useEffect(() => {
@@ -204,12 +249,24 @@ export function useChat() {
     if (!sessionId) setSession(activeSession)
     if (!sessionId) {
       const now = Date.now() / 1_000
+      const agentId = state.selectedAgentId || 'security-operations'
+      const catalogRow = (agents.data ?? []).find((row) => row.id === agentId)
+      const looksTeam =
+        catalogRow?.kind === 'team' ||
+        catalogRow?.category === 'team' ||
+        agentId.includes('-team') ||
+        agentId.includes('-route') ||
+        agentId.includes('-broadcast') ||
+        agentId.startsWith('research-analysis')
       const optimisticSession: ChatSession = {
         session_id: activeSession,
         preview: text || (pendingFiles.length ? pendingFiles.map((f) => f.name).join(', ') : '新对话'),
         created_at: now,
         updated_at: now,
         archived: false,
+        session_type: looksTeam ? 'team' : 'agent',
+        agent_id: looksTeam ? null : agentId,
+        team_id: looksTeam ? agentId : null,
       }
       markSessionActiveInCaches(queryClient, optimisticSession)
     } else if (activeSessionMeta?.archived) {
@@ -269,6 +326,7 @@ export function useChat() {
           message: text,
           session_id: activeSession,
           model_id: selectedModel.id,
+          agent_id: state.selectedAgentId,
           ...(state.reasoningEffort ? { reasoning_effort: state.reasoningEffort } : {}),
           // Tools-off / lean path ignores these server-side; send false for clarity.
           search_knowledge: state.enableTools ? state.searchKnowledge : false,
@@ -381,6 +439,34 @@ export function useChat() {
     }
     dispatch({ type: 'live-search', value })
   }
+  const setSelectedAgent = (value: string) => {
+    const next = (value || 'security-operations').trim() || 'security-operations'
+    try {
+      localStorage.setItem('agno-aios-chat-agent-id', next)
+    } catch {
+      // ignore
+    }
+    dispatch({ type: 'agent', value: next })
+    // Research / Team profiles prefer Live Search when tools are on and the model supports it.
+    const profile = (agents.data ?? []).find((row) => row.id === next)
+    const modelSupports = Boolean(
+      (models.data?.models ?? []).find((m) => m.id === state.selectedModelId)?.capabilities
+        ?.supports_live_search,
+    )
+    if (
+      profile?.prefer_live_search &&
+      state.enableTools &&
+      modelSupports &&
+      !state.liveSearch
+    ) {
+      try {
+        localStorage.setItem('agno-aios-chat-live-search', 'true')
+      } catch {
+        // ignore
+      }
+      dispatch({ type: 'live-search', value: true })
+    }
+  }
   const newChat = () => {
     dispatch({ type: 'reasoning-effort', value: defaultReasoningEffort(selectedModel) })
     // setSession aborts any in-flight run before clearing the URL session.
@@ -406,7 +492,10 @@ export function useChat() {
     setAttachments,
     history,
     models,
+    agents,
     selectedModel,
+    selectedAgentId: state.selectedAgentId,
+    setSelectedAgent,
     setSession,
     setModel,
     setReasoningEffort,

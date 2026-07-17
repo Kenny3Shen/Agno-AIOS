@@ -39,6 +39,10 @@ export const formatSkillLabels = (names: string[]): string =>
 
 /** Built-in MCP tool ids (namespace_fn) → i18n keys under chat.tools.* */
 export const BUILTIN_TOOL_I18N_KEYS: Record<string, string> = {
+  delegate_task_to_member: 'tools.delegateTaskToMember',
+  delegate_task_to_members: 'tools.delegateTaskToMembers',
+  get_member_information: 'tools.getMemberInformation',
+  get_member_information_tool: 'tools.getMemberInformation',
   basic_send_feishu_notify: 'tools.basic_send_feishu_notify',
   hitl_simulate_containment: 'tools.hitl_simulate_containment',
   playbook_list_workflows: 'tools.playbook_list_workflows',
@@ -97,6 +101,13 @@ export const formatToolLabel = (
 ): string => {
   const raw = (name || '').trim()
   if (!raw) return ''
+  // Team member tools are projected as "[Member Name] tool_id".
+  const memberPrefix = raw.match(/^\[([^\]]+)\]\s+(.+)$/)
+  if (memberPrefix) {
+    const member = memberPrefix[1]
+    const rest = formatToolLabel(memberPrefix[2], t)
+    return `[${member}] ${rest}`
+  }
   const i18nKey = BUILTIN_TOOL_I18N_KEYS[raw]
   if (i18nKey && t) {
     const translated = t(i18nKey)
@@ -105,12 +116,15 @@ export const formatToolLabel = (
   return humanizeToolId(raw)
 }
 
+export const DEFAULT_CHAT_AGENT_ID = 'security-operations'
+
 export const initialChatState: ChatState = {
   messages: [],
   input: '',
   requesting: false,
   error: null,
   selectedModelId: localStorage.getItem('agno-aios-chat-model-id'),
+  selectedAgentId: localStorage.getItem('agno-aios-chat-agent-id') || DEFAULT_CHAT_AGENT_ID,
   reasoningEffort: null,
   searchKnowledge: readStoredBool('agno-aios-chat-search-knowledge', true),
   liveSearch: readStoredBool('agno-aios-chat-live-search', false),
@@ -150,6 +164,8 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               liveSearch: false,
             }),
       }
+    case 'agent':
+      return { ...state, selectedAgentId: action.value || 'security-operations' }
     case 'start':
       return {
         ...state,
@@ -414,6 +430,8 @@ const normalizeTools = (value: unknown): ToolStep[] =>
                 duration: typeof tool.duration === 'number' ? tool.duration : null,
                 input: tool.input,
                 output: tool.output,
+                member_id: asString(tool.member_id) ?? null,
+                member_name: asString(tool.member_name) ?? null,
               },
             ]
           : []

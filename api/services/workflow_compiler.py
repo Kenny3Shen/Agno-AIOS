@@ -14,32 +14,31 @@ from agno.workflow import Condition, Loop, Parallel, Router, Step, Steps, Workfl
 from agno.workflow.cel import CEL_AVAILABLE, validate_cel_expression
 from agno.workflow.workflow import WorkflowSteps
 
+from api.services.agent_catalog import (
+    AGENT_PROFILES,
+    list_workflow_executor_options,
+    normalize_agent_id,
+)
+from api.services.agent_tools import build_tools_for_profile
 from api.services.model_config_service import get_model_for_run
 from api.services.model_factory import build_agno_model
 from api.services.postgres_store import get_async_agno_postgres_db
 from api.services.skill_service import resolve_enabled_skill_dirs
 
-# Built-in executor registry (product catalog for Studio Inspector).
-# Nested/team executors remain out of scope; keep refs stable for saved definitions.
+# Built-in executor registry — single source of truth in agent_catalog.
+# Nested Team executors remain out of scope for compile; refs stay stable.
 BUILTIN_AGENT_REFS: dict[str, dict[str, str]] = {
-    "security-operations": {
-        "id": "security-operations",
-        "name": "安全运营助手",
-        "role": "安全防御运营助手",
-        "description": "标准步骤执行器：挂载步骤绑定的 Local Skills，支持 HITL 确认/用户输入/输出复核。步骤默认不连 MCP（降低编排不确定性）；需要自动化剧本时绑定 playbook-skill。",
-        "category": "operations",
-        "capabilities": "skills,hitl,knowledge",
-        "recommended_for": "研判、隔离确认、剧本编排、报告汇总",
-    },
-    "safe-fallback": {
-        "id": "safe-fallback",
-        "name": "轻量分析助手",
-        "role": "安全分析助手",
-        "description": "无工具轻量步骤：不挂 MCP/Skills，适合纯推理、文案整理、分支兜底与失败降级路径。上下文与 token 成本更低。",
-        "category": "lite",
-        "capabilities": "reasoning",
-        "recommended_for": "条件分支兜底、摘要改写、无外部副作用步骤",
-    },
+    ref: {
+        "id": str(meta["id"]),
+        "name": str(meta["name"]),
+        "role": str(meta["role"]),
+        "description": str(meta["description"]),
+        "category": str(meta.get("category") or "operations"),
+        "capabilities": str(meta.get("capabilities") or ""),
+        "recommended_for": str(meta.get("recommended_for") or ""),
+    }
+    for ref, meta in AGENT_PROFILES.items()
+    if meta.get("workflow_selectable", True)
 }
 
 SUPPORTED_NODE_TYPES = frozenset({"step", "parallel", "condition", "loop", "router", "workflow_ref"})
@@ -57,19 +56,7 @@ class WorkflowDefinitionError(ValueError):
 
 def list_executor_options() -> list[dict[str, str]]:
     """Product catalog for Studio step executor Select (stable ``ref`` keys)."""
-    return [
-        {
-            "ref": ref,
-            "kind": "agent",
-            "name": meta["name"],
-            "description": meta["description"],
-            "category": meta.get("category", "operations"),
-            "capabilities": meta.get("capabilities", ""),
-            "recommended_for": meta.get("recommended_for", ""),
-            "role": meta.get("role", ""),
-        }
-        for ref, meta in BUILTIN_AGENT_REFS.items()
-    ]
+    return list_workflow_executor_options()
 
 
 def _path(prefix: str, key: str) -> str:
@@ -855,28 +842,45 @@ async def _build_agent(
     model_id: str | None,
     skill_names: list[str] | None = None,
 ) -> Agent:
+    from pathlib import Path
+    from anyio import Path as AsyncPath
+
     meta = BUILTIN_AGENT_REFS[ref]
+    profile = AGENT_PROFILES[normalize_agent_id(ref)]
     config = await get_model_for_run(model_id)
     model = build_agno_model(config)
-    instruction_parts = [
-        meta["description"],
-        f"当前工作流步骤：{step_name}",
-    ]
+    instruction_parts: list[str] = []
+    prompt_name = str(profile.get("prompt_full") or "")
+    if prompt_name:
+        prompt_path = Path(__file__).resolve().parents[1] / "agent" / "prompts" / prompt_name
+        try:
+            instruction_parts.append(await AsyncPath(prompt_path).read_text(encoding="utf-8"))
+        except OSError:
+            instruction_parts.append(str(meta["description"]))
+    else:
+        instruction_parts.append(str(meta["description"]))
+    instruction_parts.append(f"当前工作流步骤：{step_name}")
     if instructions:
         instruction_parts.append(instructions)
-    skills = _load_skills_for_names(list(skill_names or []))
+    # Skills only for profiles that attach them (security); specialists stay skill-free.
+    skills = (
+        _load_skills_for_names(list(skill_names or []))
+        if profile.get("attach_skills")
+        else None
+    )
+    tools = build_tools_for_profile(profile) if profile.get("builtin_tools") else []
     return Agent(
-        id=meta["id"],
-        name=meta["name"],
-        role=meta["role"],
-        description=meta["description"],
+        id=str(meta["id"]),
+        name=str(meta["name"]),
+        role=str(meta["role"]),
+        description=str(meta["description"]),
         instructions=instruction_parts,
         model=model,
         db=get_async_agno_postgres_db(),
         markdown=True,
-        # Steps stay MCP/tool-free; optional Skills bind via DSL skills[].
-        tools=[],
+        tools=tools,
         skills=skills,
+        tool_call_limit=profile.get("tool_call_limit"),
     )
 
 

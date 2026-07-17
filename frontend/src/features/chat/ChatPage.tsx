@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { Actions, Attachments, Bubble, FileCard, Prompts, Sender, Sources, ThoughtChain } from '@ant-design/x'
 import { Markdown } from '@/shared/ui/Markdown'
-import { App, Avatar, Button, Cascader, Popover, Spin, Tag, Tooltip } from 'antd'
+import { App, Avatar, Button, Cascader, Popover, Select, Spin, Tag, Tooltip } from 'antd'
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
@@ -84,13 +84,18 @@ function toolNode(
   tool: ToolStep,
   labels: { input: string; output: string; copy: string; toolTitle: (name: string) => string },
 ) {
+  const title = labels.toolTitle(tool.name) || tool.name
+  const memberHint =
+    tool.member_name && !title.includes(tool.member_name)
+      ? tool.member_name
+      : undefined
   return {
     key: `tool-${tool.id}`,
-    title: labels.toolTitle(tool.name) || tool.name,
+    title,
     status: tool.status,
     blink: tool.status === 'loading',
     collapsible: true,
-    description: tool.summary ?? undefined,
+    description: tool.summary ?? memberHint,
     footer: (
       <>
         {tool.duration != null && <span>{tool.duration.toFixed(1)}s</span>}
@@ -110,6 +115,64 @@ function thoughtNode(thought: ThoughtStep) {
     description: thought.summary ?? undefined,
     footer: thought.duration != null ? `${thought.duration.toFixed(1)}s` : undefined,
   }
+}
+
+function AgentSettings({
+  agents,
+  selectedAgentId,
+  disabled,
+  onChange,
+}: {
+  agents: { id: string; name: string; description?: string; kind?: string; category?: string; mode?: string }[]
+  selectedAgentId: string
+  disabled: boolean
+  onChange: (value: string) => void
+}) {
+  const { t } = useTranslation('chat')
+  const options = (agents.length
+    ? agents
+    : [
+        { id: 'security-operations', name: t('agents.securityOperations'), description: t('agents.securityOperationsHint') },
+        { id: 'data-analysis', name: t('agents.dataAnalysis'), description: t('agents.dataAnalysisHint') },
+        { id: 'deep-research', name: t('agents.deepResearch'), description: t('agents.deepResearchHint') },
+      ]
+  ).map((agent) => {
+    const isTeam = agent.kind === 'team' || agent.category === 'team'
+    const mode =
+      isTeam && 'mode' in agent && agent.mode
+        ? String(agent.mode)
+        : ''
+    const modeTag = mode ? ` · ${mode}` : ''
+    return {
+      value: agent.id,
+      label: isTeam ? `${agent.name} · ${t('agents.teamBeta')}${modeTag}` : agent.name,
+      title: agent.description || agent.name,
+    }
+  })
+  const current = options.find((item) => item.value === selectedAgentId) ?? options[0]
+  return (
+    <Select
+      className="agent-settings-select"
+      size="small"
+      variant="borderless"
+      disabled={disabled}
+      value={current?.value}
+      options={options}
+      optionLabelProp="label"
+      popupMatchSelectWidth={false}
+      aria-label={t('agent')}
+      title={current?.title || t('agent')}
+      onChange={onChange}
+      optionRender={(option) => (
+        <div className="agent-settings-option">
+          <strong>{option.label}</strong>
+          {option.data.title && option.data.title !== option.label ? (
+            <small>{option.data.title}</small>
+          ) : null}
+        </div>
+      )}
+    />
+  )
 }
 
 function ModelSettings({
@@ -289,7 +352,33 @@ function MessageBody({ message, retry, sessionId, requesting = false }: { messag
         <div className="message-actions-bar"><Actions className="message-actions" items={actions} /></div>
       </div>
     )
-  const chain = [...(message.thought_chain ?? []).map(thoughtNode), ...(message.tool_steps ?? []).map((tool) => toolNode(tool, { input: t('rawToolInput'), output: t('rawToolOutput'), copy: t('common:copy'), toolTitle: (name) => formatToolLabel(name, t) }))]
+  const toolLabels = {
+    input: t('rawToolInput'),
+    output: t('rawToolOutput'),
+    copy: t('common:copy'),
+    toolTitle: (name: string) => formatToolLabel(name, t),
+  }
+  // Team beta: place member tools after their member thought instead of dumping all tools at the end.
+  const thoughts = message.thought_chain ?? []
+  const tools = message.tool_steps ?? []
+  const usedToolIds = new Set<string>()
+  const chain: Array<ReturnType<typeof thoughtNode> | ReturnType<typeof toolNode>> = []
+  for (const thought of thoughts) {
+    chain.push(thoughtNode(thought))
+    // Attach tools only under the primary member node (member:<id>), not reasoning sub-nodes.
+    const memberMatch = /^member:([^:]+)$/.exec(String(thought.id || ''))
+    if (!memberMatch) continue
+    const memberId = memberMatch[1]
+    for (const tool of tools) {
+      if (tool.member_id === memberId && !usedToolIds.has(tool.id)) {
+        usedToolIds.add(tool.id)
+        chain.push(toolNode(tool, toolLabels))
+      }
+    }
+  }
+  for (const tool of tools) {
+    if (!usedToolIds.has(tool.id)) chain.push(toolNode(tool, toolLabels))
+  }
   const hasThoughts = chain.length > 0 || Boolean(message.reasoning)
   return (
     <div className={`message-body message-body--${motionState}`}>
@@ -799,6 +888,11 @@ export function ChatPage() {
               </>
             ) : null}
             <span className="context-divider" />
+            <span>
+              {(chat.agents.data ?? []).find((a) => a.id === chat.selectedAgentId)?.name
+                || t('agents.securityOperations')}
+            </span>
+            <span className="context-divider" />
             <span>{chat.selectedModel?.name ?? t('noModel')}</span>
           </div>
           <div className="context-status">
@@ -1175,6 +1269,12 @@ export function ChatPage() {
                   />
                 </div>
                 <div className="sender-actions">
+                  <AgentSettings
+                    agents={chat.agents.data ?? []}
+                    selectedAgentId={chat.selectedAgentId || 'security-operations'}
+                    disabled={chat.state.requesting || Boolean(pausedRun)}
+                    onChange={chat.setSelectedAgent}
+                  />
                   <ModelSettings
                     models={chat.models.data?.models ?? []}
                     selectedModel={chat.selectedModel}

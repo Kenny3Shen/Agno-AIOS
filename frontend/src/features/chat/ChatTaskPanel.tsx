@@ -45,8 +45,13 @@ export function buildConversationItems(sessions: ChatSession[], now = Date.now()
     .map((session) => {
       const daysAgo = today.diff(dayjs.unix(session.updated_at).startOf('day'), 'day')
       const base = session.title || session.preview || ''
-      const isWorkflow = String(session.session_type || '').toLowerCase() === 'workflow'
-      const label = isWorkflow ? (base.startsWith('[WF]') ? base : `[WF] ${base}`) : base
+      const sessionType = String(session.session_type || '').toLowerCase()
+      let label = base
+      if (sessionType === 'workflow') {
+        label = base.startsWith('[WF]') ? base : `[WF] ${base}`
+      } else if (sessionType === 'team') {
+        label = base.startsWith('[Team]') ? base : `[Team] ${base}`
+      }
       return {
         key: session.session_id,
         label,

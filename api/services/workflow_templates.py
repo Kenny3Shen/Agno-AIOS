@@ -220,6 +220,131 @@ def list_workflow_templates() -> list[dict[str, Any]]:
                 ],
             },
         },
+
+        {
+            "id": "deep-research-review",
+            "name": "Deep research review",
+            "description": (
+                "Agno-style research pipeline: scope → parallel research+analysis → "
+                "structured memo (auditable steps)."
+            ),
+            "category": "research",
+            "tags": ["research", "analysis", "parallel", "deep-research"],
+            "definition": {
+                "name": "Deep research review",
+                "description": (
+                    "Deterministic deep-research shape: clarify mandate, parallel "
+                    "investigation, synthesize an auditable memo."
+                ),
+                "steps": [
+                    {
+                        "id": "scope",
+                        "type": "step",
+                        "name": "Scope & plan",
+                        "executor": {"kind": "agent", "ref": "deep-research"},
+                        "instructions": (
+                            "Clarify the research mandate from the user input: subject, "
+                            "time range, decision use. List 3–7 sub-questions and the "
+                            "evidence types you will need. Do not write the final memo yet."
+                        ),
+                        "position": {"x": 60, "y": 120},
+                    },
+                    {
+                        "id": "investigate",
+                        "type": "parallel",
+                        "name": "Parallel investigation",
+                        "position": {"x": 300, "y": 120},
+                        "steps": [
+                            {
+                                "id": "research_arm",
+                                "type": "step",
+                                "name": "Sources & findings",
+                                "executor": {"kind": "agent", "ref": "deep-research"},
+                                "instructions": (
+                                    "Investigate using available tools (website/search/knowledge). "
+                                    "Return key findings with source titles and URLs where possible. "
+                                    "Separate facts from inference."
+                                ),
+                                "position": {"x": 520, "y": 40},
+                            },
+                            {
+                                "id": "analysis_arm",
+                                "type": "step",
+                                "name": "Numbers & checks",
+                                "executor": {"kind": "agent", "ref": "data-analysis"},
+                                "instructions": (
+                                    "From the same user topic and any numbers in context, "
+                                    "compute or sanity-check quantitative claims. "
+                                    "Show formulas or tool results; do not invent stats."
+                                ),
+                                "position": {"x": 520, "y": 220},
+                            },
+                        ],
+                    },
+                    {
+                        "id": "memo",
+                        "type": "step",
+                        "name": "Research memo",
+                        "executor": {"kind": "agent", "ref": "deep-research"},
+                        "instructions": (
+                            "Synthesize prior steps into an auditable Markdown memo: "
+                            "Executive summary (with confidence), Key findings (with evidence), "
+                            "Detailed analysis, Risks/unknowns, Recommended actions, References. "
+                            "No unsupported hard facts."
+                        ),
+                        "position": {"x": 780, "y": 120},
+                    },
+                ],
+            },
+        },
+        {
+            "id": "csv-quick-analysis",
+            "name": "CSV quick analysis",
+            "description": "Data-agent path: profile table → metrics → short readout.",
+            "category": "analysis",
+            "tags": ["data", "csv", "analysis"],
+            "definition": {
+                "name": "CSV quick analysis",
+                "description": "Profile uploaded or pasted tabular data and report metrics.",
+                "steps": [
+                    {
+                        "id": "profile",
+                        "type": "step",
+                        "name": "Profile data",
+                        "executor": {"kind": "agent", "ref": "data-analysis"},
+                        "instructions": (
+                            "Inspect available files/tables (list files/CSV in sandbox if present). "
+                            "Report row count estimate, columns, dtypes, missingness, and outliers. "
+                            "Ask at most 2 clarifying questions only if data is missing."
+                        ),
+                        "position": {"x": 80, "y": 100},
+                    },
+                    {
+                        "id": "metrics",
+                        "type": "step",
+                        "name": "Key metrics",
+                        "executor": {"kind": "agent", "ref": "data-analysis"},
+                        "instructions": (
+                            "Compute the most decision-relevant metrics for the user question "
+                            "using calculator/Python/CSV tools. Cite formulas or code steps. "
+                            "Do not invent numbers."
+                        ),
+                        "position": {"x": 360, "y": 100},
+                    },
+                    {
+                        "id": "readout",
+                        "type": "step",
+                        "name": "Readout",
+                        "executor": {"kind": "agent", "ref": "data-analysis"},
+                        "instructions": (
+                            "Write a concise Markdown readout: summary → findings → "
+                            "method/limitations → next steps. Include chart suggestions in text only."
+                        ),
+                        "position": {"x": 640, "y": 100},
+                    },
+                ],
+            },
+        },
     ]
 
 

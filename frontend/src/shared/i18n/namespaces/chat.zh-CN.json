@@ -93,7 +93,10 @@
     "playbook_get_exec_result": "剧本执行结果",
     "get_skill_instructions": "读取 Skill 说明",
     "get_skill_reference": "读取 Skill 参考",
-    "get_skill_script": "读取 Skill 脚本"
+    "get_skill_script": "读取 Skill 脚本",
+    "delegateTaskToMember": "委派给成员",
+    "delegateTaskToMembers": "委派给全部成员",
+    "getMemberInformation": "查看团队成员"
   },
   "knowledgeOffBadge": "知识库未挂载",
   "liveSearchNeedsTools": "请先打开「工具/Skill」；轻量/关工具轮次不会启用 Live Search。",
@@ -115,5 +118,21 @@
   "attachmentsTotalTooLarge": "附件总大小超过 {{maxMb}}MB",
   "attachmentsEmptyFile": "空文件：{{name}}",
   "attachmentsInvalid": "附件无效",
-  "regenerateAttachmentsHint": "重新生成仅使用当前会话中上一轮附件（刷新后不可用）"
+  "regenerateAttachmentsHint": "重新生成仅使用当前会话中上一轮附件（刷新后不可用）",
+  "agent": "智能体",
+  "agents": {
+    "securityOperations": "安全运营",
+    "securityOperationsHint": "研判、Skills/MCP、HITL 处置",
+    "dataAnalysis": "数据分析",
+    "dataAnalysisHint": "表格统计、可选只读 SQL、可复现分析",
+    "deepResearch": "深度研究",
+    "deepResearchHint": "多源检索、交叉验证与研究报告",
+    "researchAnalysisTeam": "研究分析团队",
+    "researchAnalysisTeamHint": "协调深度研究与数据分析（beta）",
+    "researchAnalysisRoute": "研究分析路由",
+    "researchAnalysisRouteHint": "路由到单一专员（beta）",
+    "teamBeta": "Team beta",
+    "researchAnalysisBroadcast": "研究分析会诊",
+    "researchAnalysisBroadcastHint": "并行征询专员并汇总（beta）"
+  }
 }

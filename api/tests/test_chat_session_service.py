@@ -608,3 +608,298 @@ async def test_get_session_summary_returns_none_when_missing():
         patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
     ):
         assert await chat_session_service.get_session_summary_async("missing") is None
+
+
+@pytest.mark.asyncio
+async def test_team_history_projects_member_thoughts_and_tools(monkeypatch):
+    """Team runs store member_responses; history should expose thought_chain + member tools."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    import api.services.chat_session_service as chat_session_service
+
+    team_run = {
+        "run_id": "team-run-h1",
+        "team_id": "research-analysis-team",
+        "status": "COMPLETED",
+        "content": "队长综合结论",
+        "input": "调研并核算",
+        "tools": [],
+        "member_responses": [
+            {
+                "run_id": "member-1",
+                "agent_id": "deep-research",
+                "agent_name": "深度研究助手",
+                "status": "COMPLETED",
+                "content": "调研摘要",
+                "tools": [
+                    {
+                        "tool_call_id": "t1",
+                        "tool_name": "read_url",
+                        "result": "ok",
+                    }
+                ],
+            },
+            {
+                "run_id": "member-2",
+                "agent_id": "data-analysis",
+                "agent_name": "数据分析助手",
+                "status": "COMPLETED",
+                "content": "指标 42",
+                "tools": [],
+            },
+        ],
+        "metrics": {"total_tokens": 12},
+        "citations": [],
+        "followups": [],
+        "metadata": {},
+    }
+
+    class FakeDb:
+        async def get_session(self, session_id, deserialize=False):
+            return {
+                "session_id": session_id,
+                "user_id": "u1",
+                "session_type": "team",
+                "team_id": "research-analysis-team",
+                "runs": [team_run],
+            }
+
+    monkeypatch.setattr(
+        chat_session_service,
+        "ensure_agno_postgres_tables_async",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        chat_session_service,
+        "get_async_agno_postgres_db",
+        lambda: FakeDb(),
+    )
+    monkeypatch.setattr(
+        chat_session_service,
+        "get_chat_settings_async",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                show_raw_tool_io=False,
+                show_thought_chain=True,
+                show_raw_reasoning=False,
+            )
+        ),
+    )
+
+    messages = await chat_session_service.get_session_messages_async("session-team")
+    assistant = next(m for m in messages if m.get("role") == "assistant")
+    assert assistant["content"] == "队长综合结论"
+    thoughts = assistant.get("thought_chain") or []
+    assert {t["id"] for t in thoughts} >= {
+        "member:deep-research",
+        "member:data-analysis",
+    }
+    tools = assistant.get("tools") or []
+    assert any(
+        str(t.get("id", "")).startswith("member:deep-research:")
+        and str(t.get("name", "")).startswith("[深度研究助手]")
+        for t in tools
+    )
+
+
+@pytest.mark.asyncio
+async def test_team_history_skips_child_member_runs(monkeypatch):
+    """Member agent runs stored with parent_run_id must not become extra chat turns."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    import api.services.chat_session_service as chat_session_service
+
+    leader_run = {
+        "run_id": "team-leader-1",
+        "team_id": "research-analysis-team",
+        "status": "COMPLETED",
+        "content": "56",
+        "input": "请委派 data-analysis 计算 7*8",
+        "tools": [{"tool_call_id": "d1", "tool_name": "delegate_task_to_member", "result": "56"}],
+        "member_responses": [
+            {
+                "run_id": "member-1",
+                "agent_id": "data-analysis",
+                "agent_name": "数据分析助手",
+                "status": "COMPLETED",
+                "content": "56",
+                "tools": [{"tool_call_id": "t1", "tool_name": "multiply", "result": "56"}],
+            }
+        ],
+        "metrics": {},
+        "citations": [],
+        "followups": [],
+        "metadata": {},
+    }
+    member_run = {
+        "run_id": "member-1",
+        "agent_id": "data-analysis",
+        "agent_name": "数据分析助手",
+        "parent_run_id": "team-leader-1",
+        "status": "COMPLETED",
+        "content": "56",
+        "input": "计算 7*8，只返回计算结果数字。",
+        "tools": [{"tool_call_id": "t1", "tool_name": "multiply", "result": "56"}],
+        "metrics": {},
+        "metadata": {},
+    }
+
+    class FakeDb:
+        async def get_session(self, session_id, deserialize=False):
+            return {
+                "session_id": session_id,
+                "user_id": "u1",
+                "session_type": "team",
+                "team_id": "research-analysis-team",
+                "runs": [member_run, leader_run],
+            }
+
+    monkeypatch.setattr(
+        chat_session_service,
+        "ensure_agno_postgres_tables_async",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        chat_session_service,
+        "get_async_agno_postgres_db",
+        lambda: FakeDb(),
+    )
+    monkeypatch.setattr(
+        chat_session_service,
+        "get_chat_settings_async",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                show_raw_tool_io=False,
+                show_thought_chain=True,
+                show_raw_reasoning=False,
+            )
+        ),
+    )
+
+    messages = await chat_session_service.get_session_messages_async("session-team")
+    users = [m for m in messages if m.get("role") == "user"]
+    assistants = [m for m in messages if m.get("role") == "assistant"]
+    assert len(users) == 1
+    assert len(assistants) == 1
+    assert assistants[0]["run_id"] == "team-leader-1"
+    assert any(
+        str(t.get("id", "")).startswith("member:data-analysis:")
+        for t in (assistants[0].get("tools") or [])
+    )
+
+
+def test_team_history_reconstructs_members_from_child_runs():
+    from api.services.chat_session_service import (
+        _history_team_thoughts,
+        _history_team_tools,
+        _member_rows,
+    )
+
+    leader = {
+        "run_id": "leader-1",
+        "team_id": "research-analysis-team",
+        "content": "42",
+        "tools": [{"tool_name": "delegate_task_to_member", "tool_call_id": "d1", "result": "42"}],
+        "member_responses": None,
+    }
+    child = {
+        "run_id": "child-1",
+        "parent_run_id": "leader-1",
+        "agent_id": "data-analysis",
+        "agent_name": "数据分析助手",
+        "content": "42",
+        "status": "COMPLETED",
+        "tools": [{"tool_name": "multiply", "tool_call_id": "m1", "result": "42"}],
+    }
+    members = _member_rows(leader, sibling_runs=[leader, child])
+    assert len(members) == 1
+    assert members[0]["agent_id"] == "data-analysis"
+    tools = _history_team_tools(
+        leader, tool_status="completed", include_raw_io=True, sibling_runs=[leader, child]
+    )
+    names = [row["name"] for row in tools]
+    assert "delegate_task_to_member" in names
+    assert any("multiply" in n for n in names)
+    thoughts = _history_team_thoughts(
+        leader, tool_status="completed", sibling_runs=[leader, child]
+    )
+    assert thoughts and thoughts[0]["id"] == "member:data-analysis"
+
+
+def test_preview_prefers_latest_run():
+    from api.services.chat_session_service import _preview_from_runs
+
+    assert _preview_from_runs(
+        [
+            {"input": "first turn"},
+            {"input": "latest turn"},
+        ]
+    ) == "latest turn"
+    # Skip non-dict tails
+    assert _preview_from_runs([{"input": "only"}, "bad"]) == "only"
+
+
+@pytest.mark.asyncio
+async def test_team_history_omits_tools_when_thought_chain_disabled(monkeypatch):
+    """show_thought_chain=false omits timeline tools + member thoughts (product setting)."""
+    from api.services import chat_session_service as svc
+
+    leader = {
+        "run_id": "leader-tools",
+        "team_id": "research-analysis-team",
+        "status": "COMPLETED",
+        "content": "81",
+        "tools": [
+            {"tool_call_id": "d1", "tool_name": "delegate_task_to_member", "result": "81"},
+        ],
+        "member_responses": [
+            {
+                "agent_id": "data-analysis",
+                "agent_name": "数据分析助手",
+                "content": "81",
+                "status": "completed",
+                "tools": [
+                    {"tool_call_id": "m1", "tool_name": "multiply", "result": "81"},
+                ],
+            }
+        ],
+    }
+    db = AsyncFakeAgnoDb(
+        rows=[],
+        session_row={"session_id": "s-team-tools", "user_id": "u1", "runs": [leader]},
+    )
+    monkeypatch.setattr(svc, "get_async_agno_postgres_db", lambda: db)
+    monkeypatch.setattr(svc, "ensure_agno_postgres_tables_async", AsyncMock())
+    monkeypatch.setattr(
+        svc,
+        "get_chat_settings_async",
+        AsyncMock(
+            return_value=__import__("types").SimpleNamespace(
+                show_raw_tool_io=False,
+                show_thought_chain=False,
+                show_raw_reasoning=False,
+            )
+        ),
+    )
+    messages = await svc.get_session_messages_async("s-team-tools")
+    assistant = next(m for m in messages if m.get("role") == "assistant")
+    assert (assistant.get("tools") or []) == []
+    assert not assistant.get("thought_chain")
+    assert assistant.get("content") == "81"
+
+
+
+def test_history_member_content_fallback():
+    from api.services.chat_session_service import _history_member_content_fallback
+
+    run = {
+        "run_id": "L",
+        "content": "",
+        "member_responses": [
+            {"agent_id": "a", "content": "first"},
+            {"agent_id": "b", "content": "last-member"},
+        ],
+    }
+    assert _history_member_content_fallback(run) == "last-member"

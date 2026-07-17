@@ -1373,3 +1373,28 @@ html.dark {
     display: none;
   }
 }
+
+.agent-settings-select {
+  min-width: 7.5rem;
+  max-width: 11rem;
+}
+.agent-settings-select .ant-select-selector {
+  padding-inline: 6px !important;
+}
+.agent-settings-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 16rem;
+  padding: 2px 0;
+}
+.agent-settings-option strong {
+  font-size: 12px;
+  font-weight: 650;
+}
+.agent-settings-option small {
+  color: var(--tais-muted);
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: normal;
+}

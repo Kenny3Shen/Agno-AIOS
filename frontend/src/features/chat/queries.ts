@@ -1,6 +1,6 @@
 import { infiniteQueryOptions, keepPreviousData, queryOptions } from '@tanstack/react-query'
 import { ApiError } from '@/shared/api/client'
-import { getHistory, getModels, getSessionMeta, listSessions } from './api'
+import { getChatAgents, getHistory, getModels, getSessionMeta, listSessions } from './api'
 
 export const SESSION_PAGE_SIZE = 40
 
@@ -30,6 +30,7 @@ export const chatKeys = {
   history: (id: string) => ['chat', 'history', id] as const,
   sessionMeta: (id: string) => ['chat', 'session-meta', id] as const,
   models: ['settings', 'models'] as const,
+  agents: ['chat', 'agents'] as const,
 }
 
 /** Infinite session list (object options only). */
@@ -88,3 +89,5 @@ export const sessionMetaQuery = (id: string, enabled = true) =>
     retry: shouldRetryQuery,
   })
 export const modelsQuery = () => queryOptions({ queryKey: chatKeys.models, queryFn: getModels, staleTime: 60_000 })
+export const agentsQuery = () =>
+  queryOptions({ queryKey: chatKeys.agents, queryFn: getChatAgents, staleTime: 300_000 })

@@ -18,6 +18,9 @@ export interface ToolStep {
   duration?: number | null
   input?: unknown
   output?: unknown
+  /** Team member that invoked this tool (Chat Team beta). */
+  member_id?: string | null
+  member_name?: string | null
 }
 export interface ThoughtStep {
   id: string
@@ -82,12 +85,23 @@ export interface ChatSession {
   archived?: boolean
   runs?: JsonRecord[]
 }
+export interface ChatAgentOption {
+  id: string
+  name: string
+  role?: string
+  description?: string
+  category?: string
+  capabilities?: string
+  recommended_for?: string
+}
+
 export interface ChatState {
   messages: Message[]
   input: string
   requesting: boolean
   error: string | null
   selectedModelId: string | null
+  selectedAgentId: string
   reasoningEffort: ReasoningEffort | null
   searchKnowledge: boolean
   liveSearch: boolean
@@ -95,7 +109,7 @@ export interface ChatState {
 }
 
 export type ChatRunEvent =
-  | { type: 'run.started'; runId: string; sessionId?: string; model?: string; provider?: string; enableTools?: boolean; leanMode?: boolean; searchKnowledge?: boolean; skillNames?: string[] | null }
+  | { type: 'run.started'; runId: string; sessionId?: string; model?: string; provider?: string; agentId?: string; enableTools?: boolean; leanMode?: boolean; searchKnowledge?: boolean; skillNames?: string[] | null }
   | { type: 'content.delta'; runId?: string; delta: string }
   | { type: 'tool.update'; runId?: string; tool: ToolStep }
   | { type: 'reasoning.delta'; runId?: string; delta: string }
@@ -130,6 +144,7 @@ export type ChatAction =
   | { type: 'search-knowledge'; value: boolean }
   | { type: 'live-search'; value: boolean }
   | { type: 'enable-tools'; value: boolean }
+  | { type: 'agent'; value: string }
   | { type: 'reset' }
 
 export type { ModelConfig }

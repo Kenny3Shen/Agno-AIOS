@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from agno.session.agent import AgentSession
 from agno.session.team import TeamSession
@@ -356,10 +356,20 @@ def _session_type_from_row(row: dict[str, Any]) -> str:
 
 
 def _preview_from_runs(runs: Any) -> str:
-    """Best-effort list preview from first run input (chat + workflow shapes)."""
-    if not isinstance(runs, list) or not runs or not isinstance(runs[0], dict):
+    """Best-effort list preview from the **latest** run input (chat + workflow).
+
+    Session ``runs`` grow over multi-turn chats; the last top-level entry best
+    reflects the recents list. Callers should already filter child member runs.
+    """
+    if not isinstance(runs, list) or not runs:
         return ""
-    run = runs[0]
+    run: dict[str, Any] | None = None
+    for item in reversed(runs):
+        if isinstance(item, dict):
+            run = cast(dict[str, Any], item)
+            break
+    if run is None:
+        return ""
     candidates: list[Any] = [
         run.get("input"),
         run.get("content"),
@@ -390,7 +400,12 @@ def _project_session_rows(
     for row in rows:
         runs = coerce_json_value(row.get("runs"))
         session_type = _session_type_from_row(row)
-        preview = _preview_from_runs(runs).strip()
+        top_runs: list[dict[str, Any]] = []
+        if isinstance(runs, list):
+            for run in runs:
+                if isinstance(run, dict) and not _is_child_member_run(run):
+                    top_runs.append(run)
+        preview = _preview_from_runs(top_runs or runs).strip()
         if not preview:
             preview = "工作流运行" if session_type == "workflow" else "新对话"
         workflow_id = str(row.get("workflow_id") or "").strip() or None
@@ -633,6 +648,175 @@ def _history_user_attachments(run: dict[str, Any]) -> list[dict[str, str]]:
     return unique
 
 
+
+
+def _is_child_member_run(run: object) -> bool:
+    """True for Team member runs nested under a leader (have parent_run_id)."""
+    if not isinstance(run, dict):
+        return False
+    return bool(str(run.get("parent_run_id") or "").strip())
+
+
+def _member_rows(
+    run: dict[str, Any],
+    *,
+    sibling_runs: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Return member_responses for a Team leader run.
+
+    Prefer ``member_responses`` on the leader. If empty, reconstruct from
+    child Agent runs in the same session (``parent_run_id == leader.run_id``),
+    so history still shows member tools after storage gaps.
+    """
+    raw = coerce_json_value(run.get("member_responses"))
+    if isinstance(raw, list) and raw:
+        return [row for row in raw if isinstance(row, dict)]
+
+    leader_id = str(run.get("run_id") or "").strip()
+    if not leader_id or not sibling_runs:
+        return []
+
+    reconstructed: list[dict[str, Any]] = []
+    for child in sibling_runs:
+        if not isinstance(child, dict):
+            continue
+        if str(child.get("parent_run_id") or "").strip() != leader_id:
+            continue
+        member_id = str(child.get("agent_id") or "member").strip() or "member"
+        member_name = (
+            str(child.get("agent_name") or child.get("name") or member_id).strip()
+            or member_id
+        )
+        tools = child.get("tools")
+        reconstructed.append(
+            {
+                "agent_id": member_id,
+                "agent_name": member_name,
+                "content": child.get("content"),
+                "status": child.get("status"),
+                "tools": tools if isinstance(tools, list) else [],
+            }
+        )
+    return reconstructed
+
+
+def _history_team_thoughts(
+    run: dict[str, Any],
+    *,
+    tool_status: Literal["running", "completed", "error"],
+    sibling_runs: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Project Team member_responses into Chat thought_chain items."""
+    thoughts: list[dict[str, Any]] = []
+    for member in _member_rows(run, sibling_runs=sibling_runs):
+        member_id = str(member.get("agent_id") or "member").strip() or "member"
+        member_name = str(member.get("agent_name") or member_id).strip() or member_id
+        summary = member.get("content")
+        if not isinstance(summary, str) or not summary.strip():
+            summary = "完成"
+        member_status = str(member.get("status") or "").strip().lower()
+        if member_status in {"error", "failed"}:
+            status = "error"
+        elif member_status in {"cancelled", "canceled"}:
+            status = "error"
+        elif tool_status == "running":
+            status = "running"
+        else:
+            status = "completed"
+        thoughts.append(
+            {
+                "id": f"member:{member_id}",
+                "type": "member",
+                "title": f"成员 · {member_name}",
+                "status": status,
+                "summary": summary.strip()[:280],
+            }
+        )
+    return thoughts
+
+
+def _history_team_tools(
+    run: dict[str, Any],
+    *,
+    tool_status: Literal["running", "completed", "error"],
+    include_raw_io: bool,
+    sibling_runs: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Project leader + member tools with Team member prefixes for Chat UI."""
+    projected: list[dict[str, Any]] = []
+    leader_tools = run.get("tools")
+    if isinstance(leader_tools, list):
+        for tool in leader_tools:
+            if isinstance(tool, dict):
+                projected.append(
+                    tool_update(tool, tool_status, include_raw_io=include_raw_io)
+                )
+    for member in _member_rows(run, sibling_runs=sibling_runs):
+        member_id = str(member.get("agent_id") or "member").strip() or "member"
+        member_name = str(member.get("agent_name") or member_id).strip() or member_id
+        member_tools = member.get("tools")
+        if not isinstance(member_tools, list):
+            continue
+        for tool in member_tools:
+            if not isinstance(tool, dict):
+                continue
+            row = tool_update(tool, tool_status, include_raw_io=include_raw_io)
+            raw_id = str(row.get("id") or "tool")
+            raw_name = str(row.get("name") or "工具调用")
+            row["id"] = f"member:{member_id}:{raw_id}"
+            row["name"] = f"[{member_name}] {raw_name}"
+            row["member_id"] = member_id
+            row["member_name"] = member_name
+            projected.append(row)
+    return projected
+
+
+def _history_run_has_assistant_payload(
+    run: dict[str, Any],
+    *,
+    sibling_runs: list[dict[str, Any]] | None = None,
+) -> bool:
+    content = run.get("content", "")
+    if isinstance(content, str) and content.strip():
+        return True
+    tools_value = run.get("tools")
+    if isinstance(tools_value, list) and any(
+        isinstance(tool, dict)
+        and (
+            (tool.get("confirmed") is True and tool.get("result") not in (None, ""))
+            or tool.get("confirmed") is False
+            or tool.get("tool_call_error") is True
+            or str(tool.get("confirmation_note") or "").strip()
+            or tool.get("tool_name")
+            or tool.get("tool_call_id")
+        )
+        for tool in tools_value
+    ):
+        return True
+    for member in _member_rows(run, sibling_runs=sibling_runs):
+        member_content = member.get("content")
+        if isinstance(member_content, str) and member_content.strip():
+            return True
+        member_tools = member.get("tools")
+        if isinstance(member_tools, list) and member_tools:
+            return True
+    return False
+
+
+
+def _history_member_content_fallback(
+    run: dict[str, Any],
+    *,
+    sibling_runs: list[dict[str, Any]] | None = None,
+) -> str:
+    """When the Team leader left content empty, use the last member summary."""
+    for member in reversed(_member_rows(run, sibling_runs=sibling_runs)):
+        content = member.get("content")
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+    return ""
+
+
 async def get_session_messages_async(
     session_id: str,
     *,
@@ -657,8 +841,13 @@ async def get_session_messages_async(
 
     chat_settings = await get_chat_settings_async()
     messages: list[dict[str, Any]] = []
+    dict_runs: list[dict[str, Any]] = [r for r in runs if isinstance(r, dict)]
     for index, run in enumerate(runs):
         if not isinstance(run, dict):
+            continue
+        # Team sessions may store member Agent runs alongside the leader Team run.
+        # Member tools/thoughts come from leader.member_responses — skip child rows.
+        if _is_child_member_run(run):
             continue
         user_text = _preview_from_runs([run])
         run_id = str(run.get("run_id") or f"history-{index}")
@@ -676,39 +865,46 @@ async def get_session_messages_async(
             messages.append(user_msg)
 
         content = run.get("content", "")
-        tools_value_for_gate = run.get("tools")
-        has_tool_results = isinstance(tools_value_for_gate, list) and any(
-            isinstance(tool, dict)
-            and (
-                (tool.get("confirmed") is True and tool.get("result") not in (None, ""))
-                or tool.get("confirmed") is False
-                or tool.get("tool_call_error") is True
-                or str(tool.get("confirmation_note") or "").strip()
-            )
-            for tool in tools_value_for_gate
-        )
-        if (isinstance(content, str) and content.strip()) or has_tool_results:
+        if _history_run_has_assistant_payload(cast(dict[str, Any], run), sibling_runs=dict_runs):
             tools_value = run.get("tools")
             raw_tools: list[Any] = tools_value if isinstance(tools_value, list) else []
+            # Include member tools when computing HITL/paused status for Team runs.
+            for member in _member_rows(
+                cast(dict[str, Any], run), sibling_runs=dict_runs
+            ):
+                member_tools = member.get("tools")
+                if isinstance(member_tools, list):
+                    raw_tools = [*raw_tools, *member_tools]
             status = _history_run_status(run.get("status"), raw_tools)
-            tool_status = "running" if status == "paused" else "completed"
-            tools = (
-                [
-                    tool_update(
-                        tool,
-                        tool_status,
-                        include_raw_io=chat_settings.show_raw_tool_io,
-                    )
-                    for tool in raw_tools
-                ]
-                if chat_settings.show_thought_chain
-                else []
+            tool_status: Literal["running", "completed", "error"] = (
+                "running" if status == "paused" else "completed"
             )
+            if chat_settings.show_thought_chain:
+                tools = _history_team_tools(
+                    cast(dict[str, Any], run),
+                    tool_status=tool_status,
+                    include_raw_io=chat_settings.show_raw_tool_io,
+                    sibling_runs=dict_runs,
+                )
+                thought_chain = _history_team_thoughts(
+                    cast(dict[str, Any], run),
+                    tool_status=tool_status,
+                    sibling_runs=dict_runs,
+                )
+            else:
+                tools = []
+                thought_chain = []
             followups = run.get("followups")
             message: dict[str, Any] = {
                 "id": run_id,
                 "role": "assistant",
-                "content": _project_history_content(cast(dict[str, object], run), status) or (content.strip() if isinstance(content, str) else ""),
+                "content": (
+                    _project_history_content(cast(dict[str, object], run), status)
+                    or (content.strip() if isinstance(content, str) else "")
+                    or _history_member_content_fallback(
+                        cast(dict[str, Any], run), sibling_runs=dict_runs
+                    )
+                ),
                 "final": True,
                 "run_id": run_id,
                 "session_id": session_id,
@@ -718,6 +914,8 @@ async def get_session_messages_async(
                 "tools": tools,
                 "followups": [item for item in followups if isinstance(item, str)] if isinstance(followups, list) else [],
             }
+            if thought_chain:
+                message["thought_chain"] = thought_chain
             approval_id = _history_approval_id(raw_tools)
             if approval_id:
                 message["approval_id"] = approval_id

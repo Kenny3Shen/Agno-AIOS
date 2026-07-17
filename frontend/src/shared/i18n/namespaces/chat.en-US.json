@@ -93,7 +93,10 @@
     "playbook_get_exec_result": "Playbook execution result",
     "get_skill_instructions": "Read skill instructions",
     "get_skill_reference": "Read skill reference",
-    "get_skill_script": "Read skill script"
+    "get_skill_script": "Read skill script",
+    "delegateTaskToMember": "Delegate to member",
+    "delegateTaskToMembers": "Delegate to all members",
+    "getMemberInformation": "List team members"
   },
   "knowledgeOffBadge": "Knowledge off",
   "liveSearchNeedsTools": "Turn on Tools/Skills first; lite and tools-off turns ignore Live Search.",
@@ -115,5 +118,21 @@
   "attachmentsTotalTooLarge": "Total attachment size exceeds {{maxMb}}MB",
   "attachmentsEmptyFile": "Empty file: {{name}}",
   "attachmentsInvalid": "Invalid attachment",
-  "regenerateAttachmentsHint": "Regenerate reuses last-turn files still in this session (not after reload)"
+  "regenerateAttachmentsHint": "Regenerate reuses last-turn files still in this session (not after reload)",
+  "agent": "Agent",
+  "agents": {
+    "securityOperations": "Security Ops",
+    "securityOperationsHint": "Triage, Skills/MCP, HITL actions",
+    "dataAnalysis": "Data Analysis",
+    "dataAnalysisHint": "Tables, optional read-only SQL, reproducible analysis",
+    "deepResearch": "Deep Research",
+    "deepResearchHint": "Multi-source research reports",
+    "researchAnalysisTeam": "Research+Analysis Team",
+    "researchAnalysisTeamHint": "Coordinate research and analysis (beta)",
+    "researchAnalysisRoute": "Research+Analysis Route",
+    "researchAnalysisRouteHint": "Route to one specialist (beta)",
+    "teamBeta": "Team beta",
+    "researchAnalysisBroadcast": "Research Board",
+    "researchAnalysisBroadcastHint": "Parallel specialist consult (beta)"
+  }
 }
