@@ -768,6 +768,7 @@ export function WorkflowPage() {
                   key={item.type}
                   className="workflow-palette__item"
                   draggable={!workflow.state.running && canWrite}
+                  aria-disabled={workflow.state.running || !canWrite}
                   onDragStart={(event) => {
                     if (workflow.state.running || !canWrite) {
                       event.preventDefault()
@@ -775,9 +776,16 @@ export function WorkflowPage() {
                     }
                     paletteDragStart(event, item.type)
                   }}
-                  onDoubleClick={() => workflow.add(item.type)}
+                  onDoubleClick={() => {
+                    if (workflow.state.running || !canWrite) return
+                    workflow.add(item.type)
+                  }}
                   style={{ borderColor: item.color }}
-                  title={t('paletteDragHint')}
+                  title={
+                    workflow.state.running
+                      ? t('errorEditWhileRunning')
+                      : t('paletteDragHint')
+                  }
                 >
                   <span className="workflow-palette__icon" style={{ color: item.color }}>
                     {item.icon}

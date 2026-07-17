@@ -1,5 +1,10 @@
 # 下一步工作
 
+## 已完成：运行中禁用调色板双击加节点
+
+- 运行中/无写权限：palette `onDoubleClick` 直接 return（此前仅挡 drag，双击仍会 `add` 后被 `rejectIfRunning` 弹错）。
+- `title` 切到 `errorEditWhileRunning`；`draggable=false` 时取消 hover 抬升动画。
+
 ## 已完成：未发布草稿启用 Webhook e2e
 
 - Playwright：未发布工作流打开「定义与触发」，启用 Webhook → 弹出「需要先发布」说明；Esc 关闭后开关仍为关。
