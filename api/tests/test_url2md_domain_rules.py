@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 
 from api.services.url2md_service import (
     _find_content_container,
+    _find_generic_content_container,
     get_markdown_text,
 )
 from api.services.collect_crawl_service import configured_source_domains
@@ -104,3 +105,62 @@ def test_get_markdown_text_dailydarkweb_multi_class():
     md = get_markdown_text(soup, "https://dailydarkweb.net/leak-notice/")
     assert md.startswith("# DDW Leak Notice")
     assert "marketplace report" in md
+
+
+
+def test_find_generic_content_container_prefers_article():
+    body = ("Incident response notes with enough characters for extract. " * 8)
+    html = f"""
+    <html><body>
+      <nav class="menu">Home About</nav>
+      <article>
+        <h1>Generic Post</h1>
+        <p>{body}</p>
+        <p>{body}</p>
+      </article>
+      <aside class="sidebar related">More stories</aside>
+    </body></html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    container = _find_generic_content_container(soup)
+    assert container is not None
+    assert container.name == "article"
+    assert "Incident response" in container.get_text()
+
+
+def test_get_markdown_text_generic_article_fallback():
+    """Unknown domain still extracts from semantic article containers."""
+    body = ("Vendor advisory detail with sufficient length for markdown. " * 8)
+    html = f"""
+    <html><head><title>Unknown Source Advisory</title></head>
+    <body>
+      <header>Site chrome</header>
+      <article class="post">
+        <p>{body}</p>
+        <p>{body}</p>
+      </article>
+    </body></html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    md = get_markdown_text(soup, "https://unknown-news.example/a/post")
+    assert md.startswith("# Unknown Source Advisory")
+    assert "Vendor advisory" in md
+
+
+def test_get_markdown_text_falls_back_when_domain_class_missing():
+    """Configured domain whose CMS class drifted still recovers via generic selectors."""
+    body = ("Class drift recovery paragraph with enough text content. " * 8)
+    html = f"""
+    <html><head><title>THN Drifted Markup</title></head>
+    <body>
+      <div class="entry-content">
+        <p>{body}</p>
+        <p>{body}</p>
+      </div>
+    </body></html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    # thehackernews rule expects articlebody clear cf — missing here.
+    md = get_markdown_text(soup, "https://thehackernews.com/2024/01/example.html")
+    assert md.startswith("# THN Drifted Markup")
+    assert "Class drift recovery" in md

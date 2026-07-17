@@ -214,6 +214,87 @@ def _find_content_container(soup: BeautifulSoup, main_class_name: str):
     )
 
 
+# Prefer semantic / CMS body containers when domain rules miss or class drifts.
+_GENERIC_CONTAINER_SELECTORS: tuple[str, ...] = (
+    "article",
+    "main",
+    "[role=main]",
+    ".post-content",
+    ".entry-content",
+    ".article-content",
+    ".article-body",
+    ".td-post-content",
+    ".content-detail",
+    ".single-post-content",
+    "#content",
+    ".content",
+)
+
+_GENERIC_NOISE_CLASS_HINTS = frozenset(
+    {
+        "nav",
+        "menu",
+        "sidebar",
+        "footer",
+        "header",
+        "comment",
+        "share",
+        "related",
+        "breadcrumb",
+        "widget",
+        "promo",
+        "advert",
+        "cookie",
+    }
+)
+
+
+def _element_text_len(node) -> int:
+    if node is None:
+        return 0
+    return len(node.get_text(" ", strip=True) or "")
+
+
+def _looks_like_noise_container(node) -> bool:
+    classes = {part.lower() for part in _class_set(node.get("class"))}
+    node_id = str(node.get("id") or "").lower()
+    haystack = " ".join(classes | ({node_id} if node_id else set()))
+    return any(token in haystack for token in _GENERIC_NOISE_CLASS_HINTS)
+
+
+def _find_generic_content_container(soup: BeautifulSoup):
+    """Best-effort article body when domain rule is missing or container drifted.
+
+    Scores candidates by visible text length and prefers semantic tags
+    (``article`` / ``main``) over generic ``div`` dumps.
+    """
+    candidates: list[tuple[int, int, object]] = []
+    seen: set[int] = set()
+    for index, selector in enumerate(_GENERIC_CONTAINER_SELECTORS):
+        try:
+            matches = soup.select(selector)
+        except Exception:  # noqa: BLE001 — bad selector should not break parse
+            continue
+        for node in matches:
+            if id(node) in seen:
+                continue
+            seen.add(id(node))
+            if _looks_like_noise_container(node):
+                continue
+            length = _element_text_len(node)
+            if length < 200:
+                continue
+            # Prefer earlier (more specific) selectors slightly.
+            score = length * 10 - index
+            if getattr(node, "name", None) in {"article", "main"}:
+                score += 500
+            candidates.append((score, length, node))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return candidates[0][2]
+
+
 def _exclude_by_class(container, exclude_classes: list[str]) -> None:
     for exclude_class in exclude_classes:
         tokens = _class_tokens(exclude_class)
@@ -262,13 +343,24 @@ def get_markdown_text(soup: BeautifulSoup, url: str) -> str:
         host = (urlsplit(url).hostname or "").lower()
         logger.debug("Rules not found for domain: {} url={}", host, url)
 
+    if container is None:
+        container = _find_generic_content_container(soup)
+        if container is not None:
+            logger.debug(
+                "Using generic content container tag={} classes={} url={}",
+                getattr(container, "name", "?"),
+                container.get("class"),
+                url,
+            )
+
     if container is not None:
         _exclude_by_class(container, exclude_classes)
         if domain_key == "www.anquanke.com":
             tags_to_extract.append("div")
         elements = container.find_all(tags_to_extract)
     else:
-        elements = soup.find_all(["p"])
+        # Last resort: whole-document paragraphs (noisy but better than empty).
+        elements = soup.find_all(["p", "li", "h2", "h3"])
 
     main_paragraphs = parse_to_markdown(elements, truncate_marker, title)
 

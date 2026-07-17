@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Collect 通用正文兜底提取
+
+- 域名规则未命中或 CMS class 漂移时，优先用 `article`/`main`/常见 CMS 容器按文本长度评分提取。
+- 避免仅扫全页 `<p>` 导致正文过短失败；单页采集与同步抓取共用 `get_markdown_text`。
+
+
 ## 已完成：Collect 同步进度 i18n + Studio 软错误自动消失
 
 - Collect 进度条按 stage/字段本地化展示，不再依赖服务端中文 message。
