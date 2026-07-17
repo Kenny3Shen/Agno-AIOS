@@ -1,5 +1,10 @@
 # 下一步工作
 
+## 已完成：Chat session-meta 错误文案主副信息
+
+- 主文案固定 i18n「无法加载会话信息」；原始错误作为次级 detail。
+- 配套样式 `chat-error__detail`。
+
 ## 已完成：Chat 深链 meta 加载文案与 workflow 跳转占位
 
 - meta 加载中展示「加载会话信息」而非「加载会话历史」。

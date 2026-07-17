@@ -800,9 +800,10 @@ export function ChatPage() {
           {showSessionMetaError ? (
             <div className="chat-error chat-history-error" role="alert">
               <span className="chat-error__message">
-                {(chat.sessionMetaError instanceof Error && chat.sessionMetaError.message.trim())
-                  ? chat.sessionMetaError.message
-                  : t('sessionMetaLoadFailed')}
+                {t('sessionMetaLoadFailed')}
+                {chat.sessionMetaError instanceof Error && chat.sessionMetaError.message.trim() ? (
+                  <small className="chat-error__detail"> {chat.sessionMetaError.message}</small>
+                ) : null}
               </span>
               <span className="chat-error__actions">
                 <Button size="small" type="primary" onClick={() => chat.sessionMetaRefetch()}>

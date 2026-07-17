@@ -332,6 +332,7 @@ describe('chat session meta load failure', () => {
     renderWithQuery(<ChatPage />)
     expect(screen.queryByText('从哪里开始调查？')).toBeNull()
     const alert = screen.getByRole('alert')
+    expect(alert.textContent || '').toMatch(/无法加载会话信息/)
     expect(alert.textContent || '').toMatch(/meta boom/)
     await user.click(alert.querySelector('button') as HTMLButtonElement)
     expect(chat.sessionMetaRefetch).toHaveBeenCalled()

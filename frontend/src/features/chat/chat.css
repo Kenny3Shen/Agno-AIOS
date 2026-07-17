@@ -448,6 +448,14 @@
   flex: 1;
   min-width: 0;
 }
+.chat-error__detail {
+  display: block;
+  margin-top: 4px;
+  opacity: 0.78;
+  font-size: 12px;
+  font-weight: 400;
+}
+
 .chat-error__actions {
   display: inline-flex;
   align-items: center;
