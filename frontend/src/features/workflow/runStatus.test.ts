@@ -62,6 +62,14 @@ describe('runStatus performance helpers', () => {
     expect(again).toBe(base)
   })
 
+
+  it('marks running nodes when workflow is cancelled', () => {
+    let map = applyNodeRunStatusEvent(steps, {}, event('step.started', 'a'))
+    map = applyNodeRunStatusEvent(steps, map, event('step.started', 'b'))
+    map = applyNodeRunStatusEvent(steps, map, event('workflow.cancelled'))
+    expect(map).toEqual({ a: 'error', b: 'error' })
+  })
+
   it('caps run log length', () => {
     let log: WorkflowRunLogItem[] = []
     for (let i = 0; i < 5; i += 1) {
@@ -85,6 +93,7 @@ describe('runStatus performance helpers', () => {
 describe('runEventLabelKey', () => {
   it('maps known event types to i18n keys', () => {
     expect(runEventLabelKey('workflow.started')).toBe('runEvent_workflow_started')
+    expect(runEventLabelKey('workflow.cancelled')).toBe('runEvent_workflow_cancelled')
     expect(runEventLabelKey('step.completed')).toBe('runEvent_step_completed')
     expect(runEventLabelKey('loop.iteration.started')).toBe('runEvent_loop_iteration_started')
   })

@@ -22,6 +22,7 @@ import type {
   WorkflowNode,
   WorkflowNodeType,
   WorkflowRunHistoryItem,
+  WorkflowRunLogItem,
   WorkflowState,
   WorkflowTriggers,
 } from './types'
@@ -558,7 +559,7 @@ export function useWorkflow() {
     }))
   }
 
-  const copySelected = () => {
+  const copySelected = (): boolean => {
     const ids = state.selectedIds.length
       ? state.selectedIds
       : state.selectedId
@@ -571,7 +572,9 @@ export function useWorkflow() {
     const tops = nodes.filter(
       (node) => !nodes.some((other) => other.id !== node.id && Boolean(findNode([other], node.id)))
     )
-    clipboardRef.current = (tops.length ? tops : nodes).map(cloneNodeDeep)
+    const payload = (tops.length ? tops : nodes).map(cloneNodeDeep)
+    clipboardRef.current = payload
+    return payload.length > 0
   }
 
   const pasteClipboard = (): {
@@ -1105,15 +1108,38 @@ export function useWorkflow() {
     const runId = state.lastRunId
     // Always stop the client SSE first so the UI unblocks immediately.
     abortRef.current?.abort()
-    setState((current) => ({
-      ...current,
-      running: false,
-      runHistory: current.runHistory.map((entry, index) =>
-        index === 0 && entry.status === 'running'
-          ? { ...entry, status: 'cancelled', finishedAt: Date.now() }
-          : entry
-      ),
-    }))
+    setState((current) => {
+      const cancelItem: WorkflowRunLogItem = {
+        id: crypto.randomUUID(),
+        type: 'workflow.cancelled',
+        message: t('runStoppedByUser'),
+        runId: runId || current.lastRunId,
+        sessionId: current.lastSessionId,
+        at: Date.now(),
+      }
+      // Avoid duplicate cancelled rows if stop is double-clicked.
+      const alreadyCancelled =
+        current.runLog.length > 0 &&
+        current.runLog[current.runLog.length - 1]?.type === 'workflow.cancelled'
+      const runLog = alreadyCancelled
+        ? current.runLog
+        : appendRunLog(current.runLog, cancelItem, 200)
+      return {
+        ...current,
+        running: false,
+        runLog,
+        nodeRunStatus: applyNodeRunStatusEvent(
+          current.steps,
+          current.nodeRunStatus,
+          cancelItem,
+        ),
+        runHistory: current.runHistory.map((entry, index) =>
+          index === 0 && entry.status === 'running'
+            ? { ...entry, status: 'cancelled' as const, finishedAt: Date.now() }
+            : entry
+        ),
+      }
+    })
     if (!runId) return
     void cancelWorkflowRun(runId).catch((error: unknown) => {
       // 404 = run already finished or never registered (race with terminal event).

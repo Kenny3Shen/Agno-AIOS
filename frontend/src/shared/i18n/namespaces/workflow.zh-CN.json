@@ -270,6 +270,8 @@
   "multiSelectHitlParallelHint": "并行内的步骤无法开启 HITL，相关勾选会被跳过。",
   "pasteMultiSelectRoot": "当前多选，粘贴已追加到画布根级",
   "pasteEmptyClipboard": "剪贴板为空 — 请先复制节点（Ctrl/⌘C）",
+  "runStoppedByUser": "已由用户停止",
+  "copyEmptySelection": "请先选中要复制的节点",
   "reparentCycleBlocked": "不能把节点移入自己的子树",
   "reparentInvalidBlocked": "无法放置到该位置",
   "stopRunHint": "停止运行（Esc）",

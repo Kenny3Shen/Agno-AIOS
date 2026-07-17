@@ -88,6 +88,11 @@ export function WorkflowPage() {
   const formatDate = useFormatDate()
   const routerNav = useRouter()
   const workflow = useWorkflow()
+  const copyWithGuard = () => {
+    if (!workflow.copySelected()) {
+      message.info(t('copyEmptySelection'))
+    }
+  }
   const pasteWithHitlGuard = () => {
     const result = workflow.pasteClipboard()
     if (!result.pasted) {
@@ -822,7 +827,7 @@ export function WorkflowPage() {
             onFocusInspector={focusInspectorForNode}
             onUndo={workflow.undo}
             onRedo={workflow.redo}
-            onCopy={workflow.copySelected}
+            onCopy={copyWithGuard}
             onPaste={pasteWithHitlGuard}
             onOrganize={workflow.organizeLayout}
             onDuplicateSelected={duplicateWithHitlGuard}
@@ -1778,7 +1783,8 @@ export function WorkflowPage() {
                               <Space size={4} wrap>
                                 <Tag
                                   color={
-                                    item.type === 'workflow.paused'
+                                    item.type === 'workflow.paused' ||
+                                    item.type === 'workflow.cancelled'
                                       ? 'warning'
                                       : item.type.includes('error') || item.type.includes('failed')
                                         ? 'error'

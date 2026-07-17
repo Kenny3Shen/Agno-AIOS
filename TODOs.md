@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：停止写入 Run Log + 空复制提示 + cancelled 标签色
+
+- Studio `stop`：立即追加 `workflow.cancelled` 日志（文案「已由用户停止」）、刷新节点运行态、历史标 cancelled；避免双重点击重复行。
+- Run Log 标签：`workflow.cancelled` 使用 warning 色（与 paused 一致，非 error）。
+- 无选中复制：info toast `copyEmptySelection`。
+
+
 ## 已完成：Studio 停止调用服务端 Workflow cancel
 
 - `POST /api/workflows/runs/{run_id}/cancel`：对已注册的 live run 调用 Agno `Workflow.cancel_run`（按 owner 隔离）。
