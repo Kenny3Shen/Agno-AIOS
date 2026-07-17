@@ -18,5 +18,8 @@
   "updateStageSource": "Fetching source {{source}} ({{index}}/{{total}})",
   "updateStageSourceDone": "{{source}}: +{{add}} / −{{del}} ({{index}}/{{total}})",
   "updateStageDatabase": "Writing database (+{{add}} / −{{del}})",
-  "updateStageCache": "Updating local cache and commit markers"
+  "updateStageCache": "Updating local cache and commit markers",
+  "updateStop": "Stop update",
+  "updateStopHint": "Abort the current CVE database update (applied changes are kept)",
+  "updateCancelled": "CVE database update stopped"
 }

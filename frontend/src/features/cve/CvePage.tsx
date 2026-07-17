@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { App, Button, Card, Input, Progress, Select, Space, Table, Tag, Typography } from 'antd'
-import { ReloadOutlined, SearchOutlined } from '@ant-design/icons'
+import { ReloadOutlined, SearchOutlined, StopOutlined } from '@ant-design/icons'
 import { currentUserQuery } from '@/features/auth'
 import { roleOf } from '@/shared/auth/permissions'
 import { PageHeader } from '@/shared/ui/PageHeader'
@@ -34,6 +34,9 @@ function formatCveProgressMessage(
   t: (key: string, options?: Record<string, unknown>) => string,
 ): string {
   if (!event) return t('updateStarting')
+  if (event.status === 'cancelled') {
+    return event.message || t('updateCancelled')
+  }
   if (event.status === 'failed') {
     return event.error || event.message || t('updateFailed')
   }
@@ -82,6 +85,7 @@ export function CvePage() {
   const [source, setSource] = useState<string>()
   const [pagination, setPagination] = useState({ page: 1, size: 20 })
   const [updateProgress, setUpdateProgress] = useState<CveUpdateProgress | null>(null)
+  const updateAbortRef = useRef<AbortController | null>(null)
 
   const search = useQuery({
     queryKey: ['cve', 'search', debouncedQuery, source, pagination.page, pagination.size],
@@ -101,12 +105,27 @@ export function CvePage() {
     }
   }, [search.isError, search.error, message, t])
 
+  useEffect(() => {
+    return () => {
+      updateAbortRef.current?.abort()
+    }
+  }, [])
+
   const update = useMutation({
     mutationFn: async () => {
+      updateAbortRef.current?.abort()
+      const controller = new AbortController()
+      updateAbortRef.current = controller
       setUpdateProgress({ stage: 'start', status: 'running', message: t('updateStarting') })
-      return updateCvesStream((event) => {
-        setUpdateProgress(event)
-      })
+      try {
+        return await updateCvesStream((event) => {
+          setUpdateProgress(event)
+        }, controller.signal)
+      } finally {
+        if (updateAbortRef.current === controller) {
+          updateAbortRef.current = null
+        }
+      }
     },
     onSuccess: (data) => {
       message.success(
@@ -129,6 +148,16 @@ export function CvePage() {
       void search.refetch()
     },
     onError: (error) => {
+      if (error instanceof Error && error.name === 'AbortError') {
+        message.info(t('updateCancelled'))
+        setUpdateProgress((prev) =>
+          prev
+            ? { ...prev, stage: 'done', status: 'cancelled', message: t('updateCancelled') }
+            : { stage: 'done', status: 'cancelled', message: t('updateCancelled') },
+        )
+        void search.refetch()
+        return
+      }
       message.error(error instanceof Error ? error.message : t('updateFailed'))
       setUpdateProgress((prev) =>
         prev
@@ -137,6 +166,10 @@ export function CvePage() {
       )
     },
   })
+
+  const stopUpdate = () => {
+    updateAbortRef.current?.abort()
+  }
 
   const percent = progressPercent(updateProgress)
   const updating = update.isPending
@@ -182,14 +215,20 @@ export function CvePage() {
               { value: 'exploit-db', label: 'Exploit-DB' },
             ]}
           />
-          <Button
-            icon={<ReloadOutlined />}
-            loading={updating}
-            disabled={!canUpdateDatabase || updating}
-            onClick={() => update.mutate()}
-          >
-            {t('updateDb')}
-          </Button>
+          {updating && canUpdateDatabase ? (
+            <Button danger icon={<StopOutlined />} title={t('updateStopHint')} onClick={stopUpdate}>
+              {t('updateStop')}
+            </Button>
+          ) : (
+            <Button
+              icon={<ReloadOutlined />}
+              loading={updating}
+              disabled={!canUpdateDatabase || updating}
+              onClick={() => update.mutate()}
+            >
+              {t('updateDb')}
+            </Button>
+          )}
         </Space>
 
         {updateProgress ? (
@@ -199,11 +238,13 @@ export function CvePage() {
               status={
                 updateProgress.status === 'failed'
                   ? 'exception'
-                  : updateProgress.status === 'completed' && updateProgress.stage === 'done'
-                    ? 'success'
-                    : updating
-                      ? 'active'
-                      : 'normal'
+                  : updateProgress.status === 'cancelled'
+                    ? 'normal'
+                    : updateProgress.status === 'completed' && updateProgress.stage === 'done'
+                      ? 'success'
+                      : updating
+                        ? 'active'
+                        : 'normal'
               }
               size="small"
             />

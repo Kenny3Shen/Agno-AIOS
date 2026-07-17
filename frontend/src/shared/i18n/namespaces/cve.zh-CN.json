@@ -18,5 +18,8 @@
   "updateStageSource": "拉取数据源 {{source}}（{{index}}/{{total}}）",
   "updateStageSourceDone": "{{source}}: +{{add}} / −{{del}}（{{index}}/{{total}}）",
   "updateStageDatabase": "写入数据库（新增 {{add}}，删除 {{del}}）",
-  "updateStageCache": "提交本地缓存与 commit 标记"
+  "updateStageCache": "提交本地缓存与 commit 标记",
+  "updateStop": "停止更新",
+  "updateStopHint": "中断当前 CVE 库更新（已写入变更保留）",
+  "updateCancelled": "已停止 CVE 库更新"
 }

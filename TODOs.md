@@ -1,5 +1,10 @@
 # 下一步工作
 
+## 已完成：CVE 库更新可停止
+
+- 与 Collect 同步：`AbortController` + 进度条「停止更新」；SSE 断开取消服务端 worker。
+- 取消 info toast / `cancelled` 进度态；已应用变更保留。
+
 ## 已完成：Collect 同步可停止
 
 - 前端 `AbortController` 传入 crawl SSE；进度条旁「停止同步」中止读流。
