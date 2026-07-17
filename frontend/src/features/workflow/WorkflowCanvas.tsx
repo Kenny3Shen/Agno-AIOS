@@ -1,3 +1,4 @@
+import { isKeyboardTargetEditable, isOverlayEscapeTarget } from '@/shared/lib/keyboard'
 import {
   useMemo,
   useCallback,
@@ -51,7 +52,6 @@ import {
   NODE_LAYOUT_HEIGHT,
   type ReparentTarget,
   type SmartGuideLine,
-  isKeyboardTargetEditable,
 } from './utils'
 import {
   WorkflowFlowNode,
@@ -1005,6 +1005,7 @@ function CanvasInner({
         return
       }
       if (event.key === 'Escape') {
+        if (isOverlayEscapeTarget(event.target)) return
         if (running && onStop) {
           event.preventDefault()
           onStop()

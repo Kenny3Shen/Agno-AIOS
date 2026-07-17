@@ -156,3 +156,17 @@ describe('chat stop shortcuts', () => {
     expect(chat.cancel).not.toHaveBeenCalled()
   })
 })
+
+  it('does not stop when Escape is pressed while a modal is open', async () => {
+    ;(chat.state as { requesting: boolean }).requesting = true
+    const wrap = document.createElement('div')
+    wrap.className = 'ant-modal-wrap'
+    document.body.appendChild(wrap)
+    try {
+      renderWithQuery(<ChatPage />)
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      expect(chat.cancel).not.toHaveBeenCalled()
+    } finally {
+      wrap.remove()
+    }
+  })

@@ -1,5 +1,13 @@
 # 下一步工作
 
+## 已完成：Esc 不误伤弹层 + 请求中隐藏 followups + 共用 keyboard helper
+
+- `shared/lib/keyboard`：`isKeyboardTargetEditable` / `isOverlayEscapeTarget`（Chat + Studio 共用）。
+- Chat/Studio 全局 Esc 停跑：Modal/Drawer/下拉打开时不触发 cancel。
+- Chat followups：请求中或 HITL 暂停时不展示，避免并发 submit。
+- workflow `utils` 仍 re-export editable 检测，兼容既有导入。
+
+
 ## 已完成：停止写入 Run Log + 空复制提示 + cancelled 标签色
 
 - Studio `stop`：立即追加 `workflow.cancelled` 日志（文案「已由用户停止」）、刷新节点运行态、历史标 cancelled；避免双重点击重复行。

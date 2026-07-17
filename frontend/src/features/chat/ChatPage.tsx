@@ -31,6 +31,7 @@ import { useTranslation } from 'react-i18next'
 import { useRouter } from '@tanstack/react-router'
 import { buildTraceSearch, emptyTraceFilters } from '@/features/trace/utils'
 import { copyToClipboard } from '@/shared/lib/clipboard'
+import { isOverlayEscapeTarget } from '@/shared/lib/keyboard'
 import { reasoningEffortLabel } from '@/shared/lib/reasoning'
 import {
   formatSkillLabels,
@@ -543,11 +544,13 @@ export function ChatPage() {
   }, [chat.state.error, chat.state.messages, chat.dispatch])
 
   // Esc stops an in-flight run (including model retry backoff).
+  // Skip when a modal/drawer owns Escape (e.g. rename session).
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return
       if (event.metaKey || event.ctrlKey || event.altKey) return
       if (!chat.state.requesting) return
+      if (isOverlayEscapeTarget(event.target)) return
       event.preventDefault()
       void cancelRef.current()
     }
@@ -696,12 +699,15 @@ export function ChatPage() {
           ) : (
             <Bubble.List items={bubbles} autoScroll={false} />
           )}
-          {chat.state.messages.at(-1)?.followups?.length ? (
+          {chat.state.messages.at(-1)?.followups?.length && !chat.state.requesting && !pausedRun ? (
             <Prompts
               className="followup-prompts"
               title={t('continueAnalysis')}
               items={chat.state.messages.at(-1)?.followups?.map((label, index) => ({ key: String(index), label })) ?? []}
-              onItemClick={({ data }) => void chat.submit(String(data.label ?? ''))}
+              onItemClick={({ data }) => {
+                if (chat.state.requesting || pausedRun) return
+                void chat.submit(String(data.label ?? ''))
+              }}
             />
           ) : null}
           {lastAssistant?.status === 'retrying' && !chat.state.error ? (

@@ -63,6 +63,7 @@ import { CelExpressionField } from './CelExpressionField'
 import { currentUserQuery } from '@/features/auth'
 import { hasScope } from '@/shared/auth/permissions'
 import { useFormatDate } from '@/shared/lib/format'
+import { isOverlayEscapeTarget } from '@/shared/lib/keyboard'
 import { copyToClipboard } from '@/shared/lib/clipboard'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
@@ -156,6 +157,7 @@ export function WorkflowPage() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return
       if (event.metaKey || event.ctrlKey || event.altKey) return
+      if (isOverlayEscapeTarget(event.target)) return
       event.preventDefault()
       stopRef.current()
     }

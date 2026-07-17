@@ -1648,21 +1648,8 @@ export const buildWorkflowCode = (state: WorkflowState) => {
   ].join('\n')
 }
 
-/** True when a keyboard event target is an editable control (incl. Ant Design hosts). */
-export const isKeyboardTargetEditable = (target: EventTarget | null): boolean => {
-  if (!(target instanceof HTMLElement)) return false
-  if (target.isContentEditable) return true
-  const tag = target.tagName
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
-  if (
-    target.closest(
-      'input, textarea, select, [contenteditable="true"], .ant-select, .ant-select-selector, .ant-picker, .ant-input-number, .ant-mentions, .ant-cascader, .cel-expression-field',
-    )
-  ) {
-    return true
-  }
-  return false
-}
+/** @deprecated Prefer `@/shared/lib/keyboard` — re-exported for existing Studio imports. */
+export { isKeyboardTargetEditable } from '@/shared/lib/keyboard'
 
 export type MultiSelectAgentSummary = {
   agentCount: number
