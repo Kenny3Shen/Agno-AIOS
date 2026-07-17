@@ -366,6 +366,14 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
         ...state,
         error: null,
       }
+    case 'session-switch':
+      // Drop in-flight stream UI so history can replace messages for the new session.
+      return {
+        ...state,
+        messages: [],
+        requesting: false,
+        error: null,
+      }
     case 'reset':
       return { ...state, messages: [], input: '', requesting: false, error: null, reasoningEffort: null }
   }

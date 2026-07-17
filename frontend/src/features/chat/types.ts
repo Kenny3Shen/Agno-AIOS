@@ -116,6 +116,8 @@ export type ChatAction =
   | { type: 'network-error'; id: string; message: string }
   | { type: 'soft-error'; message: string }
   | { type: 'clear-error' }
+  /** URL session changed: drop in-flight UI so history can load; late SSE is ignored. */
+  | { type: 'session-switch' }
   | { type: 'model'; value: string | null; reasoningEffort: ReasoningEffort | null }
   | { type: 'reasoning-effort'; value: ReasoningEffort | null }
   | { type: 'search-knowledge'; value: boolean }

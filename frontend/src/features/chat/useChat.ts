@@ -75,6 +75,10 @@ export function useChat() {
     abortRef.current = null
     // Keep activeRunIdRef for submit's AbortError → run.cancelled payload; submit finally clears it.
     bestEffortCancelRun(runId)
+    // null → new session is first-message submit (keep streaming UI). A→B or A→null needs clear.
+    if (prev != null) {
+      dispatch({ type: 'session-switch' })
+    }
   }, [sessionId])
 
   // Unmount only aborts the stream this instance registered (sidebar unmount must not kill page stream).
@@ -248,6 +252,8 @@ export function useChat() {
           enable_tools: state.enableTools,
         },
         (event: ChatRunEvent) => {
+          // Drop late chunks if the user switched sessions mid-stream.
+          if (prevSessionIdRef.current !== activeSession) return
           // Keep cancel targets current across retries / late run_id attachment.
           const eventRunId = 'runId' in event ? event.runId : undefined
           if (typeof eventRunId === 'string' && eventRunId) {
@@ -260,17 +266,20 @@ export function useChat() {
       )
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
-        dispatch({ type: 'clear-error' })
-        dispatch({
-          type: 'event',
-          id: assistantId,
-          event: {
-            type: 'run.cancelled',
-            runId: activeRunIdRef.current ?? undefined,
-            reason: t('stoppedGenerating'),
-          },
-        })
-      } else {
+        // Session switch already cleared requesting via session-switch; skip cancelled UI.
+        if (prevSessionIdRef.current === activeSession) {
+          dispatch({ type: 'clear-error' })
+          dispatch({
+            type: 'event',
+            id: assistantId,
+            event: {
+              type: 'run.cancelled',
+              runId: activeRunIdRef.current ?? undefined,
+              reason: t('stoppedGenerating'),
+            },
+          })
+        }
+      } else if (prevSessionIdRef.current === activeSession) {
         dispatch({
           type: 'network-error',
           id: assistantId,

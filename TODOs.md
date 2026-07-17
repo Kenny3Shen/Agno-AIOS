@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Chat 会话切换清空流式态
+
+- `session-switch`：URL 从已有 session 切走时清空 messages + `requesting`，避免历史加载被挡住。
+- 首条消息 `null→session` 不触发（保留进行中流式 UI）。
+- 迟到 SSE / Abort / network error 若 session 已变则丢弃，不污染新会话。
+
 ## 已完成：Collect 发现阶段取消 + 布局高度 + sessionsQuery 收窄
 
 - `discover_article_urls` 在 `CancelledError` 时 cancel sibling domain 任务，避免共享 httpx Client 关闭后悬挂请求。

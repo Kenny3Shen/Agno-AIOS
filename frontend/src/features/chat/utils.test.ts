@@ -218,6 +218,27 @@ describe('chat behavior', () => {
     expect(next.messages).toEqual([])
   })
 
+  it('session-switch clears requesting and messages for history load', () => {
+    const started = chatReducer(initialChatState, {
+      type: 'start',
+      user: { id: 'u1', role: 'user', content: 'hi', final: true },
+      assistant: { id: 'a1', role: 'assistant', content: '', final: false, status: 'streaming' },
+      modelId: 'm1',
+    })
+    expect(started.requesting).toBe(true)
+    expect(started.messages).toHaveLength(2)
+    const switched = chatReducer(started, { type: 'session-switch' })
+    expect(switched.requesting).toBe(false)
+    expect(switched.messages).toEqual([])
+    expect(switched.error).toBeNull()
+    // history can apply after switch
+    const withHistory = chatReducer(switched, {
+      type: 'history',
+      messages: [{ id: 'h1', role: 'user', content: 'prior', final: true }],
+    })
+    expect(withHistory.messages).toHaveLength(1)
+  })
+
   it('marks a run cancelled and clears requesting', () => {
     const assistant: Message = { id: 'a', role: 'assistant', content: 'partial', final: false, status: 'streaming' }
     const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
