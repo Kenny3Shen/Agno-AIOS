@@ -138,7 +138,15 @@ const relativeTime = (timestamp: number, t: (key: string, options?: Record<strin
 
 const notificationKind = (notification: Notification) => {
   const status = typeof notification.data.status === 'string' ? notification.data.status : ''
+  const resourceType =
+    typeof notification.data.resource_type === 'string' ? notification.data.resource_type : ''
   if (status === 'rejected' || notification.title.toLowerCase().includes('rejected'))
+    return { icon: <CloseCircleOutlined />, className: 'notification-kind-rejected' }
+  if (
+    status === 'error' ||
+    resourceType === 'background_task' ||
+    notification.title.toLowerCase().includes('failed')
+  )
     return { icon: <CloseCircleOutlined />, className: 'notification-kind-rejected' }
   if (typeof notification.data.approval_id === 'string') return { icon: <AuditOutlined />, className: 'notification-kind-approval' }
   return { icon: <InfoCircleOutlined />, className: 'notification-kind-info' }
@@ -238,6 +246,21 @@ export function AppFrame({ children }: { children: ReactNode }) {
               void queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
               const sessionId = typeof notification.data.session_id === 'string' ? notification.data.session_id : ''
               if (sessionId) void queryClient.invalidateQueries({ queryKey: chatKeys.history(sessionId) })
+              // Surface important failures immediately (badge alone is easy to miss).
+              const status = typeof notification.data.status === 'string' ? notification.data.status : ''
+              const resourceType =
+                typeof notification.data.resource_type === 'string'
+                  ? notification.data.resource_type
+                  : ''
+              if (
+                !notification.read &&
+                (status === 'error' ||
+                  resourceType === 'background_task' ||
+                  status === 'rejected' ||
+                  /failed|失败|rejected|拒绝/i.test(notification.title))
+              ) {
+                message.warning(notification.title, 6)
+              }
             },
             controller.signal
           )
@@ -252,7 +275,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
     }
     void connect()
     return () => controller.abort()
-  }, [canReadNotifications, notificationsQuery.isFetched, queryClient, token])
+  }, [canReadNotifications, message, notificationsQuery.isFetched, queryClient, token])
 
   const items = useMemo<MenuProps['items']>(
     () =>

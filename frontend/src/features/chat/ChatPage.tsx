@@ -698,7 +698,26 @@ export function ChatPage() {
             setFollowLatest(node.scrollHeight - node.scrollTop - node.clientHeight < threshold)
           }}
         >
-          {!bubbles.length ? (
+          {chat.sessionId && chat.history.isError && !chat.state.requesting ? (
+            <div className="chat-error chat-history-error" role="alert">
+              <span className="chat-error__message">
+                {chat.history.error instanceof Error
+                  ? chat.history.error.message
+                  : t('historyLoadFailed')}
+              </span>
+              <span className="chat-error__actions">
+                <Button
+                  size="small"
+                  type="primary"
+                  loading={chat.history.isFetching}
+                  onClick={() => void chat.history.refetch()}
+                >
+                  {t('common:retry')}
+                </Button>
+              </span>
+            </div>
+          ) : null}
+          {chat.sessionId && chat.history.isError && !bubbles.length ? null : !bubbles.length ? (
             <div className="chat-welcome">
               <div className="welcome-emblem">
                 <SafetyOutlined />

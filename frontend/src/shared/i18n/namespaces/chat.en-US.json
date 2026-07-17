@@ -100,5 +100,6 @@
   "knowledgeSearchNeedsTools": "Turn on Tools/Skills first; lite and tools-off turns do not mount knowledge search.",
   "liveSearchAutoLeanHint": "Last turn was auto-lite; live search was not used. Your preference is kept and applies on the next tool-intent turn.",
   "knowledgeSearchAutoLeanHint": "Last turn was auto-lite; knowledge search was not mounted. Your preference is kept and applies on the next tool-intent turn.",
-  "retryingDetailWithDelay": "Model temporarily unavailable; retry {{attempt}}/{{max}} in {{seconds}}s…"
+  "retryingDetailWithDelay": "Model temporarily unavailable; retry {{attempt}}/{{max}} in {{seconds}}s…",
+  "historyLoadFailed": "Unable to load conversation history. Please retry."
 }

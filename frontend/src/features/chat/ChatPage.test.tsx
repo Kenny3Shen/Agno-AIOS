@@ -8,9 +8,15 @@ const longModelName = 'enterprise-security-analysis-model-with-an-intentionally-
 
 const chat = {
   state: { messages: [], input: '', requesting: false, error: null, selectedModelId: 'long', reasoningEffort: null, searchKnowledge: true, liveSearch: false, enableTools: true },
-  sessionId: null,
+  sessionId: null as string | null,
   sessions: { data: [] },
-  history: { data: [] },
+  history: {
+    data: [] as unknown[],
+    isError: false,
+    isFetching: false,
+    error: null as Error | null,
+    refetch: vi.fn(),
+  },
   models: {
     isLoading: false,
     data: {
@@ -172,3 +178,27 @@ describe('chat stop shortcuts', () => {
       wrap.remove()
     }
   })
+
+describe('chat history load failure', () => {
+  beforeEach(() => {
+    HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
+    chat.sessionId = 'session-err'
+    chat.history.isError = true
+    chat.history.isFetching = false
+    chat.history.error = new Error('history boom')
+    chat.history.refetch = vi.fn()
+    chat.state.messages = []
+    chat.state.requesting = false
+  })
+
+  it('shows history error with retry when load fails', async () => {
+    const user = setupUser()
+    renderWithQuery(<ChatPage />)
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toContain('history boom')
+    const retry = alert.querySelector('button')
+    expect(retry).toBeTruthy()
+    await user.click(retry as HTMLButtonElement)
+    expect(chat.history.refetch).toHaveBeenCalled()
+  })
+})

@@ -1231,3 +1231,8 @@ html.dark {
   color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.45));
   white-space: nowrap;
 }
+
+.chat-history-error {
+  margin: 12px 16px 0;
+  flex-shrink: 0;
+}
