@@ -586,8 +586,16 @@ export function ChatPage() {
       Boolean(historyFlags.isPending) ||
       (Boolean(historyFlags.isFetching) && chat.state.messages.length === 0))
   const sessionMetaBusy = Boolean(chat.sessionMetaLoading)
+  const showSessionMetaLoading =
+    sessionMetaBusy && !chat.state.requesting && chat.state.messages.length === 0
   const showHistoryLoading =
-    (historyBusy || sessionMetaBusy) && !chat.state.requesting && chat.state.messages.length === 0
+    historyBusy && !sessionMetaBusy && !chat.state.requesting && chat.state.messages.length === 0
+  // Workflow deep-links redirect away; avoid a welcome flash while effect runs.
+  const showWorkflowRedirecting =
+    Boolean(chat.sessionId) &&
+    isWorkflowSession &&
+    !chat.state.requesting &&
+    chat.state.messages.length === 0
   const showSessionMissing =
     Boolean(chat.sessionId) &&
     Boolean(chat.sessionMissing) &&
@@ -822,7 +830,12 @@ export function ChatPage() {
               </span>
             </div>
           ) : null}
-          {showHistoryLoading ? (
+          {showSessionMetaLoading || showWorkflowRedirecting ? (
+            <div className="chat-history-loading" role="status" aria-live="polite">
+              <Spin size="small" />
+              <span>{t('sessionMetaLoading')}</span>
+            </div>
+          ) : showHistoryLoading ? (
             <div className="chat-history-loading" role="status" aria-live="polite">
               <Spin size="small" />
               <span>{t('historyLoading')}</span>

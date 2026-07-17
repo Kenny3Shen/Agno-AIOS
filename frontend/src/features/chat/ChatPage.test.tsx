@@ -358,6 +358,8 @@ describe('chat session meta loading', () => {
 
   it('disables send while session meta is resolving', () => {
     renderWithQuery(<ChatPage />)
+    expect(screen.getByText('加载会话信息…')).toBeTruthy()
+    expect(screen.queryByText('从哪里开始调查？')).toBeNull()
     const send = document.querySelector('.sender-actions button.ant-btn-primary') as HTMLButtonElement | null
     expect(send).toBeTruthy()
     expect(send?.disabled).toBe(true)

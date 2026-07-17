@@ -1,5 +1,10 @@
 # 下一步工作
 
+## 已完成：Chat 深链 meta 加载文案与 workflow 跳转占位
+
+- meta 加载中展示「加载会话信息」而非「加载会话历史」。
+- 识别到 workflow 会话时显示加载占位，避免跳转前闪欢迎页。
+
 ## 已完成：Chat 深链 meta 解析中禁用发送 + 防 workflow 误发
 
 - `sessionMetaLoading` / `sessionMetaFailed` / workflow 会话期间禁用输入。

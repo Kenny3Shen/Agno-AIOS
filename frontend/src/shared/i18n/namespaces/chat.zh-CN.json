@@ -102,6 +102,7 @@
   "knowledgeSearchAutoLeanHint": "上一轮为自动轻量，未挂载知识库。本开关仍会保留偏好；发送安全任务意图后再生效。",
   "retryingDetailWithDelay": "模型暂时不可用，将在 {{seconds}}s 后进行第 {{attempt}}/{{max}} 次重试…",
   "historyLoadFailed": "无法加载会话历史，请重试",
+  "sessionMetaLoading": "加载会话信息…",
   "historyLoading": "加载会话历史…",
   "sessionNotFound": "会话不存在或无权访问",
   "sessionMetaLoadFailed": "无法加载会话信息，请重试"
