@@ -489,6 +489,8 @@ async def _fetch_markdown_with_retries(
         try:
             markdowns = await fetch_and_parse_url([url])
             markdown = (markdowns[0] if markdowns else "").strip()
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:  # noqa: BLE001 — classify then maybe retry
             markdown = f"Unexpected error for {url}: {exc}"
             logger.warning(
@@ -552,6 +554,8 @@ async def fetch_article_record(url: str) -> dict[str, Any]:
             "error_message": "",
             "fetched_at": now,
         }
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:  # noqa: BLE001 — persist failure row
         logger.exception("collect fetch failed {}", url)
         return {

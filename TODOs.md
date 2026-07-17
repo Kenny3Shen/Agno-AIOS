@@ -8,6 +8,8 @@
 
 ## 已完成：Collect 发现阶段取消 + 布局高度 + sessionsQuery 收窄
 
+- `_fetch_markdown_with_retries` / `fetch_article_record` 透传 `CancelledError`，避免取消被记成 Unexpected error 行。
+
 - `discover_article_urls` 在 `CancelledError` 时 cancel sibling domain 任务，避免共享 httpx Client 关闭后悬挂请求。
 - Collect/CVE SSE worker 明确记录 cancel（不审计为失败）。
 - `estimateNodeHeight` 计入 skills、空槽 CTA、长标题，降低自动布局重叠。
