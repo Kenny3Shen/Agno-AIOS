@@ -133,6 +133,11 @@
     "researchAnalysisRouteHint": "Route to one specialist (beta)",
     "teamBeta": "Team beta",
     "researchAnalysisBroadcast": "Research Board",
-    "researchAnalysisBroadcastHint": "Parallel specialist consult (beta)"
+    "researchAnalysisBroadcastHint": "Parallel specialist consult (beta)",
+    "teamMode": {
+      "coordinate": "coordinate",
+      "route": "route",
+      "broadcast": "broadcast"
+    }
   }
 }

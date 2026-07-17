@@ -133,6 +133,11 @@
     "researchAnalysisRouteHint": "路由到单一专员（beta）",
     "teamBeta": "Team beta",
     "researchAnalysisBroadcast": "研究分析会诊",
-    "researchAnalysisBroadcastHint": "并行征询专员并汇总（beta）"
+    "researchAnalysisBroadcastHint": "并行征询专员并汇总（beta）",
+    "teamMode": {
+      "coordinate": "协调",
+      "route": "路由",
+      "broadcast": "会诊"
+    }
   }
 }

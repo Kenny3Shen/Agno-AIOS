@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
+import type { ReactNode } from 'react'
 import { Actions, Attachments, Bubble, FileCard, Prompts, Sender, Sources, ThoughtChain } from '@ant-design/x'
 import { Markdown } from '@/shared/ui/Markdown'
 import { App, Avatar, Button, Cascader, Popover, Select, Spin, Tag, Tooltip } from 'antd'
@@ -114,6 +115,7 @@ function thoughtNode(thought: ThoughtStep) {
     collapsible: true,
     description: thought.summary ?? undefined,
     footer: thought.duration != null ? `${thought.duration.toFixed(1)}s` : undefined,
+    content: undefined as ReactNode | undefined,
   }
 }
 
@@ -138,11 +140,14 @@ function AgentSettings({
       ]
   ).map((agent) => {
     const isTeam = agent.kind === 'team' || agent.category === 'team'
-    const mode =
+    const modeRaw =
       isTeam && 'mode' in agent && agent.mode
         ? String(agent.mode)
         : ''
-    const modeTag = mode ? ` · ${mode}` : ''
+    const modeLabel = modeRaw
+      ? t(`agents.teamMode.${modeRaw}`, { defaultValue: modeRaw })
+      : ''
+    const modeTag = modeLabel ? ` · ${modeLabel}` : ''
     return {
       value: agent.id,
       label: isTeam ? `${agent.name} · ${t('agents.teamBeta')}${modeTag}` : agent.name,
@@ -358,23 +363,40 @@ function MessageBody({ message, retry, sessionId, requesting = false }: { messag
     copy: t('common:copy'),
     toolTitle: (name: string) => formatToolLabel(name, t),
   }
-  // Team beta: place member tools after their member thought instead of dumping all tools at the end.
+  // Team beta: attach member tools under the primary member thought (content),
+  // keep leader tools / unmatched tools as sibling chain items.
   const thoughts = message.thought_chain ?? []
   const tools = message.tool_steps ?? []
   const usedToolIds = new Set<string>()
   const chain: Array<ReturnType<typeof thoughtNode> | ReturnType<typeof toolNode>> = []
   for (const thought of thoughts) {
-    chain.push(thoughtNode(thought))
-    // Attach tools only under the primary member node (member:<id>), not reasoning sub-nodes.
+    const node = thoughtNode(thought)
     const memberMatch = /^member:([^:]+)$/.exec(String(thought.id || ''))
-    if (!memberMatch) continue
-    const memberId = memberMatch[1]
-    for (const tool of tools) {
-      if (tool.member_id === memberId && !usedToolIds.has(tool.id)) {
+    if (memberMatch) {
+      const memberId = memberMatch[1]
+      const memberTools = tools.filter((tool) => {
+        if (tool.member_id !== memberId || usedToolIds.has(tool.id)) return false
         usedToolIds.add(tool.id)
-        chain.push(toolNode(tool, toolLabels))
+        return true
+      })
+      if (memberTools.length) {
+        node.content = (
+          <div className="member-tool-stack">
+            {memberTools.map((tool) => {
+              const item = toolNode(tool, toolLabels)
+              return (
+                <div key={item.key} className={`member-tool-item status-${item.status || 'default'}`}>
+                  <div className="member-tool-title">{item.title}</div>
+                  {item.description ? <div className="member-tool-desc">{item.description}</div> : null}
+                  {item.footer ? <div className="member-tool-body">{item.footer}</div> : null}
+                </div>
+              )
+            })}
+          </div>
+        )
       }
     }
+    chain.push(node)
   }
   for (const tool of tools) {
     if (!usedToolIds.has(tool.id)) chain.push(toolNode(tool, toolLabels))

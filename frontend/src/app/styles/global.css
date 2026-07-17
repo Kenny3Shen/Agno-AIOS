@@ -218,10 +218,10 @@ html.dark .shell-menu .ant-menu-item-selected {
 }
 .shell-identity {
   display: flex;
-  height: 64px;
+  min-height: 52px;
   align-items: center;
-  gap: 9px;
-  padding: 10px 18px;
+  gap: 10px;
+  padding: 10px 14px;
   border-top: 1px solid var(--tais-border);
 }
 
@@ -235,10 +235,14 @@ html.dark .shell-menu .ant-menu-item-selected {
 .shell-footer .shell-identity {
   display: flex;
   width: 100%;
+  min-height: 56px;
   box-sizing: border-box;
+  align-items: center;
+  gap: 10px;
   border: 0;
   border-top: 0;
   border-bottom: 1px solid var(--tais-border);
+  padding: 10px 14px;
   background: transparent;
   color: inherit;
   text-align: left;
@@ -251,30 +255,102 @@ html.dark .shell-menu .ant-menu-item-selected {
 .shell-footer .shell-identity:hover {
   background: color-mix(in srgb, var(--tais-blue) 8%, var(--tais-surface));
 }
+.shell-footer .shell-identity:focus-visible {
+  outline: 2px solid var(--tais-blue);
+  outline-offset: -2px;
+}
 .shell-footer .shell-identity-copy {
-  display: grid;
-  gap: 1px;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
   min-width: 0;
+  text-align: left;
 }
-.shell-footer .shell-identity-copy strong {
+.shell-footer .shell-identity-email {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  color: var(--tais-text);
+  font-size: 13px;
   font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
 }
-.shell-footer .shell-identity-copy small {
+.shell-footer .shell-identity-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  line-height: 1;
+}
+.shell-footer .shell-identity-role {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--tais-blue) 18%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tais-blue) 10%, var(--tais-soft));
+  color: color-mix(in srgb, var(--tais-blue) 72%, var(--tais-text));
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 16px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.shell-footer .shell-identity-role--admin {
+  border-color: color-mix(in srgb, #fa8c16 28%, transparent);
+  background: color-mix(in srgb, #fa8c16 14%, var(--tais-soft));
+  color: color-mix(in srgb, #d46b08 72%, var(--tais-text));
+}
+.shell-footer .shell-identity-badge {
+  display: inline-flex;
+  max-width: min(100%, 9.5em);
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tais-muted) 10%, var(--tais-soft));
   color: var(--tais-muted);
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shell-footer .shell-identity-badge.is-inactive {
+  background: color-mix(in srgb, #ff4d4f 14%, var(--tais-soft));
+  color: #cf1322;
+}
+.shell-footer .shell-identity-avatar.ant-avatar {
+  flex: 0 0 32px;
+  width: 32px !important;
+  height: 32px !important;
+  line-height: 32px !important;
+  color: color-mix(in srgb, var(--tais-blue) 78%, #fff);
+  background: color-mix(in srgb, var(--tais-blue) 16%, var(--tais-soft));
+  font-size: 12px;
+  font-weight: 700;
+}
+/* Expanded identity: keep copy; collapsed overrides handle icon centering. */
+.shell-footer .shell-identity:not(.shell-identity-collapsed) {
+  padding: 10px 14px;
 }
 .shell-footer .shell-bottom-menu {
   border-top: 0 !important;
 }
 .shell-footer-drawer .shell-identity {
   margin-bottom: 0;
+  min-height: 56px;
+  padding: 10px 12px;
 }
 .chat-task-panel {
   display: flex;
@@ -3081,4 +3157,26 @@ html.dark .workflow-canvas--main .react-flow__background pattern line {
   min-height: 56px;
   padding: 8px 4px;
   font-size: 11px;
+}
+
+html.dark .shell-footer .shell-identity-role {
+  border-color: color-mix(in srgb, var(--tais-blue) 28%, transparent);
+  background: color-mix(in srgb, var(--tais-blue) 18%, var(--tais-surface));
+  color: color-mix(in srgb, var(--tais-blue) 55%, var(--tais-text));
+}
+html.dark .shell-footer .shell-identity-role--admin {
+  border-color: color-mix(in srgb, #fa8c16 32%, transparent);
+  background: color-mix(in srgb, #fa8c16 18%, var(--tais-surface));
+  color: color-mix(in srgb, #ffc069 55%, var(--tais-text));
+}
+html.dark .shell-footer .shell-identity-badge {
+  background: color-mix(in srgb, var(--tais-muted) 16%, var(--tais-surface));
+}
+html.dark .shell-footer .shell-identity-badge.is-inactive {
+  background: color-mix(in srgb, #ff4d4f 18%, var(--tais-surface));
+  color: #ff7875;
+}
+html.dark .shell-footer .shell-identity-avatar.ant-avatar {
+  color: color-mix(in srgb, var(--tais-blue) 45%, #fff);
+  background: color-mix(in srgb, var(--tais-blue) 24%, var(--tais-surface));
 }

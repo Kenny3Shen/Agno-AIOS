@@ -193,14 +193,25 @@ def _build_csv() -> Any:
     """CSV helpers over files already present in the analysis sandbox.
 
     SQL ``query_csv_file`` requires optional ``duckdb``; without it the toolkit
-    still supports list/read/columns.
+    still supports list/read/columns. Rebuilds the file list from the sandbox
+    on each Agent/Team construction so Chat-staged uploads are visible.
     """
     from agno.tools.csv_toolkit import CsvTools
 
     base = analysis_work_dir()
-    csvs: list[Path] = sorted(base.glob("*.csv"))
+    # Include nested uploads (if any) while staying inside the sandbox.
+    csvs: list[Path] = sorted({*base.glob("*.csv"), *base.glob("**/*.csv")})
+    # De-dupe by resolved path order-preserving.
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for path in csvs:
+        key = path.resolve()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(path)
     return CsvTools(
-        csvs=list(csvs) if csvs else None,
+        csvs=list(unique) if unique else None,
         row_limit=500,
         enable_read_csv_file=True,
         enable_list_csv_files=True,

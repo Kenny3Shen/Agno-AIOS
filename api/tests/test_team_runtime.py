@@ -68,6 +68,12 @@ async def test_build_research_team_members(monkeypatch):
     assert "deep-research" in member_ids
     assert "data-analysis" in member_ids
     assert {row["id"] for row in created} >= {"deep-research", "data-analysis"}
+    # Each member gets its own model instance (broadcast-safe).
+    models = [row.get("model") for row in created if row.get("id") in {"deep-research", "data-analysis"}]
+    assert len(models) == 2
+    assert models[0] is not models[1]
+    assert getattr(team, "session_summary_manager", None) is not None
+    assert getattr(team, "add_session_summary_to_context", False) is True
 
 
 @pytest.mark.asyncio
@@ -951,5 +957,39 @@ async def test_member_stream_thought_summary_accumulates_deltas(monkeypatch):
     # Accumulators must grow (not single-token only)
     assert max(len(s) for s in running) >= len("Alpha-Bravo-")
     assert completed and completed[-1] == "Alpha-Bravo-Charlie-Delta-end"
+
+@pytest.mark.asyncio
+async def test_broadcast_shares_member_interactions(monkeypatch):
+    from agno.team.mode import TeamMode
+    from api.services import team_runtime as tr
+
+    captured: dict = {}
+
+    class FakeTeam:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.__dict__.update(kwargs)
+            self.members = kwargs.get("members") or []
+
+    monkeypatch.setattr(tr, "Agent", lambda **kwargs: SimpleNamespace(**kwargs))
+    monkeypatch.setattr(tr, "Team", FakeTeam)
+    async def fake_get_model(_m=None):
+        return {"provider": "x", "model_id": "m"}
+
+    monkeypatch.setattr(tr, "get_model_for_run", fake_get_model)
+    monkeypatch.setattr(tr, "build_agno_model", lambda *_a, **_k: object())
+    monkeypatch.setattr(tr, "get_async_agno_postgres_db", lambda: None)
+    monkeypatch.setattr(tr, "build_tools_for_profile", lambda _p: [])
+
+    await tr.build_team("research-analysis-broadcast", enable_tools=False)
+    assert captured.get("mode") == TeamMode.broadcast
+    assert captured.get("share_member_interactions") is True
+    assert captured.get("respond_directly") is False
+
+    captured.clear()
+    await tr.build_team("research-analysis-route", enable_tools=False)
+    assert captured.get("mode") == TeamMode.route
+    assert captured.get("respond_directly") is True
+    assert captured.get("share_member_interactions") is False
 
 

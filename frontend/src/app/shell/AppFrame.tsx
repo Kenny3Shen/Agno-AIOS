@@ -425,7 +425,45 @@ export function AppFrame({ children }: { children: ReactNode }) {
       </div>
     )
 
-  const initials = userQuery.data?.email.slice(0, 2).toUpperCase() ?? 'AI'
+  const email = userQuery.data?.email?.trim() || ''
+  const emailLocal = email.includes('@') ? email.split('@')[0]! : email
+  const initials = (emailLocal.slice(0, 2) || 'AI').toUpperCase()
+  const roleKey = roleOf(userQuery.data)
+  const roleLabel = t(`settings:role_${roleKey}`, { defaultValue: roleKey })
+  // Secondary badge: inactive first; non-admin scope count only (admin role chip is enough).
+  const identityBadge = (() => {
+    if (userQuery.data?.is_active === false) {
+      return { kind: 'inactive' as const, text: t('shell:userInactive') }
+    }
+    if (roleKey === 'admin') return null
+    const count = userQuery.data?.scopes?.length ?? 0
+    if (count > 0) {
+      return { kind: 'scope' as const, text: t('shell:userScopeCount', { count }) }
+    }
+    return null
+  })()
+
+  const identityCopy = (
+    <div className="shell-identity-copy">
+      <strong className="shell-identity-email" title={email || undefined}>
+        {email || '—'}
+      </strong>
+      <div className="shell-identity-meta" aria-label={roleLabel}>
+        <span className={`shell-identity-role shell-identity-role--${roleKey}`}>{roleLabel}</span>
+        {identityBadge ? (
+          <span
+            className={
+              identityBadge.kind === 'inactive'
+                ? 'shell-identity-badge is-inactive'
+                : 'shell-identity-badge is-scope'
+            }
+          >
+            {identityBadge.text}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  )
   return (
     <Layout className="app-shell">
       <Sider width={264} collapsedWidth={76} collapsed={mobile ? true : collapsed} className="shell-sider" trigger={null}>
@@ -481,30 +519,18 @@ export function AppFrame({ children }: { children: ReactNode }) {
                 type="button"
                 className={`shell-identity${collapsed ? ' shell-identity-collapsed' : ''}`}
                 aria-label={t('shell:userProfile')}
-                title={userQuery.data?.email}
+                title={email || undefined}
               >
                 {collapsed ? (
                   <span className="shell-identity-icon" aria-hidden>
                     <UserOutlined />
                   </span>
                 ) : (
-                  <Avatar size="small">{initials}</Avatar>
+                  <Avatar size={32} className="shell-identity-avatar">
+                    {initials}
+                  </Avatar>
                 )}
-                <div className="shell-identity-copy">
-                  <strong>{userQuery.data?.email ?? '—'}</strong>
-                  <small>
-                    {t(`settings:role_${roleOf(userQuery.data)}`, {
-                      defaultValue: roleOf(userQuery.data),
-                    })}
-                    {userQuery.data?.is_active === false
-                      ? ` · ${t('shell:userInactive')}`
-                      : userQuery.data?.scopes?.length
-                        ? ` · ${t('shell:userScopeCount', { count: userQuery.data.scopes.length })}`
-                        : roleOf(userQuery.data) === 'admin'
-                          ? ` · ${t('shell:userAdminAllScopes')}`
-                          : ''}
-                  </small>
-                </div>
+                {identityCopy}
               </button>
             </Dropdown>
             {settingsItems?.length ? (
@@ -682,27 +708,16 @@ export function AppFrame({ children }: { children: ReactNode }) {
               type="button"
               className="shell-identity"
               aria-label={t('shell:userProfile')}
+              title={email || undefined}
               onClick={() => {
                 setMobileOpen(false)
                 void router.history.push('/settings')
               }}
             >
-              <Avatar size="small">{initials}</Avatar>
-              <div className="shell-identity-copy">
-                <strong>{userQuery.data?.email ?? '—'}</strong>
-                <small>
-                  {t(`settings:role_${roleOf(userQuery.data)}`, {
-                    defaultValue: roleOf(userQuery.data),
-                  })}
-                  {userQuery.data?.is_active === false
-                    ? ` · ${t('shell:userInactive')}`
-                    : userQuery.data?.scopes?.length
-                      ? ` · ${t('shell:userScopeCount', { count: userQuery.data.scopes.length })}`
-                      : roleOf(userQuery.data) === 'admin'
-                        ? ` · ${t('shell:userAdminAllScopes')}`
-                        : ''}
-                </small>
-              </div>
+              <Avatar size={32} className="shell-identity-avatar">
+                {initials}
+              </Avatar>
+              {identityCopy}
             </button>
             {settingsItems?.length ? (
               <Menu

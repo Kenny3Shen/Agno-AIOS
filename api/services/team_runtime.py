@@ -9,10 +9,12 @@ HITL/MCP are intentionally not mounted on team members in this beta.
 from __future__ import annotations
 
 import os
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, cast
 
 from agno.agent import Agent
+from agno.session import SessionSummaryManager
 from agno.team import Team
 from agno.team.mode import TeamMode
 from anyio import Path as AsyncPath
@@ -248,10 +250,13 @@ async def build_team(
             extra = "你是团队中的调研专员：优先检索与交叉验证，输出带来源的发现。"
         elif mid == "data-analysis":
             extra = "你是团队中的数据分析专员：对数字与表格做可复现核算，指出异常。"
+        # Broadcast runs members concurrently; give each a model copy so provider
+        # clients / mutable request state never collide on one instance.
+        member_model = deepcopy(model)
         members.append(
             await _member_from_profile(
                 mid,
-                model=model,
+                model=member_model,
                 instructions_extra=extra,
                 search_knowledge=search_knowledge and enable_tools,
                 knowledge=knowledge,
@@ -312,7 +317,7 @@ async def build_team(
         max_iterations=8,
         tool_call_limit=48,
         get_member_information_tool=True,
-        share_member_interactions=mode == TeamMode.coordinate,
+        share_member_interactions=mode in {TeamMode.coordinate, TeamMode.broadcast},
         show_members_responses=False,
         stream_member_events=True,
         store_member_responses=True,
@@ -325,6 +330,9 @@ async def build_team(
         add_member_tools_to_context=False,
         update_memory_on_run=bool(memory_enabled),
         add_memories_to_context=bool(memory_enabled),
+        # Multi-turn Team chats benefit from compact session summaries.
+        session_summary_manager=SessionSummaryManager(model=model),
+        add_session_summary_to_context=True,
         knowledge=knowledge if search_knowledge and enable_tools else None,
         knowledge_filters=knowledge_filters if search_knowledge and enable_tools else None,
         search_knowledge=bool(search_knowledge and enable_tools and knowledge is not None),

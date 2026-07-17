@@ -2,6 +2,10 @@
 
 - [x] Team 成员 content **delta 累积** 再写入 ThoughtChain summary（避免摘要只剩单 token）
 - [x] Team 成员 Intermediate content 无 agent_id 时仍按 parent_run_id 归 ThoughtChain（不泄漏到队长 content.delta）
+- [x] Team 成员独立 model deepcopy（broadcast 并发安全）+ session_summary
+- [x] Team share_member_interactions 覆盖 coordinate/broadcast；ThoughtChain 成员工具内嵌
+- [x] data-analysis CsvTools 扫描沙箱内全部 CSV；Team 模式 i18n 文案
+
 
 
 
