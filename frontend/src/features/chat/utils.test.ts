@@ -448,3 +448,30 @@ describe('formatRetryDetail', () => {
     expect(failed.requesting).toBe(false)
   })
 
+  it('paused clears retry metadata', () => {
+    const assistant: Message = { id: 'a', role: 'assistant', content: '', final: false, status: 'streaming' }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    const retrying = chatReducer(started, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'run.retrying', attempt: 1, maxAttempts: 3, delaySeconds: 1 },
+    })
+    const paused = chatReducer(retrying, {
+      type: 'event',
+      id: 'a',
+      event: {
+        type: 'run.paused',
+        runId: 'run-1',
+        sessionId: 'sess-1',
+        approvalId: 'appr-1',
+      },
+    })
+    expect(paused.messages[0]).toMatchObject({
+      status: 'paused',
+      retry: null,
+      approval_id: 'appr-1',
+      session_id: 'sess-1',
+    })
+    expect(paused.requesting).toBe(false)
+  })
+

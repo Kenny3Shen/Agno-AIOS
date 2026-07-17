@@ -227,6 +227,8 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               approval_id: event.approvalId,
               status: 'paused',
               final: true,
+              retry: null,
+              error: null,
               tool_steps: tool ? (index < 0 ? [...toolSteps, tool] : toolSteps.map((step, stepIndex) => (stepIndex === index ? tool : step))) : toolSteps,
             }
           }
