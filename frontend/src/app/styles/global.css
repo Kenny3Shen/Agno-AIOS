@@ -2973,3 +2973,32 @@ html.dark .workflow-canvas--main .react-flow__background pattern line {
   line-height: 1.55;
   text-align: left;
 }
+
+/* Sticky section titles inside scrollable Studio rails */
+.workflow-studio__panel--grow {
+  position: relative;
+}
+
+.workflow-studio__panel--grow > .workflow-studio__panel-title {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: -10px -12px 10px;
+  padding: 10px 12px 8px;
+  background: color-mix(in srgb, var(--tais-surface) 92%, transparent);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid color-mix(in srgb, var(--tais-border) 70%, transparent);
+}
+
+.workflow-studio__left .workflow-studio__panel--grow > .workflow-studio__panel-title {
+  background: color-mix(in srgb, var(--tais-surface) 90%, var(--tais-muted));
+}
+
+/* Run log list denser like diagram tool event strip */
+.workflow-studio__right .ant-collapse-content-box {
+  padding-top: 4px !important;
+}
+
+.workflow-studio__run-log {
+  font-variant-numeric: tabular-nums;
+}
