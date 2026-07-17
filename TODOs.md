@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Collect 同步可停止
+
+- 前端 `AbortController` 传入 crawl SSE；进度条旁「停止同步」中止读流。
+- 服务端 `EventSourceResponse` 在客户端断开时 cancel worker（既有行为），已写入文章保留。
+- 取消 toast 为 info；进度态 `cancelled`。
+
 ## 已完成：Chat 双 useChat 全局流取消
 
 - `activeChatStream` 进程级 registry：ChatPage / ChatTaskPanel 各有独立 `useChat` 状态，但共享唯一 live SSE。

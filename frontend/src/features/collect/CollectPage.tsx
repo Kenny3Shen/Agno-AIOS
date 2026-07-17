@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { App, Button, Card, Empty, Input, Pagination, Progress, Select, Space, Splitter, Tag, Typography } from 'antd'
 import { Markdown } from '@/shared/ui/Markdown'
@@ -6,6 +6,7 @@ import {
   CloudDownloadOutlined,
   ReloadOutlined,
   SearchOutlined,
+  StopOutlined,
 } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { currentUserQuery } from '@/features/auth'
@@ -52,6 +53,9 @@ function formatCrawlProgressMessage(
   t: (key: string, options?: Record<string, unknown>) => string,
 ): string {
   if (!event) return t('crawlStarting')
+  if (event.status === 'cancelled') {
+    return event.message || t('crawlCancelled')
+  }
   if (event.status === 'failed') {
     return (
       (typeof event.error === 'string' && event.error) ||
@@ -125,6 +129,7 @@ export function CollectPage() {
   const [previewMarkdown, setPreviewMarkdown] = useState('')
   const [previewLoading, setPreviewLoading] = useState(false)
   const [crawlProgress, setCrawlProgress] = useState<CollectCrawlProgress | null>(null)
+  const crawlAbortRef = useRef<AbortController | null>(null)
 
   const sourcesQuery = useQuery({
     queryKey: ['collect', 'sources'],
@@ -138,6 +143,12 @@ export function CollectPage() {
   useEffect(() => {
     setPage(1)
   }, [debouncedQuery, sourceDomain, statusFilter])
+
+  useEffect(() => {
+    return () => {
+      crawlAbortRef.current?.abort()
+    }
+  }, [])
 
   const articlesQuery = useQuery({
     queryKey: ['collect', 'articles', debouncedQuery, sourceDomain, statusFilter, page],
@@ -211,6 +222,9 @@ export function CollectPage() {
   const crawlMutation = useMutation({
     mutationFn: async () => {
       const scoped = Boolean(sourceDomain)
+      crawlAbortRef.current?.abort()
+      const controller = new AbortController()
+      crawlAbortRef.current = controller
       setCrawlProgress({
         stage: 'start',
         status: 'running',
@@ -218,17 +232,24 @@ export function CollectPage() {
           ? t('crawlStartingSource', { source: sourceDomain })
           : t('crawlStarting'),
       })
-      return crawlSourcesStream(
-        {
-          // When a source filter is active, only sync that domain (faster ops).
-          domains: sourceDomain ? [sourceDomain] : undefined,
-          max_links_per_source: scoped ? 20 : 15,
-          max_articles_total: scoped ? 30 : 60,
-        },
-        (event) => {
-          setCrawlProgress(event)
-        },
-      )
+      try {
+        return await crawlSourcesStream(
+          {
+            // When a source filter is active, only sync that domain (faster ops).
+            domains: sourceDomain ? [sourceDomain] : undefined,
+            max_links_per_source: scoped ? 20 : 15,
+            max_articles_total: scoped ? 30 : 60,
+          },
+          (event) => {
+            setCrawlProgress(event)
+          },
+          controller.signal,
+        )
+      } finally {
+        if (crawlAbortRef.current === controller) {
+          crawlAbortRef.current = null
+        }
+      }
     },
     onSuccess: async (data) => {
       message.success(
@@ -257,6 +278,21 @@ export function CollectPage() {
       await Promise.all([articlesQuery.refetch(), sourcesQuery.refetch(), statsQuery.refetch()])
     },
     onError: (err: Error) => {
+      if (err.name === 'AbortError') {
+        message.info(t('crawlCancelled'))
+        setCrawlProgress((prev) =>
+          prev
+            ? {
+                ...prev,
+                stage: 'done',
+                status: 'cancelled',
+                message: t('crawlCancelled'),
+              }
+            : { stage: 'done', status: 'cancelled', message: t('crawlCancelled') },
+        )
+        void Promise.all([articlesQuery.refetch(), sourcesQuery.refetch(), statsQuery.refetch()])
+        return
+      }
       message.error(err.message || t('crawlFailed'))
       setCrawlProgress((prev) =>
         prev
@@ -270,6 +306,10 @@ export function CollectPage() {
       )
     },
   })
+
+  const stopCrawl = () => {
+    crawlAbortRef.current?.abort()
+  }
 
   const reparseMutation = useMutation({
     mutationFn: (articleId: number) => reparseArticle(articleId),
@@ -389,19 +429,28 @@ export function CollectPage() {
             ]}
           />
           {isAdmin ? (
-            <Button
-              icon={<ReloadOutlined />}
-              loading={crawling}
-              disabled={crawling}
-              title={
-                sourceDomain
-                  ? t('crawlSourceHint', { source: sourceDomain })
-                  : t('crawlAllHint')
-              }
-              onClick={() => crawlMutation.mutate()}
-            >
-              {sourceDomain ? t('crawlSelectedSource') : t('crawlSources')}
-            </Button>
+            crawling ? (
+              <Button
+                danger
+                icon={<StopOutlined />}
+                title={t('crawlStopHint')}
+                onClick={stopCrawl}
+              >
+                {t('crawlStop')}
+              </Button>
+            ) : (
+              <Button
+                icon={<ReloadOutlined />}
+                title={
+                  sourceDomain
+                    ? t('crawlSourceHint', { source: sourceDomain })
+                    : t('crawlAllHint')
+                }
+                onClick={() => crawlMutation.mutate()}
+              >
+                {sourceDomain ? t('crawlSelectedSource') : t('crawlSources')}
+              </Button>
+            )
           ) : null}
           {canWrite && (statusFilter === 'error' || errorTotal > 0) ? (
             <Button
@@ -432,11 +481,13 @@ export function CollectPage() {
               status={
                 crawlProgress.status === 'failed'
                   ? 'exception'
-                  : crawlProgress.status === 'completed' && crawlProgress.stage === 'done'
-                    ? 'success'
-                    : crawling
-                      ? 'active'
-                      : 'normal'
+                  : crawlProgress.status === 'cancelled'
+                    ? 'normal'
+                    : crawlProgress.status === 'completed' && crawlProgress.stage === 'done'
+                      ? 'success'
+                      : crawling
+                        ? 'active'
+                        : 'normal'
               }
               size="small"
             />

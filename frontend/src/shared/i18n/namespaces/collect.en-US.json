@@ -42,5 +42,8 @@
   "crawlStageSelectDone": "Will fetch {{selected}} (skipped {{skipped}} existing, discovered {{discovered}})",
   "crawlStageFetch": "Fetching articles {{fetched}}/{{selected}} (ok {{ok}}, failed {{error}})",
   "crawlStageDatabase": "Writing database (ok {{ok}}, failed {{error}})",
-  "crawlStageDone": "Sync done: discovered {{discovered}}, fetched {{selected}}, ok {{ok}}, saved {{saved}}"
+  "crawlStageDone": "Sync done: discovered {{discovered}}, fetched {{selected}}, ok {{ok}}, saved {{saved}}",
+  "crawlStop": "Stop sync",
+  "crawlStopHint": "Abort the current source sync (articles already saved are kept)",
+  "crawlCancelled": "Sync stopped"
 }
