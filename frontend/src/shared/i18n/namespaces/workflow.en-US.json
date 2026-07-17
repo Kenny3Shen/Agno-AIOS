@@ -136,6 +136,8 @@
   "runBannerCancelled": "Latest run cancelled",
   "openRunLog": "Open run log",
   "errorSaveFailed": "Save failed",
+  "saveSuccess": "Workflow saved",
+  "publishSuccess": "Workflow published",
   "errorPublishFailed": "Publish failed",
   "errorRestoreFailed": "Restore failed",
   "errorRunFailed": "Run failed",

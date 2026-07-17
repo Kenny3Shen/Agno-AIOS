@@ -136,6 +136,8 @@
   "runBannerCancelled": "最近一次运行已取消",
   "openRunLog": "查看运行记录",
   "errorSaveFailed": "保存失败",
+  "saveSuccess": "工作流已保存",
+  "publishSuccess": "工作流已发布",
   "errorPublishFailed": "发布失败",
   "errorRestoreFailed": "版本恢复失败",
   "errorRunFailed": "运行失败",

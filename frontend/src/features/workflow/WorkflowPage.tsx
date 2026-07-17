@@ -259,7 +259,9 @@ export function WorkflowPage() {
       if (!canWriteSaveRef.current) return
       if (workflow.state.saving || workflow.state.loading) return
       event.preventDefault()
-      void saveRef.current()
+      void saveRef.current().then((ok) => {
+        if (ok) message.success(t('saveSuccess'))
+      })
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -342,9 +344,13 @@ export function WorkflowPage() {
         okText: t('publish'),
         onOk: () => {
           if (workflow.state.workflowId && !workflow.state.dirty) {
-            void workflow.publish()
+            void workflow.publish().then((ok) => {
+              if (ok) message.success(t('publishSuccess'))
+            })
           } else if (canWrite) {
-            void workflow.save()
+            void workflow.save().then((ok) => {
+              if (ok) message.success(t('saveSuccess'))
+            })
           }
         },
       })
@@ -356,7 +362,11 @@ export function WorkflowPage() {
         content: t('triggerNeedsSavePublishBody'),
         okText: t('save'),
         onOk: () => {
-          if (canWrite) void workflow.save()
+          if (canWrite) {
+            void workflow.save().then((ok) => {
+              if (ok) message.success(t('saveSuccess'))
+            })
+          }
         },
       })
       return
@@ -607,7 +617,11 @@ export function WorkflowPage() {
             type="primary"
             loading={workflow.state.saving}
             disabled={!canWrite}
-            onClick={() => void workflow.save()}
+            onClick={() => {
+              void workflow.save().then((ok) => {
+                if (ok) message.success(t('saveSuccess'))
+              })
+            }}
           >
             {t('save')}
             {workflow.state.dirty ? ' *' : ''}
@@ -624,7 +638,11 @@ export function WorkflowPage() {
               }
               loading={workflow.state.saving}
               disabled={!canWrite || !workflow.state.workflowId || workflow.state.dirty}
-              onClick={() => void workflow.publish()}
+              onClick={() => {
+                void workflow.publish().then((ok) => {
+                  if (ok) message.success(t('publishSuccess'))
+                })
+              }}
             >
               {t('publish')}
             </Button>

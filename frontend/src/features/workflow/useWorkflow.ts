@@ -885,7 +885,7 @@ export function useWorkflow() {
     setState(initialState())
   }
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     const translate = (key: string, options?: Record<string, string | number>) => t(key, options)
     const issues = validateWorkflowDraft(state.steps, translate, state.workflowId)
     const nameIssue = validateWorkflowName(state.name, translate)
@@ -899,7 +899,7 @@ export function useWorkflow() {
         selectedId: issues[0]?.nodeId ?? current.selectedId,
         selectedIds: issues[0]?.nodeId ? [issues[0].nodeId] : current.selectedIds,
       }))
-      return
+      return false
     }
     setState((current) => ({ ...current, saving: true, error: null, validationIssues: [] }))
     try {
@@ -924,23 +924,25 @@ export function useWorkflow() {
       }))
       await workflowsQuery.refetch()
       await versionsQuery.refetch()
+      return true
     } catch (error) {
       setState((current) => ({
         ...current,
         saving: false,
         error: error instanceof Error ? error.message : t('errorSaveFailed'),
       }))
+      return false
     }
   }
 
-  const publish = async () => {
+  const publish = async (): Promise<boolean> => {
     if (!state.workflowId) {
       setState((current) => ({ ...current, error: t('errorPublishNeedsSave') }))
-      return
+      return false
     }
     if (state.dirty) {
       setState((current) => ({ ...current, error: t('errorPublishNeedsClean') }))
-      return
+      return false
     }
     setState((current) => ({ ...current, saving: true, error: null }))
     try {
@@ -956,12 +958,14 @@ export function useWorkflow() {
       }))
       await workflowsQuery.refetch()
       await versionsQuery.refetch()
+      return true
     } catch (error) {
       setState((current) => ({
         ...current,
         saving: false,
         error: error instanceof Error ? error.message : t('errorPublishFailed'),
       }))
+      return false
     }
   }
 

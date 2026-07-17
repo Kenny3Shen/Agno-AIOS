@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Save/Publish 成功 Toast + 生成中归档确认
+
+- Studio `save`/`publish` 返回 boolean；按钮与 Ctrl/⌘S 成功后 toast。
+- Chat 归档当前会话且仍在生成时，确认「停止并归档」再执行（newChat 会取消流）。
+
+
 ## 已完成：Chat 同路径会话切换不重复确认 + Studio Ctrl/⌘S 保存
 
 - Chat `useBlocker`：pathname 不变时（`/chat?session=` 切换）不弹离开确认，由 `setSession` 负责取消流。

@@ -68,7 +68,7 @@ export function filterConversationItems(items: ConversationListItem[], query: st
 }
 
 export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate }: ChatTaskPanelProps) {
-  const { message: toast } = App.useApp()
+  const { message: toast, modal } = App.useApp()
   const { t } = useTranslation()
   const router = useRouter()
   const chat = useChat()
@@ -123,14 +123,29 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
     )
   }
   const archive = async (sessionId: string) => {
-    try {
-      await archiveSession(sessionId)
-      if (chat.sessionId === sessionId) chat.newChat()
-      await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
-      toast.success(t('shell:conversations.archived'))
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('shell:conversations.archiveFailed'))
+    const archivingActive = chat.sessionId === sessionId && chat.state.requesting
+    const run = async () => {
+      try {
+        await archiveSession(sessionId)
+        if (chat.sessionId === sessionId) chat.newChat()
+        await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
+        toast.success(t('shell:conversations.archived'))
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t('shell:conversations.archiveFailed'))
+      }
     }
+    if (!archivingActive) {
+      await run()
+      return
+    }
+    modal.confirm({
+      title: t('chat:archiveWhileGeneratingTitle'),
+      content: t('chat:archiveWhileGeneratingContent'),
+      okText: t('chat:archiveAndStop'),
+      cancelText: t('common:cancel'),
+      okButtonProps: { danger: true },
+      onOk: () => run(),
+    })
   }
   const confirmRename = async () => {
     const { title } = await renameForm.validateFields()
