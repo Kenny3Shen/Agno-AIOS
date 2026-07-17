@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Chat 深链 session-meta 网络/5xx 错误态 + Loop 自动布局
+
+- meta 非 404 失败：`sessionMetaFailed`，不把会话当 missing，也不拉 agent history。
+- Chat 展示错误 + 重试；压制欢迎页；输入禁用直至 meta 可用。
+- Workflow：`applyAutoLayout` 对 loop 子节点纵向间距回归测试。
+
 ## 已完成：Trace OK 过滤 reconcile 变稀 truncated + CVE 空表 + Router 布局
 
 - `list_traces(status=OK|UNSET)`：audit reconcile 剔除后本页变稀时 `meta.truncated=true`（总数仍为 Agno 近似）。

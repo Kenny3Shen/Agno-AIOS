@@ -392,6 +392,22 @@ describe('reparent and auto-layout', () => {
     expect(a!.position!.x).toBeGreaterThan(laid[0]!.position!.x)
   })
 
+
+  it('auto-layout separates loop body children without vertical overlap', () => {
+    const loop = createNode('loop')
+    loop.id = 'loop-1'
+    loop.steps = [
+      { id: 'a', type: 'step', name: 'A', targetId: 'security-operations' },
+      { id: 'b', type: 'step', name: 'B', targetId: 'safe-fallback' },
+    ]
+    const laid = applyAutoLayout([loop])
+    const kids = laid[0]?.steps ?? []
+    expect(kids).toHaveLength(2)
+    expect(kids[0]!.position!.y).toBeLessThan(kids[1]!.position!.y)
+    expect(kids[1]!.position!.y).toBeGreaterThanOrEqual(kids[0]!.position!.y + 96)
+    expect(kids[0]!.position!.x).toBeGreaterThan(laid[0]!.position!.x)
+  })
+
 })
 
 describe('run status reduce', () => {

@@ -21,6 +21,9 @@ const chat = {
       }
     | undefined,
   sessionMetaLoading: false,
+  sessionMetaFailed: false,
+  sessionMetaError: null as Error | null,
+  sessionMetaRefetch: vi.fn(),
   sessionMissing: false,
   history: {
     data: [] as unknown[],
@@ -303,5 +306,34 @@ describe('chat archived session header', () => {
     expect(screen.getByText('已归档')).toBeTruthy()
     await user.click(screen.getByRole('button', { name: '取消归档' }))
     expect(unarchiveSessionMock).toHaveBeenCalled()
+  })
+})
+
+
+describe('chat session meta load failure', () => {
+  beforeEach(() => {
+    HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
+    chat.sessionId = 'session-meta-err'
+    chat.sessionMissing = false
+    chat.sessionMetaLoading = false
+    chat.sessionMetaFailed = true
+    chat.sessionMetaError = new Error('meta boom')
+    chat.sessionMetaRefetch = vi.fn()
+    chat.history.isError = false
+    chat.history.isLoading = false
+    chat.history.isPending = false
+    chat.history.isFetching = false
+    chat.state.messages = []
+    chat.state.requesting = false
+  })
+
+  it('shows meta error with retry instead of welcome', async () => {
+    const user = setupUser()
+    renderWithQuery(<ChatPage />)
+    expect(screen.queryByText('从哪里开始调查？')).toBeNull()
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent || '').toMatch(/meta boom/)
+    await user.click(alert.querySelector('button') as HTMLButtonElement)
+    expect(chat.sessionMetaRefetch).toHaveBeenCalled()
   })
 })

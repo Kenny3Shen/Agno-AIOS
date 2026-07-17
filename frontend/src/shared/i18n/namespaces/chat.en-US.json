@@ -103,5 +103,6 @@
   "retryingDetailWithDelay": "Model temporarily unavailable; retry {{attempt}}/{{max}} in {{seconds}}s…",
   "historyLoadFailed": "Unable to load conversation history. Please retry.",
   "historyLoading": "Loading conversation history…",
-  "sessionNotFound": "Session not found or access denied"
+  "sessionNotFound": "Session not found or access denied",
+  "sessionMetaLoadFailed": "Unable to load session details. Please retry."
 }

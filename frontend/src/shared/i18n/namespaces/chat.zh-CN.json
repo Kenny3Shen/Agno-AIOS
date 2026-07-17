@@ -103,5 +103,6 @@
   "retryingDetailWithDelay": "模型暂时不可用，将在 {{seconds}}s 后进行第 {{attempt}}/{{max}} 次重试…",
   "historyLoadFailed": "无法加载会话历史，请重试",
   "historyLoading": "加载会话历史…",
-  "sessionNotFound": "会话不存在或无权访问"
+  "sessionNotFound": "会话不存在或无权访问",
+  "sessionMetaLoadFailed": "无法加载会话信息，请重试"
 }

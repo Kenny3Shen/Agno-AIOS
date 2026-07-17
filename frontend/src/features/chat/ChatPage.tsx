@@ -505,7 +505,8 @@ export function ChatPage() {
   const inputDisabled =
     !chat.selectedModel?.enabled ||
     !chat.selectedModel.configured ||
-    Boolean(chat.sessionMissing)
+    Boolean(chat.sessionMissing) ||
+    Boolean(chat.sessionMetaFailed)
   const liveSearchSupported = Boolean(chat.selectedModel?.capabilities?.supports_live_search)
   const latestAssistant = useMemo(
     () => [...chat.state.messages].reverse().find((item) => item.role === 'assistant'),
@@ -588,8 +589,17 @@ export function ChatPage() {
     Boolean(chat.sessionMissing) &&
     !chat.state.requesting &&
     chat.state.messages.length === 0
+  const showSessionMetaError =
+    Boolean(chat.sessionId) &&
+    Boolean(chat.sessionMetaFailed) &&
+    !chat.state.requesting &&
+    chat.state.messages.length === 0
   const showHistoryError =
-    Boolean(chat.sessionId) && chat.history.isError && !chat.state.requesting && !showSessionMissing
+    Boolean(chat.sessionId) &&
+    chat.history.isError &&
+    !chat.state.requesting &&
+    !showSessionMissing &&
+    !showSessionMetaError
 
   // Soft errors (e.g. server cancel failed) auto-dismiss; keep hard run failures until dismiss/retry.
 
@@ -775,6 +785,20 @@ export function ChatPage() {
             setFollowLatest(node.scrollHeight - node.scrollTop - node.clientHeight < threshold)
           }}
         >
+          {showSessionMetaError ? (
+            <div className="chat-error chat-history-error" role="alert">
+              <span className="chat-error__message">
+                {(chat.sessionMetaError instanceof Error && chat.sessionMetaError.message.trim())
+                  ? chat.sessionMetaError.message
+                  : t('sessionMetaLoadFailed')}
+              </span>
+              <span className="chat-error__actions">
+                <Button size="small" type="primary" onClick={() => chat.sessionMetaRefetch()}>
+                  {t('common:retry')}
+                </Button>
+              </span>
+            </div>
+          ) : null}
           {showHistoryError ? (
             <div className="chat-error chat-history-error" role="alert">
               <span className="chat-error__message">
@@ -799,7 +823,7 @@ export function ChatPage() {
               <Spin size="small" />
               <span>{t('historyLoading')}</span>
             </div>
-          ) : showSessionMissing ? (
+          ) : showSessionMetaError ? null : showSessionMissing ? (
             <div className="chat-history-error chat-session-missing" role="status">
               <p className="chat-error__message">{t('sessionNotFound')}</p>
               <Button type="primary" onClick={() => chat.newChat()}>

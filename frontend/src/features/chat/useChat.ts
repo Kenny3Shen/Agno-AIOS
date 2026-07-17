@@ -60,6 +60,9 @@ export function useChat() {
   const isWorkflowSession = String(activeSessionMeta?.session_type || '').toLowerCase() === 'workflow'
   // Wait for meta when missing from list so we do not load agent history for a workflow session.
   const metaResolved = !sessionId || Boolean(listSessionMeta) || sessionMetaResult.isFetched
+  // Network/5xx on meta: do not treat as missing (404) or load history as agent blindly.
+  const sessionMetaFailed =
+    Boolean(sessionId) && !listSessionMeta && Boolean(sessionMetaResult.isError)
   // 404 meta → null data with success; treat as missing for empty-state UX.
   const sessionMissing =
     Boolean(sessionId) &&
@@ -70,7 +73,11 @@ export function useChat() {
   const history = useQuery(
     historyQuery(
       sessionId ?? '',
-      Boolean(sessionId) && metaResolved && !isWorkflowSession && !sessionMissing,
+      Boolean(sessionId) &&
+        metaResolved &&
+        !sessionMetaFailed &&
+        !isWorkflowSession &&
+        !sessionMissing,
     )
   )
   const models = useQuery(modelsQuery())
@@ -349,6 +356,14 @@ export function useChat() {
     sessions,
     activeSessionMeta,
     sessionMetaLoading: Boolean(sessionId) && !listSessionMeta && !sessionMetaResult.isFetched,
+    sessionMetaFailed,
+    sessionMetaError:
+      sessionMetaFailed && sessionMetaResult.error instanceof Error
+        ? sessionMetaResult.error
+        : sessionMetaFailed
+          ? new Error('session meta failed')
+          : null,
+    sessionMetaRefetch: () => void sessionMetaResult.refetch(),
     sessionMissing,
     history,
     models,
