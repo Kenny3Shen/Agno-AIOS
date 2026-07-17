@@ -206,7 +206,7 @@ function ModelSettings({
   )
 }
 
-function MessageBody({ message, retry, sessionId }: { message: Message; retry: () => void; sessionId?: string | null }) {
+function MessageBody({ message, retry, sessionId, requesting = false }: { message: Message; retry: () => void; sessionId?: string | null; requesting?: boolean }) {
   const { t } = useTranslation('chat')
   const { message: toast } = App.useApp()
   const router = useRouter()
@@ -234,7 +234,7 @@ function MessageBody({ message, retry, sessionId }: { message: Message; retry: (
     ...(message.role === 'assistant'
       ? [
           // HITL pause: regenerate would re-fire tools; route through Approvals instead.
-          ...(message.final && message.status !== 'paused'
+          ...(message.final && message.status !== 'paused' && !requesting
             ? [{ key: 'retry', label: t('regenerate'), icon: <ReloadOutlined />, onItemClick: retry }]
             : []),
           ...(traceRunId || traceSessionId
@@ -461,7 +461,7 @@ export function ChatPage() {
           </Avatar>
         ),
       contentRender: (value: Message) => (
-        <MessageBody message={value} retry={() => chat.retry(value.id)} sessionId={chat.sessionId} />
+        <MessageBody message={value} retry={() => chat.retry(value.id)} sessionId={chat.sessionId} requesting={chat.state.requesting} />
       ),
     }))
   const activeRun = [...chat.state.messages].reverse().find((item) => item.role === 'assistant' && (item.status === 'streaming' || item.status === 'retrying'))

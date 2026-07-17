@@ -95,22 +95,43 @@ export function WorkflowPage() {
     }
   }
 
-  /** Prompt before wiping an unsaved draft (load / reset / template / delete). */
-  const confirmDiscardIfDirty = (action: () => void) => {
-    if (!workflow.state.dirty) {
-      action()
+  /**
+   * Prompt before wiping Studio state (load / reset / template / restore).
+   * Running runs are stopped first; dirty drafts need discard confirmation.
+   */
+  const confirmLeaveStudio = (action: () => void) => {
+    const proceed = () => {
+      if (!workflow.state.dirty) {
+        action()
+        return
+      }
+      modal.confirm({
+        title: t('discardDirtyTitle'),
+        content: t('discardDirtyContent'),
+        okText: t('discardDirtyConfirm'),
+        cancelText: t('common:cancel'),
+        okButtonProps: { danger: true },
+        onOk: () => {
+          action()
+        },
+      })
+    }
+    if (workflow.state.running) {
+      modal.confirm({
+        title: t('stopRunBeforeLeaveTitle'),
+        content: t('stopRunBeforeLeaveContent'),
+        okText: t('stopRunAndContinue'),
+        cancelText: t('common:cancel'),
+        okButtonProps: { danger: true },
+        onOk: () => {
+          workflow.stop()
+          // Let the stop dialog close before any dirty-discard dialog.
+          window.setTimeout(() => proceed(), 0)
+        },
+      })
       return
     }
-    modal.confirm({
-      title: t('discardDirtyTitle'),
-      content: t('discardDirtyContent'),
-      okText: t('discardDirtyConfirm'),
-      cancelText: t('common:cancel'),
-      okButtonProps: { danger: true },
-      onOk: () => {
-        action()
-      },
-    })
+    proceed()
   }
   const pasteWithHitlGuard = () => {
     const result = workflow.pasteClipboard()
@@ -708,7 +729,7 @@ export function WorkflowPage() {
                     className="workflow-templates__load"
                     title={tpl.description}
                     disabled={!canWrite}
-                    onClick={() => confirmDiscardIfDirty(() => workflow.applyTemplate(tpl.id))}
+                    onClick={() => confirmLeaveStudio(() => workflow.applyTemplate(tpl.id))}
                   >
                     <strong>{tpl.name}</strong>
                     <span>{tpl.description}</span>
@@ -718,7 +739,7 @@ export function WorkflowPage() {
                       type="link"
                       size="small"
                       disabled={!canWrite || workflow.state.saving}
-                      onClick={() => confirmDiscardIfDirty(() => workflow.applyTemplate(tpl.id))}
+                      onClick={() => confirmLeaveStudio(() => workflow.applyTemplate(tpl.id))}
                     >
                       {t('templateLoadDraft')}
                     </Button>
@@ -726,7 +747,7 @@ export function WorkflowPage() {
                       type="link"
                       size="small"
                       disabled={!canWrite || workflow.state.saving}
-                      onClick={() => confirmDiscardIfDirty(() => void workflow.applyTemplateAndSave(tpl.id))}
+                      onClick={() => confirmLeaveStudio(() => void workflow.applyTemplateAndSave(tpl.id))}
                     >
                       {t('templateSaveAndOpen')}
                     </Button>
@@ -773,12 +794,12 @@ export function WorkflowPage() {
               }
               onChange={(value) => {
                 if (value) {
-                  confirmDiscardIfDirty(() => {
+                  confirmLeaveStudio(() => {
                     workflow.setLibrarySearch('')
                     workflow.load(value)
                   })
                 } else {
-                  confirmDiscardIfDirty(() => {
+                  confirmLeaveStudio(() => {
                     workflow.setLibrarySearch('')
                     workflow.reset()
                   })
@@ -807,7 +828,7 @@ export function WorkflowPage() {
                 type="link"
                 size="small"
                 style={{ paddingInline: 0, marginTop: 4 }}
-                onClick={() => confirmDiscardIfDirty(() => workflow.startFromTemplate('ir-triage'))}
+                onClick={() => confirmLeaveStudio(() => workflow.startFromTemplate('ir-triage'))}
               >
                 {t('startFromTemplate')}
               </Button>
@@ -820,11 +841,18 @@ export function WorkflowPage() {
                 onClick={() => {
                   modal.confirm({
                     title: t('deleteSavedTitle'),
-                    content: workflow.state.dirty ? t('deleteSavedDirtyContent') : t('deleteSavedContent'),
+                    content: workflow.state.running
+                      ? t('deleteSavedRunningContent')
+                      : workflow.state.dirty
+                        ? t('deleteSavedDirtyContent')
+                        : t('deleteSavedContent'),
                     okText: t('deleteSavedConfirm'),
                     cancelText: t('common:cancel'),
                     okButtonProps: { danger: true },
-                    onOk: () => void workflow.removeSaved(),
+                    onOk: () => {
+                      if (workflow.state.running) workflow.stop()
+                      void workflow.removeSaved()
+                    },
                   })
                 }}
               >
@@ -845,7 +873,7 @@ export function WorkflowPage() {
                     label: `v${item.version}`,
                   }))}
                   onChange={(version) =>
-                    confirmDiscardIfDirty(() => void workflow.restoreVersion(Number(version)))
+                    confirmLeaveStudio(() => void workflow.restoreVersion(Number(version)))
                   }
                 />
               </>
@@ -885,7 +913,7 @@ export function WorkflowPage() {
             emptyHint={t('canvasEmpty')}
             emptyActionLabel={canWrite ? t('startFromTemplate') : undefined}
             onEmptyAction={
-              canWrite ? () => confirmDiscardIfDirty(() => workflow.startFromTemplate('ir-triage')) : undefined
+              canWrite ? () => confirmLeaveStudio(() => workflow.startFromTemplate('ir-triage')) : undefined
             }
           />
         </section>

@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Studio 运行中离开确认 + Chat 流式隐藏 regenerate
+
+- 加载/重置/模板/恢复：若 `running` 先确认停止，再（可选）确认丢弃脏草稿；嵌套 modal 用 `setTimeout(0)` 错开。
+- 删除已保存工作流：运行中文案提示会先 stop。
+- Chat：全局 `requesting` 时消息操作栏不展示「重新生成」（retry 函数仍有门闩）。
+
+
 ## 已完成：Studio 脏草稿丢弃确认 + Chat regenerate 门闩
 
 - 加载库/清空/模板/恢复版本：`dirty` 时 `modal.confirm` 再继续。
