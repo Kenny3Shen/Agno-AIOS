@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Studio 运行中锁定画布结构编辑
+
+- 运行中：禁用节点拖拽/连线/调色板拖入/删除/粘贴/undo·redo/整理布局；Esc 仍可停止。
+- 结构变更 API（add/remove/reparent/connect…）统一 `rejectIfRunning` 并提示 `errorEditWhileRunning`。
+- 仍可保存草稿（不影响当前 run）；Inspector 字段编辑未硬锁（与保存策略一致）。
+
+
 ## 已完成：Chat HITL 继续清 approval + 重试 sources + Studio 运行中脏草稿提示
 
 - `run.continued` / completed / cancelled / failed 清空 `approval_id`，避免继续后仍显示「打开审批」。

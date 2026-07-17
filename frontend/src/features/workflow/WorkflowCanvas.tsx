@@ -775,6 +775,7 @@ function CanvasInner({
   )
 
   const onNodeDragStart: OnNodeDrag = useCallback(() => {
+    if (running) return
     draggingRef.current = true
     setSmartGuides([])
     wrapperRef.current?.classList.add('is-dragging-node')
@@ -782,10 +783,11 @@ function CanvasInner({
       clearTimeout(settleTimerRef.current)
       settleTimerRef.current = null
     }
-  }, [])
+  }, [running])
 
   const onNodeDrag: OnNodeDrag = useCallback(
     (_event, node) => {
+      if (running) return
       // Container reparent highlight; smart snap lives in onNodesChange.
       const hits = getIntersectingNodes(node).filter((item) => item.id !== node.id)
       let nextTarget: string | null = null
@@ -798,11 +800,18 @@ function CanvasInner({
       }
       setDropTargetId((current) => (current === nextTarget ? current : nextTarget))
     },
-    [getIntersectingNodes, resolveContainerTarget]
+    [getIntersectingNodes, resolveContainerTarget, running]
   )
 
   const onNodeDragStop: OnNodeDrag = useCallback(
     (_event, node, allNodes) => {
+      if (running) {
+        draggingRef.current = false
+        setDropTargetId(null)
+        setSmartGuides([])
+        wrapperRef.current?.classList.remove('is-dragging-node')
+        return
+      }
       draggingRef.current = false
       const targetId = dropTargetId
       setDropTargetId(null)
@@ -834,15 +843,16 @@ function CanvasInner({
         settleTimerRef.current = null
       }, NODE_SETTLE_MS + 40)
     },
-    [dropTargetId, onPositionsChange, onReparent, resolveContainerTarget]
+    [dropTargetId, onPositionsChange, onReparent, resolveContainerTarget, running]
   )
 
   const onConnectStart: OnConnectStart = useCallback((_event, params) => {
+    if (running) return
     connectingFromRef.current = {
       nodeId: params.nodeId ?? '',
       handleId: params.handleId ?? null,
     }
-  }, [])
+  }, [running])
 
   const onConnectEnd: OnConnectEnd = useCallback(() => {
     connectingFromRef.current = null
@@ -851,6 +861,7 @@ function CanvasInner({
 
   const onConnect: OnConnect = useCallback(
     (connection) => {
+      if (running) return
       if (!connection.source || !connection.target || connection.source === connection.target) {
         return
       }
@@ -868,7 +879,7 @@ function CanvasInner({
       connectingFromRef.current = null
       setConnectTargetId(null)
     },
-    [onConnectBranch, onConnectSequence, steps]
+    [onConnectBranch, onConnectSequence, steps, running]
   )
 
   const onNodeMouseEnter: NodeMouseHandler = useCallback(
@@ -887,6 +898,7 @@ function CanvasInner({
 
   const isValidConnection = useCallback<IsValidConnection<Edge>>(
     (connection) => {
+      if (running) return false
       const source = connection.source
       const target = connection.target
       if (!source || !target) return false
@@ -917,13 +929,18 @@ function CanvasInner({
       }
       return true
     },
-    [steps]
+    [steps, running]
   )
 
   const onDragOver = useCallback((event: DragEvent) => {
+    if (running) {
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'none'
+      return
+    }
     event.preventDefault()
     event.dataTransfer.dropEffect = 'copy'
-  }, [])
+  }, [running])
 
   const findContainerAtPoint = useCallback(
     (flowPos: { x: number; y: number }): { id: string; target: ReparentTarget } | null => {
@@ -958,6 +975,7 @@ function CanvasInner({
   const onDrop = useCallback(
     (event: DragEvent) => {
       event.preventDefault()
+      if (running) return
       const type = event.dataTransfer.getData(PALETTE_MIME) as WorkflowNodeType
       if (!type) return
       const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
@@ -968,12 +986,23 @@ function CanvasInner({
         requestAnimationFrame(() => void fitView({ ...FIT_VIEW_OPTIONS }))
       }
     },
-    [screenToFlowPosition, onDropNode, fitView, findContainerAtPoint]
+    [screenToFlowPosition, onDropNode, fitView, findContainerAtPoint, running]
   )
 
   const onKeyDown = useCallback(
     (event: KeyboardEvent | ReactKeyboardEvent<HTMLDivElement>) => {
       const mod = event.metaKey || event.ctrlKey
+      // Topology edits are locked while a run is active (Esc still stops).
+      if (running) {
+        if (event.key === 'Escape') {
+          if (isOverlayEscapeTarget(event.target)) return
+          if (onStop) {
+            event.preventDefault()
+            onStop()
+          }
+        }
+        return
+      }
       if (mod && event.key.toLowerCase() === 'z' && !event.shiftKey) {
         event.preventDefault()
         onUndo()
@@ -1051,7 +1080,7 @@ function CanvasInner({
   return (
     <div
       ref={wrapperRef}
-      className={`workflow-canvas workflow-canvas--main ${steps.length ? '' : 'is-empty'}`}
+      className={`workflow-canvas workflow-canvas--main ${steps.length ? '' : 'is-empty'}${running ? ' is-running' : ''}`}
       onDrop={onDrop}
       onDragOver={onDragOver}
     >
@@ -1073,8 +1102,8 @@ function CanvasInner({
         isValidConnection={isValidConnection}
         onNodeMouseEnter={onNodeMouseEnter}
         onNodeMouseLeave={onNodeMouseLeave}
-        nodesDraggable
-        nodesConnectable
+        nodesDraggable={!running}
+        nodesConnectable={!running}
         elementsSelectable
         selectNodesOnDrag={false}
         selectionOnDrag

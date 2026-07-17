@@ -186,12 +186,22 @@ export function useWorkflow() {
     [pushHistory]
   )
 
+  const rejectIfRunning = useCallback((): boolean => {
+    if (!state.running) return false
+    setState((current) => ({
+      ...current,
+      error: t('errorEditWhileRunning'),
+    }))
+    return true
+  }, [state.running, t])
+
   const canUndo = pastRef.current.length > 0
   const canRedo = futureRef.current.length > 0
   // historyTick forces re-render of canUndo/canRedo consumers
   void historyTick
 
   const undo = useCallback(() => {
+    if (rejectIfRunning()) return
     setState((current) => {
       const prev = pastRef.current.pop()
       if (!prev) return current
@@ -205,9 +215,10 @@ export function useWorkflow() {
         dirty: true,
       }
     })
-  }, [])
+  }, [rejectIfRunning])
 
   const redo = useCallback(() => {
+    if (rejectIfRunning()) return
     setState((current) => {
       const next = futureRef.current.pop()
       if (!next) return current
@@ -221,7 +232,7 @@ export function useWorkflow() {
         dirty: true,
       }
     })
-  }, [])
+  }, [rejectIfRunning])
 
   const patch = useCallback((value: Partial<WorkflowState>) => {
     setState((current) => ({ ...current, ...value, dirty: value.dirty !== false }))
@@ -260,6 +271,7 @@ export function useWorkflow() {
   }, [])
 
   const add = (type: WorkflowNodeType = 'step') => {
+    if (rejectIfRunning()) return
     const node = createNode(type)
     withHistory((current) => ({
       ...current,
@@ -275,6 +287,7 @@ export function useWorkflow() {
     position: { x: number; y: number },
     target?: ReparentTarget | null
   ) => {
+    if (rejectIfRunning()) return
     const node = createNode(type)
     node.position = { x: position.x, y: position.y }
     withHistory((current) => {
@@ -296,6 +309,7 @@ export function useWorkflow() {
     branch: 'steps' | 'thenSteps' | 'elseSteps' = 'steps',
     type: WorkflowNodeType = 'step'
   ) => {
+    if (rejectIfRunning()) return
     const child = createNode(type)
     withHistory((current) => ({
       ...current,
@@ -307,6 +321,7 @@ export function useWorkflow() {
   }
 
   const addToSlot = (parentId: string, slotKey: string, type: WorkflowNodeType = 'step') => {
+    if (rejectIfRunning()) return
     withHistory((current) => {
       const parent = findNode(current.steps, parentId)
       if (!parent) return current
@@ -446,7 +461,8 @@ export function useWorkflow() {
     return skippedHitl
   }
 
-  const remove = (id: string) =>
+  const remove = (id: string) => {
+    if (rejectIfRunning()) return
     withHistory((current) => {
       const selectedIds = current.selectedIds.filter((item) => item !== id)
       return {
@@ -457,8 +473,10 @@ export function useWorkflow() {
         selectedIds,
       }
     })
+  }
 
   const removeSelected = () => {
+    if (rejectIfRunning()) return
     withHistory((current) => {
       const ids = current.selectedIds.length
         ? current.selectedIds
@@ -476,12 +494,14 @@ export function useWorkflow() {
     })
   }
 
-  const move = (id: string, direction: -1 | 1) =>
+  const move = (id: string, direction: -1 | 1) => {
+    if (rejectIfRunning()) return
     withHistory((current) => ({
       ...current,
       dirty: true,
       steps: moveStep(current.steps, id, direction),
     }))
+  }
 
   const applyPositions = (positions: Record<string, { x: number; y: number }>) => {
     withHistory((current) => {
@@ -494,6 +514,7 @@ export function useWorkflow() {
   }
 
   const reparent = (nodeId: string, target: ReparentTarget): ReparentBlockedReason | null => {
+    if (rejectIfRunning()) return null
     // Precompute against current state so Strict Mode double-invoke cannot clear the reason.
     const preview = reparentNode(state.steps, nodeId, target)
     if (preview.blocked) return preview.blocked
@@ -516,6 +537,7 @@ export function useWorkflow() {
   }
 
   const connectSequence = (sourceId: string, targetId: string) => {
+    if (rejectIfRunning()) return
     withHistory((current) => ({
       ...current,
       dirty: true,
@@ -529,6 +551,7 @@ export function useWorkflow() {
     targetId: string,
     sourceHandle?: string | null,
   ): ReparentBlockedReason | null => {
+    if (rejectIfRunning()) return null
     const source = findNode(state.steps, sourceId)
     if (!source) return null
     const target = reparentTargetFromHandle(source, sourceHandle)
@@ -558,6 +581,7 @@ export function useWorkflow() {
   }
 
   const organizeLayout = () => {
+    if (rejectIfRunning()) return
     withHistory((current) => ({
       ...current,
       dirty: true,
@@ -588,6 +612,7 @@ export function useWorkflow() {
     multiSelectRootPaste: boolean
     pasted: boolean
   } => {
+    if (rejectIfRunning()) return { divertedHitlCount: 0, multiSelectRootPaste: false, pasted: false }
     const items = clipboardRef.current
     if (!items.length) {
       return { divertedHitlCount: 0, multiSelectRootPaste: false, pasted: false }
@@ -678,6 +703,7 @@ export function useWorkflow() {
     multiSelectRootPaste: boolean
     pasted: boolean
   } => {
+    if (rejectIfRunning()) return { divertedHitlCount: 0, multiSelectRootPaste: false, pasted: false }
     // snapshot selection into clipboard then paste with offset
     const ids = state.selectedIds.length
       ? state.selectedIds

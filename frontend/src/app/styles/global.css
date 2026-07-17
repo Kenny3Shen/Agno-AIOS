@@ -1950,6 +1950,17 @@ html.dark .workflow-studio {
 }
 
 /* Smooth node motion: settle after drag/reorder; no lag while dragging */
+
+.workflow-canvas--main.is-running {
+  cursor: default;
+}
+.workflow-canvas--main.is-running .react-flow__node {
+  cursor: default;
+}
+.workflow-palette__item[draggable='false'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 .workflow-canvas--main .react-flow__node {
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;

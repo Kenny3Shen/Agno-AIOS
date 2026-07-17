@@ -593,19 +593,23 @@ export function WorkflowPage() {
           <Tooltip title={t('undoHint')} getPopupContainer={studioPopupContainer}>
             <Button
               icon={<UndoOutlined />}
-              disabled={!workflow.canUndo}
+              disabled={!workflow.canUndo || workflow.state.running}
               onClick={workflow.undo}
             />
           </Tooltip>
           <Tooltip title={t('redoHint')} getPopupContainer={studioPopupContainer}>
             <Button
               icon={<RedoOutlined />}
-              disabled={!workflow.canRedo}
+              disabled={!workflow.canRedo || workflow.state.running}
               onClick={workflow.redo}
             />
           </Tooltip>
           <Tooltip title={t('organizeHint')} getPopupContainer={studioPopupContainer}>
-            <Button icon={<ApartmentOutlined />} onClick={workflow.organizeLayout}>
+            <Button
+              icon={<ApartmentOutlined />}
+              disabled={workflow.state.running}
+              onClick={workflow.organizeLayout}
+            >
               {t('organize')}
             </Button>
           </Tooltip>
@@ -762,8 +766,14 @@ export function WorkflowPage() {
                 <div
                   key={item.type}
                   className="workflow-palette__item"
-                  draggable
-                  onDragStart={(event) => paletteDragStart(event, item.type)}
+                  draggable={!workflow.state.running && canWrite}
+                  onDragStart={(event) => {
+                    if (workflow.state.running || !canWrite) {
+                      event.preventDefault()
+                      return
+                    }
+                    paletteDragStart(event, item.type)
+                  }}
                   onDoubleClick={() => workflow.add(item.type)}
                   style={{ borderColor: item.color }}
                   title={t('paletteDragHint')}

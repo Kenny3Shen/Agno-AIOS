@@ -142,6 +142,7 @@
   "errorPublishFailed": "Publish failed",
   "errorRestoreFailed": "Restore failed",
   "errorRunFailed": "Run failed",
+  "errorEditWhileRunning": "A run is in progress — canvas structure is locked (you can still save; Esc to stop)",
   "errorLoadFailed": "Load failed",
   "errorDeleteFailed": "Delete failed",
   "slotAddBranch": "Add branch",
