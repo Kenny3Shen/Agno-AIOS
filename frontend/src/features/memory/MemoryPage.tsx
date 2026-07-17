@@ -127,18 +127,20 @@ export function MemoryPage() {
             placeholder={t('searchPlaceholder')}
             allowClear
           />
-          <Input
-            value={userFilter}
-            onChange={(event) => setUserFilter(event.target.value)}
-            onPressEnter={() => {
-              setAppliedUser(userFilter.trim())
-              setPage(1)
-            }}
-            placeholder={t('userFilterPlaceholder')}
-            allowClear
-            style={{ minWidth: 200 }}
-            aria-label={t('filterUser')}
-          />
+          {isAdmin ? (
+            <Input
+              value={userFilter}
+              onChange={(event) => setUserFilter(event.target.value)}
+              onPressEnter={() => {
+                setAppliedUser(userFilter.trim())
+                setPage(1)
+              }}
+              placeholder={t('userFilterPlaceholder')}
+              allowClear
+              style={{ minWidth: 200 }}
+              aria-label={t('filterUser')}
+            />
+          ) : null}
           <Button
             type="primary"
             onClick={() => {

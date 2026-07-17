@@ -3,9 +3,9 @@
 ## 已完成：安全情报源扩展 + CVE 标签 + Memory 清空/用户筛选
 
 - Collect：新增 BleepingComputer / Krebs / SecurityWeek / Dark Reading / The Record / Unit 42 / Cloudflare 规则与种子；删除未使用的 `system_prompt`；parse 返回字符串 markdown（去掉数组兼容）。
-- Collect 列表/详情/预览从标题摘要正文提取 `cve_ids`，UI 跳转 CVE 页。
-- Memory：`POST /api/memories/clear`（用户范围 / admin 全量）；前端用户 ID 筛选 + 清空按钮。
-- 测试：`test_collect_cve_extract` / 域规则扩展 / `test_memory_clear` 绿。
+- Collect 列表/详情/预览从标题摘要正文提取 `cve_ids`，UI 跳转 CVE 页；CVE 页支持 `?q=` 深链。
+- Memory：`POST /api/memories/clear`（用户范围 / admin 全量）；前端 **admin** 用户 ID 筛选 + 清空按钮（本人/筛选用户/全量）。
+- 测试：`test_collect_cve_extract` / 域规则扩展 / `test_memory_clear` / CVE deep-link / memory api clear·user_id 绿。
 
 
 ## 已完成：Workflow Studio draw.io 风格打磨（纯 UI / 注释）

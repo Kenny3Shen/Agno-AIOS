@@ -1,10 +1,18 @@
 import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
 import { user } from '@/test/user'
 import { CvePage } from './CvePage'
+
+const routerMock = vi.hoisted(() => ({ searchStr: '' }))
+
+vi.mock('@tanstack/react-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-router')>()),
+  useRouterState: ({ select }: { select: (state: { location: { searchStr: string } }) => unknown }) =>
+    select({ location: { searchStr: routerMock.searchStr } }),
+}))
 
 const emptySearch = {
   data: [],
@@ -12,6 +20,38 @@ const emptySearch = {
 }
 
 describe('CvePage', () => {
+  beforeEach(() => {
+    routerMock.searchStr = ''
+  })
+
+  it('seeds search from ?q deep-link', async () => {
+    routerMock.searchStr = '?q=CVE-2021-44228'
+    let seenQuery = ''
+    server.use(
+      http.get('/api/auth/users/me', () =>
+        HttpResponse.json({
+          id: 'member-1',
+          email: 'member@example.com',
+          role: 'user',
+          scopes: ['cve:read'],
+        }),
+      ),
+      http.post('/api/cve/search', async ({ request }) => {
+        const payload = (await request.json()) as { query?: string }
+        seenQuery = String(payload.query || '')
+        return HttpResponse.json({
+          data: [],
+          meta: { page: 1, limit: 20, total_pages: 0, total_count: 0, search_time_ms: 0 },
+        })
+      }),
+    )
+    renderWithQuery(<CvePage />)
+    await waitFor(() => {
+      expect(seenQuery).toBe('CVE-2021-44228')
+    })
+    expect(screen.getByDisplayValue('CVE-2021-44228')).toBeTruthy()
+  })
+
   it('disables database updates for non-admin users', async () => {
     server.use(
       http.get('/api/auth/users/me', () =>

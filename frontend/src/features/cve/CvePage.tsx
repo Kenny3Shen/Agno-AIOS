@@ -1,4 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+/**
+ * CVE intelligence library: search, source filter, admin DB update stream.
+ * Supports Collect deep-links via ``?q=CVE-…``.
+ */
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouterState } from '@tanstack/react-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { App, Button, Card, Input, Progress, Select, Space, Table, Tag, Typography } from 'antd'
 import { ReloadOutlined, SearchOutlined, StopOutlined } from '@ant-design/icons'
@@ -78,14 +83,29 @@ export function CvePage() {
   const { t } = useTranslation('cve')
   const formatDate = useFormatDate()
   const { message } = App.useApp()
+  const searchStr = useRouterState({ select: (state) => state.location.searchStr })
+  const initialQuery = useMemo(() => {
+    try {
+      return (new URLSearchParams(searchStr).get('q') || '').trim()
+    } catch {
+      return ''
+    }
+  }, [searchStr])
   const currentUser = useQuery(currentUserQuery())
   const canUpdateDatabase = roleOf(currentUser.data) === 'admin'
-  const [query, setQuery] = useState('')
-  const debouncedQuery = useDebouncedValue(query, 300)
+  const [query, setQuery] = useState(initialQuery)
   const [source, setSource] = useState<string>()
   const [pagination, setPagination] = useState({ page: 1, size: 20 })
   const [updateProgress, setUpdateProgress] = useState<CveUpdateProgress | null>(null)
   const updateAbortRef = useRef<AbortController | null>(null)
+  // Deep-link from Collect CVE tags (/cve?q=CVE-…) keeps search box in sync.
+  useEffect(() => {
+    if (initialQuery) {
+      setQuery(initialQuery)
+      setPagination((prev) => ({ ...prev, page: 1 }))
+    }
+  }, [initialQuery])
+  const debouncedQuery = useDebouncedValue(query, 300)
 
   const search = useQuery({
     queryKey: ['cve', 'search', debouncedQuery, source, pagination.page, pagination.size],
