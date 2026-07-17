@@ -831,7 +831,7 @@ export function WorkflowPage() {
       ) : null}
 
       <div className="workflow-studio__body">
-        {/* Left: palette + library */}
+        {/* Left rail: shapes palette + templates + library (draw.io "Shapes") */}
         <aside className="workflow-studio__left workflow-studio__shapes">
           <section className="workflow-studio__panel">
             <div className="workflow-studio__panel-title">{t('palette')}</div>
@@ -1034,7 +1034,7 @@ export function WorkflowPage() {
           </section>
         </aside>
 
-        {/* Center: canvas */}
+        {/* Center stage: React Flow canvas (chrome only in WorkflowCanvas) */}
         <section className="workflow-studio__canvas">
           <WorkflowCanvas
             steps={workflow.state.steps}
@@ -1071,7 +1071,7 @@ export function WorkflowPage() {
           />
         </section>
 
-        {/* Right: inspector + run */}
+        {/* Right rail: inspector forms + run log (domain actions via useWorkflow) */}
         <aside className="workflow-studio__right">
           <section
             ref={inspectorPanelRef}

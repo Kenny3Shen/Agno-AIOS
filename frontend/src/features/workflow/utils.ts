@@ -1,6 +1,9 @@
 /**
- * Pure helpers for Workflow Studio: DSL create/normalize, canvas layout, smart-snap,
- * reparent rules, and validation. No React / side effects.
+ * Pure helpers for Workflow Studio.
+ *
+ * Includes: DSL create/normalize, canvas layout, smart-snap guides,
+ * reparent rules, and client-side validation.
+ * No React hooks and no network — safe to unit test in isolation.
  */
 import type {
   WorkflowDefinition,

@@ -2941,6 +2941,19 @@ button.collect-article-item.is-selected {
   border-radius: 12px;
 }
 
+/* Node hover (draw.io-like lift) — transform only, no selection logic */
+.workflow-canvas--main:not(.is-dragging-node) .wf-flow-node:hover {
+  box-shadow: var(--wf-shadow);
+}
+
+/* Canvas stage frame */
+.workflow-studio__canvas {
+  background:
+    radial-gradient(circle at 18% 12%, var(--wf-canvas-glow-a), transparent 42%),
+    radial-gradient(circle at 82% 88%, var(--wf-canvas-glow-b), transparent 44%),
+    var(--tais-bg);
+}
+
 html.dark .wf-status-bar {
   background: color-mix(in srgb, var(--tais-surface) 88%, transparent) !important;
 }

@@ -1,6 +1,12 @@
 /**
  * Studio orchestration hook: load/save/publish, undo stack, run SSE, and draft validation.
- * Canvas rendering stays in `WorkflowCanvas`; this file owns workflow domain state only.
+ *
+ * Ownership:
+ * - This file: workflow domain state, history, API, run lifecycle
+ * - `WorkflowCanvas`: RF presentation, drag/connect chrome
+ * - `WorkflowPage`: layout shell + inspector forms
+ *
+ * Prefer extending handlers here rather than duplicating side effects in the page.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'

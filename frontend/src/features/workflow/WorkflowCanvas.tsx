@@ -187,6 +187,10 @@ type Props = {
   executorNames?: ReadonlyMap<string, string> | Record<string, string>
 }
 
+// ---------------------------------------------------------------------------
+// Graph build (pure mapping DSL → RF nodes/edges; no network / no mutations)
+// ---------------------------------------------------------------------------
+
 type FlowGraph = { nodes: WorkflowCanvasNode[]; edges: Edge[] }
 
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string
@@ -310,6 +314,10 @@ function buildGraph(
 
   return { nodes: flowNodes, edges: flowEdges }
 }
+
+// ---------------------------------------------------------------------------
+// CanvasInner: RF event surface + chrome (still no save/run/publish)
+// ---------------------------------------------------------------------------
 
 function CanvasInner({
   steps,
@@ -1301,6 +1309,10 @@ function CanvasInner({
     </div>
   )
 }
+
+// ---------------------------------------------------------------------------
+// Public exports
+// ---------------------------------------------------------------------------
 
 export function WorkflowCanvas(props: Props) {
   return (
