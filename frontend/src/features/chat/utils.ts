@@ -167,6 +167,9 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
           case 'run.started':
             return { ...message, run_id: event.runId, session_id: event.sessionId ?? message.session_id, status: 'streaming', retry: null, error: null, leanMode: event.leanMode, enableTools: event.enableTools, searchKnowledge: event.searchKnowledge, skillNames: event.skillNames }
           case 'content.delta':
+            if (message.final && message.status !== 'streaming' && message.status !== 'retrying') {
+              return message
+            }
             return {
               ...message,
               content: message.content + event.delta,
@@ -175,6 +178,9 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               error: null,
             }
           case 'run.retrying':
+            if (message.final && message.status !== 'streaming' && message.status !== 'retrying') {
+              return message
+            }
             return {
               ...message,
               run_id: event.runId ?? message.run_id,
@@ -196,15 +202,30 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               },
             }
           case 'tool.update': {
+            if (message.final && message.status !== 'streaming' && message.status !== 'retrying') {
+              return message
+            }
             const toolSteps = message.tool_steps ?? []
             const index = toolSteps.findIndex((step) => step.id === event.tool.id)
             const next =
               index < 0 ? [...toolSteps, event.tool] : toolSteps.map((step, stepIndex) => (stepIndex === index ? event.tool : step))
-            return { ...message, tool_steps: next, status: 'streaming' }
+            return { ...message, tool_steps: next, status: 'streaming', retry: null, error: null }
           }
           case 'reasoning.delta':
-            return { ...message, reasoning: (message.reasoning ?? '') + event.delta, status: 'streaming' }
+            if (message.final && message.status !== 'streaming' && message.status !== 'retrying') {
+              return message
+            }
+            return {
+              ...message,
+              reasoning: (message.reasoning ?? '') + event.delta,
+              status: 'streaming',
+              retry: null,
+              error: null,
+            }
           case 'thought.update': {
+            if (message.final && message.status !== 'streaming' && message.status !== 'retrying') {
+              return message
+            }
             const thoughts = message.thought_chain ?? []
             const index = thoughts.findIndex((step) => step.id === event.thought.id)
             return {
@@ -212,9 +233,14 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               thought_chain:
                 index < 0 ? [...thoughts, event.thought] : thoughts.map((step, stepIndex) => (stepIndex === index ? event.thought : step)),
               status: 'streaming',
+              retry: null,
+              error: null,
             }
           }
           case 'sources':
+            if (message.final && message.status !== 'streaming' && message.status !== 'retrying') {
+              return message
+            }
             return { ...message, sources: event.items }
           case 'run.paused': {
             const toolSteps = message.tool_steps ?? []

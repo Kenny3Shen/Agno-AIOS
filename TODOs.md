@@ -1,5 +1,10 @@
 # 下一步工作
 
+## 已完成：Chat 终态后忽略迟到 SSE + 工具更新清 retry
+
+- `content.delta` / `tool.update` / `reasoning` / `thought` / `run.retrying`：消息已终态（非 streaming/retrying）则忽略，避免取消后追加内容。
+- 工具/思考事件恢复 streaming 时同步 `retry: null`，防止重试条与工具链并存错乱。
+
 ## 已完成：HITL pause session_id 回退 + cancel runId 跟踪
 
 - `run.paused` 缺 `session_id` 时回退 `request.session_id`（审批通知/深链一致）。

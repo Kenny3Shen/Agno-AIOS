@@ -475,3 +475,39 @@ describe('formatRetryDetail', () => {
     expect(paused.requesting).toBe(false)
   })
 
+  it('clears retry when tool updates resume after provider retry', () => {
+    const assistant: Message = { id: 'a', role: 'assistant', content: '', final: false, status: 'streaming' }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    const retrying = chatReducer(started, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'run.retrying', attempt: 1, maxAttempts: 3, delaySeconds: 1 },
+    })
+    const withTool = chatReducer(retrying, {
+      type: 'event',
+      id: 'a',
+      event: {
+        type: 'tool.update',
+        tool: { id: 't1', name: 'lookup', status: 'loading' },
+      },
+    })
+    expect(withTool.messages[0]).toMatchObject({ status: 'streaming', retry: null })
+    expect(withTool.messages[0]?.tool_steps?.[0]?.id).toBe('t1')
+  })
+
+  it('ignores late content after cancel', () => {
+    const assistant: Message = { id: 'a', role: 'assistant', content: 'partial', final: false, status: 'streaming' }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    const cancelled = chatReducer(started, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'run.cancelled', runId: 'run-1', reason: 'stopped' },
+    })
+    const late = chatReducer(cancelled, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'content.delta', delta: ' should not append' },
+    })
+    expect(late.messages[0]).toMatchObject({ status: 'cancelled', content: 'partial' })
+  })
+
