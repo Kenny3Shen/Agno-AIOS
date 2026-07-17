@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Collect 预览空态/加载失败 + Parallel 自动布局回归
+
+- 选中文章后：正文加载失败显示错误 + 重试；成功但无正文显示 emptyOkPreview；不再误用「请选择文章」。
+- Workflow：`applyAutoLayout` 对 parallel 多子节点无重叠回归测试。
+- CVE 流式更新 worker cancel 补 debug 日志。
+
 ## 已完成：归档会话继续对话自动恢复 + 列表缓存
 
 - 在已归档会话上 `submit` 时乐观写回 active 列表并 best-effort `unarchiveSession`。

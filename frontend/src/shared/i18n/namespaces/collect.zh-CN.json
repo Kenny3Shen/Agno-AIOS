@@ -45,5 +45,7 @@
   "crawlStageDone": "同步完成：发现 {{discovered}}，抓取 {{selected}}，成功 {{ok}}，写入 {{saved}}",
   "crawlStop": "停止同步",
   "crawlStopHint": "中断当前源站同步（已写入的文章保留）",
-  "crawlCancelled": "已停止同步"
+  "crawlCancelled": "已停止同步",
+  "previewLoadFailed": "无法加载文章正文",
+  "emptyOkPreview": "正文为空或未抽取到 Markdown"
 }

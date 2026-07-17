@@ -345,6 +345,28 @@ describe('reparent and auto-layout', () => {
     const t1Bottom = t1!.position!.y + 96
     expect(e1!.position!.y).toBeGreaterThanOrEqual(t1Bottom)
   })
+
+  it('auto-layout separates parallel children without vertical overlap', () => {
+    const parallel = createNode('parallel')
+    parallel.id = 'p1'
+    parallel.steps = [
+      { id: 'a', type: 'step', name: 'A', targetId: 'security-operations' },
+      { id: 'b', type: 'step', name: 'B', targetId: 'safe-fallback' },
+      { id: 'c', type: 'step', name: 'C', targetId: 'safe-fallback' },
+    ]
+    const laid = applyAutoLayout([parallel])
+    const kids = laid[0]?.steps ?? []
+    expect(kids).toHaveLength(3)
+    expect(kids.every((k) => k.position)).toBe(true)
+    // stacked top → bottom
+    expect(kids[0]!.position!.y).toBeLessThan(kids[1]!.position!.y)
+    expect(kids[1]!.position!.y).toBeLessThan(kids[2]!.position!.y)
+    const aBottom = kids[0]!.position!.y + 96
+    expect(kids[1]!.position!.y).toBeGreaterThanOrEqual(aBottom)
+    // children to the right of parallel parent
+    expect(kids[0]!.position!.x).toBeGreaterThan(laid[0]!.position!.x)
+  })
+
 })
 
 describe('run status reduce', () => {

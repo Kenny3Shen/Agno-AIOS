@@ -45,5 +45,7 @@
   "crawlStageDone": "Sync done: discovered {{discovered}}, fetched {{selected}}, ok {{ok}}, saved {{saved}}",
   "crawlStop": "Stop sync",
   "crawlStopHint": "Abort the current source sync (articles already saved are kept)",
-  "crawlCancelled": "Sync stopped"
+  "crawlCancelled": "Sync stopped",
+  "previewLoadFailed": "Unable to load article body",
+  "emptyOkPreview": "No markdown body extracted for this article"
 }

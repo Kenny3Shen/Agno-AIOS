@@ -178,6 +178,6 @@ async def _update_cve_stream(request: Request, user: User) -> EventSourceRespons
             try:
                 await task
             except asyncio.CancelledError:
-                pass
+                logger.debug("CVE update worker cancelled after client disconnect")
 
     return EventSourceResponse(event_generator())

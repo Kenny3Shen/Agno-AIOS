@@ -128,6 +128,8 @@ export function CollectPage() {
   const [selected, setSelected] = useState<CollectArticle | null>(null)
   const [previewMarkdown, setPreviewMarkdown] = useState('')
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [previewReloadToken, setPreviewReloadToken] = useState(0)
   const [crawlProgress, setCrawlProgress] = useState<CollectCrawlProgress | null>(null)
   const crawlAbortRef = useRef<AbortController | null>(null)
 
@@ -167,25 +169,31 @@ export function CollectPage() {
     let cancelled = false
     if (!selected?.id) {
       setPreviewMarkdown('')
+      setPreviewError(null)
       setPreviewLoading(false)
       return
     }
     if (selected.markdown) {
       setPreviewMarkdown(selected.markdown)
+      setPreviewError(null)
       setPreviewLoading(false)
       return
     }
     setPreviewLoading(true)
+    setPreviewError(null)
     void getArticle(selected.id)
       .then((row) => {
         if (cancelled) return
         setPreviewMarkdown(row.markdown || '')
+        setPreviewError(null)
         setSelected((prev) =>
           prev && prev.id === row.id ? { ...prev, ...row, markdown: row.markdown || '' } : prev,
         )
       })
-      .catch(() => {
-        if (!cancelled) setPreviewMarkdown('')
+      .catch((error: unknown) => {
+        if (cancelled) return
+        setPreviewMarkdown('')
+        setPreviewError(error instanceof Error ? error.message : t('previewLoadFailed'))
       })
       .finally(() => {
         if (!cancelled) setPreviewLoading(false)
@@ -193,7 +201,7 @@ export function CollectPage() {
     return () => {
       cancelled = true
     }
-  }, [selected?.id])
+  }, [selected?.id, selected?.markdown, previewReloadToken, t])
 
   const parseMutation = useMutation({
     mutationFn: () => parseUrl(url),
@@ -654,10 +662,27 @@ export function CollectPage() {
                 <div className="payload-viewer collect-preview">
                   <Markdown content={activeMarkdown} openLinksInNewTab escapeRawHtml />
                 </div>
+              ) : previewError ? (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={
+                    <Space direction="vertical" size={8}>
+                      <span>{previewError}</span>
+                      <Button size="small" onClick={() => setPreviewReloadToken((n) => n + 1)}>
+                        {t('common:retry')}
+                      </Button>
+                    </Space>
+                  }
+                />
               ) : selected?.status === 'error' ? (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
                   description={selected.error_message || t('emptyErrorPreview')}
+                />
+              ) : selected ? (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={t('emptyOkPreview')}
                 />
               ) : (
                 <Empty
