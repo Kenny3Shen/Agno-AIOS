@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 import { cancelRun, streamMessage } from './api'
+import { ApiError } from '@/shared/api/client'
 import { chatKeys, historyQuery, modelsQuery, SESSION_PAGE_SIZE, sessionsQuery } from './queries'
 import { chatReducer, defaultReasoningEffort, initialChatState, previousPrompt } from './utils'
 import type { SessionListResult } from './api'
@@ -206,6 +207,8 @@ export function useChat() {
       await cancelRun(runId)
     } catch (error) {
       // Best-effort server cancel; client stream is already aborted.
+      // 404 = run already finished or never registered (race with terminal event).
+      if (error instanceof ApiError && error.status === 404) return
       const detail = error instanceof Error ? error.message : String(error)
       console.warn(`[chat] server cancel failed for run ${runId}: ${detail}`)
       dispatch({ type: 'soft-error', message: t('cancelServerFailed') })

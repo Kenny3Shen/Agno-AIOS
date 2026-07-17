@@ -434,3 +434,17 @@ describe('formatRetryDetail', () => {
     expect(cancelled.messages[0]).toMatchObject({ status: 'cancelled', retry: null })
     expect(cancelled.requesting).toBe(false)
   })
+
+  it('network-error clears retry metadata', () => {
+    const assistant: Message = { id: 'a', role: 'assistant', content: '', final: false, status: 'streaming' }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    const retrying = chatReducer(started, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'run.retrying', attempt: 1, maxAttempts: 4, delaySeconds: 1 },
+    })
+    const failed = chatReducer(retrying, { type: 'network-error', id: 'a', message: 'offline' })
+    expect(failed.messages[0]).toMatchObject({ status: 'failed', retry: null })
+    expect(failed.requesting).toBe(false)
+  })
+

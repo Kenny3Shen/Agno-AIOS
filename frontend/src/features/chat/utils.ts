@@ -287,6 +287,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
           ...message,
           final: true,
           status: 'failed',
+          retry: null,
           error: { message: action.message, retryable: true },
         })),
       }

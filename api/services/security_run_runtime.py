@@ -1162,6 +1162,9 @@ class SecurityRunRuntime:
                     )
                     registered_run_ids.discard(run_id)
         finally:
+            # Ensure retry backoff / in-flight model calls stop when the SSE
+            # consumer disconnects or the stream ends.
+            stream_cancel.set()
             if owner_user_id:
                 current = self._user_stream_cancels.get(owner_user_id)
                 if current is stream_cancel:

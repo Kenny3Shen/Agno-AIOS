@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Chat 取消 404 静默 + network-error 清 retry + SSE 结束打断 backoff
+
+- `cancelRun` 返回 404（已结束/竞态）不再 toast「服务端取消失败」。
+- `network-error` 清空 `retry`，与其它终态一致。
+- `_stream_agent_events` finally 中 `stream_cancel.set()`，SSE 断开时打断模型重试睡眠。
+
 ## 已完成：多选开启 HITL 被 Parallel 拦截时 Toast
 
 - `updateSelectedSteps` 返回跳过数量（Strict Mode 安全预计算）。
