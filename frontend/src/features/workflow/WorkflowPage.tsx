@@ -94,6 +94,24 @@ export function WorkflowPage() {
       message.info(t('copyEmptySelection'))
     }
   }
+
+  /** Prompt before wiping an unsaved draft (load / reset / template / delete). */
+  const confirmDiscardIfDirty = (action: () => void) => {
+    if (!workflow.state.dirty) {
+      action()
+      return
+    }
+    modal.confirm({
+      title: t('discardDirtyTitle'),
+      content: t('discardDirtyContent'),
+      okText: t('discardDirtyConfirm'),
+      cancelText: t('common:cancel'),
+      okButtonProps: { danger: true },
+      onOk: () => {
+        action()
+      },
+    })
+  }
   const pasteWithHitlGuard = () => {
     const result = workflow.pasteClipboard()
     if (!result.pasted) {
@@ -690,7 +708,7 @@ export function WorkflowPage() {
                     className="workflow-templates__load"
                     title={tpl.description}
                     disabled={!canWrite}
-                    onClick={() => workflow.applyTemplate(tpl.id)}
+                    onClick={() => confirmDiscardIfDirty(() => workflow.applyTemplate(tpl.id))}
                   >
                     <strong>{tpl.name}</strong>
                     <span>{tpl.description}</span>
@@ -700,7 +718,7 @@ export function WorkflowPage() {
                       type="link"
                       size="small"
                       disabled={!canWrite || workflow.state.saving}
-                      onClick={() => workflow.applyTemplate(tpl.id)}
+                      onClick={() => confirmDiscardIfDirty(() => workflow.applyTemplate(tpl.id))}
                     >
                       {t('templateLoadDraft')}
                     </Button>
@@ -708,7 +726,7 @@ export function WorkflowPage() {
                       type="link"
                       size="small"
                       disabled={!canWrite || workflow.state.saving}
-                      onClick={() => void workflow.applyTemplateAndSave(tpl.id)}
+                      onClick={() => confirmDiscardIfDirty(() => void workflow.applyTemplateAndSave(tpl.id))}
                     >
                       {t('templateSaveAndOpen')}
                     </Button>
@@ -755,11 +773,15 @@ export function WorkflowPage() {
               }
               onChange={(value) => {
                 if (value) {
-                  workflow.setLibrarySearch('')
-                  workflow.load(value)
+                  confirmDiscardIfDirty(() => {
+                    workflow.setLibrarySearch('')
+                    workflow.load(value)
+                  })
                 } else {
-                  workflow.setLibrarySearch('')
-                  workflow.reset()
+                  confirmDiscardIfDirty(() => {
+                    workflow.setLibrarySearch('')
+                    workflow.reset()
+                  })
                 }
               }}
             />
@@ -785,7 +807,7 @@ export function WorkflowPage() {
                 type="link"
                 size="small"
                 style={{ paddingInline: 0, marginTop: 4 }}
-                onClick={() => workflow.startFromTemplate('ir-triage')}
+                onClick={() => confirmDiscardIfDirty(() => workflow.startFromTemplate('ir-triage'))}
               >
                 {t('startFromTemplate')}
               </Button>
@@ -795,7 +817,16 @@ export function WorkflowPage() {
                 danger
                 type="link"
                 style={{ paddingInline: 0, marginTop: 4 }}
-                onClick={() => void workflow.removeSaved()}
+                onClick={() => {
+                  modal.confirm({
+                    title: t('deleteSavedTitle'),
+                    content: workflow.state.dirty ? t('deleteSavedDirtyContent') : t('deleteSavedContent'),
+                    okText: t('deleteSavedConfirm'),
+                    cancelText: t('common:cancel'),
+                    okButtonProps: { danger: true },
+                    onOk: () => void workflow.removeSaved(),
+                  })
+                }}
               >
                 {t('deleteSaved')}
               </Button>
@@ -813,7 +844,9 @@ export function WorkflowPage() {
                     value: item.version,
                     label: `v${item.version}`,
                   }))}
-                  onChange={(version) => void workflow.restoreVersion(Number(version))}
+                  onChange={(version) =>
+                    confirmDiscardIfDirty(() => void workflow.restoreVersion(Number(version)))
+                  }
                 />
               </>
             ) : null}
@@ -852,7 +885,7 @@ export function WorkflowPage() {
             emptyHint={t('canvasEmpty')}
             emptyActionLabel={canWrite ? t('startFromTemplate') : undefined}
             onEmptyAction={
-              canWrite ? () => workflow.startFromTemplate('ir-triage') : undefined
+              canWrite ? () => confirmDiscardIfDirty(() => workflow.startFromTemplate('ir-triage')) : undefined
             }
           />
         </section>

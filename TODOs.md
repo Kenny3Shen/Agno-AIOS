@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Studio 脏草稿丢弃确认 + Chat regenerate 门闩
+
+- 加载库/清空/模板/恢复版本：`dirty` 时 `modal.confirm` 再继续。
+- 删除已保存工作流：始终确认（脏草稿用更明确文案）。
+- Chat `retry`：`requesting` 时直接 return，避免与进行中流并发。
+
+
 ## 已完成：Chat 会话切换取消流 + history 不覆盖流式 + beforeunload
 
 - 切换会话 / 新建对话：若仍在 requesting，abort SSE 并 best-effort `cancelRun`（同会话 no-op）。

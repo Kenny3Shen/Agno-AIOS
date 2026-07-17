@@ -218,6 +218,7 @@ export function useChat() {
   }
 
   const retry = (assistantId: string) => {
+    if (state.requesting) return
     const prompt = previousPrompt(state.messages, assistantId)
     const index = state.messages.findIndex((message) => message.id === assistantId)
     if (!prompt || index < 0) return
