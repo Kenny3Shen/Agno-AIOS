@@ -258,7 +258,25 @@ async def _discover_one_domain(
     async with semaphore:
         for seed in seeds:
             try:
-                resp = await _get_public_url(client, seed)
+                resp = None
+                last_exc: Exception | None = None
+                for attempt in range(2):
+                    try:
+                        resp = await _get_public_url(client, seed)
+                        if resp.status_code in {429, 500, 502, 503, 504} and attempt == 0:
+                            await asyncio.sleep(0.5)
+                            continue
+                        break
+                    except httpx.HTTPError as exc:
+                        last_exc = exc
+                        if attempt == 0:
+                            await asyncio.sleep(0.5)
+                            continue
+                        raise
+                if resp is None:
+                    if last_exc:
+                        raise last_exc
+                    continue
                 if resp.status_code != 200:
                     logger.warning("collect crawl seed HTTP {}: {}", resp.status_code, seed)
                     continue
@@ -307,13 +325,89 @@ async def discover_article_urls(
     return {domain: links for domain, links in pairs}
 
 
+
+_TRANSIENT_HTTP_MARKERS = (
+    "status code 408",
+    "status code 425",
+    "status code 429",
+    "status code 500",
+    "status code 502",
+    "status code 503",
+    "status code 504",
+)
+
+
+def _is_transient_fetch_failure(message: str) -> bool:
+    """True when a fetch failure is worth retrying once or twice."""
+    text = (message or "").strip()
+    if not text:
+        return True
+    lower = text.lower()
+    if text.startswith("Network error"):
+        return True
+    if text.startswith("HTTP error") and any(marker in lower for marker in _TRANSIENT_HTTP_MARKERS):
+        return True
+    if "timeout" in lower or "timed out" in lower or "temporar" in lower:
+        return True
+    if text.startswith("Unexpected error") and any(
+        token in lower for token in ("timeout", "connect", "reset", "temporarily")
+    ):
+        return True
+    return False
+
+
+async def _fetch_markdown_with_retries(
+    url: str,
+    *,
+    attempts: int = 3,
+) -> str:
+    """Call ``fetch_and_parse_url`` with short backoff on transient failures."""
+    delays = (0.35, 0.9, 1.8)
+    last = ""
+    tries = max(1, int(attempts))
+    for attempt in range(tries):
+        try:
+            markdowns = await fetch_and_parse_url([url])
+            markdown = (markdowns[0] if markdowns else "").strip()
+        except Exception as exc:  # noqa: BLE001 — classify then maybe retry
+            markdown = f"Unexpected error for {url}: {exc}"
+            logger.warning(
+                "collect fetch attempt {}/{} raised for {}: {}",
+                attempt + 1,
+                tries,
+                url,
+                exc,
+            )
+        last = markdown
+        if markdown and not markdown.startswith(
+            ("HTTP error", "Network error", "Unexpected error", "Content too short", "Restricted access")
+        ):
+            return markdown
+        if attempt + 1 >= tries or not _is_transient_fetch_failure(markdown):
+            return markdown
+        delay = delays[min(attempt, len(delays) - 1)]
+        logger.info(
+            "collect fetch retry {}/{} for {} after {:.2f}s ({})",
+            attempt + 2,
+            tries,
+            url,
+            delay,
+            (markdown or "")[:120],
+        )
+        await asyncio.sleep(delay)
+    return last
+
+
 async def fetch_article_record(url: str) -> dict[str, Any]:
-    """Parse one URL into a collect_articles row payload."""
+    """Parse one URL into a collect_articles row payload.
+
+    Transient network / 5xx / timeout failures are retried with short backoff
+    before persisting an error row.
+    """
     domain = _domain_of(url)
     now = datetime.now(UTC)
     try:
-        markdowns = await fetch_and_parse_url([url])
-        markdown = (markdowns[0] if markdowns else "").strip()
+        markdown = (await _fetch_markdown_with_retries(url)).strip()
         if not markdown or markdown.startswith(
             ("HTTP error", "Network error", "Unexpected error", "Content too short", "Restricted access")
         ):

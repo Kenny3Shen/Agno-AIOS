@@ -1,5 +1,10 @@
 # 下一步工作
 
+## 已完成：Collect 瞬态失败自动重试
+
+- 文章抓取：网络错误 / 408·429·5xx / timeout 等最多 3 次退避重试后再写入 error 行。
+- 列表发现 seed：对 429/5xx 与 HTTPError 再试 1 次，降低源站抖动导致的发现为空。
+
 ## 已完成：Collect 列表瘦身 + 失败重试 + CVE 全文检索
 
 - 列表搜索默认不返回 `markdown`（按需 `GET /articles/{id}`），避免大字段拖慢分页；查询不再默认扫全文 markdown。

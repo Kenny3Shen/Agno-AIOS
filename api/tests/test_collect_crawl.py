@@ -4,6 +4,7 @@ from api.services.collect_crawl_service import (
     _title_from_markdown,
     configured_source_domains,
     extract_article_links,
+    _is_transient_fetch_failure,
     select_urls_round_robin,
 )
 from api.utils.url2md_utils import active_domain_rules
@@ -100,3 +101,12 @@ def test_select_urls_round_robin_empty_when_all_existing():
         exclude={"https://a.com/1"},
     )
     assert selected == []
+
+
+def test_transient_fetch_failure_classifier():
+    assert _is_transient_fetch_failure("Network error for https://x: timeout")
+    assert _is_transient_fetch_failure("HTTP error for https://x: status code 503")
+    assert _is_transient_fetch_failure("Unexpected error for https://x: connect timeout")
+    assert not _is_transient_fetch_failure("Content too short for https://x")
+    assert not _is_transient_fetch_failure("HTTP error for https://x: status code 404")
+    assert not _is_transient_fetch_failure("Restricted access")
