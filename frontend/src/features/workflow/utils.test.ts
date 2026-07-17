@@ -25,6 +25,7 @@ import {
   summarizeSelectedAgentSteps,
   cloneNodeDeep,
   pasteNodesIntoSelection,
+  preserveSelectionAfterReload,
   locateNode,
   nodeLabel,
   triggerEnableBlocked,
@@ -993,3 +994,23 @@ describe('nodeLabel', () => {
   })
 })
 
+
+describe('preserveSelectionAfterReload', () => {
+  it('keeps multi-selection when nodes still exist after save reload', () => {
+    const a = createNode('step')
+    a.id = 'a'
+    const b = createNode('step')
+    b.id = 'b'
+    const c = createNode('step')
+    c.id = 'c'
+    const result = preserveSelectionAfterReload([a, b, c], 'b', ['a', 'b'], 'a')
+    expect(result).toEqual({ selectedId: 'b', selectedIds: ['a', 'b'] })
+  })
+
+  it('falls back when selection was removed', () => {
+    const a = createNode('step')
+    a.id = 'a'
+    const result = preserveSelectionAfterReload([a], 'gone', ['gone'], 'a')
+    expect(result).toEqual({ selectedId: 'a', selectedIds: ['a'] })
+  })
+})

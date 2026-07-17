@@ -1390,6 +1390,27 @@ export const fromRecord = (record: WorkflowRecord): Partial<WorkflowState> => {
   }
 }
 
+
+/** Keep multi/single selection when a saved record reloads steps (e.g. mid-run save). */
+export const preserveSelectionAfterReload = (
+  steps: WorkflowNode[],
+  selectedId: string | null | undefined,
+  selectedIds: string[] | undefined,
+  fallbackId: string | null | undefined,
+): { selectedId: string | null; selectedIds: string[] } => {
+  const keep = (selectedIds ?? []).filter((id) => Boolean(findNode(steps, id)))
+  if (keep.length) {
+    const primary =
+      selectedId && keep.includes(selectedId) ? selectedId : keep[0] ?? null
+    return { selectedId: primary, selectedIds: keep }
+  }
+  if (selectedId && findNode(steps, selectedId)) {
+    return { selectedId, selectedIds: [selectedId] }
+  }
+  const fallback = fallbackId && findNode(steps, fallbackId) ? fallbackId : null
+  return { selectedId: fallback, selectedIds: fallback ? [fallback] : [] }
+}
+
 /** Absolute webhook URL for the current browser origin. */
 export const workflowWebhookUrl = (workflowId: string, origin = window.location.origin) =>
   `${origin.replace(/\/$/, '')}/api/workflows/${encodeURIComponent(workflowId)}/hooks/webhook`

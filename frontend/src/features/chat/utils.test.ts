@@ -511,3 +511,34 @@ describe('formatRetryDetail', () => {
     expect(late.messages[0]).toMatchObject({ status: 'cancelled', content: 'partial' })
   })
 
+
+  it('replaces thought chain when thought.update resumes after provider retry', () => {
+    const assistant: Message = {
+      id: 'a',
+      role: 'assistant',
+      content: 'partial',
+      final: false,
+      status: 'streaming',
+      thought_chain: [{ id: 'old', title: 'old', status: 'success' }],
+    }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    const retrying = chatReducer(started, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'run.retrying', attempt: 1, maxAttempts: 3, delaySeconds: 1 },
+    })
+    const withThought = chatReducer(retrying, {
+      type: 'event',
+      id: 'a',
+      event: {
+        type: 'thought.update',
+        thought: { id: 'new', title: 'new', status: 'loading' },
+      },
+    })
+    expect(withThought.messages[0]).toMatchObject({
+      status: 'streaming',
+      retry: null,
+      content: '',
+    })
+    expect(withThought.messages[0]?.thought_chain?.map((t) => t.id)).toEqual(['new'])
+  })

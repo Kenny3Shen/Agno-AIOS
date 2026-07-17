@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Studio 保存/发布保留选中 + Chat thought 重试一致
+
+- `preserveSelectionAfterReload`：save/publish/模板保存后不把 Inspector 跳回第一个节点（运行中 Ctrl+S 更稳）。
+- `thought.update` 在 `run.retrying` 后恢复时清空旧 thought/content，与 content/tool/reasoning 路径一致。
+
+
 ## 已完成：Chat 重试保留部分输出 + 去双停止 + Studio 取消摘要
 
 - 模型 `run.retrying` 退避期间保留已生成 partial content；新 token/工具到达时再替换本轮输出。

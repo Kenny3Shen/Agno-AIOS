@@ -45,6 +45,7 @@ import {
   isInsideParallel,
   locateNode,
   pasteNodesIntoSelection,
+  preserveSelectionAfterReload,
   triggerEnableBlocked,
   moveNodeAfter,
   moveStep,
@@ -862,15 +863,24 @@ export function useWorkflow() {
       }
       const record = await createWorkflow(body)
       const saved = fromRecord(record)
-      setState((current) => ({
-        ...current,
-        ...saved,
-        selectedIds: saved.selectedId ? [saved.selectedId] : [],
-        saving: false,
-        dirty: false,
-        error: null,
+      setState((current) => {
+        const steps = saved.steps ?? current.steps
+        const selection = preserveSelectionAfterReload(
+          steps,
+          current.selectedId,
+          current.selectedIds,
+          saved.selectedId,
+        )
+        return {
+          ...current,
+          ...saved,
+          ...selection,
+          saving: false,
+          dirty: false,
+          error: null,
         focusEpoch: current.focusEpoch + 1,
-      }))
+        }
+      })
       await workflowsQuery.refetch()
       await versionsQuery.refetch()
     } catch (error) {
@@ -919,14 +929,23 @@ export function useWorkflow() {
         ? await updateWorkflow(state.workflowId, body)
         : await createWorkflow(body)
       const loaded = fromRecord(record)
-      setState((current) => ({
-        ...current,
-        ...loaded,
-        selectedIds: loaded.selectedId ? [loaded.selectedId] : [],
-        saving: false,
-        dirty: false,
-        error: null,
-      }))
+      setState((current) => {
+        const steps = loaded.steps ?? current.steps
+        const selection = preserveSelectionAfterReload(
+          steps,
+          current.selectedId,
+          current.selectedIds,
+          loaded.selectedId,
+        )
+        return {
+          ...current,
+          ...loaded,
+          ...selection,
+          saving: false,
+          dirty: false,
+          error: null,
+        }
+      })
       await workflowsQuery.refetch()
       await versionsQuery.refetch()
       return true
@@ -953,14 +972,23 @@ export function useWorkflow() {
     try {
       const record = await publishWorkflow(state.workflowId)
       const loaded = fromRecord(record)
-      setState((current) => ({
-        ...current,
-        ...loaded,
-        selectedIds: loaded.selectedId ? [loaded.selectedId] : [],
-        saving: false,
-        dirty: false,
-        error: null,
-      }))
+      setState((current) => {
+        const steps = loaded.steps ?? current.steps
+        const selection = preserveSelectionAfterReload(
+          steps,
+          current.selectedId,
+          current.selectedIds,
+          loaded.selectedId,
+        )
+        return {
+          ...current,
+          ...loaded,
+          ...selection,
+          saving: false,
+          dirty: false,
+          error: null,
+        }
+      })
       await workflowsQuery.refetch()
       await versionsQuery.refetch()
       return true

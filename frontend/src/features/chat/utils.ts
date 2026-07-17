@@ -240,10 +240,14 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
             if (message.final && message.status !== 'streaming' && message.status !== 'retrying') {
               return message
             }
-            const thoughts = message.thought_chain ?? []
+            const resumeAfterRetry = message.status === 'retrying'
+            const thoughts = resumeAfterRetry ? [] : (message.thought_chain ?? [])
             const index = thoughts.findIndex((step) => step.id === event.thought.id)
             return {
               ...message,
+              content: resumeAfterRetry ? '' : message.content,
+              reasoning: resumeAfterRetry ? null : message.reasoning,
+              tool_steps: resumeAfterRetry ? [] : message.tool_steps,
               thought_chain:
                 index < 0 ? [...thoughts, event.thought] : thoughts.map((step, stepIndex) => (stepIndex === index ? event.thought : step)),
               status: 'streaming',
