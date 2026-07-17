@@ -456,6 +456,15 @@ export const normalizeMessages = (value: unknown): Message[] =>
           id: String(source.id ?? source.message_id ?? source.run_id ?? `${source.role ?? 'message'}-${index}`),
           role: source.role === 'user' || source.role === 'system' ? source.role : 'assistant',
           content: typeof source.content === 'string' ? source.content : JSON.stringify(source.content ?? ''),
+          attachments: Array.isArray(source.attachments)
+            ? source.attachments
+                .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+                .map((item) => ({
+                  name: String(item.name ?? item.filename ?? 'file'),
+                  mime: item.mime != null ? String(item.mime) : item.mime_type != null ? String(item.mime_type) : undefined,
+                  kind: item.kind != null ? String(item.kind) : undefined,
+                }))
+            : undefined,
           final: status !== 'streaming',
           status,
           run_id: asString(source.run_id),

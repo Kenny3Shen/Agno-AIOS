@@ -2,7 +2,7 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from typing import Literal
+from typing import Any, Literal
 from sse_starlette.sse import EventSourceResponse
 
 from api.auth.models import User
@@ -28,6 +28,7 @@ from api.services.security_run_runtime import (
     cancel_security_run,
     stream_security_run,
 )
+from api.services.chat_media import process_chat_uploads
 from api.services.model_config_service import get_model_for_run
 from api.services.chat_settings_service import get_chat_settings
 from api.services.tracing_service import mark_trace_error
@@ -157,49 +158,154 @@ def _exception_detail(exc: BaseException) -> str:
     return f"{type(current).__name__}: {current}"
 
 
+def _parse_optional_bool(value: object, default: bool | None = None) -> bool | None:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if not isinstance(value, str):
+        return default
+    text = value.strip().lower()
+    if text in {"", "null", "none"}:
+        return default
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    raise HTTPException(status_code=422, detail=f"Invalid boolean: {value}")
+
+
+async def _start_chat_stream(
+    *,
+    message: str,
+    session_id: str,
+    model_id: str | None,
+    reasoning_effort: str | None,
+    search_knowledge: bool,
+    live_search: bool | None,
+    enable_tools: bool,
+    media_images: tuple = (),
+    media_files: tuple = (),
+    media_audio: tuple = (),
+    media_videos: tuple = (),
+    attachments: tuple = (),
+    user: User,
+    raw_request: Request,
+):
+    if not message.strip() and not (media_images or media_files or media_audio or media_videos):
+        raise HTTPException(status_code=422, detail="消息或附件不能同时为空")
+    if session_id:
+        owner_user_id = await get_session_owner_async(session_id)
+        if owner_user_id is not None:
+            assert_owned_resource(
+                user,
+                owner_user_id=owner_user_id,
+                resource_name="Session",
+            )
+    if reasoning_effort is not None:
+        model_config = await get_model_for_run(model_id)
+        _validate_reasoning_effort(reasoning_effort, model_config)
+    chat_settings = await get_chat_settings()
+    # Empty message with media only: give the model a short instruction.
+    text = message.strip() or "请根据附件内容进行分析。"
+    run_request = SecurityRunRequest.from_chat_args(
+        text,
+        session_id=session_id,
+        model_id=model_id,
+        reasoning_effort=reasoning_effort,
+        user_id=actor_id(user),
+        knowledge_owner_user_id=None
+        if has_scope(user, ADMIN_SCOPE)
+        else actor_id(user),
+        memory_enabled=chat_settings["memory_enabled"],
+        store_raw_tool_io=chat_settings["show_raw_tool_io"],
+        search_knowledge=search_knowledge,
+        live_search=live_search,
+        enable_tools=enable_tools,
+        images=media_images,
+        files=media_files,
+        audio=media_audio,
+        videos=media_videos,
+        attachments=attachments,
+    )
+    return EventSourceResponse(
+        _event_generator(
+            run_request,
+            actor=user,
+            request_context=audit_request_context(raw_request),
+        ),
+        headers={"Cache-Control": "no-cache"},
+        sep="\n",
+    )
+
+
 @router.post("/chat")
 async def chat_agent(
-    request: ChatRequest,
     raw_request: Request,
     user: User = Depends(require_scope("sessions:write")),
 ):
-    """使用 LLM 处理聊天消息（流式）"""
+    """Chat SSE: JSON body or multipart form (Agno-style ``files`` uploads)."""
     try:
-        if request.session_id:
-            owner_user_id = await get_session_owner_async(request.session_id)
-            if owner_user_id is not None:
-                assert_owned_resource(
-                    user,
-                    owner_user_id=owner_user_id,
-                    resource_name="Session",
-                )
-        if request.reasoning_effort is not None:
-            model_config = await get_model_for_run(request.model_id)
-            _validate_reasoning_effort(request.reasoning_effort, model_config)
-        chat_settings = await get_chat_settings()
-        run_request = SecurityRunRequest.from_chat_args(
-            request.message,
+        content_type = (raw_request.headers.get("content-type") or "").lower()
+        if "multipart/form-data" in content_type:
+            form = await raw_request.form()
+            message = str(form.get("message") or "")
+            session_id = str(form.get("session_id") or "").strip()
+            if not session_id:
+                raise HTTPException(status_code=422, detail="session_id is required")
+            model_raw = form.get("model_id")
+            model_id = str(model_raw).strip() if model_raw not in (None, "") else None
+            effort_raw = form.get("reasoning_effort")
+            reasoning_effort = (
+                str(effort_raw).strip() if effort_raw not in (None, "") else None  # type: ignore[assignment]
+            )
+            if reasoning_effort is not None and reasoning_effort not in {
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "max",
+            }:
+                raise HTTPException(status_code=422, detail="Invalid reasoning_effort")
+            search_knowledge = _parse_optional_bool(form.get("search_knowledge"), True)  # type: ignore[arg-type]
+            live_search = _parse_optional_bool(form.get("live_search"), None)  # type: ignore[arg-type]
+            enable_tools = _parse_optional_bool(form.get("enable_tools"), True)  # type: ignore[arg-type]
+            assert search_knowledge is not None and enable_tools is not None
+            uploads: list[Any] = []
+            for key in ("files", "file"):
+                for item in form.getlist(key):
+                    if hasattr(item, "filename") and hasattr(item, "read"):
+                        uploads.append(item)
+            bundle = await process_chat_uploads(uploads or None)  # type: ignore[arg-type]
+            return await _start_chat_stream(
+                message=message,
+                session_id=session_id,
+                model_id=model_id,
+                reasoning_effort=reasoning_effort,
+                search_knowledge=search_knowledge,
+                live_search=live_search,
+                enable_tools=enable_tools,
+                media_images=bundle.images,
+                media_files=bundle.files,
+                media_audio=bundle.audio,
+                media_videos=bundle.videos,
+                attachments=bundle.attachments,
+                user=user,
+                raw_request=raw_request,
+            )
+
+        body = await raw_request.json()
+        request = ChatRequest.model_validate(body)
+        return await _start_chat_stream(
+            message=request.message,
             session_id=request.session_id,
             model_id=request.model_id,
             reasoning_effort=request.reasoning_effort,
-            user_id=actor_id(user),
-            knowledge_owner_user_id=None
-            if has_scope(user, ADMIN_SCOPE)
-            else actor_id(user),
-            memory_enabled=chat_settings["memory_enabled"],
-            store_raw_tool_io=chat_settings["show_raw_tool_io"],
             search_knowledge=request.search_knowledge,
             live_search=request.live_search,
             enable_tools=request.enable_tools,
-        )
-        return EventSourceResponse(
-            _event_generator(
-                run_request,
-                actor=user,
-                request_context=audit_request_context(raw_request),
-            ),
-            headers={"Cache-Control": "no-cache"},
-            sep="\n",
+            user=user,
+            raw_request=raw_request,
         )
     except HTTPException:
         raise

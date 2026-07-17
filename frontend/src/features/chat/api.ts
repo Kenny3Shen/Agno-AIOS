@@ -238,16 +238,49 @@ const parseEvent = (event: string, data: string): ChatRunEvent | null => {
   }
 }
 
+export type StreamMessagePayload = {
+  message: string
+  session_id: string
+  model_id: string | null
+  reasoning_effort?: ReasoningEffort
+  search_knowledge?: boolean
+  live_search?: boolean | null
+  enable_tools?: boolean
+  /** Browser File objects for Agno multipart upload (field name ``files``). */
+  files?: File[]
+}
+
 export const streamMessage = async (
-  payload: { message: string; session_id: string; model_id: string | null; reasoning_effort?: ReasoningEffort; search_knowledge?: boolean; live_search?: boolean | null; enable_tools?: boolean },
+  payload: StreamMessagePayload,
   onEvent: (event: ChatRunEvent) => void,
   signal: AbortSignal
 ) => {
-  const response = await apiFetch('/chat', {
-    ...jsonInit('POST', payload),
-    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-    signal,
-  })
+  const files = (payload.files ?? []).filter((file) => file instanceof File)
+  let response: Response
+  if (files.length > 0) {
+    const form = new FormData()
+    form.set('message', payload.message)
+    form.set('session_id', payload.session_id)
+    if (payload.model_id) form.set('model_id', payload.model_id)
+    if (payload.reasoning_effort) form.set('reasoning_effort', payload.reasoning_effort)
+    if (payload.search_knowledge != null) form.set('search_knowledge', String(payload.search_knowledge))
+    if (payload.live_search != null) form.set('live_search', String(payload.live_search))
+    if (payload.enable_tools != null) form.set('enable_tools', String(payload.enable_tools))
+    for (const file of files) form.append('files', file, file.name)
+    response = await apiFetch('/chat', {
+      method: 'POST',
+      body: form,
+      headers: { Accept: 'text/event-stream' },
+      signal,
+    })
+  } else {
+    const { files: _ignored, ...jsonPayload } = payload
+    response = await apiFetch('/chat', {
+      ...jsonInit('POST', jsonPayload),
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      signal,
+    })
+  }
   if (!response.ok || !response.body) throw new Error(`Chat request failed (${response.status})`)
   let terminal = false
   await consumeSse(

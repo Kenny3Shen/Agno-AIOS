@@ -26,6 +26,12 @@ export interface ThoughtStep {
   summary?: string | null
   duration?: number | null
 }
+export interface ChatAttachment {
+  name: string
+  mime?: string
+  kind?: 'image' | 'document' | 'audio' | 'video' | string
+}
+
 export interface ChatSource {
   id: string
   title: string
@@ -37,6 +43,7 @@ export interface Message {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
+  attachments?: ChatAttachment[] | null
   final: boolean
   status?: RunStatus
   run_id?: string | null

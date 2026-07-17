@@ -574,6 +574,65 @@ def _project_history_content(run: dict[str, object], status: str) -> str:
     return content_text
 
 
+
+def _history_user_attachments(run: dict[str, Any]) -> list[dict[str, str]]:
+    """Project light attachment cards from Agno run input media."""
+    items: list[dict[str, str]] = []
+    inp = coerce_json_value(run.get("input"))
+    media_sources: list[tuple[str, object]] = []
+    if isinstance(inp, dict):
+        for key, kind in (
+            ("images", "image"),
+            ("files", "document"),
+            ("audio", "audio"),
+            ("audios", "audio"),
+            ("videos", "video"),
+        ):
+            media_sources.append((kind, inp.get(key)))
+    for kind, value in media_sources:
+        if not isinstance(value, list):
+            continue
+        for raw in value:
+            if not isinstance(raw, dict):
+                continue
+            name = (
+                str(raw.get("filename") or raw.get("name") or raw.get("id") or kind).strip()
+                or kind
+            )
+            mime = str(raw.get("mime_type") or raw.get("mime") or "").strip()
+            items.append({"name": name, "mime": mime, "kind": kind})
+    # Fallback: T.A.I.S may stash attachment meta on runtime metadata in future.
+    metadata = coerce_json_value(run.get("metadata") or {})
+    if isinstance(metadata, dict):
+        context = metadata.get("tais_runtime")
+        if isinstance(context, dict):
+            extra = context.get("attachments")
+            if isinstance(extra, list):
+                for raw in extra:
+                    if not isinstance(raw, dict):
+                        continue
+                    name = str(raw.get("name") or "").strip()
+                    if not name:
+                        continue
+                    items.append(
+                        {
+                            "name": name,
+                            "mime": str(raw.get("mime") or "").strip(),
+                            "kind": str(raw.get("kind") or "document").strip() or "document",
+                        }
+                    )
+    # Dedupe by name+kind
+    seen: set[tuple[str, str]] = set()
+    unique: list[dict[str, str]] = []
+    for item in items:
+        key = (item["name"], item["kind"])
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(item)
+    return unique
+
+
 async def get_session_messages_async(
     session_id: str,
     *,
@@ -603,8 +662,18 @@ async def get_session_messages_async(
             continue
         user_text = _preview_from_runs([run])
         run_id = str(run.get("run_id") or f"history-{index}")
-        if user_text.strip():
-            messages.append({"id": f"{run_id}:user", "role": "user", "content": user_text.strip(), "final": True, "session_id": session_id})
+        attachments = _history_user_attachments(cast(dict[str, Any], run))
+        if user_text.strip() or attachments:
+            user_msg: dict[str, Any] = {
+                "id": f"{run_id}:user",
+                "role": "user",
+                "content": user_text.strip(),
+                "final": True,
+                "session_id": session_id,
+            }
+            if attachments:
+                user_msg["attachments"] = attachments
+            messages.append(user_msg)
 
         content = run.get("content", "")
         tools_value_for_gate = run.get("tools")

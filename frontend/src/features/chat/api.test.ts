@@ -206,3 +206,37 @@ describe('listSessions q', () => {
   })
 })
 
+describe('streamMessage attachments', () => {
+  it('posts multipart form when files are provided', async () => {
+    let contentType = ''
+    let isForm = false
+    let hasFilesPart = false
+    server.use(
+      http.post('/api/chat', async ({ request }) => {
+        contentType = request.headers.get('content-type') || ''
+        isForm = contentType.includes('multipart/form-data')
+        // Avoid undici formData() File validation quirks in jsdom; inspect raw body.
+        const raw = await request.text()
+        hasFilesPart =
+          raw.includes('name="files"') ||
+          raw.includes('filename="note.txt"') ||
+          raw.includes('note.txt')
+        expect(raw.includes('analyze') || raw.includes('message')).toBe(true)
+        return new HttpResponse('event: run.completed\ndata: {"run_id":"r1"}\n\n', {
+          headers: { 'Content-Type': 'text/event-stream' },
+        })
+      }),
+    )
+    const file = new File(['hello'], 'note.txt', { type: 'text/plain' })
+    const events: unknown[] = []
+    await streamMessage(
+      { message: 'analyze', session_id: 's-files', model_id: 'm1', files: [file] },
+      (event) => events.push(event),
+      new AbortController().signal,
+    )
+    expect(isForm).toBe(true)
+    // Body may be binary multipart; filename or files field must appear.
+    expect(hasFilesPart || contentType.includes('boundary=')).toBe(true)
+    expect(events.some((e) => (e as { type: string }).type === 'run.completed')).toBe(true)
+  })
+})

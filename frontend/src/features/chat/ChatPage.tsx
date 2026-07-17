@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Actions, Bubble, Prompts, Sender, Sources, ThoughtChain } from '@ant-design/x'
+import { Actions, Attachments, Bubble, FileCard, Prompts, Sender, Sources, ThoughtChain } from '@ant-design/x'
 import { Markdown } from '@/shared/ui/Markdown'
 import { App, Avatar, Button, Cascader, Popover, Spin, Tag, Tooltip } from 'antd'
 import {
@@ -271,7 +271,19 @@ function MessageBody({ message, retry, sessionId, requesting = false }: { messag
   if (message.role !== 'assistant')
     return (
       <div className={`message-body message-body--${motionState}`}>
-        <p>{message.content}</p>
+        {message.attachments?.length ? (
+          <div className="message-attachments">
+            <FileCard.List
+              size="small"
+              items={message.attachments.map((item) => ({
+                name: item.name,
+                description: item.mime || item.kind,
+                type: item.kind === 'image' ? 'image' : item.kind === 'audio' ? 'audio' : item.kind === 'video' ? 'video' : 'file',
+              }))}
+            />
+          </div>
+        ) : null}
+        {message.content ? <p>{message.content}</p> : null}
         <div className="message-actions-bar"><Actions className="message-actions" items={actions} /></div>
       </div>
     )
@@ -469,6 +481,8 @@ export function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const senderShellRef = useRef<HTMLDivElement>(null)
   const workspaceRef = useRef<HTMLDivElement>(null)
+  const attachmentsRef = useRef<{ select: (options?: { accept?: string; multiple?: boolean }) => void } | null>(null)
+  const [openAttachments, setOpenAttachments] = useState(false)
   const cancelRef = useRef(chat.cancel)
   cancelRef.current = chat.cancel
   const [followLatest, setFollowLatest] = useState(true)
@@ -479,7 +493,7 @@ export function ChatPage() {
     [chat.activeSessionMeta, chat.sessionId, chat.sessions.data]
   )
   const bubbles = chat.state.messages
-    .filter((item) => item.content || item.role === 'assistant')
+    .filter((item) => item.content || item.attachments?.length || item.role === 'assistant')
     .map((item) => ({
       key: item.id,
       role: item.role === 'user' ? 'user' : 'ai',
@@ -528,7 +542,9 @@ export function ChatPage() {
     liveSearchSupported,
     lastTurnAutoLean,
   )
-  const sendDisabled = inputDisabled || Boolean(pausedRun) || !chat.state.input.trim()
+  const hasAttachments = (chat.attachments?.length ?? 0) > 0
+  const sendDisabled =
+    inputDisabled || Boolean(pausedRun) || (!chat.state.input.trim() && !hasAttachments)
   const scrollToLatest = useCallback((behavior: ScrollBehavior = 'smooth') => {
     const node = scrollRef.current
     if (!node) return
@@ -967,6 +983,46 @@ export function ChatPage() {
             suffix={false}
             placeholder={chat.selectedModel?.configured ? t('placeholderReady') : t('placeholderNoModel')}
             autoSize={{ minRows: 1, maxRows: 5 }}
+            header={
+              <Sender.Header
+                title={t('attachments')}
+                open={openAttachments || hasAttachments}
+                onOpenChange={(open) => {
+                  if (!open && !hasAttachments) setOpenAttachments(false)
+                  else setOpenAttachments(open)
+                }}
+                styles={{ content: { padding: 0 } }}
+              >
+                <Attachments
+                  ref={attachmentsRef as never}
+                  beforeUpload={() => false}
+                  items={(chat.attachments ?? []).map((file, index) => ({
+                    uid: `${file.name}-${file.size}-${file.lastModified}-${index}`,
+                    name: file.name,
+                    size: file.size,
+                    type: file.type,
+                    originFileObj: file as never,
+                    status: 'done' as const,
+                  }))}
+                  onChange={({ fileList }) => {
+                    const next = fileList
+                      .map((item) => item.originFileObj as File | undefined)
+                      .filter((file): file is File => file instanceof File)
+                    chat.setAttachments(next)
+                    if (next.length > 0) setOpenAttachments(true)
+                  }}
+                  overflow="scrollX"
+                  maxCount={8}
+                  accept="image/*,.pdf,.txt,.md,.csv,.json,.html,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.py,.js,.xml,.rtf,audio/*,video/*"
+                  placeholder={{
+                    icon: <PaperClipOutlined />,
+                    title: t('attachmentsDropTitle'),
+                    description: t('attachmentsDropHint'),
+                  }}
+                  getDropContainer={() => senderShellRef.current}
+                />
+              </Sender.Header>
+            }
             footer={
               <div className="sender-controls">
                 <div className="sender-toggles">
@@ -1026,7 +1082,23 @@ export function ChatPage() {
                   >
                     {t('knowledgeSearch')}
                   </Button>
-                  <Button className="sender-extension" type="text" icon={<PaperClipOutlined />} disabled aria-label={t('attachmentsComing')} />
+                  <Button
+                    className={hasAttachments || openAttachments ? 'sender-extension active' : 'sender-extension'}
+                    type="text"
+                    icon={<PaperClipOutlined />}
+                    aria-label={t('attachments')}
+                    title={t('attachmentsHelp')}
+                    disabled={chat.state.requesting || Boolean(pausedRun) || inputDisabled}
+                    onClick={() => {
+                      if (hasAttachments || openAttachments) {
+                        setOpenAttachments((value) => !value)
+                        return
+                      }
+                      setOpenAttachments(true)
+                      // Open native picker after header mounts.
+                      window.setTimeout(() => attachmentsRef.current?.select({ multiple: true }), 0)
+                    }}
+                  />
                 </div>
                 <div className="sender-actions">
                   <ModelSettings

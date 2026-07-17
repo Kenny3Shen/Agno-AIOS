@@ -25,6 +25,8 @@ const chat = {
   sessionMetaError: null as Error | null,
   sessionMetaRefetch: vi.fn(),
   sessionMissing: false,
+  attachments: [] as File[],
+  setAttachments: vi.fn(),
   history: {
     data: [] as unknown[],
     isError: false,

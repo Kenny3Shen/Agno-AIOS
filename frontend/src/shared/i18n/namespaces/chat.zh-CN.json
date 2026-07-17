@@ -43,7 +43,7 @@
   "workspace": "安全调查工作区",
   "placeholderReady": "描述你要调查的问题…",
   "placeholderNoModel": "请先在设置中配置可用模型",
-  "attachmentsComing": "附件功能即将推出",
+  "attachmentsComing": "附件",
   "stopGenerating": "停止生成",
   "stopGeneratingHint": "停止生成（Esc）",
   "leaveWhileGeneratingTitle": "生成尚未结束，确认离开？",
@@ -105,5 +105,9 @@
   "sessionMetaLoading": "加载会话信息…",
   "historyLoading": "加载会话历史…",
   "sessionNotFound": "会话不存在或无权访问",
-  "sessionMetaLoadFailed": "无法加载会话信息，请重试"
+  "sessionMetaLoadFailed": "无法加载会话信息，请重试",
+  "attachments": "附件",
+  "attachmentsHelp": "为本条消息附加图片或文档（最多 8 个，单个 ≤20MB）",
+  "attachmentsDropTitle": "拖放文件到这里",
+  "attachmentsDropHint": "支持图片、PDF、文本、Office、音视频等"
 }

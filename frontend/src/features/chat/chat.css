@@ -1264,3 +1264,17 @@ html.dark {
   flex: 1;
   font-size: 12px;
 }
+
+
+.message-attachments {
+  margin-bottom: 8px;
+  max-width: min(100%, 420px);
+}
+
+.sender-extension.active {
+  color: var(--tais-orange) !important;
+}
+
+.sender-shell .ant-sender-header {
+  border-bottom: 1px solid color-mix(in srgb, var(--tais-border, #e5e7eb) 80%, transparent);
+}

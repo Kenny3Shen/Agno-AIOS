@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Chat 文件上传（Agno media + Ant Design X Attachments）
+
+- `POST /api/chat` 支持 JSON 与 `multipart/form-data`（字段 `files`，对齐 Agno OS agent run）。
+- `chat_media.process_chat_uploads`：按 MIME/扩展名分类为 Image/File/Audio/Video，透传 `agent.arun`。
+- 前端 `Sender` + `Attachments` 选择/拖放；气泡 `FileCard` 展示；历史从 run input / `tais_runtime.attachments` 投影。
+- 限制：最多 8 个、单文件 20MB、合计 40MB。
+
 ## 已完成：Workflow SSE 去掉重复 workflow.started
 
 - 保留编译侧一次 `workflow.started`（含 skills / loaded_skills）。

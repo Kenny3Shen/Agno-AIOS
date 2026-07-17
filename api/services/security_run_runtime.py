@@ -361,6 +361,13 @@ class SecurityRunRequest:
     enable_tools: bool = True
     # None = all enabled skills; list = enabled ∩ names (Workflow-style).
     skill_names: list[str] | None = None
+    # Agno media for this turn (images / files / audio / videos).
+    images: tuple[Any, ...] = ()
+    files: tuple[Any, ...] = ()
+    audio: tuple[Any, ...] = ()
+    videos: tuple[Any, ...] = ()
+    # Light UI metadata only (name/mime/kind); not sent to the model.
+    attachments: tuple[dict[str, str], ...] = ()
 
     @classmethod
     def from_chat_args(
@@ -377,6 +384,11 @@ class SecurityRunRequest:
         live_search: bool | None = None,
         enable_tools: bool = True,
         skill_names: list[str] | None = None,
+        images: tuple[Any, ...] | list[Any] | None = None,
+        files: tuple[Any, ...] | list[Any] | None = None,
+        audio: tuple[Any, ...] | list[Any] | None = None,
+        videos: tuple[Any, ...] | list[Any] | None = None,
+        attachments: tuple[dict[str, str], ...] | list[dict[str, str]] | None = None,
         *,
         infer_skills: bool = True,
     ) -> "SecurityRunRequest":
@@ -400,6 +412,11 @@ class SecurityRunRequest:
             live_search=live_search,
             enable_tools=enable_tools,
             skill_names=resolved_skills,
+            images=tuple(images or ()),
+            files=tuple(files or ()),
+            audio=tuple(audio or ()),
+            videos=tuple(videos or ()),
+            attachments=tuple(attachments or ()),
         )
 
     @property
@@ -407,7 +424,7 @@ class SecurityRunRequest:
         return (self.user_id or "anonymous").strip() or "anonymous"
 
     def runtime_metadata(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "version": RUNTIME_METADATA_VERSION,
             "model_id": self.model_id or "",
             "reasoning_effort": self.reasoning_effort or "",
@@ -421,6 +438,9 @@ class SecurityRunRequest:
             if self.skill_names is not None
             else None,
         }
+        if self.attachments:
+            payload["attachments"] = [dict(item) for item in self.attachments]
+        return payload
 
     @classmethod
     def from_run_metadata(
@@ -892,6 +912,15 @@ class SecurityRunRuntime:
 
         async def _produce_agent_events() -> None:
             try:
+                media_kwargs: dict[str, Any] = {}
+                if request.images:
+                    media_kwargs["images"] = list(request.images)
+                if request.files:
+                    media_kwargs["files"] = list(request.files)
+                if request.audio:
+                    media_kwargs["audio"] = list(request.audio)
+                if request.videos:
+                    media_kwargs["videos"] = list(request.videos)
                 async for event in agent.arun(
                     request.message,
                     session_id=request.session_id,
@@ -899,6 +928,7 @@ class SecurityRunRuntime:
                     metadata={RUNTIME_METADATA_KEY: request.runtime_metadata()},
                     stream=True,
                     stream_events=True,
+                    **media_kwargs,
                 ):
                     await agent_queue.put(("event", event))
             except BaseException as exc:

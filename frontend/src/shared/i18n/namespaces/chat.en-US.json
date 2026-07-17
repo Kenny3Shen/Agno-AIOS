@@ -43,7 +43,7 @@
   "workspace": "Security investigation workspace",
   "placeholderReady": "Describe the issue to investigate…",
   "placeholderNoModel": "Configure an available model in Settings first",
-  "attachmentsComing": "Attachments coming soon",
+  "attachmentsComing": "Attachments",
   "stopGenerating": "Stop generating",
   "stopGeneratingHint": "Stop generating (Esc)",
   "leaveWhileGeneratingTitle": "Leave while generating?",
@@ -105,5 +105,9 @@
   "sessionMetaLoading": "Loading session…",
   "historyLoading": "Loading conversation history…",
   "sessionNotFound": "Session not found or access denied",
-  "sessionMetaLoadFailed": "Unable to load session details. Please retry."
+  "sessionMetaLoadFailed": "Unable to load session details. Please retry.",
+  "attachments": "Attachments",
+  "attachmentsHelp": "Attach images or documents for this message (max 8, 20MB each)",
+  "attachmentsDropTitle": "Drop files here",
+  "attachmentsDropHint": "Images, PDF, text, Office docs, audio, or video"
 }

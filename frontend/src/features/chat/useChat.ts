@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
@@ -36,6 +36,7 @@ export function useChat() {
   const searchStr = useRouterState({ select: (state) => state.location.searchStr })
   const sessionId = new URLSearchParams(searchStr).get('session')
   const [state, dispatch] = useReducer(chatReducer, initialChatState)
+  const [attachments, setAttachments] = useState<File[]>([])
   const abortRef = useRef<AbortController | null>(null)
   const activeRunIdRef = useRef<string | null>(null)
   // Track URL session for abort-on-change (sidebar navigates URL; this hook owns the SSE).
@@ -184,8 +185,9 @@ export function useChat() {
 
   const submit = async (prompt: string, appendUser = true) => {
     const text = prompt.trim()
+    const pendingFiles = attachments.slice()
     const hasPendingApproval = state.messages.some((message) => message.role === 'assistant' && message.status === 'paused')
-    if (!text || state.requesting || hasPendingApproval || !selectedModel?.enabled || !selectedModel.configured) return
+    if ((!text && pendingFiles.length === 0) || state.requesting || hasPendingApproval || !selectedModel?.enabled || !selectedModel.configured) return
     // Existing deep-link session: wait for meta (and never send on workflow sessions).
     if (sessionId && (!metaResolved || sessionMetaFailed || isWorkflowSession)) return
     const activeSession = sessionId ?? crypto.randomUUID()
@@ -194,7 +196,7 @@ export function useChat() {
       const now = Date.now() / 1_000
       const optimisticSession: ChatSession = {
         session_id: activeSession,
-        preview: text,
+        preview: text || (pendingFiles.length ? pendingFiles.map((f) => f.name).join(', ') : '新对话'),
         created_at: now,
         updated_at: now,
         archived: false,
@@ -215,7 +217,25 @@ export function useChat() {
       })
     }
     const assistantId = crypto.randomUUID()
-    const user: Message = { id: crypto.randomUUID(), role: 'user', content: text, final: true, session_id: activeSession }
+    const user: Message = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: text,
+      final: true,
+      session_id: activeSession,
+      attachments: pendingFiles.map((file) => ({
+        name: file.name,
+        mime: file.type || undefined,
+        kind: file.type.startsWith('image/')
+          ? 'image'
+          : file.type.startsWith('audio/')
+            ? 'audio'
+            : file.type.startsWith('video/')
+              ? 'video'
+              : 'document',
+      })),
+    }
+    setAttachments([])
     const assistant: Message = {
       id: assistantId,
       role: 'assistant',
@@ -243,6 +263,7 @@ export function useChat() {
           search_knowledge: state.enableTools ? state.searchKnowledge : false,
           live_search: state.enableTools ? state.liveSearch : false,
           enable_tools: state.enableTools,
+          ...(pendingFiles.length ? { files: pendingFiles } : {}),
         },
         (event: ChatRunEvent) => {
           // Drop late chunks if the user switched sessions mid-stream.
@@ -367,6 +388,8 @@ export function useChat() {
           : null,
     sessionMetaRefetch: () => void sessionMetaResult.refetch(),
     sessionMissing,
+    attachments,
+    setAttachments,
     history,
     models,
     selectedModel,
