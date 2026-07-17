@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Collect 标题 og:title + Playwright 配置外置
+
+- `_get_title_text` 优先 `og:title`，再 `<title>` / h1。
+- Playwright：`TAIS_COLLECT_USE_PLAYWRIGHT` / `HEADLESS` / `USER_DATA` 环境变量，去掉硬编码 home 路径。
+- `.env.example` 补充说明；域规则与 SSRF 回归仍绿。
+
 ## 已完成：Chat history/meta 错误文案统一 + RQ 重试收窄
 
 - history / session-meta 错误：主文案 i18n，原始错误为次级 detail。

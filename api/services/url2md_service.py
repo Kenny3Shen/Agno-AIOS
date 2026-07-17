@@ -1,8 +1,10 @@
 import asyncio
 import importlib
 import ipaddress
+import os
 import re
 import socket
+from pathlib import Path
 from copy import copy
 from typing import Any
 from urllib.parse import urljoin, urlsplit
@@ -17,8 +19,26 @@ from api.utils.url2md_utils import (
 )
 from loguru import logger
 
-USE_PLAYWRIGHT = False  # 是否使用 Playwright 绕过 WAF
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on"}
+
+
+# Optional browser fallback for WAF challenges (requires patchright + Chrome).
+USE_PLAYWRIGHT = _env_flag("TAIS_COLLECT_USE_PLAYWRIGHT", False)
 MAX_REDIRECTS = 5
+
+
+def _playwright_user_data_dir() -> Path:
+    """Resolve browser profile dir without hardcoding a developer home path."""
+    override = (os.getenv("TAIS_COLLECT_PLAYWRIGHT_USER_DATA") or "").strip()
+    if override:
+        return Path(override).expanduser()
+    xdg = (os.getenv("XDG_CONFIG_HOME") or "").strip()
+    base = Path(xdg).expanduser() if xdg else Path.home() / ".config"
+    return base / "patchright-chrome"
 
 
 class UnsafeUrlError(ValueError):
@@ -82,9 +102,16 @@ async def _get_public_url(client: httpx.AsyncClient, url: str) -> httpx.Response
 
 
 def _get_title_text(soup: BeautifulSoup) -> str:
-    """提取页面标题的纯文本"""
-    title = None
-    if soup.title:
+    """Best-effort page title: og:title → <title> → first h1."""
+    title = ""
+    og = soup.find("meta", attrs={"property": "og:title"})
+    if og is None:
+        og = soup.find("meta", attrs={"name": "og:title"})
+    if og is not None:
+        content = og.get("content")
+        if isinstance(content, str) and content.strip():
+            title = content.strip()
+    if not title and soup.title:
         title = soup.title.get_text(strip=True)
     if not title:
         h1 = soup.find("h1")
@@ -445,10 +472,12 @@ async def _fetch_with_playwright(url: str) -> str:
         raise RuntimeError("patchright is required when USE_PLAYWRIGHT is enabled") from exc
 
     async with async_playwright() as p:
+        user_data_dir = _playwright_user_data_dir()
+        user_data_dir.mkdir(parents=True, exist_ok=True)
         context = await p.chromium.launch_persistent_context(
-            user_data_dir="/home/shenss/.config/patchright-chrome",
+            user_data_dir=str(user_data_dir),
             channel="chrome",
-            headless=False,
+            headless=_env_flag("TAIS_COLLECT_PLAYWRIGHT_HEADLESS", True),
             no_viewport=True,
         )
         try:

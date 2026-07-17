@@ -253,3 +253,28 @@ def test_get_markdown_text_extracts_pre_and_blockquote():
     assert "SELECT * FROM users" in md
     assert "```" in md
     assert "Analyst note" in md
+
+
+def test_get_title_prefers_og_title():
+    from bs4 import BeautifulSoup
+    from api.services.url2md_service import _get_title_text
+
+    soup = BeautifulSoup(
+        """
+        <html><head>
+          <title>Short tab</title>
+          <meta property="og:title" content="Full Article Title - Site" />
+        </head><body><h1>Ignored</h1></body></html>
+        """,
+        "html.parser",
+    )
+    assert _get_title_text(soup) == "Full Article Title - Site"
+
+
+def test_playwright_user_data_dir_respects_env(monkeypatch, tmp_path):
+    from api.services import url2md_service as svc
+
+    target = tmp_path / "browser-profile"
+    monkeypatch.setenv("TAIS_COLLECT_PLAYWRIGHT_USER_DATA", str(target))
+    assert svc._playwright_user_data_dir() == target
+
