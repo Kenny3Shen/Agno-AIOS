@@ -1,5 +1,13 @@
 # 下一步工作
 
+## 已完成：Studio 停止调用服务端 Workflow cancel
+
+- `POST /api/workflows/runs/{run_id}/cancel`：对已注册的 live run 调用 Agno `Workflow.cancel_run`（按 owner 隔离）。
+- `stream_workflow_run` 注册/注销 live 实例；客户端断开 `CancelledError` 时也会 cancel 并下发 `workflow.cancelled`。
+- Studio：启动时预生成 `run_id` 写入 body/`lastRunId`；Stop/Esc 先 abort SSE，再 best-effort 调 cancel（404 静默）。
+- 单测：owner 校验、stream 结束后注销。
+
+
 ## 已完成：空剪贴板粘贴 / reparent 失败 Toast / Studio Esc 停跑
 
 - 粘贴/复制：剪贴板空时 `pasteEmptyClipboard` info toast，不再静默。

@@ -201,3 +201,77 @@ async def test_stream_workflow_paused_creates_approval():
     paused = events[-1]
     assert paused.data["approval_id"] == "appr-1"
     create_appr.assert_awaited_once()
+
+
+def test_cancel_workflow_run_requires_registered_owner():
+    class FakeCancellable:
+        def __init__(self) -> None:
+            self.cancelled: list[str] = []
+
+        def cancel_run(self, run_id: str) -> bool:
+            self.cancelled.append(run_id)
+            return True
+
+    workflow = FakeCancellable()
+    workflow_run_runtime.register_workflow_run(
+        user_id="u1", run_id="run-x", workflow=workflow
+    )
+    try:
+        assert not workflow_run_runtime.cancel_workflow_run(user_id="u2", run_id="run-x")
+        assert workflow.cancelled == []
+        assert workflow_run_runtime.cancel_workflow_run(user_id="u1", run_id="run-x")
+        assert workflow.cancelled == ["run-x"]
+        assert not workflow_run_runtime.cancel_workflow_run(user_id="u1", run_id="missing")
+    finally:
+        workflow_run_runtime.unregister_workflow_run(user_id="u1", run_id="run-x")
+
+
+@pytest.mark.asyncio
+async def test_stream_registers_and_unregisters_workflow():
+    class FakeWorkflow:
+        def __init__(self) -> None:
+            self.name = "reg"
+            self.cancelled: list[str] = []
+
+        def cancel_run(self, run_id: str) -> bool:
+            self.cancelled.append(run_id)
+            return True
+
+        def arun(self, **_kwargs):
+            async def _gen():
+                yield SimpleNamespace(
+                    event="WorkflowStarted",
+                    run_id="run-reg",
+                    session_id="sess-reg",
+                    workflow_name="reg",
+                )
+                yield SimpleNamespace(
+                    event="WorkflowCompleted",
+                    run_id="run-reg",
+                    session_id="sess-reg",
+                    content="ok",
+                )
+
+            return _gen()
+
+    fake = FakeWorkflow()
+    with patch.object(
+        workflow_run_runtime,
+        "compile_workflow",
+        new=AsyncMock(return_value=fake),
+    ):
+        events = [
+            event
+            async for event in workflow_run_runtime.stream_workflow_run(
+                workflow_id="wf-reg",
+                definition={"name": "reg", "steps": []},
+                input_text="x",
+                user_id="u1",
+                session_id="sess-reg",
+                run_id="run-reg",
+            )
+        ]
+    assert [e.event for e in events][0] == "workflow.started"
+    assert events[-1].event == "workflow.completed"
+    # After stream completes, cancel should miss (unregistered).
+    assert not workflow_run_runtime.cancel_workflow_run(user_id="u1", run_id="run-reg")

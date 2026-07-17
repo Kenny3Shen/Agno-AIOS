@@ -19,7 +19,7 @@ from api.services.audit_service import (
     record_audit_event_async,
 )
 from api.services.workflow_compiler import WorkflowDefinitionError
-from api.services.workflow_run_runtime import stream_workflow_run
+from api.services.workflow_run_runtime import cancel_workflow_run, stream_workflow_run
 from api.services.workflow_templates import list_workflow_templates
 from api.services.notification_service import notify_workflow_trigger_failure
 from api.services.workflow_service import (
@@ -54,6 +54,8 @@ class WorkflowRunRequest(BaseModel):
     input: str = Field(default="", max_length=100_000)
     session_id: str | None = None
     model_id: str | None = None
+    # Client may pre-allocate so cancel works before the first SSE event.
+    run_id: str | None = None
 
 
 @router.get("/executors")
@@ -459,6 +461,23 @@ async def list_workflow_trigger_history(
     }
 
 
+@router.post("/runs/{run_id}/cancel")
+async def cancel_workflow_run_endpoint(
+    run_id: str,
+    user: User = Depends(require_scope("workflows:run")),
+):
+    """Cancel a live Studio workflow run owned by the current user."""
+    if not cancel_workflow_run(user_id=actor_id(user), run_id=run_id):
+        raise HTTPException(status_code=404, detail="运行不存在或已结束")
+    await record_audit_event_async(
+        user,
+        action="workflow.run.cancel",
+        resource_type="workflow_run",
+        resource_id=run_id,
+    )
+    return {"success": True, "run_id": run_id}
+
+
 @router.post("/{workflow_id}/runs")
 async def run_workflow(
     workflow_id: str,
@@ -476,7 +495,7 @@ async def run_workflow(
         raise HTTPException(status_code=422, detail="Workflow definition is invalid")
 
     session_id = (body.session_id or "").strip() or str(uuid4())
-    run_id = str(uuid4())
+    run_id = (body.run_id or "").strip() or str(uuid4())
     input_text = (body.input or "").strip() or "workflow run"
     ctx = audit_request_context(request)
 

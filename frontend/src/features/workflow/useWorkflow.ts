@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { getModels } from '@/features/settings/api'
+import { ApiError } from '@/shared/api/client'
 import {
   createWorkflow,
   deleteWorkflow,
@@ -13,6 +14,7 @@ import {
   listWorkflowTemplates,
   restoreWorkflowVersion,
   publishWorkflow,
+  cancelWorkflowRun,
   streamWorkflowRun,
   updateWorkflow,
 } from './api'
@@ -1005,6 +1007,7 @@ export function useWorkflow() {
     const controller = new AbortController()
     abortRef.current = controller
     const sessionId = crypto.randomUUID()
+    const runId = crypto.randomUUID()
     const historyId = crypto.randomUUID()
     setState((current) => ({
       ...current,
@@ -1014,12 +1017,12 @@ export function useWorkflow() {
       nodeRunStatus: {},
       sessionId,
       lastSessionId: sessionId,
-      lastRunId: null,
+      lastRunId: runId,
       lastApprovalId: null,
       runHistory: [
         {
           id: historyId,
-          runId: '',
+          runId,
           sessionId,
           status: 'running' as const,
           startedAt: Date.now(),
@@ -1030,7 +1033,12 @@ export function useWorkflow() {
     try {
       await streamWorkflowRun(
         state.workflowId,
-        { input: state.input, session_id: sessionId, model_id: state.modelId },
+        {
+          input: state.input,
+          session_id: sessionId,
+          model_id: state.modelId,
+          run_id: runId,
+        },
         (item) => {
           setState((current) => {
             const runLog = appendRunLog(current.runLog, item, 200)
@@ -1094,6 +1102,8 @@ export function useWorkflow() {
   }
 
   const stop = () => {
+    const runId = state.lastRunId
+    // Always stop the client SSE first so the UI unblocks immediately.
     abortRef.current?.abort()
     setState((current) => ({
       ...current,
@@ -1104,6 +1114,13 @@ export function useWorkflow() {
           : entry
       ),
     }))
+    if (!runId) return
+    void cancelWorkflowRun(runId).catch((error: unknown) => {
+      // 404 = run already finished or never registered (race with terminal event).
+      if (error instanceof ApiError && error.status === 404) return
+      const detail = error instanceof Error ? error.message : String(error)
+      console.warn(`[workflow] server cancel failed for run ${runId}: ${detail}`)
+    })
   }
 
   const selected = useMemo(

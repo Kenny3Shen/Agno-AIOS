@@ -284,9 +284,20 @@ export const listExecutors = async () => {
 
 export type WorkflowSseHandler = (item: WorkflowRunLogItem) => void
 
+export const cancelWorkflowRun = (runId: string) =>
+  requestJson<{ success?: boolean }>(
+    `/workflows/runs/${encodeURIComponent(runId)}/cancel`,
+    jsonInit('POST'),
+  )
+
 export const streamWorkflowRun = async (
   workflowId: string,
-  payload: { input: string; session_id?: string; model_id?: string | null },
+  payload: {
+    input: string
+    session_id?: string
+    model_id?: string | null
+    run_id?: string
+  },
   onEvent: WorkflowSseHandler,
   signal: AbortSignal
 ) => {

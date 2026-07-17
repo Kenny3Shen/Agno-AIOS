@@ -30,6 +30,45 @@ class WorkflowRunEventOut:
     data: dict[str, Any]
 
 
+# Live Studio / webhook runs keyed by (user_id, run_id) for cancel_run.
+_active_workflows: dict[tuple[str, str], Any] = {}
+
+
+def register_workflow_run(*, user_id: str, run_id: str, workflow: Any) -> None:
+    if not user_id or not run_id:
+        return
+    _active_workflows[(user_id, run_id)] = workflow
+
+
+def unregister_workflow_run(*, user_id: str, run_id: str) -> None:
+    if not user_id or not run_id:
+        return
+    _active_workflows.pop((user_id, run_id), None)
+
+
+def cancel_workflow_run(*, user_id: str, run_id: str) -> bool:
+    """Cancel a live Agno workflow run owned by ``user_id``.
+
+    Uses Agno ``Workflow.cancel_run`` so step executors observe cancellation
+    (client SSE abort alone does not stop server-side model work).
+    """
+    if not user_id or not run_id:
+        return False
+    workflow = _active_workflows.get((user_id, run_id))
+    if workflow is None:
+        return False
+    cancel = getattr(workflow, "cancel_run", None)
+    if callable(cancel):
+        try:
+            return bool(cancel(run_id))
+        except Exception:
+            logger.exception("workflow cancel_run failed for {}", run_id)
+            return False
+    # Fallback: drop registration so late events are ignored after client stop.
+    unregister_workflow_run(user_id=user_id, run_id=run_id)
+    return True
+
+
 def _preview(value: Any, limit: int = 2000) -> str:
     if value is None:
         return ""
@@ -380,6 +419,9 @@ async def stream_workflow_run(
         },
     )
 
+    register_workflow_run(
+        user_id=user_id, run_id=active_run_id, workflow=workflow
+    )
     try:
         stream_result = workflow.arun(
             input=input_text,
@@ -609,6 +651,19 @@ async def stream_workflow_run(
                     },
                 )
                 return
+    except asyncio.CancelledError:
+        # Client disconnect / task cancel — ask Agno to stop step executors.
+        cancel_workflow_run(user_id=user_id, run_id=active_run_id)
+        yield WorkflowRunEventOut(
+            "workflow.cancelled",
+            {
+                "workflow_id": workflow_id,
+                "run_id": active_run_id,
+                "session_id": active_session_id,
+                "reason": "cancelled",
+            },
+        )
+        raise
     except Exception as exc:
         logger.exception("Workflow run failed: {}", workflow_id)
         yield WorkflowRunEventOut(
@@ -621,3 +676,5 @@ async def stream_workflow_run(
                 "message": f"{type(exc).__name__}: {exc}",
             },
         )
+    finally:
+        unregister_workflow_run(user_id=user_id, run_id=active_run_id)
