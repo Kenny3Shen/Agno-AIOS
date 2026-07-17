@@ -1146,7 +1146,12 @@ export function useWorkflow() {
         ),
         runHistory: current.runHistory.map((entry, index) =>
           index === 0 && entry.status === 'running'
-            ? { ...entry, status: 'cancelled' as const, finishedAt: Date.now() }
+            ? {
+                ...entry,
+                status: 'cancelled' as const,
+                finishedAt: Date.now(),
+                summary: t('runStoppedByUser'),
+              }
             : entry
         ),
       }

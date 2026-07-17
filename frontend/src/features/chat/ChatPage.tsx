@@ -749,11 +749,8 @@ export function ChatPage() {
               <span className="chat-retrying__message">
                 {formatRetryDetail(lastAssistant.retry, t)}
               </span>
-              {chat.state.requesting ? (
-                <Button type="link" size="small" danger title={t('stopGeneratingHint')} onClick={() => void chat.cancel()}>
-                  {t('stopGenerating')}
-                </Button>
-              ) : null}
+              {/* Stop lives on the sender FAB (Esc) — avoid a second Stop control. */}
+              <span className="chat-retrying__hint">{t('stopGeneratingHint')}</span>
             </div>
           ) : null}
           {chat.state.error && (

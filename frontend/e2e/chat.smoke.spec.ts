@@ -260,7 +260,7 @@ test.describe('chat critical path', () => {
       await input.fill('e2e retry then esc')
       await page.getByRole('button', { name: '发送消息' }).click()
 
-      // Retry banner while backoff is in progress (may show dual Stop: banner + sender).
+      // Retry banner while backoff is in progress; Stop is the sender FAB (Esc).
       await expect(page.getByText(/重试|retry/i).first()).toBeVisible({ timeout: 10_000 })
       await expect(page.getByLabel('停止生成')).toBeVisible()
 

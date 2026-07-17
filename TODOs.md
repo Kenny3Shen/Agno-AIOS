@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Chat 重试条去掉双停止 + Studio 取消摘要 + 会话切换 cancel 静默
+
+- 模型重试横幅只提示 Esc/发送区停止，不再并排第二个「停止生成」按钮。
+- Studio 用户停止时，最近运行摘要写入「已由用户停止」。
+- 切换会话时服务端 cancel 失败仅日志，不 soft-error（导航会 reset，横幅无意义）。
+
+
 ## 已完成：Studio 运行历史摘要去原始事件名 + Chat 重试中 Esc e2e
 
 - `historySummaryFromEvent`：最近运行摘要优先 content/stepName，过滤 `workflow.started` 等原始 type 文案。

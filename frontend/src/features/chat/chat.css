@@ -1225,3 +1225,9 @@ html.dark {
   min-width: 0;
   font-size: 13px;
 }
+.chat-retrying__hint {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.45));
+  white-space: nowrap;
+}
