@@ -548,6 +548,7 @@ export function WorkflowPage() {
             className="workflow-studio__name"
             data-inspector-field="workflowName"
             value={workflow.state.name}
+            disabled={!canWrite || workflow.state.running}
             onChange={(e) => workflow.patch({ name: e.target.value })}
             placeholder={t('namePlaceholder')}
             variant="borderless"
@@ -993,7 +994,9 @@ export function WorkflowPage() {
         <aside className="workflow-studio__right">
           <section
             ref={inspectorPanelRef}
-            className="workflow-studio__panel workflow-studio__panel--grow"
+            className={`workflow-studio__panel workflow-studio__panel--grow${
+              workflow.state.running ? ' is-definition-locked' : ''
+            }`}
           >
             {workflow.state.validationIssues.length ? (
               <Alert
@@ -1028,6 +1031,11 @@ export function WorkflowPage() {
             ) : null}
             <div className="workflow-studio__panel-title">
               {t('inspector')}
+              {workflow.state.running ? (
+                <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
+                  {t('inspectorLockedWhileRunning')}
+                </Typography.Text>
+              ) : null}
               {workflow.state.selectedIds.length > 1 ? (
                 <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
                   {t('selectedCount', { count: workflow.state.selectedIds.length })}
@@ -1050,6 +1058,7 @@ export function WorkflowPage() {
                       type="text"
                       danger
                       icon={<DeleteOutlined />}
+                      disabled={workflow.state.running}
                       onClick={() => workflow.removeSelected()}
                     />
                   </Tooltip>
@@ -1060,6 +1069,7 @@ export function WorkflowPage() {
                     size="small"
                     type="text"
                     danger
+                    disabled={workflow.state.running}
                     icon={<DeleteOutlined />}
                     onClick={() => workflow.remove(step.id)}
                   />
@@ -1996,7 +2006,7 @@ export function WorkflowPage() {
                         <Switch
                           size="small"
                           checked={workflow.state.triggers.webhook.enabled}
-                          disabled={!canWrite}
+                          disabled={!canWrite || workflow.state.running}
                           onChange={(enabled) => requestEnableTrigger('webhook', enabled)}
                         />
                         <span>{t('webhookTrigger')}</span>
@@ -2053,7 +2063,7 @@ export function WorkflowPage() {
                               <Button
                                 size="small"
                                 icon={<ReloadOutlined />}
-                                disabled={!canWrite}
+                                disabled={!canWrite || workflow.state.running}
                                 onClick={() =>
                                   workflow.patchTriggers({
                                     ...workflow.state.triggers,
@@ -2133,7 +2143,7 @@ export function WorkflowPage() {
                         <Switch
                           size="small"
                           checked={workflow.state.triggers.cron.enabled}
-                          disabled={!canWrite}
+                          disabled={!canWrite || workflow.state.running}
                           onChange={(enabled) => requestEnableTrigger('cron', enabled)}
                         />
                         <span>{t('cronTrigger')}</span>

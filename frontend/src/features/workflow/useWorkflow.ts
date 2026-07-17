@@ -235,8 +235,13 @@ export function useWorkflow() {
   }, [rejectIfRunning])
 
   const patch = useCallback((value: Partial<WorkflowState>) => {
+    // Definition/metadata edits while a run is active still dirties the draft that
+    // is not the live run — lock them for a consistent "structure locked" policy.
+    // Runtime-only fields (input/modelId/session) stay editable.
+    const definitionKeys = ['name', 'description', 'triggers', 'steps'] as const
+    if (definitionKeys.some((key) => key in value) && rejectIfRunning()) return
     setState((current) => ({ ...current, ...value, dirty: value.dirty !== false }))
-  }, [])
+  }, [rejectIfRunning])
 
   const patchMeta = useCallback((value: Partial<WorkflowState>) => {
     setState((current) => ({ ...current, ...value }))
@@ -347,6 +352,7 @@ export function useWorkflow() {
   const inspectorHistoryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const update = (node: WorkflowNode) => {
+    if (rejectIfRunning()) return
     setState((current) => {
       if (inspectorHistoryNodeRef.current !== node.id) {
         pushHistory(current)
@@ -390,6 +396,7 @@ export function useWorkflow() {
   const updateSelectedSteps = (
     patch: Partial<Pick<WorkflowNode, 'targetId' | 'skills' | 'requiresConfirmation' | 'requiresUserInput' | 'requiresOutputReview' | 'instructions'>>,
   ): number => {
+    if (rejectIfRunning()) return 0
     // Precompute against current snapshot so toast count is Strict Mode-safe.
     const ids = (
       state.selectedIds.length
@@ -721,6 +728,7 @@ export function useWorkflow() {
   }
 
   const patchTriggers = (triggers: WorkflowTriggers) => {
+    if (rejectIfRunning()) return
     setState((current) => {
       const enablingWebhook =
         triggers.webhook.enabled && !current.triggers.webhook.enabled

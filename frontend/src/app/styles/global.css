@@ -2692,3 +2692,16 @@ button.collect-article-item.is-selected {
   border-color: var(--ant-color-primary-border, #91caff);
   background: var(--ant-color-primary-bg, #e6f4ff);
 }
+
+.workflow-studio__panel.is-definition-locked .workflow-inspector__switch,
+.workflow-studio__panel.is-definition-locked input,
+.workflow-studio__panel.is-definition-locked textarea,
+.workflow-studio__panel.is-definition-locked .ant-select,
+.workflow-studio__panel.is-definition-locked .ant-input-number,
+.workflow-studio__panel.is-definition-locked .ant-btn-dangerous {
+  pointer-events: none;
+  opacity: 0.72;
+}
+.workflow-studio__panel.is-definition-locked {
+  position: relative;
+}

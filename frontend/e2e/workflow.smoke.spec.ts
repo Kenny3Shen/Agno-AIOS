@@ -640,4 +640,118 @@ test.describe('workflow critical path', () => {
   })
 
 
+
+  test('publish promotes draft to published version', async ({ page }) => {
+    let publishCalls = 0
+    const draft = {
+      ...workflow,
+      version: 2,
+      published_version: null,
+      published_at: null,
+      has_published: false,
+    }
+    const published = {
+      ...workflow,
+      version: 2,
+      published_version: 2,
+      published_at: 1720001000,
+      has_published: true,
+    }
+    let current = draft
+
+    await openAuthed(page, '/dashboard', {
+      handleApi: async ({ method, path, route }) => {
+        if (method === 'GET' && path.endsWith('/api/workflows')) {
+          await fulfillJson(route, {
+            data: [current],
+            meta: { page: 1, limit: 50, total_pages: 1, total_count: 1, search_time_ms: 0 },
+          })
+          return true
+        }
+        if (method === 'GET' && path.endsWith(`/api/workflows/${workflow.id}`)) {
+          await fulfillJson(route, current)
+          return true
+        }
+        if (method === 'GET' && path.endsWith('/api/workflows/executors')) {
+          await fulfillJson(route, {
+            data: [
+              {
+                ref: 'security-operations',
+                kind: 'agent',
+                name: 'Security Operations',
+                description: '',
+              },
+            ],
+          })
+          return true
+        }
+        if (method === 'GET' && path.endsWith('/api/workflows/templates')) {
+          await fulfillJson(route, { data: [] })
+          return true
+        }
+        if (method === 'GET' && path.endsWith('/api/skills')) {
+          await fulfillJson(route, {
+            data: [],
+            meta: { page: 1, limit: 1, total_pages: 0, total_count: 0, search_time_ms: 0 },
+          })
+          return true
+        }
+        if (method === 'GET' && path.includes(`/api/workflows/${workflow.id}/versions`)) {
+          await fulfillJson(route, {
+            data: [],
+            meta: { page: 1, limit: 20, total_pages: 0, total_count: 0, search_time_ms: 0 },
+          })
+          return true
+        }
+        if (method === 'GET' && path.includes(`/api/workflows/${workflow.id}/triggers/history`)) {
+          await fulfillJson(route, {
+            data: [],
+            meta: { page: 1, limit: 20, total_pages: 0, total_count: 0, search_time_ms: 0 },
+          })
+          return true
+        }
+        if (method === 'GET' && path.endsWith('/api/models')) {
+          await fulfillJson(route, {
+            active_model_id: 'model-1',
+            models: [
+              {
+                id: 'model-1',
+                name: 'E2E Model',
+                provider: 'openai',
+                model_id: 'gpt-test',
+                base_url: '',
+                api_key: 'sk-test',
+                api_protocol: 'chat-completions',
+                structured_output_mode: 'native',
+                description: '',
+                enabled: true,
+                builtin: false,
+                configured: true,
+              },
+            ],
+          })
+          return true
+        }
+        if (method === 'POST' && path.endsWith(`/api/workflows/${workflow.id}/publish`)) {
+          publishCalls += 1
+          current = published
+          await fulfillJson(route, published)
+          return true
+        }
+        return false
+      },
+    })
+
+    await page.goto(`/#/workflow?workflow_id=${workflow.id}`, { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { name: '工作流' })).toBeVisible()
+    await expect(page.getByPlaceholder('工作流名称')).toHaveValue('E2E Workflow', { timeout: 10_000 })
+    // Unpublished status should be visible before publish.
+    await expect(page.getByText(/未发布|Unpublished/i).first()).toBeVisible()
+
+    await page.getByRole('button', { name: /cloud-upload 发布|Publish/i }).click()
+    await expect.poll(() => publishCalls, { timeout: 10_000 }).toBe(1)
+    await expect(page.getByText(/已发布|Published/i).first()).toBeVisible({ timeout: 10_000 })
+  })
+
+
 })

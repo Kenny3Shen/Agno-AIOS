@@ -143,6 +143,7 @@
   "errorRestoreFailed": "版本恢复失败",
   "errorRunFailed": "运行失败",
   "errorEditWhileRunning": "运行进行中，无法修改画布结构（可保存草稿；Esc 停止）",
+  "inspectorLockedWhileRunning": "运行中只读（可保存草稿）",
   "errorLoadFailed": "加载失败",
   "errorDeleteFailed": "删除失败",
   "slotAddBranch": "添加分支",

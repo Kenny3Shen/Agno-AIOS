@@ -1,10 +1,17 @@
 # 下一步工作
 
+## 已完成：Studio 运行中定义只读 + Publish e2e
+
+- 运行中锁定 Inspector 定义字段（`update` / 多选 patch / `patch` 定义键 / 触发器）；面板标注只读，CSS 降低可编辑感。
+- 顶栏名称、触发开关、删除节点在运行中禁用；保存与停止仍可用。
+- Playwright：`publish` 将草稿提升为 published 版本并更新状态文案。
+
+
 ## 已完成：Studio 运行中锁定画布结构编辑
 
 - 运行中：禁用节点拖拽/连线/调色板拖入/删除/粘贴/undo·redo/整理布局；Esc 仍可停止。
 - 结构变更 API（add/remove/reparent/connect…）统一 `rejectIfRunning` 并提示 `errorEditWhileRunning`。
-- 仍可保存草稿（不影响当前 run）；Inspector 字段编辑未硬锁（与保存策略一致）。
+- 仍可保存草稿（不影响当前 run）；Inspector 定义字段运行中只读。
 
 
 ## 已完成：Chat HITL 继续清 approval + 重试 sources + Studio 运行中脏草稿提示
