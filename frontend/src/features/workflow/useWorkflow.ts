@@ -572,9 +572,9 @@ export function useWorkflow() {
     clipboardRef.current = (tops.length ? tops : nodes).map(cloneNodeDeep)
   }
 
-  const pasteClipboard = (): number => {
+  const pasteClipboard = (): { divertedHitlCount: number; multiSelectRootPaste: boolean } => {
     const items = clipboardRef.current
-    if (!items.length) return 0
+    if (!items.length) return { divertedHitlCount: 0, multiSelectRootPaste: false }
 
     const soleId =
       state.selectedIds.length === 1
@@ -649,10 +649,13 @@ export function useWorkflow() {
         focusEpoch: current.focusEpoch + 1,
       }
     })
-    return pasted.divertedHitlCount
+    return {
+      divertedHitlCount: pasted.divertedHitlCount,
+      multiSelectRootPaste: pasted.multiSelectRootPaste,
+    }
   }
 
-  const duplicateSelected = (): number => {
+  const duplicateSelected = (): { divertedHitlCount: number; multiSelectRootPaste: boolean } => {
     // snapshot selection into clipboard then paste with offset
     const ids = state.selectedIds.length
       ? state.selectedIds

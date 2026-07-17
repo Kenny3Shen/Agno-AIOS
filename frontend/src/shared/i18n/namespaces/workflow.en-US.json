@@ -123,7 +123,7 @@
   "librarySearchEmpty": "No workflows match this search",
   "libraryEmpty": "No saved workflows yet",
   "librarySearching": "Searching…",
-  "keyboardHints": "Shortcuts: Ctrl/⌘Z undo · Y redo · C/V copy/paste · A select all · L auto-layout · Esc clear · Del delete · double-click focuses inspector",
+  "keyboardHints": "Shortcuts: Ctrl/⌘Z undo · Y redo · C/V copy/paste (multi-select paste → root) · A select all · L auto-layout · Esc clear · Del delete · double-click focuses inspector",
   "keyboardHintsTitle": "Keyboard",
   "selectedCount": "{{count}} selected",
   "deleteSelected": "Delete selected",
@@ -268,6 +268,7 @@
   "multiSelectInstructionsHint": "Instructions differ across selection; edits apply to every selected Agent step.",
   "hitlBlockedInParallel": "Parallel branches cannot pause for step HITL. Move the step out of Parallel or clear HITL.",
   "multiSelectHitlParallelHint": "HITL cannot be enabled on steps inside Parallel; those selections are skipped.",
+  "pasteMultiSelectRoot": "Multiple nodes selected — paste appended at canvas root",
   "pasteHitlDiverted": "{{count}} HITL step(s) cannot live inside Parallel — placed at root instead",
   "reparentHitlBlocked": "Steps with HITL cannot move into a Parallel branch",
   "multiSelectHitlSkipped": "Skipped HITL on {{count}} step(s) inside Parallel"

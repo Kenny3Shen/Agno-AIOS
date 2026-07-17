@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
@@ -204,7 +204,7 @@ export function useChat() {
     dispatch({ type: 'history', messages: base })
     void submit(prompt, false)
   }
-  const cancel = async () => {
+  const cancel = useCallback(async () => {
     const runId = activeRunIdRef.current
     // Always stop the client SSE first so the UI unblocks even before run.started.
     abortRef.current?.abort()
@@ -219,7 +219,7 @@ export function useChat() {
       console.warn(`[chat] server cancel failed for run ${runId}: ${detail}`)
       dispatch({ type: 'soft-error', message: t('cancelServerFailed') })
     }
-  }
+  }, [t])
   const setReasoningEffort = (value: ReasoningEffort | null) => dispatch({ type: 'reasoning-effort', value })
   const setSearchKnowledge = (value: boolean) => {
     try {

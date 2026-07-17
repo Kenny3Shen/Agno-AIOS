@@ -45,6 +45,7 @@
   "placeholderNoModel": "Configure an available model in Settings first",
   "attachmentsComing": "Attachments coming soon",
   "stopGenerating": "Stop generating",
+  "stopGeneratingHint": "Stop generating (Esc)",
   "sendMessage": "Send message",
   "jumpToLatest": "Jump to latest",
   "welcomeKicker": "T.A.I.S / SECURITY ANALYSIS",

@@ -922,6 +922,17 @@ describe('pasteNodesIntoSelection', () => {
     const pasted = pasteNodesIntoSelection([a, cond], [cloneNodeDeep(b)], ['a', 'cond'], 'cond')
     expect(pasted.steps).toHaveLength(3)
     expect(findNode(pasted.steps, 'cond')?.thenSteps?.length ?? 0).toBe(0)
+    expect(pasted.multiSelectRootPaste).toBe(true)
+    expect(pasted.divertedHitlCount).toBe(0)
+  })
+
+  it('marks single-select paste as non multi-select root', () => {
+    const a = createNode('step')
+    a.id = 'a'
+    const b = createNode('step')
+    b.id = 'b'
+    const pasted = pasteNodesIntoSelection([a], [cloneNodeDeep(b)], ['a'], 'a')
+    expect(pasted.multiSelectRootPaste).toBe(false)
   })
 
   it('pastes as sibling after a selected agent step', () => {
@@ -971,6 +982,7 @@ describe('pasteNodesIntoSelection', () => {
     expect(findNode(pasted.steps, 'par')?.steps?.length ?? 0).toBe(0)
     expect(pasted.steps).toHaveLength(2)
     expect(pasted.divertedHitlCount).toBe(1)
+    expect(pasted.multiSelectRootPaste).toBe(false)
     expect(pasted.steps.some((n) => n.requiresConfirmation)).toBe(true)
   })
 

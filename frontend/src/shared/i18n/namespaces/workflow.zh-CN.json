@@ -123,7 +123,7 @@
   "librarySearchEmpty": "没有匹配的工作流",
   "libraryEmpty": "还没有已保存的工作流",
   "librarySearching": "搜索中…",
-  "keyboardHints": "快捷键：Ctrl/⌘Z 撤销 · Y 重做 · C/V 复制粘贴 · A 全选 · L 整理布局 · Esc 取消选择 · Del 删除 · 双击节点聚焦配置",
+  "keyboardHints": "快捷键：Ctrl/⌘Z 撤销 · Y 重做 · C/V 复制粘贴（多选粘贴到根级） · A 全选 · L 整理布局 · Esc 取消选择 · Del 删除 · 双击节点聚焦配置",
   "keyboardHintsTitle": "快捷键",
   "selectedCount": "已选 {{count}} 个",
   "deleteSelected": "删除所选",
@@ -268,6 +268,7 @@
   "multiSelectInstructionsHint": "当前指令不一致；编辑内容会写入全部选中的 Agent 步骤。",
   "hitlBlockedInParallel": "并行分支内不能暂停等待步骤人工确认。请移出并行节点或关闭 HITL。",
   "multiSelectHitlParallelHint": "并行内的步骤无法开启 HITL，相关勾选会被跳过。",
+  "pasteMultiSelectRoot": "当前多选，粘贴已追加到画布根级",
   "pasteHitlDiverted": "{{count}} 个含人工确认的步骤不能放进并行节点，已改放到画布根级",
   "reparentHitlBlocked": "含人工确认的步骤不能拖入并行分支",
   "multiSelectHitlSkipped": "已跳过 {{count}} 个并行内步骤的人工确认（引擎限制）"

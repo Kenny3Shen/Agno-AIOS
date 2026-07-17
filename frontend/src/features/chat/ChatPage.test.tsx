@@ -84,9 +84,11 @@ describe('chat model settings', () => {
   beforeEach(() => {
     HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
     ;(chat.state as { reasoningEffort: string | null }).reasoningEffort = null
+    ;(chat.state as { requesting: boolean }).requesting = false
     chat.dispatch.mockClear()
     chat.setModel.mockClear()
     chat.setReasoningEffort.mockClear()
+    chat.cancel.mockClear()
     chat.setReasoningEffort.mockImplementation((effort) => {
       ;(chat.state as { reasoningEffort: string | null }).reasoningEffort = effort
     })
@@ -128,5 +130,29 @@ describe('chat model settings', () => {
     await user.click(screen.getByRole('button', { name: /分析最新 CVE 对现有资产的影响/ }))
     expect(chat.dispatch).toHaveBeenCalledWith({ type: 'input', value: '分析最新 CVE 对现有资产的影响' })
     expect(screen.getByText('从哪里开始调查？')).toBeTruthy()
+  })
+})
+
+describe('chat stop shortcuts', () => {
+  beforeEach(() => {
+    HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
+    ;(chat.state as { requesting: boolean }).requesting = false
+    chat.cancel.mockClear()
+  })
+
+  it('stops generation when Escape is pressed during a request', async () => {
+    ;(chat.state as { requesting: boolean }).requesting = true
+    renderWithQuery(<ChatPage />)
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    expect(chat.cancel).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not stop when Escape is pressed while idle', async () => {
+    ;(chat.state as { requesting: boolean }).requesting = false
+    renderWithQuery(<ChatPage />)
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    expect(chat.cancel).not.toHaveBeenCalled()
   })
 })

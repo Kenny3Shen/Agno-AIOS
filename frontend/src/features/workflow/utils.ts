@@ -797,6 +797,27 @@ export const fieldForValidationIssue = (issue: Pick<WorkflowValidationIssue, 'co
   }
 }
 
+/** Internal layout/debug label (canvas display uses i18n + executor names). */
+export const nodeLabel = (node: WorkflowNode): string => {
+  if (node.name?.trim()) return node.name.trim()
+  switch (node.type) {
+    case 'step':
+      return 'Agent step'
+    case 'workflow_ref':
+      return 'Nested workflow'
+    case 'parallel':
+      return 'Parallel'
+    case 'condition':
+      return 'Condition'
+    case 'loop':
+      return 'Loop'
+    case 'router':
+      return 'Router'
+    default:
+      return node.type
+  }
+}
+
 /** Client-side save checks (mirrors compiler empty-branch rules). */
 export type WorkflowValidationTranslate = (
   key: string,
@@ -1399,27 +1420,6 @@ export const triggerEnableBlocked = (state: {
   return null
 }
 
-/** Internal layout/debug label (canvas display uses i18n + executor names). */
-export const nodeLabel = (node: WorkflowNode): string => {
-  if (node.name?.trim()) return node.name.trim()
-  switch (node.type) {
-    case 'step':
-      return 'Agent step'
-    case 'workflow_ref':
-      return 'Nested workflow'
-    case 'parallel':
-      return 'Parallel'
-    case 'condition':
-      return 'Condition'
-    case 'loop':
-      return 'Loop'
-    case 'router':
-      return 'Router'
-    default:
-      return node.type
-  }
-}
-
 /** Resolve canvas subtitle for a node (executor display name when available). */
 export type CanvasSubtitleT = (key: string, options?: Record<string, unknown>) => string
 
@@ -1720,6 +1720,8 @@ export type PasteSelectionResult = {
   steps: WorkflowNode[]
   /** Clones that could not enter Parallel because of HITL (appended at root). */
   divertedHitlCount: number
+  /** Multi-select (2+) forces root append; single-select pastes into/after the host. */
+  multiSelectRootPaste: boolean
 }
 
 /**
@@ -1736,7 +1738,7 @@ export const pasteNodesIntoSelection = (
   selectedIds: string[],
   selectedId: string | null,
 ): PasteSelectionResult => {
-  if (!clones.length) return { steps, divertedHitlCount: 0 }
+  if (!clones.length) return { steps, divertedHitlCount: 0, multiSelectRootPaste: false }
   const soleId =
     selectedIds.length === 1
       ? selectedIds[0]
@@ -1746,13 +1748,19 @@ export const pasteNodesIntoSelection = (
   const host = soleId ? findNode(steps, soleId) : null
 
   // Multi-select or empty selection: root append.
-  if (!host) return { steps: [...steps, ...clones], divertedHitlCount: 0 }
+  if (!host) {
+    return {
+      steps: [...steps, ...clones],
+      divertedHitlCount: 0,
+      multiSelectRootPaste: selectedIds.length > 1,
+    }
+  }
 
   // Container: paste into default slot (then/else/steps/choice).
   if (isContainerType(host.type)) {
     const drop = defaultDropTarget(host)
     if (!drop || drop.kind === 'root') {
-      return { steps: [...steps, ...clones], divertedHitlCount: 0 }
+      return { steps: [...steps, ...clones], divertedHitlCount: 0, multiSelectRootPaste: false }
     }
     const intoParallel = isInsideParallel(steps, host.id)
 
@@ -1770,12 +1778,15 @@ export const pasteNodesIntoSelection = (
     return {
       steps: rootFallback.length ? [...next, ...rootFallback] : next,
       divertedHitlCount: rootFallback.length,
+      multiSelectRootPaste: false,
     }
   }
 
   // Non-container: insert as siblings after the selected node.
   const location = locateNode(steps, host.id)
-  if (!location) return { steps: [...steps, ...clones], divertedHitlCount: 0 }
+  if (!location) {
+    return { steps: [...steps, ...clones], divertedHitlCount: 0, multiSelectRootPaste: false }
+  }
 
   // Sibling under a Parallel (or deeper) cannot receive HITL trees.
   const siblingUnderParallel = isInsideParallel(steps, host.id)
@@ -1796,6 +1807,7 @@ export const pasteNodesIntoSelection = (
   return {
     steps: rootFallback.length ? [...next, ...rootFallback] : next,
     divertedHitlCount: rootFallback.length,
+    multiSelectRootPaste: false,
   }
 }
 

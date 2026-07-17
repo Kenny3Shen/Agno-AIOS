@@ -89,15 +89,19 @@ export function WorkflowPage() {
   const routerNav = useRouter()
   const workflow = useWorkflow()
   const pasteWithHitlGuard = () => {
-    const diverted = workflow.pasteClipboard()
-    if (diverted > 0) {
-      message.warning(t('pasteHitlDiverted', { count: diverted }))
+    const result = workflow.pasteClipboard()
+    if (result.divertedHitlCount > 0) {
+      message.warning(t('pasteHitlDiverted', { count: result.divertedHitlCount }))
+    } else if (result.multiSelectRootPaste) {
+      message.info(t('pasteMultiSelectRoot'))
     }
   }
   const duplicateWithHitlGuard = () => {
-    const diverted = workflow.duplicateSelected()
-    if (diverted > 0) {
-      message.warning(t('pasteHitlDiverted', { count: diverted }))
+    const result = workflow.duplicateSelected()
+    if (result.divertedHitlCount > 0) {
+      message.warning(t('pasteHitlDiverted', { count: result.divertedHitlCount }))
+    } else if (result.multiSelectRootPaste) {
+      message.info(t('pasteMultiSelectRoot'))
     }
   }
   const warnReparentBlocked = (blocked: string | null | undefined) => {

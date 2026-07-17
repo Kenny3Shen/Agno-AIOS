@@ -45,6 +45,7 @@ import './chat.css'
 
 const promptKeys = ['cve', 'exposure', 'runbook'] as const
 
+
 const reasoningOptions = (model: ModelConfig | null) => {
   return supportedReasoningEfforts(model).map((value) => ({ value, label: reasoningEffortLabel(value) }))
 }
@@ -434,6 +435,8 @@ export function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const senderShellRef = useRef<HTMLDivElement>(null)
   const workspaceRef = useRef<HTMLDivElement>(null)
+  const cancelRef = useRef(chat.cancel)
+  cancelRef.current = chat.cancel
   const [followLatest, setFollowLatest] = useState(true)
   const activeSession = useMemo(
     () => (chat.sessions.data ?? []).find((session) => session.session_id === chat.sessionId),
@@ -538,6 +541,19 @@ export function ChatPage() {
     }, 8_000)
     return () => window.clearTimeout(timer)
   }, [chat.state.error, chat.state.messages, chat.dispatch])
+
+  // Esc stops an in-flight run (including model retry backoff).
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      if (event.metaKey || event.ctrlKey || event.altKey) return
+      if (!chat.state.requesting) return
+      event.preventDefault()
+      void cancelRef.current()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [chat.state.requesting])
 
   useEffect(() => {
     const shell = senderShellRef.current
@@ -694,7 +710,7 @@ export function ChatPage() {
                 {formatRetryDetail(lastAssistant.retry, t)}
               </span>
               {chat.state.requesting ? (
-                <Button type="link" size="small" danger onClick={() => void chat.cancel()}>
+                <Button type="link" size="small" danger title={t('stopGeneratingHint')} onClick={() => void chat.cancel()}>
                   {t('stopGenerating')}
                 </Button>
               ) : null}
@@ -836,7 +852,7 @@ export function ChatPage() {
                   />
                   <Button
                     aria-label={chat.state.requesting ? t('stopGenerating') : t('sendMessage')}
-                    title={chat.state.requesting ? t('stopGenerating') : t('sendMessage')}
+                    title={chat.state.requesting ? t('stopGeneratingHint') : t('sendMessage')}
                     type={chat.state.requesting ? 'default' : 'primary'}
                     danger={chat.state.requesting}
                     shape="circle"

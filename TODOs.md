@@ -1,5 +1,13 @@
 # 下一步工作
 
+## 已完成：多选粘贴根级提示 + Chat Esc 停止 + nodeLabel 卫生
+
+- Studio：`pasteNodesIntoSelection` 返回 `multiSelectRootPaste`；多选粘贴/复制时 Toast「已追加到画布根级」（HITL 分流提示优先）。
+- 快捷键说明补充多选粘贴到根级语义。
+- Chat：生成中（含重试退避）按 Esc 停止；`cancel` 用 `useCallback`；停止按钮 title 显示 Esc 提示。
+- `nodeLabel` 上移到 `validateWorkflowDraft` 之前，避免阅读时像未定义依赖。
+
+
 ## 已完成：Chat 终态后忽略迟到 SSE + 工具更新清 retry
 
 - `content.delta` / `tool.update` / `reasoning` / `thought` / `run.retrying`：消息已终态（非 streaming/retrying）则忽略，避免取消后追加内容。
