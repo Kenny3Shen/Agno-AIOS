@@ -110,18 +110,33 @@ async def search_cve_rows(
     filters = []
     order_by = [desc(table.c.created_at), desc(table.c.id)]
     if normalized_query:
-        pattern = f"%{normalized_query}%"
-        filters.append(
-            or_(
-                table.c.cve_id.ilike(pattern),
-                table.c.description.ilike(pattern),
-            )
-        )
-        # Exact CVE-ID hits first (common analyst lookup: CVE-2024-1234).
         upper_q = normalized_query.upper()
-        if upper_q.startswith("CVE-"):
+        # Exact / prefix CVE-ID lookups stay on btree-friendly ILIKE.
+        if upper_q.startswith("CVE-") and len(upper_q) <= 32 and " " not in upper_q:
+            pattern = f"%{normalized_query}%"
+            filters.append(
+                or_(
+                    table.c.cve_id.ilike(pattern),
+                    table.c.description.ilike(pattern),
+                )
+            )
             order_by = [
                 case((func.upper(table.c.cve_id) == upper_q, 0), else_=1),
+                desc(table.c.created_at),
+                desc(table.c.id),
+            ]
+        else:
+            # Keyword search: use GIN full-text index (idx_cves_search).
+            tsvector = func.to_tsvector(
+                "simple",
+                table.c.cve_id.concat(literal(" ")).concat(
+                    func.coalesce(table.c.description, "")
+                ),
+            )
+            tsquery = func.plainto_tsquery("simple", normalized_query)
+            filters.append(tsvector.op("@@")(tsquery))
+            order_by = [
+                desc(func.ts_rank_cd(tsvector, tsquery)),
                 desc(table.c.created_at),
                 desc(table.c.id),
             ]

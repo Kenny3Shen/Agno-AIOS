@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Collect 列表瘦身 + 失败重试 + CVE 全文检索
+
+- 列表搜索默认不返回 `markdown`（按需 `GET /articles/{id}`），避免大字段拖慢分页；查询不再默认扫全文 markdown。
+- 搜索支持 `status=ok|error|all`；UI 可筛失败文章，失败项展示错误摘要。
+- `POST /articles/{id}/reparse` 重新采集；前端有写权限时预览区「重新采集」。
+- CVE 关键词检索走 GIN `to_tsvector` / `plainto_tsquery` + `ts_rank_cd`；`CVE-` ID 仍走 ILIKE 精确优先。
+
 ## 已完成：Collect 公平抓取 + 并发锁 + CVE 删除/检索优化
 
 - Collect：`select_urls_round_robin` 跨源交错取 URL，避免按域名排序截断饿死后续源；`skip_existing` 先排除已入库再填预算；进程内 crawl 锁，重复同步返回 409。

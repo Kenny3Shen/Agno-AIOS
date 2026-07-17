@@ -35,6 +35,7 @@ export type CollectListMeta = ListPaginationMeta
 export const searchArticles = async (payload: {
   query?: string
   source_domain?: string
+  status?: 'ok' | 'error' | 'all'
   page?: number
   size?: number
 }) => {
@@ -45,6 +46,7 @@ export const searchArticles = async (payload: {
     jsonInit('POST', {
       query: payload.query ?? '',
       source_domain: payload.source_domain,
+      status: payload.status ?? 'ok',
       page,
       size,
     }),
@@ -85,3 +87,10 @@ export const crawlSources = (payload?: {
     ok?: number
     error?: number
   }>('/url2md/crawl', jsonInit('POST', payload ?? {}))
+
+
+export const getArticle = (articleId: number) =>
+  requestJson<CollectArticle>(`/url2md/articles/${articleId}`)
+
+export const reparseArticle = (articleId: number) =>
+  requestJson<CollectArticle>(`/url2md/articles/${articleId}/reparse`, jsonInit('POST', {}))

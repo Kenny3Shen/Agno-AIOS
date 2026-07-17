@@ -9,11 +9,13 @@ import {
 } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { currentUserQuery } from '@/features/auth'
-import { roleOf } from '@/shared/auth/permissions'
+import { hasScope, roleOf } from '@/shared/auth/permissions'
 import {
   crawlSources,
+  getArticle,
   listSources,
   parseUrl,
+  reparseArticle,
   searchArticles,
   type CollectArticle,
 } from './api'
@@ -27,13 +29,17 @@ export function CollectPage() {
   const { message } = App.useApp()
   const currentUser = useQuery(currentUserQuery())
   const isAdmin = roleOf(currentUser.data) === 'admin'
+  const canWrite = hasScope(currentUser.data, 'collect:write')
 
   const [url, setUrl] = useState('')
   const [query, setQuery] = useState('')
   const debouncedQuery = useDebouncedValue(query, 300)
   const [sourceDomain, setSourceDomain] = useState<string>()
+  const [statusFilter, setStatusFilter] = useState<'ok' | 'error' | 'all'>('ok')
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<CollectArticle | null>(null)
+  const [previewMarkdown, setPreviewMarkdown] = useState('')
+  const [previewLoading, setPreviewLoading] = useState(false)
 
   const sourcesQuery = useQuery({
     queryKey: ['collect', 'sources'],
@@ -42,18 +48,52 @@ export function CollectPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [debouncedQuery, sourceDomain])
+  }, [debouncedQuery, sourceDomain, statusFilter])
 
   const articlesQuery = useQuery({
-    queryKey: ['collect', 'articles', debouncedQuery, sourceDomain, page],
+    queryKey: ['collect', 'articles', debouncedQuery, sourceDomain, statusFilter, page],
     queryFn: () =>
       searchArticles({
         query: debouncedQuery,
         source_domain: sourceDomain,
+        status: statusFilter,
         page,
         size: 20,
       }),
   })
+
+  // List payloads omit markdown; load body when selection changes.
+  useEffect(() => {
+    let cancelled = false
+    if (!selected?.id) {
+      setPreviewMarkdown('')
+      setPreviewLoading(false)
+      return
+    }
+    if (selected.markdown) {
+      setPreviewMarkdown(selected.markdown)
+      setPreviewLoading(false)
+      return
+    }
+    setPreviewLoading(true)
+    void getArticle(selected.id)
+      .then((row) => {
+        if (cancelled) return
+        setPreviewMarkdown(row.markdown || '')
+        setSelected((prev) =>
+          prev && prev.id === row.id ? { ...prev, ...row, markdown: row.markdown || '' } : prev,
+        )
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewMarkdown('')
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selected?.id])
 
   const parseMutation = useMutation({
     mutationFn: () => parseUrl(url),
@@ -96,6 +136,17 @@ export function CollectPage() {
     onError: (err: Error) => message.error(err.message || t('crawlFailed')),
   })
 
+  const reparseMutation = useMutation({
+    mutationFn: (articleId: number) => reparseArticle(articleId),
+    onSuccess: async (row) => {
+      message.success(t('reparseOk'))
+      await articlesQuery.refetch()
+      setSelected(row)
+      setPreviewMarkdown(row.markdown || '')
+    },
+    onError: (err: Error) => message.error(err.message || t('reparseFailed')),
+  })
+
   const items = articlesQuery.data?.data ?? []
   const total = articlesQuery.data?.meta.total_count ?? 0
   const sourceOptions = useMemo(
@@ -107,7 +158,7 @@ export function CollectPage() {
     [sourcesQuery.data?.data]
   )
 
-  const activeMarkdown = selected?.markdown ?? ''
+  const activeMarkdown = previewMarkdown
 
   return (
     <main className="page">
@@ -146,6 +197,20 @@ export function CollectPage() {
             placeholder={t('allSources')}
             options={sourceOptions}
             loading={sourcesQuery.isLoading}
+          />
+          <Select
+            style={{ minWidth: 140 }}
+            value={statusFilter}
+            onChange={(value) => {
+              setStatusFilter(value)
+              setPage(1)
+              setSelected(null)
+            }}
+            options={[
+              { value: 'ok', label: t('statusOk') },
+              { value: 'error', label: t('statusError') },
+              { value: 'all', label: t('statusAll') },
+            ]}
           />
           {isAdmin ? (
             <Button
@@ -206,13 +271,20 @@ export function CollectPage() {
                         {item.source_domain ? (
                           <Tag style={{ margin: 0 }}>{item.source_domain}</Tag>
                         ) : null}
+                        {item.status === 'error' ? (
+                          <Tag color="error" style={{ margin: 0 }}>
+                            {t('statusError')}
+                          </Tag>
+                        ) : null}
                       </Space>
                       <Typography.Paragraph
                         type="secondary"
                         ellipsis={{ rows: 2 }}
                         style={{ marginBottom: 4, fontSize: 12, textAlign: 'left' }}
                       >
-                        {item.summary || item.url}
+                        {item.status === 'error'
+                          ? item.error_message || item.summary || item.url
+                          : item.summary || item.url}
                       </Typography.Paragraph>
                       <Typography.Text type="secondary" style={{ fontSize: 11 }}>
                         {item.fetched_at ? formatDate(item.fetched_at) : ''}
@@ -246,17 +318,38 @@ export function CollectPage() {
               size="small"
               title={selected?.title || t('preview')}
               extra={
-                selected?.url ? (
-                  <Typography.Link href={selected.url} target="_blank" rel="noreferrer">
-                    {t('openSource')}
-                  </Typography.Link>
+                selected ? (
+                  <Space size={8}>
+                    {selected.url ? (
+                      <Typography.Link href={selected.url} target="_blank" rel="noreferrer">
+                        {t('openSource')}
+                      </Typography.Link>
+                    ) : null}
+                    {canWrite ? (
+                      <Button
+                        type="link"
+                        size="small"
+                        loading={reparseMutation.isPending}
+                        onClick={() => reparseMutation.mutate(selected.id)}
+                      >
+                        {t('reparse')}
+                      </Button>
+                    ) : null}
+                  </Space>
                 ) : null
               }
             >
-              {activeMarkdown ? (
+              {previewLoading ? (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('loading')} />
+              ) : activeMarkdown ? (
                 <div className="payload-viewer collect-preview">
                   <Markdown content={activeMarkdown} openLinksInNewTab escapeRawHtml />
                 </div>
+              ) : selected?.status === 'error' ? (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={selected.error_message || t('emptyErrorPreview')}
+                />
               ) : (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}

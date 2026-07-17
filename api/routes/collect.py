@@ -6,7 +6,13 @@ from api.auth.models import User
 from api.auth.scopes import require_scope
 from api.models.schemas import Url2MdRequest
 from api.services.audit_service import audit_request_context, record_audit_event_async
-from api.services.collect_service import get_article, list_sources, run_crawl, search_articles
+from api.services.collect_service import (
+    get_article,
+    list_sources,
+    reparse_article,
+    run_crawl,
+    search_articles,
+)
 from api.services.collect_crawl_service import (
     CollectCrawlAlreadyRunningError,
     parse_and_store_url,
@@ -22,6 +28,8 @@ class CollectSearchRequest(BaseModel):
 
     query: str = ""
     source_domain: str | None = None
+    # ok (default) | error | all
+    status: str = Field("ok", pattern=r"^(ok|error|all)$")
     page: int = Field(1, ge=1)
     size: int = Field(20, ge=1, le=100)
 
@@ -56,6 +64,7 @@ async def search_collect_articles_route(
         items, total = await search_articles(
             query=request.query,
             source_domain=request.source_domain,
+            status=request.status,
             page=request.page,
             size=request.size,
         )
@@ -77,6 +86,50 @@ async def get_collect_article_route(
     if not row:
         raise HTTPException(status_code=404, detail="article not found")
     return row
+
+
+@router.post("/articles/{article_id}/reparse")
+async def reparse_collect_article_route(
+    article_id: int,
+    request_ctx: Request,
+    user: User = Depends(require_scope("collect:write")),
+) -> dict:
+    """Re-fetch a stored URL (retry failed crawls / refresh content)."""
+    try:
+        record = await reparse_article(article_id)
+        await record_audit_event_async(
+            user,
+            action="collect.reparse",
+            resource_type="collect_articles",
+            resource_id=str(article_id),
+            metadata={
+                "status": record.get("status"),
+                "url": record.get("url"),
+            },
+            **audit_request_context(request_ctx),
+        )
+        if record.get("status") != "ok":
+            raise HTTPException(
+                status_code=400,
+                detail=record.get("error_message") or "reparse failed",
+            )
+        return record
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Collect reparse error: {}", e)
+        await record_audit_event_async(
+            user,
+            action="collect.reparse",
+            resource_type="collect_articles",
+            resource_id=str(article_id),
+            status="failure",
+            metadata={"error": str(e)},
+            **audit_request_context(request_ctx),
+        )
+        raise HTTPException(status_code=400, detail=f"reparse failed: {e}") from e
 
 
 @router.post("/crawl")

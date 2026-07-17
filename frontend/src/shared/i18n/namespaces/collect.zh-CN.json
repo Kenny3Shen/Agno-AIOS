@@ -16,5 +16,12 @@
   "loading": "加载中…",
   "preview": "预览",
   "selectArticle": "从左侧选择一篇文章查看 Markdown",
-  "openSource": "原文"
+  "openSource": "原文",
+  "statusOk": "成功",
+  "statusError": "失败",
+  "statusAll": "全部状态",
+  "reparse": "重新采集",
+  "reparseOk": "已重新采集",
+  "reparseFailed": "重新采集失败",
+  "emptyErrorPreview": "该文章采集失败，可点击「重新采集」重试"
 }

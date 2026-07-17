@@ -106,43 +106,58 @@ async def search_collect_articles(
     *,
     query: str = "",
     source_domain: str | None = None,
+    status: str | None = "ok",
     page: int = 1,
     size: int = 20,
+    include_markdown: bool = False,
 ) -> tuple[list[dict[str, Any]], int]:
+    """Search articles.
+
+    List responses omit ``markdown`` by default (use ``get_collect_article`` for
+    body). ``status`` accepts ``ok`` / ``error`` / ``all`` (None treated as ok).
+    """
     await ensure_collect_articles_table()
     safe_page = max(1, int(page or 1))
     safe_size = min(100, max(1, int(size or 20)))
     table = collect_articles_table()
-    filters = [table.c.status == "ok"]
+    filters = []
+    status_norm = (status or "ok").strip().lower()
+    if status_norm in {"ok", "error"}:
+        filters.append(table.c.status == status_norm)
+    elif status_norm not in {"all", "*"}:
+        filters.append(table.c.status == "ok")
     normalized = (query or "").strip()
     if normalized:
         pattern = f"%{normalized}%"
-        filters.append(
-            or_(
-                table.c.title.ilike(pattern),
-                table.c.summary.ilike(pattern),
-                table.c.url.ilike(pattern),
-                table.c.markdown.ilike(pattern),
-            )
-        )
+        text_filters = [
+            table.c.title.ilike(pattern),
+            table.c.summary.ilike(pattern),
+            table.c.url.ilike(pattern),
+        ]
+        # Full-body scan is expensive; only when explicitly requested with markdown.
+        if include_markdown:
+            text_filters.append(table.c.markdown.ilike(pattern))
+        filters.append(or_(*text_filters))
     if source_domain:
         filters.append(table.c.source_domain == source_domain.strip())
 
     count_stmt = select(func.count()).select_from(table).where(*filters)
+    columns = [
+        table.c.id,
+        table.c.url,
+        table.c.source_domain,
+        table.c.title,
+        table.c.summary,
+        table.c.status,
+        table.c.error_message,
+        table.c.fetched_at,
+        table.c.created_at,
+        table.c.updated_at,
+    ]
+    if include_markdown:
+        columns.insert(4, table.c.markdown)
     rows_stmt = (
-        select(
-            table.c.id,
-            table.c.url,
-            table.c.source_domain,
-            table.c.title,
-            table.c.markdown,
-            table.c.summary,
-            table.c.status,
-            table.c.error_message,
-            table.c.fetched_at,
-            table.c.created_at,
-            table.c.updated_at,
-        )
+        select(*columns)
         .where(*filters)
         .order_by(desc(table.c.fetched_at), desc(table.c.id))
         .limit(safe_size)
@@ -155,6 +170,9 @@ async def search_collect_articles(
             _row_to_dict(row)
             for row in (await conn.execute(rows_stmt)).mappings().all()
         ]
+    if not include_markdown:
+        for row in rows:
+            row.setdefault("markdown", "")
     return rows, total
 
 

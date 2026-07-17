@@ -16,5 +16,12 @@
   "loading": "Loading…",
   "preview": "Preview",
   "selectArticle": "Select an article on the left to preview Markdown",
-  "openSource": "Source"
+  "openSource": "Source",
+  "statusOk": "OK",
+  "statusError": "Failed",
+  "statusAll": "All statuses",
+  "reparse": "Re-fetch",
+  "reparseOk": "Re-fetched",
+  "reparseFailed": "Re-fetch failed",
+  "emptyErrorPreview": "This article failed; re-fetch to retry"
 }

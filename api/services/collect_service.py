@@ -9,7 +9,11 @@ from api.persistence.collect_articles import (
     list_collect_source_domains,
     search_collect_articles,
 )
-from api.services.collect_crawl_service import configured_source_domains, crawl_and_persist
+from api.services.collect_crawl_service import (
+    configured_source_domains,
+    crawl_and_persist,
+    parse_and_store_url,
+)
 from api.utils.url2md_utils import active_domain_rules
 
 
@@ -17,14 +21,17 @@ async def search_articles(
     *,
     query: str = "",
     source_domain: str | None = None,
+    status: str | None = "ok",
     page: int = 1,
     size: int = 20,
 ) -> tuple[list[dict[str, Any]], int]:
     return await search_collect_articles(
         query=query,
         source_domain=source_domain,
+        status=status,
         page=page,
         size=size,
+        include_markdown=False,
     )
 
 
@@ -58,3 +65,14 @@ async def run_crawl(
         max_links_per_source=max_links_per_source,
         max_articles_total=max_articles_total,
     )
+
+
+async def reparse_article(article_id: int) -> dict[str, Any]:
+    """Re-fetch and upsert an existing article by id (retry failed collects)."""
+    row = await get_collect_article(article_id)
+    if not row:
+        raise LookupError("article not found")
+    url = str(row.get("url") or "").strip()
+    if not url:
+        raise ValueError("article has no url")
+    return await parse_and_store_url(url)
