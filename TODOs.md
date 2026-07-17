@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Chat 会话切换取消流 + history 不覆盖流式 + beforeunload
+
+- 切换会话 / 新建对话：若仍在 requesting，abort SSE 并 best-effort `cancelRun`（同会话 no-op）。
+- history effect：`requesting` 时不把 Query 历史写回 messages，避免冲掉流式内容；结束后再同步。
+- Chat：生成中 `beforeunload` 提示；Studio：运行中或 dirty 草稿 `beforeunload` 提示。
+
+
 ## 已完成：Esc 不误伤弹层 + 请求中隐藏 followups + 共用 keyboard helper
 
 - `shared/lib/keyboard`：`isKeyboardTargetEditable` / `isOverlayEscapeTarget`（Chat + Studio 共用）。

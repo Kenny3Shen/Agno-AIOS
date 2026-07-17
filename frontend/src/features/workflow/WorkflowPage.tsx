@@ -164,6 +164,18 @@ export function WorkflowPage() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [workflow.state.running])
+
+  // Warn before leaving with an active run or unsaved draft.
+  useEffect(() => {
+    if (!workflow.state.running && !workflow.state.dirty) return
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [workflow.state.running, workflow.state.dirty])
+
   const runLogListRef = useRef<HTMLDivElement>(null)
   const inspectorPanelRef = useRef<HTMLElement | null>(null)
   const focusFieldRef = useRef<string | null>(null)

@@ -558,6 +558,18 @@ export function ChatPage() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [chat.state.requesting])
 
+  // Warn before closing the tab while a run is streaming / retrying.
+  useEffect(() => {
+    if (!chat.state.requesting) return
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [chat.state.requesting])
+
+
   useEffect(() => {
     const shell = senderShellRef.current
     const workspace = workspaceRef.current

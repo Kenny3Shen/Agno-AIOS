@@ -41,9 +41,15 @@ export function useChat() {
   const models = useQuery(modelsQuery())
 
   useEffect(() => {
-    if (sessionId && history.data) dispatch({ type: 'history', messages: history.data })
-    else if (!sessionId) dispatch({ type: 'reset' })
-  }, [history.data, sessionId])
+    if (!sessionId) {
+      dispatch({ type: 'reset' })
+      return
+    }
+    if (!history.data) return
+    // Avoid replacing an in-flight stream with a concurrent history fetch.
+    if (state.requesting) return
+    dispatch({ type: 'history', messages: history.data })
+  }, [history.data, sessionId, state.requesting])
 
   // Workflow sessions are not agent transcripts — open Studio when known, else Trace.
   useEffect(() => {
@@ -82,7 +88,22 @@ export function useChat() {
     [models.data, state.selectedModelId]
   )
   const setSession = (value: string | null) => {
-    void router.history.push(value ? `/chat?session=${encodeURIComponent(value)}` : '/chat')
+    const next = value
+    const same =
+      (next == null && !sessionId) || (next != null && next === sessionId)
+    // Switching sessions mid-stream aborts the client SSE (server cancel best-effort).
+    if (!same && state.requesting) {
+      const runId = activeRunIdRef.current
+      abortRef.current?.abort()
+      if (runId) {
+        void cancelRun(runId).catch((error: unknown) => {
+          if (error instanceof ApiError && error.status === 404) return
+          console.warn(`[chat] cancel on session switch failed for ${runId}:`, error)
+        })
+      }
+    }
+    if (same) return
+    void router.history.push(next ? `/chat?session=${encodeURIComponent(next)}` : '/chat')
   }
   const setModel = (value: string) => {
     localStorage.setItem('agno-aios-chat-model-id', value)
@@ -251,6 +272,7 @@ export function useChat() {
   const newChat = () => {
     dispatch({ type: 'reasoning-effort', value: defaultReasoningEffort(selectedModel) })
     setSessionSearch('')
+    // setSession aborts any in-flight run before clearing the URL session.
     setSession(null)
   }
   return {
