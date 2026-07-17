@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { Conversations } from '@ant-design/x'
 import { App, Button, Empty, Flex, Form, Input, Modal, Skeleton } from 'antd'
 import {
@@ -15,13 +15,15 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { useTranslation } from 'react-i18next'
-import { archiveSession, renameSession, unarchiveSession, type SessionListResult } from './api'
-import { chatKeys } from './queries'
-import { useChat } from './useChat'
+import { useRouter, useRouterState } from '@tanstack/react-router'
+import { archiveSession, cancelRun, renameSession, unarchiveSession, type SessionListResult } from './api'
+import { abortActiveChatStream, getActiveChatStream } from './activeChatStream'
+import { chatKeys, sessionsQuery } from './queries'
 import type { ChatSession } from './types'
 import { copyToClipboard } from '@/shared/lib/clipboard'
-import { useRouter } from '@tanstack/react-router'
+import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 import { buildTraceSearch, emptyTraceFilters } from '@/features/trace/utils'
+import { ApiError } from '@/shared/api/client'
 
 export type ConversationGroupKey = 'today' | 'yesterday' | 'earlier'
 
@@ -68,34 +70,64 @@ export function filterConversationItems(items: ConversationListItem[], query: st
   })
 }
 
+function bestEffortCancelRun(runId: string | null | undefined) {
+  if (!runId) return
+  void cancelRun(runId).catch((error: unknown) => {
+    if (error instanceof ApiError && error.status === 404) return
+    const detail = error instanceof Error ? error.message : String(error)
+    console.warn(`[chat] cancel on session switch failed for ${runId}: ${detail}`)
+  })
+}
+
+/** Sidebar/drawer recents list — session list only, no live stream state. */
 export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate }: ChatTaskPanelProps) {
   const { message: toast, modal } = App.useApp()
   const { t } = useTranslation()
   const router = useRouter()
-  const chat = useChat()
+  const searchStr = useRouterState({ select: (state) => state.location.searchStr })
+  const sessionId = new URLSearchParams(searchStr).get('session')
   const queryClient = useQueryClient()
   const contentId = useId()
+  const [sessionSearch, setSessionSearch] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
+  const debouncedSessionSearch = useDebouncedValue(sessionSearch, 300)
   const [renameTarget, setRenameTarget] = useState<ChatSession | null>(null)
   const [renameForm] = Form.useForm<{ title: string }>()
   const [renaming, setRenaming] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<string[]>([])
   const expandedGroupsInitialized = useRef(false)
+
+  const sessionsQueryResult = useInfiniteQuery(
+    sessionsQuery({
+      archivedOnly: showArchived,
+      q: debouncedSessionSearch.trim(),
+    }),
+  )
+  const sessionItems = useMemo(
+    () => sessionsQueryResult.data?.pages.flatMap((page) => page.data) ?? [],
+    [sessionsQueryResult.data],
+  )
+  const sessions = {
+    ...sessionsQueryResult,
+    data: sessionItems,
+  }
+
   const conversations = useMemo(
     () =>
-      buildConversationItems(chat.sessions.data ?? []).map((item) => ({
+      buildConversationItems(sessionItems).map((item) => ({
         ...item,
         label: item.label || t('shell:conversations.unnamed'),
         title: item.title || t('shell:conversations.unnamed'),
       })),
-    [chat.sessions.data, t]
+    [sessionItems, t],
   )
   // Only client-filter once the server query has caught up (avoid empty flash while typing).
   const filteredConversations = useMemo(() => {
-    if (chat.sessionSearch.trim() !== (chat.debouncedSessionSearch ?? '').trim()) {
+    if (sessionSearch.trim() !== debouncedSessionSearch.trim()) {
       return conversations
     }
-    return filterConversationItems(conversations, chat.sessionSearch)
-  }, [conversations, chat.sessionSearch, chat.debouncedSessionSearch])
+    return filterConversationItems(conversations, sessionSearch)
+  }, [conversations, sessionSearch, debouncedSessionSearch])
   const conversationGroups = useMemo(
     () => Array.from(new Set(filteredConversations.map((item) => item.group))),
     [filteredConversations],
@@ -103,32 +135,48 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
 
   useEffect(() => {
     if (expandedGroupsInitialized.current || !conversationGroups.length) return
-    setExpandedGroups([conversationGroups.includes('today') ? 'today' : conversationGroups[0]])
+    setExpandedGroups([conversationGroups.includes('today') ? 'today' : conversationGroups[0]!])
     expandedGroupsInitialized.current = true
   }, [conversationGroups])
 
   // When searching, expand every group so matches are visible without clicking.
   useEffect(() => {
-    if (!chat.sessionSearch.trim() || !conversationGroups.length) return
+    if (!sessionSearch.trim() || !conversationGroups.length) return
     setExpandedGroups(conversationGroups)
     expandedGroupsInitialized.current = true
-  }, [chat.sessionSearch, conversationGroups])
+  }, [sessionSearch, conversationGroups])
+
+  const navigateToChatSession = (next: string | null) => {
+    const same = (next == null && !sessionId) || (next != null && next === sessionId)
+    if (!same) {
+      const { runId } = abortActiveChatStream()
+      bestEffortCancelRun(runId)
+    }
+    if (same) return
+    void router.history.push(next ? `/chat?session=${encodeURIComponent(next)}` : '/chat')
+  }
 
   const startRename = (session: ChatSession) => {
     renameForm.setFieldsValue({ title: session.title || session.preview || '' })
     setRenameTarget(session)
   }
-  const copySessionId = (sessionId: string) => {
-    void copyToClipboard(sessionId).then((copied) =>
-      copied ? toast.success(t('shell:conversations.copied')) : toast.error(t('shell:conversations.copyFailed'))
+  const copySessionId = (id: string) => {
+    void copyToClipboard(id).then((copied) =>
+      copied ? toast.success(t('shell:conversations.copied')) : toast.error(t('shell:conversations.copyFailed')),
     )
   }
-  const archive = async (sessionId: string) => {
-    const archivingActive = chat.sessionId === sessionId && chat.state.requesting
+  const archive = async (id: string) => {
+    const live = getActiveChatStream()
+    const archivingActive = sessionId === id && Boolean(live)
     const run = async () => {
       try {
-        await archiveSession(sessionId)
-        if (chat.sessionId === sessionId) chat.newChat()
+        // Stop any live stream for this session before archive.
+        if (archivingActive) {
+          const { runId } = abortActiveChatStream()
+          bestEffortCancelRun(runId)
+        }
+        await archiveSession(id)
+        if (sessionId === id) navigateToChatSession(null)
         await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
         toast.success(t('shell:conversations.archived'))
       } catch (error) {
@@ -148,9 +196,9 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
       onOk: () => run(),
     })
   }
-  const unarchive = async (sessionId: string) => {
+  const unarchive = async (id: string) => {
     try {
-      await unarchiveSession(sessionId)
+      await unarchiveSession(id)
       await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
       toast.success(t('shell:conversations.unarchived'))
     } catch (error) {
@@ -174,7 +222,7 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
               data: page.data.map((item) =>
                 item.session_id === renameTarget.session_id
                   ? { ...item, ...updated, title: updated.title ?? title.trim() }
-                  : item
+                  : item,
               ),
             })),
           }
@@ -188,8 +236,8 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
       setRenaming(false)
     }
   }
-  const openSession = (sessionId: string) => {
-    const session = (chat.sessions.data ?? []).find((item) => item.session_id === sessionId)
+  const openSession = (id: string) => {
+    const session = sessionItems.find((item) => item.session_id === id)
     const isWorkflow = String(session?.session_type || '').toLowerCase() === 'workflow'
     if (isWorkflow) {
       // Prefer Studio when workflow_id is known; otherwise open Trace for this session.
@@ -201,22 +249,23 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
       }
       const filters = {
         ...emptyTraceFilters(),
-        session_id: sessionId,
+        session_id: id,
       }
-      const search = buildTraceSearch(filters, sessionId, '')
+      const search = buildTraceSearch(filters, id, '')
       void router.history.push(`/trace${search ? `?${search}` : ''}`)
       onNavigate?.()
       return
     }
-    chat.setSession(sessionId)
+    navigateToChatSession(id)
     onNavigate?.()
   }
+
   return (
     <>
       <section
         className={`chat-task-panel chat-task-panel-${variant} ${expanded ? 'chat-task-panel-expanded' : 'chat-task-panel-collapsed'}`}
         aria-label={
-          chat.showArchived ? t('shell:conversations.archivedTitle') : t('shell:conversations.title')
+          showArchived ? t('shell:conversations.archivedTitle') : t('shell:conversations.title')
         }
       >
         <button
@@ -225,13 +274,13 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
           aria-expanded={expanded}
           aria-controls={contentId}
           aria-label={
-            chat.showArchived ? t('shell:conversations.archivedTitle') : t('shell:conversations.title')
+            showArchived ? t('shell:conversations.archivedTitle') : t('shell:conversations.title')
           }
           onClick={() => onExpandedChange(!expanded)}
         >
           <span className="chat-task-panel-toggle-label">
             <HistoryOutlined />
-            {chat.showArchived
+            {showArchived
               ? t('shell:conversations.archivedTitle')
               : t('shell:conversations.title')}
           </span>
@@ -239,11 +288,11 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
         </button>
         {expanded ? (
           <div id={contentId} className="chat-task-panel-content">
-            {chat.sessions.isLoading && !chat.sessions.data?.length && !chat.sessionSearch ? (
+            {sessions.isLoading && !sessionItems.length && !sessionSearch ? (
               <div className="chat-task-panel-loading" aria-label={t('common:loading')}>
                 <Skeleton active title={false} paragraph={{ rows: 3 }} />
               </div>
-            ) : chat.sessions.isError ? (
+            ) : sessions.isError ? (
               <div className="chat-task-panel-state" role="alert">
                 <span>{t('shell:conversations.loadFailed')}</span>
                 <Button
@@ -251,7 +300,7 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
                   type="text"
                   icon={<ReloadOutlined />}
                   aria-label={t('shell:conversations.retry')}
-                  onClick={() => void chat.sessions.refetch()}
+                  onClick={() => void sessions.refetch()}
                 >
                   {t('shell:conversations.retry')}
                 </Button>
@@ -261,38 +310,37 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
                 <div className="chat-task-panel-mode">
                   <Button
                     size="small"
-                    type={chat.showArchived ? 'default' : 'primary'}
+                    type={showArchived ? 'default' : 'primary'}
                     onClick={() => {
-                      if (chat.showArchived) chat.setShowArchived(false)
+                      if (showArchived) setShowArchived(false)
                     }}
                   >
                     {t('shell:conversations.recents')}
                   </Button>
                   <Button
                     size="small"
-                    type={chat.showArchived ? 'primary' : 'default'}
+                    type={showArchived ? 'primary' : 'default'}
                     onClick={() => {
-                      if (!chat.showArchived) chat.setShowArchived(true)
+                      if (!showArchived) setShowArchived(true)
                     }}
                   >
                     {t('shell:conversations.archivedInbox')}
                   </Button>
                 </div>
-                {conversations.length || chat.sessionSearch.trim() || chat.sessions.isFetching ? (
+                {sessionItems.length || sessionSearch.trim() ? (
                   <Input.Search
                     allowClear
-                    size="small"
                     className="chat-task-panel-search"
                     placeholder={t('shell:conversations.searchPlaceholder')}
-                    value={chat.sessionSearch}
-                    onChange={(event) => chat.setSessionSearch(event.target.value)}
-                    loading={Boolean(chat.sessions.isFetching && !chat.sessions.isFetchingNextPage)}
+                    value={sessionSearch}
+                    onChange={(event) => setSessionSearch(event.target.value)}
+                    loading={Boolean(sessions.isFetching && !sessions.isFetchingNextPage)}
                     aria-label={t('shell:conversations.searchPlaceholder')}
                   />
                 ) : null}
                 <Conversations
                   items={filteredConversations}
-                  activeKey={chat.sessionId ?? undefined}
+                  activeKey={sessionId ?? undefined}
                   onActiveChange={openSession}
                   groupable={{
                     label: (group) => (
@@ -315,7 +363,7 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
                         icon: <EditOutlined />,
                         label: t('shell:conversations.rename'),
                         onClick: () => {
-                          const session = (chat.sessions.data ?? []).find((value) => value.session_id === item.key)
+                          const session = sessionItems.find((value) => value.session_id === item.key)
                           if (session) startRename(session)
                         },
                       },
@@ -325,7 +373,7 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
                         label: t('shell:conversations.copySessionId'),
                         onClick: () => copySessionId(item.key),
                       },
-                      chat.showArchived
+                      showArchived
                         ? {
                             key: 'unarchive',
                             icon: <UndoOutlined />,
@@ -342,24 +390,24 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
                     ],
                   })}
                 />
-                {chat.sessions.hasNextPage ? (
+                {sessions.hasNextPage ? (
                   <div className="chat-task-panel-load-more">
                     <Button
                       size="small"
                       type="link"
-                      loading={Boolean(chat.sessions.isFetchingNextPage)}
-                      disabled={Boolean(chat.sessions.isFetchingNextPage)}
-                      onClick={() => void chat.sessions.fetchNextPage()}
+                      loading={Boolean(sessions.isFetchingNextPage)}
+                      disabled={Boolean(sessions.isFetchingNextPage)}
+                      onClick={() => void sessions.fetchNextPage()}
                     >
                       {t('shell:conversations.loadMore')}
                     </Button>
                   </div>
                 ) : null}
-                {!conversations.length && !chat.sessionSearch.trim() ? (
+                {!conversations.length && !sessionSearch.trim() ? (
                   <Empty
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
                     description={
-                      chat.showArchived
+                      showArchived
                         ? t('shell:conversations.emptyArchived')
                         : t('shell:conversations.empty')
                     }

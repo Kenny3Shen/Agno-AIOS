@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Chat 侧栏去掉 useChat 双实例
+
+- `ChatTaskPanel` 仅用 `sessionsQuery` + URL `session`，不再挂 `useChat` 流式状态。
+- 切会话仍 `abortActiveChatStream` + best-effort `cancelRun`；归档进行中会话同样中止 live stream。
+- 从根上消除 Page/Panel 双 reducer 竞态（配合既有 session-switch）。
+
 ## 已完成：Chat 会话切换清空流式态
 
 - `session-switch`：URL 从已有 session 切走时清空 messages + `requesting`，避免历史加载被挡住。

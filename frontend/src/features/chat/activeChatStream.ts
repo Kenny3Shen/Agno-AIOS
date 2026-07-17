@@ -1,9 +1,8 @@
 /**
  * Process-wide handle for the single live Chat SSE stream.
  *
- * ChatPage and ChatTaskPanel each call useChat() with independent reducer
- * state; only one instance owns the in-flight stream. Session switches from
- * the sidebar must abort that stream even when the panel instance is idle.
+ * ChatPage owns the stream via useChat(); ChatTaskPanel only lists sessions
+ * but can abort the live stream when the user switches or archives a session.
  */
 
 export type ActiveChatStream = {

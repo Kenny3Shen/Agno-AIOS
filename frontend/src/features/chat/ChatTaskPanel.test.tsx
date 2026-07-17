@@ -1,41 +1,42 @@
 import dayjs from 'dayjs'
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import { http, HttpResponse } from 'msw'
 import { setupUser } from '@/test/user'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '@/shared/i18n'
 import { renderWithQuery } from '@/test/render'
+import { server } from '@/test/server'
 import { buildConversationItems, filterConversationItems, ChatTaskPanel } from './ChatTaskPanel'
 import type { ChatSession } from './types'
 
-const sessions = {
-  data: [] as ChatSession[],
-  isLoading: false,
-  isError: false,
-  isFetching: false,
-  hasNextPage: false,
-  isFetchingNextPage: false,
-  fetchNextPage: vi.fn<() => Promise<unknown>>(),
-  refetch: vi.fn<() => Promise<unknown>>(),
-}
+const historyPush = vi.fn<(path: string) => void>()
 
-const chat = {
-  sessionId: null as string | null,
-  sessions,
-  sessionSearch: '',
-  debouncedSessionSearch: '',
-  setSessionSearch: vi.fn<(value: string) => void>(),
-  showArchived: false,
-  setShowArchived: vi.fn<(value: boolean) => void>(),
-  setSession: vi.fn<(sessionId: string) => void>(),
-  newChat: vi.fn<() => void>(),
-  state: { requesting: false },
-}
-
-vi.mock('./useChat', () => ({ useChat: () => chat }))
 vi.mock('@tanstack/react-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tanstack/react-router')>()),
-  useRouter: () => ({ history: { push: vi.fn(), replace: vi.fn() } }),
+  useRouter: () => ({ history: { push: historyPush, replace: vi.fn() } }),
+  useRouterState: ({ select }: { select: (state: { location: { searchStr: string } }) => unknown }) =>
+    select({ location: { searchStr: '' } }),
 }))
+
+const emptyMeta = { page: 1, limit: 40, total_pages: 0, total_count: 0, search_time_ms: 0 }
+
+function mockSessions(data: ChatSession[], options?: { error?: boolean; totalPages?: number }) {
+  server.use(
+    http.get('/api/chat/sessions', () => {
+      if (options?.error) {
+        return HttpResponse.json({ detail: 'boom' }, { status: 500 })
+      }
+      return HttpResponse.json({
+        data,
+        meta: {
+          ...emptyMeta,
+          total_count: data.length,
+          total_pages: options?.totalPages ?? (data.length ? 1 : 0),
+        },
+      })
+    }),
+  )
+}
 
 describe('conversation list mapping', () => {
   it('filters conversations by title or session id', () => {
@@ -57,7 +58,6 @@ describe('conversation list mapping', () => {
     expect(filterConversationItems(items, 'OTHER').map((item) => item.key)).toEqual(['other'])
     expect(filterConversationItems(items, '  ').map((item) => item.key)).toEqual(['other', 'abc-risk'])
   })
-
 
   it('prefixes workflow sessions with [WF] for recents scanning', () => {
     const items = buildConversationItems([
@@ -112,7 +112,7 @@ describe('conversation list mapping', () => {
           updated_at: dayjs('2026-07-12T09:00:00').unix(),
         },
       ],
-      now
+      now,
     )
 
     expect(items.map(({ key, group }) => ({ key, group }))).toEqual([
@@ -126,20 +126,8 @@ describe('conversation list mapping', () => {
 describe('ChatTaskPanel', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('zh-CN')
-    sessions.data = []
-    sessions.isLoading = false
-    sessions.isError = false
-    sessions.isFetching = false
-    sessions.hasNextPage = false
-    sessions.isFetchingNextPage = false
-    sessions.fetchNextPage.mockReset()
-    sessions.refetch.mockReset()
-    chat.sessionId = null
-    chat.sessionSearch = ''
-    chat.debouncedSessionSearch = ''
-    chat.setSession.mockReset()
-    chat.setSessionSearch.mockReset()
-    chat.newChat.mockReset()
+    historyPush.mockReset()
+    mockSessions([])
   })
 
   it('exposes a controlled expand toggle without rendering hidden content', async () => {
@@ -157,7 +145,7 @@ describe('ChatTaskPanel', () => {
   it('opens conversations while notifying a mobile drawer to close', async () => {
     const user = setupUser()
     const onNavigate = vi.fn<() => void>()
-    sessions.data = [
+    mockSessions([
       {
         session_id: 'session-1',
         title: '资产风险分析',
@@ -165,66 +153,111 @@ describe('ChatTaskPanel', () => {
         created_at: dayjs().unix(),
         updated_at: dayjs().unix(),
       },
-    ]
+    ])
     renderWithQuery(
-      <ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} onNavigate={onNavigate} variant="drawer" />
+      <ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} onNavigate={onNavigate} variant="drawer" />,
     )
 
-    expect(screen.queryByText('新建对话')).toBeNull()
+    expect(await screen.findByText('资产风险分析')).toBeTruthy()
     await user.click(screen.getByText('资产风险分析'))
-    expect(chat.setSession).toHaveBeenCalledWith('session-1')
+    expect(historyPush).toHaveBeenCalledWith('/chat?session=session-1')
     expect(onNavigate).toHaveBeenCalledOnce()
   })
 
   it('renders an empty state and retries a failed sessions query', async () => {
     const user = setupUser()
-    const { unmount } = renderWithQuery(<ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} variant="sider" />)
-    expect(screen.getByText('暂无对话')).toBeTruthy()
+    mockSessions([])
+    const { unmount } = renderWithQuery(
+      <ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} variant="sider" />,
+    )
+    expect(await screen.findByText('暂无对话')).toBeTruthy()
 
     unmount()
-    sessions.isError = true
+    mockSessions([], { error: true })
     renderWithQuery(<ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} variant="sider" />)
-    await user.click(screen.getByRole('button', { name: '重试' }))
-    expect(sessions.refetch).toHaveBeenCalledOnce()
+    const retry = await screen.findByRole('button', { name: '重试' })
+    // After retry, serve success empty list so the query settles.
+    mockSessions([])
+    await user.click(retry)
+    await waitFor(() => expect(screen.queryByRole('button', { name: '重试' })).toBeNull())
   })
 
   it('localizes the panel and date group labels', async () => {
     await i18n.changeLanguage('en-US')
-    sessions.data = [
+    mockSessions([
       {
         session_id: 'session-1',
         preview: 'Investigate CVE',
         created_at: dayjs().unix(),
         updated_at: dayjs().unix(),
       },
-    ]
+    ])
     renderWithQuery(<ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} variant="sider" />)
-    expect(screen.getByText('Recent conversations')).toBeTruthy()
-    expect(screen.getByText('Today')).toBeTruthy()
+    expect(await screen.findByText('Recent conversations')).toBeTruthy()
+    expect(await screen.findByText('Investigate CVE')).toBeTruthy()
+    expect(await screen.findByText('Today')).toBeTruthy()
   })
+
   it('loads more sessions when hasNextPage is true', async () => {
     const user = setupUser()
-    sessions.data = [
-      {
-        session_id: 'session-1',
-        preview: 'First page',
-        created_at: dayjs().unix(),
-        updated_at: dayjs().unix(),
-      },
-    ]
-    sessions.hasNextPage = true
+    let page = 0
+    server.use(
+      http.get('/api/chat/sessions', ({ request }) => {
+        const params = new URL(request.url).searchParams
+        page = Number(params.get('page') || '1')
+        if (page === 1) {
+          return HttpResponse.json({
+            data: [
+              {
+                session_id: 'session-1',
+                preview: 'First page',
+                created_at: dayjs().unix(),
+                updated_at: dayjs().unix(),
+              },
+            ],
+            meta: { page: 1, limit: 40, total_pages: 2, total_count: 41, search_time_ms: 0 },
+          })
+        }
+        return HttpResponse.json({
+          data: [
+            {
+              session_id: 'session-2',
+              preview: 'Second page',
+              created_at: dayjs().unix(),
+              updated_at: dayjs().unix(),
+            },
+          ],
+          meta: { page: 2, limit: 40, total_pages: 2, total_count: 41, search_time_ms: 0 },
+        })
+      }),
+    )
     renderWithQuery(<ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} variant="sider" />)
+    expect(await screen.findByText('First page')).toBeTruthy()
     await user.click(screen.getByRole('button', { name: '加载更多' }))
-    expect(sessions.fetchNextPage).toHaveBeenCalledOnce()
+    expect(await screen.findByText('Second page')).toBeTruthy()
   })
 
   it('keeps search input when server results are empty', async () => {
-    sessions.data = []
-    chat.sessionSearch = 'no-match-xyz'
-    chat.debouncedSessionSearch = 'no-match-xyz'
+    const user = setupUser()
+    mockSessions([
+      {
+        session_id: 'seed',
+        preview: 'seed conversation',
+        created_at: dayjs().unix(),
+        updated_at: dayjs().unix(),
+      },
+    ])
     renderWithQuery(<ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} variant="sider" />)
+    const search = await screen.findByLabelText(i18n.t('shell:conversations.searchPlaceholder'))
+    // Client-side filter after debounce matches; no need to change server payload.
+    await user.clear(search)
+    await user.type(search, 'no-match-xyz')
+    await waitFor(
+      () => {
+        expect(screen.getByText(i18n.t('shell:conversations.emptySearch'))).toBeTruthy()
+      },
+      { timeout: 2500 },
+    )
     expect(screen.getByLabelText(i18n.t('shell:conversations.searchPlaceholder'))).toBeTruthy()
-    expect(screen.getByText(i18n.t('shell:conversations.emptySearch'))).toBeTruthy()
   })
-
 })
