@@ -15,6 +15,7 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    case,
     delete,
     desc,
     func,
@@ -107,6 +108,7 @@ async def search_cve_rows(
     normalized_query = query.strip()
     table = cves_table()
     filters = []
+    order_by = [desc(table.c.created_at), desc(table.c.id)]
     if normalized_query:
         pattern = f"%{normalized_query}%"
         filters.append(
@@ -115,6 +117,14 @@ async def search_cve_rows(
                 table.c.description.ilike(pattern),
             )
         )
+        # Exact CVE-ID hits first (common analyst lookup: CVE-2024-1234).
+        upper_q = normalized_query.upper()
+        if upper_q.startswith("CVE-"):
+            order_by = [
+                case((func.upper(table.c.cve_id) == upper_q, 0), else_=1),
+                desc(table.c.created_at),
+                desc(table.c.id),
+            ]
     if source:
         filters.append(table.c.source == source)
 
@@ -129,7 +139,7 @@ async def search_cve_rows(
             table.c.create_time,
         )
         .where(*filters)
-        .order_by(desc(table.c.created_at), desc(table.c.id))
+        .order_by(*order_by)
         .limit(safe_size)
         .offset((safe_page - 1) * safe_size)
     )
@@ -171,13 +181,33 @@ async def delete_cve_rows(rows: Sequence[dict[str, Any]]) -> int:
         return 0
     await ensure_cves_table()
     table = cves_table()
+    pairs: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for row in rows:
+        cve_id = str(row.get("cve_id") or "").strip()
+        github_url = str(row.get("github_url") or "").strip()
+        if not cve_id or not github_url:
+            continue
+        key = (cve_id, github_url)
+        if key in seen:
+            continue
+        seen.add(key)
+        pairs.append(key)
+    if not pairs:
+        return 0
     deleted = 0
+    chunk_size = 200
     async with get_async_control_plane_engine().begin() as conn:
-        for row in rows:
+        for i in range(0, len(pairs), chunk_size):
+            chunk = pairs[i : i + chunk_size]
             result = await conn.execute(
                 delete(table).where(
-                    table.c.cve_id == row.get("cve_id"),
-                    table.c.github_url == row.get("github_url"),
+                    or_(
+                        *[
+                            (table.c.cve_id == cve_id) & (table.c.github_url == github_url)
+                            for cve_id, github_url in chunk
+                        ]
+                    )
                 )
             )
             deleted += max(int(result.rowcount or 0), 0)

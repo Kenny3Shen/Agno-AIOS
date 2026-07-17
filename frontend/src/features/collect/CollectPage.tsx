@@ -87,6 +87,8 @@ export function CollectPage() {
           ok: data.ok ?? 0,
           saved: data.saved ?? 0,
           discovered: data.discovered ?? 0,
+          selected: data.selected ?? data.fetched ?? 0,
+          skipped: data.skipped_existing ?? 0,
         })
       )
       await Promise.all([articlesQuery.refetch(), sourcesQuery.refetch()])

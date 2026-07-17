@@ -5,7 +5,7 @@
   "searchPlaceholder": "Search title, summary, or URL",
   "allSources": "All sources",
   "crawlSources": "Sync sources",
-  "crawlOk": "Sync done: discovered {{discovered}}, ok {{ok}}, saved {{saved}}",
+  "crawlOk": "Sync done: discovered {{discovered}}, fetched {{selected}}, skipped {{skipped}}, ok {{ok}}, saved {{saved}}",
   "crawlFailed": "Sync failed",
   "parseOk": "Collected and saved",
   "parseFailed": "Collect failed",

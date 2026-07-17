@@ -4,6 +4,7 @@ from api.services.collect_crawl_service import (
     _title_from_markdown,
     configured_source_domains,
     extract_article_links,
+    select_urls_round_robin,
 )
 from api.utils.url2md_utils import active_domain_rules
 
@@ -49,3 +50,53 @@ def test_title_and_summary_from_markdown():
     md = "# Sample Title\n\nFirst paragraph with enough text.\n\nSecond line."
     assert _title_from_markdown(md) == "Sample Title"
     assert "First paragraph" in _summary_from_markdown(md)
+
+
+def test_select_urls_round_robin_fairness():
+    discovered = {
+        "aaa.example": [f"https://aaa.example/a{i}" for i in range(10)],
+        "zzz.example": [f"https://zzz.example/z{i}" for i in range(10)],
+    }
+    selected = select_urls_round_robin(discovered, max_articles_total=4)
+    assert len(selected) == 4
+    # Alphabetical concat would take only aaa.*; round-robin must interleave.
+    assert any("zzz.example" in url for url in selected)
+    assert any("aaa.example" in url for url in selected)
+
+
+def test_select_urls_round_robin_excludes_existing_before_budget():
+    discovered = {
+        "aaa.example": [
+            "https://aaa.example/old-1",
+            "https://aaa.example/old-2",
+            "https://aaa.example/new-1",
+        ],
+        "zzz.example": [
+            "https://zzz.example/old-z",
+            "https://zzz.example/new-z",
+        ],
+    }
+    existing = {
+        "https://aaa.example/old-1",
+        "https://aaa.example/old-2",
+        "https://zzz.example/old-z",
+    }
+    selected = select_urls_round_robin(
+        discovered,
+        max_articles_total=2,
+        exclude=existing,
+    )
+    assert selected == [
+        "https://aaa.example/new-1",
+        "https://zzz.example/new-z",
+    ]
+
+
+def test_select_urls_round_robin_empty_when_all_existing():
+    discovered = {"a.com": ["https://a.com/1"]}
+    selected = select_urls_round_robin(
+        discovered,
+        max_articles_total=10,
+        exclude={"https://a.com/1"},
+    )
+    assert selected == []

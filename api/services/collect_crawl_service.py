@@ -189,6 +189,56 @@ def extract_article_links(html: str, base_url: str, source_domain: str) -> list[
     return found
 
 
+
+
+def select_urls_round_robin(
+    discovered: dict[str, list[str]],
+    *,
+    max_articles_total: int,
+    exclude: set[str] | None = None,
+) -> list[str]:
+    """Fairly interleave per-source URLs up to *max_articles_total*.
+
+    Skips URLs in *exclude* (e.g. already stored successfully) without
+    starving later sources the way a sorted concat + hard slice would.
+    """
+    if max_articles_total <= 0 or not discovered:
+        return []
+    blocked = exclude or set()
+    queues: dict[str, list[str]] = {}
+    for domain, links in discovered.items():
+        kept = [url for url in links if url and url not in blocked]
+        if kept:
+            queues[domain] = kept
+    if not queues:
+        return []
+    domains = sorted(queues.keys())
+    indices = {domain: 0 for domain in domains}
+    selected: list[str] = []
+    while len(selected) < max_articles_total:
+        progressed = False
+        for domain in domains:
+            idx = indices[domain]
+            links = queues[domain]
+            if idx >= len(links):
+                continue
+            selected.append(links[idx])
+            indices[domain] = idx + 1
+            progressed = True
+            if len(selected) >= max_articles_total:
+                break
+        if not progressed:
+            break
+    return selected
+
+
+class CollectCrawlAlreadyRunningError(RuntimeError):
+    """Raised when another collect crawl is already in progress."""
+
+
+_CRAWL_LOCK = asyncio.Lock()
+
+
 async def _discover_one_domain(
     client: httpx.AsyncClient,
     domain: str,
@@ -310,28 +360,56 @@ async def crawl_and_persist(
     skip_existing: bool = True,
     fetch_concurrency: int = FETCH_CONCURRENCY,
 ) -> dict[str, Any]:
-    """Discover, fetch, and upsert articles. Returns crawl stats."""
+    """Discover, fetch, and upsert articles. Returns crawl stats.
+
+    URL selection is round-robin across sources so early alphabetical domains
+    cannot consume the whole ``max_articles_total`` budget. When
+    ``skip_existing`` is set, already-ok URLs are excluded *before* selection
+    so the budget is filled with new work.
+    """
+    if _CRAWL_LOCK.locked():
+        raise CollectCrawlAlreadyRunningError("Collect crawl is already running")
+
+    async with _CRAWL_LOCK:
+        return await _crawl_and_persist_locked(
+            domains=domains,
+            max_links_per_source=max_links_per_source,
+            max_articles_total=max_articles_total,
+            skip_existing=skip_existing,
+            fetch_concurrency=fetch_concurrency,
+        )
+
+
+async def _crawl_and_persist_locked(
+    *,
+    domains: list[str] | None,
+    max_links_per_source: int,
+    max_articles_total: int,
+    skip_existing: bool,
+    fetch_concurrency: int,
+) -> dict[str, Any]:
     await ensure_collect_articles_table()
     discovered = await discover_article_urls(
         domains=domains,
         max_links_per_source=max_links_per_source,
     )
-    urls: list[str] = []
-    for domain in sorted(discovered.keys()):
-        for link in discovered[domain]:
-            urls.append(link)
-            if len(urls) >= max_articles_total:
-                break
-        if len(urls) >= max_articles_total:
-            break
+    discovered_total = sum(len(links) for links in discovered.values())
+    all_urls = [url for links in discovered.values() for url in links]
 
-    skipped = 0
-    if skip_existing and urls:
-        existing = await list_existing_ok_urls(urls)
-        if existing:
-            before = len(urls)
-            urls = [u for u in urls if u not in existing]
-            skipped = before - len(urls)
+    existing: set[str] = set()
+    if skip_existing and all_urls:
+        existing = await list_existing_ok_urls(all_urls)
+    skipped = sum(1 for url in all_urls if url in existing)
+
+    urls = select_urls_round_robin(
+        discovered,
+        max_articles_total=max_articles_total,
+        exclude=existing if skip_existing else None,
+    )
+    selected_by_source: dict[str, int] = {}
+    for url in urls:
+        domain = _domain_of(url)
+        selected_by_source[domain] = selected_by_source.get(domain, 0) + 1
 
     semaphore = asyncio.Semaphore(max(1, int(fetch_concurrency or FETCH_CONCURRENCY)))
 
@@ -348,12 +426,16 @@ async def crawl_and_persist(
     saved = await bulk_upsert_collect_articles(records)
     stats = {
         "sources": len(discovered),
-        "discovered": sum(len(v) for v in discovered.values()),
+        "discovered": discovered_total,
         "skipped_existing": skipped,
+        "selected": len(urls),
         "fetched": len(records),
         "saved": saved,
         "ok": ok,
         "error": err,
+        "by_source_discovered": {k: len(v) for k, v in discovered.items()},
+        "by_source_selected": selected_by_source,
+        # Backward-compatible alias (discovered counts).
         "by_source": {k: len(v) for k, v in discovered.items()},
     }
     logger.info("collect crawl finished: {}", stats)

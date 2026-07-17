@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Collect 公平抓取 + 并发锁 + CVE 删除/检索优化
+
+- Collect：`select_urls_round_robin` 跨源交错取 URL，避免按域名排序截断饿死后续源；`skip_existing` 先排除已入库再填预算；进程内 crawl 锁，重复同步返回 409。
+- 统计增加 `selected` / `by_source_selected`；前端 toast 展示发现/抓取/跳过/成功/写入。
+- CVE：删除改为 chunk 批量；`CVE-` 精确 ID 查询优先排序。
+
 ## 已完成：运行中禁用调色板双击加节点
 
 - 运行中/无写权限：palette `onDoubleClick` 直接 return（此前仅挡 drag，双击仍会 `add` 后被 `rejectIfRunning` 弹错）。

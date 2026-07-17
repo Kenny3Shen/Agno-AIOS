@@ -7,7 +7,10 @@ from api.auth.scopes import require_scope
 from api.models.schemas import Url2MdRequest
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.collect_service import get_article, list_sources, run_crawl, search_articles
-from api.services.collect_crawl_service import parse_and_store_url
+from api.services.collect_crawl_service import (
+    CollectCrawlAlreadyRunningError,
+    parse_and_store_url,
+)
 from api.utils.pagination import pagination_meta
 from loguru import logger
 
@@ -98,6 +101,9 @@ async def crawl_collect_sources(
             **audit_request_context(request_ctx),
         )
         return {"message": "crawl completed", **stats}
+    except CollectCrawlAlreadyRunningError as e:
+        logger.warning("Collect crawl rejected: {}", e)
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except Exception as e:
         logger.error("Collect crawl error: {}", e)
         await record_audit_event_async(

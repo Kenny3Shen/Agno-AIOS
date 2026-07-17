@@ -78,6 +78,8 @@ export const crawlSources = (payload?: {
     message?: string
     sources?: number
     discovered?: number
+    skipped_existing?: number
+    selected?: number
     fetched?: number
     saved?: number
     ok?: number
