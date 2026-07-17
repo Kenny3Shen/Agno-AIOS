@@ -11,6 +11,8 @@ const chat = {
   sessionId: null as string | null,
   sessions: { data: [] },
   activeSessionMeta: undefined,
+  sessionMetaLoading: false,
+  sessionMissing: false,
   history: {
     data: [] as unknown[],
     isError: false,
@@ -223,5 +225,32 @@ describe('chat history loading state', () => {
     renderWithQuery(<ChatPage />)
     expect(screen.getByRole('status').textContent || '').toMatch(/loading|加载/i)
     expect(screen.queryByText('从哪里开始调查？')).toBeNull()
+  })
+})
+
+
+describe('chat missing session', () => {
+  beforeEach(() => {
+    HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
+    chat.sessionId = 'gone'
+    chat.sessionMissing = true
+    chat.sessionMetaLoading = false
+    chat.history.isError = false
+    chat.history.isLoading = false
+    chat.history.isPending = false
+    chat.history.isFetching = false
+    chat.state.messages = []
+    chat.state.requesting = false
+    chat.newChat.mockClear()
+  })
+
+  it('shows not-found instead of welcome when session meta is missing', async () => {
+    const user = setupUser()
+    renderWithQuery(<ChatPage />)
+    expect(screen.queryByText('从哪里开始调查？')).toBeNull()
+    const status = screen.getByRole('status')
+    expect(status.textContent || '').toMatch(/not found|不存在|无权/i)
+    await user.click(screen.getByRole('button', { name: '新建分析' }))
+    expect(chat.newChat).toHaveBeenCalled()
   })
 })

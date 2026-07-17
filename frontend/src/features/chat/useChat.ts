@@ -58,8 +58,18 @@ export function useChat() {
   const isWorkflowSession = String(activeSessionMeta?.session_type || '').toLowerCase() === 'workflow'
   // Wait for meta when missing from list so we do not load agent history for a workflow session.
   const metaResolved = !sessionId || Boolean(listSessionMeta) || sessionMetaResult.isFetched
+  // 404 meta → null data with success; treat as missing for empty-state UX.
+  const sessionMissing =
+    Boolean(sessionId) &&
+    metaResolved &&
+    !listSessionMeta &&
+    sessionMetaResult.isSuccess &&
+    sessionMetaResult.data == null
   const history = useQuery(
-    historyQuery(sessionId ?? '', Boolean(sessionId) && metaResolved && !isWorkflowSession)
+    historyQuery(
+      sessionId ?? '',
+      Boolean(sessionId) && metaResolved && !isWorkflowSession && !sessionMissing,
+    )
   )
   const models = useQuery(modelsQuery())
 
@@ -361,6 +371,8 @@ export function useChat() {
     sessionId,
     sessions,
     activeSessionMeta,
+    sessionMetaLoading: Boolean(sessionId) && !listSessionMeta && !sessionMetaResult.isFetched,
+    sessionMissing,
     history,
     models,
     selectedModel,

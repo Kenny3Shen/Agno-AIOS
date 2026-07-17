@@ -470,7 +470,10 @@ export function ChatPage() {
   const activeRun = [...chat.state.messages].reverse().find((item) => item.role === 'assistant' && (item.status === 'streaming' || item.status === 'retrying'))
   const pausedRun = [...chat.state.messages].reverse().find((item) => item.role === 'assistant' && item.status === 'paused')
   const availableReasoningOptions = reasoningOptions(chat.selectedModel)
-  const inputDisabled = !chat.selectedModel?.enabled || !chat.selectedModel.configured
+  const inputDisabled =
+    !chat.selectedModel?.enabled ||
+    !chat.selectedModel.configured ||
+    Boolean(chat.sessionMissing)
   const liveSearchSupported = Boolean(chat.selectedModel?.capabilities?.supports_live_search)
   const latestAssistant = useMemo(
     () => [...chat.state.messages].reverse().find((item) => item.role === 'assistant'),
@@ -545,9 +548,16 @@ export function ChatPage() {
     (Boolean(historyFlags.isLoading) ||
       Boolean(historyFlags.isPending) ||
       (Boolean(historyFlags.isFetching) && chat.state.messages.length === 0))
-  const showHistoryLoading = historyBusy && !chat.state.requesting && chat.state.messages.length === 0
+  const sessionMetaBusy = Boolean(chat.sessionMetaLoading)
+  const showHistoryLoading =
+    (historyBusy || sessionMetaBusy) && !chat.state.requesting && chat.state.messages.length === 0
+  const showSessionMissing =
+    Boolean(chat.sessionId) &&
+    Boolean(chat.sessionMissing) &&
+    !chat.state.requesting &&
+    chat.state.messages.length === 0
   const showHistoryError =
-    Boolean(chat.sessionId) && chat.history.isError && !chat.state.requesting
+    Boolean(chat.sessionId) && chat.history.isError && !chat.state.requesting && !showSessionMissing
 
   // Soft errors (e.g. server cancel failed) auto-dismiss; keep hard run failures until dismiss/retry.
 
@@ -740,6 +750,13 @@ export function ChatPage() {
             <div className="chat-history-loading" role="status" aria-live="polite">
               <Spin size="small" />
               <span>{t('historyLoading')}</span>
+            </div>
+          ) : showSessionMissing ? (
+            <div className="chat-history-error chat-session-missing" role="status">
+              <p className="chat-error__message">{t('sessionNotFound')}</p>
+              <Button type="primary" onClick={() => chat.newChat()}>
+                {t('newAnalysis')}
+              </Button>
             </div>
           ) : showHistoryError && !bubbles.length ? null : !bubbles.length ? (
             <div className="chat-welcome">

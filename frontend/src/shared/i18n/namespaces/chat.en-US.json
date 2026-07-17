@@ -102,5 +102,6 @@
   "knowledgeSearchAutoLeanHint": "Last turn was auto-lite; knowledge search was not mounted. Your preference is kept and applies on the next tool-intent turn.",
   "retryingDetailWithDelay": "Model temporarily unavailable; retry {{attempt}}/{{max}} in {{seconds}}s…",
   "historyLoadFailed": "Unable to load conversation history. Please retry.",
-  "historyLoading": "Loading conversation history…"
+  "historyLoading": "Loading conversation history…",
+  "sessionNotFound": "Session not found or access denied"
 }

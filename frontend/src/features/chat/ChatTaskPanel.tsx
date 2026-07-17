@@ -177,6 +177,7 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
         }
         await archiveSession(id)
         if (sessionId === id) navigateToChatSession(null)
+        queryClient.removeQueries({ queryKey: chatKeys.sessionMeta(id) })
         await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
         toast.success(t('shell:conversations.archived'))
       } catch (error) {

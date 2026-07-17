@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Chat 深链 meta 加载态 + 会话不存在
+
+- meta 解析中显示历史加载 Spin，避免闪欢迎页。
+- meta 404（不存在/无权）展示「会话不存在」+ 新建分析；输入禁用。
+- 归档时 `removeQueries(sessionMeta)`，避免陈旧缓存。
+
 ## 已完成：Chat 深链 session meta 按 id 解析
 
 - 后端 `GET /api/chat/sessions/{id}/meta`：与列表同形投影（title / session_type / workflow_id / …），含归属校验。
