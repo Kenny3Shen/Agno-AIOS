@@ -408,7 +408,11 @@ export interface SseEvent {
   event: string
   data: string
 }
-export const consumeSse = async (stream: ReadableStream<Uint8Array>, onEvent: (event: SseEvent) => void) => {
+export const consumeSse = async (
+  stream: ReadableStream<Uint8Array>,
+  onEvent: (event: SseEvent) => void,
+  signal?: AbortSignal,
+) => {
   const reader = stream.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -425,15 +429,39 @@ export const consumeSse = async (stream: ReadableStream<Uint8Array>, onEvent: (e
       .join('\n')
     if (data) onEvent({ event, data })
   }
-  while (true) {
-    const { value, done } = await reader.read()
-    buffer += decoder.decode(value, { stream: !done })
-    const blocks = buffer.split(/\n\n|\r\n\r\n/)
-    buffer = blocks.pop() ?? ''
-    blocks.forEach(flush)
-    if (done) break
+  const onAbort = () => {
+    void reader.cancel().catch(() => undefined)
   }
-  if (buffer.trim()) flush(buffer)
+  if (signal) {
+    if (signal.aborted) {
+      onAbort()
+      throw new DOMException('The operation was aborted.', 'AbortError')
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+  }
+  try {
+    while (true) {
+      if (signal?.aborted) {
+        throw new DOMException('The operation was aborted.', 'AbortError')
+      }
+      const { value, done } = await reader.read()
+      // reader.cancel() on abort often resolves read() with done=true; still treat as abort.
+      if (signal?.aborted) {
+        throw new DOMException('The operation was aborted.', 'AbortError')
+      }
+      buffer += decoder.decode(value, { stream: !done })
+      const blocks = buffer.split(/\n\n|\r\n\r\n/)
+      buffer = blocks.pop() ?? ''
+      blocks.forEach(flush)
+      if (done) break
+    }
+    if (signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError')
+    }
+    if (buffer.trim()) flush(buffer)
+  } finally {
+    if (signal) signal.removeEventListener('abort', onAbort)
+  }
 }
 
 export const previousPrompt = (messages: Message[], assistantId: string) => {

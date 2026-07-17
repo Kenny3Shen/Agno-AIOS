@@ -35,6 +35,21 @@ describe('chat behavior', () => {
     expect(chunks).toEqual(['first', 'second'])
   })
 
+  it('aborts SSE consumption when signal is aborted', async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start() {
+        // never enqueues — wait for cancel
+      },
+      cancel() {
+        // ok
+      },
+    })
+    const controller = new AbortController()
+    const pending = consumeSse(stream, () => undefined, controller.signal)
+    controller.abort()
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
   it('preserves a partial answer when a request fails', () => {
     const assistant: Message = { id: 'a', role: 'assistant', content: '', final: false }
     const started = chatReducer(initialChatState, {

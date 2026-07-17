@@ -609,6 +609,119 @@ def test_runtime_cancellation_requires_the_matching_user_and_live_run():
 
 
 @pytest.mark.asyncio
+async def test_sleep_interruptible_stops_when_cancel_event_set():
+    cancel = asyncio.Event()
+
+    async def _trip():
+        await asyncio.sleep(0.05)
+        cancel.set()
+
+    trip = asyncio.create_task(_trip())
+    with pytest.raises(asyncio.CancelledError):
+        await security_run_runtime._sleep_interruptible(2.0, cancel, slice_seconds=0.02)
+    await trip
+    assert cancel.is_set()
+
+
+@pytest.mark.asyncio
+async def test_cancel_run_sets_stream_cancel_event_even_without_agent_hook():
+    runtime = security_run_runtime.SecurityRunRuntime()
+    cancel = asyncio.Event()
+    runtime.register_run(
+        user_id="u1",
+        run_id="run-backoff",
+        agent=EventAgent(),
+        cancel_event=cancel,
+    )
+    assert runtime.cancel_run(user_id="u1", run_id="run-backoff")
+    assert cancel.is_set()
+
+
+@pytest.mark.asyncio
+async def test_stream_retry_backoff_cancel_emits_run_cancelled():
+    """POST cancel during model retry sleep should surface run.cancelled, not hang."""
+    runtime = security_run_runtime.SecurityRunRuntime()
+
+    class SlowRetryModel:
+        def __init__(self):
+            self.retries = 2
+            self.delay_between_retries = 5
+            self.exponential_backoff = False
+            self.name = "test"
+            self.id = "test-model"
+            self.calls = 0
+
+        def classify_error(self, error):
+            return error
+
+        def _is_retryable_error(self, _error):
+            return True
+
+        def _get_retry_delay(self, _attempt):
+            return 5.0
+
+        async def ainvoke_stream(self, **_kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                from agno.exceptions import ModelProviderError
+
+                raise ModelProviderError("auth_unavailable", status_code=503)
+            if False:  # pragma: no cover
+                yield None
+
+        async def _ainvoke_stream_with_retry(self, **kwargs):
+            if False:  # pragma: no cover
+                yield None
+
+    model = SlowRetryModel()
+
+    class RetryThenHangAgent:
+        def __init__(self):
+            self.model = model
+
+        async def arun(self, *_args, **_kwargs):
+            yield {
+                "event": "RunStarted",
+                "run_id": "run-cancel-retry",
+                "session_id": "session-1",
+                "model": "test-model",
+                "model_provider": "test",
+            }
+            # Enter patched retry path (will sleep 5s after first failure).
+            async for _ in self.model._ainvoke_stream_with_retry():
+                pass
+            yield {
+                "event": "RunCompleted",
+                "run_id": "run-cancel-retry",
+                "session_id": "session-1",
+                "metrics": {"total_tokens": 1},
+            }
+
+        def cancel_run(self, run_id: str) -> bool:
+            return True
+
+    agent = RetryThenHangAgent()
+    request = security_run_runtime.SecurityRunRequest.from_chat_args(
+        "hello",
+        session_id="session-1",
+        user_id="user-1",
+    )
+
+    chunks: list = []
+
+    async def _consume():
+        async for event in runtime._stream_agent_events(agent, request):
+            chunks.append(event)
+            if event.event == "run.retrying":
+                # Cancel while backoff sleep is in progress.
+                assert runtime.cancel_run(user_id="user-1", run_id="run-cancel-retry")
+
+    await asyncio.wait_for(_consume(), timeout=2.0)
+    assert any(c.event == "run.retrying" for c in chunks), chunks
+    assert any(c.event == "run.cancelled" for c in chunks), chunks
+
+
+@pytest.mark.asyncio
 async def test_provider_block_detector_matches_openai_status_error_text():
     assert security_run_runtime._is_provider_block_error(
         RuntimeError("Your request was blocked.")

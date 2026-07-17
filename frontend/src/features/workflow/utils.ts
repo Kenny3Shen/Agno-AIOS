@@ -1716,14 +1716,6 @@ export const summarizeSelectedAgentSteps = (
   }
 }
 
-/**
- * Insert cloned nodes relative to the current selection:
- * - single container selected → default empty/primary branch
- * - single non-container selected → sibling after that node
- * - multi-select / none → append at roots
- *
- * Parallel never receives HITL trees (Agno constraint); those clones fall back to root.
- */
 export type PasteSelectionResult = {
   steps: WorkflowNode[]
   /** Clones that could not enter Parallel because of HITL (appended at root). */

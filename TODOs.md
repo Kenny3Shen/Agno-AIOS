@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Chat 重试等待期可中断取消
+
+- `_sleep_interruptible`：模型重试 backoff 按 100ms 切片，可被 `cancel_event` 打断。
+- `cancel_run` 设置 per-run / per-user stream cancel；retry 睡眠中的 cancel 发出 `run.cancelled`。
+- 前端 `consumeSse` 接受 `AbortSignal`，停止时 cancel reader，避免悬挂读。
+- 清理 `pasteNodesIntoSelection` 重复 docstring。
+
 ## 已完成：Chat 重试可见性强化
 
 - `formatRetryDetail`：展示 attempt/max，有 `delay_seconds` 时显示等待秒数，并附带简短提供商错误。

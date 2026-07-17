@@ -235,16 +235,20 @@ export const streamMessage = async (
   })
   if (!response.ok || !response.body) throw new Error(`Chat request failed (${response.status})`)
   let terminal = false
-  await consumeSse(response.body, ({ event, data }) => {
-    const chatEvent = parseEvent(event, data)
-    if (!chatEvent) return
-    terminal ||=
-      chatEvent.type === 'run.paused' ||
-      chatEvent.type === 'run.completed' ||
-      chatEvent.type === 'run.cancelled' ||
-      chatEvent.type === 'run.failed'
-    onEvent(chatEvent)
-  })
+  await consumeSse(
+    response.body,
+    ({ event, data }) => {
+      const chatEvent = parseEvent(event, data)
+      if (!chatEvent) return
+      terminal ||=
+        chatEvent.type === 'run.paused' ||
+        chatEvent.type === 'run.completed' ||
+        chatEvent.type === 'run.cancelled' ||
+        chatEvent.type === 'run.failed'
+      onEvent(chatEvent)
+    },
+    signal,
+  )
   if (!terminal) throw new Error('Chat stream ended before a terminal event')
 }
 

@@ -482,11 +482,40 @@ class SecurityRunRuntimeDependencies:
 
 
 
-def _install_stream_retry_notifier(model: Any, queue: asyncio.Queue[dict[str, Any] | None]) -> Callable[[], None]:
+async def _sleep_interruptible(
+    delay: float,
+    cancel_event: asyncio.Event | None,
+    *,
+    slice_seconds: float = 0.1,
+) -> None:
+    """Sleep that can be cut short when the workbench cancels the run."""
+    remaining = max(0.0, float(delay))
+    if cancel_event is None:
+        if remaining:
+            await asyncio.sleep(remaining)
+        return
+    while remaining > 0:
+        if cancel_event.is_set():
+            raise asyncio.CancelledError()
+        step = min(slice_seconds, remaining)
+        await asyncio.sleep(step)
+        remaining -= step
+    if cancel_event.is_set():
+        raise asyncio.CancelledError()
+
+
+def _install_stream_retry_notifier(
+    model: Any,
+    queue: asyncio.Queue[dict[str, Any] | None],
+    cancel_event: asyncio.Event | None = None,
+) -> Callable[[], None]:
     """Patch Agno model stream retry so workbench can surface attempt/delay to the UI.
 
     Agno restarts the entire stream on ModelProviderError; without a signal the
     Chat UI keeps partial content and looks non-streaming after a successful retry.
+
+    ``cancel_event`` lets POST /chat/runs/{id}/cancel interrupt the retry backoff
+    sleep (otherwise a multi-second delay would ignore stop until the next token).
     """
     if model is None:
         return lambda: None
@@ -518,7 +547,7 @@ def _install_stream_retry_notifier(model: Any, queue: asyncio.Queue[dict[str, An
                             "message": str(last_exception),
                         }
                     )
-                    await asyncio.sleep(delay)
+                    await _sleep_interruptible(delay, cancel_event)
             except RetryableModelProviderError as exc:
                 current_count = retries_with_guidance_count
                 limit = int(getattr(self, "retry_with_guidance_limit", 0) or 0)
@@ -563,21 +592,43 @@ class SecurityRunRuntime:
     ) -> None:
         self.dependencies = dependencies or SecurityRunRuntimeDependencies()
         self._active_agents: dict[tuple[str, str], Any] = {}
+        self._stream_cancels: dict[tuple[str, str], asyncio.Event] = {}
+        # user_id -> cancel event for the in-flight chat stream (covers retry
+        # backoff before run.started is processed / registered under run_id).
+        self._user_stream_cancels: dict[str, asyncio.Event] = {}
         self._resume_tasks: dict[str, asyncio.Task[None]] = {}
 
-    def register_run(self, *, user_id: str, run_id: str, agent: Any) -> None:
-        if run_id:
-            self._active_agents[(user_id, run_id)] = agent
+    def register_run(
+        self,
+        *,
+        user_id: str,
+        run_id: str,
+        agent: Any,
+        cancel_event: asyncio.Event | None = None,
+    ) -> None:
+        if not run_id:
+            return
+        key = (user_id, run_id)
+        self._active_agents[key] = agent
+        if cancel_event is not None:
+            self._stream_cancels[key] = cancel_event
 
     def unregister_run(self, *, user_id: str, run_id: str) -> None:
         if run_id:
-            self._active_agents.pop((user_id, run_id), None)
+            key = (user_id, run_id)
+            self._active_agents.pop(key, None)
+            self._stream_cancels.pop(key, None)
 
     def cancel_run(self, *, user_id: str, run_id: str) -> bool:
-        agent = self._active_agents.get((user_id, run_id))
+        key = (user_id, run_id)
+        cancel_event = self._stream_cancels.get(key) or self._user_stream_cancels.get(user_id)
+        if cancel_event is not None:
+            cancel_event.set()
+        agent = self._active_agents.get(key)
         if agent is None:
-            return False
-        return bool(agent.cancel_run(run_id))
+            # Interrupted retry backoff / stream before agent.cancel_run is available.
+            return cancel_event is not None
+        return bool(agent.cancel_run(run_id)) or cancel_event is not None
 
     @staticmethod
     def _is_security_chat_approval(approval_record: dict[str, Any]) -> bool:
@@ -826,9 +877,15 @@ class SecurityRunRuntime:
         show_raw_tool_io = bool(getattr(chat_settings, "show_raw_tool_io", False))
         show_thought_chain = bool(getattr(chat_settings, "show_thought_chain", True))
         registered_run_ids: set[str] = set()
+        stream_cancel = asyncio.Event()
+        owner_user_id = str(request.agent_user_id or "")
+        if owner_user_id:
+            self._user_stream_cancels[owner_user_id] = stream_cancel
         retry_queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
         restore_retry = _install_stream_retry_notifier(
-            getattr(agent, "model", None), retry_queue
+            getattr(agent, "model", None),
+            retry_queue,
+            cancel_event=stream_cancel,
         )
         active_run_id = ""
         agent_queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
@@ -889,6 +946,16 @@ class SecurityRunRuntime:
                     break
                 if kind == "error":
                     agent_waiter = None
+                    # Cancel during model retry backoff (or agent.arun) → clean cancelled SSE.
+                    if isinstance(payload, asyncio.CancelledError) or stream_cancel.is_set():
+                        yield ChatRunEvent(
+                            "run.cancelled",
+                            {
+                                "run_id": active_run_id,
+                                "reason": "已停止生成",
+                            },
+                        )
+                        break
                     raise payload
                 agent_waiter = asyncio.create_task(agent_queue.get(), name="security-run-agent-wait")
                 event = payload
@@ -896,12 +963,25 @@ class SecurityRunRuntime:
                 run_id = str(event_value(event, "run_id", "") or "")
                 if run_id:
                     active_run_id = run_id
-                if event_type == RunEvent.run_started.value:
-                    if run_id:
+                    # Bind cancel early so POST /cancel works during model retry
+                    # even if the client cancels before we fully process run.started.
+                    if run_id not in registered_run_ids:
                         registered_run_ids.add(run_id)
-                    self.register_run(
-                        user_id=request.agent_user_id, run_id=run_id, agent=agent
-                    )
+                        self.register_run(
+                            user_id=request.agent_user_id,
+                            run_id=run_id,
+                            agent=agent,
+                            cancel_event=stream_cancel,
+                        )
+                if event_type == RunEvent.run_started.value:
+                    if run_id and run_id not in registered_run_ids:
+                        registered_run_ids.add(run_id)
+                        self.register_run(
+                            user_id=request.agent_user_id,
+                            run_id=run_id,
+                            agent=agent,
+                            cancel_event=stream_cancel,
+                        )
                     lean = is_lean_tool_surface(
                         request.skill_names,
                         enable_tools=bool(request.enable_tools),
@@ -1082,6 +1162,10 @@ class SecurityRunRuntime:
                     )
                     registered_run_ids.discard(run_id)
         finally:
+            if owner_user_id:
+                current = self._user_stream_cancels.get(owner_user_id)
+                if current is stream_cancel:
+                    self._user_stream_cancels.pop(owner_user_id, None)
             restore_retry()
             if not producer.done():
                 producer.cancel()
