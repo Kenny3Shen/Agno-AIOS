@@ -815,9 +815,10 @@ export function ChatPage() {
           {showHistoryError ? (
             <div className="chat-error chat-history-error" role="alert">
               <span className="chat-error__message">
-                {chat.history.error instanceof Error
-                  ? chat.history.error.message
-                  : t('historyLoadFailed')}
+                {t('historyLoadFailed')}
+                {chat.history.error instanceof Error && chat.history.error.message.trim() ? (
+                  <small className="chat-error__detail"> {chat.history.error.message}</small>
+                ) : null}
               </span>
               <span className="chat-error__actions">
                 <Button

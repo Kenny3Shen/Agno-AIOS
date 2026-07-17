@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Chat history/meta 错误文案统一 + RQ 重试收窄
+
+- history / session-meta 错误：主文案 i18n，原始错误为次级 detail。
+- RQ `retry`：404/403 不重试，其它最多 2 次（减少 5xx 抖动误报）。
+- 本机 Grok 4.5 SSE 冒烟：`run.started → content.delta(pong) → run.completed`。
+
 ## 已完成：Chat session-meta 错误文案主副信息
 
 - 主文案固定 i18n「无法加载会话信息」；原始错误作为次级 detail。

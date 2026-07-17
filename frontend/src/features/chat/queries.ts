@@ -1,4 +1,5 @@
 import { infiniteQueryOptions, keepPreviousData, queryOptions } from '@tanstack/react-query'
+import { ApiError } from '@/shared/api/client'
 import { getHistory, getModels, getSessionMeta, listSessions } from './api'
 
 export const SESSION_PAGE_SIZE = 40
@@ -64,11 +65,17 @@ export const sessionsQuery = (options: SessionsQueryOptions = {}) => {
   })
 }
 
+const shouldRetryQuery = (failureCount: number, error: unknown) => {
+  if (error instanceof ApiError && (error.status === 404 || error.status === 403)) return false
+  return failureCount < 2
+}
+
 export const historyQuery = (id: string, enabled = true) =>
   queryOptions({
     queryKey: chatKeys.history(id),
     queryFn: () => getHistory(id),
     enabled: Boolean(id) && enabled,
+    retry: shouldRetryQuery,
   })
 
 /** One-session list projection when the id is outside loaded recents pages. */
@@ -78,5 +85,6 @@ export const sessionMetaQuery = (id: string, enabled = true) =>
     queryFn: () => getSessionMeta(id),
     enabled: Boolean(id) && enabled,
     staleTime: 30_000,
+    retry: shouldRetryQuery,
   })
 export const modelsQuery = () => queryOptions({ queryKey: chatKeys.models, queryFn: getModels, staleTime: 60_000 })
