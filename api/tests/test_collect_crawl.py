@@ -134,3 +134,19 @@ def test_extract_list_page_links_finds_next_and_page():
     assert any("/page/2" in link for link in links)
     assert any("/page/3" in link for link in links)
     assert all("serious-bug" not in link for link in links)
+
+
+
+def test_discover_filters_inactive_and_unknown_domains():
+    """Unknown/disabled domains must not be crawled (returns empty without HTTP)."""
+    import asyncio
+
+    from api.services.collect_crawl_service import discover_article_urls
+
+    result = asyncio.run(
+        discover_article_urls(
+            domains=["botcrawl.com", "not-a-real-source.example"],
+            max_links_per_source=5,
+        )
+    )
+    assert result == {}

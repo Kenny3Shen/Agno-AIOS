@@ -28,5 +28,11 @@
   "bulkReparseOk": "批量重采完成：成功 {{ok}} / 失败 {{error}}（共 {{requested}}）",
   "bulkReparseFailed": "批量重采失败",
   "errorCountBadge": "失败 {{count}}",
-  "crawlStarting": "正在同步源站…"
+  "crawlStarting": "正在同步源站…",
+  "crawlSelectedSource": "同步当前源",
+  "crawlStartingSource": "正在同步 {{source}}…",
+  "crawlSourceHint": "仅同步筛选中的源站 {{source}}",
+  "crawlAllHint": "同步全部已配置源站",
+  "sourceHealthLabel": "源健康",
+  "sourceHealthItem": "{{source}} · 失败 {{error}} / 成功 {{ok}}"
 }

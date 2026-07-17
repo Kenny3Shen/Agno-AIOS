@@ -28,5 +28,11 @@
   "bulkReparseOk": "Bulk re-fetch done: ok {{ok}} / failed {{error}} (of {{requested}})",
   "bulkReparseFailed": "Bulk re-fetch failed",
   "errorCountBadge": "{{count}} failed",
-  "crawlStarting": "Syncing sources…"
+  "crawlStarting": "Syncing sources…",
+  "crawlSelectedSource": "Sync selected source",
+  "crawlStartingSource": "Syncing {{source}}…",
+  "crawlSourceHint": "Sync only the filtered source {{source}}",
+  "crawlAllHint": "Sync all configured sources",
+  "sourceHealthLabel": "Source health",
+  "sourceHealthItem": "{{source}} · {{error}} failed / {{ok}} ok"
 }

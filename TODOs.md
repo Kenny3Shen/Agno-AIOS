@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Collect 按源同步 + 源健康条
+
+- 筛选某源站时，「同步」仅抓取该 domain，并提高单源预算。
+- 有失败文章的源以 Tag 展示成功率，点击即筛到该源失败列表。
+- 下拉源列表按失败数优先排序。
+
+
 ## 已完成：Collect 同步进度 SSE
 
 - `POST /api/url2md/crawl?stream=true`：阶段进度（start → discover → select → fetch → database → done）。

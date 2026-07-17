@@ -149,9 +149,21 @@ export function CollectPage() {
 
   const crawlMutation = useMutation({
     mutationFn: async () => {
-      setCrawlProgress({ stage: 'start', status: 'running', message: t('crawlStarting') })
+      const scoped = Boolean(sourceDomain)
+      setCrawlProgress({
+        stage: 'start',
+        status: 'running',
+        message: scoped
+          ? t('crawlStartingSource', { source: sourceDomain })
+          : t('crawlStarting'),
+      })
       return crawlSourcesStream(
-        { max_links_per_source: 15, max_articles_total: 60 },
+        {
+          // When a source filter is active, only sync that domain (faster ops).
+          domains: sourceDomain ? [sourceDomain] : undefined,
+          max_links_per_source: scoped ? 20 : 15,
+          max_articles_total: scoped ? 30 : 60,
+        },
         (event) => {
           setCrawlProgress(event)
         },
@@ -232,9 +244,17 @@ export function CollectPage() {
   const crawling = crawlMutation.isPending
   const items = articlesQuery.data?.data ?? []
   const total = articlesQuery.data?.meta.total_count ?? 0
-  const sourceOptions = useMemo(
-    () =>
-      (sourcesQuery.data?.data ?? []).map((item) => {
+  const sourceRows = sourcesQuery.data?.data
+  const sourceOptions = useMemo(() => {
+    const sources = sourceRows ?? []
+    return [...sources]
+      .sort((a, b) => {
+        const ae = a.error_count ?? 0
+        const be = b.error_count ?? 0
+        if (be !== ae) return be - ae
+        return a.domain.localeCompare(b.domain)
+      })
+      .map((item) => {
         const err = item.error_count ?? 0
         const ok = item.ok_count ?? 0
         const suffix =
@@ -243,9 +263,14 @@ export function CollectPage() {
           value: item.domain,
           label: `${item.domain}${suffix}`,
         }
-      }),
-    [sourcesQuery.data?.data],
-  )
+      })
+  }, [sourceRows])
+  const unhealthySources = useMemo(() => {
+    const sources = sourceRows ?? []
+    return sources
+      .filter((item) => (item.error_count ?? 0) > 0)
+      .sort((a, b) => (b.error_count ?? 0) - (a.error_count ?? 0))
+  }, [sourceRows])
   const errorTotal = statsQuery.data?.error ?? 0
 
   const activeMarkdown = previewMarkdown
@@ -307,9 +332,14 @@ export function CollectPage() {
               icon={<ReloadOutlined />}
               loading={crawling}
               disabled={crawling}
+              title={
+                sourceDomain
+                  ? t('crawlSourceHint', { source: sourceDomain })
+                  : t('crawlAllHint')
+              }
               onClick={() => crawlMutation.mutate()}
             >
-              {t('crawlSources')}
+              {sourceDomain ? t('crawlSelectedSource') : t('crawlSources')}
             </Button>
           ) : null}
           {canWrite && (statusFilter === 'error' || errorTotal > 0) ? (
@@ -354,6 +384,41 @@ export function CollectPage() {
             </Typography.Text>
           </div>
         ) : null}
+
+        {unhealthySources.length > 0 ? (
+          <div className="collect-source-health" style={{ marginBottom: 12 }}>
+            <Typography.Text type="secondary" style={{ fontSize: 12, marginInlineEnd: 8 }}>
+              {t('sourceHealthLabel')}
+            </Typography.Text>
+            <Space size={[4, 4]} wrap>
+              {unhealthySources.map((item) => {
+                const err = item.error_count ?? 0
+                const ok = item.ok_count ?? 0
+                const active = sourceDomain === item.domain
+                return (
+                  <Tag
+                    key={item.domain}
+                    color={active ? 'error' : 'warning'}
+                    style={{ cursor: 'pointer', marginInlineEnd: 0 }}
+                    onClick={() => {
+                      setSourceDomain(item.domain)
+                      setStatusFilter('error')
+                      setPage(1)
+                      setSelected(null)
+                    }}
+                  >
+                    {t('sourceHealthItem', {
+                      source: item.domain,
+                      error: err,
+                      ok,
+                    })}
+                  </Tag>
+                )
+              })}
+            </Space>
+          </div>
+        ) : null}
+
 
         <Space.Compact className="collect-toolbar" style={{ width: '100%', marginBottom: 12 }}>
           <Input
