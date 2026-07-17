@@ -13,9 +13,11 @@ import { hasScope, roleOf } from '@/shared/auth/permissions'
 import {
   crawlSources,
   getArticle,
+  getLibraryStats,
   listSources,
   parseUrl,
   reparseArticle,
+  reparseFailedArticles,
   searchArticles,
   type CollectArticle,
 } from './api'
@@ -44,6 +46,10 @@ export function CollectPage() {
   const sourcesQuery = useQuery({
     queryKey: ['collect', 'sources'],
     queryFn: listSources,
+  })
+  const statsQuery = useQuery({
+    queryKey: ['collect', 'stats', sourceDomain],
+    queryFn: () => getLibraryStats(sourceDomain),
   })
 
   useEffect(() => {
@@ -131,7 +137,7 @@ export function CollectPage() {
           skipped: data.skipped_existing ?? 0,
         })
       )
-      await Promise.all([articlesQuery.refetch(), sourcesQuery.refetch()])
+      await Promise.all([articlesQuery.refetch(), sourcesQuery.refetch(), statsQuery.refetch()])
     },
     onError: (err: Error) => message.error(err.message || t('crawlFailed')),
   })
@@ -140,23 +146,49 @@ export function CollectPage() {
     mutationFn: (articleId: number) => reparseArticle(articleId),
     onSuccess: async (row) => {
       message.success(t('reparseOk'))
-      await articlesQuery.refetch()
+      await Promise.all([articlesQuery.refetch(), statsQuery.refetch(), sourcesQuery.refetch()])
       setSelected(row)
       setPreviewMarkdown(row.markdown || '')
     },
     onError: (err: Error) => message.error(err.message || t('reparseFailed')),
   })
 
+  const bulkReparseMutation = useMutation({
+    mutationFn: () =>
+      reparseFailedArticles({
+        source_domain: sourceDomain,
+        limit: 10,
+      }),
+    onSuccess: async (data) => {
+      message.success(
+        t('bulkReparseOk', {
+          ok: data.ok ?? 0,
+          error: data.error ?? 0,
+          requested: data.requested ?? 0,
+        }),
+      )
+      await Promise.all([articlesQuery.refetch(), statsQuery.refetch(), sourcesQuery.refetch()])
+    },
+    onError: (err: Error) => message.error(err.message || t('bulkReparseFailed')),
+  })
+
   const items = articlesQuery.data?.data ?? []
   const total = articlesQuery.data?.meta.total_count ?? 0
   const sourceOptions = useMemo(
     () =>
-      (sourcesQuery.data?.data ?? []).map((item) => ({
-        value: item.domain,
-        label: item.has_articles ? item.domain : `${item.domain}`,
-      })),
-    [sourcesQuery.data?.data]
+      (sourcesQuery.data?.data ?? []).map((item) => {
+        const err = item.error_count ?? 0
+        const ok = item.ok_count ?? 0
+        const suffix =
+          err > 0 ? ` · ${ok}/${ok + err}` : ok > 0 ? ` · ${ok}` : ''
+        return {
+          value: item.domain,
+          label: `${item.domain}${suffix}`,
+        }
+      }),
+    [sourcesQuery.data?.data],
   )
+  const errorTotal = statsQuery.data?.error ?? 0
 
   const activeMarkdown = previewMarkdown
 
@@ -220,6 +252,26 @@ export function CollectPage() {
             >
               {t('crawlSources')}
             </Button>
+          ) : null}
+          {canWrite && (statusFilter === 'error' || errorTotal > 0) ? (
+            <Button
+              loading={bulkReparseMutation.isPending}
+              onClick={() => bulkReparseMutation.mutate()}
+            >
+              {t('bulkReparse', { count: Math.min(10, errorTotal || 10) })}
+            </Button>
+          ) : null}
+          {errorTotal > 0 ? (
+            <Tag
+              color="error"
+              style={{ cursor: 'pointer', marginInlineEnd: 0 }}
+              onClick={() => {
+                setStatusFilter('error')
+                setPage(1)
+              }}
+            >
+              {t('errorCountBadge', { count: errorTotal })}
+            </Tag>
           ) : null}
         </Space>
 

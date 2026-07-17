@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Collect 失败批量重采 + 源健康计数
+
+- `POST /api/url2md/articles/reparse-failed`：按源/全局重采最近失败文章（默认 10、并发 3）。
+- `GET /api/url2md/stats` + sources 附带 `ok_count/error_count`；UI 失败徽章与「重采失败」按钮。
+- 路由顺序：静态 `reparse-failed` 在 `{article_id}` 之前。
+
 ## 已完成：Studio 运行中结构锁 e2e
 
 - 并入 stop smoke：运行中断言 canvas `is-running`、palette `draggable=false`、选中节点无 NodeToolbar。

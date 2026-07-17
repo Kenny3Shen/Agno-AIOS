@@ -8,8 +8,10 @@ from api.models.schemas import Url2MdRequest
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.collect_service import (
     get_article,
+    library_status_counts,
     list_sources,
     reparse_article,
+    reparse_failed_articles,
     run_crawl,
     search_articles,
 )
@@ -75,6 +77,58 @@ async def search_collect_articles_route(
     except Exception as e:
         logger.error("Collect search error: {}", e)
         raise HTTPException(status_code=400, detail=f"错误:{e}") from e
+
+
+class CollectBulkReparseRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    source_domain: str | None = None
+    limit: int = Field(10, ge=1, le=50)
+
+
+@router.post("/articles/reparse-failed")
+async def reparse_failed_collect_articles_route(
+    request_ctx: Request,
+    request: CollectBulkReparseRequest,
+    user: User = Depends(require_scope("collect:write")),
+) -> dict:
+    """Re-fetch the newest failed Collect articles (bounded batch)."""
+    try:
+        stats = await reparse_failed_articles(
+            source_domain=request.source_domain,
+            limit=request.limit,
+        )
+        await record_audit_event_async(
+            user,
+            action="collect.reparse_failed",
+            resource_type="collect_articles",
+            resource_id="bulk",
+            metadata=stats,
+            **audit_request_context(request_ctx),
+        )
+        return {"message": "reparse completed", **stats}
+    except Exception as e:
+        logger.error("Collect bulk reparse error: {}", e)
+        await record_audit_event_async(
+            user,
+            action="collect.reparse_failed",
+            resource_type="collect_articles",
+            resource_id="bulk",
+            status="failure",
+            metadata={"error": str(e)},
+            **audit_request_context(request_ctx),
+        )
+        raise HTTPException(status_code=500, detail=f"bulk reparse failed: {e}") from e
+
+
+@router.get("/stats")
+async def collect_library_stats(
+    source_domain: str | None = None,
+    _user: User = Depends(require_scope("collect:read")),
+) -> dict:
+    """Ok/error totals for Collect library health badges."""
+    counts = await library_status_counts(source_domain=source_domain)
+    return counts
 
 
 @router.get("/articles/{article_id}")

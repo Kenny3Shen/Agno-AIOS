@@ -19,6 +19,15 @@ export interface CollectSource {
   domain: string
   has_rule: boolean
   has_articles: boolean
+  ok_count?: number
+  error_count?: number
+  total_count?: number
+}
+
+export interface CollectLibraryStats {
+  ok: number
+  error: number
+  total: number
 }
 
 export const parseUrl = (url: string) =>
@@ -94,3 +103,20 @@ export const getArticle = (articleId: number) =>
 
 export const reparseArticle = (articleId: number) =>
   requestJson<CollectArticle>(`/url2md/articles/${articleId}/reparse`, jsonInit('POST', {}))
+
+
+export const reparseFailedArticles = (payload?: {
+  source_domain?: string
+  limit?: number
+}) =>
+  requestJson<{
+    message?: string
+    requested?: number
+    ok?: number
+    error?: number
+  }>('/url2md/articles/reparse-failed', jsonInit('POST', payload ?? {}))
+
+export const getLibraryStats = (sourceDomain?: string) => {
+  const q = sourceDomain ? `?source_domain=${encodeURIComponent(sourceDomain)}` : ''
+  return requestJson<CollectLibraryStats>(`/url2md/stats${q}`)
+}

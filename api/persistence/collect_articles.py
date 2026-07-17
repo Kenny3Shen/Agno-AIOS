@@ -206,6 +206,92 @@ async def list_collect_source_domains() -> list[str]:
     return [str(item) for item in rows if item]
 
 
+
+async def list_error_collect_article_ids(
+    *,
+    source_domain: str | None = None,
+    limit: int = 20,
+) -> list[int]:
+    """IDs of failed collects, newest first (for bulk reparse)."""
+    await ensure_collect_articles_table()
+    safe_limit = max(1, min(int(limit or 20), 50))
+    table = collect_articles_table()
+    filters = [table.c.status == "error"]
+    if source_domain:
+        filters.append(table.c.source_domain == source_domain.strip())
+    stmt = (
+        select(table.c.id)
+        .where(*filters)
+        .order_by(desc(table.c.fetched_at), desc(table.c.id))
+        .limit(safe_limit)
+    )
+    async with get_async_control_plane_engine().begin() as conn:
+        rows = (await conn.execute(stmt)).scalars().all()
+    return [int(item) for item in rows if item is not None]
+
+
+async def count_collect_articles_by_status(
+    *,
+    source_domain: str | None = None,
+) -> dict[str, int]:
+    """Return ``{status: count}`` for health badges."""
+    await ensure_collect_articles_table()
+    table = collect_articles_table()
+    filters = []
+    if source_domain:
+        filters.append(table.c.source_domain == source_domain.strip())
+    stmt = (
+        select(table.c.status, func.count())
+        .where(*filters)
+        .group_by(table.c.status)
+    )
+    async with get_async_control_plane_engine().begin() as conn:
+        rows = (await conn.execute(stmt)).all()
+    out: dict[str, int] = {}
+    for status, count in rows:
+        key = str(status or "").strip() or "unknown"
+        out[key] = int(count or 0)
+    return out
+
+
+async def list_collect_source_stats() -> list[dict[str, Any]]:
+    """Per-domain ok/error/total counts for configured library views."""
+    await ensure_collect_articles_table()
+    table = collect_articles_table()
+    stmt = (
+        select(
+            table.c.source_domain,
+            table.c.status,
+            func.count().label("cnt"),
+        )
+        .where(table.c.source_domain != "")
+        .group_by(table.c.source_domain, table.c.status)
+        .order_by(table.c.source_domain)
+    )
+    async with get_async_control_plane_engine().begin() as conn:
+        rows = (await conn.execute(stmt)).all()
+    by_domain: dict[str, dict[str, int]] = {}
+    for domain, status, count in rows:
+        key = str(domain or "").strip()
+        if not key:
+            continue
+        bucket = by_domain.setdefault(key, {"ok": 0, "error": 0, "total": 0})
+        status_key = str(status or "").strip() or "unknown"
+        n = int(count or 0)
+        if status_key in ("ok", "error"):
+            bucket[status_key] = n
+        bucket["total"] += n
+    return [
+        {
+            "domain": domain,
+            "ok": stats.get("ok", 0),
+            "error": stats.get("error", 0),
+            "total": stats.get("total", 0),
+        }
+        for domain, stats in sorted(by_domain.items())
+    ]
+
+
 async def upsert_collect_article(record: dict[str, Any]) -> dict[str, Any]:
     await ensure_collect_articles_table()
     table = collect_articles_table()

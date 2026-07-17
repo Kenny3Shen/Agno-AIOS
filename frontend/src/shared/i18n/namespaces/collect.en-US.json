@@ -23,5 +23,9 @@
   "reparse": "Re-fetch",
   "reparseOk": "Re-fetched",
   "reparseFailed": "Re-fetch failed",
-  "emptyErrorPreview": "This article failed; re-fetch to retry"
+  "emptyErrorPreview": "This article failed; re-fetch to retry",
+  "bulkReparse": "Retry failed (max {{count}})",
+  "bulkReparseOk": "Bulk re-fetch done: ok {{ok}} / failed {{error}} (of {{requested}})",
+  "bulkReparseFailed": "Bulk re-fetch failed",
+  "errorCountBadge": "{{count}} failed"
 }
