@@ -1,3 +1,4 @@
+/** Collect (安全情报) client: article library search, parse, crawl SSE. */
 import { ApiError, apiFetch, jsonInit, requestJson } from '@/shared/api/client'
 import { consumeSse } from '@/features/chat/utils'
 import { normalizePaginatedList, type ListPaginationMeta } from '@/shared/lib/pagination'
@@ -11,6 +12,8 @@ export interface CollectArticle {
   summary: string
   status: string
   error_message?: string
+  /** CVE-YYYY-NNNN ids extracted from title/summary/body. */
+  cve_ids?: string[]
   fetched_at?: string
   created_at?: string
   updated_at?: string
@@ -33,11 +36,13 @@ export interface CollectLibraryStats {
 
 export const parseUrl = (url: string) =>
   requestJson<{
-    markdown?: string | string[]
+    markdown?: string
     title?: string
     source_domain?: string
     id?: number
     url?: string
+    summary?: string
+    cve_ids?: string[]
   }>('/url2md/parse', jsonInit('POST', { url }))
 
 export type CollectListMeta = ListPaginationMeta

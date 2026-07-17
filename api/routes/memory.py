@@ -1,3 +1,5 @@
+"""Memory workbench HTTP routes (Agno-native list / update / delete / clear)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -10,6 +12,7 @@ from api.auth.scopes import require_scope
 from api.auth.users import current_active_user
 from api.services.memory_service import (
     MemoryMutationNotFound,
+    clear_memory_records,
     delete_memory_record,
     list_memories_native,
     update_memory_record,
@@ -69,6 +72,51 @@ async def list_memories(
     except Exception as exc:
         logger.error("获取 Agno memory list 失败: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to load memories") from exc
+
+
+
+class MemoryClearRequest(BaseModel):
+    """Clear one user's memories, or the whole table when all_users (admin)."""
+
+    user_id: str | None = None
+    all_users: bool = False
+
+
+@router.post("/clear")
+async def clear_memories(
+    body: MemoryClearRequest,
+    request: Request,
+    user: User = Depends(require_memory_delete_permission),
+):
+    """Bulk-delete memories (scoped). Admin may pass all_users to wipe the table."""
+    try:
+        result = await clear_memory_records(
+            user,
+            user_id=body.user_id,
+            all_users=body.all_users,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error("清空 Agno memory 失败: {}", exc)
+        raise HTTPException(status_code=500, detail="Failed to clear memories") from exc
+    await record_policy_event(
+        user,
+        PolicyAuditEvent(
+            action="memory.clear",
+            resource_type="memory",
+            resource_id=str(result.get("user_id") or "all"),
+            metadata={
+                "deleted": result.get("deleted"),
+                "all_users": bool(result.get("all_users")),
+                "user_id": result.get("user_id"),
+            },
+        ),
+        request,
+    )
+    return result
 
 
 @router.delete("/{memory_id}")

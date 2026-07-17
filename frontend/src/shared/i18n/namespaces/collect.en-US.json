@@ -1,6 +1,6 @@
 {
   "title": "Collect",
-  "description": "Security news library crawled from configured sources; search or collect a single URL",
+  "description": "Security news library from configured sources; search, sync, and jump to CVEs",
   "action": "Collect URL",
   "searchPlaceholder": "Search title, summary, or URL",
   "allSources": "All sources",
@@ -47,5 +47,7 @@
   "crawlStopHint": "Abort the current source sync (articles already saved are kept)",
   "crawlCancelled": "Sync stopped",
   "previewLoadFailed": "Unable to load article body",
-  "emptyOkPreview": "No markdown body extracted for this article"
+  "emptyOkPreview": "No markdown body extracted for this article",
+  "relatedCves": "Related CVEs",
+  "openCve": "Open {{id}} in CVE library"
 }

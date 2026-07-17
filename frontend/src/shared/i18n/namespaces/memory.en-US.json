@@ -35,5 +35,17 @@
   "labelMemoryId": "Memory ID",
   "additionalContext": "Additional context",
   "statusStored": "stored",
-  "metadataTitle": "Metadata"
+  "metadataTitle": "Metadata",
+  "userFilterPlaceholder": "Filter by user id",
+  "clearMine": "Clear my memories",
+  "clearUser": "Clear this user",
+  "clearAll": "Clear all memories",
+  "clearMineConfirm": "Permanently delete all memories for your account?",
+  "clearUserConfirm": "Permanently delete all memories for user {{user}}?",
+  "clearAllConfirm": "Permanently delete every memory in the system (admin)?",
+  "clearOk": "Cleared {{count}} memories",
+  "clearAllOk": "Cleared all memories",
+  "clearFailed": "Failed to clear memories. Please try again.",
+  "clearHint": "Requires memories:delete",
+  "filterUser": "User"
 }

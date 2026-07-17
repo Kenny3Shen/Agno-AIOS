@@ -1,4 +1,9 @@
-"""Crawl configured security-news sites and persist articles for Collect."""
+"""Crawl configured security-news sites and persist articles for Collect.
+
+Discovery walks home + optional seed list pages, round-robins URLs across
+sources, and upserts Markdown into ``collect_articles``. CVE IDs are
+extracted from title/body for intel linking (not a separate store).
+"""
 
 from __future__ import annotations
 
@@ -45,6 +50,13 @@ SOURCE_EXTRA_SEEDS: dict[str, list[str]] = {
     "thecyberexpress.com": ["https://thecyberexpress.com/"],
     "www.csoonline.com": ["https://www.csoonline.com/"],
     "dailydarkweb.net": ["https://dailydarkweb.net/"],
+    "www.bleepingcomputer.com": ["https://www.bleepingcomputer.com/news/"],
+    "krebsonsecurity.com": ["https://krebsonsecurity.com/"],
+    "www.securityweek.com": ["https://www.securityweek.com/"],
+    "www.darkreading.com": ["https://www.darkreading.com/"],
+    "therecord.media": ["https://therecord.media/"],
+    "unit42.paloaltonetworks.com": ["https://unit42.paloaltonetworks.com/"],
+    "blog.cloudflare.com": ["https://blog.cloudflare.com/tag/security/"],
     "mp.weixin.qq.com": [],  # WeChat articles need explicit URLs; home is not listable
 }
 
@@ -62,6 +74,26 @@ DEFAULT_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8",
 }
+
+
+# CVE identifiers surfaced on article cards / preview (order preserved, de-duped).
+CVE_ID_RE = re.compile(r"\bCVE-\d{4}-\d{4,7}\b", re.IGNORECASE)
+
+
+def extract_cve_ids(*parts: str, limit: int = 24) -> list[str]:
+    """Collect unique CVE-YYYY-NNNN ids from free text (title, summary, body)."""
+    seen: list[str] = []
+    for part in parts:
+        if not part:
+            continue
+        for match in CVE_ID_RE.finditer(part):
+            cve_id = match.group(0).upper()
+            if cve_id not in seen:
+                seen.append(cve_id)
+            if len(seen) >= limit:
+                return seen
+    return seen
+
 
 SKIP_PATH_MARKERS = (
     "/tag/",
@@ -542,17 +574,20 @@ async def fetch_article_record(url: str) -> dict[str, Any]:
                 "status": "error",
                 "error_message": markdown[:2000] if markdown else "empty content",
                 "fetched_at": now,
+                "cve_ids": [],
             }
         title = _title_from_markdown(markdown) or domain
+        summary = _summary_from_markdown(markdown)
         return {
             "url": _normalize_url(url) or url,
             "source_domain": domain,
             "title": title,
             "markdown": markdown,
-            "summary": _summary_from_markdown(markdown),
+            "summary": summary,
             "status": "ok",
             "error_message": "",
             "fetched_at": now,
+            "cve_ids": extract_cve_ids(title, summary, markdown),
         }
     except asyncio.CancelledError:
         raise
@@ -567,6 +602,7 @@ async def fetch_article_record(url: str) -> dict[str, Any]:
             "status": "error",
             "error_message": str(exc)[:2000],
             "fetched_at": now,
+            "cve_ids": [],
         }
 
 

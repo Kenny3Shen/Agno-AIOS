@@ -278,3 +278,13 @@ def test_playwright_user_data_dir_respects_env(monkeypatch, tmp_path):
     monkeypatch.setenv("TAIS_COLLECT_PLAYWRIGHT_USER_DATA", str(target))
     assert svc._playwright_user_data_dir() == target
 
+
+
+def test_new_security_intel_sources_resolve():
+    assert resolve_domain_rule_key("https://www.bleepingcomputer.com/news/x/") == "www.bleepingcomputer.com"
+    assert resolve_domain_rule_key("https://bleepingcomputer.com/news/x/") == "www.bleepingcomputer.com"
+    assert resolve_domain_rule_key("https://krebsonsecurity.com/2024/01/x/") == "krebsonsecurity.com"
+    assert resolve_domain_rule_key("https://www.darkreading.com/vulnerabilities-threats/x") == "www.darkreading.com"
+    assert resolve_domain_rule_key("https://therecord.media/x") == "therecord.media"
+    assert resolve_domain_rule_key("https://unit42.paloaltonetworks.com/x/") == "unit42.paloaltonetworks.com"
+    assert resolve_domain_rule_key("https://blog.cloudflare.com/security/") == "blog.cloudflare.com"

@@ -35,5 +35,17 @@
   "labelMemoryId": "记忆 ID",
   "additionalContext": "附加上下文",
   "statusStored": "已存储",
-  "metadataTitle": "元数据"
+  "metadataTitle": "元数据",
+  "userFilterPlaceholder": "按用户 ID 筛选",
+  "clearMine": "清空我的记忆",
+  "clearUser": "清空该用户",
+  "clearAll": "清空全部记忆",
+  "clearMineConfirm": "将永久删除当前账号下的全部记忆，是否继续？",
+  "clearUserConfirm": "将永久删除用户 {{user}} 的全部记忆，是否继续？",
+  "clearAllConfirm": "将永久删除系统中全部记忆（管理员），是否继续？",
+  "clearOk": "已清空 {{count}} 条记忆",
+  "clearAllOk": "已清空全部记忆",
+  "clearFailed": "清空记忆失败，请稍后重试。",
+  "clearHint": "需要 memories:delete 权限",
+  "filterUser": "用户"
 }

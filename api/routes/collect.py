@@ -1,3 +1,5 @@
+"""Collect / URL→Markdown HTTP routes (security news library + crawl SSE)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -26,6 +28,7 @@ from api.services.collect_service import (
 )
 from api.services.collect_crawl_service import (
     CollectCrawlAlreadyRunningError,
+    extract_cve_ids,
     parse_and_store_url,
 )
 from api.utils.pagination import pagination_meta
@@ -359,12 +362,19 @@ async def parse_url_to_markdown(
                 status_code=400,
                 detail=record.get("error_message") or "parse failed",
             )
+        cve_ids = record.get("cve_ids") or extract_cve_ids(
+            str(record.get("title") or ""),
+            str(record.get("summary") or ""),
+            str(markdown or ""),
+        )
         return {
             "url": request.url,
-            "markdown": [markdown] if markdown else [],
+            "markdown": markdown,
             "title": record.get("title"),
             "source_domain": record.get("source_domain"),
             "id": record.get("id"),
+            "cve_ids": cve_ids,
+            "summary": record.get("summary") or "",
         }
     except HTTPException:
         raise

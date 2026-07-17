@@ -1,3 +1,4 @@
+/** Memory workbench client (Agno data/meta list, mutate, clear). */
 import { jsonInit, requestJson } from '@/shared/api/client'
 import { asRecord } from '@/shared/lib/format'
 import { normalizePaginatedList, type ListPaginationMeta } from '@/shared/lib/pagination'
@@ -82,3 +83,18 @@ export const deleteMemory = (id: string, userId?: string) =>
   requestJson(`/memories/${encodeURIComponent(id)}${userId ? `?user_id=${encodeURIComponent(userId)}` : ''}`, {
     method: 'DELETE',
   })
+
+export type ClearMemoriesParams = {
+  user_id?: string
+  /** Admin-only: wipe every memory in the store. */
+  all_users?: boolean
+}
+
+export const clearMemories = (params: ClearMemoriesParams = {}) =>
+  requestJson<{ deleted: number; user_id?: string | null; all_users?: boolean }>(
+    '/memories/clear',
+    jsonInit('POST', {
+      user_id: params.user_id || undefined,
+      all_users: Boolean(params.all_users),
+    }),
+  )

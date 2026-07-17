@@ -1,3 +1,7 @@
+/**
+ * Memory workbench: search, user filter, edit/delete, and scoped clear.
+ * List uses Agno-style data/meta; clear requires memories:delete (all_users admin).
+ */
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { App, Button, Card, Drawer, Empty, Form, Input, Modal, Popconfirm, Space, Table, Tag, Tooltip, Typography } from 'antd'
@@ -5,11 +9,13 @@ import { DeleteOutlined, EditOutlined, SearchOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { CopyableValue, MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
 import { JsonValueCard } from '@/shared/ui/FormattedContentCard'
-import { deleteMemory, getMemories, updateMemory, type Memory } from './api'
+import { clearMemories, deleteMemory, getMemories, updateMemory, type Memory } from './api'
 import { compactId, compareTimestamp, useFormatDate } from '@/shared/lib/format'
 import { parseMemoryInput } from './utils'
 import { useTranslation } from 'react-i18next'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
+import { currentUserQuery } from '@/features/auth'
+import { hasScope, roleOf } from '@/shared/auth/permissions'
 
 export function MemoryPage() {
   const { t } = useTranslation('memory')
@@ -19,7 +25,13 @@ export function MemoryPage() {
   const [search, setSearch] = useState('')
   const [applied, setApplied] = useState('')
   const debouncedSearch = useDebouncedValue(search, 300)
+  const [userFilter, setUserFilter] = useState('')
+  const [appliedUser, setAppliedUser] = useState('')
+  const debouncedUser = useDebouncedValue(userFilter, 300)
   const [page, setPage] = useState(1)
+  const currentUser = useQuery(currentUserQuery())
+  const isAdmin = roleOf(currentUser.data) === 'admin'
+  const canDelete = hasScope(currentUser.data, 'memories:delete')
   const pageSize = 12
   const [selected, setSelected] = useState<Memory | null>(null)
   const [editing, setEditing] = useState<Memory | null>(null)
@@ -28,11 +40,16 @@ export function MemoryPage() {
     setApplied(debouncedSearch)
     setPage(1)
   }, [debouncedSearch])
+  useEffect(() => {
+    setAppliedUser(debouncedUser.trim())
+    setPage(1)
+  }, [debouncedUser])
   const query = useQuery({
-    queryKey: ['memory', applied, page, pageSize],
+    queryKey: ['memory', applied, appliedUser, page, pageSize],
     queryFn: () =>
       getMemories({
         search_content: applied || undefined,
+        user_id: appliedUser || undefined,
         page,
         limit: pageSize,
       }),
@@ -46,6 +63,20 @@ export function MemoryPage() {
     },
     onError: (error) =>
       message.error(error instanceof Error ? error.message : t('deleteFailed')),
+  })
+  const clearMutation = useMutation({
+    mutationFn: (payload: { user_id?: string; all_users?: boolean }) => clearMemories(payload),
+    onSuccess: async (result) => {
+      setSelected(null)
+      if (result.all_users || result.deleted < 0) {
+        message.success(t('clearAllOk'))
+      } else {
+        message.success(t('clearOk', { count: result.deleted ?? 0 }))
+      }
+      await refresh()
+    },
+    onError: (error) =>
+      message.error(error instanceof Error ? error.message : t('clearFailed')),
   })
 
   const memoryInput = parseMemoryInput(selected?.input)
@@ -84,7 +115,7 @@ export function MemoryPage() {
     <main className="page">
       <PageHeader title={t('title')} description={t('description')} />
       <Card className="workbench-card memory-toolbar">
-        <Space>
+        <Space wrap>
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -94,16 +125,58 @@ export function MemoryPage() {
             }}
             prefix={<SearchOutlined />}
             placeholder={t('searchPlaceholder')}
+            allowClear
+          />
+          <Input
+            value={userFilter}
+            onChange={(event) => setUserFilter(event.target.value)}
+            onPressEnter={() => {
+              setAppliedUser(userFilter.trim())
+              setPage(1)
+            }}
+            placeholder={t('userFilterPlaceholder')}
+            allowClear
+            style={{ minWidth: 200 }}
+            aria-label={t('filterUser')}
           />
           <Button
             type="primary"
             onClick={() => {
               setApplied(search)
+              setAppliedUser(userFilter.trim())
               setPage(1)
             }}
           >
             {t('common:query')}
           </Button>
+          {canDelete ? (
+            <Popconfirm
+              title={
+                appliedUser
+                  ? t('clearUserConfirm', { user: appliedUser })
+                  : t('clearMineConfirm')
+              }
+              onConfirm={() =>
+                clearMutation.mutate(
+                  appliedUser ? { user_id: appliedUser } : {},
+                )
+              }
+            >
+              <Button danger loading={clearMutation.isPending} title={t('clearHint')}>
+                {appliedUser ? t('clearUser') : t('clearMine')}
+              </Button>
+            </Popconfirm>
+          ) : null}
+          {canDelete && isAdmin ? (
+            <Popconfirm
+              title={t('clearAllConfirm')}
+              onConfirm={() => clearMutation.mutate({ all_users: true })}
+            >
+              <Button danger type="primary" loading={clearMutation.isPending}>
+                {t('clearAll')}
+              </Button>
+            </Popconfirm>
+          ) : null}
         </Space>
       </Card>
       <Card className="workbench-card" title={t('listTitle')} extra={<Tag>{query.data?.meta.total_count ?? 0}</Tag>}>

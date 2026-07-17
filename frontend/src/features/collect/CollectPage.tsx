@@ -1,4 +1,9 @@
+/**
+ * Collect / 安全情报 page: search the article library, sync sources, parse URLs.
+ * CVE tags deep-link to the CVE workspace when ids are present on a row.
+ */
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from '@tanstack/react-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { App, Button, Card, Empty, Input, Pagination, Progress, Select, Space, Splitter, Tag, Typography } from 'antd'
 import { Markdown } from '@/shared/ui/Markdown'
@@ -113,6 +118,7 @@ function formatCrawlProgressMessage(
 
 export function CollectPage() {
   const { t } = useTranslation('collect')
+  const router = useRouter()
   const formatDate = useFormatDate()
   const { message } = App.useApp()
   const currentUser = useQuery(currentUserQuery())
@@ -209,9 +215,7 @@ export function CollectPage() {
       message.success(t('parseOk'))
       setUrl('')
       await Promise.all([articlesQuery.refetch(), statsQuery.refetch(), sourcesQuery.refetch()])
-      const markdown = Array.isArray(data.markdown)
-        ? data.markdown.join('\n\n')
-        : data.markdown || ''
+      const markdown = data.markdown || ''
       if (data.id) {
         setSelected({
           id: data.id,
@@ -219,8 +223,9 @@ export function CollectPage() {
           source_domain: data.source_domain || '',
           title: data.title || url,
           markdown,
-          summary: '',
+          summary: data.summary || '',
           status: 'ok',
+          cve_ids: data.cve_ids || [],
         })
       }
     },
@@ -593,6 +598,25 @@ export function CollectPage() {
                             {t('statusError')}
                           </Tag>
                         ) : null}
+                        {(item.cve_ids ?? []).slice(0, 3).map((cveId) => (
+                          <Tag
+                            key={cveId}
+                            color="purple"
+                            style={{ margin: 0, cursor: 'pointer' }}
+                            title={t('openCve', { id: cveId })}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              void router.history.push(
+                                `/cve?q=${encodeURIComponent(cveId)}`,
+                              )
+                            }}
+                          >
+                            {cveId}
+                          </Tag>
+                        ))}
+                        {(item.cve_ids?.length ?? 0) > 3 ? (
+                          <Tag style={{ margin: 0 }}>+{(item.cve_ids?.length ?? 0) - 3}</Tag>
+                        ) : null}
                       </Space>
                       <Typography.Paragraph
                         type="secondary"
@@ -660,6 +684,26 @@ export function CollectPage() {
                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('loading')} />
               ) : activeMarkdown ? (
                 <div className="payload-viewer collect-preview">
+                  {(selected?.cve_ids?.length ?? 0) > 0 ? (
+                    <Space size={[4, 4]} wrap style={{ marginBottom: 10 }}>
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        {t('relatedCves')}
+                      </Typography.Text>
+                      {(selected?.cve_ids ?? []).map((cveId) => (
+                        <Tag
+                          key={cveId}
+                          color="purple"
+                          style={{ cursor: 'pointer', marginInlineEnd: 0 }}
+                          title={t('openCve', { id: cveId })}
+                          onClick={() => {
+                            void router.history.push(`/cve?q=${encodeURIComponent(cveId)}`)
+                          }}
+                        >
+                          {cveId}
+                        </Tag>
+                      ))}
+                    </Space>
+                  ) : null}
                   <Markdown content={activeMarkdown} openLinksInNewTab escapeRawHtml />
                 </div>
               ) : previewError ? (

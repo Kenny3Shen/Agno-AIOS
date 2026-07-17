@@ -1,3 +1,5 @@
+"""Agno-native user memory list / mutate helpers for the Memory workbench."""
+
 from __future__ import annotations
 
 import asyncio
@@ -380,3 +382,62 @@ async def update_memory_record(
         "created_at": iso(persisted_row.get("created_at") or updated_memory.created_at),
         "updated_at": iso(persisted_row.get("updated_at") or updated_at),
     }
+
+
+
+async def clear_memory_records(
+    actor: ActorLike,
+    *,
+    user_id: str | None = None,
+    all_users: bool = False,
+) -> dict[str, Any]:
+    """Clear memories for one user, or the entire table (admin + all_users).
+
+    Non-admins are forced to their own ``user_id`` via ``scoped_requested_user_id``.
+    Returns ``{"deleted": n, "user_id": ..., "all_users": bool}``.
+    ``deleted`` is ``-1`` when the whole table is wiped (Agno ``clear_memories``).
+    """
+    from api.auth.claims import ADMIN_SCOPE, has_scope
+
+    db = get_async_agno_postgres_db()
+    if all_users:
+        if not has_scope(actor, ADMIN_SCOPE):
+            raise PermissionError("clearing all memories requires admin")
+        await db.clear_memories()
+        return {"deleted": -1, "user_id": None, "all_users": True}
+
+    scoped_user_id = scoped_requested_user_id(actor, user_id)
+    if not scoped_user_id:
+        # Admin with no explicit filter: clear the actor's own memories (not the whole table).
+        from api.auth.claims import actor_id
+
+        scoped_user_id = actor_id(actor) or None
+    if not scoped_user_id:
+        raise ValueError("user_id is required unless all_users is true")
+
+    deleted = 0
+    # Always re-read page 1 after each bulk delete until the user has no rows left.
+    for _ in range(500):
+        raw = await db.get_user_memories(
+            user_id=scoped_user_id,
+            limit=100,
+            page=1,
+            deserialize=False,
+        )
+        if isinstance(raw, tuple):
+            rows, _total = raw
+        else:
+            rows = raw or []
+        ids: list[str] = []
+        for row in rows or []:
+            data = row if isinstance(row, dict) else row_dict(row)
+            mid = str(data.get("memory_id") or "").strip()
+            if mid:
+                ids.append(mid)
+        if not ids:
+            break
+        await db.delete_user_memories(ids, user_id=scoped_user_id)
+        deleted += len(ids)
+    return {"deleted": deleted, "user_id": scoped_user_id, "all_users": False}
+
+

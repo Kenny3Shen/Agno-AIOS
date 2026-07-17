@@ -1,6 +1,6 @@
 {
   "title": "采集",
-  "description": "从安全资讯源入库的文章库；支持按源站检索与单页采集",
+  "description": "从安全资讯源入库的文章库；支持按源站检索、同步与 CVE 跳转",
   "action": "采集 URL",
   "searchPlaceholder": "搜索标题、摘要或 URL",
   "allSources": "全部来源",
@@ -47,5 +47,7 @@
   "crawlStopHint": "中断当前源站同步（已写入的文章保留）",
   "crawlCancelled": "已停止同步",
   "previewLoadFailed": "无法加载文章正文",
-  "emptyOkPreview": "正文为空或未抽取到 Markdown"
+  "emptyOkPreview": "正文为空或未抽取到 Markdown",
+  "relatedCves": "相关 CVE",
+  "openCve": "在 CVE 库中打开 {{id}}"
 }
