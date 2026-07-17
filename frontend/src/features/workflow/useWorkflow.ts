@@ -1,3 +1,7 @@
+/**
+ * Studio orchestration hook: load/save/publish, undo stack, run SSE, and draft validation.
+ * Canvas rendering stays in `WorkflowCanvas`; this file owns workflow domain state only.
+ */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'

@@ -1269,3 +1269,108 @@ html.dark {
 .sender-shell .ant-sender-header {
   border-bottom: 1px solid color-mix(in srgb, var(--tais-border, #e5e7eb) 80%, transparent);
 }
+
+
+/* Conversations rail embedded in Chat (Agent) page */
+.chat-page {
+  display: grid !important;
+  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+  height: calc(100vh - 52px);
+  min-height: 0;
+  overflow: hidden;
+}
+.chat-conversations-rail {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid var(--chat-border, var(--tais-border));
+  background: var(--chat-rail-bg, var(--tais-surface));
+}
+.chat-conversations-rail .chat-task-panel {
+  display: flex;
+  max-height: none;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  border-top: 0;
+  background: transparent;
+}
+.chat-task-panel-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 12px 8px;
+  border-bottom: 1px solid var(--chat-border, var(--tais-border));
+}
+.chat-task-panel-heading {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.chat-task-panel-heading strong {
+  color: var(--chat-heading, var(--tais-text));
+  font-size: 13px;
+}
+.chat-task-panel-heading span {
+  color: var(--chat-subtle, var(--tais-muted));
+  font-size: 11px;
+}
+.chat-conversations-rail .chat-task-panel-content {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px 12px;
+}
+.chat-conversations-rail .ant-conversations {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+.chat-page > .chat-workspace {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+.chat-drop-overlay {
+  position: absolute;
+  inset: 8px;
+  z-index: 30;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  border: 2px dashed color-mix(in srgb, var(--tais-blue) 55%, var(--tais-border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--tais-blue) 10%, var(--chat-workspace-bg, var(--tais-surface)));
+  color: var(--tais-text);
+  pointer-events: none;
+}
+.chat-drop-overlay .anticon {
+  font-size: 28px;
+  color: var(--tais-blue);
+}
+.chat-drop-overlay span {
+  font-size: 14px;
+  font-weight: 600;
+}
+.chat-drop-overlay small {
+  color: var(--tais-muted);
+  font-size: 12px;
+}
+.chat-page--drop-active .chat-workspace {
+  outline: none;
+}
+@media (max-width: 960px) {
+  .chat-page {
+    grid-template-columns: 1fr !important;
+  }
+  .chat-conversations-rail {
+    display: none;
+  }
+}

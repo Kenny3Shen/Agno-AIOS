@@ -130,16 +130,15 @@ describe('ChatTaskPanel', () => {
     mockSessions([])
   })
 
-  it('exposes a controlled expand toggle without rendering hidden content', async () => {
+  it('shows conversation title and new chat action', async () => {
+    const onNewChat = vi.fn<() => void>()
     const user = setupUser()
-    const onExpandedChange = vi.fn<(expanded: boolean) => void>()
-    renderWithQuery(<ChatTaskPanel expanded={false} onExpandedChange={onExpandedChange} variant="sider" />)
+    renderWithQuery(<ChatTaskPanel variant="page" onNewChat={onNewChat} />)
 
-    const toggle = screen.getByRole('button', { name: '对话' })
-    expect(toggle.getAttribute('aria-expanded')).toBe('false')
-    expect(screen.queryByText('新建对话')).toBeNull()
-    await user.click(toggle)
-    expect(onExpandedChange).toHaveBeenCalledWith(true)
+    expect(await screen.findByText('对话')).toBeTruthy()
+    const newChat = await screen.findByRole('button', { name: '新对话' })
+    await user.click(newChat)
+    expect(onNewChat).toHaveBeenCalledOnce()
   })
 
   it('opens conversations while notifying a mobile drawer to close', async () => {
@@ -155,7 +154,7 @@ describe('ChatTaskPanel', () => {
       },
     ])
     renderWithQuery(
-      <ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} onNavigate={onNavigate} variant="drawer" />,
+      <ChatTaskPanel onNavigate={onNavigate} variant="page" />,
     )
 
     expect(await screen.findByText('资产风险分析')).toBeTruthy()
@@ -168,13 +167,13 @@ describe('ChatTaskPanel', () => {
     const user = setupUser()
     mockSessions([])
     const { unmount } = renderWithQuery(
-      <ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} variant="sider" />,
+      <ChatTaskPanel variant="page" />,
     )
     expect(await screen.findByText('暂无对话')).toBeTruthy()
 
     unmount()
     mockSessions([], { error: true })
-    renderWithQuery(<ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} variant="sider" />)
+    renderWithQuery(<ChatTaskPanel variant="page" />)
     const retry = await screen.findByRole('button', { name: '重试' })
     // After retry, serve success empty list so the query settles.
     mockSessions([])
@@ -192,7 +191,7 @@ describe('ChatTaskPanel', () => {
         updated_at: dayjs().unix(),
       },
     ])
-    renderWithQuery(<ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} variant="sider" />)
+    renderWithQuery(<ChatTaskPanel variant="page" />)
     expect(await screen.findByText('Conversations')).toBeTruthy()
     expect(await screen.findByText('Investigate CVE')).toBeTruthy()
     expect(await screen.findByText('Today')).toBeTruthy()
@@ -231,7 +230,7 @@ describe('ChatTaskPanel', () => {
         })
       }),
     )
-    renderWithQuery(<ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} variant="sider" />)
+    renderWithQuery(<ChatTaskPanel variant="page" />)
     expect(await screen.findByText('First page')).toBeTruthy()
     await user.click(screen.getByRole('button', { name: '加载更多' }))
     expect(await screen.findByText('Second page')).toBeTruthy()
@@ -247,7 +246,7 @@ describe('ChatTaskPanel', () => {
         updated_at: dayjs().unix(),
       },
     ])
-    renderWithQuery(<ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} variant="sider" />)
+    renderWithQuery(<ChatTaskPanel variant="page" />)
     const search = await screen.findByLabelText(i18n.t('shell:conversations.searchPlaceholder'))
     // Client-side filter after debounce matches; no need to change server payload.
     await user.clear(search)

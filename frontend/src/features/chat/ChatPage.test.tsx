@@ -101,10 +101,13 @@ const chat = {
 
 vi.mock('@tanstack/react-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tanstack/react-router')>()),
-  useRouter: () => ({ history: { push: vi.fn<(path: string) => void>() } }),
+  useRouter: () => ({ history: { push: vi.fn<(path: string) => void>(), replace: vi.fn() } }),
+  useRouterState: ({ select }: { select: (state: { location: { searchStr: string; pathname: string } }) => unknown }) =>
+    select({ location: { searchStr: '', pathname: '/chat' } }),
   // useBlocker needs a real RouterProvider; no-op in unit tests.
   useBlocker: () => undefined,
 }))
+vi.mock('./ChatTaskPanel', () => ({ ChatTaskPanel: () => null }))
 vi.mock('./useChat', () => ({ useChat: () => chat }))
 const { unarchiveSessionMock } = vi.hoisted(() => ({
   unarchiveSessionMock: vi.fn(async () => ({ success: true, archived: false })),

@@ -1,3 +1,9 @@
+/**
+ * Workflow Studio page shell (draw.io-style three-pane layout).
+ *
+ * Left: palette + templates + library · Center: React Flow canvas · Right: inspector + run log.
+ * Orchestration state lives in `useWorkflow`; this file wires UI chrome only.
+ */
 import {
   Alert,
   App,
@@ -602,7 +608,7 @@ export function WorkflowPage() {
             </Tag>
           </div>
         </div>
-        <Space wrap className="workflow-studio__actions">
+        <Space wrap className="workflow-studio__actions workflow-studio__actions--drawio">
           <Button onClick={workflow.reset}>{t('new')}</Button>
           <Tooltip title={t('undoHint')} getPopupContainer={studioPopupContainer}>
             <Button
@@ -785,7 +791,7 @@ export function WorkflowPage() {
 
       <div className="workflow-studio__body">
         {/* Left: palette + library */}
-        <aside className="workflow-studio__left">
+        <aside className="workflow-studio__left workflow-studio__shapes">
           <section className="workflow-studio__panel">
             <div className="workflow-studio__panel-title">{t('palette')}</div>
             <div className="workflow-palette">

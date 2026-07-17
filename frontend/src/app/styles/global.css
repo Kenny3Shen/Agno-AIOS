@@ -224,6 +224,52 @@ html.dark .shell-menu .ant-menu-item-selected {
   padding: 10px 18px;
   border-top: 1px solid var(--tais-border);
 }
+
+.shell-footer {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  border-top: 1px solid var(--tais-border);
+  background: var(--tais-surface);
+}
+.shell-footer .shell-identity {
+  width: 100%;
+  border: 0;
+  border-top: 0;
+  border-bottom: 1px solid var(--tais-border);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.shell-footer .shell-identity:hover {
+  background: color-mix(in srgb, var(--tais-blue) 8%, var(--tais-surface));
+}
+.shell-footer .shell-identity-copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.shell-footer .shell-identity-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 650;
+}
+.shell-footer .shell-identity-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tais-muted);
+  font-size: 11px;
+}
+.shell-footer .shell-bottom-menu {
+  border-top: 0 !important;
+}
+.shell-footer-drawer .shell-identity {
+  margin-bottom: 0;
+}
 .chat-task-panel {
   display: flex;
   max-height: min(320px, 40vh);
@@ -2713,3 +2759,124 @@ button.collect-article-item.is-selected {
 .workflow-studio__panel.is-definition-locked {
   position: relative;
 }
+
+/* Collapsed nav: VS Code–style account (user) icon */
+.shell-identity-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--tais-border) 80%, var(--tais-text));
+  background: color-mix(in srgb, var(--tais-soft) 70%, transparent);
+  color: var(--tais-text);
+  font-size: 15px;
+}
+.shell-sider.ant-layout-sider-collapsed .shell-identity {
+  justify-content: center;
+  padding-inline: 0;
+}
+.shell-sider.ant-layout-sider-collapsed .shell-identity-icon {
+  margin-inline: auto;
+}
+.shell-footer .shell-identity:focus-visible .shell-identity-icon,
+.shell-footer .shell-identity:hover .shell-identity-icon {
+  border-color: color-mix(in srgb, var(--tais-blue) 55%, var(--tais-border));
+  color: color-mix(in srgb, var(--tais-blue) 70%, var(--tais-text));
+}
+
+
+/* ---- Draw.io-inspired Studio chrome (visual only) ---- */
+.workflow-studio__shapes .workflow-studio__panel-title {
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tais-muted);
+}
+
+.workflow-studio__actions--drawio {
+  gap: 6px !important;
+}
+
+.workflow-studio__actions--drawio .ant-btn {
+  border-radius: 6px;
+}
+
+/* Canvas status strip (Panel bottom-center) */
+.wf-status-bar {
+  display: flex !important;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 10px !important;
+  padding: 4px 12px !important;
+  border-radius: 999px !important;
+  border: 1px solid var(--tais-border) !important;
+  background: color-mix(in srgb, var(--tais-surface) 92%, transparent) !important;
+  box-shadow: var(--wf-shadow-soft) !important;
+  backdrop-filter: blur(8px);
+  color: var(--tais-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  user-select: none;
+}
+
+.wf-status-bar__item + .wf-status-bar__item {
+  border-left: 1px solid var(--tais-border);
+  padding-left: 12px;
+}
+
+.wf-status-bar__zoom {
+  color: var(--tais-text);
+  font-weight: 600;
+}
+
+.wf-status-bar__running {
+  color: #1677ff;
+  font-weight: 700;
+}
+
+/* Minimap / controls: corner chrome like diagram tools */
+.workflow-canvas--main .wf-minimap {
+  margin: 0 12px 12px 0 !important;
+}
+
+.workflow-canvas--main .wf-controls {
+  margin: 0 0 12px 12px !important;
+}
+
+/* Line grid slightly softer so nodes stay primary */
+.workflow-canvas--main .react-flow__background pattern line {
+  stroke: var(--wf-canvas-dot) !important;
+}
+
+/* Palette closer to draw.io shape tiles */
+.workflow-palette {
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.workflow-palette__item {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 64px;
+  padding: 10px 6px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.workflow-palette__icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+html.dark .wf-status-bar {
+  background: color-mix(in srgb, var(--tais-surface) 88%, transparent) !important;
+}
+

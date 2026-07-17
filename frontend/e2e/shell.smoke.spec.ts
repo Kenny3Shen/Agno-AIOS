@@ -53,16 +53,19 @@ test.describe('shell critical path', () => {
     await expect(sider.getByText('观测', { exact: true })).toHaveCount(0)
   })
 
-  test('desktop sider collapse hides recents and flattens icons', async ({ page }) => {
+  test('desktop sider shows account above settings; chat auto-collapses nav', async ({ page }) => {
     await openAuthed(page, '/dashboard')
 
     await expect(page.locator('.shell-sider')).toBeVisible()
-    // Recents panel only when expanded.
-    await expect(page.locator('.shell-sider').getByText('最近对话')).toBeVisible()
+    // Conversations live on the agent page, not the global sider.
+    await expect(page.locator('.shell-sider').getByText('对话', { exact: true })).toHaveCount(0)
+    await expect(page.locator('.shell-footer .shell-identity')).toBeVisible()
+    await expect(page.locator('.shell-footer').getByText('设置', { exact: true })).toBeVisible()
 
-    await page.getByRole('button', { name: '折叠或展开导航' }).click()
-    await expect(page.locator('.shell-sider').getByText('最近对话')).toHaveCount(0)
-    // Collapsed width class still hosts menu; brand remains overview entry.
+    await page.locator('.shell-sider').getByText('智能体', { exact: true }).click()
+    await expect(page).toHaveURL(/#\/chat/)
+    await expect(page.locator('.shell-sider.ant-layout-sider-collapsed')).toBeVisible()
+    await expect(page.locator('.chat-conversations-rail').getByText('对话', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: '返回运行概览' })).toBeVisible()
   })
 })

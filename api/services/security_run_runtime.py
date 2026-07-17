@@ -1185,12 +1185,19 @@ class SecurityRunRuntime:
                     )
                     registered_run_ids.discard(run_id)
                 elif event_type == RunEvent.run_error.value:
+                    detail = (
+                        event_value(event, "content")
+                        or event_value(event, "error")
+                        or event_value(event, "message")
+                        or "安全分析运行失败"
+                    )
+                    detail_text = str(detail).strip() or "安全分析运行失败"
                     yield ChatRunEvent(
                         "run.failed",
                         {
                             "run_id": run_id,
                             "code": "AGENT_RUN_ERROR",
-                            "message": "安全分析运行失败",
+                            "message": detail_text,
                             "retryable": True,
                         },
                     )

@@ -46,11 +46,11 @@ import {
   SettingOutlined,
   SunOutlined,
   TranslationOutlined,
+  UserOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { currentUserQuery, logout } from '@/features/auth'
 import { getApprovalCount } from '@/features/approvals/api'
-import { ChatTaskPanel } from '@/features/chat/ChatTaskPanel'
 import { chatKeys } from '@/features/chat/queries'
 import {
   deleteNotification,
@@ -63,16 +63,14 @@ import {
 } from '@/features/notifications/api'
 import { loginPath, nextPathFromLocation } from '@/features/auth/routing'
 import { getToken } from '@/shared/auth/storage'
-import { hasScope } from '@/shared/auth/permissions'
+import { hasScope, roleOf } from '@/shared/auth/permissions'
 import { usePreferences } from '@/app/providers/AppProviders'
 import {
   defaultOpenNavigationGroupKeys,
   filterNavigationGroups,
   navigationGroupKeyForItemPath,
   navigationGroupMenuKey,
-  readRecentConversationsExpanded,
   withOpenNavigationGroup,
-  writeRecentConversationsExpanded,
   type NavigationGroup,
 } from './utils'
 
@@ -153,7 +151,7 @@ const notificationKind = (notification: Notification) => {
 }
 
 export function AppFrame({ children }: { children: ReactNode }) {
-  const { t } = useTranslation(['shell', 'common'])
+  const { t } = useTranslation(['shell', 'common', 'settings'])
   const router = useRouter()
   const queryClient = useQueryClient()
   const { message } = App.useApp()
@@ -164,13 +162,18 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [openNavigationGroups, setOpenNavigationGroups] = useState(defaultOpenNavigationGroups)
   const [mobileOpenNavigationGroups, setMobileOpenNavigationGroups] = useState(defaultOpenNavigationGroups)
-  const [recentConversationsExpanded, setRecentConversationsExpanded] = useState(readRecentConversationsExpanded)
-  const [mobileRecentConversationsExpanded, setMobileRecentConversationsExpanded] = useState(false)
   const [notificationOpen, setNotificationOpen] = useState(false)
   const [markingAllNotifications, setMarkingAllNotifications] = useState(false)
   const [deletingNotificationId, setDeletingNotificationId] = useState<number | null>(null)
   const lastNotificationIdRef = useRef(0)
   const path = useRouterState({ select: (state) => state.location.pathname })
+  // Chat / Workflow: auto-collapse desktop nav for more canvas room.
+  useEffect(() => {
+    if (mobile) return
+    if (path === '/chat' || path === '/workflow') {
+      setCollapsed(true)
+    }
+  }, [mobile, path])
   const searchStr = useRouterState({ select: (state) => state.location.searchStr })
   // Deep links (e.g. /trace, /cve): ensure the owning group is open on desktop without collapsing others.
   useEffect(() => {
@@ -331,18 +334,12 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const navigateFromMenu: MenuProps['onClick'] = ({ key }) => {
     void router.history.push(key === '/chat' ? '/chat' : key)
     setMobileOpen(false)
-    setMobileRecentConversationsExpanded(false)
   }
   const navigateToDashboard = () => {
     void router.history.push('/dashboard')
     setMobileOpen(false)
   }
-  const toggleRecentConversations = (expanded: boolean) => {
-    setRecentConversationsExpanded(expanded)
-    writeRecentConversationsExpanded(expanded)
-  }
   const openMobileNavigation = () => {
-    setMobileRecentConversationsExpanded(false)
     // Predictable mobile defaults + current route group so deep links stay visible.
     setMobileOpenNavigationGroups(
       withOpenNavigationGroup(
@@ -400,7 +397,6 @@ export function AppFrame({ children }: { children: ReactNode }) {
   }
   useEffect(() => {
     setMobileOpen(false)
-    setMobileRecentConversationsExpanded(false)
     setMobileOpenNavigationGroups(
       withOpenNavigationGroup(
         defaultOpenNavigationGroups,
@@ -452,20 +448,77 @@ export function AppFrame({ children }: { children: ReactNode }) {
             className="shell-menu shell-main-menu"
             tooltip={{ placement: 'right' }}
           />
-          {!mobile && !collapsed ? (
-            <ChatTaskPanel expanded={recentConversationsExpanded} onExpandedChange={toggleRecentConversations} variant="sider" />
-          ) : null}
-          {settingsItems?.length ? (
-            <Menu
-              mode="inline"
-              inlineCollapsed={collapsed}
-              selectedKeys={path === '/settings' ? [path] : []}
-              items={settingsItems}
-              onClick={navigateFromMenu}
-              className="shell-menu shell-bottom-menu"
-              tooltip={{ placement: 'right' }}
-            />
-          ) : null}
+          <div className="shell-footer">
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: 'settings',
+                    icon: <SettingOutlined />,
+                    label: t('shell:settings'),
+                    onClick: () => void router.history.push('/settings'),
+                  },
+                  {
+                    key: 'logout',
+                    icon: <SafetyCertificateOutlined />,
+                    label: t('shell:logout'),
+                    onClick: async () => {
+                      try {
+                        await logout()
+                        queryClient.clear()
+                        window.location.reload()
+                      } catch (error) {
+                        message.error(error instanceof Error ? error.message : t('shell:logoutFailed'))
+                      }
+                    },
+                  },
+                ],
+              }}
+              placement="topLeft"
+              trigger={['click']}
+            >
+              <button
+                type="button"
+                className={`shell-identity${collapsed ? ' shell-identity-collapsed' : ''}`}
+                aria-label={t('shell:userProfile')}
+                title={userQuery.data?.email}
+              >
+                {collapsed ? (
+                  <span className="shell-identity-icon" aria-hidden>
+                    <UserOutlined />
+                  </span>
+                ) : (
+                  <Avatar size="small">{initials}</Avatar>
+                )}
+                <div className="shell-identity-copy">
+                  <strong>{userQuery.data?.email ?? '—'}</strong>
+                  <small>
+                    {t(`settings:role_${roleOf(userQuery.data)}`, {
+                      defaultValue: roleOf(userQuery.data),
+                    })}
+                    {userQuery.data?.is_active === false
+                      ? ` · ${t('shell:userInactive')}`
+                      : userQuery.data?.scopes?.length
+                        ? ` · ${t('shell:userScopeCount', { count: userQuery.data.scopes.length })}`
+                        : roleOf(userQuery.data) === 'admin'
+                          ? ` · ${t('shell:userAdminAllScopes')}`
+                          : ''}
+                  </small>
+                </div>
+              </button>
+            </Dropdown>
+            {settingsItems?.length ? (
+              <Menu
+                mode="inline"
+                inlineCollapsed={collapsed}
+                selectedKeys={path === '/settings' ? [path] : []}
+                items={settingsItems}
+                onClick={navigateFromMenu}
+                className="shell-menu shell-bottom-menu"
+                tooltip={{ placement: 'right' }}
+              />
+            ) : null}
+          </div>
         </div>
       </Sider>
       <Layout>
@@ -582,30 +635,6 @@ export function AppFrame({ children }: { children: ReactNode }) {
             <Tooltip title="GitHub">
               <Button type="text" icon={<GithubOutlined />} href="https://github.com/Kenny3Shen/Agno-AIOS" target="_blank" />
             </Tooltip>
-            <Dropdown
-              menu={{
-                items: [
-                  {
-                    key: 'logout',
-                    icon: <SafetyCertificateOutlined />,
-                    label: t('shell:logout'),
-                    onClick: async () => {
-                      try {
-                        await logout()
-                        queryClient.clear()
-                        window.location.reload()
-                      } catch (error) {
-                        message.error(error instanceof Error ? error.message : t('shell:logoutFailed'))
-                      }
-                    },
-                  },
-                ],
-              }}
-            >
-              <Button type="text">
-                <Avatar size="small">{initials}</Avatar>
-              </Button>
-            </Dropdown>
           </Space>
         </Header>
         <Content className="shell-content">
@@ -628,7 +657,6 @@ export function AppFrame({ children }: { children: ReactNode }) {
         open={mobileOpen}
         onClose={() => {
           setMobileOpen(false)
-          setMobileRecentConversationsExpanded(false)
           setMobileOpenNavigationGroups(
             withOpenNavigationGroup(
               defaultOpenNavigationGroups,
@@ -649,24 +677,43 @@ export function AppFrame({ children }: { children: ReactNode }) {
             items={items}
             className="shell-menu shell-main-menu shell-drawer-menu"
           />
-          <ChatTaskPanel
-            expanded={mobileRecentConversationsExpanded}
-            onExpandedChange={setMobileRecentConversationsExpanded}
-            onNavigate={() => {
-              setMobileOpen(false)
-              setMobileRecentConversationsExpanded(false)
-            }}
-            variant="drawer"
-          />
-          {settingsItems?.length ? (
-            <Menu
-              mode="inline"
-              selectedKeys={path === '/settings' ? [path] : []}
-              onClick={navigateFromMenu}
-              items={settingsItems}
-              className="shell-menu shell-bottom-menu"
-            />
-          ) : null}
+          <div className="shell-footer shell-footer-drawer">
+            <button
+              type="button"
+              className="shell-identity"
+              aria-label={t('shell:userProfile')}
+              onClick={() => {
+                setMobileOpen(false)
+                void router.history.push('/settings')
+              }}
+            >
+              <Avatar size="small">{initials}</Avatar>
+              <div className="shell-identity-copy">
+                <strong>{userQuery.data?.email ?? '—'}</strong>
+                <small>
+                  {t(`settings:role_${roleOf(userQuery.data)}`, {
+                    defaultValue: roleOf(userQuery.data),
+                  })}
+                  {userQuery.data?.is_active === false
+                    ? ` · ${t('shell:userInactive')}`
+                    : userQuery.data?.scopes?.length
+                      ? ` · ${t('shell:userScopeCount', { count: userQuery.data.scopes.length })}`
+                      : roleOf(userQuery.data) === 'admin'
+                        ? ` · ${t('shell:userAdminAllScopes')}`
+                        : ''}
+                </small>
+              </div>
+            </button>
+            {settingsItems?.length ? (
+              <Menu
+                mode="inline"
+                selectedKeys={path === '/settings' ? [path] : []}
+                onClick={navigateFromMenu}
+                items={settingsItems}
+                className="shell-menu shell-bottom-menu"
+              />
+            ) : null}
+          </div>
         </div>
       </Drawer>
     </Layout>

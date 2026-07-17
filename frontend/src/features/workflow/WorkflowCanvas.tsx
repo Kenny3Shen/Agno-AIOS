@@ -1,3 +1,10 @@
+/**
+ * Workflow Studio canvas (React Flow).
+ *
+ * Draw.io–inspired shell: dotted/line grid, minimap, zoom controls, smart-snap
+ * guides, and a read-only status strip. Graph mutations stay in parent hooks;
+ * this module maps DSL steps ↔ RF nodes/edges and handles drag/connect UI only.
+ */
 import { isKeyboardTargetEditable, isOverlayEscapeTarget } from '@/shared/lib/keyboard'
 import {
   useMemo,
@@ -14,8 +21,10 @@ import {
   Background,
   Controls,
   MiniMap,
+  Panel,
   ReactFlowProvider,
   useReactFlow,
+  useViewport,
   applyNodeChanges,
   type Edge,
   type IsValidConnection,
@@ -74,6 +83,47 @@ const DEFAULT_EDGE_OPTIONS = {
 
 const PRO_OPTIONS = { hideAttribution: true } as const
 
+/** Draw.io-like grid: light lines, readable at default zoom. */
+const BACKGROUND_GAP = 20
+const BACKGROUND_SIZE = 1
+
+/**
+ * Read-only chrome under the canvas (zoom / counts).
+ * Must render inside `<ReactFlow>` (uses `useViewport`).
+ */
+function CanvasStatusBar({
+  nodeCount,
+  selectedCount,
+  running,
+}: {
+  nodeCount: number
+  selectedCount: number
+  running: boolean
+}) {
+  const { t } = useTranslation('workflow')
+  const { zoom } = useViewport()
+  const zoomPct = Math.max(1, Math.round(zoom * 100))
+  return (
+    <Panel position="bottom-center" className="wf-status-bar" aria-live="polite">
+      <span className="wf-status-bar__item">
+        {t('canvasStatusNodes', { count: nodeCount })}
+      </span>
+      {selectedCount > 0 ? (
+        <span className="wf-status-bar__item">
+          {t('canvasStatusSelected', { count: selectedCount })}
+        </span>
+      ) : null}
+      <span className="wf-status-bar__item wf-status-bar__zoom" title={t('canvasStatusZoomHint')}>
+        {zoomPct}%
+      </span>
+      {running ? (
+        <span className="wf-status-bar__item wf-status-bar__running">{t('canvasStatusRunning')}</span>
+      ) : null}
+    </Panel>
+  )
+}
+
+
 const MINIMAP_NODE_COLOR = (node: WorkflowCanvasNode) => {
   const status = node.data?.runStatus
   if (status === 'running') return '#1677ff'
@@ -83,6 +133,7 @@ const MINIMAP_NODE_COLOR = (node: WorkflowCanvasNode) => {
   return 'var(--tais-muted, #c0c0c0)'
 }
 
+/** Canvas props: graph state + callbacks owned by `useWorkflow` / Studio page. */
 type Props = {
   steps: WorkflowNode[]
   selectedId: string | null
@@ -1183,24 +1234,34 @@ function CanvasInner({
             </div>
           </ViewportPortal>
         ) : null}
+        {/* Grid: line pattern reads closer to draw.io than sparse dots. */}
         <Background
-          variant={BackgroundVariant.Dots}
-          gap={18}
-          size={1.2}
+          variant={BackgroundVariant.Lines}
+          gap={BACKGROUND_GAP}
+          size={BACKGROUND_SIZE}
           color="var(--wf-canvas-dot)"
         />
         <MiniMap
+          position="bottom-right"
           pannable
           zoomable
           nodeStrokeWidth={2}
           className="wf-minimap"
           nodeColor={MINIMAP_NODE_COLOR}
+          ariaLabel={t('canvasMinimapAria')}
         />
         <Controls
+          position="bottom-left"
           showInteractive={false}
           showFitView
           showZoom
           className="wf-controls"
+          aria-label={t('canvasControlsAria')}
+        />
+        <CanvasStatusBar
+          nodeCount={steps.length}
+          selectedCount={selectedIds.length || (selectedId ? 1 : 0)}
+          running={Boolean(running)}
         />
       </ReactFlow>
       {!steps.length ? (

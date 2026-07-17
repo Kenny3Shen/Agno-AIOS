@@ -58,7 +58,9 @@
     "unarchive": "Unarchive",
     "unarchived": "Conversation restored",
     "unarchiveFailed": "Unable to restore conversation",
-    "emptyArchived": "No archived conversations"
+    "emptyArchived": "No archived conversations",
+    "subtitle": "Sessions on this page",
+    "newChat": "New chat"
   },
   "noNotifications": "No notifications",
   "markAllRead": "Mark all as read",
@@ -76,5 +78,9 @@
   "notificationsMarkReadFailed": "Unable to mark the notification as read",
   "notificationsMarkAllFailed": "Unable to mark all notifications as read",
   "notificationsDeleteFailed": "Unable to delete the notification",
-  "logoutFailed": "Unable to sign out. Please try again."
+  "logoutFailed": "Unable to sign out. Please try again.",
+  "userProfile": "Account",
+  "userInactive": "Inactive",
+  "userScopeCount": "{{count}} scopes",
+  "userAdminAllScopes": "Full access"
 }

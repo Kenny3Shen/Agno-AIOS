@@ -1,3 +1,9 @@
+/**
+ * Custom React Flow node for Workflow Studio.
+ *
+ * Presentation only: handles, NodeToolbar, run-status pills, empty-slot CTAs.
+ * Mutation callbacks are injected via `data` from `WorkflowCanvas.buildGraph`.
+ */
 import { memo, type CSSProperties, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import {

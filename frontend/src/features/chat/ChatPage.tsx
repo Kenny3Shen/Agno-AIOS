@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { Actions, Attachments, Bubble, FileCard, Prompts, Sender, Sources, ThoughtChain } from '@ant-design/x'
 import { Markdown } from '@/shared/ui/Markdown'
 import { App, Avatar, Button, Cascader, Popover, Spin, Tag, Tooltip } from 'antd'
@@ -26,6 +26,7 @@ import {
 } from '@ant-design/icons'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useChat } from './useChat'
+import { ChatTaskPanel } from './ChatTaskPanel'
 import { formatAttachmentLimitError, validateChatAttachments } from './attachmentLimits'
 import { unarchiveSession } from './api'
 import { chatKeys } from './queries'
@@ -484,6 +485,8 @@ export function ChatPage() {
   const workspaceRef = useRef<HTMLDivElement>(null)
   const attachmentsRef = useRef<{ select: (options?: { accept?: string; multiple?: boolean }) => void } | null>(null)
   const [openAttachments, setOpenAttachments] = useState(false)
+  const [workspaceDragOver, setWorkspaceDragOver] = useState(false)
+  const dragDepthRef = useRef(0)
   const cancelRef = useRef(chat.cancel)
   cancelRef.current = chat.cancel
   const [followLatest, setFollowLatest] = useState(true)
@@ -707,9 +710,74 @@ export function ChatPage() {
     return () => observer.disconnect()
   }, [])
 
+
+  const mergeDroppedFiles = useCallback(
+    (incoming: File[]) => {
+      if (!incoming.length || chat.state.requesting || Boolean(pausedRun) || inputDisabled) return
+      const next = [...(chat.attachments ?? []), ...incoming]
+      const limitError = validateChatAttachments(next)
+      if (limitError) {
+        toastMessage.error(formatAttachmentLimitError(limitError, t))
+        return
+      }
+      chat.setAttachments(next)
+      setOpenAttachments(true)
+    },
+    [chat, inputDisabled, pausedRun, t, toastMessage],
+  )
+
+  const onWorkspaceDragEnter = useCallback((event: DragEvent) => {
+    if (!event.dataTransfer?.types?.includes('Files')) return
+    event.preventDefault()
+    dragDepthRef.current += 1
+    setWorkspaceDragOver(true)
+  }, [])
+
+  const onWorkspaceDragLeave = useCallback((event: DragEvent) => {
+    if (!event.dataTransfer?.types?.includes('Files')) return
+    event.preventDefault()
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+    if (dragDepthRef.current === 0) setWorkspaceDragOver(false)
+  }, [])
+
+  const onWorkspaceDragOver = useCallback((event: DragEvent) => {
+    if (!event.dataTransfer?.types?.includes('Files')) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+  }, [])
+
+  const onWorkspaceDrop = useCallback(
+    (event: DragEvent) => {
+      if (!event.dataTransfer?.files?.length) return
+      event.preventDefault()
+      dragDepthRef.current = 0
+      setWorkspaceDragOver(false)
+      const files = Array.from(event.dataTransfer.files)
+      mergeDroppedFiles(files)
+    },
+    [mergeDroppedFiles],
+  )
+
   return (
-    <main className="chat-page">
-      <section className="chat-workspace" ref={workspaceRef}>
+    <main className={`chat-page${workspaceDragOver ? ' chat-page--drop-active' : ''}`}>
+      <aside className="chat-conversations-rail" aria-label={t('shell:conversations.title')}>
+        <ChatTaskPanel variant="page" onNewChat={() => chat.newChat()} />
+      </aside>
+      <section
+        className="chat-workspace"
+        ref={workspaceRef}
+        onDragEnter={onWorkspaceDragEnter}
+        onDragLeave={onWorkspaceDragLeave}
+        onDragOver={onWorkspaceDragOver}
+        onDrop={onWorkspaceDrop}
+      >
+        {workspaceDragOver ? (
+          <div className="chat-drop-overlay" aria-hidden>
+            <PaperClipOutlined />
+            <span>{t('attachmentsDropTitle')}</span>
+            <small>{t('attachmentsDropHint')}</small>
+          </div>
+        ) : null}
         <header className="chat-context-bar">
           <div>
             <SafetyCertificateOutlined />
@@ -1025,7 +1093,7 @@ export function ChatPage() {
                     title: t('attachmentsDropTitle'),
                     description: t('attachmentsDropHint'),
                   }}
-                  getDropContainer={() => senderShellRef.current}
+                  getDropContainer={() => workspaceRef.current}
                 />
               </Sender.Header>
             }

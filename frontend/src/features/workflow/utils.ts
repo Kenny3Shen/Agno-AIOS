@@ -1,3 +1,7 @@
+/**
+ * Pure helpers for Workflow Studio: DSL create/normalize, canvas layout, smart-snap,
+ * reparent rules, and validation. No React / side effects.
+ */
 import type {
   WorkflowDefinition,
   WorkflowDefinitionNode,

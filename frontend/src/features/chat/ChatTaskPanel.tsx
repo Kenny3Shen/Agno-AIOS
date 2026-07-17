@@ -1,16 +1,14 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { Conversations } from '@ant-design/x'
 import { App, Button, Empty, Flex, Form, Input, Modal, Skeleton } from 'antd'
 import {
   CopyOutlined,
   DeleteOutlined,
-  DownOutlined,
   EditOutlined,
   FieldTimeOutlined,
-  HistoryOutlined,
+  PlusOutlined,
   ReloadOutlined,
-  RightOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { useTranslation } from 'react-i18next'
@@ -27,10 +25,10 @@ import { ApiError } from '@/shared/api/client'
 export type ConversationGroupKey = 'today' | 'yesterday' | 'earlier'
 
 export interface ChatTaskPanelProps {
-  expanded: boolean
-  onExpandedChange: (expanded: boolean) => void
-  variant: 'sider' | 'drawer'
+  /** Embedded in Chat page (default) or mobile drawer fallback. */
+  variant?: 'page' | 'drawer'
   onNavigate?: () => void
+  onNewChat?: () => void
 }
 
 export interface ConversationListItem {
@@ -79,14 +77,13 @@ function bestEffortCancelRun(runId: string | null | undefined) {
 }
 
 /** Sidebar/drawer recents list — session list only, no live stream state. */
-export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate }: ChatTaskPanelProps) {
+export function ChatTaskPanel({ variant = 'page', onNavigate, onNewChat }: ChatTaskPanelProps) {
   const { message: toast, modal } = App.useApp()
   const { t } = useTranslation()
   const router = useRouter()
   const searchStr = useRouterState({ select: (state) => state.location.searchStr })
   const sessionId = new URLSearchParams(searchStr).get('session')
   const queryClient = useQueryClient()
-  const contentId = useId()
   const [sessionSearch, setSessionSearch] = useState('')
   const debouncedSessionSearch = useDebouncedValue(sessionSearch, 300)
   const [renameTarget, setRenameTarget] = useState<ChatSession | null>(null)
@@ -261,130 +258,140 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
   return (
     <>
       <section
-        className={`chat-task-panel chat-task-panel-${variant} ${expanded ? 'chat-task-panel-expanded' : 'chat-task-panel-collapsed'}`}
+        className={`chat-task-panel chat-task-panel-${variant}`}
         aria-label={t('shell:conversations.title')}
       >
-        <button
-          type="button"
-          className="chat-task-panel-toggle"
-          aria-expanded={expanded}
-          aria-controls={contentId}
-          aria-label={t('shell:conversations.title')}
-          onClick={() => onExpandedChange(!expanded)}
-        >
-          <span className="chat-task-panel-toggle-label">
-            <HistoryOutlined />
-            {t('shell:conversations.title')}
-          </span>
-          {expanded ? <DownOutlined /> : <RightOutlined />}
-        </button>
-        {expanded ? (
-          <div id={contentId} className="chat-task-panel-content">
-            {sessions.isLoading && !sessionItems.length && !sessionSearch ? (
-              <div className="chat-task-panel-loading" aria-label={t('common:loading')}>
-                <Skeleton active title={false} paragraph={{ rows: 3 }} />
-              </div>
-            ) : sessions.isError ? (
-              <div className="chat-task-panel-state" role="alert">
-                <span>{t('shell:conversations.loadFailed')}</span>
-                <Button
-                  size="small"
-                  type="text"
-                  icon={<ReloadOutlined />}
-                  aria-label={t('shell:conversations.retry')}
-                  onClick={() => void sessions.refetch()}
-                >
-                  {t('shell:conversations.retry')}
-                </Button>
-              </div>
-            ) : (
-              <>
-                {sessionItems.length || sessionSearch.trim() ? (
-                  <Input.Search
-                    allowClear
-                    className="chat-task-panel-search"
-                    placeholder={t('shell:conversations.searchPlaceholder')}
-                    value={sessionSearch}
-                    onChange={(event) => setSessionSearch(event.target.value)}
-                    loading={Boolean(sessions.isFetching && !sessions.isFetchingNextPage)}
-                    aria-label={t('shell:conversations.searchPlaceholder')}
-                  />
-                ) : null}
-                <Conversations
-                  items={filteredConversations}
-                  activeKey={sessionId ?? undefined}
-                  onActiveChange={openSession}
-                  groupable={{
-                    label: (group) => (
-                      <Flex gap="small">
-                        <FieldTimeOutlined />
-                        {t(`shell:conversations.${group}`)}
-                      </Flex>
-                    ),
-                    collapsible: (group) => group !== 'today',
-                    expandedKeys: expandedGroups,
-                    onExpand: (keys) => {
-                      expandedGroupsInitialized.current = true
-                      setExpandedGroups(keys)
-                    },
-                  }}
-                  menu={(item) => ({
-                    items: [
-                      {
-                        key: 'rename',
-                        icon: <EditOutlined />,
-                        label: t('shell:conversations.rename'),
-                        onClick: () => {
-                          const session = sessionItems.find((value) => value.session_id === item.key)
-                          if (session) startRename(session)
-                        },
-                      },
-                      {
-                        key: 'copy-session-id',
-                        icon: <CopyOutlined />,
-                        label: t('shell:conversations.copySessionId'),
-                        onClick: () => copySessionId(item.key),
-                      },
-                      {
-                        key: 'archive',
-                        danger: true,
-                        icon: <DeleteOutlined />,
-                        label: t('shell:conversations.archive'),
-                        onClick: () => void archive(item.key),
-                      },
-                    ],
-                  })}
-                />
-                {sessions.hasNextPage ? (
-                  <div className="chat-task-panel-load-more">
-                    <Button
-                      size="small"
-                      type="link"
-                      loading={Boolean(sessions.isFetchingNextPage)}
-                      disabled={Boolean(sessions.isFetchingNextPage)}
-                      onClick={() => void sessions.fetchNextPage()}
-                    >
-                      {t('shell:conversations.loadMore')}
-                    </Button>
-                  </div>
-                ) : null}
-                {!conversations.length && !sessionSearch.trim() ? (
-                  <Empty
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description={t('shell:conversations.empty')}
-                    className="chat-task-panel-empty"
-                  />
-                ) : !filteredConversations.length ? (
-                  <Empty
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description={t('shell:conversations.emptySearch')}
-                    className="chat-task-panel-empty"
-                  />
-                ) : null}
-              </>
-            )}
+        <header className="chat-task-panel-header">
+          <div className="chat-task-panel-heading">
+            <strong>{t('shell:conversations.title')}</strong>
+            <span>{t('shell:conversations.subtitle')}</span>
           </div>
-        ) : null}
+          {onNewChat ? (
+            <Button
+              type="primary"
+              size="small"
+              icon={<PlusOutlined />}
+              onClick={() => onNewChat()}
+              aria-label={t('shell:conversations.newChat')}
+            >
+              {t('shell:conversations.newChat')}
+            </Button>
+          ) : null}
+        </header>
+        <div className="chat-task-panel-content">
+          {sessions.isLoading && !sessionItems.length && !sessionSearch ? (
+            <div className="chat-task-panel-loading" aria-label={t('common:loading')}>
+              <Skeleton active title={false} paragraph={{ rows: 4 }} />
+            </div>
+          ) : sessions.isError ? (
+            <div className="chat-task-panel-state" role="alert">
+              <span>{t('shell:conversations.loadFailed')}</span>
+              <Button
+                size="small"
+                type="text"
+                icon={<ReloadOutlined />}
+                aria-label={t('shell:conversations.retry')}
+                onClick={() => void sessions.refetch()}
+              >
+                {t('shell:conversations.retry')}
+              </Button>
+            </div>
+          ) : (
+            <>
+              {sessionItems.length || sessionSearch.trim() ? (
+                <Input.Search
+                  allowClear
+                  className="chat-task-panel-search"
+                  placeholder={t('shell:conversations.searchPlaceholder')}
+                  value={sessionSearch}
+                  onChange={(event) => setSessionSearch(event.target.value)}
+                  loading={Boolean(sessions.isFetching && !sessions.isFetchingNextPage)}
+                  aria-label={t('shell:conversations.searchPlaceholder')}
+                />
+              ) : null}
+              <Conversations
+                items={filteredConversations}
+                activeKey={sessionId ?? undefined}
+                onActiveChange={openSession}
+                creation={
+                  onNewChat
+                    ? {
+                        label: t('shell:conversations.newChat'),
+                        icon: <PlusOutlined />,
+                        onClick: () => onNewChat(),
+                      }
+                    : undefined
+                }
+                groupable={{
+                  label: (group) => (
+                    <Flex gap="small">
+                      <FieldTimeOutlined />
+                      {t(`shell:conversations.${group}`)}
+                    </Flex>
+                  ),
+                  collapsible: (group) => group !== 'today',
+                  expandedKeys: expandedGroups,
+                  onExpand: (keys) => {
+                    expandedGroupsInitialized.current = true
+                    setExpandedGroups(keys)
+                  },
+                }}
+                menu={(item) => ({
+                  items: [
+                    {
+                      key: 'rename',
+                      icon: <EditOutlined />,
+                      label: t('shell:conversations.rename'),
+                      onClick: () => {
+                        const session = sessionItems.find((value) => value.session_id === item.key)
+                        if (session) startRename(session)
+                      },
+                    },
+                    {
+                      key: 'copy-session-id',
+                      icon: <CopyOutlined />,
+                      label: t('shell:conversations.copySessionId'),
+                      onClick: () => copySessionId(item.key),
+                    },
+                    {
+                      key: 'archive',
+                      danger: true,
+                      icon: <DeleteOutlined />,
+                      label: t('shell:conversations.archive'),
+                      onClick: () => void archive(item.key),
+                    },
+                  ],
+                })}
+              />
+              {sessions.hasNextPage ? (
+                <div className="chat-task-panel-load-more">
+                  <Button
+                    size="small"
+                    type="link"
+                    loading={Boolean(sessions.isFetchingNextPage)}
+                    disabled={Boolean(sessions.isFetchingNextPage)}
+                    onClick={() => void sessions.fetchNextPage()}
+                  >
+                    {t('shell:conversations.loadMore')}
+                  </Button>
+                </div>
+              ) : null}
+              {!conversations.length && !sessionSearch.trim() ? (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={t('shell:conversations.empty')}
+                  className="chat-task-panel-empty"
+                />
+              ) : !filteredConversations.length ? (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={t('shell:conversations.emptySearch')}
+                  className="chat-task-panel-empty"
+                />
+              ) : null}
+            </>
+          )}
+        </div>
       </section>
       <Modal
         title={t('shell:conversations.renameTitle')}

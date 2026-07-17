@@ -1,5 +1,19 @@
 # 下一步工作
 
+## 已完成：Workflow Studio draw.io 风格打磨（纯 UI / 注释）
+
+- 画布：线型网格、角标 MiniMap/Controls、底部状态条（节点数 / 选中 / 缩放 / 运行中）。
+- 左侧节点调色板：图块化（仿 shapes 面板）；Studio 文案与模块头注释规范化。
+- **未改** 保存 / 运行 / 编译 / 连线 / 校验等业务逻辑。
+
+## 已完成：对话迁入智能体 + 用户详情上移 + 导航自动收缩 + 对话框拖拽上传
+
+- 对话列表从全局侧栏迁入「智能体」页左侧轨，基于 Ant Design X `Conversations`（creation / groupable / menu）。
+- 导航侧栏底部：用户详情（邮箱、角色、权限摘要）置于「设置」上方，菜单含设置与退出。
+- 进入 `/chat` 或 `/workflow` 时桌面导航自动 `collapsed`。
+- Chat 工作区支持直接拖入文件（overlay 提示）；multipart 上传冒烟 history 含 attachments。
+- 侧栏不再展示对话列表；shell smoke 同步。
+
 ## 已完成：侧栏对话与观测文案收口
 
 - 侧栏标题「最近对话」→「对话」；去掉「最近 / 已归档」切换，列表仅展示活跃会话。

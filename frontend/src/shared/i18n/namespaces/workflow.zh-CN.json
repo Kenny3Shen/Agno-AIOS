@@ -55,7 +55,7 @@
   "userInputMessagePlaceholder": "用户输入提示",
   "requiresOutputReview": "输出需人工复核",
   "outputReviewMessagePlaceholder": "输出复核提示",
-  "studioHint": "拖入节点编排安全自动化 · 发布后可由 Webhook / 定时任务触发",
+  "studioHint": "仿 draw.io：左侧拖入节点 · 画布连线编排 · 右侧配置与运行",
   "palette": "节点",
   "paletteDragHint": "拖到画布或容器；Shift 多选；双击聚焦配置；Del 删除",
   "canvasEmpty": "画布为空 — 选用安全模板，或从左侧拖入节点",
@@ -302,5 +302,12 @@
   "stopRunHint": "停止运行（Esc）",
   "pasteHitlDiverted": "{{count}} 个含人工确认的步骤不能放进并行节点，已改放到画布根级",
   "reparentHitlBlocked": "含人工确认的步骤不能拖入并行分支",
-  "multiSelectHitlSkipped": "已跳过 {{count}} 个并行内步骤的人工确认（引擎限制）"
+  "multiSelectHitlSkipped": "已跳过 {{count}} 个并行内步骤的人工确认（引擎限制）",
+  "canvasStatusNodes": "{{count}} 个节点",
+  "canvasStatusSelected": "已选 {{count}}",
+  "canvasStatusZoomHint": "当前缩放",
+  "canvasStatusRunning": "运行中",
+  "canvasMinimapAria": "画布缩略图",
+  "canvasControlsAria": "缩放与适应视图",
+  "toolbarGroupFile": "文件"
 }

@@ -55,7 +55,7 @@
   "userInputMessagePlaceholder": "User input prompt",
   "requiresOutputReview": "Require output review",
   "outputReviewMessagePlaceholder": "Output review prompt",
-  "studioHint": "Drag nodes to automate security ops · publish for webhook & schedule",
+  "studioHint": "Draw.io-style studio: drag nodes · wire on canvas · configure & run on the right",
   "palette": "Nodes",
   "paletteDragHint": "Drag onto canvas or containers; Shift multi-select; double-click focuses inspector; Del deletes",
   "canvasEmpty": "Empty canvas — start from a security template or drag a node",
@@ -302,5 +302,12 @@
   "stopRunHint": "Stop run (Esc)",
   "pasteHitlDiverted": "{{count}} HITL step(s) cannot live inside Parallel — placed at root instead",
   "reparentHitlBlocked": "Steps with HITL cannot move into a Parallel branch",
-  "multiSelectHitlSkipped": "Skipped HITL on {{count}} step(s) inside Parallel"
+  "multiSelectHitlSkipped": "Skipped HITL on {{count}} step(s) inside Parallel",
+  "canvasStatusNodes": "{{count}} nodes",
+  "canvasStatusSelected": "{{count}} selected",
+  "canvasStatusZoomHint": "Zoom level",
+  "canvasStatusRunning": "Running",
+  "canvasMinimapAria": "Canvas minimap",
+  "canvasControlsAria": "Zoom and fit view",
+  "toolbarGroupFile": "File"
 }

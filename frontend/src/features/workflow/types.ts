@@ -1,3 +1,6 @@
+/**
+ * Shared Workflow Studio types (nodes, triggers, run log, React Query state).
+ */
 export type UserInputSchemaField = {
   name: string
   field_type?: string
