@@ -446,6 +446,7 @@ export function WorkflowPage() {
     loadWorkflow(id)
   }, [currentWorkflowId, loadWorkflow])
 
+  // Pin to latest events (list is chronological; newest at bottom).
   useEffect(() => {
     if (!workflow.state.running && !workflow.state.runLog.length) return
     const node = runLogListRef.current
@@ -1954,7 +1955,8 @@ export function WorkflowPage() {
                       })()}
                       {workflow.state.runLog.length ? (
                         <div className="workflow-compact-list workflow-run-log-list" ref={runLogListRef}>
-                          {[...workflow.state.runLog].reverse().slice(0, 40).map((item) => (
+                          {/* Chronological (oldest → newest): matches auto-scroll to bottom on new events. */}
+                          {workflow.state.runLog.slice(-40).map((item) => (
                             <div key={item.id} className="workflow-compact-list__item">
                               <Space size={4} wrap>
                                 <Tag
