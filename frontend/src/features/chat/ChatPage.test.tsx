@@ -77,6 +77,8 @@ const chat = {
 vi.mock('@tanstack/react-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tanstack/react-router')>()),
   useRouter: () => ({ history: { push: vi.fn<(path: string) => void>() } }),
+  // useBlocker needs a real RouterProvider; no-op in unit tests.
+  useBlocker: () => undefined,
 }))
 vi.mock('./useChat', () => ({ useChat: () => chat }))
 

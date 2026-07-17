@@ -28,7 +28,7 @@ import { useChat } from './useChat'
 import type { Message, ThoughtStep, ToolStep } from './types'
 import type { ModelConfig, ReasoningEffort } from '@/shared/types/common'
 import { useTranslation } from 'react-i18next'
-import { useRouter } from '@tanstack/react-router'
+import { useBlocker, useRouter } from '@tanstack/react-router'
 import { buildTraceSearch, emptyTraceFilters } from '@/features/trace/utils'
 import { copyToClipboard } from '@/shared/lib/clipboard'
 import { isOverlayEscapeTarget } from '@/shared/lib/keyboard'
@@ -431,6 +431,7 @@ function MessageBody({ message, retry, sessionId, requesting = false }: { messag
 
 export function ChatPage() {
   const { t } = useTranslation('chat')
+  const { modal } = App.useApp()
   const router = useRouter()
   const chat = useChat()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -558,16 +559,32 @@ export function ChatPage() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [chat.state.requesting])
 
-  // Warn before closing the tab while a run is streaming / retrying.
-  useEffect(() => {
-    if (!chat.state.requesting) return
-    const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault()
-      event.returnValue = ''
-    }
-    window.addEventListener('beforeunload', onBeforeUnload)
-    return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [chat.state.requesting])
+  // SPA nav + tab close while a run is streaming / retrying.
+  const cancelForLeaveRef = useRef(chat.cancel)
+  cancelForLeaveRef.current = chat.cancel
+  const requestingRef = useRef(chat.state.requesting)
+  requestingRef.current = chat.state.requesting
+  useBlocker({
+    disabled: !chat.state.requesting,
+    enableBeforeUnload: chat.state.requesting,
+    shouldBlockFn: async () => {
+      if (!requestingRef.current) return false
+      const leave = await new Promise<boolean>((resolve) => {
+        modal.confirm({
+          title: t('leaveWhileGeneratingTitle'),
+          content: t('leaveWhileGeneratingContent'),
+          okText: t('stopAndLeave'),
+          cancelText: t('common:cancel'),
+          okButtonProps: { danger: true },
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        })
+      })
+      if (!leave) return true
+      void cancelForLeaveRef.current()
+      return false
+    },
+  })
 
 
   useEffect(() => {

@@ -1,5 +1,13 @@
 # 下一步工作
 
+## 已完成：SPA 导航离开守卫（useBlocker）
+
+- Chat：生成中侧栏/路由离开弹出确认，确认后 stop 再放行；`enableBeforeUnload` 覆盖关页。
+- Studio：运行中或脏草稿离开确认；运行中确认后 stop。
+- 用 ref 读取最新 running/dirty/requesting，避免 shouldBlockFn 闭包过期。
+- ChatPage 单测 mock `useBlocker`。
+
+
 ## 已完成：Studio 运行中离开确认 + Chat 流式隐藏 regenerate
 
 - 加载/重置/模板/恢复：若 `running` 先确认停止，再（可选）确认丢弃脏草稿；嵌套 modal 用 `setTimeout(0)` 错开。

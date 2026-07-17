@@ -40,7 +40,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { Markdown } from '@/shared/ui/Markdown'
 import { useQuery } from '@tanstack/react-query'
-import { useRouter } from '@tanstack/react-router'
+import { useBlocker, useRouter } from '@tanstack/react-router'
 import { useWorkflow } from './useWorkflow'
 import { runEventLabelKey } from './runStatus'
 import { WorkflowCanvas, paletteDragStart } from './WorkflowCanvas'
@@ -204,16 +204,37 @@ export function WorkflowPage() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [workflow.state.running])
 
-  // Warn before leaving with an active run or unsaved draft.
-  useEffect(() => {
-    if (!workflow.state.running && !workflow.state.dirty) return
-    const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault()
-      event.returnValue = ''
-    }
-    window.addEventListener('beforeunload', onBeforeUnload)
-    return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [workflow.state.running, workflow.state.dirty])
+  // SPA nav + tab close with active run or unsaved draft.
+  const stopForLeaveRef = useRef(workflow.stop)
+  stopForLeaveRef.current = workflow.stop
+  const leaveGuardRef = useRef({ running: false, dirty: false })
+  leaveGuardRef.current = {
+    running: workflow.state.running,
+    dirty: workflow.state.dirty,
+  }
+  const leaveGuardActive = workflow.state.running || workflow.state.dirty
+  useBlocker({
+    disabled: !leaveGuardActive,
+    enableBeforeUnload: leaveGuardActive,
+    shouldBlockFn: async () => {
+      const { running, dirty } = leaveGuardRef.current
+      if (!running && !dirty) return false
+      const leave = await new Promise<boolean>((resolve) => {
+        modal.confirm({
+          title: running ? t('leaveWhileRunningTitle') : t('leaveWhileDirtyTitle'),
+          content: running ? t('leaveWhileRunningContent') : t('leaveWhileDirtyContent'),
+          okText: running ? t('stopAndLeave') : t('discardAndLeave'),
+          cancelText: t('common:cancel'),
+          okButtonProps: { danger: true },
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        })
+      })
+      if (!leave) return true
+      if (running) stopForLeaveRef.current()
+      return false
+    },
+  })
 
   const runLogListRef = useRef<HTMLDivElement>(null)
   const inspectorPanelRef = useRef<HTMLElement | null>(null)
