@@ -15,6 +15,7 @@ from api.services.chat_session_service import (
     list_sessions_async,
     get_session_messages_async,
     get_session_owner_async,
+    get_session_summary_async,
     rename_session,
 )
 from api.services.audit_service import (
@@ -249,6 +250,24 @@ async def list_sessions(
         )
     except Exception as e:
         logger.error("获取会话列表失败: {}", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/chat/sessions/{session_id}/meta")
+async def get_session_meta(
+    session_id: str,
+    user: User = Depends(require_scope("sessions:read")),
+):
+    """Return one session list projection for deep-link headers and redirects."""
+    try:
+        result = await get_session_summary_async(session_id, actor=user)
+        if result is None:
+            raise HTTPException(status_code=404, detail="会话不存在")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("获取会话摘要失败: {}", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 

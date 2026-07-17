@@ -1,5 +1,5 @@
 import { infiniteQueryOptions, keepPreviousData, queryOptions } from '@tanstack/react-query'
-import { getHistory, getModels, listSessions } from './api'
+import { getHistory, getModels, getSessionMeta, listSessions } from './api'
 
 export const SESSION_PAGE_SIZE = 40
 
@@ -27,6 +27,7 @@ export const chatKeys = {
       },
     ] as const,
   history: (id: string) => ['chat', 'history', id] as const,
+  sessionMeta: (id: string) => ['chat', 'session-meta', id] as const,
   models: ['settings', 'models'] as const,
 }
 
@@ -68,5 +69,14 @@ export const historyQuery = (id: string, enabled = true) =>
     queryKey: chatKeys.history(id),
     queryFn: () => getHistory(id),
     enabled: Boolean(id) && enabled,
+  })
+
+/** One-session list projection when the id is outside loaded recents pages. */
+export const sessionMetaQuery = (id: string, enabled = true) =>
+  queryOptions({
+    queryKey: chatKeys.sessionMeta(id),
+    queryFn: () => getSessionMeta(id),
+    enabled: Boolean(id) && enabled,
+    staleTime: 30_000,
   })
 export const modelsQuery = () => queryOptions({ queryKey: chatKeys.models, queryFn: getModels, staleTime: 60_000 })

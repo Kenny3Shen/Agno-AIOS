@@ -441,8 +441,10 @@ export function ChatPage() {
   cancelRef.current = chat.cancel
   const [followLatest, setFollowLatest] = useState(true)
   const activeSession = useMemo(
-    () => (chat.sessions.data ?? []).find((session) => session.session_id === chat.sessionId),
-    [chat.sessionId, chat.sessions.data]
+    () =>
+      chat.activeSessionMeta ??
+      (chat.sessions.data ?? []).find((session) => session.session_id === chat.sessionId),
+    [chat.activeSessionMeta, chat.sessionId, chat.sessions.data]
   )
   const bubbles = chat.state.messages
     .filter((item) => item.content || item.role === 'assistant')

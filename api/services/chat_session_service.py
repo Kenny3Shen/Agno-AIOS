@@ -146,6 +146,30 @@ async def unarchive_session(
     return True
 
 
+async def get_session_summary_async(
+    session_id: str,
+    *,
+    actor: Any | None = None,
+) -> dict[str, Any] | None:
+    """Return one list-style session projection (title, type, workflow_id, …).
+
+    Used for deep links when the session is outside the loaded recents window.
+    """
+    await ensure_agno_postgres_tables_async()
+    row = await get_async_agno_postgres_db().get_session(session_id, deserialize=False)
+    if not isinstance(row, dict):
+        return None
+    if actor is not None:
+        assert_owned_resource(
+            actor,
+            owner_user_id=str(row.get("user_id") or ""),
+            resource_name="Session",
+        )
+    session_row = cast(dict[str, Any], row)
+    projected = _project_session_rows([session_row], include_runs=False, already_sorted=True)
+    return projected[0] if projected else None
+
+
 async def rename_session(
     session_id: str,
     title: str,

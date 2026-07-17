@@ -570,3 +570,41 @@ async def test_unarchive_session_clears_flags():
     assert "agno_aios_archived_by" not in metadata
     assert "agno_aios_archived_at" not in metadata
     assert metadata.get("title") == "keep-me"
+
+
+@pytest.mark.asyncio
+async def test_get_session_summary_projects_list_fields():
+    row = {
+        "session_id": "wf-deep",
+        "user_id": "u1",
+        "session_type": "workflow",
+        "workflow_id": "flow-9",
+        "agent_id": None,
+        "team_id": None,
+        "created_at": 10,
+        "updated_at": 20,
+        "runs": [{"input": "triage alert"}],
+        "metadata": {"agno_aios_title": "IR 分诊"},
+    }
+    db = AsyncFakeAgnoDb(rows=[], session_row=row)
+    with (
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
+    ):
+        summary = await chat_session_service.get_session_summary_async("wf-deep")
+    assert summary is not None
+    assert summary["session_id"] == "wf-deep"
+    assert summary["session_type"] == "workflow"
+    assert summary["workflow_id"] == "flow-9"
+    assert summary["title"] == "IR 分诊"
+    assert summary["preview"] == "triage alert"
+
+
+@pytest.mark.asyncio
+async def test_get_session_summary_returns_none_when_missing():
+    db = AsyncFakeAgnoDb(rows=[], session_row=None)
+    with (
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
+    ):
+        assert await chat_session_service.get_session_summary_async("missing") is None

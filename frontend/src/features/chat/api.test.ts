@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
-import { cancelRun, listSessions, renameSession, streamMessage } from './api'
+import { cancelRun, getSessionMeta, listSessions, renameSession, streamMessage } from './api'
 import { server } from '@/test/server'
 import { AUTH_TOKEN_STORAGE_KEY } from '@/shared/auth/storage'
 
@@ -70,6 +70,33 @@ describe('chat API', () => {
     )
 
     await expect(renameSession('s1', 'Investigation')).resolves.toMatchObject({ title: 'Investigation' })
+  })
+
+  it('loads one-session meta for deep links', async () => {
+    server.use(
+      http.get('/api/chat/sessions/deep-1/meta', () =>
+        HttpResponse.json({
+          session_id: 'deep-1',
+          session_type: 'workflow',
+          workflow_id: 'flow-1',
+          preview: 'run',
+          title: 'Deep WF',
+          created_at: 1,
+          updated_at: 2,
+        })
+      )
+    )
+    await expect(getSessionMeta('deep-1')).resolves.toMatchObject({
+      session_id: 'deep-1',
+      session_type: 'workflow',
+      workflow_id: 'flow-1',
+      title: 'Deep WF',
+    })
+  })
+
+  it('returns null when session meta is missing', async () => {
+    server.use(http.get('/api/chat/sessions/missing/meta', () => HttpResponse.json({ detail: '会话不存在' }, { status: 404 })))
+    await expect(getSessionMeta('missing')).resolves.toBeNull()
   })
 
   it('rejects a successful response that contains no stream content', async () => {

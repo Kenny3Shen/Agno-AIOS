@@ -1,5 +1,12 @@
 # 下一步工作
 
+## 已完成：Chat 深链 session meta 按 id 解析
+
+- 后端 `GET /api/chat/sessions/{id}/meta`：与列表同形投影（title / session_type / workflow_id / …），含归属校验。
+- 前端：列表未命中时 `sessionMetaQuery` 拉取；标题与 workflow→Studio/Trace 重定向不再依赖 recents 第一页。
+- history 在 meta 未就绪时不请求，避免把 workflow 会话当 agent 转录加载。
+- 新会话乐观写入与 rename 同步 `session-meta` 缓存；404 meta 软失败为 null。
+
 ## 已完成：Studio 发布前校验 + 运行中禁止改坐标
 
 - `publish()` 与 save/run 一致：校验草稿，失败高亮节点。

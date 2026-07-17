@@ -402,3 +402,29 @@ async def test_unarchive_session_route_returns_payload():
         result = await chat.unarchive_chat_session(session_id="session-1", user=current_actor)
     assert result == {"success": True, "archived": False}
     unarchive_session.assert_awaited_once_with("session-1", actor=current_actor)
+
+
+@pytest.mark.asyncio
+async def test_get_session_meta_returns_summary_for_actor():
+    current_actor = actor("u1")
+    payload = {
+        "session_id": "s-meta",
+        "session_type": "agent",
+        "title": "Deep link",
+        "preview": "hello",
+        "workflow_id": None,
+    }
+    with patch.object(chat, "get_session_summary_async", new_callable=AsyncMock) as summary:
+        summary.return_value = payload
+        result = await chat.get_session_meta("s-meta", user=current_actor)
+    assert result == payload
+    summary.assert_awaited_once_with("s-meta", actor=current_actor)
+
+
+@pytest.mark.asyncio
+async def test_get_session_meta_maps_missing_to_404():
+    with patch.object(chat, "get_session_summary_async", new_callable=AsyncMock) as summary:
+        summary.return_value = None
+        with pytest.raises(HTTPException) as missing:
+            await chat.get_session_meta("gone", user=actor("u1"))
+    assert missing.value.status_code == 404

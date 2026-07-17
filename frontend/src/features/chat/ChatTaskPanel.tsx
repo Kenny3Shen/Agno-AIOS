@@ -228,6 +228,15 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
           }
         },
       )
+      queryClient.setQueryData(chatKeys.sessionMeta(renameTarget.session_id), (current: ChatSession | null | undefined) => {
+        const titleValue = updated.title ?? title.trim()
+        if (current) return { ...current, ...updated, title: titleValue }
+        return {
+          ...renameTarget,
+          ...updated,
+          title: titleValue,
+        }
+      })
       toast.success(t('shell:conversations.renamed'))
       setRenameTarget(null)
     } catch (error) {

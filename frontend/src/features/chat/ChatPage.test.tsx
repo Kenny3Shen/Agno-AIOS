@@ -10,6 +10,7 @@ const chat = {
   state: { messages: [], input: '', requesting: false, error: null, selectedModelId: 'long', reasoningEffort: null, searchKnowledge: true, liveSearch: false, enableTools: true },
   sessionId: null as string | null,
   sessions: { data: [] },
+  activeSessionMeta: undefined,
   history: {
     data: [] as unknown[],
     isError: false,

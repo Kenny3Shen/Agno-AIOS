@@ -1,4 +1,4 @@
-import { apiFetch, jsonInit, requestJson } from '@/shared/api/client'
+import { ApiError, apiFetch, jsonInit, requestJson } from '@/shared/api/client'
 import { normalizePaginatedList, type ListPaginationMeta } from '@/shared/lib/pagination'
 import type { ModelConfigResponse, ReasoningEffort } from '@/shared/types/common'
 import type { ChatRunEvent, ChatSession } from './types'
@@ -75,6 +75,16 @@ export const listSessions = async (options: ListSessionsOptions = {}): Promise<S
 }
 export const getHistory = async (sessionId: string) =>
   normalizeMessages(await requestJson<unknown>(`/chat/sessions/${encodeURIComponent(sessionId)}`))
+/** List-style projection for one session (deep links outside loaded recents). */
+export const getSessionMeta = async (sessionId: string): Promise<ChatSession | null> => {
+  try {
+    const payload = await requestJson<unknown>(`/chat/sessions/${encodeURIComponent(sessionId)}/meta`)
+    return normalizeSession(payload)
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null
+    throw error
+  }
+}
 export const archiveSession = (sessionId: string) =>
   requestJson<{ success: boolean }>(`/chat/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' })
 export const unarchiveSession = (sessionId: string) =>

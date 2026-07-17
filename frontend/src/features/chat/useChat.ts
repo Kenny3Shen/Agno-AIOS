@@ -10,7 +10,7 @@ import {
   updateChatStreamRunId,
 } from './activeChatStream'
 import { ApiError } from '@/shared/api/client'
-import { chatKeys, historyQuery, modelsQuery, SESSION_PAGE_SIZE, sessionsQuery } from './queries'
+import { chatKeys, historyQuery, modelsQuery, SESSION_PAGE_SIZE, sessionMetaQuery, sessionsQuery } from './queries'
 import { chatReducer, defaultReasoningEffort, initialChatState, previousPrompt } from './utils'
 import type { SessionListResult } from './api'
 import type { ChatRunEvent, ChatSession, Message } from './types'
@@ -48,12 +48,19 @@ export function useChat() {
     ...sessionsQueryResult,
     data: sessionItems,
   }
-  const activeSessionMeta = useMemo(
+  const listSessionMeta = useMemo(
     () => (sessionId ? sessionItems.find((item) => item.session_id === sessionId) : undefined),
     [sessionId, sessionItems]
   )
+  // Deep links / older sessions may sit outside the loaded recents window.
+  const sessionMetaResult = useQuery(sessionMetaQuery(sessionId ?? '', Boolean(sessionId) && !listSessionMeta))
+  const activeSessionMeta = listSessionMeta ?? sessionMetaResult.data ?? undefined
   const isWorkflowSession = String(activeSessionMeta?.session_type || '').toLowerCase() === 'workflow'
-  const history = useQuery(historyQuery(sessionId ?? '', !isWorkflowSession))
+  // Wait for meta when missing from list so we do not load agent history for a workflow session.
+  const metaResolved = !sessionId || Boolean(listSessionMeta) || sessionMetaResult.isFetched
+  const history = useQuery(
+    historyQuery(sessionId ?? '', Boolean(sessionId) && metaResolved && !isWorkflowSession)
+  )
   const models = useQuery(modelsQuery())
 
   // URL session changed (sidebar, deep link, browser history): abort live SSE
@@ -170,6 +177,7 @@ export function useChat() {
         created_at: now,
         updated_at: now,
       }
+      queryClient.setQueryData(chatKeys.sessionMeta(activeSession), optimisticSession)
       // Seed active recents cache (same key as ChatTaskPanel) so the new thread appears immediately.
       queryClient.setQueryData<{ pages: SessionListResult[]; pageParams: number[] }>(
         chatKeys.sessions({}),
@@ -352,6 +360,7 @@ export function useChat() {
     dispatch,
     sessionId,
     sessions,
+    activeSessionMeta,
     history,
     models,
     selectedModel,
