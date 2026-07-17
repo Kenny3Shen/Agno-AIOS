@@ -4,6 +4,30 @@ T.A.I.S（Trinity AI Security）是一个面向安全运营的 AI 工作台。�
 
 旧版 Vue + Element Plus 位于 `vue` 分支；`master` 是 React 主线。
 
+## 内置 Agents
+
+Chat 与 Workflow 共用稳定 `agent_id` / executor `ref`（见 `api/services/agent_catalog.py`）：
+
+| id | 名称 | 默认能力 |
+|----|------|----------|
+| `security-operations` | 安全运营助手 | MCP + Local Skills + HITL + Knowledge |
+| `data-analysis` | 数据分析助手 | Calculator + Python/Polars + File/CSV 沙箱 + 可选只读 SQL（`TAIS_DATA_SQL_URL`）+ Knowledge 口径 + Reasoning |
+| `deep-research` | 深度研究助手 | Reasoning + Website + 可选 Web Search；Knowledge / Live Search；可审计 Markdown 备忘录 |
+| `safe-fallback` | 轻量分析助手 | 无工具（Workflow 兜底） |
+
+- Chat：`GET /api/chat/agents`，发消息可带 `agent_id`（multipart/JSON）。
+- Workflow Studio：步骤 executor 下拉同步上述 catalog。
+- **Agno Team（beta）**：`TAIS_ENABLE_AGNO_TEAM=1` 时 Chat 可选 `research-analysis-team`（coordinate）/ `research-analysis-route` / `research-analysis-broadcast`；成员事件映射为 ThoughtChain，队长内容为最终回答（含成员 Intermediate 无 agent_id 的防泄漏）；历史会话回放 `member_responses`；可用 xAI Grok 联调；多轮会话历史在客户端提前结束 SSE 时仍保持 COMPLETED；默认不启用以避免 HITL/MCP 语义混淆。
+
+### Agno 对齐（Data / Deep Research）
+
+- Workflow 模板：`deep-research-review`（scope → parallel 调研/分析 → memo）、`csv-quick-analysis`（profile → metrics → readout）。
+
+- **Data analysis**：遵循 [Data Agents](https://docs.agno.com/use-cases/data-agents/overview) — 先 introspect 后查询、答案附查询/步骤、Knowledge 承载业务口径、写边界靠只读连接（`TAIS_DATA_SQL_URL`）。
+- **Deep research**：遵循 [Deep Research](https://docs.agno.com/use-cases/deep-research/overview) — grounding、结构化可审计交付、多源对照。
+- **Team beta**：route / coordinate / broadcast 对应官方 orchestration patterns；标准化流水线继续用 Workflow Studio。
+
+
 ## 技术栈
 
 - 前端：React 19、TypeScript、Vite、TanStack Router/Query、Ant Design、Ant Design X、UnoCSS、Bun。

@@ -1,10 +1,11 @@
 import asyncio
 import re
+import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from inspect import isawaitable, iscoroutinefunction
 from pathlib import Path
-from typing import Any, AsyncIterator, Callable
+from typing import Any, AsyncIterator, Callable, Literal
 
 from agno.agent import Agent
 from agno.exceptions import ModelProviderError, RetryableModelProviderError
@@ -12,6 +13,7 @@ from agno.approval import approval as require_approval
 from agno.run.approval import acheck_and_apply_approval_resolution
 from agno.run import RunStatus
 from agno.run.agent import RunEvent
+from agno.run.team import TeamRunEvent
 from agno.run.requirement import RunRequirement
 from agno.session.summary import SessionSummaryManager
 from agno.skills import LocalSkills, Skills
@@ -31,6 +33,24 @@ from api.services.notification_service import (
     notify_admins_of_hitl_approval,
     notify_hitl_resume_failure,
     notify_submitter_of_hitl_resolution,
+)
+from api.services.agent_catalog import (
+    DEFAULT_AGENT_ID,
+    get_agent_profile,
+    profile_attaches_skills,
+    profile_connects_mcp,
+    resolve_chat_run_target,
+)
+from api.services.team_runtime import (
+    build_team,
+    get_team_profile,
+    is_team_id,
+    team_feature_enabled,
+)
+from api.services.agent_tools import (
+    build_tools_for_profile,
+    profile_uses_analysis_sandbox,
+    stage_media_into_analysis_dir,
 )
 from api.services.chat_settings_service import get_chat_settings_async
 from api.services.chat_run_events import (
@@ -74,10 +94,200 @@ PROMPT_DIR = Path(__file__).resolve().parents[1] / "agent" / "prompts"
 SECURITY_OPERATIONS_PROMPT = "security_operations.md"
 SECURITY_OPERATIONS_LITE_PROMPT = "security_operations_lite.md"
 SAFE_FALLBACK_PROMPT = "safe_fallback.md"
+DATA_ANALYSIS_PROMPT = "data_analysis.md"
+DEEP_RESEARCH_PROMPT = "deep_research.md"
 HITL_MCP_TOOL_PREFIX = "hitl_"
 RUNTIME_METADATA_KEY = "tais_runtime"
 
 RUNTIME_METADATA_VERSION = 1
+
+def _event_matches(event_type: str, name: str) -> bool:
+    """True if event_type equals Agent or Team enum value for ``name``."""
+    agent_ev = getattr(RunEvent, name, None)
+    team_ev = getattr(TeamRunEvent, name, None)
+    if agent_ev is not None and event_type == agent_ev.value:
+        return True
+    if team_ev is not None and event_type == team_ev.value:
+        return True
+    return False
+
+
+
+def _invoke_runner_cancel(runner: Any, run_id: str) -> bool:
+    """Cancel an Agno Agent/Team run.
+
+    Agno exposes ``cancel_run`` as a ``@staticmethod``; tests and wrappers may
+    expose it as an instance method. Try instance first, then type.
+    """
+    if not run_id:
+        return False
+    # Instance method / bound callable
+    inst = getattr(runner, "cancel_run", None)
+    if callable(inst):
+        try:
+            return bool(inst(run_id))
+        except TypeError:
+            # Unbound-like callable that expects (self, run_id) but was already bound wrong.
+            pass
+    cls_fn = getattr(type(runner), "cancel_run", None)
+    if callable(cls_fn):
+        try:
+            return bool(cls_fn(run_id))
+        except TypeError:
+            try:
+                return bool(cls_fn(runner, run_id))
+            except Exception:
+                return False
+    return False
+
+
+def _is_member_agent_event(event: Any) -> bool:
+    """Member agent events during a Team run.
+
+    Fully-identified member events have ``agent_id`` + ``parent_run_id`` and no
+    ``team_id``. Agno also converts member ``RunContent`` into
+    ``IntermediateRunContentEvent(content=...)`` (identity fields omitted) but
+    still stamps ``parent_run_id`` when the Team forwards the stream — treat
+    those as member so content never leaks into the leader answer.
+    """
+    team_id = str(event_value(event, "team_id", "") or "")
+    if team_id:
+        return False
+    parent = str(event_value(event, "parent_run_id", "") or "")
+    return bool(parent)
+
+
+def _member_label(
+    event: Any,
+    *,
+    fallback: tuple[str, str] | None = None,
+) -> tuple[str, str]:
+    member_id = str(event_value(event, "agent_id", "") or "").strip()
+    if member_id:
+        member_name = (
+            str(event_value(event, "agent_name", "") or member_id).strip() or member_id
+        )
+        return member_id, member_name
+    if fallback:
+        return fallback
+    return "member", "member"
+
+
+def _resolve_member_identity(
+    event: Any,
+    *,
+    by_run: dict[str, tuple[str, str]],
+    last: list[tuple[str, str] | None],
+) -> tuple[str, str]:
+    """Resolve member id/name; remember last seen for identity-stripped deltas.
+
+    Agno member Intermediate content often lacks ``agent_id``; map via
+    ``run_id`` or the most recently observed member in this stream.
+    """
+    run_id = str(event_value(event, "run_id", "") or "").strip()
+    explicit_id = str(event_value(event, "agent_id", "") or "").strip()
+    if explicit_id:
+        name = (
+            str(event_value(event, "agent_name", "") or explicit_id).strip()
+            or explicit_id
+        )
+        identity = (explicit_id, name)
+        last[0] = identity
+        if run_id:
+            by_run[run_id] = identity
+        return identity
+    if run_id and run_id in by_run:
+        identity = by_run[run_id]
+        last[0] = identity
+        return identity
+    if last[0] is not None:
+        if run_id:
+            by_run[run_id] = last[0]
+        return last[0]
+    return "member", "member"
+
+
+def _should_emit_member_thought(
+    last_emit: dict[str, tuple[str, float]],
+    *,
+    member_id: str,
+    summary: str,
+    force: bool = False,
+    min_interval_s: float = 0.25,
+    min_growth: int = 12,
+) -> bool:
+    """Throttle member thought.update while streaming token deltas.
+
+    Frontend merges by thought id, but unbounded SSE still wastes bandwidth
+    (broadcast can emit 100+ content deltas per member).
+    """
+    now = time.monotonic()
+    summary = (summary or "").strip()
+    prev = last_emit.get(member_id)
+    if force or prev is None:
+        last_emit[member_id] = (summary, now)
+        return True
+    prev_summary, prev_t = prev
+    if summary == prev_summary:
+        return False
+    grew = len(summary) - len(prev_summary)
+    if (now - prev_t) >= min_interval_s or grew >= min_growth:
+        last_emit[member_id] = (summary, now)
+        return True
+    return False
+
+
+
+def _append_member_content_delta(
+    acc: dict[str, str],
+    *,
+    member_id: str,
+    delta: str,
+    max_len: int = 280,
+) -> str:
+    """Accumulate member stream deltas into a rolling ThoughtChain summary."""
+    if not delta:
+        return acc.get(member_id, "")
+    prev = acc.get(member_id, "")
+    # If provider sends growing cumulative snapshots, avoid double-append.
+    if prev and delta.startswith(prev):
+        merged = delta
+    elif prev and prev.endswith(delta):
+        merged = prev
+    else:
+        merged = prev + delta
+    if len(merged) > max_len:
+        merged = merged[-max_len:]
+    acc[member_id] = merged
+    return merged
+
+
+
+
+def _project_tool_update(
+    event: Any,
+    status: Literal["running", "completed", "error"],
+    *,
+    include_raw_io: bool = False,
+) -> dict[str, Any]:
+    """Project tool step; prefix member identity for Team member tools."""
+    projected = tool_update(
+        event_value(event, "tool"),
+        status,
+        include_raw_io=include_raw_io,
+    )
+    if not _is_member_agent_event(event):
+        return projected
+    member_id, member_name = _member_label(event)
+    raw_id = str(projected.get("id") or "tool")
+    raw_name = str(projected.get("name") or "工具调用")
+    projected["id"] = f"member:{member_id}:{raw_id}"
+    projected["name"] = f"[{member_name}] {raw_name}"
+    projected["member_id"] = member_id
+    projected["member_name"] = member_name
+    return projected
+
+
 
 # Chat skill attach: align with Workflow step skills[] (enabled ∩ wanted).
 # None = all enabled; [] = none; non-empty = filter by skill dir/metadata name.
@@ -265,13 +475,23 @@ _SKILL_TO_MCP_PREFIXES: dict[str, tuple[str, ...]] = {
 }
 
 
-def should_connect_mcp(skill_names: list[str] | None, *, enable_tools: bool) -> bool:
-    """Skip MCP session when tools are off or this turn attaches no skills at all.
+def should_connect_mcp(
+    skill_names: list[str] | None,
+    *,
+    enable_tools: bool,
+    agent_id: str | None = None,
+) -> bool:
+    """Skip MCP session when tools are off, agent has no MCP, or no skills attached.
 
     Trivial / non-ops turns set ``skill_names=[]``; connecting would still inject
-    every MCP tool schema into the model context.
+    every MCP tool schema into the model context. Specialist agents
+    (data-analysis / deep-research) never open MCP.
     """
     if not enable_tools:
+        return False
+    if is_team_id(agent_id):
+        return False
+    if not profile_connects_mcp(agent_id):
         return False
     if skill_names is not None and len(skill_names) == 0:
         return False
@@ -346,7 +566,7 @@ def filter_mcp_tools_by_prefixes(
 
 @dataclass(frozen=True)
 class SecurityRunRequest:
-    """Security Operations Assistant 的一次 Run 请求。"""
+    """一次 Chat Agent Run 请求（默认安全运营；可切换数据分析/深度研究）。"""
 
     message: str
     session_id: str | None
@@ -359,6 +579,8 @@ class SecurityRunRequest:
     search_knowledge: bool = True
     live_search: bool | None = None
     enable_tools: bool = True
+    # Built-in agent profile id (security-operations | data-analysis | deep-research).
+    agent_id: str = DEFAULT_AGENT_ID
     # None = all enabled skills; list = enabled ∩ names (Workflow-style).
     skill_names: list[str] | None = None
     # Agno media for this turn (images / files / audio / videos).
@@ -383,6 +605,7 @@ class SecurityRunRequest:
         search_knowledge: bool = True,
         live_search: bool | None = None,
         enable_tools: bool = True,
+        agent_id: str | None = None,
         skill_names: list[str] | None = None,
         images: tuple[Any, ...] | list[Any] | None = None,
         files: tuple[Any, ...] | list[Any] | None = None,
@@ -392,8 +615,11 @@ class SecurityRunRequest:
         *,
         infer_skills: bool = True,
     ) -> "SecurityRunRequest":
-        if not enable_tools:
-            # Tools-off is an explicit lite path; do not attach or invent skill filters.
+        kind, resolved_agent = resolve_chat_run_target(agent_id)
+        # Teams and specialist agents never attach security Local Skills.
+        attaches_skills = kind == "agent" and profile_attaches_skills(resolved_agent)
+        if not enable_tools or not attaches_skills:
+            # Tools-off, team, or specialist agents: no Local Skills attach.
             resolved_skills: list[str] | None = []
         else:
             resolved_skills = skill_names
@@ -411,6 +637,7 @@ class SecurityRunRequest:
             search_knowledge=search_knowledge,
             live_search=live_search,
             enable_tools=enable_tools,
+            agent_id=resolved_agent,
             skill_names=resolved_skills,
             images=tuple(images or ()),
             files=tuple(files or ()),
@@ -426,6 +653,7 @@ class SecurityRunRequest:
     def runtime_metadata(self) -> dict[str, object]:
         payload: dict[str, object] = {
             "version": RUNTIME_METADATA_VERSION,
+            "agent_id": str(self.agent_id or DEFAULT_AGENT_ID),
             "model_id": self.model_id or "",
             "reasoning_effort": self.reasoning_effort or "",
             "knowledge_owner_user_id": self.knowledge_owner_user_id or "",
@@ -483,6 +711,7 @@ class SecurityRunRequest:
             search_knowledge=bool(context.get("search_knowledge", True)),
             live_search=live_search,
             enable_tools=bool(context.get("enable_tools", True)),
+            agent_id=str(context.get("agent_id") or DEFAULT_AGENT_ID),
             skill_names=skill_names,
             infer_skills=False,
         )
@@ -648,7 +877,12 @@ class SecurityRunRuntime:
         if agent is None:
             # Interrupted retry backoff / stream before agent.cancel_run is available.
             return cancel_event is not None
-        return bool(agent.cancel_run(run_id)) or cancel_event is not None
+        cancelled = False
+        try:
+            cancelled = _invoke_runner_cancel(agent, run_id)
+        except Exception as exc:  # noqa: BLE001 — cancel is best-effort
+            logger.debug("cancel_run on runner failed run_id={}: {}", run_id, exc)
+        return cancelled or cancel_event is not None
 
     @staticmethod
     def _is_security_chat_approval(approval_record: dict[str, Any]) -> bool:
@@ -957,16 +1191,74 @@ class SecurityRunRuntime:
         retry_waiter: asyncio.Task[dict[str, Any] | None] | None = asyncio.create_task(
             retry_queue.get(), name="security-run-retry-wait"
         )
+        cancelled_emitted = False
+        # True after leader terminal events so finally does not cancel Agno mid-persist.
+        # Early client disconnect after run.completed used to mark runs CANCELLED and
+        # break multi-turn Team history (get_messages skips cancelled runs).
+        run_finished_naturally = False
+        # member_id -> (last_summary, monotonic_ts) for thought.update throttle
+        member_thought_emit: dict[str, tuple[str, float]] = {}
+        # member_id -> accumulated streaming content (Agno content events are deltas)
+        member_content_acc: dict[str, str] = {}
+        # member run_id -> (agent_id, agent_name); last explicit member for stripped deltas
+        member_identity_by_run: dict[str, tuple[str, str]] = {}
+        last_member_identity: list[tuple[str, str] | None] = [None]
+
+        def _request_runner_cancel() -> None:
+            if not active_run_id:
+                return
+            try:
+                _invoke_runner_cancel(agent, active_run_id)
+            except Exception:  # noqa: BLE001
+                pass
+
         try:
             while True:
-                wait_set = {t for t in (agent_waiter, retry_waiter) if t is not None}
+                if stream_cancel.is_set():
+                    if not producer.done():
+                        producer.cancel()
+                    _request_runner_cancel()
+                    if not cancelled_emitted:
+                        cancelled_emitted = True
+                        yield ChatRunEvent(
+                            "run.cancelled",
+                            {
+                                "run_id": active_run_id,
+                                "reason": "已停止生成",
+                            },
+                        )
+                    break
+                wait_set: set[asyncio.Task[Any]] = {
+                    t for t in (agent_waiter, retry_waiter) if t is not None
+                }
+                cancel_waiter: asyncio.Task[Any] = asyncio.create_task(
+                    stream_cancel.wait(), name="security-run-cancel-wait"
+                )
+                wait_set.add(cancel_waiter)
                 done, _pending = await asyncio.wait(
                     wait_set, return_when=asyncio.FIRST_COMPLETED
                 )
+                if cancel_waiter not in done:
+                    cancel_waiter.cancel()
+                else:
+                    # User/stop requested: stop producer and emit one cancelled event.
+                    if not producer.done():
+                        producer.cancel()
+                    _request_runner_cancel()
+                    if not cancelled_emitted:
+                        cancelled_emitted = True
+                        yield ChatRunEvent(
+                            "run.cancelled",
+                            {
+                                "run_id": active_run_id,
+                                "reason": "已停止生成",
+                            },
+                        )
+                    break
                 if retry_waiter is not None and retry_waiter in done:
                     retry_info = retry_waiter.result()
                     retry_waiter = asyncio.create_task(retry_queue.get(), name="security-run-retry-wait")
-                    if isinstance(retry_info, dict):
+                    if isinstance(retry_info, dict) and not stream_cancel.is_set():
                         yield _retry_event(retry_info)
                 if agent_waiter is None or agent_waiter not in done:
                     continue
@@ -978,23 +1270,38 @@ class SecurityRunRuntime:
                     agent_waiter = None
                     # Cancel during model retry backoff (or agent.arun) → clean cancelled SSE.
                     if isinstance(payload, asyncio.CancelledError) or stream_cancel.is_set():
-                        yield ChatRunEvent(
-                            "run.cancelled",
-                            {
-                                "run_id": active_run_id,
-                                "reason": "已停止生成",
-                            },
-                        )
+                        _request_runner_cancel()
+                        if not cancelled_emitted:
+                            cancelled_emitted = True
+                            yield ChatRunEvent(
+                                "run.cancelled",
+                                {
+                                    "run_id": active_run_id,
+                                    "reason": "已停止生成",
+                                },
+                            )
                         break
                     raise payload
                 agent_waiter = asyncio.create_task(agent_queue.get(), name="security-run-agent-wait")
                 event = payload
                 event_type = str(event_value(event, "event", ""))
                 run_id = str(event_value(event, "run_id", "") or "")
-                if run_id:
+                is_member_event = _is_member_agent_event(event)
+                member_id = ""
+                member_name = ""
+                if is_member_event:
+                    member_id, member_name = _resolve_member_identity(
+                        event,
+                        by_run=member_identity_by_run,
+                        last=last_member_identity,
+                    )
+                display_run_id = active_run_id or run_id
+                if run_id and not is_member_event:
                     active_run_id = run_id
+                    display_run_id = run_id
                     # Bind cancel early so POST /cancel works during model retry
                     # even if the client cancels before we fully process run.started.
+                    # Team member runs share parent_run_id; only register leader/top-level.
                     if run_id not in registered_run_ids:
                         registered_run_ids.add(run_id)
                         self.register_run(
@@ -1003,8 +1310,8 @@ class SecurityRunRuntime:
                             agent=agent,
                             cancel_event=stream_cancel,
                         )
-                if event_type == RunEvent.run_started.value:
-                    if run_id and run_id not in registered_run_ids:
+                if _event_matches(event_type, "run_started"):
+                    if run_id and not is_member_event and run_id not in registered_run_ids:
                         registered_run_ids.add(run_id)
                         self.register_run(
                             user_id=request.agent_user_id,
@@ -1012,14 +1319,34 @@ class SecurityRunRuntime:
                             agent=agent,
                             cancel_event=stream_cancel,
                         )
+                    if is_member_event and show_thought_chain:
+                        yield ChatRunEvent(
+                            "thought.update",
+                            {
+                                "run_id": display_run_id or run_id,
+                                "thought": {
+                                    "id": f"member:{member_id}",
+                                    "type": "member",
+                                    "title": f"成员 · {member_name}",
+                                    "status": "running",
+                                    "summary": "开始执行",
+                                },
+                            },
+                        )
+                        continue
                     lean = is_lean_tool_surface(
                         request.skill_names,
                         enable_tools=bool(request.enable_tools),
                     )
                     # Prefer the agent flag set in _build_security_agent (lean skips KB).
+                    # Teams may not mirror Agent.search_knowledge the same way.
                     search_knowledge_active = bool(
                         getattr(agent, "search_knowledge", False)
                     )
+                    if is_team_id(request.agent_id):
+                        search_knowledge_active = bool(
+                            request.search_knowledge and request.enable_tools
+                        )
                     yield ChatRunEvent(
                         "run.started",
                         {
@@ -1034,6 +1361,7 @@ class SecurityRunRuntime:
                             "provider": str(
                                 event_value(event, "model_provider", "") or ""
                             ),
+                            "agent_id": str(request.agent_id or DEFAULT_AGENT_ID),
                             "enable_tools": bool(request.enable_tools),
                             "lean_mode": lean,
                             "search_knowledge": search_knowledge_active,
@@ -1042,13 +1370,76 @@ class SecurityRunRuntime:
                             else None,
                         },
                     )
-                elif event_type == RunEvent.run_content.value:
+                elif _event_matches(event_type, "run_intermediate_content"):
+                    # Leader intermediate drafts -> content.delta; member intermediate
+                    # (often identity-stripped) -> ThoughtChain only.
                     content = event_value(event, "content")
-                    if isinstance(content, str) and content:
-                        yield ChatRunEvent(
-                            "content.delta", {"run_id": run_id, "delta": content}
-                        )
-                elif event_type == RunEvent.reasoning_content_delta.value:
+                    if not (isinstance(content, str) and content):
+                        continue
+                    if is_member_event:
+                        if show_thought_chain:
+                            summary = _append_member_content_delta(
+                                member_content_acc,
+                                member_id=member_id,
+                                delta=content,
+                            )
+                            if _should_emit_member_thought(
+                                member_thought_emit,
+                                member_id=member_id,
+                                summary=summary,
+                            ):
+                                yield ChatRunEvent(
+                                    "thought.update",
+                                    {
+                                        "run_id": display_run_id or run_id,
+                                        "thought": {
+                                            "id": f"member:{member_id}",
+                                            "type": "member",
+                                            "title": f"成员 · {member_name}",
+                                            "status": "running",
+                                            "summary": summary,
+                                        },
+                                    },
+                                )
+                        continue
+                    yield ChatRunEvent(
+                        "content.delta", {"run_id": run_id, "delta": content}
+                    )
+                elif _event_matches(event_type, "run_content"):
+                    content = event_value(event, "content")
+                    if not (isinstance(content, str) and content):
+                        continue
+                    # Team member streams: show as thought chain, not final answer.
+                    if is_member_event:
+                        if show_thought_chain:
+                            summary = _append_member_content_delta(
+                                member_content_acc,
+                                member_id=member_id,
+                                delta=content,
+                            )
+                            if _should_emit_member_thought(
+                                member_thought_emit,
+                                member_id=member_id,
+                                summary=summary,
+                            ):
+                                yield ChatRunEvent(
+                                    "thought.update",
+                                    {
+                                        "run_id": display_run_id or run_id,
+                                        "thought": {
+                                            "id": f"member:{member_id}",
+                                            "type": "member",
+                                            "title": f"成员 · {member_name}",
+                                            "status": "running",
+                                            "summary": summary,
+                                        },
+                                    },
+                                )
+                        continue
+                    yield ChatRunEvent(
+                        "content.delta", {"run_id": run_id, "delta": content}
+                    )
+                elif _event_matches(event_type, "reasoning_content_delta"):
                     if show_raw_reasoning:
                         reasoning = event_value(
                             event, "content", event_value(event, "reasoning", "")
@@ -1058,69 +1449,146 @@ class SecurityRunRuntime:
                                 "reasoning.delta",
                                 {"run_id": run_id, "delta": reasoning},
                             )
-                elif event_type in {
-                    RunEvent.reasoning_started.value,
-                    RunEvent.reasoning_step.value,
-                    RunEvent.reasoning_completed.value,
-                }:
+                elif (
+                    _event_matches(event_type, "reasoning_started")
+                    or _event_matches(event_type, "reasoning_step")
+                    or _event_matches(event_type, "reasoning_completed")
+                ):
                     if show_thought_chain:
-                        completed = event_type == RunEvent.reasoning_completed.value
+                        completed = _event_matches(event_type, "reasoning_completed")
                         summary = event_value(
                             event, "message", event_value(event, "content", "")
                         )
+                        summary_text = str(summary or "正在推理")[:280]
+                        if is_member_event:
+                            thought_id = f"member:{member_id}:reasoning"
+                            title = f"成员推理 · {member_name}"
+                            # Throttle reasoning_step noise; always emit start/complete.
+                            if (
+                                _event_matches(event_type, "reasoning_step")
+                                and not _should_emit_member_thought(
+                                    member_thought_emit,
+                                    member_id=f"{member_id}:reasoning",
+                                    summary=summary_text,
+                                )
+                            ):
+                                continue
+                            if _event_matches(event_type, "reasoning_completed"):
+                                _should_emit_member_thought(
+                                    member_thought_emit,
+                                    member_id=f"{member_id}:reasoning",
+                                    summary=summary_text,
+                                    force=True,
+                                )
+                        else:
+                            thought_id = "reasoning"
+                            title = "模型推理"
                         yield ChatRunEvent(
                             "thought.update",
                             {
-                                "run_id": run_id,
+                                "run_id": display_run_id or run_id,
                                 "thought": {
-                                    "id": "reasoning",
+                                    "id": thought_id,
                                     "type": "reasoning",
-                                    "title": "模型推理",
+                                    "title": title,
                                     "status": "completed" if completed else "running",
-                                    "summary": str(summary or "正在推理")[:280],
+                                    "summary": summary_text,
                                 },
                             },
                         )
-                elif event_type == RunEvent.tool_call_started.value:
+                elif (
+                    _event_matches(event_type, "task_created")
+                    or _event_matches(event_type, "task_updated")
+                    or _event_matches(event_type, "task_iteration_started")
+                    or _event_matches(event_type, "task_iteration_completed")
+                ):
+                    if not show_thought_chain:
+                        continue
+                    # Agno Team tasks mode (and some coordinate plans) emit task events.
+                    task_id = str(
+                        event_value(event, "task_id", "")
+                        or event_value(event, "id", "")
+                        or ""
+                    ).strip()
+                    title = str(
+                        event_value(event, "title", "")
+                        or event_value(event, "task_summary", "")
+                        or ""
+                    ).strip()
+                    desc = str(event_value(event, "description", "") or "").strip()
+                    status_raw = str(event_value(event, "status", "") or "").strip().lower()
+                    if _event_matches(event_type, "task_iteration_started"):
+                        iteration = event_value(event, "iteration", 0)
+                        max_it = event_value(event, "max_iterations", 0)
+                        title = title or f"任务迭代 {iteration}/{max_it}"
+                        status = "running"
+                        thought_id = f"task-iter:{iteration}"
+                    elif _event_matches(event_type, "task_iteration_completed"):
+                        iteration = event_value(event, "iteration", 0)
+                        max_it = event_value(event, "max_iterations", 0)
+                        summary = event_value(event, "task_summary")
+                        title = title or f"任务迭代 {iteration}/{max_it} 完成"
+                        if isinstance(summary, str) and summary.strip():
+                            desc = summary.strip()
+                        status = "completed"
+                        thought_id = f"task-iter:{iteration}"
+                    else:
+                        thought_id = f"task:{task_id or title or 'item'}"
+                        if status_raw in {"completed", "done", "success"}:
+                            status = "completed"
+                        elif status_raw in {"failed", "error", "blocked", "cancelled", "canceled"}:
+                            status = "error"
+                        elif status_raw in {"in_progress", "running", "pending"}:
+                            status = "running"
+                        else:
+                            status = (
+                                "running"
+                                if _event_matches(event_type, "task_created")
+                                else "completed"
+                            )
+                        if not title:
+                            title = "团队任务"
+                    yield ChatRunEvent(
+                        "thought.update",
+                        {
+                            "run_id": display_run_id or run_id,
+                            "thought": {
+                                "id": thought_id,
+                                "type": "task",
+                                "title": title[:120],
+                                "status": status,
+                                "summary": (desc or title)[:280],
+                            },
+                        },
+                    )
+                elif _event_matches(event_type, "tool_call_started"):
                     if show_thought_chain:
                         yield ChatRunEvent(
                             "tool.update",
                             {
-                                "run_id": run_id,
-                                "tool": tool_update(
-                                    event_value(event, "tool"),
-                                    "running",
-                                    include_raw_io=show_raw_tool_io,
-                                ),
+                                "run_id": display_run_id or run_id,
+                                "tool": _project_tool_update(event, "running", include_raw_io=show_raw_tool_io),
                             },
                         )
-                elif event_type == RunEvent.tool_call_completed.value:
+                elif _event_matches(event_type, "tool_call_completed"):
                     if show_thought_chain:
                         yield ChatRunEvent(
                             "tool.update",
                             {
-                                "run_id": run_id,
-                                "tool": tool_update(
-                                    event_value(event, "tool"),
-                                    "completed",
-                                    include_raw_io=show_raw_tool_io,
-                                ),
+                                "run_id": display_run_id or run_id,
+                                "tool": _project_tool_update(event, "completed", include_raw_io=show_raw_tool_io),
                             },
                         )
-                elif event_type == RunEvent.tool_call_error.value:
+                elif _event_matches(event_type, "tool_call_error"):
                     if show_thought_chain:
                         yield ChatRunEvent(
                             "tool.update",
                             {
-                                "run_id": run_id,
-                                "tool": tool_update(
-                                    event_value(event, "tool"),
-                                    "error",
-                                    include_raw_io=show_raw_tool_io,
-                                ),
+                                "run_id": display_run_id or run_id,
+                                "tool": _project_tool_update(event, "error", include_raw_io=show_raw_tool_io),
                             },
                         )
-                elif event_type == RunEvent.run_paused.value:
+                elif _event_matches(event_type, "run_paused"):
                     paused = paused_payload(event)
                     if not paused.get("session_id"):
                         paused["session_id"] = str(request.session_id or "")
@@ -1136,12 +1604,13 @@ class SecurityRunRuntime:
                             run_id=run_id,
                             session_id=session_id,
                         )
+                    run_finished_naturally = True
                     yield ChatRunEvent("run.paused", paused)
                     self.unregister_run(
                         user_id=request.agent_user_id, run_id=run_id
                     )
                     registered_run_ids.discard(run_id)
-                elif event_type == RunEvent.run_continued.value:
+                elif _event_matches(event_type, "run_continued"):
                     yield ChatRunEvent(
                         "run.continued",
                         {
@@ -1153,7 +1622,34 @@ class SecurityRunRuntime:
                             ),
                         },
                     )
-                elif event_type == RunEvent.run_completed.value:
+                elif _event_matches(event_type, "run_completed"):
+                    if is_member_event:
+                        if show_thought_chain:
+                            summary = event_value(event, "content")
+                            if not isinstance(summary, str) or not str(summary).strip():
+                                summary = member_content_acc.get(member_id) or "完成"
+                            summary_text = str(summary)[:280]
+                            member_content_acc.pop(member_id, None)
+                            _should_emit_member_thought(
+                                member_thought_emit,
+                                member_id=member_id,
+                                summary=summary_text,
+                                force=True,
+                            )
+                            yield ChatRunEvent(
+                                "thought.update",
+                                {
+                                    "run_id": display_run_id or run_id,
+                                    "thought": {
+                                        "id": f"member:{member_id}",
+                                        "type": "member",
+                                        "title": f"成员 · {member_name}",
+                                        "status": "completed",
+                                        "summary": summary_text,
+                                    },
+                                },
+                            )
+                        continue
                     sources = source_items(
                         event_value(event, "citations")
                     ) or source_items(event_value(event, "references"))
@@ -1164,12 +1660,32 @@ class SecurityRunRuntime:
                     completed = completed_payload(event)
                     if not completed.get("session_id"):
                         completed["session_id"] = str(request.session_id or "")
+                    # Set before yield: consumer may close the stream at this event.
+                    run_finished_naturally = True
                     yield ChatRunEvent("run.completed", completed)
                     self.unregister_run(
                         user_id=request.agent_user_id, run_id=run_id
                     )
                     registered_run_ids.discard(run_id)
-                elif event_type == RunEvent.run_cancelled.value:
+                elif _event_matches(event_type, "run_cancelled"):
+                    if is_member_event:
+                        if show_thought_chain:
+                            member_content_acc.pop(member_id, None)
+                            yield ChatRunEvent(
+                                "thought.update",
+                                {
+                                    "run_id": display_run_id or run_id,
+                                    "thought": {
+                                        "id": f"member:{member_id}",
+                                        "type": "member",
+                                        "title": f"成员 · {member_name}",
+                                        "status": "error",
+                                        "summary": "成员运行已取消",
+                                    },
+                                },
+                            )
+                        continue
+                    run_finished_naturally = True
                     yield ChatRunEvent(
                         "run.cancelled",
                         {
@@ -1184,7 +1700,7 @@ class SecurityRunRuntime:
                         user_id=request.agent_user_id, run_id=run_id
                     )
                     registered_run_ids.discard(run_id)
-                elif event_type == RunEvent.run_error.value:
+                elif _event_matches(event_type, "run_error"):
                     detail = (
                         event_value(event, "content")
                         or event_value(event, "error")
@@ -1192,6 +1708,25 @@ class SecurityRunRuntime:
                         or "安全分析运行失败"
                     )
                     detail_text = str(detail).strip() or "安全分析运行失败"
+                    # Team member failure: surface under ThoughtChain; do not fail the whole run.
+                    if is_member_event:
+                        if show_thought_chain:
+                            member_content_acc.pop(member_id, None)
+                            yield ChatRunEvent(
+                                "thought.update",
+                                {
+                                    "run_id": display_run_id or run_id,
+                                    "thought": {
+                                        "id": f"member:{member_id}",
+                                        "type": "member",
+                                        "title": f"成员 · {member_name}",
+                                        "status": "error",
+                                        "summary": detail_text[:280],
+                                    },
+                                },
+                            )
+                        continue
+                    run_finished_naturally = True
                     yield ChatRunEvent(
                         "run.failed",
                         {
@@ -1206,20 +1741,37 @@ class SecurityRunRuntime:
                     )
                     registered_run_ids.discard(run_id)
         finally:
-            # Ensure retry backoff / in-flight model calls stop when the SSE
-            # consumer disconnects or the stream ends.
-            stream_cancel.set()
+            # User cancel was requested via stream_cancel Event before finally.
+            user_stop = stream_cancel.is_set()
+            # Only force-cancel Agno when the client disconnects / user stops.
+            # Natural completion must let the producer finish so status stays COMPLETED
+            # (Team multi-turn history skips CANCELLED runs).
+            if not run_finished_naturally:
+                stream_cancel.set()
             if owner_user_id:
                 current = self._user_stream_cancels.get(owner_user_id)
                 if current is stream_cancel:
                     self._user_stream_cancels.pop(owner_user_id, None)
             restore_retry()
             if not producer.done():
-                producer.cancel()
-                try:
-                    await producer
-                except asyncio.CancelledError:
-                    pass
+                if run_finished_naturally and not user_stop:
+                    try:
+                        await asyncio.wait_for(producer, timeout=60)
+                    except (asyncio.TimeoutError, asyncio.CancelledError):
+                        producer.cancel()
+                        try:
+                            await producer
+                        except asyncio.CancelledError:
+                            pass
+                        _request_runner_cancel()
+                else:
+                    producer.cancel()
+                    try:
+                        await producer
+                    except asyncio.CancelledError:
+                        pass
+                    if user_stop or not run_finished_naturally:
+                        _request_runner_cancel()
             for waiter in (agent_waiter, retry_waiter):
                 if waiter is not None and not waiter.done():
                     waiter.cancel()
@@ -1263,11 +1815,20 @@ class SecurityRunRuntime:
         mcp_tools: Any | None,
         request: SecurityRunRequest,
     ) -> Agent:
+        profile = get_agent_profile(request.agent_id)
+        agent_id = str(profile["id"])
         enable_tools = bool(request.enable_tools)
-        tools = [mcp_tools] if mcp_tools is not None else []
+        attaches_skills = bool(profile.get("attach_skills")) and enable_tools
+        tools: list[Any] = []
+        if enable_tools:
+            if request.files and profile_uses_analysis_sandbox(profile):
+                stage_media_into_analysis_dir(request.files)
+            tools.extend(build_tools_for_profile(profile))
+            if mcp_tools is not None:
+                tools.append(mcp_tools)
         skills = (
             await self._build_enabled_skills(request.skill_names)
-            if enable_tools
+            if attaches_skills
             else None
         )
         # Lean surface when tools off or intent filter attached nothing.
@@ -1276,10 +1837,18 @@ class SecurityRunRuntime:
         # not inject long-term memories into the model context (still may
         # write memories after the run when memory_enabled).
         tool_surface = bool(tools) or skills is not None
-        # Knowledge / live search are part of the full tool surface; lean
-        # turns ignore the request flags so trivial chat stays cheap.
-        search_knowledge = bool(request.search_knowledge) and tool_surface
-        live_search = request.live_search if tool_surface else False
+        # Knowledge / live search are part of the full tool surface for security;
+        # specialist agents keep explicit UI toggles even without MCP.
+        specialist = agent_id != DEFAULT_AGENT_ID
+        surface_active = tool_surface or (specialist and enable_tools)
+        search_knowledge = bool(request.search_knowledge) and surface_active
+        # Live search: prefer profile default when client leaves null.
+        if not surface_active:
+            live_search = False
+        elif request.live_search is not None:
+            live_search = request.live_search
+        else:
+            live_search = bool(profile.get("prefer_live_search"))
         model = await self._build_model(
             request.model_id,
             request.reasoning_effort,
@@ -1288,30 +1857,34 @@ class SecurityRunRuntime:
         knowledge = None
         if search_knowledge:
             knowledge = await _maybe_await(self.dependencies.get_async_knowledge_base())
-        prompt_name = (
-            SECURITY_OPERATIONS_PROMPT if tool_surface else SECURITY_OPERATIONS_LITE_PROMPT
-        )
+        if agent_id == DEFAULT_AGENT_ID:
+            prompt_name = (
+                str(profile.get("prompt_full") or SECURITY_OPERATIONS_PROMPT)
+                if surface_active
+                else str(profile.get("prompt_lite") or SECURITY_OPERATIONS_LITE_PROMPT)
+            )
+        else:
+            prompt_name = str(profile.get("prompt_full") or profile.get("prompt_lite") or "")
         has_session = bool(str(request.session_id or "").strip())
-        if tool_surface:
-            history_runs = 5
+        if surface_active:
+            history_runs = int(profile.get("history_runs") or 5)
             add_history = True
             add_datetime = True
         else:
-            # Brand-new chat has no prior turns; avoid history lookup overhead.
             history_runs = 2 if has_session else 0
             add_history = has_session
             add_datetime = False
-        session_summaries = tool_surface
-        inject_memories = bool(request.memory_enabled) and tool_surface
+        session_summaries = surface_active
+        inject_memories = bool(request.memory_enabled) and surface_active
+        description = str(profile.get("description") or profile.get("name") or agent_id)
+        if agent_id == DEFAULT_AGENT_ID and not surface_active:
+            description = "安全运营助手（轻量）：无 MCP/Skills，适合闲聊与概念解答。"
         return self.dependencies.agent_factory(
-            id="security-operations",
-            name="安全运营助手",
-            description=(
-                "安全运营助手：研判、知识检索、剧本与 HITL 处置。"
-                if tool_surface
-                else "安全运营助手（轻量）：无 MCP/Skills，适合闲聊与概念解答。"
-            ),
-            instructions=[await _load_prompt_async(prompt_name)],
+            id=agent_id,
+            name=str(profile.get("name") or agent_id),
+            role=str(profile.get("role") or ""),
+            description=description,
+            instructions=[await _load_prompt_async(prompt_name)] if prompt_name else [],
             model=model,
             tools=tools,
             knowledge=knowledge,
@@ -1327,18 +1900,21 @@ class SecurityRunRuntime:
             add_history_to_context=add_history,
             update_memory_on_run=request.memory_enabled,
             add_memories_to_context=inject_memories,
-            store_tool_messages=request.store_raw_tool_io if tool_surface else False,
+            store_tool_messages=request.store_raw_tool_io if surface_active else False,
             enable_session_summaries=session_summaries,
             session_summary_manager=_session_summary_manager(model) if session_summaries else None,
             num_history_runs=history_runs,
             add_datetime_to_context=add_datetime,
+            tool_call_limit=profile.get("tool_call_limit"),
             markdown=True,
         )
 
     @asynccontextmanager
     async def security_agent_context(self, request: SecurityRunRequest) -> AsyncIterator[Agent]:
         if not should_connect_mcp(
-            request.skill_names, enable_tools=bool(request.enable_tools)
+            request.skill_names,
+            enable_tools=bool(request.enable_tools),
+            agent_id=request.agent_id,
         ):
             # Tools off, or trivial/non-ops turn with empty skill list: no MCP session.
             security_agent = await _maybe_await(
@@ -1373,9 +1949,73 @@ class SecurityRunRuntime:
             )
             yield security_agent
 
+
+    async def _stream_team(
+        self,
+        request: SecurityRunRequest,
+        chat_settings: Any | None = None,
+    ) -> AsyncIterator[ChatRunEvent]:
+        """Build and stream an Agno Team run (beta)."""
+        enable_tools = bool(request.enable_tools)
+        search_knowledge = bool(request.search_knowledge) and enable_tools
+        # Align with specialist agents: explicit request wins; else team profile prefer_*.
+        team_profile = get_team_profile(request.agent_id) or {}
+        if not enable_tools:
+            live_search = False
+        elif request.live_search is not None:
+            live_search = request.live_search
+        else:
+            live_search = bool(team_profile.get("prefer_live_search"))
+        knowledge = None
+        knowledge_filters = None
+        if search_knowledge:
+            knowledge = await _maybe_await(self.dependencies.get_async_knowledge_base())
+            if request.knowledge_owner_user_id:
+                knowledge_filters = {"user_id": request.knowledge_owner_user_id}
+        team = await build_team(
+            str(request.agent_id),
+            model_id=request.model_id,
+            reasoning_effort=request.reasoning_effort,
+            live_search=live_search,
+            search_knowledge=search_knowledge,
+            knowledge=knowledge,
+            knowledge_filters=knowledge_filters,
+            memory_enabled=bool(request.memory_enabled),
+            enable_tools=enable_tools,
+            media_files=request.files,
+        )
+        async for event in self._stream_agent_events(team, request, chat_settings):
+            yield event
+
     async def stream(self, request: SecurityRunRequest) -> AsyncIterator[ChatRunEvent]:
         chat_settings = await get_chat_settings_async()
         try:
+            if is_team_id(request.agent_id):
+                if not team_feature_enabled():
+                    yield ChatRunEvent(
+                        "run.failed",
+                        {
+                            "run_id": "",
+                            "code": "TEAM_DISABLED",
+                            "message": "Agno Team 未启用（设置环境变量 TAIS_ENABLE_AGNO_TEAM=1）",
+                            "retryable": False,
+                        },
+                    )
+                    return
+                try:
+                    async for event in self._stream_team(request, chat_settings):
+                        yield event
+                except ValueError as exc:
+                    yield ChatRunEvent(
+                        "run.failed",
+                        {
+                            "run_id": "",
+                            "code": "TEAM_BUILD_ERROR",
+                            "message": str(exc) or "无法构建 Team",
+                            "retryable": False,
+                        },
+                    )
+                return
             async with self.security_agent_context(request) as security_agent:
                 async for event in self._stream_agent_events(
                     security_agent,

@@ -1,3 +1,60 @@
+## Agents / Team
+
+- [x] Team 成员 content **delta 累积** 再写入 ThoughtChain summary（避免摘要只剩单 token）
+- [x] Team 成员 Intermediate content 无 agent_id 时仍按 parent_run_id 归 ThoughtChain（不泄漏到队长 content.delta）
+
+
+
+- [x] Workflow 模板：`deep-research-review` / `csv-quick-analysis`（对齐 Agno pipeline + data agent）
+
+
+- [x] Team 成员 content 流式 thought.update 节流（降 broadcast SSE 风暴）
+- [x] Chat 选择器展示 Team `mode`（coordinate/route/broadcast）
+
+
+- [x] 对齐 Agno Data Agents：可选 `SQLTools`（`TAIS_DATA_SQL_URL` 只读）、prompt grounding/自纠/引用查询
+- [x] 对齐 Agno Deep Research：prompt 可审计备忘录结构
+- [x] Team broadcast：`research-analysis-broadcast` + 模式化 leader instructions
+- [x] Data/Deep/Team 与官方 use-case 文档交叉对照（SQL warehouse 需配置；tasks 模式未默认开放因流式支持有限）
+
+
+- [x] `show_thought_chain=false` 整条时间线（tools+member thoughts）隐藏（与设置语义一致）
+- [x] Session preview 取最新 top-level run；Team leader 空 content 时用成员回退
+- [x] Team 成员 Agent 启用 `add_history_to_context`
+- [x] Grok：route 多轮记忆冒烟通过
+
+
+- [x] Team 历史：member_responses 缺失时从子 Agent run（parent_run_id）回填 tools/thoughts
+- [x] Team stream：task_created/updated/iteration → ThoughtChain
+- [x] Team 构建：max_iterations/tool_call_limit/expected_output
+- [x] ThoughtChain：成员工具挂在主 member 节点（不挂在 reasoning 子节点）
+
+- [x] Team 多轮：run.completed 后客户端断开不再把 run 标 CANCELLED（history 可用）
+- [x] Catalog `prefer_live_search`；切研究/Team 时自动开 Live Search（模型支持时）
+
+- [x] Grok 4.5 真机冒烟：coordinate/route tools-off；tools-on 成员 Thought+multiply；singleton cancel
+- [x] 修复 PythonTools/FileTools 同名工具冲突（read_file/list_files）
+- [x] Team intermediate content → content.delta；delegate 工具 i18n
+
+- [x] Team 历史：member_responses → thought_chain + 成员 tools；Team 多轮 history 上下文
+
+- [x] Team：成员 run_error/cancel 隔离为 ThoughtChain，不拖垮整轮
+- [x] Chat：打开会话恢复 agent/team；stale team id 回退；最近列表 [Team] 前缀
+
+- [x] Built-in Chat agents: `security-operations` / `data-analysis` / `deep-research`（catalog + prompts + tools）
+- [x] Chat `agent_id` + `GET /api/chat/agents` + 前端选择器
+- [x] Workflow executor refs 同步 catalog（含 safe-fallback）
+- [x] Agno Team beta：feature flag `TAIS_ENABLE_AGNO_TEAM`；Chat SSE 挂载 coordinate/route 团队
+- [x] Team 成员事件 → ThoughtChain；队长 content → 最终回答
+- [ ] Team：HITL/审批只绑 security 成员（当前 team 不挂 MCP/HITL）
+- [x] Team 成员 tool 事件前缀 `[成员名]` + member_id 字段（ThoughtChain 可辨识）
+- [x] Team/Agent 流式取消：`stream_cancel` 等待 + `cancel_run` 多形态调用
+- [x] Team SSE 集成测试：成员 thought/tool、队长 content、tools-off、cancel
+- [x] data-analysis：FileTools + CsvTools（沙箱；DuckDB SQL 可选）+ PythonTools 安装器已剥离
+- [x] data-analysis：Chat 上传文档/CSV 自动 stage 到分析沙箱（File/CsvTools 可见）
+- [ ] data-analysis：可选完整 DuckDB 依赖（`query_csv_file` 仍 soft-fail）
+- [x] deep-research：可选 `web_search`（DuckDuckGoTools；缺 `ddgs` 时 soft-fail，仍可用 Live Search + Website）
+
 # 下一步工作
 
 ## 已完成：Workflow Studio 布局精简与文案收口
