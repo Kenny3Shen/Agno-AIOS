@@ -494,7 +494,7 @@ Vitest 默认关闭 CSS 解析、限制 `maxWorkers=4`、使用 instant `user-ev
 
 | Event | 含义 |
 |-------|------|
-| `workflow.started` | 运行开始（含 `run_id` / `session_id`） |
+| `workflow.started` | 运行开始（含 `run_id` / `session_id` / skills；单次） |
 | `step.started` / `step.completed` / `step.error` | 叶子步骤生命周期；`content` 为预览截断 |
 | `parallel.started` / `parallel.completed` | 并行块生命周期（含 `parallel_step_count`） |
 | `condition.started` / `condition.completed` | 条件块（含 `condition_result` / `branch`） |
