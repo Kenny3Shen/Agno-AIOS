@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Workflow SSE 去掉重复 workflow.started
+
+- 保留编译侧一次 `workflow.started`（含 skills / loaded_skills）。
+- 忽略 Agno 流内二次 `WorkflowStarted`，避免 Run Log 双开始事件。
+- 本机线性 triage 工作流跑通至 `workflow.completed`。
+
 ## 已完成：Collect 标题 og:title + Playwright 配置外置
 
 - `_get_title_text` 优先 `og:title`，再 `<title>` / h1。

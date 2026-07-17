@@ -450,15 +450,8 @@ async def stream_workflow_run(
             )
 
             if event_name == WorkflowRunEvent.workflow_started.value:
-                yield WorkflowRunEventOut(
-                    "workflow.started",
-                    {
-                        "workflow_id": workflow_id,
-                        "run_id": run_id_value,
-                        "session_id": session_value,
-                        "name": str(event_value(event, "workflow_name", "") or ""),
-                    },
-                )
+                # Already emitted a richer workflow.started (skills/loaded_skills) above.
+                continue
             elif event_name == WorkflowRunEvent.step_started.value:
                 yield WorkflowRunEventOut("step.started", base)
             elif event_name == WorkflowRunEvent.step_completed.value:

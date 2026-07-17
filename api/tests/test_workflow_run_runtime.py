@@ -129,6 +129,8 @@ async def test_stream_workflow_run_projects_lifecycle_events():
         ]
     names = [event.event for event in events]
     assert names[0] == "workflow.started"
+    assert names.count("workflow.started") == 1
+    assert events[0].data.get("skills") == []
     assert "parallel.started" in names
     assert "step.started" in names
     assert "step.completed" in names
