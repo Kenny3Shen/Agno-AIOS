@@ -1,4 +1,5 @@
-import { jsonInit, requestJson } from '@/shared/api/client'
+import { ApiError, apiFetch, jsonInit, requestJson } from '@/shared/api/client'
+import { consumeSse } from '@/features/chat/utils'
 import { normalizePaginatedList, type ListPaginationMeta } from '@/shared/lib/pagination'
 
 export interface Cve {
@@ -47,3 +48,64 @@ export const searchCves = async (payload: {
 
 export const updateCves = () =>
   requestJson<{ message?: string; add_count?: number; del_count?: number }>('/cve/update', { method: 'POST' })
+
+export type CveUpdateProgress = {
+  stage?: string
+  status?: string
+  message?: string
+  source?: string
+  source_index?: number
+  source_total?: number
+  add_count?: number
+  del_count?: number
+  duration_seconds?: number
+  error?: string
+  code?: number
+}
+
+export const updateCvesStream = async (
+  onProgress: (event: CveUpdateProgress) => void,
+  signal?: AbortSignal,
+): Promise<{ add_count: number; del_count: number }> => {
+  const response = await apiFetch('/cve/update?stream=true', {
+    method: 'POST',
+    signal,
+    headers: { Accept: 'text/event-stream' },
+  })
+  if (!response.ok) {
+    let message = `CVE update failed (${response.status})`
+    try {
+      const payload = (await response.json()) as { detail?: string; message?: string }
+      message = payload.detail || payload.message || message
+    } catch {
+      // ignore non-json error bodies
+    }
+    throw new ApiError(message, response.status)
+  }
+  if (!response.body) {
+    throw new Error('CVE update stream has no body')
+  }
+  let addCount = 0
+  let delCount = 0
+  let failed: string | null = null
+  await consumeSse(
+    response.body,
+    ({ event, data }) => {
+      let payload: CveUpdateProgress = {}
+      try {
+        payload = data ? (JSON.parse(data) as CveUpdateProgress) : {}
+      } catch {
+        payload = { message: data }
+      }
+      onProgress(payload)
+      if (typeof payload.add_count === 'number') addCount = payload.add_count
+      if (typeof payload.del_count === 'number') delCount = payload.del_count
+      if (event === 'progress.failed' || payload.status === 'failed') {
+        failed = payload.error || payload.message || 'CVE update failed'
+      }
+    },
+    signal,
+  )
+  if (failed) throw new Error(failed)
+  return { add_count: addCount, del_count: delCount }
+}

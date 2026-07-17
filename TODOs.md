@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：CVE 更新进度 SSE
+
+- `POST /api/cve/update?stream=true`：阶段进度（start → source×N → database → cache → done）。
+- 同步路径保留；冲突仍 409。前端 Progress 条展示阶段文案与新增/删除结果。
+- `update_cve.main(on_progress=…)` 串行拉源并推送回调。
+
 ## 已完成：Dashboard 失败行键盘可达 + Collect 卫生
 
 - Dashboard 最近失败行：`tabIndex` / Enter·Space 打开 Trace，focus-visible 高亮。

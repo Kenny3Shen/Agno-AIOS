@@ -58,9 +58,21 @@ describe('CvePage', () => {
           meta: { page: 1, limit: 20, total_pages: 1, total_count: 1, search_time_ms: 1 },
         })
       }),
-      http.post('/api/cve/update', () =>
-        HttpResponse.json({ message: 'ok', add_count: 3, del_count: 1 }),
-      ),
+      http.post('/api/cve/update', ({ request }) => {
+        const url = new URL(request.url)
+        expect(url.searchParams.get('stream')).toBe('true')
+        const body = [
+          'event: progress',
+          'data: {"stage":"start","status":"running","message":"start"}',
+          '',
+          'event: progress.completed',
+          'data: {"stage":"done","status":"completed","add_count":3,"del_count":1,"message":"done"}',
+          '',
+        ].join('\n')
+        return new HttpResponse(body, {
+          headers: { 'Content-Type': 'text/event-stream' },
+        })
+      }),
     )
 
     renderWithQuery(<CvePage />)

@@ -12,5 +12,6 @@
   "colDescription": "Description",
   "colSource": "Source",
   "colIndexed": "Indexed",
-  "updatedDetail": "CVE database updated: +{{add}} / −{{del}}"
+  "updatedDetail": "CVE database updated: +{{add}} / −{{del}}",
+  "updateStarting": "Updating CVE database…"
 }

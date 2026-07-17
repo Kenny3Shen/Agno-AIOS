@@ -1,14 +1,33 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { App, Button, Card, Input, Select, Space, Table, Tag } from 'antd'
+import { App, Button, Card, Input, Progress, Select, Space, Table, Tag, Typography } from 'antd'
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import { currentUserQuery } from '@/features/auth'
 import { roleOf } from '@/shared/auth/permissions'
 import { PageHeader } from '@/shared/ui/PageHeader'
-import { searchCves, updateCves, type Cve } from './api'
+import {
+  searchCves,
+  updateCvesStream,
+  type Cve,
+  type CveUpdateProgress,
+} from './api'
 import { compareTimestamp, useFormatDate } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
+
+function progressPercent(event: CveUpdateProgress | null): number {
+  if (!event) return 0
+  if (event.stage === 'done' && event.status === 'completed') return 100
+  if (event.stage === 'database' || event.stage === 'cache') return 80
+  if (event.stage === 'source' && event.source_total) {
+    const index = Math.max(0, Number(event.source_index || 0))
+    const total = Math.max(1, Number(event.source_total || 1))
+    const base = event.status === 'completed' ? index : Math.max(0, index - 1)
+    return Math.min(70, Math.round((base / total) * 70) + 10)
+  }
+  if (event.stage === 'start') return 5
+  return 15
+}
 
 export function CvePage() {
   const { t } = useTranslation('cve')
@@ -20,6 +39,7 @@ export function CvePage() {
   const debouncedQuery = useDebouncedValue(query, 300)
   const [source, setSource] = useState<string>()
   const [pagination, setPagination] = useState({ page: 1, size: 20 })
+  const [updateProgress, setUpdateProgress] = useState<CveUpdateProgress | null>(null)
 
   const search = useQuery({
     queryKey: ['cve', 'search', debouncedQuery, source, pagination.page, pagination.size],
@@ -40,7 +60,12 @@ export function CvePage() {
   }, [search.isError, search.error, message, t])
 
   const update = useMutation({
-    mutationFn: updateCves,
+    mutationFn: async () => {
+      setUpdateProgress({ stage: 'start', status: 'running', message: t('updateStarting') })
+      return updateCvesStream((event) => {
+        setUpdateProgress(event)
+      })
+    },
     onSuccess: (data) => {
       message.success(
         t('updatedDetail', {
@@ -48,11 +73,31 @@ export function CvePage() {
           del: data.del_count ?? 0,
         }),
       )
+      setUpdateProgress((prev) =>
+        prev
+          ? {
+              ...prev,
+              stage: 'done',
+              status: 'completed',
+              add_count: data.add_count,
+              del_count: data.del_count,
+            }
+          : prev,
+      )
       void search.refetch()
     },
-    onError: (error) =>
-      message.error(error instanceof Error ? error.message : t('updateFailed')),
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : t('updateFailed'))
+      setUpdateProgress((prev) =>
+        prev
+          ? { ...prev, stage: 'done', status: 'failed', message: error instanceof Error ? error.message : t('updateFailed') }
+          : { stage: 'done', status: 'failed', message: t('updateFailed') },
+      )
+    },
   })
+
+  const percent = progressPercent(updateProgress)
+  const updating = update.isPending
 
   return (
     <main className="page">
@@ -97,13 +142,35 @@ export function CvePage() {
           />
           <Button
             icon={<ReloadOutlined />}
-            loading={update.isPending}
-            disabled={!canUpdateDatabase}
+            loading={updating}
+            disabled={!canUpdateDatabase || updating}
             onClick={() => update.mutate()}
           >
             {t('updateDb')}
           </Button>
         </Space>
+
+        {updateProgress ? (
+          <div style={{ marginTop: 12, maxWidth: 640 }}>
+            <Progress
+              percent={percent}
+              status={
+                updateProgress.status === 'failed'
+                  ? 'exception'
+                  : updateProgress.status === 'completed' && updateProgress.stage === 'done'
+                    ? 'success'
+                    : updating
+                      ? 'active'
+                      : 'normal'
+              }
+              size="small"
+            />
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {updateProgress.message || t('updateStarting')}
+            </Typography.Text>
+          </div>
+        ) : null}
+
         <Table<Cve>
           rowKey="id"
           dataSource={search.data?.data ?? []}

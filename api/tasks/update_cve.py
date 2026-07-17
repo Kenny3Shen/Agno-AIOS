@@ -19,6 +19,7 @@ from datetime import datetime
 import fcntl
 from os import environ
 from pathlib import Path
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from anyio import Path as AsyncPath
@@ -291,28 +292,100 @@ async def get_add_del_data(
     )
 
 
-async def main() -> tuple[int, int]:
-    """主函数"""
+ProgressCallback = Callable[[Mapping[str, Any]], Awaitable[None] | None]
+
+
+async def _emit_progress(
+    on_progress: ProgressCallback | None,
+    *,
+    stage: str,
+    status: str = "running",
+    message: str = "",
+    **extra: Any,
+) -> None:
+    if on_progress is None:
+        return
+    payload: dict[str, Any] = {
+        "stage": stage,
+        "status": status,
+        "message": message,
+        **extra,
+    }
+    result = on_progress(payload)
+    if asyncio.iscoroutine(result):
+        await result
+
+
+async def main(
+    *,
+    on_progress: ProgressCallback | None = None,
+) -> tuple[int, int]:
+    """Run CVE database update; optionally stream stage progress events."""
     settings = get_settings()
     try:
         await _configure_file_logging_async()
         start_time = datetime.now()
         logger.info("CVE 更新开始: {}", start_time)
+        await _emit_progress(
+            on_progress,
+            stage="start",
+            message="CVE 更新开始",
+        )
 
         async with _cve_update_lock(settings.cve_update_lock_path):
-            need_add_data, need_del_data = [], []
+            need_add_data: list[dict[str, Any]] = []
+            need_del_data: list[dict[str, Any]] = []
             source_config = await load_cve_source_config()
-            task = [
-                get_add_del_data(source_name, source_config)
-                for source_name in DATA_SOURCES.keys()
-            ]
-            deltas = await asyncio.gather(*task)
+            source_names = list(DATA_SOURCES.keys())
+            deltas: list[CVESourceDelta] = []
+
+            for index, source_name in enumerate(source_names, start=1):
+                await _emit_progress(
+                    on_progress,
+                    stage="source",
+                    message=f"拉取数据源 {source_name}",
+                    source=source_name,
+                    source_index=index,
+                    source_total=len(source_names),
+                )
+                delta = await get_add_del_data(source_name, source_config)
+                deltas.append(delta)
+                await _emit_progress(
+                    on_progress,
+                    stage="source",
+                    status="completed",
+                    message=(
+                        f"{source_name}: +{len(delta.increment_data)} "
+                        f"/-{len(delta.deleted_data)}"
+                    ),
+                    source=source_name,
+                    source_index=index,
+                    source_total=len(source_names),
+                    add_count=len(delta.increment_data),
+                    del_count=len(delta.deleted_data),
+                )
 
             for delta in deltas:
                 need_add_data.extend(delta.increment_data)
                 need_del_data.extend(delta.deleted_data)
 
+            await _emit_progress(
+                on_progress,
+                stage="database",
+                message=(
+                    f"写入数据库（新增 {len(need_add_data)}，"
+                    f"删除 {len(need_del_data)}）"
+                ),
+                pending_add=len(need_add_data),
+                pending_del=len(need_del_data),
+            )
             add_count, del_count = await update_cve_database(need_add_data, need_del_data)
+
+            await _emit_progress(
+                on_progress,
+                stage="cache",
+                message="提交本地缓存与 commit 标记",
+            )
             for delta in deltas:
                 await _commit_source_state(delta)
 
@@ -325,10 +398,26 @@ async def main() -> tuple[int, int]:
             del_count,
             duration,
         )
+        await _emit_progress(
+            on_progress,
+            stage="done",
+            status="completed",
+            message="CVE 更新完成",
+            add_count=add_count,
+            del_count=del_count,
+            duration_seconds=round(duration, 2),
+        )
         return (add_count, del_count)
 
     except Exception as e:
         logger.exception("CVE 更新失败: {}", e)
+        await _emit_progress(
+            on_progress,
+            stage="done",
+            status="failed",
+            message=str(e),
+            error=str(e),
+        )
         raise
 
 
