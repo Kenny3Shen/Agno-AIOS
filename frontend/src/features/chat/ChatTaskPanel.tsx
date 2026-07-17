@@ -266,17 +266,6 @@ export function ChatTaskPanel({ variant = 'page', onNavigate, onNewChat }: ChatT
             <strong>{t('shell:conversations.title')}</strong>
             <span>{t('shell:conversations.subtitle')}</span>
           </div>
-          {onNewChat ? (
-            <Button
-              type="primary"
-              size="small"
-              icon={<PlusOutlined />}
-              onClick={() => onNewChat()}
-              aria-label={t('shell:conversations.newChat')}
-            >
-              {t('shell:conversations.newChat')}
-            </Button>
-          ) : null}
         </header>
         <div className="chat-task-panel-content">
           {sessions.isLoading && !sessionItems.length && !sessionSearch ? (

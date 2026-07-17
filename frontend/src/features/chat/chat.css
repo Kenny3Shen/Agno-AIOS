@@ -1300,7 +1300,6 @@ html.dark {
   display: flex;
   flex: 0 0 auto;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 8px;
   padding: 12px 12px 8px;
   border-bottom: 1px solid var(--chat-border, var(--tais-border));

@@ -130,14 +130,16 @@ describe('ChatTaskPanel', () => {
     mockSessions([])
   })
 
-  it('shows conversation title and new chat action', async () => {
+  it('shows conversation title and Conversations creation new chat', async () => {
     const onNewChat = vi.fn<() => void>()
     const user = setupUser()
     renderWithQuery(<ChatTaskPanel variant="page" onNewChat={onNewChat} />)
 
     expect(await screen.findByText('对话')).toBeTruthy()
-    const newChat = await screen.findByRole('button', { name: '新对话' })
-    await user.click(newChat)
+    // Ant Design X mounts creation as a <button> inside <ul>; role queries can miss it in jsdom.
+    const newChat = await screen.findByText('新对话')
+    const trigger = newChat.closest('button') ?? newChat
+    await user.click(trigger)
     expect(onNewChat).toHaveBeenCalledOnce()
   })
 

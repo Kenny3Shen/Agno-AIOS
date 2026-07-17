@@ -233,7 +233,9 @@ html.dark .shell-menu .ant-menu-item-selected {
   background: var(--tais-surface);
 }
 .shell-footer .shell-identity {
+  display: flex;
   width: 100%;
+  box-sizing: border-box;
   border: 0;
   border-top: 0;
   border-bottom: 1px solid var(--tais-border);
@@ -241,6 +243,10 @@ html.dark .shell-menu .ant-menu-item-selected {
   color: inherit;
   text-align: left;
   cursor: pointer;
+}
+.shell-footer .ant-dropdown-trigger {
+  width: 100%;
+  display: block;
 }
 .shell-footer .shell-identity:hover {
   background: color-mix(in srgb, var(--tais-blue) 8%, var(--tais-surface));
@@ -1491,9 +1497,7 @@ html.dark .shell-menu .ant-menu-item-selected {
   transform: translateX(-6px);
   pointer-events: none;
 }
-.shell-sider.ant-layout-sider-collapsed .shell-identity {
-  padding-inline: 20px;
-}
+/* Collapsed identity padding/centering is owned by .shell-identity-icon rules below. */
 .shell-brand:hover .brand-mark {
   transform: translateY(-1px);
   box-shadow: 0 5px 12px color-mix(in srgb, var(--tais-orange) 28%, transparent);
@@ -2762,22 +2766,44 @@ button.collect-article-item.is-selected {
 
 /* Collapsed nav: VS Code–style account (user) icon */
 .shell-identity-icon {
-  display: grid;
+  display: inline-flex;
   width: 28px;
   height: 28px;
   flex: 0 0 28px;
-  place-items: center;
+  align-items: center;
+  justify-content: center;
   border-radius: 50%;
   border: 1px solid color-mix(in srgb, var(--tais-border) 80%, var(--tais-text));
   background: color-mix(in srgb, var(--tais-soft) 70%, transparent);
   color: var(--tais-text);
   font-size: 15px;
+  line-height: 1;
 }
-.shell-sider.ant-layout-sider-collapsed .shell-identity {
+.shell-identity-icon .anticon,
+.shell-identity-icon .anticon > svg {
+  display: block;
+  line-height: 1;
+  margin: 0;
+}
+/* Glyph sits slightly high in the circle; nudge for optical center */
+.shell-identity-icon .anticon {
+  transform: translateY(0.5px);
+}
+.shell-sider.ant-layout-sider-collapsed .shell-identity,
+.shell-identity.shell-identity-collapsed {
   justify-content: center;
+  align-items: center;
+  gap: 0;
   padding-inline: 0;
+  text-align: center;
 }
-.shell-sider.ant-layout-sider-collapsed .shell-identity-icon {
+/* Hide copy completely when collapsed so flex space doesn't shift the icon */
+.shell-sider.ant-layout-sider-collapsed .shell-identity-copy,
+.shell-identity.shell-identity-collapsed .shell-identity-copy {
+  display: none;
+}
+.shell-sider.ant-layout-sider-collapsed .shell-identity-icon,
+.shell-identity.shell-identity-collapsed .shell-identity-icon {
   margin-inline: auto;
 }
 .shell-footer .shell-identity:focus-visible .shell-identity-icon,
