@@ -3,6 +3,12 @@ import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 import { cancelRun, streamMessage } from './api'
+import {
+  abortActiveChatStream,
+  clearChatStream,
+  registerChatStream,
+  updateChatStreamRunId,
+} from './activeChatStream'
 import { ApiError } from '@/shared/api/client'
 import { chatKeys, historyQuery, modelsQuery, SESSION_PAGE_SIZE, sessionsQuery } from './queries'
 import { chatReducer, defaultReasoningEffort, initialChatState, previousPrompt } from './utils'
@@ -11,6 +17,16 @@ import type { ChatRunEvent, ChatSession, Message } from './types'
 import type { ReasoningEffort } from '@/shared/types/common'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 import { buildTraceSearch, emptyTraceFilters } from '@/features/trace/utils'
+
+function bestEffortCancelRun(runId: string | null | undefined) {
+  if (!runId) return
+  void cancelRun(runId).catch((error: unknown) => {
+    // Leaving the session: soft-error would be cleared by reset and is noisy.
+    if (error instanceof ApiError && error.status === 404) return
+    const detail = error instanceof Error ? error.message : String(error)
+    console.warn(`[chat] cancel on session switch failed for ${runId}: ${detail}`)
+  })
+}
 
 export function useChat() {
   const { t } = useTranslation('chat')
@@ -24,6 +40,9 @@ export function useChat() {
   const debouncedSessionSearch = useDebouncedValue(sessionSearch, 300)
   const abortRef = useRef<AbortController | null>(null)
   const activeRunIdRef = useRef<string | null>(null)
+  // Track URL session so any dual useChat instance aborts the live stream on change
+  // (sidebar may call setSession while only the page instance owns the SSE).
+  const prevSessionIdRef = useRef<string | null>(sessionId)
   const sessionsQueryResult = useInfiniteQuery(
     sessionsQuery({
       archivedOnly: showArchived,
@@ -45,6 +64,35 @@ export function useChat() {
   const isWorkflowSession = String(activeSessionMeta?.session_type || '').toLowerCase() === 'workflow'
   const history = useQuery(historyQuery(sessionId ?? '', !isWorkflowSession))
   const models = useQuery(modelsQuery())
+
+  // URL session changed (sidebar, deep link, or another useChat instance): abort live SSE
+  // so this instance can load history and the server run is cancelled best-effort.
+  useEffect(() => {
+    const prev = prevSessionIdRef.current
+    prevSessionIdRef.current = sessionId
+    if (prev === sessionId) return
+    const { runId } = abortActiveChatStream()
+    abortRef.current = null
+    // Keep activeRunIdRef for submit's AbortError → run.cancelled payload; submit finally clears it.
+    bestEffortCancelRun(runId)
+  }, [sessionId])
+
+  // Unmount only aborts the stream this instance registered (sidebar unmount must not kill page stream).
+  useEffect(() => {
+    return () => {
+      const local = abortRef.current
+      if (!local) return
+      const runId = activeRunIdRef.current
+      clearChatStream(local)
+      try {
+        local.abort()
+      } catch {
+        // ignore
+      }
+      abortRef.current = null
+      bestEffortCancelRun(runId)
+    }
+  }, [])
 
   useEffect(() => {
     if (!sessionId) {
@@ -97,18 +145,13 @@ export function useChat() {
     const next = value
     const same =
       (next == null && !sessionId) || (next != null && next === sessionId)
-    // Switching sessions mid-stream aborts the client SSE (server cancel best-effort).
-    if (!same && state.requesting) {
-      const runId = activeRunIdRef.current
-      abortRef.current?.abort()
-      if (runId) {
-        void cancelRun(runId).catch((error: unknown) => {
-          // Leaving the session: soft-error would be cleared by reset and is noisy.
-          if (error instanceof ApiError && error.status === 404) return
-          const detail = error instanceof Error ? error.message : String(error)
-          console.warn(`[chat] cancel on session switch failed for ${runId}: ${detail}`)
-        })
-      }
+    // Switching sessions mid-stream aborts the live SSE even if this instance is idle
+    // (ChatTaskPanel vs ChatPage dual useChat).
+    if (!same) {
+      const { runId } = abortActiveChatStream()
+      abortRef.current = null
+      // Keep activeRunIdRef for submit's AbortError → run.cancelled payload; submit finally clears it.
+      bestEffortCancelRun(runId)
     }
     if (same) return
     void router.history.push(next ? `/chat?session=${encodeURIComponent(next)}` : '/chat')
@@ -191,6 +234,7 @@ export function useChat() {
     const controller = new AbortController()
     abortRef.current = controller
     activeRunIdRef.current = null
+    registerChatStream(controller, activeSession)
     try {
       await streamMessage(
         {
@@ -208,6 +252,7 @@ export function useChat() {
           const eventRunId = 'runId' in event ? event.runId : undefined
           if (typeof eventRunId === 'string' && eventRunId) {
             activeRunIdRef.current = eventRunId
+            updateChatStreamRunId(eventRunId)
           }
           dispatch({ type: 'event', id: assistantId, event })
         },
@@ -233,6 +278,7 @@ export function useChat() {
         })
       }
     } finally {
+      clearChatStream(controller)
       abortRef.current = null
       activeRunIdRef.current = null
       // Refresh after success, cancel, or failure (partial/cancelled runs may be stored).
@@ -251,9 +297,13 @@ export function useChat() {
     void submit(prompt, false)
   }
   const cancel = useCallback(async () => {
-    const runId = activeRunIdRef.current
-    // Always stop the client SSE first so the UI unblocks even before run.started.
+    // Prefer process-wide stream (this instance or the sibling useChat owner).
+    const global = abortActiveChatStream()
+    // Local backup if registry was already cleared mid-flight.
     abortRef.current?.abort()
+    abortRef.current = null
+    const runId = global.runId ?? activeRunIdRef.current
+    // Leave activeRunIdRef for submit's AbortError path; submit finally clears it.
     if (!runId) return
     try {
       await cancelRun(runId)

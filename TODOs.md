@@ -1,5 +1,13 @@
 # 下一步工作
 
+## 已完成：Chat 双 useChat 全局流取消
+
+- `activeChatStream` 进程级 registry：ChatPage / ChatTaskPanel 各有独立 `useChat` 状态，但共享唯一 live SSE。
+- 侧栏 `setSession`、URL `session` 变化、Esc/Stop `cancel` 均 `abortActiveChatStream` + best-effort `cancelRun`。
+- `submit` 注册/更新 runId、finally `clearChatStream`；AbortError 仍走 `run.cancelled`。
+- 单测覆盖 registry 与「空闲侧栏中止页面流」场景。
+
+
 ## 已完成：Chat 已归档列表 + 取消归档
 
 - `POST /api/chat/sessions/{id}/unarchive` 清除归档元数据并审计 `session.unarchive`。
