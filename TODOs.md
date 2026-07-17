@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：多选开启 HITL 被 Parallel 拦截时 Toast
+
+- `updateSelectedSteps` 返回跳过数量（Strict Mode 安全预计算）。
+- 多选确认/输入/复核开关走 `bulkHitlWithGuard`；跳过时 `multiSelectHitlSkipped` 提示。
+- 终态 `run.completed` 同步清空 `retry`。
+
 ## 已完成：粘贴后聚焦选中节点 + 取消清理 retry 态
 
 - Studio 粘贴/复制后 `focusEpoch++`；画布 fitView 优先框选当前选中（粘贴结果），无选中再 fit 全图。

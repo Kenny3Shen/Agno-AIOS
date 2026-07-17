@@ -247,6 +247,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               followups: event.followups ?? [],
               status: 'completed',
               final: true,
+              retry: null,
             }
           case 'run.cancelled':
             return {

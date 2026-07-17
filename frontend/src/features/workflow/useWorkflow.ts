@@ -360,20 +360,45 @@ export function useWorkflow() {
   }
 
 
-  /** Apply a patch to every selected Agent step (multi-select bulk edit). */
+  /** Apply a patch to every selected Agent step (multi-select bulk edit).
+   * Returns how many Parallel-nested steps skipped enabling HITL.
+   */
   const updateSelectedSteps = (
     patch: Partial<Pick<WorkflowNode, 'targetId' | 'skills' | 'requiresConfirmation' | 'requiresUserInput' | 'requiresOutputReview' | 'instructions'>>,
-  ) => {
+  ): number => {
+    // Precompute against current snapshot so toast count is Strict Mode-safe.
+    const ids = (
+      state.selectedIds.length
+        ? state.selectedIds
+        : state.selectedId
+          ? [state.selectedId]
+          : []
+    )
+    if (!ids.length) return 0
+    const hitlPatch =
+      patch.requiresConfirmation === true ||
+      patch.requiresUserInput === true ||
+      patch.requiresOutputReview === true
+    let skippedHitl = 0
+    if (hitlPatch) {
+      for (const id of ids) {
+        const node = findNode(state.steps, id)
+        if (node?.type === 'step' && isInsideParallel(state.steps, id)) {
+          skippedHitl += 1
+        }
+      }
+    }
+
     // Burst undo for typing (instructions); discrete Select/Checkbox still one snapshot per burst.
     setState((current) => {
-      const ids = new Set(
+      const liveIds = new Set(
         current.selectedIds.length
           ? current.selectedIds
           : current.selectedId
             ? [current.selectedId]
             : [],
       )
-      if (!ids.size) return current
+      if (!liveIds.size) return current
       if (inspectorHistoryNodeRef.current !== 'multi-select') {
         pushHistory(current)
         inspectorHistoryNodeRef.current = 'multi-select'
@@ -384,14 +409,14 @@ export function useWorkflow() {
         inspectorHistoryTimerRef.current = null
       }, 600)
       let steps = current.steps
-      const hitlPatch =
+      const enablingHitl =
         patch.requiresConfirmation === true ||
         patch.requiresUserInput === true ||
         patch.requiresOutputReview === true
-      for (const id of ids) {
+      for (const id of liveIds) {
         const node = findNode(steps, id)
         if (!node || node.type !== 'step') continue
-        if (hitlPatch && isInsideParallel(steps, id)) {
+        if (enablingHitl && isInsideParallel(steps, id)) {
           // Skip enabling HITL under Parallel; allow clearing flags.
           const cleared = { ...patch }
           if (patch.requiresConfirmation === true) cleared.requiresConfirmation = false
@@ -409,6 +434,7 @@ export function useWorkflow() {
         steps,
       }
     })
+    return skippedHitl
   }
 
   const remove = (id: string) =>

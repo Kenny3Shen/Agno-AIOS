@@ -118,6 +118,14 @@ export function WorkflowPage() {
   ) => {
     warnReparentBlocked(workflow.connectBranch(sourceId, targetId, sourceHandle))
   }
+  const bulkHitlWithGuard = (
+    patch: Parameters<typeof workflow.updateSelectedSteps>[0],
+  ) => {
+    const skipped = workflow.updateSelectedSteps(patch)
+    if (skipped > 0) {
+      message.warning(t('multiSelectHitlSkipped', { count: skipped }))
+    }
+  }
   const runLogListRef = useRef<HTMLDivElement>(null)
   const inspectorPanelRef = useRef<HTMLElement | null>(null)
   const focusFieldRef = useRef<string | null>(null)
@@ -1034,7 +1042,7 @@ export function WorkflowPage() {
                         checked={allConfirm}
                         indeterminate={!allConfirm && !noneConfirm}
                         onChange={(e) =>
-                          workflow.updateSelectedSteps({
+                          bulkHitlWithGuard({
                             requiresConfirmation: e.target.checked,
                           })
                         }
@@ -1046,7 +1054,7 @@ export function WorkflowPage() {
                         checked={allUserInput}
                         indeterminate={!allUserInput && !noneUserInput}
                         onChange={(e) =>
-                          workflow.updateSelectedSteps({
+                          bulkHitlWithGuard({
                             requiresUserInput: e.target.checked,
                           })
                         }
@@ -1058,7 +1066,7 @@ export function WorkflowPage() {
                         checked={allOutputReview}
                         indeterminate={!allOutputReview && !noneOutputReview}
                         onChange={(e) =>
-                          workflow.updateSelectedSteps({
+                          bulkHitlWithGuard({
                             requiresOutputReview: e.target.checked,
                           })
                         }
