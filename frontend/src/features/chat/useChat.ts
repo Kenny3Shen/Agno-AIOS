@@ -159,13 +159,15 @@ export function useChat() {
           enable_tools: state.enableTools,
         },
         (event: ChatRunEvent) => {
-          if (event.type === 'run.started') activeRunIdRef.current = event.runId
+          // Keep cancel targets current across retries / late run_id attachment.
+          const eventRunId = 'runId' in event ? event.runId : undefined
+          if (typeof eventRunId === 'string' && eventRunId) {
+            activeRunIdRef.current = eventRunId
+          }
           dispatch({ type: 'event', id: assistantId, event })
         },
         controller.signal
       )
-      await queryClient.invalidateQueries({ queryKey: chatKeys.history(activeSession) })
-      await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
         dispatch({ type: 'clear-error' })
@@ -188,6 +190,9 @@ export function useChat() {
     } finally {
       abortRef.current = null
       activeRunIdRef.current = null
+      // Refresh after success, cancel, or failure (partial/cancelled runs may be stored).
+      void queryClient.invalidateQueries({ queryKey: chatKeys.history(activeSession) })
+      void queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
     }
   }
 

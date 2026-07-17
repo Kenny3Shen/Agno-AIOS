@@ -5,6 +5,7 @@
 - `run.paused` 缺 `session_id` 时回退 `request.session_id`（审批通知/深链一致）。
 - 前端从任意带 `runId` 的 SSE 事件更新 `activeRunId`（重试后 cancel 仍可用）。
 - 用户停止生成时 `clear-error`，避免残留 soft-error 横幅。
+- history/sessionLists invalidate 移入 `finally`：成功/取消/失败都刷新最近对话。
 
 ## 已完成：run.completed session_id 回退请求会话
 
