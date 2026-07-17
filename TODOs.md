@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Chat 历史加载态 + 空正文采集错误分类
+
+- 会话历史加载中显示 Spin，不再闪欢迎页。
+- `get_markdown_text` 抽不出正文时，fetch 路径返回 `Content too short…`（不再是空串）。
+
+
 ## 已完成：Collect 通用正文兜底提取
 
 - 域名规则未命中或 CMS class 漂移时，优先用 `article`/`main`/常见 CMS 容器按文本长度评分提取。

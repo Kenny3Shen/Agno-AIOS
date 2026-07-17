@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Actions, Bubble, Prompts, Sender, Sources, ThoughtChain } from '@ant-design/x'
 import { Markdown } from '@/shared/ui/Markdown'
-import { App, Avatar, Button, Cascader, Popover, Tag, Tooltip } from 'antd'
+import { App, Avatar, Button, Cascader, Popover, Spin, Tag, Tooltip } from 'antd'
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
@@ -531,7 +531,24 @@ export function ChatPage() {
     setFollowLatest(true)
   }, [chat.sessionId])
 
+  const historyFlags = chat.history as {
+    isError?: boolean
+    isLoading?: boolean
+    isPending?: boolean
+    isFetching?: boolean
+  }
+  const historyBusy =
+    Boolean(chat.sessionId) &&
+    !historyFlags.isError &&
+    (Boolean(historyFlags.isLoading) ||
+      Boolean(historyFlags.isPending) ||
+      (Boolean(historyFlags.isFetching) && chat.state.messages.length === 0))
+  const showHistoryLoading = historyBusy && !chat.state.requesting && chat.state.messages.length === 0
+  const showHistoryError =
+    Boolean(chat.sessionId) && chat.history.isError && !chat.state.requesting
+
   // Soft errors (e.g. server cancel failed) auto-dismiss; keep hard run failures until dismiss/retry.
+
   useEffect(() => {
     if (!chat.state.error) return
     const hardFailure = chat.state.messages.some(
@@ -698,7 +715,7 @@ export function ChatPage() {
             setFollowLatest(node.scrollHeight - node.scrollTop - node.clientHeight < threshold)
           }}
         >
-          {chat.sessionId && chat.history.isError && !chat.state.requesting ? (
+          {showHistoryError ? (
             <div className="chat-error chat-history-error" role="alert">
               <span className="chat-error__message">
                 {chat.history.error instanceof Error
@@ -717,7 +734,12 @@ export function ChatPage() {
               </span>
             </div>
           ) : null}
-          {chat.sessionId && chat.history.isError && !bubbles.length ? null : !bubbles.length ? (
+          {showHistoryLoading ? (
+            <div className="chat-history-loading" role="status" aria-live="polite">
+              <Spin size="small" />
+              <span>{t('historyLoading')}</span>
+            </div>
+          ) : showHistoryError && !bubbles.length ? null : !bubbles.length ? (
             <div className="chat-welcome">
               <div className="welcome-emblem">
                 <SafetyOutlined />

@@ -101,5 +101,6 @@
   "liveSearchAutoLeanHint": "Last turn was auto-lite; live search was not used. Your preference is kept and applies on the next tool-intent turn.",
   "knowledgeSearchAutoLeanHint": "Last turn was auto-lite; knowledge search was not mounted. Your preference is kept and applies on the next tool-intent turn.",
   "retryingDetailWithDelay": "Model temporarily unavailable; retry {{attempt}}/{{max}} in {{seconds}}s…",
-  "historyLoadFailed": "Unable to load conversation history. Please retry."
+  "historyLoadFailed": "Unable to load conversation history. Please retry.",
+  "historyLoading": "Loading conversation history…"
 }

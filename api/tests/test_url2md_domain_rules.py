@@ -164,3 +164,10 @@ def test_get_markdown_text_falls_back_when_domain_class_missing():
     md = get_markdown_text(soup, "https://thehackernews.com/2024/01/example.html")
     assert md.startswith("# THN Drifted Markup")
     assert "Class drift recovery" in md
+
+
+
+def test_get_markdown_text_returns_empty_when_no_usable_body():
+    html = "<html><head><title>Empty</title></head><body><nav>only nav</nav></body></html>"
+    soup = BeautifulSoup(html, "html.parser")
+    assert get_markdown_text(soup, "https://unknown-news.example/empty") == ""

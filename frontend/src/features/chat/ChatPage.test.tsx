@@ -13,6 +13,8 @@ const chat = {
   history: {
     data: [] as unknown[],
     isError: false,
+    isLoading: false,
+    isPending: false,
     isFetching: false,
     error: null as Error | null,
     refetch: vi.fn(),
@@ -200,5 +202,25 @@ describe('chat history load failure', () => {
     expect(retry).toBeTruthy()
     await user.click(retry as HTMLButtonElement)
     expect(chat.history.refetch).toHaveBeenCalled()
+  })
+})
+
+describe('chat history loading state', () => {
+  beforeEach(() => {
+    HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
+    chat.sessionId = 'session-loading'
+    chat.history.isError = false
+    chat.history.isLoading = true
+    chat.history.isPending = true
+    chat.history.isFetching = true
+    chat.history.error = null
+    chat.state.messages = []
+    chat.state.requesting = false
+  })
+
+  it('shows loading instead of welcome while history fetches', () => {
+    renderWithQuery(<ChatPage />)
+    expect(screen.getByRole('status').textContent || '').toMatch(/loading|加载/i)
+    expect(screen.queryByText('从哪里开始调查？')).toBeNull()
   })
 })

@@ -1236,3 +1236,13 @@ html.dark {
   margin: 12px 16px 0;
   flex-shrink: 0;
 }
+
+.chat-history-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 160px;
+  color: var(--tais-muted);
+  font-size: 13px;
+}

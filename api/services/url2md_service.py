@@ -478,6 +478,12 @@ async def fetch_and_parse_url(urls: list[str]) -> list[str]:
                     continue
 
                 markdown_text = get_markdown_text(soup, fetched_url)
+                if not (markdown_text or "").strip():
+                    results.append(
+                        f"Content too short for {fetched_url}: "
+                        "could not extract article body"
+                    )
+                    continue
 
                 results.append(markdown_text)
 
