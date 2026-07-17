@@ -1,5 +1,10 @@
 # 下一步工作
 
+## 已完成：Studio 运行中结构锁 e2e
+
+- 并入 stop smoke：运行中断言 canvas `is-running`、palette `draggable=false`、选中节点无 NodeToolbar。
+- 停止摘要文案用 `.first()` 避免 Run Log 与历史双处匹配导致 strict mode 失败。
+
 ## 已完成：Collect 列表页加深发现 + CVE 默认检索体验
 
 - Collect 发现：首页后自动补 `page/2..N` seed，并跟随 `rel=next` / 分页链接（有界），提高每源文章发现量。

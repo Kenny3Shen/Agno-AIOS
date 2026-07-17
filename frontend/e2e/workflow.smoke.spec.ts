@@ -624,6 +624,11 @@ test.describe('workflow critical path', () => {
       await expect(page.getByText(/工作流开始|Workflow started|工作流运行中/i).first()).toBeVisible({
         timeout: 10_000,
       })
+      // Structure lock while running: palette not draggable; node toolbar hidden.
+      await expect(page.locator('.workflow-canvas--main.is-running')).toBeVisible({ timeout: 10_000 })
+      await expect(page.locator('.workflow-palette__item').first()).toHaveAttribute('draggable', 'false')
+      await page.locator('.wf-flow-node').first().click()
+      await expect(page.locator('.wf-node-toolbar')).toHaveCount(0)
       // Client pre-allocates run_id; stop should call cancel for that id.
       const stop = page.getByRole('button', { name: /stop|停止/i })
       await expect(stop).toBeVisible({ timeout: 10_000 })
@@ -633,7 +638,7 @@ test.describe('workflow critical path', () => {
       expect(cancelRunId).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
       )
-      await expect(page.getByText(/已由用户停止|Stopped by user/)).toBeVisible({ timeout: 10_000 })
+      await expect(page.getByText(/已由用户停止|Stopped by user/).first()).toBeVisible({ timeout: 10_000 })
     } finally {
       await sse.close().catch(() => undefined)
     }
@@ -752,6 +757,8 @@ test.describe('workflow critical path', () => {
     await expect.poll(() => publishCalls, { timeout: 10_000 }).toBe(1)
     await expect(page.getByText(/已发布|Published/i).first()).toBeVisible({ timeout: 10_000 })
   })
+
+
 
   test('enabling webhook on unpublished draft opens publish modal', async ({ page }) => {
     const draft = {
