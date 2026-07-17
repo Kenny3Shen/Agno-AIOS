@@ -171,3 +171,38 @@ def test_get_markdown_text_returns_empty_when_no_usable_body():
     html = "<html><head><title>Empty</title></head><body><nav>only nav</nav></body></html>"
     soup = BeautifulSoup(html, "html.parser")
     assert get_markdown_text(soup, "https://unknown-news.example/empty") == ""
+
+
+def test_find_content_container_accepts_article_tag():
+    """Class rules should match semantic article tags, not only div."""
+    body = "Security research content with enough length. " * 10
+    html = f"""
+    <html><body>
+      <article class="td-post-content tagdiv-type">
+        <p>{body}</p>
+      </article>
+    </body></html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    container = _find_content_container(soup, "td-post-content tagdiv-type")
+    assert container is not None
+    assert container.name == "article"
+    assert "Security research" in container.get_text()
+
+
+def test_get_markdown_text_domain_rule_on_article_tag():
+    body = ("Threat analysis on article tag with enough length. " * 8)
+    html = f"""
+    <html><head><title>Article Tag CVE</title></head>
+    <body>
+      <article class="td-post-content tagdiv-type">
+        <p>{body}</p>
+        <p>{body}</p>
+      </article>
+    </body></html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    md = get_markdown_text(soup, "https://cybersecuritynews.com/article-tag/")
+    assert md.startswith("# Article Tag CVE")
+    assert "Threat analysis" in md
+

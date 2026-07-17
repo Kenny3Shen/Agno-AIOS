@@ -670,24 +670,32 @@ async def _crawl_and_persist_locked(
         done_count = 0
         ok_running = 0
         err_running = 0
-        for finished in asyncio.as_completed(tasks):
-            record = await finished
-            records.append(record)
-            done_count += 1
-            if record.get("status") == "ok":
-                ok_running += 1
-            else:
-                err_running += 1
-            if fetch_total <= 12 or done_count == fetch_total or done_count % 2 == 0:
-                await _emit_progress(
-                    on_progress,
-                    stage="fetch",
-                    message=f"抓取文章 {done_count}/{fetch_total}",
-                    fetched=done_count,
-                    selected=fetch_total,
-                    ok=ok_running,
-                    error=err_running,
-                )
+        try:
+            for finished in asyncio.as_completed(tasks):
+                record = await finished
+                records.append(record)
+                done_count += 1
+                if record.get("status") == "ok":
+                    ok_running += 1
+                else:
+                    err_running += 1
+                if fetch_total <= 12 or done_count == fetch_total or done_count % 2 == 0:
+                    await _emit_progress(
+                        on_progress,
+                        stage="fetch",
+                        message=f"抓取文章 {done_count}/{fetch_total}",
+                        fetched=done_count,
+                        selected=fetch_total,
+                        ok=ok_running,
+                        error=err_running,
+                    )
+        except asyncio.CancelledError:
+            # Client abort / worker cancel: stop sibling fetches so lock can release.
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
 
     ok = sum(1 for record in records if record.get("status") == "ok")
     err = len(records) - ok

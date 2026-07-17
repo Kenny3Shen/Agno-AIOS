@@ -171,7 +171,7 @@ export function TracePage() {
   // active-or-archived chat rows (archived_only / default exclude) so filter flags
   // are accurate without multi-page client walks.
   const chatSessions = useInfiniteQuery({
-    ...sessionsQuery(true, effectiveUserId || undefined),
+    ...sessionsQuery({ includeArchived: true, userId: effectiveUserId || undefined }),
     enabled: !archiveScoped,
   })
   const chatArchiveWindow = useQuery({

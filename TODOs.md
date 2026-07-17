@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Collect 取消清理 + 正文容器 + Trace sessions 查询
+
+- 同步抓取阶段 `CancelledError` 时 cancel 未完成 sibling fetch tasks，避免悬挂任务占锁。
+- `_find_content_container` 匹配 `div/article/section/main`（多 class 规则兼容语义标签）。
+- Trace 归档列表 `sessionsQuery` 改对象形参，去掉 boolean 遗留调用点。
+
 ## 已完成：CVE 库更新可停止
 
 - 与 Collect 同步：`AbortController` + 进度条「停止更新」；SSE 断开取消服务端 worker。

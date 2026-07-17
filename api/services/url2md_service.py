@@ -201,17 +201,28 @@ def _class_set(value: object) -> set[str]:
 
 
 def _find_content_container(soup: BeautifulSoup, main_class_name: str):
-    """Locate the article body div using multi-class-safe matching."""
+    """Locate the article body using multi-class-safe matching.
+
+    Prefer ``div`` (most CMS rules) but also try ``article`` / ``section`` /
+    ``main`` so class-based rules still match semantic markup.
+    """
     tokens = _class_tokens(main_class_name)
     if not tokens:
         return None
-    if len(tokens) == 1:
-        return soup.find("div", class_=tokens[0])
-    # Multi-class: require all tokens present on the same element
-    return soup.find(
-        "div",
-        class_=lambda value, t=tokens: bool(value) and set(t).issubset(_class_set(value)),
-    )
+    tags = ("div", "article", "section", "main")
+    for tag in tags:
+        if len(tokens) == 1:
+            node = soup.find(tag, class_=tokens[0])
+        else:
+            # Multi-class: require all tokens present on the same element.
+            node = soup.find(
+                tag,
+                class_=lambda value, t=tokens: bool(value)
+                and set(t).issubset(_class_set(value)),
+            )
+        if node is not None:
+            return node
+    return None
 
 
 # Prefer semantic / CMS body containers when domain rules miss or class drifts.
