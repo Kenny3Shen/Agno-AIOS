@@ -1090,6 +1090,43 @@ async def test_resume_job_marks_agno_run_and_trace_error_and_notifies_both_sides
 
 
 
+
+
+@pytest.mark.asyncio
+async def test_run_paused_falls_back_to_request_session_id():
+    runtime = security_run_runtime.SecurityRunRuntime()
+
+    class PausedNoSessionAgent:
+        async def arun(self, *_args, **_kwargs):
+            yield {
+                "event": "RunStarted",
+                "run_id": "run-pause",
+                "session_id": "session-client",
+                "model": "test-model",
+                "model_provider": "test",
+            }
+            yield {
+                "event": "RunPaused",
+                "run_id": "run-pause",
+                "approval_id": "appr-1",
+                "tools": [{"tool_name": "hitl_simulate_containment", "approval_id": "appr-1"}],
+            }
+
+    events = [
+        event
+        async for event in runtime._stream_agent_events(
+            PausedNoSessionAgent(),
+            security_run_runtime.SecurityRunRequest.from_chat_args(
+                "isolate host",
+                session_id="session-client",
+                user_id="user-1",
+            ),
+        )
+    ]
+    paused = next(event for event in events if event.event == "run.paused")
+    assert paused.data.get("session_id") == "session-client"
+    assert paused.data.get("approval_id") == "appr-1"
+
 @pytest.mark.asyncio
 async def test_run_completed_falls_back_to_request_session_id():
     """Agno may omit session_id on RunCompleted; keep the request session for UI/history."""

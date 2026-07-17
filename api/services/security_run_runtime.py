@@ -1092,6 +1092,8 @@ class SecurityRunRuntime:
                         )
                 elif event_type == RunEvent.run_paused.value:
                     paused = paused_payload(event)
+                    if not paused.get("session_id"):
+                        paused["session_id"] = str(request.session_id or "")
                     approval_id = str(paused.get("approval_id") or "")
                     if approval_id and run_id:
                         session_id = str(

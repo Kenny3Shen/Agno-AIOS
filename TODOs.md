@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：HITL pause session_id 回退 + cancel runId 跟踪
+
+- `run.paused` 缺 `session_id` 时回退 `request.session_id`（审批通知/深链一致）。
+- 前端从任意带 `runId` 的 SSE 事件更新 `activeRunId`（重试后 cancel 仍可用）。
+- 用户停止生成时 `clear-error`，避免残留 soft-error 横幅。
+
 ## 已完成：run.completed session_id 回退请求会话
 
 - Agno 终态事件可能省略 `session_id` 时，用 `request.session_id` 填充 `run.completed` / `run.continued`，避免新会话 history 深链丢会话。

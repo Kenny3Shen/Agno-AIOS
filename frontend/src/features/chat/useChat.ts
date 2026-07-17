@@ -168,6 +168,7 @@ export function useChat() {
       await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
+        dispatch({ type: 'clear-error' })
         dispatch({
           type: 'event',
           id: assistantId,
