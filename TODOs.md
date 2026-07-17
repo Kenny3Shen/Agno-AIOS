@@ -1,5 +1,13 @@
 # 下一步工作
 
+## 已完成：空剪贴板粘贴 / reparent 失败 Toast / Studio Esc 停跑
+
+- 粘贴/复制：剪贴板空时 `pasteEmptyClipboard` info toast，不再静默。
+- reparent/连线：`cycle` / `invalid` 与 HITL 一样给出 warning toast。
+- Studio 运行中 Esc 停止（页面级 + 画布优先于清选择）；停止按钮 title 提示 Esc。
+- 快捷键说明补充 Esc 停止运行语义。
+
+
 ## 已完成：多选粘贴根级提示 + Chat Esc 停止 + nodeLabel 卫生
 
 - Studio：`pasteNodesIntoSelection` 返回 `multiSelectRootPaste`；多选粘贴/复制时 Toast「已追加到画布根级」（HITL 分流提示优先）。

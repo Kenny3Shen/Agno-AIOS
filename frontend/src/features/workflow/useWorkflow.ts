@@ -572,9 +572,15 @@ export function useWorkflow() {
     clipboardRef.current = (tops.length ? tops : nodes).map(cloneNodeDeep)
   }
 
-  const pasteClipboard = (): { divertedHitlCount: number; multiSelectRootPaste: boolean } => {
+  const pasteClipboard = (): {
+    divertedHitlCount: number
+    multiSelectRootPaste: boolean
+    pasted: boolean
+  } => {
     const items = clipboardRef.current
-    if (!items.length) return { divertedHitlCount: 0, multiSelectRootPaste: false }
+    if (!items.length) {
+      return { divertedHitlCount: 0, multiSelectRootPaste: false, pasted: false }
+    }
 
     const soleId =
       state.selectedIds.length === 1
@@ -652,10 +658,15 @@ export function useWorkflow() {
     return {
       divertedHitlCount: pasted.divertedHitlCount,
       multiSelectRootPaste: pasted.multiSelectRootPaste,
+      pasted: true,
     }
   }
 
-  const duplicateSelected = (): { divertedHitlCount: number; multiSelectRootPaste: boolean } => {
+  const duplicateSelected = (): {
+    divertedHitlCount: number
+    multiSelectRootPaste: boolean
+    pasted: boolean
+  } => {
     // snapshot selection into clipboard then paste with offset
     const ids = state.selectedIds.length
       ? state.selectedIds

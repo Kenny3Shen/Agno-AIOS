@@ -108,6 +108,9 @@ type Props = {
   onPaste: () => void
   onOrganize: () => void
   onDuplicateSelected: () => void
+  /** When true, Escape stops the active Studio run before clearing selection. */
+  running?: boolean
+  onStop?: () => void
   nodeRunStatus?: Record<string, 'running' | 'ok' | 'error' | 'paused'>
   validationIssues?: Array<{ nodeId: string | null; code: string; message: string }>
   validationEpoch?: number
@@ -262,6 +265,8 @@ function CanvasInner({
   onPaste,
   onOrganize,
   onDuplicateSelected,
+  running = false,
+  onStop,
   nodeRunStatus = {},
   validationIssues = [],
   validationEpoch = 0,
@@ -1000,6 +1005,11 @@ function CanvasInner({
         return
       }
       if (event.key === 'Escape') {
+        if (running && onStop) {
+          event.preventDefault()
+          onStop()
+          return
+        }
         if (selectedIds.length || selectedId) {
           event.preventDefault()
           onSelectMany([])
@@ -1012,7 +1022,7 @@ function CanvasInner({
         onDeleteSelected()
       }
     },
-    [onUndo, onRedo, onCopy, onPaste, onSelectMany, onOrganize, onDeleteSelected, steps, selectedIds, selectedId]
+    [onUndo, onRedo, onCopy, onPaste, onSelectMany, onOrganize, onDeleteSelected, onStop, running, steps, selectedIds, selectedId]
   )
 
   useEffect(() => {

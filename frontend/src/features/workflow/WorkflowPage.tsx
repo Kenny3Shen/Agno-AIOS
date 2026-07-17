@@ -90,6 +90,10 @@ export function WorkflowPage() {
   const workflow = useWorkflow()
   const pasteWithHitlGuard = () => {
     const result = workflow.pasteClipboard()
+    if (!result.pasted) {
+      message.info(t('pasteEmptyClipboard'))
+      return
+    }
     if (result.divertedHitlCount > 0) {
       message.warning(t('pasteHitlDiverted', { count: result.divertedHitlCount }))
     } else if (result.multiSelectRootPaste) {
@@ -98,6 +102,10 @@ export function WorkflowPage() {
   }
   const duplicateWithHitlGuard = () => {
     const result = workflow.duplicateSelected()
+    if (!result.pasted) {
+      message.info(t('pasteEmptyClipboard'))
+      return
+    }
     if (result.divertedHitlCount > 0) {
       message.warning(t('pasteHitlDiverted', { count: result.divertedHitlCount }))
     } else if (result.multiSelectRootPaste) {
@@ -107,6 +115,10 @@ export function WorkflowPage() {
   const warnReparentBlocked = (blocked: string | null | undefined) => {
     if (blocked === 'hitl_in_parallel') {
       message.warning(t('reparentHitlBlocked'))
+    } else if (blocked === 'cycle') {
+      message.warning(t('reparentCycleBlocked'))
+    } else if (blocked === 'invalid') {
+      message.warning(t('reparentInvalidBlocked'))
     }
   }
   const reparentWithHitlGuard = (
@@ -130,6 +142,21 @@ export function WorkflowPage() {
       message.warning(t('multiSelectHitlSkipped', { count: skipped }))
     }
   }
+
+  // Esc stops an in-flight Studio run (page-level; canvas also handles when focused).
+  const stopRef = useRef(workflow.stop)
+  stopRef.current = workflow.stop
+  useEffect(() => {
+    if (!workflow.state.running) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      if (event.metaKey || event.ctrlKey || event.altKey) return
+      event.preventDefault()
+      stopRef.current()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [workflow.state.running])
   const runLogListRef = useRef<HTMLDivElement>(null)
   const inspectorPanelRef = useRef<HTMLElement | null>(null)
   const focusFieldRef = useRef<string | null>(null)
@@ -516,9 +543,11 @@ export function WorkflowPage() {
             </Button>
           </Tooltip>
           {workflow.state.running ? (
-            <Button danger icon={<StopOutlined />} onClick={workflow.stop}>
-              {t('stop')}
-            </Button>
+            <Tooltip title={t('stopRunHint')} getPopupContainer={studioPopupContainer}>
+              <Button danger icon={<StopOutlined />} onClick={workflow.stop}>
+                {t('stop')}
+              </Button>
+            </Tooltip>
           ) : null}
         </Space>
       </header>
@@ -778,6 +807,8 @@ export function WorkflowPage() {
             steps={workflow.state.steps}
             selectedId={workflow.state.selectedId}
             selectedIds={workflow.state.selectedIds}
+            running={workflow.state.running}
+            onStop={workflow.stop}
             executorNames={executorNames}
             onSelect={workflow.select}
             onSelectMany={workflow.selectMany}
