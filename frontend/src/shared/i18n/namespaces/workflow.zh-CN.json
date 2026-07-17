@@ -201,6 +201,7 @@
   "errorRunNeedsSave": "请先保存工作流再运行",
   "errorRunNeedsClean": "请先保存修改再运行",
   "validationFixBeforeRun": "请先修复校验问题再运行",
+  "validationFixBeforePublish": "请先修复校验问题再发布",
   "errorTriggerNeedsPublish": "请先发布工作流再启用 Webhook / 定时触发",
   "errorTriggerNeedsSavePublish": "请先保存并重新发布当前草稿，再启用触发器",
   "validationEmptyConditionCel": "{{path}}：请填写条件表达式",

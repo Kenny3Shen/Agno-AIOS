@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Studio 发布前校验 + 运行中禁止改坐标
+
+- `publish()` 与 save/run 一致：校验草稿，失败高亮节点。
+- `applyPositions` 增加 `rejectIfRunning` 防御（画布已 `nodesDraggable=false`）。
+- CVE DB 同步透传 `CancelledError`。
+
 ## 已完成：useChat 瘦身 + url2md 取消透传
 
 - `useChat` 不再维护侧栏搜索/归档状态；会话列表只拉 active 页并与侧栏 RQ 缓存对齐。

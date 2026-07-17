@@ -190,6 +190,8 @@ async def update_cve_database(
         for i in range(0, len(deleted_data), batch_size):
             del_count += await delete_cve_rows(deleted_data[i : i + batch_size])
         total_count = await count_cve_rows()
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.exception("同步过程中出错: {}", e)
         raise

@@ -201,6 +201,7 @@
   "errorRunNeedsSave": "Save the workflow before running",
   "errorRunNeedsClean": "Save changes before running",
   "validationFixBeforeRun": "Fix validation errors before running",
+  "validationFixBeforePublish": "Fix validation errors before publishing",
   "errorTriggerNeedsPublish": "Publish the workflow before enabling webhook or cron triggers",
   "errorTriggerNeedsSavePublish": "Save and publish the current draft before enabling triggers",
   "validationEmptyConditionCel": "{{path}}: condition expression is required",

@@ -511,6 +511,7 @@ export function useWorkflow() {
   }
 
   const applyPositions = (positions: Record<string, { x: number; y: number }>) => {
+    if (rejectIfRunning()) return
     withHistory((current) => {
       let steps = current.steps
       for (const [id, position] of Object.entries(positions)) {
@@ -1002,7 +1003,23 @@ export function useWorkflow() {
       setState((current) => ({ ...current, error: t('errorPublishNeedsClean') }))
       return false
     }
-    setState((current) => ({ ...current, saving: true, error: null }))
+    // Same draft checks as save/run so publish never ships a broken definition.
+    const translate = (key: string, options?: Record<string, string | number>) => t(key, options)
+    const issues = validateWorkflowDraft(state.steps, translate, state.workflowId)
+    const nameIssue = validateWorkflowName(state.name, translate)
+    if (nameIssue) issues.unshift(nameIssue)
+    if (issues.length) {
+      setState((current) => ({
+        ...current,
+        validationIssues: issues,
+        validationEpoch: current.validationEpoch + 1,
+        error: issues[0]?.message ?? t('validationFixBeforePublish'),
+        selectedId: issues[0]?.nodeId ?? current.selectedId,
+        selectedIds: issues[0]?.nodeId ? [issues[0].nodeId] : current.selectedIds,
+      }))
+      return false
+    }
+    setState((current) => ({ ...current, saving: true, error: null, validationIssues: [] }))
     try {
       const record = await publishWorkflow(state.workflowId)
       const loaded = fromRecord(record)
