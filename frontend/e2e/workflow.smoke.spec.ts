@@ -753,5 +753,123 @@ test.describe('workflow critical path', () => {
     await expect(page.getByText(/已发布|Published/i).first()).toBeVisible({ timeout: 10_000 })
   })
 
+  test('enabling webhook on unpublished draft opens publish modal', async ({ page }) => {
+    const draft = {
+      ...workflow,
+      version: 1,
+      published_version: null,
+      published_at: null,
+      has_published: false,
+      triggers: {
+        webhook: { enabled: false, secret: '' },
+        cron: { enabled: false, expression: '', last_run_at: 0 },
+      },
+    }
+
+    await openAuthed(page, '/dashboard', {
+      handleApi: async ({ method, path, route }) => {
+        if (method === 'GET' && path.endsWith('/api/workflows')) {
+          await fulfillJson(route, {
+            data: [draft],
+            meta: { page: 1, limit: 50, total_pages: 1, total_count: 1, search_time_ms: 0 },
+          })
+          return true
+        }
+        if (method === 'GET' && path.endsWith(`/api/workflows/${workflow.id}`)) {
+          await fulfillJson(route, draft)
+          return true
+        }
+        if (method === 'GET' && path.endsWith('/api/workflows/executors')) {
+          await fulfillJson(route, {
+            data: [
+              {
+                ref: 'security-operations',
+                kind: 'agent',
+                name: 'Security Operations',
+                description: '',
+              },
+            ],
+          })
+          return true
+        }
+        if (method === 'GET' && path.endsWith('/api/workflows/templates')) {
+          await fulfillJson(route, { data: [] })
+          return true
+        }
+        if (method === 'GET' && path.endsWith('/api/skills')) {
+          await fulfillJson(route, {
+            data: [],
+            meta: { page: 1, limit: 1, total_pages: 0, total_count: 0, search_time_ms: 0 },
+          })
+          return true
+        }
+        if (method === 'GET' && path.includes(`/api/workflows/${workflow.id}/versions`)) {
+          await fulfillJson(route, {
+            data: [],
+            meta: { page: 1, limit: 20, total_pages: 0, total_count: 0, search_time_ms: 0 },
+          })
+          return true
+        }
+        if (method === 'GET' && path.includes(`/api/workflows/${workflow.id}/triggers/history`)) {
+          await fulfillJson(route, {
+            data: [],
+            meta: { page: 1, limit: 20, total_pages: 0, total_count: 0, search_time_ms: 0 },
+          })
+          return true
+        }
+        if (method === 'GET' && path.endsWith('/api/models')) {
+          await fulfillJson(route, {
+            active_model_id: 'model-1',
+            models: [
+              {
+                id: 'model-1',
+                name: 'E2E Model',
+                provider: 'openai',
+                model_id: 'gpt-test',
+                base_url: '',
+                api_key: 'sk-test',
+                api_protocol: 'chat-completions',
+                structured_output_mode: 'native',
+                description: '',
+                enabled: true,
+                builtin: false,
+                configured: true,
+              },
+            ],
+          })
+          return true
+        }
+        return false
+      },
+    })
+
+    await page.goto(`/#/workflow?workflow_id=${workflow.id}`, { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { name: '工作流' })).toBeVisible()
+    await expect(page.getByPlaceholder('工作流名称')).toHaveValue('E2E Workflow', { timeout: 10_000 })
+    await expect(page.getByText(/未发布|Unpublished/i).first()).toBeVisible()
+
+    // Right panel uses Collapse (not Tabs): expand "定义与触发".
+    const defPanel = page.locator('.ant-collapse-item').filter({ hasText: /定义与触发|Definition/i }).first()
+    await expect(defPanel).toBeVisible({ timeout: 10_000 })
+    if (!(await defPanel.locator('.ant-collapse-content-active').count())) {
+      await defPanel.locator('.ant-collapse-header').click()
+    }
+    const webhookRow = defPanel.locator('.workflow-inspector__switch').filter({
+      hasText: /Webhook/,
+    })
+    await expect(webhookRow).toBeVisible({ timeout: 10_000 })
+    await webhookRow.locator('.ant-switch').click()
+
+    const dialog = page.getByRole('dialog').filter({ hasText: /需要先发布|Publish required/i })
+    await expect(dialog).toBeVisible({ timeout: 10_000 })
+    await expect(dialog.getByText(/已发布版本|published revision|先保存草稿并发布/i)).toBeVisible()
+
+    // warning modal only has OK (publish); closing still leaves webhook off because
+    // enable was never applied when unpublished.
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden({ timeout: 5_000 })
+    await expect(webhookRow.locator('.ant-switch')).not.toHaveClass(/ant-switch-checked/)
+  })
+
 
 })

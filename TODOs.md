@@ -1,5 +1,10 @@
 # 下一步工作
 
+## 已完成：未发布草稿启用 Webhook e2e
+
+- Playwright：未发布工作流打开「定义与触发」，启用 Webhook → 弹出「需要先发布」说明；Esc 关闭后开关仍为关。
+- 覆盖 P0.1 触发器发布守卫 UI 路径（Collapse 面板，非 Tabs）。
+
 ## 已完成：Studio 运行中隐藏节点工具栏与空槽 CTA
 
 - 节点 `data.structureLocked` 随 `running` 同步（topology rebuild + `updateNodeData` 轻量 patch，不触发布局）。
