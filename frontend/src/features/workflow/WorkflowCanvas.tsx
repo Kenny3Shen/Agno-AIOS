@@ -144,6 +144,7 @@ function buildGraph(
   } | null = null,
   t: TranslateFn = (key) => key,
   executorNames: ReadonlyMap<string, string> | Record<string, string> = {},
+  structureLocked = false,
 ): FlowGraph {
   const layout = layoutCanvas(steps)
   const prevById = new Map(prevNodes.map((item) => [item.id, item]))
@@ -192,6 +193,7 @@ function buildGraph(
         onToolbarDelete: () => toolbar?.onDelete(item.id),
         onToolbarCopy: () => toolbar?.onCopy(),
         onToolbarDuplicate: () => toolbar?.onDuplicate(),
+        structureLocked,
       },
       selected: selected.has(item.id),
       ...(prev?.measured ? { measured: prev.measured } : {}),
@@ -293,6 +295,8 @@ function CanvasInner({
   const connectingFromRef = useRef<{ nodeId: string; handleId: string | null } | null>(null)
   const nodeRunStatusRef = useRef(nodeRunStatus)
   nodeRunStatusRef.current = nodeRunStatus
+  const runningRef = useRef(running)
+  runningRef.current = running
   const stepsRef = useRef(steps)
   stepsRef.current = steps
   const selectionRef = useRef({ selectedIds, selectedId })
@@ -396,13 +400,15 @@ function CanvasInner({
         },
         t,
         executorNamesRef.current,
+        runningRef.current,
       )
-      // Preserve runStatus + apply current selection/highlights (refs, not deps).
+      // Preserve runStatus + structureLocked + apply current selection/highlights (refs, not deps).
       const prevStatus = new Map(
         prev.nodes.map((n) => [n.id, n.data.runStatus ?? null])
       )
       const liveStatus = nodeRunStatusRef.current
       const selectedSet = new Set(effectiveSelectedIds)
+      const locked = runningRef.current
       next.nodes = next.nodes.map((n) => {
         const status = liveStatus[n.id] ?? prevStatus.get(n.id) ?? null
         return {
@@ -411,6 +417,7 @@ function CanvasInner({
           data: {
             ...n.data,
             runStatus: status,
+            structureLocked: locked,
             dropHighlight: dropId === n.id,
             connectHighlight: connectId === n.id,
           },
@@ -545,6 +552,30 @@ function CanvasInner({
       return changed ? { ...current, nodes } : current
     })
   }, [nodeRunStatus, updateNodeData])
+
+  // Structure lock while a Studio run is active: hide toolbar/slot CTAs without layout.
+  useEffect(() => {
+    const locked = running
+    const toPatch = graphNodesRef.current.filter(
+      (node) => Boolean(node.data.structureLocked) !== locked,
+    )
+    for (const node of toPatch) {
+      updateNodeData(node.id, { structureLocked: locked })
+    }
+    setGraph((current) => {
+      if (!current.nodes.length) return current
+      let changed = false
+      const nodes = current.nodes.map((node) => {
+        if (Boolean(node.data.structureLocked) === locked) return node
+        changed = true
+        return {
+          ...node,
+          data: { ...node.data, structureLocked: locked },
+        }
+      })
+      return changed ? { ...current, nodes } : current
+    })
+  }, [running, updateNodeData])
 
   // Focus viewport on running / paused nodes during a run.
   useEffect(() => {

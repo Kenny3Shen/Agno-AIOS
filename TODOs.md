@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Studio 运行中隐藏节点工具栏与空槽 CTA
+
+- 节点 `data.structureLocked` 随 `running` 同步（topology rebuild + `updateNodeData` 轻量 patch，不触发布局）。
+- 运行中：选中节点不显示 Copy/Dup/Del 工具栏；容器空槽「添加…」CTA 不渲染；点击守卫保留。
+- 与已有 `rejectIfRunning` / `nodesDraggable={!running}` / Inspector 定义只读形成完整「结构只读」体验。
+
 ## 已完成：Studio 运行中定义只读 + Publish e2e
 
 - 运行中锁定 Inspector 定义字段（`update` / 多选 patch / `patch` 定义键 / 触发器）；面板标注只读，CSS 降低可编辑感。

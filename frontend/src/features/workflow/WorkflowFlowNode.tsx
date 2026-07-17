@@ -34,6 +34,8 @@ export type WorkflowFlowNodeData = {
   onToolbarDelete?: () => void
   onToolbarCopy?: () => void
   onToolbarDuplicate?: () => void
+  /** When true, hide mutation toolbar + empty-slot CTAs (Studio run active). */
+  structureLocked?: boolean
 }
 
 /** Typed React Flow node for Studio (skill: Node<data, type>). */
@@ -99,6 +101,7 @@ function WorkflowFlowNodeComponent({
   const onSlotClick = (event: MouseEvent, key: string) => {
     event.stopPropagation()
     event.preventDefault()
+    if (payload.structureLocked) return
     payload.onEmptySlot?.(key)
   }
 
@@ -109,7 +112,7 @@ function WorkflowFlowNodeComponent({
       title={payload.invalidMessage || undefined}
     >
       <NodeToolbar
-        isVisible={selected}
+        isVisible={selected && !payload.structureLocked}
         position={Position.Top}
         offset={10}
         className="wf-node-toolbar nodrag nopan"
@@ -186,7 +189,7 @@ function WorkflowFlowNodeComponent({
         {payload.invalid && payload.invalidMessage ? (
           <div className="wf-flow-node__error">{payload.invalidMessage}</div>
         ) : null}
-        {payload.emptySlots?.length ? (
+        {payload.emptySlots?.length && !payload.structureLocked ? (
           <div className="wf-flow-node__slots">
             {payload.emptySlots.map((slot) => (
               <button
