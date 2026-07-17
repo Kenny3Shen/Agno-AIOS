@@ -50,6 +50,8 @@ SOURCE_EXTRA_SEEDS: dict[str, list[str]] = {
 # Concurrent HTTP/parse workers for article body fetch.
 FETCH_CONCURRENCY = 6
 DISCOVER_CONCURRENCY = 4
+# Extra list pages to walk after home (page/2 …) when the home feed is thin.
+MAX_LIST_PAGES = 3
 
 DEFAULT_HEADERS = {
     "User-Agent": (
@@ -171,6 +173,56 @@ def _summary_from_markdown(markdown: str, limit: int = 280) -> str:
     return text[: limit - 1] + "…"
 
 
+
+def _is_list_path(url: str) -> bool:
+    """True for category/tag/pagination list pages (not article bodies)."""
+    lower = url.lower()
+    path = urlsplit(url).path or ""
+    if any(marker in lower for marker in ("/tag/", "/tags/", "/category/", "/author/", "/search")):
+        return True
+    if re.search(r"/page/\d+/?$", path) or re.search(r"[?&]page=\d+", lower):
+        return True
+    return False
+
+
+def _list_page_seed_urls(home: str, *, max_pages: int = MAX_LIST_PAGES) -> list[str]:
+    """Build common WordPress-style list pagination URLs from a home seed."""
+    if max_pages <= 1 or not home:
+        return []
+    base = home.rstrip("/") + "/"
+    seeds: list[str] = []
+    for page in range(2, max_pages + 1):
+        seeds.append(f"{base}page/{page}/")
+    return seeds
+
+
+def extract_list_page_links(html: str, base_url: str, source_domain: str) -> list[str]:
+    """Collect same-source list/pagination links for deeper discovery."""
+    soup = BeautifulSoup(html, "html.parser")
+    found: list[str] = []
+    seen: set[str] = set()
+    for anchor in soup.find_all("a", href=True):
+        href = str(anchor.get("href") or "").strip()
+        if not href:
+            continue
+        absolute = _normalize_url(urljoin(base_url, href))
+        if not absolute or absolute in seen:
+            continue
+        if not _is_same_source(absolute, source_domain):
+            continue
+        rel = " ".join(anchor.get("rel") or []).lower()
+        text = anchor.get_text(" ", strip=True).lower()
+        if "next" in rel or text in {"next", "older", "下一页", "下页", "»", "›"}:
+            if absolute not in seen:
+                seen.add(absolute)
+                found.append(absolute)
+            continue
+        if _is_list_path(absolute):
+            seen.add(absolute)
+            found.append(absolute)
+    return found
+
+
 def extract_article_links(html: str, base_url: str, source_domain: str) -> list[str]:
     soup = BeautifulSoup(html, "html.parser")
     found: list[str] = []
@@ -253,10 +305,21 @@ async def _discover_one_domain(
     home = SOURCE_HOME_URLS.get(domain)
     if home and home not in seeds:
         seeds.insert(0, home)
+    # Walk common list pagination after the home feed when still under quota.
+    for page_seed in _list_page_seed_urls(home or "", max_pages=MAX_LIST_PAGES):
+        if page_seed not in seeds:
+            seeds.append(page_seed)
     links: list[str] = []
     seen: set[str] = set()
+    visited_seeds: set[str] = set()
+    queue = list(seeds)
     async with semaphore:
-        for seed in seeds:
+        while queue and len(links) < max_links_per_source:
+            seed = queue.pop(0)
+            normalized_seed = _normalize_url(seed) or seed
+            if normalized_seed in visited_seeds:
+                continue
+            visited_seeds.add(normalized_seed)
             try:
                 resp = None
                 last_exc: Exception | None = None
@@ -280,17 +343,24 @@ async def _discover_one_domain(
                 if resp.status_code != 200:
                     logger.warning("collect crawl seed HTTP {}: {}", resp.status_code, seed)
                     continue
-                for link in extract_article_links(resp.text, str(resp.url), domain):
+                final_url = str(resp.url)
+                for link in extract_article_links(resp.text, final_url, domain):
                     if link in seen:
                         continue
                     seen.add(link)
                     links.append(link)
                     if len(links) >= max_links_per_source:
                         break
+                # Enqueue same-source list pages (bounded) for deeper discovery.
+                if len(links) < max_links_per_source and len(visited_seeds) < MAX_LIST_PAGES + 2:
+                    for list_link in extract_list_page_links(resp.text, final_url, domain):
+                        norm = _normalize_url(list_link) or list_link
+                        if norm in visited_seeds:
+                            continue
+                        if norm not in {_normalize_url(item) or item for item in queue}:
+                            queue.append(list_link)
             except (UnsafeUrlError, httpx.HTTPError) as exc:
                 logger.warning("collect crawl seed failed {}: {}", seed, exc)
-            if len(links) >= max_links_per_source:
-                break
     logger.info("collect crawl discovered {} links for {}", len(links), domain)
     return domain, links
 

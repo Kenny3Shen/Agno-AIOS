@@ -4,6 +4,8 @@ from api.services.collect_crawl_service import (
     _title_from_markdown,
     configured_source_domains,
     extract_article_links,
+    extract_list_page_links,
+    _list_page_seed_urls,
     _is_transient_fetch_failure,
     select_urls_round_robin,
 )
@@ -110,3 +112,25 @@ def test_transient_fetch_failure_classifier():
     assert not _is_transient_fetch_failure("Content too short for https://x")
     assert not _is_transient_fetch_failure("HTTP error for https://x: status code 404")
     assert not _is_transient_fetch_failure("Restricted access")
+
+
+def test_list_page_seed_urls_builds_pagination():
+    seeds = _list_page_seed_urls("https://thehackernews.com/", max_pages=3)
+    assert seeds == [
+        "https://thehackernews.com/page/2/",
+        "https://thehackernews.com/page/3/",
+    ]
+
+
+def test_extract_list_page_links_finds_next_and_page():
+    html = """
+    <html><body>
+      <a href="/page/2/">Next</a>
+      <a rel="next" href="https://thehackernews.com/page/3/">older</a>
+      <a href="/2024/05/serious-bug-found.html">Article</a>
+    </body></html>
+    """
+    links = extract_list_page_links(html, "https://thehackernews.com/", "thehackernews.com")
+    assert any("/page/2" in link for link in links)
+    assert any("/page/3" in link for link in links)
+    assert all("serious-bug" not in link for link in links)

@@ -11,5 +11,6 @@
   "colCve": "CVE",
   "colDescription": "Description",
   "colSource": "Source",
-  "colIndexed": "Indexed"
+  "colIndexed": "Indexed",
+  "updatedDetail": "CVE database updated: +{{add}} / −{{del}}"
 }
