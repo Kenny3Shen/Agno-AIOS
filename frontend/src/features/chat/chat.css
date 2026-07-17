@@ -1255,15 +1255,6 @@ html.dark {
   font-size: 13px;
 }
 
-.chat-task-panel-mode {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-.chat-task-panel-mode .ant-btn {
-  flex: 1;
-  font-size: 12px;
-}
 
 
 .message-attachments {

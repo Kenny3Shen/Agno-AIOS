@@ -1,5 +1,22 @@
 # 下一步工作
 
+## 已完成：侧栏对话与观测文案收口
+
+- 侧栏标题「最近对话」→「对话」；去掉「最近 / 已归档」切换，列表仅展示活跃会话。
+- 归档仍从会话菜单执行；取消归档保留在 Chat 顶栏（已归档会话时）。
+- 观测中栏标题「运行与 Span」→「Run」；根节点标签为 `Run Root · {{name}}`（不译为「根」）。
+- Chat 附件收口：客户端限额、错误 detail 透传、同会话 regenerate 复用上一轮 `File[]`。
+
+## 已完成：Chat 文件上传收口（Agno media + Ant Design X + 冒烟）
+
+- 对齐 Agno OS：`multipart` 字段 `files` → `classify_upload_file` / `process_*` → `agent.arun(images/files/audio/videos)`。
+- 对齐 Ant Design X Pattern 5：`Sender.Header` + `Attachments`（纸夹/拖放/`maxCount=8`）+ 气泡 `FileCard.List`。
+- 客户端限额与后端一致（8 / 20MB / 40MB）；超限 toast；`streamMessage` 透传 API `detail`。
+- 同会话「重新生成」复用 `lastTurnFilesRef` 中的上一轮 `File[]`（刷新后不可用，tooltip 说明）。
+- 本机冒烟：multipart 文本附件 `run.started`；history 含 `attachments`；空文件 400；仅附件默认文案「请根据附件内容进行分析。」。
+- 单测：`test_chat_media` 4 绿；chat vitest 87 绿。
+
+
 ## 已完成：Chat 文件上传（Agno media + Ant Design X Attachments）
 
 - `POST /api/chat` 支持 JSON 与 `multipart/form-data`（字段 `files`，对齐 Agno OS agent run）。

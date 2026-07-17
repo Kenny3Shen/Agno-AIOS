@@ -240,3 +240,21 @@ describe('streamMessage attachments', () => {
     expect(events.some((e) => (e as { type: string }).type === 'run.completed')).toBe(true)
   })
 })
+
+describe('streamMessage errors', () => {
+  it('surfaces attachment limit errors from API detail', async () => {
+    server.use(
+      http.post('/api/chat', () =>
+        HttpResponse.json({ detail: '最多上传 8 个附件' }, { status: 400 }),
+      ),
+    )
+    await expect(
+      streamMessage(
+        { message: 'x', session_id: 's1', model_id: 'm1', files: [new File(['a'], 'a.txt')] },
+        () => {},
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow('最多上传 8 个附件')
+  })
+})
+

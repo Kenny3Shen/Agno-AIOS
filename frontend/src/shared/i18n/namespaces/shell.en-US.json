@@ -28,12 +28,12 @@
     "intelligence": "Security intelligence"
   },
   "conversations": {
-    "title": "Recent conversations",
+    "title": "Conversations",
     "today": "Today",
     "yesterday": "Yesterday",
     "earlier": "Earlier",
     "empty": "No conversations yet",
-    "loadFailed": "Unable to load recent conversations",
+    "loadFailed": "Unable to load conversations",
     "retry": "Retry",
     "unnamed": "Untitled conversation",
     "rename": "Rename",

@@ -26,6 +26,7 @@ import {
 } from '@ant-design/icons'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useChat } from './useChat'
+import { formatAttachmentLimitError, validateChatAttachments } from './attachmentLimits'
 import { unarchiveSession } from './api'
 import { chatKeys } from './queries'
 import { markSessionActiveInCaches } from './sessionCache'
@@ -239,7 +240,7 @@ function MessageBody({ message, retry, sessionId, requesting = false }: { messag
       ? [
           // HITL pause: regenerate would re-fire tools; route through Approvals instead.
           ...(message.final && message.status !== 'paused' && !requesting
-            ? [{ key: 'retry', label: t('regenerate'), icon: <ReloadOutlined />, onItemClick: retry }]
+            ? [{ key: 'retry', label: t('regenerate'), title: t('regenerateAttachmentsHint'), icon: <ReloadOutlined />, onItemClick: retry }]
             : []),
           ...(traceRunId || traceSessionId
             ? [
@@ -1008,6 +1009,11 @@ export function ChatPage() {
                     const next = fileList
                       .map((item) => item.originFileObj as File | undefined)
                       .filter((file): file is File => file instanceof File)
+                    const limitError = validateChatAttachments(next)
+                    if (limitError) {
+                      toastMessage.error(formatAttachmentLimitError(limitError, t))
+                      return
+                    }
                     chat.setAttachments(next)
                     if (next.length > 0) setOpenAttachments(true)
                   }}

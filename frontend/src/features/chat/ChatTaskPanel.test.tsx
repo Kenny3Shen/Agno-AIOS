@@ -135,7 +135,7 @@ describe('ChatTaskPanel', () => {
     const onExpandedChange = vi.fn<(expanded: boolean) => void>()
     renderWithQuery(<ChatTaskPanel expanded={false} onExpandedChange={onExpandedChange} variant="sider" />)
 
-    const toggle = screen.getByRole('button', { name: '最近对话' })
+    const toggle = screen.getByRole('button', { name: '对话' })
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
     expect(screen.queryByText('新建对话')).toBeNull()
     await user.click(toggle)
@@ -193,7 +193,7 @@ describe('ChatTaskPanel', () => {
       },
     ])
     renderWithQuery(<ChatTaskPanel expanded onExpandedChange={vi.fn<(expanded: boolean) => void>()} variant="sider" />)
-    expect(await screen.findByText('Recent conversations')).toBeTruthy()
+    expect(await screen.findByText('Conversations')).toBeTruthy()
     expect(await screen.findByText('Investigate CVE')).toBeTruthy()
     expect(await screen.findByText('Today')).toBeTruthy()
   })

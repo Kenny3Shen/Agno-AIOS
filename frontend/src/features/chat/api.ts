@@ -281,7 +281,20 @@ export const streamMessage = async (
       signal,
     })
   }
-  if (!response.ok || !response.body) throw new Error(`Chat request failed (${response.status})`)
+  if (!response.ok || !response.body) {
+    let detail = `Chat request failed (${response.status})`
+    try {
+      const payload: unknown = await response.json()
+      if (payload && typeof payload === 'object') {
+        const record = payload as Record<string, unknown>
+        if (typeof record.detail === 'string' && record.detail.trim()) detail = record.detail
+        else if (typeof record.message === 'string' && record.message.trim()) detail = record.message
+      }
+    } catch {
+      // non-JSON error body
+    }
+    throw new Error(detail)
+  }
   let terminal = false
   await consumeSse(
     response.body,

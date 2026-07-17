@@ -11,15 +11,13 @@ import {
   HistoryOutlined,
   ReloadOutlined,
   RightOutlined,
-  UndoOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { useTranslation } from 'react-i18next'
 import { useRouter, useRouterState } from '@tanstack/react-router'
-import { archiveSession, cancelRun, renameSession, unarchiveSession, type SessionListResult } from './api'
+import { archiveSession, cancelRun, renameSession, type SessionListResult } from './api'
 import { abortActiveChatStream, getActiveChatStream } from './activeChatStream'
 import { chatKeys, sessionsQuery } from './queries'
-import { markSessionActiveInCaches } from './sessionCache'
 import type { ChatSession } from './types'
 import { copyToClipboard } from '@/shared/lib/clipboard'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
@@ -90,7 +88,6 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
   const queryClient = useQueryClient()
   const contentId = useId()
   const [sessionSearch, setSessionSearch] = useState('')
-  const [showArchived, setShowArchived] = useState(false)
   const debouncedSessionSearch = useDebouncedValue(sessionSearch, 300)
   const [renameTarget, setRenameTarget] = useState<ChatSession | null>(null)
   const [renameForm] = Form.useForm<{ title: string }>()
@@ -100,7 +97,6 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
 
   const sessionsQueryResult = useInfiniteQuery(
     sessionsQuery({
-      archivedOnly: showArchived,
       q: debouncedSessionSearch.trim(),
     }),
   )
@@ -198,21 +194,6 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
       onOk: () => run(),
     })
   }
-  const unarchive = async (id: string) => {
-    try {
-      await unarchiveSession(id)
-      const seed = sessionItems.find((item) => item.session_id === id)
-      if (seed) {
-        markSessionActiveInCaches(queryClient, { ...seed, archived: false })
-      } else {
-        queryClient.removeQueries({ queryKey: chatKeys.sessionMeta(id) })
-      }
-      await queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
-      toast.success(t('shell:conversations.unarchived'))
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('shell:conversations.unarchiveFailed'))
-    }
-  }
   const confirmRename = async () => {
     const { title } = await renameForm.validateFields()
     if (!renameTarget) return
@@ -281,25 +262,19 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
     <>
       <section
         className={`chat-task-panel chat-task-panel-${variant} ${expanded ? 'chat-task-panel-expanded' : 'chat-task-panel-collapsed'}`}
-        aria-label={
-          showArchived ? t('shell:conversations.archivedTitle') : t('shell:conversations.title')
-        }
+        aria-label={t('shell:conversations.title')}
       >
         <button
           type="button"
           className="chat-task-panel-toggle"
           aria-expanded={expanded}
           aria-controls={contentId}
-          aria-label={
-            showArchived ? t('shell:conversations.archivedTitle') : t('shell:conversations.title')
-          }
+          aria-label={t('shell:conversations.title')}
           onClick={() => onExpandedChange(!expanded)}
         >
           <span className="chat-task-panel-toggle-label">
             <HistoryOutlined />
-            {showArchived
-              ? t('shell:conversations.archivedTitle')
-              : t('shell:conversations.title')}
+            {t('shell:conversations.title')}
           </span>
           {expanded ? <DownOutlined /> : <RightOutlined />}
         </button>
@@ -324,26 +299,6 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
               </div>
             ) : (
               <>
-                <div className="chat-task-panel-mode">
-                  <Button
-                    size="small"
-                    type={showArchived ? 'default' : 'primary'}
-                    onClick={() => {
-                      if (showArchived) setShowArchived(false)
-                    }}
-                  >
-                    {t('shell:conversations.recents')}
-                  </Button>
-                  <Button
-                    size="small"
-                    type={showArchived ? 'primary' : 'default'}
-                    onClick={() => {
-                      if (!showArchived) setShowArchived(true)
-                    }}
-                  >
-                    {t('shell:conversations.archivedInbox')}
-                  </Button>
-                </div>
                 {sessionItems.length || sessionSearch.trim() ? (
                   <Input.Search
                     allowClear
@@ -390,20 +345,13 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
                         label: t('shell:conversations.copySessionId'),
                         onClick: () => copySessionId(item.key),
                       },
-                      showArchived
-                        ? {
-                            key: 'unarchive',
-                            icon: <UndoOutlined />,
-                            label: t('shell:conversations.unarchive'),
-                            onClick: () => void unarchive(item.key),
-                          }
-                        : {
-                            key: 'archive',
-                            danger: true,
-                            icon: <DeleteOutlined />,
-                            label: t('shell:conversations.archive'),
-                            onClick: () => void archive(item.key),
-                          },
+                      {
+                        key: 'archive',
+                        danger: true,
+                        icon: <DeleteOutlined />,
+                        label: t('shell:conversations.archive'),
+                        onClick: () => void archive(item.key),
+                      },
                     ],
                   })}
                 />
@@ -423,11 +371,7 @@ export function ChatTaskPanel({ expanded, onExpandedChange, variant, onNavigate 
                 {!conversations.length && !sessionSearch.trim() ? (
                   <Empty
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description={
-                      showArchived
-                        ? t('shell:conversations.emptyArchived')
-                        : t('shell:conversations.empty')
-                    }
+                    description={t('shell:conversations.empty')}
                     className="chat-task-panel-empty"
                   />
                 ) : !filteredConversations.length ? (

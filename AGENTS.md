@@ -21,9 +21,9 @@ MCP 框架为 FastMCP, 文档通过 fastmcp-docs mcp 查询
 
 `cd frontend && bun run check`
 
-更新前端文件后：
+修改完毕后：
 
-`bun run build`
+`bun run build` 若编译失败则修复
 
 提交commit时，需要更新 TODOS.md 和 README.md
 <scripts></scripts>

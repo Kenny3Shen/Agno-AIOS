@@ -50,7 +50,7 @@
   "leaveWhileGeneratingContent": "仍在生成回复。离开将停止当前运行。",
   "stopAndLeave": "停止并离开",
   "archiveWhileGeneratingTitle": "生成中归档会话？",
-  "archiveWhileGeneratingContent": "当前会话仍在生成回复。归档将停止运行并从最近对话中移除。",
+  "archiveWhileGeneratingContent": "当前会话仍在生成回复。归档将停止运行并从对话列表中移除。",
   "archiveAndStop": "停止并归档",
   "sendMessage": "发送消息",
   "jumpToLatest": "返回最新消息",
@@ -107,7 +107,13 @@
   "sessionNotFound": "会话不存在或无权访问",
   "sessionMetaLoadFailed": "无法加载会话信息，请重试",
   "attachments": "附件",
-  "attachmentsHelp": "为本条消息附加图片或文档（最多 8 个，单个 ≤20MB）",
+  "attachmentsHelp": "为本条消息附加图片或文档（最多 8 个，单个 ≤20MB，合计 ≤40MB）",
   "attachmentsDropTitle": "拖放文件到这里",
-  "attachmentsDropHint": "支持图片、PDF、文本、Office、音视频等"
+  "attachmentsDropHint": "支持图片、PDF、文本、Office、音视频等",
+  "attachmentsTooMany": "最多上传 {{max}} 个附件",
+  "attachmentsFileTooLarge": "文件过大（上限 {{maxMb}}MB）：{{name}}",
+  "attachmentsTotalTooLarge": "附件总大小超过 {{maxMb}}MB",
+  "attachmentsEmptyFile": "空文件：{{name}}",
+  "attachmentsInvalid": "附件无效",
+  "regenerateAttachmentsHint": "重新生成仅使用当前会话中上一轮附件（刷新后不可用）"
 }

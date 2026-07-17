@@ -12,6 +12,7 @@ import {
 import { ApiError } from '@/shared/api/client'
 import { chatKeys, historyQuery, modelsQuery, sessionMetaQuery, sessionsQuery } from './queries'
 import { markSessionActiveInCaches } from './sessionCache'
+import { formatAttachmentLimitError, validateChatAttachments } from './attachmentLimits'
 import { chatReducer, defaultReasoningEffort, initialChatState, previousPrompt } from './utils'
 import type { ChatRunEvent, ChatSession, Message } from './types'
 import type { ReasoningEffort } from '@/shared/types/common'
@@ -39,6 +40,8 @@ export function useChat() {
   const [attachments, setAttachments] = useState<File[]>([])
   const abortRef = useRef<AbortController | null>(null)
   const activeRunIdRef = useRef<string | null>(null)
+  /** Files from the last submitted user turn (for regenerate while still in session). */
+  const lastTurnFilesRef = useRef<File[]>([])
   // Track URL session for abort-on-change (sidebar navigates URL; this hook owns the SSE).
   const prevSessionIdRef = useRef<string | null>(sessionId)
   // Active (non-archived) list only — shares RQ cache with ChatTaskPanel recents.
@@ -96,6 +99,8 @@ export function useChat() {
     // null → new session is first-message submit (keep streaming UI). A→B or A→null needs clear.
     if (prev != null) {
       dispatch({ type: 'session-switch' })
+      lastTurnFilesRef.current = []
+      setAttachments([])
     }
   }, [sessionId])
 
@@ -183,11 +188,16 @@ export function useChat() {
     dispatch({ type: 'model', value, reasoningEffort: defaultReasoningEffort(model) })
   }
 
-  const submit = async (prompt: string, appendUser = true) => {
+  const submit = async (prompt: string, appendUser = true, filesOverride?: File[]) => {
     const text = prompt.trim()
-    const pendingFiles = attachments.slice()
+    const pendingFiles = (filesOverride ?? attachments).slice()
     const hasPendingApproval = state.messages.some((message) => message.role === 'assistant' && message.status === 'paused')
     if ((!text && pendingFiles.length === 0) || state.requesting || hasPendingApproval || !selectedModel?.enabled || !selectedModel.configured) return
+    const limitError = validateChatAttachments(pendingFiles)
+    if (limitError) {
+      dispatch({ type: 'soft-error', message: formatAttachmentLimitError(limitError, t) })
+      return
+    }
     // Existing deep-link session: wait for meta (and never send on workflow sessions).
     if (sessionId && (!metaResolved || sessionMetaFailed || isWorkflowSession)) return
     const activeSession = sessionId ?? crypto.randomUUID()
@@ -235,6 +245,7 @@ export function useChat() {
               : 'document',
       })),
     }
+    lastTurnFilesRef.current = pendingFiles
     setAttachments([])
     const assistant: Message = {
       id: assistantId,
@@ -314,10 +325,13 @@ export function useChat() {
     if (state.requesting) return
     const prompt = previousPrompt(state.messages, assistantId)
     const index = state.messages.findIndex((message) => message.id === assistantId)
-    if (!prompt || index < 0) return
+    if (index < 0) return
+    // Allow attachment-only turns: empty text is OK when last-turn files remain in memory.
+    const retryFiles = lastTurnFilesRef.current
+    if (!prompt && retryFiles.length === 0) return
     const base = state.messages.slice(0, index)
     dispatch({ type: 'history', messages: base })
-    void submit(prompt, false)
+    void submit(prompt, false, retryFiles)
   }
   const cancel = useCallback(async () => {
     // Prefer process-wide stream (this instance or the sibling useChat owner).

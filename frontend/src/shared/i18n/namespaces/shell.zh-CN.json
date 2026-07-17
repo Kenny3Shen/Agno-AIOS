@@ -28,12 +28,12 @@
     "intelligence": "安全情报"
   },
   "conversations": {
-    "title": "最近对话",
+    "title": "对话",
     "today": "今天",
     "yesterday": "昨天",
     "earlier": "更早",
     "empty": "暂无对话",
-    "loadFailed": "无法加载最近对话",
+    "loadFailed": "无法加载对话",
     "retry": "重试",
     "unnamed": "未命名会话",
     "rename": "重命名",

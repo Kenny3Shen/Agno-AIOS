@@ -145,7 +145,7 @@ describe('TracePage interactions', () => {
     renderWithQuery(<TracePage />)
 
     expect(await screen.findByText('Session 1')).toBeTruthy()
-    expect(within(cardByTitle('运行与 Span')).queryByText(/Run 1/)).toBeNull()
+    expect(within(cardByTitle('Run')).queryByText(/Run 1/)).toBeNull()
     expect(traceRequests).toHaveLength(0)
   })
 
@@ -185,9 +185,9 @@ describe('TracePage interactions', () => {
     renderWithQuery(<TracePage />)
 
     await user.click(await screen.findByRole('button', { name: /Session 1/ }))
-    expect(await within(cardByTitle('运行与 Span')).findByText(/Run 1/)).toBeTruthy()
+    expect(await within(cardByTitle('Run')).findByText(/Run 1/)).toBeTruthy()
     routerMock.push.mockClear()
-    await clickPage(cardByTitle('运行与 Span'), 2)
+    await clickPage(cardByTitle('Run'), 2)
 
     await waitFor(() => expect(traceRequests.some((params) => params.get('page') === '2')).toBe(true))
     const pageTwoRequests = traceRequests.filter((params) => params.get('page') === '2')
@@ -200,8 +200,8 @@ describe('TracePage interactions', () => {
     renderWithQuery(<TracePage />)
 
     await user.click(await screen.findByRole('button', { name: /Session 1/ }))
-    const runsCard = cardByTitle('运行与 Span')
-    const root = await within(runsCard).findByText('Run 根 · Run 1')
+    const runsCard = cardByTitle('Run')
+    const root = await within(runsCard).findByText('Run Root · Run 1')
     expect(within(runsCard).queryByText('Run · Run 1')).toBeNull()
     const rootRow = root.closest('.run-tree-node')
     expect(rootRow?.textContent).toContain('OK')

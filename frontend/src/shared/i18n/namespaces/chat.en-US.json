@@ -50,7 +50,7 @@
   "leaveWhileGeneratingContent": "Generation is still in progress. Leave will stop the current run.",
   "stopAndLeave": "Stop and leave",
   "archiveWhileGeneratingTitle": "Archive while generating?",
-  "archiveWhileGeneratingContent": "This session is still generating a reply. Archiving will stop the run and remove it from recents.",
+  "archiveWhileGeneratingContent": "This session is still generating a reply. Archiving will stop the run and remove it from the conversation list.",
   "archiveAndStop": "Stop and archive",
   "sendMessage": "Send message",
   "jumpToLatest": "Jump to latest",
@@ -107,7 +107,13 @@
   "sessionNotFound": "Session not found or access denied",
   "sessionMetaLoadFailed": "Unable to load session details. Please retry.",
   "attachments": "Attachments",
-  "attachmentsHelp": "Attach images or documents for this message (max 8, 20MB each)",
+  "attachmentsHelp": "Attach images or documents for this message (max 8, 20MB each, 40MB total)",
   "attachmentsDropTitle": "Drop files here",
-  "attachmentsDropHint": "Images, PDF, text, Office docs, audio, or video"
+  "attachmentsDropHint": "Images, PDF, text, Office docs, audio, or video",
+  "attachmentsTooMany": "At most {{max}} attachments",
+  "attachmentsFileTooLarge": "File too large (max {{maxMb}}MB): {{name}}",
+  "attachmentsTotalTooLarge": "Total attachment size exceeds {{maxMb}}MB",
+  "attachmentsEmptyFile": "Empty file: {{name}}",
+  "attachmentsInvalid": "Invalid attachment",
+  "regenerateAttachmentsHint": "Regenerate reuses last-turn files still in this session (not after reload)"
 }
