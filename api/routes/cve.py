@@ -7,7 +7,10 @@ from api.auth.scopes import require_scope
 from api.models.schemas import CveSearchRequest
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.cve_service import search_cves
-from api.tasks.update_cve import main as update_cve_main
+from api.tasks.update_cve import (
+    CVEUpdateAlreadyRunningError,
+    main as update_cve_main,
+)
 from api.utils.pagination import pagination_meta
 
 router = APIRouter(prefix="/api/cve", tags=["CVE"])
@@ -58,6 +61,9 @@ async def update_cve_database(
             "add_count": add_count,
             "del_count": del_count,
         }
+    except CVEUpdateAlreadyRunningError as e:
+        logger.warning("CVE update rejected: {}", e)
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except Exception as e:
         logger.error("更新 CVE 数据库错误: {}", e)
         await record_audit_event_async(

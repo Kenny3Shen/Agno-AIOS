@@ -35,3 +35,13 @@ def test_search_cve_rows_uses_fts_for_keyword_queries():
     assert "plainto_tsquery" in source
     assert "ts_rank_cd" in source
     assert 'startswith("CVE-")' in source or "startswith('CVE-')" in source
+
+
+
+def test_cve_update_route_maps_already_running_to_409():
+    import inspect
+    from api.routes import cve as cve_routes
+
+    source = inspect.getsource(cve_routes.update_cve_database)
+    assert "CVEUpdateAlreadyRunningError" in source
+    assert "status_code=409" in source
