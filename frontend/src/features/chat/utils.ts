@@ -239,6 +239,8 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               session_id: event.sessionId ?? message.session_id,
               status: 'streaming',
               final: false,
+              retry: null,
+              error: null,
             }
           case 'run.completed':
             return {

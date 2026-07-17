@@ -6,7 +6,7 @@
 - 前端从任意带 `runId` 的 SSE 事件更新 `activeRunId`（重试后 cancel 仍可用）。
 - 用户停止生成时 `clear-error`，避免残留 soft-error 横幅。
 - history/sessionLists invalidate 移入 `finally`：成功/取消/失败都刷新最近对话。
-- `run.paused` 清空 `retry`/`error`，避免重试条残留在审批等待态。
+- `run.paused` / `run.continued` 清空 `retry`/`error`，避免重试条残留在审批等待或恢复后。
 
 ## 已完成：run.completed session_id 回退请求会话
 
