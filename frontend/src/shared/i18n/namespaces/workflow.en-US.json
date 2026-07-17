@@ -123,7 +123,7 @@
   "librarySearchEmpty": "No workflows match this search",
   "libraryEmpty": "No saved workflows yet",
   "librarySearching": "Searching…",
-  "keyboardHints": "Shortcuts: Ctrl/⌘S save · Z undo · Y redo · C/V copy/paste (multi-select paste → root) · A select all · L auto-layout · Esc stop run / clear selection · Del delete · double-click focuses inspector",
+  "keyboardHints": "Shortcuts:\nCtrl/⌘S save\nCtrl/⌘Z undo · Y redo\nC/V copy/paste (multi-select pastes to root)\nA select all · L auto-layout\nEsc stop run / clear selection · Del delete\nDouble-click a node to focus inspector",
   "keyboardHintsTitle": "Keyboard",
   "selectedCount": "{{count}} selected",
   "deleteSelected": "Delete selected",

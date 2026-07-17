@@ -659,7 +659,20 @@ export function WorkflowPage() {
                 {t('organize')}
               </Button>
             </Tooltip>
-            <Tooltip title={t('keyboardHints')} getPopupContainer={studioPopupContainer}>
+            <Tooltip
+              title={t('keyboardHints')}
+              classNames={{ root: 'workflow-studio__kbd-tooltip' }}
+              styles={{
+                container: {
+                  maxWidth: 320,
+                  whiteSpace: 'pre-line',
+                  fontSize: 12,
+                  lineHeight: 1.55,
+                  textAlign: 'left',
+                },
+              }}
+              getPopupContainer={studioPopupContainer}
+            >
               <Button type="text" icon={<QuestionCircleOutlined />} aria-label={t('keyboardHintsTitle')} />
             </Tooltip>
           </div>
