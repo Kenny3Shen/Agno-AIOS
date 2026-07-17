@@ -666,12 +666,25 @@ export function WorkflowPage() {
             </Button>
           </Tooltip>
           <Tooltip
-            title={!canRun ? t('runScopeHint') : undefined}
+            title={
+              !canRun
+                ? t('runScopeHint')
+                : !workflow.state.workflowId
+                  ? t('errorRunNeedsSave')
+                  : workflow.state.dirty
+                    ? t('errorRunNeedsClean')
+                    : undefined
+            }
             getPopupContainer={studioPopupContainer}
           >
             <Button
               icon={<PlayCircleOutlined />}
-              disabled={workflow.state.running || !canRun}
+              disabled={
+                workflow.state.running ||
+                !canRun ||
+                !workflow.state.workflowId ||
+                workflow.state.dirty
+              }
               onClick={() => void workflow.run()}
             >
               {t('run')}

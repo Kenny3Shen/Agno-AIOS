@@ -1,5 +1,11 @@
 # 下一步工作
 
+## 已完成：Studio 运行前校验 + Run 按钮门闩
+
+- `run()` 在发 SSE 前复用 `validateWorkflowDraft` / `validateWorkflowName`，失败时高亮问题节点并提示。
+- Run 按钮在无 workflowId / dirty / 无 run 权限时禁用，Tooltip 说明原因。
+- 去掉 Collect crawl stats 未使用的 `by_source` 兼容别名。
+
 ## 已完成：Chat 侧栏去掉 useChat 双实例
 
 - `ChatTaskPanel` 仅用 `sessionsQuery` + URL `session`，不再挂 `useChat` 流式状态。

@@ -731,8 +731,6 @@ async def _crawl_and_persist_locked(
         "error": err,
         "by_source_discovered": {k: len(v) for k, v in discovered.items()},
         "by_source_selected": selected_by_source,
-        # Backward-compatible alias (discovered counts).
-        "by_source": {k: len(v) for k, v in discovered.items()},
     }
     await _emit_progress(
         on_progress,

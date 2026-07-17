@@ -1086,6 +1086,22 @@ export function useWorkflow() {
       setState((current) => ({ ...current, error: t('errorRunNeedsClean') }))
       return
     }
+    // Re-validate before streaming so empty/invalid graphs fail in Studio, not as opaque 422.
+    const translate = (key: string, options?: Record<string, string | number>) => t(key, options)
+    const issues = validateWorkflowDraft(state.steps, translate, state.workflowId)
+    const nameIssue = validateWorkflowName(state.name, translate)
+    if (nameIssue) issues.unshift(nameIssue)
+    if (issues.length) {
+      setState((current) => ({
+        ...current,
+        validationIssues: issues,
+        validationEpoch: current.validationEpoch + 1,
+        error: issues[0]?.message ?? t('validationFixBeforeRun'),
+        selectedId: issues[0]?.nodeId ?? current.selectedId,
+        selectedIds: issues[0]?.nodeId ? [issues[0].nodeId] : current.selectedIds,
+      }))
+      return
+    }
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
