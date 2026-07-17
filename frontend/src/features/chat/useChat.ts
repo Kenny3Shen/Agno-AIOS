@@ -186,6 +186,8 @@ export function useChat() {
     const text = prompt.trim()
     const hasPendingApproval = state.messages.some((message) => message.role === 'assistant' && message.status === 'paused')
     if (!text || state.requesting || hasPendingApproval || !selectedModel?.enabled || !selectedModel.configured) return
+    // Existing deep-link session: wait for meta (and never send on workflow sessions).
+    if (sessionId && (!metaResolved || sessionMetaFailed || isWorkflowSession)) return
     const activeSession = sessionId ?? crypto.randomUUID()
     if (!sessionId) setSession(activeSession)
     if (!sessionId) {

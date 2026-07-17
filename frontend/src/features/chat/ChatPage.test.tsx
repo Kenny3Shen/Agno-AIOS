@@ -337,3 +337,29 @@ describe('chat session meta load failure', () => {
     expect(chat.sessionMetaRefetch).toHaveBeenCalled()
   })
 })
+
+
+describe('chat session meta loading', () => {
+  beforeEach(() => {
+    HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
+    chat.sessionId = 'session-meta-loading'
+    chat.sessionMissing = false
+    chat.sessionMetaLoading = true
+    chat.sessionMetaFailed = false
+    chat.sessionMetaError = null
+    chat.history.isError = false
+    chat.history.isLoading = false
+    chat.history.isPending = false
+    chat.history.isFetching = false
+    chat.state.messages = []
+    chat.state.requesting = false
+    chat.state.input = 'hello'
+  })
+
+  it('disables send while session meta is resolving', () => {
+    renderWithQuery(<ChatPage />)
+    const send = document.querySelector('.sender-actions button.ant-btn-primary') as HTMLButtonElement | null
+    expect(send).toBeTruthy()
+    expect(send?.disabled).toBe(true)
+  })
+})

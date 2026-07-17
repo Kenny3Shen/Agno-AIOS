@@ -502,11 +502,15 @@ export function ChatPage() {
   const activeRun = [...chat.state.messages].reverse().find((item) => item.role === 'assistant' && (item.status === 'streaming' || item.status === 'retrying'))
   const pausedRun = [...chat.state.messages].reverse().find((item) => item.role === 'assistant' && item.status === 'paused')
   const availableReasoningOptions = reasoningOptions(chat.selectedModel)
+  const isWorkflowSession =
+    String(chat.activeSessionMeta?.session_type || '').toLowerCase() === 'workflow'
   const inputDisabled =
     !chat.selectedModel?.enabled ||
     !chat.selectedModel.configured ||
     Boolean(chat.sessionMissing) ||
-    Boolean(chat.sessionMetaFailed)
+    Boolean(chat.sessionMetaFailed) ||
+    Boolean(chat.sessionMetaLoading) ||
+    isWorkflowSession
   const liveSearchSupported = Boolean(chat.selectedModel?.capabilities?.supports_live_search)
   const latestAssistant = useMemo(
     () => [...chat.state.messages].reverse().find((item) => item.role === 'assistant'),

@@ -1,5 +1,13 @@
 # 下一步工作
 
+## 已完成：Chat 深链 meta 解析中禁用发送 + 防 workflow 误发
+
+- `sessionMetaLoading` / `sessionMetaFailed` / workflow 会话期间禁用输入。
+- `submit` 对已有 session 在 meta 未就绪、失败或 workflow 类型时直接 return。
+- 避免深链加载窗口把 workflow 会话当 agent 发出。
+
+## 已完成：Chat 深链 session-meta 网络/5xx 错误态 + Loop 自动布局
+
 ## 已完成：Chat 深链 session-meta 网络/5xx 错误态 + Loop 自动布局
 
 - meta 非 404 失败：`sessionMetaFailed`，不把会话当 missing，也不拉 agent history。
