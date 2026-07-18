@@ -159,16 +159,26 @@ def _build_web_search() -> Any:
     except Exception as exc:  # noqa: BLE001
         logger.warning("DuckDuckGoTools unavailable: {}", exc)
         return None
-    try:
-        return DuckDuckGoTools(
-            enable_search=True,
-            enable_news=True,
-            fixed_max_results=8,
-            timeout=12,
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("DuckDuckGoTools init failed: {}", exc)
-        return None
+    # Prefer explicit backends that return results in constrained networks.
+    # Default ``duckduckgo`` backend often yields empty text results; ``api``/``html``
+    # are more reliable. Soft-fail entirely if none construct.
+    last_exc: Exception | None = None
+    for backend in ("api", "html", "lite", None):
+        try:
+            kwargs: dict[str, Any] = {
+                "enable_search": True,
+                "enable_news": True,
+                "fixed_max_results": 8,
+                "timeout": 15,
+            }
+            if backend is not None:
+                kwargs["backend"] = backend
+            return DuckDuckGoTools(**kwargs)
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            continue
+    logger.warning("DuckDuckGoTools init failed: {}", last_exc)
+    return None
 
 
 def _build_file() -> Any:

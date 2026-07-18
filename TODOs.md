@@ -1,5 +1,10 @@
 ## Agents / Team
 
+- [x] 依赖 `duckdb` + `ddgs`：CSV SQL 与 Web Search 默认可挂载
+- [x] DuckDuckGoTools 优先 api/html backend（规避空结果）
+- [x] FE：cancelled/failed thought/tool 状态映射为 abort/error
+- [x] Grok：data-analysis CSV SQL；deep-research web_search
+
 - [x] 历史回放成员 reasoning_content → member:reasoning ThoughtChain
 - [x] Chat UI：无父节点时仍展示 orphan member:reasoning
 - [x] Grok coordinate 双成员并行 tools-on（54 + Example Domain）
@@ -71,7 +76,7 @@
 - [x] Team SSE 集成测试：成员 thought/tool、队长 content、tools-off、cancel
 - [x] data-analysis：FileTools + CsvTools（沙箱；DuckDB SQL 可选）+ PythonTools 安装器已剥离
 - [x] data-analysis：Chat 上传文档/CSV 自动 stage 到分析沙箱（File/CsvTools 可见）
-- [ ] data-analysis：可选完整 DuckDB 依赖（`query_csv_file` 仍 soft-fail）
+- [x] data-analysis：DuckDB 依赖已纳入，`query_csv_file` 可用
 - [x] deep-research：可选 `web_search`（DuckDuckGoTools；缺 `ddgs` 时 soft-fail，仍可用 Live Search + Website）
 
 # 下一步工作

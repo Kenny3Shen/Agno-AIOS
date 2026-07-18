@@ -164,3 +164,28 @@ def test_sql_tools_load_when_url_set(monkeypatch):
     finally:
         if original is not None:
             at._BUILDERS["sql"] = original
+
+
+def test_optional_analysis_deps_enable_query_and_search(tmp_path, monkeypatch):
+    """With duckdb/ddgs installed, CSV SQL and web search toolkits should mount."""
+    import api.services.agent_tools as at
+    from api.services.agent_catalog import get_agent_profile
+
+    work = tmp_path / "sandbox"
+    work.mkdir()
+    (work / "demo.csv").write_text("x,y\n1,2\n", encoding="utf-8")
+    monkeypatch.setattr(at, "analysis_work_dir", lambda: work)
+
+    csv_tool = at._build_csv()
+    assert csv_tool is not None
+    assert "query_csv_file" in getattr(csv_tool, "functions", {}) or hasattr(csv_tool, "query_csv_file")
+    result = csv_tool.query_csv_file("demo", "SELECT SUM(y) AS total FROM demo")
+    assert "3" in str(result) or "total" in str(result).lower()
+
+    data_tools = at.build_tools_for_profile(get_agent_profile("data-analysis"))
+    assert any(type(t).__name__ == "CsvTools" for t in data_tools)
+
+    web = at._build_web_search()
+    assert web is not None
+    research_tools = at.build_tools_for_profile(get_agent_profile("deep-research"))
+    assert any("DuckDuckGo" in type(t).__name__ or "WebSearch" in type(t).__name__ for t in research_tools)

@@ -11,8 +11,8 @@ Chat 与 Workflow 共用稳定 `agent_id` / executor `ref`（见 `api/services/a
 | id | 名称 | 默认能力 |
 |----|------|----------|
 | `security-operations` | 安全运营助手 | MCP + Local Skills + HITL + Knowledge |
-| `data-analysis` | 数据分析助手 | Calculator + Python/Polars + File/CSV 沙箱 + 可选只读 SQL（`TAIS_DATA_SQL_URL`）+ Knowledge 口径 + Reasoning |
-| `deep-research` | 深度研究助手 | Reasoning + Website + 可选 Web Search；Knowledge / Live Search；可审计 Markdown 备忘录 |
+| `data-analysis` | 数据分析助手 | Calculator + Python/Polars + File/CSV 沙箱（`duckdb` 支持 `query_csv_file`）+ 可选只读 SQL（`TAIS_DATA_SQL_URL`）+ Knowledge 口径 + Reasoning |
+| `deep-research` | 深度研究助手 | Reasoning + Website + Web Search（`ddgs`，优先 api/html backend）；Knowledge / Live Search；可审计 Markdown 备忘录 |
 | `safe-fallback` | 轻量分析助手 | 无工具（Workflow 兜底） |
 
 - Chat：`GET /api/chat/agents`，发消息可带 `agent_id`（multipart/JSON）。

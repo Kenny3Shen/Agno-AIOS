@@ -190,7 +190,14 @@ const parseEvent = (event: string, data: string): ChatRunEvent | null => {
         tool: {
           id: stringValue(tool, 'id') ?? tool.name,
           name: tool.name,
-          status: tool.status === 'completed' || tool.status === 'success' ? 'success' : tool.status === 'error' ? 'error' : 'loading',
+          status:
+            tool.status === 'completed' || tool.status === 'success'
+              ? 'success'
+              : tool.status === 'error' || tool.status === 'failed'
+                ? 'error'
+                : tool.status === 'abort' || tool.status === 'cancelled' || tool.status === 'canceled'
+                  ? 'abort'
+                  : 'loading',
           summary: stringValue(tool, 'summary'),
           duration: typeof tool.duration === 'number' ? tool.duration : undefined,
           input: tool.input,
@@ -214,9 +221,11 @@ const parseEvent = (event: string, data: string): ChatRunEvent | null => {
           status:
             thought.status === 'completed' || thought.status === 'success'
               ? 'success'
-              : thought.status === 'error'
+              : thought.status === 'error' || thought.status === 'failed'
                 ? 'error'
-                : thought.status === 'abort'
+                : thought.status === 'abort' ||
+                    thought.status === 'cancelled' ||
+                    thought.status === 'canceled'
                   ? 'abort'
                   : 'loading',
           summary: stringValue(thought, 'summary'),

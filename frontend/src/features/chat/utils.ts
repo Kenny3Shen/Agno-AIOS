@@ -439,8 +439,13 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
   }
 }
 
-const normalizeToolStatus = (value: unknown): ToolStatus =>
-  value === 'completed' || value === 'success' ? 'success' : value === 'error' ? 'error' : value === 'abort' ? 'abort' : 'loading'
+const normalizeToolStatus = (value: unknown): ToolStatus => {
+  const status = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  if (status === 'completed' || status === 'success') return 'success'
+  if (status === 'error' || status === 'failed') return 'error'
+  if (status === 'abort' || status === 'cancelled' || status === 'canceled') return 'abort'
+  return 'loading'
+}
 const normalizeSources = (value: unknown): ChatSource[] =>
   Array.isArray(value)
     ? value.flatMap((source, index) => {
