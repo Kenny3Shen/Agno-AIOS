@@ -12,7 +12,6 @@ from anyio import Path as AsyncPath
 
 from loguru import logger
 
-from api.services.knowledge_progress import emit_progress
 
 
 SOURCE_METADATA_KEY = "_tais_source"
@@ -111,7 +110,6 @@ async def ainsert_source_snapshot_async(
     *,
     reader_for_filename: Callable[[str | None, Mapping[str, object] | None], object],
     content_id: str | None = None,
-    on_progress: Callable[[Mapping[str, object]], Any] | None = None,
 ) -> None:
     kind = str(source.get("kind") or "").strip().lower()
     metadata = mapping_metadata(source.get("metadata"))
@@ -130,7 +128,6 @@ async def ainsert_source_snapshot_async(
             filename=filename,
             reader=reader,
             content_id=content_id,
-            on_progress=on_progress,
         )
         return
     kwargs: dict[str, object] = {
@@ -168,7 +165,6 @@ async def _aload_source_snapshot_with_id_async(
     filename: str,
     reader: Any,
     content_id: str,
-    on_progress: Callable[[Mapping[str, object]], Any] | None = None,
 ) -> None:
     """Safely reload a document under a stable content_id.
 
@@ -208,27 +204,6 @@ async def _aload_source_snapshot_with_id_async(
         raise ValueError("当前知识记录缺少可重建的原始 source 快照")
 
     content.content_hash = knowledge._build_content_hash(content)
-    await emit_progress(
-        on_progress,
-        "parse",
-        "running",
-        message="解析中",
-        detail={"content_id": content_id, "filename": filename},
-    )
-    await emit_progress(
-        on_progress,
-        "parse",
-        "completed",
-        message="已解析",
-        detail={"content_id": content_id, "filename": filename},
-    )
-    await emit_progress(
-        on_progress,
-        "vectorize",
-        "running",
-        message="向量化中",
-        detail={"content_id": content_id},
-    )
 
     shadow_id = f"{content_id}__safe_{uuid4().hex}"
     shadow_content = Content(
@@ -252,29 +227,13 @@ async def _aload_source_snapshot_with_id_async(
             stable_content=content,
             shadow_id=shadow_id,
         )
-    except Exception as exc:
+    except Exception:
         await _best_effort_remove_content_async(knowledge, shadow_id)
-        await emit_progress(
-            on_progress,
-            "vectorize",
-            "failed",
-            message="失败，已保留旧内容",
-            error=str(exc),
-            detail={"content_id": content_id, "shadow_id": shadow_id},
-        )
         raise
 
     # After a successful promote, remove residual shadow registration.
     # Shadow vectors were either re-pointed to the stable id or already deleted.
     await _best_effort_remove_content_async(knowledge, shadow_id)
-
-    await emit_progress(
-        on_progress,
-        "vectorize",
-        "completed",
-        message="已切换",
-        detail={"content_id": content_id},
-    )
 
 
 async def _assert_content_ready_async(knowledge: Any, content_id: str) -> None:

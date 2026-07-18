@@ -29,18 +29,6 @@
   "fileName": "File name",
   "fileNameHint": "Extension selects the reader and chunking strategy",
   "newBody": "New body",
-  "stages": {
-    "upload": "Upload",
-    "parse": "Parse",
-    "vectorize": "Vectorize",
-    "cleanup": "Cleanup",
-    "uploadActive": "Uploading",
-    "parseActive": "Parsing",
-    "vectorizeActive": "Vectorizing",
-    "cleanupActive": "Cleaning up",
-    "skipped": "Skipped",
-    "processing": "Processing"
-  },
   "ingest": {
     "splitBySize": "Split by size",
     "strategyHint": "Overrides extension inference; keep automatic in most cases.",

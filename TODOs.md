@@ -1,3 +1,9 @@
+## 已完成：移除 Knowledge 进度 SSE 与 on_progress 死路径
+
+- 删除 `api/services/knowledge_progress.py`、路由 `stream`/`_run_progress_sse` 与 service 层 `on_progress`/`emit_progress`。
+- 入库/重建/替换统一后台 Task + `processing` 占位；metadata 更新仍同步。
+- 测试与 README 同步，无 job 轮询 API。
+
 ## 已完成：去掉 Knowledge 前端进度 SSE / UpdateProgress
 
 - 删除 `UpdateProgress`、前端 `consumeKnowledgeSse` 与 `stream`/`onProgress` 选项；Drawer 仅走非流式后台入库。

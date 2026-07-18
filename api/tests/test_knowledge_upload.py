@@ -10,7 +10,6 @@ import pytest
 from fastapi import UploadFile
 from starlette.datastructures import Headers
 from starlette.requests import Request
-from sse_starlette.sse import EventSourceResponse
 
 from api.auth.models import User
 from api.routes import knowledge as knowledge_route
@@ -106,14 +105,12 @@ async def test_update_route_passes_rebuild_metadata_and_ingest_options_to_lifecy
                     reader_strategy="markdown",
                 )
             ),
-            stream=False,
             user=current_user,
         )
         assert result["status"] == "processing"
         assert len(scheduled) == 1
         bg = await scheduled[0]["work"]()
 
-    assert not isinstance(result, EventSourceResponse)
     assert bg["can_manage"] is True
     assert captured == {
         "doc_id": "doc-1",
@@ -399,10 +396,8 @@ async def test_upload_route_ingests_persisted_path_with_browser_metadata(tmp_pat
             semantic_min_sentences_per_chunk=None,
             semantic_min_characters_per_sentence=None,
             reader_strategy="markdown",
-            stream=False,
             user=actor(),
         )
-        assert not isinstance(result, EventSourceResponse)
         assert result["status"] == "processing"
         assert str(result["id"]).startswith("processing:upload:")
         assert result["can_manage"] is True
@@ -484,7 +479,6 @@ async def test_upload_route_removes_file_when_ingest_fails(tmp_path: Path) -> No
             semantic_min_sentences_per_chunk=None,
             semantic_min_characters_per_sentence=None,
             reader_strategy=None,
-            stream=False,
             user=actor(),
         )
         assert result["status"] == "processing"
@@ -579,10 +573,8 @@ async def test_update_upload_route_replaces_selected_document_from_persisted_pat
             semantic_min_sentences_per_chunk=2,
             semantic_min_characters_per_sentence=12,
             reader_strategy=None,
-            stream=False,
             user=current_user,
         )
-        assert not isinstance(result, EventSourceResponse)
         assert result["status"] == "processing"
         assert str(result["id"]).startswith("processing:update-upload:")
         assert result["can_manage"] is True
@@ -675,7 +667,6 @@ async def test_update_upload_route_removes_file_when_document_is_missing(
             semantic_min_sentences_per_chunk=None,
             semantic_min_characters_per_sentence=None,
             reader_strategy=None,
-            stream=False,
             user=actor(),
         )
         assert result["status"] == "processing"

@@ -29,18 +29,6 @@
   "fileName": "文件名",
   "fileNameHint": "文件后缀决定 Reader 和分块策略",
   "newBody": "新正文",
-  "stages": {
-    "upload": "上传",
-    "parse": "解析",
-    "vectorize": "向量化",
-    "cleanup": "清理",
-    "uploadActive": "上传中",
-    "parseActive": "解析中",
-    "vectorizeActive": "向量化中",
-    "cleanupActive": "清理中",
-    "skipped": "跳过",
-    "processing": "处理中"
-  },
   "ingest": {
     "splitBySize": "按大小切分",
     "strategyHint": "覆盖后缀自动推断；通常保持自动即可。",

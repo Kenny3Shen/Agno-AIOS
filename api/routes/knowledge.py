@@ -1,13 +1,11 @@
 import asyncio
-import json
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Annotated, Any, Literal, cast
+from typing import Literal, cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 from loguru import logger
-from sse_starlette.sse import EventSourceResponse
 
 from api.auth.claims import actor_id, scope_user_id
 from api.auth.models import User
@@ -15,12 +13,6 @@ from api.auth.scopes import require_scope
 from api.auth.visibility import can_manage_resource
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.knowledge_document_service import KnowledgeDocumentPayload
-from api.services.knowledge_progress import (
-    KnowledgeProgressStage,
-    emit_progress,
-    initial_progress_stages,
-    knowledge_progress_event,
-)
 from api.services.knowledge_service import (
     get_knowledge_base_lifecycle,
     update_rag_settings_async,
@@ -34,7 +26,7 @@ from api.services.knowledge_upload_service import (
 
 router = APIRouter(prefix="/api/knowledge", tags=["Knowledge"])
 
-# Wall-clock budget for one streamed ingest/update job (vectorize can be slow).
+# Wall-clock budget for one background ingest/update job (vectorize can be slow).
 KNOWLEDGE_INGEST_TIMEOUT_SECONDS = 15 * 60
 
 
@@ -75,12 +67,6 @@ def with_manage_flags(
 
 
 
-
-def _sse_payload(event: str, data: Mapping[str, object] | dict[str, object]) -> dict[str, str]:
-    return {
-        "event": event,
-        "data": json.dumps(data, ensure_ascii=False, default=str),
-    }
 
 
 
@@ -190,141 +176,6 @@ def _processing_document_payload(
             "can_manage": True,
         },
     )
-
-
-async def _queue_progress(
-    queue: asyncio.Queue[dict[str, object] | None],
-    event: Mapping[str, object],
-) -> None:
-    await queue.put(dict(event))
-
-
-
-async def _run_progress_sse(
-    *,
-    include_upload: bool,
-    work,
-    task_name: str = "knowledge-progress",
-    lookup_failed_stage: KnowledgeProgressStage | None = None,
-) -> EventSourceResponse:
-    """Run an async work(on_progress) coroutine and stream stage events."""
-    queue: asyncio.Queue[dict[str, object] | None] = asyncio.Queue()
-
-    async def on_progress(event: Mapping[str, object]) -> None:
-        await _queue_progress(queue, event)
-
-    async def worker() -> None:
-        try:
-            for stage_event in initial_progress_stages(include_upload=include_upload):
-                await queue.put(stage_event)
-            document = await asyncio.wait_for(
-                work(on_progress),
-                timeout=KNOWLEDGE_INGEST_TIMEOUT_SECONDS,
-            )
-            await queue.put(
-                {
-                    "stage": "done",
-                    "status": "completed",
-                    "label": "完成",
-                    "message": "完成",
-                    "document": document,
-                }
-            )
-        except TimeoutError:
-            message = (
-                f"知识入库超时（>{KNOWLEDGE_INGEST_TIMEOUT_SECONDS // 60} 分钟）"
-            )
-            await queue.put(
-                {
-                    "stage": "done",
-                    "status": "failed",
-                    "label": "失败",
-                    "message": message,
-                    "error": message,
-                    "code": 504,
-                }
-            )
-        except KnowledgeUploadTooLargeError as exc:
-            await queue.put(
-                knowledge_progress_event(
-                    "upload",
-                    "failed",
-                    message=str(exc),
-                    error=str(exc),
-                )
-            )
-            await queue.put(
-                {
-                    "stage": "done",
-                    "status": "failed",
-                    "label": "失败",
-                    "message": str(exc),
-                    "error": str(exc),
-                    "code": 413,
-                }
-            )
-        except LookupError as exc:
-            if lookup_failed_stage:
-                await queue.put(
-                    knowledge_progress_event(
-                        lookup_failed_stage,
-                        "failed",
-                        message=str(exc),
-                        error=str(exc),
-                    )
-                )
-            await queue.put(
-                {
-                    "stage": "done",
-                    "status": "failed",
-                    "label": "失败",
-                    "message": str(exc),
-                    "error": str(exc),
-                    "code": 404,
-                }
-            )
-        except Exception as exc:
-            await queue.put(
-                {
-                    "stage": "done",
-                    "status": "failed",
-                    "label": "失败",
-                    "message": str(exc),
-                    "error": str(exc),
-                    "code": 400,
-                }
-            )
-        finally:
-            await queue.put(None)
-
-    async def event_generator() -> AsyncIterator[dict[str, str]]:
-        task = asyncio.create_task(worker(), name=task_name)
-        try:
-            while True:
-                item = await queue.get()
-                if item is None:
-                    break
-                status = str(item.get("status") or "")
-                stage = str(item.get("stage") or "")
-                if stage == "done":
-                    yield _sse_payload(
-                        "progress.completed" if status == "completed" else "progress.failed",
-                        item,
-                    )
-                    break
-                event_name = "progress.failed" if status == "failed" else "progress"
-                yield _sse_payload(event_name, item)
-        finally:
-            if not task.done():
-                task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-
-    return EventSourceResponse(event_generator())
-
-
 
 class KnowledgeIngestOptionsRequest(BaseModel):
     chunk_size: int | None = Field(default=None, ge=200)
@@ -502,175 +353,112 @@ async def get_knowledge_status(
 async def create_text_document(
     request_ctx: Request,
     request: KnowledgeTextRequest,
-    stream: Annotated[bool, Query()] = False,
     user: User = Depends(require_scope("knowledge:write")),
-) -> KnowledgeDocumentResponsePayload | EventSourceResponse:
+) -> KnowledgeDocumentResponsePayload:
     ingest_options = (
         request.ingest_options.model_dump(exclude_none=True)
         if request.ingest_options is not None
         else None
     )
+    owner = actor_id(user)
+    job_id = f"processing:text:{owner}:{abs(hash((request.title, request.source, request.content[:64]))) % 10**12}"
+    clean_title = (request.title or "").strip() or "text"
+    clean_source = (request.source or "").strip() or "manual"
 
-    async def run_create(on_progress=None) -> KnowledgeDocumentResponsePayload:
-        await emit_progress(
-            on_progress,
-            "upload",
-            "skipped",
-            message="跳过",
-        )
+    async def _bg_ingest() -> KnowledgeDocumentResponsePayload:
         result = await get_knowledge_base_lifecycle().add_text_document_async(
             title=request.title,
             content=request.content,
             source=request.source,
             visibility=request.visibility,
             metadata=request.metadata,
-            owner_user_id=actor_id(user),
-            ingest_options=ingest_options,
-            on_progress=on_progress,
-        )
-        response = cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
-        await record_audit_event_async(
-            user,
-            action="knowledge.create",
-            resource_type="knowledge_document",
-            resource_id=str(result.get("id") or request.title),
-            metadata={"source": request.source},
-            **audit_request_context(request_ctx),
-        )
-        return response
-
-    if not stream:
-        # Text ingest can be slow (chunk + embed); return immediately.
-        owner = actor_id(user)
-        job_id = f"processing:text:{owner}:{abs(hash((request.title, request.source, request.content[:64]))) % 10**12}"
-        clean_title = (request.title or "").strip() or "text"
-        clean_source = (request.source or "").strip() or "manual"
-
-        async def _bg_ingest() -> KnowledgeDocumentResponsePayload:
-            result = await get_knowledge_base_lifecycle().add_text_document_async(
-                title=request.title,
-                content=request.content,
-                source=request.source,
-                visibility=request.visibility,
-                metadata=request.metadata,
-                owner_user_id=owner,
-                ingest_options=ingest_options,
-            )
-            return cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
-
-        _schedule_knowledge_ingest(
-            task_name=f"knowledge-bg-text:{job_id}",
-            work=_bg_ingest,
-            user=user,
-            audit_action="knowledge.create",
-            audit_resource_id=job_id,
-            audit_metadata={
-                "title": request.title,
-                "source": request.source,
-                "async_ingest": True,
-                "input_mode": "text",
-            },
-            request_ctx=request_ctx,
-        )
-        return _processing_document_payload(
-            job_id=job_id,
-            title=clean_title,
-            source=clean_source,
             owner_user_id=owner,
-            visibility=request.visibility,
-            file_type=".txt",
-            metadata={"input_mode": "text"},
+            ingest_options=ingest_options,
         )
-    return await _run_progress_sse(include_upload=False, work=run_create, task_name="knowledge-create")
+        return cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
+
+    _schedule_knowledge_ingest(
+        task_name=f"knowledge-bg-text:{job_id}",
+        work=_bg_ingest,
+        user=user,
+        audit_action="knowledge.create",
+        audit_resource_id=job_id,
+        audit_metadata={
+            "title": request.title,
+            "source": request.source,
+            "async_ingest": True,
+            "input_mode": "text",
+        },
+        request_ctx=request_ctx,
+    )
+    return _processing_document_payload(
+        job_id=job_id,
+        title=clean_title,
+        source=clean_source,
+        owner_user_id=owner,
+        visibility=request.visibility,
+        file_type=".txt",
+        metadata={"input_mode": "text"},
+    )
 
 
 @router.post("/documents/file", response_model=None)
 async def create_file_document(
     request_ctx: Request,
     request: KnowledgeFileRequest,
-    stream: Annotated[bool, Query()] = False,
     user: User = Depends(require_scope("knowledge:write")),
-) -> KnowledgeDocumentResponsePayload | EventSourceResponse:
+) -> KnowledgeDocumentResponsePayload:
     ingest_options = (
         request.ingest_options.model_dump(exclude_none=True)
         if request.ingest_options is not None
         else None
     )
+    owner = actor_id(user)
+    job_id = f"processing:file:{owner}:{abs(hash(request.path)) % 10**12}"
+    path_name = Path(request.path).name
+    path_stem = Path(request.path).stem
+    clean_title = (request.title or path_stem).strip() or path_stem
+    clean_source = (request.source or request.path).strip() or request.path
 
-    async def run_create(on_progress=None) -> KnowledgeDocumentResponsePayload:
-        await emit_progress(
-            on_progress,
-            "upload",
-            "skipped",
-            message="跳过",
-        )
+    async def _bg_ingest() -> KnowledgeDocumentResponsePayload:
         result = await get_knowledge_base_lifecycle().add_file_document_async(
             path=request.path,
             title=request.title,
             source=request.source,
-            owner_user_id=actor_id(user),
-            visibility=request.visibility,
-            ingest_options=ingest_options,
-            on_progress=on_progress,
-        )
-        response = cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
-        await record_audit_event_async(
-            user,
-            action="knowledge.create",
-            resource_type="knowledge_document",
-            resource_id=str(result.get("id") or request.title or request.path),
-            metadata={"path": request.path, "source": request.source or request.path},
-            **audit_request_context(request_ctx),
-        )
-        return response
-
-    if not stream:
-        owner = actor_id(user)
-        job_id = f"processing:file:{owner}:{abs(hash(request.path)) % 10**12}"
-        path_name = Path(request.path).name
-        path_stem = Path(request.path).stem
-        clean_title = (request.title or path_stem).strip() or path_stem
-        clean_source = (request.source or request.path).strip() or request.path
-
-        async def _bg_ingest() -> KnowledgeDocumentResponsePayload:
-            result = await get_knowledge_base_lifecycle().add_file_document_async(
-                path=request.path,
-                title=request.title,
-                source=request.source,
-                owner_user_id=owner,
-                visibility=request.visibility,
-                ingest_options=ingest_options,
-            )
-            return cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
-
-        _schedule_knowledge_ingest(
-            task_name=f"knowledge-bg-file:{job_id}",
-            work=_bg_ingest,
-            user=user,
-            audit_action="knowledge.create",
-            audit_resource_id=job_id,
-            audit_metadata={
-                "path": request.path,
-                "source": request.source or request.path,
-                "async_ingest": True,
-            },
-            request_ctx=request_ctx,
-        )
-        return _processing_document_payload(
-            job_id=job_id,
-            title=clean_title,
-            source=clean_source,
             owner_user_id=owner,
             visibility=request.visibility,
-            file_name=path_name,
-            file_type=Path(request.path).suffix.lower(),
-            metadata={"input_mode": "path"},
+            ingest_options=ingest_options,
         )
-    return await _run_progress_sse(include_upload=False, work=run_create, task_name="knowledge-create")
+        return cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
+
+    _schedule_knowledge_ingest(
+        task_name=f"knowledge-bg-file:{job_id}",
+        work=_bg_ingest,
+        user=user,
+        audit_action="knowledge.create",
+        audit_resource_id=job_id,
+        audit_metadata={
+            "path": request.path,
+            "source": request.source or request.path,
+            "async_ingest": True,
+        },
+        request_ctx=request_ctx,
+    )
+    return _processing_document_payload(
+        job_id=job_id,
+        title=clean_title,
+        source=clean_source,
+        owner_user_id=owner,
+        visibility=request.visibility,
+        file_name=path_name,
+        file_type=Path(request.path).suffix.lower(),
+        metadata={"input_mode": "path"},
+    )
 
 
 @router.post("/documents/upload", response_model=None)
 async def upload_document(
+
     request_ctx: Request,
     file: UploadFile = File(...),
     title: str | None = Form(default=None),
@@ -689,9 +477,8 @@ async def upload_document(
     semantic_min_sentences_per_chunk: int | None = Form(default=None, ge=1),
     semantic_min_characters_per_sentence: int | None = Form(default=None, ge=1),
     reader_strategy: str | None = Form(default=None),
-    stream: Annotated[bool, Form()] = False,
     user: User = Depends(require_scope("knowledge:write")),
-) -> KnowledgeDocumentResponsePayload | EventSourceResponse:
+) -> KnowledgeDocumentResponsePayload:
     ingest_options = ingest_options_from_form(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
@@ -708,116 +495,61 @@ async def upload_document(
         reader_strategy=reader_strategy,
     )
     clean_title = (title or "").strip() or None
-
-    async def run_create(on_progress=None) -> KnowledgeDocumentResponsePayload:
-        await emit_progress(
-            on_progress,
-            "upload",
-            "running",
-            message="上传中",
-        )
+    try:
         stored_upload = await store_knowledge_upload_async(file)
-        await emit_progress(
-            on_progress,
-            "upload",
-            "completed",
-            message="已上传",
-            detail={
-                "file_name": stored_upload.file_name,
-                "file_size": stored_upload.file_size,
-            },
-        )
-        clean_source = (source or "").strip() or f"upload:{stored_upload.file_name}"
+    except KnowledgeUploadTooLargeError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    clean_source = (source or "").strip() or f"upload:{stored_upload.file_name}"
+    owner = actor_id(user)
+    job_id = f"processing:upload:{stored_upload.upload_id}"
+
+    async def _bg_ingest() -> KnowledgeDocumentResponsePayload:
         try:
             result = await get_knowledge_base_lifecycle().add_file_document_async(
                 path=str(stored_upload.path),
                 title=clean_title,
                 source=clean_source,
                 metadata=stored_upload.metadata(),
-                owner_user_id=actor_id(user),
+                owner_user_id=owner,
                 visibility=visibility,
                 ingest_options=ingest_options,
-                on_progress=on_progress,
             )
         except Exception:
             await remove_managed_upload_async(stored_upload.metadata())
             raise
-        response = cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
-        await record_audit_event_async(
-            user,
-            action="knowledge.create",
-            resource_type="knowledge_document",
-            resource_id=str(result.get("id") or stored_upload.file_name),
-            metadata={
-                "file_name": stored_upload.file_name,
-                "file_size": stored_upload.file_size,
-                "mime_type": stored_upload.mime_type,
-                "source": clean_source,
-                "upload_mode": "browser",
-            },
-            **audit_request_context(request_ctx),
-        )
-        return response
+        return cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
 
-    if not stream:
-        # Accept upload immediately; parse/vectorize in background so the Drawer
-        # is not blocked on Docling/embedding.
-        try:
-            stored_upload = await store_knowledge_upload_async(file)
-        except KnowledgeUploadTooLargeError as exc:
-            raise HTTPException(status_code=413, detail=str(exc)) from exc
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        clean_source = (source or "").strip() or f"upload:{stored_upload.file_name}"
-        owner = actor_id(user)
-        job_id = f"processing:upload:{stored_upload.upload_id}"
-
-        async def _bg_ingest() -> KnowledgeDocumentResponsePayload:
-            try:
-                result = await get_knowledge_base_lifecycle().add_file_document_async(
-                    path=str(stored_upload.path),
-                    title=clean_title,
-                    source=clean_source,
-                    metadata=stored_upload.metadata(),
-                    owner_user_id=owner,
-                    visibility=visibility,
-                    ingest_options=ingest_options,
-                )
-            except Exception:
-                await remove_managed_upload_async(stored_upload.metadata())
-                raise
-            return cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
-
-        _schedule_knowledge_ingest(
-            task_name=f"knowledge-bg-upload:{stored_upload.upload_id}",
-            work=_bg_ingest,
-            user=user,
-            audit_action="knowledge.create",
-            audit_resource_id=job_id,
-            audit_metadata={
-                "file_name": stored_upload.file_name,
-                "file_size": stored_upload.file_size,
-                "mime_type": stored_upload.mime_type,
-                "source": clean_source,
-                "upload_mode": "browser",
-                "async_ingest": True,
-            },
-            request_ctx=request_ctx,
-        )
-        return _processing_document_payload(
-            job_id=job_id,
-            title=clean_title or Path(stored_upload.file_name).stem,
-            source=clean_source,
-            owner_user_id=owner,
-            visibility=visibility,
-            file_name=stored_upload.file_name,
-            file_size=stored_upload.file_size,
-            mime_type=stored_upload.mime_type,
-            file_type=Path(stored_upload.file_name).suffix.lower(),
-            metadata=stored_upload.metadata(),
-        )
-    return await _run_progress_sse(include_upload=True, work=run_create, task_name="knowledge-create-upload")
+    _schedule_knowledge_ingest(
+        task_name=f"knowledge-bg-upload:{stored_upload.upload_id}",
+        work=_bg_ingest,
+        user=user,
+        audit_action="knowledge.create",
+        audit_resource_id=job_id,
+        audit_metadata={
+            "file_name": stored_upload.file_name,
+            "file_size": stored_upload.file_size,
+            "mime_type": stored_upload.mime_type,
+            "source": clean_source,
+            "upload_mode": "browser",
+            "async_ingest": True,
+        },
+        request_ctx=request_ctx,
+    )
+    return _processing_document_payload(
+        job_id=job_id,
+        title=clean_title or Path(stored_upload.file_name).stem,
+        source=clean_source,
+        owner_user_id=owner,
+        visibility=visibility,
+        file_name=stored_upload.file_name,
+        file_size=stored_upload.file_size,
+        mime_type=stored_upload.mime_type,
+        file_type=Path(stored_upload.file_name).suffix.lower(),
+        metadata=stored_upload.metadata(),
+    )
 
 
 @router.delete("/documents/{doc_id}")
@@ -863,19 +595,17 @@ async def update_document(
     request_ctx: Request,
     doc_id: str,
     request: KnowledgeDocumentUpdateActionRequest,
-    stream: Annotated[bool, Query()] = False,
     user: User = Depends(require_scope("knowledge:write")),
-) -> KnowledgeDocumentResponsePayload | EventSourceResponse:
+) -> KnowledgeDocumentResponsePayload:
     metadata = request.metadata or KnowledgeDocumentMetadataUpdateRequest()
     ingest_options = (
         request.ingest_options.model_dump(exclude_none=True)
         if request.ingest_options is not None
         else None
     )
-    wants_stream = stream and request.mode in {"rebuild", "replace_text"}
 
-    async def run_update(on_progress=None) -> KnowledgeDocumentResponsePayload:
-        if request.mode == "metadata":
+    if request.mode == "metadata":
+        try:
             updated = await get_knowledge_base_lifecycle().update_document_metadata_async(
                 doc_id,
                 title=metadata.title,
@@ -884,163 +614,99 @@ async def update_document(
                 metadata=metadata.metadata,
                 user=user,
             )
-            audit_action = "knowledge.update"
-            audit_metadata = {"mode": request.mode, "fields": changed_metadata_fields(metadata)}
-        elif request.mode == "rebuild":
-            await emit_progress(
-                on_progress,
-                "upload",
-                "skipped",
-                message="跳过",
-            )
-            updated = await get_knowledge_base_lifecycle().rebuild_document_async(
-                doc_id,
-                owner_user_id=effective_knowledge_user_filter(user),
-                user=user,
-                title=metadata.title,
-                source=metadata.source,
-                visibility=metadata.visibility,
-                metadata=metadata.metadata,
-                ingest_options=ingest_options,
-                on_progress=on_progress,
-            )
-            audit_action = "knowledge.rebuild"
-            audit_metadata = {"mode": request.mode, "fields": changed_metadata_fields(metadata)}
-        else:
-            clean_content = (request.content or "").strip()
-            clean_file_name = (request.file_name or "").strip()
-            if not clean_content or not clean_file_name:
-                raise ValueError("正文替换需要提供 content 和 file_name")
-            await emit_progress(
-                on_progress,
-                "upload",
-                "skipped",
-                message="跳过",
-            )
-            updated = await get_knowledge_base_lifecycle().replace_document_source_async(
-                doc_id,
-                content=clean_content,
-                file_name=clean_file_name,
-                title=metadata.title,
-                source=metadata.source,
-                visibility=metadata.visibility,
-                metadata=metadata.metadata,
-                owner_user_id=effective_knowledge_user_filter(user),
-                user=user,
-                ingest_options=ingest_options,
-                on_progress=on_progress,
-            )
-            audit_action = "knowledge.source_replace"
-            audit_metadata = {
-                "mode": request.mode,
-                "fields": changed_metadata_fields(metadata),
-                "file_name": clean_file_name,
-            }
-        if updated is None:
-            raise LookupError("知识文档不存在")
-        response = cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
-        await record_audit_event_async(
-            user,
-            action=audit_action,
-            resource_type="knowledge_document",
-            resource_id=doc_id,
-            metadata=audit_metadata,
-            **audit_request_context(request_ctx),
-        )
-        return response
-
-    if not wants_stream:
-        # Metadata-only stays synchronous; re-vectorize modes run in background.
-        if request.mode == "metadata":
-            try:
-                return await run_update()
-            except ValueError as exc:
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
-            except LookupError as exc:
-                raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-        if request.mode == "replace_text":
-            clean_content = (request.content or "").strip()
-            clean_file_name = (request.file_name or "").strip()
-            if not clean_content or not clean_file_name:
-                raise HTTPException(
-                    status_code=400,
-                    detail="正文替换需要提供 content 和 file_name",
-                )
-
-        job_id = f"processing:update:{request.mode}:{doc_id}"
-        owner_filter = effective_knowledge_user_filter(user)
-
-        async def _bg_update() -> KnowledgeDocumentResponsePayload:
-            if request.mode == "rebuild":
-                updated = await get_knowledge_base_lifecycle().rebuild_document_async(
-                    doc_id,
-                    owner_user_id=owner_filter,
-                    user=user,
-                    title=metadata.title,
-                    source=metadata.source,
-                    visibility=metadata.visibility,
-                    metadata=metadata.metadata,
-                    ingest_options=ingest_options,
-                )
-            else:
-                updated = await get_knowledge_base_lifecycle().replace_document_source_async(
-                    doc_id,
-                    content=(request.content or "").strip(),
-                    file_name=(request.file_name or "").strip(),
-                    title=metadata.title,
-                    source=metadata.source,
-                    visibility=metadata.visibility,
-                    metadata=metadata.metadata,
-                    owner_user_id=owner_filter,
-                    user=user,
-                    ingest_options=ingest_options,
-                )
             if updated is None:
                 raise LookupError("知识文档不存在")
-            return cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
+            response = cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
+            await record_audit_event_async(
+                user,
+                action="knowledge.update",
+                resource_type="knowledge_document",
+                resource_id=doc_id,
+                metadata={"mode": request.mode, "fields": changed_metadata_fields(metadata)},
+                **audit_request_context(request_ctx),
+            )
+            return response
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-        audit_action = (
-            "knowledge.rebuild" if request.mode == "rebuild" else "knowledge.source_replace"
-        )
-        _schedule_knowledge_ingest(
-            task_name=f"knowledge-bg-update:{request.mode}:{doc_id}",
-            work=_bg_update,
-            user=user,
-            audit_action=audit_action,
-            audit_resource_id=doc_id,
-            audit_metadata={
-                "mode": request.mode,
-                "fields": changed_metadata_fields(metadata),
-                "async_ingest": True,
-                **(
-                    {"file_name": (request.file_name or "").strip()}
-                    if request.mode == "replace_text"
-                    else {}
-                ),
-            },
-            request_ctx=request_ctx,
-        )
-        return _processing_document_payload(
-            job_id=job_id,
-            title=(metadata.title or "").strip() or doc_id,
-            source=(metadata.source or "").strip() or doc_id,
-            owner_user_id=actor_id(user),
-            visibility=metadata.visibility or "private",
-            file_name=(request.file_name or "").strip() if request.mode == "replace_text" else "",
-            metadata={"mode": request.mode, "async_ingest": "true"},
-        )
+    if request.mode == "replace_text":
+        clean_content = (request.content or "").strip()
+        clean_file_name = (request.file_name or "").strip()
+        if not clean_content or not clean_file_name:
+            raise HTTPException(
+                status_code=400,
+                detail="正文替换需要提供 content 和 file_name",
+            )
 
-    return await _run_progress_sse(
-        include_upload=False,
-        work=run_update,
-        task_name=f"knowledge-update:{doc_id}",
-        lookup_failed_stage="cleanup",
+    job_id = f"processing:update:{request.mode}:{doc_id}"
+    owner_filter = effective_knowledge_user_filter(user)
+
+    async def _bg_update() -> KnowledgeDocumentResponsePayload:
+        if request.mode == "rebuild":
+            updated = await get_knowledge_base_lifecycle().rebuild_document_async(
+                doc_id,
+                owner_user_id=owner_filter,
+                user=user,
+                title=metadata.title,
+                source=metadata.source,
+                visibility=metadata.visibility,
+                metadata=metadata.metadata,
+                ingest_options=ingest_options,
+            )
+        else:
+            updated = await get_knowledge_base_lifecycle().replace_document_source_async(
+                doc_id,
+                content=(request.content or "").strip(),
+                file_name=(request.file_name or "").strip(),
+                title=metadata.title,
+                source=metadata.source,
+                visibility=metadata.visibility,
+                metadata=metadata.metadata,
+                owner_user_id=owner_filter,
+                user=user,
+                ingest_options=ingest_options,
+            )
+        if updated is None:
+            raise LookupError("知识文档不存在")
+        return cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
+
+    audit_action = (
+        "knowledge.rebuild" if request.mode == "rebuild" else "knowledge.source_replace"
+    )
+    _schedule_knowledge_ingest(
+        task_name=f"knowledge-bg-update:{request.mode}:{doc_id}",
+        work=_bg_update,
+        user=user,
+        audit_action=audit_action,
+        audit_resource_id=doc_id,
+        audit_metadata={
+            "mode": request.mode,
+            "fields": changed_metadata_fields(metadata),
+            "async_ingest": True,
+            **(
+                {"file_name": (request.file_name or "").strip()}
+                if request.mode == "replace_text"
+                else {}
+            ),
+        },
+        request_ctx=request_ctx,
+    )
+    return _processing_document_payload(
+        job_id=job_id,
+        title=(metadata.title or "").strip() or doc_id,
+        source=(metadata.source or "").strip() or doc_id,
+        owner_user_id=actor_id(user),
+        visibility=metadata.visibility or "private",
+        file_name=(request.file_name or "").strip() if request.mode == "replace_text" else "",
+        metadata={"mode": request.mode, "async_ingest": "true"},
     )
 
 
 @router.post("/documents/{doc_id}/update/upload", response_model=None)
 async def update_document_upload(
+
     request_ctx: Request,
     doc_id: str,
     file: UploadFile = File(...),
@@ -1060,9 +726,8 @@ async def update_document_upload(
     semantic_min_sentences_per_chunk: int | None = Form(default=None, ge=1),
     semantic_min_characters_per_sentence: int | None = Form(default=None, ge=1),
     reader_strategy: str | None = Form(default=None),
-    stream: Annotated[bool, Form()] = False,
     user: User = Depends(require_scope("knowledge:write")),
-) -> KnowledgeDocumentResponsePayload | EventSourceResponse:
+) -> KnowledgeDocumentResponsePayload:
     ingest_options = ingest_options_from_form(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
@@ -1079,38 +744,29 @@ async def update_document_upload(
         reader_strategy=reader_strategy,
     )
     clean_title = (title or "").strip() or None
-    clean_source = (source or "").strip() or None
-
-    async def run_upload(on_progress=None) -> tuple[KnowledgeDocumentResponsePayload, Any]:
-        await emit_progress(
-            on_progress,
-            "upload",
-            "running",
-            message="上传中",
-        )
+    try:
         stored_upload = await store_knowledge_upload_async(file)
-        await emit_progress(
-            on_progress,
-            "upload",
-            "completed",
-            message="已上传",
-            detail={
-                "file_name": stored_upload.file_name,
-                "file_size": stored_upload.file_size,
-            },
-        )
+    except KnowledgeUploadTooLargeError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    clean_source_val = (source or "").strip() or None
+    owner_filter = effective_knowledge_user_filter(user)
+    job_id = f"processing:update-upload:{doc_id}:{stored_upload.upload_id}"
+
+    async def _bg_replace() -> KnowledgeDocumentResponsePayload:
         try:
             updated = await get_knowledge_base_lifecycle().replace_document_file_async(
                 doc_id,
                 path=str(stored_upload.path),
                 title=clean_title,
-                source=clean_source,
+                source=clean_source_val,
                 visibility=visibility,
                 metadata=stored_upload.metadata(),
-                owner_user_id=effective_knowledge_user_filter(user),
+                owner_user_id=owner_filter,
                 user=user,
                 ingest_options=ingest_options,
-                on_progress=on_progress,
             )
         except Exception:
             await remove_managed_upload_async(stored_upload.metadata())
@@ -1118,95 +774,35 @@ async def update_document_upload(
         if updated is None:
             await remove_managed_upload_async(stored_upload.metadata())
             raise LookupError("知识文档不存在")
-        response = cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
-        await record_audit_event_async(
-            user,
-            action="knowledge.source_replace",
-            resource_type="knowledge_document",
-            resource_id=doc_id,
-            metadata={
-                "mode": "upload",
-                "file_name": stored_upload.file_name,
-                "file_size": stored_upload.file_size,
-                "mime_type": stored_upload.mime_type,
-                "upload_mode": "browser",
-            },
-            **audit_request_context(request_ctx),
-        )
-        return response, stored_upload
+        return cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
 
-    if not stream:
-        # Store replacement file, then vectorize in background.
-        try:
-            await emit_progress(None, "upload", "running", message="上传中")
-            stored_upload = await store_knowledge_upload_async(file)
-        except KnowledgeUploadTooLargeError as exc:
-            raise HTTPException(status_code=413, detail=str(exc)) from exc
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        clean_source_val = (source or "").strip() or None
-        owner_filter = effective_knowledge_user_filter(user)
-        job_id = f"processing:update-upload:{doc_id}:{stored_upload.upload_id}"
-
-        async def _bg_replace() -> KnowledgeDocumentResponsePayload:
-            try:
-                updated = await get_knowledge_base_lifecycle().replace_document_file_async(
-                    doc_id,
-                    path=str(stored_upload.path),
-                    title=clean_title,
-                    source=clean_source_val,
-                    visibility=visibility,
-                    metadata=stored_upload.metadata(),
-                    owner_user_id=owner_filter,
-                    user=user,
-                    ingest_options=ingest_options,
-                )
-            except Exception:
-                await remove_managed_upload_async(stored_upload.metadata())
-                raise
-            if updated is None:
-                await remove_managed_upload_async(stored_upload.metadata())
-                raise LookupError("知识文档不存在")
-            return cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
-
-        _schedule_knowledge_ingest(
-            task_name=f"knowledge-bg-update-upload:{doc_id}:{stored_upload.upload_id}",
-            work=_bg_replace,
-            user=user,
-            audit_action="knowledge.source_replace",
-            audit_resource_id=doc_id,
-            audit_metadata={
-                "mode": "upload",
-                "file_name": stored_upload.file_name,
-                "file_size": stored_upload.file_size,
-                "mime_type": stored_upload.mime_type,
-                "upload_mode": "browser",
-                "async_ingest": True,
-            },
-            request_ctx=request_ctx,
-        )
-        return _processing_document_payload(
-            job_id=job_id,
-            title=clean_title or stored_upload.file_name,
-            source=clean_source_val or f"upload:{stored_upload.file_name}",
-            owner_user_id=actor_id(user),
-            visibility=visibility or "private",
-            file_name=stored_upload.file_name,
-            file_size=stored_upload.file_size,
-            mime_type=stored_upload.mime_type,
-            file_type=Path(stored_upload.file_name).suffix.lower(),
-            metadata=stored_upload.metadata(),
-        )
-
-    async def _stream_upload(on_progress=None):
-        document, _stored = await run_upload(on_progress=on_progress)
-        return document
-
-    return await _run_progress_sse(
-        include_upload=True,
-        work=_stream_upload,
-        task_name=f"knowledge-update-upload:{doc_id}",
+    _schedule_knowledge_ingest(
+        task_name=f"knowledge-bg-update-upload:{doc_id}:{stored_upload.upload_id}",
+        work=_bg_replace,
+        user=user,
+        audit_action="knowledge.source_replace",
+        audit_resource_id=doc_id,
+        audit_metadata={
+            "mode": "upload",
+            "file_name": stored_upload.file_name,
+            "file_size": stored_upload.file_size,
+            "mime_type": stored_upload.mime_type,
+            "upload_mode": "browser",
+            "async_ingest": True,
+        },
+        request_ctx=request_ctx,
+    )
+    return _processing_document_payload(
+        job_id=job_id,
+        title=clean_title or stored_upload.file_name,
+        source=clean_source_val or f"upload:{stored_upload.file_name}",
+        owner_user_id=actor_id(user),
+        visibility=visibility or "private",
+        file_name=stored_upload.file_name,
+        file_size=stored_upload.file_size,
+        mime_type=stored_upload.mime_type,
+        file_type=Path(stored_upload.file_name).suffix.lower(),
+        metadata=stored_upload.metadata(),
     )
 
 

@@ -88,7 +88,6 @@ from api.services.knowledge_source_service import (
     source_ref as make_source_ref,
     text_source_snapshot,
 )
-from api.services.knowledge_progress import emit_progress
 from api.services.knowledge_upload_service import remove_managed_upload_async
 
 _knowledge_async_lock = asyncio.Lock()
@@ -678,7 +677,6 @@ class KnowledgeBaseLifecycle:
         owner_user_id: str | None = None,
         visibility: str = "private",
         ingest_options: Mapping[str, object] | None = None,
-        on_progress=None,
     ) -> KnowledgeDocumentPayload:
         clean_title = title.strip() or "未命名知识"
         clean_content = content.strip()
@@ -715,54 +713,16 @@ class KnowledgeBaseLifecycle:
             filename=filename,
         )
         knowledge = await self._async_knowledge_async()
-        await emit_progress(
-            on_progress,
-            "parse",
-            "running",
-            message="解析中",
-            detail={"file_name": filename},
-        )
         async with _knowledge_async_lock:
             await self._ensure_storage_async()
-            await emit_progress(
-                on_progress,
-                "parse",
-                "completed",
-                message="已解析",
-                detail={"file_name": filename},
-            )
-            await emit_progress(
-                on_progress,
-                "vectorize",
-                "running",
-                message="向量化中",
-                detail={"file_name": filename},
-            )
-            try:
-                await knowledge.ainsert(
-                    name=clean_title,
-                    description=clean_source,
-                    text_content=clean_content,
-                    metadata=safe_metadata,
-                    reader=reader_for_profile(profile, filename, ingest_overrides),
-                    upsert=True,
-                    skip_if_exists=False,
-                )
-            except Exception as exc:
-                await emit_progress(
-                    on_progress,
-                    "vectorize",
-                    "failed",
-                    message="失败",
-                    error=str(exc),
-                )
-                raise
-            await emit_progress(
-                on_progress,
-                "vectorize",
-                "completed",
-                message="已写入",
-                detail={"file_name": filename},
+            await knowledge.ainsert(
+                name=clean_title,
+                description=clean_source,
+                text_content=clean_content,
+                metadata=safe_metadata,
+                reader=reader_for_profile(profile, filename, ingest_overrides),
+                upsert=True,
+                skip_if_exists=False,
             )
         inserted = await _latest_inserted_content_async(
             knowledge,
@@ -771,22 +731,8 @@ class KnowledgeBaseLifecycle:
             source_ref=source_reference,
         )
         if inserted is not None:
-            await emit_progress(
-                on_progress,
-                "cleanup",
-                "running",
-                message="保存中",
-                detail={"content_id": str(inserted.id)},
-            )
             await self._store_source_async(str(inserted.id), source_snapshot)
             document = _content_to_document(inserted)
-            await emit_progress(
-                on_progress,
-                "cleanup",
-                "completed",
-                message="完成",
-                document=document,
-            )
             return document
         raise RuntimeError("知识写入完成但未能读取内容登记记录")
 
@@ -799,7 +745,6 @@ class KnowledgeBaseLifecycle:
         owner_user_id: str | None = None,
         visibility: str = "private",
         ingest_options: Mapping[str, object] | None = None,
-        on_progress=None,
     ) -> KnowledgeDocumentPayload:
         file_path = await resolve_existing_file_async(path)
         if file_path.suffix.lower() not in SUPPORTED_FILE_SUFFIXES:
@@ -842,54 +787,16 @@ class KnowledgeBaseLifecycle:
         )
         reader = reader_for_profile(profile, file_path.name, ingest_overrides)
         knowledge = await self._async_knowledge_async()
-        await emit_progress(
-            on_progress,
-            "parse",
-            "running",
-            message="解析中",
-            detail={"file_name": file_path.name},
-        )
         async with _knowledge_async_lock:
             await self._ensure_storage_async()
-            await emit_progress(
-                on_progress,
-                "parse",
-                "completed",
-                message="已解析",
-                detail={"file_name": file_path.name},
-            )
-            await emit_progress(
-                on_progress,
-                "vectorize",
-                "running",
-                message="向量化中",
-                detail={"file_name": file_path.name},
-            )
-            try:
-                await knowledge.ainsert(
-                    name=clean_title,
-                    description=clean_source,
-                    path=str(file_path),
-                    metadata=safe_metadata,
-                    reader=reader,
-                    upsert=True,
-                    skip_if_exists=False,
-                )
-            except Exception as exc:
-                await emit_progress(
-                    on_progress,
-                    "vectorize",
-                    "failed",
-                    message="失败",
-                    error=str(exc),
-                )
-                raise
-            await emit_progress(
-                on_progress,
-                "vectorize",
-                "completed",
-                message="已写入",
-                detail={"file_name": file_path.name},
+            await knowledge.ainsert(
+                name=clean_title,
+                description=clean_source,
+                path=str(file_path),
+                metadata=safe_metadata,
+                reader=reader,
+                upsert=True,
+                skip_if_exists=False,
             )
         contents, _ = await knowledge.aget_content(
             limit=1,
@@ -899,22 +806,8 @@ class KnowledgeBaseLifecycle:
         )
         for content_row in contents:
             if content_row.name == clean_title:
-                await emit_progress(
-                    on_progress,
-                    "cleanup",
-                    "running",
-                    message="保存中",
-                    detail={"content_id": str(content_row.id)},
-                )
                 await self._store_source_async(str(content_row.id), source_snapshot)
                 document = _content_to_document(content_row)
-                await emit_progress(
-                    on_progress,
-                    "cleanup",
-                    "completed",
-                    message="完成",
-                    document=document,
-                )
                 return document
         raise RuntimeError("知识写入完成但未能读取内容登记记录")
 
@@ -1196,7 +1089,6 @@ class KnowledgeBaseLifecycle:
         visibility: str | None = None,
         metadata: Mapping[str, object] | None = None,
         ingest_options: Mapping[str, object] | None = None,
-        on_progress=None,
     ) -> KnowledgeDocumentPayload | None:
         await self._ensure_contents_storage_async()
         content = await self._knowledge_content_by_id_async(doc_id)
@@ -1265,19 +1157,11 @@ class KnowledgeBaseLifecycle:
             active_source_snapshot["metadata"] = source_metadata
         async with _knowledge_async_lock:
             await self._ensure_storage_async()
-            await emit_progress(
-                on_progress,
-                "parse",
-                "running",
-                message="重建中",
-                detail={"content_id": doc_id},
-            )
             await ainsert_source_snapshot_async(
                 knowledge,
                 active_source_snapshot,
                 reader_for_filename=reader_for_filename,
                 content_id=doc_id,
-                on_progress=on_progress,
             )
             if restore_metadata and restore_metadata != source_metadata:
                 patched = await knowledge.apatch_content(
@@ -1293,24 +1177,10 @@ class KnowledgeBaseLifecycle:
                 or ingest_options
             ):
                 await self._store_source_async(doc_id, active_source_snapshot)
-        await emit_progress(
-            on_progress,
-            "cleanup",
-            "running",
-            message="保存中",
-            detail={"content_id": doc_id},
-        )
         refreshed = await self._knowledge_content_by_id_async(doc_id)
         if refreshed is None:
             raise RuntimeError("知识重建完成但未能读取内容登记记录")
         document = _content_to_document(refreshed)
-        await emit_progress(
-            on_progress,
-            "cleanup",
-            "completed",
-            message="完成",
-            document=document,
-        )
         return document
 
     async def replace_document_source_async(
@@ -1326,7 +1196,6 @@ class KnowledgeBaseLifecycle:
         owner_user_id: str | None = None,
         user: ActorLike | None = None,
         ingest_options: Mapping[str, object] | None = None,
-        on_progress=None,
     ) -> KnowledgeDocumentPayload | None:
         await self._ensure_contents_storage_async()
         current = await self._knowledge_content_by_id_async(doc_id)
@@ -1413,36 +1282,14 @@ class KnowledgeBaseLifecycle:
         knowledge = await self._async_knowledge_async()
         async with _knowledge_async_lock:
             await self._ensure_storage_async()
-            await emit_progress(
-                on_progress,
-                "parse",
-                "running",
-                message="解析中",
-                detail={"content_id": doc_id, "file_name": clean_file_name},
-            )
             await ainsert_source_snapshot_async(
                 knowledge,
                 source_snapshot,
                 reader_for_filename=reader_for_filename,
                 content_id=doc_id,
-                on_progress=on_progress,
-            )
-            await emit_progress(
-                on_progress,
-                "cleanup",
-                "running",
-                message="清理中",
-                detail={"content_id": doc_id},
             )
             await self._store_source_async(doc_id, source_snapshot)
             await remove_managed_upload_async(current_metadata)
-            await emit_progress(
-                on_progress,
-                "cleanup",
-                "completed",
-                message="完成",
-                detail={"content_id": doc_id},
-            )
 
         refreshed = await self._knowledge_content_by_id_async(doc_id)
         if refreshed is None:
@@ -1462,7 +1309,6 @@ class KnowledgeBaseLifecycle:
         owner_user_id: str | None = None,
         user: ActorLike | None = None,
         ingest_options: Mapping[str, object] | None = None,
-        on_progress=None,
     ) -> KnowledgeDocumentPayload | None:
         await self._ensure_contents_storage_async()
         current = await self._knowledge_content_by_id_async(doc_id)
@@ -1549,36 +1395,14 @@ class KnowledgeBaseLifecycle:
         knowledge = await self._async_knowledge_async()
         async with _knowledge_async_lock:
             await self._ensure_storage_async()
-            await emit_progress(
-                on_progress,
-                "parse",
-                "running",
-                message="解析中",
-                detail={"content_id": doc_id, "file_name": file_path.name},
-            )
             await ainsert_source_snapshot_async(
                 knowledge,
                 source_snapshot,
                 reader_for_filename=reader_for_filename,
                 content_id=doc_id,
-                on_progress=on_progress,
-            )
-            await emit_progress(
-                on_progress,
-                "cleanup",
-                "running",
-                message="清理中",
-                detail={"content_id": doc_id},
             )
             await self._store_source_async(doc_id, source_snapshot)
             await remove_managed_upload_async(current_metadata)
-            await emit_progress(
-                on_progress,
-                "cleanup",
-                "completed",
-                message="完成",
-                detail={"content_id": doc_id},
-            )
 
         refreshed = await self._knowledge_content_by_id_async(doc_id)
         if refreshed is None:
