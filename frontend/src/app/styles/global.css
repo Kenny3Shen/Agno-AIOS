@@ -680,6 +680,14 @@ html.dark .shell-menu .ant-menu-item-selected {
   min-height: 100%;
   padding: 14px;
 }
+
+.page:has(.workflow-studio) {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
 .page-header {
   display: flex;
   min-width: 0;
@@ -1631,6 +1639,16 @@ html.dark .shell-menu .ant-menu-item-selected {
 .ant-tag:active {
   transform: translateY(1px);
 }
+.shell-content:has(.workflow-studio) {
+  overflow: hidden;
+}
+
+.shell-page-transition:has(.workflow-studio) {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .shell-page-transition {
   min-height: 100%;
   animation: page-enter var(--motion-base) var(--motion-enter-ease) both;
@@ -1808,9 +1826,12 @@ html.dark .shell-menu .ant-menu-item-selected {
 
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 64px);
-  min-height: 560px;
-  margin: -8px -12px 0;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
   padding: 0;
   overflow: hidden;
   color: var(--tais-text);
@@ -1836,12 +1857,14 @@ html.dark .workflow-studio {
   display: flex;
   align-items: center;
   gap: 10px 14px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  min-width: 0;
   padding: 8px 12px;
   border-bottom: 1px solid var(--wf-panel-border);
   background: var(--tais-surface);
   z-index: 2;
-  row-gap: 8px;
+  overflow: hidden;
 }
 
 .workflow-studio__banner {
@@ -1859,6 +1882,7 @@ html.dark .workflow-studio {
   gap: 10px;
   min-width: 148px;
   flex: 0 1 auto;
+  flex-shrink: 1;
 }
 
 .workflow-studio__title {
@@ -1896,8 +1920,9 @@ html.dark .workflow-studio {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 1;
-  min-width: 220px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .workflow-studio__name {
@@ -1946,10 +1971,12 @@ html.dark .workflow-studio {
 
 .workflow-studio__body {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(196px, 220px) minmax(0, 1fr) minmax(272px, 312px);
   background: color-mix(in srgb, var(--tais-bg) 92%, var(--tais-muted));
+  overflow: hidden;
 }
 
 .workflow-studio__left,
@@ -3105,6 +3132,21 @@ button.collect-article-item.is-selected {
 .workflow-studio__tab-pane-body--scroll {
   overflow: auto;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+/* Prefer no visible rail scrollbars; content still scrollable when necessary */
+.workflow-studio__left .workflow-studio__tab-pane-body--scroll,
+.workflow-studio__right .workflow-studio__tab-pane-body--scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.workflow-studio__left .workflow-studio__tab-pane-body--scroll::-webkit-scrollbar,
+.workflow-studio__right .workflow-studio__tab-pane-body--scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .workflow-studio__tab-pane-body .workflow-studio__panel-title {
@@ -3132,11 +3174,12 @@ html.dark .workflow-studio__rail-tabs > .ant-tabs-nav {
 
 .workflow-studio__actions--drawio {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-end;
   gap: 2px 0;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .workflow-studio__action-group {
