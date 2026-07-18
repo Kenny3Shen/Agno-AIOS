@@ -314,5 +314,8 @@
   "toolbarGroupEdit": "编辑",
   "toolbarGroupLayout": "布局",
   "toolbarGroupDeploy": "发布",
-  "toolbarGroupRun": "运行"
+  "toolbarGroupRun": "运行",
+  "shapesSearchPlaceholder": "搜索节点…",
+  "shapesSearchEmpty": "无匹配节点",
+  "shapesDropHint": "拖到画布；双击快速添加"
 }

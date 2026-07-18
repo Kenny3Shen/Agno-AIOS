@@ -1948,8 +1948,8 @@ html.dark .workflow-studio {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(168px, 188px) minmax(0, 1fr) minmax(260px, 300px);
-  background: var(--tais-bg);
+  grid-template-columns: minmax(196px, 220px) minmax(0, 1fr) minmax(272px, 312px);
+  background: color-mix(in srgb, var(--tais-bg) 92%, var(--tais-muted));
 }
 
 .workflow-studio__left,
@@ -1971,12 +1971,99 @@ html.dark .workflow-studio {
   border-left: 1px solid var(--wf-panel-border);
 }
 
+
 .workflow-studio__canvas {
   min-width: 0;
   min-height: 0;
   position: relative;
-  background: var(--tais-bg);
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 18px 20px 22px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--tais-bg) 88%, #d9d9d9), color-mix(in srgb, var(--tais-bg) 96%, #bfbfbf));
+  overflow: hidden;
 }
+
+html.dark .workflow-studio__canvas {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--tais-bg) 92%, #000), var(--tais-bg));
+}
+
+.workflow-studio__page {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 2px;
+  background: var(--tais-surface);
+  border: 1px solid color-mix(in srgb, var(--tais-border) 80%, transparent);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #fff 55%, transparent) inset,
+    0 10px 28px color-mix(in srgb, #000 12%, transparent),
+    0 2px 6px color-mix(in srgb, #000 8%, transparent);
+  overflow: hidden;
+  position: relative;
+}
+
+html.dark .workflow-studio__page {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--tais-border) 80%, transparent),
+    0 12px 32px color-mix(in srgb, #000 45%, transparent);
+}
+
+.workflow-shapes-search {
+  width: 100%;
+}
+
+.workflow-studio__panel--shapes-search {
+  padding-bottom: 6px;
+}
+
+.workflow-palette--icons {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.workflow-palette__item--icon {
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-height: 64px;
+  padding: 8px 4px 6px;
+  border-style: solid;
+  border-width: 1px;
+  border-radius: 6px;
+  text-align: center;
+  background: var(--tais-surface);
+}
+
+.workflow-palette__item--icon .workflow-palette__icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 18px;
+}
+
+.workflow-palette__label {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--tais-text);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-palette__empty {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  text-align: center;
+  padding: 8px 0;
+}
+
 
 .workflow-studio__panel {
   padding: 8px 10px;
@@ -2070,10 +2157,7 @@ html.dark .workflow-studio {
   width: 100%;
   height: 100%;
   position: relative;
-  background:
-    radial-gradient(circle at 20% 20%, var(--wf-canvas-glow-a), transparent 40%),
-    radial-gradient(circle at 80% 80%, var(--wf-canvas-glow-b), transparent 42%),
-    var(--tais-bg);
+  background: var(--tais-surface);
 }
 
 /* Smooth node motion: settle after drag/reorder; no lag while dragging */
@@ -2618,7 +2702,13 @@ html.dark .wf-flow-node__badge {
 
 @media (max-width: 1100px) {
   .workflow-studio__body {
-    grid-template-columns: 160px minmax(0, 1fr) 260px;
+    grid-template-columns: minmax(176px, 196px) minmax(0, 1fr) minmax(248px, 280px);
+  }
+  .workflow-studio__canvas {
+    padding: 12px 14px 16px;
+  }
+  .workflow-palette--icons {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -2637,8 +2727,18 @@ html.dark .wf-flow-node__badge {
     border: none;
     border-bottom: 1px solid var(--wf-panel-border);
   }
-  .workflow-canvas--main {
+  .workflow-studio__canvas {
+    padding: 10px 12px 14px;
     min-height: 55vh;
+  }
+  .workflow-studio__page {
+    min-height: 52vh;
+  }
+  .workflow-canvas--main {
+    min-height: 52vh;
+  }
+  .workflow-palette--icons {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

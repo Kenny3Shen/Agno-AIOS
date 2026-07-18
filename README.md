@@ -16,7 +16,7 @@ Chat 与 Workflow 共用稳定 `agent_id` / executor `ref`（见 `api/services/a
 | `safe-fallback` | 轻量分析助手 | 无工具（Workflow 兜底） |
 
 - Chat：`GET /api/chat/agents`，发消息可带 `agent_id`（multipart/JSON）。
-- Workflow Studio：步骤 executor 下拉同步上述 catalog。
+- Workflow Studio（draw.io 风格三栏：形状搜索/调色板 · 页面视图网格 · 属性与运行日志）：步骤 executor 下拉同步 catalog。
 - **Agno Team（beta）**：`TAIS_ENABLE_AGNO_TEAM=1` 时 Chat 可选 `research-analysis-team`（coordinate）/ `research-analysis-route` / `research-analysis-broadcast`；成员事件映射为 ThoughtChain（成员工具与 `member:reasoning` 内嵌显示），队长内容为最终回答（含成员 Intermediate 无 agent_id 的防泄漏）；broadcast 成员独立 model 实例与 session summary；Chat 终态收口 loading thought/tool 并支持 completed.content 兜底；成员推理/content 分桶累积、citations 前缀与历史 `_history_team_sources`/reasoning 回放合并；成员失败时队长空回答可恢复提示；历史会话回放 `member_responses`；可用 xAI Grok 联调；多轮会话历史在客户端提前结束 SSE 时仍保持 COMPLETED；默认不启用以避免 HITL/MCP 语义混淆。
 
 ### Agno 对齐（Data / Deep Research）

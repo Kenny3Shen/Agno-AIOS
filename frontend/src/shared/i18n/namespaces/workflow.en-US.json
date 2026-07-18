@@ -314,5 +314,8 @@
   "toolbarGroupEdit": "Edit",
   "toolbarGroupLayout": "Layout",
   "toolbarGroupDeploy": "Deploy",
-  "toolbarGroupRun": "Run"
+  "toolbarGroupRun": "Run",
+  "shapesSearchPlaceholder": "Search shapes…",
+  "shapesSearchEmpty": "No matching shapes",
+  "shapesDropHint": "Drag to canvas; double-click to add"
 }

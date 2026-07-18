@@ -88,7 +88,7 @@ const DEFAULT_EDGE_OPTIONS = {
 const PRO_OPTIONS = { hideAttribution: true } as const
 
 /** Draw.io-like grid: light lines, readable at default zoom. */
-const BACKGROUND_GAP = 20
+const BACKGROUND_GAP = 16
 const BACKGROUND_SIZE = 1
 
 /**

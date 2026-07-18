@@ -48,6 +48,7 @@ import {
   CopyOutlined,
   ReloadOutlined,
   QuestionCircleOutlined,
+  SearchOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { Markdown } from '@/shared/ui/Markdown'
@@ -252,6 +253,7 @@ export function WorkflowPage() {
   const inspectorPanelRef = useRef<HTMLElement | null>(null)
   const focusFieldRef = useRef<string | null>(null)
   const [runPanelKeys, setRunPanelKeys] = useState<string[]>(['run'])
+  const [paletteFilter, setPaletteFilter] = useState('')
   const currentUser = useQuery(currentUserQuery())
   const canRun =
     hasScope(currentUser.data, 'workflows:run') ||
@@ -554,6 +556,24 @@ export function WorkflowPage() {
     return map[type]
   }
 
+  const filteredPalette = useMemo(() => {
+    const q = paletteFilter.trim().toLowerCase()
+    if (!q) return PALETTE
+    const labels: Record<WorkflowNodeType, string> = {
+      step: t('addStep'),
+      parallel: t('addParallel'),
+      condition: t('addCondition'),
+      loop: t('addLoop'),
+      router: t('addRouter'),
+      workflow_ref: t('addWorkflowRef'),
+    }
+    return PALETTE.filter((item) => {
+      const label = (labels[item.type] || item.type).toLowerCase()
+      return label.includes(q) || item.type.toLowerCase().includes(q)
+    })
+  }, [paletteFilter, t])
+
+
   return (
     <main className="page workflow-studio">
       <header className="workflow-studio__toolbar">
@@ -840,13 +860,24 @@ export function WorkflowPage() {
       <div className="workflow-studio__body">
         {/* Left rail: shapes palette + templates + library (draw.io "Shapes") */}
         <aside className="workflow-studio__left workflow-studio__shapes">
+          <section className="workflow-studio__panel workflow-studio__panel--shapes-search">
+            <Input
+              allowClear
+              size="small"
+              prefix={<SearchOutlined />}
+              placeholder={t('shapesSearchPlaceholder')}
+              value={paletteFilter}
+              onChange={(event) => setPaletteFilter(event.target.value)}
+              className="workflow-shapes-search"
+            />
+          </section>
           <section className="workflow-studio__panel">
             <div className="workflow-studio__panel-title">{t('palette')}</div>
-            <div className="workflow-palette">
-              {PALETTE.map((item) => (
+            <div className="workflow-palette workflow-palette--icons">
+              {filteredPalette.map((item) => (
                 <div
                   key={item.type}
-                  className="workflow-palette__item"
+                  className="workflow-palette__item workflow-palette__item--icon"
                   draggable={!workflow.state.running && canWrite}
                   aria-disabled={workflow.state.running || !canWrite}
                   onDragStart={(event) => {
@@ -860,20 +891,26 @@ export function WorkflowPage() {
                     if (workflow.state.running || !canWrite) return
                     workflow.add(item.type)
                   }}
-                  style={{ borderColor: item.color }}
+                  style={{ borderColor: item.color, color: item.color }}
                   title={
                     workflow.state.running
                       ? t('errorEditWhileRunning')
-                      : t('paletteDragHint')
+                      : `${paletteLabel(item.type)} · ${t('paletteDragHint')}`
                   }
                 >
                   <span className="workflow-palette__icon" style={{ color: item.color }}>
                     {item.icon}
                   </span>
-                  <span>{paletteLabel(item.type)}</span>
+                  <span className="workflow-palette__label">{paletteLabel(item.type)}</span>
                 </div>
               ))}
+              {!filteredPalette.length ? (
+                <Typography.Text type="secondary" className="workflow-palette__empty">
+                  {t('shapesSearchEmpty')}
+                </Typography.Text>
+              ) : null}
             </div>
+            <p className="workflow-studio__hint">{t('shapesDropHint')}</p>
           </section>
 
           <section className="workflow-studio__panel">
@@ -1030,39 +1067,43 @@ export function WorkflowPage() {
 
         {/* Center stage: React Flow canvas (chrome only in WorkflowCanvas) */}
         <section className="workflow-studio__canvas">
-          <WorkflowCanvas
-            steps={workflow.state.steps}
-            selectedId={workflow.state.selectedId}
-            selectedIds={workflow.state.selectedIds}
-            running={workflow.state.running}
-            onStop={workflow.stop}
-            executorNames={executorNames}
-            onSelect={workflow.select}
-            onSelectMany={workflow.selectMany}
-            onPositionsChange={workflow.applyPositions}
-            onConnectSequence={workflow.connectSequence}
-            onConnectBranch={connectBranchWithHitlGuard}
-            onDropNode={(type, position, target) => workflow.addAt(type, position, target)}
-            onReparent={reparentWithHitlGuard}
-            onEmptySlot={(parentId, slotKey) => workflow.addToSlot(parentId, slotKey)}
-            onDeleteSelected={workflow.removeSelected}
-            onFocusInspector={focusInspectorForNode}
-            onUndo={workflow.undo}
-            onRedo={workflow.redo}
-            onCopy={copyWithGuard}
-            onPaste={pasteWithHitlGuard}
-            onOrganize={workflow.organizeLayout}
-            onDuplicateSelected={duplicateWithHitlGuard}
-            nodeRunStatus={workflow.state.nodeRunStatus}
-            validationIssues={workflow.state.validationIssues}
-            validationEpoch={workflow.state.validationEpoch}
-            focusEpoch={workflow.state.focusEpoch}
-            emptyHint={t('canvasEmptyHint')}
-            emptyActionLabel={canWrite ? t('startFromTemplate') : undefined}
-            onEmptyAction={
-              canWrite ? () => confirmLeaveStudio(() => workflow.startFromTemplate('ir-triage')) : undefined
-            }
-          />
+          <div className="workflow-studio__page">
+            <WorkflowCanvas
+              steps={workflow.state.steps}
+              selectedId={workflow.state.selectedId}
+              selectedIds={workflow.state.selectedIds}
+              running={workflow.state.running}
+              onStop={workflow.stop}
+              executorNames={executorNames}
+              onSelect={workflow.select}
+              onSelectMany={workflow.selectMany}
+              onPositionsChange={workflow.applyPositions}
+              onConnectSequence={workflow.connectSequence}
+              onConnectBranch={connectBranchWithHitlGuard}
+              onDropNode={(type, position, target) => workflow.addAt(type, position, target)}
+              onReparent={reparentWithHitlGuard}
+              onEmptySlot={(parentId, slotKey) => workflow.addToSlot(parentId, slotKey)}
+              onDeleteSelected={workflow.removeSelected}
+              onFocusInspector={focusInspectorForNode}
+              onUndo={workflow.undo}
+              onRedo={workflow.redo}
+              onCopy={copyWithGuard}
+              onPaste={pasteWithHitlGuard}
+              onOrganize={workflow.organizeLayout}
+              onDuplicateSelected={duplicateWithHitlGuard}
+              nodeRunStatus={workflow.state.nodeRunStatus}
+              validationIssues={workflow.state.validationIssues}
+              validationEpoch={workflow.state.validationEpoch}
+              focusEpoch={workflow.state.focusEpoch}
+              emptyHint={t('canvasEmptyHint')}
+              emptyActionLabel={canWrite ? t('startFromTemplate') : undefined}
+              onEmptyAction={
+                canWrite
+                  ? () => confirmLeaveStudio(() => workflow.startFromTemplate('ir-triage'))
+                  : undefined
+              }
+            />
+          </div>
         </section>
 
         {/* Right rail: inspector forms + run log (domain actions via useWorkflow) */}

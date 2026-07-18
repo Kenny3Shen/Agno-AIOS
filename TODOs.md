@@ -1,3 +1,7 @@
+## Workflow
+
+- [x] Studio 布局对齐 draw.io：左侧搜索+图标调色板、中央页面视图网格、右栏属性
+
 ## Agents / Team
 
 - [x] 自动轻量不再禁用手动「联网搜索 / 知识库」开关（仍跳过 MCP/Skills/Memory 注入）
