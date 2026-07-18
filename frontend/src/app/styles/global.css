@@ -302,18 +302,30 @@ html.dark .shell-menu .ant-menu-item-selected {
   box-shadow: 0 0 0 1px color-mix(in srgb, #000 12%, transparent);
 }
 .shell-footer .shell-bottom-menu {
-  border-top: 0 !important;
-  padding: 0 !important;
+  margin-top: 2px;
+  border-top: 1px solid var(--tais-border) !important;
+  padding: 8px 0 0 !important;
+  background: transparent !important;
 }
 .shell-footer .shell-bottom-menu .ant-menu-item {
   border-radius: 10px;
   margin-inline: 0 !important;
+}
+/* Collapsed: keep divider, center settings under avatar */
+.shell-sider.ant-layout-sider-collapsed .shell-footer .shell-bottom-menu {
+  width: 100%;
+  padding-top: 8px !important;
 }
 .shell-footer-drawer {
   padding: 8px;
 }
 .shell-footer-drawer .shell-identity {
   margin-bottom: 0;
+}
+.shell-footer-drawer .shell-bottom-menu {
+  margin-top: 2px;
+  border-top: 1px solid var(--tais-border) !important;
+  padding: 8px 0 0 !important;
 }
 .chat-task-panel {
   display: flex;
