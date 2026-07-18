@@ -16,7 +16,7 @@ Chat 与 Workflow 共用稳定 `agent_id` / executor `ref`（见 `api/services/a
 | `safe-fallback` | 轻量分析助手 | 无工具（Workflow 兜底） |
 
 - Chat：`GET /api/chat/agents`，发消息可带 `agent_id`（multipart/JSON）。
-- Workflow Studio（draw.io 风格三栏：形状搜索/调色板 · 页面视图网格 · 属性与运行日志）：步骤 executor 下拉同步 catalog。
+- Workflow Studio（三栏：左侧节点/模板/工作流 Tab · 页面视图网格 · 右侧属性/运行 Tab · 顶栏纯图标工具条）：步骤 executor 下拉同步 catalog。
 - **Agno Team（beta）**：`TAIS_ENABLE_AGNO_TEAM=1` 时 Chat 可选 `research-analysis-team`（coordinate）/ `research-analysis-route` / `research-analysis-broadcast`；成员事件映射为 ThoughtChain（成员工具与 `member:reasoning` 内嵌显示），队长内容为最终回答（含成员 Intermediate 无 agent_id 的防泄漏）；broadcast 成员独立 model 实例与 session summary；Chat 终态收口 loading thought/tool 并支持 completed.content 兜底；成员推理/content 分桶累积、citations 前缀与历史 `_history_team_sources`/reasoning 回放合并；成员失败时队长空回答可恢复提示；历史会话回放 `member_responses`；可用 xAI Grok 联调；多轮会话历史在客户端提前结束 SSE 时仍保持 COMPLETED；默认不启用以避免 HITL/MCP 语义混淆。
 
 ### Agno 对齐（Data / Deep Research）
@@ -92,7 +92,7 @@ Responses 协议通过 Agno `OpenAIResponses.parallel_tool_calls` 传递；Chat 
 
 模型配置支持请求重试：`retries` / `delay_between_retries` / `exponential_backoff`（Agno 应用层，覆盖 Chat Completions 与 Responses），以及可选 `http_max_retries`（OpenAI SDK 连接层）。默认 4 次指数退避，可在设置页按模型调整。
 
-模型供应商支持 DeepSeek / OpenAI / **xAI（Agno 官方 `xAI` 类，Chat Completions）** / OpenAI-compatible。 xAI 可配置 structured output 与 Live Search；Chat 输入区可开关联网搜索与知识库检索。 设置页模型表单仅配置连接信息（名称/供应商/Model ID/密钥/Base URL）；其余模型参数由能力画像解析（optimal → 配置 → 请求覆盖 → fallback）；xAI 不使用 `reasoning_effort`，靠推理/非推理 model id。历史 Grok 配置（`api.x.ai` 或 `model_id` 以 `grok` 开头）在读路径 `normalized` 时映射为 `provider=xai`（不再走 OpenAI Responses）；不会在每次 load 写回数据库，显式保存或完整性修复时才持久化。 残留 `config/model_config.json` 一律归档为 `*.imported` 且**永不导入**（无 `TAIS_MODEL_CONFIG_FILE` 覆盖）；空表只 seed 内置默认模型，连接与密钥以 Settings/Postgres 为准。
+模型供应商支持 DeepSeek / OpenAI / **xAI（Agno 官方 `xAI` 类，Chat Completions）** / OpenAI-compatible。 xAI 可配置 structured output 与 Live Search；Chat 输入区可开关联网搜索与知识库检索。 附件区使用 `@ant-design/x` `Attachments`（占位拖放/点击、数量提示与体积限制）。 设置页模型表单仅配置连接信息（名称/供应商/Model ID/密钥/Base URL）；其余模型参数由能力画像解析（optimal → 配置 → 请求覆盖 → fallback）；xAI 不使用 `reasoning_effort`，靠推理/非推理 model id。历史 Grok 配置（`api.x.ai` 或 `model_id` 以 `grok` 开头）在读路径 `normalized` 时映射为 `provider=xai`（不再走 OpenAI Responses）；不会在每次 load 写回数据库，显式保存或完整性修复时才持久化。 残留 `config/model_config.json` 一律归档为 `*.imported` 且**永不导入**（无 `TAIS_MODEL_CONFIG_FILE` 覆盖）；空表只 seed 内置默认模型，连接与密钥以 Settings/Postgres 为准。
 
 模型工厂把 structured output 模式存在实例私有属性 `_tais_structured_output_mode`，**不写** Agno `model.metadata`，避免 OpenAI Responses / Chat 把内部标记当作 HTTP `metadata` 发给 Grok 等不兼容网关（会 400 `Argument not supported: metadata`）。
 

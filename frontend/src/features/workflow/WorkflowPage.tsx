@@ -2,9 +2,10 @@
  * Workflow Studio page shell (draw.io-style three-pane layout).
  *
  * Layout:
- * - Left: shapes palette + templates + library
+ * - Left: tabbed rails (shapes / templates / library)
  * - Center: React Flow canvas
- * - Right: inspector + run log
+ * - Right: tabbed rails (inspector / run)
+ * - Top: pure icon toolbar with tooltips
  *
  * Orchestration state lives in `useWorkflow`. This file wires UI chrome only
  * (toolbar groups, panels, inspector forms). Keep save/run/publish handlers
@@ -23,6 +24,7 @@ import {
   Space,
   Spin,
   Switch,
+  Tabs,
   Tag,
   Tooltip,
   Typography,
@@ -34,6 +36,7 @@ import {
   CloseOutlined,
   DeleteOutlined,
   DeploymentUnitOutlined,
+  FileAddOutlined,
   NodeIndexOutlined,
   PlayCircleOutlined,
   PartitionOutlined,
@@ -250,15 +253,22 @@ export function WorkflowPage() {
   })
 
   const runLogListRef = useRef<HTMLDivElement>(null)
-  const inspectorPanelRef = useRef<HTMLElement | null>(null)
+  const inspectorPanelRef = useRef<HTMLDivElement | null>(null)
   const focusFieldRef = useRef<string | null>(null)
-  const [runPanelKeys, setRunPanelKeys] = useState<string[]>(['run'])
+  const [leftRailTab, setLeftRailTab] = useState('shapes')
+  const [rightRailTab, setRightRailTab] = useState('props')
+  const [runPanelKeys, setRunPanelKeys] = useState<string[]>(['def'])
   const [paletteFilter, setPaletteFilter] = useState('')
   const currentUser = useQuery(currentUserQuery())
   const canRun =
     hasScope(currentUser.data, 'workflows:run') ||
     hasScope(currentUser.data, 'workflows:write')
   const canWrite = hasScope(currentUser.data, 'workflows:write')
+
+  // Focus run tab when a run starts so operators see live log without hunting panels.
+  useEffect(() => {
+    if (workflow.state.running) setRightRailTab('run')
+  }, [workflow.state.running])
 
   // Soft banners (e.g. server cancel failed, validation) auto-dismiss; keep hard
   // run failure visible via run-status Alert while a failed duty banner is shown.
@@ -507,6 +517,7 @@ export function WorkflowPage() {
 
   const focusInspectorForNode = useCallback(
     (nodeId: string) => {
+      setRightRailTab('props')
       focusFieldRef.current = 'name'
       workflow.select(nodeId)
       // Direct focus (validation effect only runs when issues exist).
@@ -629,14 +640,21 @@ export function WorkflowPage() {
             </Tag>
           </div>
         </div>
-        {/* Draw.io-style action strip: visual groups only; handlers unchanged. */}
+        {/* Pure icon toolbar (tooltip labels); handlers unchanged. */}
         <div className="workflow-studio__actions workflow-studio__actions--drawio">
           <div
             className="workflow-studio__action-group"
             role="group"
             aria-label={t('toolbarGroupFile')}
           >
-            <Button onClick={workflow.reset}>{t('new')}</Button>
+            <Tooltip title={t('new')} getPopupContainer={studioPopupContainer}>
+              <Button
+                icon={<FileAddOutlined />}
+                aria-label={t('new')}
+                disabled={workflow.state.running}
+                onClick={workflow.reset}
+              />
+            </Tooltip>
           </div>
           <span className="workflow-studio__action-sep" aria-hidden />
           <div
@@ -647,6 +665,7 @@ export function WorkflowPage() {
             <Tooltip title={t('undoHint')} getPopupContainer={studioPopupContainer}>
               <Button
                 icon={<UndoOutlined />}
+                aria-label={t('undoHint')}
                 disabled={!workflow.canUndo || workflow.state.running}
                 onClick={workflow.undo}
               />
@@ -654,6 +673,7 @@ export function WorkflowPage() {
             <Tooltip title={t('redoHint')} getPopupContainer={studioPopupContainer}>
               <Button
                 icon={<RedoOutlined />}
+                aria-label={t('redoHint')}
                 disabled={!workflow.canRedo || workflow.state.running}
                 onClick={workflow.redo}
               />
@@ -696,20 +716,27 @@ export function WorkflowPage() {
             role="group"
             aria-label={t('toolbarGroupDeploy')}
           >
-            <Button
-              icon={<SaveOutlined />}
-              type="primary"
-              loading={workflow.state.saving}
-              disabled={!canWrite}
-              onClick={() => {
-                void workflow.save().then((ok) => {
-                  if (ok) message.success(t('saveSuccess'))
-                })
-              }}
+            <Tooltip
+              title={
+                workflow.state.dirty
+                  ? `${t('save')} *`
+                  : t('save')
+              }
+              getPopupContainer={studioPopupContainer}
             >
-              {t('save')}
-              {workflow.state.dirty ? ' *' : ''}
-            </Button>
+              <Button
+                icon={<SaveOutlined />}
+                type="primary"
+                loading={workflow.state.saving}
+                disabled={!canWrite}
+                aria-label={t('save')}
+                onClick={() => {
+                  void workflow.save().then((ok) => {
+                    if (ok) message.success(t('saveSuccess'))
+                  })
+                }}
+              />
+            </Tooltip>
             <Tooltip title={t('publishHint')} getPopupContainer={studioPopupContainer}>
               <Button
                 icon={<CloudUploadOutlined />}
@@ -722,14 +749,13 @@ export function WorkflowPage() {
                 }
                 loading={workflow.state.saving}
                 disabled={!canWrite || !workflow.state.workflowId || workflow.state.dirty}
+                aria-label={t('publish')}
                 onClick={() => {
                   void workflow.publish().then((ok) => {
                     if (ok) message.success(t('publishSuccess'))
                   })
                 }}
-              >
-                {t('publish')}
-              </Button>
+              />
             </Tooltip>
           </div>
           <span className="workflow-studio__action-sep" aria-hidden />
@@ -746,12 +772,13 @@ export function WorkflowPage() {
                     ? t('errorRunNeedsSave')
                     : workflow.state.dirty
                       ? t('errorRunNeedsClean')
-                      : undefined
+                      : t('run')
               }
               getPopupContainer={studioPopupContainer}
             >
               <Button
                 icon={<PlayCircleOutlined />}
+                aria-label={t('run')}
                 disabled={
                   workflow.state.running ||
                   !canRun ||
@@ -759,15 +786,16 @@ export function WorkflowPage() {
                   workflow.state.dirty
                 }
                 onClick={() => void workflow.run()}
-              >
-                {t('run')}
-              </Button>
+              />
             </Tooltip>
             {workflow.state.running ? (
               <Tooltip title={t('stopRunHint')} getPopupContainer={studioPopupContainer}>
-                <Button danger icon={<StopOutlined />} onClick={workflow.stop}>
-                  {t('stop')}
-                </Button>
+                <Button
+                  danger
+                  icon={<StopOutlined />}
+                  aria-label={t('stop')}
+                  onClick={workflow.stop}
+                />
               </Tooltip>
             ) : null}
           </div>
@@ -858,10 +886,21 @@ export function WorkflowPage() {
       ) : null}
 
       <div className="workflow-studio__body">
-        {/* Left rail: shapes palette + templates + library (draw.io "Shapes") */}
+        {/* Left rail: tabbed shapes / templates / library */}
         <aside className="workflow-studio__left workflow-studio__shapes">
-          <section className="workflow-studio__panel workflow-studio__panel--shapes-search">
-            <Input
+          <Tabs
+            className="workflow-studio__rail-tabs"
+            size="small"
+            activeKey={leftRailTab}
+            onChange={setLeftRailTab}
+            items={[
+              {
+                key: 'shapes',
+                label: t('palette'),
+                children: (
+                  <div className="workflow-studio__tab-pane">
+                    <div className="workflow-studio__tab-pane-head">
+                      <Input
               allowClear
               size="small"
               prefix={<SearchOutlined />}
@@ -870,10 +909,9 @@ export function WorkflowPage() {
               onChange={(event) => setPaletteFilter(event.target.value)}
               className="workflow-shapes-search"
             />
-          </section>
-          <section className="workflow-studio__panel">
-            <div className="workflow-studio__panel-title">{t('palette')}</div>
-            <div className="workflow-palette workflow-palette--icons">
+                    </div>
+                    <div className="workflow-studio__tab-pane-body">
+                      <div className="workflow-palette workflow-palette--icons">
               {filteredPalette.map((item) => (
                 <div
                   key={item.type}
@@ -911,11 +949,17 @@ export function WorkflowPage() {
               ) : null}
             </div>
             <p className="workflow-studio__hint">{t('shapesDropHint')}</p>
-          </section>
-
-          <section className="workflow-studio__panel">
-            <div className="workflow-studio__panel-title">{t('templates')}</div>
-            <div className="workflow-templates">
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                key: 'templates',
+                label: t('templates'),
+                children: (
+                  <div className="workflow-studio__tab-pane">
+                    <div className="workflow-studio__tab-pane-body">
+                      <div className="workflow-templates">
               {(workflow.templatesQuery.data ?? []).map((tpl) => (
                 <div key={tpl.id} className="workflow-templates__item">
                   <button
@@ -944,11 +988,17 @@ export function WorkflowPage() {
                 </Typography.Text>
               ) : null}
             </div>
-          </section>
-
-          <section className="workflow-studio__panel workflow-studio__panel--grow">
-            <div className="workflow-studio__panel-title">{t('library')}</div>
-            <Select
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                key: 'library',
+                label: t('library'),
+                children: (
+                  <div className="workflow-studio__tab-pane">
+                    <div className="workflow-studio__tab-pane-body workflow-studio__tab-pane-body--scroll">
+                      <Select
               getPopupContainer={studioPopupContainer}
               style={{ width: '100%' }}
               placeholder={t('loadPlaceholder')}
@@ -1062,7 +1112,12 @@ export function WorkflowPage() {
                 />
               </>
             ) : null}
-          </section>
+                    </div>
+                  </div>
+                ),
+              },
+            ]}
+          />
         </aside>
 
         {/* Center stage: React Flow canvas (chrome only in WorkflowCanvas) */}
@@ -1106,15 +1161,24 @@ export function WorkflowPage() {
           </div>
         </section>
 
-        {/* Right rail: inspector forms + run log (domain actions via useWorkflow) */}
+        {/* Right rail: tabbed inspector / run */}
         <aside className="workflow-studio__right">
-          <section
-            ref={inspectorPanelRef}
-            className={`workflow-studio__panel workflow-studio__panel--grow${
-              workflow.state.running ? ' is-definition-locked' : ''
-            }`}
-          >
-            {workflow.state.validationIssues.length ? (
+          <Tabs
+            className="workflow-studio__rail-tabs"
+            size="small"
+            activeKey={rightRailTab}
+            onChange={setRightRailTab}
+            items={[
+              {
+                key: 'props',
+                label: t('inspector'),
+                children: (
+                  <div
+                    ref={inspectorPanelRef as never}
+                    className={`workflow-studio__tab-pane${workflow.state.running ? ' is-definition-locked' : ''}`}
+                  >
+                    <div className="workflow-studio__tab-pane-body workflow-studio__tab-pane-body--scroll">
+                      {workflow.state.validationIssues.length ? (
               <Alert
                 type="error"
                 showIcon
@@ -1129,6 +1193,7 @@ export function WorkflowPage() {
                           size="small"
                           style={{ paddingInline: 0, height: 'auto' }}
                           onClick={() => {
+                            setRightRailTab('props')
                             focusFieldRef.current = fieldForValidationIssue(issue)
                             if (issue.nodeId) workflow.select(issue.nodeId)
                             // Re-trigger inspector focus even if the node was already selected.
@@ -1899,23 +1964,17 @@ export function WorkflowPage() {
                 ) : null}
               </div>
             )}
-          </section>
-
-          <section className="workflow-studio__panel">
-            <Collapse
-              size="small"
-              bordered={false}
-              activeKey={runPanelKeys}
-              onChange={(keys) =>
-                setRunPanelKeys(Array.isArray(keys) ? keys.map(String) : [String(keys)])
-              }
-              destroyOnHidden
-              items={[
-                {
-                  key: 'run',
-                  label: t('runLog'),
-                  children: (
-                    <>
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                key: 'run',
+                label: t('runLog'),
+                children: (
+                  <div className="workflow-studio__tab-pane">
+                    <div className="workflow-studio__tab-pane-body workflow-studio__tab-pane-body--scroll">
+                      <>
                       <Input.TextArea
                         value={workflow.state.input}
                         onChange={(e) =>
@@ -2106,13 +2165,20 @@ export function WorkflowPage() {
                         />
                       )}
                     </>
-                  ),
-                },
-                {
-                  key: 'def',
-                  label: t('definition'),
-                  children: (
-                    <>
+                      <Collapse
+                        size="small"
+                        bordered={false}
+                        activeKey={runPanelKeys}
+                        onChange={(keys) =>
+                          setRunPanelKeys(Array.isArray(keys) ? keys.map(String) : [String(keys)])
+                        }
+                        destroyOnHidden
+                        items={[
+                          {
+                            key: 'def',
+                            label: t('definition'),
+                            children: (
+                              <>
                       <Input.TextArea
                         value={workflow.state.description}
                         onChange={(e) => workflow.patch({ description: e.target.value })}
@@ -2381,16 +2447,21 @@ export function WorkflowPage() {
                         </div>
                       ) : null}
                     </>
-                  ),
-                },
-                {
-                  key: 'code',
-                  label: t('generatedCode'),
-                  children: <PayloadViewer value={buildWorkflowCode(workflow.state)} />,
-                },
-              ]}
-            />
-          </section>
+                            ),
+                          },
+                          {
+                            key: 'code',
+                            label: t('generatedCode'),
+                            children: <PayloadViewer value={buildWorkflowCode(workflow.state)} />,
+                          },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                ),
+              },
+            ]}
+          />
         </aside>
       </div>
     </main>

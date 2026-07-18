@@ -28,7 +28,7 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useChat } from './useChat'
 import { ChatTaskPanel } from './ChatTaskPanel'
-import { formatAttachmentLimitError, validateChatAttachments } from './attachmentLimits'
+import { formatAttachmentLimitError, MAX_CHAT_FILES, validateChatAttachments } from './attachmentLimits'
 import { unarchiveSession } from './api'
 import { chatKeys } from './queries'
 import { markSessionActiveInCaches } from './sessionCache'
@@ -1185,16 +1185,22 @@ export function ChatPage() {
             autoSize={{ minRows: 1, maxRows: 5 }}
             header={
               <Sender.Header
-                title={t('attachments')}
+                title={
+                  hasAttachments
+                    ? `${t('attachments')} · ${chat.attachments?.length ?? 0}`
+                    : t('attachments')
+                }
                 open={openAttachments || hasAttachments}
                 onOpenChange={(open) => {
                   if (!open && !hasAttachments) setOpenAttachments(false)
                   else setOpenAttachments(open)
                 }}
                 styles={{ content: { padding: 0 } }}
+                classNames={{ header: 'chat-attachments-header' }}
               >
                 <Attachments
                   ref={attachmentsRef as never}
+                  className="chat-attachments"
                   beforeUpload={() => false}
                   items={(chat.attachments ?? []).map((file, index) => ({
                     uid: `${file.name}-${file.size}-${file.lastModified}-${index}`,
@@ -1203,6 +1209,7 @@ export function ChatPage() {
                     type: file.type,
                     originFileObj: file as never,
                     status: 'done' as const,
+                    description: `${Math.max(1, Math.round(file.size / 1024))} KB`,
                   }))}
                   onChange={({ fileList }) => {
                     const next = fileList
@@ -1215,16 +1222,29 @@ export function ChatPage() {
                     }
                     chat.setAttachments(next)
                     if (next.length > 0) setOpenAttachments(true)
+                    else setOpenAttachments(false)
                   }}
                   overflow="scrollX"
-                  maxCount={8}
+                  maxCount={MAX_CHAT_FILES}
                   accept="image/*,.pdf,.txt,.md,.csv,.json,.html,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.py,.js,.xml,.rtf,audio/*,video/*"
-                  placeholder={{
-                    icon: <PaperClipOutlined />,
-                    title: t('attachmentsDropTitle'),
-                    description: t('attachmentsDropHint'),
-                  }}
+                  placeholder={(type) =>
+                    type === 'drop'
+                      ? {
+                          icon: <PaperClipOutlined />,
+                          title: t('attachmentsDropTitle'),
+                          description: t('attachmentsDropHint'),
+                        }
+                      : {
+                          icon: <PaperClipOutlined />,
+                          title: t('attachmentsBrowseTitle'),
+                          description: t('attachmentsBrowseHint'),
+                        }
+                  }
                   getDropContainer={() => workspaceRef.current}
+                  styles={{
+                    placeholder: { paddingBlock: 14, minHeight: 96 },
+                    list: { paddingInline: 10, paddingBlock: 8 },
+                  }}
                 />
               </Sender.Header>
             }

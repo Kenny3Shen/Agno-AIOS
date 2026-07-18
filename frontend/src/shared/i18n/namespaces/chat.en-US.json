@@ -137,5 +137,7 @@
       "route": "route",
       "broadcast": "broadcast"
     }
-  }
+  },
+  "attachmentsBrowseTitle": "Click or drop to attach",
+  "attachmentsBrowseHint": "Up to 8 files; 20MB each, 40MB total"
 }

@@ -137,5 +137,7 @@
       "route": "路由",
       "broadcast": "会诊"
     }
-  }
+  },
+  "attachmentsBrowseTitle": "点击或拖放添加附件",
+  "attachmentsBrowseHint": "最多 8 个文件；单个 ≤20MB，合计 ≤40MB"
 }

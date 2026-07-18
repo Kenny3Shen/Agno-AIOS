@@ -1,6 +1,9 @@
 ## Workflow
 
 - [x] Studio 布局对齐 draw.io：左侧搜索+图标调色板、中央页面视图网格、右栏属性
+- [x] Studio 左右侧 Tab 栏（节点/模板/工作流 · 属性/运行），侧栏无外层滚动条
+- [x] 顶栏纯图标工具条（Tooltip 标签）
+- [x] Chat 附件：`@ant-design/x` Attachments 占位/拖放/数量提示与样式打磨
 
 ## Agents / Team
 

@@ -1428,3 +1428,53 @@ html.dark {
 .member-tool-item.status-loading .member-tool-title {
   color: var(--tais-blue);
 }
+
+
+/* Attachments panel inside Sender.Header (@ant-design/x Attachments) */
+.chat-attachments-header .ant-sender-header-content,
+.sender-shell .chat-attachments {
+  background: color-mix(in srgb, var(--tais-surface, #fff) 92%, transparent);
+}
+
+.chat-attachments .ant-attachment-list,
+.chat-attachments .ant-attachments-list {
+  gap: 8px;
+}
+
+.chat-attachments .ant-attachment-list-card,
+.chat-attachments .ant-attachments-list-card,
+.chat-attachments .ant-file-card {
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--tais-border, #e5e7eb) 85%, transparent);
+  background: var(--tais-surface, #fff);
+}
+
+.chat-attachments .ant-attachments-placeholder,
+.chat-attachments .ant-attachment-placeholder {
+  border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--tais-border, #d0d5dd) 90%, transparent);
+  background: color-mix(in srgb, var(--tais-bg, #f7f9fc) 88%, transparent);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.chat-attachments .ant-attachments-placeholder:hover,
+.chat-attachments .ant-attachment-placeholder:hover {
+  border-color: color-mix(in srgb, var(--tais-blue, #1677ff) 55%, transparent);
+  background: color-mix(in srgb, var(--tais-blue, #1677ff) 6%, transparent);
+}
+
+.workspace-drag-over .chat-attachments .ant-attachments-placeholder,
+.workspace-drag-over .chat-attachments .ant-attachment-placeholder {
+  border-color: var(--tais-blue, #1677ff);
+  background: color-mix(in srgb, var(--tais-blue, #1677ff) 10%, transparent);
+}
+
+html.dark .chat-attachments .ant-attachments-placeholder,
+html.dark .chat-attachments .ant-attachment-placeholder {
+  background: color-mix(in srgb, var(--tais-surface) 80%, #000);
+}
+
+html.dark .chat-attachments .ant-file-card,
+html.dark .chat-attachments .ant-attachments-list-card {
+  background: color-mix(in srgb, var(--tais-surface) 92%, #000);
+}
