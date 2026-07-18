@@ -21,7 +21,8 @@ dependencies = [
     "beautifulsoup4>=4.15.0",
     "pyyaml>=6.0.3",
     "sentence-transformers>=3.0.0",
-    "torch>=2.12.1",
+    "torch>=2.6.0",
+    "torchvision>=0.21.0",
     "pgvector>=0.4.2",
     "psycopg>=3.3.4",
     "fastapi-users[oauth,sqlalchemy]>=14.0.0",
@@ -36,6 +37,7 @@ dependencies = [
     "sse-starlette>=3.4.4",
     "cel-python>=0.5.0",
     "ddgs>=9.14.4",
+    "docling>=2.113.0",
 ]
 
 [project.scripts]
@@ -60,9 +62,11 @@ dev = [
 ]
 
 [tool.uv.sources]
-torch = { index = "pytorch-cpu" }
+# GTX 1070 Ti (Pascal sm_61) + WSL: use CUDA 12.4 wheels (driver reports CUDA 13.0).
+torch = { index = "pytorch-cu124" }
+torchvision = { index = "pytorch-cu124" }
 
 [[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
 explicit = true

@@ -1,3 +1,10 @@
+## Docling / GPU
+
+- [x] 依赖 `docling` + Agno `DoclingReader`（Markdown export）
+- [x] Chat 上传：文档转 Markdown 注入消息；附件 meta 标记 `engine=docling`
+- [x] Knowledge：`document` strategy → DoclingReader（PDF/DOCX/PPTX/HTML…）
+- [x] PyTorch 源切换 `pytorch-cu124`（GTX 1070 Ti / CUDA 12.4 wheels）
+
 ## Shell
 
 - [x] 侧栏用户区对齐 ChatGPT：圆角账户卡片、显示名 + 个人帐户副文案

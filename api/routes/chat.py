@@ -31,6 +31,7 @@ from api.services.security_run_runtime import (
     stream_security_run,
 )
 from api.services.chat_media import process_chat_uploads
+from api.services.docling_service import append_document_markdown_to_message
 from api.services.model_config_service import get_model_for_run
 from api.services.chat_settings_service import get_chat_settings
 from api.services.tracing_service import mark_trace_error
@@ -301,8 +302,12 @@ async def chat_agent(
                     if hasattr(item, "filename") and hasattr(item, "read"):
                         uploads.append(item)
             bundle = await process_chat_uploads(uploads or None)  # type: ignore[arg-type]
+            message_with_docs = append_document_markdown_to_message(
+                message,
+                bundle.document_markdown,
+            )
             return await _start_chat_stream(
-                message=message,
+                message=message_with_docs,
                 session_id=session_id,
                 model_id=model_id,
                 reasoning_effort=reasoning_effort,

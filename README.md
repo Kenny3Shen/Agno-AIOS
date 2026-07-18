@@ -4,6 +4,9 @@ T.A.I.S（Trinity AI Security）是一个面向安全运营的 AI 工作台。�
 
 旧版 Vue + Element Plus 位于 `vue` 分支；`master` 是 React 主线。
 
+本地 GPU：默认从 PyTorch **cu124** 索引安装 `torch`/`torchvision`（适配 GTX 1070 Ti 等 Pascal，驱动 CUDA ≥12.x）。Knowledge/Chat 的 Docling 依赖该栈。
+
+
 ## 内置 Agents
 
 Chat 与 Workflow 共用稳定 `agent_id` / executor `ref`（见 `api/services/agent_catalog.py`）：
@@ -92,7 +95,7 @@ Responses 协议通过 Agno `OpenAIResponses.parallel_tool_calls` 传递；Chat 
 
 模型配置支持请求重试：`retries` / `delay_between_retries` / `exponential_backoff`（Agno 应用层，覆盖 Chat Completions 与 Responses），以及可选 `http_max_retries`（OpenAI SDK 连接层）。默认 4 次指数退避，可在设置页按模型调整。
 
-模型供应商支持 DeepSeek / OpenAI / **xAI（Agno 官方 `xAI` 类，Chat Completions）** / OpenAI-compatible。 xAI 可配置 structured output 与 Live Search；Chat 输入区可开关联网搜索与知识库检索。 附件区使用 `@ant-design/x` `Attachments`（占位拖放/点击、数量提示与体积限制）。 设置页模型表单仅配置连接信息（名称/供应商/Model ID/密钥/Base URL）；其余模型参数由能力画像解析（optimal → 配置 → 请求覆盖 → fallback）；xAI 不使用 `reasoning_effort`，靠推理/非推理 model id。历史 Grok 配置（`api.x.ai` 或 `model_id` 以 `grok` 开头）在读路径 `normalized` 时映射为 `provider=xai`（不再走 OpenAI Responses）；不会在每次 load 写回数据库，显式保存或完整性修复时才持久化。 残留 `config/model_config.json` 一律归档为 `*.imported` 且**永不导入**（无 `TAIS_MODEL_CONFIG_FILE` 覆盖）；空表只 seed 内置默认模型，连接与密钥以 Settings/Postgres 为准。
+模型供应商支持 DeepSeek / OpenAI / **xAI（Agno 官方 `xAI` 类，Chat Completions）** / OpenAI-compatible。 xAI 可配置 structured output 与 Live Search；Chat 输入区可开关联网搜索与知识库检索。 附件区使用 `@ant-design/x` `Attachments`（占位拖放/点击、数量提示与体积限制）。 **Chat 文档附件经 Agno DoclingReader 转为 Markdown 注入消息**（图片/音视频仍走 Agno media）； **Knowledge 结构化文档（PDF/DOCX/PPTX/HTML 等）默认 `DoclingReader`**。 设置页模型表单仅配置连接信息（名称/供应商/Model ID/密钥/Base URL）；其余模型参数由能力画像解析（optimal → 配置 → 请求覆盖 → fallback）；xAI 不使用 `reasoning_effort`，靠推理/非推理 model id。历史 Grok 配置（`api.x.ai` 或 `model_id` 以 `grok` 开头）在读路径 `normalized` 时映射为 `provider=xai`（不再走 OpenAI Responses）；不会在每次 load 写回数据库，显式保存或完整性修复时才持久化。 残留 `config/model_config.json` 一律归档为 `*.imported` 且**永不导入**（无 `TAIS_MODEL_CONFIG_FILE` 覆盖）；空表只 seed 内置默认模型，连接与密钥以 Settings/Postgres 为准。
 
 模型工厂把 structured output 模式存在实例私有属性 `_tais_structured_output_mode`，**不写** Agno `model.metadata`，避免 OpenAI Responses / Chat 把内部标记当作 HTTP `metadata` 发给 Grok 等不兼容网关（会 400 `Argument not supported: metadata`）。
 

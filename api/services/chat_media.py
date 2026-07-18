@@ -1,4 +1,10 @@
-"""Chat file attachments via Agno media types (aligned with Agno OS agent upload)."""
+"""Chat file attachments via Agno media types + Docling Markdown conversion.
+
+Binary documents (PDF/DOCX/PPTX/…) are converted with Agno ``DoclingReader``
+into Markdown and injected into the chat message so models that do not accept
+raw Office/PDF bytes (e.g. xAI Grok) still see the full text. Images/audio/video
+continue as Agno media objects.
+"""
 
 from __future__ import annotations
 
@@ -17,6 +23,8 @@ from agno.os.utils import (
     process_video,
 )
 
+from api.services.docling_service import convert_bytes_to_markdown
+
 # Keep chat uploads bounded (not Knowledge-scale).
 MAX_CHAT_FILES = 8
 MAX_CHAT_FILE_BYTES = 20 * 1024 * 1024
@@ -33,10 +41,18 @@ class ChatMediaBundle:
     videos: tuple[Video, ...] = ()
     # UI-facing: name / mime / kind (image|document|audio|video)
     attachments: tuple[dict[str, str], ...] = ()
+    # Docling-converted Markdown keyed by original filename (order preserved).
+    document_markdown: tuple[tuple[str, str], ...] = ()
 
     @property
     def empty(self) -> bool:
-        return not (self.images or self.files or self.audio or self.videos)
+        return not (
+            self.images
+            or self.files
+            or self.audio
+            or self.videos
+            or self.document_markdown
+        )
 
 
 def _attachment_meta(
@@ -44,17 +60,44 @@ def _attachment_meta(
     kind: str,
     filename: str | None,
     mime: str | None,
+    extra: dict[str, str] | None = None,
 ) -> dict[str, str]:
     name = (filename or "file").strip() or "file"
-    return {
+    payload = {
         "name": name,
         "mime": (mime or "").strip(),
         "kind": kind,
     }
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+def _read_upload_bytes(upload: Any) -> bytes:
+    file_obj = getattr(upload, "file", None)
+    if file_obj is not None:
+        try:
+            file_obj.seek(0)
+        except Exception:
+            pass
+        raw = file_obj.read()
+        try:
+            file_obj.seek(0)
+        except Exception:
+            pass
+        return raw or b""
+    # Fallback for exotic upload types
+    raw = upload.read() if hasattr(upload, "read") else b""
+    if hasattr(upload, "seek"):
+        try:
+            upload.seek(0)
+        except Exception:
+            pass
+    return raw or b""
 
 
 async def process_chat_uploads(files: list[Any] | None) -> ChatMediaBundle:
-    """Classify and convert multipart uploads into Agno Image/File/Audio/Video."""
+    """Classify and convert multipart uploads into Agno media + Docling Markdown."""
     if not files:
         return ChatMediaBundle()
 
@@ -73,25 +116,11 @@ async def process_chat_uploads(files: list[Any] | None) -> ChatMediaBundle:
     audios: list[Audio] = []
     videos: list[Video] = []
     attachments: list[dict[str, str]] = []
+    document_markdown: list[tuple[str, str]] = []
     total = 0
 
     for upload in uploads:
-        # Size gate: sync read (Agno processors also use file.file.read).
-        file_obj = getattr(upload, "file", None)
-        if file_obj is not None:
-            try:
-                file_obj.seek(0)
-            except Exception:
-                pass
-            raw = file_obj.read()
-            try:
-                file_obj.seek(0)
-            except Exception:
-                pass
-        else:
-            raw = await upload.read()
-            if hasattr(upload, "seek"):
-                await upload.seek(0)
+        raw = _read_upload_bytes(upload)
         size = len(raw or b"")
         if size <= 0:
             raise HTTPException(status_code=400, detail=f"空文件: {upload.filename or 'file'}")
@@ -145,18 +174,26 @@ async def process_chat_uploads(files: list[Any] | None) -> ChatMediaBundle:
                     )
                 )
             elif category == "document":
+                # Convert to Markdown via Docling for model input; still keep a
+                # lightweight File media object for agents that stage attachments
+                # (e.g. data-analysis sandbox) when useful.
+                filename = upload.filename or "document"
+                try:
+                    markdown = convert_bytes_to_markdown(raw, filename=filename)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                document_markdown.append((filename, markdown))
+                # Keep Agno File for sandbox staging / history; models primarily
+                # see the Markdown injected into the message.
                 media = process_document(upload)
-                if media is None:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"无法解析文档: {upload.filename or 'file'}",
-                    )
-                docs.append(media)
+                if media is not None:
+                    docs.append(media)
                 attachments.append(
                     _attachment_meta(
                         kind="document",
-                        filename=upload.filename or media.filename,
-                        mime=upload.content_type or media.mime_type,
+                        filename=filename,
+                        mime=upload.content_type or getattr(media, "mime_type", None),
+                        extra={"converted": "markdown", "engine": "docling"},
                     )
                 )
             else:
@@ -176,6 +213,7 @@ async def process_chat_uploads(files: list[Any] | None) -> ChatMediaBundle:
         audio=tuple(audios),
         videos=tuple(videos),
         attachments=tuple(attachments),
+        document_markdown=tuple(document_markdown),
     )
 
 

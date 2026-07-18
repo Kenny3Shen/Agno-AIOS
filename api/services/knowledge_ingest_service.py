@@ -19,6 +19,8 @@ from agno.knowledge.reader.markdown_reader import MarkdownReader
 from agno.knowledge.reader.pdf_reader import PDFReader
 from agno.knowledge.reader.text_reader import TextReader
 
+from api.services.docling_service import knowledge_docling_reader
+
 
 @dataclass(frozen=True)
 class KnowledgeIngestProfile:
@@ -63,7 +65,7 @@ class KnowledgeIngestOverrides:
     reader_strategy: str | None = None
 
 
-KnowledgeReader = TextReader | MarkdownReader | CSVReader | JSONReader | PDFReader | DocxReader
+KnowledgeReader = TextReader | MarkdownReader | CSVReader | JSONReader | PDFReader | DocxReader | Any
 
 MARKDOWN_SUFFIXES = (".md", ".markdown", ".mdown", ".mkd")
 CSV_SUFFIXES = (".csv", ".tsv")
@@ -91,7 +93,7 @@ CODE_SUFFIXES = (
     ".sh",
     ".sql",
 )
-STRUCTURED_DOC_SUFFIXES = (".pdf", ".docx")
+STRUCTURED_DOC_SUFFIXES = (".pdf", ".docx", ".doc", ".pptx", ".ppt", ".xlsx", ".xls", ".html", ".htm")
 TEXT_SUFFIXES = (".txt", ".log", ".rst", ".yaml", ".yml", ".toml")
 
 SUPPORTED_FILE_SUFFIXES = (
@@ -134,9 +136,9 @@ PROFILE_CODE = KnowledgeIngestProfile(
 PROFILE_STRUCTURED = KnowledgeIngestProfile(
     suffixes=STRUCTURED_DOC_SUFFIXES,
     strategy="document",
-    reader="DocumentReader",
-    label="Document",
-    description="按段落、页和章节保留文档结构，适合 PDF/DOCX。",
+    reader="DoclingReader",
+    label="Document (Docling)",
+    description="使用 Agno DoclingReader 转为 Markdown 后按文档结构切分，适合 PDF/DOCX/PPTX/HTML。",
 )
 PROFILE_TEXT = KnowledgeIngestProfile(
     suffixes=TEXT_SUFFIXES,
@@ -377,11 +379,16 @@ def reader_for_profile(
             )
         )
     if profile.strategy == "document":
-        if suffix == ".pdf":
-            return PDFReader(chunking_strategy=_document_chunking(config))
-        if suffix == ".docx":
-            return DocxReader(chunking_strategy=_document_chunking(config))
-        return TextReader(chunking_strategy=_document_chunking(config))
+        # Prefer Agno DoclingReader (markdown export) for structured office/PDF/HTML.
+        # Fall back to pypdf/python-docx readers only if Docling is unavailable.
+        try:
+            return knowledge_docling_reader(chunking_strategy=_document_chunking(config))
+        except Exception:
+            if suffix == ".pdf":
+                return PDFReader(chunking_strategy=_document_chunking(config))
+            if suffix == ".docx":
+                return DocxReader(chunking_strategy=_document_chunking(config))
+            return TextReader(chunking_strategy=_document_chunking(config))
     return TextReader(chunking_strategy=_semantic_chunking(config))
 
 
