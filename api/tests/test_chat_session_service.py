@@ -903,3 +903,75 @@ def test_history_member_content_fallback():
         ],
     }
     assert _history_member_content_fallback(run) == "last-member"
+
+
+@pytest.mark.asyncio
+async def test_team_history_merges_member_sources(monkeypatch):
+    """History should surface member citations with member name prefix (stream parity)."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    import api.services.chat_session_service as chat_session_service
+
+    team_run = {
+        "run_id": "team-run-src",
+        "team_id": "research-analysis-team",
+        "status": "COMPLETED",
+        "content": "综合",
+        "input": "调研",
+        "tools": [],
+        "member_responses": [
+            {
+                "run_id": "m1",
+                "agent_id": "deep-research",
+                "agent_name": "深度研究助手",
+                "status": "COMPLETED",
+                "content": "调研摘要",
+                "citations": [{"title": "Report", "url": "https://example.com/r"}],
+                "tools": [],
+            }
+        ],
+        "metrics": {},
+        "citations": [{"title": "Leader note", "url": "https://example.com/leader"}],
+        "followups": [],
+        "metadata": {},
+    }
+
+    class FakeDb:
+        async def get_session(self, session_id, deserialize=False):
+            return {
+                "session_id": session_id,
+                "user_id": "u1",
+                "session_type": "team",
+                "team_id": "research-analysis-team",
+                "runs": [team_run],
+            }
+
+    monkeypatch.setattr(
+        chat_session_service,
+        "ensure_agno_postgres_tables_async",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        chat_session_service,
+        "get_async_agno_postgres_db",
+        lambda: FakeDb(),
+    )
+    monkeypatch.setattr(
+        chat_session_service,
+        "get_chat_settings_async",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                show_raw_tool_io=False,
+                show_thought_chain=True,
+                show_raw_reasoning=False,
+            )
+        ),
+    )
+
+    messages = await chat_session_service.get_session_messages_async("session-team-src")
+    assistant = next(m for m in messages if m.get("role") == "assistant")
+    sources = assistant.get("sources") or []
+    titles = [str(s.get("title") or "") for s in sources]
+    assert any("Leader note" in t for t in titles), titles
+    assert any("深度研究助手" in t and "Report" in t for t in titles), titles

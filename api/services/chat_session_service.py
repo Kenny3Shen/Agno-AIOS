@@ -817,6 +817,44 @@ def _history_member_content_fallback(
     return ""
 
 
+
+def _history_team_sources(
+    run: dict[str, Any],
+    *,
+    sibling_runs: list[dict[str, Any]] | None = None,
+) -> list[dict[str, str]]:
+    """Merge leader + member citations for Chat history (stream parity)."""
+    merged: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    def _add(items: list[dict[str, str]], *, prefix: str = "") -> None:
+        for item in items:
+            title = str(item.get("title") or "").strip()
+            url = str(item.get("url") or "").strip()
+            if prefix and title and not title.startswith(prefix):
+                title = f"{prefix}{title}"
+            key = url or title
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            row = dict(item)
+            if title:
+                row["title"] = title
+            merged.append(row)
+
+    _add(source_items(run.get("citations")) or source_items(run.get("references")))
+    for member in _member_rows(run, sibling_runs=sibling_runs):
+        member_id = str(member.get("agent_id") or "member").strip() or "member"
+        member_name = str(member.get("agent_name") or member_id).strip() or member_id
+        prefix = f"[{member_name}] "
+        _add(
+            source_items(member.get("citations"))
+            or source_items(member.get("references")),
+            prefix=prefix,
+        )
+    return merged
+
+
 async def get_session_messages_async(
     session_id: str,
     *,
@@ -910,7 +948,9 @@ async def get_session_messages_async(
                 "session_id": session_id,
                 "status": status,
                 "metrics": metric_values(run.get("metrics")),
-                "sources": source_items(run.get("citations")) or source_items(run.get("references")),
+                "sources": _history_team_sources(
+                    cast(dict[str, Any], run), sibling_runs=dict_runs
+                ),
                 "tools": tools,
                 "followups": [item for item in followups if isinstance(item, str)] if isinstance(followups, list) else [],
             }

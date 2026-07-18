@@ -1139,6 +1139,24 @@ async def test_member_reasoning_delta_stays_in_thought(monkeypatch):
                 content="成员内部推理片段",
             )
             yield SimpleNamespace(
+                event="RunContent",
+                run_id="member-run-r",
+                team_id="",
+                agent_id="deep-research",
+                agent_name="深度研究助手",
+                parent_run_id="team-run-r",
+                content="成员结",
+            )
+            yield SimpleNamespace(
+                event="RunContent",
+                run_id="member-run-r",
+                team_id="",
+                agent_id="deep-research",
+                agent_name="深度研究助手",
+                parent_run_id="team-run-r",
+                content="论草稿",
+            )
+            yield SimpleNamespace(
                 event="RunCompleted",
                 run_id="member-run-r",
                 team_id="",
@@ -1186,6 +1204,16 @@ async def test_member_reasoning_delta_stays_in_thought(monkeypatch):
     assert any(
         e.data["thought"].get("id") == "member:deep-research:reasoning" for e in thoughts
     ), thoughts
+    # Content thought summary must not be polluted by reasoning deltas.
+    member_done = [
+        e
+        for e in thoughts
+        if e.data["thought"].get("id") == "member:deep-research"
+        and e.data["thought"].get("status") == "completed"
+    ]
+    assert member_done, thoughts
+    assert "成员内部推理片段" not in str(member_done[-1].data["thought"].get("summary") or "")
+    assert "成员结论" in str(member_done[-1].data["thought"].get("summary") or "")
     sources = [e for e in events if e.event == "sources"]
     assert sources, events
     titles = [item.get("title") for item in sources[0].data.get("items") or []]
@@ -1211,3 +1239,87 @@ def test_csv_builder_dedupes_stem(tmp_path, monkeypatch):
     a_path = next(p for p in tools.csvs if p.stem == "a")
     assert a_path.parent == root
 
+
+
+@pytest.mark.asyncio
+async def test_team_empty_content_recovers_member_errors(monkeypatch):
+    """When members fail and leader has no content, surface a recoverable answer."""
+    from api.services import security_run_runtime as srr
+
+    monkeypatch.setenv("TAIS_ENABLE_AGNO_TEAM", "1")
+
+    class Runner:
+        async def arun(self, *_a, **_k):
+            yield SimpleNamespace(
+                event="TeamRunStarted",
+                run_id="team-run-e",
+                session_id="s1",
+                team_id="research-analysis-team",
+                model="m",
+                model_provider="p",
+                agent_id="",
+                parent_run_id=None,
+            )
+            yield SimpleNamespace(
+                event="RunStarted",
+                run_id="member-run-e",
+                team_id="",
+                agent_id="data-analysis",
+                agent_name="数据分析助手",
+                parent_run_id="team-run-e",
+                model="m",
+                model_provider="p",
+            )
+            yield SimpleNamespace(
+                event="RunError",
+                run_id="member-run-e",
+                team_id="",
+                agent_id="data-analysis",
+                agent_name="数据分析助手",
+                parent_run_id="team-run-e",
+                content="Access denied to chat endpoint",
+            )
+            yield SimpleNamespace(
+                event="TeamRunCompleted",
+                run_id="team-run-e",
+                session_id="s1",
+                team_id="research-analysis-team",
+                content="",
+                metrics={},
+                citations=[],
+                followups=[],
+            )
+
+        def cancel_run(self, *_a, **_k):
+            return True
+
+    runtime = srr.SecurityRunRuntime()
+    request = srr.SecurityRunRequest.from_chat_args(
+        "x", session_id="s1", user_id="u1", agent_id="research-analysis-team"
+    )
+    settings = SimpleNamespace(
+        show_raw_reasoning=False,
+        show_raw_tool_io=False,
+        show_thought_chain=True,
+    )
+    events = [
+        event
+        async for event in runtime._stream_agent_events(Runner(), request, settings)
+    ]
+    assert not any(e.event == "run.failed" for e in events), events
+    completed = [e for e in events if e.event == "run.completed"]
+    assert completed, events
+    content = str(completed[-1].data.get("content") or "")
+    assert "成员错误" in content or "Access denied" in content, content
+    deltas = "".join(
+        str(e.data.get("delta") or "") for e in events if e.event == "content.delta"
+    )
+    assert "成员错误" in deltas or "Access denied" in deltas, deltas
+    member_err = [
+        e
+        for e in events
+        if e.event == "thought.update"
+        and e.data.get("thought", {}).get("id") == "member:data-analysis"
+        and e.data.get("thought", {}).get("status") == "error"
+    ]
+    assert member_err, events

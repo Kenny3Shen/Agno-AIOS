@@ -1,5 +1,10 @@
 ## Agents / Team
 
+- [x] 成员 Reasoning 与 content 分桶累积（避免 summary 被推理污染）
+- [x] 历史回放合并成员 citations（`_history_team_sources`，带成员名前缀）
+- [x] Team 队长空 content 时注入成员错误恢复文案 + content.delta
+- [x] Chat UI：`member:reasoning` 嵌套进对应成员 ThoughtChain 节点
+
 - [x] Team 成员 content **delta 累积** 再写入 ThoughtChain summary（避免摘要只剩单 token）
 - [x] Team 成员 Intermediate content 无 agent_id 时仍按 parent_run_id 归 ThoughtChain（不泄漏到队长 content.delta）
 - [x] Team 成员独立 model deepcopy（broadcast 并发安全）+ session_summary

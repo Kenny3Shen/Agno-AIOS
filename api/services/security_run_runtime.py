@@ -1199,13 +1199,17 @@ class SecurityRunRuntime:
         # Early client disconnect after run.completed used to mark runs CANCELLED and
         # break multi-turn Team history (get_messages skips cancelled runs).
         run_finished_naturally = False
-        # member_id -> (last_summary, monotonic_ts) for thought.update throttle
+        # member_id (or member_id:reasoning) -> throttle state for thought.update
         member_thought_emit: dict[str, tuple[str, float]] = {}
-        # member_id -> accumulated streaming content (Agno content events are deltas)
+        # member_id -> content stream; member_id:reasoning -> reasoning stream (isolated)
         member_content_acc: dict[str, str] = {}
         # member run_id -> (agent_id, agent_name); last explicit member for stripped deltas
         member_identity_by_run: dict[str, tuple[str, str]] = {}
         last_member_identity: list[tuple[str, str] | None] = [None]
+        # Team leader content emitted via content.delta (for empty-completion recovery)
+        leader_content_emitted = False
+        # Member error summaries when member fails but team continues
+        member_error_notes: list[str] = []
 
         def _request_runner_cancel() -> None:
             if not active_run_id:
@@ -1405,6 +1409,7 @@ class SecurityRunRuntime:
                                     },
                                 )
                         continue
+                    leader_content_emitted = True
                     yield ChatRunEvent(
                         "content.delta", {"run_id": run_id, "delta": content}
                     )
@@ -1439,6 +1444,7 @@ class SecurityRunRuntime:
                                     },
                                 )
                         continue
+                    leader_content_emitted = True
                     yield ChatRunEvent(
                         "content.delta", {"run_id": run_id, "delta": content}
                     )
@@ -1452,14 +1458,15 @@ class SecurityRunRuntime:
                     # leader/top-level run feeds the main reasoning panel.
                     if is_member_event:
                         if show_thought_chain:
+                            reason_key = f"{member_id or 'member'}:reasoning"
                             summary = _append_member_content_delta(
                                 member_content_acc,
-                                member_id=member_id or "member",
+                                member_id=reason_key,
                                 delta=reasoning,
                             )
                             if _should_emit_member_thought(
                                 member_thought_emit,
-                                member_id=f"{member_id or 'member'}:reasoning",
+                                member_id=reason_key,
                                 summary=summary,
                             ):
                                 yield ChatRunEvent(
@@ -1467,7 +1474,7 @@ class SecurityRunRuntime:
                                     {
                                         "run_id": display_run_id or run_id,
                                         "thought": {
-                                            "id": f"member:{member_id or 'member'}:reasoning",
+                                            "id": f"member:{reason_key}",
                                             "type": "reasoning",
                                             "title": f"成员推理 · {member_name or member_id or 'member'}",
                                             "status": "running",
@@ -1512,6 +1519,7 @@ class SecurityRunRuntime:
                                     summary=summary_text,
                                     force=True,
                                 )
+                                member_content_acc.pop(f"{member_id}:reasoning", None)
                         else:
                             thought_id = "reasoning"
                             title = "模型推理"
@@ -1657,6 +1665,28 @@ class SecurityRunRuntime:
                 elif _event_matches(event_type, "run_completed"):
                     if is_member_event:
                         if show_thought_chain:
+                            reason_key = f"{member_id}:reasoning"
+                            reason_summary = member_content_acc.pop(reason_key, None)
+                            if reason_summary:
+                                _should_emit_member_thought(
+                                    member_thought_emit,
+                                    member_id=reason_key,
+                                    summary=str(reason_summary)[:280],
+                                    force=True,
+                                )
+                                yield ChatRunEvent(
+                                    "thought.update",
+                                    {
+                                        "run_id": display_run_id or run_id,
+                                        "thought": {
+                                            "id": f"member:{reason_key}",
+                                            "type": "reasoning",
+                                            "title": f"成员推理 · {member_name}",
+                                            "status": "completed",
+                                            "summary": str(reason_summary)[:280],
+                                        },
+                                    },
+                                )
                             summary = event_value(event, "content")
                             if not isinstance(summary, str) or not str(summary).strip():
                                 summary = member_content_acc.get(member_id) or "完成"
@@ -1711,13 +1741,17 @@ class SecurityRunRuntime:
                     # identity-stripped path / early client disconnect mid-member).
                     if show_thought_chain and member_content_acc:
                         for open_id, open_summary in list(member_content_acc.items()):
-                            open_name = open_id
-                            # Prefer last known label for this member id.
+                            is_reason = open_id.endswith(":reasoning")
+                            base_id = open_id[: -len(":reasoning")] if is_reason else open_id
+                            open_name = base_id
                             for _rid, (mid, mname) in member_identity_by_run.items():
-                                if mid == open_id:
+                                if mid == base_id:
                                     open_name = mname
                                     break
-                            if last_member_identity[0] and last_member_identity[0][0] == open_id:
+                            if (
+                                last_member_identity[0]
+                                and last_member_identity[0][0] == base_id
+                            ):
                                 open_name = last_member_identity[0][1]
                             summary_text = (open_summary or "完成")[:280]
                             yield ChatRunEvent(
@@ -1726,8 +1760,12 @@ class SecurityRunRuntime:
                                     "run_id": display_run_id or run_id,
                                     "thought": {
                                         "id": f"member:{open_id}",
-                                        "type": "member",
-                                        "title": f"成员 · {open_name}",
+                                        "type": "reasoning" if is_reason else "member",
+                                        "title": (
+                                            f"成员推理 · {open_name}"
+                                            if is_reason
+                                            else f"成员 · {open_name}"
+                                        ),
                                         "status": "completed",
                                         "summary": summary_text,
                                     },
@@ -1737,6 +1775,34 @@ class SecurityRunRuntime:
                     completed = completed_payload(event)
                     if not completed.get("session_id"):
                         completed["session_id"] = str(request.session_id or "")
+                    # Team: recover empty final answer when members failed or only
+                    # intermediate tools ran (e.g. provider 403 on member).
+                    if is_team_id(request.agent_id) and not (
+                        isinstance(completed.get("content"), str)
+                        and str(completed.get("content") or "").strip()
+                    ):
+                        recovery = ""
+                        if member_error_notes:
+                            recovery = (
+                                "团队未能生成最终回答。成员错误：\n- "
+                                + "\n- ".join(member_error_notes[-3:])
+                            )
+                        elif not leader_content_emitted:
+                            recovery = (
+                                "团队运行已结束，但未产生可展示的回答。"
+                                "请重试或切换模型/检查成员工具依赖。"
+                            )
+                        if recovery:
+                            completed["content"] = recovery[:2000]
+                            if not leader_content_emitted:
+                                yield ChatRunEvent(
+                                    "content.delta",
+                                    {
+                                        "run_id": display_run_id or run_id,
+                                        "delta": recovery[:2000],
+                                    },
+                                )
+                                leader_content_emitted = True
                     # Set before yield: consumer may close the stream at this event.
                     run_finished_naturally = True
                     yield ChatRunEvent("run.completed", completed)
@@ -1748,6 +1814,20 @@ class SecurityRunRuntime:
                     if is_member_event:
                         if show_thought_chain:
                             member_content_acc.pop(member_id, None)
+                            member_content_acc.pop(f"{member_id}:reasoning", None)
+                            yield ChatRunEvent(
+                                "thought.update",
+                                {
+                                    "run_id": display_run_id or run_id,
+                                    "thought": {
+                                        "id": f"member:{member_id}:reasoning",
+                                        "type": "reasoning",
+                                        "title": f"成员推理 · {member_name}",
+                                        "status": "error",
+                                        "summary": "成员运行已取消",
+                                    },
+                                },
+                            )
                             yield ChatRunEvent(
                                 "thought.update",
                                 {
@@ -1787,8 +1867,24 @@ class SecurityRunRuntime:
                     detail_text = str(detail).strip() or "安全分析运行失败"
                     # Team member failure: surface under ThoughtChain; do not fail the whole run.
                     if is_member_event:
+                        note = f"{member_name or member_id}: {detail_text[:200]}"
+                        member_error_notes.append(note)
                         if show_thought_chain:
                             member_content_acc.pop(member_id, None)
+                            member_content_acc.pop(f"{member_id}:reasoning", None)
+                            yield ChatRunEvent(
+                                "thought.update",
+                                {
+                                    "run_id": display_run_id or run_id,
+                                    "thought": {
+                                        "id": f"member:{member_id}:reasoning",
+                                        "type": "reasoning",
+                                        "status": "error",
+                                        "title": f"成员推理 · {member_name}",
+                                        "summary": detail_text[:280],
+                                    },
+                                },
+                            )
                             yield ChatRunEvent(
                                 "thought.update",
                                 {

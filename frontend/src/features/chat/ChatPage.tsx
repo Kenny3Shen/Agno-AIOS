@@ -363,39 +363,54 @@ function MessageBody({ message, retry, sessionId, requesting = false }: { messag
     copy: t('common:copy'),
     toolTitle: (name: string) => formatToolLabel(name, t),
   }
-  // Team beta: attach member tools under the primary member thought (content),
-  // keep leader tools / unmatched tools as sibling chain items.
+  // Team beta: nest member tools + member:reasoning under primary member thought;
+  // keep leader tools / unmatched items as sibling chain entries.
   const thoughts = message.thought_chain ?? []
   const tools = message.tool_steps ?? []
   const usedToolIds = new Set<string>()
+  const usedThoughtIds = new Set<string>()
   const chain: Array<ReturnType<typeof thoughtNode> | ReturnType<typeof toolNode>> = []
   for (const thought of thoughts) {
+    const thoughtId = String(thought.id || '')
+    if (usedThoughtIds.has(thoughtId)) continue
+    // Nested under member:{id}; skip top-level placement.
+    if (/^member:[^:]+:reasoning$/.test(thoughtId)) continue
     const node = thoughtNode(thought)
-    const memberMatch = /^member:([^:]+)$/.exec(String(thought.id || ''))
+    const memberMatch = /^member:([^:]+)$/.exec(thoughtId)
     if (memberMatch) {
       const memberId = memberMatch[1]
+      const nested: ReactNode[] = []
+      const reasonThought = thoughts.find((item) => item.id === `member:${memberId}:reasoning`)
+      if (reasonThought) {
+        usedThoughtIds.add(String(reasonThought.id))
+        const reasonNode = thoughtNode(reasonThought)
+        nested.push(
+          <div key={reasonNode.key} className={`member-tool-item status-${reasonNode.status || 'default'}`}>
+            <div className="member-tool-title">{reasonNode.title}</div>
+            {reasonNode.description ? <div className="member-tool-desc">{reasonNode.description}</div> : null}
+          </div>,
+        )
+      }
       const memberTools = tools.filter((tool) => {
         if (tool.member_id !== memberId || usedToolIds.has(tool.id)) return false
         usedToolIds.add(tool.id)
         return true
       })
-      if (memberTools.length) {
-        node.content = (
-          <div className="member-tool-stack">
-            {memberTools.map((tool) => {
-              const item = toolNode(tool, toolLabels)
-              return (
-                <div key={item.key} className={`member-tool-item status-${item.status || 'default'}`}>
-                  <div className="member-tool-title">{item.title}</div>
-                  {item.description ? <div className="member-tool-desc">{item.description}</div> : null}
-                  {item.footer ? <div className="member-tool-body">{item.footer}</div> : null}
-                </div>
-              )
-            })}
-          </div>
+      for (const tool of memberTools) {
+        const item = toolNode(tool, toolLabels)
+        nested.push(
+          <div key={item.key} className={`member-tool-item status-${item.status || 'default'}`}>
+            <div className="member-tool-title">{item.title}</div>
+            {item.description ? <div className="member-tool-desc">{item.description}</div> : null}
+            {item.footer ? <div className="member-tool-body">{item.footer}</div> : null}
+          </div>,
         )
       }
+      if (nested.length) {
+        node.content = <div className="member-tool-stack">{nested}</div>
+      }
     }
+    usedThoughtIds.add(thoughtId)
     chain.push(node)
   }
   for (const tool of tools) {
