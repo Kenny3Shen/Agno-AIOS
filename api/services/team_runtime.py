@@ -360,17 +360,3 @@ async def build_team_by_id(
     if not key:
         raise ValueError(f"Unknown team id: {team_id}")
     return await build_team(key, model_id=model_id, **kwargs)
-
-
-async def build_research_analysis_team(
-    *,
-    model_id: str | None = None,
-    mode: TeamMode = TeamMode.coordinate,
-) -> Team:
-    """Backward-compatible helper used by tests."""
-    team_id = (
-        "research-analysis-route"
-        if mode == TeamMode.route
-        else "research-analysis-team"
-    )
-    return await build_team(team_id, model_id=model_id)

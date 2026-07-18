@@ -77,8 +77,7 @@
   "errors": {
     "tooLarge": "文件不能超过 50 MB",
     "empty": "不能上传空文件",
-    "unsupported": "暂不支持该文件类型",
-    "processFailed": "文档处理失败"
+    "unsupported": "暂不支持该文件类型"
   },
   "profiles": {
     "markdown": "按标题结构切分 Markdown 文档",

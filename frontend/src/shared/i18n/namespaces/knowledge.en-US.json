@@ -77,8 +77,7 @@
   "errors": {
     "tooLarge": "File must be 50 MB or smaller",
     "empty": "Empty files are not allowed",
-    "unsupported": "This file type is not supported",
-    "processFailed": "Document processing failed"
+    "unsupported": "This file type is not supported"
   },
   "profiles": {
     "markdown": "Split Markdown by heading structure",
