@@ -119,11 +119,7 @@ def _schedule_knowledge_ingest(
             except Exception:
                 logger.exception("knowledge background failure notify failed: {}", task_name)
 
-    try:
-        asyncio.get_running_loop().create_task(_job(), name=task_name)
-    except RuntimeError:
-        # No loop (sync context) — run inline as last resort.
-        asyncio.run(_job())
+    asyncio.create_task(_job(), name=task_name)
 
 
 def _processing_document_payload(

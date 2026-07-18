@@ -351,11 +351,7 @@ def schedule_workflow_resume(approval_id: str) -> None:
         except Exception:
             logger.exception("Background workflow resume failed: {}", approval_id)
 
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(_job(), name=f"workflow-resume:{approval_id}")
-    except RuntimeError:
-        asyncio.run(_job())
+    asyncio.create_task(_job(), name=f"workflow-resume:{approval_id}")
 
 
 async def stream_workflow_run(

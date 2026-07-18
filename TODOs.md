@@ -1,3 +1,8 @@
+## 已完成：后台任务同步 fallback 清理
+
+- Knowledge 入库和 Workflow approval resume 均只由 async 路由触发，删除不可达的 `asyncio.run()` 同步 fallback。
+- 后台任务统一用 `asyncio.create_task(..., name=...)` 绑定当前 ASGI event loop，保留原有异常日志与通知行为。
+
 ## 已完成：前端无引用类型与 API wrapper 清理
 
 - 删除无调用方的审批计数响应别名、Chat Agent 选项、Collect/Trace/Workflow 别名类型、i18n namespace 类型和 Knowledge 文件问题类型。
