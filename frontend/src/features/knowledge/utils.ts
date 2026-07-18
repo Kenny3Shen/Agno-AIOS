@@ -177,8 +177,6 @@ export const selectedUploadFile = (fileList?: UploadFile[]) => {
   return (item?.originFileObj ?? item) as File | undefined
 }
 
-export type KnowledgeFileIssue = 'unsupported' | 'too-large' | 'empty'
-
 export function knowledgeFileErrorKey(issue: string): 'errors.tooLarge' | 'errors.empty' | 'errors.unsupported' {
   if (issue === 'too-large') return 'errors.tooLarge'
   if (issue === 'empty') return 'errors.empty'

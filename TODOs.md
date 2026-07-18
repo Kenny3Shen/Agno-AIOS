@@ -1,3 +1,8 @@
+## 已完成：前端无引用类型与 API wrapper 清理
+
+- 删除无调用方的审批计数响应别名、Chat Agent 选项、Collect/Trace/Workflow 别名类型、i18n namespace 类型和 Knowledge 文件问题类型。
+- 删除未被页面调用的 CVE 同步更新 wrapper；页面继续使用带取消/进度反馈的 `updateCvesStream`。
+
 ## 已完成：移除 Knowledge 进度 SSE 与 on_progress 死路径
 
 - 删除 `api/services/knowledge_progress.py`、路由 `stream`/`_run_progress_sse` 与 service 层 `on_progress`/`emit_progress`。
@@ -1943,9 +1948,8 @@ P0.4 审批值班薄入口        ✅
 
 相关：`tracing_service.py` / `knowledge_service.py` / `chat_session_service.py` / `workflow_service.py` / `routes/chat.py`
 
-## 已完成：Knowledge SSE 进度去重 + 后台 task 命名
+## 已完成：Knowledge 后台 task 命名
 
-- `update` / `update/upload` 流式路径复用 `_run_progress_sse`（含 LookupError 阶段可选 `lookup_failed_stage`），去掉两段重复 worker/event_generator。
 - Knowledge 与 security run 的 `asyncio.create_task` 补充 `name=`，便于 asyncio 异常处理定位。
 
 相关：`api/routes/knowledge.py` / `api/services/security_run_runtime.py`
@@ -2366,7 +2370,7 @@ P0.4 审批值班薄入口        ✅
 - overview snapshots 各子块异常改为 `logger.exception`（不再静默 `pass`），缺键仍表示该能力不可用。
 - 进程 lifespan 安装 asyncio exception handler，捕获 Agno `amake_memories` 等 fire-and-forget Task 失败（含 Grok metadata 类错误）写入结构化日志。
 - HITL resume：approval 缺失 / 失败后无法加载记录时增加 error 日志；既有 submitter+admin 通知路径不变。
-- Knowledge SSE 入库/更新/上传增加 15 分钟 `wait_for` 超时，超时发 `progress.failed`（code 504）；阶段失败与前端 toast 路径保持。
+- Knowledge 后台入库/更新/上传增加 15 分钟 `wait_for` 超时；失败经后台任务日志和通知路径暴露。
 
 相关入口：
 
@@ -2528,18 +2532,16 @@ P0.4 审批值班薄入口        ✅
 - 设置页提供启用、禁用、留空三态；非 DeepSeek 模型的 Responses 和 Chat Completions 均可配置。
 - Responses 通过 Agno `OpenAIResponses.parallel_tool_calls` 传递；Chat Completions 通过 Agno `request_params` 传递，聊天与会话摘要共用该设置。
 
-## 已完成：Knowledge 进度与安全更新
+## 已完成：Knowledge 安全更新
 
-- 创建/更新统一四阶段进度协议：`upload → parse → vectorize → cleanup`，SSE 推送短文案阶段状态。
-- 前端 `DocumentDrawer` / `UpdateDocumentDrawer` 使用 Ant Design `Steps` 展示进度，处理中锁定关闭。
 - 安全更新：先写入 shadow `content_id`，成功后再切换到稳定文档 ID；失败只清理 shadow，旧文档与旧向量保持可检索。
 - 自动按后缀识别 Reader/Profile，支持 Markdown、TXT、JSON、CSV、代码、PDF/DOCX 同类型与跨类型替换，并保持文档 ID、可见性与选中状态。
-- 成功后清理旧 managed 上传文件；后端/前端单测覆盖进度流与失败回滚路径。
+- 成功后清理旧 managed 上传文件；后端/前端单测覆盖后台入库与失败回滚路径。
 
 相关入口：
 
-- API：`POST /api/knowledge/documents/upload|text|file`、`/documents/{id}/update`、`/documents/{id}/update/upload`（`stream=true`）
-- 代码：`api/services/knowledge_progress.py`、`knowledge_source_service.py`、`frontend/src/features/knowledge/components/UpdateProgress.tsx`
+- API：`POST /api/knowledge/documents/upload|text|file`、`/documents/{id}/update`、`/documents/{id}/update/upload`
+- 代码：`api/routes/knowledge.py`、`knowledge_source_service.py`
 
 ## 已完成：治理前端测试耗时
 
@@ -2576,7 +2578,7 @@ P0.4 审批值班薄入口        ✅
 2. 默认展开“工作台”和“能力与数据”，权限不足时空分组消失。
 3. 点击“智能体”清除 `session` 参数；点击最近对话进入指定 Session。
 4. 264px/76px 侧栏切换、最近对话持久化和移动端抽屉默认状态。
-5. Knowledge 创建/更新进度流和 Trace Session → Run → Span 的主路径。
+5. Knowledge 创建/更新后台入库和 Trace Session → Run → Span 的主路径。
 
 测试应通过 API mock 或独立测试数据隔离运行，避免依赖开发数据库中已有的 Session 和文档。
 

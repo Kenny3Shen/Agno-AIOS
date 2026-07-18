@@ -486,19 +486,6 @@ export const listWorkflowTriggerHistory = async (
   })
 }
 
-export type WorkflowTemplate = {
-  id: string
-  name: string
-  description: string
-  category: string
-  tags: string[]
-  definition: {
-    name: string
-    description: string
-    steps: WorkflowDefinitionNode[]
-  }
-}
-
 export const listWorkflowTemplates = async () => {
   const raw = await requestJson<unknown>('/workflows/templates')
   const { data } = normalizePaginatedList(raw, {
@@ -526,4 +513,3 @@ export const listWorkflowTemplates = async () => {
   })
   return data
 }
-

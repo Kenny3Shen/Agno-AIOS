@@ -46,9 +46,6 @@ export const searchCves = async (payload: {
   })
 }
 
-export const updateCves = () =>
-  requestJson<{ message?: string; add_count?: number; del_count?: number }>('/cve/update', { method: 'POST' })
-
 export type CveUpdateProgress = {
   stage?: string
   status?: string

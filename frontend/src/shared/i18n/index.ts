@@ -82,7 +82,6 @@ export const resources = {
 } as const
 
 export type AppResources = (typeof resources)['zh-CN']
-export type AppNamespace = keyof AppResources
 
 const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('locale') : null
 const initialLng: AppLocale = stored === 'en-US' ? 'en-US' : 'zh-CN'

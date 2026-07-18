@@ -229,10 +229,6 @@ export const resolveSubmissionApproval = async (
 export const getSkillSubmissionPreview = (id: string) =>
   requestJson<SkillSubmissionPreview>(`/approvals/submissions/${encodeURIComponent(id)}/skill-preview`)
 
-export type ApprovalCountResult = {
-  count: number
-}
-
 /** Pending HITL approval count (Agno-native ``{ count }``). */
 export const getApprovalCount = async (userId?: string): Promise<number> => {
   const search = new URLSearchParams()

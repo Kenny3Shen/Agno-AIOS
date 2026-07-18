@@ -49,8 +49,6 @@ export type WorkflowNode = {
   position?: { x: number; y: number }
 }
 
-export type WorkflowStep = WorkflowNode
-
 export type WorkflowDefinitionNode = {
   id: string
   type: WorkflowNodeType
@@ -104,18 +102,6 @@ export type WorkflowRecord = {
   next_cron_at?: number | null
   created_at: number
   updated_at: number
-}
-
-export type WorkflowVersionRecord = {
-  id: string
-  workflow_id: string
-  version: number
-  name: string
-  description: string
-  definition: WorkflowDefinition
-  triggers?: WorkflowTriggers
-  created_at: number
-  created_by: string
 }
 
 export type ExecutorOption = {

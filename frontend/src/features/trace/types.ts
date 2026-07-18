@@ -42,9 +42,6 @@ export type TraceList = {
   meta: TraceListMeta
 }
 
-/** Wire shape for GET /api/traces (Agno-native envelope). */
-export type TraceListNative = TraceList
-
 export interface TraceFilters {
   session_id: string
   run_id: string
@@ -76,9 +73,6 @@ export type TraceSessionList = {
   data: TraceSessionSummary[]
   meta: TraceListMeta
 }
-
-/** Wire shape for GET /api/traces/sessions. */
-export type TraceSessionListNative = TraceSessionList
 
 export interface SpanTreeNode {
   span: Span

@@ -1,7 +1,7 @@
 /** Collect (安全情报) client: article library search, parse, crawl SSE. */
 import { ApiError, apiFetch, jsonInit, requestJson } from '@/shared/api/client'
 import { consumeSse } from '@/features/chat/utils'
-import { normalizePaginatedList, type ListPaginationMeta } from '@/shared/lib/pagination'
+import { normalizePaginatedList } from '@/shared/lib/pagination'
 
 export interface CollectArticle {
   id: number
@@ -44,8 +44,6 @@ export const parseUrl = (url: string) =>
     summary?: string
     cve_ids?: string[]
   }>('/url2md/parse', jsonInit('POST', { url }))
-
-export type CollectListMeta = ListPaginationMeta
 
 export const searchArticles = async (payload: {
   query?: string

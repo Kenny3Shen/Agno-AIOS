@@ -85,16 +85,6 @@ export interface ChatSession {
   archived?: boolean
   runs?: JsonRecord[]
 }
-export interface ChatAgentOption {
-  id: string
-  name: string
-  role?: string
-  description?: string
-  category?: string
-  capabilities?: string
-  recommended_for?: string
-}
-
 export interface ChatState {
   messages: Message[]
   input: string
