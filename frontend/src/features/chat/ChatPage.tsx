@@ -45,7 +45,6 @@ import {
   formatToolLabel,
   formatRetryDetail,
   supportedReasoningEfforts,
-  isLastTurnAutoLean,
   isKnowledgeToggleActive,
   isLiveSearchToggleActive,
 } from './utils'
@@ -664,17 +663,14 @@ export function ChatPage() {
     () => [...chat.state.messages].reverse().find((item) => item.role === 'assistant'),
     [chat.state.messages],
   )
-  const lastTurnAutoLean = isLastTurnAutoLean(chat.state.enableTools, latestAssistant)
   const knowledgeToggleActive = isKnowledgeToggleActive(
     chat.state.searchKnowledge,
     chat.state.enableTools,
-    lastTurnAutoLean,
   )
   const liveSearchToggleActive = isLiveSearchToggleActive(
     chat.state.liveSearch,
     chat.state.enableTools,
     liveSearchSupported,
-    lastTurnAutoLean,
   )
   const hasAttachments = (chat.attachments?.length ?? 0) > 0
   const sendDisabled =
@@ -1249,19 +1245,13 @@ export function ChatPage() {
                     {t('toolsSkills')}
                   </Button>
                   <Button
-                    className={liveSearchToggleActive ? 'sender-toggle active' : chat.state.liveSearch && chat.state.enableTools && lastTurnAutoLean ? 'sender-toggle muted' : 'sender-toggle'}
+                    className={liveSearchToggleActive ? 'sender-toggle active' : 'sender-toggle'}
                     type="text"
                     size="small"
                     icon={<GlobalOutlined />}
                     aria-pressed={chat.state.liveSearch}
                     aria-label={t('liveSearch')}
-                    title={
-                      !chat.state.enableTools
-                        ? t('liveSearchNeedsTools')
-                        : lastTurnAutoLean
-                          ? t('liveSearchAutoLeanHint')
-                          : t('liveSearchHelp')
-                    }
+                    title={!chat.state.enableTools ? t('liveSearchNeedsTools') : t('liveSearchHelp')}
                     disabled={
                       chat.state.requesting ||
                       Boolean(pausedRun) ||
@@ -1273,18 +1263,14 @@ export function ChatPage() {
                     {t('liveSearch')}
                   </Button>
                   <Button
-                    className={knowledgeToggleActive ? 'sender-toggle active' : chat.state.searchKnowledge && chat.state.enableTools && lastTurnAutoLean ? 'sender-toggle muted' : 'sender-toggle'}
+                    className={knowledgeToggleActive ? 'sender-toggle active' : 'sender-toggle'}
                     type="text"
                     size="small"
                     icon={<BookOutlined />}
                     aria-pressed={chat.state.searchKnowledge}
                     aria-label={t('knowledgeSearch')}
                     title={
-                      !chat.state.enableTools
-                        ? t('knowledgeSearchNeedsTools')
-                        : lastTurnAutoLean
-                          ? t('knowledgeSearchAutoLeanHint')
-                          : t('knowledgeSearchHelp')
+                      !chat.state.enableTools ? t('knowledgeSearchNeedsTools') : t('knowledgeSearchHelp')
                     }
                     disabled={chat.state.requesting || Boolean(pausedRun) || !chat.state.enableTools}
                     onClick={() => chat.setSearchKnowledge(!chat.state.searchKnowledge)}

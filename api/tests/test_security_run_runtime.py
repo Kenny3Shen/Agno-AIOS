@@ -1727,9 +1727,10 @@ async def test_lean_surface_skips_memory_context_when_memory_enabled():
     assert created["instructions"] == ["lite"]
     assert created["update_memory_on_run"] is True
     assert created["add_memories_to_context"] is False
-    assert created["search_knowledge"] is False
-    assert created["knowledge"] is None
-    assert created["add_search_knowledge_instructions"] is False
+    # Manual knowledge toggle still honored under auto-lean.
+    assert created["search_knowledge"] is True
+    assert created["knowledge"] is not None
+    assert created["add_search_knowledge_instructions"] is True
     assert created["num_history_runs"] == 0
     assert created["add_history_to_context"] is False
     assert created["add_datetime_to_context"] is False
@@ -1837,7 +1838,7 @@ async def test_full_tool_surface_keeps_history_and_datetime():
 
 
 @pytest.mark.asyncio
-async def test_lean_surface_skips_knowledge_even_when_requested():
+async def test_tools_off_skips_knowledge_even_when_requested():
     created: dict = {}
     kb_called = {"value": False}
 
@@ -1881,6 +1882,51 @@ async def test_lean_surface_skips_knowledge_even_when_requested():
     assert created["knowledge"] is None
     assert created["knowledge_filters"] is None
     assert created["add_search_knowledge_instructions"] is False
+
+
+@pytest.mark.asyncio
+async def test_lean_surface_honors_knowledge_when_requested():
+    """Auto-lean still mounts knowledge when the UI toggle is on."""
+    created: dict = {}
+    kb = object()
+
+    def agent_factory(**kwargs):
+        created.update(kwargs)
+        return SimpleNamespace()
+
+    with TemporaryDirectory() as temp_dir:
+        prompt_dir = Path(temp_dir)
+        (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_PROMPT).write_text(
+            "full", encoding="utf-8"
+        )
+        (prompt_dir / security_run_runtime.SECURITY_OPERATIONS_LITE_PROMPT).write_text(
+            "lite", encoding="utf-8"
+        )
+        runtime = security_run_runtime.SecurityRunRuntime(
+            security_run_runtime.SecurityRunRuntimeDependencies(
+                build_model=lambda *_a, **_k: object(),
+                get_db=lambda: object(),
+                get_async_knowledge_base=lambda: kb,
+                get_enabled_skill_dirs=lambda: [],
+                agent_factory=agent_factory,
+            )
+        )
+        with patch.object(security_run_runtime, "PROMPT_DIR", prompt_dir):
+            await runtime._build_security_agent(
+                None,
+                security_run_runtime.SecurityRunRequest.from_chat_args(
+                    "ping",
+                    enable_tools=True,
+                    search_knowledge=True,
+                    knowledge_owner_user_id="u1",
+                ),
+            )
+    assert created["instructions"] == ["lite"]
+    assert created["search_knowledge"] is True
+    assert created["knowledge"] is kb
+    assert created["knowledge_filters"] == {"user_id": "u1"}
+    assert created["add_search_knowledge_instructions"] is True
+
 
 
 @pytest.mark.asyncio
@@ -1942,7 +1988,7 @@ async def test_full_tool_surface_loads_knowledge_when_requested():
 
 
 @pytest.mark.asyncio
-async def test_lean_surface_disables_live_search_even_when_requested():
+async def test_lean_surface_honors_live_search_when_requested():
     created: dict = {}
     models: list = []
 
@@ -1982,7 +2028,8 @@ async def test_lean_surface_disables_live_search_even_when_requested():
                 ),
             )
     assert created["instructions"] == ["lite"]
-    assert models and models[0]["live_search"] is False
+    assert models and models[0]["live_search"] is True
+    assert created["search_knowledge"] is True
 
 
 @pytest.mark.asyncio

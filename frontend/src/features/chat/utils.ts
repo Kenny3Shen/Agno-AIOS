@@ -679,13 +679,11 @@ export const isLastTurnAutoLean = (
 export const isKnowledgeToggleActive = (
   searchKnowledge: boolean,
   enableTools: boolean,
-  lastTurnAutoLean: boolean,
-): boolean => Boolean(searchKnowledge && enableTools && !lastTurnAutoLean)
+): boolean => Boolean(searchKnowledge && enableTools)
 
 export const isLiveSearchToggleActive = (
   liveSearch: boolean,
   enableTools: boolean,
   liveSearchSupported: boolean,
-  lastTurnAutoLean: boolean,
-): boolean => Boolean(liveSearch && enableTools && liveSearchSupported && !lastTurnAutoLean)
+): boolean => Boolean(liveSearch && enableTools && liveSearchSupported)
 

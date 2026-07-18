@@ -404,16 +404,17 @@ describe('formatToolLabel', () => {
   })
 })
 
-describe('lean-aware toggle helpers', () => {
-  it('detects auto-lean last turn and dims dependent toggles', () => {
+describe('toggle helpers', () => {
+  it('activates knowledge/live search from explicit preferences when tools are on', () => {
     expect(isLastTurnAutoLean(true, { leanMode: true, enableTools: true })).toBe(true)
     expect(isLastTurnAutoLean(true, { leanMode: false, enableTools: true })).toBe(false)
     expect(isLastTurnAutoLean(false, { leanMode: true, enableTools: true })).toBe(false)
-    expect(isKnowledgeToggleActive(true, true, true)).toBe(false)
-    expect(isKnowledgeToggleActive(true, true, false)).toBe(true)
-    expect(isLiveSearchToggleActive(true, true, true, true)).toBe(false)
-    expect(isLiveSearchToggleActive(true, true, true, false)).toBe(true)
-    expect(isLiveSearchToggleActive(true, true, false, false)).toBe(false)
+    // Auto-lean no longer dims manual knowledge / live-search toggles.
+    expect(isKnowledgeToggleActive(true, true)).toBe(true)
+    expect(isKnowledgeToggleActive(true, false)).toBe(false)
+    expect(isLiveSearchToggleActive(true, true, true)).toBe(true)
+    expect(isLiveSearchToggleActive(true, true, false)).toBe(false)
+    expect(isLiveSearchToggleActive(true, false, true)).toBe(false)
   })
 })
 

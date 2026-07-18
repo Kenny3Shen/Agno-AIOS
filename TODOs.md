@@ -1,5 +1,7 @@
 ## Agents / Team
 
+- [x] 自动轻量不再禁用手动「联网搜索 / 知识库」开关（仍跳过 MCP/Skills/Memory 注入）
+
 - [x] data-analysis SQL 统一为 Agno SQLTools（`TAIS_DATA_SQL_URL`），禁用 CsvTools.query_csv_file / 不引入 DuckDB
 
 - [x] 依赖 `ddgs`：Web Search 默认可挂载；SQL 走 SQLTools（不引入 DuckDB）

@@ -2014,14 +2014,17 @@ class SecurityRunRuntime:
         # specialist agents keep explicit UI toggles even without MCP.
         specialist = agent_id != DEFAULT_AGENT_ID
         surface_active = tool_surface or (specialist and enable_tools)
-        search_knowledge = bool(request.search_knowledge) and surface_active
-        # Live search: prefer profile default when client leaves null.
-        if not surface_active:
+        # Knowledge / live search follow explicit UI toggles whenever tools are on.
+        # Auto-lean (empty skill_names) still skips MCP/Skills, but does not block
+        # manual knowledge retrieval or live search.
+        search_knowledge = bool(request.search_knowledge) and enable_tools
+        if not enable_tools:
             live_search = False
         elif request.live_search is not None:
-            live_search = request.live_search
+            live_search = bool(request.live_search)
         else:
-            live_search = bool(profile.get("prefer_live_search"))
+            # Profile prefer_* only auto-enables on full tool surface.
+            live_search = bool(profile.get("prefer_live_search")) and surface_active
         model = await self._build_model(
             request.model_id,
             request.reasoning_effort,
