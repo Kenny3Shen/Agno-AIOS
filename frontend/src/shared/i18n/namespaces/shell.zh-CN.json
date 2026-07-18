@@ -82,5 +82,6 @@
   "userProfile": "用户详情",
   "userInactive": "已停用",
   "userScopeCount": "{{count}} 项权限",
-  "userAdminAllScopes": "全部权限"
+  "userAdminAllScopes": "全部权限",
+  "personalAccount": "个人帐户"
 }

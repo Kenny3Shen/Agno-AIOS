@@ -82,5 +82,6 @@
   "userProfile": "Account",
   "userInactive": "Inactive",
   "userScopeCount": "{{count}} scopes",
-  "userAdminAllScopes": "Full access"
+  "userAdminAllScopes": "Full access",
+  "personalAccount": "Personal account"
 }

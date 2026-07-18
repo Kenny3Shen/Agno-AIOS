@@ -218,139 +218,102 @@ html.dark .shell-menu .ant-menu-item-selected {
 }
 .shell-identity {
   display: flex;
-  min-height: 52px;
   align-items: center;
   gap: 10px;
-  padding: 10px 14px;
-  border-top: 1px solid var(--tais-border);
 }
 
 .shell-footer {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 10px;
   border-top: 1px solid var(--tais-border);
   background: var(--tais-surface);
-}
-.shell-footer .shell-identity {
-  display: flex;
-  width: 100%;
-  min-height: 56px;
-  box-sizing: border-box;
-  align-items: center;
-  gap: 10px;
-  border: 0;
-  border-top: 0;
-  border-bottom: 1px solid var(--tais-border);
-  padding: 10px 14px;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
 }
 .shell-footer .ant-dropdown-trigger {
   width: 100%;
   display: block;
 }
+/* ChatGPT-like account chip */
+.shell-footer .shell-identity {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--tais-border) 88%, transparent);
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--tais-soft) 55%, var(--tais-surface));
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--motion-ease),
+    border-color var(--motion-fast) var(--motion-ease);
+}
 .shell-footer .shell-identity:hover {
-  background: color-mix(in srgb, var(--tais-blue) 8%, var(--tais-surface));
+  background: color-mix(in srgb, var(--tais-soft) 80%, var(--tais-surface));
+  border-color: color-mix(in srgb, var(--tais-border) 70%, var(--tais-text));
 }
 .shell-footer .shell-identity:focus-visible {
   outline: 2px solid var(--tais-blue);
-  outline-offset: -2px;
+  outline-offset: 1px;
 }
 .shell-footer .shell-identity-copy {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   justify-content: center;
-  gap: 5px;
+  gap: 2px;
   min-width: 0;
   text-align: left;
 }
-.shell-footer .shell-identity-email {
+.shell-footer .shell-identity-name {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--tais-text);
   font-size: 13px;
-  font-weight: 650;
-  line-height: 1.2;
+  font-weight: 600;
+  line-height: 1.25;
   letter-spacing: -0.01em;
 }
-.shell-footer .shell-identity-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  line-height: 1;
-}
-.shell-footer .shell-identity-role {
-  display: inline-flex;
-  max-width: 100%;
-  align-items: center;
-  height: 18px;
-  padding: 0 7px;
-  border: 1px solid color-mix(in srgb, var(--tais-blue) 18%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--tais-blue) 10%, var(--tais-soft));
-  color: color-mix(in srgb, var(--tais-blue) 72%, var(--tais-text));
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  line-height: 16px;
+.shell-footer .shell-identity-sub {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.shell-footer .shell-identity-role--admin {
-  border-color: color-mix(in srgb, #fa8c16 28%, transparent);
-  background: color-mix(in srgb, #fa8c16 14%, var(--tais-soft));
-  color: color-mix(in srgb, #d46b08 72%, var(--tais-text));
-}
-.shell-footer .shell-identity-badge {
-  display: inline-flex;
-  max-width: min(100%, 9.5em);
-  align-items: center;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--tais-muted) 10%, var(--tais-soft));
   color: var(--tais-muted);
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 18px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.shell-footer .shell-identity-badge.is-inactive {
-  background: color-mix(in srgb, #ff4d4f 14%, var(--tais-soft));
-  color: #cf1322;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.25;
 }
 .shell-footer .shell-identity-avatar.ant-avatar {
-  flex: 0 0 32px;
-  width: 32px !important;
-  height: 32px !important;
-  line-height: 32px !important;
-  color: color-mix(in srgb, var(--tais-blue) 78%, #fff);
-  background: color-mix(in srgb, var(--tais-blue) 16%, var(--tais-soft));
+  flex: 0 0 auto;
+  color: #fff !important;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--tais-blue) 88%, #111), color-mix(in srgb, var(--tais-blue) 55%, #722ed1)) !important;
   font-size: 12px;
   font-weight: 700;
-}
-/* Expanded identity: keep copy; collapsed overrides handle icon centering. */
-.shell-footer .shell-identity:not(.shell-identity-collapsed) {
-  padding: 10px 14px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, #000 12%, transparent);
 }
 .shell-footer .shell-bottom-menu {
   border-top: 0 !important;
+  padding: 0 !important;
+}
+.shell-footer .shell-bottom-menu .ant-menu-item {
+  border-radius: 10px;
+  margin-inline: 0 !important;
+}
+.shell-footer-drawer {
+  padding: 8px;
 }
 .shell-footer-drawer .shell-identity {
   margin-bottom: 0;
-  min-height: 56px;
-  padding: 10px 12px;
 }
 .chat-task-panel {
   display: flex;
@@ -2974,52 +2937,28 @@ button.collect-article-item.is-selected {
   position: relative;
 }
 
-/* Collapsed nav: VS Code–style account (user) icon */
-.shell-identity-icon {
-  display: inline-flex;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
+/* Collapsed nav: avatar-only account chip */
+.shell-sider.ant-layout-sider-collapsed .shell-footer {
+  padding: 8px 10px 12px;
   align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--tais-border) 80%, var(--tais-text));
-  background: color-mix(in srgb, var(--tais-soft) 70%, transparent);
-  color: var(--tais-text);
-  font-size: 15px;
-  line-height: 1;
-}
-.shell-identity-icon .anticon,
-.shell-identity-icon .anticon > svg {
-  display: block;
-  line-height: 1;
-  margin: 0;
-}
-/* Glyph sits slightly high in the circle; nudge for optical center */
-.shell-identity-icon .anticon {
-  transform: translateY(0.5px);
 }
 .shell-sider.ant-layout-sider-collapsed .shell-identity,
 .shell-identity.shell-identity-collapsed {
+  width: 44px;
+  min-height: 44px;
   justify-content: center;
   align-items: center;
   gap: 0;
-  padding-inline: 0;
+  padding: 6px;
+  border-radius: 12px;
   text-align: center;
 }
-/* Hide copy completely when collapsed so flex space doesn't shift the icon */
 .shell-sider.ant-layout-sider-collapsed .shell-identity-copy,
 .shell-identity.shell-identity-collapsed .shell-identity-copy {
   display: none;
 }
-.shell-sider.ant-layout-sider-collapsed .shell-identity-icon,
-.shell-identity.shell-identity-collapsed .shell-identity-icon {
-  margin-inline: auto;
-}
-.shell-footer .shell-identity:focus-visible .shell-identity-icon,
-.shell-footer .shell-identity:hover .shell-identity-icon {
-  border-color: color-mix(in srgb, var(--tais-blue) 55%, var(--tais-border));
-  color: color-mix(in srgb, var(--tais-blue) 70%, var(--tais-text));
+.shell-sider.ant-layout-sider-collapsed .shell-identity-avatar.ant-avatar {
+  margin: 0;
 }
 
 

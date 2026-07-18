@@ -46,7 +46,6 @@ import {
   SettingOutlined,
   SunOutlined,
   TranslationOutlined,
-  UserOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { currentUserQuery, logout } from '@/features/auth'
@@ -430,38 +429,21 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const initials = (emailLocal.slice(0, 2) || 'AI').toUpperCase()
   const roleKey = roleOf(userQuery.data)
   const roleLabel = t(`settings:role_${roleKey}`, { defaultValue: roleKey })
-  // Secondary badge: inactive first; non-admin scope count only (admin role chip is enough).
-  const identityBadge = (() => {
-    if (userQuery.data?.is_active === false) {
-      return { kind: 'inactive' as const, text: t('shell:userInactive') }
-    }
-    if (roleKey === 'admin') return null
-    const count = userQuery.data?.scopes?.length ?? 0
-    if (count > 0) {
-      return { kind: 'scope' as const, text: t('shell:userScopeCount', { count }) }
-    }
-    return null
-  })()
+  // Primary line: local-part as display name (ChatGPT-style); full email on title/hover.
+  const displayName = emailLocal || email || '—'
+  const accountLine =
+    userQuery.data?.is_active === false
+      ? t('shell:userInactive')
+      : t('shell:personalAccount')
 
   const identityCopy = (
     <div className="shell-identity-copy">
-      <strong className="shell-identity-email" title={email || undefined}>
-        {email || '—'}
+      <strong className="shell-identity-name" title={email || undefined}>
+        {displayName}
       </strong>
-      <div className="shell-identity-meta" aria-label={roleLabel}>
-        <span className={`shell-identity-role shell-identity-role--${roleKey}`}>{roleLabel}</span>
-        {identityBadge ? (
-          <span
-            className={
-              identityBadge.kind === 'inactive'
-                ? 'shell-identity-badge is-inactive'
-                : 'shell-identity-badge is-scope'
-            }
-          >
-            {identityBadge.text}
-          </span>
-        ) : null}
-      </div>
+      <span className="shell-identity-sub" title={email ? `${email} · ${roleLabel}` : roleLabel}>
+        {accountLine}
+      </span>
     </div>
   )
   return (
@@ -521,15 +503,9 @@ export function AppFrame({ children }: { children: ReactNode }) {
                 aria-label={t('shell:userProfile')}
                 title={email || undefined}
               >
-                {collapsed ? (
-                  <span className="shell-identity-icon" aria-hidden>
-                    <UserOutlined />
-                  </span>
-                ) : (
-                  <Avatar size={32} className="shell-identity-avatar">
-                    {initials}
-                  </Avatar>
-                )}
+                <Avatar size={collapsed ? 28 : 32} className="shell-identity-avatar">
+                  {initials}
+                </Avatar>
                 {identityCopy}
               </button>
             </Dropdown>
