@@ -1,4 +1,6 @@
+import json
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
@@ -15,8 +17,22 @@ def actor(user_id: str, role: str = "user"):
     return SimpleNamespace(id=user_id, role=role, is_superuser=False)
 
 
-def raw_request() -> Request:
-    return Request({"type": "http", "method": "POST", "path": "/api/chat", "headers": [], "client": ("127.0.0.1", 1)})
+def raw_request(body: dict[str, Any] | None = None) -> Request:
+    payload = json.dumps(body or {}).encode()
+
+    async def receive() -> dict[str, object]:
+        return {"type": "http.request", "body": payload, "more_body": False}
+
+    return Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/chat",
+            "headers": [(b"content-type", b"application/json")],
+            "client": ("127.0.0.1", 1),
+        },
+        receive=receive,
+    )
 
 
 def test_owned_resource_allows_owner():
@@ -151,7 +167,7 @@ async def test_cancel_chat_run_records_audit_event():
 
 @pytest.mark.asyncio
 async def test_list_sessions_uses_current_user_as_owner_filter():
-    captured: dict[str, str | None] = {}
+    captured: dict[str, object] = {}
 
     async def fake_list_sessions(
         *,
@@ -192,7 +208,7 @@ async def test_list_sessions_uses_current_user_as_owner_filter():
 
 @pytest.mark.asyncio
 async def test_list_sessions_honors_admin_user_filter():
-    captured: dict[str, str | None] = {}
+    captured: dict[str, object] = {}
 
     async def fake_list_sessions(*, owner_user_id: str | None, **_kwargs):
         captured["owner_user_id"] = owner_user_id
@@ -218,8 +234,7 @@ async def test_chat_rejects_foreign_existing_session_id():
         mocked.return_value = "u2"
         with pytest.raises(HTTPException) as exc:
             await chat.chat_agent(
-                chat.ChatRequest(message="hello", session_id="foreign-session"),
-                raw_request(),
+                raw_request({"message": "hello", "session_id": "foreign-session"}),
                 user=actor("u1"),
             )
     assert exc.value.status_code == 404
@@ -230,8 +245,7 @@ async def test_chat_allows_owned_existing_session_id():
     with patch.object(chat, "get_session_owner_async", new_callable=AsyncMock) as mocked:
         mocked.return_value = "u1"
         response = await chat.chat_agent(
-            chat.ChatRequest(message="hello", session_id="own-session"),
-            raw_request(),
+            raw_request({"message": "hello", "session_id": "own-session"}),
             user=actor("u1"),
         )
     assert response.media_type == "text/event-stream"
@@ -262,13 +276,14 @@ async def test_chat_passes_reasoning_effort_to_the_run_request():
         }
         get_owner.return_value = None
         response = await chat.chat_agent(
-            chat.ChatRequest(
-                message="hello",
-                session_id="session-1",
-                model_id="deepseek-1",
-                reasoning_effort="max",
+            raw_request(
+                {
+                    "message": "hello",
+                    "session_id": "session-1",
+                    "model_id": "deepseek-1",
+                    "reasoning_effort": "max",
+                }
             ),
-            raw_request(),
             user=actor("u1"),
         )
 
@@ -289,8 +304,13 @@ async def test_chat_rejects_reasoning_effort_for_incompatible_model():
         get_owner.return_value = None
         with pytest.raises(HTTPException) as exc:
             await chat.chat_agent(
-                chat.ChatRequest(message="hello", session_id="session-1", reasoning_effort="high"),
-                raw_request(),
+                raw_request(
+                    {
+                        "message": "hello",
+                        "session_id": "session-1",
+                        "reasoning_effort": "high",
+                    }
+                ),
                 user=actor("u1"),
             )
 

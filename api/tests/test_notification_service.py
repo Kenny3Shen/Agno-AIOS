@@ -193,7 +193,9 @@ async def test_notify_background_task_failure_routes_memory_to_memory_page():
             error="Argument not supported: metadata",
         )
     create.assert_awaited_once()
-    kwargs = create.await_args.kwargs
+    call = create.await_args
+    assert call is not None
+    kwargs = call.kwargs
     assert kwargs["data"]["path"] == "/memory"
     assert "Memory task failed" in kwargs["title"]
 

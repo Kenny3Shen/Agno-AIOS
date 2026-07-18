@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -9,6 +11,10 @@ from starlette.requests import Request
 
 from api.auth.models import User
 from api.routes import knowledge as knowledge_route
+
+
+def scheduled_work(task: dict[str, object]) -> Callable[[], Awaitable[dict[str, object]]]:
+    return cast(Callable[[], Awaitable[dict[str, object]]], task["work"])
 
 
 def request(path: str) -> Request:
@@ -57,7 +63,7 @@ async def test_create_text_document_returns_processing_placeholder() -> None:
         "metadata": {},
     }
     lifecycle = SimpleNamespace(add_text_document_async=AsyncMock(return_value=document))
-    scheduled: list[object] = []
+    scheduled: list[dict[str, object]] = []
 
     def fake_schedule(**kwargs: object) -> None:
         scheduled.append(kwargs)
@@ -75,6 +81,6 @@ async def test_create_text_document_returns_processing_placeholder() -> None:
         assert result["status"] == "processing"
         assert str(result["id"]).startswith("processing:text:")
         assert len(scheduled) == 1
-        bg = await scheduled[0]["work"]()
+        bg = await scheduled_work(scheduled[0])()
         assert bg["id"] == "doc-new"
         lifecycle.add_text_document_async.assert_awaited_once()

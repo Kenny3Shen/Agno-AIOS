@@ -1,3 +1,8 @@
+## 已完成：后端测试静态化与 coroutine mock 清理
+
+- 清理测试文件重复 imports、弱类型任务 scheduler mock 和过期 Chat 路由调用顺序；`ty check api` 无诊断。
+- Eval 测试显式关闭 auto-lean 推断，Workflow cron task mock 显式关闭 coroutine；全量 pytest 不再产生未 await warning。
+
 ## 已完成：后台任务同步 fallback 清理
 
 - Knowledge 入库和 Workflow approval resume 均只由 async 路由触发，删除不可达的 `asyncio.run()` 同步 fallback。

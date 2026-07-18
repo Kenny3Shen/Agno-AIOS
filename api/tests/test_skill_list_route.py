@@ -1,6 +1,8 @@
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import patch
 
+from api.auth.models import User
 from api.routes import skills
 
 
@@ -22,7 +24,7 @@ def test_list_skills_returns_data_meta_envelope():
         }
     ]
     with patch.object(skills, "list_skill_infos", return_value=rows):
-        result = skills.list_skills(user=user)  # type: ignore[arg-type]
+        result = skills.list_skills(user=cast(User, user))
     assert [item.name for item in result["data"]] == ["Owned"]
     assert result["meta"]["total_count"] == 1
     assert result["meta"]["page"] == 1

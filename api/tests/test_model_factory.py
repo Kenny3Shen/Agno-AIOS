@@ -314,6 +314,7 @@ def test_compatible_live_search_uses_extra_body():
         )
     )
     assert isinstance(model, OpenAILike)
+    assert model.request_params is not None
     assert model.request_params["extra_body"]["search_parameters"]["mode"] == "on"
 
 

@@ -90,13 +90,20 @@ async def test_tick_claims_and_starts_task():
             ],
         },
     }
+    def close_scheduled_coroutine(coroutine, **_kwargs):
+        coroutine.close()
+        return None
+
     with (
         patch(
             "api.services.workflow_cron.workflow_store.list_workflows_for_cron",
             AsyncMock(return_value=[row]),
         ),
         patch("api.services.workflow_cron.try_claim_cron_run", AsyncMock(return_value=True)),
-        patch("api.services.workflow_cron.asyncio.create_task", return_value=None) as create_task,
+        patch(
+            "api.services.workflow_cron.asyncio.create_task",
+            side_effect=close_scheduled_coroutine,
+        ) as create_task,
     ):
         started = await tick_workflow_crons()
     assert started == 1

@@ -29,7 +29,11 @@ async def test_security_runtime_exposes_agent_context_for_evals():
         agent_factory=lambda **kwargs: SimpleNamespace(**kwargs),
     )
 
-    request = SecurityRunRequest.from_chat_args("ping", user_id="user-1")
+    request = SecurityRunRequest.from_chat_args(
+        "ping",
+        user_id="user-1",
+        infer_skills=False,
+    )
     async with runtime.security_agent_context(request) as agent:
         assert agent.id == "security-operations"
         assert agent.tools == ["mcp-tools"]

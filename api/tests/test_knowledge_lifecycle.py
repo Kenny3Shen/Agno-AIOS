@@ -19,6 +19,12 @@ from api.services.knowledge_source_service import SOURCE_METADATA_KEY, source_di
 from api.tests.knowledge_fakes import StrictAsyncKnowledge
 
 
+def int_kwarg(values: Mapping[str, object], key: str, default: int) -> int:
+    value = values.get(key, default)
+    assert isinstance(value, int)
+    return value
+
+
 def route_dependency(endpoint_name: str):
     for route in knowledge_route.router.routes:
         if isinstance(route, APIRoute) and getattr(route.endpoint, "__name__", "") == endpoint_name:
@@ -1355,8 +1361,8 @@ async def test_list_documents_async_pages_beyond_first_window() -> None:
 
     async def content_rows_async(**kwargs: object):
         calls.append(dict(kwargs))
-        page = int(kwargs.get("page") or 1)
-        limit = int(kwargs.get("limit") or 200)
+        page = int_kwarg(kwargs, "page", 1)
+        limit = int_kwarg(kwargs, "limit", 200)
         start = (page - 1) * limit
         end = start + limit
         return all_rows[start:end], len(all_rows)
@@ -1429,7 +1435,7 @@ async def test_knowledge_status_uses_paged_document_count_without_full_list() ->
             chunk_count_async=lambda _owner_user_id=None: 9,
         )
     )
-    lifecycle.list_documents_page_async = fake_page  # type: ignore[method-assign]
+    setattr(lifecycle, "list_documents_page_async", fake_page)
 
     status = await lifecycle.knowledge_status_async(owner_user_id="u1")
 
@@ -1533,8 +1539,8 @@ async def test_clear_knowledge_base_deletes_all_visible_content_with_async_depen
 
     async def content_rows_async(**kwargs: object):
         calls.append(dict(kwargs))
-        page = int(kwargs.get("page") or 1)
-        limit = int(kwargs.get("limit") or 200)
+        page = int_kwarg(kwargs, "page", 1)
+        limit = int_kwarg(kwargs, "limit", 200)
         start = (page - 1) * limit
         end = start + limit
         return contents[start:end], len(contents)
@@ -1562,7 +1568,7 @@ async def test_clear_knowledge_base_deletes_all_visible_content_with_async_depen
     }
     assert deleted == ["doc-1", "doc-2"]
     assert calls  # streamed pages instead of one full dump helper
-    assert all(int(call.get("limit") or 0) > 0 for call in calls)
+    assert all(int_kwarg(call, "limit", 0) > 0 for call in calls)
 
 
 @pytest.mark.asyncio
@@ -1600,8 +1606,8 @@ async def test_clear_knowledge_only_deletes_resources_managed_by_user() -> None:
     deleted: list[str] = []
 
     async def content_rows_async(**kwargs: object):
-        page = int(kwargs.get("page") or 1)
-        limit = int(kwargs.get("limit") or 200)
+        page = int_kwarg(kwargs, "page", 1)
+        limit = int_kwarg(kwargs, "limit", 200)
         start = (page - 1) * limit
         end = start + limit
         return contents[start:end], len(contents)
@@ -1725,8 +1731,8 @@ async def test_list_documents_page_injected_unfiltered_uses_native_page_limit() 
 
     async def content_rows_async(**kwargs: object):
         calls.append(dict(kwargs))
-        page = int(kwargs.get("page") or 1)
-        limit = int(kwargs.get("limit") or 50)
+        page = int_kwarg(kwargs, "page", 1)
+        limit = int_kwarg(kwargs, "limit", 50)
         start = (page - 1) * limit
         window = rows[start : start + limit]
         return window, len(rows)
@@ -1766,8 +1772,8 @@ async def test_list_documents_page_owner_filter_streams_without_full_list() -> N
 
     async def content_rows_async(**kwargs: object):
         calls.append(dict(kwargs))
-        page = int(kwargs.get("page") or 1)
-        limit = int(kwargs.get("limit") or 200)
+        page = int_kwarg(kwargs, "page", 1)
+        limit = int_kwarg(kwargs, "limit", 200)
         start = (page - 1) * limit
         return rows[start : start + limit], len(rows)
 
@@ -1790,7 +1796,7 @@ async def test_list_documents_page_owner_filter_streams_without_full_list() -> N
     assert total == 3
     assert [document["id"] for document in documents] == ["a", "c"]
     assert calls
-    assert all(int(call.get("limit") or 0) == 200 for call in calls)
+    assert all(int_kwarg(call, "limit", 0) == 200 for call in calls)
 
 
 

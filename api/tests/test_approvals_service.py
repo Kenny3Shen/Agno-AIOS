@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from starlette.requests import Request
 
 from api.routes import approvals
+from api.services import approvals_service
 from api.services.approvals_service import (
     ApprovalListParams,
     ApprovalResolveConflictError,
@@ -536,13 +537,6 @@ async def test_get_approval_status_counts_returns_pending_approved_rejected():
         "total": 9,
     }
 
-
-import pytest
-from unittest.mock import AsyncMock, patch
-
-from api.services import approvals_service
-
-
 @pytest.mark.asyncio
 async def test_list_combined_approvals_native_uploads_then_hitl():
     upload_rows = [{"id": "u0", "status": "pending", "resource_type": "skill"}]
@@ -584,4 +578,3 @@ async def test_list_combined_approvals_native_uploads_then_hitl():
         )
     assert [row["id"] for row in result["data"]] == ["u0", "h0", "h1"]
     assert result["meta"]["total_count"] == 3
-

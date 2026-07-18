@@ -267,7 +267,9 @@ async def test_load_model_config_store_archives_leftover_json_when_postgres_has_
     assert (tmp_path / "model_config.json.imported").exists()
     if replace.await_count:
         # Integrity rewrite is allowed; must not seed leftover "stale" model.
-        saved = replace.await_args.args[0]
+        call = replace.await_args
+        assert call is not None
+        saved = call.args[0]
         assert all(row["id"] != "stale" for row in saved)
 
 
@@ -438,4 +440,3 @@ async def test_load_model_config_store_uses_short_ttl_cache():
     assert first is second
     assert list_rows.await_count == 1
     model_config_service._invalidate_model_config_cache()
-

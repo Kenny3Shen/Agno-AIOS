@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -22,6 +23,10 @@ from api.services.knowledge_upload_service import (
     remove_managed_upload_async,
     store_knowledge_upload_async,
 )
+
+
+def scheduled_work(task: dict[str, object]) -> Callable[[], Awaitable[dict[str, object]]]:
+    return cast(Callable[[], Awaitable[dict[str, object]]], task["work"])
 
 
 def test_json_ingest_options_accept_reader_specific_fields() -> None:
@@ -71,7 +76,7 @@ async def test_update_route_passes_rebuild_metadata_and_ingest_options_to_lifecy
                 "metadata": {},
             }
 
-    scheduled: list[object] = []
+    scheduled: list[dict[str, object]] = []
 
     def fake_schedule(**kwargs: object) -> None:
         scheduled.append(kwargs)
@@ -109,7 +114,7 @@ async def test_update_route_passes_rebuild_metadata_and_ingest_options_to_lifecy
         )
         assert result["status"] == "processing"
         assert len(scheduled) == 1
-        bg = await scheduled[0]["work"]()
+        bg = await scheduled_work(scheduled[0])()
 
     assert bg["can_manage"] is True
     assert captured == {
@@ -350,7 +355,7 @@ async def test_upload_route_ingests_persisted_path_with_browser_metadata(tmp_pat
                 "metadata": {},
             }
 
-    scheduled: list[object] = []
+    scheduled: list[dict[str, object]] = []
 
     def fake_schedule(**kwargs: object) -> None:
         scheduled.append(kwargs)
@@ -403,9 +408,7 @@ async def test_upload_route_ingests_persisted_path_with_browser_metadata(tmp_pat
         assert result["can_manage"] is True
         assert len(scheduled) == 1
         assert scheduled[0]["audit_action"] == "knowledge.create"
-        work = scheduled[0]["work"]
-        assert callable(work)
-        bg_result = await work()
+        bg_result = await scheduled_work(scheduled[0])()
         assert bg_result["id"] == "doc-1"
         assert captured == {
             "path": str(stored.path),
@@ -433,7 +436,7 @@ async def test_upload_route_removes_file_when_ingest_fails(tmp_path: Path) -> No
         upload_id="d" * 32,
     )
     cleanup = AsyncMock(return_value=True)
-    scheduled: list[object] = []
+    scheduled: list[dict[str, object]] = []
 
     class Lifecycle:
         async def add_file_document_async(self, **_kwargs: object) -> dict[str, object]:
@@ -484,7 +487,7 @@ async def test_upload_route_removes_file_when_ingest_fails(tmp_path: Path) -> No
         assert result["status"] == "processing"
         assert len(scheduled) == 1
         with pytest.raises(RuntimeError, match="ingest failed"):
-            await scheduled[0]["work"]()
+            await scheduled_work(scheduled[0])()
         cleanup.assert_awaited_once_with(stored.metadata())
 
 
@@ -526,7 +529,7 @@ async def test_update_upload_route_replaces_selected_document_from_persisted_pat
                 "metadata": {},
             }
 
-    scheduled: list[object] = []
+    scheduled: list[dict[str, object]] = []
 
     def fake_schedule(**kwargs: object) -> None:
         scheduled.append(kwargs)
@@ -579,7 +582,7 @@ async def test_update_upload_route_replaces_selected_document_from_persisted_pat
         assert str(result["id"]).startswith("processing:update-upload:")
         assert result["can_manage"] is True
         assert len(scheduled) == 1
-        bg = await scheduled[0]["work"]()
+        bg = await scheduled_work(scheduled[0])()
         assert bg["id"] == "doc-1"
         assert captured == {
             "doc_id": "doc-1",
@@ -616,7 +619,7 @@ async def test_update_upload_route_removes_file_when_document_is_missing(
         upload_id="f" * 32,
     )
     cleanup = AsyncMock(return_value=True)
-    scheduled: list[object] = []
+    scheduled: list[dict[str, object]] = []
 
     class Lifecycle:
         async def replace_document_file_async(
@@ -672,5 +675,5 @@ async def test_update_upload_route_removes_file_when_document_is_missing(
         assert result["status"] == "processing"
         assert len(scheduled) == 1
         with pytest.raises(LookupError, match="知识文档不存在"):
-            await scheduled[0]["work"]()
+            await scheduled_work(scheduled[0])()
         cleanup.assert_awaited_once_with(stored.metadata())

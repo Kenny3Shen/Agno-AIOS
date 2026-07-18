@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock
 import asyncio
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -64,7 +65,8 @@ async def test_build_research_team_members(monkeypatch):
 
     team = await build_team_by_id("research-analysis")
     assert team.id == "research-analysis-team"
-    member_ids = [getattr(m, "id", None) for m in team.members]
+    member_list = cast(list[object], team.members)
+    member_ids = [getattr(member, "id", None) for member in member_list]
     assert "deep-research" in member_ids
     assert "data-analysis" in member_ids
     assert {row["id"] for row in created} >= {"deep-research", "data-analysis"}

@@ -428,6 +428,8 @@ uv run ty check .
 uv run pytest api/tests
 ```
 
+后端测试与生产代码共同通过 `ruff` / `ty`；路由测试使用真实 HTTP request shape，后台任务 mock 会显式关闭未执行的 coroutine，避免静态诊断和 `RuntimeWarning` 被掩盖。
+
 前端：
 
 ```bash

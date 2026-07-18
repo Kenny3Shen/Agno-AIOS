@@ -462,15 +462,17 @@ async def test_list_memories_admin_unscoped_stats_uses_page_users_only():
     db = FakeMemoryDb()
     stats_calls: list[dict[str, object]] = []
 
-    async def tracking_stats(**kwargs):
+    async def tracking_stats(**kwargs: object):
         stats_calls.append(kwargs)
         return (
             [{"user_id": kwargs.get("user_id") or "u1", "total_memories": 12, "last_memory_updated_at": 1}],
             1,
         )
 
-    db.get_user_memory_stats = tracking_stats  # type: ignore[method-assign]
-    with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
+    with (
+        patch.object(db, "get_user_memory_stats", tracking_stats),
+        patch.object(memory_service, "get_async_agno_postgres_db", return_value=db),
+    ):
         payload = await memory_service.list_memories_native(actor("admin", "admin"))
     assert payload["data"][0]["user_id"] == "u1"
     assert len(stats_calls) == 1
@@ -524,14 +526,16 @@ async def test_list_memories_admin_batches_multi_user_stats():
 
     db = MultiUserDb()
 
-    async def tracking_stats(**kwargs):
+    async def tracking_stats(**kwargs: object):
         stats_calls.append(kwargs)
         uid = kwargs.get("user_id") or "u1"
         total = 51 if uid == "u1" else 3
         return ([{"user_id": uid, "total_memories": total, "last_memory_updated_at": 1}], 1)
 
-    db.get_user_memory_stats = tracking_stats  # type: ignore[method-assign]
-    with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
+    with (
+        patch.object(db, "get_user_memory_stats", tracking_stats),
+        patch.object(memory_service, "get_async_agno_postgres_db", return_value=db),
+    ):
         payload = await memory_service.list_memories_native(actor("admin", "admin"))
     assert {row["user_id"] for row in payload["data"]} == {"u1", "u2"}
     assert {call.get("user_id") for call in stats_calls} == {"u1", "u2"}
