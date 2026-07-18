@@ -413,7 +413,7 @@ frontend/src/app/shell/AppFrame.tsx       # 通知 stream、重连和 Query 刷�
 cd frontend && bun run test:e2e
 ```
 
-前端门禁：`bun run lint`（oxlint deny-warnings）、`bun run typecheck`、`bun run test`；Trace 列表 root `input` 批量失败会打 exception 日志并返回 `input=null`（不 N+1）。 ERROR 列表在 page=1 用 audit 失败 run 补充时，按 `run_id` 批量查 traces（非 per-run `get_trace`）。
+前端门禁：`bun run lint`（oxlint deny-warnings）、`bun run typecheck`、`bun run test`；构建覆盖未引用本地符号检查，客户端只保留页面实际调用的 API wrapper 与类型契约。Trace 列表 root `input` 批量失败会打 exception 日志并返回 `input=null`（不 N+1）。 ERROR 列表在 page=1 用 audit 失败 run 补充时，按 `run_id` 批量查 traces（非 per-run `get_trace`）。
 
 使用 Playwright + 页内 `/api` mock，不依赖本地后端与开发库数据；覆盖登录、侧栏分组/权限过滤、智能体清 session、深链展开与侧栏折叠；以及 Trace 深链 Session→Run→Span、Dashboard 最近失败→Trace 规范 query、Knowledge 文本后台入库完成路径、Approvals 值班列表、`approval_id` 深链与 HITL 批准 resolve、Workflow `workflow_id` 深链加载、Studio Run SSE 与 pause→Approvals resolve 闭环、Studio/Chat 停止按钮取消 run、Studio Publish、未发布启用 Webhook 守卫、运行中结构锁；Chat 模型重试退避中 Esc 亦可取消；重试横幅不再重复停止按钮，退避期间保留已生成片段直至新流开始。
 

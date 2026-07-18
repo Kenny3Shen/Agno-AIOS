@@ -5,7 +5,7 @@
 
 ## 已完成：前端无引用类型与 API wrapper 清理
 
-- 删除无调用方的审批计数响应别名、Chat Agent 选项、Collect/Trace/Workflow 别名类型、i18n namespace 类型和 Knowledge 文件问题类型。
+- 删除无调用方的审批计数响应别名、Chat Agent 选项、Collect/Trace/Workflow 别名类型、i18n resource/namespace 类型和 Knowledge 文件问题类型。
 - 删除未被页面调用的 CVE 同步更新 wrapper；页面继续使用带取消/进度反馈的 `updateCvesStream`。
 
 ## 已完成：移除 Knowledge 进度 SSE 与 on_progress 死路径
