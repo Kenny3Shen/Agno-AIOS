@@ -373,8 +373,12 @@ function MessageBody({ message, retry, sessionId, requesting = false }: { messag
   for (const thought of thoughts) {
     const thoughtId = String(thought.id || '')
     if (usedThoughtIds.has(thoughtId)) continue
-    // Nested under member:{id}; skip top-level placement.
-    if (/^member:[^:]+:reasoning$/.test(thoughtId)) continue
+    // Nested under member:{id} when parent exists; otherwise keep top-level.
+    const nestedReasonMatch = /^member:([^:]+):reasoning$/.exec(thoughtId)
+    if (nestedReasonMatch) {
+      const parentId = `member:${nestedReasonMatch[1]}`
+      if (thoughts.some((item) => item.id === parentId)) continue
+    }
     const node = thoughtNode(thought)
     const memberMatch = /^member:([^:]+)$/.exec(thoughtId)
     if (memberMatch) {

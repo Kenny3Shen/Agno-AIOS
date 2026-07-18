@@ -732,6 +732,21 @@ def _history_team_thoughts(
                 "summary": summary.strip()[:280],
             }
         )
+        reasoning = member.get("reasoning_content") or member.get("reasoning")
+        if isinstance(reasoning, list):
+            reasoning = "".join(
+                str(item) for item in reasoning if isinstance(item, str)
+            )
+        if isinstance(reasoning, str) and reasoning.strip():
+            thoughts.append(
+                {
+                    "id": f"member:{member_id}:reasoning",
+                    "type": "reasoning",
+                    "title": f"成员推理 · {member_name}",
+                    "status": status,
+                    "summary": reasoning.strip()[:280],
+                }
+            )
     return thoughts
 
 

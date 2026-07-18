@@ -1,5 +1,9 @@
 ## Agents / Team
 
+- [x] 历史回放成员 reasoning_content → member:reasoning ThoughtChain
+- [x] Chat UI：无父节点时仍展示 orphan member:reasoning
+- [x] Grok coordinate 双成员并行 tools-on（54 + Example Domain）
+
 - [x] 成员 Reasoning 与 content 分桶累积（避免 summary 被推理污染）
 - [x] 历史回放合并成员 citations（`_history_team_sources`，带成员名前缀）
 - [x] Team 队长空 content 时注入成员错误恢复文案 + content.delta

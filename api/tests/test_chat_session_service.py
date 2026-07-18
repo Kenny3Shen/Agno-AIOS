@@ -632,6 +632,7 @@ async def test_team_history_projects_member_thoughts_and_tools(monkeypatch):
                 "agent_name": "深度研究助手",
                 "status": "COMPLETED",
                 "content": "调研摘要",
+                "reasoning_content": "内部推理步骤 A",
                 "tools": [
                     {
                         "tool_call_id": "t1",
@@ -693,8 +694,11 @@ async def test_team_history_projects_member_thoughts_and_tools(monkeypatch):
     thoughts = assistant.get("thought_chain") or []
     assert {t["id"] for t in thoughts} >= {
         "member:deep-research",
+        "member:deep-research:reasoning",
         "member:data-analysis",
     }
+    reason = next(t for t in thoughts if t["id"] == "member:deep-research:reasoning")
+    assert "内部推理" in reason["summary"]
     tools = assistant.get("tools") or []
     assert any(
         str(t.get("id", "")).startswith("member:deep-research:")
