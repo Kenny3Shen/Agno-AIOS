@@ -11,7 +11,7 @@ Chat 与 Workflow 共用稳定 `agent_id` / executor `ref`（见 `api/services/a
 | id | 名称 | 默认能力 |
 |----|------|----------|
 | `security-operations` | 安全运营助手 | MCP + Local Skills + HITL + Knowledge |
-| `data-analysis` | 数据分析助手 | Calculator + Python/Polars + File/CSV 沙箱（`duckdb` 支持 `query_csv_file`）+ 可选只读 SQL（`TAIS_DATA_SQL_URL`）+ Knowledge 口径 + Reasoning |
+| `data-analysis` | 数据分析助手 | Calculator + Python/Polars + File/CSV 沙箱 + 可选只读 **SQLTools**（`TAIS_DATA_SQL_URL`）+ Knowledge 口径 + Reasoning |
 | `deep-research` | 深度研究助手 | Reasoning + Website + Web Search（`ddgs`，优先 api/html backend）；Knowledge / Live Search；可审计 Markdown 备忘录 |
 | `safe-fallback` | 轻量分析助手 | 无工具（Workflow 兜底） |
 
@@ -23,7 +23,7 @@ Chat 与 Workflow 共用稳定 `agent_id` / executor `ref`（见 `api/services/a
 
 - Workflow 模板：`deep-research-review`（scope → parallel 调研/分析 → memo）、`csv-quick-analysis`（profile → metrics → readout）。
 
-- **Data analysis**：遵循 [Data Agents](https://docs.agno.com/use-cases/data-agents/overview) — 先 introspect 后查询、答案附查询/步骤、Knowledge 承载业务口径、写边界靠只读连接（`TAIS_DATA_SQL_URL`）。
+- **Data analysis**：遵循 [Data Agents](https://docs.agno.com/use-cases/data-agents/overview) — 先 introspect 后查询、答案附查询/步骤、Knowledge 承载业务口径、写边界靠只读 **SQLTools** 连接（`TAIS_DATA_SQL_URL`）；本地 CSV 用 Polars/File，不引入 DuckDB。
 - **Deep research**：遵循 [Deep Research](https://docs.agno.com/use-cases/deep-research/overview) — grounding、结构化可审计交付、多源对照。
 - **Team beta**：route / coordinate / broadcast 对应官方 orchestration patterns；标准化流水线继续用 Workflow Studio。
 

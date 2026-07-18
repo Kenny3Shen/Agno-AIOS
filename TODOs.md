@@ -1,6 +1,8 @@
 ## Agents / Team
 
-- [x] 依赖 `duckdb` + `ddgs`：CSV SQL 与 Web Search 默认可挂载
+- [x] data-analysis SQL 统一为 Agno SQLTools（`TAIS_DATA_SQL_URL`），禁用 CsvTools.query_csv_file / 不引入 DuckDB
+
+- [x] 依赖 `ddgs`：Web Search 默认可挂载；SQL 走 SQLTools（不引入 DuckDB）
 - [x] DuckDuckGoTools 优先 api/html backend（规避空结果）
 - [x] FE：cancelled/failed thought/tool 状态映射为 abort/error
 - [x] Grok：data-analysis CSV SQL；deep-research web_search
@@ -74,9 +76,9 @@
 - [x] Team 成员 tool 事件前缀 `[成员名]` + member_id 字段（ThoughtChain 可辨识）
 - [x] Team/Agent 流式取消：`stream_cancel` 等待 + `cancel_run` 多形态调用
 - [x] Team SSE 集成测试：成员 thought/tool、队长 content、tools-off、cancel
-- [x] data-analysis：FileTools + CsvTools（沙箱；DuckDB SQL 可选）+ PythonTools 安装器已剥离
+- [x] data-analysis：FileTools + CsvTools（沙箱 list/read/columns）+ PythonTools；SQL 仅 SQLTools
 - [x] data-analysis：Chat 上传文档/CSV 自动 stage 到分析沙箱（File/CsvTools 可见）
-- [x] data-analysis：DuckDB 依赖已纳入，`query_csv_file` 可用
+- [x] data-analysis：移除 DuckDB；CSV 聚合用 Polars，仓库 SQL 用 SQLTools
 - [x] deep-research：可选 `web_search`（DuckDuckGoTools；缺 `ddgs` 时 soft-fail，仍可用 Live Search + Website）
 
 # 下一步工作

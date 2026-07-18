@@ -202,8 +202,8 @@ def _build_file() -> Any:
 def _build_csv() -> Any:
     """CSV helpers over files already present in the analysis sandbox.
 
-    SQL ``query_csv_file`` requires optional ``duckdb``; without it the toolkit
-    still supports list/read/columns. Rebuilds the file list from the sandbox
+    List/read/columns only — SQL is provided by Agno ``SQLTools`` via
+    ``TAIS_DATA_SQL_URL`` (no DuckDB). Rebuilds the file list from the sandbox
     on each Agent/Team construction so Chat-staged uploads are visible.
     """
     from agno.tools.csv_toolkit import CsvTools
@@ -238,8 +238,8 @@ def _build_csv() -> Any:
         enable_read_csv_file=True,
         enable_list_csv_files=True,
         enable_get_columns=True,
-        # Soft: enable only when duckdb importable (CsvTools handles ImportError).
-        enable_query_csv_file=True,
+        # Warehouse SQL uses SQLTools (TAIS_DATA_SQL_URL), not DuckDB/CsvTools.
+        enable_query_csv_file=False,
     )
 
 
@@ -297,10 +297,11 @@ def _build_python() -> Any:
 
 
 def _build_sql() -> Any:
-    """Optional read-only SQL toolkit (Agno data-agent pattern).
+    """Optional read-only warehouse SQL via Agno ``SQLTools`` (no DuckDB).
 
-    Set ``TAIS_DATA_SQL_URL`` to a warehouse connection (prefer a DB role with
-    SELECT-only grants). Soft-fails when unset so local CSV/Python analysis still works.
+    Set ``TAIS_DATA_SQL_URL`` (or ``TAIS_ANALYTICS_DB_URL``) to a SQLAlchemy URL
+    with SELECT-only grants. Soft-fails when unset so local CSV/Python analysis
+    still works through File/Csv/Python tools.
     """
     import os
 

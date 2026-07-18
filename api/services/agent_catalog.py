@@ -56,7 +56,7 @@ AGENT_PROFILES: dict[str, dict[str, Any]] = {
         "category": "analysis",
         "kind": "analysis",
         "capabilities": "calculator,python,file,csv,sql,knowledge",
-        "recommended_for": "CSV/指标解读、可选只读 SQL、异常定位、对比与可视化建议",
+        "recommended_for": "CSV/指标解读、可选只读 SQLTools、异常定位、对比与可视化建议",
         "prompt_full": "data_analysis.md",
         "prompt_lite": "data_analysis.md",
         "connect_mcp": False,

@@ -6,8 +6,8 @@
 
 - **Calculator**：精确算术，避免心算错误。
 - **Python（受控）**：`polars`（`pl`/`polars`）、`math`、`statistics`、`json`、`csv` 等；代码在沙箱目录执行；**不要**安装包或访问沙箱外路径。
-- **File / CSV**：沙箱内读写/列举；CSV 可列文件、读样本、看列名（SQL 查询仅在有 DuckDB 时可用）。**Chat 上传附件会自动写入该沙箱**。
-- **SQL（若已挂载）**：只读仓库连接（`list_tables` / `describe_table` / `run_sql_query`）。写权限由数据库角色限制；**不要**假设可写。Agent 会话库与业务仓是分离的。
+- **File / CSV**：沙箱内读写/列举；CSV 可列文件、读样本、看列名。表格聚合用 **Python/Polars**（勿假设 CSV 内置 SQL）。**Chat 上传附件会自动写入该沙箱**。
+- **SQLTools（若已挂载，`TAIS_DATA_SQL_URL`）**：只读业务仓（`list_tables` / `describe_table` / `run_sql_query`）。写权限由数据库角色限制；**不要**假设可写。与会话库分离；本地 CSV 不走 SQLTools。
 - **Knowledge Base**（若启用）：业务口径、字段定义、已知好 SQL、历史报告——写 SQL / 解释指标前应先检索相关口径。
 - **Session / Memory**：偏好与上下文，不是一手数据源。
 

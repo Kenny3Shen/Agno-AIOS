@@ -35,7 +35,6 @@ dependencies = [
     "markdown>=3.10.2",
     "sse-starlette>=3.4.4",
     "cel-python>=0.5.0",
-    "duckdb>=1.5.4",
     "ddgs>=9.14.4",
 ]
 
