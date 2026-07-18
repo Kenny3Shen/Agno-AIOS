@@ -728,30 +728,6 @@ html.dark .shell-menu .ant-menu-item-selected {
   font-size: 34px;
 }
 
-.knowledge-update-progress {
-  margin-bottom: 16px;
-  padding: 12px 14px;
-  border: 1px solid var(--tais-border);
-  border-radius: 8px;
-  background: var(--tais-soft);
-}
-.knowledge-update-progress .ant-steps {
-  margin-bottom: 12px;
-}
-.knowledge-update-progress-alert {
-  margin-bottom: 0;
-}
-.knowledge-update-progress .ant-steps-item-content,
-.knowledge-update-progress .ant-steps-item-title,
-.knowledge-update-progress .ant-steps-item-description {
-  max-width: none;
-  white-space: nowrap;
-  font-size: 12px;
-  line-height: 1.2;
-}
-.knowledge-update-progress .ant-steps-item {
-  white-space: nowrap;
-}
 .retrieval-playground {
   min-height: 360px;
 }

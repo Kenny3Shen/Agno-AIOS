@@ -2,7 +2,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { server } from '@/test/server'
 import { AUTH_TOKEN_STORAGE_KEY } from '@/shared/auth/storage'
-import { addText, searchKnowledge, updateDocumentAction, updateDocumentUpload, uploadDocument } from './api'
+import { searchKnowledge, updateDocumentAction, updateDocumentUpload, uploadDocument } from './api'
 import type { Document } from './types'
 
 const document: Document = {
@@ -165,127 +165,5 @@ describe('knowledge document API', () => {
     const result = await searchKnowledge(' policy ', 8, 'vector')
 
     expect(result[0].doc_id).toBe('doc-1')
-  })
-})
-
-
-describe('knowledge update progress stream', () => {
-  it('streams progress events while replacing text', async () => {
-    const seen: string[] = []
-    const body = [
-      'event: progress',
-      'data: {"stage":"upload","status":"skipped","label":"上传","message":"跳过"}',
-      '',
-      'event: progress',
-      'data: {"stage":"parse","status":"running","label":"解析","message":"解析中"}',
-      '',
-      'event: progress',
-      'data: {"stage":"parse","status":"completed","label":"解析","message":"已解析"}',
-      '',
-      'event: progress',
-      'data: {"stage":"vectorize","status":"running","label":"向量化","message":"向量化中"}',
-      '',
-      'event: progress',
-      'data: {"stage":"vectorize","status":"completed","label":"向量化","message":"已切换"}',
-      '',
-      'event: progress',
-      'data: {"stage":"cleanup","status":"completed","label":"清理","message":"完成"}',
-      '',
-      'event: progress.completed',
-      `data: ${JSON.stringify({ stage: 'done', status: 'completed', document })}`,
-      '',
-      '',
-    ].join('\n')
-
-    server.use(
-      http.post('/api/knowledge/documents/:id/update', ({ request }) => {
-        expect(new URL(request.url).searchParams.get('stream')).toBe('true')
-        return new HttpResponse(body, { headers: { 'Content-Type': 'text/event-stream' } })
-      })
-    )
-
-    const result = await updateDocumentAction(
-      'doc-1',
-      { mode: 'replace_text', file_name: 'runbook.md', content: '# body' },
-      {
-        stream: true,
-        onProgress: (event) => {
-          seen.push(`${event.stage}:${event.status}`)
-        },
-      }
-    )
-
-    expect(result.id).toBe('doc-1')
-    expect(seen).toContain('parse:running')
-    expect(seen).toContain('vectorize:completed')
-    expect(seen).toContain('cleanup:completed')
-  })
-})
-
-
-describe('knowledge create progress stream', () => {
-  it('streams progress while creating an upload', async () => {
-    const seen: string[] = []
-    const body = [
-      'event: progress',
-      'data: {"stage":"upload","status":"running","label":"上传","message":"上传中"}',
-      '',
-      'event: progress',
-      'data: {"stage":"parse","status":"completed","label":"解析","message":"已解析"}',
-      '',
-      'event: progress',
-      'data: {"stage":"vectorize","status":"completed","label":"向量化","message":"已写入"}',
-      '',
-      'event: progress',
-      'data: {"stage":"cleanup","status":"completed","label":"清理","message":"完成"}',
-      '',
-      'event: progress.completed',
-      `data: ${JSON.stringify({ stage: 'done', status: 'completed', document })}`,
-      '',
-      '',
-    ].join('\n')
-    server.use(
-      http.post('/api/knowledge/documents/upload', async ({ request }) => {
-        const text = await request.text()
-        expect(text).toContain('name="stream"')
-        return new HttpResponse(body, { headers: { 'Content-Type': 'text/event-stream' } })
-      })
-    )
-    const result = await uploadDocument(
-      { file: new File(['# Runbook'], 'runbook.md', { type: 'text/markdown' }), visibility: 'private' },
-      { stream: true, onProgress: (event) => seen.push(`${event.stage}:${event.status}`) }
-    )
-    expect(result.id).toBe('doc-1')
-    expect(seen).toContain('upload:running')
-    expect(seen).toContain('vectorize:completed')
-  })
-
-  it('streams progress while creating text content', async () => {
-    const seen: string[] = []
-    const body = [
-      'event: progress',
-      'data: {"stage":"upload","status":"skipped","label":"上传","message":"跳过"}',
-      '',
-      'event: progress',
-      'data: {"stage":"parse","status":"running","label":"解析","message":"解析中"}',
-      '',
-      'event: progress.completed',
-      `data: ${JSON.stringify({ stage: 'done', status: 'completed', document })}`,
-      '',
-      '',
-    ].join('\n')
-    server.use(
-      http.post('/api/knowledge/documents/text', ({ request }) => {
-        expect(new URL(request.url).searchParams.get('stream')).toBe('true')
-        return new HttpResponse(body, { headers: { 'Content-Type': 'text/event-stream' } })
-      })
-    )
-    const result = await addText(
-      { title: 'Note', content: 'hello', visibility: 'private' },
-      { stream: true, onProgress: (event) => seen.push(`${event.stage}:${event.status}`) }
-    )
-    expect(result.id).toBe('doc-1')
-    expect(seen).toContain('upload:skipped')
-    expect(seen).toContain('parse:running')
   })
 })

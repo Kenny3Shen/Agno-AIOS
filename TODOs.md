@@ -1,3 +1,8 @@
+## 已完成：去掉 Knowledge 前端进度 SSE / UpdateProgress
+
+- 删除 `UpdateProgress`、前端 `consumeKnowledgeSse` 与 `stream`/`onProgress` 选项；Drawer 仅走非流式后台入库。
+- e2e/单测改为 JSON `processing` 占位；不引入可轮询 job/progress API。
+
 ## 已完成：Knowledge 入库后台化（Drawer 不阻塞）
 
 - 非流式 `POST /documents/upload|text|file` 与 update/upload、rebuild、replace_text：落盘/校验后 `_schedule_knowledge_ingest`，立即返回 `processing` 占位。

@@ -67,16 +67,10 @@ describe('knowledge document workflow', () => {
     server.use(
       http.get('/api/knowledge', () => HttpResponse.json(response(replaced ? newDocument : oldDocument))),
       http.post('/api/knowledge/documents/doc-old/update', async ({ request }) => {
-        expect(new URL(request.url).searchParams.get('stream')).toBe('true')
+        expect(new URL(request.url).searchParams.get('stream')).toBeNull()
         expect(await request.json()).toEqual({ mode: 'replace_text', file_name: 'runbook.md', content: '# Updated runbook' })
         replaced = true
-        const streamBody = [
-          'event: progress.completed',
-          `data: ${JSON.stringify({ stage: 'done', status: 'completed', document: newDocument })}`,
-          '',
-          '',
-        ].join('\n')
-        return new HttpResponse(streamBody, { headers: { 'Content-Type': 'text/event-stream' } })
+        return HttpResponse.json({ ...newDocument, status: 'processing' })
       })
     )
     renderWithQuery(<KnowledgePage />)
@@ -95,41 +89,14 @@ describe('knowledge document workflow', () => {
     const user = setupUser()
     const newDocument = { ...oldDocument, chunks: 5, metadata: { file_name: 'uploaded.md' } }
     let replaced = false
-    let release!: () => void
-    const gate = new Promise<void>((resolve) => {
-      release = resolve
-    })
     server.use(
       http.get('/api/knowledge', () => HttpResponse.json(response(replaced ? newDocument : oldDocument))),
       http.post('/api/knowledge/documents/doc-old/update/upload', async ({ request }) => {
         const body = await request.text()
         expect(body).toContain('name="file"')
         expect(body).toContain('Content-Type: text/markdown')
-        expect(body).toContain('name="stream"')
-        await gate
         replaced = true
-        const streamBody = [
-          'event: progress',
-          'data: {"stage":"upload","status":"running","label":"上传","message":"上传中"}',
-          '',
-          'event: progress',
-          'data: {"stage":"upload","status":"completed","label":"上传","message":"已上传"}',
-          '',
-          'event: progress',
-          'data: {"stage":"parse","status":"completed","label":"解析","message":"已解析"}',
-          '',
-          'event: progress',
-          'data: {"stage":"vectorize","status":"completed","label":"向量化","message":"已切换"}',
-          '',
-          'event: progress',
-          'data: {"stage":"cleanup","status":"completed","label":"清理","message":"完成"}',
-          '',
-          'event: progress.completed',
-          `data: ${JSON.stringify({ stage: 'done', status: 'completed', document: newDocument })}`,
-          '',
-          '',
-        ].join('\n')
-        return new HttpResponse(streamBody, { headers: { 'Content-Type': 'text/event-stream' } })
+        return HttpResponse.json({ ...newDocument, status: 'processing', id: 'processing:update-upload:doc-old' })
       })
     )
     renderWithQuery(<KnowledgePage />)
@@ -141,68 +108,11 @@ describe('knowledge document workflow', () => {
     await user.upload(input as HTMLInputElement, new File(['# Uploaded runbook'], 'uploaded.md', { type: 'text/markdown' }))
     await user.click(screen.getByRole('button', { name: /保存/ }))
 
-    expect(await screen.findByText('上传')).toBeTruthy()
-    expect(screen.getByText('解析')).toBeTruthy()
-    expect(screen.getByText('向量化')).toBeTruthy()
-    expect(screen.getByText('清理')).toBeTruthy()
-    release()
-
+    // Drawer closes after queued ingest; list refreshes to completed document.
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /更新/ })).toBeNull())
     await waitFor(() => expect(screen.getByText('5')).toBeTruthy())
-    expect(screen.getByText('doc-old')).toBeTruthy()
   })
 
-  it('shows four-stage progress while replacing text content', async () => {
-    const user = setupUser()
-    const newDocument = { ...oldDocument, chunks: 4 }
-    let replaced = false
-    let release!: () => void
-    const gate = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    server.use(
-      http.get('/api/knowledge', () => HttpResponse.json(response(replaced ? newDocument : oldDocument))),
-      http.post('/api/knowledge/documents/doc-old/update', async ({ request }) => {
-        expect(new URL(request.url).searchParams.get('stream')).toBe('true')
-        await gate
-        replaced = true
-        const streamBody = [
-          'event: progress',
-          'data: {"stage":"upload","status":"skipped","label":"上传","message":"跳过"}',
-          '',
-          'event: progress',
-          'data: {"stage":"parse","status":"running","label":"解析","message":"解析中"}',
-          '',
-          'event: progress',
-          'data: {"stage":"parse","status":"completed","label":"解析","message":"已解析"}',
-          '',
-          'event: progress',
-          'data: {"stage":"vectorize","status":"completed","label":"向量化","message":"已切换"}',
-          '',
-          'event: progress',
-          'data: {"stage":"cleanup","status":"completed","label":"清理","message":"完成"}',
-          '',
-          'event: progress.completed',
-          `data: ${JSON.stringify({ stage: 'done', status: 'completed', document: newDocument })}`,
-          '',
-          '',
-        ].join('\n')
-        return new HttpResponse(streamBody, { headers: { 'Content-Type': 'text/event-stream' } })
-      })
-    )
-    renderWithQuery(<KnowledgePage />)
-
-    await user.click(await screen.findByText('Runbook'))
-    await clickUpdateAction(user)
-    await user.click(await screen.findByRole('tab', { name: '文本' }))
-    fireEvent.change(screen.getByLabelText('新正文'), { target: { value: '# Updated runbook' } })
-    await user.click(screen.getByRole('button', { name: /保存/ }))
-
-    expect(await screen.findByText('解析')).toBeTruthy()
-    expect(screen.getByText('向量化')).toBeTruthy()
-    expect(screen.getByText('清理')).toBeTruthy()
-    release()
-    await waitFor(() => expect(screen.getByText('4')).toBeTruthy())
-  })
 
   it('submits rebuild advanced chunking options from the update tab', async () => {
     const user = setupUser()
@@ -211,16 +121,10 @@ describe('knowledge document workflow', () => {
     server.use(
       http.get('/api/knowledge', () => HttpResponse.json(response(rebuiltDocument ? rebuilt : oldDocument))),
       http.post('/api/knowledge/documents/doc-old/update', async ({ request }) => {
-        expect(new URL(request.url).searchParams.get('stream')).toBe('true')
+        expect(new URL(request.url).searchParams.get('stream')).toBeNull()
         expect(await request.json()).toEqual({ mode: 'rebuild', ingest_options: { chunk_size: 1800 } })
         rebuiltDocument = true
-        const streamBody = [
-          'event: progress.completed',
-          `data: ${JSON.stringify({ stage: 'done', status: 'completed', document: rebuilt })}`,
-          '',
-          '',
-        ].join('\n')
-        return new HttpResponse(streamBody, { headers: { 'Content-Type': 'text/event-stream' } })
+        return HttpResponse.json({ ...rebuilt, status: 'processing' })
       })
     )
     renderWithQuery(<KnowledgePage />)
@@ -305,57 +209,6 @@ describe('knowledge document workflow', () => {
     expect(screen.getByText(/high/)).toBeTruthy()
   })
 
-  it('shows four-stage progress while creating an upload', async () => {
-    const user = setupUser()
-    const created = { ...oldDocument, id: 'doc-new', chunks: 2 }
-    let release!: () => void
-    const gate = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    let createdDocument = false
-    server.use(
-      http.get('/api/knowledge', () => HttpResponse.json(response(createdDocument ? created : oldDocument))),
-      http.post('/api/knowledge/documents/upload', async ({ request }) => {
-        const body = await request.text()
-        expect(body).toContain('name="stream"')
-        await gate
-        createdDocument = true
-        const streamBody = [
-          'event: progress',
-          'data: {"stage":"upload","status":"running","label":"上传","message":"上传中"}',
-          '',
-          'event: progress',
-          'data: {"stage":"parse","status":"completed","label":"解析","message":"已解析"}',
-          '',
-          'event: progress',
-          'data: {"stage":"vectorize","status":"completed","label":"向量化","message":"已写入"}',
-          '',
-          'event: progress',
-          'data: {"stage":"cleanup","status":"completed","label":"清理","message":"完成"}',
-          '',
-          'event: progress.completed',
-          `data: ${JSON.stringify({ stage: 'done', status: 'completed', document: created })}`,
-          '',
-          '',
-        ].join('\n')
-        return new HttpResponse(streamBody, { headers: { 'Content-Type': 'text/event-stream' } })
-      })
-    )
-    renderWithQuery(<KnowledgePage />)
-
-    await user.click(await screen.findByText('添加文档'))
-    const input = document.querySelector('input[type="file"]')
-    expect(input).toBeTruthy()
-    await user.upload(input as HTMLInputElement, new File(['# New'], 'new.md', { type: 'text/markdown' }))
-    await user.click(screen.getByRole('button', { name: /上传并入库/ }))
-
-    expect(await screen.findByText('解析')).toBeTruthy()
-    expect(screen.getByText('向量化')).toBeTruthy()
-    expect(screen.getByText('清理')).toBeTruthy()
-    expect(screen.getAllByText('上传').length).toBeGreaterThan(0)
-    release()
-    await waitFor(() => expect(screen.queryByText('添加知识文档')).toBeNull())
-  })
 
   it('shows concrete advanced chunking defaults from runtime settings', async () => {
     const user = setupUser()

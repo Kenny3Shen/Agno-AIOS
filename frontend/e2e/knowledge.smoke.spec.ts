@@ -15,6 +15,20 @@ const document = {
   metadata: {},
 }
 
+const processing = {
+  id: 'processing:text:e2e',
+  title: 'E2E Knowledge Doc',
+  source: 'e2e',
+  chunks: 0,
+  created_at: '',
+  updated_at: '',
+  status: 'processing',
+  visibility: 'private',
+  owner_user_id: 'user-1',
+  can_manage: true,
+  metadata: { status: 'processing' },
+}
+
 const emptyList = {
   data: [],
   meta: { page: 1, limit: 12, total_pages: 0, total_count: 0, search_time_ms: 0 },
@@ -35,27 +49,10 @@ async function fulfillJson(route: Route, body: unknown) {
   })
 }
 
-function progressSse() {
-  // Full body is fine for smoke: client consumes all events then closes drawer.
-  // Intermediate step paint is covered by UpdateProgress unit tests.
-  const events = [
-    ['progress', { stage: 'parse', status: 'running', message: 'parsing' }],
-    ['progress', { stage: 'parse', status: 'completed', message: 'parsed' }],
-    ['progress', { stage: 'vectorize', status: 'running', message: 'vectorizing' }],
-    ['progress', { stage: 'vectorize', status: 'completed', message: 'vectorized' }],
-    ['progress', { stage: 'cleanup', status: 'running', message: 'cleanup' }],
-    ['progress', { stage: 'cleanup', status: 'completed', message: 'cleaned' }],
-    ['progress.completed', { stage: 'done', status: 'completed', message: 'done', document }],
-  ] as const
-  return events
-    .map(([event, data]) => ['event: ' + event, 'data: ' + JSON.stringify(data), ''].join('\n'))
-    .join('\n')
-}
-
 test.describe('knowledge critical path', () => {
-  test('text ingest streams to completion and lists document', async ({ page }) => {
+  test('text ingest queues background work and lists document after refresh', async ({ page }) => {
     let listCalls = 0
-    let streamPosts = 0
+    let createPosts = 0
     await openAuthed(page, '/dashboard', {
       handleApi: async ({ method, path, url, route }) => {
         if (path.endsWith('/api/knowledge') && method === 'GET') {
@@ -68,16 +65,9 @@ test.describe('knowledge critical path', () => {
           return true
         }
         if (path.endsWith('/api/knowledge/documents/text') && method === 'POST') {
-          expect(url.searchParams.get('stream')).toBe('true')
-          streamPosts += 1
-          await route.fulfill({
-            status: 200,
-            headers: {
-              'Content-Type': 'text/event-stream',
-              'Cache-Control': 'no-cache',
-            },
-            body: progressSse(),
-          })
+          expect(url.searchParams.get('stream')).toBeNull()
+          createPosts += 1
+          await fulfillJson(route, processing)
           return true
         }
         return false
@@ -92,18 +82,18 @@ test.describe('knowledge critical path', () => {
     await expect(drawer).toBeVisible()
 
     await drawer.getByRole('tab', { name: '文本' }).click()
-    // antd Button inserts spaces in CJK labels (same as login "登 录").
     const submit = drawer.getByRole('button', { name: /入\s*库/ })
     await expect(submit).toBeVisible()
 
     await drawer.getByRole('textbox', { name: /标题/ }).fill('E2E Knowledge Doc')
-    await drawer.getByRole('textbox', { name: /内容/ }).fill('hello knowledge progress e2e')
+    await drawer.getByRole('textbox', { name: /内容/ }).fill('hello knowledge background e2e')
 
     await submit.click()
 
-    // Stream completion closes drawer and refreshes the list.
     await expect(drawer).toBeHidden({ timeout: 15_000 })
-    await expect(page.getByRole('row', { name: /E2E Knowledge Doc/ }).getByRole('cell', { name: 'E2E Knowledge Doc', exact: true })).toBeVisible()
-    expect(streamPosts).toBe(1)
+    await expect(
+      page.getByRole('row', { name: /E2E Knowledge Doc/ }).getByRole('cell', { name: 'E2E Knowledge Doc', exact: true }),
+    ).toBeVisible({ timeout: 15_000 })
+    expect(createPosts).toBe(1)
   })
 })

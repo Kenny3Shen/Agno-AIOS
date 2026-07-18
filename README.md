@@ -193,11 +193,10 @@ flowchart LR
 
 ### Knowledge 入库与更新
 
-- **默认 UX（Drawer）**：文件接受/落盘后立即返回 `status=processing` 占位；**解析与向量化在后台 Task** 执行，Drawer 不阻塞。失败经 `notify_background_task_failure` 通知。
-- **可选 SSE**：`stream=true` 仍支持四阶段进度：`上传 → 解析 → 向量化 → 清理`（测试与需要进度条的客户端）。
+- **Drawer UX**：文件接受/落盘后立即返回 `status=processing` 占位；**解析与向量化在后台 Task** 执行，Drawer 不阻塞。失败经 `notify_background_task_failure` 通知；列表延迟刷新展示完成行。
 - 更新采用安全切换：新内容先写入临时 shadow ID，成功后再切换到原文档 ID；失败时保留旧文档与旧向量，避免检索空窗。
-- 按文件后缀自动选择 Reader/分块策略，支持 Markdown、文本、JSON、CSV、代码、PDF、DOCX（Docling）；创建/更新后列表延迟刷新以展示完成行。
-- 相关实现见 `api/routes/knowledge.py`（`_schedule_knowledge_ingest`）、`api/services/knowledge_progress.py`、`knowledge_source_service.py` 与 `frontend/src/features/knowledge/`。
+- 按文件后缀自动选择 Reader/分块策略，支持 Markdown、文本、JSON、CSV、代码、PDF、DOCX（Docling）。
+- 相关实现见 `api/routes/knowledge.py`（`_schedule_knowledge_ingest`）与 `frontend/src/features/knowledge/`。后端仍保留可选 `stream=true` SSE 进度（非工作台默认路径，无轮询 job API）。
 
 ### HITL 人机审批技术架构
 

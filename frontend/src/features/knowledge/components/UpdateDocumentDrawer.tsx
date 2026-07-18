@@ -207,17 +207,13 @@ function UpdateTab({
           if (!file) return
           return onSubmit(
             () =>
-              updateDocumentUpload(
-                document.id,
-                {
-                  file,
-                  title: decision.metadata?.title,
-                  source: decision.metadata?.source,
-                  visibility: decision.metadata?.visibility,
-                  ingest_options: decision.ingest_options,
-                },
-                { stream: false },
-              ),
+              updateDocumentUpload(document.id, {
+                file,
+                title: decision.metadata?.title,
+                source: decision.metadata?.source,
+                visibility: decision.metadata?.visibility,
+                ingest_options: decision.ingest_options,
+              }),
             t('savedRevectorized'),
             { queued: true },
           )
@@ -225,15 +221,11 @@ function UpdateTab({
         if (decision.kind === 'rebuild') {
           return onSubmit(
             () =>
-              updateDocumentAction(
-                document.id,
-                {
-                  mode: 'rebuild',
-                  metadata: decision.metadata,
-                  ingest_options: decision.ingest_options,
-                },
-                { stream: false },
-              ),
+              updateDocumentAction(document.id, {
+                mode: 'rebuild',
+                metadata: decision.metadata,
+                ingest_options: decision.ingest_options,
+              }),
             t('savedRevectorized'),
             { queued: true },
           )
@@ -319,17 +311,13 @@ function TextTab({
         const metadata = buildMetadataUpdate(document, values)
         return onSubmit(
           () =>
-            updateDocumentAction(
-              document.id,
-              {
-                mode: 'replace_text',
-                metadata: hasMetadataUpdate(metadata) ? metadata : undefined,
-                file_name: values.file_name.trim(),
-                content: values.content,
-                ingest_options: cleanIngestOptions(values.ingest_options),
-              },
-              { stream: false },
-            ),
+            updateDocumentAction(document.id, {
+              mode: 'replace_text',
+              metadata: hasMetadataUpdate(metadata) ? metadata : undefined,
+              file_name: values.file_name.trim(),
+              content: values.content,
+              ingest_options: cleanIngestOptions(values.ingest_options),
+            }),
           t('savedRevectorized'),
           { queued: true },
         )

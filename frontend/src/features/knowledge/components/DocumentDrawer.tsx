@@ -82,17 +82,13 @@ export function DocumentDrawer({
                   const file = selectedUploadFile(values.fileList)
                   if (!file) return
                   return submit(() =>
-                    uploadDocument(
-                      {
-                        file,
-                        title: values.title,
-                        source: values.source,
-                        visibility: values.visibility,
-                        ingest_options: cleanIngestOptions(values.ingest_options),
-                      },
-                      // Non-stream: server stores file then backgrounds Docling/vectorize.
-                      { stream: false },
-                    ),
+                    uploadDocument({
+                      file,
+                      title: values.title,
+                      source: values.source,
+                      visibility: values.visibility,
+                      ingest_options: cleanIngestOptions(values.ingest_options),
+                    }),
                   )
                 }}
               >
@@ -160,10 +156,10 @@ export function DocumentDrawer({
                   ingest_options?: KnowledgeIngestOptions
                 }) => {
                   return submit(() =>
-                    addText(
-                      { ...values, ingest_options: cleanIngestOptions(values.ingest_options) },
-                      { stream: false },
-                    ),
+                    addText({
+                      ...values,
+                      ingest_options: cleanIngestOptions(values.ingest_options),
+                    }),
                   )
                 }}
               >

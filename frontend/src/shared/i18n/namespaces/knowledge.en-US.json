@@ -90,9 +90,7 @@
     "tooLarge": "File must be 50 MB or smaller",
     "empty": "Empty files are not allowed",
     "unsupported": "This file type is not supported",
-    "processFailed": "Document processing failed",
-    "streamEnded": "Stream ended without a document",
-    "streamUnavailable": "Progress stream unavailable"
+    "processFailed": "Document processing failed"
   },
   "profiles": {
     "markdown": "Split Markdown by heading structure",
