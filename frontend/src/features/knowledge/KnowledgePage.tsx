@@ -110,6 +110,15 @@ export function KnowledgePage() {
   const ingestDefaults = useMemo(() => effectiveKnowledgeIngestDefaults(query.data?.status.rag_settings), [query.data?.status.rag_settings])
   const selected = documents.find((document) => document.id === selectedId) ?? null
   const refresh = () => client.invalidateQueries({ queryKey: ['knowledge'] })
+  const scheduleIngestRefresh = () => {
+    // Background Docling/vectorize: refresh again shortly so completed rows appear.
+    window.setTimeout(() => {
+      void client.invalidateQueries({ queryKey: ['knowledge'] })
+    }, 2500)
+    window.setTimeout(() => {
+      void client.invalidateQueries({ queryKey: ['knowledge'] })
+    }, 8000)
+  }
 
   const syncUpdatedDocument = async (document: Document, previousId = selectedId, selectDocument = true) => {
     const currentKey = ['knowledge', debouncedFilter, page, pageSize, sortBy, sortOrder]
@@ -254,7 +263,10 @@ export function KnowledgePage() {
       <DocumentDrawer
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={(document) => syncUpdatedDocument(document, '')}
+        onCreated={async (document) => {
+          await syncUpdatedDocument(document, '')
+          scheduleIngestRefresh()
+        }}
         ingestDefaults={ingestDefaults}
       />
       {updateOpen && selected && (
@@ -262,7 +274,12 @@ export function KnowledgePage() {
           document={selected}
           open
           onClose={() => setUpdateOpen(false)}
-          onUpdated={syncUpdatedDocument}
+          onUpdated={async (document) => {
+            await syncUpdatedDocument(document, selectedId)
+            if (document.status === 'processing' || document.id.startsWith('processing:')) {
+              scheduleIngestRefresh()
+            }
+          }}
           ingestDefaults={ingestDefaults}
         />
       )}

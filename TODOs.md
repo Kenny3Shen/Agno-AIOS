@@ -1,3 +1,10 @@
+## 已完成：Knowledge 入库后台化（Drawer 不阻塞）
+
+- 非流式 `POST /documents/upload|text|file` 与 update/upload、rebuild、replace_text：落盘/校验后 `_schedule_knowledge_ingest`，立即返回 `processing` 占位。
+- SSE `stream=true` 路径保留，供进度 UI 与测试。
+- 前端 Document/Update Drawer 默认 `stream: false`，成功 toast `ingestQueued` 并延迟刷新列表。
+- 失败走 `notify_background_task_failure` + audit。
+
 ## Docling / GPU
 
 - [x] 依赖 `docling` + Agno `DoclingReader`（Markdown export）

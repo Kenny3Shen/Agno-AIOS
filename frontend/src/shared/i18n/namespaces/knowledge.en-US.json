@@ -141,5 +141,6 @@
   "strategyCode": "Code",
   "strategyCsv": "CSV rows",
   "strategyJson": "JSON",
-  "strategyDocument": "Document"
+  "strategyDocument": "Document",
+  "ingestQueued": "Ingest queued in the background; the list will refresh shortly"
 }

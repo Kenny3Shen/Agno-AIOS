@@ -125,7 +125,7 @@ Approvals HITL 列表 `GET /api/approvals` 使用 Agno 风格 `data`/`meta`；�
 
 `GET /api/approvals/count` 返回 Agno 风格 `{ count }`（pending HITL），供导航 badge 与 dashboard 快照复用。 Dashboard `snapshots.approvals` 提供 `{ pending, approved, rejected }`（不再输出 `pending_approvals` 别名）。
 
-后台 Task 失败（如 Memory 抽取）经 asyncio exception handler 记入日志；overview 快照子项失败记 exception 而非静默。Knowledge 流式入库有 15 分钟超时。
+后台 Task 失败（如 Memory 抽取）经 asyncio exception handler 记入日志；overview 快照子项失败记 exception 而非静默。Knowledge 入库（流式 SSE 与后台 Task）统一 15 分钟超时。
 
 列表分页 `meta` 由共用 `api/utils/pagination.pagination_meta` 生成（Memory/Trace/Approvals/Chat sessions/Evals）；TypedDict `PaginationMeta` 供 Memory/Approvals 等服务层复用。前端 Knowledge 文档列表亦走 `normalizePaginatedList`。
 
@@ -193,10 +193,11 @@ flowchart LR
 
 ### Knowledge 入库与更新
 
-- 浏览器上传、正文入库、路径导入与文档更新支持 SSE 四阶段进度：`上传 → 解析 → 向量化 → 清理`。
+- **默认 UX（Drawer）**：文件接受/落盘后立即返回 `status=processing` 占位；**解析与向量化在后台 Task** 执行，Drawer 不阻塞。失败经 `notify_background_task_failure` 通知。
+- **可选 SSE**：`stream=true` 仍支持四阶段进度：`上传 → 解析 → 向量化 → 清理`（测试与需要进度条的客户端）。
 - 更新采用安全切换：新内容先写入临时 shadow ID，成功后再切换到原文档 ID；失败时保留旧文档与旧向量，避免检索空窗。
-- 按文件后缀自动选择 Reader/分块策略，支持 Markdown、文本、JSON、CSV、代码、PDF、DOCX；创建/更新后保持文档 ID、可见性与当前选中状态。
-- 相关实现见 `api/services/knowledge_progress.py`、`knowledge_source_service.py` 与 `frontend/src/features/knowledge/`。
+- 按文件后缀自动选择 Reader/分块策略，支持 Markdown、文本、JSON、CSV、代码、PDF、DOCX（Docling）；创建/更新后列表延迟刷新以展示完成行。
+- 相关实现见 `api/routes/knowledge.py`（`_schedule_knowledge_ingest`）、`api/services/knowledge_progress.py`、`knowledge_source_service.py` 与 `frontend/src/features/knowledge/`。
 
 ### HITL 人机审批技术架构
 

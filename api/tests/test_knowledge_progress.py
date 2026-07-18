@@ -258,3 +258,46 @@ async def test_upload_document_stream_emits_upload_stage(tmp_path: Path) -> None
     assert events[-1].startswith("done:") or "done:completed" in events or events[-1] == "done:completed"
     # last event stage is done
     assert "done" in events[-1]
+
+
+@pytest.mark.asyncio
+async def test_create_text_document_non_stream_returns_processing_placeholder() -> None:
+    document = {
+        "id": "doc-new",
+        "title": "Note",
+        "source": "manual",
+        "chunks": 1,
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z",
+        "status": "completed",
+        "status_message": "",
+        "type": "text",
+        "size": 4,
+        "visibility": "private",
+        "owner_user_id": "u1",
+        "metadata": {},
+    }
+    lifecycle = SimpleNamespace(add_text_document_async=AsyncMock(return_value=document))
+    scheduled: list[object] = []
+
+    def fake_schedule(**kwargs: object) -> None:
+        scheduled.append(kwargs)
+
+    with (
+        patch.object(knowledge_route, "get_knowledge_base_lifecycle", return_value=lifecycle),
+        patch.object(knowledge_route, "record_audit_event_async", AsyncMock()),
+        patch.object(knowledge_route, "_schedule_knowledge_ingest", side_effect=fake_schedule),
+    ):
+        result = await knowledge_route.create_text_document(
+            request("/api/knowledge/documents/text"),
+            knowledge_route.KnowledgeTextRequest(title="Note", content="body"),
+            stream=False,
+            user=admin(),
+        )
+        assert not isinstance(result, EventSourceResponse)
+        assert result["status"] == "processing"
+        assert str(result["id"]).startswith("processing:text:")
+        assert len(scheduled) == 1
+        bg = await scheduled[0]["work"]()
+        assert bg["id"] == "doc-new"
+        lifecycle.add_text_document_async.assert_awaited_once()

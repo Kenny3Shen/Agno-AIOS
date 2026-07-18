@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Alert, App, Button, Drawer, Form, Input, Tabs, Upload, type FormInstance, type UploadFile } from 'antd'
 import { InboxOutlined, SaveOutlined } from '@ant-design/icons'
 import { VisibilitySelect } from '@/shared/ui/VisibilitySelect'
 import type { ResourceVisibility } from '@/shared/types/common'
 import { updateDocumentAction, updateDocumentUpload } from '../api'
-import type { Document, KnowledgeIngestOptions, KnowledgeProgressEvent } from '../types'
+import type { Document, KnowledgeIngestOptions } from '../types'
 import type { KnowledgeIngestDefaults } from '../utils'
 import {
   buildMetadataUpdate,
@@ -22,12 +22,6 @@ import {
 } from '../utils'
 import { IngestOptionsFields } from './IngestOptionsFields'
 import { useTranslation } from 'react-i18next'
-import {
-  applyProgressEvent,
-  createInitialProgress,
-  type ProgressStageState,
-  UpdateProgress,
-} from './UpdateProgress'
 
 type KnowledgeUpdateTabKey = 'update' | 'text'
 
@@ -65,8 +59,6 @@ export function UpdateDocumentDrawer({
   const { message } = App.useApp()
   const [pending, setPending] = useState(false)
   const [activeTab, setActiveTab] = useState<KnowledgeUpdateTabKey>('update')
-  const [progressStages, setProgressStages] = useState<ProgressStageState[] | null>(null)
-  const [progressIncludesUpload, setProgressIncludesUpload] = useState(false)
   const [updateForm] = Form.useForm<UpdateTabValues>()
   const [textForm] = Form.useForm<TextTabValues>()
   const fileName = document.metadata?.file_name?.trim() || document.title
@@ -79,22 +71,17 @@ export function UpdateDocumentDrawer({
     updateForm.submit()
   }
 
-  const trackProgress = (includeUpload: boolean) => {
-    setProgressIncludesUpload(includeUpload)
-    setProgressStages(createInitialProgress(includeUpload))
-    return (event: KnowledgeProgressEvent) => {
-      setProgressStages((current) => applyProgressEvent(current ?? createInitialProgress(includeUpload), event))
-    }
-  }
-
-  const submit = async (update: () => Promise<Document>, success: string) => {
+  const submit = async (
+    update: () => Promise<Document>,
+    success: string,
+    opts?: { queued?: boolean },
+  ) => {
     setPending(true)
     try {
       const updated = await update()
-      await onUpdated(updated)
-      message.success(success)
-      setProgressStages(null)
       onClose()
+      await onUpdated(updated)
+      message.success(opts?.queued ? t('ingestQueued') : success)
     } catch (error) {
       message.error(error instanceof Error ? error.message : t('updateFailed'))
     } finally {
@@ -108,7 +95,6 @@ export function UpdateDocumentDrawer({
       open={open}
       onClose={() => {
         if (pending) return
-        setProgressStages(null)
         onClose()
       }}
       destroyOnHidden
@@ -116,9 +102,6 @@ export function UpdateDocumentDrawer({
       maskClosable={!pending}
       keyboard={!pending}
     >
-      {progressStages ? (
-        <UpdateProgress stages={progressStages} includeUpload={progressIncludesUpload} />
-      ) : null}
       <Tabs
         activeKey={activeTab}
         destroyOnHidden
@@ -145,8 +128,7 @@ export function UpdateDocumentDrawer({
                 ingestDefaults={ingestDefaults}
                 disabled={pending}
                 onNoop={() => message.info(t('noChanges'))}
-                onSubmit={(update, success) => submit(update, success)}
-                onTrackProgress={trackProgress}
+                onSubmit={(update, success, opts) => submit(update, success, opts)}
               />
             ),
           },
@@ -159,8 +141,7 @@ export function UpdateDocumentDrawer({
                 document={document}
                 ingestDefaults={ingestDefaults}
                 disabled={pending}
-                onSubmit={(update, success) => submit(update, success)}
-                onTrackProgress={trackProgress}
+                onSubmit={(update, success, opts) => submit(update, success, opts)}
               />
             ),
           },
@@ -178,7 +159,6 @@ function UpdateTab({
   disabled,
   onNoop,
   onSubmit,
-  onTrackProgress,
 }: {
   form: FormInstance<UpdateTabValues>
   document: Document
@@ -186,12 +166,16 @@ function UpdateTab({
   ingestDefaults?: KnowledgeIngestDefaults
   disabled?: boolean
   onNoop: () => void
-  onSubmit: (update: () => Promise<Document>, success: string) => void
-  onTrackProgress: (includeUpload: boolean) => (event: KnowledgeProgressEvent) => void
+  onSubmit: (
+    update: () => Promise<Document>,
+    success: string,
+    opts?: { queued?: boolean },
+  ) => void
 }) {
   const { t } = useTranslation('knowledge')
   const { message } = App.useApp()
-  const initialIngestOptions = useMemo(() => ingestOptionsFromMetadata(document.metadata), [document.metadata])
+  const initialIngestOptions = ingestOptionsFromMetadata(document.metadata)
+
   return (
     <Form
       form={form}
@@ -221,7 +205,6 @@ function UpdateTab({
         }
         if (decision.kind === 'upload') {
           if (!file) return
-          const onProgress = onTrackProgress(true)
           return onSubmit(
             () =>
               updateDocumentUpload(
@@ -233,13 +216,13 @@ function UpdateTab({
                   visibility: decision.metadata?.visibility,
                   ingest_options: decision.ingest_options,
                 },
-                { stream: true, onProgress }
+                { stream: false },
               ),
-            t('savedRevectorized')
+            t('savedRevectorized'),
+            { queued: true },
           )
         }
         if (decision.kind === 'rebuild') {
-          const onProgress = onTrackProgress(false)
           return onSubmit(
             () =>
               updateDocumentAction(
@@ -249,9 +232,10 @@ function UpdateTab({
                   metadata: decision.metadata,
                   ingest_options: decision.ingest_options,
                 },
-                { stream: true, onProgress }
+                { stream: false },
               ),
-            t('savedRevectorized')
+            t('savedRevectorized'),
+            { queued: true },
           )
         }
         return onSubmit(
@@ -260,16 +244,11 @@ function UpdateTab({
               mode: 'metadata',
               metadata: decision.metadata,
             }),
-          t('saved')
+          t('saved'),
         )
       }}
     >
-      <Alert
-        className="knowledge-form-note"
-        type="info"
-        showIcon
-        title={t('updateHint')}
-      />
+      <Alert className="knowledge-form-note" type="info" showIcon title={t('updateHint')} />
       <Form.Item name="title" label={t('titleField')} rules={[{ required: true, whitespace: true }]}>
         <Input />
       </Form.Item>
@@ -312,14 +291,16 @@ function TextTab({
   ingestDefaults,
   disabled,
   onSubmit,
-  onTrackProgress,
 }: {
   form: FormInstance<TextTabValues>
   document: Document
   ingestDefaults?: KnowledgeIngestDefaults
   disabled?: boolean
-  onSubmit: (update: () => Promise<Document>, success: string) => void
-  onTrackProgress: (includeUpload: boolean) => (event: KnowledgeProgressEvent) => void
+  onSubmit: (
+    update: () => Promise<Document>,
+    success: string,
+    opts?: { queued?: boolean },
+  ) => void
 }) {
   const { t } = useTranslation('knowledge')
   return (
@@ -336,7 +317,6 @@ function TextTab({
       }}
       onFinish={(values) => {
         const metadata = buildMetadataUpdate(document, values)
-        const onProgress = onTrackProgress(false)
         return onSubmit(
           () =>
             updateDocumentAction(
@@ -348,18 +328,14 @@ function TextTab({
                 content: values.content,
                 ingest_options: cleanIngestOptions(values.ingest_options),
               },
-              { stream: true, onProgress }
+              { stream: false },
             ),
-          t('savedRevectorized')
+          t('savedRevectorized'),
+          { queued: true },
         )
       }}
     >
-      <Alert
-        className="knowledge-form-note"
-        type="warning"
-        showIcon
-        title={t('replaceTextHint')}
-      />
+      <Alert className="knowledge-form-note" type="warning" showIcon title={t('replaceTextHint')} />
       <Form.Item name="title" label={t('titleField')} rules={[{ required: true, whitespace: true }]}>
         <Input />
       </Form.Item>

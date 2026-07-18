@@ -4,7 +4,7 @@ import { FileAddOutlined, InboxOutlined } from '@ant-design/icons'
 import { VisibilitySelect } from '@/shared/ui/VisibilitySelect'
 import type { ResourceVisibility } from '@/shared/types/common'
 import { addText, uploadDocument } from '../api'
-import type { Document, KnowledgeIngestOptions, KnowledgeProgressEvent } from '../types'
+import type { Document, KnowledgeIngestOptions } from '../types'
 import type { KnowledgeIngestDefaults } from '../utils'
 import {
   cleanIngestOptions,
@@ -16,12 +16,6 @@ import {
 } from '../utils'
 import { IngestOptionsFields } from './IngestOptionsFields'
 import { useTranslation } from 'react-i18next'
-import {
-  applyProgressEvent,
-  createInitialProgress,
-  type ProgressStageState,
-  UpdateProgress,
-} from './UpdateProgress'
 
 export function DocumentDrawer({
   open,
@@ -37,25 +31,15 @@ export function DocumentDrawer({
   const { t } = useTranslation('knowledge')
   const { message } = App.useApp()
   const [pending, setPending] = useState(false)
-  const [progressStages, setProgressStages] = useState<ProgressStageState[] | null>(null)
-  const [progressIncludesUpload, setProgressIncludesUpload] = useState(true)
-
-  const trackProgress = (includeUpload: boolean) => {
-    setProgressIncludesUpload(includeUpload)
-    setProgressStages(createInitialProgress(includeUpload))
-    return (event: KnowledgeProgressEvent) => {
-      setProgressStages((current) => applyProgressEvent(current ?? createInitialProgress(includeUpload), event))
-    }
-  }
 
   const submit = async (create: () => Promise<Document>) => {
     setPending(true)
     try {
       const document = await create()
-      await onCreated(document)
-      message.success(t('added'))
-      setProgressStages(null)
+      // Close drawer immediately; parse/vectorize continues in a backend task.
       onClose()
+      await onCreated(document)
+      message.success(t('ingestQueued'))
     } catch (error) {
       message.error(error instanceof Error ? error.message : t('addFailed'))
     } finally {
@@ -69,7 +53,6 @@ export function DocumentDrawer({
       open={open}
       onClose={() => {
         if (pending) return
-        setProgressStages(null)
         onClose()
       }}
       destroyOnHidden
@@ -77,7 +60,6 @@ export function DocumentDrawer({
       maskClosable={!pending}
       keyboard={!pending}
     >
-      {progressStages ? <UpdateProgress stages={progressStages} includeUpload={progressIncludesUpload} /> : null}
       <Tabs
         destroyOnHidden
         items={[
@@ -99,7 +81,6 @@ export function DocumentDrawer({
                 }) => {
                   const file = selectedUploadFile(values.fileList)
                   if (!file) return
-                  const onProgress = trackProgress(true)
                   return submit(() =>
                     uploadDocument(
                       {
@@ -109,8 +90,9 @@ export function DocumentDrawer({
                         visibility: values.visibility,
                         ingest_options: cleanIngestOptions(values.ingest_options),
                       },
-                      { stream: true, onProgress }
-                    )
+                      // Non-stream: server stores file then backgrounds Docling/vectorize.
+                      { stream: false },
+                    ),
                   )
                 }}
               >
@@ -177,12 +159,11 @@ export function DocumentDrawer({
                   visibility: ResourceVisibility
                   ingest_options?: KnowledgeIngestOptions
                 }) => {
-                  const onProgress = trackProgress(false)
                   return submit(() =>
                     addText(
                       { ...values, ingest_options: cleanIngestOptions(values.ingest_options) },
-                      { stream: true, onProgress }
-                    )
+                      { stream: false },
+                    ),
                   )
                 }}
               >
