@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type DragEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import type { ReactNode } from 'react'
 import { Actions, Attachments, Bubble, FileCard, Prompts, Sender, Sources, ThoughtChain } from '@ant-design/x'
 import { Markdown } from '@/shared/ui/Markdown'
@@ -694,7 +694,6 @@ export function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const senderShellRef = useRef<HTMLDivElement>(null)
   const workspaceRef = useRef<HTMLDivElement>(null)
-  const attachmentsRef = useRef<ComponentRef<typeof Attachments> | null>(null)
   const [openAttachments, setOpenAttachments] = useState(false)
   const [workspaceDragOver, setWorkspaceDragOver] = useState(false)
   const dragDepthRef = useRef(0)
@@ -1311,7 +1310,6 @@ export function ChatPage() {
                 classNames={{ header: 'chat-attachments-header' }}
               >
                 <Attachments
-                  ref={attachmentsRef}
                   className="chat-attachments"
                   beforeUpload={() => false}
                   items={(chat.attachments ?? []).map((file, index) => ({
@@ -1337,6 +1335,8 @@ export function ChatPage() {
                   }}
                   overflow="scrollX"
                   maxCount={MAX_CHAT_FILES}
+                  multiple
+                  openFileDialogOnClick
                   accept="image/*,.pdf,.txt,.md,.csv,.json,.html,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.py,.js,.xml,.rtf,audio/*,video/*"
                   placeholder={(type) =>
                     type === 'drop'
@@ -1421,8 +1421,6 @@ export function ChatPage() {
                         return
                       }
                       setOpenAttachments(true)
-                      // Open native picker after header mounts.
-                      window.setTimeout(() => attachmentsRef.current?.select({ multiple: true }), 0)
                     }}
                   />
                 </div>

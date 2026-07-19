@@ -215,6 +215,62 @@ test.describe('chat critical path', () => {
     await expectNoActiveHorizontalOffset(page, page.getByRole('button', { name: '模型与推理强度' }))
   })
 
+  test('opens the file picker only after the attachment panel is selected', async ({ page }) => {
+    await openAuthed(page, '/dashboard', {
+      handleApi: async ({ method, path, route }) => {
+        if (method === 'GET' && path.endsWith('/api/models')) {
+          await fulfillJson(route, {
+            active_model_id: 'model-1',
+            models: [
+              {
+                id: 'model-1',
+                name: 'E2E Model',
+                provider: 'openai',
+                model_id: 'gpt-test',
+                base_url: '',
+                api_key: 'sk-test',
+                api_protocol: 'chat-completions',
+                structured_output_mode: 'native',
+                description: '',
+                enabled: true,
+                builtin: false,
+                configured: true,
+              },
+            ],
+          })
+          return true
+        }
+        if (method === 'GET' && path.endsWith('/api/settings/chat')) {
+          await fulfillJson(route, {
+            enable_user_memories: false,
+            add_history_to_context: true,
+            num_history_runs: 3,
+          })
+          return true
+        }
+        return false
+      },
+    })
+
+    await page.goto('/#/chat', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('.chat-page, main').first()).toBeVisible({ timeout: 15_000 })
+
+    let directPickerOpened = false
+    page.on('filechooser', () => {
+      directPickerOpened = true
+    })
+
+    await page.getByRole('button', { name: '附件' }).click()
+    const attachmentPanel = page.getByText(/点击或拖放添加附件|Click or drop to attach/)
+    await expect(attachmentPanel).toBeVisible()
+    await page.waitForTimeout(250)
+    expect(directPickerOpened).toBe(false)
+
+    const chooser = page.waitForEvent('filechooser')
+    await attachmentPanel.click()
+    expect((await chooser).isMultiple()).toBe(true)
+  })
+
   test('stop button cancels active run', async ({ page }) => {
     const sse = await startHangingChatSseServer()
     let cancelCalls = 0
