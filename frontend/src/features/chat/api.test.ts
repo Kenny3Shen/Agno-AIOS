@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { cancelRun, getChatAgents, getSessionMeta, listSessions, renameSession, streamMessage } from './api'
+import type { ChatRunEvent } from './types'
 import { server } from '@/test/server'
 import { setToken } from '@/shared/auth/storage'
 import { chatSessionFixture } from './testFixtures'
@@ -163,6 +164,55 @@ describe('chat API', () => {
       new AbortController().signal
     )
     expect(events).toEqual(['run.started', 'content.delta', 'run.completed'])
+  })
+
+  it('parses a bounded Team task-state snapshot from SSE', async () => {
+    server.use(
+      http.post(
+        '/api/chat',
+        () =>
+          new HttpResponse(
+            [
+              'event: team.tasks\ndata: {"run_id":"run-team-1","task_summary":"Split research and analysis","goal_complete":true,"completion_summary":"Synthesis ready","tasks":[{"id":"research","title":"Collect evidence","status":"running","assignee":"Deep Research","dependencies":["scope"],"result":"Three sources"},{"id":"analysis","title":"Analyze findings","status":"unknown"}]}\n\n',
+              'event: run.completed\ndata: {"run_id":"run-team-1"}\n\n',
+            ].join(''),
+            { headers: { 'Content-Type': 'text/event-stream' } },
+          ),
+      ),
+    )
+    const events: ChatRunEvent[] = []
+    await streamMessage(
+      { message: 'investigate', session_id: 's-team', model_id: 'model' },
+      (event) => events.push(event),
+      new AbortController().signal,
+    )
+
+    expect(events[0]).toEqual({
+      type: 'team.tasks',
+      runId: 'run-team-1',
+      state: {
+        taskSummary: 'Split research and analysis',
+        goalComplete: true,
+        completionSummary: 'Synthesis ready',
+        tasks: [
+          {
+            id: 'research',
+            title: 'Collect evidence',
+            status: 'in_progress',
+            assignee: 'Deep Research',
+            dependencies: ['scope'],
+            result: 'Three sources',
+          },
+          {
+            id: 'analysis',
+            title: 'Analyze findings',
+            status: 'pending',
+            dependencies: [],
+          },
+        ],
+      },
+    })
+    expect(events[1]?.type).toBe('run.completed')
   })
 
   it('treats a HITL pause as a normal stream terminal event', async () => {

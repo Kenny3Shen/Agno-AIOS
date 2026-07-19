@@ -693,3 +693,84 @@ describe('formatRetryDetail', () => {
       { id: '2', title: '[数据分析] B', url: 'https://b.example' },
     ])
   })
+
+describe('Team task snapshots', () => {
+  const taskState = {
+    tasks: [
+      { id: 'research', title: 'Collect evidence', status: 'in_progress' as const, assignee: 'Deep Research' },
+      { id: 'analysis', title: 'Analyze evidence', status: 'pending' as const, dependencies: ['research'] },
+    ],
+    taskSummary: 'Split the investigation',
+  }
+
+  const startedWithTasks = () => {
+    const assistant: Message = { id: 'a', role: 'assistant', content: '', final: false, status: 'streaming' }
+    const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })
+    return chatReducer(started, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'team.tasks', state: taskState },
+    })
+  }
+
+  it('uses the latest Team task snapshot rather than merging stale tasks', () => {
+    const first = startedWithTasks()
+    const next = chatReducer(first, {
+      type: 'event',
+      id: 'a',
+      event: {
+        type: 'team.tasks',
+        state: {
+          tasks: [{ id: 'synthesis', title: 'Synthesize answer', status: 'completed' }],
+          goalComplete: true,
+        },
+      },
+    })
+
+    expect(next.messages[0]?.team_tasks).toEqual({
+      tasks: [{ id: 'synthesis', title: 'Synthesize answer', status: 'completed' }],
+      goalComplete: true,
+    })
+  })
+
+  it('clears the prior Team task panel when a retry starts streaming again', () => {
+    const retrying = chatReducer(startedWithTasks(), {
+      type: 'event',
+      id: 'a',
+      event: { type: 'run.retrying', attempt: 1, maxAttempts: 3 },
+    })
+    const resumed = chatReducer(retrying, {
+      type: 'event',
+      id: 'a',
+      event: { type: 'content.delta', delta: 'A fresh answer' },
+    })
+
+    expect(resumed.messages[0]).toMatchObject({ status: 'streaming', team_tasks: null })
+  })
+
+  it('settles unfinished Team tasks when the run is cancelled or fails', () => {
+    const cancelled = chatReducer(startedWithTasks(), {
+      type: 'event',
+      id: 'a',
+      event: { type: 'run.cancelled', reason: 'Stopped' },
+    })
+    const failed = chatReducer(startedWithTasks(), {
+      type: 'event',
+      id: 'a',
+      event: { type: 'run.failed', message: 'Provider failed' },
+    })
+
+    expect(cancelled.messages[0]?.team_tasks?.tasks.map((task) => task.status)).toEqual(['cancelled', 'cancelled'])
+    expect(failed.messages[0]?.team_tasks?.tasks.map((task) => task.status)).toEqual(['failed', 'failed'])
+  })
+
+  it('settles unfinished Team tasks on a transport failure', () => {
+    const failed = chatReducer(startedWithTasks(), {
+      type: 'network-error',
+      id: 'a',
+      message: 'offline',
+    })
+
+    expect(failed.messages[0]?.team_tasks?.tasks.map((task) => task.status)).toEqual(['failed', 'failed'])
+  })
+})

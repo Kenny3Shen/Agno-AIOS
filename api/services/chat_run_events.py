@@ -14,6 +14,7 @@ ChatRunEventName = Literal[
     "tool.update",
     "reasoning.delta",
     "thought.update",
+    "team.tasks",
     "sources",
     "run.completed",
     "run.cancelled",
@@ -72,6 +73,59 @@ def source_items(value: Any) -> list[dict[str, str]]:
             title = url or f"来源 {index + 1}"
         items.append({"id": _text(item.get("id"), 128) or str(index), "title": title, "url": url, "snippet": snippet})
     return items
+
+
+_TEAM_TASK_STATUSES = frozenset(
+    {"pending", "in_progress", "completed", "failed", "blocked", "cancelled"}
+)
+
+
+def team_tasks_payload(
+    value: Any,
+    *,
+    task_summary: Any = None,
+    goal_complete: Any = False,
+    completion_summary: Any = None,
+) -> dict[str, Any]:
+    """Project an Agno ``TeamTaskStateUpdated`` snapshot for the Chat UI.
+
+    Task mode events contain rich dataclasses, but the browser only needs a
+    bounded, stable task board: identity, ownership, state, dependencies and a
+    short result.  Keeping the projection here also prevents provider/tool
+    payloads from being forwarded wholesale through the SSE stream.
+    """
+    raw_tasks = value if isinstance(value, list) else []
+    tasks: list[dict[str, Any]] = []
+    for index, raw_task in enumerate(raw_tasks[:24]):
+        task = to_mapping(raw_task)
+        raw_status = _text(task.get("status"), 32).lower().replace("-", "_")
+        if raw_status == "running":
+            raw_status = "in_progress"
+        status = raw_status if raw_status in _TEAM_TASK_STATUSES else "pending"
+        dependencies = task.get("dependencies")
+        dependency_ids = (
+            [_text(item, 120) for item in dependencies if _text(item, 120)][:12]
+            if isinstance(dependencies, list)
+            else []
+        )
+        task_id = _text(task.get("id"), 120) or f"task-{index + 1}"
+        tasks.append(
+            {
+                "id": task_id,
+                "title": _text(task.get("title"), 240) or f"任务 {index + 1}",
+                "description": _text(task.get("description"), 600),
+                "status": status,
+                "assignee": _text(task.get("assignee"), 120),
+                "dependencies": dependency_ids,
+                "result": _text(task.get("result"), 1_000),
+            }
+        )
+    return {
+        "tasks": tasks,
+        "task_summary": _text(task_summary, 600),
+        "goal_complete": bool(goal_complete),
+        "completion_summary": _text(completion_summary, 1_000),
+    }
 
 
 def metric_values(value: Any) -> dict[str, int | float]:

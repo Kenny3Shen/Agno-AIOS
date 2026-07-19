@@ -24,8 +24,12 @@ from api.services.audit_service import (
     audit_request_context,
     record_audit_event_async,
 )
-from api.services.agent_catalog import list_chat_agents, resolve_chat_run_target
-from api.services.team_runtime import list_chat_teams, team_feature_enabled
+from api.services.agent_catalog import list_chat_agents
+from api.services.team_runtime import (
+    is_team_id,
+    list_chat_teams,
+    team_feature_enabled,
+)
 from api.services.security_run_runtime import (
     SecurityRunRequest,
     cancel_security_run,
@@ -54,6 +58,44 @@ class ChatRequest(BaseModel):
 
 class SessionRenameRequest(BaseModel):
     title: str
+
+
+def _assert_team_session_target(
+    session: dict[str, object] | None,
+    requested_agent_id: str | None,
+) -> str | None:
+    """Keep a persisted Team session from silently becoming an Agent session.
+
+    Agno stores Team and Agent runs under different session types.  Continuing a
+    Team conversation with a fallback Agent would both surprise the user and
+    mix incompatible histories, so callers must enable and select the original
+    Team or start a new conversation.
+    """
+    requested = str(requested_agent_id or "").strip()
+    if requested and is_team_id(requested) and not team_feature_enabled():
+        raise HTTPException(
+            status_code=409,
+            detail="该 Team 当前未启用；请启用 TAIS_ENABLE_AGNO_TEAM 后继续，或新建普通分析。",
+        )
+    if not session or str(session.get("session_type") or "").lower() != "team":
+        return requested or None
+    team_id = str(session.get("team_id") or "").strip()
+    if not team_id or not is_team_id(team_id) or not team_feature_enabled():
+        raise HTTPException(
+            status_code=409,
+            detail="此 Team 会话当前不可用；请启用 Team 后继续，或新建普通分析。",
+        )
+    # Older Chat clients did not submit ``agent_id``.  Preserve the persisted
+    # Team target rather than allowing SecurityRunRequest to resolve it to the
+    # default Agent.
+    if not requested:
+        return team_id
+    if requested != team_id:
+        raise HTTPException(
+            status_code=409,
+            detail="不能在已有 Team 会话中切换执行者；请新建分析以使用其他智能体。",
+        )
+    return requested
 
 
 def _validate_reasoning_effort(
@@ -209,6 +251,11 @@ async def _start_chat_stream(
                 owner_user_id=owner_user_id,
                 resource_name="Session",
             )
+        # Resolve the persisted target for every request. This keeps older
+        # clients that omit ``agent_id`` on their original Team instead of
+        # silently falling back to the default Agent.
+        session = await get_session_summary_async(session_id, actor=user)
+        agent_id = _assert_team_session_target(session, agent_id)
     if reasoning_effort is not None:
         model_config = await get_model_for_run(model_id)
         _validate_reasoning_effort(reasoning_effort, model_config)
@@ -289,10 +336,6 @@ async def chat_agent(
             live_search = _parse_optional_bool(_form_text(form, "live_search"), None)
             enable_tools = _parse_optional_bool(_form_text(form, "enable_tools"), True)
             agent_raw = (_form_text(form, "agent_id") or "").strip()
-            if agent_raw:
-                _kind, agent_id = resolve_chat_run_target(agent_raw)
-            else:
-                agent_id = None
             assert search_knowledge is not None and enable_tools is not None
             uploads: list[UploadFile] = []
             for key in ("files", "file"):
@@ -312,7 +355,7 @@ async def chat_agent(
                 search_knowledge=search_knowledge,
                 live_search=live_search,
                 enable_tools=enable_tools,
-                agent_id=agent_id,
+                agent_id=agent_raw or None,
                 media_images=bundle.images,
                 media_files=bundle.files,
                 media_audio=bundle.audio,

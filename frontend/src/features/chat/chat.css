@@ -526,6 +526,9 @@
   .status-dot.active {
     animation: none;
   }
+  .team-task-board__item.is-in_progress .team-task-board__marker {
+    animation: none;
+  }
 }
 @media (max-width: 900px) {
   .bubble-scroll {
@@ -1244,6 +1247,162 @@ html.dark {
   font-size: 11px;
   line-height: 1.3;
   white-space: normal;
+}
+.agent-settings-option__roster {
+  color: var(--chat-subtle, var(--tais-muted)) !important;
+}
+
+.chat-team-unavailable {
+  width: min(800px, calc(100% - 32px));
+  margin: 12px auto 0;
+}
+
+.team-task-board {
+  width: min(100%, 720px);
+  margin: 0 0 12px;
+  border: 1px solid color-mix(in srgb, var(--tais-blue) 24%, var(--tais-border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--tais-surface) 92%, var(--tais-blue) 4%);
+  color: var(--tais-text);
+  overflow: hidden;
+}
+.team-task-board__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tais-border) 82%, transparent);
+  padding: 10px 12px;
+}
+.team-task-board__title,
+.team-task-board__progress,
+.team-task-board__assignee,
+.team-task-board__dependencies,
+.team-task-board__status {
+  font-size: 12px;
+  line-height: 1.4;
+}
+.team-task-board__title {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  font-weight: 650;
+}
+.team-task-board__title svg {
+  color: var(--tais-blue);
+}
+.team-task-board__progress {
+  flex: 0 0 auto;
+  color: var(--tais-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.team-task-board__summary {
+  margin: 10px 12px 0;
+  color: var(--tais-muted);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.team-task-board__list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 4px 12px 8px;
+  list-style: none;
+}
+.team-task-board__item {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr);
+  gap: 9px;
+  padding: 9px 0;
+}
+.team-task-board__item + .team-task-board__item {
+  border-top: 1px solid color-mix(in srgb, var(--tais-border) 62%, transparent);
+}
+.team-task-board__marker {
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--tais-muted);
+}
+.team-task-board__item.is-in_progress .team-task-board__marker {
+  background: var(--tais-blue);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--tais-blue) 14%, transparent);
+  animation: chat-pulse 1.8s ease-in-out infinite;
+}
+.team-task-board__item.is-completed .team-task-board__marker {
+  background: #3fa66c;
+}
+.team-task-board__item.is-failed .team-task-board__marker {
+  background: #df3f36;
+}
+.team-task-board__item.is-blocked .team-task-board__marker {
+  background: #d29922;
+}
+.team-task-board__item.is-cancelled .team-task-board__marker {
+  background: #8c96a5;
+}
+.team-task-board__body {
+  min-width: 0;
+}
+.team-task-board__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.team-task-board__row strong {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.team-task-board__status {
+  flex: 0 0 auto;
+  color: var(--tais-muted);
+  white-space: nowrap;
+}
+.team-task-board__assignee,
+.team-task-board__dependencies {
+  display: block;
+  margin-top: 3px;
+  color: var(--tais-muted);
+  overflow-wrap: anywhere;
+}
+.team-task-board__body > p,
+.team-task-board__result p {
+  margin: 5px 0 0;
+  color: var(--tais-text);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.team-task-board__result {
+  margin-top: 6px;
+}
+.team-task-board__result summary {
+  color: var(--tais-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.team-task-board__complete {
+  display: grid;
+  gap: 2px;
+  border-top: 1px solid color-mix(in srgb, #3fa66c 28%, var(--tais-border));
+  background: color-mix(in srgb, #3fa66c 9%, transparent);
+  padding: 9px 12px;
+  color: var(--tais-text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.team-task-board__complete strong {
+  color: #318253;
+}
+html.dark .team-task-board__complete strong {
+  color: #6cd697;
 }
 
 /* Team member tools nested under ThoughtChain member node */

@@ -1,7 +1,7 @@
 import { ApiError, apiFetch, jsonInit, requestJson } from '@/shared/api/client'
 import { normalizePaginatedList, type ListPaginationMeta } from '@/shared/lib/pagination'
 import type { ModelConfigResponse, ReasoningEffort } from '@/shared/types/common'
-import type { ChatRunEvent, ChatSession } from './types'
+import type { ChatRunEvent, ChatSession, TeamTaskState, TeamTaskStatus } from './types'
 import { consumeSse, normalizeMessages } from './utils'
 
 const SESSION_TYPES = new Set(['agent', 'team', 'workflow'])
@@ -120,6 +120,8 @@ type ChatAgentCatalogItem = {
   prefer_live_search?: boolean
   /** Team orchestration mode when kind=team. */
   mode?: string
+  /** Team roster supplied by the server for a more informative selector. */
+  members?: { id: string; name: string; role?: string }[]
 }
 
 type ChatAgentCatalogResponse = { data: ChatAgentCatalogItem[] }
@@ -132,6 +134,56 @@ export const cancelRun = (runId: string) =>
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object'
 const stringValue = (record: Record<string, unknown>, key: string) => (typeof record[key] === 'string' ? record[key] : undefined)
+const TEAM_TASK_STATUSES = new Set<TeamTaskStatus>([
+  'pending',
+  'in_progress',
+  'completed',
+  'failed',
+  'blocked',
+  'cancelled',
+])
+
+const isTeamTaskStatus = (value: string): value is TeamTaskStatus =>
+  TEAM_TASK_STATUSES.has(value as TeamTaskStatus)
+
+const taskText = (record: Record<string, unknown>, key: string, max: number) => {
+  const value = stringValue(record, key)?.trim() ?? ''
+  return value.slice(0, max)
+}
+
+const parseTeamTaskState = (value: Record<string, unknown>): TeamTaskState => {
+  const rawTasks = Array.isArray(value.tasks) ? value.tasks : []
+  const tasks: TeamTaskState['tasks'] = []
+  for (const [index, raw] of rawTasks.entries()) {
+    if (!isRecord(raw)) continue
+    const rawStatus = taskText(raw, 'status', 32).toLowerCase().replaceAll('-', '_')
+    const status = rawStatus === 'running' ? 'in_progress' : rawStatus
+    const dependencies = Array.isArray(raw.dependencies)
+      ? raw.dependencies
+          .filter((item): item is string => typeof item === 'string')
+          .map((item) => item.trim().slice(0, 120))
+          .filter(Boolean)
+          .slice(0, 12)
+      : []
+    tasks.push({
+      id: taskText(raw, 'id', 120) || `task-${index + 1}`,
+      title: taskText(raw, 'title', 240) || `Task ${index + 1}`,
+      description: taskText(raw, 'description', 600) || undefined,
+      status: isTeamTaskStatus(status) ? status : 'pending',
+      assignee: taskText(raw, 'assignee', 120) || undefined,
+      dependencies,
+      result: taskText(raw, 'result', 1_000) || undefined,
+    })
+    if (tasks.length === 24) break
+  }
+  return {
+    tasks,
+    taskSummary: taskText(value, 'task_summary', 600) || undefined,
+    goalComplete: value.goal_complete === true,
+    completionSummary: taskText(value, 'completion_summary', 1_000) || undefined,
+  }
+}
+
 const parseEvent = (event: string, data: string): ChatRunEvent | null => {
   let value: unknown
   try {
@@ -215,6 +267,8 @@ const parseEvent = (event: string, data: string): ChatRunEvent | null => {
         },
       }
     }
+    case 'team.tasks':
+      return { type: event, runId, state: parseTeamTaskState(value) }
     case 'sources':
       return {
         type: event,

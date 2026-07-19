@@ -72,7 +72,7 @@
 - [x] Team 成员 content **delta 累积** 再写入 ThoughtChain summary（避免摘要只剩单 token）
 - [x] Team 成员 Intermediate content 无 agent_id 时仍按 parent_run_id 归 ThoughtChain（不泄漏到队长 content.delta）
 - [x] Team 成员独立 model deepcopy（broadcast 并发安全）+ session_summary
-- [x] Team share_member_interactions 覆盖 coordinate/broadcast；ThoughtChain 成员工具内嵌
+- [x] Team share_member_interactions 覆盖 coordinate/broadcast/tasks；ThoughtChain 成员工具内嵌
 - [x] data-analysis CsvTools 扫描沙箱内全部 CSV；Team 模式 i18n 文案
 - [x] Chat 终态收口：run.completed 将 loading 的 thought/tool 置 success；cancel/fail 同步收口
 - [x] run.completed 带 content 兜底；content.delta 兼容 cumulative snapshot；Team 补 flush 未完成成员 thought
@@ -88,13 +88,13 @@
 
 
 - [x] Team 成员 content 流式 thought.update 节流（降 broadcast SSE 风暴）
-- [x] Chat 选择器展示 Team `mode`（coordinate/route/broadcast）
+- [x] Chat 选择器展示 Team `mode`（coordinate/route/broadcast/tasks）与成员 roster
 
 
 - [x] 对齐 Agno Data Agents：可选 `SQLTools`（`TAIS_DATA_SQL_URL` 只读）、prompt grounding/自纠/引用查询
 - [x] 对齐 Agno Deep Research：prompt 可审计备忘录结构
 - [x] Team broadcast：`research-analysis-broadcast` + 模式化 leader instructions
-- [x] Data/Deep/Team 与官方 use-case 文档交叉对照（SQL warehouse 需配置；tasks 模式未默认开放因流式支持有限）
+- [x] Data/Deep/Team 与官方 use-case 文档交叉对照（SQL warehouse 需配置；Tasks 模式使用官方 dedicated streaming events）
 
 
 - [x] `show_thought_chain=false` 整条时间线（tools+member thoughts）隐藏（与设置语义一致）
@@ -104,7 +104,7 @@
 
 
 - [x] Team 历史：member_responses 缺失时从子 Agent run（parent_run_id）回填 tools/thoughts
-- [x] Team stream：task_created/updated/iteration → ThoughtChain
+- [x] Team stream：task_created/updated/iteration → ThoughtChain；`TaskStateUpdated` → 有界任务快照 SSE / 实时看板
 - [x] Team 构建：max_iterations/tool_call_limit/expected_output
 - [x] ThoughtChain：成员工具挂在主 member 节点（不挂在 reasoning 子节点）
 
@@ -118,12 +118,12 @@
 - [x] Team 历史：member_responses → thought_chain + 成员 tools；Team 多轮 history 上下文
 
 - [x] Team：成员 run_error/cancel 隔离为 ThoughtChain，不拖垮整轮
-- [x] Chat：打开会话恢复 agent/team；stale team id 回退；最近列表 [Team] 前缀
+- [x] Chat：打开会话恢复 agent/team；不可用/移除 Team 会话 fail-closed；最近列表 [Team] 前缀
 
 - [x] Built-in Chat agents: `security-operations` / `data-analysis` / `deep-research`（catalog + prompts + tools）
 - [x] Chat `agent_id` + `GET /api/chat/agents` + 前端选择器
 - [x] Workflow executor refs 同步 catalog（含 safe-fallback）
-- [x] Agno Team beta：feature flag `TAIS_ENABLE_AGNO_TEAM`；Chat SSE 挂载 coordinate/route 团队
+- [x] Agno Team beta：feature flag `TAIS_ENABLE_AGNO_TEAM`；Chat SSE 挂载 coordinate/route/broadcast/tasks 团队
 - [x] Team 成员事件 → ThoughtChain；队长 content → 最终回答
 - [ ] Team：HITL/审批只绑 security 成员（当前 team 不挂 MCP/HITL）
 - [x] Team 成员 tool 事件前缀 `[成员名]` + member_id 字段（ThoughtChain 可辨识）

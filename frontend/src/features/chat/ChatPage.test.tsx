@@ -3,8 +3,15 @@ import { setupUser } from '@/test/user'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithQuery } from '@/test/render'
 import { ChatPage } from './ChatPage'
+import type { Message } from './types'
 
 const longModelName = 'enterprise-security-analysis-model-with-an-intentionally-long-display-name'
+
+class IntersectionObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
 
 const chat = {
   state: { messages: [], input: '', requesting: false, error: null, selectedModelId: 'long', reasoningEffort: null, searchKnowledge: true, liveSearch: false, enableTools: true },
@@ -27,6 +34,8 @@ const chat = {
   sessionMetaError: null as Error | null,
   sessionMetaRefetch: vi.fn<() => void>(),
   sessionMissing: false,
+  teamSessionChecking: false,
+  teamSessionUnavailable: false,
   attachments: [] as File[],
   setAttachments: vi.fn<(attachments: File[]) => void>(),
   history: {
@@ -128,6 +137,9 @@ vi.mock('./api', async (importOriginal) => ({
 
 beforeEach(() => {
   HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
+  vi.stubGlobal('IntersectionObserver', IntersectionObserverMock)
+  chat.teamSessionChecking = false
+  chat.teamSessionUnavailable = false
 })
 
 describe('chat model settings', () => {
@@ -373,5 +385,138 @@ describe('chat session meta loading', () => {
     const send = document.querySelector('.sender-actions button.ant-btn-primary') as HTMLButtonElement | null
     expect(send).toBeTruthy()
     expect(send?.disabled).toBe(true)
+  })
+})
+
+describe('Team task presentation', () => {
+  beforeEach(() => {
+    chat.sessionId = null
+    chat.activeSessionMeta = undefined
+    chat.sessionMissing = false
+    chat.sessionMetaLoading = false
+    chat.sessionMetaFailed = false
+    chat.sessionMetaError = null
+    chat.history.isError = false
+    chat.history.isLoading = false
+    chat.history.isPending = false
+    chat.history.isFetching = false
+    chat.history.error = null
+    chat.state.input = ''
+    chat.state.requesting = false
+    chat.teamSessionChecking = false
+    chat.teamSessionUnavailable = false
+  })
+
+  it('renders Team task progress, assignee, dependencies, and completion state', () => {
+    const message: Message = {
+      id: 'team-run',
+      role: 'assistant',
+      content: '',
+      final: false,
+      status: 'streaming',
+      team_tasks: {
+        taskSummary: '并行收集并分析证据',
+        goalComplete: true,
+        completionSummary: '已准备综合结论',
+        tasks: [
+          {
+            id: 'research',
+            title: '收集漏洞情报',
+            status: 'completed',
+            assignee: '深度研究',
+            result: '已核实三个来源',
+          },
+          {
+            id: 'analysis',
+            title: '分析资产影响',
+            status: 'in_progress',
+            dependencies: ['research'],
+          },
+        ],
+      },
+    }
+    ;(chat.state as { messages: Message[] }).messages = [message]
+
+    renderWithQuery(<ChatPage />)
+
+    const panel = screen.getByRole('region', { name: '团队任务' })
+    expect(panel.textContent).toContain('1 / 2 已完成')
+    expect(panel.textContent).toContain('负责人：深度研究')
+    expect(panel.textContent).toContain('依赖：research')
+    expect(panel.textContent).toContain('团队目标已完成')
+  })
+
+  it('keeps an initial Team task summary visible before individual tasks arrive', () => {
+    const message: Message = {
+      id: 'team-summary',
+      role: 'assistant',
+      content: '',
+      final: false,
+      status: 'streaming',
+      team_tasks: { tasks: [], taskSummary: '正在为专员拆分任务' },
+    }
+    ;(chat.state as { messages: Message[] }).messages = [message]
+
+    renderWithQuery(<ChatPage />)
+
+    const panel = screen.getByRole('region', { name: '团队任务' })
+    expect(panel.textContent).toContain('正在为专员拆分任务')
+    expect(panel.textContent).not.toContain('0 / 0 已完成')
+  })
+
+  it('keeps an empty final task snapshot visible with its completion summary', () => {
+    const message: Message = {
+      id: 'team-completion-summary',
+      role: 'assistant',
+      content: '',
+      final: true,
+      status: 'completed',
+      team_tasks: {
+        tasks: [],
+        goalComplete: true,
+        completionSummary: '无需再创建子任务',
+      },
+    }
+    ;(chat.state as { messages: Message[] }).messages = [message]
+
+    renderWithQuery(<ChatPage />)
+
+    const panel = screen.getByRole('region', { name: '团队任务' })
+    expect(panel.textContent).toContain('团队目标已完成')
+    expect(panel.textContent).toContain('无需再创建子任务')
+  })
+})
+
+describe('unavailable Team session', () => {
+  beforeEach(() => {
+    chat.sessionId = 'team-disabled-session'
+    chat.activeSessionMeta = undefined
+    chat.sessionMissing = false
+    chat.sessionMetaLoading = false
+    chat.sessionMetaFailed = false
+    chat.sessionMetaError = null
+    chat.history.isError = false
+    chat.history.isLoading = false
+    chat.history.isPending = false
+    chat.history.isFetching = false
+    chat.history.error = null
+    chat.state.input = '继续该团队会话'
+    chat.state.requesting = false
+    ;(chat.state as { messages: Message[] }).messages = []
+    chat.teamSessionChecking = false
+    chat.teamSessionUnavailable = true
+    chat.newChat.mockClear()
+  })
+
+  it('shows a fail-closed warning, disables sending, and offers a fresh analysis', async () => {
+    const user = setupUser()
+    renderWithQuery(<ChatPage />)
+
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toContain('此 Team 当前不可用')
+    expect((screen.getByRole('button', { name: '发送消息' }) as HTMLButtonElement).disabled).toBe(true)
+
+    await user.click(screen.getByRole('button', { name: '新建普通分析' }))
+    expect(chat.newChat).toHaveBeenCalledTimes(1)
   })
 })

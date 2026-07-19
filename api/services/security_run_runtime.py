@@ -59,6 +59,7 @@ from api.services.chat_run_events import (
     event_value,
     paused_payload,
     source_items,
+    team_tasks_payload,
     tool_update,
 )
 
@@ -1534,6 +1535,30 @@ class SecurityRunRuntime:
                                 },
                             },
                         )
+                elif _event_matches(event_type, "task_state_updated"):
+                    if not show_thought_chain:
+                        continue
+                    task_state = team_tasks_payload(
+                        event_value(event, "tasks"),
+                        task_summary=event_value(event, "task_summary"),
+                        goal_complete=event_value(event, "goal_complete", False),
+                        completion_summary=event_value(event, "completion_summary"),
+                    )
+                    # TeamTaskStateUpdated is a full snapshot. It lets the UI
+                    # correct any dropped/interleaved incremental task events.
+                    if (
+                        task_state["tasks"]
+                        or task_state["task_summary"]
+                        or task_state["goal_complete"]
+                        or task_state["completion_summary"]
+                    ):
+                        yield ChatRunEvent(
+                            "team.tasks",
+                            {
+                                "run_id": display_run_id or run_id,
+                                **task_state,
+                            },
+                        )
                 elif (
                     _event_matches(event_type, "task_created")
                     or _event_matches(event_type, "task_updated")
@@ -2156,6 +2181,7 @@ class SecurityRunRuntime:
             knowledge_filters=knowledge_filters,
             memory_enabled=bool(request.memory_enabled),
             enable_tools=enable_tools,
+            store_raw_tool_io=bool(request.store_raw_tool_io),
             media_files=request.files,
         )
         async for event in self._stream_agent_events(team, request, chat_settings):

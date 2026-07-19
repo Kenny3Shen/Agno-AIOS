@@ -81,9 +81,9 @@ def test_resolve_chat_run_target_team(monkeypatch):
     assert tid == "research-analysis-team"
 
     monkeypatch.delenv("TAIS_ENABLE_AGNO_TEAM", raising=False)
-    kind2, aid = resolve_chat_run_target("research-analysis-team")
-    assert kind2 == "agent"
-    assert aid == "security-operations"
+    kind2, tid2 = resolve_chat_run_target("research-analysis-team")
+    assert kind2 == "team"
+    assert tid2 == "research-analysis-team"
 
 
 def test_stage_media_into_analysis_dir(tmp_path, monkeypatch):

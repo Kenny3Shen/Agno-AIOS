@@ -138,6 +138,19 @@ const asMetrics = (value: unknown): RunMetrics | null => (isRecord(value) ? (val
 const updateMessage = (messages: Message[], id: string, callback: (message: Message) => Message) =>
   messages.map((message) => (message.id === id ? callback(message) : message))
 
+const finishTeamTasks = (message: Message, status: 'failed' | 'cancelled') => {
+  const state = message.team_tasks
+  if (!state) return undefined
+  return {
+    ...state,
+    tasks: state.tasks.map((task) =>
+      task.status === 'pending' || task.status === 'in_progress'
+        ? { ...task, status }
+        : task,
+    ),
+  }
+}
+
 export const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
   switch (action.type) {
     case 'history':
@@ -198,6 +211,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               ...message,
               content: nextContent,
               reasoning: resumeAfterRetry ? null : message.reasoning,
+              team_tasks: resumeAfterRetry ? null : message.team_tasks,
               status: 'streaming',
               retry: null,
               error: null,
@@ -236,6 +250,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               content: resumeAfterRetry ? '' : message.content,
               reasoning: resumeAfterRetry ? null : message.reasoning,
               thought_chain: resumeAfterRetry ? [] : message.thought_chain,
+              team_tasks: resumeAfterRetry ? null : message.team_tasks,
               tool_steps: next,
               status: 'streaming',
               retry: null,
@@ -253,6 +268,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               reasoning: resumeAfterRetry ? event.delta : (message.reasoning ?? '') + event.delta,
               tool_steps: resumeAfterRetry ? [] : message.tool_steps,
               thought_chain: resumeAfterRetry ? [] : message.thought_chain,
+              team_tasks: resumeAfterRetry ? null : message.team_tasks,
               status: 'streaming',
               retry: null,
               error: null,
@@ -272,6 +288,24 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               tool_steps: resumeAfterRetry ? [] : message.tool_steps,
               thought_chain:
                 index < 0 ? [...thoughts, event.thought] : thoughts.map((step, stepIndex) => (stepIndex === index ? event.thought : step)),
+              team_tasks: resumeAfterRetry ? null : message.team_tasks,
+              status: 'streaming',
+              retry: null,
+              error: null,
+            }
+          }
+          case 'team.tasks': {
+            if (message.final && message.status !== 'streaming' && message.status !== 'retrying') {
+              return message
+            }
+            const resumeAfterRetry = message.status === 'retrying'
+            return {
+              ...message,
+              content: resumeAfterRetry ? '' : message.content,
+              reasoning: resumeAfterRetry ? null : message.reasoning,
+              tool_steps: resumeAfterRetry ? [] : message.tool_steps,
+              thought_chain: resumeAfterRetry ? [] : message.thought_chain,
+              team_tasks: event.state,
               status: 'streaming',
               retry: null,
               error: null,
@@ -300,6 +334,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               reasoning: resumeAfterRetry ? null : message.reasoning,
               tool_steps: resumeAfterRetry ? [] : message.tool_steps,
               thought_chain: resumeAfterRetry ? [] : message.thought_chain,
+              team_tasks: resumeAfterRetry ? null : message.team_tasks,
               sources: merged,
               status: 'streaming',
               retry: null,
@@ -377,6 +412,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               thought_chain: (message.thought_chain ?? []).map((step) =>
                 step.status === 'loading' ? { ...step, status: 'abort' as const } : step,
               ),
+              team_tasks: finishTeamTasks(message, 'cancelled'),
             }
           case 'run.failed':
             return {
@@ -393,6 +429,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
               thought_chain: (message.thought_chain ?? []).map((step) =>
                 step.status === 'loading' ? { ...step, status: 'error' as const } : step,
               ),
+              team_tasks: finishTeamTasks(message, 'failed'),
             }
         }
       })
@@ -414,6 +451,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
           status: 'failed',
           retry: null,
           error: { message: action.message, retryable: true },
+          team_tasks: finishTeamTasks(message, 'failed'),
         })),
       }
     case 'soft-error':

@@ -85,6 +85,23 @@ TEAM_PROFILES: dict[str, dict[str, Any]] = {
         "chat_selectable": True,
         "prefer_live_search": True,
     },
+    "research-analysis-tasks": {
+        "id": "research-analysis-tasks",
+        "name": "研究分析任务组",
+        "role": "拆分、并行执行并核验研究任务",
+        "description": (
+            "Agno Team（beta，tasks）：将复杂问题拆成可见任务，"
+            "并行委派调研与数据分析，再依据依赖关系汇总结论。"
+        ),
+        "category": "team",
+        "kind": "team",
+        "capabilities": "team,tasks,parallel,research,analysis",
+        "recommended_for": "需要清晰分工、实时进度与可复核交付物的复杂研究任务",
+        "mode": TeamMode.tasks,
+        "members": ("deep-research", "data-analysis"),
+        "chat_selectable": True,
+        "prefer_live_search": True,
+    },
 }
 
 def team_feature_enabled() -> bool:
@@ -119,6 +136,16 @@ def list_chat_teams(*, include_disabled: bool = False) -> list[dict[str, Any]]:
             continue
         mode = meta.get("mode")
         mode_value = getattr(mode, "value", mode)
+        members = []
+        for member_id in tuple(meta.get("members") or ()):
+            member = get_agent_profile(member_id)
+            members.append(
+                {
+                    "id": str(member.get("id") or member_id),
+                    "name": str(member.get("name") or member_id),
+                    "role": str(member.get("role") or ""),
+                }
+            )
         rows.append(
             {
                 "id": str(meta["id"]),
@@ -130,6 +157,7 @@ def list_chat_teams(*, include_disabled: bool = False) -> list[dict[str, Any]]:
                 "recommended_for": str(meta.get("recommended_for") or ""),
                 "kind": "team",
                 "mode": str(mode_value or ""),
+                "members": members,
                 "prefer_live_search": bool(meta.get("prefer_live_search")),
             }
         )
@@ -156,6 +184,7 @@ async def _member_from_profile(
     knowledge_filters: dict[str, Any] | None = None,
     memory_enabled: bool = False,
     enable_tools: bool = True,
+    store_raw_tool_io: bool = False,
     db: Any | None = None,
 ) -> Agent:
     profile = get_agent_profile(agent_id)
@@ -192,6 +221,9 @@ async def _member_from_profile(
         num_history_runs=int(profile.get("history_runs") or 3),
         update_memory_on_run=False,
         add_memories_to_context=False,
+        # Member tool payloads can contain CSV, SQL, or website data. Persist
+        # them only when the operator explicitly enables raw tool IO in Chat.
+        store_tool_messages=store_raw_tool_io,
         markdown=True,
         tool_call_limit=profile.get("tool_call_limit"),
     )
@@ -208,6 +240,7 @@ async def build_team(
     knowledge_filters: dict[str, Any] | None = None,
     memory_enabled: bool = False,
     enable_tools: bool = True,
+    store_raw_tool_io: bool = False,
     media_files: Any = None,
 ) -> Team:
     profile = get_team_profile(team_id)
@@ -251,6 +284,7 @@ async def build_team(
                 knowledge_filters=knowledge_filters,
                 memory_enabled=memory_enabled,
                 enable_tools=enable_tools,
+                store_raw_tool_io=store_raw_tool_io,
                 db=db,
             )
         )
@@ -266,6 +300,18 @@ async def build_team(
             "- 计算/表格/SQL/指标 → data-analysis",
             "不要综合多个成员；route 模式只委派一人。",
             "不要假装调用了 MCP 或安全 Skills。",
+        ]
+    elif mode == TeamMode.tasks:
+        leader_instructions = [
+            "你是任务编排负责人：把复杂请求拆成可验收的团队任务，并在最终回答中综合结果。",
+            "先创建边界清晰、自包含的任务，明确负责人、完成条件与依赖关系。",
+            "公开资料检索、事实核验和来源整理 → deep-research；计算、表格、SQL 和数字复核 → data-analysis。",
+            "两个专员的任务彼此独立时，使用 execute_tasks_parallel 并行执行；"
+            "只有确实依赖前序结果时才声明 dependencies。",
+            "每名专员同一时间最多执行一项任务，避免混合不同任务的结论。",
+            "所有任务完成后，再比较证据与数字并输出统一结论；不要只拼接成员原文。",
+            "最终回答必须区分事实与推断，列出关键来源、复核方法与未解决问题。",
+            "不要假装调用了 MCP 或安全 Skills；需要处置告警时建议用户改用安全运营助手。",
         ]
     elif mode == TeamMode.broadcast:
         leader_instructions = [
@@ -301,14 +347,18 @@ async def build_team(
         ),
         # Coordinate: leader synthesizes; route: member response may surface directly.
         respond_directly=mode == TeamMode.route,
-        determine_input_for_members=True,
-        max_iterations=8,
-        tool_call_limit=48,
+        # Route returns the selected member's answer directly, so preserve the
+        # user's original wording instead of paying for a leader rewrite.
+        determine_input_for_members=mode != TeamMode.route,
+        max_iterations=10 if mode == TeamMode.tasks else 8,
+        tool_call_limit=60 if mode == TeamMode.tasks else 48,
         get_member_information_tool=True,
-        share_member_interactions=mode in {TeamMode.coordinate, TeamMode.broadcast},
+        share_member_interactions=mode
+        in {TeamMode.coordinate, TeamMode.broadcast, TeamMode.tasks},
         show_members_responses=False,
         stream_member_events=True,
         store_member_responses=True,
+        store_tool_messages=store_raw_tool_io,
         add_datetime_to_context=True,
         add_history_to_context=True,
         num_history_runs=4,

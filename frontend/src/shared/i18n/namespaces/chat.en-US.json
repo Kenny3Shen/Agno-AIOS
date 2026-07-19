@@ -107,6 +107,25 @@
   "historyLoading": "Loading conversation history…",
   "sessionNotFound": "Session not found or access denied",
   "sessionMetaLoadFailed": "Unable to load session details. Please retry.",
+  "teamSessionUnavailableTitle": "This Team is currently unavailable",
+  "teamSessionUnavailable": "This conversation belongs to a Team that is disabled or unavailable. Sending is blocked so another Agent cannot continue it by mistake.",
+  "startNewAnalysis": "Start a new analysis",
+  "teamTasks": {
+    "title": "Team tasks",
+    "progress": "{{completed}} / {{total}} completed",
+    "assignee": "Assignee: {{name}}",
+    "dependencies": "Depends on: {{items}}",
+    "result": "Task result",
+    "goalComplete": "Team goal complete",
+    "status": {
+      "pending": "Pending",
+      "in_progress": "In progress",
+      "completed": "Completed",
+      "failed": "Failed",
+      "blocked": "Blocked",
+      "cancelled": "Cancelled"
+    }
+  },
   "attachments": "Attachments",
   "attachmentsHelp": "Attach images or documents for this message (max 8, 20MB each, 40MB total)",
   "attachmentsDropTitle": "Drop files here",
@@ -132,11 +151,15 @@
     "teamBeta": "Team beta",
     "researchAnalysisBroadcast": "Research Board",
     "researchAnalysisBroadcastHint": "Parallel specialist consult (beta)",
+    "researchAnalysisTasks": "Research+Analysis Task Team",
+    "researchAnalysisTasksHint": "Split parallel tasks, resolve dependencies, and synthesize (beta)",
     "teamMode": {
       "coordinate": "coordinate",
       "route": "route",
-      "broadcast": "broadcast"
-    }
+      "broadcast": "broadcast",
+      "tasks": "tasks"
+    },
+    "teamMembers": "Members: {{members}}"
   },
   "attachmentsBrowseTitle": "Click or drop to attach",
   "attachmentsBrowseHint": "Up to 8 files; 20MB each, 40MB total"

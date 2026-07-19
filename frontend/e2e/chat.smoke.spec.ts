@@ -360,5 +360,100 @@ test.describe('chat critical path', () => {
     }
   })
 
+  test('renders an Agno Team task snapshot as a live task board', async ({ page }) => {
+    await openAuthed(page, '/dashboard', {
+      handleApi: async ({ method, path, route }) => {
+        if (method === 'GET' && path.endsWith('/api/models')) {
+          await fulfillJson(route, {
+            active_model_id: 'model-1',
+            models: [
+              {
+                id: 'model-1',
+                name: 'E2E Model',
+                provider: 'openai',
+                model_id: 'gpt-test',
+                base_url: '',
+                api_key: 'sk-test',
+                api_protocol: 'chat-completions',
+                structured_output_mode: 'native',
+                description: '',
+                enabled: true,
+                builtin: false,
+                configured: true,
+              },
+            ],
+          })
+          return true
+        }
+        if (method === 'GET' && path.endsWith('/api/chat/agents')) {
+          await fulfillJson(route, {
+            data: [
+              {
+                id: 'research-analysis-tasks',
+                name: '研究分析任务团队',
+                kind: 'team',
+                category: 'team',
+                mode: 'tasks',
+                description: '拆分、并行执行并核验研究任务',
+                members: [
+                  { id: 'deep-research', name: '深度研究', role: '调研专员' },
+                  { id: 'data-analysis', name: '数据分析', role: '数据分析专员' },
+                ],
+              },
+            ],
+            meta: { team_enabled: true },
+          })
+          return true
+        }
+        if (method === 'GET' && path.endsWith('/api/settings/chat')) {
+          await fulfillJson(route, {
+            enable_user_memories: false,
+            add_history_to_context: true,
+            num_history_runs: 3,
+          })
+          return true
+        }
+        // The run is intentionally not persisted in this offline mock. Keep a
+        // failed history refresh from replacing the live task snapshot with an
+        // empty transcript after `run.completed`.
+        if (method === 'GET' && /^\/api\/chat\/sessions\/[^/]+$/.test(path)) {
+          await route.fulfill({ status: 503, contentType: 'application/json', body: '{"detail":"offline mock"}' })
+          return true
+        }
+        if (method === 'POST' && path.endsWith('/api/chat')) {
+          await route.fulfill({
+            status: 200,
+            contentType: 'text/event-stream',
+            body: [
+              'event: run.started\ndata: {"run_id":"run-team-e2e","session_id":"session-team-e2e","agent_id":"research-analysis-tasks"}\n\n',
+              'event: team.tasks\ndata: {"run_id":"run-team-e2e","task_summary":"并行核验并复核数据","goal_complete":true,"completion_summary":"证据已汇总","tasks":[{"id":"research","title":"收集来源","status":"completed","assignee":"深度研究","result":"已核实三个来源"},{"id":"analysis","title":"复核数字","status":"in_progress","assignee":"数据分析","dependencies":["research"]}]}\n\n',
+              'event: content.delta\ndata: {"run_id":"run-team-e2e","delta":"综合结论"}\n\n',
+              'event: run.completed\ndata: {"run_id":"run-team-e2e","content":"综合结论"}\n\n',
+            ].join(''),
+          })
+          return true
+        }
+        return false
+      },
+    })
+
+    await page.goto('/#/chat', { waitUntil: 'domcontentloaded' })
+    const input = page.getByPlaceholder(/描述你要调查的问题|Describe your/i)
+    await expect(input).toBeVisible()
+
+    await page.locator('.agent-settings-select').click()
+    await page.getByRole('option').filter({ hasText: '研究分析任务团队' }).click()
+    await input.fill('请拆分并核验这份研究')
+    await page.getByRole('button', { name: '发送消息' }).click()
+
+    const taskBoard = page.getByRole('region', { name: '团队任务' })
+    await expect(taskBoard).toBeVisible()
+    await expect(taskBoard).toContainText('1 / 2 已完成')
+    await expect(taskBoard).toContainText('负责人：深度研究')
+    await expect(taskBoard).toContainText('依赖：research')
+    await expect(taskBoard).toContainText('团队目标已完成')
+    await expect(page.getByText('综合结论')).toBeVisible()
+  })
+
 
 })

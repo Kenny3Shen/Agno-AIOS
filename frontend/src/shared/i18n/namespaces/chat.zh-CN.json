@@ -107,6 +107,25 @@
   "historyLoading": "加载会话历史…",
   "sessionNotFound": "会话不存在或无权访问",
   "sessionMetaLoadFailed": "无法加载会话信息，请重试",
+  "teamSessionUnavailableTitle": "此 Team 当前不可用",
+  "teamSessionUnavailable": "该会话属于一个当前已停用或不可访问的 Team。为避免由其他智能体继续执行，已禁止发送消息。",
+  "startNewAnalysis": "新建普通分析",
+  "teamTasks": {
+    "title": "团队任务",
+    "progress": "{{completed}} / {{total}} 已完成",
+    "assignee": "负责人：{{name}}",
+    "dependencies": "依赖：{{items}}",
+    "result": "任务结果",
+    "goalComplete": "团队目标已完成",
+    "status": {
+      "pending": "待处理",
+      "in_progress": "执行中",
+      "completed": "已完成",
+      "failed": "失败",
+      "blocked": "受阻",
+      "cancelled": "已取消"
+    }
+  },
   "attachments": "附件",
   "attachmentsHelp": "为本条消息附加图片或文档（最多 8 个，单个 ≤20MB，合计 ≤40MB）",
   "attachmentsDropTitle": "拖放文件到这里",
@@ -132,11 +151,15 @@
     "teamBeta": "Team beta",
     "researchAnalysisBroadcast": "研究分析会诊",
     "researchAnalysisBroadcastHint": "并行征询专员并汇总（beta）",
+    "researchAnalysisTasks": "研究分析任务团队",
+    "researchAnalysisTasksHint": "拆分并行任务并处理依赖后汇总（beta）",
     "teamMode": {
       "coordinate": "协调",
       "route": "路由",
-      "broadcast": "会诊"
-    }
+      "broadcast": "会诊",
+      "tasks": "任务编排"
+    },
+    "teamMembers": "成员：{{members}}"
   },
   "attachmentsBrowseTitle": "点击或拖放添加附件",
   "attachmentsBrowseHint": "最多 8 个文件；单个 ≤20MB，合计 ≤40MB"

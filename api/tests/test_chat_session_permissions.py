@@ -84,6 +84,78 @@ def test_chat_request_requires_a_session_id():
         chat.ChatRequest.model_validate({"message": "hello"})
 
 
+def test_team_session_target_rejects_historical_team_when_feature_is_disabled(monkeypatch):
+    monkeypatch.setenv("TAIS_ENABLE_AGNO_TEAM", "0")
+
+    with pytest.raises(HTTPException) as exc:
+        chat._assert_team_session_target(
+            {
+                "session_type": "team",
+                "team_id": "research-analysis-tasks",
+            },
+            "data-analysis",
+        )
+
+    assert exc.value.status_code == 409
+
+
+def test_team_session_target_rejects_switching_to_another_executor(monkeypatch):
+    monkeypatch.setenv("TAIS_ENABLE_AGNO_TEAM", "1")
+
+    with pytest.raises(HTTPException) as exc:
+        chat._assert_team_session_target(
+            {
+                "session_type": "team",
+                "team_id": "research-analysis-tasks",
+            },
+            "deep-research",
+        )
+
+    assert exc.value.status_code == 409
+
+
+def test_team_session_target_allows_its_original_team(monkeypatch):
+    monkeypatch.setenv("TAIS_ENABLE_AGNO_TEAM", "1")
+
+    target = chat._assert_team_session_target(
+        {
+            "session_type": "team",
+            "team_id": "research-analysis-tasks",
+        },
+        "research-analysis-tasks",
+    )
+    assert target == "research-analysis-tasks"
+
+
+def test_team_session_target_restores_team_for_legacy_client_without_agent_id(monkeypatch):
+    monkeypatch.setenv("TAIS_ENABLE_AGNO_TEAM", "1")
+
+    target = chat._assert_team_session_target(
+        {
+            "session_type": "team",
+            "team_id": "research-analysis-tasks",
+        },
+        None,
+    )
+
+    assert target == "research-analysis-tasks"
+
+
+def test_team_session_target_rejects_removed_team_profile(monkeypatch):
+    monkeypatch.setenv("TAIS_ENABLE_AGNO_TEAM", "1")
+
+    with pytest.raises(HTTPException) as exc:
+        chat._assert_team_session_target(
+            {
+                "session_type": "team",
+                "team_id": "retired-research-team",
+            },
+            "retired-research-team",
+        )
+
+    assert exc.value.status_code == 409
+
+
 def test_chat_read_route_allows_guest_actor():
     dependency = route_dependency(chat.router, "list_sessions")
 

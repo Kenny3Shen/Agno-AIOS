@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, t
 import type { ReactNode } from 'react'
 import { Actions, Attachments, Bubble, FileCard, Prompts, Sender, Sources, ThoughtChain } from '@ant-design/x'
 import { Markdown } from '@/shared/ui/Markdown'
-import { App, Avatar, Button, Cascader, Popover, Select, Spin, Tag, Tooltip } from 'antd'
+import { Alert, App, Avatar, Button, Cascader, Popover, Select, Spin, Tag, Tooltip } from 'antd'
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
@@ -32,7 +32,7 @@ import { formatAttachmentLimitError, MAX_CHAT_FILES, validateChatAttachments } f
 import { unarchiveSession } from './api'
 import { chatKeys } from './queries'
 import { markSessionActiveInCaches } from './sessionCache'
-import type { Message, ThoughtStep, ToolStep } from './types'
+import type { Message, TeamTaskState, ThoughtStep, ToolStep } from './types'
 import type { ModelConfig, ReasoningEffort } from '@/shared/types/common'
 import { useTranslation } from 'react-i18next'
 import { useBlocker, useRouter } from '@tanstack/react-router'
@@ -121,13 +121,83 @@ function thoughtNode(thought: ThoughtStep) {
   }
 }
 
+function TeamTaskBoard({ state }: { state: TeamTaskState }) {
+  const { t } = useTranslation('chat')
+  if (!state.tasks.length && !state.taskSummary && !state.goalComplete) return null
+  const completed = state.tasks.filter((task) => task.status === 'completed').length
+  const statusLabel = (status: TeamTaskState['tasks'][number]['status']) =>
+    t(`teamTasks.status.${status}`, { defaultValue: status })
+  return (
+    <section className="team-task-board" aria-label={t('teamTasks.title')} aria-live="polite">
+      <header className="team-task-board__header">
+        <span className="team-task-board__title">
+          <NodeIndexOutlined />
+          {t('teamTasks.title')}
+        </span>
+        {state.tasks.length ? (
+          <span className="team-task-board__progress">
+            {t('teamTasks.progress', { completed, total: state.tasks.length })}
+          </span>
+        ) : null}
+      </header>
+      {state.taskSummary ? <p className="team-task-board__summary">{state.taskSummary}</p> : null}
+      {state.tasks.length ? (
+        <ol className="team-task-board__list">
+          {state.tasks.map((task) => (
+            <li key={task.id} className={`team-task-board__item is-${task.status}`}>
+              <span className="team-task-board__marker" aria-label={statusLabel(task.status)} />
+              <div className="team-task-board__body">
+                <div className="team-task-board__row">
+                  <strong>{task.title}</strong>
+                  <span className="team-task-board__status">{statusLabel(task.status)}</span>
+                </div>
+                {task.assignee ? (
+                  <span className="team-task-board__assignee">
+                    {t('teamTasks.assignee', { name: task.assignee })}
+                  </span>
+                ) : null}
+                {task.description ? <p>{task.description}</p> : null}
+                {task.dependencies?.length ? (
+                  <span className="team-task-board__dependencies">
+                    {t('teamTasks.dependencies', { items: task.dependencies.join(' · ') })}
+                  </span>
+                ) : null}
+                {task.result ? (
+                  <details className="team-task-board__result">
+                    <summary>{t('teamTasks.result')}</summary>
+                    <p>{task.result}</p>
+                  </details>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      {state.goalComplete ? (
+        <footer className="team-task-board__complete">
+          <strong>{t('teamTasks.goalComplete')}</strong>
+          {state.completionSummary ? <span>{state.completionSummary}</span> : null}
+        </footer>
+      ) : null}
+    </section>
+  )
+}
+
 function AgentSettings({
   agents,
   selectedAgentId,
   disabled,
   onChange,
 }: {
-  agents: { id: string; name: string; description?: string; kind?: string; category?: string; mode?: string }[]
+  agents: {
+    id: string
+    name: string
+    description?: string
+    kind?: string
+    category?: string
+    mode?: string
+    members?: { id: string; name: string; role?: string }[]
+  }[]
   selectedAgentId: string
   disabled: boolean
   onChange: (value: string) => void
@@ -150,10 +220,17 @@ function AgentSettings({
       ? t(`agents.teamMode.${modeRaw}`, { defaultValue: modeRaw })
       : ''
     const modeTag = modeLabel ? ` · ${modeLabel}` : ''
+    const members = isTeam
+      ? (agent.members ?? [])
+          .map((member) => member.name.trim())
+          .filter(Boolean)
+          .join(' · ')
+      : ''
     return {
       value: agent.id,
       label: isTeam ? `${agent.name} · ${t('agents.teamBeta')}${modeTag}` : agent.name,
       title: agent.description || agent.name,
+      roster: members ? t('agents.teamMembers', { members }) : undefined,
     }
   })
   const current = options.find((item) => item.value === selectedAgentId) ?? options[0]
@@ -176,6 +253,7 @@ function AgentSettings({
           {option.data.title && option.data.title !== option.label ? (
             <small>{option.data.title}</small>
           ) : null}
+          {option.data.roster ? <small className="agent-settings-option__roster">{option.data.roster}</small> : null}
         </div>
       )}
     />
@@ -425,6 +503,7 @@ function MessageBody({ message, retry, sessionId, requesting = false }: { messag
   const hasThoughts = chain.length > 0 || Boolean(message.reasoning)
   return (
     <div className={`message-body message-body--${motionState}`}>
+      {message.team_tasks ? <TeamTaskBoard state={message.team_tasks} /> : null}
       {hasThoughts && (
         <section className="thought-section">
           <Button
@@ -671,6 +750,8 @@ export function ChatPage() {
     Boolean(chat.sessionMissing) ||
     Boolean(chat.sessionMetaFailed) ||
     Boolean(chat.sessionMetaLoading) ||
+    Boolean(chat.teamSessionChecking) ||
+    Boolean(chat.teamSessionUnavailable) ||
     isWorkflowSession
   const liveSearchSupported = Boolean(chat.selectedModel?.capabilities?.supports_live_search)
   const latestAssistant = useMemo(
@@ -712,6 +793,7 @@ export function ChatPage() {
       lastAssistant.content.length,
       lastAssistant.tool_steps?.length ?? 0,
       lastAssistant.thought_chain?.length ?? 0,
+      lastAssistant.team_tasks?.tasks.map((task) => `${task.id}:${task.status}`).join(',') ?? '',
     ].join(':')
   }, [chat.state.messages, lastAssistant])
 
@@ -766,6 +848,10 @@ export function ChatPage() {
     Boolean(chat.sessionMetaFailed) &&
     !chat.state.requesting &&
     chat.state.messages.length === 0
+  const showTeamUnavailable =
+    Boolean(chat.sessionId) &&
+    Boolean(chat.teamSessionUnavailable) &&
+    !chat.state.requesting
   const showHistoryError =
     Boolean(chat.sessionId) &&
     chat.history.isError &&
@@ -1060,6 +1146,20 @@ export function ChatPage() {
               </span>
             </div>
           ) : null}
+          {showTeamUnavailable ? (
+            <Alert
+              className="chat-team-unavailable"
+              type="warning"
+              showIcon
+              title={t('teamSessionUnavailableTitle')}
+              description={t('teamSessionUnavailable')}
+              action={
+                <Button size="small" type="primary" onClick={() => chat.newChat()}>
+                  {t('startNewAnalysis')}
+                </Button>
+              }
+            />
+          ) : null}
           {showSessionMetaLoading || showWorkflowRedirecting ? (
             <output className="chat-history-loading" aria-live="polite">
               <Spin size="small" />
@@ -1330,7 +1430,12 @@ export function ChatPage() {
                   <AgentSettings
                     agents={chat.agents.data ?? []}
                     selectedAgentId={chat.selectedAgentId || 'security-operations'}
-                    disabled={chat.state.requesting || Boolean(pausedRun)}
+                    disabled={
+                      chat.state.requesting ||
+                      Boolean(pausedRun) ||
+                      Boolean(chat.teamSessionChecking) ||
+                      Boolean(chat.teamSessionUnavailable)
+                    }
                     onChange={chat.setSelectedAgent}
                   />
                   <ModelSettings

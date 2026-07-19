@@ -184,20 +184,19 @@ def resolve_chat_run_target(raw: object | None) -> tuple[str, str]:
     """Return ``(kind, id)`` for a Chat run target.
 
     kind is ``"agent"`` or ``"team"``. Unknown values fall back to the default agent.
-    Team ids are only accepted when the Team feature flag is enabled.
+    Known Team ids retain their kind while disabled so the run runtime can
+    return ``TEAM_DISABLED`` rather than silently executing the default Agent.
     """
     from api.services.team_runtime import (
         normalize_team_id,
-        team_feature_enabled,
     )
 
     value = str(raw or "").strip()
-    if team_feature_enabled():
-        team_id = normalize_team_id(value)
-        if team_id:
-            return ("team", team_id)
-        # Unknown team-like ids fall through to default agent when not in catalog.
-        # Known suffixes: -team / -route / -broadcast (see team_runtime.TEAM_PROFILES).
+    team_id = normalize_team_id(value)
+    if team_id:
+        return ("team", team_id)
+    # Unknown team-like ids fall through to default agent when not in catalog.
+    # Known suffixes: -team / -route / -broadcast / -tasks (see TEAM_PROFILES).
     if value in AGENT_PROFILES and AGENT_PROFILES[value].get("chat_selectable", True):
         return ("agent", value)
     return ("agent", DEFAULT_AGENT_ID)

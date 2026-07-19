@@ -29,6 +29,22 @@ export interface ThoughtStep {
   summary?: string | null
   duration?: number | null
 }
+export type TeamTaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'blocked' | 'cancelled'
+export interface TeamTask {
+  id: string
+  title: string
+  description?: string | null
+  status: TeamTaskStatus
+  assignee?: string | null
+  dependencies?: string[]
+  result?: string | null
+}
+export interface TeamTaskState {
+  tasks: TeamTask[]
+  taskSummary?: string | null
+  goalComplete?: boolean
+  completionSummary?: string | null
+}
 interface ChatAttachment {
   name: string
   mime?: string
@@ -56,6 +72,8 @@ export interface Message {
   sources?: ChatSource[] | null
   tool_steps?: ToolStep[] | null
   thought_chain?: ThoughtStep[] | null
+  /** Latest full Agno Team task-state snapshot, shown as a live task board. */
+  team_tasks?: TeamTaskState | null
   reasoning?: string | null
   followups?: string[] | null
   approval_id?: string | null
@@ -104,6 +122,7 @@ export type ChatRunEvent =
   | { type: 'tool.update'; runId?: string; tool: ToolStep }
   | { type: 'reasoning.delta'; runId?: string; delta: string }
   | { type: 'thought.update'; runId?: string; thought: ThoughtStep }
+  | { type: 'team.tasks'; runId?: string; state: TeamTaskState }
   | { type: 'sources'; runId?: string; items: ChatSource[] }
   | { type: 'run.paused'; runId: string; sessionId?: string; approvalId: string; tool?: ToolStep }
   | { type: 'run.continued'; runId: string; sessionId?: string }

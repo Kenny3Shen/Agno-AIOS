@@ -30,6 +30,26 @@ def test_team_catalog_gated(monkeypatch):
     assert "research-analysis-route" in ids
 
 
+def test_tasks_team_catalog_exposes_mode_and_member_roster(monkeypatch):
+    from agno.team.mode import TeamMode
+    from api.services.team_runtime import get_team_profile
+
+    monkeypatch.setenv("TAIS_ENABLE_AGNO_TEAM", "1")
+    profile = get_team_profile("research-analysis-tasks")
+    assert profile is not None
+    assert profile["mode"] == TeamMode.tasks
+
+    catalog = {row["id"]: row for row in list_chat_teams()}
+    task_team = catalog["research-analysis-tasks"]
+    assert task_team["kind"] == "team"
+    assert task_team["mode"] == TeamMode.tasks.value
+    assert [member["id"] for member in task_team["members"]] == [
+        "deep-research",
+        "data-analysis",
+    ]
+    assert all(member["name"] and member["role"] for member in task_team["members"])
+
+
 def test_normalize_team_ids_require_catalog_values():
     assert normalize_team_id("research-analysis-team") == "research-analysis-team"
     assert normalize_team_id("research-analysis") is None
@@ -80,6 +100,59 @@ async def test_build_research_team_members(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_build_tasks_team_configures_task_mode_and_raw_tool_io(monkeypatch):
+    from agno.team.mode import TeamMode
+    from api.services import team_runtime as tr
+
+    member_options: list[dict] = []
+    team_options: dict = {}
+
+    class FakeTeam:
+        def __init__(self, **kwargs):
+            team_options.update(kwargs)
+            self.__dict__.update(kwargs)
+            self.members = kwargs.get("members") or []
+
+    def fake_agent(**kwargs):
+        member_options.append(kwargs)
+        return SimpleNamespace(**kwargs)
+
+    async def fake_get_model(_model_id=None):
+        return {"provider": "openai-compatible", "model_id": "fake"}
+
+    monkeypatch.setattr(tr, "Agent", fake_agent)
+    monkeypatch.setattr(tr, "Team", FakeTeam)
+    monkeypatch.setattr(tr, "get_model_for_run", fake_get_model)
+    monkeypatch.setattr(tr, "build_agno_model", lambda *_a, **_k: object())
+    monkeypatch.setattr(tr, "get_async_agno_postgres_db", lambda: None)
+
+    team = await tr.build_team("research-analysis-tasks", enable_tools=False)
+    assert team.id == "research-analysis-tasks"
+    assert team_options["mode"] == TeamMode.tasks
+    assert team_options["max_iterations"] == 10
+    assert team_options["tool_call_limit"] == 60
+    assert team_options["share_member_interactions"] is True
+    assert team_options["determine_input_for_members"] is True
+    assert team_options["store_tool_messages"] is False
+    instructions = "\n".join(team_options["instructions"])
+    assert "execute_tasks_parallel" in instructions
+    assert "dependencies" in instructions
+    assert member_options
+    assert all(options["store_tool_messages"] is False for options in member_options)
+
+    team_options.clear()
+    member_options.clear()
+    await tr.build_team(
+        "research-analysis-tasks",
+        enable_tools=False,
+        store_raw_tool_io=True,
+    )
+    assert team_options["store_tool_messages"] is True
+    assert member_options
+    assert all(options["store_tool_messages"] is True for options in member_options)
+
+
+@pytest.mark.asyncio
 async def test_stream_team_disabled_fails(monkeypatch):
     from api.services import security_run_runtime as srr
 
@@ -89,8 +162,9 @@ async def test_stream_team_disabled_fails(monkeypatch):
         agent_id="research-analysis-team",
         enable_tools=True,
     )
-    # when flag off, resolve_chat_run_target falls back to security-operations
-    assert req.agent_id == "security-operations"
+    # A known Team remains a Team target so runtime can fail closed instead of
+    # silently running security-operations.
+    assert req.agent_id == "research-analysis-team"
 
     monkeypatch.setenv("TAIS_ENABLE_AGNO_TEAM", "1")
     req2 = srr.SecurityRunRequest.from_chat_args(
@@ -508,7 +582,7 @@ async def test_member_run_error_is_thought_not_failed(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_team_live_search_defaults_to_profile(monkeypatch):
+async def test_team_live_search_defaults_to_profile_and_forwards_raw_tool_io(monkeypatch):
     from api.services import security_run_runtime as srr
 
     monkeypatch.setenv("TAIS_ENABLE_AGNO_TEAM", "1")
@@ -525,6 +599,7 @@ async def test_team_live_search_defaults_to_profile(monkeypatch):
     async def _build_team(team_id, **kwargs):
         captured["team_id"] = team_id
         captured["live_search"] = kwargs.get("live_search")
+        captured["store_raw_tool_io"] = kwargs.get("store_raw_tool_io")
         return _FakeTeam()
 
     monkeypatch.setattr(srr, "build_team", _build_team)
@@ -546,10 +621,12 @@ async def test_team_live_search_defaults_to_profile(monkeypatch):
         enable_tools=True,
         live_search=None,
         search_knowledge=False,
+        store_raw_tool_io=True,
     )
     async for _ in runtime.stream(request):
         pass
     assert captured.get("live_search") is True
+    assert captured.get("store_raw_tool_io") is True
 
 
 @pytest.mark.asyncio
@@ -838,9 +915,166 @@ def test_task_event_matches_team_run_event():
     from api.services.security_run_runtime import _event_matches
     from agno.run.team import TeamRunEvent
 
+    assert _event_matches(TeamRunEvent.task_state_updated.value, "task_state_updated")
     assert _event_matches(TeamRunEvent.task_created.value, "task_created")
     assert _event_matches(TeamRunEvent.task_updated.value, "task_updated")
     assert _event_matches(TeamRunEvent.task_iteration_started.value, "task_iteration_started")
+
+
+@pytest.mark.asyncio
+async def test_task_state_updated_projects_team_tasks_to_sse(monkeypatch):
+    from agno.run.team import TaskData, TaskStateUpdatedEvent
+    from api.services import security_run_runtime as srr
+
+    monkeypatch.setenv("TAIS_ENABLE_AGNO_TEAM", "1")
+
+    class Runner:
+        model = None
+
+        async def arun(self, *_args, **_kwargs):
+            yield SimpleNamespace(
+                event="TeamRunStarted",
+                run_id="team-run-tasks",
+                session_id="session-tasks",
+                team_id="research-analysis-tasks",
+                team_name="研究分析任务组",
+                model="m",
+                model_provider="p",
+                agent_id="",
+                parent_run_id=None,
+            )
+            yield TaskStateUpdatedEvent(
+                run_id="team-run-tasks",
+                session_id="session-tasks",
+                team_id="research-analysis-tasks",
+                task_summary="正在执行 2 个任务",
+                goal_complete=False,
+                tasks=[
+                    TaskData(
+                        id="research",
+                        title="核验公开资料",
+                        description="交叉验证关键事实和来源",
+                        status="in_progress",
+                        assignee="deep-research",
+                    ),
+                    TaskData(
+                        id="analysis",
+                        title="复核数据",
+                        status="pending",
+                        assignee="data-analysis",
+                        dependencies=["research"],
+                        result="等待调研结果",
+                    ),
+                ],
+                completion_summary="",
+            )
+            yield SimpleNamespace(
+                event="TeamRunCompleted",
+                run_id="team-run-tasks",
+                session_id="session-tasks",
+                team_id="research-analysis-tasks",
+                content="最终结论",
+                metrics={},
+                citations=[],
+                followups=[],
+            )
+
+        def cancel_run(self, *_args, **_kwargs):
+            return True
+
+    runtime = srr.SecurityRunRuntime()
+    request = srr.SecurityRunRequest.from_chat_args(
+        "调研并复核",
+        session_id="session-tasks",
+        user_id="u1",
+        agent_id="research-analysis-tasks",
+    )
+    settings = SimpleNamespace(
+        show_raw_reasoning=False,
+        show_raw_tool_io=False,
+        show_thought_chain=True,
+    )
+
+    events = [
+        event
+        async for event in runtime._stream_agent_events(Runner(), request, settings)
+    ]
+
+    task_event = next(event for event in events if event.event == "team.tasks")
+    assert task_event.data["run_id"] == "team-run-tasks"
+    assert task_event.data["task_summary"] == "正在执行 2 个任务"
+    assert task_event.data["goal_complete"] is False
+    assert task_event.data["tasks"] == [
+        {
+            "id": "research",
+            "title": "核验公开资料",
+            "description": "交叉验证关键事实和来源",
+            "status": "in_progress",
+            "assignee": "deep-research",
+            "dependencies": [],
+            "result": "",
+        },
+        {
+            "id": "analysis",
+            "title": "复核数据",
+            "description": "",
+            "status": "pending",
+            "assignee": "data-analysis",
+            "dependencies": ["research"],
+            "result": "等待调研结果",
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_task_state_completion_summary_is_sent_without_task_rows(monkeypatch):
+    from agno.run.team import TaskStateUpdatedEvent
+    from api.services import security_run_runtime as srr
+
+    monkeypatch.setenv("TAIS_ENABLE_AGNO_TEAM", "1")
+
+    class Runner:
+        model = None
+
+        async def arun(self, *_args, **_kwargs):
+            yield SimpleNamespace(
+                event="TeamRunStarted",
+                run_id="team-run-summary",
+                session_id="session-summary",
+                team_id="research-analysis-tasks",
+                agent_id="",
+                parent_run_id=None,
+            )
+            yield TaskStateUpdatedEvent(
+                run_id="team-run-summary",
+                session_id="session-summary",
+                team_id="research-analysis-tasks",
+                goal_complete=True,
+                completion_summary="团队已完成目标",
+            )
+
+    request = srr.SecurityRunRequest.from_chat_args(
+        "完成任务",
+        session_id="session-summary",
+        user_id="u1",
+        agent_id="research-analysis-tasks",
+    )
+    settings = SimpleNamespace(
+        show_raw_reasoning=False,
+        show_raw_tool_io=False,
+        show_thought_chain=True,
+    )
+    events = [
+        event
+        async for event in srr.SecurityRunRuntime()._stream_agent_events(
+            Runner(), request, settings
+        )
+    ]
+
+    task_event = next(event for event in events if event.event == "team.tasks")
+    assert task_event.data["tasks"] == []
+    assert task_event.data["goal_complete"] is True
+    assert task_event.data["completion_summary"] == "团队已完成目标"
 
 
 def test_broadcast_team_in_catalog(monkeypatch):

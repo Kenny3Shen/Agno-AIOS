@@ -28,6 +28,10 @@ function bestEffortCancelRun(runId: string | null | undefined) {
   })
 }
 
+/** Team identity is server-catalog metadata, never an id naming convention. */
+export const isTeamCatalogItem = (item: { id?: string; kind?: string; category?: string } | undefined) =>
+  item?.kind === 'team' || item?.category === 'team'
+
 
 
 export function useChat() {
@@ -86,6 +90,19 @@ export function useChat() {
   )
   const models = useQuery(modelsQuery())
   const agents = useQuery(agentsQuery())
+  const activeSessionType = String(activeSessionMeta?.session_type || '').toLowerCase()
+  const activeSessionTeamId = String(activeSessionMeta?.team_id || '').trim()
+  const isTeamSession = activeSessionType === 'team' && Boolean(activeSessionTeamId)
+  // A Team session must never silently continue through a fallback Agent after
+  // its feature flag/catalog entry disappears. Wait for the catalog, then
+  // fail closed and let the user start a new ordinary chat instead.
+  const teamCatalogSettled = Boolean(agents.isFetched || agents.isError)
+  const teamSessionChecking = Boolean(isTeamSession && !teamCatalogSettled)
+  const teamSessionUnavailable = Boolean(
+    isTeamSession &&
+      teamCatalogSettled &&
+      !(agents.data ?? []).some((row) => row.id === activeSessionTeamId && isTeamCatalogItem(row)),
+  )
 
   // URL session changed (sidebar, deep link, browser history): abort live SSE
   // so history can load and the server run is cancelled best-effort.
@@ -133,6 +150,7 @@ export function useChat() {
   useEffect(() => {
     const rows = agents.data
     if (!rows?.length) return
+    if (teamSessionChecking || teamSessionUnavailable) return
     if (rows.some((row) => row.id === state.selectedAgentId)) return
     const fallback = rows[0]?.id || 'security-operations'
     try {
@@ -141,7 +159,7 @@ export function useChat() {
       // ignore
     }
     dispatch({ type: 'agent', value: fallback })
-  }, [agents.data, state.selectedAgentId])
+  }, [agents.data, state.selectedAgentId, teamSessionChecking, teamSessionUnavailable])
 
   // Restore agent/team selector when opening an existing session (team_id wins for team sessions).
   useEffect(() => {
@@ -240,7 +258,16 @@ export function useChat() {
       return
     }
     // Existing deep-link session: wait for meta (and never send on workflow sessions).
-    if (sessionId && (!metaResolved || sessionMetaFailed || isWorkflowSession)) return
+    if (
+      sessionId &&
+      (
+        !metaResolved ||
+        sessionMetaFailed ||
+        isWorkflowSession ||
+        teamSessionChecking ||
+        teamSessionUnavailable
+      )
+    ) return
     const activeSession = sessionId ?? crypto.randomUUID()
     if (!sessionId) {
       prevSessionIdRef.current = activeSession
@@ -248,13 +275,7 @@ export function useChat() {
       const now = Date.now() / 1_000
       const agentId = state.selectedAgentId || 'security-operations'
       const catalogRow = (agents.data ?? []).find((row) => row.id === agentId)
-      const looksTeam =
-        catalogRow?.kind === 'team' ||
-        catalogRow?.category === 'team' ||
-        agentId.includes('-team') ||
-        agentId.includes('-route') ||
-        agentId.includes('-broadcast') ||
-        agentId.startsWith('research-analysis')
+      const looksTeam = isTeamCatalogItem(catalogRow)
       const optimisticSession: ChatSession = {
         session_id: activeSession,
         preview: text || (pendingFiles.length ? pendingFiles.map((f) => f.name).join(', ') : '新对话'),
@@ -485,6 +506,8 @@ export function useChat() {
           : null,
     sessionMetaRefetch: () => void sessionMetaResult.refetch(),
     sessionMissing,
+    teamSessionChecking,
+    teamSessionUnavailable,
     attachments,
     setAttachments,
     history,

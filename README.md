@@ -20,7 +20,7 @@ Chat 与 Workflow 共用稳定 `agent_id` / executor `ref`（见 `api/services/a
 
 - Chat：`GET /api/chat/agents`，发消息可带 `agent_id`（multipart/JSON）。
 - Workflow Studio（三栏：左侧节点/模板/工作流 Tab · 页面视图网格 · 右侧属性/运行 Tab · 顶栏纯图标工具条）：步骤 executor 下拉同步 catalog。
-- **Agno Team（beta）**：`TAIS_ENABLE_AGNO_TEAM=1` 时 Chat 可选 `research-analysis-team`（coordinate）/ `research-analysis-route` / `research-analysis-broadcast`；成员事件映射为 ThoughtChain（成员工具与 `member:reasoning` 内嵌显示），队长内容为最终回答（含成员 Intermediate 无 agent_id 的防泄漏）；broadcast 成员独立 model 实例与 session summary；Chat 终态收口 loading thought/tool 并支持 completed.content 兜底；成员推理/content 分桶累积、citations 前缀与历史 `_history_team_sources`/reasoning 回放合并；成员失败时队长空回答可恢复提示；历史会话回放 `member_responses`；可用 xAI Grok 联调；多轮会话历史在客户端提前结束 SSE 时仍保持 COMPLETED；默认不启用以避免 HITL/MCP 语义混淆。
+- **Agno Team（beta）**：`TAIS_ENABLE_AGNO_TEAM=1` 时 Chat 可选 `research-analysis-team`（coordinate）/ `research-analysis-route` / `research-analysis-broadcast` / `research-analysis-tasks`；Tasks 模式遵循 Agno 的 `TaskStateUpdated` 快照渲染实时任务看板（负责人、依赖、结果与完成状态），并支持独立任务并行、依赖任务串行汇总。成员事件映射为 ThoughtChain，队长内容为最终回答；成员与 Team 的原始工具 I/O 默认不持久化。历史 Team 会话在 Team 关闭或移除时 fail-closed，不会降级到普通 Agent；默认不启用以避免 HITL/MCP 语义混淆。
 
 ### Agno 对齐（Data / Deep Research）
 
@@ -28,7 +28,7 @@ Chat 与 Workflow 共用稳定 `agent_id` / executor `ref`（见 `api/services/a
 
 - **Data analysis**：遵循 [Data Agents](https://docs.agno.com/use-cases/data-agents/overview) — 先 introspect 后查询、答案附查询/步骤、Knowledge 承载业务口径、写边界靠只读 **SQLTools** 连接（`TAIS_DATA_SQL_URL`）；本地 CSV 用 Polars/File，不引入 DuckDB。
 - **Deep research**：遵循 [Deep Research](https://docs.agno.com/use-cases/deep-research/overview) — grounding、结构化可审计交付、多源对照。
-- **Team beta**：route / coordinate / broadcast 对应官方 orchestration patterns；标准化流水线继续用 Workflow Studio。
+- **Team beta**：route / coordinate / broadcast / tasks 对应官方 orchestration patterns；标准化流水线继续用 Workflow Studio。
 
 
 ## 技术栈
