@@ -5,11 +5,25 @@ from importlib.metadata import PackageNotFoundError, version as package_version
 from pathlib import Path
 from urllib.parse import quote_plus
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Single source: pyproject.toml [project].version (via importlib.metadata after install/uv sync).
 _PACKAGE_NAME = "agno-aios"
+
+_PRODUCTION_ENVIRONMENTS = frozenset({"prod", "production"})
+_DEFAULT_AUTH_SECRETS = {
+    "AUTH_JWT_SECRET": "change-me-in-production-auth-jwt-secret-32-bytes-min",
+    "AUTH_RESET_PASSWORD_SECRET": "change-me-in-production-reset-secret-32-bytes-min",
+    "AUTH_VERIFICATION_SECRET": "change-me-in-production-verification-secret-32-bytes-min",
+    "AUTH_OAUTH_STATE_SECRET": "change-me-in-production-oauth-state-secret-32-bytes-min",
+}
+_INSECURE_SECRET_PLACEHOLDERS = frozenset({"", "replace-with-long-random-secret"})
+
+
+def is_production_environment(environment: str) -> bool:
+    """Return whether *environment* enables production safety guards."""
+    return environment.strip().casefold() in _PRODUCTION_ENVIRONMENTS
 
 
 def _default_app_version() -> str:
@@ -44,6 +58,7 @@ class Settings(BaseSettings):
     log_file: str = "poc.log"
 
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
+    trusted_hosts: list[str] = Field(default_factory=lambda: ["*"])
 
     postgres_host: str = Field(default="localhost", validation_alias="POSTGRES_HOST")
     postgres_port: int = Field(default=5432, validation_alias="POSTGRES_PORT")
@@ -177,17 +192,15 @@ class Settings(BaseSettings):
     )
     feishu_webhook_url: SecretStr = SecretStr("")
 
-    auth_jwt_secret: SecretStr = SecretStr(
-        "change-me-in-production-auth-jwt-secret-32-bytes-min"
-    )
+    auth_jwt_secret: SecretStr = SecretStr(_DEFAULT_AUTH_SECRETS["AUTH_JWT_SECRET"])
     auth_reset_password_secret: SecretStr = SecretStr(
-        "change-me-in-production-reset-secret-32-bytes-min"
+        _DEFAULT_AUTH_SECRETS["AUTH_RESET_PASSWORD_SECRET"]
     )
     auth_verification_secret: SecretStr = SecretStr(
-        "change-me-in-production-verification-secret-32-bytes-min"
+        _DEFAULT_AUTH_SECRETS["AUTH_VERIFICATION_SECRET"]
     )
     auth_oauth_state_secret: SecretStr = SecretStr(
-        "change-me-in-production-oauth-state-secret-32-bytes-min"
+        _DEFAULT_AUTH_SECRETS["AUTH_OAUTH_STATE_SECRET"]
     )
     auth_token_lifetime_seconds: int = 3600
     auth_cookie_secure: bool = False
@@ -216,7 +229,7 @@ class Settings(BaseSettings):
     microsoft_oauth_tenant: str = "common"
     microsoft_oauth_redirect_url: str | None = None
 
-    @field_validator("cors_origins", mode="before")
+    @field_validator("cors_origins", "trusted_hosts", mode="before")
     @classmethod
     def parse_cors_origins(cls, value: object) -> object:
         if isinstance(value, str):
@@ -227,6 +240,56 @@ class Settings(BaseSettings):
                 return value
             return [item.strip() for item in stripped.split(",") if item.strip()]
         return value
+
+    @property
+    def oauth_is_configured(self) -> bool:
+        """Whether any OAuth provider will register its cookie-backed flow."""
+        providers = (
+            (self.github_oauth_client_id, self.github_oauth_client_secret),
+            (self.google_oauth_client_id, self.google_oauth_client_secret),
+            (self.microsoft_oauth_client_id, self.microsoft_oauth_client_secret),
+        )
+        return any(
+            client_id.strip() and client_secret.get_secret_value().strip()
+            for client_id, client_secret in providers
+        )
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> Settings:
+        """Fail closed when a production process is configured insecurely.
+
+        Development intentionally retains convenient defaults.  Production must not
+        start with credential defaults or an origin wildcard; OAuth additionally
+        requires its CSRF cookie to be marked secure.
+        """
+        if not is_production_environment(self.environment):
+            return self
+
+        configured_secrets = {
+            "AUTH_JWT_SECRET": self.auth_jwt_secret.get_secret_value(),
+            "AUTH_RESET_PASSWORD_SECRET": self.auth_reset_password_secret.get_secret_value(),
+            "AUTH_VERIFICATION_SECRET": self.auth_verification_secret.get_secret_value(),
+            "AUTH_OAUTH_STATE_SECRET": self.auth_oauth_state_secret.get_secret_value(),
+        }
+        unsafe_secrets = [
+            name
+            for name, configured_value in configured_secrets.items()
+            if configured_value.strip() in _INSECURE_SECRET_PLACEHOLDERS
+            or configured_value.strip() == _DEFAULT_AUTH_SECRETS[name]
+        ]
+
+        errors: list[str] = []
+        if unsafe_secrets:
+            errors.append(f"replace insecure secrets: {', '.join(unsafe_secrets)}")
+        if "*" in self.cors_origins:
+            errors.append("CORS_ORIGINS must not contain '*' in production")
+        if "*" in self.trusted_hosts:
+            errors.append("TRUSTED_HOSTS must not contain '*' in production")
+        if self.oauth_is_configured and not self.auth_cookie_secure:
+            errors.append("AUTH_COOKIE_SECURE must be true when OAuth is configured")
+        if errors:
+            raise ValueError("Production settings are unsafe: " + "; ".join(errors))
+        return self
 
     @property
     def log_path(self) -> Path:

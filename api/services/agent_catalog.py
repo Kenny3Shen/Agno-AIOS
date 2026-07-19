@@ -49,7 +49,8 @@ AGENT_PROFILES: dict[str, dict[str, Any]] = {
         "role": "数据分析师",
         "description": (
             "数据分析：表格清洗、统计汇总、可选只读 SQL、趋势对比与可复现计算。"
-            "内置计算器与受控 Python（Polars）；Knowledge 承载业务口径；不挂 MCP/安全 Skills。"
+            "内置计算器与每运行隔离的 File/CSV；可信开发环境可显式启用本地 Python（Polars）；"
+            "Knowledge 承载业务口径；不挂 MCP/安全 Skills。"
         ),
         "category": "analysis",
         "kind": "analysis",

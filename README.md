@@ -14,7 +14,7 @@ Chat 与 Workflow 共用稳定 `agent_id` / executor `ref`（见 `api/services/a
 | id | 名称 | 默认能力 |
 |----|------|----------|
 | `security-operations` | 安全运营助手 | MCP + Local Skills + HITL + Knowledge |
-| `data-analysis` | 数据分析助手 | Calculator + Python/Polars + File/CSV 沙箱 + 可选只读 **SQLTools**（`TAIS_DATA_SQL_URL`）+ Knowledge 口径 + Reasoning |
+| `data-analysis` | 数据分析助手 | Calculator + 每运行隔离的 File/CSV 工作区 + 可选只读 **SQLTools**（`TAIS_DATA_SQL_URL`）+ Knowledge 口径 + Reasoning；本地 Python 仅限显式开发开关 |
 | `deep-research` | 深度研究助手 | Reasoning + Website + Web Search（`ddgs`，优先 api/html backend）；Knowledge / Live Search；可审计 Markdown 备忘录 |
 | `safe-fallback` | 轻量分析助手 | 无工具（Workflow 兜底） |
 
@@ -27,6 +27,7 @@ Chat 与 Workflow 共用稳定 `agent_id` / executor `ref`（见 `api/services/a
 - Workflow 模板：`deep-research-review`（scope → parallel 调研/分析 → memo）、`csv-quick-analysis`（profile → metrics → readout）。
 
 - **Data analysis**：遵循 [Data Agents](https://docs.agno.com/use-cases/data-agents/overview) — 先 introspect 后查询、答案附查询/步骤、Knowledge 承载业务口径、写边界靠只读 **SQLTools** 连接（`TAIS_DATA_SQL_URL`）；本地 CSV 用 Polars/File，不引入 DuckDB。
+- **分析运行隔离**：Chat、Team、Workflow（含审批恢复）各自创建并在结束时删除 `0700` 临时工作区；上传文件只会 stage 到当前运行。File/CsvTools 绑定该目录。目录边界不是 Python 进程沙箱：生产环境始终不挂载本地 `PythonTools`；可信的非生产开发环境才可显式设置 `TAIS_ALLOW_UNSAFE_LOCAL_PYTHON=1`，生产执行应接入真实容器/VM 沙箱。
 - **Deep research**：遵循 [Deep Research](https://docs.agno.com/use-cases/deep-research/overview) — grounding、结构化可审计交付、多源对照。
 - **Team beta**：route / coordinate / broadcast / tasks 对应官方 orchestration patterns；标准化流水线继续用 Workflow Studio。
 
@@ -78,7 +79,9 @@ TAIS_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
 - CVE 情报源配置为仓库根目录 `cve_sources.toml`（可用 `TAIS_CVE_SOURCE_CONFIG_PATH` 覆盖）。
 Collect 按 `api/utils/url2md_utils.domain_rules` 源站爬取文章入库（`collect_articles`），页面默认从库检索。标题优先 og:title；可选 `TAIS_COLLECT_USE_PLAYWRIGHT` 浏览器兜底。解析侧用 `resolve_domain_rule_key` 归一化 host/`www` 并安全匹配多 class 正文容器（div/article/section/main）；规则未命中、class 漂移或 domain 正文过短（<200）时回退语义容器（article/main 等）；正文抽取含 h1–h4/pre/blockquote；已停用 botcrawl / The Register / securitylab.ru；源站含 BleepingComputer/Krebs/SecurityWeek/Dark Reading/The Record/Unit 42/Cloudflare 等；文章卡可跳转 CVE。同步时并发发现与抓取；跨源 round-robin 选取 URL 并跳过已入库成功项后补齐预算；重复同步返回 409。列表默认不带正文、可筛失败并 reparse/批量重采；源健康计数与按失败源快捷筛选；同步可按当前筛选源站；发现阶段跟进分页列表页；CVE 关键词走全文索引，页面进入即检索最近条目；库更新与 Collect 源站同步均支持 `stream=true` 阶段进度；Collect 同步与 CVE 库更新均可前端 Abort 停止（发现/抓取 sibling 任务一并取消；已写入变更保留）。
 - `POSTGRES_*` / `POSTGRES_URL`：PostgreSQL 连接。
+- `ENVIRONMENT=production`（或 `prod`）启用 fail-closed 启动校验：`AUTH_JWT_SECRET`、重置/验证/OAuth state secret 必须替换默认或模板值，`CORS_ORIGINS` 与 `TRUSTED_HOSTS` 必须列出明确值而非 `*`；配置 OAuth 时还必须设置 `AUTH_COOKIE_SECURE=true`。
 - `AUTH_JWT_SECRET`：JWT 密钥；生产环境必须替换默认值。
+- `/api/health` 是不依赖下游服务的 liveness probe；`/api/ready` 在启动完成且控制面 PostgreSQL `SELECT 1` 成功后才返回 200，失败时返回 503。
 - `TAIS_BOOTSTRAP_ADMIN_EMAIL`、`TAIS_BOOTSTRAP_ADMIN_PASSWORD`：可选的初始管理员。
 - `TAIS_KNOWLEDGE_*`：Knowledge chunk、search、rerank 与 PgVector 配置。
 - MCP 服务配置以 Settings / PostgreSQL 为准；残留 `.config/mcp/mcp_config.json` 只会归档为 `.migrated`，不会再导入。

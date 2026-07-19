@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -148,6 +149,65 @@ async def test_stream_workflow_run_projects_lifecycle_events():
     assert condition.data["branch"] == "then"
 
 
+@pytest.mark.asyncio
+async def test_workflow_run_binds_tools_to_one_workspace_and_cleans():
+    """Workflow compilation and execution see the same ephemeral directory."""
+    from api.services.agent_catalog import get_agent_profile
+    from api.services.agent_tools import (
+        build_tools_for_profile,
+        current_analysis_workspace,
+    )
+
+    captured: dict[str, object] = {}
+
+    class ScopedWorkflow:
+        name = "scoped"
+
+        def arun(self, **_kwargs):
+            async def _events():
+                workspace = current_analysis_workspace()
+                assert workspace is not None
+                captured["executed_workspace"] = workspace.path
+                assert workspace.path.exists()
+                yield SimpleNamespace(
+                    event="WorkflowCompleted",
+                    run_id="workflow-scope-run",
+                    session_id="workflow-scope-session",
+                    content="done",
+                )
+
+            return _events()
+
+    async def compile_scoped(*_args, **_kwargs):
+        workspace = current_analysis_workspace()
+        assert workspace is not None
+        captured["compiled_workspace"] = workspace.path
+        tools = build_tools_for_profile(get_agent_profile("data-analysis"))
+        file_tool = next(tool for tool in tools if type(tool).__name__ == "FileTools")
+        assert file_tool.base_dir == workspace.path
+        return ScopedWorkflow()
+
+    with patch.object(workflow_run_runtime, "compile_workflow", new=compile_scoped):
+        events = [
+            event
+            async for event in workflow_run_runtime.stream_workflow_run(
+                workflow_id="wf-scope",
+                definition={"name": "scope", "steps": []},
+                input_text="hello",
+                user_id="u1",
+                session_id="workflow-scope-session",
+                run_id="workflow-scope-run",
+            )
+        ]
+
+    assert events[-1].event == "workflow.completed"
+    compiled = captured["compiled_workspace"]
+    executed = captured["executed_workspace"]
+    assert isinstance(compiled, Path)
+    assert compiled == executed
+    assert not compiled.exists()
+
+
 
 class FakePausedWorkflow:
     def __init__(self):
@@ -275,6 +335,54 @@ async def test_resume_canonicalizes_legacy_persisted_skill_before_compiling() ->
     assert compile_call is not None
     definition = compile_call.args[0]
     assert definition["steps"][0]["skills"] == ["cve-intel-skill"]
+
+
+@pytest.mark.asyncio
+async def test_workflow_resume_uses_fresh_workspace_and_cleans() -> None:
+    from api.services.agent_catalog import get_agent_profile
+    from api.services.agent_tools import (
+        build_tools_for_profile,
+        current_analysis_workspace,
+    )
+
+    class ApprovalDb:
+        async def get_approval(self, _approval_id: str):
+            return {
+                "source_type": "workflow",
+                "workflow_id": "wf-resume-scope",
+                "run_id": "workflow-resume-run",
+                "session_id": "workflow-resume-session",
+                "status": "approved",
+                "context": {},
+            }
+
+    captured: dict[str, Path] = {}
+
+    async def compile_scoped(*_args, **_kwargs):
+        workspace = current_analysis_workspace()
+        assert workspace is not None
+        captured["workspace"] = workspace.path
+        tools = build_tools_for_profile(get_agent_profile("data-analysis"))
+        assert any(type(tool).__name__ == "FileTools" for tool in tools)
+        return SimpleNamespace(aget_run_output=AsyncMock(return_value=None))
+
+    with (
+        patch.object(
+            workflow_run_runtime,
+            "get_async_agno_postgres_db",
+            return_value=ApprovalDb(),
+        ),
+        patch.object(
+            workflow_run_runtime.workflow_store,
+            "get_workflow",
+            new=AsyncMock(return_value={"definition": {"name": "x", "steps": []}}),
+        ),
+        patch.object(workflow_run_runtime, "compile_workflow", new=compile_scoped),
+    ):
+        with pytest.raises(ValueError, match="Paused run workflow-resume-run not found"):
+            await workflow_run_runtime.resume_workflow_run("approval-scope")
+
+    assert not captured["workspace"].exists()
 
 
 @pytest.mark.asyncio

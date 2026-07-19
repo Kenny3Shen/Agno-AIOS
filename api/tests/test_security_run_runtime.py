@@ -184,6 +184,119 @@ async def test_security_agent_loads_prompt_when_agent_is_built():
 
 
 @pytest.mark.asyncio
+async def test_chat_analysis_workspace_is_run_scoped_and_cleaned(monkeypatch):
+    """Chat builds/stages analysis tools in one 0700 directory and removes it."""
+    from api.services.agent_tools import current_analysis_workspace
+
+    captured: dict[str, object] = {}
+
+    class ScopedAgent:
+        def __init__(self, tools):
+            self.tools = tools
+
+        async def arun(self, *_args, **_kwargs):
+            workspace = current_analysis_workspace()
+            assert workspace is not None
+            captured["workspace"] = workspace.path
+            assert (workspace.path / "chat.csv").read_text(encoding="utf-8") == "x\n1\n"
+            file_tool = next(
+                tool for tool in self.tools if type(tool).__name__ == "FileTools"
+            )
+            csv_tool = next(
+                tool for tool in self.tools if type(tool).__name__ == "CsvTools"
+            )
+            assert file_tool.base_dir == workspace.path
+            assert all(path.parent == workspace.path for path in (csv_tool.csvs or []))
+            yield {
+                "event": "RunStarted",
+                "run_id": "analysis-run",
+                "session_id": "analysis-session",
+            }
+            yield {
+                "event": "RunCompleted",
+                "run_id": "analysis-run",
+                "session_id": "analysis-session",
+                "metrics": {},
+            }
+
+    def agent_factory(**kwargs):
+        captured["tools"] = kwargs["tools"]
+        return ScopedAgent(kwargs["tools"])
+
+    runtime = security_run_runtime.SecurityRunRuntime(
+        security_run_runtime.SecurityRunRuntimeDependencies(
+            build_model=lambda *_args, **_kwargs: object(),
+            get_db=lambda: object(),
+            get_async_knowledge_base=lambda: None,
+            get_enabled_skill_dirs=lambda: [],
+            agent_factory=agent_factory,
+        )
+    )
+    monkeypatch.setattr(
+        security_run_runtime,
+        "get_chat_settings_async",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                show_raw_reasoning=False,
+                show_raw_tool_io=False,
+                show_thought_chain=True,
+            )
+        ),
+    )
+    request = security_run_runtime.SecurityRunRequest.from_chat_args(
+        "summarize this file",
+        session_id="analysis-session",
+        user_id="u-analysis",
+        agent_id="data-analysis",
+        search_knowledge=False,
+        files=[SimpleNamespace(filename="chat.csv", content=b"x\n1\n")],
+    )
+
+    events = [event async for event in runtime.stream(request)]
+
+    assert any(event.event == "run.completed" for event in events)
+    workspace_path = captured["workspace"]
+    assert isinstance(workspace_path, Path)
+    assert not workspace_path.exists()
+    assert current_analysis_workspace() is None
+
+
+@pytest.mark.asyncio
+async def test_security_agent_context_cleans_resume_workspace(monkeypatch):
+    """HITL continuation uses this context, so it must not retain old uploads."""
+    from api.services.agent_tools import current_analysis_workspace
+
+    captured: dict[str, Path] = {}
+
+    def agent_factory(**kwargs):
+        workspace = current_analysis_workspace()
+        assert workspace is not None
+        captured["workspace"] = workspace.path
+        return SimpleNamespace(**kwargs)
+
+    runtime = security_run_runtime.SecurityRunRuntime(
+        security_run_runtime.SecurityRunRuntimeDependencies(
+            build_model=lambda *_args, **_kwargs: object(),
+            get_db=lambda: object(),
+            get_async_knowledge_base=lambda: None,
+            get_enabled_skill_dirs=lambda: [],
+            agent_factory=agent_factory,
+        )
+    )
+    request = security_run_runtime.SecurityRunRequest.from_chat_args(
+        "resume with isolated files",
+        user_id="u-resume",
+        agent_id="data-analysis",
+        search_knowledge=False,
+        files=[SimpleNamespace(filename="resume.csv", content=b"x\n2\n")],
+    )
+    async with runtime.security_agent_context(request):
+        assert (captured["workspace"] / "resume.csv").exists()
+
+    assert not captured["workspace"].exists()
+
+
+@pytest.mark.asyncio
 async def test_fallback_agent_loads_prompt_when_agent_is_built():
     created: dict = {}
 

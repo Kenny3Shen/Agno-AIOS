@@ -29,13 +29,49 @@ def reader_config() -> knowledge_ingest_service.KnowledgeReaderConfig:
     )
 
 
-def test_convert_plain_text_skips_docling() -> None:
+def test_convert_plain_text_skips_docling(monkeypatch: pytest.MonkeyPatch) -> None:
+    def docling_must_not_run(**_kwargs: object) -> object:
+        raise AssertionError("plain text should not initialize Docling")
+
+    monkeypatch.setattr(docling_service, "docling_reader_markdown", docling_must_not_run)
     text = docling_service.convert_bytes_to_markdown(
         b"# Hello\n\nWorld",
         filename="note.md",
     )
     assert "Hello" in text
     assert "World" in text
+
+
+def test_convert_plain_text_honors_character_and_token_budgets() -> None:
+    text = docling_service.convert_bytes_to_markdown(
+        b"a" * 100,
+        filename="note.txt",
+        max_output_chars=12,
+        max_output_tokens=3,
+    )
+    assert len(text) <= 12
+    assert docling_service.estimate_markdown_tokens(text) <= 3
+
+
+def test_convert_structured_docling_honors_output_budgets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Document:
+        content = "a" * 100
+
+    class Reader:
+        def read(self, *_args: object, **_kwargs: object) -> list[Document]:
+            return [Document()]
+
+    monkeypatch.setattr(docling_service, "docling_reader_markdown", lambda **_kwargs: Reader())
+    text = docling_service.convert_bytes_to_markdown(
+        b"%PDF-1.4 fake",
+        filename="report.pdf",
+        max_output_chars=12,
+        max_output_tokens=3,
+    )
+    assert len(text) <= 12
+    assert docling_service.estimate_markdown_tokens(text) <= 3
 
 
 def test_convert_html_via_docling() -> None:
@@ -92,7 +128,7 @@ def test_chat_document_upload_produces_markdown(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(
         chat_media,
         "convert_bytes_to_markdown",
-        lambda content, filename=None, force_docling=False: f"# from {filename}\n\nok",
+        lambda content, filename=None, force_docling=False, **_kwargs: f"# from {filename}\n\nok",
     )
     # process_document still builds File media
     upload = UploadFile(

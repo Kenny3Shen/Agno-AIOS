@@ -23,6 +23,7 @@ from api.services.skill_service import resolve_enabled_skill_dirs
 from api.services.audit_service import record_audit_event_async
 from api.services.notification_service import notify_workflow_hitl_pending
 from api.persistence import workflows as workflow_store
+from api.services.agent_tools import analysis_workspace_context
 
 
 @dataclass(frozen=True)
@@ -236,6 +237,15 @@ def is_workflow_step_approval(approval: dict[str, Any]) -> bool:
 
 async def resume_workflow_run(approval_id: str) -> str:
     """Continue a paused workflow after Approvals resolve (background-friendly)."""
+    # A resumed workflow is a new live execution window.  Do not reuse a prior
+    # paused run's files: all staged inputs and generated artifacts are removed
+    # when that run ends, and this scope is cleaned on every resume outcome.
+    with analysis_workspace_context(run_id=f"workflow-resume-{approval_id}"):
+        return await _resume_workflow_run_in_workspace(approval_id)
+
+
+async def _resume_workflow_run_in_workspace(approval_id: str) -> str:
+    """Resume implementation that assumes a run workspace is already bound."""
     db = get_async_agno_postgres_db()
     approval = await db.get_approval(approval_id)
     if not isinstance(approval, dict):
@@ -365,9 +375,33 @@ async def stream_workflow_run(
     model_id: str | None = None,
     run_id: str | None = None,
 ) -> AsyncIterator[WorkflowRunEventOut]:
-    """Compile definition and stream workflow lifecycle events."""
+    """Compile and stream one workflow in a freshly isolated workspace."""
     active_run_id = (run_id or "").strip() or str(uuid4())
     active_session_id = (session_id or "").strip() or str(uuid4())
+    with analysis_workspace_context(run_id=active_run_id):
+        async for event in _stream_workflow_run_in_workspace(
+            workflow_id=workflow_id,
+            definition=definition,
+            input_text=input_text,
+            user_id=user_id,
+            active_session_id=active_session_id,
+            model_id=model_id,
+            active_run_id=active_run_id,
+        ):
+            yield event
+
+
+async def _stream_workflow_run_in_workspace(
+    *,
+    workflow_id: str,
+    definition: dict[str, Any],
+    input_text: str,
+    user_id: str,
+    active_session_id: str,
+    model_id: str | None = None,
+    active_run_id: str,
+) -> AsyncIterator[WorkflowRunEventOut]:
+    """Compile definition and stream lifecycle events in a bound workspace."""
     bound_skill_names = collect_workflow_skill_names(definition)
     loaded_skill_dirs = resolve_enabled_skill_dirs(bound_skill_names)
     loaded_skill_names = [

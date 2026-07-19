@@ -100,6 +100,56 @@ async def test_build_research_team_members(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_team_stages_analysis_uploads_in_bound_run_workspace(monkeypatch):
+    """Team members share only the caller's short-lived Chat workspace."""
+    from api.services import team_runtime as tr
+    from api.services.agent_tools import (
+        analysis_workspace_context,
+        current_analysis_workspace,
+    )
+
+    created: list[dict] = []
+
+    class FakeTeam:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+            self.members = kwargs.get("members") or []
+
+    def fake_agent(**kwargs):
+        created.append(kwargs)
+        return SimpleNamespace(**kwargs)
+
+    async def fake_get_model(_model_id=None):
+        return {"provider": "openai-compatible", "model_id": "fake"}
+
+    monkeypatch.setattr(tr, "Agent", fake_agent)
+    monkeypatch.setattr(tr, "Team", FakeTeam)
+    monkeypatch.setattr(tr, "get_model_for_run", fake_get_model)
+    monkeypatch.setattr(tr, "build_agno_model", lambda *_a, **_k: object())
+    monkeypatch.setattr(tr, "get_async_agno_postgres_db", lambda: None)
+
+    with analysis_workspace_context("team-run") as workspace:
+        team = await tr.build_team(
+            "research-analysis-team",
+            media_files=[SimpleNamespace(filename="team.csv", content=b"n\n3\n")],
+        )
+        assert team.members
+        assert (workspace.path / "team.csv").read_bytes() == b"n\n3\n"
+        assert current_analysis_workspace() == workspace
+        data_member = next(row for row in created if row["id"] == "data-analysis")
+        file_tool = next(
+            tool for tool in data_member["tools"] if type(tool).__name__ == "FileTools"
+        )
+        csv_tool = next(
+            tool for tool in data_member["tools"] if type(tool).__name__ == "CsvTools"
+        )
+        assert file_tool.base_dir == workspace.path
+        assert csv_tool.csvs == [workspace.path / "team.csv"]
+
+    assert not workspace.path.exists()
+
+
+@pytest.mark.asyncio
 async def test_build_tasks_team_configures_task_mode_and_raw_tool_io(monkeypatch):
     from agno.team.mode import TeamMode
     from api.services import team_runtime as tr
@@ -1457,24 +1507,23 @@ async def test_member_reasoning_delta_stays_in_thought(monkeypatch):
     assert any(isinstance(t, str) and "深度研究助手" in t for t in titles), titles
 
 
-def test_csv_builder_dedupes_stem(tmp_path, monkeypatch):
-    from pathlib import Path
+def test_csv_builder_dedupes_stem():
     from api.services import agent_tools as at
 
-    root = Path(tmp_path)
-    (root / "a.csv").write_text("x\n1\n", encoding="utf-8")
-    nested = root / "sub"
-    nested.mkdir()
-    (nested / "a.csv").write_text("y\n2\n", encoding="utf-8")
-    (root / "b.csv").write_text("z\n3\n", encoding="utf-8")
+    with at.analysis_workspace_context("csv-dedupe") as workspace:
+        root = workspace.path
+        (root / "a.csv").write_text("x\n1\n", encoding="utf-8")
+        nested = root / "sub"
+        nested.mkdir()
+        (nested / "a.csv").write_text("y\n2\n", encoding="utf-8")
+        (root / "b.csv").write_text("z\n3\n", encoding="utf-8")
 
-    monkeypatch.setattr(at, "analysis_work_dir", lambda: root)
-    tools = at._build_csv()
-    stems = [p.stem for p in tools.csvs]
-    assert stems.count("a") == 1
-    assert "b" in stems
-    a_path = next(p for p in tools.csvs if p.stem == "a")
-    assert a_path.parent == root
+        tools = at._build_csv()
+        stems = [p.stem for p in tools.csvs]
+        assert stems.count("a") == 1
+        assert "b" in stems
+        a_path = next(p for p in tools.csvs if p.stem == "a")
+        assert a_path.parent == root
 
 
 

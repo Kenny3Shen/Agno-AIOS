@@ -48,6 +48,7 @@ from api.services.team_runtime import (
     team_feature_enabled,
 )
 from api.services.agent_tools import (
+    analysis_workspace_context,
     build_tools_for_profile,
     profile_uses_analysis_sandbox,
     stage_media_into_analysis_dir,
@@ -2103,43 +2104,47 @@ class SecurityRunRuntime:
 
     @asynccontextmanager
     async def security_agent_context(self, request: SecurityRunRequest) -> AsyncIterator[Agent]:
-        if not should_connect_mcp(
-            request.skill_names,
-            enable_tools=bool(request.enable_tools),
-            agent_id=request.agent_id,
-        ):
-            # Tools off, or trivial/non-ops turn with empty skill list: no MCP session.
-            security_agent = await _maybe_await(
-                self._build_security_agent(None, request)
-            )
-            yield security_agent
-            return
-
-        token = await _run_sync_dependency(self.dependencies.get_mcp_token)
-        server_params = StreamableHTTPClientParams(
-            url=await _run_sync_dependency(self.dependencies.get_mcp_url),
-        )
-        async with self.dependencies.mcp_tools_factory(
-            server_params=server_params,
-            transport="streamable-http",
-            timeout_seconds=20,
-            header_provider=_mcp_header_provider(token),
-        ) as mcp_tools:
-            allowed = mcp_prefixes_for_skills(request.skill_names)
-            removed = filter_mcp_tools_by_prefixes(mcp_tools, allowed)
-            if removed:
-                logger.debug(
-                    "MCP tools filtered for skill intent skill_names={} removed={}",
-                    request.skill_names,
-                    removed,
+        # Keep the run workspace alive for both tool construction and the
+        # streamed Agent execution.  A nested caller (``stream``/resume) reuses
+        # its workspace, while direct callers still get correct cleanup.
+        with analysis_workspace_context() as _workspace:
+            if not should_connect_mcp(
+                request.skill_names,
+                enable_tools=bool(request.enable_tools),
+                agent_id=request.agent_id,
+            ):
+                # Tools off, or trivial/non-ops turn with empty skill list: no MCP session.
+                security_agent = await _maybe_await(
+                    self._build_security_agent(None, request)
                 )
-            marked = mark_hitl_mcp_tools(mcp_tools)
-            if marked:
-                logger.debug("Agno required approval applied to MCP tools: {}", marked)
-            security_agent = await _maybe_await(
-                self._build_security_agent(mcp_tools, request)
+                yield security_agent
+                return
+
+            token = await _run_sync_dependency(self.dependencies.get_mcp_token)
+            server_params = StreamableHTTPClientParams(
+                url=await _run_sync_dependency(self.dependencies.get_mcp_url),
             )
-            yield security_agent
+            async with self.dependencies.mcp_tools_factory(
+                server_params=server_params,
+                transport="streamable-http",
+                timeout_seconds=20,
+                header_provider=_mcp_header_provider(token),
+            ) as mcp_tools:
+                allowed = mcp_prefixes_for_skills(request.skill_names)
+                removed = filter_mcp_tools_by_prefixes(mcp_tools, allowed)
+                if removed:
+                    logger.debug(
+                        "MCP tools filtered for skill intent skill_names={} removed={}",
+                        request.skill_names,
+                        removed,
+                    )
+                marked = mark_hitl_mcp_tools(mcp_tools)
+                if marked:
+                    logger.debug("Agno required approval applied to MCP tools: {}", marked)
+                security_agent = await _maybe_await(
+                    self._build_security_agent(mcp_tools, request)
+                )
+                yield security_agent
 
 
     async def _stream_team(
@@ -2148,99 +2153,107 @@ class SecurityRunRuntime:
         chat_settings: Any | None = None,
     ) -> AsyncIterator[ChatRunEvent]:
         """Build and stream an Agno Team run (beta)."""
-        enable_tools = bool(request.enable_tools)
-        search_knowledge = bool(request.search_knowledge) and enable_tools
-        # Align with specialist agents: explicit request wins; else team profile prefer_*.
-        team_profile = get_team_profile(request.agent_id) or {}
-        if not enable_tools:
-            live_search = False
-        elif request.live_search is not None:
-            live_search = request.live_search
-        else:
-            live_search = bool(team_profile.get("prefer_live_search"))
-        knowledge = None
-        knowledge_filters = None
-        if search_knowledge:
-            knowledge = await _maybe_await(self.dependencies.get_async_knowledge_base())
-            if request.knowledge_owner_user_id:
-                knowledge_filters = {"user_id": request.knowledge_owner_user_id}
-        team = await build_team(
-            str(request.agent_id),
-            model_id=request.model_id,
-            reasoning_effort=request.reasoning_effort,
-            live_search=live_search,
-            search_knowledge=search_knowledge,
-            knowledge=knowledge,
-            knowledge_filters=knowledge_filters,
-            memory_enabled=bool(request.memory_enabled),
-            enable_tools=enable_tools,
-            store_raw_tool_io=bool(request.store_raw_tool_io),
-            media_files=request.files,
-        )
-        async for event in self._stream_agent_events(team, request, chat_settings):
-            yield event
+        # Team members may execute concurrently, so bind before constructing
+        # their File/Csv/Python toolkits and retain the scope until the leader
+        # stream has fully ended.
+        with analysis_workspace_context() as _workspace:
+            enable_tools = bool(request.enable_tools)
+            search_knowledge = bool(request.search_knowledge) and enable_tools
+            # Align with specialist agents: explicit request wins; else team profile prefer_*.
+            team_profile = get_team_profile(request.agent_id) or {}
+            if not enable_tools:
+                live_search = False
+            elif request.live_search is not None:
+                live_search = request.live_search
+            else:
+                live_search = bool(team_profile.get("prefer_live_search"))
+            knowledge = None
+            knowledge_filters = None
+            if search_knowledge:
+                knowledge = await _maybe_await(self.dependencies.get_async_knowledge_base())
+                if request.knowledge_owner_user_id:
+                    knowledge_filters = {"user_id": request.knowledge_owner_user_id}
+            team = await build_team(
+                str(request.agent_id),
+                model_id=request.model_id,
+                reasoning_effort=request.reasoning_effort,
+                live_search=live_search,
+                search_knowledge=search_knowledge,
+                knowledge=knowledge,
+                knowledge_filters=knowledge_filters,
+                memory_enabled=bool(request.memory_enabled),
+                enable_tools=enable_tools,
+                store_raw_tool_io=bool(request.store_raw_tool_io),
+                media_files=request.files,
+            )
+            async for event in self._stream_agent_events(team, request, chat_settings):
+                yield event
 
     async def stream(self, request: SecurityRunRequest) -> AsyncIterator[ChatRunEvent]:
         chat_settings = await get_chat_settings_async()
-        try:
-            if is_team_id(request.agent_id):
-                if not team_feature_enabled():
-                    yield ChatRunEvent(
-                        "run.failed",
-                        {
-                            "run_id": "",
-                            "code": "TEAM_DISABLED",
-                            "message": "Agno Team 未启用（设置环境变量 TAIS_ENABLE_AGNO_TEAM=1）",
-                            "retryable": False,
-                        },
-                    )
+        # One directory per Chat invocation, including Team and provider fallback
+        # paths.  Nested helpers share it and its ``finally`` cleanup runs when
+        # this async generator is closed on completion/disconnect.
+        with analysis_workspace_context() as _workspace:
+            try:
+                if is_team_id(request.agent_id):
+                    if not team_feature_enabled():
+                        yield ChatRunEvent(
+                            "run.failed",
+                            {
+                                "run_id": "",
+                                "code": "TEAM_DISABLED",
+                                "message": "Agno Team 未启用（设置环境变量 TAIS_ENABLE_AGNO_TEAM=1）",
+                                "retryable": False,
+                            },
+                        )
+                        return
+                    try:
+                        async for event in self._stream_team(request, chat_settings):
+                            yield event
+                    except ValueError as exc:
+                        yield ChatRunEvent(
+                            "run.failed",
+                            {
+                                "run_id": "",
+                                "code": "TEAM_BUILD_ERROR",
+                                "message": str(exc) or "无法构建 Team",
+                                "retryable": False,
+                            },
+                        )
                     return
-                try:
-                    async for event in self._stream_team(request, chat_settings):
+                async with self.security_agent_context(request) as security_agent:
+                    async for event in self._stream_agent_events(
+                        security_agent,
+                        request,
+                        chat_settings,
+                    ):
                         yield event
-                except ValueError as exc:
-                    yield ChatRunEvent(
-                        "run.failed",
-                        {
-                            "run_id": "",
-                            "code": "TEAM_BUILD_ERROR",
-                            "message": str(exc) or "无法构建 Team",
-                            "retryable": False,
-                        },
+            except Exception as exc:
+                if not _is_provider_block_error(exc):
+                    raise
+                logger.warning("模型服务拦截完整 Agent 上下文，切换到无工具降级模式: {}", exc)
+                yield ChatRunEvent("content.delta", {"run_id": "", "delta": "模型服务拦截了完整 Agent 上下文，已切换到无工具安全模式。\n\n"})
+                fallback_agent = await _maybe_await(
+                    self.build_fallback_agent(
+                        request.model_id,
+                        memory_enabled=request.memory_enabled,
+                        live_search=request.live_search,
                     )
-                return
-            async with self.security_agent_context(request) as security_agent:
+                    if request.reasoning_effort is None
+                    else self.build_fallback_agent(
+                        request.model_id,
+                        request.reasoning_effort,
+                        memory_enabled=request.memory_enabled,
+                        live_search=request.live_search,
+                    )
+                )
                 async for event in self._stream_agent_events(
-                    security_agent,
+                    fallback_agent,
                     request,
                     chat_settings,
                 ):
                     yield event
-        except Exception as exc:
-            if not _is_provider_block_error(exc):
-                raise
-            logger.warning("模型服务拦截完整 Agent 上下文，切换到无工具降级模式: {}", exc)
-            yield ChatRunEvent("content.delta", {"run_id": "", "delta": "模型服务拦截了完整 Agent 上下文，已切换到无工具安全模式。\n\n"})
-            fallback_agent = await _maybe_await(
-                self.build_fallback_agent(
-                    request.model_id,
-                    memory_enabled=request.memory_enabled,
-                    live_search=request.live_search,
-                )
-                if request.reasoning_effort is None
-                else self.build_fallback_agent(
-                    request.model_id,
-                    request.reasoning_effort,
-                    memory_enabled=request.memory_enabled,
-                    live_search=request.live_search,
-                )
-            )
-            async for event in self._stream_agent_events(
-                fallback_agent,
-                request,
-                chat_settings,
-            ):
-                yield event
 
 
 DEFAULT_SECURITY_RUN_RUNTIME = SecurityRunRuntime()

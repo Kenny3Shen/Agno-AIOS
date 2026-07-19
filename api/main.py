@@ -1,14 +1,18 @@
 import asyncio
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
 from anyio import Lock
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from agno.os.middleware.jwt import JWTMiddleware
 from loguru import logger
 from fastmcp.utilities.lifespan import combine_lifespans
+from sqlalchemy import text
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from api.auth.claims import ADMIN_SCOPE
 from api.auth.database import bootstrap_admin_user, close_auth_engine, create_auth_tables
@@ -17,7 +21,10 @@ from api.config import get_settings
 from api.core.logging import configure_logging_async
 from api.mcp.config import bootstrap_mcp_config
 from api.mcp.server import bootstrap_mcp_token, configure_main_mcp, main_mcp
-from api.persistence.database import dispose_async_control_plane_engine
+from api.persistence.database import (
+    dispose_async_control_plane_engine,
+    get_async_control_plane_engine,
+)
 from api.routes import (
     agent_evals,
     approvals,
@@ -51,6 +58,7 @@ JWT_EXCLUDED_ROUTE_PATHS = [
     "/vite.svg",
     "/api/auth/*",
     "/api/health",
+    "/api/ready",
     "/mcp",
     "/mcp/*",
     "/docs",
@@ -58,6 +66,9 @@ JWT_EXCLUDED_ROUTE_PATHS = [
     "/openapi.json",
     "/docs/oauth2-redirect",
 ]
+
+ReadinessProbe = Callable[[], Awaitable[bool | None]]
+
 
 class LazyFrontendStaticFiles:
     def __init__(self) -> None:
@@ -108,8 +119,38 @@ def _asyncio_exception_handler(loop: asyncio.AbstractEventLoop, context: dict) -
         logger.exception("Unable to schedule background failure notification")
 
 
+async def check_control_plane_database() -> bool:
+    """Verify that the control-plane database can serve a minimal query."""
+    engine = get_async_control_plane_engine()
+    async with engine.connect() as connection:
+        await connection.execute(text("SELECT 1"))
+    return True
+
+
+async def is_application_ready(application: FastAPI) -> bool:
+    """Check startup completion and the injectable readiness dependency.
+
+    ``application.state.readiness_probe`` permits focused tests and deployments
+    with an extended probe without making liveness depend on external services.
+    """
+    if not getattr(application.state, "is_ready", False):
+        return False
+
+    readiness_probe: ReadinessProbe = getattr(
+        application.state,
+        "readiness_probe",
+        check_control_plane_database,
+    )
+    try:
+        return (await readiness_probe()) is not False
+    except Exception:
+        logger.warning("Readiness probe failed")
+        return False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app.state.is_ready = False
     await configure_logging_async(app_settings)
     try:
         asyncio.get_running_loop().set_exception_handler(_asyncio_exception_handler)
@@ -136,9 +177,11 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("启动 Workflow cron 调度器失败")
 
+    app.state.is_ready = True
     try:
         yield
     finally:
+        app.state.is_ready = False
         await stop_workflow_cron_scheduler()
         await shutdown_security_runtime()
         await close_auth_engine()
@@ -153,6 +196,8 @@ app = FastAPI(
     version=app_settings.app_version,
     lifespan=combine_lifespans(lifespan, mcp_app.lifespan),
 )
+app.state.is_ready = False
+app.state.readiness_probe = check_control_plane_database
 
 # Starlette middleware typing expects pure ASGI; FastAPI classes are compatible at runtime.
 app.add_middleware(
@@ -164,10 +209,18 @@ app.add_middleware(
 )
 
 
-# Health check
+# Liveness check: deliberately does not depend on PostgreSQL or other services.
 @app.get("/api/health")
 def health_check():
     return {"status": "ok", "environment": app_settings.environment}
+
+
+@app.get("/api/ready")
+async def readiness_check(request: Request):
+    """Return 503 until startup and the control-plane dependency are ready."""
+    if not await is_application_ready(request.app):
+        return JSONResponse(status_code=503, content={"status": "not_ready"})
+    return {"status": "ready", "environment": app_settings.environment}
 
 
 # Include routers
@@ -197,6 +250,10 @@ app.add_middleware(
     excluded_route_paths=JWT_EXCLUDED_ROUTE_PATHS,
     admin_scope=ADMIN_SCOPE,
     user_isolation=True,
+)
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=app_settings.trusted_hosts,
 )
 
 # Integrated FastMCP protocol endpoint. Same process, same port:

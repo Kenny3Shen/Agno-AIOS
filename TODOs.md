@@ -129,8 +129,9 @@
 - [x] Team 成员 tool 事件前缀 `[成员名]` + member_id 字段（ThoughtChain 可辨识）
 - [x] Team/Agent 流式取消：`stream_cancel` 等待 + `cancel_run` 多形态调用
 - [x] Team SSE 集成测试：成员 thought/tool、队长 content、tools-off、cancel
-- [x] data-analysis：FileTools + CsvTools（沙箱 list/read/columns）+ PythonTools；SQL 仅 SQLTools
-- [x] data-analysis：Chat 上传文档/CSV 自动 stage 到分析沙箱（File/CsvTools 可见）
+- [x] data-analysis：FileTools + CsvTools（每运行 0700 工作区 list/read/columns）+ 可选本地 Python；SQL 仅 SQLTools
+- [x] data-analysis：Chat/Team/Workflow（含恢复）上传文件只 stage 到当前运行工作区，finally 清理
+- [x] 本地 Python：生产 fail-closed；非生产须显式 `TAIS_ALLOW_UNSAFE_LOCAL_PYTHON=1`，目录限制不作为进程沙箱声明
 - [x] data-analysis：移除 DuckDB；CSV 聚合用 Polars，仓库 SQL 用 SQLTools
 - [x] deep-research：可选 `web_search`（DuckDuckGoTools；缺 `ddgs` 时 soft-fail，仍可用 Live Search + Website）
 
