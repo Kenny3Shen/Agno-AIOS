@@ -142,5 +142,7 @@ def test_chat_document_upload_produces_markdown(monkeypatch: pytest.MonkeyPatch)
     assert bundle.document_markdown
     assert bundle.document_markdown[0][0] == "note.pdf"
     assert "ok" in bundle.document_markdown[0][1]
+    assert bundle.files == ()
+    assert len(bundle.workspace_files) == 1
     assert bundle.attachments[0]["engine"] == "docling"
     assert bundle.attachments[0]["converted"] == "markdown"

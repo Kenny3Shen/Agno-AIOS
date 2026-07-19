@@ -5,6 +5,19 @@
 - Workflow cron 的 workflow-row CAS、durable job 插入和 `last_run_at` 更新处于同一事务；入队异常会回滚，避免永久漏跑。
 - Legacy Grok/xAI 持久化配置通过 `20260720_0002` Alembic 数据迁移一次性规范化；不再在请求路径逐行写回。
 
+## 已完成：真实负载基准与 Chat 文档兼容性
+
+- `uv run benchmark-runtime` 提供显式 opt-in 的 Chat SSE / Overview 预发基准，输出 TTFT、p50/p95、失败率和事件量，且不持久化 token、prompt 或模型输出。
+- 本机预发 DeepSeek Flash（tools off）在 6 并发、6 个短 Chat 请求下全部成功：TTFT p95 约 1.26s、总时延 p95 约 2.08s；当前没有证据说明同步 tracing 已造成 SSE 退化，暂不启用 Agno tracing batch（其可见性延迟也会增加）。
+- `--file README.md` 端到端通过；Docling 文档 Markdown 注入模型消息，原始 `File` 只进入 data-analysis / Team 隔离工作区，避免 DeepSeek Chat Completions 的 `unknown variant file` 400。
+- 取消流改为单一 `security-run-cancel-wait` 生命周期，并在 SSE 退出时 cancel + await，避免 pending task 警告。
+
+## 下一步：以端点与交付链路为主的性能治理
+
+- Dashboard Overview 在同机 6 并发请求下 p95 约 866ms（单并发样本 p50 约 169ms）；先做按用户/时间窗的短 TTL 请求合并或缓存，并用 `EXPLAIN` 验证 trace `(user_id, start_time)` / `(user_id, status, start_time)` 复合索引需求，再考虑扩大 API worker 数。
+- Dashboard 默认路由会下载约 3.70MB 原始（约 1.16MB gzip）的 CSS/JS；生产部署应先提供 immutable cache + Brotli/gzip，随后将全量 `echarts` 换成 `echarts/core` 按需注册或在无图表数据时延后加载。
+- Chat 当前每条 SSE event 都会遍历消息列表，且历史接口没有分页窗口；先补最近消息窗口/向前分页和 SSE rAF 合并，再以 100/500 条真实历史决定是否引入虚拟列表，避免过早改变 Bubble.List 的滚动锚定语义。
+
 ## 已完成：PgVector 索引只读核验
 
 - `uv run verify-pgvector-indexes` 从配置的知识库 schema/table 读取 PostgreSQL catalog 与 `pg_indexes` 定义，报告 embedding 声明/抽样维度、HNSW/IVFFlat、全文 GIN 与 JSONB metadata/filter GIN 状态。

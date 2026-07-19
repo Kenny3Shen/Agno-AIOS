@@ -64,10 +64,15 @@ _DOCUMENT_CONVERSION_SLOTS = BoundedSemaphore(MAX_CHAT_DOCUMENT_CONCURRENCY)
 
 @dataclass(frozen=True)
 class ChatMediaBundle:
-    """Agno media objects + light metadata for UI history projection."""
+    """Model media, workspace-only media, and metadata for a chat upload."""
 
     images: tuple[Image, ...] = ()
     files: tuple[File, ...] = ()
+    # Documents converted to Markdown are retained only for the isolated
+    # data-analysis / Team workspace.  Passing those same File objects to a
+    # Chat Completions provider produces an unsupported ``file`` content part
+    # for providers such as DeepSeek.
+    workspace_files: tuple[File, ...] = ()
     audio: tuple[Audio, ...] = ()
     videos: tuple[Video, ...] = ()
     # UI-facing: name / mime / kind (image|document|audio|video)
@@ -191,7 +196,7 @@ async def process_chat_uploads(files: list[UploadFile] | None) -> ChatMediaBundl
         )
 
     images: list[Image] = []
-    docs: list[File] = []
+    workspace_docs: list[File] = []
     audios: list[Audio] = []
     videos: list[Video] = []
     attachments: list[dict[str, str]] = []
@@ -256,9 +261,9 @@ async def process_chat_uploads(files: list[UploadFile] | None) -> ChatMediaBundl
                     )
                 )
             elif category == "document":
-                # Convert to Markdown via Docling for model input; still keep a
-                # lightweight File media object for agents that stage attachments
-                # (e.g. data-analysis sandbox) when useful.
+                # Convert documents to Markdown for model input.  Keep the
+                # original File only for a run-scoped analysis workspace; never
+                # also send it to the model as a ``file`` content variant.
                 filename = upload.filename or "document"
                 remaining_chars = max(
                     0,
@@ -288,10 +293,10 @@ async def process_chat_uploads(files: list[UploadFile] | None) -> ChatMediaBundl
                     document_markdown.append((filename, markdown))
                     document_text_chars += len(markdown)
                     document_text_tokens += estimate_markdown_tokens(markdown)
-                # Keep Agno File for sandbox staging / history; models primarily
-                # see the Markdown injected into the message.
+                # The model sees only the Markdown injected into the message.
+                # Retain raw bytes exclusively for sandbox staging.
                 if media is not None:
-                    docs.append(media)
+                    workspace_docs.append(media)
                 attachments.append(
                     _attachment_meta(
                         kind="document",
@@ -313,7 +318,7 @@ async def process_chat_uploads(files: list[UploadFile] | None) -> ChatMediaBundl
 
     return ChatMediaBundle(
         images=tuple(images),
-        files=tuple(docs),
+        workspace_files=tuple(workspace_docs),
         audio=tuple(audios),
         videos=tuple(videos),
         attachments=tuple(attachments),

@@ -1,9 +1,11 @@
 import json
+from io import BytesIO
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
 from pydantic import ValidationError
+from starlette.datastructures import FormData, Headers, UploadFile
 from starlette.requests import Request
 from api.auth.ownership import assert_owned_resource
 from api.routes import chat
@@ -354,6 +356,71 @@ async def test_chat_passes_reasoning_effort_to_the_run_request():
 
     assert response.media_type == "text/event-stream"
     assert captured["reasoning_effort"] == "max"
+
+
+@pytest.mark.asyncio
+async def test_multipart_document_uses_markdown_and_workspace_only_file(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A Docling document must not also reach the model as Agno File media."""
+
+    upload = UploadFile(
+        file=BytesIO(b"# README"),
+        filename="README.md",
+        headers=Headers({"content-type": "text/markdown"}),
+    )
+    form = FormData(
+        [
+            ("message", "请总结附件"),
+            ("session_id", "session-1"),
+            ("files", upload),
+        ]
+    )
+    workspace_file = SimpleNamespace(filename="README.md", content=b"# README")
+    captured: dict[str, object] = {}
+    start_kwargs: dict[str, Any] = {}
+
+    async def receive() -> dict[str, object]:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    multipart_request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/chat",
+            "headers": [(b"content-type", b"multipart/form-data; boundary=test")],
+            "client": ("127.0.0.1", 1),
+        },
+        receive=receive,
+    )
+
+    async def fake_process_chat_uploads(uploads):
+        captured["uploads"] = uploads
+        return SimpleNamespace(
+            images=(),
+            files=(),
+            workspace_files=(workspace_file,),
+            audio=(),
+            videos=(),
+            attachments=(),
+            document_markdown=(("README.md", "# README excerpt"),),
+        )
+
+    async def fake_start_chat_stream(**kwargs):
+        start_kwargs.update(kwargs)
+        return "stream-started"
+
+    monkeypatch.setattr(chat, "process_chat_uploads", fake_process_chat_uploads)
+    monkeypatch.setattr(chat, "_start_chat_stream", fake_start_chat_stream)
+    monkeypatch.setattr(multipart_request, "form", AsyncMock(return_value=form))
+
+    result = await chat.chat_agent(multipart_request, user=actor("u1"))
+
+    assert result == "stream-started"
+    assert captured["uploads"] == [upload]
+    assert "# README excerpt" in str(start_kwargs["message"])
+    assert start_kwargs["media_files"] == ()
+    assert start_kwargs["workspace_files"] == (workspace_file,)
 
 
 @pytest.mark.asyncio

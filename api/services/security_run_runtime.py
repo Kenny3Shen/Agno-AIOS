@@ -581,9 +581,13 @@ class SecurityRunRequest:
     agent_id: str = DEFAULT_AGENT_ID
     # None = all enabled skills; list = enabled ∩ names (Workflow-style).
     skill_names: list[str] | None = None
-    # Agno media for this turn (images / files / audio / videos).
+    # Agno media forwarded to the model for this turn.
     images: tuple[Any, ...] = ()
     files: tuple[Any, ...] = ()
+    # Raw attachments retained only for the isolated data-analysis / Team
+    # workspace.  Docling-converted documents belong here so providers that do
+    # not support ``file`` input receive their Markdown text only.
+    workspace_files: tuple[Any, ...] = ()
     audio: tuple[Any, ...] = ()
     videos: tuple[Any, ...] = ()
     # Light UI metadata only (name/mime/kind); not sent to the model.
@@ -607,6 +611,7 @@ class SecurityRunRequest:
         skill_names: list[str] | None = None,
         images: tuple[Any, ...] | list[Any] | None = None,
         files: tuple[Any, ...] | list[Any] | None = None,
+        workspace_files: tuple[Any, ...] | list[Any] | None = None,
         audio: tuple[Any, ...] | list[Any] | None = None,
         videos: tuple[Any, ...] | list[Any] | None = None,
         attachments: tuple[dict[str, str], ...] | list[dict[str, str]] | None = None,
@@ -639,6 +644,7 @@ class SecurityRunRequest:
             skill_names=resolved_skills,
             images=tuple(images or ()),
             files=tuple(files or ()),
+            workspace_files=tuple(workspace_files or ()),
             audio=tuple(audio or ()),
             videos=tuple(videos or ()),
             attachments=tuple(attachments or ()),
@@ -1225,6 +1231,12 @@ class SecurityRunRuntime:
         retry_waiter: asyncio.Task[dict[str, Any] | None] | None = asyncio.create_task(
             retry_queue.get(), name="security-run-retry-wait"
         )
+        # Keep one waiter for the full stream lifetime.  Creating one per
+        # received event left a cancelled ``security-run-cancel-wait`` task
+        # pending when a client closed the SSE generator immediately.
+        cancel_waiter: asyncio.Task[bool] = asyncio.create_task(
+            stream_cancel.wait(), name="security-run-cancel-wait"
+        )
         cancelled_emitted = False
         # True after leader terminal events so finally does not cancel Agno mid-persist.
         # Early client disconnect after run.completed used to mark runs CANCELLED and
@@ -1269,16 +1281,11 @@ class SecurityRunRuntime:
                 wait_set: set[asyncio.Task[Any]] = {
                     t for t in (agent_waiter, retry_waiter) if t is not None
                 }
-                cancel_waiter: asyncio.Task[Any] = asyncio.create_task(
-                    stream_cancel.wait(), name="security-run-cancel-wait"
-                )
                 wait_set.add(cancel_waiter)
                 done, _pending = await asyncio.wait(
                     wait_set, return_when=asyncio.FIRST_COMPLETED
                 )
-                if cancel_waiter not in done:
-                    cancel_waiter.cancel()
-                else:
+                if cancel_waiter in done:
                     # User/stop requested: stop producer and emit one cancelled event.
                     if not producer.done():
                         producer.cancel()
@@ -2000,9 +2007,16 @@ class SecurityRunRuntime:
                         pass
                     if user_stop or not run_finished_naturally:
                         _request_runner_cancel()
-            for waiter in (agent_waiter, retry_waiter):
-                if waiter is not None and not waiter.done():
+            waiters = tuple(
+                waiter
+                for waiter in (agent_waiter, retry_waiter, cancel_waiter)
+                if waiter is not None
+            )
+            for waiter in waiters:
+                if not waiter.done():
                     waiter.cancel()
+            if waiters:
+                await asyncio.gather(*waiters, return_exceptions=True)
             while True:
                 try:
                     retry_info = retry_queue.get_nowait()
@@ -2049,8 +2063,8 @@ class SecurityRunRuntime:
         attaches_skills = bool(profile.get("attach_skills")) and enable_tools
         tools: list[Any] = []
         if enable_tools:
-            if request.files and profile_uses_analysis_sandbox(profile):
-                stage_media_into_analysis_dir(request.files)
+            if request.workspace_files and profile_uses_analysis_sandbox(profile):
+                stage_media_into_analysis_dir(request.workspace_files)
             tools.extend(build_tools_for_profile(profile))
             if mcp_tools is not None:
                 tools.append(mcp_tools)
@@ -2222,7 +2236,7 @@ class SecurityRunRuntime:
                 memory_enabled=bool(request.memory_enabled),
                 enable_tools=enable_tools,
                 store_raw_tool_io=bool(request.store_raw_tool_io),
-                media_files=request.files,
+                media_files=request.workspace_files,
             )
             async for event in self._stream_agent_events(team, request, chat_settings):
                 yield event

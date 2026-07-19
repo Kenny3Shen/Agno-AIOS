@@ -40,6 +40,7 @@ update-cve = "api.tasks.update_cve:run"
 repair-trace-status = "api.tasks.repair_trace_status:run"
 verify-pgvector-indexes = "api.tasks.verify_pgvector_indexes:run"
 job-worker = "api.tasks.job_worker:run"
+benchmark-runtime = "api.tasks.benchmark_runtime:run"
 
 [build-system]
 requires = ["hatchling"]

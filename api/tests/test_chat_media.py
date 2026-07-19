@@ -32,7 +32,11 @@ def test_process_chat_uploads_image_and_pdf():
         )
     )
     assert len(bundle.images) == 1
-    assert len(bundle.files) == 1
+    # Docling documents become Markdown model input.  Their original bytes are
+    # reserved for the isolated analysis workspace, never an Agno ``file``
+    # content part sent to a Chat Completions model.
+    assert bundle.files == ()
+    assert len(bundle.workspace_files) == 1
     assert len(bundle.attachments) == 2
     assert bundle.attachments[0]["kind"] == "image"
     assert bundle.attachments[1]["kind"] == "document"
@@ -44,6 +48,28 @@ def test_process_chat_uploads_rejects_empty():
         raise AssertionError("expected HTTPException")
     except HTTPException as exc:
         assert exc.status_code == 400
+
+
+def test_readme_markdown_is_workspace_only_after_conversion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real README.md upload path must not yield a model ``file`` part."""
+
+    monkeypatch.setattr(
+        chat_media,
+        "convert_bytes_to_markdown",
+        lambda *_args, **_kwargs: "# README converted",
+    )
+
+    bundle = asyncio.run(
+        chat_media.process_chat_uploads(
+            [_upload("README.md", b"# README", "text/markdown")]
+        )
+    )
+
+    assert bundle.document_markdown == (("README.md", "# README converted"),)
+    assert bundle.files == ()
+    assert len(bundle.workspace_files) == 1
 
 
 def test_process_chat_uploads_rejects_too_many(monkeypatch):

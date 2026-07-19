@@ -4,6 +4,7 @@ from pathlib import Path
 import threading
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
+from typing import Any, AsyncGenerator, cast
 from unittest.mock import AsyncMock, patch
 
 from agno.models.deepseek import DeepSeek
@@ -189,13 +190,14 @@ async def test_chat_analysis_workspace_is_run_scoped_and_cleaned(monkeypatch):
     """Chat builds/stages analysis tools in one 0700 directory and removes it."""
     from api.services.agent_tools import current_analysis_workspace
 
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     class ScopedAgent:
         def __init__(self, tools):
             self.tools = tools
 
         async def arun(self, *_args, **_kwargs):
+            captured["run_kwargs"] = _kwargs
             workspace = current_analysis_workspace()
             assert workspace is not None
             captured["workspace"] = workspace.path
@@ -250,7 +252,7 @@ async def test_chat_analysis_workspace_is_run_scoped_and_cleaned(monkeypatch):
         user_id="u-analysis",
         agent_id="data-analysis",
         search_knowledge=False,
-        files=[SimpleNamespace(filename="chat.csv", content=b"x\n1\n")],
+        workspace_files=[SimpleNamespace(filename="chat.csv", content=b"x\n1\n")],
     )
 
     events = [event async for event in runtime.stream(request)]
@@ -260,6 +262,9 @@ async def test_chat_analysis_workspace_is_run_scoped_and_cleaned(monkeypatch):
     assert isinstance(workspace_path, Path)
     assert not workspace_path.exists()
     assert current_analysis_workspace() is None
+    # Workspace-only uploads must never become an Agno ``files`` argument for
+    # the provider (DeepSeek Chat Completions rejects that content variant).
+    assert "files" not in captured["run_kwargs"]
 
 
 @pytest.mark.asyncio
@@ -289,7 +294,7 @@ async def test_security_agent_context_cleans_resume_workspace(monkeypatch):
         user_id="u-resume",
         agent_id="data-analysis",
         search_knowledge=False,
-        files=[SimpleNamespace(filename="resume.csv", content=b"x\n2\n")],
+        workspace_files=[SimpleNamespace(filename="resume.csv", content=b"x\n2\n")],
     )
     async with runtime.security_agent_context(request):
         assert (captured["workspace"] / "resume.csv").exists()
@@ -631,6 +636,55 @@ async def test_stream_agent_events_projects_safe_tools_sources_and_metrics():
     assert completed["metrics"] == {"total_tokens": 42, "duration": 1.25}
     assert completed["followups"] == ["Assess impact"]
     assert not runtime.cancel_run(user_id="u1", run_id="run-1")
+
+
+@pytest.mark.asyncio
+async def test_stream_agent_events_settles_cancel_waiter_before_return(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Avoid pending ``security-run-cancel-wait`` tasks at SSE teardown."""
+
+    original_create_task = asyncio.create_task
+    cancel_waiters: list[asyncio.Task[object]] = []
+
+    def tracking_create_task(coro, *, name=None, context=None):
+        kwargs = {"name": name} if name is not None else {}
+        if context is not None:
+            kwargs["context"] = context
+        task = original_create_task(coro, **kwargs)
+        if name == "security-run-cancel-wait":
+            cancel_waiters.append(task)
+        return task
+
+    class CompletedAgent:
+        async def arun(self, *_args, **_kwargs):
+            yield {"event": "RunStarted", "run_id": "run-cleanup"}
+            yield {"event": "RunCompleted", "run_id": "run-cleanup", "metrics": {}}
+
+    monkeypatch.setattr(
+        security_run_runtime.asyncio,
+        "create_task",
+        tracking_create_task,
+    )
+    runtime = security_run_runtime.SecurityRunRuntime()
+
+    stream = cast(
+        AsyncGenerator[ChatRunEvent, None],
+        runtime._stream_agent_events(
+            CompletedAgent(),
+            security_run_runtime.SecurityRunRequest.from_chat_args("hello", user_id="u1"),
+        ),
+    )
+    events = []
+    async for event in stream:
+        events.append(event)
+        if event.event == "run.completed":
+            break  # Mirror an SSE consumer that closes at its terminal event.
+    await stream.aclose()
+
+    assert any(event.event == "run.completed" for event in events)
+    assert cancel_waiters
+    assert all(waiter.done() for waiter in cancel_waiters)
 
 
 @pytest.mark.asyncio

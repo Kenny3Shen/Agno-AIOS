@@ -235,13 +235,20 @@ async def _start_chat_stream(
     agent_id: str | None = None,
     media_images: tuple = (),
     media_files: tuple = (),
+    workspace_files: tuple = (),
     media_audio: tuple = (),
     media_videos: tuple = (),
     attachments: tuple = (),
     user: User,
     raw_request: Request,
 ):
-    if not message.strip() and not (media_images or media_files or media_audio or media_videos):
+    if not message.strip() and not (
+        media_images
+        or media_files
+        or workspace_files
+        or media_audio
+        or media_videos
+    ):
         raise HTTPException(status_code=422, detail="消息或附件不能同时为空")
     if session_id:
         owner_user_id = await get_session_owner_async(session_id)
@@ -279,6 +286,7 @@ async def _start_chat_stream(
         agent_id=agent_id,
         images=media_images,
         files=media_files,
+        workspace_files=workspace_files,
         audio=media_audio,
         videos=media_videos,
         attachments=attachments,
@@ -358,6 +366,7 @@ async def chat_agent(
                 agent_id=agent_raw or None,
                 media_images=bundle.images,
                 media_files=bundle.files,
+                workspace_files=bundle.workspace_files,
                 media_audio=bundle.audio,
                 media_videos=bundle.videos,
                 attachments=bundle.attachments,
