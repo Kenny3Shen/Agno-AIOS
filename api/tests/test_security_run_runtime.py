@@ -10,6 +10,7 @@ from agno.models.deepseek import DeepSeek
 import pytest
 from pydantic import SecretStr
 
+from api.persistence.durable_jobs import JobState
 from api.services import runtime_env, security_run_runtime
 from api.services.chat_run_events import ChatRunEvent
 from api.utils.async_once import AsyncOnce
@@ -1008,6 +1009,10 @@ class ResumeDb:
 
     async def update_approval_run_status(self, run_id, status):
         self.status_updates.append((run_id, status))
+        self.approval = {
+            **self.approval,
+            "run_status": getattr(status, "value", str(status)),
+        }
 
     async def get_approvals(self, *, status=None, run_id=None, **_kwargs):
         if run_id == "run-1":
@@ -1024,30 +1029,92 @@ async def test_schedule_resume_is_idempotent_for_completed_run():
 
     assert await runtime.schedule_resume("approval-1") == "COMPLETED"
     assert db.status_updates == []
-    assert runtime._resume_tasks == {}
 
 
 @pytest.mark.asyncio
-async def test_schedule_resume_deduplicates_active_background_task():
+async def test_resume_job_does_not_repeat_a_completed_continuation():
+    db = ResumeDb(approval=_security_approval(run_status="COMPLETED"))
+    runtime = security_run_runtime.SecurityRunRuntime(
+        security_run_runtime.SecurityRunRuntimeDependencies(get_db=lambda: db)
+    )
+
+    with (
+        patch.object(runtime, "_load_approval_run", new=AsyncMock()) as load_run,
+        patch.object(
+            security_run_runtime,
+            "notify_submitter_of_hitl_resolution",
+            new=AsyncMock(),
+        ) as notify,
+    ):
+        assert await runtime._resume_job("approval-1") == "COMPLETED"
+
+    load_run.assert_not_awaited()
+    notify.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_resume_job_does_not_implicitly_retry_an_error_run():
+    db = ResumeDb(approval=_security_approval(run_status="ERROR"))
+    runtime = security_run_runtime.SecurityRunRuntime(
+        security_run_runtime.SecurityRunRuntimeDependencies(get_db=lambda: db)
+    )
+
+    with patch.object(runtime, "_load_approval_run", new=AsyncMock()) as load_run:
+        assert await runtime._resume_job("approval-1") == "ERROR"
+
+    load_run.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_schedule_resume_idempotently_enqueues_durable_job():
     db = ResumeDb()
     runtime = security_run_runtime.SecurityRunRuntime(
         security_run_runtime.SecurityRunRuntimeDependencies(get_db=lambda: db)
     )
-    started = asyncio.Event()
+    durable_job = SimpleNamespace(id="job-1", state=JobState.QUEUED)
 
-    async def pending_job(approval_id):
-        assert approval_id == "approval-1"
-        started.set()
-        await asyncio.Event().wait()
-
-    with patch.object(runtime, "_resume_job", new=pending_job):
+    with patch.object(
+        security_run_runtime,
+        "enqueue_durable_job",
+        new=AsyncMock(return_value=durable_job),
+    ) as enqueue:
         assert await runtime.schedule_resume("approval-1") == "RUNNING"
-        await started.wait()
         assert await runtime.schedule_resume("approval-1") == "RUNNING"
-        assert len(db.status_updates) == 1
-        await runtime.shutdown()
+    assert db.status_updates == [("run-1", security_run_runtime.RunStatus.running)]
+    assert enqueue.await_count == 2
+    assert enqueue.await_args_list[0].kwargs == {
+        "kind": security_run_runtime.JobKind.SECURITY_HITL_RESUME,
+        "payload": {"approval_id": "approval-1"},
+        "idempotency_key": "security-hitl-resume:approval-1",
+    }
+    assert enqueue.await_args_list[1].kwargs == enqueue.await_args_list[0].kwargs
 
-    assert runtime._resume_tasks == {}
+
+@pytest.mark.asyncio
+async def test_schedule_resume_requeues_failed_durable_job_for_explicit_retry():
+    db = ResumeDb(approval=_security_approval(run_status="ERROR"))
+    runtime = security_run_runtime.SecurityRunRuntime(
+        security_run_runtime.SecurityRunRuntimeDependencies(get_db=lambda: db)
+    )
+    durable_job = SimpleNamespace(id="job-1", state=JobState.FAILED)
+
+    with (
+        patch.object(
+            security_run_runtime,
+            "enqueue_durable_job",
+            new=AsyncMock(return_value=durable_job),
+        ) as enqueue,
+        patch.object(security_run_runtime, "retry_job", new=AsyncMock()) as retry,
+    ):
+        assert await runtime.schedule_resume("approval-1", retry_error=True) == "RUNNING"
+
+    assert db.status_updates == [("run-1", security_run_runtime.RunStatus.running)]
+    enqueue.assert_awaited_once_with(
+        kind=security_run_runtime.JobKind.SECURITY_HITL_RESUME,
+        payload={"approval_id": "approval-1"},
+        idempotency_key="security-hitl-resume:approval-1",
+    )
+    retry.assert_awaited_once_with("job-1")
 
 
 @pytest.mark.asyncio
@@ -1146,7 +1213,7 @@ async def test_resume_job_rejects_requirement_and_notifies_submitter_after_conti
             new=AsyncMock(),
         ) as notify,
     ):
-        await runtime._resume_job("approval-1")
+        assert await runtime._resume_job("approval-1") == "COMPLETED"
 
     assert tool.confirmed is False
     assert tool.confirmation_note == "Rejected by administrator: 证据不足，暂不封禁"
@@ -1183,7 +1250,7 @@ async def test_resume_job_marks_agno_run_and_trace_error_and_notifies_both_sides
             new=AsyncMock(),
         ) as notify,
     ):
-        await runtime._resume_job("approval-1")
+        assert await runtime._resume_job("approval-1") == "ERROR"
 
     assert db.status_updates == [("run-1", security_run_runtime.RunStatus.error)]
     mark_trace.assert_awaited_once_with("run-1")

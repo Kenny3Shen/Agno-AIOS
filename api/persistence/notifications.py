@@ -18,14 +18,12 @@ from sqlalchemy import (
     desc,
     func,
     select,
-    text,
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, insert
-from sqlalchemy.schema import CreateSchema
-
 from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
+from api.persistence.migrations import ensure_control_plane_schema_current
 
 
 def _table() -> Table:
@@ -53,22 +51,7 @@ _notifications_ensure_once = AsyncOnce()
 
 
 async def _create_notifications_table() -> None:
-    table = _table()
-    schema = get_settings().agno_app_schema
-    async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(CreateSchema(schema, if_not_exists=True))
-        await conn.run_sync(table.create, checkfirst=True)
-        # Best-effort index evolve for existing deployments (create checkfirst
-        # alone does not add indexes to tables that already exist).
-        for ddl in (
-            f"CREATE INDEX IF NOT EXISTS idx_notifications_user_created "
-            f'ON "{schema}".notifications (user_id, created_at DESC)',
-            f"CREATE INDEX IF NOT EXISTS idx_notifications_user_id "
-            f'ON "{schema}".notifications (user_id, id)',
-            f"CREATE INDEX IF NOT EXISTS idx_notifications_user_unread "
-            f'ON "{schema}".notifications (user_id, read)',
-        ):
-            await conn.execute(text(ddl))
+    await ensure_control_plane_schema_current()
 
 
 async def _ensure() -> None:

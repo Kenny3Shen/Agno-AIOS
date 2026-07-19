@@ -32,11 +32,14 @@ dependencies = [
     "ddgs>=9.14.4",
     "docling>=2.113.0",
     "aiofiles>=25.1.0",
+    "alembic>=1.18.5",
 ]
 
 [project.scripts]
 update-cve = "api.tasks.update_cve:run"
 repair-trace-status = "api.tasks.repair_trace_status:run"
+verify-pgvector-indexes = "api.tasks.verify_pgvector_indexes:run"
+job-worker = "api.tasks.job_worker:run"
 
 [build-system]
 requires = ["hatchling"]

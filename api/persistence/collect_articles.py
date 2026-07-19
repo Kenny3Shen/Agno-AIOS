@@ -25,10 +25,9 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, insert
-from sqlalchemy.schema import CreateSchema
-
 from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
+from api.persistence.migrations import ensure_control_plane_schema_current
 
 COLLECT_ARTICLES_TABLE = "collect_articles"
 
@@ -89,24 +88,7 @@ _collect_articles_table_once = AsyncOnce()
 
 
 async def _create_collect_articles_table() -> None:
-    table = collect_articles_table()
-    schema = _app_schema()
-    async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(CreateSchema(schema, if_not_exists=True))
-        await conn.run_sync(table.create, checkfirst=True)
-        # ``Table.create(checkfirst=True)`` does not evolve an already-created
-        # table. Keep this explicit migration beside the table declaration so
-        # existing deployments receive persisted CVE tags too.
-        escaped_schema = schema.replace('"', '""')
-        await conn.execute(
-            text(
-                f'ALTER TABLE "{escaped_schema}"."{COLLECT_ARTICLES_TABLE}" '
-                "ADD COLUMN IF NOT EXISTS cve_ids TEXT[] "
-                "NOT NULL DEFAULT '{}'::text[]"
-            )
-        )
-        for index in table.indexes:
-            await conn.run_sync(index.create, checkfirst=True)
+    await ensure_control_plane_schema_current()
 
 
 async def ensure_collect_articles_table() -> None:

@@ -1,11 +1,9 @@
-import asyncio
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal, cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
-from loguru import logger
 
 from api.auth.claims import actor_id, scope_user_id
 from api.auth.models import User
@@ -13,6 +11,11 @@ from api.auth.scopes import require_scope
 from api.auth.visibility import can_manage_resource
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.knowledge_document_service import KnowledgeDocumentPayload
+from api.services.knowledge_durable_jobs import (
+    build_knowledge_ingest_payload,
+    enqueue_knowledge_ingest_job,
+    knowledge_ingest_idempotency_key,
+)
 from api.services.knowledge_rag_settings_service import current_ingest_defaults
 from api.services.knowledge_service import get_knowledge_base_lifecycle
 from api.utils.pagination import pagination_meta
@@ -23,9 +26,6 @@ from api.services.knowledge_upload_service import (
 )
 
 router = APIRouter(prefix="/api/knowledge", tags=["Knowledge"])
-
-# Wall-clock budget for one background ingest/update job (vectorize can be slow).
-KNOWLEDGE_INGEST_TIMEOUT_SECONDS = 15 * 60
 
 
 class KnowledgeDocumentResponsePayload(KnowledgeDocumentPayload):
@@ -64,60 +64,18 @@ def with_manage_flags(
     return flagged
 
 
-
-
-
-
-def _schedule_knowledge_ingest(
+def _knowledge_idempotency_key(
+    request: Request,
     *,
-    task_name: str,
-    work,
-    user: User,
-    audit_action: str,
-    audit_resource_id: str,
-    audit_metadata: Mapping[str, object] | None,
-    request_ctx: Request,
-) -> None:
-    """Fire-and-forget parse/vectorize so HTTP handlers can return after upload."""
-
-    async def _job() -> None:
-        try:
-            document = await asyncio.wait_for(
-                work(),
-                timeout=KNOWLEDGE_INGEST_TIMEOUT_SECONDS,
-            )
-            try:
-                await record_audit_event_async(
-                    user,
-                    action=audit_action,
-                    resource_type="knowledge_document",
-                    resource_id=str(
-                        (
-                            (document or {}).get("id")
-                            if isinstance(document, Mapping)
-                            else None
-                        )
-                        or audit_resource_id
-                    ),
-                    metadata=dict(audit_metadata or {}),
-                    **audit_request_context(request_ctx),
-                )
-            except Exception:
-                logger.exception("knowledge background audit failed: {}", task_name)
-        except Exception as exc:
-            logger.exception("knowledge background ingest failed: {}", task_name)
-            try:
-                from api.services.notification_service import notify_background_task_failure
-
-                await notify_background_task_failure(
-                    task_name=task_name,
-                    error=str(exc),
-                    user_id=actor_id(user),
-                )
-            except Exception:
-                logger.exception("knowledge background failure notify failed: {}", task_name)
-
-    asyncio.create_task(_job(), name=task_name)
+    operation: str,
+    owner_user_id: str,
+) -> str:
+    """Collapse only explicit client retries; fresh submissions stay distinct."""
+    return knowledge_ingest_idempotency_key(
+        operation=operation,
+        owner_user_id=owner_user_id,
+        request_key=request.headers.get("idempotency-key"),
+    )
 
 
 def _processing_document_payload(
@@ -314,38 +272,39 @@ async def create_text_document(
         else None
     )
     owner = actor_id(user)
-    job_id = f"processing:text:{owner}:{abs(hash((request.title, request.source, request.content[:64]))) % 10**12}"
     clean_title = (request.title or "").strip() or "text"
     clean_source = (request.source or "").strip() or "manual"
-
-    async def _bg_ingest() -> KnowledgeDocumentResponsePayload:
-        result = await get_knowledge_base_lifecycle().add_text_document_async(
-            title=request.title,
-            content=request.content,
-            source=request.source,
-            visibility=request.visibility,
-            metadata=request.metadata,
+    job = await enqueue_knowledge_ingest_job(
+        payload=build_knowledge_ingest_payload(
+            operation="text",
+            actor=user,
             owner_user_id=owner,
-            ingest_options=ingest_options,
-        )
-        return cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
-
-    _schedule_knowledge_ingest(
-        task_name=f"knowledge-bg-text:{job_id}",
-        work=_bg_ingest,
-        user=user,
-        audit_action="knowledge.create",
-        audit_resource_id=job_id,
-        audit_metadata={
-            "title": request.title,
-            "source": request.source,
-            "async_ingest": True,
-            "input_mode": "text",
-        },
-        request_ctx=request_ctx,
+            data={
+                "title": request.title,
+                "content": request.content,
+                "source": request.source,
+                "visibility": request.visibility,
+                "metadata": request.metadata,
+                "ingest_options": ingest_options or {},
+            },
+            audit_action="knowledge.create",
+            audit_resource_id="knowledge:text",
+            audit_metadata={
+                "title": request.title,
+                "source": request.source,
+                "async_ingest": True,
+                "input_mode": "text",
+            },
+            **audit_request_context(request_ctx),
+        ),
+        idempotency_key=_knowledge_idempotency_key(
+            request_ctx,
+            operation="text",
+            owner_user_id=owner,
+        ),
     )
     return _processing_document_payload(
-        job_id=job_id,
+        job_id=job.id,
         title=clean_title,
         source=clean_source,
         owner_user_id=owner,
@@ -357,7 +316,6 @@ async def create_text_document(
 
 @router.post("/documents/upload", response_model=None)
 async def upload_document(
-
     request_ctx: Request,
     file: UploadFile = File(...),
     title: str | None = Form(default=None),
@@ -403,42 +361,43 @@ async def upload_document(
 
     clean_source = (source or "").strip() or f"upload:{stored_upload.file_name}"
     owner = actor_id(user)
-    job_id = f"processing:upload:{stored_upload.upload_id}"
-
-    async def _bg_ingest() -> KnowledgeDocumentResponsePayload:
-        try:
-            result = await get_knowledge_base_lifecycle().add_file_document_async(
-                path=str(stored_upload.path),
-                title=clean_title,
-                source=clean_source,
-                metadata=stored_upload.metadata(),
+    try:
+        job = await enqueue_knowledge_ingest_job(
+            payload=build_knowledge_ingest_payload(
+                operation="upload",
+                actor=user,
                 owner_user_id=owner,
-                visibility=visibility,
-                ingest_options=ingest_options,
-            )
-        except Exception:
-            await remove_managed_upload_async(stored_upload.metadata())
-            raise
-        return cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
-
-    _schedule_knowledge_ingest(
-        task_name=f"knowledge-bg-upload:{stored_upload.upload_id}",
-        work=_bg_ingest,
-        user=user,
-        audit_action="knowledge.create",
-        audit_resource_id=job_id,
-        audit_metadata={
-            "file_name": stored_upload.file_name,
-            "file_size": stored_upload.file_size,
-            "mime_type": stored_upload.mime_type,
-            "source": clean_source,
-            "upload_mode": "browser",
-            "async_ingest": True,
-        },
-        request_ctx=request_ctx,
-    )
+                data={
+                    "path": str(stored_upload.path),
+                    "title": clean_title or "",
+                    "source": clean_source,
+                    "visibility": visibility,
+                    "metadata": stored_upload.metadata(),
+                    "ingest_options": ingest_options or {},
+                },
+                audit_action="knowledge.create",
+                audit_resource_id="knowledge:upload",
+                audit_metadata={
+                    "file_name": stored_upload.file_name,
+                    "file_size": stored_upload.file_size,
+                    "mime_type": stored_upload.mime_type,
+                    "source": clean_source,
+                    "upload_mode": "browser",
+                    "async_ingest": True,
+                },
+                **audit_request_context(request_ctx),
+            ),
+            idempotency_key=_knowledge_idempotency_key(
+                request_ctx,
+                operation="upload",
+                owner_user_id=owner,
+            ),
+        )
+    except Exception:
+        await remove_managed_upload_async(stored_upload.metadata())
+        raise
     return _processing_document_payload(
-        job_id=job_id,
+        job_id=job.id,
         title=clean_title or Path(stored_upload.file_name).stem,
         source=clean_source,
         owner_user_id=owner,
@@ -539,61 +498,48 @@ async def update_document(
                 detail="正文替换需要提供 content 和 file_name",
             )
 
-    job_id = f"processing:update:{request.mode}:{doc_id}"
     owner_filter = effective_knowledge_user_filter(user)
-
-    async def _bg_update() -> KnowledgeDocumentResponsePayload:
-        if request.mode == "rebuild":
-            updated = await get_knowledge_base_lifecycle().rebuild_document_async(
-                doc_id,
-                owner_user_id=owner_filter,
-                user=user,
-                title=metadata.title,
-                source=metadata.source,
-                visibility=metadata.visibility,
-                metadata=metadata.metadata,
-                ingest_options=ingest_options,
-            )
-        else:
-            updated = await get_knowledge_base_lifecycle().replace_document_source_async(
-                doc_id,
-                content=(request.content or "").strip(),
-                file_name=(request.file_name or "").strip(),
-                title=metadata.title,
-                source=metadata.source,
-                visibility=metadata.visibility,
-                metadata=metadata.metadata,
-                owner_user_id=owner_filter,
-                user=user,
-                ingest_options=ingest_options,
-            )
-        if updated is None:
-            raise LookupError("知识文档不存在")
-        return cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
-
     audit_action = (
         "knowledge.rebuild" if request.mode == "rebuild" else "knowledge.source_replace"
     )
-    _schedule_knowledge_ingest(
-        task_name=f"knowledge-bg-update:{request.mode}:{doc_id}",
-        work=_bg_update,
-        user=user,
-        audit_action=audit_action,
-        audit_resource_id=doc_id,
-        audit_metadata={
-            "mode": request.mode,
-            "fields": changed_metadata_fields(metadata),
-            "async_ingest": True,
-            **(
-                {"file_name": (request.file_name or "").strip()}
-                if request.mode == "replace_text"
-                else {}
-            ),
-        },
-        request_ctx=request_ctx,
+    operation = "rebuild" if request.mode == "rebuild" else "replace_text"
+    job = await enqueue_knowledge_ingest_job(
+        payload=build_knowledge_ingest_payload(
+            operation=operation,
+            actor=user,
+            owner_user_id=owner_filter,
+            data={
+                "doc_id": doc_id,
+                "content": (request.content or "").strip(),
+                "file_name": (request.file_name or "").strip(),
+                "title": metadata.title or "",
+                "source": metadata.source or "",
+                "visibility": metadata.visibility or "",
+                "metadata": metadata.metadata,
+                "ingest_options": ingest_options or {},
+            },
+            audit_action=audit_action,
+            audit_resource_id=doc_id,
+            audit_metadata={
+                "mode": request.mode,
+                "fields": changed_metadata_fields(metadata),
+                "async_ingest": True,
+                **(
+                    {"file_name": (request.file_name or "").strip()}
+                    if request.mode == "replace_text"
+                    else {}
+                ),
+            },
+            **audit_request_context(request_ctx),
+        ),
+        idempotency_key=_knowledge_idempotency_key(
+            request_ctx,
+            operation=operation,
+            owner_user_id=actor_id(user),
+        ),
     )
     return _processing_document_payload(
-        job_id=job_id,
+        job_id=job.id,
         title=(metadata.title or "").strip() or doc_id,
         source=(metadata.source or "").strip() or doc_id,
         owner_user_id=actor_id(user),
@@ -605,7 +551,6 @@ async def update_document(
 
 @router.post("/documents/{doc_id}/update/upload", response_model=None)
 async def update_document_upload(
-
     request_ctx: Request,
     doc_id: str,
     file: UploadFile = File(...),
@@ -652,47 +597,44 @@ async def update_document_upload(
 
     clean_source_val = (source or "").strip() or None
     owner_filter = effective_knowledge_user_filter(user)
-    job_id = f"processing:update-upload:{doc_id}:{stored_upload.upload_id}"
-
-    async def _bg_replace() -> KnowledgeDocumentResponsePayload:
-        try:
-            updated = await get_knowledge_base_lifecycle().replace_document_file_async(
-                doc_id,
-                path=str(stored_upload.path),
-                title=clean_title,
-                source=clean_source_val,
-                visibility=visibility,
-                metadata=stored_upload.metadata(),
+    try:
+        job = await enqueue_knowledge_ingest_job(
+            payload=build_knowledge_ingest_payload(
+                operation="replace_file",
+                actor=user,
                 owner_user_id=owner_filter,
-                user=user,
-                ingest_options=ingest_options,
-            )
-        except Exception:
-            await remove_managed_upload_async(stored_upload.metadata())
-            raise
-        if updated is None:
-            await remove_managed_upload_async(stored_upload.metadata())
-            raise LookupError("知识文档不存在")
-        return cast(KnowledgeDocumentResponsePayload, {**updated, "can_manage": True})
-
-    _schedule_knowledge_ingest(
-        task_name=f"knowledge-bg-update-upload:{doc_id}:{stored_upload.upload_id}",
-        work=_bg_replace,
-        user=user,
-        audit_action="knowledge.source_replace",
-        audit_resource_id=doc_id,
-        audit_metadata={
-            "mode": "upload",
-            "file_name": stored_upload.file_name,
-            "file_size": stored_upload.file_size,
-            "mime_type": stored_upload.mime_type,
-            "upload_mode": "browser",
-            "async_ingest": True,
-        },
-        request_ctx=request_ctx,
-    )
+                data={
+                    "doc_id": doc_id,
+                    "path": str(stored_upload.path),
+                    "title": clean_title or "",
+                    "source": clean_source_val or "",
+                    "visibility": visibility or "",
+                    "metadata": stored_upload.metadata(),
+                    "ingest_options": ingest_options or {},
+                },
+                audit_action="knowledge.source_replace",
+                audit_resource_id=doc_id,
+                audit_metadata={
+                    "mode": "upload",
+                    "file_name": stored_upload.file_name,
+                    "file_size": stored_upload.file_size,
+                    "mime_type": stored_upload.mime_type,
+                    "upload_mode": "browser",
+                    "async_ingest": True,
+                },
+                **audit_request_context(request_ctx),
+            ),
+            idempotency_key=_knowledge_idempotency_key(
+                request_ctx,
+                operation="replace_file",
+                owner_user_id=actor_id(user),
+            ),
+        )
+    except Exception:
+        await remove_managed_upload_async(stored_upload.metadata())
+        raise
     return _processing_document_payload(
-        job_id=job_id,
+        job_id=job.id,
         title=clean_title or stored_upload.file_name,
         source=clean_source_val or f"upload:{stored_upload.file_name}",
         owner_user_id=actor_id(user),

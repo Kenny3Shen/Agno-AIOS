@@ -296,6 +296,46 @@ async def test_resolve_route_derives_resolver_from_actor_and_records_audit():
 
 
 @pytest.mark.asyncio
+async def test_resolve_workflow_step_awaits_durable_resume_enqueue():
+    current_actor = actor("admin-1")
+    resolved = {
+        "id": "approval-workflow-1",
+        "status": "approved",
+        "source_type": "workflow",
+        "workflow_id": "workflow-1",
+        "run_id": "run-1",
+        "session_id": "session-1",
+    }
+    with (
+        patch.object(
+            approvals,
+            "resolve_approval_record",
+            new=AsyncMock(return_value=resolved),
+        ),
+        patch.object(
+            approvals,
+            "schedule_workflow_resume",
+            new=AsyncMock(),
+        ) as schedule,
+        patch.object(
+            approvals,
+            "get_approval_record",
+            new=AsyncMock(return_value=resolved),
+        ),
+        patch.object(approvals, "record_policy_event", new=AsyncMock()),
+    ):
+        result = await approvals.resolve_approval(
+            "approval-workflow-1",
+            approvals.ApprovalResolveRequest(status="approved"),
+            request=request(),
+            user=current_actor,
+        )
+
+    schedule.assert_awaited_once_with("approval-workflow-1")
+    assert result == resolved
+
+
+@pytest.mark.asyncio
 async def test_resolve_route_maps_missing_and_conflict_to_http_errors():
     current_actor = actor("admin-1")
 

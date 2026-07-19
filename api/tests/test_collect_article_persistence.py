@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy.dialects import postgresql
@@ -42,37 +42,13 @@ def test_error_upsert_keeps_an_existing_successful_payload() -> None:
 
 
 @pytest.mark.asyncio
-async def test_collect_articles_schema_migration_adds_cve_ids_column() -> None:
-    class Connection:
-        def __init__(self) -> None:
-            self.statements: list[object] = []
-
-        async def __aenter__(self) -> "Connection":
-            return self
-
-        async def __aexit__(self, *_args: object) -> None:
-            return None
-
-        async def execute(self, statement: object) -> None:
-            self.statements.append(statement)
-
-        async def run_sync(self, *_args: object, **_kwargs: object) -> None:
-            return None
-
-    class Engine:
-        def __init__(self, connection: Connection) -> None:
-            self.connection = connection
-
-        def begin(self) -> Connection:
-            return self.connection
-
-    connection = Connection()
+async def test_collect_articles_schema_ensure_only_checks_applied_migration() -> None:
+    schema_check = AsyncMock()
     with patch.object(
         collect_articles,
-        "get_async_control_plane_engine",
-        return_value=Engine(connection),
+        "ensure_control_plane_schema_current",
+        schema_check,
     ):
         await collect_articles._create_collect_articles_table()
 
-    ddl = "\n".join(str(statement) for statement in connection.statements)
-    assert "ADD COLUMN IF NOT EXISTS cve_ids TEXT[]" in ddl
+    schema_check.assert_awaited_once_with()

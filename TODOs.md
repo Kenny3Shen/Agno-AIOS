@@ -1,3 +1,16 @@
+## 已完成：Alembic 控制面与 PostgreSQL Durable Jobs
+
+- 控制面表（认证、`app`、`mcp`）由 Alembic baseline + 后续 revision 管理；API 与 Worker 启动仅校验 revision，运行期不再创建/修改仓库自有表。
+- `uv run job-worker --concurrency 4` 以 PostgreSQL `FOR UPDATE SKIP LOCKED` 租约、心跳、指数重试和幂等键执行 Knowledge、Workflow resume、Security HITL resume 与 cron dispatch。
+- Workflow cron 的 workflow-row CAS、durable job 插入和 `last_run_at` 更新处于同一事务；入队异常会回滚，避免永久漏跑。
+- Legacy Grok/xAI 持久化配置通过 `20260720_0002` Alembic 数据迁移一次性规范化；不再在请求路径逐行写回。
+
+## 已完成：PgVector 索引只读核验
+
+- `uv run verify-pgvector-indexes` 从配置的知识库 schema/table 读取 PostgreSQL catalog 与 `pg_indexes` 定义，报告 embedding 声明/抽样维度、HNSW/IVFFlat、全文 GIN 与 JSONB metadata/filter GIN 状态。
+- 缺失索引只给出以 corpus 规模、召回、延迟和代表性 `EXPLAIN` 为前提的建议；不在 API 启动或核验命令中调用 Agno `optimize()` / 创建近似索引。
+- `--explain-sql` 才会捕获单条只读 SELECT/WITH 的非 `ANALYZE` JSON plan，默认不收集计划。
+
 ## 已完成：后端测试静态化与 coroutine mock 清理
 
 - 清理测试文件重复 imports、弱类型任务 scheduler mock 和过期 Chat 路由调用顺序；`ty check api` 无诊断。
@@ -2058,7 +2071,7 @@ P0.4 审批值班薄入口        ✅
 ## 已完成：xAI 官方 Agno 接入
 
 - `provider=xai` → `agno.models.xai.xAI`（默认 `https://api.x.ai/v1`，Chat Completions）
-- 内置模型 `xai-grok-4.5`；旧 Grok / `api.x.ai` 配置自动迁移，不再用 OpenAI Responses
+- 内置模型 `xai-grok-4.5`；旧 Grok / `api.x.ai` 持久化配置由 Alembic 数据迁移规范化，不再用 OpenAI Responses 或运行时逐行写回
 - 设置页可选 xAI；不暴露 reasoning_effort
 
 相关：`model_factory.py` / `model_config_service.py` / `SettingsPage.tsx`

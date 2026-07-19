@@ -13,21 +13,14 @@ from sqlalchemy import (
     String,
     Table,
     Text,
-    and_,
     delete,
-    func,
     insert,
-    or_,
     select,
-    text,
-    update,
 )
-from sqlalchemy.schema import CreateSchema
-
-from loguru import logger
 
 from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
+from api.persistence.migrations import ensure_control_plane_schema_current
 
 MODEL_CONFIGS_TABLE = "model_configs"
 
@@ -75,92 +68,8 @@ def model_configs_table(metadata: MetaData | None = None) -> Table:
 _model_configs_table_once = AsyncOnce()
 
 
-def _xai_model_config_migration_statement(table: Table):
-    provider = func.lower(func.coalesce(table.c.provider, ""))
-    model_id = func.lower(func.coalesce(table.c.model_id, ""))
-    base_url = func.lower(func.coalesce(table.c.base_url, ""))
-    legacy_xai = and_(
-        provider.in_(("", "openai-compatible")),
-        or_(model_id.like("grok%"), base_url.like("%api.x.ai%")),
-    )
-    stale_xai = and_(
-        provider == "xai",
-        or_(
-            func.coalesce(table.c.api_protocol, "") != "chat-completions",
-            table.c.default_reasoning_effort.is_not(None),
-        ),
-    )
-    return (
-        update(table)
-        .where(or_(legacy_xai, stale_xai))
-        .values(
-            provider="xai",
-            api_protocol="chat-completions",
-            default_reasoning_effort=None,
-        )
-    )
-
-
-async def _migrate_xai_model_configs_async(conn: Any, table: Table) -> int:
-    result = await conn.execute(_xai_model_config_migration_statement(table))
-    return max(0, int(getattr(result, "rowcount", 0) or 0))
-
-
 async def _create_model_configs_table_async() -> None:
-    table = model_configs_table()
-    async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(CreateSchema(_app_schema(), if_not_exists=True))
-        await conn.run_sync(table.create, checkfirst=True)
-        preparer = conn.dialect.identifier_preparer
-        schema = preparer.quote(_app_schema())
-        table_name = preparer.quote(MODEL_CONFIGS_TABLE)
-        await conn.execute(
-            text(
-                f"ALTER TABLE {schema}.{table_name} "
-                "ADD COLUMN IF NOT EXISTS default_reasoning_effort VARCHAR(16)"
-            )
-        )
-        await conn.execute(
-            text(
-                f"ALTER TABLE {schema}.{table_name} "
-                "ADD COLUMN IF NOT EXISTS parallel_tool_calls BOOLEAN"
-            )
-        )
-        await conn.execute(
-            text(
-                f"ALTER TABLE {schema}.{table_name} "
-                "ADD COLUMN IF NOT EXISTS live_search_enabled BOOLEAN NOT NULL DEFAULT false"
-            )
-        )
-        await conn.execute(
-            text(
-                f"ALTER TABLE {schema}.{table_name} "
-                "ADD COLUMN IF NOT EXISTS retries BIGINT NOT NULL DEFAULT 4"
-            )
-        )
-        await conn.execute(
-            text(
-                f"ALTER TABLE {schema}.{table_name} "
-                "ADD COLUMN IF NOT EXISTS delay_between_retries BIGINT NOT NULL DEFAULT 1"
-            )
-        )
-        await conn.execute(
-            text(
-                f"ALTER TABLE {schema}.{table_name} "
-                "ADD COLUMN IF NOT EXISTS exponential_backoff BOOLEAN NOT NULL DEFAULT true"
-            )
-        )
-        await conn.execute(
-            text(
-                f"ALTER TABLE {schema}.{table_name} "
-                "ADD COLUMN IF NOT EXISTS http_max_retries BIGINT"
-            )
-        )
-        migrated_count = await _migrate_xai_model_configs_async(conn, table)
-        if migrated_count:
-            logger.info("canonicalized {} legacy xAI model config row(s)", migrated_count)
-        for index in table.indexes:
-            await conn.run_sync(index.create, checkfirst=True)
+    await ensure_control_plane_schema_current()
 
 
 async def ensure_model_configs_table_async() -> None:

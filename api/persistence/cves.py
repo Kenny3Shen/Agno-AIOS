@@ -21,14 +21,12 @@ from sqlalchemy import (
     literal,
     or_,
     select,
-    text,
     tuple_,
 )
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.schema import CreateSchema
-
 from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
+from api.persistence.migrations import ensure_control_plane_schema_current
 
 CVES_TABLE = "cves"
 
@@ -92,40 +90,8 @@ def cves_table() -> Table:
 _cves_table_once = AsyncOnce()
 
 
-def _quoted_identifier(value: str) -> str:
-    return '"' + value.replace('"', '""') + '"'
-
-
-async def _migrate_cve_source_ownership(conn: Any) -> None:
-    """Replace the legacy cross-source uniqueness constraint.
-
-    Earlier versions keyed rows by ``(cve_id, github_url)`` only.  That made
-    a deletion reported by one source delete an identical reference that had
-    also been discovered by another source.  PostgreSQL allows an upsert to
-    target a unique index, so use a three-column unique index for both fresh
-    and upgraded databases.
-    """
-    schema = _quoted_identifier(_app_schema())
-    table = _quoted_identifier(CVES_TABLE)
-    await conn.execute(
-        text(f"ALTER TABLE {schema}.{table} DROP CONSTRAINT IF EXISTS uq_cves_cve_url")
-    )
-    await conn.execute(
-        text(
-            "CREATE UNIQUE INDEX IF NOT EXISTS uq_cves_cve_url_source "
-            f"ON {schema}.{table} (cve_id, github_url, source)"
-        )
-    )
-
-
 async def _create_cves_table() -> None:
-    table = cves_table()
-    async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(CreateSchema(_app_schema(), if_not_exists=True))
-        await conn.run_sync(table.create, checkfirst=True)
-        await _migrate_cve_source_ownership(conn)
-        for index in table.indexes:
-            await conn.run_sync(index.create, checkfirst=True)
+    await ensure_control_plane_schema_current()
 
 
 async def ensure_cves_table() -> None:

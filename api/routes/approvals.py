@@ -266,7 +266,7 @@ async def resolve_approval(
             raise HTTPException(status_code=500, detail="Failed to schedule approval run") from exc
     elif is_workflow_step_approval(dict(approval)):
         try:
-            schedule_workflow_resume(approval_id)
+            await schedule_workflow_resume(approval_id)
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except Exception as exc:

@@ -21,10 +21,9 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, insert
-from sqlalchemy.schema import CreateSchema
-
 from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
+from api.persistence.migrations import ensure_control_plane_schema_current
 
 MCP_TOKENS_TABLE = "mcp_tokens"
 MCP_SERVERS_TABLE = "mcp_servers"
@@ -98,16 +97,7 @@ _mcp_tables_once = AsyncOnce()
 
 
 async def _create_mcp_tables() -> None:
-    metadata = _metadata()
-    tables = (
-        mcp_tokens_table(metadata),
-        mcp_servers_table(metadata),
-        mcp_component_overrides_table(metadata),
-    )
-    async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(CreateSchema(_mcp_schema(), if_not_exists=True))
-        for table in tables:
-            await conn.run_sync(table.create, checkfirst=True)
+    await ensure_control_plane_schema_current()
 
 
 async def ensure_mcp_tables() -> None:

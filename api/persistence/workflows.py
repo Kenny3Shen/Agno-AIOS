@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from api.utils.async_once import AsyncOnce
-
 import time
+from collections.abc import Mapping
 from typing import Any
 from uuid import uuid4
 
@@ -20,16 +19,18 @@ from sqlalchemy import (
     func,
     or_,
     select,
-    text,
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, insert
-from sqlalchemy.schema import CreateSchema
-
+from sqlalchemy.ext.asyncio import AsyncConnection
 from loguru import logger
 
 from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
+from api.persistence import durable_jobs as durable_job_store
+from api.persistence.durable_jobs import JobKind
+from api.persistence.migrations import ensure_control_plane_schema_current
+from api.utils.async_once import AsyncOnce
 
 WORKFLOWS_TABLE = "workflows"
 
@@ -132,35 +133,7 @@ async def _migrate_workflow_definition_aliases_async() -> None:
 
 
 async def _create_workflows_table_async() -> None:
-    table = workflows_table()
-    async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(CreateSchema(_schema(), if_not_exists=True))
-        await conn.run_sync(table.create, checkfirst=True)
-    # Best-effort schema evolution for triggers JSONB.
-    schema = _schema()
-    ddl = (
-        f'ALTER TABLE "{schema}"."{WORKFLOWS_TABLE}" '
-        "ADD COLUMN IF NOT EXISTS triggers JSONB NOT NULL DEFAULT '{}'::jsonb"
-    )
-    try:
-        async with get_async_control_plane_engine().begin() as conn:
-            await conn.execute(text(ddl))
-    except Exception:
-        # Concurrent migrate / already-applied columns are fine.
-        logger.debug("workflows triggers column migrate skipped", exc_info=True)
-    for extra_ddl in (
-        f'ALTER TABLE "{schema}"."{WORKFLOWS_TABLE}" '
-        "ADD COLUMN IF NOT EXISTS published_definition JSONB",
-        f'ALTER TABLE "{schema}"."{WORKFLOWS_TABLE}" '
-        "ADD COLUMN IF NOT EXISTS published_version BIGINT",
-        f'ALTER TABLE "{schema}"."{WORKFLOWS_TABLE}" '
-        "ADD COLUMN IF NOT EXISTS published_at BIGINT",
-    ):
-        try:
-            async with get_async_control_plane_engine().begin() as conn:
-                await conn.execute(text(extra_ddl))
-        except Exception:
-            logger.debug("workflows publish-column migrate skipped", exc_info=True)
+    await ensure_control_plane_schema_current()
     await _migrate_workflow_definition_aliases_async()
 
 
@@ -245,6 +218,73 @@ async def update_workflow(
     return dict(row) if row else None
 
 
+async def _locked_cron_triggers(
+    conn: AsyncConnection,
+    *,
+    workflow_id: str,
+    expected_last_run_at: float,
+) -> dict[str, Any] | None:
+    """Lock one workflow and return a mutable trigger document on a CAS match."""
+    table = workflows_table()
+    row = (
+        (
+            await conn.execute(
+                select(table).where(table.c.id == workflow_id).with_for_update()
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        return None
+    triggers_raw = row.get("triggers")
+    triggers: dict[str, Any] = (
+        {str(k): v for k, v in triggers_raw.items()}
+        if isinstance(triggers_raw, dict)
+        else {}
+    )
+    cron_raw = triggers.get("cron")
+    cron: dict[str, Any] = (
+        {str(k): v for k, v in cron_raw.items()}
+        if isinstance(cron_raw, dict)
+        else {}
+    )
+    current = float(cron.get("last_run_at") or 0)
+    expected = float(expected_last_run_at or 0)
+    # Another scheduler advanced last_run_at past our snapshot → lose claim.
+    if current > expected + 0.01:
+        return None
+    if expected > 0 and abs(current - expected) > 0.01:
+        return None
+    triggers["cron"] = cron
+    return triggers
+
+
+async def _advance_locked_cron_last_run(
+    conn: AsyncConnection,
+    *,
+    workflow_id: str,
+    triggers: dict[str, Any],
+    claim_ts: float,
+) -> bool:
+    """Persist a cron claim after the caller has completed its coupled write."""
+    table = workflows_table()
+    cron_raw = triggers.get("cron")
+    cron: dict[str, Any] = (
+        {str(k): v for k, v in cron_raw.items()}
+        if isinstance(cron_raw, dict)
+        else {}
+    )
+    cron["last_run_at"] = float(claim_ts)
+    triggers["cron"] = cron
+    result = await conn.execute(
+        update(table)
+        .where(table.c.id == workflow_id)
+        .values(triggers=triggers, updated_at=int(claim_ts))
+    )
+    return bool(result.rowcount)
+
+
 async def claim_cron_last_run(
     workflow_id: str,
     *,
@@ -253,46 +293,64 @@ async def claim_cron_last_run(
 ) -> bool:
     """CAS claim on triggers.cron.last_run_at (row lock) for multi-instance safety."""
     await ensure_workflows_table_async()
-    table = workflows_table()
-    expected = float(expected_last_run_at or 0)
     async with get_async_control_plane_engine().begin() as conn:
-        row = (
-            (
-                await conn.execute(
-                    select(table).where(table.c.id == workflow_id).with_for_update()
-                )
-            )
-            .mappings()
-            .first()
+        triggers = await _locked_cron_triggers(
+            conn,
+            workflow_id=workflow_id,
+            expected_last_run_at=expected_last_run_at,
         )
-        if row is None:
+        if triggers is None:
             return False
-        triggers_raw = row.get("triggers")
-        triggers: dict[str, Any] = (
-            {str(k): v for k, v in triggers_raw.items()}
-            if isinstance(triggers_raw, dict)
-            else {}
+        return await _advance_locked_cron_last_run(
+            conn,
+            workflow_id=workflow_id,
+            triggers=triggers,
+            claim_ts=claim_ts,
         )
-        cron_raw = triggers.get("cron")
-        cron: dict[str, Any] = (
-            {str(k): v for k, v in cron_raw.items()}
-            if isinstance(cron_raw, dict)
-            else {}
+
+
+async def claim_cron_run_and_enqueue_job(
+    workflow_id: str,
+    *,
+    expected_last_run_at: float,
+    claim_ts: float,
+    kind: JobKind | str,
+    payload: Mapping[str, Any],
+    idempotency_key: str,
+    max_attempts: int = 5,
+    priority: int = 0,
+) -> bool:
+    """Atomically claim a cron occurrence and enqueue its durable dispatch.
+
+    The workflow row remains locked while the idempotent job insert and
+    ``last_run_at`` update share one PostgreSQL transaction.  If queueing or
+    the final update fails, the transaction rolls back and the occurrence
+    remains due for the next scheduler tick.  Concurrent schedulers serialize
+    on the workflow row; the durable unique key is a second idempotency guard.
+    """
+    await ensure_workflows_table_async()
+    async with get_async_control_plane_engine().begin() as conn:
+        triggers = await _locked_cron_triggers(
+            conn,
+            workflow_id=workflow_id,
+            expected_last_run_at=expected_last_run_at,
         )
-        current = float(cron.get("last_run_at") or 0)
-        # Another worker advanced last_run_at past our snapshot → lose claim.
-        if current > expected + 0.01:
+        if triggers is None:
             return False
-        if expected > 0 and abs(current - expected) > 0.01:
-            return False
-        cron["last_run_at"] = float(claim_ts)
-        triggers["cron"] = cron
-        result = await conn.execute(
-            update(table)
-            .where(table.c.id == workflow_id)
-            .values(triggers=triggers, updated_at=int(claim_ts))
+        await durable_job_store.enqueue_job_in_transaction(
+            conn,
+            kind=kind,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            max_attempts=max_attempts,
+            priority=priority,
         )
-        return bool(result.rowcount)
+        return await _advance_locked_cron_last_run(
+            conn,
+            workflow_id=workflow_id,
+            triggers=triggers,
+            claim_ts=claim_ts,
+        )
 
 
 async def delete_workflow(
@@ -343,10 +401,7 @@ _workflow_versions_table_once = AsyncOnce()
 
 
 async def _create_workflow_versions_table_async() -> None:
-    table = workflow_versions_table()
-    async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(CreateSchema(_schema(), if_not_exists=True))
-        await conn.run_sync(table.create, checkfirst=True)
+    await ensure_control_plane_schema_current()
 
 
 async def ensure_workflow_versions_table_async() -> None:

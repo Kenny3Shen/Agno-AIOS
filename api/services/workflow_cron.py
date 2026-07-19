@@ -13,13 +13,13 @@ from croniter import croniter
 from loguru import logger
 
 from api.persistence import workflows as workflow_store
+from api.persistence.durable_jobs import JobKind
 from api.services.audit_service import record_audit_event_async
 from api.services.notification_service import notify_workflow_trigger_failure
 from api.services.workflow_run_runtime import stream_workflow_run
 from api.services.workflow_service import (
     _normalize_triggers,
     get_published_definition,
-    try_claim_cron_run,
 )
 
 
@@ -45,19 +45,30 @@ def next_cron_timestamp(
         return None
 
 
-def _cron_due(expression: str, last_run_at: float, now: float) -> bool:
+def _cron_due_timestamp(expression: str, last_run_at: float) -> float | None:
+    """Return the first scheduled fire after ``last_run_at``.
+
+    The timestamp is also the durable dispatch idempotency boundary.  It must
+    be derived from the schedule, rather than from the wall clock of one API
+    process, so competing scheduler instances construct the same job key.
+    """
     expr = (expression or "").strip()
     if not expr:
-        return False
+        return None
     try:
         # Walk from last_run forward; due if next schedule is in the past.
         base = datetime.fromtimestamp(last_run_at or 0, tz=timezone.utc)
         itr = croniter(expr, base)
         nxt = itr.get_next(datetime)
-        return nxt.timestamp() <= now + 0.5
-    except (ValueError, KeyError, TypeError):
+        return float(nxt.timestamp())
+    except (OverflowError, OSError, ValueError, KeyError, TypeError):
         logger.warning("Invalid cron expression: {!r}", expr)
-        return False
+        return None
+
+
+def _cron_dispatch_key(workflow_id: str, scheduled_at: float) -> str:
+    """Return one stable idempotency key for a workflow schedule occurrence."""
+    return f"workflow-cron:{workflow_id}:{scheduled_at:.6f}"
 
 
 def _system_actor(owner_user_id: str) -> SimpleNamespace:
@@ -70,7 +81,7 @@ def _system_actor(owner_user_id: str) -> SimpleNamespace:
 
 
 async def tick_workflow_crons(*, limit: int = 200) -> int:
-    """Fire due cron workflows once. Returns number started."""
+    """Queue due cron workflows once. Returns the number durably dispatched."""
     rows = await workflow_store.list_workflows_for_cron(limit=limit)
     now = time.time()
     started = 0
@@ -86,36 +97,35 @@ async def tick_workflow_crons(*, limit: int = 200) -> int:
             continue
         expression = str(cron.get("expression") or "").strip()
         last_run_at = float(cron.get("last_run_at") or 0)
-        if not _cron_due(expression, last_run_at, now):
+        scheduled_at = _cron_due_timestamp(expression, last_run_at)
+        if scheduled_at is None or scheduled_at > now + 0.5:
             continue
         definition = get_published_definition(row)
         if definition is None:
             logger.debug("Skip cron {}: no published definition", workflow_id)
             continue
-        # Atomic claim: multi-instance safe (FOR UPDATE + CAS on last_run_at).
-        claimed = await try_claim_cron_run(
+        # Keep the workflow CAS and durable insert in one transaction.  A
+        # queue-write failure must leave this occurrence due for the next tick.
+        claimed = await workflow_store.claim_cron_run_and_enqueue_job(
             workflow_id,
             expected_last_run_at=last_run_at,
             claim_ts=now,
+            kind=JobKind.WORKFLOW_CRON_DISPATCH,
+            payload={
+                "workflow_id": workflow_id,
+                "definition": definition,
+                "owner_user_id": str(row.get("owner_user_id") or "system"),
+                "run_id": str(uuid4()),
+                "session_id": str(uuid4()),
+                "expression": expression,
+                "scheduled_at": scheduled_at,
+            },
+            idempotency_key=_cron_dispatch_key(workflow_id, scheduled_at),
         )
         if not claimed:
             logger.debug("Skip cron {}: lost lease claim", workflow_id)
             continue
-        owner = str(row.get("owner_user_id") or "system")
-        run_id = str(uuid4())
-        session_id = str(uuid4())
         started += 1
-        asyncio.create_task(
-            _run_cron_workflow(
-                workflow_id=workflow_id,
-                definition=definition,
-                owner_user_id=owner,
-                run_id=run_id,
-                session_id=session_id,
-                expression=expression,
-            ),
-            name=f"workflow-cron-{workflow_id}",
-        )
     return started
 
 
@@ -127,7 +137,7 @@ async def _run_cron_workflow(
     run_id: str,
     session_id: str,
     expression: str = "",
-) -> None:
+) -> str:
     actor = _system_actor(owner_user_id)
     terminal = "error"
     try:
@@ -202,6 +212,7 @@ async def _run_cron_workflow(
                 session_id=session_id,
                 error="Cron workflow run failed",
             )
+    return terminal
 
 
 _cron_task: asyncio.Task[None] | None = None

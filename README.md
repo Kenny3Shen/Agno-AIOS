@@ -79,11 +79,14 @@ TAIS_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
 - CVE 情报源配置为仓库根目录 `cve_sources.toml`（可用 `TAIS_CVE_SOURCE_CONFIG_PATH` 覆盖）。
 Collect 按 `api/utils/url2md_utils.domain_rules` 源站爬取文章入库（`collect_articles`），页面默认从库检索。标题优先 og:title；可选 `TAIS_COLLECT_USE_PLAYWRIGHT` 浏览器兜底。解析侧用 `resolve_domain_rule_key` 归一化 host/`www` 并安全匹配多 class 正文容器（div/article/section/main）；规则未命中、class 漂移或 domain 正文过短（<200）时回退语义容器（article/main 等）；正文抽取含 h1–h4/pre/blockquote；已停用 botcrawl / The Register / securitylab.ru；源站含 BleepingComputer/Krebs/SecurityWeek/Dark Reading/The Record/Unit 42/Cloudflare 等；文章卡可跳转 CVE。同步时并发发现与抓取；跨源 round-robin 选取 URL 并跳过已入库成功项后补齐预算；重复同步返回 409。列表默认不带正文、可筛失败并 reparse/批量重采；源健康计数与按失败源快捷筛选；同步可按当前筛选源站；发现阶段跟进分页列表页；CVE 关键词走全文索引，页面进入即检索最近条目；库更新与 Collect 源站同步均支持 `stream=true` 阶段进度；Collect 同步与 CVE 库更新均可前端 Abort 停止（发现/抓取 sibling 任务一并取消；已写入变更保留）。
 - `POSTGRES_*` / `POSTGRES_URL`：PostgreSQL 连接。
+- 控制面（认证、`app`、`mcp`）表结构仅由 Alembic 管理；发布阶段先执行 `uv run alembic upgrade head`，API 与 Worker 仅校验数据库 revision，未迁移时会拒绝启动。Agno 自有的 session/trace/vector 表仍随已锁定的 Agno 版本管理。
 - `ENVIRONMENT=production`（或 `prod`）启用 fail-closed 启动校验：`AUTH_JWT_SECRET`、重置/验证/OAuth state secret 必须替换默认或模板值，`CORS_ORIGINS` 与 `TRUSTED_HOSTS` 必须列出明确值而非 `*`；配置 OAuth 时还必须设置 `AUTH_COOKIE_SECURE=true`。
 - `AUTH_JWT_SECRET`：JWT 密钥；生产环境必须替换默认值。
 - `/api/health` 是不依赖下游服务的 liveness probe；`/api/ready` 在启动完成且控制面 PostgreSQL `SELECT 1` 成功后才返回 200，失败时返回 503。
 - `TAIS_BOOTSTRAP_ADMIN_EMAIL`、`TAIS_BOOTSTRAP_ADMIN_PASSWORD`：可选的初始管理员。
 - `TAIS_KNOWLEDGE_*`：Knowledge chunk、search、rerank 与 PgVector 配置。
+- Durable Jobs：Knowledge 入库、Workflow 审批恢复、安全 HITL 恢复与 cron dispatch 均写入 PostgreSQL 队列，发布后另起 Worker：`uv run job-worker --concurrency 4`。Worker 与 API 一样会先校验 Alembic revision；cron 的 claim 与入队在同一事务内完成。当前 Knowledge 上传文件落在配置的本地目录，独立部署 API/Worker 时必须共享该持久卷（或在部署层替换为对象存储）。
+- PgVector 索引核验：`uv run verify-pgvector-indexes` 只读检查实际 schema/table、embedding 维度、`pg_indexes` 定义、向量/全文 GIN/JSONB metadata GIN 索引，并输出 JSON 报告；不会调用 Agno `optimize()` 或创建索引。只有明确传入 `--explain-sql "SELECT ..."` 时才捕获非 `ANALYZE` 的 JSON plan。先用真实语料验证 corpus 规模、召回与延迟，再把批准的 HNSW/IVFFlat/GIN 变更写入 Alembic migration。
 - MCP 服务配置以 Settings / PostgreSQL 为准；残留 `.config/mcp/mcp_config.json` 只会归档为 `.migrated`，不会再导入。
 - `VITE_API_PROXY_TARGET`：前端开发代理地址。
 
@@ -93,7 +96,7 @@ Collect 按 `api/utils/url2md_utils.domain_rules` 源站爬取文章入库（`co
 
 模型工厂仍支持已持久化的 `parallel_tool_calls`、`retries` / `delay_between_retries` / `exponential_backoff` 与可选 `http_max_retries`；默认使用 4 次指数退避。Responses 与 Chat Completions 共享同一模型工厂，因此策略在聊天 Run 与会话摘要路径一致生效。
 
-模型供应商支持 DeepSeek / OpenAI / **xAI（Agno 官方 `xAI` 类，Chat Completions）** / OpenAI-compatible。 xAI 可配置 structured output 与 Live Search；Chat 输入区可开关联网搜索与知识库检索。 附件区使用 `@ant-design/x` `Attachments`：纸夹首次仅展开附件区，点击占位添加框才打开系统选择器（支持多选），并提供拖放、数量提示与体积限制。 **Chat 文档附件经 Agno DoclingReader 转为 Markdown 注入消息**（图片/音视频仍走 Agno media）； **Knowledge 结构化文档（PDF/DOCX/PPTX/HTML 等）默认 `DoclingReader`**。 设置页模型表单仅配置连接信息（名称/供应商/Model ID/密钥/Base URL）；其余模型参数由能力画像解析（optimal → 配置 → 请求覆盖 → fallback）；xAI 不使用 `reasoning_effort`，靠推理/非推理 model id。历史 Grok 配置（`api.x.ai` 或 `model_id` 以 `grok` 开头）会在模型配置表初始化时规范写回为 `provider=xai`、Chat Completions，后续加载不再执行逐行兼容迁移。残留 `config/model_config.json` 一律归档为 `*.imported` 且**永不导入**（无 `TAIS_MODEL_CONFIG_FILE` 覆盖）；空表只 seed 内置默认模型，连接与密钥以 Settings/Postgres 为准。
+模型供应商支持 DeepSeek / OpenAI / **xAI（Agno 官方 `xAI` 类，Chat Completions）** / OpenAI-compatible。 xAI 可配置 structured output 与 Live Search；Chat 输入区可开关联网搜索与知识库检索。 附件区使用 `@ant-design/x` `Attachments`：纸夹首次仅展开附件区，点击占位添加框才打开系统选择器（支持多选），并提供拖放、数量提示与体积限制。 **Chat 文档附件经 Agno DoclingReader 转为 Markdown 注入消息**（图片/音视频仍走 Agno media）； **Knowledge 结构化文档（PDF/DOCX/PPTX/HTML 等）默认 `DoclingReader`**。 设置页模型表单仅配置连接信息（名称/供应商/Model ID/密钥/Base URL）；其余模型参数由能力画像解析（optimal → 配置 → 请求覆盖 → fallback）；xAI 不使用 `reasoning_effort`，靠推理/非推理 model id。历史 Grok 配置（`api.x.ai` 或 `model_id` 以 `grok` 开头）由 `uv run alembic upgrade head` 中的数据迁移规范写回为 `provider=xai`、Chat Completions；运行时加载不再执行逐行兼容写回。残留 `config/model_config.json` 一律归档为 `*.imported` 且**永不导入**（无 `TAIS_MODEL_CONFIG_FILE` 覆盖）；空表只 seed 内置默认模型，连接与密钥以 Settings/Postgres 为准。
 
 模型工厂把 structured output 模式存在实例私有属性 `_tais_structured_output_mode`，**不写** Agno `model.metadata`，避免 OpenAI Responses / Chat 把内部标记当作 HTTP `metadata` 发给 Grok 等不兼容网关（会 400 `Argument not supported: metadata`）。
 

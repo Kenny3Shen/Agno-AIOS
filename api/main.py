@@ -15,7 +15,7 @@ from sqlalchemy import text
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from api.auth.claims import ADMIN_SCOPE
-from api.auth.database import bootstrap_admin_user, close_auth_engine, create_auth_tables
+from api.auth.database import bootstrap_admin_user, close_auth_engine
 from api.auth.router import router as auth_router
 from api.config import get_settings
 from api.core.logging import configure_logging_async
@@ -25,6 +25,7 @@ from api.persistence.database import (
     dispose_async_control_plane_engine,
     get_async_control_plane_engine,
 )
+from api.persistence.migrations import ensure_control_plane_schema_current
 from api.routes import (
     agent_evals,
     approvals,
@@ -43,7 +44,6 @@ from api.routes import (
     workflows,
 )
 from api.services.security_run_runtime import recover_security_runs, shutdown_security_runtime
-from api.services.postgres_store import ensure_app_tables_async
 from api.services.workflow_cron import start_workflow_cron_scheduler, stop_workflow_cron_scheduler
 from api.services.tracing_service import setup_agno_tracing
 
@@ -157,9 +157,8 @@ async def lifespan(app: FastAPI):
     except RuntimeError:
         logger.warning("Unable to install asyncio exception handler (no running loop)")
     logger.info("启动 {}", app_settings.app_name)
-    await ensure_app_tables_async()
+    await ensure_control_plane_schema_current()
     setup_agno_tracing()
-    await create_auth_tables()
     await bootstrap_admin_user(app_settings)
 
     await bootstrap_mcp_config()

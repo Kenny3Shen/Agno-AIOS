@@ -10,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from loguru import logger
 
-from api.auth.models import AuthBase, OAuthAccount, User
+from api.auth.models import OAuthAccount, User
 from api.config import Settings, get_settings
 
 settings = get_settings()
@@ -19,17 +19,14 @@ async_session_maker = async_sessionmaker(auth_engine, expire_on_commit=False)
 
 
 async def create_auth_tables() -> None:
-    async with auth_engine.begin() as conn:
-        await conn.run_sync(AuthBase.metadata.create_all)
-        await conn.execute(
-            text(
-                """
-                ALTER TABLE "user"
-                ADD COLUMN IF NOT EXISTS role VARCHAR(32) NOT NULL DEFAULT 'user'
-                """
-            )
-        )
-        await conn.execute(text("""UPDATE "user" SET role = 'user' WHERE role IS NULL"""))
+    """Legacy compatibility check; schema creation belongs to Alembic.
+
+    Keeping the function protects callers from silently reintroducing runtime
+    DDL while deployments transition to the explicit migration command.
+    """
+    from api.persistence.migrations import ensure_control_plane_schema_current
+
+    await ensure_control_plane_schema_current()
 
 
 async def bootstrap_admin_user(app_settings: Settings | None = None) -> None:

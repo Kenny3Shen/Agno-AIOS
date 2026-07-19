@@ -24,10 +24,9 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.schema import CreateSchema
-
 from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
+from api.persistence.migrations import ensure_control_plane_schema_current
 
 SUITES_TABLE = "agent_eval_suites"
 CASES_TABLE = "agent_eval_cases"
@@ -214,18 +213,7 @@ async def ensure_agent_eval_tables_async() -> None:
 
 
 async def _create_agent_eval_tables_async() -> None:
-    tables = (
-        agent_eval_suites_table(),
-        agent_eval_cases_table(),
-        agent_eval_suite_runs_table(),
-        agent_eval_case_runs_table(),
-    )
-    async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(CreateSchema(_app_schema(), if_not_exists=True))
-        for table in tables:
-            await conn.run_sync(table.create, checkfirst=True)
-            for index in table.indexes:
-                await conn.run_sync(index.create, checkfirst=True)
+    await ensure_control_plane_schema_current()
 
 
 def _row_dict(row: Any) -> dict[str, Any]:

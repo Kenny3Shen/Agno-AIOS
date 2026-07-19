@@ -22,10 +22,9 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.schema import CreateSchema
-
 from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
+from api.persistence.migrations import ensure_control_plane_schema_current
 
 AUDIT_LOGS_TABLE = "audit_logs"
 
@@ -103,12 +102,7 @@ _audit_logs_table_once = AsyncOnce()
 
 
 async def _create_audit_logs_table_async() -> None:
-    table = audit_logs_table()
-    async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(CreateSchema(_app_schema(), if_not_exists=True))
-        await conn.run_sync(table.create, checkfirst=True)
-        for index in table.indexes:
-            await conn.run_sync(index.create, checkfirst=True)
+    await ensure_control_plane_schema_current()
 
 
 async def ensure_audit_logs_table_async() -> None:

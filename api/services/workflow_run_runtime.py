@@ -23,7 +23,9 @@ from api.services.skill_service import resolve_enabled_skill_dirs
 from api.services.audit_service import record_audit_event_async
 from api.services.notification_service import notify_workflow_hitl_pending
 from api.persistence import workflows as workflow_store
+from api.persistence.durable_jobs import DurableJob, JobKind
 from api.services.agent_tools import analysis_workspace_context
+from api.services.durable_job_service import enqueue_durable_job
 
 
 @dataclass(frozen=True)
@@ -353,16 +355,21 @@ async def _resume_workflow_run_in_workspace(approval_id: str) -> str:
         raise
 
 
-def schedule_workflow_resume(approval_id: str) -> None:
-    """Fire-and-forget continue after Approvals resolve."""
+async def schedule_workflow_resume(approval_id: str) -> DurableJob:
+    """Durably queue continuation after a workflow-step approval resolves.
 
-    async def _job() -> None:
-        try:
-            await resume_workflow_run(approval_id)
-        except Exception:
-            logger.exception("Background workflow resume failed: {}", approval_id)
-
-    asyncio.create_task(_job(), name=f"workflow-resume:{approval_id}")
+    The approval id is immutable for one HITL pause, so it is the natural
+    idempotency boundary.  Repeated delivery of the same resolve request gets
+    the original job rather than starting a second ``continue_run`` call.
+    """
+    normalized_approval_id = approval_id.strip()
+    if not normalized_approval_id:
+        raise ValueError("approval_id is required")
+    return await enqueue_durable_job(
+        kind=JobKind.WORKFLOW_RESUME,
+        payload={"approval_id": normalized_approval_id},
+        idempotency_key=f"workflow-resume:{normalized_approval_id}",
+    )
 
 
 async def stream_workflow_run(

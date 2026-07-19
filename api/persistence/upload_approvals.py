@@ -4,12 +4,11 @@ from api.utils.async_once import AsyncOnce
 
 from typing import Any
 
-from sqlalchemy import BigInteger, Column, MetaData, String, Table, select, text, update
+from sqlalchemy import BigInteger, Column, MetaData, String, Table, select, update
 from sqlalchemy.dialects.postgresql import JSONB, insert
-from sqlalchemy.schema import CreateSchema
-
 from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
+from api.persistence.migrations import ensure_control_plane_schema_current
 
 UPLOAD_APPROVALS_TABLE = "upload_approvals"
 
@@ -41,28 +40,7 @@ _upload_approvals_table_once = AsyncOnce()
 
 
 async def _create_upload_approvals_table() -> None:
-    metadata = _metadata()
-    table = upload_approvals_table(metadata)
-    async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(
-            CreateSchema(get_settings().agno_app_schema, if_not_exists=True)
-        )
-        await conn.run_sync(table.create, checkfirst=True)
-        await conn.execute(
-            text(
-                f"ALTER TABLE {get_settings().agno_app_schema}.{UPLOAD_APPROVALS_TABLE} ADD COLUMN IF NOT EXISTS submitted_by_email VARCHAR(320) NOT NULL DEFAULT ''"
-            )
-        )
-        await conn.execute(
-            text(
-                f"ALTER TABLE {get_settings().agno_app_schema}.{UPLOAD_APPROVALS_TABLE} ADD COLUMN IF NOT EXISTS resolved_by_email VARCHAR(320)"
-            )
-        )
-        await conn.execute(
-            text(
-                f"ALTER TABLE {get_settings().agno_app_schema}.{UPLOAD_APPROVALS_TABLE} ADD COLUMN IF NOT EXISTS rejection_reason VARCHAR(2000)"
-            )
-        )
+    await ensure_control_plane_schema_current()
 
 
 async def ensure_upload_approvals_table() -> None:

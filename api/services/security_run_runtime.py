@@ -23,6 +23,8 @@ from anyio import to_thread
 from loguru import logger
 
 from api.config import get_settings
+from api.persistence.durable_jobs import JobKind, JobState, retry_job
+from api.services.durable_job_service import enqueue_durable_job
 from api.services.knowledge_service import get_async_knowledge_base_async
 
 from api.services.model_config_service import get_model_for_run
@@ -841,7 +843,6 @@ class SecurityRunRuntime:
         # user_id -> cancel event for the in-flight chat stream (covers retry
         # backoff before run.started is processed / registered under run_id).
         self._user_stream_cancels: dict[str, asyncio.Event] = {}
-        self._resume_tasks: dict[str, asyncio.Task[None]] = {}
 
     def register_run(
         self,
@@ -921,7 +922,14 @@ class SecurityRunRuntime:
             async for _event in result:
                 pass
 
-    async def _resume_job(self, approval_id: str) -> None:
+    async def _resume_job(self, approval_id: str) -> str:
+        """Continue one resolved security HITL run in the calling worker.
+
+        This deliberately contains no task scheduling.  The durable-job worker
+        owns process lifetime, leasing, and retries; keeping the actual Agno
+        continuation here also preserves the existing failure status and
+        notification behavior for both a fresh worker and a recovered lease.
+        """
         db = self.dependencies.get_db()
         try:
             approval_record = await db.get_approval(approval_id)
@@ -930,6 +938,30 @@ class SecurityRunRuntime:
                 raise ValueError("Approval not found")
             if str(approval_record.get("status") or "") not in {"approved", "rejected"}:
                 raise ValueError("Approval must be resolved before resuming")
+            current_run_status = str(approval_record.get("run_status") or "").upper()
+            if current_run_status == RunStatus.completed.value:
+                # A worker can be reclaimed after Agno persisted completion but
+                # before it recorded the durable job's terminal state.  Do not
+                # continue the already-completed tool call a second time.  The
+                # resolution notification is deliberately at-least-once: the
+                # prior worker may have exited before it emitted it.
+                await notify_submitter_of_hitl_resolution(
+                    approval_id=approval_id,
+                    tool_name=str(approval_record.get("tool_name") or "tool"),
+                    submitter_id=str(approval_record.get("user_id") or ""),
+                    status=str(approval_record.get("status") or "approved"),
+                    rejection_reason=_approval_rejection_reason(
+                        approval_record.get("resolution_data")
+                    ),
+                    run_id=str(approval_record.get("run_id") or ""),
+                    session_id=str(approval_record.get("session_id") or ""),
+                )
+                return RunStatus.completed.value
+            if current_run_status == RunStatus.error.value:
+                # A reclaimed lease must not turn an already-failed run into
+                # an implicit retry.  The approval retry endpoint transitions
+                # it back to RUNNING before requeuing the durable job.
+                return RunStatus.error.value
 
             run_output = await self._load_approval_run(approval_record)
             request = SecurityRunRequest.from_run_metadata(
@@ -985,6 +1017,7 @@ class SecurityRunRuntime:
                 run_id=str(final_approval.get("run_id") or ""),
                 session_id=str(final_approval.get("session_id") or ""),
             )
+            return RunStatus.completed.value
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -1011,10 +1044,7 @@ class SecurityRunRuntime:
                     session_id=str(approval_record.get("session_id") or ""),
                     error=str(exc)[:500],
                 )
-
-    def _forget_resume_task(self, approval_id: str, task: asyncio.Task[None]) -> None:
-        if self._resume_tasks.get(approval_id) is task:
-            self._resume_tasks.pop(approval_id, None)
+            return RunStatus.error.value
 
     async def schedule_resume(
         self,
@@ -1022,12 +1052,11 @@ class SecurityRunRuntime:
         *,
         retry_error: bool = False,
     ) -> str:
-        active = self._resume_tasks.get(approval_id)
-        if active is not None and not active.done():
-            return RunStatus.running.value
-
+        normalized_approval_id = str(approval_id or "").strip()
+        if not normalized_approval_id:
+            raise ValueError("approval_id is required")
         db = self.dependencies.get_db()
-        approval_record = await db.get_approval(approval_id)
+        approval_record = await db.get_approval(normalized_approval_id)
         if not isinstance(approval_record, dict):
             raise ValueError("Approval not found")
         if not self._is_security_chat_approval(approval_record):
@@ -1042,13 +1071,21 @@ class SecurityRunRuntime:
             raise ValueError("Failed run requires an explicit retry")
 
         run_id = str(approval_record["run_id"])
-        await db.update_approval_run_status(run_id, RunStatus.running)
-        task = asyncio.create_task(
-            self._resume_job(approval_id),
-            name=f"hitl-resume:{approval_id}",
+        # A recovered process may find a run already marked RUNNING after the
+        # old API process died between status persistence and enqueueing.  It
+        # still needs to enqueue below, but does not need another status write.
+        if run_status != RunStatus.running.value:
+            await db.update_approval_run_status(run_id, RunStatus.running)
+        job = await enqueue_durable_job(
+            kind=JobKind.SECURITY_HITL_RESUME,
+            payload={"approval_id": normalized_approval_id},
+            idempotency_key=f"security-hitl-resume:{normalized_approval_id}",
         )
-        self._resume_tasks[approval_id] = task
-        task.add_done_callback(lambda completed: self._forget_resume_task(approval_id, completed))
+        # A manual retry is the one case in which a terminal idempotent row
+        # must run again.  Retrying the same row retains its audit trail and
+        # prevents a second continuation from being enqueued concurrently.
+        if retry_error and job.state in {JobState.FAILED, JobState.CANCELLED}:
+            await retry_job(job.id)
         return RunStatus.running.value
 
     async def recover_resolved_runs(self) -> int:
@@ -1072,12 +1109,13 @@ class SecurityRunRuntime:
         return recovered
 
     async def shutdown(self) -> None:
-        tasks = [task for task in self._resume_tasks.values() if not task.done()]
-        for task in tasks:
-            task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-        self._resume_tasks.clear()
+        """Keep lifecycle compatibility without cancelling durable work.
+
+        Security continuations are leased by the standalone durable worker,
+        not this API process.  Cancelling them during API shutdown would make
+        deployment ordering affect an already accepted approval.
+        """
+        return None
 
     async def _build_model(
         self,
@@ -2338,6 +2376,15 @@ async def resume_security_run(approval_id: str, *, retry_error: bool = False) ->
         approval_id,
         retry_error=retry_error,
     )
+
+
+async def execute_security_hitl_resume(approval_id: str) -> str:
+    """Execute a queued security HITL continuation in the durable worker.
+
+    This is intentionally separate from :func:`resume_security_run`, which is
+    an API-side producer and only enqueues work.
+    """
+    return await DEFAULT_SECURITY_RUN_RUNTIME._resume_job(approval_id)
 
 
 async def recover_security_runs() -> int:

@@ -1,6 +1,36 @@
-from sqlalchemy import MetaData, create_engine, insert, select
+from collections.abc import Callable
+from functools import lru_cache
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
+from types import ModuleType
+from typing import cast
 
-from api.persistence import model_configs
+from sqlalchemy import Column, MetaData, String, Table, Text, create_engine, insert, select
+from sqlalchemy.sql.dml import Update
+
+
+@lru_cache(maxsize=1)
+def _xai_canonicalization_revision() -> ModuleType:
+    revision_path = (
+        Path(__file__).resolve().parents[2]
+        / "alembic"
+        / "versions"
+        / "20260720_0002_canonicalize_xai_model_configs.py"
+    )
+    spec = spec_from_file_location("xai_canonicalization_revision", revision_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _canonicalization_statement(table: Table) -> Update:
+    statement = getattr(
+        _xai_canonicalization_revision(),
+        "_xai_model_config_canonicalization_statement",
+    )
+    return cast(Callable[[Table], Update], statement)(table)
 
 
 def _row(
@@ -14,33 +44,26 @@ def _row(
 ) -> dict[str, object]:
     return {
         "id": row_id,
-        "name": row_id,
         "model_id": model_id,
         "provider": provider,
         "api_protocol": api_protocol,
-        "structured_output_mode": "json",
         "default_reasoning_effort": default_reasoning_effort,
-        "parallel_tool_calls": None,
-        "live_search_enabled": False,
-        "retries": 4,
-        "delay_between_retries": 1,
-        "exponential_backoff": True,
-        "http_max_retries": None,
         "base_url": base_url,
-        "api_key": "secret",
-        "description": "",
-        "enabled": True,
-        "builtin": False,
-        "active": False,
-        "sort_order": 0,
-        "created_at": 1,
-        "updated_at": 1,
     }
 
 
-def test_xai_model_config_migration_updates_only_legacy_rows() -> None:
+def test_xai_alembic_migration_updates_only_legacy_rows() -> None:
     metadata = MetaData()
-    table = model_configs.model_configs_table(metadata)
+    table = Table(
+        "model_configs",
+        metadata,
+        Column("id", String, primary_key=True),
+        Column("provider", String),
+        Column("model_id", Text),
+        Column("api_protocol", String),
+        Column("default_reasoning_effort", String),
+        Column("base_url", Text),
+    )
     engine = create_engine("sqlite://")
     try:
         metadata.create_all(engine)
@@ -64,6 +87,13 @@ def test_xai_model_config_migration_updates_only_legacy_rows() -> None:
                         default_reasoning_effort="high",
                     ),
                     _row(
+                        "stale-xai-reasoning",
+                        provider="xai",
+                        model_id="grok-4.5",
+                        api_protocol="chat-completions",
+                        default_reasoning_effort="high",
+                    ),
+                    _row(
                         "compatible",
                         provider="openai-compatible",
                         model_id="custom-model",
@@ -73,7 +103,7 @@ def test_xai_model_config_migration_updates_only_legacy_rows() -> None:
                 ],
             )
             result = connection.execute(
-                model_configs._xai_model_config_migration_statement(table)
+                _canonicalization_statement(table)
             )
             rows = {
                 str(row["id"]): dict(row)
@@ -82,8 +112,8 @@ def test_xai_model_config_migration_updates_only_legacy_rows() -> None:
     finally:
         engine.dispose()
 
-    assert result.rowcount == 2
-    for row_id in ("legacy-grok", "stale-xai"):
+    assert result.rowcount == 3
+    for row_id in ("legacy-grok", "stale-xai", "stale-xai-reasoning"):
         assert rows[row_id]["provider"] == "xai"
         assert rows[row_id]["api_protocol"] == "chat-completions"
         assert rows[row_id]["default_reasoning_effort"] is None

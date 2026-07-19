@@ -85,39 +85,13 @@ def coerce_json_value(value: Any) -> Any:
     return current
 
 
-_app_tables_once = AsyncOnce()
-
-
-async def _create_app_tables_async() -> None:
-    from sqlalchemy import text
-    from sqlalchemy.schema import CreateSchema
-
-    from api.mcp.config import init_mcp_postgres_tables
-    from api.persistence.audit_logs import ensure_audit_logs_table_async
-    from api.persistence.chat_settings import ensure_chat_settings_table_async
-    from api.persistence.cves import ensure_cves_table
-    from api.persistence.collect_articles import ensure_collect_articles_table
-    from api.persistence.database import get_async_control_plane_engine
-    from api.persistence.knowledge_sources import ensure_knowledge_sources_table_async
-    from api.persistence.model_configs import ensure_model_configs_table_async
-    from api.persistence.upload_approvals import ensure_upload_approvals_table
-    from api.persistence.workflows import ensure_workflows_table_async
-
-    async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        for schema in (app_schema(), agno_schema(), mcp_schema(), knowledge_schema()):
-            await conn.execute(CreateSchema(schema, if_not_exists=True))
-
-    await ensure_cves_table()
-    await ensure_collect_articles_table()
-    await ensure_audit_logs_table_async()
-    await ensure_chat_settings_table_async()
-    await ensure_knowledge_sources_table_async()
-    await ensure_model_configs_table_async()
-    await ensure_upload_approvals_table()
-    await ensure_workflows_table_async()
-    await init_mcp_postgres_tables()
-
-
 async def ensure_app_tables_async() -> None:
-    await _app_tables_once.run(_create_app_tables_async)
+    """Compatibility name for the Alembic-only control-plane readiness check.
+
+    New deployments must execute ``alembic upgrade head`` outside the API
+    process.  Retaining this narrow wrapper avoids a disruptive import churn
+    while guaranteeing that the old startup path cannot perform DDL.
+    """
+    from api.persistence.migrations import ensure_control_plane_schema_current
+
+    await ensure_control_plane_schema_current()

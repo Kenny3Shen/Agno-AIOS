@@ -14,7 +14,6 @@ from starlette.requests import Request
 from api.auth.models import User
 from api.routes import knowledge as knowledge_route
 from api.services import knowledge_service
-from api.tests.knowledge_fakes import scheduled_work
 from api.services.knowledge_upload_service import (
     MANAGED_UPLOAD_METADATA_KEY,
     MANAGED_UPLOAD_METADATA_VERSION,
@@ -49,45 +48,10 @@ def test_json_ingest_options_accept_reader_specific_fields() -> None:
 
 @pytest.mark.asyncio
 async def test_update_route_passes_rebuild_metadata_and_ingest_options_to_lifecycle() -> None:
-    captured: dict[str, object] = {}
     current_user = actor()
-
-    class Lifecycle:
-        async def rebuild_document_async(self, doc_id: str, **kwargs: object) -> dict[str, object]:
-            captured["doc_id"] = doc_id
-            captured.update(kwargs)
-            return {
-                "id": "doc-1",
-                "title": "Runbook",
-                "source": "manual",
-                "chunks": 3,
-                "created_at": "",
-                "updated_at": "",
-                "status": "completed",
-                "type": ".md",
-                "size": 12,
-                "visibility": "private",
-                "owner_user_id": "u1",
-                "metadata": {},
-            }
-
-    scheduled: list[dict[str, object]] = []
-
-    def fake_schedule(**kwargs: object) -> None:
-        scheduled.append(kwargs)
-
+    enqueue = AsyncMock(return_value=SimpleNamespace(id="job-rebuild-1"))
     with (
-        patch.object(
-            knowledge_route,
-            "get_knowledge_base_lifecycle",
-            return_value=Lifecycle(),
-        ),
-        patch.object(knowledge_route, "record_audit_event_async", new=AsyncMock()),
-        patch.object(
-            knowledge_route,
-            "_schedule_knowledge_ingest",
-            side_effect=fake_schedule,
-        ),
+        patch.object(knowledge_route, "enqueue_knowledge_ingest_job", enqueue),
     ):
         result = await knowledge_route.update_document(
             request("/api/knowledge/documents/doc-1/update"),
@@ -108,14 +72,17 @@ async def test_update_route_passes_rebuild_metadata_and_ingest_options_to_lifecy
             user=current_user,
         )
         assert result["status"] == "processing"
-        assert len(scheduled) == 1
-        bg = await scheduled_work(scheduled[0])()
+        assert result["id"] == "job-rebuild-1"
 
-    assert bg["can_manage"] is True
-    assert captured == {
+    call = enqueue.await_args
+    assert call is not None
+    payload = call.kwargs["payload"]
+    assert payload["operation"] == "rebuild"
+    assert payload["owner_user_id"] == "u1"
+    assert payload["data"] == {
         "doc_id": "doc-1",
-        "owner_user_id": "u1",
-        "user": current_user,
+        "content": "",
+        "file_name": "",
         "title": "Updated runbook",
         "source": "IR",
         "visibility": "public",
@@ -321,7 +288,7 @@ async def test_delete_document_requests_managed_upload_cleanup() -> None:
 
 
 @pytest.mark.asyncio
-async def test_upload_route_ingests_persisted_path_with_browser_metadata(tmp_path: Path) -> None:
+async def test_upload_route_enqueues_persisted_path_with_browser_metadata(tmp_path: Path) -> None:
     stored = StoredKnowledgeUpload(
         path=tmp_path / "upload-id" / "runbook.md",
         file_name="runbook.md",
@@ -329,30 +296,7 @@ async def test_upload_route_ingests_persisted_path_with_browser_metadata(tmp_pat
         mime_type="text/markdown",
         upload_id="c" * 32,
     )
-    captured: dict[str, object] = {}
-
-    class Lifecycle:
-        async def add_file_document_async(self, **kwargs: object) -> dict[str, object]:
-            captured.update(kwargs)
-            return {
-                "id": "doc-1",
-                "title": "Runbook",
-                "source": "upload:runbook.md",
-                "chunks": 1,
-                "created_at": "",
-                "updated_at": "",
-                "status": "completed",
-                "type": ".md",
-                "size": 12,
-                "visibility": "private",
-                "owner_user_id": "u1",
-                "metadata": {},
-            }
-
-    scheduled: list[dict[str, object]] = []
-
-    def fake_schedule(**kwargs: object) -> None:
-        scheduled.append(kwargs)
+    enqueue = AsyncMock(return_value=SimpleNamespace(id="job-upload-1"))
 
     with (
         patch.object(
@@ -360,21 +304,7 @@ async def test_upload_route_ingests_persisted_path_with_browser_metadata(tmp_pat
             "store_knowledge_upload_async",
             new=AsyncMock(return_value=stored),
         ),
-        patch.object(
-            knowledge_route,
-            "get_knowledge_base_lifecycle",
-            return_value=Lifecycle(),
-        ),
-        patch.object(
-            knowledge_route,
-            "record_audit_event_async",
-            new=AsyncMock(),
-        ),
-        patch.object(
-            knowledge_route,
-            "_schedule_knowledge_ingest",
-            side_effect=fake_schedule,
-        ),
+        patch.object(knowledge_route, "enqueue_knowledge_ingest_job", enqueue),
     ):
         result = await knowledge_route.upload_document(
             request(),
@@ -397,31 +327,31 @@ async def test_upload_route_ingests_persisted_path_with_browser_metadata(tmp_pat
             reader_strategy="markdown",
             user=actor(),
         )
-        assert result["status"] == "processing"
-        assert str(result["id"]).startswith("processing:upload:")
-        assert result["can_manage"] is True
-        assert len(scheduled) == 1
-        assert scheduled[0]["audit_action"] == "knowledge.create"
-        bg_result = await scheduled_work(scheduled[0])()
-        assert bg_result["id"] == "doc-1"
-        assert captured == {
-            "path": str(stored.path),
-            "title": "Runbook",
-            "source": "upload:runbook.md",
-            "metadata": stored.metadata(),
-            "owner_user_id": "u1",
-            "visibility": "private",
-            "ingest_options": {
-                "chunk_size": 1500,
-                "chunk_overlap": 120,
-                "markdown_split_on_headings": 2,
-                "reader_strategy": "markdown",
-            },
-        }
+
+    assert result["status"] == "processing"
+    assert result["id"] == "job-upload-1"
+    assert result["can_manage"] is True
+    call = enqueue.await_args
+    assert call is not None
+    payload = call.kwargs["payload"]
+    assert payload["operation"] == "upload"
+    assert payload["data"] == {
+        "path": str(stored.path),
+        "title": "Runbook",
+        "source": "upload:runbook.md",
+        "visibility": "private",
+        "metadata": stored.metadata(),
+        "ingest_options": {
+            "chunk_size": 1500,
+            "chunk_overlap": 120,
+            "markdown_split_on_headings": 2,
+            "reader_strategy": "markdown",
+        },
+    }
 
 
 @pytest.mark.asyncio
-async def test_upload_route_removes_file_when_ingest_fails(tmp_path: Path) -> None:
+async def test_upload_route_removes_file_when_enqueue_fails(tmp_path: Path) -> None:
     stored = StoredKnowledgeUpload(
         path=tmp_path / "upload-id" / "runbook.md",
         file_name="runbook.md",
@@ -430,14 +360,6 @@ async def test_upload_route_removes_file_when_ingest_fails(tmp_path: Path) -> No
         upload_id="d" * 32,
     )
     cleanup = AsyncMock(return_value=True)
-    scheduled: list[dict[str, object]] = []
-
-    class Lifecycle:
-        async def add_file_document_async(self, **_kwargs: object) -> dict[str, object]:
-            raise RuntimeError("ingest failed")
-
-    def fake_schedule(**kwargs: object) -> None:
-        scheduled.append(kwargs)
 
     with (
         patch.object(
@@ -445,48 +367,40 @@ async def test_upload_route_removes_file_when_ingest_fails(tmp_path: Path) -> No
             "store_knowledge_upload_async",
             new=AsyncMock(return_value=stored),
         ),
-        patch.object(
-            knowledge_route,
-            "get_knowledge_base_lifecycle",
-            return_value=Lifecycle(),
-        ),
         patch.object(knowledge_route, "remove_managed_upload_async", cleanup),
         patch.object(
             knowledge_route,
-            "_schedule_knowledge_ingest",
-            side_effect=fake_schedule,
+            "enqueue_knowledge_ingest_job",
+            new=AsyncMock(side_effect=RuntimeError("database unavailable")),
         ),
     ):
-        result = await knowledge_route.upload_document(
-            request(),
-            upload_file(b"# Runbook\n", "runbook.md"),
-            title=None,
-            source=None,
-            visibility="private",
-            chunk_size=None,
-            chunk_overlap=None,
-            markdown_split_on_headings=None,
-            csv_skip_header=None,
-            csv_clean_rows=None,
-            code_chunk_size=None,
-            code_tokenizer=None,
-            code_include_nodes=None,
-            semantic_threshold=None,
-            semantic_similarity_window=None,
-            semantic_min_sentences_per_chunk=None,
-            semantic_min_characters_per_sentence=None,
-            reader_strategy=None,
-            user=actor(),
-        )
-        assert result["status"] == "processing"
-        assert len(scheduled) == 1
-        with pytest.raises(RuntimeError, match="ingest failed"):
-            await scheduled_work(scheduled[0])()
-        cleanup.assert_awaited_once_with(stored.metadata())
+        with pytest.raises(RuntimeError, match="database unavailable"):
+            await knowledge_route.upload_document(
+                request(),
+                upload_file(b"# Runbook\n", "runbook.md"),
+                title=None,
+                source=None,
+                visibility="private",
+                chunk_size=None,
+                chunk_overlap=None,
+                markdown_split_on_headings=None,
+                csv_skip_header=None,
+                csv_clean_rows=None,
+                code_chunk_size=None,
+                code_tokenizer=None,
+                code_include_nodes=None,
+                semantic_threshold=None,
+                semantic_similarity_window=None,
+                semantic_min_sentences_per_chunk=None,
+                semantic_min_characters_per_sentence=None,
+                reader_strategy=None,
+                user=actor(),
+            )
+    cleanup.assert_awaited_once_with(stored.metadata())
 
 
 @pytest.mark.asyncio
-async def test_update_upload_route_replaces_selected_document_from_persisted_path(
+async def test_update_upload_route_enqueues_replacement_from_persisted_path(
     tmp_path: Path,
 ) -> None:
     stored = StoredKnowledgeUpload(
@@ -496,58 +410,15 @@ async def test_update_upload_route_replaces_selected_document_from_persisted_pat
         mime_type="text/markdown",
         upload_id="e" * 32,
     )
-    captured: dict[str, object] = {}
     current_user = actor()
-
-    class Lifecycle:
-        async def replace_document_file_async(
-            self,
-            doc_id: str,
-            **kwargs: object,
-        ) -> dict[str, object]:
-            captured["doc_id"] = doc_id
-            captured.update(kwargs)
-            return {
-                "id": "doc-1",
-                "title": "Runbook",
-                "source": "upload:runbook.md",
-                "chunks": 2,
-                "created_at": "",
-                "updated_at": "",
-                "status": "completed",
-                "type": ".md",
-                "size": 16,
-                "visibility": "private",
-                "owner_user_id": "u1",
-                "metadata": {},
-            }
-
-    scheduled: list[dict[str, object]] = []
-
-    def fake_schedule(**kwargs: object) -> None:
-        scheduled.append(kwargs)
-
+    enqueue = AsyncMock(return_value=SimpleNamespace(id="job-replace-file-1"))
     with (
         patch.object(
             knowledge_route,
             "store_knowledge_upload_async",
             new=AsyncMock(return_value=stored),
         ),
-        patch.object(
-            knowledge_route,
-            "get_knowledge_base_lifecycle",
-            return_value=Lifecycle(),
-        ),
-        patch.object(
-            knowledge_route,
-            "record_audit_event_async",
-            new=AsyncMock(),
-        ),
-        patch.object(
-            knowledge_route,
-            "_schedule_knowledge_ingest",
-            side_effect=fake_schedule,
-        ),
+        patch.object(knowledge_route, "enqueue_knowledge_ingest_job", enqueue),
     ):
         result = await knowledge_route.update_document_upload(
             request("/api/knowledge/documents/doc-1/update/upload"),
@@ -572,36 +443,35 @@ async def test_update_upload_route_replaces_selected_document_from_persisted_pat
             user=current_user,
         )
         assert result["status"] == "processing"
-        assert str(result["id"]).startswith("processing:update-upload:")
+        assert result["id"] == "job-replace-file-1"
         assert result["can_manage"] is True
-        assert len(scheduled) == 1
-        bg = await scheduled_work(scheduled[0])()
-        assert bg["id"] == "doc-1"
-        assert captured == {
-            "doc_id": "doc-1",
-            "path": str(stored.path),
-            "title": None,
-            "source": None,
-            "visibility": None,
-            "metadata": stored.metadata(),
-            "owner_user_id": "u1",
-            "user": current_user,
-            "ingest_options": {
-                "csv_skip_header": True,
-                "csv_clean_rows": False,
-                "code_chunk_size": 2200,
-                "code_tokenizer": "gpt2",
-                "code_include_nodes": True,
-                "semantic_threshold": 0.61,
-                "semantic_similarity_window": 4,
-                "semantic_min_sentences_per_chunk": 2,
-                "semantic_min_characters_per_sentence": 12,
-            },
-        }
+    call = enqueue.await_args
+    assert call is not None
+    payload = call.kwargs["payload"]
+    assert payload["operation"] == "replace_file"
+    assert payload["data"] == {
+        "doc_id": "doc-1",
+        "path": str(stored.path),
+        "title": "",
+        "source": "",
+        "visibility": "",
+        "metadata": stored.metadata(),
+        "ingest_options": {
+            "csv_skip_header": True,
+            "csv_clean_rows": False,
+            "code_chunk_size": 2200,
+            "code_tokenizer": "gpt2",
+            "code_include_nodes": True,
+            "semantic_threshold": 0.61,
+            "semantic_similarity_window": 4,
+            "semantic_min_sentences_per_chunk": 2,
+            "semantic_min_characters_per_sentence": 12,
+        },
+    }
 
 
 @pytest.mark.asyncio
-async def test_update_upload_route_removes_file_when_document_is_missing(
+async def test_update_upload_route_removes_file_when_enqueue_fails(
     tmp_path: Path,
 ) -> None:
     stored = StoredKnowledgeUpload(
@@ -612,61 +482,40 @@ async def test_update_upload_route_removes_file_when_document_is_missing(
         upload_id="f" * 32,
     )
     cleanup = AsyncMock(return_value=True)
-    scheduled: list[dict[str, object]] = []
-
-    class Lifecycle:
-        async def replace_document_file_async(
-            self,
-            _doc_id: str,
-            **_kwargs: object,
-        ) -> None:
-            return None
-
-    def fake_schedule(**kwargs: object) -> None:
-        scheduled.append(kwargs)
-
     with (
         patch.object(
             knowledge_route,
             "store_knowledge_upload_async",
             new=AsyncMock(return_value=stored),
         ),
-        patch.object(
-            knowledge_route,
-            "get_knowledge_base_lifecycle",
-            return_value=Lifecycle(),
-        ),
         patch.object(knowledge_route, "remove_managed_upload_async", cleanup),
         patch.object(
             knowledge_route,
-            "_schedule_knowledge_ingest",
-            side_effect=fake_schedule,
+            "enqueue_knowledge_ingest_job",
+            new=AsyncMock(side_effect=RuntimeError("database unavailable")),
         ),
     ):
-        result = await knowledge_route.update_document_upload(
-            request("/api/knowledge/documents/doc-missing/update/upload"),
-            "doc-missing",
-            upload_file(b"# Runbook v2\n", "runbook-v2.md"),
-            title=None,
-            source=None,
-            visibility=None,
-            chunk_size=None,
-            chunk_overlap=None,
-            markdown_split_on_headings=None,
-            csv_skip_header=None,
-            csv_clean_rows=None,
-            code_chunk_size=None,
-            code_tokenizer=None,
-            code_include_nodes=None,
-            semantic_threshold=None,
-            semantic_similarity_window=None,
-            semantic_min_sentences_per_chunk=None,
-            semantic_min_characters_per_sentence=None,
-            reader_strategy=None,
-            user=actor(),
-        )
-        assert result["status"] == "processing"
-        assert len(scheduled) == 1
-        with pytest.raises(LookupError, match="知识文档不存在"):
-            await scheduled_work(scheduled[0])()
-        cleanup.assert_awaited_once_with(stored.metadata())
+        with pytest.raises(RuntimeError, match="database unavailable"):
+            await knowledge_route.update_document_upload(
+                request("/api/knowledge/documents/doc-missing/update/upload"),
+                "doc-missing",
+                upload_file(b"# Runbook v2\n", "runbook-v2.md"),
+                title=None,
+                source=None,
+                visibility=None,
+                chunk_size=None,
+                chunk_overlap=None,
+                markdown_split_on_headings=None,
+                csv_skip_header=None,
+                csv_clean_rows=None,
+                code_chunk_size=None,
+                code_tokenizer=None,
+                code_include_nodes=None,
+                semantic_threshold=None,
+                semantic_similarity_window=None,
+                semantic_min_sentences_per_chunk=None,
+                semantic_min_characters_per_sentence=None,
+                reader_strategy=None,
+                user=actor(),
+            )
+    cleanup.assert_awaited_once_with(stored.metadata())

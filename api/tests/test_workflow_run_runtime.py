@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from api.persistence.durable_jobs import JobKind
 from api.services import workflow_run_runtime
 
 
@@ -286,6 +287,30 @@ def test_cancel_workflow_run_requires_registered_owner():
         assert not workflow_run_runtime.cancel_workflow_run(user_id="u1", run_id="missing")
     finally:
         workflow_run_runtime.unregister_workflow_run(user_id="u1", run_id="run-x")
+
+
+@pytest.mark.asyncio
+async def test_schedule_workflow_resume_enqueues_one_idempotent_job() -> None:
+    job = object()
+    with patch.object(
+        workflow_run_runtime,
+        "enqueue_durable_job",
+        new=AsyncMock(return_value=job),
+    ) as enqueue:
+        scheduled = await workflow_run_runtime.schedule_workflow_resume(" approval-1 ")
+
+    assert scheduled is job
+    enqueue.assert_awaited_once_with(
+        kind=JobKind.WORKFLOW_RESUME,
+        payload={"approval_id": "approval-1"},
+        idempotency_key="workflow-resume:approval-1",
+    )
+
+
+@pytest.mark.asyncio
+async def test_schedule_workflow_resume_requires_approval_id() -> None:
+    with pytest.raises(ValueError, match="approval_id is required"):
+        await workflow_run_runtime.schedule_workflow_resume(" ")
 
 
 @pytest.mark.asyncio

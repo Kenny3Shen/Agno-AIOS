@@ -9,7 +9,6 @@ from starlette.requests import Request
 
 from api.auth.models import User
 from api.routes import knowledge as knowledge_route
-from api.tests.knowledge_fakes import scheduled_work
 
 
 def request(path: str) -> Request:
@@ -86,31 +85,10 @@ async def test_list_knowledge_has_no_status_snapshot() -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_text_document_queues_background_ingest() -> None:
-    document = {
-        "id": "doc-new",
-        "title": "Note",
-        "source": "manual",
-        "chunks": 1,
-        "created_at": "2026-01-01T00:00:00Z",
-        "updated_at": "2026-01-01T00:00:00Z",
-        "status": "completed",
-        "type": "text",
-        "size": 4,
-        "visibility": "private",
-        "owner_user_id": "u1",
-        "metadata": {},
-    }
-    lifecycle = SimpleNamespace(add_text_document_async=AsyncMock(return_value=document))
-    scheduled: list[dict[str, object]] = []
-
-    def fake_schedule(**kwargs: object) -> None:
-        scheduled.append(kwargs)
-
+async def test_create_text_document_enqueues_durable_ingest() -> None:
+    enqueue = AsyncMock(return_value=SimpleNamespace(id="job-text-1"))
     with (
-        patch.object(knowledge_route, "get_knowledge_base_lifecycle", return_value=lifecycle),
-        patch.object(knowledge_route, "record_audit_event_async", AsyncMock()),
-        patch.object(knowledge_route, "_schedule_knowledge_ingest", side_effect=fake_schedule),
+        patch.object(knowledge_route, "enqueue_knowledge_ingest_job", enqueue),
     ):
         result = await knowledge_route.create_text_document(
             request("/api/knowledge/documents/text"),
@@ -119,8 +97,17 @@ async def test_create_text_document_queues_background_ingest() -> None:
         )
         assert result["status"] == "processing"
         assert "status_message" not in result
-        assert str(result["id"]).startswith("processing:text:")
-        assert len(scheduled) == 1
-        bg = await scheduled_work(scheduled[0])()
-        assert bg["id"] == "doc-new"
-        lifecycle.add_text_document_async.assert_awaited_once()
+        assert result["id"] == "job-text-1"
+    enqueue.assert_awaited_once()
+    call = enqueue.await_args
+    assert call is not None
+    payload = call.kwargs["payload"]
+    assert payload["operation"] == "text"
+    assert payload["data"] == {
+        "title": "Note",
+        "content": "body",
+        "source": "manual",
+        "visibility": "private",
+        "metadata": {},
+        "ingest_options": {},
+    }

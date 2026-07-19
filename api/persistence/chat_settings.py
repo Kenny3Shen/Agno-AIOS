@@ -16,10 +16,9 @@ from sqlalchemy import (
     select,
     update,
 )
-from sqlalchemy.schema import CreateSchema
-
 from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
+from api.persistence.migrations import ensure_control_plane_schema_current
 
 CHAT_SETTINGS_TABLE = "chat_settings"
 GLOBAL_CHAT_SETTINGS_ID = "global"
@@ -52,10 +51,7 @@ _chat_settings_table_once = AsyncOnce()
 
 
 async def _create_chat_settings_table_async() -> None:
-    table = chat_settings_table()
-    async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(CreateSchema(_app_schema(), if_not_exists=True))
-        await conn.run_sync(table.create, checkfirst=True)
+    await ensure_control_plane_schema_current()
 
 
 async def ensure_chat_settings_table_async() -> None:

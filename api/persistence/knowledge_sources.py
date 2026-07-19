@@ -7,10 +7,9 @@ from typing import Any
 
 from sqlalchemy import Column, DateTime, MetaData, Table, Text, func, select, text
 from sqlalchemy.dialects.postgresql import JSONB, insert as pg_insert
-from sqlalchemy.schema import CreateSchema
-
 from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
+from api.persistence.migrations import ensure_control_plane_schema_current
 from api.services.postgres_store import coerce_json_value
 
 KNOWLEDGE_SOURCES_TABLE = "knowledge_sources"
@@ -51,10 +50,7 @@ _knowledge_sources_table_once = AsyncOnce()
 
 
 async def _create_knowledge_sources_table_async() -> None:
-    table = knowledge_sources_table()
-    async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(CreateSchema(_app_schema(), if_not_exists=True))
-        await conn.run_sync(table.create, checkfirst=True)
+    await ensure_control_plane_schema_current()
 
 
 async def ensure_knowledge_sources_table_async() -> None:
