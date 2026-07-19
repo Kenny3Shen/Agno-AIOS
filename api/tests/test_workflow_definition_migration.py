@@ -1,5 +1,10 @@
-from api.services.workflow_definition_migration import canonicalize_workflow_definition
+from unittest.mock import AsyncMock, patch
 from uuid import UUID
+
+import pytest
+
+from api.persistence import workflows as workflow_store
+from api.services.workflow_definition_migration import canonicalize_workflow_definition
 
 
 def test_canonicalize_workflow_definition_rewrites_nested_legacy_keys() -> None:
@@ -167,3 +172,119 @@ def test_canonicalize_workflow_definition_adds_empty_condition_else_branch() -> 
 
     assert migrated is not None
     assert migrated["steps"][0]["else"] == []
+
+
+def test_canonicalize_workflow_definition_removes_retired_skill_recursively() -> None:
+    migrated = canonicalize_workflow_definition(
+        {
+            "steps": [
+                {
+                    "id": "condition",
+                    "type": "condition",
+                    "evaluator": {"cel": "true"},
+                    "steps": [
+                        {
+                            "id": "triage",
+                            "type": "step",
+                            "executor": {"ref": "security-operations"},
+                            "skills": ["playbook-skill", "cve-intel-skill"],
+                        },
+                        {
+                            "id": "retry",
+                            "type": "loop",
+                            "max_iterations": 1,
+                            "steps": [
+                                {
+                                    "id": "retry-step",
+                                    "type": "step",
+                                    "executor": {"ref": "safe-fallback"},
+                                    "skills": ["playbook-skill"],
+                                }
+                            ],
+                        },
+                    ],
+                    "else": [],
+                },
+                {
+                    "id": "route",
+                    "type": "router",
+                    "selector": {"cel": 'input.contains("x") ? "one" : "two"'},
+                    "choices": [
+                        {
+                            "id": "one",
+                            "name": "one",
+                            "steps": [
+                                {
+                                    "id": "route-one",
+                                    "type": "step",
+                                    "executor": {"ref": "safe-fallback"},
+                                    "skills": ["playbook-skill"],
+                                }
+                            ],
+                        },
+                        {
+                            "id": "two",
+                            "name": "two",
+                            "steps": [
+                                {
+                                    "id": "route-two",
+                                    "type": "step",
+                                    "executor": {"ref": "security-operations"},
+                                    "skills": [
+                                        "hitl-containment-skill",
+                                        "playbook-skill",
+                                    ],
+                                }
+                            ],
+                        },
+                    ],
+                },
+            ]
+        }
+    )
+
+    assert migrated is not None
+    condition, router = migrated["steps"]
+    assert condition["steps"][0]["skills"] == ["cve-intel-skill"]
+    assert "skills" not in condition["steps"][1]["steps"][0]
+    assert "skills" not in router["choices"][0]["steps"][0]
+    assert router["choices"][1]["steps"][0]["skills"] == [
+        "hitl-containment-skill"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_persistence_migrates_definition_published_definition_and_versions() -> None:
+    workflow_table = object()
+    version_table = object()
+    migrate_columns = AsyncMock(side_effect=[2, 3])
+
+    with (
+        patch.object(
+            workflow_store,
+            "ensure_workflow_versions_table_async",
+            new=AsyncMock(),
+        ),
+        patch.object(workflow_store, "workflows_table", return_value=workflow_table),
+        patch.object(
+            workflow_store,
+            "workflow_versions_table",
+            return_value=version_table,
+        ),
+        patch.object(
+            workflow_store,
+            "_migrate_definition_columns_async",
+            new=migrate_columns,
+        ),
+    ):
+        await workflow_store._migrate_workflow_definition_aliases_async()
+
+    assert migrate_columns.await_args_list[0].args == (workflow_table,)
+    assert migrate_columns.await_args_list[0].kwargs["definition_columns"] == (
+        "definition",
+        "published_definition",
+    )
+    assert migrate_columns.await_args_list[1].args == (version_table,)
+    assert migrate_columns.await_args_list[1].kwargs["definition_columns"] == (
+        "definition",
+    )

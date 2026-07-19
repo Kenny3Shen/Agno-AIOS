@@ -136,31 +136,48 @@ flowchart LR
         Router["TanStack Router<br/>页面与 URL 状态"]
         Query["TanStack Query<br/>服务端状态"]
         Recents["最近对话<br/>Conversations"]
-        Features["领域页面<br/>Chat / Trace / Knowledge / Governance"]
+        Chat["Chat<br/>SSE 对话与附件"]
+        Studio["Workflow Studio<br/>定义、版本、运行日志"]
+        Features["领域页面<br/>Trace / Knowledge / CVE / Collect / Governance"]
 
         Shell --> ScopeFilter
         Shell --> Router
         Shell --> Recents
+        Router --> Chat
+        Router --> Studio
         Router --> Features
         Recents --> Query
+        Chat --> Query
+        Studio --> Query
         Features --> Query
     end
 
     Query -->|"JWT + JSON"| API["FastAPI<br/>认证、授权、业务路由"]
-    Features -->|"Chat SSE"| API
+    Chat -->|"Chat SSE"| API
+    Studio -->|"Workflow SSE / Cron / Webhook"| API
 
-    subgraph Runtime["Agent 运行时"]
-        Agno["Agno Agent"]
+    subgraph Runtime["统一 Agno 编排运行时"]
+        ChatRuntime["Chat Runtime<br/>按意图挂载能力"]
+        Compiler["Workflow Compiler<br/>验证、编译、版本快照"]
+        Orchestrator["Agno Workflow<br/>Step · 条件 · 并行 · 循环 · 路由 · HITL"]
+        Scheduler["Cron / Webhook Trigger<br/>通知与审计"]
+        Agent["Agno Agent<br/>每个 Workflow Step 的执行器"]
         MCP["FastMCP 工具"]
         Skills["Local Skills"]
         Retrieval["Knowledge + Memory"]
 
-        Agno --> MCP
-        Agno --> Skills
-        Agno --> Retrieval
+        ChatRuntime --> Agent
+        Compiler --> Orchestrator
+        Scheduler --> Orchestrator
+        Orchestrator --> Agent
+        Agent --> MCP
+        Agent --> Skills
+        Agent --> Retrieval
     end
 
-    API --> Runtime
+    API --> ChatRuntime
+    API --> Compiler
+    API --> Scheduler
     API --> Authz["JWT scopes<br/>owner / admin 校验"]
     API --> Audit["Audit + Notifications"]
     API --> Postgres["PostgreSQL<br/>业务与运行数据"]

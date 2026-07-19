@@ -21,7 +21,6 @@ from api.mcp.config import (
 )
 from api.mcp.tools.basic import basic_mcp
 from api.mcp.tools.hitl import hitl_mcp
-from api.mcp.tools.playbook import playbook_mcp
 
 ComponentType = Literal["tool", "resource", "template", "prompt"]
 
@@ -58,7 +57,6 @@ async def configure_main_mcp() -> None:
                 child = {
                     "basic": basic_mcp,
                     "hitl": hitl_mcp,
-                    "playbook": playbook_mcp,
                 }.get(row["name"])
                 if child is None:
                     continue

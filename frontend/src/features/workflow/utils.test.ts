@@ -283,12 +283,12 @@ describe('workflow behavior', () => {
           name: 'T',
           targetId: 'security-operations',
           instructions: 'x',
-          skills: ['playbook-skill', 'cve-intel-skill'],
+          skills: ['cve-intel-skill', 'hitl-containment-skill'],
         },
       ],
     }
     const def = toDefinition(withSkills)
-    expect(def.steps[0]?.skills).toEqual(['playbook-skill', 'cve-intel-skill'])
+    expect(def.steps[0]?.skills).toEqual(['cve-intel-skill', 'hitl-containment-skill'])
     const restored = fromRecord({
       id: 'wf',
       name: 'n',
@@ -300,7 +300,7 @@ describe('workflow behavior', () => {
       created_at: 1,
       updated_at: 1,
     })
-    expect(restored.steps?.[0]?.skills).toEqual(['playbook-skill', 'cve-intel-skill'])
+    expect(restored.steps?.[0]?.skills).toEqual(['cve-intel-skill', 'hitl-containment-skill'])
   })
 
   it('builds webhook URL and curl sample', () => {
@@ -858,16 +858,16 @@ describe('updateNodeInTree bulk skills patch', () => {
     a.skills = ['cve-intel-skill']
     const b = createNode('step')
     b.id = 'b'
-    b.skills = ['playbook-skill']
+    b.skills = ['intranet-ip-skill']
     let steps = [a, b]
     for (const id of ['a', 'b']) {
       steps = updateNodeInTree(steps, id, (item) => ({
         ...item,
-        skills: ['playbook-skill', 'hitl-containment-skill'],
+        skills: ['cve-intel-skill', 'hitl-containment-skill'],
       }))
     }
-    expect(findNode(steps, 'a')?.skills).toEqual(['playbook-skill', 'hitl-containment-skill'])
-    expect(findNode(steps, 'b')?.skills).toEqual(['playbook-skill', 'hitl-containment-skill'])
+    expect(findNode(steps, 'a')?.skills).toEqual(['cve-intel-skill', 'hitl-containment-skill'])
+    expect(findNode(steps, 'b')?.skills).toEqual(['cve-intel-skill', 'hitl-containment-skill'])
   })
 })
 
@@ -933,7 +933,7 @@ describe('summarizeSelectedAgentSteps', () => {
     const b = createNode('step')
     b.id = 'b'
     b.targetId = 'safe-fallback'
-    b.skills = ['playbook-skill']
+    b.skills = ['intranet-ip-skill']
     b.instructions = 'two'
     b.requiresConfirmation = false
     b.requiresUserInput = true
@@ -956,7 +956,7 @@ describe('summarizeSelectedAgentSteps', () => {
   it('shares values when agents match', () => {
     const a = createNode('step')
     a.targetId = 'security-operations'
-    a.skills = ['playbook-skill']
+    a.skills = ['hitl-containment-skill']
     a.instructions = 'shared'
     a.requiresConfirmation = true
     a.requiresUserInput = true
@@ -965,7 +965,7 @@ describe('summarizeSelectedAgentSteps', () => {
     const summary = summarizeSelectedAgentSteps([a, b])
     expect(summary.sharedTargetId).toBe('security-operations')
     expect(summary.skillsMixed).toBe(false)
-    expect(summary.sharedSkills).toEqual(['playbook-skill'])
+    expect(summary.sharedSkills).toEqual(['hitl-containment-skill'])
     expect(summary.instructionsMixed).toBe(false)
     expect(summary.sharedInstructions).toBe('shared')
     expect(summary.allConfirm).toBe(true)
@@ -978,11 +978,11 @@ describe('summarizeSelectedAgentSteps', () => {
 describe('cloneNodeDeep', () => {
   it('cloneNodeDeep isolates skills arrays', () => {
     const a = createNode('step')
-    a.skills = ['playbook-skill']
+    a.skills = ['hitl-containment-skill']
     const clone = cloneNodeDeep(a)
     clone.skills?.push('cve-intel-skill')
-    expect(a.skills).toEqual(['playbook-skill'])
-    expect(clone.skills).toEqual(['playbook-skill', 'cve-intel-skill'])
+    expect(a.skills).toEqual(['hitl-containment-skill'])
+    expect(clone.skills).toEqual(['hitl-containment-skill', 'cve-intel-skill'])
     expect(clone.id).not.toBe(a.id)
   })
 })

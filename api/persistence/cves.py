@@ -14,7 +14,6 @@ from sqlalchemy import (
     MetaData,
     Table,
     Text,
-    UniqueConstraint,
     case,
     delete,
     desc,
@@ -22,6 +21,8 @@ from sqlalchemy import (
     literal,
     or_,
     select,
+    text,
+    tuple_,
 )
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.schema import CreateSchema
@@ -62,10 +63,19 @@ def cves_table() -> Table:
             nullable=False,
             server_default=func.now(),
         ),
-        UniqueConstraint("cve_id", "github_url", name="uq_cves_cve_url"),
     )
     Index("idx_cves_cve_id", table.c.cve_id)
     Index("idx_cves_source", table.c.source)
+    # A reference can legitimately be supplied by more than one upstream
+    # feed.  Source is therefore part of its ownership key: reconciling one
+    # feed must never remove another feed's membership.
+    Index(
+        "uq_cves_cve_url_source",
+        table.c.cve_id,
+        table.c.github_url,
+        table.c.source,
+        unique=True,
+    )
     Index(
         "idx_cves_search",
         func.to_tsvector(
@@ -82,11 +92,38 @@ def cves_table() -> Table:
 _cves_table_once = AsyncOnce()
 
 
+def _quoted_identifier(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
+
+
+async def _migrate_cve_source_ownership(conn: Any) -> None:
+    """Replace the legacy cross-source uniqueness constraint.
+
+    Earlier versions keyed rows by ``(cve_id, github_url)`` only.  That made
+    a deletion reported by one source delete an identical reference that had
+    also been discovered by another source.  PostgreSQL allows an upsert to
+    target a unique index, so use a three-column unique index for both fresh
+    and upgraded databases.
+    """
+    schema = _quoted_identifier(_app_schema())
+    table = _quoted_identifier(CVES_TABLE)
+    await conn.execute(
+        text(f"ALTER TABLE {schema}.{table} DROP CONSTRAINT IF EXISTS uq_cves_cve_url")
+    )
+    await conn.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_cves_cve_url_source "
+            f"ON {schema}.{table} (cve_id, github_url, source)"
+        )
+    )
+
+
 async def _create_cves_table() -> None:
     table = cves_table()
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(CreateSchema(_app_schema(), if_not_exists=True))
         await conn.run_sync(table.create, checkfirst=True)
+        await _migrate_cve_source_ownership(conn)
         for index in table.indexes:
             await conn.run_sync(index.create, checkfirst=True)
 
@@ -166,29 +203,101 @@ async def search_cve_rows(
 
 
 async def insert_new_cve_rows(rows: Sequence[dict[str, Any]]) -> int:
+    """Insert new references and refresh mutable source data on conflict.
+
+    The historical function name is kept for call-site compatibility.  Its
+    upsert behaviour also refreshes changed descriptions and timestamps so a
+    remote correction is visible without waiting for a new reference URL.
+    """
     if not rows:
         return 0
     await ensure_cves_table()
     now = datetime.now(UTC)
     table = cves_table()
-    values = [
-        {
-            "cve_id": row.get("cve_id"),
-            "description": row.get("description") or "",
-            "github_url": row.get("github_url") or "",
-            "source": row.get("source") or "",
-            "create_time": row.get("create_time") or now,
-        }
-        for row in rows
-    ]
+    values: list[dict[str, Any]] = []
+    for row in rows:
+        cve_id = str(row.get("cve_id") or "").strip().upper()
+        github_url = str(row.get("github_url") or "").strip()
+        source = str(row.get("source") or "").strip()
+        if not cve_id or not github_url or not source:
+            continue
+        values.append(
+            {
+                "cve_id": cve_id,
+                "description": str(row.get("description") or ""),
+                "github_url": github_url,
+                "source": source,
+                "create_time": row.get("create_time") or now,
+                "updated_at": now,
+            }
+        )
+    if not values:
+        return 0
+    stmt = insert(table).values(values)
     stmt = (
-        insert(table)
-        .values(values)
-        .on_conflict_do_nothing(index_elements=[table.c.cve_id, table.c.github_url])
+        stmt.on_conflict_do_update(
+            index_elements=[table.c.cve_id, table.c.github_url, table.c.source],
+            set_={
+                "description": stmt.excluded.description,
+                "create_time": stmt.excluded.create_time,
+                "updated_at": now,
+            },
+        )
     )
     async with get_async_control_plane_engine().begin() as conn:
         result = await conn.execute(stmt)
     return max(int(result.rowcount or 0), 0)
+
+
+async def find_missing_cve_source_keys(
+    rows: Sequence[dict[str, Any]],
+) -> set[tuple[str, str, str]]:
+    """Return source-owned CVE identities absent from the database.
+
+    After upgrading the legacy two-column uniqueness constraint, a local cache
+    can know that a second source owns a reference even though the old database
+    could store only the first source. This lookup allows the update task to
+    repair only those missing memberships instead of replaying an entire cache.
+    """
+    requested: set[tuple[str, str, str]] = set()
+    for row in rows:
+        cve_id = str(row.get("cve_id") or "").strip().upper()
+        github_url = str(row.get("github_url") or "").strip()
+        source = str(row.get("source") or "").strip()
+        if cve_id and github_url and source:
+            requested.add((cve_id, github_url, source))
+    if not requested:
+        return set()
+
+    await ensure_cves_table()
+    table = cves_table()
+    existing: set[tuple[str, str, str]] = set()
+    # Keep parameter counts bounded while allowing a single set-based lookup
+    # per chunk instead of one query for every cached row.
+    chunk_size = 1_000
+    identities = list(requested)
+    async with get_async_control_plane_engine().begin() as conn:
+        for index in range(0, len(identities), chunk_size):
+            chunk = identities[index : index + chunk_size]
+            rows_found = (
+                (
+                    await conn.execute(
+                        select(table.c.cve_id, table.c.github_url, table.c.source).where(
+                            tuple_(
+                                table.c.cve_id,
+                                table.c.github_url,
+                                table.c.source,
+                            ).in_(chunk)
+                        )
+                    )
+                )
+                .all()
+            )
+            existing.update(
+                (str(cve_id), str(github_url), str(source))
+                for cve_id, github_url, source in rows_found
+            )
+    return requested.difference(existing)
 
 
 async def delete_cve_rows(rows: Sequence[dict[str, Any]]) -> int:
@@ -196,14 +305,17 @@ async def delete_cve_rows(rows: Sequence[dict[str, Any]]) -> int:
         return 0
     await ensure_cves_table()
     table = cves_table()
-    pairs: list[tuple[str, str]] = []
-    seen: set[tuple[str, str]] = set()
+    pairs: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
     for row in rows:
-        cve_id = str(row.get("cve_id") or "").strip()
+        cve_id = str(row.get("cve_id") or "").strip().upper()
         github_url = str(row.get("github_url") or "").strip()
-        if not cve_id or not github_url:
+        source = str(row.get("source") or "").strip()
+        # Do not make a legacy/cache row without source ownership capable of
+        # deleting every matching reference in the database.
+        if not cve_id or not github_url or not source:
             continue
-        key = (cve_id, github_url)
+        key = (cve_id, github_url, source)
         if key in seen:
             continue
         seen.add(key)
@@ -219,8 +331,10 @@ async def delete_cve_rows(rows: Sequence[dict[str, Any]]) -> int:
                 delete(table).where(
                     or_(
                         *[
-                            (table.c.cve_id == cve_id) & (table.c.github_url == github_url)
-                            for cve_id, github_url in chunk
+                            (table.c.cve_id == cve_id)
+                            & (table.c.github_url == github_url)
+                            & (table.c.source == source)
+                            for cve_id, github_url, source in chunk
                         ]
                     )
                 )
@@ -236,4 +350,3 @@ async def count_cve_rows() -> int:
         return int(
             (await conn.execute(select(func.count()).select_from(table))).scalar_one()
         )
-

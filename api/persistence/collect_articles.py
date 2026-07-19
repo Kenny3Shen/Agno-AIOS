@@ -10,6 +10,7 @@ from typing import Any
 
 from sqlalchemy import (
     BigInteger,
+    case,
     Column,
     DateTime,
     Index,
@@ -21,8 +22,9 @@ from sqlalchemy import (
     func,
     or_,
     select,
+    text,
 )
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.dialects.postgresql import ARRAY, insert
 from sqlalchemy.schema import CreateSchema
 
 from api.config import get_settings
@@ -49,6 +51,12 @@ def collect_articles_table() -> Table:
         Column("title", Text, nullable=False, server_default=""),
         Column("markdown", Text, nullable=False, server_default=""),
         Column("summary", Text, nullable=False, server_default=""),
+        Column(
+            "cve_ids",
+            ARRAY(Text),
+            nullable=False,
+            server_default=text("'{}'::text[]"),
+        ),
         Column("status", Text, nullable=False, server_default="ok"),
         Column("error_message", Text, nullable=False, server_default=""),
         Column(
@@ -82,9 +90,21 @@ _collect_articles_table_once = AsyncOnce()
 
 async def _create_collect_articles_table() -> None:
     table = collect_articles_table()
+    schema = _app_schema()
     async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(CreateSchema(_app_schema(), if_not_exists=True))
+        await conn.execute(CreateSchema(schema, if_not_exists=True))
         await conn.run_sync(table.create, checkfirst=True)
+        # ``Table.create(checkfirst=True)`` does not evolve an already-created
+        # table. Keep this explicit migration beside the table declaration so
+        # existing deployments receive persisted CVE tags too.
+        escaped_schema = schema.replace('"', '""')
+        await conn.execute(
+            text(
+                f'ALTER TABLE "{escaped_schema}"."{COLLECT_ARTICLES_TABLE}" '
+                "ADD COLUMN IF NOT EXISTS cve_ids TEXT[] "
+                "NOT NULL DEFAULT '{}'::text[]"
+            )
+        )
         for index in table.indexes:
             await conn.run_sync(index.create, checkfirst=True)
 
@@ -95,11 +115,56 @@ async def ensure_collect_articles_table() -> None:
 
 def _row_to_dict(row: Any) -> dict[str, Any]:
     data = dict(row)
+    data["cve_ids"] = _normalize_cve_ids(data.get("cve_ids"))
     for key in ("fetched_at", "created_at", "updated_at"):
         value = data.get(key)
         if hasattr(value, "isoformat"):
             data[key] = value.isoformat()
     return data
+
+
+def _normalize_cve_ids(value: Any) -> list[str]:
+    """Return a stable, de-duplicated list suitable for PostgreSQL TEXT[]."""
+    if not isinstance(value, (list, tuple, set)):
+        return []
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        cve_id = str(item or "").strip().upper()
+        if not cve_id or cve_id in seen:
+            continue
+        seen.add(cve_id)
+        result.append(cve_id)
+    return result
+
+
+def _collect_article_conflict_update_values(table: Table, excluded: Any) -> dict[str, Any]:
+    """Build an upsert that never replaces a usable article with an error.
+
+    A transient refresh failure produces an empty/error record. If the URL
+    already has an ``ok`` row, retain that successful payload (including its
+    status and CVE tags) instead of making the article disappear from the
+    default library view.
+    """
+    preserve_success = (table.c.status == "ok") & (excluded.status == "error")
+
+    def keep_existing(column: str) -> Any:
+        return case(
+            (preserve_success, table.c[column]),
+            else_=excluded[column],
+        )
+
+    return {
+        "source_domain": keep_existing("source_domain"),
+        "title": keep_existing("title"),
+        "markdown": keep_existing("markdown"),
+        "summary": keep_existing("summary"),
+        "cve_ids": keep_existing("cve_ids"),
+        "status": keep_existing("status"),
+        "error_message": keep_existing("error_message"),
+        "fetched_at": keep_existing("fetched_at"),
+        "updated_at": keep_existing("updated_at"),
+    }
 
 
 async def search_collect_articles(
@@ -148,6 +213,7 @@ async def search_collect_articles(
         table.c.source_domain,
         table.c.title,
         table.c.summary,
+        table.c.cve_ids,
         table.c.status,
         table.c.error_message,
         table.c.fetched_at,
@@ -303,40 +369,29 @@ async def upsert_collect_article(record: dict[str, Any]) -> dict[str, Any]:
         "title": str(record.get("title") or "")[:500],
         "markdown": str(record.get("markdown") or ""),
         "summary": str(record.get("summary") or "")[:1000],
+        "cve_ids": _normalize_cve_ids(record.get("cve_ids")),
         "status": str(record.get("status") or "ok"),
         "error_message": str(record.get("error_message") or "")[:2000],
         "fetched_at": record.get("fetched_at") or now,
         "updated_at": now,
     }
-    stmt = (
-        insert(table)
-        .values(**values)
-        .on_conflict_do_update(
-            index_elements=[table.c.url],
-            set_={
-                "source_domain": values["source_domain"],
-                "title": values["title"],
-                "markdown": values["markdown"],
-                "summary": values["summary"],
-                "status": values["status"],
-                "error_message": values["error_message"],
-                "fetched_at": values["fetched_at"],
-                "updated_at": now,
-            },
-        )
-        .returning(
-            table.c.id,
-            table.c.url,
-            table.c.source_domain,
-            table.c.title,
-            table.c.markdown,
-            table.c.summary,
-            table.c.status,
-            table.c.error_message,
-            table.c.fetched_at,
-            table.c.created_at,
-            table.c.updated_at,
-        )
+    stmt = insert(table).values(**values)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[table.c.url],
+        set_=_collect_article_conflict_update_values(table, stmt.excluded),
+    ).returning(
+        table.c.id,
+        table.c.url,
+        table.c.source_domain,
+        table.c.title,
+        table.c.markdown,
+        table.c.summary,
+        table.c.cve_ids,
+        table.c.status,
+        table.c.error_message,
+        table.c.fetched_at,
+        table.c.created_at,
+        table.c.updated_at,
     )
     async with get_async_control_plane_engine().begin() as conn:
         row = (await conn.execute(stmt)).mappings().one()
@@ -391,6 +446,7 @@ async def bulk_upsert_collect_articles(records: Sequence[dict[str, Any]]) -> int
                 "title": str(record.get("title") or "")[:500],
                 "markdown": str(record.get("markdown") or ""),
                 "summary": str(record.get("summary") or "")[:1000],
+                "cve_ids": _normalize_cve_ids(record.get("cve_ids")),
                 "status": str(record.get("status") or "ok"),
                 "error_message": str(record.get("error_message") or "")[:2000],
                 "fetched_at": record.get("fetched_at") or now,
@@ -409,18 +465,8 @@ async def bulk_upsert_collect_articles(records: Sequence[dict[str, Any]]) -> int
     stmt = insert(table).values(values)
     stmt = stmt.on_conflict_do_update(
         index_elements=[table.c.url],
-        set_={
-            "source_domain": stmt.excluded.source_domain,
-            "title": stmt.excluded.title,
-            "markdown": stmt.excluded.markdown,
-            "summary": stmt.excluded.summary,
-            "status": stmt.excluded.status,
-            "error_message": stmt.excluded.error_message,
-            "fetched_at": stmt.excluded.fetched_at,
-            "updated_at": stmt.excluded.updated_at,
-        },
+        set_=_collect_article_conflict_update_values(table, stmt.excluded),
     )
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(stmt)
     return len(values)
-

@@ -49,8 +49,13 @@ def _normalize_triggers(raw: object | None) -> dict[str, Any]:
 def _canonical_definition(raw: object, *, context: str) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise WorkflowDefinitionError(f"{context} must be an object")
+    from api.services.workflow_definition_migration import canonicalize_workflow_definition
+
+    canonical = canonicalize_workflow_definition(raw)
+    if canonical is None:
+        raise WorkflowDefinitionError(f"{context} must be an object")
     try:
-        return validate_and_normalize_definition(raw)
+        return validate_and_normalize_definition(canonical)
     except WorkflowDefinitionError as exc:
         raise WorkflowDefinitionError(f"{context} is invalid: {exc}") from exc
 

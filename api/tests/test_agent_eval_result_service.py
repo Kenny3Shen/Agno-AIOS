@@ -33,7 +33,10 @@ class FakeEvalDb:
         return {
             "run_id": eval_run_id,
             "eval_type": "reliability",
-            "eval_data": {"passed": False, "missing_tool_calls": ["playbook.cve_lookup"]},
+            "eval_data": {
+                "passed": False,
+                "missing_tool_calls": ["basic_send_feishu_notify"],
+            },
         }
 
 

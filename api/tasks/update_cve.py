@@ -28,8 +28,17 @@ from loguru import logger
 import polars as pl
 
 from api.config import get_settings
-from api.persistence.cves import count_cve_rows, delete_cve_rows, insert_new_cve_rows
-from api.tasks.cve_sources import DATA_SOURCES, load_cve_source_config
+from api.persistence.cves import (
+    count_cve_rows,
+    delete_cve_rows,
+    find_missing_cve_source_keys,
+    insert_new_cve_rows,
+)
+from api.tasks.cve_sources import (
+    DATA_SOURCES,
+    load_cve_source_config,
+    normalize_cve_dataframe,
+)
 
 _FILE_LOGGING_CONFIGURED = False
 
@@ -49,7 +58,7 @@ class CVEDataSourceEmptyError(CVEUpdateError):
 @dataclass(slots=True)
 class CVESourceDelta:
     source_name: str
-    increment_data: list[dict[str, Any]]
+    upsert_data: list[dict[str, Any]]
     deleted_data: list[dict[str, Any]]
     local_cache_path: str
     remote_dataframe: pl.DataFrame
@@ -152,10 +161,64 @@ async def _read_csv_if_exists(path: str) -> pl.DataFrame:
 
 
 def _parse_source_data(source: Any, raw_data: Any, source_name: str) -> pl.DataFrame:
-    df_remote = source.parse_data(raw_data)
+    df_remote = normalize_cve_dataframe(source.parse_data(raw_data))
     if not df_remote.is_empty():
         df_remote = df_remote.with_columns(pl.lit(source_name).alias("source"))
     return df_remote
+
+
+_CVE_IDENTITY_COLUMNS = ("cve_id", "github_url")
+
+
+def _source_identity(row: Mapping[str, Any]) -> tuple[str, str, str] | None:
+    cve_id = str(row.get("cve_id") or "").strip().upper()
+    github_url = str(row.get("github_url") or "").strip()
+    source = str(row.get("source") or "").strip()
+    if not cve_id or not github_url or not source:
+        return None
+    return cve_id, github_url, source
+
+
+def _description_updates(
+    df_remote: pl.DataFrame,
+    df_local: pl.DataFrame,
+) -> pl.DataFrame:
+    """Return same-identity rows whose description changed upstream."""
+    if df_remote.is_empty() or df_local.is_empty():
+        return df_remote.head(0)
+    if not set(_CVE_IDENTITY_COLUMNS).issubset(df_remote.columns) or not set(
+        _CVE_IDENTITY_COLUMNS
+    ).issubset(df_local.columns):
+        return df_remote.head(0)
+
+    matching_local = df_local.select(_CVE_IDENTITY_COLUMNS).unique()
+    if "description" not in df_local.columns or "description" not in df_remote.columns:
+        # A legacy cache without descriptions needs one full description refresh.
+        return df_remote.join(
+            matching_local,
+            on=list(_CVE_IDENTITY_COLUMNS),
+            how="inner",
+        )
+
+    local_descriptions = df_local.select(
+        *[pl.col(column) for column in _CVE_IDENTITY_COLUMNS],
+        pl.col("description")
+        .fill_null("")
+        .cast(pl.String)
+        .alias("_local_description"),
+    ).unique(subset=list(_CVE_IDENTITY_COLUMNS), keep="first")
+    return (
+        df_remote.join(
+            local_descriptions,
+            on=list(_CVE_IDENTITY_COLUMNS),
+            how="inner",
+        )
+        .filter(
+            pl.col("description").fill_null("").cast(pl.String)
+            != pl.col("_local_description")
+        )
+        .select(df_remote.columns)
+    )
 
 
 async def _write_csv(path: str, dataframe: pl.DataFrame) -> None:
@@ -172,21 +235,21 @@ async def _commit_source_state(delta: CVESourceDelta) -> None:
 
 
 async def update_cve_database(
-    increment_data: list[dict[str, Any]],
+    upsert_data: list[dict[str, Any]],
     deleted_data: list[dict[str, Any]],
 ) -> tuple[int, int]:
     """
     更新 PostgreSQL 数据库：
-    - 插入新增数据（ON CONFLICT DO NOTHING）
-    - 删除远程已移除的数据（DELETE）
-    返回 (新增条数, 删除条数)
+    - 写入新增或描述已更新的数据（按来源 ownership upsert）
+    - 仅删除报告移除它的来源成员（DELETE）
+    返回 (写入条数, 删除条数)
     """
     new_count = 0
     del_count = 0
     batch_size = 500
     try:
-        for i in range(0, len(increment_data), batch_size):
-            new_count += await insert_new_cve_rows(increment_data[i : i + batch_size])
+        for i in range(0, len(upsert_data), batch_size):
+            new_count += await insert_new_cve_rows(upsert_data[i : i + batch_size])
         for i in range(0, len(deleted_data), batch_size):
             del_count += await delete_cve_rows(deleted_data[i : i + batch_size])
         total_count = await count_cve_rows()
@@ -197,7 +260,7 @@ async def update_cve_database(
         raise
 
     logger.info(
-        "同步完成。新增: {} 条，删除: {} 条，数据库总记录: {} 条。",
+        "同步完成。写入/刷新: {} 条，删除: {} 条，数据库总记录: {} 条。",
         new_count,
         del_count,
         total_count,
@@ -231,27 +294,56 @@ async def get_add_del_data(
     except Exception as e:
         logger.warning("无法获取数据源 {} 的远程 commit: {}，继续拉取数据", source_name, e)
 
-    local_commit_path = getattr(source, "commit_cache", None)
-    if not local_commit_path:
-        local_cache_path = source.get_local_cache_path()
-        local_commit_path = local_cache_path + ".commit"
+    local_cache_path = source.get_local_cache_path()
+    local_commit_path = getattr(source, "commit_cache", None) or (
+        local_cache_path + ".commit"
+    )
 
     local_commit = None
     if remote_commit:
         local_commit = await _read_text_if_exists(local_commit_path)
 
     if remote_commit and local_commit == remote_commit:
-        logger.info("数据源 {} 无变化，跳过拉取", source_name)
-        return CVESourceDelta(
-            source_name=source_name,
-            increment_data=[],
-            deleted_data=[],
-            local_cache_path=source.get_local_cache_path(),
-            remote_dataframe=pl.DataFrame(),
-            remote_commit=remote_commit,
-            local_commit_path=local_commit_path,
-            should_update_cache=False,
-            should_update_commit=False,
+        # A legacy database had a two-column uniqueness key and could only
+        # retain one source for an identical reference. Reconcile this source's
+        # cached snapshot even when its remote commit has not changed, so the
+        # ownership migration is backfilled without forcing a full re-fetch.
+        cached_snapshot = normalize_cve_dataframe(
+            await _read_csv_if_exists(local_cache_path)
+        )
+        if not cached_snapshot.is_empty():
+            cached_snapshot = cached_snapshot.with_columns(
+                pl.lit(source_name).alias("source")
+            )
+            cached_rows = cached_snapshot.to_dicts()
+            missing_keys = await find_missing_cve_source_keys(cached_rows)
+            backfill_rows = [
+                row
+                for row in cached_rows
+                if _source_identity(row) in missing_keys
+            ]
+            if backfill_rows:
+                logger.info(
+                    "数据源 {} commit 未变化，补齐 {} 条缺失 source ownership",
+                    source_name,
+                    len(backfill_rows),
+                )
+            else:
+                logger.info("数据源 {} 无变化，跳过拉取", source_name)
+            return CVESourceDelta(
+                source_name=source_name,
+                upsert_data=backfill_rows,
+                deleted_data=[],
+                local_cache_path=local_cache_path,
+                remote_dataframe=pl.DataFrame(),
+                remote_commit=remote_commit,
+                local_commit_path=local_commit_path,
+                should_update_cache=False,
+                should_update_commit=False,
+            )
+        logger.warning(
+            "数据源 {} commit 未变化但本地快照不可用，重新拉取以避免遗漏 ownership",
+            source_name,
         )
 
     # 2. 获取远程数据（现在直接得到 DataFrame）
@@ -268,8 +360,11 @@ async def get_add_del_data(
         )
 
     # 3. 读取本地缓存（直接得到 DataFrame）
-    local_cache_path = source.get_local_cache_path()
-    df_local = await _read_csv_if_exists(local_cache_path)
+    df_local = normalize_cve_dataframe(await _read_csv_if_exists(local_cache_path))
+    # A cache belongs to exactly one source.  Old cache files predate the
+    # source column; overwrite any stale value so deletes have safe ownership.
+    if not df_local.is_empty():
+        df_local = df_local.with_columns(pl.lit(source_name).alias("source"))
 
     # 4. 对比（DataFrame in -> DataFrame out）
     df_inc, df_del = await to_thread.run_sync(
@@ -277,13 +372,49 @@ async def get_add_del_data(
         df_remote,
         df_local,
     )
+    df_updated = _description_updates(df_remote, df_local)
+    upsert_frames = [frame for frame in (df_inc, df_updated) if not frame.is_empty()]
+    if upsert_frames:
+        df_upsert = pl.concat(upsert_frames, how="vertical_relaxed").unique(
+            subset=["cve_id", "github_url", "source"], keep="first"
+        )
+    else:
+        df_upsert = df_remote.head(0)
 
-    has_changes = not df_inc.is_empty() or not df_del.is_empty()
+    upsert_data = df_upsert.to_dicts()
+    upsert_keys = {
+        identity
+        for row in upsert_data
+        if (identity := _source_identity(row)) is not None
+    }
+    # A source can change one unrelated row after the ownership migration. In
+    # that case, stable rows in the same remote snapshot still need a one-time
+    # source-membership backfill too.
+    stable_remote_rows = [
+        row
+        for row in df_remote.to_dicts()
+        if (identity := _source_identity(row)) is not None and identity not in upsert_keys
+    ]
+    missing_keys = await find_missing_cve_source_keys(stable_remote_rows)
+    if missing_keys:
+        backfill_rows = [
+            row
+            for row in stable_remote_rows
+            if _source_identity(row) in missing_keys
+        ]
+        logger.info(
+            "数据源 {} 补齐 {} 条缺失 source ownership",
+            source_name,
+            len(backfill_rows),
+        )
+        upsert_data.extend(backfill_rows)
+
+    has_changes = bool(upsert_data) or not df_del.is_empty()
     if not has_changes:
         logger.info("未检测到数据变化，跳过数据库更新")
     return CVESourceDelta(
         source_name=source_name,
-        increment_data=df_inc.to_dicts(),
+        upsert_data=upsert_data,
         deleted_data=df_del.to_dicts(),
         local_cache_path=local_cache_path,
         remote_dataframe=df_remote,
@@ -335,7 +466,7 @@ async def main(
         )
 
         async with _cve_update_lock(settings.cve_update_lock_path):
-            need_add_data: list[dict[str, Any]] = []
+            need_upsert_data: list[dict[str, Any]] = []
             need_del_data: list[dict[str, Any]] = []
             source_config = await load_cve_source_config()
             source_names = list(DATA_SOURCES.keys())
@@ -357,31 +488,34 @@ async def main(
                     stage="source",
                     status="completed",
                     message=(
-                        f"{source_name}: +{len(delta.increment_data)} "
+                        f"{source_name}: 写入/刷新 {len(delta.upsert_data)} "
                         f"/-{len(delta.deleted_data)}"
                     ),
                     source=source_name,
                     source_index=index,
                     source_total=len(source_names),
-                    add_count=len(delta.increment_data),
+                    add_count=len(delta.upsert_data),
                     del_count=len(delta.deleted_data),
                 )
 
             for delta in deltas:
-                need_add_data.extend(delta.increment_data)
+                need_upsert_data.extend(delta.upsert_data)
                 need_del_data.extend(delta.deleted_data)
 
             await _emit_progress(
                 on_progress,
                 stage="database",
                 message=(
-                    f"写入数据库（新增 {len(need_add_data)}，"
+                    f"写入数据库（新增或刷新 {len(need_upsert_data)}，"
                     f"删除 {len(need_del_data)}）"
                 ),
-                pending_add=len(need_add_data),
+                pending_add=len(need_upsert_data),
                 pending_del=len(need_del_data),
             )
-            add_count, del_count = await update_cve_database(need_add_data, need_del_data)
+            add_count, del_count = await update_cve_database(
+                need_upsert_data,
+                need_del_data,
+            )
 
             await _emit_progress(
                 on_progress,
@@ -395,7 +529,7 @@ async def main(
         duration = (end_time - start_time).total_seconds()
 
         logger.info(
-            "CVE 更新完成: 新增={}, 删除={}, 耗时={:.2f}秒",
+            "CVE 更新完成: 写入/刷新={}, 删除={}, 耗时={:.2f}秒",
             add_count,
             del_count,
             duration,

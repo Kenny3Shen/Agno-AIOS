@@ -59,16 +59,21 @@ async def test_create_case_sets_defaults_and_preserves_reliability_config():
             return_value={
                 "id": "case-1",
                 "suite_id": "suite-1",
-                "name": "CVE lookup calls MCP",
+                "name": "Feishu notification calls MCP",
                 "description": "",
                 "target_agent_id": "security-operations",
-                "input": "Lookup CVE-2026-20700",
+                "input": "Send a Feishu notification about the incident",
                 "expected_output": "",
                 "criteria": "",
                 "threshold": 7,
                 "eval_types": ["reliability"],
-                "expected_tool_calls": ["playbook.cve_lookup"],
-                "expected_tool_call_arguments": {"playbook.cve_lookup": {"cve": "CVE-2026-20700"}},
+                "expected_tool_calls": ["basic_send_feishu_notify"],
+                "expected_tool_call_arguments": {
+                    "basic_send_feishu_notify": {
+                        "title": "Incident notification",
+                        "content_md": "Please investigate the incident.",
+                    }
+                },
                 "allow_additional_tool_calls": False,
                 "performance_config": {},
                 "metadata": {},
@@ -81,16 +86,21 @@ async def test_create_case_sets_defaults_and_preserves_reliability_config():
         result = await store.create_case(
             {
                 "suite_id": "suite-1",
-                "name": "CVE lookup calls MCP",
-                "input": "Lookup CVE-2026-20700",
+                "name": "Feishu notification calls MCP",
+                "input": "Send a Feishu notification about the incident",
                 "eval_types": ["reliability"],
-                "expected_tool_calls": ["playbook.cve_lookup"],
-                "expected_tool_call_arguments": {"playbook.cve_lookup": {"cve": "CVE-2026-20700"}},
+                "expected_tool_calls": ["basic_send_feishu_notify"],
+                "expected_tool_call_arguments": {
+                    "basic_send_feishu_notify": {
+                        "title": "Incident notification",
+                        "content_md": "Please investigate the incident.",
+                    }
+                },
             }
         )
 
     assert result["eval_types"] == ["reliability"]
-    assert result["expected_tool_calls"] == ["playbook.cve_lookup"]
+    assert result["expected_tool_calls"] == ["basic_send_feishu_notify"]
     create_call = create_mock.await_args
     assert create_call is not None
     assert create_call.kwargs["values"]["allow_additional_tool_calls"] is False

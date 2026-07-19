@@ -8,6 +8,9 @@ from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 
+RETIRED_WORKFLOW_SKILL_NAMES = frozenset({"playbook-skill"})
+
+
 def _copy_mapping(value: Mapping[Any, Any]) -> dict[str, Any]:
     return {str(key): deepcopy(item) for key, item in value.items()}
 
@@ -57,6 +60,17 @@ def _canonicalize_node(value: object, *, path: str) -> object:
     node["type"] = node_type
 
     if node_type == "step":
+        raw_skills = node.get("skills")
+        if isinstance(raw_skills, list):
+            skills = [
+                str(skill).strip()
+                for skill in raw_skills
+                if str(skill).strip() not in RETIRED_WORKFLOW_SKILL_NAMES
+            ]
+            if skills:
+                node["skills"] = skills
+            else:
+                node.pop("skills", None)
         raw_executor = node.get("executor")
         executor = _copy_mapping(raw_executor) if isinstance(raw_executor, Mapping) else {}
         legacy_ref = _first_non_empty(

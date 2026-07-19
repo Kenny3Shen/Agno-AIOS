@@ -46,7 +46,7 @@ async def test_list_skill_workflow_references_filters_matches():
             "id": "wf-1",
             "name": "IR",
             "version": 2,
-            "definition": {"steps": [{"skills": ["playbook-skill"]}]},
+            "definition": {"steps": [{"skills": ["cve-intel-skill"]}]},
         },
         {
             "id": "wf-2",
@@ -57,7 +57,7 @@ async def test_list_skill_workflow_references_filters_matches():
     ]
 
     async def fake_list(**kwargs):
-        assert kwargs["skill_name"] == "playbook-skill"
+        assert kwargs["skill_name"] == "cve-intel-skill"
         return rows
 
     actor = SimpleNamespace(id="u1", role="user", is_superuser=False)
@@ -66,7 +66,7 @@ async def test_list_skill_workflow_references_filters_matches():
         "list_workflows_referencing_skill_text",
         new=AsyncMock(side_effect=fake_list),
     ):
-        matches = await refs.list_skill_workflow_references(actor, "playbook-skill")
+        matches = await refs.list_skill_workflow_references(actor, "cve-intel-skill")
     assert matches["data"] == [{"workflow_id": "wf-1", "name": "IR", "version": "2"}]
     assert matches["truncated"] is False
 
@@ -82,7 +82,7 @@ async def test_list_skill_workflow_references_ignores_incidental_text_matches():
                 "steps": [
                     {
                         "id": "a",
-                        "instructions": "use playbook-skill carefully",
+                        "instructions": "use cve-intel-skill carefully",
                         "skills": [],
                     }
                 ]
@@ -99,6 +99,6 @@ async def test_list_skill_workflow_references_ignores_incidental_text_matches():
         "list_workflows_referencing_skill_text",
         new=AsyncMock(side_effect=fake_list),
     ):
-        matches = await refs.list_skill_workflow_references(actor, "playbook-skill")
+        matches = await refs.list_skill_workflow_references(actor, "cve-intel-skill")
     assert matches["data"] == []
     assert matches["truncated"] is False

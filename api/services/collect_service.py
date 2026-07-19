@@ -1,8 +1,8 @@
 """Read-side service for Collect articles stored in Postgres.
 
-List/detail responses attach derived ``cve_ids`` from title/summary/(body)
-without a separate DB column — keeps the schema simple while enabling CVE
-deep-links from the security news library.
+List/detail responses preserve persisted ``cve_ids`` and backfill legacy rows
+from title, summary, and body when necessary, enabling CVE deep-links from the
+security news library.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from api.utils.url2md_utils import active_domain_rules
 
 
 def _with_cve_ids(row: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Attach derived CVE ids for UI without a separate DB column."""
+    """Normalize persisted CVE ids and derive them only for legacy rows."""
     if not row:
         return row
     out = dict(row)
@@ -98,7 +98,7 @@ async def reparse_article(article_id: int) -> dict[str, Any]:
     if not url:
         raise ValueError("article has no URL")
     record = await parse_and_store_url(url)
-    # parse_and_store returns DB row without cve_ids — re-attach for clients.
+    # Normalize persisted tags, or backfill a legacy row for clients.
     return _with_cve_ids(record) or record
 
 

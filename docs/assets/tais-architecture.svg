@@ -160,13 +160,13 @@
     <path d="M1040 275h335" stroke="#c4b5fd" stroke-opacity=".4"/>
     <circle cx="1073" cy="260" r="9" fill="#c4b5fd"/>
     <text x="1096" y="256" class="groupMeta" fill="#ddd6fe">AI ORCHESTRATION</text>
-    <text x="1096" y="279" class="groupTitle" fill="#fbfaff">Agno Agent 运行时</text>
+    <text x="1096" y="279" class="groupTitle" fill="#fbfaff">Agno Agent 与 Workflow</text>
 
     <rect x="1064" y="322" width="287" height="112" rx="16" fill="#2b2056" stroke="#c4b5fd" stroke-opacity=".23"/>
     <rect x="1080" y="342" width="38" height="38" rx="10" fill="#594199"/>
     <circle cx="1099" cy="358" r="9" fill="none" stroke="#ede9fe" stroke-width="3"/>
     <path d="M1087 376c2-9 8-13 12-13s10 4 12 13" fill="none" stroke="#ede9fe" stroke-width="3" stroke-linecap="round"/>
-    <text x="1132" y="356" class="cardTitle" fill="#f8f7ff">Agent 与 Team</text>
+    <text x="1132" y="356" class="cardTitle" fill="#f8f7ff">Agent、Team 与步骤</text>
     <text x="1132" y="380" class="cardText" fill="#d8d1f8">Security · Data · Deep Research</text>
     <text x="1132" y="404" class="cardText" fill="#b9afe9">可选 Team 协同与结构化输出</text>
 
@@ -174,8 +174,8 @@
     <rect x="1080" y="474" width="38" height="38" rx="10" fill="#594199"/>
     <path d="M1089 493h20m-10-10v20" stroke="#ede9fe" stroke-width="3" stroke-linecap="round"/>
     <text x="1132" y="488" class="cardTitle" fill="#f8f7ff">Skills 与工具选择</text>
-    <text x="1132" y="512" class="cardText" fill="#d8d1f8">Progressive Discovery · 意图挂载</text>
-    <text x="1132" y="536" class="cardText" fill="#b9afe9">MCP namespace 裁剪 · HITL 门闩</text>
+    <text x="1132" y="512" class="cardText" fill="#d8d1f8">Workflow 编译 · 条件 · 并行 · 循环 · 路由</text>
+    <text x="1132" y="536" class="cardText" fill="#b9afe9">Skills 选择 · MCP namespace 裁剪 · HITL 门闩</text>
 
     <rect x="1064" y="586" width="287" height="112" rx="16" fill="#2b2056" stroke="#c4b5fd" stroke-opacity=".23"/>
     <rect x="1080" y="606" width="38" height="38" rx="10" fill="#594199"/>
@@ -185,8 +185,8 @@
     <text x="1132" y="668" class="cardText" fill="#b9afe9">附件转换 · Memory · Knowledge</text>
 
     <rect x="1064" y="730" width="287" height="91" rx="16" fill="#382771" stroke="#c4b5fd" stroke-opacity=".36"/>
-    <text x="1207" y="765" text-anchor="middle" class="cardTitle" fill="#f1efff">流式执行与恢复</text>
-    <text x="1207" y="791" text-anchor="middle" class="cardText" fill="#d8d1f8">Run events · Approval resume · Trace</text>
+    <text x="1207" y="765" text-anchor="middle" class="cardTitle" fill="#f1efff">统一工作流执行与恢复</text>
+    <text x="1207" y="791" text-anchor="middle" class="cardText" fill="#d8d1f8">Run events · Approval resume · Trace · Cron/Webhook</text>
   </g>
 
   <g class="font" filter="url(#softShadow)">
@@ -209,8 +209,8 @@
     <rect x="1470" y="474" width="38" height="38" rx="10" fill="#19716e"/>
     <path d="M1479 493h20m-10-10v20M1482 486l14 14m0-14l-14 14" stroke="#ccfbf1" stroke-width="2.5" stroke-linecap="round"/>
     <text x="1522" y="488" class="cardTitle" fill="#f5fffd">FastMCP 与 Local Skills</text>
-    <text x="1522" y="512" class="cardText" fill="#c0ebe5">同进程挂载 /mcp/ · 外部 MCP 服务</text>
-    <text x="1522" y="536" class="cardText" fill="#97d6cd">Playbook · CVE Intel · Intranet IP · HITL</text>
+    <text x="1522" y="512" class="cardText" fill="#c0ebe5">同进程挂载 /mcp/ · Basic 通知 · 外部 MCP</text>
+    <text x="1522" y="536" class="cardText" fill="#97d6cd">CVE Intel · Intranet IP · HITL · Local Skills</text>
 
     <rect x="1454" y="586" width="382" height="112" rx="16" fill="#103a43" stroke="#5eead4" stroke-opacity=".24"/>
     <rect x="1470" y="606" width="38" height="38" rx="10" fill="#19716e"/>

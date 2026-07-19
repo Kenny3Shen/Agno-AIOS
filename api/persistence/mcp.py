@@ -259,6 +259,25 @@ async def delete_server_row(server_id: int) -> bool:
     return int(result.rowcount or 0) > 0
 
 
+async def delete_retired_builtin_server_row(name: str) -> bool:
+    """Remove an obsolete built-in MCP service and its cascading overrides.
+
+    This is intentionally separate from the user-facing delete path, which
+    protects supported built-ins from removal.  Startup migrations use it only
+    for services the application no longer provides.
+    """
+    await ensure_mcp_tables()
+    table = mcp_servers_table()
+    async with get_async_control_plane_engine().begin() as conn:
+        result = await conn.execute(
+            delete(table).where(
+                table.c.name == name,
+                table.c.server_type == "builtin",
+            )
+        )
+    return int(result.rowcount or 0) > 0
+
+
 async def list_component_override_rows() -> list[dict[str, Any]]:
     await ensure_mcp_tables()
     table = mcp_component_overrides_table()
@@ -341,4 +360,3 @@ async def find_token_row(token: str) -> dict[str, Any] | None:
             .first()
         )
     return dict(row) if row else None
-

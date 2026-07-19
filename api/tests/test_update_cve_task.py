@@ -7,7 +7,7 @@ import polars as pl
 import pytest
 
 from api.tasks import update_cve
-from api.tasks.cve_sources import ExploitDBSource
+from api.tasks.cve_sources import ExploitDBSource, normalize_cve_id
 
 
 class _ChangingSource:
@@ -52,6 +52,15 @@ class _EmptySource(_ChangingSource):
         )
 
 
+class _StableCachedSource(_ChangingSource):
+    def __init__(self, config: dict[str, str]) -> None:
+        super().__init__(config)
+        self.commit_cache = str(self.commit_path)
+
+    async def fetch_data(self) -> str:
+        raise AssertionError("an unchanged commit with a usable cache must not refetch")
+
+
 def test_exploitdb_source_parses_csv_text() -> None:
     raw_csv = "\n".join(
         [
@@ -69,6 +78,85 @@ def test_exploitdb_source_parses_csv_text() -> None:
             "github_url": "https://www.exploit-db.com/exploits/12345",
         }
     ]
+
+
+def test_exploitdb_source_excludes_non_cve_codes_and_paths() -> None:
+    raw_csv = "\n".join(
+        [
+            "id,file,description,date,author,type,platform,port,codes,tags,verified",
+            "1,exploits/linux/remote/12345.py,Valid,2026-01-01,a,remote,linux,,CVE-2026-0001,,1",
+            "2,exploits/linux/remote/12346.py,OSVDB,2026-01-01,a,remote,linux,,OSVDB-12345,,1",
+            "3,exploits/linux/remote/12347.py,Short,2026-01-01,a,remote,linux,,CVE-2026-123,,1",
+            "4,exploits/linux/remote/12348.py,Empty,2026-01-01,a,remote,linux,,,,1",
+            "5,exploits/linux/remote/12349.py,Another,2026-01-01,a,remote,linux,,CVE-2026-0002;OSVDB-1,,1",
+        ]
+    )
+
+    parsed = ExploitDBSource().parse_data(raw_csv)
+
+    assert sorted(parsed.select("cve_id").to_series().to_list()) == [
+        "CVE-2026-0001",
+        "CVE-2026-0002",
+    ]
+    assert normalize_cve_id("CVE-2026-123") is None
+    assert normalize_cve_id("osvdb-12345") is None
+
+
+def test_description_delta_refreshes_existing_source_row() -> None:
+    remote = pl.DataFrame(
+        {
+            "cve_id": ["CVE-2026-0001"],
+            "github_url": ["https://github.com/example/poc"],
+            "description": ["Corrected description"],
+            "source": ["github"],
+        }
+    )
+    local = remote.with_columns(pl.lit("Old description").alias("description"))
+
+    updates = update_cve._description_updates(remote, local)
+
+    assert updates.to_dicts() == remote.to_dicts()
+
+
+@pytest.mark.asyncio
+async def test_unchanged_commit_backfills_missing_source_membership(tmp_path) -> None:
+    cache_path = tmp_path / "cache.csv"
+    commit_path = tmp_path / "commit.txt"
+    cache_path.write_text(
+        "cve_id,description,github_url,source\n"
+        "CVE-2026-0001,Existing,https://github.com/example/poc,github\n",
+        encoding="utf-8",
+    )
+    commit_path.write_text("remote-sha", encoding="utf-8")
+    config = {"cache_path": str(cache_path), "commit_path": str(commit_path)}
+    source_identity = (
+        "CVE-2026-0001",
+        "https://github.com/example/poc",
+        "fake",
+    )
+
+    with (
+        patch.dict(update_cve.DATA_SOURCES, {"fake": _StableCachedSource}, clear=True),
+        patch.object(
+            update_cve,
+            "find_missing_cve_source_keys",
+            new=AsyncMock(return_value={source_identity}),
+        ) as find_missing,
+    ):
+        delta = await update_cve.get_add_del_data("fake", config)
+
+    find_missing.assert_awaited_once()
+    assert delta.upsert_data == [
+        {
+            "cve_id": "CVE-2026-0001",
+            "description": "Existing",
+            "github_url": "https://github.com/example/poc",
+            "source": "fake",
+        }
+    ]
+    assert delta.deleted_data == []
+    assert not delta.should_update_cache
+    assert not delta.should_update_commit
 
 
 @pytest.mark.asyncio

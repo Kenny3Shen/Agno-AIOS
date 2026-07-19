@@ -13,13 +13,13 @@ def actor(actor_id: str, role: str = "user", is_superuser: bool = False):
 
 @pytest.mark.asyncio
 async def test_apply_service_toggle_updates_postgres_row():
-    rows = [{"id": 1, "name": "playbook", "server_type": "builtin", "enabled": True}]
+    rows = [{"id": 1, "name": "basic", "server_type": "builtin", "enabled": True}]
     update = AsyncMock()
     with (
         patch.object(mcp_config_service, "get_server_row_by_name", AsyncMock(return_value=rows[0])),
         patch.object(mcp_config_service, "update_server_row", update),
     ):
-        change = await mcp_config_service.apply_service_toggle("playbook", False)
+        change = await mcp_config_service.apply_service_toggle("basic", False)
     update.assert_awaited_once()
     assert change.response["restart_required"] is True
     assert change.metadata == {"enabled": False}

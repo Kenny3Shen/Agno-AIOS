@@ -1,5 +1,9 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
+from api.persistence import workflows as workflow_store
+from api.services import workflow_compiler
 from api.services.workflow_compiler import (
     WorkflowDefinitionError,
     validate_and_normalize_definition,
@@ -403,12 +407,36 @@ def test_step_skills_normalized_unique():
                     "id": "s1",
                     "type": "step",
                     "executor": agent_executor("security-operations"),
-                    "skills": [" playbook-skill ", "cve-intel-skill", "playbook-skill", ""],
+                    "skills": [
+                        " cve-intel-skill ",
+                        "hitl-containment-skill",
+                        "cve-intel-skill",
+                        "",
+                    ],
                 }
             ],
         }
     )
-    assert normalized["steps"][0]["skills"] == ["playbook-skill", "cve-intel-skill"]
+    assert normalized["steps"][0]["skills"] == [
+        "cve-intel-skill",
+        "hitl-containment-skill",
+    ]
+
+
+def test_step_skills_reject_retired_playbook_skill() -> None:
+    with pytest.raises(WorkflowDefinitionError, match="retired skill 'playbook-skill'"):
+        validate_and_normalize_definition(
+            {
+                "steps": [
+                    {
+                        "id": "s1",
+                        "type": "step",
+                        "executor": agent_executor("security-operations"),
+                        "skills": ["playbook-skill"],
+                    }
+                ]
+            }
+        )
 
 
 def test_step_without_skills_omits_field():
@@ -442,6 +470,48 @@ def test_collect_workflow_skill_names_nested():
         }
     )
     assert names == ["a", "b", "c"]
+
+
+def test_collect_workflow_skill_names_ignores_retired_skill() -> None:
+    from api.services.workflow_compiler import collect_workflow_skill_names
+
+    names = collect_workflow_skill_names(
+        {
+            "steps": [
+                {
+                    "type": "step",
+                    "skills": ["playbook-skill", "cve-intel-skill"],
+                }
+            ]
+        }
+    )
+
+    assert names == ["cve-intel-skill"]
+
+
+@pytest.mark.asyncio
+async def test_nested_persisted_definition_is_canonicalized_before_compile() -> None:
+    legacy_definition = {
+        "name": "Nested historic workflow",
+        "steps": [
+            {
+                "id": "triage",
+                "type": "step",
+                "executor": {"kind": "agent", "ref": "security-operations"},
+                "skills": ["playbook-skill", "cve-intel-skill"],
+            }
+        ],
+    }
+    with patch.object(
+        workflow_store,
+        "get_workflow",
+        new=AsyncMock(return_value={"definition": legacy_definition}),
+    ):
+        definition = await workflow_compiler._resolve_persisted_workflow_definition(
+            "wf-nested"
+        )
+
+    assert definition["steps"][0]["skills"] == ["cve-intel-skill"]
 
 
 

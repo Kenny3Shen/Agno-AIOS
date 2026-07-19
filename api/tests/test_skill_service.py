@@ -7,7 +7,7 @@ from api.services import skill_service
 
 
 def test_resolve_enabled_skill_dirs_filters_and_empty():
-    fake = [Path("/tmp/playbook-skill"), Path("/tmp/cve-intel-skill")]
+    fake = [Path("/tmp/cve-intel-skill"), Path("/tmp/hitl-containment-skill")]
 
     class Meta:
         def __init__(self, name: str):
@@ -27,4 +27,3 @@ def test_resolve_enabled_skill_dirs_filters_and_empty():
             "cve-intel-skill"
         ]
         assert skill_service.resolve_enabled_skill_dirs(["missing"]) == []
-

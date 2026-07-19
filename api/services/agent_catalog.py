@@ -24,13 +24,13 @@ AGENT_PROFILES: dict[str, dict[str, Any]] = {
         "name": "安全运营助手",
         "role": "安全防御运营助手",
         "description": (
-            "安全运营：威胁研判、知识检索、CVE/剧本与 HITL 处置。"
+            "安全运营：威胁研判、知识检索、CVE/Workflow 与 HITL 处置。"
             "默认挂载 MCP 与 Local Skills（可按意图裁剪）。"
         ),
         "category": "operations",
         "kind": "security",
         "capabilities": "skills,hitl,knowledge,mcp",
-        "recommended_for": "告警研判、隔离确认、剧本编排、安全报告",
+        "recommended_for": "告警研判、隔离确认、工作流编排、安全报告",
         "prompt_full": "security_operations.md",
         "prompt_lite": "security_operations_lite.md",
         "connect_mcp": True,

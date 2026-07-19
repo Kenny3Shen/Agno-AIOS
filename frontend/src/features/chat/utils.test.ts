@@ -19,7 +19,6 @@ const translateToolLabel = (key: string) =>
   ({
     'tools.hitl_simulate_containment': '模拟隔离资产',
     'tools.basic_send_feishu_notify': '发送飞书通知',
-    'tools.playbook_list_workflows': '列出剧本',
     'tools.get_skill_instructions': '读取 Skill 说明',
   }[key] ?? key)
 
@@ -300,14 +299,14 @@ describe('chat behavior', () => {
         type: 'run.started',
         runId: 'run-skills',
         leanMode: false,
-        skillNames: ['cve-intel-skill', 'playbook-skill'],
+        skillNames: ['cve-intel-skill', 'hitl-containment-skill'],
         enableTools: true,
       },
     })
     expect(next.messages[0]).toMatchObject({
       run_id: 'run-skills',
       leanMode: false,
-      skillNames: ['cve-intel-skill', 'playbook-skill'],
+      skillNames: ['cve-intel-skill', 'hitl-containment-skill'],
       status: 'streaming',
     })
   })
@@ -399,8 +398,8 @@ describe('chat behavior', () => {
 
 describe('formatSkillLabel', () => {
   it('strips -skill and title-cases segments', () => {
-    expect(formatSkillLabels(['cve-intel-skill', 'playbook-skill', 'hitl-containment-skill', 'intranet-ip-skill'])).toBe(
-      'CVE Intel, Playbook, HITL Containment, Intranet IP',
+    expect(formatSkillLabels(['cve-intel-skill', 'hitl-containment-skill', 'intranet-ip-skill'])).toBe(
+      'CVE Intel, HITL Containment, Intranet IP',
     )
   })
 })
@@ -409,7 +408,6 @@ describe('formatToolLabel', () => {
   it('maps builtin MCP tools via i18n', () => {
     expect(formatToolLabel('hitl_simulate_containment', translateToolLabel)).toBe('模拟隔离资产')
     expect(formatToolLabel('basic_send_feishu_notify', translateToolLabel)).toBe('发送飞书通知')
-    expect(formatToolLabel('playbook_list_workflows', translateToolLabel)).toBe('列出剧本')
     expect(formatToolLabel('get_skill_instructions', translateToolLabel)).toBe('读取 Skill 说明')
   })
 

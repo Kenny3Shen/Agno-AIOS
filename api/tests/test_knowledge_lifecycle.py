@@ -727,7 +727,7 @@ async def test_rebuild_document_applies_advanced_ingest_options_to_snapshot() ->
             title="Updated Runbook",
             source="IR",
             visibility="public",
-            metadata={"category": "playbook"},
+            metadata={"category": "workflow"},
             ingest_options={
                 "chunk_size": 1800,
                 "markdown_split_on_headings": 2,
@@ -746,7 +746,7 @@ async def test_rebuild_document_applies_advanced_ingest_options_to_snapshot() ->
     assert insert_metadata["title"] == "Updated Runbook"
     assert insert_metadata["source"] == "IR"
     assert insert_metadata["visibility"] == "public"
-    assert insert_metadata["category"] == "playbook"
+    assert insert_metadata["category"] == "workflow"
     assert insert_metadata["chunk_size"] == "1800"
     assert insert_metadata["markdown_split_on_headings"] == "2"
     assert insert_metadata["chunk_strategy"] == "markdown"

@@ -21,6 +21,66 @@ from api.config import get_settings
 from api.services.runtime_env import load_runtime_env_async
 
 
+# CVE Program IDs have a four-digit year and at least a four-digit sequence.
+# Keep this shared by parsers and the update pipeline so non-CVE identifiers
+# (ExploitDB file paths, OSVDB IDs, arbitrary advisory codes) cannot enter the
+# CVE table.
+CVE_ID_PATTERN = r"CVE-\d{4}-\d{4,}"
+_CVE_ID_FULL_RE = re.compile(rf"^{CVE_ID_PATTERN}$", re.IGNORECASE)
+_CVE_ID_EXTRACT_PATTERN = rf"(?i)\b({CVE_ID_PATTERN})\b"
+_CVE_ID_POLARS_PATTERN = rf"(?i)^{CVE_ID_PATTERN}$"
+_CVE_REQUIRED_COLUMNS = {"cve_id", "description", "github_url"}
+
+
+def normalize_cve_id(value: Any) -> str | None:
+    """Return an uppercase CVE ID only when *value* has the canonical form."""
+    cve_id = str(value or "").strip().upper()
+    return cve_id if _CVE_ID_FULL_RE.fullmatch(cve_id) else None
+
+
+def normalize_cve_dataframe(dataframe: pl.DataFrame) -> pl.DataFrame:
+    """Normalize and strictly filter a source dataframe to valid CVE rows."""
+    if dataframe.is_empty():
+        return dataframe
+    missing = _CVE_REQUIRED_COLUMNS.difference(dataframe.columns)
+    if missing:
+        logger.warning("CVE source data is missing required columns: {}", sorted(missing))
+        return pl.DataFrame(
+            schema={
+                "cve_id": pl.String,
+                "description": pl.String,
+                "github_url": pl.String,
+            }
+        )
+
+    initial_height = dataframe.height
+    identity_columns = ["cve_id", "github_url"]
+    if "source" in dataframe.columns:
+        identity_columns.append("source")
+    normalized = (
+        dataframe.with_columns(
+            pl.col("cve_id")
+            .cast(pl.String)
+            .str.strip_chars()
+            .str.to_uppercase()
+            .alias("cve_id"),
+            pl.col("description").fill_null("").cast(pl.String).alias("description"),
+            pl.col("github_url")
+            .fill_null("")
+            .cast(pl.String)
+            .str.strip_chars()
+            .alias("github_url"),
+        )
+        .filter(pl.col("cve_id").str.contains(_CVE_ID_POLARS_PATTERN))
+        .filter(pl.col("github_url") != "")
+        .unique(subset=identity_columns, keep="first")
+    )
+    rejected = initial_height - normalized.height
+    if rejected:
+        logger.warning("Filtered {} non-CVE or invalid reference row(s)", rejected)
+    return normalized
+
+
 def _cve_cache_file(filename: str) -> str:
     return str(Path(get_settings().cve_data_dir) / filename)
 
@@ -142,14 +202,18 @@ class GitHubPocExpSource(CVEDataSource):
         # 1. 使用正则匹配 CVE 块：从 ## CVE-xxx 开始到下一个 ## 或文件末尾
         # re.DOTALL 允许 . 匹配换行符
         cve_blocks = re.finditer(
-            r"##\s*(CVE-\d{4}-\d+)(.*?)(?=\n##|\Z)", raw_data, re.DOTALL
+            rf"^##\s*({CVE_ID_PATTERN})\b(.*?)(?=^##\s|\Z)",
+            raw_data,
+            re.DOTALL | re.IGNORECASE | re.MULTILINE,
         )
 
         url_pattern = re.compile(r"-\s*\[(https://github\.com/[^\]]+)\]")
         cve_data = []
 
         for block in cve_blocks:
-            cve_id = block.group(1)
+            cve_id = normalize_cve_id(block.group(1))
+            if not cve_id:
+                continue
             content = block.group(2)
 
             # 2. 提取该块内所有的 GitHub URL
@@ -192,8 +256,9 @@ class GitHubPocExpSource(CVEDataSource):
             else pl.DataFrame()
         )
 
-        logger.info("从数据中解析了 {} 条有效的 CVE 记录", df_remote_cve.height)
-        return df_remote_cve
+        normalized = normalize_cve_dataframe(df_remote_cve)
+        logger.info("从数据中解析了 {} 条有效的 CVE 记录", normalized.height)
+        return normalized
 
     def get_local_cache_path(self) -> str:
         """获取本地缓存文件路径"""
@@ -255,35 +320,49 @@ class ExploitDBSource(CVEDataSource):
             )
             return pl.DataFrame()
 
-        # 使用 Polars 处理数据
-        # 基于 (cve_id, github_url) 去重
-        # coalesce 从左到右折叠列，保留第一个非空值。
+        try:
+            source_frame = pl.read_csv(StringIO(raw_data))
+        except pl.exceptions.PolarsError as exc:
+            logger.warning("无法解析 ExploitDB CSV: {}", exc)
+            return pl.DataFrame()
+
+        required = {"file", "codes", "description"}
+        missing = required.difference(source_frame.columns)
+        if missing:
+            logger.warning("ExploitDB CSV is missing required columns: {}", sorted(missing))
+            return pl.DataFrame()
+
+        # ExploitDB includes many rows without CVEs. Do not fall back to file
+        # paths, OSVDB IDs, or arbitrary ``codes`` values: this is a CVE table.
         df_remote_cve = (
-            pl.read_csv(StringIO(raw_data))
-            .lazy()
+            source_frame.lazy()
             .select(
-                pl.when(pl.col("codes").is_null() | (pl.col("codes") == ""))
-                .then(pl.col("file"))
-                .otherwise(
-                    pl.coalesce(
-                        pl.col("codes").str.extract(r"(CVE-\d{4}-\d+)", 1),
-                        pl.col("codes").str.extract(r"(OSVDB-\d+)", 1),
-                        pl.col("codes"),
-                    )
-                )
+                pl.col("codes")
+                .cast(pl.String)
+                .str.extract(_CVE_ID_EXTRACT_PATTERN, 1)
+                .str.to_uppercase()
                 .alias("cve_id"),
-                pl.col("description").alias("description"),
+                pl.col("description").fill_null("").cast(pl.String).alias("description"),
+                pl.col("file")
+                .cast(pl.String)
+                .str.extract(r"/(\d+)\.", 1)
+                .alias("_exploit_id"),
+            )
+            .filter(pl.col("cve_id").is_not_null())
+            .filter(pl.col("_exploit_id").str.contains(r"^\d+$"))
+            .with_columns(
                 pl.format(
                     "https://www.exploit-db.com/exploits/{}",
-                    pl.col("file").str.extract(r"/(\d+)\.", 1),
-                ).alias("github_url"),
+                    pl.col("_exploit_id"),
+                ).alias("github_url")
             )
-            .unique(subset=["cve_id", "github_url"], keep="first")
+            .select("cve_id", "description", "github_url")
             .collect()
         )
+        normalized = normalize_cve_dataframe(df_remote_cve)
 
-        logger.info("去重后: {} 条唯一 CVE 记录）", df_remote_cve.height)
-        return df_remote_cve
+        logger.info("去重后: {} 条唯一 CVE 记录", normalized.height)
+        return normalized
 
     def get_local_cache_path(self) -> str:
         """获取本地缓存文件路径"""
@@ -310,6 +389,9 @@ __all__ = [
     "CVEDataSource",
     "GitHubPocExpSource",
     "ExploitDBSource",
+    "CVE_ID_PATTERN",
     "DATA_SOURCES",
     "load_cve_source_config",
+    "normalize_cve_dataframe",
+    "normalize_cve_id",
 ]

@@ -26,7 +26,9 @@ from api.persistence.collect_articles import (
 from api.services.url2md_service import (
     UnsafeUrlError,
     _get_public_url,
+    create_url2md_http_client,
     fetch_and_parse_url,
+    fetch_and_parse_url_with_client,
 )
 from api.utils.url2md_utils import (
     active_domain_rules,
@@ -77,11 +79,12 @@ DEFAULT_HEADERS = {
 
 
 # CVE identifiers surfaced on article cards / preview (order preserved, de-duped).
-CVE_ID_RE = re.compile(r"\bCVE-\d{4}-\d{4,7}\b", re.IGNORECASE)
+# The CVE Program permits sequence values longer than seven digits.
+CVE_ID_RE = re.compile(r"\bCVE-\d{4}-\d{4,}\b", re.IGNORECASE)
 
 
 def extract_cve_ids(*parts: str, limit: int = 24) -> list[str]:
-    """Collect unique CVE-YYYY-NNNN ids from free text (title, summary, body)."""
+    """Collect unique canonical CVE IDs from free text (title, summary, body)."""
     seen: list[str] = []
     for part in parts:
         if not part:
@@ -512,14 +515,19 @@ async def _fetch_markdown_with_retries(
     url: str,
     *,
     attempts: int = 3,
+    client: httpx.AsyncClient | None = None,
 ) -> str:
-    """Call ``fetch_and_parse_url`` with short backoff on transient failures."""
+    """Call the URL parser with short backoff on transient failures."""
     delays = (0.35, 0.9, 1.8)
     last = ""
     tries = max(1, int(attempts))
     for attempt in range(tries):
         try:
-            markdowns = await fetch_and_parse_url([url])
+            if client is None:
+                # Keep one-off parsing compatible with the existing public API.
+                markdowns = await fetch_and_parse_url([url])
+            else:
+                markdowns = await fetch_and_parse_url_with_client(client, [url])
             markdown = (markdowns[0] if markdowns else "").strip()
         except asyncio.CancelledError:
             raise
@@ -552,7 +560,11 @@ async def _fetch_markdown_with_retries(
     return last
 
 
-async def fetch_article_record(url: str) -> dict[str, Any]:
+async def fetch_article_record(
+    url: str,
+    *,
+    client: httpx.AsyncClient | None = None,
+) -> dict[str, Any]:
     """Parse one URL into a collect_articles row payload.
 
     Transient network / 5xx / timeout failures are retried with short backoff
@@ -561,7 +573,7 @@ async def fetch_article_record(url: str) -> dict[str, Any]:
     domain = _domain_of(url)
     now = datetime.now(UTC)
     try:
-        markdown = (await _fetch_markdown_with_retries(url)).strip()
+        markdown = (await _fetch_markdown_with_retries(url, client=client)).strip()
         if not markdown or markdown.startswith(
             ("HTTP error", "Network error", "Unexpected error", "Content too short", "Restricted access")
         ):
@@ -697,9 +709,12 @@ async def _crawl_and_persist_locked(
 
     semaphore = asyncio.Semaphore(max(1, int(fetch_concurrency or FETCH_CONCURRENCY)))
 
-    async def _bounded(url: str) -> dict[str, Any]:
+    async def _bounded(
+        url: str,
+        client: httpx.AsyncClient,
+    ) -> dict[str, Any]:
         async with semaphore:
-            return await fetch_article_record(url)
+            return await fetch_article_record(url, client=client)
 
     records: list[dict[str, Any]] = []
     fetch_total = len(urls)
@@ -711,39 +726,49 @@ async def _crawl_and_persist_locked(
             fetched=0,
             selected=fetch_total,
         )
-        tasks = [
-            asyncio.create_task(_bounded(url), name=f"collect-fetch-{index}")
-            for index, url in enumerate(urls)
-        ]
-        done_count = 0
-        ok_running = 0
-        err_running = 0
-        try:
-            for finished in asyncio.as_completed(tasks):
-                record = await finished
-                records.append(record)
-                done_count += 1
-                if record.get("status") == "ok":
-                    ok_running += 1
-                else:
-                    err_running += 1
-                if fetch_total <= 12 or done_count == fetch_total or done_count % 2 == 0:
-                    await _emit_progress(
-                        on_progress,
-                        stage="fetch",
-                        message=f"抓取文章 {done_count}/{fetch_total}",
-                        fetched=done_count,
-                        selected=fetch_total,
-                        ok=ok_running,
-                        error=err_running,
-                    )
-        except asyncio.CancelledError:
-            # Client abort / worker cancel: stop sibling fetches so lock can release.
-            for task in tasks:
-                if not task.done():
-                    task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-            raise
+        # A single client is shared across all bounded workers, preserving the
+        # URL parser's redirect/SSRF checks while reusing its connection pool.
+        async with create_url2md_http_client() as client:
+            tasks = [
+                asyncio.create_task(
+                    _bounded(url, client),
+                    name=f"collect-fetch-{index}",
+                )
+                for index, url in enumerate(urls)
+            ]
+            done_count = 0
+            ok_running = 0
+            err_running = 0
+            try:
+                for finished in asyncio.as_completed(tasks):
+                    record = await finished
+                    records.append(record)
+                    done_count += 1
+                    if record.get("status") == "ok":
+                        ok_running += 1
+                    else:
+                        err_running += 1
+                    if (
+                        fetch_total <= 12
+                        or done_count == fetch_total
+                        or done_count % 2 == 0
+                    ):
+                        await _emit_progress(
+                            on_progress,
+                            stage="fetch",
+                            message=f"抓取文章 {done_count}/{fetch_total}",
+                            fetched=done_count,
+                            selected=fetch_total,
+                            ok=ok_running,
+                            error=err_running,
+                        )
+            except asyncio.CancelledError:
+                # Client abort / worker cancel: stop sibling fetches so lock can release.
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                raise
 
     ok = sum(1 for record in records if record.get("status") == "ok")
     err = len(records) - ok

@@ -170,14 +170,6 @@ class Settings(BaseSettings):
     )
     github_token: SecretStr = Field(default=SecretStr(""), validation_alias="GITHUB_TOKEN")
 
-    w5_soar_token: SecretStr = Field(default=SecretStr(""), validation_alias="W5_SOAR_TOKEN")
-    w5_api_base: str = Field(default="", validation_alias="W5_API_BASE")
-    octomation_token: SecretStr = Field(
-        default=SecretStr(""),
-        validation_alias="OCTOMATION_TOKEN",
-    )
-    octomation_api_base: str = Field(default="", validation_alias="OCTOMATION_API_BASE")
-
     mcp_server_url: str = "http://127.0.0.1:8000/mcp/"
     mcp_token: SecretStr = Field(
         default=SecretStr(""),

@@ -9,6 +9,7 @@ from anyio import Path as AsyncPath
 from loguru import logger
 
 from api.persistence.mcp import (
+    delete_retired_builtin_server_row,
     delete_token_row,
     ensure_mcp_tables,
     find_token_row,
@@ -22,7 +23,11 @@ from api.persistence.mcp import (
 from api.services.runtime_paths import CONFIG_DIR
 from api.utils.async_once import AsyncOnce
 
-SERVICE_IDS = ("playbook", "basic", "hitl")
+SERVICE_IDS = ("basic", "hitl")
+# A migration must name only services deliberately removed by this release.
+# Treating every unknown ``builtin`` row as retired would silently discard
+# data from a newer deployment or an extension during a rolling downgrade.
+RETIRED_SERVICE_IDS = frozenset({"playbook"})
 MCP_CONFIG_FILE = CONFIG_DIR / "mcp" / "mcp_config.json"
 MCP_TOKENS_TABLE = "mcp_tokens"
 
@@ -46,6 +51,16 @@ async def _seed_mcp_bootstrap() -> None:
     now = int(time.time())
     rows = await list_server_rows()
     existing_names = {row["name"] for row in rows}
+    retired_builtin_names = sorted(
+        str(row.get("name") or "")
+        for row in rows
+        if str(row.get("server_type") or "") == "builtin"
+        and str(row.get("name") or "") in RETIRED_SERVICE_IDS
+    )
+    for service_id in retired_builtin_names:
+        if await delete_retired_builtin_server_row(service_id):
+            logger.info("retired obsolete built-in MCP service {}", service_id)
+            existing_names.discard(service_id)
     for service_id in SERVICE_IDS:
         if service_id in existing_names:
             continue

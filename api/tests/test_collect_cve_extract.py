@@ -11,10 +11,10 @@ from api.services import collect_service
 def test_extract_cve_ids_dedupes_and_uppercases():
     ids = extract_cve_ids(
         "Advisory for cve-2024-1234",
-        "Also CVE-2024-1234 and CVE-2021-44228",
+        "Also CVE-2024-1234, CVE-2021-44228, and CVE-2026-12345678",
         "noise CVE-99-1 invalid",
     )
-    assert ids == ["CVE-2024-1234", "CVE-2021-44228"]
+    assert ids == ["CVE-2024-1234", "CVE-2021-44228", "CVE-2026-12345678"]
 
 
 @pytest.mark.asyncio

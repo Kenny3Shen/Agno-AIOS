@@ -37,14 +37,14 @@ async def test_skill_references_projects_service_envelope():
     user = SimpleNamespace(id="u1", role="user", is_superuser=False)
     reference = {"workflow_id": "wf-1", "name": "Incident response", "version": "3"}
     with (
-        patch.object(skills, "get_skill_info", return_value={"name": "playbook"}),
+        patch.object(skills, "get_skill_info", return_value={"name": "cve-intel-skill"}),
         patch.object(
             skills,
             "list_skill_workflow_references",
             new=AsyncMock(return_value={"data": [reference], "truncated": True}),
         ),
     ):
-        result = await skills.skill_references("playbook", user=cast(User, user))
+        result = await skills.skill_references("cve-intel-skill", user=cast(User, user))
 
     assert result["data"] == [reference]
     assert result["meta"]["total_count"] == 1

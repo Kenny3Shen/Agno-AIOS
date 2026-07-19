@@ -18,6 +18,7 @@ from api.services.workflow_compiler import (
     collect_workflow_skill_names,
     compile_workflow,
 )
+from api.services.workflow_definition_migration import canonicalize_workflow_definition
 from api.services.skill_service import resolve_enabled_skill_dirs
 from api.services.audit_service import record_audit_event_async
 from api.services.notification_service import notify_workflow_hitl_pending
@@ -255,8 +256,8 @@ async def resume_workflow_run(approval_id: str) -> str:
     row = await workflow_store.get_workflow(workflow_id)
     if row is None:
         raise ValueError(f"Workflow {workflow_id} not found")
-    definition = row.get("definition")
-    if not isinstance(definition, dict):
+    definition = canonicalize_workflow_definition(row.get("definition"))
+    if definition is None:
         raise ValueError("Workflow definition is invalid")
 
     workflow = await compile_workflow(

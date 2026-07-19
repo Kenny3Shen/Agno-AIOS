@@ -120,7 +120,7 @@ def test_run_workflow_allows_user_with_workflows_run():
 
 
 @pytest.mark.asyncio
-async def test_list_templates_returns_security_playbooks():
+async def test_list_templates_returns_security_workflows():
     result = await workflows.list_templates(user=actor())
     assert result["meta"]["page"] == 1
     assert result["meta"]["limit"] == len(result["data"])

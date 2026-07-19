@@ -27,7 +27,7 @@ def list_workflow_templates() -> list[dict[str, Any]]:
                             "Summarize the alert, list IOCs, and state severity as one of: "
                             "critical, high, medium, low. Put severity token in the reply."
                         ),
-                        "skills": ["playbook-skill", "cve-intel-skill"],
+                        "skills": ["cve-intel-skill"],
                         "position": {"x": 80, "y": 80},
                     },
                     {
@@ -42,7 +42,7 @@ def list_workflow_templates() -> list[dict[str, Any]]:
                                 "name": "Contain",
                                 "executor": {"kind": "agent", "ref": "security-operations"},
                                 "instructions": "Propose containment steps for critical severity.",
-                                "skills": ["hitl-containment-skill", "playbook-skill"],
+                                "skills": ["hitl-containment-skill"],
                                 "requires_confirmation": True,
                                 "confirmation_message": "Approve containment actions for this incident?",
                                 "position": {"x": 420, "y": 40},
@@ -184,7 +184,7 @@ def list_workflow_templates() -> list[dict[str, Any]]:
                                         "name": "Critical action",
                                         "executor": {"kind": "agent", "ref": "security-operations"},
                                         "requires_confirmation": True,
-                                        "confirmation_message": "Proceed with critical playbook?",
+                                        "confirmation_message": "Proceed with this critical workflow action?",
                                         "position": {"x": 520, "y": 20},
                                     }
                                 ],

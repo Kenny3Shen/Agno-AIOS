@@ -749,7 +749,7 @@
 - Grok 4.5 冒烟（本机）：
   - tools on + `ping` → `lean_mode=true`、`skill_names=[]`、内容 `pong`
   - tools off + `ping` → `enable_tools=false`、`lean_mode=false`、`skill_names=[]`、内容 `pong`
-  - tools on +「列出可用的安全剧本」→ `skill_names=["playbook-skill"]`、挂载 playbook 工具
+  - tools on +「分析 CVE-2024-1234」→ `skill_names=["cve-intel-skill"]`、按意图挂载本地 Skill
 
 
 ## 已完成：jsdom TextArea autoSize height:NaN 测试环境修复
@@ -762,7 +762,7 @@
 
 ## 已完成：Chat 工具调用可读名 + 会话侧栏测试路由 mock
 
-- `formatToolLabel` / `humanizeToolId`：内置 MCP（`basic_`/`hitl_`/`playbook_`）走 chat i18n `tools.*`，其它 id 去命名空间后 Title Case。
+- `formatToolLabel` / `humanizeToolId`：内置 MCP（`basic_`/`hitl_`）走 chat i18n `tools.*`，其它 id 去命名空间后 Title Case。
 - ThoughtChain 工具标题使用本地化名称（如「模拟隔离资产」/「Simulate containment」）。
 - Workflow Inspector 空步骤名 placeholder 优先显示当前执行器显示名。
 - `ChatSidebar`/`ChatTaskPanel` 测试 mock `useRouter`，消除 RouterProvider 告警。
@@ -772,7 +772,7 @@
 ## 已完成：Chat Skill 可读名 + 轻量说明 / Workflow 空步骤名提示
 
 - Chat：`formatSkillLabel(s)` 把 `cve-intel-skill` 等目录 id 显示为 `CVE Intel`；消息条与顶栏 Skills Tooltip 使用友好名。
-- Chat：`autoLeanHelp` 文案补充可触发意图的关键词示例（CVE/隔离/剧本等）。
+- Chat：`autoLeanHelp` 文案补充可触发意图的关键词示例（CVE/隔离/内网告警等）。
 - Workflow Inspector：Agent 步骤名为空时提示「运行日志将显示执行器显示名」；Skill 多选选项改为「描述 (短名)」。
 - Chat：`--chat-sender-offset` 测量高度做 `Number.isFinite` 守卫，避免 jsdom/异常布局写出 `height: NaN`。
 
@@ -792,12 +792,11 @@
 - 前端 `toDefinition` 不再把 `targetId` 当作 name 序列化；显式空名交给后端解析。
 - 保留用户自定义步骤名。
 
-## 已完成：Executor 目录产品化 + Playbook 内容库
+## 已完成：Executor 目录产品化 + Workflow 模板
 
 - 内置执行器目录扩展字段：`category` / `capabilities` / `recommended_for` / `role`（`security-operations` 运营 vs `safe-fallback` 轻量）。
 - Studio Inspector：执行器下拉展示名称、说明与适用场景；选中后显示描述摘要。
-- `playbook-skill`：补齐七类处置场景、标准作业流程、异常表与输出模板；`references/scenarios.md` 速查。
-- Grok 冒烟：剧本列表意图 → `skill_names=["playbook-skill"]`，并 progressive 加载扩充后的 SKILL.md。
+- Workflow 模板覆盖告警研判、条件分支、并行执行、HITL、Cron 与 Webhook 编排。
 
 
 ## 已完成：P1 角色预设（分析师 / 作者 / 审批 / 审计）
@@ -867,13 +866,13 @@
 ## 已完成：Chat 意图过滤 MCP 工具面 + Skills/Audit/Eval 表头 i18n
 
 - trivial / 非安全句：`skill_names=[]` 时**不连接 MCP**，走 lite 提示词与短历史。
-- 关键词 skill：只保留对应内置 MCP 前缀（`hitl_` / `playbook_`）+ 始终保留 `basic_`；外部 MCP 工具名保留。
+- 关键词 skill：只保留对应内置 MCP 前缀（`hitl_`）+ 始终保留 `basic_`；外部 MCP 工具名保留。
 - 通用安全句：仍全量 MCP + 全量 enabled skills。
 - Skills / Audit / Evaluations 列表表头 i18n；Chat 工具开关帮助文案更新。
 
 ## 已完成：Chat 按意图挂载 Local Skills（对齐 Workflow skills[]）
 
-- `infer_chat_skill_names`：闲聊/指令类消息不挂 Skill；CVE / 隔离封禁 / 剧本 / 内网关键词只挂对应 skill；其它安全运营句挂全部已启用 skill。
+- `infer_chat_skill_names`：闲聊/指令类消息不挂 Skill；CVE / 隔离封禁 / 内网关键词只挂对应 skill；其它安全运营句挂全部已启用 skill。
 - `SecurityRunRequest.skill_names` 写入 runtime metadata，HITL resume 原样恢复；Eval 关闭意图过滤以保持稳定工具面。
 - `_build_enabled_skills` 走 `resolve_enabled_skill_dirs`（enabled ∩ names）；MCP 仍随 `enable_tools` 全量连接。
 - Chat 开关帮助文案与 `security_operations.md` 边界说明同步。
@@ -1021,7 +1020,7 @@
 
 **语义**：
 - 未声明或 `[]` → 该 step 不加载任何 skill（与 Chat 全局启用不同）
-- 声明 `["playbook-skill"]` → 仅当全局 enabled 时加载
+- 声明 `["cve-intel-skill"]` → 仅当全局 enabled 时加载
 - run 级并集仅用于审计 `skill.load`；实际挂载按 step 独立编译
 
 ---
@@ -1053,7 +1052,7 @@ P0.4 审批值班薄入口        ✅
 ### P1（本阶段后，不阻塞 P0）
 
 - Dashboard 聚合下推 / 可信失败列表  
-- ~~Playbook 内容库扩充 + Executor 目录产品化~~ ✅（见上）  
+- ~~Workflow 模板与 Executor 目录产品化~~ ✅（见上）
 - ~~角色预设（分析师 / 作者 / 审批 / 审计）~~ ✅  
 - Skill 版本与「被引用」只读视图  
 - i18n 与静默失败显性化（模型/Memory 后台错误）
@@ -1762,12 +1761,11 @@ P0.4 审批值班薄入口        ✅
 
 ## 已完成：MCP/知识库吞异常日志 + Overview token 样本去 reconcile
 
-- Octomation playbook 参数拉取降级路径：`except pass` → warning/info 日志
 - Feishu webhook 请求失败写 warning（仍返回错误码）
 - knowledge chunk count / hydrate、vector reassign、best-effort remove：debug/warning 日志
 - Overview `_fetch_traces` token 采样不再 `reconcile_trace_statuses`（失败数走窗口 ERROR + recent_failures）
 
-相关：`playbook.py` / `basic.py` / `knowledge_service.py` / `knowledge_source_service.py` / `overview_service.py`
+相关：`basic.py` / `knowledge_service.py` / `knowledge_source_service.py` / `overview_service.py`
 
 ---
 

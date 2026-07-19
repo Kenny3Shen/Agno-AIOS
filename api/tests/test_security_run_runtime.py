@@ -1281,7 +1281,10 @@ async def test_send_feishu_notify_uses_server_webhook_when_omitted(monkeypatch):
     monkeypatch.setattr(basic_tools, "httpx", type("H", (), {"AsyncClient": _Client}))
     monkeypatch.setattr("api.config.get_settings", lambda: _Settings())
     result = await basic_tools.send_feishu_notify(title="t", content_md="c")
-    assert result == {"code": 0, "msg": "success"}
+    assert result.code == 0
+    assert result.status == "sent"
+    assert result.msg == "success"
+    assert result.attempts == 1
     assert posted["url"] == "https://feishu.example/hook"
 
 
@@ -1402,17 +1405,14 @@ def test_infer_chat_skill_names_trivial_and_targeted():
     assert security_run_runtime.infer_chat_skill_names(
         "对主机 10.0.0.1 模拟隔离"
     ) == ["hitl-containment-skill"]
-    assert security_run_runtime.infer_chat_skill_names("执行安全剧本排查") == [
-        "playbook-skill"
-    ]
     assert security_run_runtime.infer_chat_skill_names("查一下内网 NDR 告警") == [
         "intranet-ip-skill"
     ]
     # multi-match
     skills = security_run_runtime.infer_chat_skill_names(
-        "CVE-2024-1 并用剧本处置"
+        "CVE-2024-1 并模拟隔离受影响主机"
     )
-    assert skills == ["cve-intel-skill", "playbook-skill"]
+    assert skills == ["cve-intel-skill", "hitl-containment-skill"]
     # general security ops → all enabled (None)
     assert security_run_runtime.infer_chat_skill_names("帮我做一次威胁研判") is None
     # non-security prose → no skills
@@ -1428,9 +1428,9 @@ def test_from_chat_args_infers_and_preserves_skill_names():
 
     explicit = security_run_runtime.SecurityRunRequest.from_chat_args(
         "CVE-2024-9999 分析",
-        skill_names=["playbook-skill"],
+        skill_names=["hitl-containment-skill"],
     )
-    assert explicit.skill_names == ["playbook-skill"]
+    assert explicit.skill_names == ["hitl-containment-skill"]
 
     no_infer = security_run_runtime.SecurityRunRequest.from_chat_args(
         "CVE-2024-9999 分析",
@@ -1453,8 +1453,8 @@ async def test_build_security_agent_filters_skills_by_inference():
     created: dict = {}
     skill_dirs = [
         Path("/skills/cve-intel-skill"),
-        Path("/skills/playbook-skill"),
         Path("/skills/hitl-containment-skill"),
+        Path("/skills/intranet-ip-skill"),
     ]
 
     def agent_factory(**kwargs):
@@ -1565,37 +1565,33 @@ def test_should_connect_mcp_and_prefix_filter():
         "basic_",
         "hitl_",
     }
-    assert security_run_runtime.mcp_prefixes_for_skills(["playbook-skill"]) == {
+    assert security_run_runtime.mcp_prefixes_for_skills(["intranet-ip-skill"]) == {
         "basic_",
-        "playbook_",
     }
     assert security_run_runtime.mcp_prefixes_for_skills(
-        ["hitl-containment-skill", "playbook-skill"]
-    ) == {"basic_", "hitl_", "playbook_"}
+        ["hitl-containment-skill", "intranet-ip-skill"]
+    ) == {"basic_", "hitl_"}
 
 
 def test_filter_mcp_tools_by_prefixes_keeps_external():
     from agno.tools.function import Function
 
     hitl = Function(name="hitl_simulate_containment", entrypoint=lambda: None)
-    play = Function(name="playbook_list_workflows", entrypoint=lambda: None)
     basic = Function(name="basic_send_feishu_notify", entrypoint=lambda: None)
     external = Function(name="custom_scan", entrypoint=lambda: None)
     mcp_tools = SimpleNamespace(
         functions={
             hitl.name: hitl,
-            play.name: play,
             basic.name: basic,
             external.name: external,
         },
         async_functions={},
     )
     removed = security_run_runtime.filter_mcp_tools_by_prefixes(
-        mcp_tools, {"basic_", "hitl_"}
+        mcp_tools, {"basic_"}
     )
-    assert "playbook_list_workflows" in removed
+    assert "hitl_simulate_containment" in removed
     assert set(mcp_tools.functions) == {
-        "hitl_simulate_containment",
         "basic_send_feishu_notify",
         "custom_scan",
     }

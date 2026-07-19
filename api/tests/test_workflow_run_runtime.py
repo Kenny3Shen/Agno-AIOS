@@ -229,6 +229,55 @@ def test_cancel_workflow_run_requires_registered_owner():
 
 
 @pytest.mark.asyncio
+async def test_resume_canonicalizes_legacy_persisted_skill_before_compiling() -> None:
+    class ApprovalDb:
+        async def get_approval(self, approval_id: str):
+            assert approval_id == "approval-1"
+            return {
+                "source_type": "workflow",
+                "workflow_id": "wf-1",
+                "run_id": "run-1",
+                "session_id": "session-1",
+                "status": "approved",
+                "context": {},
+            }
+
+    workflow = SimpleNamespace(aget_run_output=AsyncMock(return_value=None))
+    compile = AsyncMock(return_value=workflow)
+    legacy_definition = {
+        "name": "Historic workflow",
+        "steps": [
+            {
+                "id": "triage",
+                "type": "step",
+                "executor": {"kind": "agent", "ref": "security-operations"},
+                "skills": ["playbook-skill", "cve-intel-skill"],
+            }
+        ],
+    }
+    with (
+        patch.object(
+            workflow_run_runtime,
+            "get_async_agno_postgres_db",
+            return_value=ApprovalDb(),
+        ),
+        patch.object(
+            workflow_run_runtime.workflow_store,
+            "get_workflow",
+            new=AsyncMock(return_value={"definition": legacy_definition}),
+        ),
+        patch.object(workflow_run_runtime, "compile_workflow", new=compile),
+    ):
+        with pytest.raises(ValueError, match="Paused run run-1 not found"):
+            await workflow_run_runtime.resume_workflow_run("approval-1")
+
+    compile_call = compile.await_args
+    assert compile_call is not None
+    definition = compile_call.args[0]
+    assert definition["steps"][0]["skills"] == ["cve-intel-skill"]
+
+
+@pytest.mark.asyncio
 async def test_stream_registers_and_unregisters_workflow():
     class FakeWorkflow:
         def __init__(self) -> None:

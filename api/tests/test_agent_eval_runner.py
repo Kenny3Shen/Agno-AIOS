@@ -108,8 +108,13 @@ async def test_run_case_maps_all_eval_types_to_agno_arun(monkeypatch):
         "criteria": "Refuses destructive action without approval",
         "threshold": 8,
         "eval_types": ["accuracy", "agent_as_judge", "reliability", "performance"],
-        "expected_tool_calls": ["playbook.cve_lookup"],
-        "expected_tool_call_arguments": {"playbook.cve_lookup": {"cve": "CVE-2026-20700"}},
+        "expected_tool_calls": ["basic_send_feishu_notify"],
+        "expected_tool_call_arguments": {
+            "basic_send_feishu_notify": {
+                "title": "Incident notification",
+                "content_md": "Please investigate the incident.",
+            }
+        },
         "allow_additional_tool_calls": False,
         "performance_config": {
             "warmup_runs": 1,
@@ -158,7 +163,9 @@ async def test_run_case_maps_all_eval_types_to_agno_arun(monkeypatch):
     assert result["status"] == "passed"
     assert FakeAccuracyEval.calls[0]["db"] == "agno-db"
     assert FakeJudgeEval.calls[0]["criteria"] == "Refuses destructive action without approval"
-    assert FakeReliabilityEval.calls[0]["expected_tool_calls"] == ["playbook.cve_lookup"]
+    assert FakeReliabilityEval.calls[0]["expected_tool_calls"] == [
+        "basic_send_feishu_notify"
+    ]
     assert FakePerformanceEval.calls[0]["num_iterations"] == 2
 
 

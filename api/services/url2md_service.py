@@ -30,6 +30,40 @@ def _env_flag(name: str, default: bool = False) -> bool:
 USE_PLAYWRIGHT = _env_flag("TAIS_COLLECT_USE_PLAYWRIGHT", False)
 MAX_REDIRECTS = 5
 
+URL2MD_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0"
+    ),
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,"
+        "image/avif,image/webp,*/*;q=0.8"
+    ),
+    "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
+    "Accept-Encoding": "gzip, deflate",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Cache-Control": "max-age=0",
+}
+
+
+def create_url2md_http_client() -> httpx.AsyncClient:
+    """Create the client used by URL→Markdown parsing.
+
+    Callers that parse multiple URLs can own one client for the batch and
+    reuse its connection pool. The legacy ``fetch_and_parse_url`` API still
+    creates and closes a client for one-off calls.
+    """
+    return httpx.AsyncClient(
+        headers=URL2MD_HEADERS,
+        timeout=30,
+        follow_redirects=False,
+    )
+
 
 def _playwright_user_data_dir() -> Path:
     """Resolve browser profile dir without hardcoding a developer home path."""
@@ -489,106 +523,95 @@ async def _fetch_with_playwright(url: str) -> str:
             await context.close()
 
 
-async def fetch_and_parse_url(urls: list[str]) -> list[str]:
+async def fetch_and_parse_url_with_client(
+    client: httpx.AsyncClient,
+    urls: list[str],
+) -> list[str]:
+    """Parse URLs with a caller-owned client while retaining SSRF validation.
+
+    The caller controls the client lifetime, which lets a crawl reuse TCP/TLS
+    connections across articles. Every request still goes through
+    ``_get_public_url`` so redirect and public-address validation are unchanged.
     """
-    使用 async HTTP client 获取 URL 内容，检测 WAF 拦截时可使用 async browser fallback。
+    results: list[str] = []
+    for url in urls:
+        try:
+            resp = await _get_public_url(client, url)
+            fetched_url = str(resp.url)
+            body = resp.text
+            waf_features = [
+                "aliyun_waf",
+            ]
+            waf_blocked = any(feature in body.lower() for feature in waf_features)
+            # 如果被 WAF 拦截，使用 patchright 获取
+            if waf_blocked and USE_PLAYWRIGHT:
+                body = await _fetch_with_playwright(fetched_url)
 
-    Args:
-        urls: URL 列表
-
-    Returns:
-        解析后的 Markdown 文本列表
-    """
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
-        "Accept-Encoding": "gzip, deflate",
-        "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1",
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "none",
-        "Sec-Fetch-User": "?1",
-        "Cache-Control": "max-age=0",
-    }
-
-    results = []
-
-    async with httpx.AsyncClient(
-        headers=headers,
-        timeout=30,
-        follow_redirects=False,
-    ) as client:
-        for url in urls:
-            try:
-                resp = await _get_public_url(client, url)
-                fetched_url = str(resp.url)
-                body = resp.text
-                waf_features = [
-                    "aliyun_waf",
-                ]
-                waf_blocked = any(feature in body.lower() for feature in waf_features)
-                # 如果被 WAF 拦截，使用 patchright 获取
-                if waf_blocked and USE_PLAYWRIGHT:
-                    body = await _fetch_with_playwright(fetched_url)
-
-                # 检查状态码（WAF 绕过后不再检查原始状态码）
-                if not waf_blocked and resp.status_code != 200:
-                    results.append(f"HTTP error for {fetched_url}: status code {resp.status_code}")
-                    continue
-
-                soup = BeautifulSoup(body, "html.parser")
-
-                if len(soup.get_text()) < 500:
-                    results.append(f"Content too short for {fetched_url}: page may be inaccessible")
-                    continue
-
-                tags_to_remove = [
-                    "header",
-                    "footer",
-                    "nav",
-                    "aside",
-                    "script",
-                    "style",
-                    "form",
-                    "iframe",
-                ]
-
-                for tag_name in tags_to_remove:
-                    for tag in soup.find_all(tag_name):
-                        tag.decompose()
-
-                text = soup.get_text(separator="\n", strip=True)
-                restricted_markers = [
-                    "access to this vulnerability report requires support",
-                    "verified supporters only",
-                    "请进行验证",
-                ]
-                lowered = text.lower()
-                if any(marker in lowered for marker in restricted_markers):
-                    results.append(
-                        f"Restricted access for {fetched_url}: page requires special permissions"
-                    )
-                    continue
-
-                markdown_text = get_markdown_text(soup, fetched_url)
-                if not (markdown_text or "").strip():
-                    results.append(
-                        f"Content too short for {fetched_url}: "
-                        "could not extract article body"
-                    )
-                    continue
-
-                results.append(markdown_text)
-
-            except httpx.HTTPError as e:
-                results.append(f"Network error for {url}: {e}")
+            # 检查状态码（WAF 绕过后不再检查原始状态码）
+            if not waf_blocked and resp.status_code != 200:
+                results.append(f"HTTP error for {fetched_url}: status code {resp.status_code}")
                 continue
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                results.append(f"Unexpected error for {url}: {e}")
+
+            soup = BeautifulSoup(body, "html.parser")
+
+            if len(soup.get_text()) < 500:
+                results.append(
+                    f"Content too short for {fetched_url}: page may be inaccessible"
+                )
                 continue
+
+            tags_to_remove = [
+                "header",
+                "footer",
+                "nav",
+                "aside",
+                "script",
+                "style",
+                "form",
+                "iframe",
+            ]
+
+            for tag_name in tags_to_remove:
+                for tag in soup.find_all(tag_name):
+                    tag.decompose()
+
+            text = soup.get_text(separator="\n", strip=True)
+            restricted_markers = [
+                "access to this vulnerability report requires support",
+                "verified supporters only",
+                "请进行验证",
+            ]
+            lowered = text.lower()
+            if any(marker in lowered for marker in restricted_markers):
+                results.append(
+                    f"Restricted access for {fetched_url}: "
+                    "page requires special permissions"
+                )
+                continue
+
+            markdown_text = get_markdown_text(soup, fetched_url)
+            if not (markdown_text or "").strip():
+                results.append(
+                    f"Content too short for {fetched_url}: "
+                    "could not extract article body"
+                )
+                continue
+
+            results.append(markdown_text)
+
+        except httpx.HTTPError as exc:
+            results.append(f"Network error for {url}: {exc}")
+            continue
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            results.append(f"Unexpected error for {url}: {exc}")
+            continue
 
     return results
+
+
+async def fetch_and_parse_url(urls: list[str]) -> list[str]:
+    """Parse URLs with a one-off client (legacy public API)."""
+    async with create_url2md_http_client() as client:
+        return await fetch_and_parse_url_with_client(client, urls)

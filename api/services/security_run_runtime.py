@@ -313,16 +313,12 @@ _HITL_SKILL_RE = re.compile(
     re.IGNORECASE,
 )
 
-_PLAYBOOK_SKILL_RE = re.compile(
-    r"剧本|playbook|自动化.?处置|octomation",
-    re.IGNORECASE,
-)
 _INTRANET_SKILL_RE = re.compile(
     r"内网|\bndr\b|intranet|doc_id|ndr告警",
     re.IGNORECASE,
 )
 _SECURITY_SIGNAL_RE = re.compile(
-    r"cve|漏洞|poc|exploit|告警|威胁|研判|隔离|封禁|剧本|playbook|"
+    r"cve|漏洞|poc|exploit|告警|威胁|研判|隔离|封禁|工作流|workflow|"
     r"内网|ndr|hitl|mcp|skill|知识库|情报|资产|攻击|malware|ransomware|"
     r"phishing|siem|soc|incident|ir\b|contain",
     re.IGNORECASE,
@@ -358,8 +354,6 @@ def infer_chat_skill_names(message: str) -> list[str] | None:
         matched.append("cve-intel-skill")
     if _HITL_SKILL_RE.search(text):
         matched.append("hitl-containment-skill")
-    if _PLAYBOOK_SKILL_RE.search(text):
-        matched.append("playbook-skill")
     if _INTRANET_SKILL_RE.search(text):
         matched.append("intranet-ip-skill")
     if matched:
@@ -469,10 +463,9 @@ def mark_hitl_mcp_tools(mcp_tools: Any) -> list[str]:
 
 
 # Built-in MCP namespaces (FastMCP mount prefixes). External tools use other prefixes.
-_BUILTIN_MCP_PREFIXES = ("basic_", "hitl_", "playbook_")
+_BUILTIN_MCP_PREFIXES = ("basic_", "hitl_")
 _SKILL_TO_MCP_PREFIXES: dict[str, tuple[str, ...]] = {
     "hitl-containment-skill": ("hitl_",),
-    "playbook-skill": ("playbook_",),
     # cve-intel-skill / intranet-ip-skill are Local Skills only.
 }
 

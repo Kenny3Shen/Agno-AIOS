@@ -23,6 +23,10 @@ from api.services.model_config_service import get_model_for_run
 from api.services.model_factory import build_agno_model
 from api.services.postgres_store import get_async_agno_postgres_db
 from api.services.skill_service import resolve_enabled_skill_dirs
+from api.services.workflow_definition_migration import (
+    RETIRED_WORKFLOW_SKILL_NAMES,
+    canonicalize_workflow_definition,
+)
 
 # Built-in executor registry — single source of truth in agent_catalog.
 # Nested Team executors remain out of scope for compile; refs stay stable.
@@ -309,6 +313,10 @@ def _normalize_step(
         skills: list[str] = []
         for entry in raw_skills:
             name = str(entry or "").strip()
+            if name in RETIRED_WORKFLOW_SKILL_NAMES:
+                raise WorkflowDefinitionError(
+                    f"{path}.skills contains retired skill {name!r}"
+                )
             if name and name not in skills:
                 skills.append(name)
         if skills:
@@ -783,7 +791,11 @@ def collect_workflow_skill_names(definition: dict[str, Any] | list[Any] | None) 
                 if isinstance(skills, list):
                     for entry in skills:
                         name = str(entry or "").strip()
-                        if name and name not in seen:
+                        if (
+                            name
+                            and name not in RETIRED_WORKFLOW_SKILL_NAMES
+                            and name not in seen
+                        ):
                             seen.add(name)
                             names.append(name)
             walk(node.get("steps"))
@@ -1027,6 +1039,24 @@ async def _compile_node(
     raise WorkflowDefinitionError(f"unsupported node type at compile: {node_type!r}")
 
 
+async def _resolve_persisted_workflow_definition(ref: str) -> dict[str, Any]:
+    """Read a nested workflow through the same legacy-data fence as restores.
+
+    Startup rewrites old definitions in-place, but nested compilation and HITL
+    resumes must remain safe if they encounter a row before that best-effort
+    migration has finished.
+    """
+    from api.persistence import workflows as workflow_store
+
+    row = await workflow_store.get_workflow(ref)
+    if row is None:
+        raise WorkflowDefinitionError(f"nested workflow not found: {ref}")
+    definition = canonicalize_workflow_definition(row.get("definition"))
+    if definition is None:
+        raise WorkflowDefinitionError(f"nested workflow {ref} has invalid definition")
+    return definition
+
+
 async def compile_workflow(
     definition: dict[str, Any],
     *,
@@ -1044,18 +1074,7 @@ async def compile_workflow(
     if workflow_id:
         stack.add(workflow_id)
 
-    async def _default_resolve(ref: str) -> dict[str, Any]:
-        from api.persistence import workflows as workflow_store
-
-        row = await workflow_store.get_workflow(ref)
-        if row is None:
-            raise WorkflowDefinitionError(f"nested workflow not found: {ref}")
-        definition_raw = row.get("definition")
-        if not isinstance(definition_raw, dict):
-            raise WorkflowDefinitionError(f"nested workflow {ref} has invalid definition")
-        return definition_raw
-
-    loader = resolve_nested or _default_resolve
+    loader = resolve_nested or _resolve_persisted_workflow_definition
     compiled_steps = [
         await _compile_node(
             node,

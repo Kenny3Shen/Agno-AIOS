@@ -45,17 +45,13 @@ const BUILTIN_TOOL_I18N_KEYS: Record<string, string> = {
   get_member_information_tool: 'tools.getMemberInformation',
   basic_send_feishu_notify: 'tools.basic_send_feishu_notify',
   hitl_simulate_containment: 'tools.hitl_simulate_containment',
-  playbook_list_workflows: 'tools.playbook_list_workflows',
-  playbook_get_method_params: 'tools.playbook_get_method_params',
-  playbook_invoke_method: 'tools.playbook_invoke_method',
-  playbook_get_exec_result: 'tools.playbook_get_exec_result',
   // Agno Local Skills progressive loaders (not MCP namespace)
   get_skill_instructions: 'tools.get_skill_instructions',
   get_skill_reference: 'tools.get_skill_reference',
   get_skill_script: 'tools.get_skill_script',
 }
 
-const TOOL_NS_PREFIXES = ['basic_', 'hitl_', 'playbook_'] as const
+const TOOL_NS_PREFIXES = ['basic_', 'hitl_'] as const
 
 /** Title-case unknown tool ids after stripping builtin namespaces. */
 const humanizeToolId = (name: string): string => {
