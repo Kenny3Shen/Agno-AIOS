@@ -503,7 +503,9 @@
 }
 .thought-toggle:active,
 .sender-actions .ant-btn:not(:disabled):active,
-.sender-extension:not(:disabled):active,
+.sender-extension:not(:disabled):active {
+  transform: translateY(1px);
+}
 .latest-button:active {
   transform: translate(-50%, 1px);
 }
@@ -841,7 +843,7 @@ html.dark {
   max-width: min(300px, 48vw);
   align-items: center;
   gap: 6px;
-  border: 0;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--chat-trigger-text);
 }

@@ -1,5 +1,5 @@
 [project]
-name = "agno-aios"
+name = "T.A.I.S"
 version = "0.6.0"
 description = "AI security operations workspace powered by FastAPI, React, Agno, and FastMCP."
 readme = "README.md"
@@ -31,6 +31,7 @@ dependencies = [
     "cel-python>=0.5.0",
     "ddgs>=9.14.4",
     "docling>=2.113.0",
+    "aiofiles>=25.1.0",
 ]
 
 [project.scripts]

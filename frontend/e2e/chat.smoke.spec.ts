@@ -1,6 +1,6 @@
 import http from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { expect, test, type Route } from '@playwright/test'
+import { expect, test, type Locator, type Page, type Route } from '@playwright/test'
 import { openAuthed } from './fixtures'
 
 async function fulfillJson(route: Route, body: unknown) {
@@ -9,6 +9,44 @@ async function fulfillJson(route: Route, body: unknown) {
     contentType: 'application/json',
     body: JSON.stringify(body),
   })
+}
+
+async function expectNoActiveHorizontalOffset(page: Page, button: Locator) {
+  await expect(button).toBeVisible()
+  const idle = await button.boundingBox()
+  expect(idle).not.toBeNull()
+  if (!idle) return
+
+  await button.hover()
+  // Let the button's interaction transition settle before comparing geometry.
+  await page.waitForTimeout(250)
+  const hovered = await button.boundingBox()
+  expect(hovered).not.toBeNull()
+  if (!hovered) return
+  expect(Math.abs(hovered.x - idle.x)).toBeLessThan(1)
+  expect(Math.abs(hovered.width - idle.width)).toBeLessThan(1)
+
+  await page.mouse.move(hovered.x + hovered.width / 2, hovered.y + hovered.height / 2)
+  await page.mouse.down()
+  try {
+    // The press animation completes quickly; inspect after it settles rather than
+    // immediately, when a transform transition could still be at its origin.
+    await page.waitForTimeout(250)
+    const during = await button.boundingBox()
+    expect(during).not.toBeNull()
+    expect(Math.abs((during?.x ?? Number.NaN) - hovered.x)).toBeLessThan(1)
+    expect(Math.abs((during?.width ?? Number.NaN) - hovered.width)).toBeLessThan(1)
+    const transform = await button.evaluate(
+      (element) => new DOMMatrix(getComputedStyle(element).transform),
+    )
+    expect(Math.abs(transform.m11 - 1)).toBeLessThan(0.01)
+    expect(Math.abs(transform.m41)).toBeLessThan(1)
+  } finally {
+    // Finish the press away from the control so this visual regression test does
+    // not open the model menu or native file picker.
+    await page.mouse.move(0, 0)
+    await page.mouse.up()
+  }
 }
 
 /**
@@ -133,6 +171,50 @@ async function startRetryingChatSseServer() {
 }
 
 test.describe('chat critical path', () => {
+  test('model and attachment controls stay stationary while pressed', async ({ page }) => {
+    await openAuthed(page, '/dashboard', {
+      handleApi: async ({ method, path, route }) => {
+        if (method === 'GET' && path.endsWith('/api/models')) {
+          await fulfillJson(route, {
+            active_model_id: 'model-1',
+            models: [
+              {
+                id: 'model-1',
+                name: 'E2E Model',
+                provider: 'openai',
+                model_id: 'gpt-test',
+                base_url: '',
+                api_key: 'sk-test',
+                api_protocol: 'chat-completions',
+                structured_output_mode: 'native',
+                description: '',
+                enabled: true,
+                builtin: false,
+                configured: true,
+              },
+            ],
+          })
+          return true
+        }
+        if (method === 'GET' && path.endsWith('/api/settings/chat')) {
+          await fulfillJson(route, {
+            enable_user_memories: false,
+            add_history_to_context: true,
+            num_history_runs: 3,
+          })
+          return true
+        }
+        return false
+      },
+    })
+
+    await page.goto('/#/chat', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('.chat-page, main').first()).toBeVisible({ timeout: 15_000 })
+
+    await expectNoActiveHorizontalOffset(page, page.getByRole('button', { name: '附件' }))
+    await expectNoActiveHorizontalOffset(page, page.getByRole('button', { name: '模型与推理强度' }))
+  })
+
   test('stop button cancels active run', async ({ page }) => {
     const sse = await startHangingChatSseServer()
     let cancelCalls = 0
