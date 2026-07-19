@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -9,6 +9,11 @@ from api.services import model_config_service
 def _clear_model_config_cache(tmp_path, monkeypatch):
     """Isolate legacy JSON path so load never archives the developer config file."""
     model_config_service._invalidate_model_config_cache()
+    monkeypatch.setattr(
+        model_config_service,
+        "_legacy_model_config_file_once",
+        model_config_service.AsyncOnce(),
+    )
     monkeypatch.setattr(
         model_config_service,
         "model_config_file",
@@ -79,21 +84,42 @@ async def test_load_model_config_store_seeds_defaults_when_empty_without_legacy_
 
 
 @pytest.mark.asyncio
+async def test_load_model_config_store_checks_legacy_file_once_per_process(tmp_path):
+    legacy_file = tmp_path / "model_config.json"
+    legacy_file.write_text("{}", encoding="utf-8")
+    rows = model_config_service._store_to_rows(model_config_service.ModelConfigStore.default())
+    list_rows = AsyncMock(return_value=rows)
+    model_config_path = Mock(return_value=legacy_file)
+
+    with (
+        patch.object(model_config_service, "model_config_file", model_config_path),
+        patch.object(model_config_service, "list_model_config_rows", list_rows),
+        patch.object(model_config_service, "replace_model_config_rows", AsyncMock()),
+    ):
+        await model_config_service.load_model_config_store()
+        model_config_service._invalidate_model_config_cache()
+        await model_config_service.load_model_config_store()
+
+    assert list_rows.await_count == 2
+    model_config_path.assert_called_once()
+    assert not legacy_file.exists()
+    assert (tmp_path / "model_config.json.imported").exists()
+
+
+@pytest.mark.asyncio
 async def test_save_model_config_writes_postgres_rows_and_preserves_masked_secret():
-    existing_store = model_config_service.ModelConfigStore.from_raw(
-        {
-            "active_model_id": "custom",
-            "models": [
-                {
-                    "id": "custom",
-                    "name": "Custom",
-                    "model_id": "model-name",
-                    "base_url": "https://api.example.com/v1",
-                    "api_key": "saved-secret",
-                }
-            ],
-        }
-    )
+    existing_store = model_config_service.ModelConfigStore(
+        active_model_id="custom",
+        models=[
+            model_config_service.ModelConfig(
+                id="custom",
+                name="Custom",
+                model_id="model-name",
+                base_url="https://api.example.com/v1",
+                api_key="saved-secret",
+            )
+        ],
+    ).with_defaults()
     existing_rows = model_config_service._store_to_rows(existing_store)
     replace = AsyncMock()
 
@@ -127,13 +153,12 @@ async def test_save_model_config_writes_postgres_rows_and_preserves_masked_secre
 
 
 def test_model_config_normalizes_new_compatible_models_to_chat_completions_json():
-    model = model_config_service.ModelConfig.normalized(
+    model = model_config_service.ModelConfig.from_row(
         {
             "id": "custom",
             "model_id": "model-name",
             "base_url": "https://api.example.com/v1",
         },
-        "fallback",
     )
 
     assert model.provider == "openai-compatible"
@@ -142,14 +167,37 @@ def test_model_config_normalizes_new_compatible_models_to_chat_completions_json(
     assert model.default_reasoning_effort is None
 
 
+def test_model_config_requires_explicit_id():
+    with pytest.raises(ValueError, match="model config id is required"):
+        model_config_service.ModelConfig.from_row({"model_id": "model-name"})
+
+
+def test_model_config_does_not_guess_native_provider_from_model_identity():
+    model = model_config_service.ModelConfig.from_row(
+        {
+            "id": "unclassified-deepseek",
+            "model_id": "deepseek-v4-flash",
+            "base_url": "https://api.deepseek.com",
+        },
+    )
+
+    assert model.provider == "openai-compatible"
+    assert model.api_protocol == "chat-completions"
+
+
 def test_model_config_uses_native_provider_defaults_without_rewriting_explicit_values():
-    deepseek = model_config_service.ModelConfig.normalized(
-        {"id": "deepseek", "provider": "deepseek"}, "fallback"
+    deepseek = model_config_service.ModelConfig.from_row(
+        {"id": "deepseek", "provider": "deepseek"}
     )
-    openai = model_config_service.ModelConfig.normalized(
-        {"id": "openai", "provider": "openai"}, "fallback"
+    openai = model_config_service.ModelConfig.from_row(
+        {"id": "openai", "provider": "openai"}
     )
-    existing_openai = model_config_service.ModelConfig.normalized(
+    submitted_openai = model_config_service.ModelConfig(
+        id="submitted-openai",
+        provider="openai",
+        model_id="gpt-5-mini",
+    )
+    existing_openai = model_config_service.ModelConfig.from_row(
         {
             "id": "existing-openai",
             "provider": "openai",
@@ -157,7 +205,6 @@ def test_model_config_uses_native_provider_defaults_without_rewriting_explicit_v
             "structured_output_mode": "json",
             "default_reasoning_effort": "low",
         },
-        "fallback",
     )
 
     assert (deepseek.api_protocol, deepseek.structured_output_mode, deepseek.default_reasoning_effort) == (
@@ -170,6 +217,14 @@ def test_model_config_uses_native_provider_defaults_without_rewriting_explicit_v
         "native",
         "high",
     )
+    assert (
+        submitted_openai.api_protocol,
+        submitted_openai.structured_output_mode,
+        submitted_openai.default_reasoning_effort,
+        submitted_openai.retries,
+        submitted_openai.delay_between_retries,
+        submitted_openai.exponential_backoff,
+    ) == ("responses", "native", "high", 4, 1, True)
     assert (existing_openai.api_protocol, existing_openai.structured_output_mode, existing_openai.default_reasoning_effort) == (
         "chat-completions",
         "json",
@@ -178,14 +233,13 @@ def test_model_config_uses_native_provider_defaults_without_rewriting_explicit_v
 
 
 def test_model_config_preserves_parallel_tool_calls_setting():
-    model = model_config_service.ModelConfig.normalized(
+    model = model_config_service.ModelConfig.from_row(
         {
             "id": "terra",
             "provider": "openai",
             "model_id": "gpt-5.6-terra-responses-lite",
             "parallel_tool_calls": False,
         },
-        "fallback",
     )
     store = model_config_service.ModelConfigStore(
         active_model_id=model.id,
@@ -212,34 +266,6 @@ def test_model_config_strips_reasoning_effort_for_unsupported_providers():
         default_reasoning_effort="high",
     )
     assert xai.default_reasoning_effort is None
-
-
-@pytest.mark.asyncio
-async def test_load_model_config_store_does_not_rewrite_for_provider_heuristic_only():
-    """Grok→xai stays on the read path; load must not rewrite rows for provider alone."""
-    store = model_config_service.ModelConfigStore.default()
-    rows = model_config_service._store_to_rows(store)
-    # Simulate pre-migration row still stored as openai-compatible + grok id.
-    for row in rows:
-        if row["id"] == "xai-grok-4.5":
-            row["provider"] = "openai-compatible"
-            row["api_protocol"] = "responses"
-            row["default_reasoning_effort"] = "high"
-            break
-    else:
-        raise AssertionError("expected default xai-grok-4.5 row")
-    replace = AsyncMock()
-
-    with (
-        patch.object(model_config_service, "list_model_config_rows", AsyncMock(return_value=rows)),
-        patch.object(model_config_service, "replace_model_config_rows", replace),
-    ):
-        loaded = await model_config_service.load_model_config_store()
-
-    grok = next(model for model in loaded.models if model.id == "xai-grok-4.5")
-    assert grok.provider == "xai"
-    replace.assert_not_awaited()
-    model_config_service._invalidate_model_config_cache()
 
 
 @pytest.mark.asyncio
@@ -295,7 +321,7 @@ async def test_load_model_config_store_rewrites_multiple_active_rows():
 
 
 def test_model_config_normalizes_retry_fields():
-    model = model_config_service.ModelConfig.normalized(
+    model = model_config_service.ModelConfig.from_row(
         {
             "id": "custom",
             "name": "Custom",
@@ -307,14 +333,13 @@ def test_model_config_normalizes_retry_fields():
             "exponential_backoff": "false",
             "http_max_retries": "1",
         },
-        "custom",
     )
     assert model.retries == 5
     assert model.delay_between_retries == 2
     assert model.exponential_backoff is False
     assert model.http_max_retries == 1
 
-    defaults = model_config_service.ModelConfig.normalized(
+    defaults = model_config_service.ModelConfig.from_row(
         {
             "id": "custom2",
             "name": "Custom2",
@@ -322,7 +347,6 @@ def test_model_config_normalizes_retry_fields():
             "provider": "openai-compatible",
             "base_url": "https://api.example.com/v1",
         },
-        "custom2",
     )
     assert defaults.retries == 4
     assert defaults.delay_between_retries == 1
@@ -331,8 +355,8 @@ def test_model_config_normalizes_retry_fields():
 
 
 
-def test_legacy_grok_openai_compatible_migrates_to_xai():
-    model = model_config_service.ModelConfig.normalized(
+def test_model_config_does_not_guess_xai_from_compatible_input():
+    model = model_config_service.ModelConfig.from_row(
         {
             "id": "grok",
             "name": "Grok",
@@ -344,27 +368,24 @@ def test_legacy_grok_openai_compatible_migrates_to_xai():
             "base_url": "https://api.x.ai/v1",
             "api_key": "xai-key",
         },
-        "fallback",
     )
-    assert model.provider == "xai"
-    assert model.api_protocol == "chat-completions"
-    # Legacy structured mode is kept when present (xAI supports native + json)
+    assert model.provider == "openai-compatible"
+    assert model.api_protocol == "responses"
     assert model.structured_output_mode == "native"
     assert model.default_reasoning_effort is None
     assert model.base_url == "https://api.x.ai/v1"
 
 
 def test_xai_provider_defaults_and_strips_reasoning_effort():
-    model = model_config_service.ModelConfig.normalized(
+    model = model_config_service.ModelConfig.from_row(
         {"id": "xai", "provider": "xai", "model_id": "grok-4.5"},
-        "fallback",
     )
     assert model.api_protocol == "chat-completions"
     assert model.structured_output_mode == "json"
     assert model.default_reasoning_effort is None
     assert model.base_url == "https://api.x.ai/v1"
 
-    # xAI does not support reasoning_effort; explicit values are dropped (legacy Grok Responses).
+    # xAI does not support reasoning_effort; explicit values are dropped.
     stripped = model_config_service.ModelConfig(
         id="xai-bad",
         provider="xai",
@@ -385,7 +406,7 @@ def test_default_models_include_xai_grok():
 
 
 def test_live_search_enabled_normalized():
-    model = model_config_service.ModelConfig.normalized(
+    model = model_config_service.ModelConfig.from_row(
         {
             "id": "xai",
             "provider": "xai",
@@ -393,7 +414,6 @@ def test_live_search_enabled_normalized():
             "live_search_enabled": "true",
             "structured_output_mode": "native",
         },
-        "fallback",
     )
     assert model.live_search_enabled is True
     assert model.structured_output_mode == "native"

@@ -4,7 +4,7 @@ export function getSkillBody(markdown: string) {
   return markdown.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, '').trim()
 }
 
-export function getSkillFrontMatter(markdown: string): Record<string, string | string[]> {
+function getSkillFrontMatter(markdown: string): Record<string, string | string[]> {
   const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---/)
   if (!match) return {}
   const metadata: Record<string, string | string[]> = {}

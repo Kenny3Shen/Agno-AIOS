@@ -4,22 +4,15 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
-from fastapi.routing import APIRoute
 
 from api.auth import claims
 from api.routes import overview
 from api.services import overview_service
+from api.tests.route_fakes import route_dependency
 
 
 def actor(user_id: str, role: str = "user"):
     return SimpleNamespace(id=user_id, role=role, is_superuser=False)
-
-
-def route_dependency():
-    for route in overview.router.routes:
-        if isinstance(route, APIRoute) and getattr(route.endpoint, "__name__", "") == "get_overview":
-            return route.dependant.dependencies[0].call
-    raise AssertionError("missing overview route")
 
 
 @pytest.mark.asyncio
@@ -101,7 +94,6 @@ async def test_overview_aggregates_scoped_traces_into_stable_payload():
         "input_tokens": 10,
         "output_tokens": 10,
         "total_tokens": 20,
-        "tokens": 20,
     }
     assert result["distributions"]["agent"] == [{"name": "security-agent", "value": 1}]
     assert result["recent_failures"][0]["trace_id"] == "failed-1"
@@ -413,7 +405,7 @@ async def test_overview_adds_evaluation_snapshot_for_authorized_actor(monkeypatc
 def test_overview_route_enforces_trace_scope(monkeypatch):
     monkeypatch.setitem(claims.ROLE_SCOPES, "guest", set())
     with pytest.raises(HTTPException) as exc:
-        route_dependency()(user=actor("g1", "guest"))
+        route_dependency(overview.router, "get_overview")(user=actor("g1", "guest"))
     assert exc.value.status_code == 403
 
 
@@ -535,6 +527,28 @@ async def test_overview_adds_approval_status_snapshot_for_authorized_actor(monke
     }
     assert "pending_approvals" not in snapshots
 
+
+@pytest.mark.asyncio
+async def test_overview_memory_snapshot_uses_agno_total(monkeypatch):
+    class FakeDb:
+        kwargs: dict[str, object]
+
+        async def get_user_memories(self, **kwargs):
+            self.kwargs = kwargs
+            return [{"memory_id": "m1"}], 42
+
+    db = FakeDb()
+    monkeypatch.setattr(overview_service, "get_async_agno_postgres_db", lambda: db)
+    monkeypatch.setattr(
+        overview_service,
+        "has_scope",
+        lambda _actor, scope: scope == "memories:read",
+    )
+
+    snapshots = await overview_service._snapshots(actor("u1"))
+
+    assert snapshots == {"memories": 42}
+    assert db.kwargs["deserialize"] is False
 
 
 @pytest.mark.asyncio
@@ -748,4 +762,3 @@ async def test_recent_failures_includes_audit_only_chat_errors():
     assert audit_row["status"] == "ERROR"
     assert audit_row["run_id"] == "run-audit"
     assert audit_row["session_id"] == "s-audit"
-

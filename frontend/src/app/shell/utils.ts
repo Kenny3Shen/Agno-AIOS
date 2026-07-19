@@ -1,5 +1,3 @@
-export const RECENT_CONVERSATIONS_STORAGE_KEY = 'tais-shell-recent-expanded'
-
 export interface NavigationGroup<T> {
   key: string
   labelKey: string
@@ -17,14 +15,6 @@ export function filterNavigationGroups<T extends { scope?: string }>(groups: Nav
     const items = group.items.filter((item) => !item.scope || canAccess(item.scope))
     return items.length ? [{ ...group, items }] : []
   })
-}
-
-export function readRecentConversationsExpanded(storage: Pick<Storage, 'getItem'> = localStorage) {
-  return storage.getItem(RECENT_CONVERSATIONS_STORAGE_KEY) !== 'false'
-}
-
-export function writeRecentConversationsExpanded(expanded: boolean, storage: Pick<Storage, 'setItem'> = localStorage) {
-  storage.setItem(RECENT_CONVERSATIONS_STORAGE_KEY, String(expanded))
 }
 
 /** Menu openKey for the group that owns ``path``, or null when path is outside grouped nav. */
@@ -45,4 +35,3 @@ export function withOpenNavigationGroup(openKeys: readonly string[], groupMenuKe
   if (!groupMenuKey || openKeys.includes(groupMenuKey)) return [...openKeys]
   return [...openKeys, groupMenuKey]
 }
-

@@ -35,7 +35,7 @@ def list_workflow_templates() -> list[dict[str, Any]]:
                         "type": "condition",
                         "name": "Critical?",
                         "evaluator": {"cel": 'input.contains("critical") || input.contains("CRITICAL")'},
-                        "then_steps": [
+                        "steps": [
                             {
                                 "id": "contain",
                                 "type": "step",
@@ -48,7 +48,7 @@ def list_workflow_templates() -> list[dict[str, Any]]:
                                 "position": {"x": 420, "y": 40},
                             }
                         ],
-                        "else_steps": [
+                        "else": [
                             {
                                 "id": "report",
                                 "type": "step",
@@ -346,11 +346,3 @@ def list_workflow_templates() -> list[dict[str, Any]]:
             },
         },
     ]
-
-
-def get_workflow_template(template_id: str) -> dict[str, Any] | None:
-    tid = (template_id or "").strip()
-    for item in list_workflow_templates():
-        if item["id"] == tid:
-            return item
-    return None

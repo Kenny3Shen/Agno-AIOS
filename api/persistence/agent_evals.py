@@ -460,16 +460,6 @@ async def get_case_run_row_async(case_run_id: str) -> dict[str, Any] | None:
     return await _get_row_async(agent_eval_case_runs_table(), case_run_id)
 
 
-def case_run_by_agno_eval_run_id_statement(eval_run_id: str) -> Any:
-    table = agent_eval_case_runs_table()
-    return (
-        select(table)
-        .where(table.c.agno_eval_run_ids.contains([eval_run_id]))
-        .order_by(desc(table.c.started_at), table.c.id)
-        .limit(1)
-    )
-
-
 def case_runs_by_agno_eval_run_ids_statement(eval_run_ids: list[str]) -> Any:
     table = agent_eval_case_runs_table()
     filters = [
@@ -478,22 +468,6 @@ def case_runs_by_agno_eval_run_ids_statement(eval_run_ids: list[str]) -> Any:
     ]
     condition = or_(*filters) if filters else false()
     return select(table).where(condition).order_by(desc(table.c.started_at), table.c.id)
-
-
-async def get_case_run_by_agno_eval_run_id_row_async(
-    eval_run_id: str,
-) -> dict[str, Any] | None:
-    eval_run_key = eval_run_id.strip()
-    if not eval_run_key:
-        return None
-    await ensure_agent_eval_tables_async()
-    async with get_async_control_plane_engine().begin() as conn:
-        row = (
-            (await conn.execute(case_run_by_agno_eval_run_id_statement(eval_run_key)))
-            .mappings()
-            .one_or_none()
-        )
-    return _row_dict(row) if row is not None else None
 
 
 async def list_case_runs_by_agno_eval_run_ids_rows_async(

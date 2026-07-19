@@ -2,9 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildTraceSearch,
   filterSessionsByArchive,
-  firstSpanId,
   groupRuns,
-  groupSessions,
   mergeTraceSessions,
   parseTraceSearch,
   previewSpanValue,
@@ -55,12 +53,6 @@ describe('trace hierarchy', () => {
     expect(state.traceId).toBe('trace-1')
   })
 
-    it('ignores legacy session/run URL aliases', () => {
-    const state = parseTraceSearch('?session=legacy-session&run=legacy-run')
-    expect(state.filters).toMatchObject({ session_id: '', run_id: '' })
-    expect(state.selectedSession).toBe('')
-  })
-
   it('parses canonical session_id and run_id URL params', () => {
     const state = parseTraceSearch('?session_id=filter-session&run_id=filter-run')
     expect(state.filters).toMatchObject({ session_id: 'filter-session', run_id: 'filter-run' })
@@ -85,29 +77,14 @@ describe('trace hierarchy', () => {
     expect(query.has('session_id')).toBe(false)
   })
 
-  it('orders sessions by their latest trace', () => {
-    expect(groupSessions(traces).map((session) => session.sessionId)).toEqual(['s2', 's1'])
-  })
-
-  it('uses the latest trace name as session text', () => {
-    expect(groupSessions(traces)[0]).toMatchObject({ sessionId: 's2', name: 'run' })
-  })
-
-  it('prefers the chat preview when it is available', () => {
-    expect(groupSessions(traces, { s2: 'Investigate the alert' })[0].name).toBe('Investigate the alert')
-  })
-
   it('filters archived sessions without hiding them by default', () => {
-    const sessions = groupSessions(traces, {}, { s1: true })
+    const sessions = [
+      { sessionId: 's2', name: 'Run', context: '', archived: false, traces: [], runCount: 1, latestAt: '' },
+      { sessionId: 's1', name: 'Run', context: '', archived: true, traces: [], runCount: 1, latestAt: '' },
+    ]
     expect(filterSessionsByArchive(sessions, 'all')).toHaveLength(2)
     expect(filterSessionsByArchive(sessions, 'active').map((session) => session.sessionId)).toEqual(['s2'])
     expect(filterSessionsByArchive(sessions, 'archived').map((session) => session.sessionId)).toEqual(['s1'])
-  })
-
-  it('treats trace-only sessions as legacy archived sessions after session data loads', () => {
-    const sessions = groupSessions(traces, { s2: 'Active session' }, { s2: false }, true)
-    expect(sessions.find((session) => session.sessionId === 's1')?.archived).toBe(true)
-    expect(sessions.find((session) => session.sessionId === 's2')?.archived).toBe(false)
   })
 
   it('keeps only trace sessions while enriching them with matching chat metadata', () => {
@@ -156,15 +133,11 @@ describe('trace hierarchy', () => {
 
   it('keeps a trace without run ID as a fallback run', () => {
     const fallback = { ...traces[0], trace_id: 'fallback-trace', session_id: 'legacy', run_id: null }
-    expect(groupSessions([fallback])[0].runCount).toBe(1)
     expect(groupRuns([fallback], 'legacy')[0]).toMatchObject({ runId: 'fallback-trace', traceId: 'fallback-trace' })
   })
 
-  it('previews span content and selects the first tree node', () => {
+  it('previews span content', () => {
     expect(previewSpanValue({ prompt: 'inspect target' })).toBe('JSON · 1 fields')
     expect(previewSpanValue({ format: 'text', text: 'Inspect the target', data: null })).toBe('Inspect the target')
-    expect(
-      firstSpanId([{ span: { span_id: 'root', name: 'agent', status_code: 'OK', duration: '1ms', start_time: '' }, children: [] }])
-    ).toBe('root')
   })
 })

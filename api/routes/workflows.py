@@ -13,9 +13,10 @@ from sse_starlette.sse import EventSourceResponse
 from api.auth.claims import actor_id
 from api.auth.models import User
 from api.auth.scopes import require_scope
+from api.persistence.audit_logs import list_audit_logs_async
+from api.services.agent_catalog import list_workflow_executor_options
 from api.services.audit_service import (
     audit_request_context,
-    list_audit_events_async,
     record_audit_event_async,
 )
 from api.services.workflow_compiler import WorkflowDefinitionError
@@ -25,7 +26,6 @@ from api.services.notification_service import notify_workflow_trigger_failure
 from api.services.workflow_service import (
     create_workflow_for_actor,
     delete_workflow_for_actor,
-    executor_catalog,
     get_published_definition,
     get_workflow_for_actor,
     list_versions_for_actor,
@@ -60,13 +60,29 @@ class WorkflowRunRequest(BaseModel):
 
 @router.get("/executors")
 async def list_executors(user: User = Depends(require_scope("workflows:read"))):
-    return {"data": executor_catalog()}
+    data = list_workflow_executor_options()
+    return {
+        "data": data,
+        "meta": pagination_meta(
+            page=1,
+            limit=max(1, len(data)),
+            total_count=len(data),
+        ),
+    }
 
 
 @router.get("/templates")
 async def list_templates(user: User = Depends(require_scope("workflows:read"))):
     """Built-in security workflow templates."""
-    return {"data": list_workflow_templates()}
+    data = list_workflow_templates()
+    return {
+        "data": data,
+        "meta": pagination_meta(
+            page=1,
+            limit=max(1, len(data)),
+            total_count=len(data),
+        ),
+    }
 
 
 @router.get("")
@@ -379,14 +395,14 @@ async def list_workflow_trigger_history(
         raise HTTPException(status_code=404, detail="Workflow not found")
     # Pull a wider window then filter by trigger actions (audit API is exact-match on action).
     window = min(200, max(limit * 5, 50))
-    cron_items, _ = await list_audit_events_async(
+    cron_items, _ = await list_audit_logs_async(
         page=1,
         limit=window,
         action="workflow.trigger.cron",
         resource_type="workflow",
         resource_id=workflow_id,
     )
-    webhook_items, _ = await list_audit_events_async(
+    webhook_items, _ = await list_audit_logs_async(
         page=1,
         limit=window,
         action="workflow.trigger.webhook",

@@ -16,7 +16,6 @@ from agno.workflow.workflow import WorkflowSteps
 
 from api.services.agent_catalog import (
     AGENT_PROFILES,
-    list_workflow_executor_options,
     normalize_agent_id,
 )
 from api.services.agent_tools import build_tools_for_profile
@@ -54,18 +53,12 @@ class WorkflowDefinitionError(ValueError):
     """Raised when a workflow definition cannot be compiled."""
 
 
-def list_executor_options() -> list[dict[str, str]]:
-    """Product catalog for Studio step executor Select (stable ``ref`` keys)."""
-    return list_workflow_executor_options()
-
-
 def _path(prefix: str, key: str) -> str:
     return f"{prefix}.{key}" if prefix else key
 
 
-def _require_non_empty_id(raw_id: object, path: str, fallback: str) -> str:
-    step_id = str(raw_id or fallback).strip()
-    if not step_id:
+def _require_non_empty_id(raw_id: object, path: str) -> str:
+    if not isinstance(raw_id, str) or not (step_id := raw_id.strip()):
         raise WorkflowDefinitionError(f"{path}.id is required")
     return step_id
 
@@ -137,7 +130,6 @@ def _normalize_node(
     item: object,
     *,
     path: str,
-    index: int,
     depth: int,
     seen_ids: set[str],
     counters: dict[str, int],
@@ -156,14 +148,18 @@ def _normalize_node(
             f"definition supports at most {MAX_TOTAL_NODES} nodes (including nested)"
         )
 
-    node_type = str(item_obj.get("type") or "step").strip().lower()
+    raw_node_type = item_obj.get("type")
+    if not isinstance(raw_node_type, str) or not (
+        node_type := raw_node_type.strip().lower()
+    ):
+        raise WorkflowDefinitionError(f"{path}.type is required")
     if node_type not in SUPPORTED_NODE_TYPES:
         raise WorkflowDefinitionError(
             f"{path}.type={node_type!r} is not supported; "
             f"allowed: {', '.join(sorted(SUPPORTED_NODE_TYPES))}"
         )
 
-    node_id = _require_non_empty_id(item_obj.get("id"), path, f"{node_type}-{index + 1}")
+    node_id = _require_non_empty_id(item_obj.get("id"), path)
     if node_id in seen_ids:
         raise WorkflowDefinitionError(f"duplicate node id: {node_id}")
     seen_ids.add(node_id)
@@ -248,21 +244,17 @@ def _normalize_step(
     inside_parallel: bool,
 ) -> dict[str, Any]:
     raw_executor = item.get("executor")
-    executor: dict[str, Any] = (
-        {str(key): value for key, value in raw_executor.items()}
-        if isinstance(raw_executor, dict)
-        else {}
-    )
-    kind = str(executor.get("kind") or item.get("kind") or "agent").strip().lower()
+    if not isinstance(raw_executor, dict):
+        raise WorkflowDefinitionError(f"{path}.executor must be an object")
+    executor: dict[str, Any] = {
+        str(key): value for key, value in raw_executor.items()
+    }
+    raw_kind = executor.get("kind")
+    if not isinstance(raw_kind, str) or not (kind := raw_kind.strip().lower()):
+        raise WorkflowDefinitionError(f"{path}.executor.kind is required")
     if kind != "agent":
         raise WorkflowDefinitionError(f"{path} executor.kind={kind!r} is not supported")
-    ref = str(
-        executor.get("ref")
-        or item.get("targetId")
-        or item.get("target_id")
-        or item.get("executor_id")
-        or ""
-    ).strip()
+    ref = str(executor.get("ref") or "").strip()
     if not ref:
         raise WorkflowDefinitionError(f"{path} executor.ref is required")
     if ref not in BUILTIN_AGENT_REFS:
@@ -402,7 +394,6 @@ def _normalize_children(
             _normalize_node(
                 child,
                 path=f"{path}[{index}]",
-                index=index,
                 depth=depth + 1,
                 seen_ids=seen_ids,
                 counters=counters,
@@ -470,22 +461,16 @@ def _normalize_condition(
         path=_path(path, "evaluator"),
         required=True,
     )
-    then_raw = (
-        item.get("then")
-        if item.get("then") is not None
-        else item.get("then_steps")
-        if item.get("then_steps") is not None
-        else item.get("steps")
-    )
+    then_raw = item.get("steps")
     then_steps = _normalize_children(
         then_raw,
-        path=_path(path, "then"),
+        path=_path(path, "steps"),
         depth=depth,
         seen_ids=seen_ids,
         counters=counters,
         inside_parallel=inside_parallel,
     )
-    else_raw = item.get("else") if item.get("else") is not None else item.get("else_steps")
+    else_raw = item.get("else")
     else_steps = _normalize_children(
         else_raw if else_raw is not None else [],
         path=_path(path, "else"),
@@ -502,7 +487,7 @@ def _normalize_condition(
         "evaluator": (
             {"cel": evaluator} if isinstance(evaluator, str) else {"value": bool(evaluator)}
         ),
-        "then": then_steps,
+        "steps": then_steps,
         "else": else_steps,
     }
     return _with_position(item, normalized)
@@ -519,7 +504,7 @@ def _normalize_loop(
     counters: dict[str, int],
     inside_parallel: bool,
 ) -> dict[str, Any]:
-    raw_max = item.get("max_iterations", item.get("maxIterations", DEFAULT_LOOP_ITERATIONS))
+    raw_max = item.get("max_iterations", DEFAULT_LOOP_ITERATIONS)
     try:
         max_iterations = int(raw_max)
     except (TypeError, ValueError) as exc:
@@ -529,7 +514,7 @@ def _normalize_loop(
             f"{path}.max_iterations must be between 1 and {MAX_LOOP_ITERATIONS}"
         )
     end_condition = _parse_cel_field(
-        item.get("end_condition", item.get("endCondition")),
+        item.get("end_condition"),
         path=_path(path, "end_condition"),
         required=False,
     )
@@ -588,9 +573,9 @@ def _assert_no_self_workflow_refs(
             )
         elif node_type == "condition":
             _assert_no_self_workflow_refs(
-                list(node.get("then") or []),
+                list(node.get("steps") or []),
                 forbid_workflow_id=target,
-                path=f"{here}.then",
+                path=f"{here}.steps",
             )
             _assert_no_self_workflow_refs(
                 list(node.get("else") or []),
@@ -640,7 +625,6 @@ def validate_and_normalize_definition(
         node = _normalize_node(
             item,
             path=f"steps[{index}]",
-            index=index,
             depth=1,
             seen_ids=seen_ids,
             counters=counters,
@@ -693,9 +677,7 @@ def _normalize_router(
     for index, raw in enumerate(raw_choices):
         if not isinstance(raw, dict):
             raise WorkflowDefinitionError(f"{path}.choices[{index}] must be an object")
-        choice_id = _require_non_empty_id(
-            raw.get("id"), f"{path}.choices[{index}]", f"choice-{index + 1}"
-        )
+        choice_id = _require_non_empty_id(raw.get("id"), f"{path}.choices[{index}]")
         if choice_id in seen_ids:
             raise WorkflowDefinitionError(f"duplicate node id: {choice_id}")
         seen_ids.add(choice_id)
@@ -747,12 +729,7 @@ def _normalize_workflow_ref(
         raise WorkflowDefinitionError(
             f"{path}: nested workflow_ref is forbidden inside Parallel"
         )
-    ref = str(
-        item.get("workflow_id")
-        or item.get("workflowId")
-        or item.get("ref")
-        or ""
-    ).strip()
+    ref = str(item.get("workflow_id") or "").strip()
     if not ref:
         raise WorkflowDefinitionError(f"{path}.workflow_id is required")
     return _with_position(
@@ -778,7 +755,7 @@ def _count_leaf_steps(nodes: list[dict[str, Any]]) -> int:
         elif node_type == "parallel":
             total += _count_leaf_steps(list(node.get("steps") or []))
         elif node_type == "condition":
-            total += _count_leaf_steps(list(node.get("then") or []))
+            total += _count_leaf_steps(list(node.get("steps") or []))
             total += _count_leaf_steps(list(node.get("else") or []))
         elif node_type == "loop":
             total += _count_leaf_steps(list(node.get("steps") or []))
@@ -810,10 +787,8 @@ def collect_workflow_skill_names(definition: dict[str, Any] | list[Any] | None) 
                             seen.add(name)
                             names.append(name)
             walk(node.get("steps"))
-            walk(node.get("then"))
+            walk(node.get("steps"))
             walk(node.get("else"))
-            walk(node.get("then_steps"))
-            walk(node.get("else_steps"))
             choices = node.get("choices")
             if isinstance(choices, list):
                 for choice in choices:
@@ -951,7 +926,7 @@ async def _compile_node(
             raise WorkflowDefinitionError(f"condition {name!r} missing evaluator")
         then_steps = [
             await _compile_node(child, model_id=model_id, resolve_nested=resolve_nested, nesting_stack=nesting_stack)
-            for child in list(node.get("then") or [])
+            for child in list(node.get("steps") or [])
         ]
         else_steps = [
             await _compile_node(child, model_id=model_id, resolve_nested=resolve_nested, nesting_stack=nesting_stack)

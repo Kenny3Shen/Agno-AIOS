@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any, cast
 
 from agno.knowledge.embedder import Embedder
+
+
+def scheduled_work(task: dict[str, object]) -> Callable[[], Awaitable[dict[str, object]]]:
+    return cast(Callable[[], Awaitable[dict[str, object]]], task["work"])
 
 
 class FakeEmbedder(Embedder):

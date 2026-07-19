@@ -9,10 +9,11 @@ continue as Agno media objects.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import cast
 
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile as AgnoUploadFile
 from loguru import logger
+from starlette.datastructures import UploadFile
 
 from agno.media import Audio, File, Image, Video
 from agno.os.utils import (
@@ -44,16 +45,6 @@ class ChatMediaBundle:
     # Docling-converted Markdown keyed by original filename (order preserved).
     document_markdown: tuple[tuple[str, str], ...] = ()
 
-    @property
-    def empty(self) -> bool:
-        return not (
-            self.images
-            or self.files
-            or self.audio
-            or self.videos
-            or self.document_markdown
-        )
-
 
 def _attachment_meta(
     *,
@@ -73,38 +64,23 @@ def _attachment_meta(
     return payload
 
 
-def _read_upload_bytes(upload: Any) -> bytes:
-    file_obj = getattr(upload, "file", None)
-    if file_obj is not None:
-        try:
-            file_obj.seek(0)
-        except Exception:
-            pass
-        raw = file_obj.read()
-        try:
-            file_obj.seek(0)
-        except Exception:
-            pass
-        return raw or b""
-    # Fallback for exotic upload types
-    raw = upload.read() if hasattr(upload, "read") else b""
-    if hasattr(upload, "seek"):
-        try:
-            upload.seek(0)
-        except Exception:
-            pass
+def _read_upload_bytes(upload: UploadFile) -> bytes:
+    file_obj = upload.file
+    file_obj.seek(0)
+    raw = file_obj.read()
+    file_obj.seek(0)
     return raw or b""
 
 
-async def process_chat_uploads(files: list[Any] | None) -> ChatMediaBundle:
+async def process_chat_uploads(files: list[UploadFile] | None) -> ChatMediaBundle:
     """Classify and convert multipart uploads into Agno media + Docling Markdown."""
     if not files:
         return ChatMediaBundle()
 
-    uploads = [f for f in files if f is not None and getattr(f, "filename", None)]
+    uploads = [upload for upload in files if upload.filename]
     if not uploads:
-        # Some clients send empty file parts; ignore.
-        uploads = [f for f in files if f is not None]
+        # Some clients send empty file parts; ignore them.
+        return ChatMediaBundle()
     if len(uploads) > MAX_CHAT_FILES:
         raise HTTPException(
             status_code=400,
@@ -120,6 +96,7 @@ async def process_chat_uploads(files: list[Any] | None) -> ChatMediaBundle:
     total = 0
 
     for upload in uploads:
+        agno_upload = cast(AgnoUploadFile, upload)
         raw = _read_upload_bytes(upload)
         size = len(raw or b"")
         if size <= 0:
@@ -136,7 +113,7 @@ async def process_chat_uploads(files: list[Any] | None) -> ChatMediaBundle:
                 detail=f"附件总大小超过 {MAX_CHAT_TOTAL_BYTES // (1024 * 1024)}MB",
             )
 
-        category = classify_upload_file(upload)
+        category = classify_upload_file(agno_upload)
         if category is None:
             raise HTTPException(
                 status_code=400,
@@ -144,7 +121,7 @@ async def process_chat_uploads(files: list[Any] | None) -> ChatMediaBundle:
             )
         try:
             if category == "image":
-                media = process_image(upload)
+                media = process_image(agno_upload)
                 images.append(media)
                 attachments.append(
                     _attachment_meta(
@@ -154,7 +131,7 @@ async def process_chat_uploads(files: list[Any] | None) -> ChatMediaBundle:
                     )
                 )
             elif category == "audio":
-                media = process_audio(upload)
+                media = process_audio(agno_upload)
                 audios.append(media)
                 attachments.append(
                     _attachment_meta(
@@ -164,7 +141,7 @@ async def process_chat_uploads(files: list[Any] | None) -> ChatMediaBundle:
                     )
                 )
             elif category == "video":
-                media = process_video(upload)
+                media = process_video(agno_upload)
                 videos.append(media)
                 attachments.append(
                     _attachment_meta(
@@ -185,7 +162,7 @@ async def process_chat_uploads(files: list[Any] | None) -> ChatMediaBundle:
                 document_markdown.append((filename, markdown))
                 # Keep Agno File for sandbox staging / history; models primarily
                 # see the Markdown injected into the message.
-                media = process_document(upload)
+                media = process_document(agno_upload)
                 if media is not None:
                     docs.append(media)
                 attachments.append(
@@ -215,17 +192,3 @@ async def process_chat_uploads(files: list[Any] | None) -> ChatMediaBundle:
         attachments=tuple(attachments),
         document_markdown=tuple(document_markdown),
     )
-
-
-def media_kwargs(bundle: ChatMediaBundle) -> dict[str, Any]:
-    """Keyword args for Agent.arun (omit empty lists)."""
-    kwargs: dict[str, Any] = {}
-    if bundle.images:
-        kwargs["images"] = list(bundle.images)
-    if bundle.files:
-        kwargs["files"] = list(bundle.files)
-    if bundle.audio:
-        kwargs["audio"] = list(bundle.audio)
-    if bundle.videos:
-        kwargs["videos"] = list(bundle.videos)
-    return kwargs

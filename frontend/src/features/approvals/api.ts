@@ -1,8 +1,8 @@
-import { jsonInit, requestJson } from '@/shared/api/client'
+import { ApiError, jsonInit, requestJson } from '@/shared/api/client'
 import { asRecord } from '@/shared/lib/format'
 import { listPaginationMeta, normalizePaginatedList, type ListPaginationMeta } from '@/shared/lib/pagination'
 
-export interface ApprovalActor {
+interface ApprovalActor {
   id: string
   email: string
 }
@@ -26,8 +26,8 @@ export interface Approval {
   created_at?: string | number
   updated_at?: string | number
   resource_type?: 'skill' | 'mcp' | string
-  submitted_by?: ApprovalActor | string
-  resolved_by?: ApprovalActor | string | null
+  submitted_by?: ApprovalActor
+  resolved_by?: ApprovalActor | null
   resolved_at?: string | number
   /** Upload submissions only (workbench field). HITL reasons live in resolution_data.note. */
   rejection_reason?: string | null
@@ -36,7 +36,7 @@ export interface Approval {
   payload?: Record<string, unknown>
 }
 
-export interface SkillSubmissionPreview {
+interface SkillSubmissionPreview {
   files: Array<{ name: string; size: number }>
   previews: Record<string, string>
   entry_count: number
@@ -44,7 +44,7 @@ export interface SkillSubmissionPreview {
 
 export type ApprovalKind = 'all' | 'workflow' | 'upload' | 'agent'
 
-export interface ApprovalListParams {
+interface ApprovalListParams {
   status?: string
   /** On-call filter: workflow HITL vs upload submissions vs chat agent HITL. */
   kind?: ApprovalKind
@@ -52,10 +52,10 @@ export interface ApprovalListParams {
   limit?: number
 }
 
-export type ApprovalListMeta = ListPaginationMeta
+type ApprovalListMeta = ListPaginationMeta
 
 /** Combined Approvals list (Agno-style ``{data, meta}``; server merge for kind=all). */
-export type ApprovalListResult = {
+type ApprovalListResult = {
   data: Approval[]
   meta: ApprovalListMeta
 }
@@ -67,9 +67,7 @@ export const isSubmissionApproval = (approval: Approval) =>
 export const isWorkflowHitlApproval = (approval: Approval) =>
   approval.source_type === 'workflow' || Boolean(approval.workflow_id)
 
-const asActor = (value: unknown): ApprovalActor | string | undefined => {
-  if (value == null) return undefined
-  if (typeof value === 'string') return value
+const asActor = (value: unknown): ApprovalActor | undefined => {
   const row = asRecord(value)
   const id = String(row.id ?? '').trim()
   const email = String(row.email ?? '').trim()
@@ -77,11 +75,11 @@ const asActor = (value: unknown): ApprovalActor | string | undefined => {
   return { id, email }
 }
 
-/** Map Agno HITL / submission approval rows into UI records. */
-export const normalizeApproval = (value: unknown): Approval | null => {
+/** Parse canonical Agno HITL / submission approval rows for the UI. */
+const parseApproval = (value: unknown, context: string): Approval => {
   const row = asRecord(value)
   const id = String(row.id ?? '').trim()
-  if (!id) return null
+  if (!id) throw new Error(`${context}: invalid approval payload`)
   const toolArgs = row.tool_args
   const resolutionData = row.resolution_data
   const payload = row.payload
@@ -143,9 +141,7 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
     search.set('page', String(page))
     search.set('limit', String(limit))
     return normalizePaginatedList(await requestJson<unknown>(`/approvals/submissions?${search}`), {
-      page,
-      limit,
-      mapItem: normalizeApproval,
+      mapItem: (item) => parseApproval(item, 'getApprovals'),
     })
   }
 
@@ -156,9 +152,7 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
     if (status) search.set('status', status)
     search.set('source_type', kind)
     return normalizePaginatedList(await requestJson<unknown>(`/approvals?${search.toString()}`), {
-      page,
-      limit,
-      mapItem: normalizeApproval,
+      mapItem: (item) => parseApproval(item, 'getApprovals'),
     })
   }
 
@@ -168,29 +162,24 @@ export const getApprovals = async (params: ApprovalListParams = {}): Promise<App
   search.set('page', String(page))
   search.set('limit', String(limit))
   return normalizePaginatedList(await requestJson<unknown>(`/approvals?${search.toString()}`), {
-    page,
-    limit,
-    mapItem: normalizeApproval,
+    mapItem: (item) => parseApproval(item, 'getApprovals'),
   })
 }
 
 
 export const getApproval = async (id: string): Promise<Approval | null> => {
-  const row = await requestJson<unknown>(`/approvals/${encodeURIComponent(id)}`)
-  return normalizeApproval(row)
+  try {
+    const row = await requestJson<unknown>(`/approvals/${encodeURIComponent(id)}`)
+    return parseApproval(row, 'getApproval')
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null
+    throw error
+  }
 }
 
-export type ResolveApprovalOptions = {
+type ResolveApprovalOptions = {
   rejectionReason?: string
   resolutionData?: Record<string, unknown>
-}
-
-const requireApproval = (row: unknown, context: string): Approval => {
-  const normalized = normalizeApproval(row)
-  if (!normalized) {
-    throw new Error(`${context}: invalid approval payload`)
-  }
-  return normalized
 }
 
 export const resolveApproval = async (
@@ -206,12 +195,12 @@ export const resolveApproval = async (
       ...(options.resolutionData ? { resolution_data: options.resolutionData } : {}),
     }),
   )
-  return requireApproval(row, 'resolveApproval')
+  return parseApproval(row, 'resolveApproval')
 }
 
 export const resumeApproval = async (id: string): Promise<Approval> => {
   const row = await requestJson<unknown>(`/approvals/${encodeURIComponent(id)}/resume`, jsonInit('POST'))
-  return requireApproval(row, 'resumeApproval')
+  return parseApproval(row, 'resumeApproval')
 }
 
 export const resolveSubmissionApproval = async (
@@ -223,7 +212,7 @@ export const resolveSubmissionApproval = async (
     `/approvals/submissions/${encodeURIComponent(id)}/resolve`,
     jsonInit('POST', { status, ...(rejectionReason ? { rejection_reason: rejectionReason } : {}) }),
   )
-  return requireApproval(row, 'resolveSubmissionApproval')
+  return parseApproval(row, 'resolveSubmissionApproval')
 }
 
 export const getSkillSubmissionPreview = (id: string) =>

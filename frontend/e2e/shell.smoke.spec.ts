@@ -28,15 +28,19 @@ test.describe('shell critical path', () => {
     await expect(page).toHaveURL(/session=sess-keep/)
 
     // Menu item for 智能体 always navigates to clean /chat.
-    await page.locator('.shell-sider').getByText('智能体', { exact: true }).click()
+    await page.locator('.shell-sider').getByRole('menuitem', { name: /智能体/ }).click()
     await expect(page).toHaveURL(/#\/chat/)
     expect(page.url()).not.toContain('session=')
 
     // Deep link into a default-collapsed group (governance is 3rd; not in default open pair).
     await page.goto('/#/trace', { waitUntil: 'domcontentloaded' })
     await expect(page).toHaveURL(/#\/trace/)
-    await expect(page.locator('.shell-sider').getByText('观测', { exact: true })).toBeVisible()
-    await expect(page.locator('.shell-sider').getByText('运行治理', { exact: true })).toBeVisible()
+    const sider = page.locator('.shell-sider')
+    if (await sider.evaluate((element) => element.classList.contains('ant-layout-sider-collapsed'))) {
+      await page.getByRole('button', { name: '折叠或展开导航' }).click()
+    }
+    await expect(sider.getByText('观测', { exact: true })).toBeVisible()
+    await expect(sider.getByText('运行治理', { exact: true })).toBeVisible()
   })
 
   test('limited scopes drop empty navigation groups', async ({ page }) => {
@@ -62,7 +66,7 @@ test.describe('shell critical path', () => {
     await expect(page.locator('.shell-footer .shell-identity')).toBeVisible()
     await expect(page.locator('.shell-footer').getByText('设置', { exact: true })).toBeVisible()
 
-    await page.locator('.shell-sider').getByText('智能体', { exact: true }).click()
+    await page.locator('.shell-sider').getByRole('menuitem', { name: /智能体/ }).click()
     await expect(page).toHaveURL(/#\/chat/)
     await expect(page.locator('.shell-sider.ant-layout-sider-collapsed')).toBeVisible()
     await expect(page.locator('.chat-conversations-rail').getByText('对话', { exact: true })).toBeVisible()

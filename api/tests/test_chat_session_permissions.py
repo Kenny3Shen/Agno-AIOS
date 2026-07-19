@@ -3,13 +3,13 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
-from fastapi.routing import APIRoute
 from pydantic import ValidationError
 from starlette.requests import Request
 from api.auth.ownership import assert_owned_resource
 from api.routes import chat
 from api.services import chat_session_service, security_run_runtime
 from api.services.chat_run_events import ChatRunEvent
+from api.tests.route_fakes import route_dependency
 import pytest
 
 
@@ -70,15 +70,8 @@ async def test_session_list_service_passes_owner_filter_to_query():
     assert captured["include_archived"] is False
 
 
-def route_dependency(endpoint_name: str):
-    for route in chat.router.routes:
-        if isinstance(route, APIRoute) and getattr(route.endpoint, "__name__", "") == endpoint_name:
-            return route.dependant.dependencies[0].call
-    raise AssertionError(f"missing route for {endpoint_name}")
-
-
 def test_chat_write_route_rejects_guest_actor():
-    dependency = route_dependency("chat_agent")
+    dependency = route_dependency(chat.router, "chat_agent")
 
     with pytest.raises(HTTPException) as exc:
         dependency(user=actor("g1", "guest"))
@@ -92,7 +85,7 @@ def test_chat_request_requires_a_session_id():
 
 
 def test_chat_read_route_allows_guest_actor():
-    dependency = route_dependency("list_sessions")
+    dependency = route_dependency(chat.router, "list_sessions")
 
     assert dependency(user=actor("g1", "guest")).id == "g1"
 

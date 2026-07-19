@@ -6,7 +6,7 @@ export const runtimeRanges = [
   { label: '7d', value: '7d' },
 ] as const
 
-export function failureRate(errors: number, runs: number) {
+function failureRate(errors: number, runs: number) {
   return runs > 0 ? Number(((errors / runs) * 100).toFixed(2)) : 0
 }
 

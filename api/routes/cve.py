@@ -13,8 +13,8 @@ from api.auth.claims import ADMIN_SCOPE
 from api.auth.models import User
 from api.auth.scopes import require_scope
 from api.models.schemas import CveSearchRequest
+from api.persistence.cves import search_cve_rows
 from api.services.audit_service import audit_request_context, record_audit_event_async
-from api.services.cve_service import search_cves
 from api.tasks.update_cve import (
     CVEUpdateAlreadyRunningError,
     main as update_cve_main,
@@ -38,7 +38,7 @@ async def search_cve(
 ) -> dict:
     """Search CVEs by ID and/or keyword with Agno-style ``data`` / ``meta`` pagination."""
     try:
-        items, total = await search_cves(
+        items, total = await search_cve_rows(
             query=request.query,
             source=request.source,
             page=request.page,

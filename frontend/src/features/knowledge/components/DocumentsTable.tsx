@@ -12,7 +12,6 @@ export function DocumentsTable({
   filter,
   loading,
   selectedId,
-  vertical,
   onFilterChange,
   onSelect,
   onUpdate,
@@ -31,7 +30,6 @@ export function DocumentsTable({
   filter: string
   loading: boolean
   selectedId: string
-  vertical: boolean
   onFilterChange: (value: string) => void
   onSelect: (document: Document) => void
   onUpdate: (document: Document) => void
@@ -101,7 +99,7 @@ export function DocumentsTable({
           if (!mapped) return
           onSortChange(mapped, active.order === 'ascend' ? 'asc' : 'desc')
         }}
-        scroll={vertical ? { x: 1100 } : { x: 1100 }}
+        scroll={{ x: 1100 }}
         rowClassName={(row) => (row.id === selectedId ? 'selected-table-row' : '')}
         onRow={(row) => ({ onClick: () => onSelect(row) })}
         columns={[

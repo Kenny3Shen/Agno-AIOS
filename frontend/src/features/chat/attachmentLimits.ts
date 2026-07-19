@@ -1,8 +1,8 @@
 /** Client-side chat attachment limits (aligned with api/services/chat_media.py). */
 
 export const MAX_CHAT_FILES = 8
-export const MAX_CHAT_FILE_BYTES = 20 * 1024 * 1024
-export const MAX_CHAT_TOTAL_BYTES = 40 * 1024 * 1024
+const MAX_CHAT_FILE_BYTES = 20 * 1024 * 1024
+const MAX_CHAT_TOTAL_BYTES = 40 * 1024 * 1024
 
 export type AttachmentLimitError =
   | { code: 'too_many'; max: number }

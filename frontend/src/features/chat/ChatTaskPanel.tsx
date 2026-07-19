@@ -22,9 +22,9 @@ import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 import { buildTraceSearch, emptyTraceFilters } from '@/features/trace/utils'
 import { ApiError } from '@/shared/api/client'
 
-export type ConversationGroupKey = 'today' | 'yesterday' | 'earlier'
+type ConversationGroupKey = 'today' | 'yesterday' | 'earlier'
 
-export interface ChatTaskPanelProps {
+interface ChatTaskPanelProps {
   /** Embedded in Chat page (default) or mobile drawer fallback. */
   variant?: 'page' | 'drawer'
   onNavigate?: () => void
@@ -38,7 +38,7 @@ export interface ConversationListItem {
   title: string
 }
 
-export function buildConversationItems(sessions: ChatSession[], now = Date.now()): ConversationListItem[] {
+function buildConversationItems(sessions: ChatSession[], now = Date.now()): ConversationListItem[] {
   const today = dayjs(now).startOf('day')
   return [...sessions]
     .sort((left, right) => right.updated_at - left.updated_at)
@@ -61,7 +61,7 @@ export function buildConversationItems(sessions: ChatSession[], now = Date.now()
     })
 }
 
-export function filterConversationItems(items: ConversationListItem[], query: string): ConversationListItem[] {
+function filterConversationItems(items: ConversationListItem[], query: string): ConversationListItem[] {
   const q = query.trim().toLowerCase()
   if (!q) return items
   return items.filter((item) => {

@@ -81,21 +81,16 @@ Collect 按 `api/utils/url2md_utils.domain_rules` 源站爬取文章入库（`co
 - `AUTH_JWT_SECRET`：JWT 密钥；生产环境必须替换默认值。
 - `TAIS_BOOTSTRAP_ADMIN_EMAIL`、`TAIS_BOOTSTRAP_ADMIN_PASSWORD`：可选的初始管理员。
 - `TAIS_KNOWLEDGE_*`：Knowledge chunk、search、rerank 与 PgVector 配置。
+- MCP 服务配置以 Settings / PostgreSQL 为准；残留 `.config/mcp/mcp_config.json` 只会归档为 `.migrated`，不会再导入。
 - `VITE_API_PROXY_TARGET`：前端开发代理地址。
 
-### 模型工具调用并行度
+### 模型运行策略
 
-在“系统设置 → 模型连接 → 编辑 → Advanced”中，可为每个非 DeepSeek 模型设置“并行工具调用”。该配置持久化为 `parallel_tool_calls`：
+设置页只编辑连接信息（名称、供应商、Model ID、密钥、Base URL、启用）。新建模型或切换供应商时，前端只提交这些字段；后端 `model_capabilities` 统一补齐协议、structured output、reasoning、重试、并行工具调用和 Live Search 的最优/兜底值。同一供应商的既有运行参数保持不变，避免无关编辑改写已验证的运行配置。
 
-- **启用**：向模型 API 发送 `parallel_tool_calls=true`。
-- **禁用**：向模型 API 发送 `parallel_tool_calls=false`；对于不支持并行工具调用的网关或模型应选择此项。
-- **留空**：不发送该参数，使用模型提供商默认值。
+模型工厂仍支持已持久化的 `parallel_tool_calls`、`retries` / `delay_between_retries` / `exponential_backoff` 与可选 `http_max_retries`；默认使用 4 次指数退避。Responses 与 Chat Completions 共享同一模型工厂，因此策略在聊天 Run 与会话摘要路径一致生效。
 
-Responses 协议通过 Agno `OpenAIResponses.parallel_tool_calls` 传递；Chat Completions 协议通过 Agno `OpenAIChat` / `OpenAILike` 的 `request_params` 传递。聊天 Run 和会话摘要使用同一模型工厂，因此该设置同时覆盖两条调用路径。
-
-模型配置支持请求重试：`retries` / `delay_between_retries` / `exponential_backoff`（Agno 应用层，覆盖 Chat Completions 与 Responses），以及可选 `http_max_retries`（OpenAI SDK 连接层）。默认 4 次指数退避，可在设置页按模型调整。
-
-模型供应商支持 DeepSeek / OpenAI / **xAI（Agno 官方 `xAI` 类，Chat Completions）** / OpenAI-compatible。 xAI 可配置 structured output 与 Live Search；Chat 输入区可开关联网搜索与知识库检索。 附件区使用 `@ant-design/x` `Attachments`（占位拖放/点击、数量提示与体积限制）。 **Chat 文档附件经 Agno DoclingReader 转为 Markdown 注入消息**（图片/音视频仍走 Agno media）； **Knowledge 结构化文档（PDF/DOCX/PPTX/HTML 等）默认 `DoclingReader`**。 设置页模型表单仅配置连接信息（名称/供应商/Model ID/密钥/Base URL）；其余模型参数由能力画像解析（optimal → 配置 → 请求覆盖 → fallback）；xAI 不使用 `reasoning_effort`，靠推理/非推理 model id。历史 Grok 配置（`api.x.ai` 或 `model_id` 以 `grok` 开头）在读路径 `normalized` 时映射为 `provider=xai`（不再走 OpenAI Responses）；不会在每次 load 写回数据库，显式保存或完整性修复时才持久化。 残留 `config/model_config.json` 一律归档为 `*.imported` 且**永不导入**（无 `TAIS_MODEL_CONFIG_FILE` 覆盖）；空表只 seed 内置默认模型，连接与密钥以 Settings/Postgres 为准。
+模型供应商支持 DeepSeek / OpenAI / **xAI（Agno 官方 `xAI` 类，Chat Completions）** / OpenAI-compatible。 xAI 可配置 structured output 与 Live Search；Chat 输入区可开关联网搜索与知识库检索。 附件区使用 `@ant-design/x` `Attachments`（占位拖放/点击、数量提示与体积限制）。 **Chat 文档附件经 Agno DoclingReader 转为 Markdown 注入消息**（图片/音视频仍走 Agno media）； **Knowledge 结构化文档（PDF/DOCX/PPTX/HTML 等）默认 `DoclingReader`**。 设置页模型表单仅配置连接信息（名称/供应商/Model ID/密钥/Base URL）；其余模型参数由能力画像解析（optimal → 配置 → 请求覆盖 → fallback）；xAI 不使用 `reasoning_effort`，靠推理/非推理 model id。历史 Grok 配置（`api.x.ai` 或 `model_id` 以 `grok` 开头）会在模型配置表初始化时规范写回为 `provider=xai`、Chat Completions，后续加载不再执行逐行兼容迁移。残留 `config/model_config.json` 一律归档为 `*.imported` 且**永不导入**（无 `TAIS_MODEL_CONFIG_FILE` 覆盖）；空表只 seed 内置默认模型，连接与密钥以 Settings/Postgres 为准。
 
 模型工厂把 structured output 模式存在实例私有属性 `_tais_structured_output_mode`，**不写** Agno `model.metadata`，避免 OpenAI Responses / Chat 把内部标记当作 HTTP `metadata` 发给 Grok 等不兼容网关（会 400 `Argument not supported: metadata`）。
 
@@ -119,9 +114,9 @@ React 工作台通过共享 API client 携带 token 请求 FastAPI；后端检�
 
 Memory API 仅使用 `/api/memories`（Agno 风格 `data`/`meta`，查询参数 `search_content`，主键字段 `memory_id`）。 列表行仅认 `memory_id`/`memory`/`topics` 等 Agno 字段，不再兼容 `id`/`content`/`topic` 别名。
 
-Trace 列表/会话 `GET /api/traces` 与 `GET /api/traces/sessions` 使用 Agno 风格 `data`/`meta`（status 走 Agno SQL 过滤；sessions 优先 SQL 按 session_id 聚合分页，失败时回退有界扫描并可 `meta.truncated`）；list/detail 对外只暴露 Agno 风格 `duration`（由存储层 `duration_ms` 投影，不改 Agno 表结构），list 尽量附带 root `input`（页面内一次 spans 批量查询，避免 per-trace N+1）。detail 仍为工作台自研契约。 Trace 深链 query 仅使用 `session_id`/`run_id`/`selected_session`/`trace`（不再识别 `session`/`run`）；Dashboard 最近失败亦走该契约。
+Trace 列表/会话 `GET /api/traces` 与 `GET /api/traces/sessions` 使用 Agno 风格 `data`/`meta`（status 走 Agno SQL 过滤；sessions 通过 SQL 按 `session_id` 聚合分页；仅 Trace 列表在状态 reconciliation 收窄当前页时以 `meta.truncated` 标注近似总数）；list/detail 对外只暴露 Agno 风格 `duration`（由存储层 `duration_ms` 投影，不改 Agno 表结构），list 尽量附带 root `input`（页面内一次 spans 批量查询，避免 per-trace N+1）。detail 仍为工作台自研契约。 Trace 深链 query 仅使用 `session_id`/`run_id`/`selected_session`/`trace`（不再识别 `session`/`run`）；Dashboard 最近失败亦走该契约。
 
-Approvals HITL 列表 `GET /api/approvals` 使用 Agno 风格 `data`/`meta`；详情/resolve/resume 与 Skill/MCP `submissions` 仍为工作台自研契约（身份 enrich、拒绝理由、Run 恢复）。HITL 响应仅 enrich `submitted_by`/`resolved_by` 对象（无 `*_email` 双字段）；拒绝理由写入 `resolution_data.note`（Agno 约定），请求体仍用 `rejection_reason`。 审批中心表格对 HITL 与上传审批 submissions 均走服务端 `page`/`limit`；`kind=all` 时按「submissions 在前」虚拟合并两路分页结果。Audit `GET /api/audit/logs` 同样使用 `data`/`meta`。 CVE `POST /api/cve/search` 与 Collect `POST /api/url2md/articles/search`（及 sources）亦同。 Knowledge `GET /api/knowledge` 列表行为 `data`/`meta`（另附 `status` RAG 快照）。 Skills `GET /api/skills` 与 Notifications `GET /api/notifications`（`meta.unread_count`）亦同。 Agent Eval suites/cases 与 MCP components/tokens 列表亦同。
+Approvals HITL 列表 `GET /api/approvals` 使用 Agno 风格 `data`/`meta`；详情/resolve/resume 与 Skill/MCP `submissions` 仍为工作台自研契约（身份 enrich、拒绝理由、Run 恢复）。HITL 响应仅 enrich `submitted_by`/`resolved_by` 对象（无 `*_email` 双字段）；拒绝理由写入 `resolution_data.note`（Agno 约定），请求体仍用 `rejection_reason`。 审批中心表格对 HITL 与上传审批 submissions 均走服务端 `page`/`limit`；`kind=all` 时按「submissions 在前」虚拟合并两路分页结果。Audit `GET /api/audit/logs` 同样使用 `data`/`meta`。 CVE `POST /api/cve/search` 与 Collect `POST /api/url2md/articles/search`（及 sources）亦同。 Knowledge `GET /api/knowledge` 列表行为 `data`/`meta`（`meta.ingest_defaults` 只提供入库表单默认值；不暴露进度或运行状态）。 Skills `GET /api/skills` 与 Notifications `GET /api/notifications`（`meta.unread_count`）亦同。 Agent Eval suites/cases 与 MCP components/tokens 列表亦同。
 
 `GET /api/approvals/count` 返回 Agno 风格 `{ count }`（pending HITL），供导航 badge 与 dashboard 快照复用。 Dashboard `snapshots.approvals` 提供 `{ pending, approved, rejected }`（不再输出 `pending_approvals` 别名）。
 
@@ -129,7 +124,7 @@ Approvals HITL 列表 `GET /api/approvals` 使用 Agno 风格 `data`/`meta`；�
 
 列表分页 `meta` 由共用 `api/utils/pagination.pagination_meta` 生成（Memory/Trace/Approvals/Chat sessions/Evals）；TypedDict `PaginationMeta` 供 Memory/Approvals 等服务层复用。前端 Knowledge 文档列表亦走 `normalizePaginatedList`。
 
-Agent Evals 的 Agno 结果读路径 `GET /api/agent-evals/agno-runs` 使用 Agno 风格 `data`/`meta`，行字段对齐 `id` + `eval_data`（保留 `passed`/`score` 投影）；前端 Runs 表按 `page`/`limit` 受控分页；Failures `GET /failures` 为 `data`/`meta`（默认取近期 50 条）；suites/cases/runs/replay 与 `/trends` 仍为工作台自研。
+Agent Evals 的 Agno 结果读路径 `GET /api/agent-evals/agno-runs` 使用 Agno 风格 `data`/`meta`，行字段对齐 `id` + `eval_data`（保留 `passed`/`score` 投影）；前端 Runs 表按 `page`/`limit` 受控分页；Failures `GET /failures` 为 `data`/`meta`（默认取近期 50 条）；suites/cases/runs/replay 仍为工作台自研。
 
 ```mermaid
 flowchart LR
@@ -193,7 +188,7 @@ flowchart LR
 
 ### Knowledge 入库与更新
 
-- **Drawer UX**：文件接受/落盘后立即返回 `status=processing` 占位；**解析与向量化在后台 Task** 执行，Drawer 不阻塞。失败经 `notify_background_task_failure` 通知；列表延迟刷新展示完成行。
+- **Drawer UX**：文件接受/落盘后立即返回 `status=processing` 占位；**解析与向量化在后台 Task** 执行，Drawer 不阻塞。失败经 `notify_background_task_failure` 通知；前端不轮询，用户可按需刷新列表获取完成行。
 - 更新采用安全切换：新内容先写入临时 shadow ID，成功后再切换到原文档 ID；失败时保留旧文档与旧向量，避免检索空窗。
 - 按文件后缀自动选择 Reader/分块策略，支持 Markdown、文本、JSON、CSV、代码、PDF、DOCX（Docling）。
 - 相关实现见 `api/routes/knowledge.py`（`_schedule_knowledge_ingest`）与 `frontend/src/features/knowledge/`。入库路径为后台 Task，直接绑定当前 ASGI event loop；前端不维护进度 SSE 状态，也无 job 轮询 API。
@@ -334,7 +329,7 @@ Rejected by administrator: <管理员填写的理由>
 | 前端拒绝必填 | UX 与 API 双重校验，保证 note 始终非空 |
 | 审计事件 | `skill.simulated_containment.executed`、`approvals.*` 与策略审计对接 |
 
-**刻意不做的事**：不手工改写 Agno session JSON、trace ID 或拼接 continuation spans。不再维护独立的 `hitl_paused_runs` 表；启动时会 `DROP TABLE IF EXISTS` 清理历史残留。
+**刻意不做的事**：不手工改写 Agno session JSON、trace ID 或拼接 continuation spans。不再维护独立的 `hitl_paused_runs` 表；历史残留不参与运行时，可由数据库运维按需清理。
 
 #### 6. 数据与状态
 
@@ -503,6 +498,7 @@ Vitest 默认关闭 CSS 解析、限制 `maxWorkers=4`、使用 instant `user-ev
 ```
 
 - `executor.ref` 必须来自内置目录：`security-operations`、`safe-fallback`（`GET /api/workflows/executors`）。
+- 持久化 DSL 使用 `executor.ref`、Condition `steps` / `else`、Loop `max_iterations` / `end_condition`、`workflow_ref.workflow_id`；启动时会幂等迁移旧定义与版本快照，写入接口不再接受旧别名。
 - PR4 支持嵌套 `step` / `parallel` / `condition` / `loop` / `router` / `workflow_ref`。
 - 约束：最大深度 5、总节点 ≤40、叶子 Agent 步 ≤20；Parallel 至少 2 分支；Condition/Loop 使用 CEL（`cel-python`）。
 - 编译期拒绝 HITL 字段与 Parallel 内 executor HITL（与 Agno 一致）。

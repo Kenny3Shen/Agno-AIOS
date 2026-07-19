@@ -210,14 +210,6 @@ async def enrich_approval_actors(
     }
 
 
-async def enrich_approval(approval: ApprovalRecord) -> ApprovalRecord:
-    return await enrich_approval_actors(approval)
-
-
-def _scoped_user_id(actor: ActorLike | None, requested_user_id: str | None) -> str | None:
-    return scope_user_id(actor, requested_user_id)
-
-
 def _query_kwargs(params: ApprovalListParams, actor: ActorLike | None) -> ApprovalQueryKwargs:
     safe_limit = max(1, min(int(params.limit or 50), 100))
     safe_page = max(1, int(params.page or 1))
@@ -229,7 +221,7 @@ def _query_kwargs(params: ApprovalListParams, actor: ActorLike | None) -> Approv
         "agent_id": params.agent_id,
         "team_id": params.team_id,
         "workflow_id": params.workflow_id,
-        "user_id": _scoped_user_id(actor, params.user_id),
+        "user_id": scope_user_id(actor, params.user_id),
         "schedule_id": params.schedule_id,
         "run_id": params.run_id,
         "limit": safe_limit,
@@ -399,7 +391,7 @@ async def get_pending_approval_count(
     Non-admin actors are forced to their own user_id; admins may pass optional
     ``user_id`` filter (None = global pending count).
     """
-    scoped = _scoped_user_id(actor, user_id)
+    scoped = scope_user_id(actor, user_id)
     try:
         raw = await get_async_agno_postgres_db().get_pending_approval_count(user_id=scoped)
         return max(0, int(raw or 0))
@@ -436,7 +428,7 @@ async def get_approval_status_counts(
     ``get_approvals(..., limit=1)`` total. Scope isolation matches list.
     Queries run in parallel.
     """
-    scoped = _scoped_user_id(actor, user_id)
+    scoped = scope_user_id(actor, user_id)
     db = get_async_agno_postgres_db()
 
     async def _pending() -> int:
@@ -478,7 +470,11 @@ async def get_approval_status_counts(
 
 async def get_approval_record(approval_id: str) -> ApprovalRecord | None:
     approval = await get_async_agno_postgres_db().get_approval(approval_id)
-    return await enrich_approval(normalize_approval(approval)) if approval is not None else None
+    return (
+        await enrich_approval_actors(normalize_approval(approval))
+        if approval is not None
+        else None
+    )
 
 
 async def resolve_approval_record(
@@ -505,4 +501,4 @@ async def resolve_approval_record(
     )
     if resolved is None:
         raise ApprovalResolveConflictError("Approval is not pending")
-    return await enrich_approval(normalize_approval(resolved))
+    return await enrich_approval_actors(normalize_approval(resolved))

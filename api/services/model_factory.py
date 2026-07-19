@@ -101,9 +101,13 @@ def _merge_request_params(kwargs: dict[str, Any], extra: dict[str, Any]) -> None
 def build_agno_model(
     config: dict[str, Any], *, reasoning_effort: str | None = None
 ) -> Model:
-    provider = str(config.get("provider") or "openai-compatible")
+    provider = str(config.get("provider") or "").strip()
+    if not provider:
+        raise ValueError("Model config requires provider")
     protocol = str(config.get("api_protocol") or "chat-completions")
     model_id = str(config.get("model_id") or "").strip()
+    if not model_id:
+        raise ValueError("Model config requires model_id")
     api_key = str(config.get("api_key") or "").strip() or None
     base_url = str(config.get("base_url") or "").strip() or None
     output_mode = _output_mode(config.get("structured_output_mode"))
@@ -148,7 +152,7 @@ def build_agno_model(
     if provider == "xai":
         # Official Agno xAI uses Chat Completions (OpenAI-compatible) at api.x.ai.
         kwargs: dict[str, Any] = {
-            "id": model_id or "grok-4-1-fast-non-reasoning-latest",
+            "id": model_id,
             "api_key": api_key,
             "base_url": base_url or "https://api.x.ai/v1",
             "supports_native_structured_outputs": native_outputs,
@@ -194,15 +198,6 @@ def build_agno_model(
         return _with_output_mode(OpenAILike(**kwargs), output_mode)
 
     raise ValueError(f"Unsupported model provider: {provider}")
-
-
-def get_structured_output_mode(model: Model) -> str | None:
-    """Read T.A.I.S structured-output mode stored on a built model instance."""
-    value = getattr(model, STRUCTURED_OUTPUT_MODE_ATTR, None)
-    if value is None:
-        return None
-    text = str(value).strip().lower()
-    return text or None
 
 
 def _output_mode(value: Any) -> str:

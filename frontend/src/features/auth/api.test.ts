@@ -2,7 +2,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { getCurrentUser, login, logout } from './api'
 import { server } from '@/test/server'
-import { AUTH_TOKEN_STORAGE_KEY } from '@/shared/auth/storage'
+import { getToken, setToken } from '@/shared/auth/storage'
 import { hasScope, roleOf } from '@/shared/auth/permissions'
 
 describe('authentication behavior', () => {
@@ -20,7 +20,7 @@ describe('authentication behavior', () => {
   })
 
   it('sends the stored bearer token when restoring the current user', async () => {
-    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, 'stored')
+    setToken('stored')
     server.use(
       http.get('/api/auth/users/me', ({ request }) => {
         expect(request.headers.get('authorization')).toBe('Bearer stored')
@@ -31,17 +31,17 @@ describe('authentication behavior', () => {
   })
 
   it('clears an invalid token after a 401 response', async () => {
-    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, 'expired')
+    setToken('expired')
     server.use(http.get('/api/auth/users/me', () => new HttpResponse(null, { status: 401 })))
     await expect(getCurrentUser()).rejects.toThrow('Request failed (401)')
-    expect(localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull()
+    expect(getToken()).toBeNull()
   })
 
   it('clears local authentication even when remote logout fails', async () => {
-    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, 'stored')
+    setToken('stored')
     server.use(http.post('/api/auth/logout', () => new HttpResponse(null, { status: 503 })))
     await logout()
-    expect(localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull()
+    expect(getToken()).toBeNull()
   })
 
   it('grants all scopes to administrators and explicit scopes to users', () => {

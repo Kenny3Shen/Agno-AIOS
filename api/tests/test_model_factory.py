@@ -1,8 +1,9 @@
 from agno.models.deepseek import DeepSeek
 from agno.models.openai import OpenAIChat, OpenAILike, OpenAIResponses
+import pytest
 
-from api.services.model_factory import build_agno_model, get_structured_output_mode
-from api.services.model_config_service import ModelConfigStore
+from api.services.model_factory import STRUCTURED_OUTPUT_MODE_ATTR, build_agno_model
+from api.services.model_config_service import ModelConfig, ModelConfigStore
 
 
 def config(**updates):
@@ -130,6 +131,16 @@ def test_missing_protocol_defaults_to_chat_completions():
     assert isinstance(model, OpenAILike)
 
 
+def test_missing_provider_is_rejected():
+    with pytest.raises(ValueError, match="Model config requires provider"):
+        build_agno_model({key: value for key, value in config().items() if key != "provider"})
+
+
+def test_missing_model_id_is_rejected():
+    with pytest.raises(ValueError, match="Model config requires model_id"):
+        build_agno_model({key: value for key, value in config().items() if key != "model_id"})
+
+
 def test_deepseek_forces_json_chat_capabilities():
     model = build_agno_model(
         config(
@@ -141,7 +152,7 @@ def test_deepseek_forces_json_chat_capabilities():
     )
 
     assert isinstance(model, DeepSeek)
-    assert get_structured_output_mode(model) == "json"
+    assert getattr(model, STRUCTURED_OUTPUT_MODE_ATTR) == "json"
     assert getattr(model, "metadata", None) in (None, {})
     assert model.supports_native_structured_outputs is False
 
@@ -149,7 +160,7 @@ def test_deepseek_forces_json_chat_capabilities():
 def test_none_output_mode_normalizes_to_json_mode():
     model = build_agno_model(config(structured_output_mode="none"))
 
-    assert get_structured_output_mode(model) == "json"
+    assert getattr(model, STRUCTURED_OUTPUT_MODE_ATTR) == "json"
     assert getattr(model, "metadata", None) in (None, {})
     assert model.supports_native_structured_outputs is False
 
@@ -173,8 +184,8 @@ def test_structured_output_mode_does_not_pollute_request_metadata():
 
     assert isinstance(responses, OpenAIResponses)
     assert isinstance(chat, OpenAILike)
-    assert get_structured_output_mode(responses) == "native"
-    assert get_structured_output_mode(chat) == "json"
+    assert getattr(responses, STRUCTURED_OUTPUT_MODE_ATTR) == "native"
+    assert getattr(chat, STRUCTURED_OUTPUT_MODE_ATTR) == "json"
     assert "metadata" not in responses.get_request_params()
     assert "metadata" not in chat.get_request_params()
     assert getattr(responses, "metadata", None) in (None, {})
@@ -182,18 +193,18 @@ def test_structured_output_mode_does_not_pollute_request_metadata():
 
 
 def test_native_provider_does_not_require_custom_base_url():
-    store = ModelConfigStore.from_raw(
-        {
-            "active_model_id": "openai",
-            "models": [
-                config(
-                    id="openai",
-                    name="OpenAI",
-                    provider="openai",
-                    base_url="",
-                )
-            ],
-        }
+    store = ModelConfigStore(
+        active_model_id="openai",
+        models=[
+            ModelConfig(
+                id="openai",
+                name="OpenAI",
+                model_id="model-1",
+                provider="openai",
+                api_key="secret",
+                base_url="",
+            )
+        ],
     )
 
     assert store.model_for_run().provider == "openai"
@@ -267,7 +278,7 @@ def test_xai_provider_uses_official_agno_class():
     assert model.id == "grok-4.5"
     assert str(model.base_url).rstrip("/") == "https://api.x.ai/v1"
     assert model.retries == 4
-    assert get_structured_output_mode(model) == "json"
+    assert getattr(model, STRUCTURED_OUTPUT_MODE_ATTR) == "json"
     assert getattr(model, "metadata", None) in (None, {})
 
 

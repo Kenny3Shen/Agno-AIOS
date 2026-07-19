@@ -21,12 +21,15 @@ const setStatus = async (label: RegExp) => {
   await user.click(await screen.findByText(label))
 }
 
+const adminCurrentUserHandler = () =>
+  http.get('/api/auth/users/me', () =>
+    HttpResponse.json({ id: 'admin-1', email: 'admin@example.com', role: 'admin', scopes: ['admin'] })
+  )
+
 describe('ApprovalsPage', () => {
   it('defaults to pending workflow HITL on-call filter', async () => {
     server.use(
-      http.get('/api/auth/users/me', () =>
-        HttpResponse.json({ id: 'admin-1', email: 'admin@example.com', role: 'admin', scopes: ['admin'] })
-      ),
+      adminCurrentUserHandler(),
       http.get('/api/approvals', ({ request }) => {
         const url = new URL(request.url)
         expect(url.searchParams.get('status')).toBe('pending')
@@ -47,9 +50,7 @@ describe('ApprovalsPage', () => {
 
   it('shows submitted skill uploads and lets an administrator approve them', async () => {
     server.use(
-      http.get('/api/auth/users/me', () =>
-        HttpResponse.json({ id: 'admin-1', email: 'admin@example.com', role: 'admin', scopes: ['admin'] })
-      ),
+      adminCurrentUserHandler(),
       http.get('/api/approvals', () =>
         HttpResponse.json({
           data: [],
@@ -168,9 +169,7 @@ describe('ApprovalsPage', () => {
 
   it('shows a failed chat HITL resume and lets an administrator retry it', async () => {
     server.use(
-      http.get('/api/auth/users/me', () =>
-        HttpResponse.json({ id: 'admin-1', email: 'admin@example.com', role: 'admin', scopes: ['admin'] })
-      ),
+      adminCurrentUserHandler(),
       http.get('/api/approvals', ({ request }) => {
         const url = new URL(request.url)
         const status = url.searchParams.get('status')
@@ -227,9 +226,7 @@ describe('ApprovalsPage', () => {
   })
   it('surfaces resolve failures to the operator', async () => {
     server.use(
-      http.get('/api/auth/users/me', () =>
-        HttpResponse.json({ id: 'admin-1', email: 'admin@example.com', role: 'admin', scopes: ['admin'] })
-      ),
+      adminCurrentUserHandler(),
       http.get('/api/approvals', () =>
         HttpResponse.json({
           data: [
@@ -267,6 +264,31 @@ describe('ApprovalsPage', () => {
     expect(
       await screen.findByText(/审批处理失败|Unable to resolve the approval|downstream continue failed/i)
     ).toBeTruthy()
+  })
+
+  it('surfaces unexpected deep-link lookup failures', async () => {
+    const previousHash = window.location.hash
+    window.location.hash = '#/approvals?approval_id=appr-unavailable'
+    try {
+      server.use(
+        adminCurrentUserHandler(),
+        http.get('/api/approvals', () =>
+          HttpResponse.json({
+            data: [],
+            meta: { page: 1, limit: 20, total_pages: 0, total_count: 0, search_time_ms: 0 },
+          })
+        ),
+        http.get('/api/approvals/appr-unavailable', () =>
+          HttpResponse.json({ detail: 'approval lookup unavailable' }, { status: 500 })
+        ),
+      )
+
+      renderWithQuery(<ApprovalsPage />)
+
+      expect(await screen.findByText('approval lookup unavailable')).toBeTruthy()
+    } finally {
+      window.location.hash = previousHash
+    }
   })
 
 })

@@ -7,8 +7,6 @@ from loguru import logger
 
 from api.persistence.audit_logs import failed_chat_run_ids_async
 
-FAILURE_STATUSES = frozenset({"ERROR", "FAILED", "FAILURE"})
-
 
 async def reconcile_trace_statuses(
     traces: Iterable[dict[str, Any]],

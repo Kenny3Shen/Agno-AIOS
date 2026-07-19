@@ -57,12 +57,8 @@ export const sessionsQuery = (options: SessionsQueryOptions = {}) => {
       }),
     initialPageParam: 1,
     placeholderData: keepPreviousData,
-    getNextPageParam: (lastPage) => {
-      const { page, total_pages } = lastPage.meta
-      if (total_pages > 0 && page < total_pages) return page + 1
-      if (total_pages <= 0 && lastPage.data.length >= SESSION_PAGE_SIZE) return page + 1
-      return undefined
-    },
+    getNextPageParam: (lastPage) =>
+      lastPage.meta.page < lastPage.meta.total_pages ? lastPage.meta.page + 1 : undefined,
   })
 }
 

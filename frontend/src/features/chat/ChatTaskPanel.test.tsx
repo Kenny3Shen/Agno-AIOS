@@ -6,14 +6,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '@/shared/i18n'
 import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
-import { buildConversationItems, filterConversationItems, ChatTaskPanel } from './ChatTaskPanel'
+import { ChatTaskPanel } from './ChatTaskPanel'
 import type { ChatSession } from './types'
+import { chatSessionFixture } from './testFixtures'
 
 const historyPush = vi.fn<(path: string) => void>()
 
 vi.mock('@tanstack/react-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tanstack/react-router')>()),
-  useRouter: () => ({ history: { push: historyPush, replace: vi.fn() } }),
+  useRouter: () => ({ history: { push: historyPush, replace: vi.fn<(path: string) => void>() } }),
   useRouterState: ({ select }: { select: (state: { location: { searchStr: string } }) => unknown }) =>
     select({ location: { searchStr: '' } }),
 }))
@@ -37,108 +38,6 @@ function mockSessions(data: ChatSession[], options?: { error?: boolean; totalPag
     }),
   )
 }
-
-describe('conversation list mapping', () => {
-  it('filters conversations by title or session id', () => {
-    const items = buildConversationItems([
-      {
-        session_id: 'abc-risk',
-        preview: '分析资产风险',
-        created_at: 1,
-        updated_at: 2,
-      },
-      {
-        session_id: 'other',
-        preview: 'Hello',
-        created_at: 1,
-        updated_at: 3,
-      },
-    ])
-    expect(filterConversationItems(items, '风险').map((item) => item.key)).toEqual(['abc-risk'])
-    expect(filterConversationItems(items, 'OTHER').map((item) => item.key)).toEqual(['other'])
-    expect(filterConversationItems(items, '  ').map((item) => item.key)).toEqual(['other', 'abc-risk'])
-  })
-
-  it('prefixes workflow sessions with [WF] for recents scanning', () => {
-    const items = buildConversationItems([
-      {
-        session_id: 'wf-1',
-        session_type: 'workflow',
-        preview: 'IR triage',
-        created_at: 1,
-        updated_at: 2,
-      },
-      {
-        session_id: 'agent-1',
-        session_type: 'agent',
-        preview: 'CVE lookup',
-        created_at: 1,
-        updated_at: 3,
-      },
-      {
-        session_id: 'wf-2',
-        session_type: 'workflow',
-        title: '[WF] already tagged',
-        preview: 'x',
-        created_at: 1,
-        updated_at: 4,
-      },
-      {
-        session_id: 'team-1',
-        session_type: 'team',
-        preview: 'research report',
-        created_at: 1,
-        updated_at: 5,
-      },
-      {
-        session_id: 'team-2',
-        session_type: 'team',
-        title: '[Team] already tagged',
-        preview: 'x',
-        created_at: 1,
-        updated_at: 6,
-      },
-    ])
-    expect(items.find((item) => item.key === 'wf-1')?.label).toBe('[WF] IR triage')
-    expect(items.find((item) => item.key === 'agent-1')?.label).toBe('CVE lookup')
-    expect(items.find((item) => item.key === 'wf-2')?.label).toBe('[WF] already tagged')
-    expect(items.find((item) => item.key === 'team-1')?.label).toBe('[Team] research report')
-    expect(items.find((item) => item.key === 'team-2')?.label).toBe('[Team] already tagged')
-  })
-
-  it('sorts sessions by update time and assigns stable date group keys', () => {
-    const now = dayjs('2026-07-13T12:00:00').valueOf()
-    const items = buildConversationItems(
-      [
-        {
-          session_id: 'earlier',
-          preview: 'Earlier',
-          created_at: dayjs('2026-07-10T08:00:00').unix(),
-          updated_at: dayjs('2026-07-10T08:00:00').unix(),
-        },
-        {
-          session_id: 'today',
-          preview: 'Today',
-          created_at: dayjs('2026-07-13T09:00:00').unix(),
-          updated_at: dayjs('2026-07-13T09:00:00').unix(),
-        },
-        {
-          session_id: 'yesterday',
-          preview: 'Yesterday',
-          created_at: dayjs('2026-07-12T09:00:00').unix(),
-          updated_at: dayjs('2026-07-12T09:00:00').unix(),
-        },
-      ],
-      now,
-    )
-
-    expect(items.map(({ key, group }) => ({ key, group }))).toEqual([
-      { key: 'today', group: 'today' },
-      { key: 'yesterday', group: 'yesterday' },
-      { key: 'earlier', group: 'earlier' },
-    ])
-  })
-})
 
 describe('ChatTaskPanel', () => {
   beforeEach(async () => {
@@ -164,13 +63,13 @@ describe('ChatTaskPanel', () => {
     const user = setupUser()
     const onNavigate = vi.fn<() => void>()
     mockSessions([
-      {
+      chatSessionFixture({
         session_id: 'session-1',
         title: '资产风险分析',
         preview: '分析资产风险',
         created_at: dayjs().unix(),
         updated_at: dayjs().unix(),
-      },
+      }),
     ])
     renderWithQuery(
       <ChatTaskPanel onNavigate={onNavigate} variant="page" />,
@@ -203,12 +102,12 @@ describe('ChatTaskPanel', () => {
   it('localizes the panel and date group labels', async () => {
     await i18n.changeLanguage('en-US')
     mockSessions([
-      {
+      chatSessionFixture({
         session_id: 'session-1',
         preview: 'Investigate CVE',
         created_at: dayjs().unix(),
         updated_at: dayjs().unix(),
-      },
+      }),
     ])
     renderWithQuery(<ChatTaskPanel variant="page" />)
     expect(await screen.findByText('Conversations')).toBeTruthy()
@@ -226,24 +125,24 @@ describe('ChatTaskPanel', () => {
         if (page === 1) {
           return HttpResponse.json({
             data: [
-              {
+              chatSessionFixture({
                 session_id: 'session-1',
                 preview: 'First page',
                 created_at: dayjs().unix(),
                 updated_at: dayjs().unix(),
-              },
+              }),
             ],
             meta: { page: 1, limit: 40, total_pages: 2, total_count: 41, search_time_ms: 0 },
           })
         }
         return HttpResponse.json({
           data: [
-            {
+            chatSessionFixture({
               session_id: 'session-2',
               preview: 'Second page',
               created_at: dayjs().unix(),
               updated_at: dayjs().unix(),
-            },
+            }),
           ],
           meta: { page: 2, limit: 40, total_pages: 2, total_count: 41, search_time_ms: 0 },
         })
@@ -258,12 +157,12 @@ describe('ChatTaskPanel', () => {
   it('keeps search input when server results are empty', async () => {
     const user = setupUser()
     mockSessions([
-      {
+      chatSessionFixture({
         session_id: 'seed',
         preview: 'seed conversation',
         created_at: dayjs().unix(),
         updated_at: dayjs().unix(),
-      },
+      }),
     ])
     renderWithQuery(<ChatTaskPanel variant="page" />)
     const search = await screen.findByLabelText(i18n.t('shell:conversations.searchPlaceholder'))

@@ -1,5 +1,4 @@
 import { jsonInit, requestJson } from '@/shared/api/client'
-import { normalizePaginatedList } from '@/shared/lib/pagination'
 import type { JsonRecord, ResourceVisibility } from '@/shared/types/common'
 
 export interface McpServer {
@@ -18,7 +17,7 @@ export interface McpServer {
   manifest: JsonRecord
 }
 
-export interface McpConfig {
+interface McpConfig {
   services: Record<string, boolean>
   mcp_servers: McpServer[]
   mcp_url: string
@@ -60,16 +59,10 @@ export interface UploadApprovalSubmission {
 
 export const getConfig = () => requestJson<McpConfig>('/mcp/config')
 export const listComponents = async (namespace?: string) => {
-  const raw = await requestJson<unknown>(
+  const payload = await requestJson<{ data: McpComponent[] }>(
     `/mcp/components${namespace ? `?namespace=${encodeURIComponent(namespace)}` : ''}`,
   )
-  const { data } = normalizePaginatedList(raw, {
-    mapItem: (row) => {
-      if (!row || typeof row !== 'object') return null
-      return row as McpComponent
-    },
-  })
-  return data
+  return payload.data
 }
 export const updateConfig = (id: string, enabled: boolean) => requestJson('/mcp/config', jsonInit('POST', { id, enabled }))
 export const setServerEnabled = (id: number, enabled: boolean) =>
@@ -82,16 +75,7 @@ export const setComponentEnabled = (component: McpComponent, enabled: boolean) =
   )
 export const callTool = (name: string, argumentsValue: JsonRecord) =>
   requestJson(`/mcp/tools/${encodeURIComponent(name)}/call`, jsonInit('POST', { arguments: argumentsValue }))
-export const listTokens = async () => {
-  const raw = await requestJson<unknown>('/mcp/tokens')
-  const { data } = normalizePaginatedList(raw, {
-    mapItem: (row) => {
-      if (!row || typeof row !== 'object') return null
-      return row as McpToken
-    },
-  })
-  return data
-}
+export const listTokens = async () => (await requestJson<{ data: McpToken[] }>('/mcp/tokens')).data
 export const issueToken = (name: string, expires_in: number) =>
   requestJson<{ token: string }>('/mcp/tokens/issue', jsonInit('POST', { name, expires_in }))
 export const deleteToken = (id: number) => requestJson('/mcp/tokens/delete', jsonInit('POST', { id }))

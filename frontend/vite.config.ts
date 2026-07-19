@@ -16,6 +16,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
     // Tests do not assert stylesheet rules; disabling CSS cuts jsdom parse cost.
     css: false,
     // DOM-heavy Ant Design suites thrash under high parallelism; keep a moderate worker cap.

@@ -94,8 +94,6 @@ PROMPT_DIR = Path(__file__).resolve().parents[1] / "agent" / "prompts"
 SECURITY_OPERATIONS_PROMPT = "security_operations.md"
 SECURITY_OPERATIONS_LITE_PROMPT = "security_operations_lite.md"
 SAFE_FALLBACK_PROMPT = "safe_fallback.md"
-DATA_ANALYSIS_PROMPT = "data_analysis.md"
-DEEP_RESEARCH_PROMPT = "deep_research.md"
 HITL_MCP_TOOL_PREFIX = "hitl_"
 RUNTIME_METADATA_KEY = "tais_runtime"
 

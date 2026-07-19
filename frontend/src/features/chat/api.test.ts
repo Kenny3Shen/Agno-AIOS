@@ -1,16 +1,17 @@
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
-import { cancelRun, getSessionMeta, listSessions, renameSession, streamMessage } from './api'
+import { cancelRun, getChatAgents, getSessionMeta, listSessions, renameSession, streamMessage } from './api'
 import { server } from '@/test/server'
-import { AUTH_TOKEN_STORAGE_KEY } from '@/shared/auth/storage'
+import { setToken } from '@/shared/auth/storage'
+import { chatSessionFixture } from './testFixtures'
 
 describe('chat API', () => {
   it('loads sessions with the stored bearer token', async () => {
-    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, 'token')
+    setToken('token')
     server.use(
       http.get('/api/chat/sessions', ({ request }) => {
         expect(request.headers.get('authorization')).toBe('Bearer token')
-        return HttpResponse.json({ data: [{ session_id: 's1', preview: 'run', created_at: 1, updated_at: 2 }], meta: { page: 1, limit: 40, total_pages: 1, total_count: 1, search_time_ms: 0 } })
+        return HttpResponse.json({ data: [chatSessionFixture({ session_id: 's1' })], meta: { page: 1, limit: 40, total_pages: 1, total_count: 1, search_time_ms: 0 } })
       })
     )
     expect((await listSessions()).data[0]?.session_id).toBe('s1')
@@ -20,7 +21,7 @@ describe('chat API', () => {
     server.use(
       http.get('/api/chat/sessions', () =>
         HttpResponse.json({
-          data: [{ session_id: 's2', preview: 'p', created_at: 3, updated_at: 4 }],
+          data: [chatSessionFixture({ session_id: 's2', preview: 'p', created_at: 3, updated_at: 4 })],
           meta: { page: 1, limit: 40, total_pages: 1, total_count: 1, search_time_ms: 0 },
         })
       )
@@ -29,6 +30,28 @@ describe('chat API', () => {
     expect(sessions.data).toHaveLength(1)
     expect(sessions.data[0]?.session_id).toBe('s2')
     expect(sessions.meta.limit).toBe(40)
+  })
+
+  it('reads the agent catalog from its data envelope', async () => {
+    server.use(
+      http.get('/api/chat/agents', () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: 'deep-research',
+              name: '深度研究助手',
+              kind: 'agent',
+              prefer_live_search: true,
+            },
+          ],
+          meta: { team_enabled: false },
+        })
+      )
+    )
+
+    await expect(getChatAgents()).resolves.toEqual([
+      expect.objectContaining({ id: 'deep-research', prefer_live_search: true }),
+    ])
   })
 
   it('requests archived sessions when explicitly enabled', async () => {
@@ -44,6 +67,19 @@ describe('chat API', () => {
     await listSessions({ includeArchived: true })
   })
 
+  it('rejects a session payload that omits canonical projection fields', async () => {
+    server.use(
+      http.get('/api/chat/sessions', () =>
+        HttpResponse.json({
+          data: [{ session_id: 'bad', preview: '', created_at: 1, updated_at: 2 }],
+          meta: { page: 1, limit: 40, total_pages: 1, total_count: 1, search_time_ms: 0 },
+        }),
+      ),
+    )
+
+    await expect(listSessions()).rejects.toThrow('listSessions: invalid session payload')
+  })
+
   it('requests the requested page and returns meta for load-more', async () => {
     server.use(
       http.get('/api/chat/sessions', ({ request }) => {
@@ -51,7 +87,7 @@ describe('chat API', () => {
         expect(params.get('page')).toBe('2')
         expect(params.get('limit')).toBe('40')
         return HttpResponse.json({
-          data: [{ session_id: 's3', preview: 'older', created_at: 5, updated_at: 6 }],
+          data: [chatSessionFixture({ session_id: 's3', preview: 'older', created_at: 5, updated_at: 6 })],
           meta: { page: 2, limit: 40, total_pages: 3, total_count: 250, search_time_ms: 1 },
         })
       })
@@ -75,15 +111,12 @@ describe('chat API', () => {
   it('loads one-session meta for deep links', async () => {
     server.use(
       http.get('/api/chat/sessions/deep-1/meta', () =>
-        HttpResponse.json({
+        HttpResponse.json(chatSessionFixture({
           session_id: 'deep-1',
           session_type: 'workflow',
           workflow_id: 'flow-1',
-          preview: 'run',
           title: 'Deep WF',
-          created_at: 1,
-          updated_at: 2,
-        })
+        }))
       )
     )
     await expect(getSessionMeta('deep-1')).resolves.toMatchObject({
@@ -100,7 +133,7 @@ describe('chat API', () => {
   })
 
   it('rejects a successful response that contains no stream content', async () => {
-    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, 'token')
+    setToken('token')
     server.use(http.post('/api/chat', () => new HttpResponse('', { headers: { 'Content-Type': 'text/event-stream' } })))
 
     await expect(
@@ -181,7 +214,7 @@ describe('listSessions archived_only', () => {
         expect(params.get('archived_only')).toBe('true')
         expect(params.get('include_archived')).toBeNull()
         return HttpResponse.json({
-          data: [{ session_id: 'a1', preview: 'archived', archived: true, created_at: 1, updated_at: 2 }],
+          data: [chatSessionFixture({ session_id: 'a1', preview: 'archived', archived: true })],
           meta: { page: 1, limit: 40, total_pages: 1, total_count: 1, search_time_ms: 0 },
         })
       }),
@@ -198,7 +231,10 @@ describe('listSessions q', () => {
       http.get('/api/chat/sessions', ({ request }) => {
         const url = new URL(request.url)
         expect(url.searchParams.get('q')).toBe('risk')
-        return HttpResponse.json({ data: [], meta: { page: 1, limit: 40, total_count: 0, total_pages: 0 } })
+        return HttpResponse.json({
+          data: [],
+          meta: { page: 1, limit: 40, total_count: 0, total_pages: 0, search_time_ms: 0 },
+        })
       }),
     )
     const result = await listSessions({ q: 'risk' })
@@ -257,4 +293,3 @@ describe('streamMessage errors', () => {
     ).rejects.toThrow('最多上传 8 个附件')
   })
 })
-

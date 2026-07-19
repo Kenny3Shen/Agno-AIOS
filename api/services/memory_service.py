@@ -8,8 +8,7 @@ from typing import Any, TypedDict, cast
 
 from agno.memory import UserMemory
 
-from api.auth.claims import ActorLike
-from api.services.actor_scope import scoped_requested_user_id
+from api.auth.claims import ActorLike, scope_user_id
 from api.services.page_payloads import iso, now_utc, row_dict
 from api.services.postgres_store import coerce_json_value, get_async_agno_postgres_db
 from loguru import logger
@@ -45,10 +44,6 @@ class MemoryMutationNotFound(ValueError):
 
 class MemoryMutationFailed(RuntimeError):
     pass
-
-
-def _now() -> datetime:
-    return now_utc()
 
 
 def _memory_status_for_count(count: int) -> str:
@@ -225,7 +220,7 @@ async def list_memories_native(
     db = get_async_agno_postgres_db()
     safe_page = max(1, int(page or 1))
     safe_limit = min(100, max(1, int(limit or 20)))
-    scoped_user_id = scoped_requested_user_id(actor, user_id)
+    scoped_user_id = scope_user_id(actor, user_id)
     scoped_topic = (topic or "").strip()
     scoped_search = (
         str(search_content).strip()
@@ -234,24 +229,21 @@ async def list_memories_native(
     )
     topics_filter = [scoped_topic] if scoped_topic else None
 
-    raw_result = await db.get_user_memories(
-        user_id=scoped_user_id,
-        topics=topics_filter,
-        search_content=scoped_search or None,
-        limit=safe_limit,
-        page=safe_page,
-        sort_by="updated_at",
-        sort_order="desc",
-        deserialize=False,
+    raw_memories, total_memories = cast(
+        tuple[list[dict[str, Any]], int],
+        await db.get_user_memories(
+            user_id=scoped_user_id,
+            topics=topics_filter,
+            search_content=scoped_search or None,
+            limit=safe_limit,
+            page=safe_page,
+            sort_by="updated_at",
+            sort_order="desc",
+            deserialize=False,
+        ),
     )
-    if isinstance(raw_result, tuple):
-        raw_memories, total_memories = raw_result
-    else:
-        raw_memories = raw_result
-        total_memories = len(raw_memories)
-
-    # Growth badge uses per-user totals (unfiltered by topic/search). Never dump
-    # global stats (old limit=500): resolve only users on this page / list scope.
+    # Growth badge uses per-user totals (unfiltered by topic/search). Resolve only
+    # users represented by the requested page or explicit list scope.
     page_user_ids: set[str] = set()
     if scoped_user_id:
         page_user_ids.add(scoped_user_id)
@@ -299,7 +291,7 @@ async def delete_memory_record(
         raise ValueError("memory_id is required")
 
     db = get_async_agno_postgres_db()
-    scoped_user_id = scoped_requested_user_id(actor, user_id)
+    scoped_user_id = scope_user_id(actor, user_id)
     raw_memory = await db.get_user_memory(
         safe_memory_id,
         user_id=scoped_user_id,
@@ -340,7 +332,7 @@ async def update_memory_record(
     if not safe_memory:
         raise ValueError("memory is required")
 
-    scoped_user_id = scoped_requested_user_id(actor, user_id)
+    scoped_user_id = scope_user_id(actor, user_id)
     db = get_async_agno_postgres_db()
     raw_memory = await db.get_user_memory(
         safe_memory_id,
@@ -353,7 +345,7 @@ async def update_memory_record(
     row = _memory_row(raw_memory)
     owner_user = str(row.get("user_id") or scoped_user_id or "")
     safe_topics = _memory_update_topics(topics or [])
-    updated_at = int(_now().timestamp())
+    updated_at = int(now_utc().timestamp())
     updated_memory = UserMemory(
         memory=safe_memory,
         memory_id=safe_memory_id,
@@ -393,7 +385,7 @@ async def clear_memory_records(
 ) -> dict[str, Any]:
     """Clear memories for one user, or the entire table (admin + all_users).
 
-    Non-admins are forced to their own ``user_id`` via ``scoped_requested_user_id``.
+    Non-admins are forced to their own ``user_id`` via ``scope_user_id``.
     Returns ``{"deleted": n, "user_id": ..., "all_users": bool}``.
     ``deleted`` is ``-1`` when the whole table is wiped (Agno ``clear_memories``).
     """
@@ -406,7 +398,7 @@ async def clear_memory_records(
         await db.clear_memories()
         return {"deleted": -1, "user_id": None, "all_users": True}
 
-    scoped_user_id = scoped_requested_user_id(actor, user_id)
+    scoped_user_id = scope_user_id(actor, user_id)
     if not scoped_user_id:
         # Admin with no explicit filter: clear the actor's own memories (not the whole table).
         from api.auth.claims import actor_id
@@ -418,18 +410,17 @@ async def clear_memory_records(
     deleted = 0
     # Always re-read page 1 after each bulk delete until the user has no rows left.
     for _ in range(500):
-        raw = await db.get_user_memories(
-            user_id=scoped_user_id,
-            limit=100,
-            page=1,
-            deserialize=False,
+        rows, _total = cast(
+            tuple[list[dict[str, Any]], int],
+            await db.get_user_memories(
+                user_id=scoped_user_id,
+                limit=100,
+                page=1,
+                deserialize=False,
+            ),
         )
-        if isinstance(raw, tuple):
-            rows, _total = raw
-        else:
-            rows = raw or []
         ids: list[str] = []
-        for row in rows or []:
+        for row in rows:
             data = row if isinstance(row, dict) else row_dict(row)
             mid = str(data.get("memory_id") or "").strip()
             if mid:
@@ -439,5 +430,3 @@ async def clear_memory_records(
         await db.delete_user_memories(ids, user_id=scoped_user_id)
         deleted += len(ids)
     return {"deleted": deleted, "user_id": scoped_user_id, "all_users": False}
-
-

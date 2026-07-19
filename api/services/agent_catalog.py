@@ -7,9 +7,7 @@ tool-focused specialists without MCP/HITL by default.
 
 from __future__ import annotations
 
-from typing import Any, Literal
-
-AgentKind = Literal["security", "analysis", "research", "lite"]
+from typing import Any
 
 DEFAULT_AGENT_ID = "security-operations"
 
@@ -202,7 +200,4 @@ def resolve_chat_run_target(raw: object | None) -> tuple[str, str]:
         # Known suffixes: -team / -route / -broadcast (see team_runtime.TEAM_PROFILES).
     if value in AGENT_PROFILES and AGENT_PROFILES[value].get("chat_selectable", True):
         return ("agent", value)
-    if value in AGENT_PROFILES:
-        # workflow-only profile selected in chat → fall back
-        return ("agent", DEFAULT_AGENT_ID)
     return ("agent", DEFAULT_AGENT_ID)

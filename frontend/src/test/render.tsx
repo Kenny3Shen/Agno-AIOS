@@ -12,7 +12,7 @@ const testTheme = {
   hashed: false,
 } as const
 
-export const createTestQueryClient = () =>
+const createTestQueryClient = () =>
   new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: 0 },

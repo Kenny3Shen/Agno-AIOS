@@ -2,7 +2,8 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from typing import Any, Literal
+from starlette.datastructures import FormData, UploadFile
+from typing import Literal
 from sse_starlette.sse import EventSourceResponse
 
 from api.auth.models import User
@@ -162,12 +163,8 @@ def _exception_detail(exc: BaseException) -> str:
     return f"{type(current).__name__}: {current}"
 
 
-def _parse_optional_bool(value: object, default: bool | None = None) -> bool | None:
+def _parse_optional_bool(value: str | None, default: bool | None = None) -> bool | None:
     if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    if not isinstance(value, str):
         return default
     text = value.strip().lower()
     if text in {"", "null", "none"}:
@@ -177,6 +174,11 @@ def _parse_optional_bool(value: object, default: bool | None = None) -> bool | N
     if text in {"0", "false", "no", "off"}:
         return False
     raise HTTPException(status_code=422, detail=f"Invalid boolean: {value}")
+
+
+def _form_text(form: FormData, key: str) -> str | None:
+    value = form.get(key)
+    return value if isinstance(value, str) else None
 
 
 async def _start_chat_stream(
@@ -269,16 +271,12 @@ async def chat_agent(
         content_type = (raw_request.headers.get("content-type") or "").lower()
         if "multipart/form-data" in content_type:
             form = await raw_request.form()
-            message = str(form.get("message") or "")
-            session_id = str(form.get("session_id") or "").strip()
+            message = _form_text(form, "message") or ""
+            session_id = (_form_text(form, "session_id") or "").strip()
             if not session_id:
                 raise HTTPException(status_code=422, detail="session_id is required")
-            model_raw = form.get("model_id")
-            model_id = str(model_raw).strip() if model_raw not in (None, "") else None
-            effort_raw = form.get("reasoning_effort")
-            reasoning_effort = (
-                str(effort_raw).strip() if effort_raw not in (None, "") else None  # type: ignore[assignment]
-            )
+            model_id = (_form_text(form, "model_id") or "").strip() or None
+            reasoning_effort = (_form_text(form, "reasoning_effort") or "").strip() or None
             if reasoning_effort is not None and reasoning_effort not in {
                 "minimal",
                 "low",
@@ -287,21 +285,21 @@ async def chat_agent(
                 "max",
             }:
                 raise HTTPException(status_code=422, detail="Invalid reasoning_effort")
-            search_knowledge = _parse_optional_bool(form.get("search_knowledge"), True)  # type: ignore[arg-type]
-            live_search = _parse_optional_bool(form.get("live_search"), None)  # type: ignore[arg-type]
-            enable_tools = _parse_optional_bool(form.get("enable_tools"), True)  # type: ignore[arg-type]
-            agent_raw = form.get("agent_id")
-            if agent_raw not in (None, ""):
-                _kind, agent_id = resolve_chat_run_target(str(agent_raw).strip())
+            search_knowledge = _parse_optional_bool(_form_text(form, "search_knowledge"), True)
+            live_search = _parse_optional_bool(_form_text(form, "live_search"), None)
+            enable_tools = _parse_optional_bool(_form_text(form, "enable_tools"), True)
+            agent_raw = (_form_text(form, "agent_id") or "").strip()
+            if agent_raw:
+                _kind, agent_id = resolve_chat_run_target(agent_raw)
             else:
                 agent_id = None
             assert search_knowledge is not None and enable_tools is not None
-            uploads: list[Any] = []
+            uploads: list[UploadFile] = []
             for key in ("files", "file"):
                 for item in form.getlist(key):
-                    if hasattr(item, "filename") and hasattr(item, "read"):
+                    if isinstance(item, UploadFile):
                         uploads.append(item)
-            bundle = await process_chat_uploads(uploads or None)  # type: ignore[arg-type]
+            bundle = await process_chat_uploads(uploads or None)
             message_with_docs = append_document_markdown_to_message(
                 message,
                 bundle.document_markdown,

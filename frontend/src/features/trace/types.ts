@@ -34,7 +34,7 @@ export interface Span {
   events?: unknown[]
 }
 /** UI-facing list meta after client normalization (Agno-style). */
-export type TraceListMeta = ListPaginationMeta
+type TraceListMeta = ListPaginationMeta
 
 /** UI-facing list shape after client normalization. */
 export type TraceList = {

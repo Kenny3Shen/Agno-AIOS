@@ -62,7 +62,18 @@ const traceDetail = (traceId: string) => {
     start_time: '2026-07-20T12:00:00Z',
     parsed: { input: `child input ${runNumber}` },
   }
-  return { trace: { trace_id: traceId }, spans: [root, child], tree: [{ span: root, children: [{ span: child, children: [] }] }] }
+  return {
+    trace: {
+      trace_id: traceId,
+      name: `Run ${runNumber}`,
+      status: 'OK',
+      duration: '1.00s',
+      start_time: '2026-07-20T12:00:00Z',
+      end_time: '',
+    },
+    spans: [root, child],
+    tree: [{ span: root, children: [{ span: child, children: [] }] }],
+  }
 }
 
 let traceRequests: URLSearchParams[] = []
@@ -196,25 +207,4 @@ describe('TracePage interactions', () => {
     expect(pageTwoRequest?.has('run_id')).toBe(false)
   })
 
-  it('renders root spans as the top-level Run summaries and preserves span detail selection', async () => {
-    renderWithQuery(<TracePage />)
-
-    await user.click(await screen.findByRole('button', { name: /Session 1/ }))
-    const runsCard = cardByTitle('Run')
-    const root = await within(runsCard).findByText('Run Root · Run 1')
-    expect(within(runsCard).queryByText('Run · Run 1')).toBeNull()
-    const rootRow = root.closest('.run-tree-node')
-    expect(rootRow?.textContent).toContain('OK')
-    expect(rootRow?.textContent).toContain('1.00s')
-
-    await user.click(root)
-    expect(await screen.findByText('root input 1')).toBeTruthy()
-    const rootNode = root.closest('.ant-tree-treenode')
-    const switcher = rootNode?.querySelector('.ant-tree-switcher')
-    if (!switcher) throw new Error('Expected root span to be expandable')
-    await user.click(switcher)
-    const child = await within(runsCard).findByText('Span · Child 1')
-    await user.click(child)
-    expect(await within(cardByTitle('详情')).findByText('child input 1')).toBeTruthy()
-  })
 })

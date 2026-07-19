@@ -11,26 +11,6 @@ from api.config import get_settings
 from api.utils.json import JSONDecodeError, loads
 
 
-def postgres_host() -> str:
-    return get_settings().postgres_host
-
-
-def postgres_port() -> int:
-    return get_settings().postgres_port
-
-
-def postgres_user() -> str:
-    return get_settings().postgres_user
-
-
-def postgres_password() -> str:
-    return get_settings().postgres_password.get_secret_value()
-
-
-def postgres_database() -> str:
-    return get_settings().postgres_db
-
-
 def app_schema() -> str:
     return get_settings().agno_app_schema
 
@@ -47,20 +27,12 @@ def knowledge_schema() -> str:
     return get_settings().agno_knowledge_schema
 
 
-def postgres_dsn() -> str:
-    return get_settings().postgres_dsn
-
-
 def postgres_sqlalchemy_url() -> str:
     return get_settings().postgres_sqlalchemy_url
 
 
 def postgres_async_sqlalchemy_url() -> str:
     return get_settings().postgres_async_sqlalchemy_url
-
-
-def postgres_label(schema: str, table_name: str) -> str:
-    return f"postgres:{postgres_database()}.{schema}.{table_name}"
 
 
 @lru_cache(maxsize=1)
@@ -145,12 +117,6 @@ async def _create_app_tables_async() -> None:
     await ensure_upload_approvals_table()
     await ensure_workflows_table_async()
     await init_mcp_postgres_tables()
-
-    # Drop obsolete pre-Agno-native HITL resume table if present.
-    async with get_async_control_plane_engine().begin() as conn:
-        await conn.execute(
-            text(f'DROP TABLE IF EXISTS "{app_schema()}"."hitl_paused_runs"')
-        )
 
 
 async def ensure_app_tables_async() -> None:

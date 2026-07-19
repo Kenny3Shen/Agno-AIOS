@@ -34,26 +34,26 @@ import { formatToolLabel } from '@/features/chat/utils'
 
 const uploadPayload = (approval: Approval) => approval.payload ?? {}
 
+const approvalToolLabel = (raw: string | null | undefined) => {
+  const value = (raw || '').trim()
+  if (!value) return ''
+  if (value.startsWith('workflow.step:')) return value
+  return formatToolLabel(value, (key) => i18n.t(`chat:${key}`)) || value
+}
+
 const approvalTitle = (approval: Approval) => {
   const name = uploadPayload(approval).name
   if (typeof name === 'string' && name.trim()) return name
   if (approval.resource_type === 'skill') return i18n.t('approvals:typeSkillUpload')
   if (approval.resource_type === 'mcp') return i18n.t('approvals:typeMcpServerUpload')
-  const toolLabel = (raw: string | null | undefined) => {
-    const value = (raw || '').trim()
-    if (!value) return ''
-    // workflow.step:* stays readable via source_name; formatToolLabel for MCP ids
-    if (value.startsWith('workflow.step:')) return value
-    return formatToolLabel(value, (key) => i18n.t(`chat:${key}`)) || value
-  }
   if (approval.source_type === 'workflow') {
     return (
-      toolLabel(approval.tool_name) ||
+      approvalToolLabel(approval.tool_name) ||
       approval.source_name ||
       i18n.t('approvals:typeWorkflowStep')
     )
   }
-  return toolLabel(approval.tool_name) || approval.source_name || '-'
+  return approvalToolLabel(approval.tool_name) || approval.source_name || '-'
 }
 
 const workflowPauseType = (approval: Approval): string => {
@@ -108,11 +108,8 @@ const actorIdentity = (
   actor: Approval['submitted_by'] | Approval['resolved_by'],
   fallbackId?: string
 ): ApprovalIdentity => {
-  if (typeof actor === 'object' && actor !== null) {
+  if (actor) {
     return { email: actor.email || '', id: actor.id || fallbackId || '' }
-  }
-  if (typeof actor === 'string') {
-    return { email: actor.includes('@') ? actor : '', id: actor || fallbackId || '' }
   }
   return { email: '', id: fallbackId || '' }
 }
@@ -261,13 +258,15 @@ export function ApprovalsPage() {
         else setKind('all')
         setSelected(row)
       })
-      .catch(() => {
-        // Missing or unauthorized approval — leave selection unchanged.
+      .catch((error) => {
+        if (cancelled) return
+        const detail = error instanceof Error && error.message.trim() ? error.message : t('approvalLoadFailed')
+        message.error(detail)
       })
     return () => {
       cancelled = true
     }
-  }, [notificationApprovalId, rows])
+  }, [message, notificationApprovalId, rows, t])
   const skillPreview = useQuery({
     queryKey: ['approvals', 'skill-preview', selected?.id],
     queryFn: () => getSkillSubmissionPreview(selected?.id ?? ''),

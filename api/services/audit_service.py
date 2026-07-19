@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, TypedDict
 
 from fastapi import Request
 from loguru import logger
 
 from api.auth.claims import actor_id, actor_role
-from api.persistence.audit_logs import (
-    insert_audit_log_async,
-    list_audit_logs_async,
-)
+from api.persistence.audit_logs import insert_audit_log_async
 
 
 class AuditRequestContext(TypedDict):
@@ -51,32 +47,3 @@ async def record_audit_event_async(
         )
     except Exception as exc:
         logger.warning("审计日志写入失败: {}", exc)
-
-
-async def list_audit_events_async(
-    *,
-    page: int = 1,
-    limit: int = 50,
-    actor_user_id: str | None = None,
-    actor_email: str | None = None,
-    action: str | None = None,
-    resource_type: str | None = None,
-    resource_id: str | None = None,
-    status: str | None = None,
-    ip_address: str | None = None,
-    created_from: datetime | None = None,
-    created_to: datetime | None = None,
-) -> tuple[list[dict[str, Any]], int]:
-    return await list_audit_logs_async(
-        page=page,
-        limit=limit,
-        actor_user_id=actor_user_id,
-        actor_email=actor_email,
-        action=action,
-        resource_type=resource_type,
-        resource_id=resource_id,
-        status=status,
-        ip_address=ip_address,
-        created_from=created_from,
-        created_to=created_to,
-    )

@@ -28,7 +28,7 @@
 
 - 非流式 `POST /documents/upload|text|file` 与 update/upload、rebuild、replace_text：落盘/校验后 `_schedule_knowledge_ingest`，立即返回 `processing` 占位。
 - 后续已移除无调用方的 `stream=true` SSE 路径与进度组件（见上方清理项）。
-- 前端 Document/Update Drawer 仅走后台入库，成功 toast `ingestQueued` 并延迟刷新列表。
+- 前端 Document/Update Drawer 仅走后台入库，成功 toast `ingestQueued` 并保留一次性 `processing` 占位；后续由用户刷新列表获取最新结果。
 - 失败走 `notify_background_task_failure` + audit。
 
 ## Docling / GPU
@@ -1232,7 +1232,7 @@ P0.4 审批值班薄入口        ✅
 ## 已完成：后端 PaginationMeta 共享 + Knowledge 列表 normalize
 
 - `api/utils/pagination.PaginationMeta` TypedDict；Memory/Approvals 去掉重复 meta TypedDict。
-- Knowledge `getKnowledge` 经 `normalizePaginatedList` 投影 Document，并保留 `status` 与 query/sort meta 扩展。
+- Knowledge `getKnowledge` 经 `normalizePaginatedList` 投影 Document，并在 `meta` 传递 RAG 设置及 query/sort 扩展。
 - 前端 `KnowledgeListMeta` 基于 `ListPaginationMeta`。
 
 ## 已完成：Catalog 列表与 meta 类型对齐共享 normalizer
@@ -1346,7 +1346,7 @@ P0.4 审批值班薄入口        ✅
 
 ## 已完成：Trace 前端列表 data/meta 收口
 
-- `listTraces` / `listTraceSessions` 归一化结果 `items`+扁平字段 → `{data, meta}`（含 `truncated`/`scanned_count`）。
+- `listTraces` / `listTraceSessions` 归一化结果 `items`+扁平字段 → `{data, meta}`（Trace 列表保留 `truncated`）。
 - `TracePage` / unit / Playwright smoke 同步；无旧 `items` 兼容。
 
 ## 已完成：Memory / Eval runs 前端列表 data/meta 收口
@@ -1398,7 +1398,7 @@ P0.4 审批值班薄入口        ✅
 
 ## 已完成：Knowledge 列表 data/meta + Collect 错误收口
 
-- `GET /api/knowledge`：`documents`/`pagination` → `data`/`meta`（`pagination_meta`，保留 query/sort 于 meta）；`status` 仍为 RAG/健康快照旁路字段。
+- `GET /api/knowledge`：`documents`/`pagination` → `data`/`meta`（`pagination_meta`，保留 query/sort 与仅供表单使用的 `ingest_defaults`）；不提供进度状态旁路字段。
 - Collect：`GET articles/{id}` 直接返回行或 404；`crawl`/`parse` 失败改 `HTTPException`，成功体去掉包一层 `status`。
 - 前端 Knowledge/Collect 与 e2e mock 同步；无旧 envelope 兼容。
 
@@ -1875,8 +1875,8 @@ P0.4 审批值班薄入口        ✅
 
 ## 已完成：Trace status 流式过滤 + 后台 Task 失败通知
 
-- Trace `status=` 列表按批 `get_traces` → reconcile → 只保留匹配行，避免整窗 2k 全量常驻
-- `meta.truncated` / `meta.scanned_count` 在扫描达上限时标记（sessions 列表同样）
+- Trace `status=` 列表使用 Agno 原生分页，再对当前页 reconcile，避免整窗扫描
+- OK/UNSET 页被 reconcile 收窄时以 `meta.truncated` 标记近似总数
 - asyncio 后台异常（如 `amake_memories`）除日志外通知 admins（`notify_background_task_failure`）
 - Trace UI 在 status 过滤且 `meta.truncated` 时显示有界扫描警告
 
@@ -2020,7 +2020,7 @@ P0.4 审批值班薄入口        ✅
 
 - 设置表单只保留：名称 / 供应商 / Model ID / API Key / Base URL / 启用
 - 协议、structured output、reasoning、重试、parallel tools、Live Search 等走能力画像默认
-- 保存时合并既有高级字段；切换供应商时重套最优默认
+- 新建/切换供应商仅提交连接字段，由服务端补齐高级默认；同供应商编辑保留既有运行字段
 
 相关：`SettingsPage.tsx` / `model_capabilities.py`
 
@@ -2487,12 +2487,12 @@ P0.4 审批值班薄入口        ✅
 ## 已完成：Evals 读路径对齐 Agno 分页 envelope
 
 - `GET /api/agent-evals/agno-runs` 返回 `{ data, meta }`，行主键 `id`、载荷 `eval_data`（Agno EvalSchema 命名），去掉 list 内嵌 `items`/`trends`/`total`。
-- `/trends` 仍为工作台聚合；`/failures` 仍为失败过滤 + case_run replay 关联；suites/cases/run/replay 自研不变。
+- `/failures` 仍为失败过滤 + case_run replay 关联；suites/cases/run/replay 自研不变。
 - overview 快照与前端 `listRuns` 改读 `data`/`meta`；`normalizeEvalRun` 接受 `eval_data`。
 
 相关入口：
 
-- API：`GET /api/agent-evals/agno-runs`、`/failures`、`/trends`；suites/cases 不变
+- API：`GET /api/agent-evals/agno-runs`、`/failures`；suites/cases 不变
 - 代码：`api/services/agent_eval_result_service.py`、`frontend/src/features/evaluations/api.ts`
 
 ## 已完成：Approvals 列表对齐 Agno 分页 envelope

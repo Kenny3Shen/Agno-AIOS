@@ -1,5 +1,4 @@
 import { jsonInit, requestJson } from '@/shared/api/client'
-import { normalizePaginatedList } from '@/shared/lib/pagination'
 import type { ResourceVisibility } from '@/shared/types/common'
 export interface Skill {
   name: string
@@ -22,16 +21,7 @@ export interface UploadApprovalSubmission {
   id?: string
   status?: string
 }
-export const listSkills = async () => {
-  const raw = await requestJson<unknown>('/skills')
-  const { data } = normalizePaginatedList(raw, {
-    mapItem: (row) => {
-      if (!row || typeof row !== 'object') return null
-      return row as Skill
-    },
-  })
-  return data
-}
+export const listSkills = async () => (await requestJson<{ data: Skill[] }>('/skills')).data
 export const getSkill = (name: string) =>
   requestJson<Skill>(`/skills/${encodeURIComponent(name)}`)
 export const toggleSkill = (name: string, enabled: boolean) =>
@@ -47,32 +37,25 @@ export const uploadSkill = async (name: string, visibility: ResourceVisibility, 
   return requestJson<UploadApprovalSubmission>('/skills/upload', { method: 'POST', body })
 }
 
-export type SkillWorkflowReference = {
+type SkillWorkflowReference = {
   workflow_id: string
   name: string
   version: string
 }
 
+type SkillReferencesResponse = {
+  data: SkillWorkflowReference[]
+  meta: {
+    truncated?: boolean
+  }
+}
+
 export const listSkillReferences = async (name: string) => {
-  const raw = await requestJson<unknown>(`/skills/${encodeURIComponent(name)}/references`)
-  const { data, meta } = normalizePaginatedList(raw, {
-    page: 1,
-    limit: 50,
-    extras: true,
-    mapItem: (row) => {
-      if (!row || typeof row !== 'object') return null
-      const r = row as Record<string, unknown>
-      const id = typeof r.workflow_id === 'string' ? r.workflow_id : ''
-      if (!id) return null
-      return {
-        workflow_id: id,
-        name: typeof r.name === 'string' ? r.name : id,
-        version: r.version != null ? String(r.version) : '',
-      } satisfies SkillWorkflowReference
-    },
-  })
+  const { data, meta } = await requestJson<SkillReferencesResponse>(
+    `/skills/${encodeURIComponent(name)}/references`,
+  )
   return {
     data,
-    truncated: Boolean((meta as { truncated?: boolean } | undefined)?.truncated),
+    truncated: Boolean(meta.truncated),
   }
 }

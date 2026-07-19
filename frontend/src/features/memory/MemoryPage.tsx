@@ -56,9 +56,9 @@ export function MemoryPage() {
   })
   const refresh = () => client.invalidateQueries({ queryKey: ['memory'] })
   const remove = useMutation({
-    mutationFn: (row: Memory) => deleteMemory(row.id, row.user_id),
+    mutationFn: (row: Memory) => deleteMemory(row.memory_id, row.user_id),
     onSuccess: async (_, row) => {
-      if (selected?.id === row.id) setSelected(null)
+      if (selected?.memory_id === row.memory_id) setSelected(null)
       await refresh()
     },
     onError: (error) =>
@@ -107,7 +107,7 @@ export function MemoryPage() {
         { key: 'feedback', label: t('labelFeedback'), children: selected.feedback || '-' },
         { key: 'created', label: t('labelCreated'), children: formatDate(selected.created_at) },
         { key: 'updated', label: t('labelUpdated'), children: formatDate(selected.updated_at) },
-        { key: 'id', label: t('labelMemoryId'), children: <CopyableValue value={selected.id} /> },
+        { key: 'id', label: t('labelMemoryId'), children: <CopyableValue value={selected.memory_id} /> },
       ]
     : []
 
@@ -183,7 +183,7 @@ export function MemoryPage() {
       </Card>
       <Card className="workbench-card" title={t('listTitle')} extra={<Tag>{query.data?.meta.total_count ?? 0}</Tag>}>
         <Table<Memory>
-          rowKey="id"
+          rowKey="memory_id"
           dataSource={query.data?.data ?? []}
           loading={query.isLoading}
           pagination={{
@@ -193,11 +193,11 @@ export function MemoryPage() {
             showSizeChanger: false,
             onChange: setPage,
           }}
-          rowClassName={(row) => (row.id === selected?.id ? 'selected-table-row' : '')}
+          rowClassName={(row) => (row.memory_id === selected?.memory_id ? 'selected-table-row' : '')}
           onRow={(row) => ({
             tabIndex: 0,
             role: 'button',
-            'aria-label': t('viewMemory', { id: row.id }),
+            'aria-label': t('viewMemory', { id: row.memory_id }),
             onClick: () => setSelected(row),
             onKeyDown: (event) => {
               if (event.key === 'Enter' || event.key === ' ') {
@@ -237,7 +237,7 @@ export function MemoryPage() {
                 <Space size={2} onClick={(event) => event.stopPropagation()}>
                   <Tooltip title={t('common:edit')}>
                     <Button
-                      aria-label={t('editNamed', { id: row.id })}
+                      aria-label={t('editNamed', { id: row.memory_id })}
                       type="text"
                       size="small"
                       icon={<EditOutlined />}
@@ -256,7 +256,7 @@ export function MemoryPage() {
                       }}
                     >
                       <Button
-                        aria-label={t('deleteNamed', { id: row.id })}
+                        aria-label={t('deleteNamed', { id: row.memory_id })}
                         danger
                         type="text"
                         size="small"
@@ -292,7 +292,7 @@ export function MemoryPage() {
             onFinish={async ({ memory, topics }: { memory: string; topics: string }) => {
               try {
                 await updateMemory(
-                  editing.id,
+                  editing.memory_id,
                   memory,
                   topics
                     .split(',')

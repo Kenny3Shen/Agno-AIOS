@@ -16,7 +16,7 @@ const markdownConfig = {
   extensions: latexExtensions,
 } as const
 
-export type MarkdownProps = Omit<XMarkdownProps, 'config'> & {
+type MarkdownProps = Omit<XMarkdownProps, 'config'> & {
   /** Merge extra marked extensions after the shared Latex plugin. */
   extensions?: NonNullable<XMarkdownProps['config']>['extensions']
 }

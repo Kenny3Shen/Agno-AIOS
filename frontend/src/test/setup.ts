@@ -11,7 +11,6 @@ class NotificationStub {
   static permission: NotificationPermission = 'denied'
   static maxActions = 0
   static requestPermission = async (): Promise<NotificationPermission> => 'denied'
-  constructor(_title?: string, _options?: NotificationOptions) {}
   close() {}
   onclick: ((this: Notification, ev: Event) => unknown) | null = null
   onshow: ((this: Notification, ev: Event) => unknown) | null = null
@@ -56,8 +55,8 @@ const getComputedStyleWithoutPseudo = window.getComputedStyle.bind(window)
  */
 Object.defineProperty(window, 'getComputedStyle', {
   writable: true,
-  value: (element: Element, pseudoElt?: string | null) => {
-    const style = getComputedStyleWithoutPseudo(element, pseudoElt as string | undefined)
+  value: (element: Element, _pseudoElt?: string | null) => {
+    const style = getComputedStyleWithoutPseudo(element)
     const numericFallbacks: Record<string, string> = {
       'box-sizing': 'border-box',
       'padding-top': '0px',
@@ -134,4 +133,3 @@ Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
     return 0
   },
 })
-

@@ -1,5 +1,5 @@
 import type { ChatSession } from '@/features/chat'
-import type { SpanTreeNode, Trace, TraceFilters, TraceRun, TraceSession, TraceSessionSummary, TraceUrlState } from './types'
+import type { Trace, TraceFilters, TraceRun, TraceSession, TraceSessionSummary, TraceUrlState } from './types'
 
 const timestamp = (value: string) => Date.parse(value) || 0
 
@@ -39,34 +39,6 @@ export function buildTraceSearch(filters: TraceFilters, selectedSession = '', tr
   if (selectedSession) query.set('selected_session', selectedSession)
   if (traceId) query.set('trace', traceId)
   return query.toString()
-}
-
-export function groupSessions(
-  traces: Trace[],
-  previews: Record<string, string> = {},
-  archived: Record<string, boolean> = {},
-  inferMissingArchived = false
-): TraceSession[] {
-  const groups = new Map<string, Trace[]>()
-  traces.forEach((trace) => {
-    if (!trace.session_id) return
-    groups.set(trace.session_id, [...(groups.get(trace.session_id) ?? []), trace])
-  })
-  return [...groups.entries()]
-    .map(([sessionId, items]) => {
-      const latest = [...items].sort((left, right) => timestamp(right.start_time) - timestamp(left.start_time))[0]!
-      return {
-        sessionId,
-        name: previews[sessionId] || latest.name || sessionId,
-        context: latest.workflow_id || latest.agent_id || latest.team_id || latest.user_id || '',
-        archived: archived[sessionId] === true || (inferMissingArchived && !(sessionId in archived)),
-        traces: items,
-        runCount: new Set(items.map((trace) => trace.run_id || trace.trace_id)).size,
-        latestAt: latest.start_time,
-        workflowId: latest.workflow_id || null,
-      }
-    })
-    .sort((left, right) => timestamp(right.latestAt) - timestamp(left.latestAt))
 }
 
 export function filterSessionsByArchive(sessions: TraceSession[], filter: SessionArchiveFilter): TraceSession[] {
@@ -113,10 +85,6 @@ export function previewSpanValue(value: unknown, limit = 120): string {
     }
   }
   return text.length <= limit ? text : `${text.slice(0, limit - 1)}…`
-}
-
-export function firstSpanId(nodes: SpanTreeNode[]): string {
-  return nodes[0]?.span.span_id ?? ''
 }
 
 export function groupRuns(traces: Trace[], sessionId: string): TraceRun[] {

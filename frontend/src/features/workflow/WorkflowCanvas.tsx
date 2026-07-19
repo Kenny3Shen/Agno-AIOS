@@ -703,10 +703,10 @@ function CanvasInner({
   // Fit after load / template / paste. Prefer current selection when present.
   useEffect(() => {
     if (!focusEpoch || !steps.length) return
-    const selectionKey = selectedIds.length
+    const focusedSelectionKey = selectedIds.length
       ? selectedIds.slice().sort().join(',')
       : selectedId ?? ''
-    const key = `focus:${focusEpoch}:${selectionKey}`
+    const key = `focus:${focusEpoch}:${focusedSelectionKey}`
     if (key === lastFocusKeyRef.current) return
     lastFocusKeyRef.current = key
     const targetIds = selectedIds.length
@@ -1326,4 +1326,3 @@ export function paletteDragStart(event: DragEvent, type: WorkflowNodeType) {
   event.dataTransfer.setData(PALETTE_MIME, type)
   event.dataTransfer.effectAllowed = 'copy'
 }
-

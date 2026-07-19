@@ -6,7 +6,7 @@ from typing import cast
 import pytest
 
 from api.services.team_runtime import (
-    build_team_by_id,
+    build_team,
     is_team_id,
     list_chat_teams,
     normalize_team_id,
@@ -30,8 +30,9 @@ def test_team_catalog_gated(monkeypatch):
     assert "research-analysis-route" in ids
 
 
-def test_normalize_team_ids():
-    assert normalize_team_id("research-analysis") == "research-analysis-team"
+def test_normalize_team_ids_require_catalog_values():
+    assert normalize_team_id("research-analysis-team") == "research-analysis-team"
+    assert normalize_team_id("research-analysis") is None
     assert normalize_team_id("research-analysis-route") == "research-analysis-route"
     assert is_team_id("research-analysis-team") is True
     assert is_team_id("data-analysis") is False
@@ -63,7 +64,7 @@ async def test_build_research_team_members(monkeypatch):
         lambda _p: [],
     )
 
-    team = await build_team_by_id("research-analysis")
+    team = await build_team("research-analysis-team")
     assert team.id == "research-analysis-team"
     member_list = cast(list[object], team.members)
     member_ids = [getattr(member, "id", None) for member in member_list]
@@ -518,8 +519,8 @@ async def test_team_live_search_defaults_to_profile(monkeypatch):
         search_knowledge = False
 
         async def arun(self, *_a, **_k):
-            if False:  # pragma: no cover - empty async generator
-                yield None
+            for event in ():
+                yield event
 
     async def _build_team(team_id, **kwargs):
         captured["team_id"] = team_id
@@ -844,10 +845,10 @@ def test_task_event_matches_team_run_event():
 
 def test_broadcast_team_in_catalog(monkeypatch):
     monkeypatch.setenv("TAIS_ENABLE_AGNO_TEAM", "1")
-    from api.services.team_runtime import list_chat_teams, normalize_team_id, get_team_profile
+    from api.services.team_runtime import get_team_profile, list_chat_teams
     from agno.team.mode import TeamMode
 
-    assert normalize_team_id("research-broadcast") == "research-analysis-broadcast"
+    assert is_team_id("research-analysis-broadcast") is True
     profile = get_team_profile("research-analysis-broadcast")
     assert profile is not None
     assert profile.get("mode") == TeamMode.broadcast
@@ -903,7 +904,7 @@ async def test_member_stream_thought_summary_accumulates_deltas(monkeypatch):
     monkeypatch.setenv("TAIS_ENABLE_AGNO_TEAM", "1")
 
     class Runner:
-        async def arun(self, *a, **k):
+        async def arun(self, *_args, **_kwargs):
             # Long enough chunk train to cross min_growth between emits.
             chunks = ["Alpha-", "Bravo-", "Charlie-", "Delta-end"]
             for ch in chunks:
@@ -944,7 +945,7 @@ async def test_member_stream_thought_summary_accumulates_deltas(monkeypatch):
                 followups=[],
             )
 
-        def cancel_run(self, *a, **k):
+        def cancel_run(self, *_args, **_kwargs):
             return True
 
     runtime = srr.SecurityRunRuntime()

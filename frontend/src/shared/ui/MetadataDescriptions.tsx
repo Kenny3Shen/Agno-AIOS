@@ -1,7 +1,7 @@
 import { Descriptions, Space, Tag, Typography, type DescriptionsProps } from 'antd'
 import { JsonValueCard } from './FormattedContentCard'
 
-export interface MetadataEntry {
+interface MetadataEntry {
   key: string
   label: string
   value: unknown
@@ -19,7 +19,7 @@ const metadataLabel = (path: string) =>
     })
     .join(' / ')
 
-export function flattenMetadata(value: unknown, prefix = ''): MetadataEntry[] {
+function flattenMetadata(value: unknown, prefix = ''): MetadataEntry[] {
   if (value === undefined && !prefix) return []
   if (isRecord(value)) {
     const entries = Object.entries(value)

@@ -2,8 +2,8 @@ import type { UploadFile } from 'antd'
 import type { ResourceVisibility } from '@/shared/types/common'
 import type {
   Document,
+  KnowledgeIngestDefaultsPayload,
   KnowledgeIngestOptions,
-  KnowledgeRagSettings,
   KnowledgeSearchType,
   RetrievalRenderMode,
   SearchResult,
@@ -12,7 +12,7 @@ import type {
 
 export const KNOWLEDGE_FILE_ACCEPT =
   '.md,.markdown,.mdown,.mkd,.csv,.tsv,.json,.jsonl,.py,.js,.mjs,.cjs,.jsx,.ts,.tsx,.vue,.go,.rs,.java,.c,.cc,.cpp,.h,.hpp,.cs,.php,.rb,.sh,.sql,.pdf,.docx,.txt,.log,.rst,.yaml,.yml,.toml'
-export const MAX_KNOWLEDGE_FILE_BYTES = 50 * 1024 * 1024
+const MAX_KNOWLEDGE_FILE_BYTES = 50 * 1024 * 1024
 export const SEARCH_TYPE_OPTIONS: KnowledgeSearchType[] = ['hybrid', 'vector', 'keyword']
 
 export interface KnowledgeIngestDefaults {
@@ -31,7 +31,7 @@ export interface KnowledgeIngestDefaults {
   search_type: KnowledgeSearchType
 }
 
-export const AGNO_INGEST_DEFAULTS: KnowledgeIngestDefaults = {
+const AGNO_INGEST_DEFAULTS: KnowledgeIngestDefaults = {
   chunk_size: 5000,
   chunk_overlap: 0,
   markdown_split_on_headings: '',
@@ -76,7 +76,7 @@ const codeSuffixes = new Set([
   '.sql',
 ])
 
-export type KnowledgeReaderStrategy = 'markdown' | 'semantic' | 'code' | 'csv_row' | 'json' | 'document'
+type KnowledgeReaderStrategy = 'markdown' | 'semantic' | 'code' | 'csv_row' | 'json' | 'document'
 
 export interface KnowledgeReaderProfile {
   strategy: KnowledgeReaderStrategy
@@ -84,7 +84,7 @@ export interface KnowledgeReaderProfile {
   descriptionKey: string
 }
 
-export const knowledgeReaderProfiles: Record<KnowledgeReaderStrategy, KnowledgeReaderProfile> = {
+const knowledgeReaderProfiles: Record<KnowledgeReaderStrategy, KnowledgeReaderProfile> = {
   markdown: { strategy: 'markdown', labelKey: 'strategyMarkdown', descriptionKey: 'profiles.markdown' },
   semantic: { strategy: 'semantic', labelKey: 'strategySemantic', descriptionKey: 'profiles.semantic' },
   code: { strategy: 'code', labelKey: 'strategyCode', descriptionKey: 'profiles.code' },
@@ -93,14 +93,14 @@ export const knowledgeReaderProfiles: Record<KnowledgeReaderStrategy, KnowledgeR
   document: { strategy: 'document', labelKey: 'strategyDocument', descriptionKey: 'profiles.document' },
 }
 
-export function effectiveKnowledgeIngestDefaults(ragSettings?: KnowledgeRagSettings): KnowledgeIngestDefaults {
+export function effectiveKnowledgeIngestDefaults(defaults?: KnowledgeIngestDefaultsPayload): KnowledgeIngestDefaults {
   return {
     ...AGNO_INGEST_DEFAULTS,
-    chunk_size: ragSettings?.chunk_size ?? 1200,
-    chunk_overlap: ragSettings?.chunk_overlap ?? 160,
-    code_chunk_size: ragSettings?.code_chunk_size ?? 1800,
-    semantic_threshold: ragSettings?.semantic_threshold ?? 0.52,
-    search_type: ragSettings?.search_type ?? 'hybrid',
+    chunk_size: defaults?.chunk_size ?? 1200,
+    chunk_overlap: defaults?.chunk_overlap ?? 160,
+    code_chunk_size: defaults?.code_chunk_size ?? 1800,
+    semantic_threshold: defaults?.semantic_threshold ?? 0.52,
+    search_type: defaults?.search_type ?? 'hybrid',
   }
 }
 
@@ -146,7 +146,7 @@ export function resolveRetrievalContent(
   return { kind: 'text', value: result.content }
 }
 
-export function fileSuffix(name: string) {
+function fileSuffix(name: string) {
   const index = name.lastIndexOf('.')
   return index >= 0 ? name.slice(index).toLowerCase() : ''
 }
@@ -205,7 +205,7 @@ export function buildMetadataUpdate(
 
 export const hasMetadataUpdate = (payload: UpdateDocumentMetadataPayload) => Object.keys(payload).length > 0
 
-export type KnowledgeUpdateDecision =
+type KnowledgeUpdateDecision =
   | { kind: 'noop' }
   | { kind: 'metadata'; metadata: UpdateDocumentMetadataPayload }
   | { kind: 'rebuild'; metadata?: UpdateDocumentMetadataPayload; ingest_options?: KnowledgeIngestOptions }

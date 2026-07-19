@@ -4,14 +4,14 @@ import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { App } from '@/app/App'
 import { AppProviders } from '@/app/providers/AppProviders'
-import { AUTH_TOKEN_STORAGE_KEY } from '@/shared/auth/storage'
+import { getToken, setToken } from '@/shared/auth/storage'
 import { server } from '@/test/server'
 import { router } from './routes'
 
 const user = {
   id: 'user-1',
-  email: 'admin@example.com',
-  role: 'admin',
+  email: 'user@example.com',
+  role: 'user',
   scopes: ['sessions:write'],
   is_active: true,
 }
@@ -55,12 +55,12 @@ describe('app authentication routing', () => {
   })
 
   it('redirects expired tokens to login and clears local auth', async () => {
-    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, 'expired')
+    setToken('expired')
     server.use(http.get('/api/auth/users/me', () => new HttpResponse(null, { status: 401 })))
 
     renderAppAt('/dashboard')
 
-    await waitFor(() => expect(localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBeNull())
+    await waitFor(() => expect(getToken()).toBeNull())
     await waitFor(() => expect(decodeURIComponent(window.location.hash)).toBe('#/login?next=/dashboard'))
   })
 

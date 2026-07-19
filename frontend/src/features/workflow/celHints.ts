@@ -8,7 +8,7 @@ export type CelHint = {
   kind: 'condition' | 'loop' | 'router' | 'any'
 }
 
-export const CEL_HINTS: CelHint[] = [
+const CEL_HINTS: CelHint[] = [
   {
     value: 'input',
     label: 'input',

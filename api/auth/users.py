@@ -12,6 +12,7 @@ from loguru import logger
 from api.auth.claims import scope_claims
 from api.auth.database import get_user_db
 from api.auth.models import User
+from api.auth.schemas import UserUpdate
 from api.config import get_settings
 from api.services.audit_service import audit_request_context, record_audit_event_async
 
@@ -25,11 +26,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, UUID]):
     async def validate_password(self, password: str, user: User | None = None) -> None:
         if len(password) < 8:
             raise exceptions.InvalidPasswordException("密码长度至少需要 8 位。")
-
-    
     async def update(
         self,
-        user_update,  # type: ignore[no-untyped-def]
+        user_update: UserUpdate,
         user: User,
         safe: bool = False,
         request: Request | None = None,
@@ -38,7 +37,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, UUID]):
         role = getattr(user_update, "role", None)
         if not safe and isinstance(role, str) and role.strip().lower() == "admin":
             # Superuser flag drives actor_role() for JWT claims.
-            user_update.is_superuser = True  # type: ignore[attr-defined]
+            user_update.is_superuser = True
         updated = await super().update(user_update, user, safe=safe, request=request)
         return updated
 

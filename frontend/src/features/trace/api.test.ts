@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
-import { getTrace, listTraceSessions, listTraces, normalizeTrace } from './api'
+import { getTrace, listTraceSessions, listTraces } from './api'
 import type { TraceSessionSummary } from './types'
 
 const summary = (index: number): TraceSessionSummary => ({
@@ -31,14 +31,22 @@ describe('trace API', () => {
               session_id: 's1',
               run_id: 'r1',
             },
+            {
+              trace_id: 't2',
+              name: 'agent.run',
+              status: 'OK',
+              duration: '0ms',
+              start_time: '',
+              end_time: '',
+            },
           ],
-          meta: { page: 1, limit: 20, total_count: 1, total_pages: 1, search_time_ms: 1.2 },
+          meta: { page: 1, limit: 20, total_count: 2, total_pages: 1, search_time_ms: 1.2, truncated: true },
         }),
       ),
     )
 
     const result = await listTraces({ session_id: 's1' })
-    expect(result.data).toHaveLength(1)
+    expect(result.data).toHaveLength(2)
     expect(result.data[0]).toMatchObject({
       trace_id: 't1',
       duration: '1.50s',
@@ -46,19 +54,22 @@ describe('trace API', () => {
       session_id: 's1',
     })
     expect(result.data[0]).not.toHaveProperty('duration_ms')
-    expect(result.meta.total_count).toBe(1)
+    expect(result.data[1]).toMatchObject({ trace_id: 't2', duration: '0ms' })
+    expect(result.meta.total_count).toBe(2)
+    expect(result.meta.truncated).toBe(true)
   })
 
-  it('defaults missing duration to 0ms', () => {
-    expect(
-      normalizeTrace({
-        trace_id: 't2',
-        name: 'agent.run',
-        status: 'OK',
-        start_time: '',
-        end_time: '',
-      }),
-    ).toMatchObject({ trace_id: 't2', duration: '0ms' })
+  it('rejects list rows without a canonical duration', async () => {
+    server.use(
+      http.get('/api/traces', () =>
+        HttpResponse.json({
+          data: [{ trace_id: 't1', name: 'agent.run', status: 'OK', start_time: '', end_time: '' }],
+          meta: { page: 1, limit: 20, total_count: 1, total_pages: 1, search_time_ms: 0 },
+        }),
+      ),
+    )
+
+    await expect(listTraces({})).rejects.toThrow('listTraces: invalid trace payload')
   })
 
   it('normalizes detail spans to duration strings', async () => {
@@ -103,6 +114,41 @@ describe('trace API', () => {
     expect(detail.tree[0]?.span.duration).toBe('1.00s')
   })
 
+  it('rejects malformed detail instead of fabricating trace and span values', async () => {
+    server.use(
+      http.get('/api/traces/t1', () =>
+        HttpResponse.json({
+          trace: { trace_id: 't1', name: 'agent.run', status: 'OK', start_time: '', end_time: '' },
+          spans: [],
+          tree: [],
+        }),
+      ),
+    )
+
+    await expect(getTrace('t1')).rejects.toThrow('getTrace: invalid trace payload')
+  })
+
+  it('rejects detail spans without a canonical duration', async () => {
+    server.use(
+      http.get('/api/traces/t1', () =>
+        HttpResponse.json({
+          trace: {
+            trace_id: 't1',
+            name: 'agent.run',
+            status: 'OK',
+            duration: '1.00s',
+            start_time: '2026-07-12T00:00:00Z',
+            end_time: '',
+          },
+          spans: [{ span_id: 'root', name: 'agent.run', status_code: 'OK', start_time: '2026-07-12T00:00:00Z' }],
+          tree: [],
+        }),
+      ),
+    )
+
+    await expect(getTrace('t1')).rejects.toThrow('getTrace: invalid span payload')
+  })
+
   it('requests a single sessions page with page/limit', async () => {
     const requested: string[] = []
     server.use(
@@ -122,28 +168,19 @@ describe('trace API', () => {
     expect(result.meta).toMatchObject({ page: 2, limit: 8, total_count: 20, total_pages: 3 })
   })
 
-  it('propagates truncated meta from a single sessions response', async () => {
+  it('rejects malformed session rows instead of silently omitting them', async () => {
     server.use(
       http.get('/api/traces/sessions', () =>
         HttpResponse.json({
-          data: Array.from({ length: 8 }, (_, index) => summary(index + 1)),
-          meta: {
-            page: 1,
-            limit: 8,
-            total_count: 50,
-            total_pages: 7,
-            search_time_ms: 0,
-            truncated: true,
-            scanned_count: 200,
-          },
+          data: [{ ...summary(1), trace_count: '1' }],
+          meta: { page: 1, limit: 20, total_count: 1, total_pages: 1, search_time_ms: 0 },
         }),
       ),
     )
-    const result = await listTraceSessions({ status: 'ERROR', page: 1, limit: 8 })
-    expect(result.data).toHaveLength(8)
-    expect(result.meta.truncated).toBe(true)
-    expect(result.meta.scanned_count).toBe(200)
-    expect(result.meta.total_count).toBe(50)
+
+    await expect(listTraceSessions({})).rejects.toThrow(
+      'listTraceSessions: invalid trace session payload',
+    )
   })
 
 })

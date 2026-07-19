@@ -1,26 +1,12 @@
 from api.services.agent_catalog import (
     DEFAULT_AGENT_ID,
     get_agent_profile,
-    list_chat_agents,
     list_workflow_executor_options,
     normalize_agent_id,
     profile_attaches_skills,
     profile_connects_mcp,
 )
 from api.services.agent_tools import build_tools_for_profile
-
-
-def test_chat_agents_include_analysis_and_research():
-    ids = {row["id"] for row in list_chat_agents()}
-    assert ids == {"security-operations", "data-analysis", "deep-research"}
-
-
-def test_workflow_executors_include_safe_fallback():
-    refs = {row["ref"] for row in list_workflow_executor_options()}
-    assert "security-operations" in refs
-    assert "data-analysis" in refs
-    assert "deep-research" in refs
-    assert "safe-fallback" in refs
 
 
 def test_normalize_unknown_agent():
@@ -35,6 +21,20 @@ def test_specialists_skip_mcp_and_skills():
     assert profile_connects_mcp("deep-research") is False
     assert profile_attaches_skills("security-operations") is True
     assert profile_connects_mcp("security-operations") is True
+
+
+def test_workflow_executors_include_builtin_agents():
+    items = list_workflow_executor_options()
+    refs = {item["ref"] for item in items}
+    assert "security-operations" in refs
+    assert "safe-fallback" in refs
+    by_ref = {item["ref"]: item for item in items}
+    assert by_ref["security-operations"]["name"]
+    assert by_ref["security-operations"]["description"]
+    assert by_ref["security-operations"]["category"] == "operations"
+    assert "hitl" in by_ref["security-operations"]["capabilities"]
+    assert by_ref["safe-fallback"]["category"] == "lite"
+    assert by_ref["safe-fallback"]["recommended_for"]
 
 
 def test_builtin_tools_load():
@@ -84,11 +84,6 @@ def test_resolve_chat_run_target_team(monkeypatch):
     kind2, aid = resolve_chat_run_target("research-analysis-team")
     assert kind2 == "agent"
     assert aid == "security-operations"
-
-
-def test_deep_research_declares_web_search():
-    profile = get_agent_profile("deep-research")
-    assert "web_search" in tuple(profile.get("builtin_tools") or ())
 
 
 def test_stage_media_into_analysis_dir(tmp_path, monkeypatch):
@@ -192,4 +187,3 @@ def test_csv_tools_disable_query_and_web_search_mounts(tmp_path, monkeypatch):
     assert web is not None
     research_tools = at.build_tools_for_profile(get_agent_profile("deep-research"))
     assert any("DuckDuckGo" in type(t).__name__ or "WebSearch" in type(t).__name__ for t in research_tools)
-

@@ -16,27 +16,23 @@ export interface Document {
 }
 export type KnowledgeSearchType = 'hybrid' | 'vector' | 'keyword'
 export type RetrievalRenderMode = 'auto' | 'markdown' | 'json' | 'text'
-export interface KnowledgeRagSettings {
+export interface KnowledgeIngestDefaultsPayload {
   search_type?: KnowledgeSearchType
   chunk_size?: number
   chunk_overlap?: number
   code_chunk_size?: number
   semantic_threshold?: number
 }
-export interface KnowledgeStatus extends JsonRecord {
-  rag_settings?: KnowledgeRagSettings
-}
-export type KnowledgeListMeta = ListPaginationMeta & {
+type KnowledgeListMeta = ListPaginationMeta & {
   query?: string
   sort_by?: string
   sort_order?: string
+  ingest_defaults?: KnowledgeIngestDefaultsPayload
 }
 
 export interface KnowledgeResponse {
   data: Document[]
   meta: KnowledgeListMeta
-  /** RAG/health snapshot for the workspace (not list envelope). */
-  status: KnowledgeStatus
 }
 export interface SearchResult {
   content: string
@@ -89,7 +85,7 @@ export interface UpdateDocumentMetadataPayload {
   metadata?: Record<string, string>
 }
 
-export type UpdateDocumentMode = 'metadata' | 'rebuild' | 'replace_text'
+type UpdateDocumentMode = 'metadata' | 'rebuild' | 'replace_text'
 
 export interface UpdateDocumentActionPayload {
   mode: UpdateDocumentMode

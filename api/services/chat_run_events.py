@@ -27,9 +27,6 @@ class ChatRunEvent:
     event: ChatRunEventName
     data: dict[str, Any]
 
-    def as_sse(self) -> dict[str, Any]:
-        return {"event": self.event, "data": self.data}
-
 
 def event_value(event: Any, name: str, default: Any = None) -> Any:
     if isinstance(event, dict):

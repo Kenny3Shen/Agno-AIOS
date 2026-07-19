@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import os
 from unittest.mock import patch
 
 import pytest
+from agno.knowledge.document import Document
 from agno.vectordb.search import SearchType
 
 from api.services import knowledge_ingest_service
+from api.services import knowledge_rag_settings_service
 from api.services import knowledge_runtime_service
 from api.services import knowledge_service
 from api.services.knowledge_ingest_service import (
@@ -77,7 +78,7 @@ def test_javascript_code_reader_uses_explicit_language_to_avoid_auto_detection()
 def test_markdown_heading_level_and_size_based_modes_configure_chunking() -> None:
     heading_reader = knowledge_ingest_service.reader_for_profile(
         knowledge_ingest_service.PROFILE_MARKDOWN,
-        reader_config(markdown_split_on_headings=2, chunk_size=1400),
+        reader_config(markdown_split_on_headings=2, chunk_size=1400, chunk_overlap=0),
         "runbook.md",
     )
     size_reader = knowledge_ingest_service.reader_for_profile(
@@ -86,10 +87,25 @@ def test_markdown_heading_level_and_size_based_modes_configure_chunking() -> Non
         "runbook.md",
     )
 
-    assert getattr(heading_reader.chunking_strategy, "split_on_headings", None) == 2
-    assert getattr(heading_reader.chunking_strategy, "chunk_size", None) == 1400
+    heading_strategy = heading_reader.chunking_strategy
+    assert heading_strategy is not None
+    assert heading_strategy.__class__.__name__ == "MarkdownHeadingChunking"
+    assert getattr(heading_strategy, "split_on_headings", None) == 2
+    assert getattr(heading_strategy, "chunk_size", None) == 1400
     assert getattr(size_reader.chunking_strategy, "split_on_headings", None) is False
     assert getattr(size_reader.chunking_strategy, "chunk_size", None) == 900
+
+    chunks = heading_strategy.chunk(
+        Document(
+            id="runbook",
+            name="Runbook",
+            content="# Overview\nContext.\n\n## Operations\nDetails.\n\n### Escalation\nNested details.",
+        )
+    )
+    assert [chunk.content for chunk in chunks] == [
+        "# Overview\nContext.",
+        "## Operations\nDetails.\n\n### Escalation\nNested details.",
+    ]
 
 
 def test_csv_row_options_configure_row_chunking() -> None:
@@ -149,15 +165,6 @@ def test_semantic_advanced_options_configure_semantic_chunking() -> None:
     assert getattr(reader.chunking_strategy, "similarity_window", None) == 4
     assert getattr(reader.chunking_strategy, "min_sentences_per_chunk", None) == 2
     assert getattr(reader.chunking_strategy, "min_characters_per_sentence", None) == 12
-
-
-def test_knowledge_service_keeps_profile_interface() -> None:
-    profile = knowledge_service.knowledge_profile_for_filename("runbook.md")
-    assert profile.strategy == "markdown"
-    assert (
-        knowledge_service.reader_for_profile(profile).__class__.__name__
-        == "MarkdownReader"
-    )
 
 
 def test_runtime_candidate_limit_respects_rerank_policy() -> None:
@@ -287,65 +294,17 @@ def test_knowledge_service_uses_agno_sentence_transformer_reranker() -> None:
     }
 
 
-def test_status_exposes_supported_suffixes_and_search_type() -> None:
-    original = os.environ.get("TAIS_KNOWLEDGE_SEARCH_TYPE")
-    os.environ["TAIS_KNOWLEDGE_SEARCH_TYPE"] = "hybrid"
-    try:
-        assert knowledge_service.search_type_from_env() == SearchType.hybrid
-    finally:
-        if original is None:
-            os.environ.pop("TAIS_KNOWLEDGE_SEARCH_TYPE", None)
-        else:
-            os.environ["TAIS_KNOWLEDGE_SEARCH_TYPE"] = original
-    status = knowledge_ingest_service.pipeline_status(
-        search_type=knowledge_service.search_type_from_env().value,
-        vector_score_weight=0.55,
-        prefix_match=False,
-        content_language="english",
-        semantic_threshold=0.52,
-        code_chunk_size=1800,
-    )
-    assert ".md" in status["supported_suffixes"]
-    assert ".csv" in status["supported_suffixes"]
-    assert ".py" in status["supported_suffixes"]
-    assert status["search_type"] in {"vector", "keyword", "hybrid"}
-    service_status = knowledge_service.pipeline_status()
-    assert service_status["search_type"] == "hybrid"
-    assert (
-        service_status["code_chunk_size"]
-        == knowledge_service.knowledge_settings().code_chunk_size
-    )
+def test_current_ingest_defaults_only_expose_form_fields() -> None:
+    defaults = knowledge_rag_settings_service.current_ingest_defaults()
 
-
-def test_update_runtime_rag_settings_updates_env_and_rolls_back_invalid_overlap(monkeypatch) -> None:
-    monkeypatch.setenv("TAIS_KNOWLEDGE_TOP_K", "5")
-    monkeypatch.setenv("TAIS_KNOWLEDGE_CHUNK_SIZE", "1200")
-    monkeypatch.setenv("TAIS_KNOWLEDGE_CHUNK_OVERLAP", "160")
-    monkeypatch.setenv("TAIS_KNOWLEDGE_SEARCH_TYPE", "hybrid")
-    knowledge_service._clear_knowledge_runtime_caches()
-    try:
-        settings = knowledge_service.update_runtime_rag_settings(
-            {
-                "top_k": 8,
-                "search_type": "vector",
-                "prefix_match": True,
-                "vector_score_weight": 0.6,
-            }
-        )
-        assert settings["top_k"] == 8
-        assert settings["search_type"] == "vector"
-        assert settings["prefix_match"] is True
-        assert os.environ["TAIS_KNOWLEDGE_TOP_K"] == "8"
-        assert os.environ["TAIS_KNOWLEDGE_SEARCH_TYPE"] == "vector"
-
-        with pytest.raises(ValueError, match="chunk_overlap"):
-            knowledge_service.update_runtime_rag_settings(
-                {"chunk_size": 500, "chunk_overlap": 500}
-            )
-        assert os.environ["TAIS_KNOWLEDGE_CHUNK_SIZE"] == "1200"
-        assert os.environ["TAIS_KNOWLEDGE_CHUNK_OVERLAP"] == "160"
-    finally:
-        knowledge_service._clear_knowledge_runtime_caches()
+    assert set(defaults) == {
+        "chunk_size",
+        "chunk_overlap",
+        "code_chunk_size",
+        "semantic_threshold",
+        "search_type",
+    }
+    assert defaults["search_type"] == knowledge_service.search_type_from_env().value
 
 
 def test_profile_for_strategy_resolves_known_reader_strategy() -> None:

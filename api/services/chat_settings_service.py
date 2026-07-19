@@ -22,10 +22,6 @@ class ChatSettings:
     memory_enabled: bool = True
 
 
-def _invalidate_chat_settings_cache() -> None:
-    _SETTINGS_CACHE.clear()
-
-
 def _project_settings(row: Mapping[str, object]) -> dict[str, bool]:
     return {key: bool(row.get(key, default)) for key, default in DEFAULT_CHAT_SETTINGS.items()}
 

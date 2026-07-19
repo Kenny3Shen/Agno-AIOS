@@ -66,14 +66,14 @@ test.describe('approvals critical path', () => {
     await expect(page.getByRole('heading', { name: '审批' })).toBeVisible()
     await expect(page.getByText('仅显示工作流步骤暂停')).toBeVisible()
 
-    // Segmented default is 工作流 HITL; row shows step tool name + Pending tag.
+    // Segmented default is 工作流 HITL; row shows step tool name + pending tag.
     await expect(page.getByText('workflow.step:confirm')).toBeVisible()
     await expect(page.getByRole('button', { name: /查看审批 appr-wf-e2e/ })).toBeVisible()
-    await expect(page.locator('.ant-tag', { hasText: 'Pending' })).toBeVisible()
+    await expect(page.locator('.ant-tag', { hasText: /待处理|Pending/i })).toBeVisible()
 
-    // Deep link opens drawer (title is English product copy).
+    // Deep link opens the approval drawer.
     await page.goto(`/#/approvals?approval_id=${workflowPending.id}`, { waitUntil: 'domcontentloaded' })
-    const drawer = page.getByRole('dialog', { name: 'Approval detail' })
+    const drawer = page.getByRole('dialog', { name: /审批详情|Approval detail/i })
     await expect(drawer).toBeVisible({ timeout: 10_000 })
     await expect(drawer.getByText('workflow.step:confirm')).toBeVisible()
     // Request data PayloadViewer includes tool_args.message.
@@ -133,7 +133,7 @@ test.describe('approvals critical path', () => {
     })
 
     await page.goto(`/#/approvals?approval_id=${workflowPending.id}`, { waitUntil: 'domcontentloaded' })
-    const drawer = page.getByRole('dialog', { name: 'Approval detail' })
+    const drawer = page.getByRole('dialog', { name: /审批详情|Approval detail/i })
     await expect(drawer).toBeVisible({ timeout: 10_000 })
     await expect(drawer.getByText('E2E approve this step?')).toBeVisible()
 

@@ -13,12 +13,18 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    and_,
     delete,
+    func,
     insert,
+    or_,
     select,
     text,
+    update,
 )
 from sqlalchemy.schema import CreateSchema
+
+from loguru import logger
 
 from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
@@ -67,6 +73,37 @@ def model_configs_table(metadata: MetaData | None = None) -> Table:
 
 
 _model_configs_table_once = AsyncOnce()
+
+
+def _xai_model_config_migration_statement(table: Table):
+    provider = func.lower(func.coalesce(table.c.provider, ""))
+    model_id = func.lower(func.coalesce(table.c.model_id, ""))
+    base_url = func.lower(func.coalesce(table.c.base_url, ""))
+    legacy_xai = and_(
+        provider.in_(("", "openai-compatible")),
+        or_(model_id.like("grok%"), base_url.like("%api.x.ai%")),
+    )
+    stale_xai = and_(
+        provider == "xai",
+        or_(
+            func.coalesce(table.c.api_protocol, "") != "chat-completions",
+            table.c.default_reasoning_effort.is_not(None),
+        ),
+    )
+    return (
+        update(table)
+        .where(or_(legacy_xai, stale_xai))
+        .values(
+            provider="xai",
+            api_protocol="chat-completions",
+            default_reasoning_effort=None,
+        )
+    )
+
+
+async def _migrate_xai_model_configs_async(conn: Any, table: Table) -> int:
+    result = await conn.execute(_xai_model_config_migration_statement(table))
+    return max(0, int(getattr(result, "rowcount", 0) or 0))
 
 
 async def _create_model_configs_table_async() -> None:
@@ -119,6 +156,9 @@ async def _create_model_configs_table_async() -> None:
                 "ADD COLUMN IF NOT EXISTS http_max_retries BIGINT"
             )
         )
+        migrated_count = await _migrate_xai_model_configs_async(conn, table)
+        if migrated_count:
+            logger.info("canonicalized {} legacy xAI model config row(s)", migrated_count)
         for index in table.indexes:
             await conn.run_sync(index.create, checkfirst=True)
 

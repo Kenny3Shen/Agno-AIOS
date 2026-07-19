@@ -7,6 +7,7 @@ import { normalizePaginatedList } from '@/shared/lib/pagination'
 import { consumeSse } from '@/features/chat/utils'
 import type {
   ExecutorOption,
+  WorkflowDefinition,
   WorkflowDefinitionNode,
   WorkflowNodeType,
   WorkflowRecord,
@@ -14,192 +15,488 @@ import type {
 } from './types'
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
-  value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
 
-const normalizeNode = (value: unknown): WorkflowDefinitionNode | null => {
-  const item = asRecord(value)
-  if (!item) return null
-  const type = (String(item.type || 'step').toLowerCase() || 'step') as WorkflowNodeType
-  const id = String(item.id ?? crypto.randomUUID())
-  const name = String(item.name ?? id)
+const isNonNegativeInteger = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0
 
-  if (type === 'parallel') {
-    return {
-      id,
-      type: 'parallel',
-      name,
-      steps: Array.isArray(item.steps)
-        ? item.steps.flatMap((child) => {
-            const node = normalizeNode(child)
-            return node ? [node] : []
-          })
-        : [],
-    }
-  }
-  if (type === 'condition') {
-    const evaluator = asRecord(item.evaluator) ?? {}
-    const thenRaw = Array.isArray(item.then_steps)
-      ? item.then_steps
-      : Array.isArray(item["then"])
-        ? item["then"]
-        : Array.isArray(item.steps)
-          ? item.steps
-          : []
-    const elseRaw = Array.isArray(item.else_steps)
-      ? item.else_steps
-      : Array.isArray(item["else"])
-        ? item["else"]
-        : []
-    return {
-      id,
-      type: 'condition',
-      name,
-      evaluator: {
-        cel: evaluator.cel != null ? String(evaluator.cel) : undefined,
-        value: typeof evaluator.value === 'boolean' ? evaluator.value : undefined,
-      },
-      then_steps: thenRaw.flatMap((child) => {
-        const node = normalizeNode(child)
-        return node ? [node] : []
-      }),
-      else_steps: elseRaw.flatMap((child) => {
-        const node = normalizeNode(child)
-        return node ? [node] : []
-      }),
-    }
-  }
-  if (type === 'loop') {
-    const end = asRecord(item.end_condition) ?? asRecord(item.endCondition)
-    return {
-      id,
-      type: 'loop',
-      name,
-      max_iterations: Number(item.max_iterations ?? item.maxIterations ?? 3),
-      end_condition: end
-        ? {
-            cel: end.cel != null ? String(end.cel) : undefined,
-            value: typeof end.value === 'boolean' ? end.value : undefined,
-          }
-        : null,
-      steps: Array.isArray(item.steps)
-        ? item.steps.flatMap((child) => {
-            const node = normalizeNode(child)
-            return node ? [node] : []
-          })
-        : [],
-      position: asRecord(item.position)
-        ? { x: Number(asRecord(item.position)?.x ?? 0), y: Number(asRecord(item.position)?.y ?? 0) }
-        : undefined,
-    }
-  }
-  if (type === 'router') {
-    const selector = asRecord(item.selector) ?? {}
-    const choices = Array.isArray(item.choices) ? item.choices : []
-    return {
-      id,
-      type: 'router',
-      name,
-      selector: { cel: selector.cel != null ? String(selector.cel) : undefined },
-      choices: choices.flatMap((raw) => {
-        const choice = asRecord(raw)
-        if (!choice) return []
-        return [
-          {
-            id: String(choice.id ?? crypto.randomUUID()),
-            name: String(choice.name ?? choice.id ?? 'choice'),
-            steps: Array.isArray(choice.steps)
-              ? choice.steps.flatMap((child) => {
-                  const node = normalizeNode(child)
-                  return node ? [node] : []
-                })
-              : [],
-          },
-        ]
-      }),
-      position: asRecord(item.position)
-        ? { x: Number(asRecord(item.position)?.x ?? 0), y: Number(asRecord(item.position)?.y ?? 0) }
-        : undefined,
-    }
-  }
-  if (type === 'workflow_ref') {
-    return {
-      id,
-      type: 'workflow_ref',
-      name,
-      workflow_id: String(item.workflow_id ?? item.workflowId ?? ''),
-      position: asRecord(item.position)
-        ? { x: Number(asRecord(item.position)?.x ?? 0), y: Number(asRecord(item.position)?.y ?? 0) }
-        : undefined,
-    }
-  }
+const isWorkflowHistoryId = (value: unknown): value is string | number =>
+  (typeof value === 'string' && Boolean(value.trim())) ||
+  (typeof value === 'number' && Number.isFinite(value))
 
-  const executor = asRecord(item.executor) ?? {}
+type WorkflowChoice = NonNullable<WorkflowDefinitionNode['choices']>[number]
+type WorkflowParseLabel = 'workflow payload' | 'workflow definition'
+
+const workflowNodeTypes = new Set<WorkflowNodeType>([
+  'step',
+  'parallel',
+  'condition',
+  'loop',
+  'router',
+  'workflow_ref',
+])
+
+const invalidWorkflowValue = (context: string, label: WorkflowParseLabel): never => {
+  throw new Error(`${context}: invalid ${label}`)
+}
+
+const requireWorkflowRecord = (
+  value: unknown,
+  context: string,
+  label: WorkflowParseLabel,
+): Record<string, unknown> => {
+  const row = asRecord(value)
+  if (!row) return invalidWorkflowValue(context, label)
+  return row
+}
+
+const requireWorkflowString = (
+  value: unknown,
+  context: string,
+  label: WorkflowParseLabel,
+): string => {
+  if (typeof value !== 'string') return invalidWorkflowValue(context, label)
+  return value
+}
+
+const requireWorkflowIdentifier = (
+  value: unknown,
+  context: string,
+  label: WorkflowParseLabel,
+): string => {
+  const text = requireWorkflowString(value, context, label)
+  if (!text.trim()) return invalidWorkflowValue(context, label)
+  return text
+}
+
+const requireWorkflowNumber = (
+  value: unknown,
+  context: string,
+  label: WorkflowParseLabel,
+): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return invalidWorkflowValue(context, label)
+  }
+  return value
+}
+
+const requireWorkflowInteger = (
+  value: unknown,
+  context: string,
+  label: WorkflowParseLabel,
+): number => {
+  const number = requireWorkflowNumber(value, context, label)
+  if (!Number.isInteger(number) || number < 0) return invalidWorkflowValue(context, label)
+  return number
+}
+
+const optionalWorkflowString = (
+  value: unknown,
+  context: string,
+  label: WorkflowParseLabel,
+): string | undefined => {
+  if (value === undefined) return undefined
+  return requireWorkflowString(value, context, label)
+}
+
+const optionalWorkflowPosition = (
+  value: unknown,
+  context: string,
+  label: WorkflowParseLabel,
+): WorkflowDefinitionNode['position'] => {
+  if (value === undefined) return undefined
+  const row = requireWorkflowRecord(value, context, label)
   return {
-    id,
-    type: 'step',
-    name,
-    executor: {
-      kind: 'agent',
-      ref: String(executor.ref ?? item.targetId ?? 'security-operations'),
-    },
-    instructions: String(item.instructions ?? ''),
-    requires_confirmation: Boolean(item.requires_confirmation),
-    confirmation_message: item.confirmation_message != null ? String(item.confirmation_message) : undefined,
-    requires_user_input: Boolean(item.requires_user_input),
-    user_input_message: item.user_input_message != null ? String(item.user_input_message) : undefined,
-    requires_output_review: Boolean(item.requires_output_review),
-    output_review_message: item.output_review_message != null ? String(item.output_review_message) : undefined,
-    position: asRecord(item.position)
-      ? { x: Number(asRecord(item.position)?.x ?? 0), y: Number(asRecord(item.position)?.y ?? 0) }
-      : undefined,
+    x: requireWorkflowNumber(row.x, context, label),
+    y: requireWorkflowNumber(row.y, context, label),
   }
 }
 
-const normalizeWorkflow = (value: unknown): WorkflowRecord | null => {
+const optionalWorkflowSkills = (
+  value: unknown,
+  context: string,
+  label: WorkflowParseLabel,
+): string[] | undefined => {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) return invalidWorkflowValue(context, label)
+  return value.map((skill) => requireWorkflowIdentifier(skill, context, label))
+}
+
+const optionalUserInputSchema = (
+  value: unknown,
+  context: string,
+  label: WorkflowParseLabel,
+): NonNullable<WorkflowDefinitionNode['user_input_schema']> | undefined => {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) return invalidWorkflowValue(context, label)
+  return value.map((field) => {
+    const row = requireWorkflowRecord(field, context, label)
+    const description = optionalWorkflowString(row.description, context, label)
+    if (typeof row.required !== 'boolean') return invalidWorkflowValue(context, label)
+    return {
+      name: requireWorkflowIdentifier(row.name, context, label),
+      field_type: requireWorkflowIdentifier(row.field_type, context, label),
+      required: row.required,
+      ...(description === undefined ? {} : { description }),
+    }
+  })
+}
+
+const parseWorkflowExecutor = (
+  value: unknown,
+  context: string,
+  label: WorkflowParseLabel,
+): NonNullable<WorkflowDefinitionNode['executor']> => {
+  const row = requireWorkflowRecord(value, context, label)
+  if (row.kind !== 'agent') return invalidWorkflowValue(context, label)
+  return {
+    kind: 'agent',
+    ref: requireWorkflowIdentifier(row.ref, context, label),
+  }
+}
+
+const parseWorkflowEvaluator = (
+  value: unknown,
+  context: string,
+  label: WorkflowParseLabel,
+): NonNullable<WorkflowDefinitionNode['evaluator']> => {
+  const row = requireWorkflowRecord(value, context, label)
+  if (typeof row.cel === 'string' && row.cel.trim() && row.value === undefined) {
+    return { cel: row.cel }
+  }
+  if (typeof row.value === 'boolean' && row.cel === undefined) {
+    return { value: row.value }
+  }
+  return invalidWorkflowValue(context, label)
+}
+
+function parseWorkflowNodeList(
+  value: unknown,
+  context: string,
+  label: WorkflowParseLabel,
+  minimumLength: number,
+): WorkflowDefinitionNode[] {
+  if (!Array.isArray(value) || value.length < minimumLength) {
+    return invalidWorkflowValue(context, label)
+  }
+  return value.map((node) => parseWorkflowNode(node, context, label))
+}
+
+function parseWorkflowChoices(
+  value: unknown,
+  context: string,
+  label: WorkflowParseLabel,
+): WorkflowChoice[] {
+  if (!Array.isArray(value) || value.length < 2) return invalidWorkflowValue(context, label)
+  return value.map((choice) => {
+    const row = requireWorkflowRecord(choice, context, label)
+    return {
+      id: requireWorkflowIdentifier(row.id, context, label),
+      name: requireWorkflowIdentifier(row.name, context, label),
+      steps: parseWorkflowNodeList(row.steps, context, label, 1),
+    }
+  })
+}
+
+function parseWorkflowNode(
+  value: unknown,
+  context: string,
+  label: WorkflowParseLabel,
+): WorkflowDefinitionNode {
+  const row = requireWorkflowRecord(value, context, label)
+  const type = requireWorkflowIdentifier(row.type, context, label)
+  if (!workflowNodeTypes.has(type as WorkflowNodeType)) return invalidWorkflowValue(context, label)
+  const position = optionalWorkflowPosition(row.position, context, label)
+  const common = {
+    id: requireWorkflowIdentifier(row.id, context, label),
+    type: type as WorkflowNodeType,
+    name: requireWorkflowIdentifier(row.name, context, label),
+    ...(position === undefined ? {} : { position }),
+  }
+
+  if (type === 'step') {
+    const confirmationMessage = optionalWorkflowString(row.confirmation_message, context, label)
+    const userInputMessage = optionalWorkflowString(row.user_input_message, context, label)
+    const outputReviewMessage = optionalWorkflowString(row.output_review_message, context, label)
+    const skills = optionalWorkflowSkills(row.skills, context, label)
+    const userInputSchema = optionalUserInputSchema(row.user_input_schema, context, label)
+    if (
+      typeof row.requires_confirmation !== 'boolean' ||
+      typeof row.requires_user_input !== 'boolean' ||
+      typeof row.requires_output_review !== 'boolean'
+    ) {
+      return invalidWorkflowValue(context, label)
+    }
+    return {
+      ...common,
+      type: 'step',
+      executor: parseWorkflowExecutor(row.executor, context, label),
+      instructions: requireWorkflowString(row.instructions, context, label),
+      requires_confirmation: row.requires_confirmation,
+      requires_user_input: row.requires_user_input,
+      requires_output_review: row.requires_output_review,
+      ...(confirmationMessage === undefined ? {} : { confirmation_message: confirmationMessage }),
+      ...(userInputMessage === undefined ? {} : { user_input_message: userInputMessage }),
+      ...(outputReviewMessage === undefined ? {} : { output_review_message: outputReviewMessage }),
+      ...(skills === undefined ? {} : { skills }),
+      ...(userInputSchema === undefined ? {} : { user_input_schema: userInputSchema }),
+    }
+  }
+  if (type === 'parallel') {
+    return {
+      ...common,
+      type: 'parallel',
+      steps: parseWorkflowNodeList(row.steps, context, label, 2),
+    }
+  }
+  if (type === 'condition') {
+    return {
+      ...common,
+      type: 'condition',
+      evaluator: parseWorkflowEvaluator(row.evaluator, context, label),
+      steps: parseWorkflowNodeList(row.steps, context, label, 1),
+      else: parseWorkflowNodeList(row.else, context, label, 0),
+    }
+  }
+  if (type === 'loop') {
+    const maxIterations = requireWorkflowInteger(row.max_iterations, context, label)
+    if (maxIterations < 1) return invalidWorkflowValue(context, label)
+    const endCondition =
+      row.end_condition === null
+        ? null
+        : parseWorkflowEvaluator(row.end_condition, context, label)
+    return {
+      ...common,
+      type: 'loop',
+      max_iterations: maxIterations,
+      end_condition: endCondition,
+      steps: parseWorkflowNodeList(row.steps, context, label, 1),
+    }
+  }
+  if (type === 'router') {
+    const selector = requireWorkflowRecord(row.selector, context, label)
+    return {
+      ...common,
+      type: 'router',
+      selector: { cel: requireWorkflowIdentifier(selector.cel, context, label) },
+      choices: parseWorkflowChoices(row.choices, context, label),
+    }
+  }
+  return {
+    ...common,
+    type: 'workflow_ref',
+    workflow_id: requireWorkflowIdentifier(row.workflow_id, context, label),
+  }
+}
+
+const parseWorkflowDefinition = (
+  value: unknown,
+  context: string,
+  label: WorkflowParseLabel,
+): WorkflowDefinition => {
+  const row = requireWorkflowRecord(value, context, label)
+  return {
+    name: requireWorkflowIdentifier(row.name, context, label),
+    description: requireWorkflowString(row.description, context, label),
+    steps: parseWorkflowNodeList(row.steps, context, label, 1),
+  }
+}
+
+const parseWorkflowTriggers = (
+  value: unknown,
+  context: string,
+  label: WorkflowParseLabel,
+): NonNullable<WorkflowRecord['triggers']> => {
+  const row = requireWorkflowRecord(value, context, label)
+  const webhook = requireWorkflowRecord(row.webhook, context, label)
+  const cron = requireWorkflowRecord(row.cron, context, label)
+  if (typeof webhook.enabled !== 'boolean' || typeof cron.enabled !== 'boolean') {
+    return invalidWorkflowValue(context, label)
+  }
+  return {
+    webhook: {
+      enabled: webhook.enabled,
+      secret: requireWorkflowString(webhook.secret, context, label),
+    },
+    cron: {
+      enabled: cron.enabled,
+      expression: requireWorkflowString(cron.expression, context, label),
+      last_run_at: requireWorkflowNumber(cron.last_run_at, context, label),
+    },
+  }
+}
+
+const parseNullableWorkflowInteger = (
+  value: unknown,
+  context: string,
+  label: WorkflowParseLabel,
+): number | null => {
+  if (value === null) return null
+  return requireWorkflowInteger(value, context, label)
+}
+
+const parseNullableWorkflowNumber = (
+  value: unknown,
+  context: string,
+  label: WorkflowParseLabel,
+): number | null => {
+  if (value === null) return null
+  return requireWorkflowNumber(value, context, label)
+}
+
+const parseWorkflow = (value: unknown, context: string): WorkflowRecord => {
+  const label: WorkflowParseLabel = 'workflow payload'
+  const row = requireWorkflowRecord(value, context, label)
+  const version = requireWorkflowInteger(row.version, context, label)
+  if (version < 1 || typeof row.enabled !== 'boolean' || typeof row.has_published !== 'boolean') {
+    return invalidWorkflowValue(context, label)
+  }
+  const publishedVersion = parseNullableWorkflowInteger(row.published_version, context, label)
+  if (publishedVersion !== null && publishedVersion < 1) return invalidWorkflowValue(context, label)
+  return {
+    id: requireWorkflowIdentifier(row.id, context, label),
+    name: requireWorkflowIdentifier(row.name, context, label),
+    description: requireWorkflowString(row.description, context, label),
+    owner_user_id: requireWorkflowIdentifier(row.owner_user_id, context, label),
+    definition: parseWorkflowDefinition(row.definition, context, label),
+    triggers: parseWorkflowTriggers(row.triggers, context, label),
+    enabled: row.enabled,
+    version,
+    published_version: publishedVersion,
+    published_at: parseNullableWorkflowInteger(row.published_at, context, label),
+    has_published: row.has_published,
+    next_cron_at: parseNullableWorkflowNumber(row.next_cron_at, context, label),
+    created_at: requireWorkflowInteger(row.created_at, context, label),
+    updated_at: requireWorkflowInteger(row.updated_at, context, label),
+  }
+}
+
+const requireWorkflow = (value: unknown, context: string): WorkflowRecord =>
+  parseWorkflow(value, context)
+
+const requireDefinition = (value: unknown, context: string): WorkflowDefinition =>
+  parseWorkflowDefinition(value, context, 'workflow definition')
+
+const parseExecutorOption = (value: unknown, context: string): ExecutorOption => {
   const row = asRecord(value)
-  if (!row) return null
-  const id = String(row.id ?? '').trim()
-  if (!id) return null
-  const definition = asRecord(row.definition) ?? { name: '', description: '', steps: [] }
+  if (!row) throw new Error(`${context}: invalid workflow executor payload`)
+  const ref = typeof row.ref === 'string' ? row.ref.trim() : ''
+  const kind = typeof row.kind === 'string' ? row.kind.trim() : ''
+  const name = typeof row.name === 'string' ? row.name.trim() : ''
+  if (
+    !ref ||
+    !kind ||
+    !name ||
+    typeof row.description !== 'string' ||
+    typeof row.category !== 'string' ||
+    typeof row.capabilities !== 'string' ||
+    typeof row.recommended_for !== 'string' ||
+    typeof row.role !== 'string'
+  ) {
+    throw new Error(`${context}: invalid workflow executor payload`)
+  }
+  return {
+    ref,
+    kind,
+    name,
+    description: row.description,
+    category: row.category,
+    capabilities: row.capabilities,
+    recommendedFor: row.recommended_for,
+    role: row.role,
+  }
+}
+
+const parseWorkflowVersion = (value: unknown, context: string) => {
+  const row = asRecord(value)
+  if (!row) throw new Error(`${context}: invalid workflow version payload`)
+  const id = typeof row.id === 'string' ? row.id.trim() : ''
+  const workflowId = typeof row.workflow_id === 'string' ? row.workflow_id.trim() : ''
+  const version = row.version
+  const createdAt = row.created_at
+  if (
+    !id ||
+    !workflowId ||
+    !isNonNegativeInteger(version) ||
+    version < 1 ||
+    typeof row.name !== 'string' ||
+    typeof row.description !== 'string' ||
+    !isNonNegativeInteger(createdAt) ||
+    typeof row.created_by !== 'string'
+  ) {
+    throw new Error(`${context}: invalid workflow version payload`)
+  }
   return {
     id,
-    name: String(row.name ?? ''),
-    description: String(row.description ?? ''),
-    owner_user_id: String(row.owner_user_id ?? ''),
-    definition: {
-      name: String(definition.name ?? row.name ?? ''),
-      description: String(definition.description ?? row.description ?? ''),
-      steps: Array.isArray(definition.steps)
-        ? definition.steps.flatMap((step) => {
-            const node = normalizeNode(step)
-            return node ? [node] : []
-          })
-        : [],
-    },
-    triggers: (() => {
-      const triggers = asRecord(row.triggers) ?? {}
-      const webhook = asRecord(triggers.webhook) ?? {}
-      const cron = asRecord(triggers.cron) ?? {}
-      return {
-        webhook: {
-          enabled: Boolean(webhook.enabled),
-          secret: String(webhook.secret ?? ''),
-        },
-        cron: {
-          enabled: Boolean(cron.enabled),
-          expression: String(cron.expression ?? ''),
-          last_run_at: Number(cron.last_run_at ?? 0) || 0,
-        },
-      }
-    })(),
-    enabled: row.enabled !== false,
-    version: Number(row.version ?? 1),
-    published_version: row.published_version != null ? Number(row.published_version) : null,
-    published_at: row.published_at != null ? Number(row.published_at) : null,
-    has_published: Boolean(row.has_published),
-    next_cron_at: row.next_cron_at != null ? Number(row.next_cron_at) : null,
-    created_at: Number(row.created_at ?? 0),
-    updated_at: Number(row.updated_at ?? 0),
+    workflow_id: workflowId,
+    version,
+    name: row.name,
+    description: row.description,
+    definition: requireDefinition(row.definition, context),
+    created_at: createdAt,
+    created_by: row.created_by,
+  }
+}
+
+const parseWorkflowTemplate = (value: unknown, context: string) => {
+  const row = asRecord(value)
+  if (!row) throw new Error(`${context}: invalid workflow template payload`)
+  const id = typeof row.id === 'string' ? row.id.trim() : ''
+  const name = typeof row.name === 'string' ? row.name.trim() : ''
+  const category = typeof row.category === 'string' ? row.category.trim() : ''
+  const tags = row.tags
+  if (
+    !id ||
+    !name ||
+    !category ||
+    typeof row.description !== 'string' ||
+    !Array.isArray(tags) ||
+    tags.some((tag) => typeof tag !== 'string')
+  ) {
+    throw new Error(`${context}: invalid workflow template payload`)
+  }
+  return {
+    id,
+    name,
+    description: row.description,
+    category,
+    tags,
+    definition: requireDefinition(row.definition, context),
+  }
+}
+
+const parseWorkflowTriggerHistoryItem = (
+  value: unknown,
+  context: string,
+): WorkflowTriggerHistoryItem => {
+  const row = asRecord(value)
+  const id = row?.id
+  if (
+    !row ||
+    !isWorkflowHistoryId(id) ||
+    typeof row.action !== 'string' ||
+    !row.action.trim() ||
+    typeof row.status !== 'string' ||
+    !row.status.trim() ||
+    typeof row.source !== 'string' ||
+    !row.source.trim() ||
+    typeof row.run_id !== 'string' ||
+    typeof row.session_id !== 'string' ||
+    typeof row.expression !== 'string' ||
+    typeof row.created_at !== 'string' ||
+    !row.created_at.trim()
+  ) {
+    throw new Error(`${context}: invalid workflow trigger history payload`)
+  }
+  return {
+    id,
+    action: row.action,
+    status: row.status,
+    source: row.source,
+    run_id: row.run_id,
+    session_id: row.session_id,
+    expression: row.expression,
+    created_at: row.created_at,
   }
 }
 
@@ -211,18 +508,15 @@ export const listWorkflows = async (page = 1, limit = 100, q = '') => {
   if (needle) params.set('q', needle)
   const raw = await requestJson<unknown>(`/workflows?${params.toString()}`)
   return normalizePaginatedList(raw, {
-    page: safePage,
-    limit: safeLimit,
-    mapItem: normalizeWorkflow,
+    mapItem: (item) => requireWorkflow(item, 'listWorkflows'),
   })
 }
 
 export const getWorkflow = async (id: string) => {
-  const row = normalizeWorkflow(
+  return requireWorkflow(
     await requestJson<unknown>(`/workflows/${encodeURIComponent(id)}`),
+    'getWorkflow',
   )
-  if (!row) throw new Error('Invalid workflow payload')
-  return row
 }
 
 export const createWorkflow = async (body: {
@@ -231,9 +525,10 @@ export const createWorkflow = async (body: {
   definition: WorkflowRecord['definition']
   triggers?: WorkflowRecord['triggers']
 }) => {
-  const row = normalizeWorkflow(await requestJson<unknown>('/workflows', jsonInit('POST', body)))
-  if (!row) throw new Error('Invalid workflow payload')
-  return row
+  return requireWorkflow(
+    await requestJson<unknown>('/workflows', jsonInit('POST', body)),
+    'createWorkflow',
+  )
 }
 
 export const updateWorkflow = async (
@@ -246,20 +541,18 @@ export const updateWorkflow = async (
     triggers?: WorkflowRecord['triggers']
   }
 ) => {
-  const row = normalizeWorkflow(
-    await requestJson<unknown>(`/workflows/${encodeURIComponent(id)}`, jsonInit('PATCH', body))
+  return requireWorkflow(
+    await requestJson<unknown>(`/workflows/${encodeURIComponent(id)}`, jsonInit('PATCH', body)),
+    'updateWorkflow',
   )
-  if (!row) throw new Error('Invalid workflow payload')
-  return row
 }
 
 
 export const publishWorkflow = async (id: string) => {
-  const row = normalizeWorkflow(
-    await requestJson<unknown>(`/workflows/${encodeURIComponent(id)}/publish`, jsonInit('POST', {}))
+  return requireWorkflow(
+    await requestJson<unknown>(`/workflows/${encodeURIComponent(id)}/publish`, jsonInit('POST', {})),
+    'publishWorkflow',
   )
-  if (!row) throw new Error('Invalid workflow payload')
-  return row
 }
 
 export const deleteWorkflow = async (id: string) =>
@@ -268,25 +561,12 @@ export const deleteWorkflow = async (id: string) =>
 export const listExecutors = async () => {
   const raw = await requestJson<unknown>('/workflows/executors')
   const { data } = normalizePaginatedList(raw, {
-    mapItem: (item): ExecutorOption | null => {
-      const row = asRecord(item)
-      if (!row?.ref) return null
-      return {
-        ref: String(row.ref),
-        kind: String(row.kind ?? 'agent'),
-        name: String(row.name ?? row.ref),
-        description: String(row.description ?? ''),
-        category: row.category != null ? String(row.category) : undefined,
-        capabilities: row.capabilities != null ? String(row.capabilities) : undefined,
-        recommendedFor: row.recommended_for != null ? String(row.recommended_for) : undefined,
-        role: row.role != null ? String(row.role) : undefined,
-      }
-    },
+    mapItem: (item) => parseExecutorOption(item, 'listExecutors'),
   })
   return data
 }
 
-export type WorkflowSseHandler = (item: WorkflowRunLogItem) => void
+type WorkflowSseHandler = (item: WorkflowRunLogItem) => void
 
 export const cancelWorkflowRun = (runId: string) =>
   requestJson<{ success?: boolean }>(
@@ -337,12 +617,7 @@ export const streamWorkflowRun = async (
       parsed = { message: data }
     }
     const type = (event || String(parsed.event || 'message')).trim()
-    const stepName =
-      parsed.step_name != null
-        ? String(parsed.step_name)
-        : parsed.stepName != null
-          ? String(parsed.stepName)
-          : null
+    const stepName = parsed.step_name != null ? String(parsed.step_name) : null
     const content = parsed.content != null ? String(parsed.content) : null
     const message =
       parsed.message != null
@@ -355,37 +630,12 @@ export const streamWorkflowRun = async (
       type,
       message,
       stepName,
-      stepId:
-        parsed.step_id != null
-          ? String(parsed.step_id)
-          : parsed.stepId != null
-            ? String(parsed.stepId)
-            : null,
+      stepId: parsed.step_id != null ? String(parsed.step_id) : null,
       content,
-      approvalId:
-        parsed.approval_id != null
-          ? String(parsed.approval_id)
-          : parsed.approvalId != null
-            ? String(parsed.approvalId)
-            : null,
-      pauseType:
-        parsed.pause_type != null
-          ? String(parsed.pause_type)
-          : parsed.pauseType != null
-            ? String(parsed.pauseType)
-            : null,
-      runId:
-        parsed.run_id != null
-          ? String(parsed.run_id)
-          : parsed.runId != null
-            ? String(parsed.runId)
-            : null,
-      sessionId:
-        parsed.session_id != null
-          ? String(parsed.session_id)
-          : parsed.sessionId != null
-            ? String(parsed.sessionId)
-            : null,
+      approvalId: parsed.approval_id != null ? String(parsed.approval_id) : null,
+      pauseType: parsed.pause_type != null ? String(parsed.pause_type) : null,
+      runId: parsed.run_id != null ? String(parsed.run_id) : null,
+      sessionId: parsed.session_id != null ? String(parsed.session_id) : null,
       at: Date.now(),
     })
     terminal ||=
@@ -405,45 +655,19 @@ export const listWorkflowVersions = async (workflowId: string, page = 1, limit =
     `/workflows/${encodeURIComponent(workflowId)}/versions?page=${safePage}&limit=${safeLimit}`,
   )
   const { data } = normalizePaginatedList(raw, {
-    page: safePage,
-    limit: safeLimit,
-    mapItem: (item) => {
-      const row = asRecord(item)
-      if (!row) return null
-      const definition = asRecord(row.definition) ?? {}
-      return {
-        id: String(row.id ?? ''),
-        workflow_id: String(row.workflow_id ?? workflowId),
-        version: Number(row.version ?? 0),
-        name: String(row.name ?? ''),
-        description: String(row.description ?? ''),
-        definition: {
-          name: String(definition.name ?? row.name ?? ''),
-          description: String(definition.description ?? row.description ?? ''),
-          steps: Array.isArray(definition.steps)
-            ? definition.steps.flatMap((step) => {
-                const node = normalizeNode(step)
-                return node ? [node] : []
-              })
-            : [],
-        },
-        created_at: Number(row.created_at ?? 0),
-        created_by: String(row.created_by ?? ''),
-      }
-    },
+    mapItem: (item) => parseWorkflowVersion(item, 'listWorkflowVersions'),
   })
   return data
 }
 
 export const restoreWorkflowVersion = async (workflowId: string, version: number) => {
-  const row = normalizeWorkflow(
+  return requireWorkflow(
     await requestJson<unknown>(
       `/workflows/${encodeURIComponent(workflowId)}/versions/${version}/restore`,
       jsonInit('POST', {})
-    )
+    ),
+    'restoreWorkflowVersion',
   )
-  if (!row) throw new Error('Invalid workflow payload')
-  return row
 }
 
 export type WorkflowTriggerHistoryItem = {
@@ -467,49 +691,14 @@ export const listWorkflowTriggerHistory = async (
     `/workflows/${encodeURIComponent(id)}/triggers/history?page=${page}&limit=${limit}`
   )
   return normalizePaginatedList(raw, {
-    page,
-    limit,
-    mapItem: (item: unknown) => {
-      const r = asRecord(item)
-      if (!r) return null
-      return {
-        id: (r.id as string | number) ?? '',
-        action: String(r.action ?? ''),
-        status: String(r.status ?? ''),
-        source: String(r.source ?? ''),
-        run_id: String(r.run_id ?? ''),
-        session_id: String(r.session_id ?? ''),
-        expression: r.expression != null ? String(r.expression) : '',
-        created_at: String(r.created_at ?? ''),
-      } satisfies WorkflowTriggerHistoryItem
-    },
+    mapItem: (item) => parseWorkflowTriggerHistoryItem(item, 'listWorkflowTriggerHistory'),
   })
 }
 
 export const listWorkflowTemplates = async () => {
   const raw = await requestJson<unknown>('/workflows/templates')
   const { data } = normalizePaginatedList(raw, {
-    mapItem: (item) => {
-      const r = asRecord(item)
-      if (!r) return null
-      const def = asRecord(r.definition) ?? {}
-      const stepsRaw = Array.isArray(def.steps) ? def.steps : []
-      return {
-        id: String(r.id ?? ''),
-        name: String(r.name ?? ''),
-        description: String(r.description ?? ''),
-        category: String(r.category ?? ''),
-        tags: Array.isArray(r.tags) ? r.tags.map(String) : [],
-        definition: {
-          name: String(def.name ?? r.name ?? ''),
-          description: String(def.description ?? ''),
-          steps: stepsRaw.flatMap((child) => {
-            const node = normalizeNode(child)
-            return node ? [node] : []
-          }),
-        },
-      }
-    },
+    mapItem: (item) => parseWorkflowTemplate(item, 'listWorkflowTemplates'),
   })
   return data
 }

@@ -85,7 +85,6 @@ def _trace_list_response(
     limit: int,
     total_count: int,
     truncated: bool | None = None,
-    scanned_count: int | None = None,
 ) -> dict[str, Any]:
     data = [_project_trace_list_item(item) for item in items]
     return {
@@ -95,7 +94,6 @@ def _trace_list_response(
             limit=limit,
             total_count=total_count,
             truncated=truncated if truncated else None,
-            scanned_count=scanned_count,
         ),
     }
 
@@ -467,86 +465,7 @@ async def list_traces(
     )
 
 
-# Session grouping still needs a bounded multi-page scan (no native session page
-# that includes per-session error counts + latest run). Cap the window.
-_STATUS_FILTER_MAX_TRACES = 2_000
-_STATUS_FILTER_PAGE_SIZE = 200
 _AUDIT_ERROR_SUPPLEMENT_LIMIT = 50
-
-
-async def _scan_trace_items(
-    *,
-    run_id: str | None,
-    session_id: str | None,
-    user_id: str | None,
-    agent_id: str | None,
-    team_id: str | None,
-    workflow_id: str | None,
-    start_time: datetime | None,
-    end_time: datetime | None,
-    status: str | None = None,
-    keep_all: bool = False,
-) -> tuple[list[dict[str, Any]], int, bool]:
-    """Page through get_traces, reconcile each batch, optionally status-filter.
-
-    When ``keep_all`` is True, every reconciled row is kept (used by session
-    grouping). When False, only ``status`` matches are retained.
-    """
-    trace_page = 1
-    kept: list[dict[str, Any]] = []
-    scanned = 0
-    truncated = False
-    while True:
-        batch, total_count = await _trace_db.get_traces(
-            run_id=run_id,
-            session_id=session_id,
-            user_id=user_id,
-            agent_id=agent_id,
-            team_id=team_id,
-            workflow_id=workflow_id,
-            # Native SQL status when filtering; keep_all session scans leave this None.
-            status=None if keep_all else status,
-            start_time=start_time,
-            end_time=end_time,
-            limit=_STATUS_FILTER_PAGE_SIZE,
-            page=trace_page,
-        )
-        if not batch:
-            break
-        remaining = _STATUS_FILTER_MAX_TRACES - scanned
-        if remaining <= 0:
-            truncated = True
-            break
-        if len(batch) > remaining:
-            batch = batch[:remaining]
-            truncated = True
-        raw_items = [jsonable_encoder(trace.to_dict()) for trace in batch]
-        scanned += len(raw_items)
-        reconciled = await reconcile_trace_statuses(
-            raw_items,
-            actor_user_id=user_id,
-        )
-        if status is None or keep_all:
-            kept.extend(reconciled)
-        else:
-            # Status was SQL-prefiltered; reconcile may flip OK→ERROR (and vice versa).
-            kept.extend(item for item in reconciled if trace_has_status(item, status))
-        if truncated or scanned >= _STATUS_FILTER_MAX_TRACES:
-            if int(total_count or 0) > scanned:
-                truncated = True
-                logger.warning(
-                    "trace status filter truncated scan: loaded {} of {}",
-                    scanned,
-                    total_count,
-                )
-            break
-        if scanned >= int(total_count or 0):
-            break
-        if len(batch) < _STATUS_FILTER_PAGE_SIZE:
-            break
-        trace_page += 1
-    return kept, scanned, truncated
-
 
 
 async def _merge_audit_error_traces(
@@ -666,35 +585,13 @@ async def list_trace_sessions(
     limit: int = 20,
     page: int = 1,
 ) -> dict[str, Any]:
-    """Return paginated trace sessions (group-by session_id).
-
-    Prefers SQL aggregation on ``agno_traces`` so large windows do not require
-    loading every matching trace into Python. Falls back to the bounded scan
-    path when the table is unavailable.
-    """
+    """Return paginated trace sessions from SQL aggregation."""
     limit = min(max(limit, 1), 200)
     page = max(page, 1)
     st, et = _validate_trace_time_range(start_time, end_time)
     normalized_status = _normalize_trace_status(status)
 
-    try:
-        return await _list_trace_sessions_sql(
-            run_id=run_id,
-            session_id=session_id,
-            user_id=user_id,
-            agent_id=agent_id,
-            team_id=team_id,
-            workflow_id=workflow_id,
-            status=normalized_status,
-            start_time=st,
-            end_time=et,
-            limit=limit,
-            page=page,
-        )
-    except Exception:
-        logger.exception("SQL trace session grouping failed; falling back to scan")
-
-    return await _list_trace_sessions_scan(
+    return await _list_trace_sessions_sql(
         run_id=run_id,
         session_id=session_id,
         user_id=user_id,
@@ -728,7 +625,10 @@ async def _list_trace_sessions_sql(
 
     table = await _trace_db._get_table(table_type="traces")
     if table is None:
-        raise RuntimeError("traces table unavailable")
+        return {
+            "data": [],
+            "meta": pagination_meta(page=page, limit=limit, total_count=0),
+        }
 
     filters = [table.c.session_id.isnot(None), table.c.session_id != ""]
     if run_id:
@@ -867,87 +767,6 @@ async def _list_trace_sessions_sql(
     return {
         "data": sessions,
         "meta": pagination_meta(page=page, limit=limit, total_count=total_count),
-    }
-
-
-async def _list_trace_sessions_scan(
-    *,
-    run_id: str | None,
-    session_id: str | None,
-    user_id: str | None,
-    agent_id: str | None,
-    team_id: str | None,
-    workflow_id: str | None,
-    status: str | None,
-    start_time: datetime | None,
-    end_time: datetime | None,
-    limit: int,
-    page: int,
-) -> dict[str, Any]:
-    """Legacy bounded scan + Python group (fallback)."""
-    trace_items, scanned_count, truncated = await _scan_trace_items(
-        run_id=run_id,
-        session_id=session_id,
-        user_id=user_id,
-        agent_id=agent_id,
-        team_id=team_id,
-        workflow_id=workflow_id,
-        start_time=start_time,
-        end_time=end_time,
-        status=status,
-        keep_all=status is None,
-    )
-    if status is not None:
-        trace_items = [item for item in trace_items if trace_has_status(item, status)]
-
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    for item in trace_items:
-        sid = str(item.get("session_id") or "").strip()
-        if sid:
-            grouped.setdefault(sid, []).append(item)
-
-    def trace_time(item: dict[str, Any]) -> str:
-        return str(item.get("start_time") or item.get("created_at") or "")
-
-    sessions: list[dict[str, Any]] = []
-    for sid, items in grouped.items():
-        latest = max(items, key=trace_time)
-        run_ids = {str(item.get("run_id")) for item in items if item.get("run_id")}
-        error_count = sum(
-            1
-            for item in items
-            if str(item.get("status") or "").upper() in {"ERROR", "FAILED", "FAILURE"}
-        )
-        sessions.append(
-            {
-                "session_id": sid,
-                "name": latest.get("name") or latest.get("agent_id") or sid,
-                "latest_trace_id": latest.get("trace_id"),
-                "latest_run_id": latest.get("run_id"),
-                "latest_start_time": latest.get("start_time"),
-                "latest_end_time": latest.get("end_time"),
-                "trace_count": len(items),
-                "run_count": len(run_ids),
-                "error_count": error_count,
-                "status": "ERROR" if error_count else str(latest.get("status") or "UNSET"),
-                "user_id": latest.get("user_id"),
-                "agent_id": latest.get("agent_id"),
-                "team_id": latest.get("team_id"),
-                "workflow_id": latest.get("workflow_id"),
-            }
-        )
-    sessions.sort(key=lambda item: str(item.get("latest_start_time") or ""), reverse=True)
-    offset = (page - 1) * limit
-    page_sessions = sessions[offset : offset + limit]
-    return {
-        "data": page_sessions,
-        "meta": pagination_meta(
-            page=page,
-            limit=limit,
-            total_count=len(sessions),
-            truncated=truncated if truncated else None,
-            scanned_count=scanned_count,
-        ),
     }
 
 

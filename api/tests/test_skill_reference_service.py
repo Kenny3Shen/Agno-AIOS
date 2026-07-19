@@ -20,8 +20,8 @@ def test_skill_names_in_definition_walks_nested_steps():
             {
                 "id": "c",
                 "type": "condition",
-                "then_steps": [{"id": "t", "skills": ["delta"]}],
-                "else_steps": [],
+                "steps": [{"id": "t", "skills": ["delta"]}],
+                "else": [],
             },
             {
                 "id": "r",

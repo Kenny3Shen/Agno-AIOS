@@ -8,32 +8,29 @@ export type ListPaginationMeta = {
   total_pages: number
   search_time_ms: number
   truncated?: boolean
-  scanned_count?: number
   /** Notifications list only. */
   unread_count?: number
 }
 
-export type PaginatedList<T, M extends ListPaginationMeta = ListPaginationMeta> = {
+type PaginatedList<T, M extends ListPaginationMeta = ListPaginationMeta> = {
   data: T[]
   meta: M
 }
 
 type NormalizeListOptions<T> = {
-  /** Fallback page when meta.page is absent. */
-  page?: number
-  /** Fallback limit when meta.limit is absent. */
-  limit?: number
   /**
    * Copy optional server meta fields when present:
-   * truncated, scanned_count, unread_count.
+   * truncated, unread_count.
    */
   extras?: boolean
-  mapItem: (row: unknown) => T | null
+  mapItem: (row: unknown) => T
 }
 
 /**
  * Normalize Agno-style ``{ data, meta }`` list payloads.
- * Drops unmapped rows; derives total_pages when the server omits it.
+ * Rejects malformed envelopes instead of guessing pagination from client
+ * request parameters or returned row counts. Item parsers must reject invalid
+ * rows so list totals and visible rows cannot silently diverge.
  */
 export function normalizePaginatedList<T>(
   payload: unknown,
@@ -41,26 +38,23 @@ export function normalizePaginatedList<T>(
 ): PaginatedList<T> {
   const envelope = asRecord(payload)
   const meta = asRecord(envelope.meta)
-  const rows = Array.isArray(envelope.data) ? envelope.data : []
-  const data = rows.map((row) => options.mapItem(row)).filter((row): row is T => row != null)
-
-  const page = Number(meta.page ?? options.page ?? 1) || 1
-  const limit = Number(meta.limit ?? options.limit ?? 20) || 20
-  const totalCount = Number(meta.total_count ?? data.length) || 0
-  const totalPages =
-    Number(meta.total_pages ?? (totalCount ? Math.ceil(totalCount / Math.max(limit, 1)) : 0)) || 0
+  const rows = envelope.data
+  const requiredMetaKeys = ['page', 'limit', 'total_count', 'total_pages', 'search_time_ms'] as const
+  if (!Array.isArray(rows) || !requiredMetaKeys.every((key) => typeof meta[key] === 'number')) {
+    throw new Error('Invalid paginated list response')
+  }
+  const data = rows.map(options.mapItem)
 
   const base: ListPaginationMeta = {
-    page,
-    limit,
-    total_count: totalCount,
-    total_pages: totalPages,
-    search_time_ms: Number(meta.search_time_ms ?? 0) || 0,
+    page: meta.page as number,
+    limit: meta.limit as number,
+    total_count: meta.total_count as number,
+    total_pages: meta.total_pages as number,
+    search_time_ms: meta.search_time_ms as number,
   }
 
   if (options.extras) {
     if (meta.truncated != null) base.truncated = Boolean(meta.truncated)
-    if (meta.scanned_count != null) base.scanned_count = Number(meta.scanned_count) || 0
     if (meta.unread_count != null) base.unread_count = Number(meta.unread_count) || 0
   }
 

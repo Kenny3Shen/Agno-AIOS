@@ -17,12 +17,12 @@ import {
 import type { WorkflowNodeRunStatus, WorkflowNodeType } from './types'
 import type { EmptySlot } from './utils'
 
-export type BranchHandle = {
+type BranchHandle = {
   id: string
   label: string
 }
 
-export type WorkflowFlowNodeData = {
+type WorkflowFlowNodeData = {
   label: string
   nodeType: WorkflowNodeType
   subtitle?: string

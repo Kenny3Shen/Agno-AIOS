@@ -66,6 +66,69 @@ def workflows_table(metadata: MetaData | None = None) -> Table:
 
 
 _workflows_table_once = AsyncOnce()
+WORKFLOW_DEFINITION_MIGRATION_BATCH_SIZE = 100
+
+
+async def _migrate_definition_columns_async(
+    table: Table,
+    *,
+    definition_columns: tuple[str, ...],
+) -> int:
+    from api.services.workflow_definition_migration import (
+        canonicalize_workflow_definition,
+    )
+
+    migrated_count = 0
+    last_id: str | None = None
+    while True:
+        columns = [table.c.id, *(table.c[column] for column in definition_columns)]
+        stmt = (
+            select(*columns)
+            .order_by(table.c.id)
+            .limit(WORKFLOW_DEFINITION_MIGRATION_BATCH_SIZE)
+        )
+        if last_id is not None:
+            stmt = stmt.where(table.c.id > last_id)
+        async with get_async_control_plane_engine().begin() as conn:
+            rows = [dict(row) for row in (await conn.execute(stmt)).mappings().all()]
+            if not rows:
+                break
+            for row in rows:
+                values: dict[str, Any] = {}
+                for column in definition_columns:
+                    original = row.get(column)
+                    normalized = canonicalize_workflow_definition(original)
+                    if normalized is not None and normalized != original:
+                        values[column] = normalized
+                if values:
+                    await conn.execute(
+                        update(table)
+                        .where(table.c.id == row["id"])
+                        .values(**values)
+                    )
+                    migrated_count += 1
+        last_id = str(rows[-1].get("id") or "")
+        if not last_id:
+            break
+    return migrated_count
+
+
+async def _migrate_workflow_definition_aliases_async() -> None:
+    await ensure_workflow_versions_table_async()
+    workflow_count = await _migrate_definition_columns_async(
+        workflows_table(),
+        definition_columns=("definition", "published_definition"),
+    )
+    version_count = await _migrate_definition_columns_async(
+        workflow_versions_table(),
+        definition_columns=("definition",),
+    )
+    if workflow_count or version_count:
+        logger.info(
+            "canonicalized workflow definitions workflows={} versions={}",
+            workflow_count,
+            version_count,
+        )
 
 
 async def _create_workflows_table_async() -> None:
@@ -98,6 +161,7 @@ async def _create_workflows_table_async() -> None:
                 await conn.execute(text(extra_ddl))
         except Exception:
             logger.debug("workflows publish-column migrate skipped", exc_info=True)
+    await _migrate_workflow_definition_aliases_async()
 
 
 async def ensure_workflows_table_async() -> None:

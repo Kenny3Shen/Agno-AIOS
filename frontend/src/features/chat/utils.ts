@@ -14,7 +14,7 @@ const readStoredBool = (key: string, fallback: boolean): boolean => {
 }
 
 /** Humanize skill directory ids for badges/tooltips (no catalog required). */
-export const formatSkillLabel = (name: string): string => {
+const formatSkillLabel = (name: string): string => {
   const raw = (name || '').trim()
   if (!raw) return ''
   let base = raw
@@ -38,7 +38,7 @@ export const formatSkillLabels = (names: string[]): string =>
   names.map(formatSkillLabel).filter(Boolean).join(', ')
 
 /** Built-in MCP tool ids (namespace_fn) → i18n keys under chat.tools.* */
-export const BUILTIN_TOOL_I18N_KEYS: Record<string, string> = {
+const BUILTIN_TOOL_I18N_KEYS: Record<string, string> = {
   delegate_task_to_member: 'tools.delegateTaskToMember',
   delegate_task_to_members: 'tools.delegateTaskToMembers',
   get_member_information: 'tools.getMemberInformation',
@@ -58,7 +58,7 @@ export const BUILTIN_TOOL_I18N_KEYS: Record<string, string> = {
 const TOOL_NS_PREFIXES = ['basic_', 'hitl_', 'playbook_'] as const
 
 /** Title-case unknown tool ids after stripping builtin namespaces. */
-export const humanizeToolId = (name: string): string => {
+const humanizeToolId = (name: string): string => {
   const raw = (name || '').trim()
   if (!raw) return ''
   let base = raw
@@ -116,7 +116,7 @@ export const formatToolLabel = (
   return humanizeToolId(raw)
 }
 
-export const DEFAULT_CHAT_AGENT_ID = 'security-operations'
+const DEFAULT_CHAT_AGENT_ID = 'security-operations'
 
 export const initialChatState: ChatState = {
   messages: [],
@@ -434,8 +434,6 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
         requesting: false,
         error: null,
       }
-    case 'reset':
-      return { ...state, messages: [], input: '', requesting: false, error: null, reasoningEffort: null }
   }
 }
 
@@ -520,16 +518,16 @@ export const normalizeMessages = (value: unknown): Message[] =>
         const source = isRecord(item) ? item : {}
         const status = normalizeRunStatus(source.status)
         return {
-          id: String(source.id ?? source.message_id ?? source.run_id ?? `${source.role ?? 'message'}-${index}`),
+          id: String(source.id ?? `${source.role ?? 'message'}-${index}`),
           role: source.role === 'user' || source.role === 'system' ? source.role : 'assistant',
           content: typeof source.content === 'string' ? source.content : JSON.stringify(source.content ?? ''),
           attachments: Array.isArray(source.attachments)
             ? source.attachments
-                .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
-                .map((item) => ({
-                  name: String(item.name ?? item.filename ?? 'file'),
-                  mime: item.mime != null ? String(item.mime) : item.mime_type != null ? String(item.mime_type) : undefined,
-                  kind: item.kind != null ? String(item.kind) : undefined,
+                .filter((attachment): attachment is Record<string, unknown> => Boolean(attachment) && typeof attachment === 'object')
+                .map((attachment) => ({
+                  name: String(attachment.name ?? 'file'),
+                  mime: attachment.mime != null ? String(attachment.mime) : undefined,
+                  kind: attachment.kind != null ? String(attachment.kind) : undefined,
                 }))
             : undefined,
           final: status !== 'streaming',
@@ -538,9 +536,9 @@ export const normalizeMessages = (value: unknown): Message[] =>
           session_id: asString(source.session_id),
           approval_id: asString(source.approval_id),
           metrics: asMetrics(source.metrics),
-          sources: normalizeSources(source.sources ?? source.citations ?? source.references),
-          tool_steps: normalizeTools(source.tool_steps ?? source.tools),
-          thought_chain: normalizeThoughts(source.thought_chain ?? source.timeline),
+          sources: normalizeSources(source.sources),
+          tool_steps: normalizeTools(source.tools),
+          thought_chain: normalizeThoughts(source.thought_chain),
           reasoning: asString(source.reasoning),
           followups: Array.isArray(source.followups)
             ? source.followups.filter((followup): followup is string => typeof followup === 'string')
@@ -549,7 +547,7 @@ export const normalizeMessages = (value: unknown): Message[] =>
           enableTools: typeof source.enable_tools === 'boolean' ? source.enable_tools : undefined,
           searchKnowledge: typeof source.search_knowledge === 'boolean' ? source.search_knowledge : undefined,
           skillNames: Array.isArray(source.skill_names)
-            ? source.skill_names.filter((item): item is string => typeof item === 'string')
+            ? source.skill_names.filter((skillName): skillName is string => typeof skillName === 'string')
             : source.skill_names === null
               ? null
               : undefined,
@@ -557,7 +555,7 @@ export const normalizeMessages = (value: unknown): Message[] =>
       })
     : []
 
-export interface SseEvent {
+interface SseEvent {
   event: string
   data: string
 }
@@ -647,7 +645,6 @@ export const defaultReasoningEffort = (model: ModelConfig | null): ReasoningEffo
   return available.at(-1) ?? null
 }
 
-/** Tools are on and the latest assistant turn reported auto-lite (no skills). */
 /** Build user-facing retry progress (attempt/max + optional delay). */
 export const formatRetryDetail = (
   retry: { attempt: number; maxAttempts: number; delaySeconds?: number; message?: string } | null | undefined,
@@ -670,12 +667,6 @@ export const formatRetryDetail = (
   return `${base} (${short})`
 }
 
-export const isLastTurnAutoLean = (
-  enableTools: boolean,
-  latestAssistant?: Pick<Message, 'enableTools' | 'leanMode'> | null,
-): boolean =>
-  Boolean(enableTools && latestAssistant?.enableTools !== false && latestAssistant?.leanMode)
-
 export const isKnowledgeToggleActive = (
   searchKnowledge: boolean,
   enableTools: boolean,
@@ -686,4 +677,3 @@ export const isLiveSearchToggleActive = (
   enableTools: boolean,
   liveSearchSupported: boolean,
 ): boolean => Boolean(liveSearch && enableTools && liveSearchSupported)
-

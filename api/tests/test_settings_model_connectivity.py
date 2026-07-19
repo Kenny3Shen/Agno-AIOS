@@ -3,12 +3,12 @@ from typing import cast
 from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException, Request
-from fastapi.routing import APIRoute
 import pytest
 
 from api.auth.models import User
 from api.routes import settings
 from api.services import model_config_service
+from api.tests.route_fakes import route_dependency
 
 FAKE_REQUEST = cast(Request, None)
 FAKE_USER = cast(User, object())
@@ -69,55 +69,33 @@ class FakeApiError(RuntimeError):
     status_code = 401
 
 
-class FakeGetSettings:
-    __name__ = "get_settings"
-
-    def __init__(self, value) -> None:
-        self.value = value
-
-    def __call__(self):
-        return self.value
-
-    def cache_clear(self) -> None:
-        return None
-
-
 async def async_noop(*_args, **_kwargs) -> None:
     return None
-
-
-def route_dependency(endpoint_name: str):
-    for route in settings.router.routes:
-        if isinstance(route, APIRoute) and getattr(route.endpoint, "__name__", "") == endpoint_name:
-            return route.dependant.dependencies[0].call
-    raise AssertionError(f"missing route for {endpoint_name}")
 
 
 def test_model_connectivity_route_rejects_user_without_write_permission():
     actor = SimpleNamespace(role="user", is_superuser=False)
 
     with pytest.raises(HTTPException) as exc:
-        route_dependency("test_model_connectivity")(user=actor)
+        route_dependency(settings.router, "test_model_connectivity")(user=actor)
 
     assert exc.value.status_code == 403
 
 
 def test_model_config_store_preserves_saved_secret_for_masked_update():
-    existing = model_config_service.ModelConfigStore.from_raw(
-        {
-            "active_model_id": "custom",
-            "models": [
-                {
-                    "id": "custom",
-                    "name": "Custom",
-                    "model_id": "model-name",
-                    "base_url": "https://api.example.com/v1",
-                    "api_key": "saved-secret",
-                    "enabled": True,
-                }
-            ],
-        }
-    )
+    existing = model_config_service.ModelConfigStore(
+        active_model_id="custom",
+        models=[
+            model_config_service.ModelConfig(
+                id="custom",
+                name="Custom",
+                model_id="model-name",
+                base_url="https://api.example.com/v1",
+                api_key="saved-secret",
+                enabled=True,
+            )
+        ],
+    ).with_defaults()
     submitted = model_config_service.ModelConfig(
         id="custom",
         name="Custom",
@@ -273,43 +251,6 @@ async def test_update_models_awaits_model_config_save():
 
     assert result["active_model_id"] == "m1"
     save.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_update_settings_reads_active_settings_off_event_loop():
-    thread_calls: list[str] = []
-    secret = SimpleNamespace(get_secret_value=lambda: "token-secret")
-    fake_settings = SimpleNamespace(
-        mcp_server_url="http://mcp.example/mcp",
-        mcp_token=secret,
-        feishu_webhook_url=secret,
-    )
-
-    async def fake_run_sync(func, *args):
-        thread_calls.append(func.__name__)
-        return func(*args)
-
-    fake_get_settings = FakeGetSettings(fake_settings)
-
-    with (
-        patch.object(settings, "get_settings", fake_get_settings),
-        patch.object(settings, "record_audit_event_async", async_noop),
-        patch.object(
-            settings,
-            "to_thread",
-            SimpleNamespace(run_sync=fake_run_sync),
-            create=True,
-        ),
-    ):
-        result = await settings.update_settings(
-            request=FAKE_REQUEST,
-            body=settings.SettingsUpdate(settings={"NAV_TAGS": "{}"}),
-            user=FAKE_USER,
-        )
-
-    assert result.settings["MCP_SERVER_URL"] == "http://mcp.example/mcp"
-    assert thread_calls == ["get_settings"]
-
 
 @pytest.mark.asyncio
 async def test_upstream_error_returns_message_without_raising():

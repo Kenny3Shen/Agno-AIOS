@@ -9,21 +9,69 @@ export interface Notification {
   data: JsonRecord
   read: boolean
   created_at: number
-  read_at?: number | null
+  read_at: number | null
 }
 
-const parseNotification = (value: unknown): Notification | null => {
-  if (!value || typeof value !== 'object') return null
+const invalidNotificationPayload = (context: string): never => {
+  throw new Error(`${context}: invalid notification payload`)
+}
+
+const isInteger = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value)
+
+const isNonNegativeInteger = (value: unknown): value is number => isInteger(value) && value >= 0
+
+const isNullableInteger = (value: unknown): value is number | null => value === null || isInteger(value)
+
+const isJsonRecord = (value: unknown): value is JsonRecord =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+
+const unreadCountFromEnvelope = (value: unknown): number => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return invalidNotificationPayload('getNotifications')
+  }
+  const meta = (value as Record<string, unknown>).meta
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) {
+    return invalidNotificationPayload('getNotifications')
+  }
+  const unreadCount = (meta as Record<string, unknown>).unread_count
+  if (!isNonNegativeInteger(unreadCount)) {
+    return invalidNotificationPayload('getNotifications')
+  }
+  return unreadCount
+}
+
+const parseNotification = (value: unknown, context: string): Notification => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return invalidNotificationPayload(context)
+  }
   const row = value as Record<string, unknown>
-  if (typeof row.id !== 'number' || typeof row.title !== 'string' || typeof row.body !== 'string') return null
+  const id = row.id
+  const data = row.data
+  const read = row.read
+  const createdAt = row.created_at
+  const readAt = row.read_at
+  if (
+    !isInteger(id) ||
+    id < 1 ||
+    typeof row.title !== 'string' ||
+    typeof row.body !== 'string' ||
+    !isJsonRecord(data) ||
+    typeof read !== 'boolean' ||
+    !isInteger(createdAt) ||
+    createdAt < 0 ||
+    !isNullableInteger(readAt)
+  ) {
+    return invalidNotificationPayload(context)
+  }
   return {
-    id: row.id,
+    id,
     title: row.title,
     body: row.body,
-    data: row.data && typeof row.data === 'object' ? (row.data as JsonRecord) : {},
-    read: row.read === true,
-    created_at: typeof row.created_at === 'number' ? row.created_at : 0,
-    read_at: typeof row.read_at === 'number' ? row.read_at : null,
+    data,
+    read,
+    created_at: createdAt,
+    read_at: readAt,
   }
 }
 
@@ -34,15 +82,16 @@ export type NotificationsResponse = {
 
 export const getNotifications = async (): Promise<NotificationsResponse> => {
   const raw = await requestJson<unknown>('/notifications')
+  const unreadCount = unreadCountFromEnvelope(raw)
   const result = normalizePaginatedList(raw, {
-    mapItem: parseNotification,
+    mapItem: (item) => parseNotification(item, 'getNotifications'),
     extras: true,
   })
   return {
     data: result.data,
     meta: {
       ...result.meta,
-      unread_count: Number(result.meta.unread_count ?? 0) || 0,
+      unread_count: unreadCount,
     },
   }
 }
@@ -76,8 +125,7 @@ export const streamNotifications = async (
       .join('\n')
     if (!data) return
     try {
-      const notification = parseNotification(JSON.parse(data))
-      if (notification) onNotification(notification)
+      onNotification(parseNotification(JSON.parse(data), 'streamNotifications'))
     } catch {
       // Ignore malformed events; the REST query remains the durable fallback.
     }

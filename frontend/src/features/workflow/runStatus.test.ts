@@ -4,10 +4,9 @@ import {
   applyNodeRunStatusEvent,
   historyStatusFromEvent,
   historySummaryFromEvent,
-  reduceNodeRunStatus,
   runEventLabelKey,
 } from './runStatus'
-import type { WorkflowNode, WorkflowNodeRunStatus, WorkflowRunLogItem } from './types'
+import type { WorkflowNode, WorkflowRunLogItem } from './types'
 
 const steps: WorkflowNode[] = [
   {
@@ -42,20 +41,6 @@ describe('runStatus performance helpers', () => {
     expect(map).toEqual({ a: 'ok' })
     map = applyNodeRunStatusEvent(steps, map, event('step.started', 'b'))
     expect(map).toEqual({ a: 'ok', b: 'running' })
-  })
-
-  it('matches full reduceNodeRunStatus for a sequence', () => {
-    const log = [
-      event('step.started', 'a'),
-      event('step.completed', 'a'),
-      event('step.started', 'b'),
-      event('workflow.paused', 'b'),
-    ]
-    let incremental: Record<string, WorkflowNodeRunStatus> = {}
-    for (const item of log) {
-      incremental = applyNodeRunStatusEvent(steps, incremental, item)
-    }
-    expect(incremental).toEqual(reduceNodeRunStatus(steps, log))
   })
 
   it('returns same map reference when status is unchanged', () => {

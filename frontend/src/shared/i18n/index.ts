@@ -36,11 +36,11 @@ import evaluationsEn from './namespaces/evaluations.en-US.json'
 import workflowZh from './namespaces/workflow.zh-CN.json'
 import workflowEn from './namespaces/workflow.en-US.json'
 
-export const defaultNS = 'common' as const
-export const supportedLngs = ['zh-CN', 'en-US'] as const
-export type AppLocale = (typeof supportedLngs)[number]
+const defaultNS = 'common' as const
+const supportedLngs = ['zh-CN', 'en-US'] as const
+type AppLocale = (typeof supportedLngs)[number]
 
-export const resources = {
+const resources = {
   'zh-CN': {
     common: commonZh,
     auth: authZh,

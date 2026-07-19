@@ -1,9 +1,9 @@
 from types import SimpleNamespace
 from fastapi import HTTPException
-from fastapi.routing import APIRoute
 import pytest
 from api.auth.claims import has_scope
 from api.routes import collect, cve
+from api.tests.route_fakes import route_dependency
 
 
 def user(role: str = "user"):
@@ -33,13 +33,6 @@ def test_collect_crawl_rejects_non_admin_user():
     with pytest.raises(HTTPException) as exc:
         dependency(user=user("user"))
     assert exc.value.status_code == 403
-
-
-def route_dependency(router, endpoint_name: str):
-    for route in router.routes:
-        if isinstance(route, APIRoute) and route.endpoint.__name__ == endpoint_name:
-            return route.dependant.dependencies[0].call
-    raise AssertionError(f"missing route for {endpoint_name}")
 
 
 def test_collect_parse_rejects_guest_without_write_permission():

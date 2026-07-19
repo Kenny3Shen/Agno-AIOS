@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildUserInputPayload,
-  coerceUserInputValue,
   isUserInputFieldFilled,
   normalizeFieldType,
   parseUserInputSchema,
@@ -34,8 +33,6 @@ describe('userInput helpers', () => {
       { name: 'count', field_type: 'number' },
       { name: 'note', field_type: 'str' },
     ])
-    expect(coerceUserInputValue(schema[0], 'true')).toBe(true)
-    expect(coerceUserInputValue(schema[1], '3')).toBe(3)
     expect(buildUserInputPayload(schema, { ok: 'true', count: '2', note: 'x' }, '')).toEqual({
       ok: true,
       count: 2,

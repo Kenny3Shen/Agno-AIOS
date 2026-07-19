@@ -3,7 +3,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
-from fastapi.routing import APIRoute
 import pytest
 from starlette.requests import Request
 
@@ -11,22 +10,16 @@ from api.auth import router as auth_router
 from api.auth.claims import has_scope
 from api.routes import audit
 from api.services import audit_service
+from api.tests.route_fakes import route_dependency
 
 
 def actor(user_id: str, role: str = "user"):
     return SimpleNamespace(id=user_id, role=role, is_superuser=False)
 
 
-def route_dependency(endpoint_name: str):
-    for route in audit.router.routes:
-        if isinstance(route, APIRoute) and getattr(route.endpoint, "__name__", "") == endpoint_name:
-            return route.dependant.dependencies[0].call
-    raise AssertionError(f"missing route for {endpoint_name}")
-
-
 def test_audit_route_rejects_non_admin_reader():
     with pytest.raises(HTTPException) as exc:
-        route_dependency("list_audit_logs")(user=actor("u1"))
+        route_dependency(audit.router, "list_audit_logs")(user=actor("u1"))
 
     assert exc.value.status_code == 403
 
@@ -78,51 +71,12 @@ async def test_record_audit_event_delegates_to_async_persistence():
 
 
 @pytest.mark.asyncio
-async def test_list_audit_events_delegates_to_async_persistence():
-    created_from = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    created_to = datetime(2026, 1, 2, tzinfo=timezone.utc)
-    with patch.object(
-        audit_service,
-        "list_audit_logs_async",
-        new_callable=AsyncMock,
-    ) as mocked:
-        mocked.return_value = ([], 0)
-        result = await audit_service.list_audit_events_async(
-            page=2,
-            limit=25,
-            actor_user_id="u1",
-            actor_email="u1@example.test",
-            action="auth.login",
-            resource_type="auth",
-            resource_id="session-1",
-            status="success",
-            ip_address="10.0.0.8",
-            created_from=created_from,
-            created_to=created_to,
-        )
-    assert result == ([], 0)
-    mocked.assert_awaited_once_with(
-        page=2,
-        limit=25,
-        actor_user_id="u1",
-        actor_email="u1@example.test",
-        action="auth.login",
-        resource_type="auth",
-        resource_id="session-1",
-        status="success",
-        ip_address="10.0.0.8",
-        created_from=created_from,
-        created_to=created_to,
-    )
-
-
-@pytest.mark.asyncio
-async def test_admin_list_audit_logs_delegates_to_service():
+async def test_admin_list_audit_logs_delegates_to_persistence():
     admin = actor("admin", "admin")
     rows = [{"id": 1, "action": "auth.login"}]
     created_from = datetime(2026, 2, 1, tzinfo=timezone.utc)
     created_to = datetime(2026, 2, 2, tzinfo=timezone.utc)
-    with patch.object(audit, "list_audit_events_async", new_callable=AsyncMock) as mocked:
+    with patch.object(audit, "list_audit_logs_async", new_callable=AsyncMock) as mocked:
         mocked.return_value = (rows, 1)
         result = await audit.list_audit_logs(
             page=3,
@@ -162,7 +116,7 @@ async def test_route_surfaces_service_failure_as_500():
     admin = actor("admin", "admin")
     with patch.object(
         audit,
-        "list_audit_events_async",
+        "list_audit_logs_async",
         new_callable=AsyncMock,
         side_effect=RuntimeError("db down"),
     ):

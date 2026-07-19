@@ -13,7 +13,6 @@ from api.persistence.agent_evals import (
     create_suite_row_async,
     create_suite_run_row_async,
     get_case_row_async,
-    get_case_run_by_agno_eval_run_id_row_async,
     get_case_run_row_async,
     get_suite_row_async,
     list_case_rows_async,
@@ -372,11 +371,6 @@ async def create_case_run(
 
 async def get_case_run(case_run_id: str) -> dict[str, Any] | None:
     row = await get_case_run_row_async(case_run_id)
-    return normalize_case_run(row) if row is not None else None
-
-
-async def get_case_run_by_agno_eval_run_id(eval_run_id: str) -> dict[str, Any] | None:
-    row = await get_case_run_by_agno_eval_run_id_row_async(eval_run_id)
     return normalize_case_run(row) if row is not None else None
 
 

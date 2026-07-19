@@ -268,7 +268,7 @@ export function TracePage() {
   )
   const visibleRuns = runs
   const statusFilterTruncated = Boolean(
-    filters.status && (selectedTraceList.data?.meta.truncated || summaries.data?.meta.truncated)
+    filters.status && selectedTraceList.data?.meta.truncated
   )
   const detailTraceIds = useMemo(
     () => [...new Set([...visibleRuns.map((run) => run.traceId), activeTraceId].filter(Boolean))],
@@ -624,7 +624,7 @@ function SpanDetailTabs({ span }: { span: Span }) {
                   label: t('status'),
                   children: <Tag color={span.status_code === 'ERROR' ? 'error' : 'success'}>{span.status_code}</Tag>,
                 },
-                { key: 'duration', label: t('duration'), children: span.duration || '-' },
+                { key: 'duration', label: t('duration'), children: span.duration },
                 { key: 'started', label: t('started'), children: formatDate(span.start_time) },
               ]}
               value={metadata}

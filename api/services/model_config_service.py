@@ -11,16 +11,18 @@ from loguru import logger
 
 from api.persistence.model_configs import list_model_config_rows, replace_model_config_rows
 from api.services.runtime_paths import CONFIG_DIR, resolve_project_path
+from api.utils.async_once import AsyncOnce
 from api.utils.ttl_cache import TtlCache
 from api.services.model_capabilities import (
     apply_optimal_model_defaults,
     capabilities_for,
-    provider_defaults as _capability_provider_defaults,
+    provider_defaults,
     resolve_reasoning_effort,
 )
 
 # Short-lived process cache for hot chat/settings reads; cleared on save/seed rewrite.
 _STORE_CACHE: TtlCache[ModelConfigStore] = TtlCache(ttl_sec=5.0)
+_legacy_model_config_file_once = AsyncOnce()
 
 
 def _invalidate_model_config_cache() -> None:
@@ -73,18 +75,6 @@ StructuredOutputMode = Literal["native", "json"]
 ReasoningEffort = Literal["minimal", "low", "medium", "high", "max"]
 
 
-def _provider_defaults(provider: str) -> tuple[str, str, str | None]:
-    return _capability_provider_defaults(provider)
-
-
-def _looks_like_xai(base_url: str, model_id: str) -> bool:
-    base = (base_url or "").strip().lower()
-    mid = (model_id or "").strip().lower()
-    if "api.x.ai" in base:
-        return True
-    return mid.startswith("grok")
-
-
 class ModelConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -133,13 +123,8 @@ class ModelConfig(BaseModel):
         if not isinstance(value, Mapping):
             return value
         raw = dict(value)
-        base_url = str(raw.get("base_url") or "").strip()
         model_id = str(raw.get("model_id") or "").strip()
         provider = str(raw.get("provider") or "").strip()
-        # Migrate legacy Grok entries that used OpenAI-compatible + api.x.ai / Responses.
-        if provider in {"", "openai-compatible"} and _looks_like_xai(base_url, model_id):
-            provider = "xai"
-            raw["provider"] = "xai"
         if not provider:
             provider = "openai-compatible"
             raw["provider"] = provider
@@ -162,7 +147,7 @@ class ModelConfig(BaseModel):
             model_id=self.model_id,
         )
         if not caps.supports_reasoning_effort:
-            # Strip rather than hard-fail so legacy configs load cleanly.
+            # Unsupported providers never receive a reasoning_effort request field.
             if self.default_reasoning_effort is not None:
                 self.default_reasoning_effort = None
             return self
@@ -182,23 +167,16 @@ class ModelConfig(BaseModel):
         return self
 
     @classmethod
-    def normalized(cls, entry: "ModelConfig | Mapping[Any, Any]", fallback_id: str) -> Self:
-        raw = entry.model_dump() if isinstance(entry, ModelConfig) else dict(entry)
-        config_id = str(raw.get("id") or fallback_id).strip() or fallback_id
+    def from_row(cls, row: Mapping[Any, Any]) -> Self:
+        raw = dict(row)
+        config_id = str(raw.get("id") or "").strip()
+        if not config_id:
+            raise ValueError("model config id is required")
         configured_model_id = str(raw.get("model_id") or "").strip()
         base_url = str(raw.get("base_url") or "").strip()
-        provider = str(raw.get("provider") or "").strip()
-        if not provider:
-            if configured_model_id.startswith("deepseek-") or "api.deepseek.com" in base_url:
-                provider = "deepseek"
-            elif _looks_like_xai(base_url, configured_model_id):
-                provider = "xai"
-            else:
-                provider = "openai-compatible"
-        elif provider == "openai-compatible" and _looks_like_xai(base_url, configured_model_id):
-            provider = "xai"
+        provider = str(raw.get("provider") or "").strip() or "openai-compatible"
 
-        default_protocol, default_output_mode, default_reasoning_effort = _provider_defaults(provider)
+        default_protocol, default_output_mode, default_reasoning_effort = provider_defaults(provider)
         api_protocol = str(raw.get("api_protocol") or default_protocol).strip()
         structured_output_mode = str(
             raw.get("structured_output_mode") or default_output_mode
@@ -320,43 +298,27 @@ class ModelConfigStore(BaseModel):
         )
 
     @classmethod
-    def from_raw(cls, raw: Mapping[str, Any] | None) -> Self:
-        if not isinstance(raw, Mapping):
-            return cls.default()
-        models: list[ModelConfig] = []
-        models_raw = raw.get("models", [])
-        if isinstance(models_raw, list):
-            for index, entry in enumerate(models_raw):
-                if isinstance(entry, ModelConfig | Mapping):
-                    models.append(ModelConfig.normalized(entry, f"model-{index + 1}"))
-        store = cls(
-            active_model_id=str(raw.get("active_model_id") or "").strip(),
-            models=models,
-        )
-        return store.with_defaults().with_valid_active_model()
-
-    @classmethod
     def from_rows(cls, rows: Iterable[Mapping[str, Any]]) -> Self:
         models: list[ModelConfig] = []
         active_model_id = ""
-        for index, row in enumerate(rows):
+        for row in rows:
             if row.get("active") and not active_model_id:
                 active_model_id = str(row.get("id") or "").strip()
-            models.append(ModelConfig.normalized(row, f"model-{index + 1}"))
+            models.append(ModelConfig.from_row(row))
         return cls(active_model_id=active_model_id, models=models)
 
     @classmethod
     def from_submitted(
         cls,
-        models: Iterable[ModelConfig | Mapping[Any, Any]],
+        models: Iterable[ModelConfig],
         *,
         active_model_id: str | None,
         existing: "ModelConfigStore",
     ) -> Self:
         existing_by_id = {model.id: model for model in existing.models}
         normalized: list[ModelConfig] = []
-        for index, entry in enumerate(models):
-            model = ModelConfig.normalized(entry, f"model-{index + 1}")
+        for entry in models:
+            model = entry.model_copy(deep=True)
             previous = existing_by_id.get(model.id)
             if previous is not None and _is_masked_secret(model.api_key):
                 model = model.model_copy(update={"api_key": previous.api_key})
@@ -459,6 +421,18 @@ def _archive_legacy_model_config_file(config_file: Path) -> None:
         )
 
 
+async def _retire_legacy_model_config_file() -> None:
+    """Retire the old JSON source once; Postgres is the only config source."""
+    leftover = model_config_file()
+    if not leftover.exists():
+        return
+    logger.warning(
+        "retiring leftover model config file at {} (Postgres is source of truth)",
+        leftover,
+    )
+    _archive_legacy_model_config_file(leftover)
+
+
 def _rows_need_persist(rows: Iterable[Mapping[str, Any]]) -> bool:
     active_count = 0
     invalid_output_mode = False
@@ -516,15 +490,7 @@ async def load_model_config_store() -> ModelConfigStore:
         return cached
 
     rows = await list_model_config_rows()
-    leftover = model_config_file()
-    if leftover.exists():
-        # Never re-import file content into Postgres (Settings UI is source of truth).
-        # Empty-table boots seed builtins; leftover JSON is retired for forensics only.
-        logger.warning(
-            "retiring leftover model config file at {} (Postgres is source of truth)",
-            leftover,
-        )
-        _archive_legacy_model_config_file(leftover)
+    await _legacy_model_config_file_once.run(_retire_legacy_model_config_file)
 
     if not rows:
         store = ModelConfigStore.default()
@@ -537,9 +503,6 @@ async def load_model_config_store() -> ModelConfigStore:
 
     base_store = ModelConfigStore.from_rows(rows)
     store = base_store.with_defaults().with_valid_active_model()
-    # Integrity only: multi-active / invalid output mode / missing builtins / bad active.
-    # Provider heuristics (e.g. Grok→xai) stay read-path via ModelConfig.normalized;
-    # persist on explicit save, not every hot load.
     needs_rewrite = (
         store.to_storage_dict() != base_store.to_storage_dict()
         or _rows_need_persist(rows)
@@ -562,7 +525,7 @@ async def public_model_config() -> dict[str, Any]:
 
 
 async def save_model_config(
-    models: Iterable[ModelConfig | Mapping[Any, Any]], active_model_id: str | None
+    models: Iterable[ModelConfig], active_model_id: str | None
 ) -> dict[str, Any]:
     existing = await load_model_config_store()
     store = ModelConfigStore.from_submitted(

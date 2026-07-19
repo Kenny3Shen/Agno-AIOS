@@ -20,7 +20,7 @@ def _walk_skills(node: Any, found: set[str]) -> None:
             name = str(entry or "").strip()
             if name:
                 found.add(name)
-    for key in ("steps", "then_steps", "else_steps", "choices"):
+    for key in ("steps", "else", "choices"):
         child = node.get(key)
         if isinstance(child, list):
             for item in child:

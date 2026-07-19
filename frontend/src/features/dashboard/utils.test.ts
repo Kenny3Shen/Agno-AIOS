@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { failureRate, timelineChartData } from './utils'
+import { timelineChartData } from './utils'
 
 describe('runtime overview chart helpers', () => {
-  it('calculates error rate without dividing by zero', () => {
-    expect(failureRate(2, 8)).toBe(25)
-    expect(failureRate(1, 0)).toBe(0)
-  })
-
   it('maps aggregate buckets into chart records', () => {
     expect(
       timelineChartData([

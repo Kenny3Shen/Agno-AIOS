@@ -1,4 +1,3 @@
-export { AuthPage } from './AuthPage'
 export { LoginPage } from './LoginPage'
-export { currentUserQuery, authKeys } from './queries'
+export { currentUserQuery } from './queries'
 export { logout } from './api'

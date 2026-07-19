@@ -87,9 +87,6 @@ def resolve_domain_rule_key(url: str) -> str | None:
     from urllib.parse import urlsplit
 
     host = normalize_content_host(urlsplit(url).hostname)
-    if not host or host in DISABLED_COLLECT_DOMAINS:
-        # Still allow parse if a non-disabled rule matches via candidates
-        pass
     for key in content_host_candidates(host):
         if key in DISABLED_COLLECT_DOMAINS:
             continue

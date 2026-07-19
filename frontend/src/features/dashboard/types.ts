@@ -1,5 +1,5 @@
 export type OverviewRange = '1h' | '24h' | '7d'
-export type OverviewResponseRange = OverviewRange | 'custom'
+type OverviewResponseRange = OverviewRange | 'custom'
 
 export interface OverviewQuery {
   range?: OverviewRange
@@ -19,7 +19,7 @@ export interface OverviewBucket {
   bucket_end?: string
 }
 
-export interface OverviewDimension {
+interface OverviewDimension {
   name: string
   value: number
 }
@@ -36,7 +36,7 @@ export interface OverviewTrace {
   workflow_id?: string | null
 }
 
-export interface OverviewAuditEvent {
+interface OverviewAuditEvent {
   id: string | number
   action: string
   resource_type: string
@@ -46,7 +46,7 @@ export interface OverviewAuditEvent {
   created_at: string
 }
 
-export interface OverviewKpis {
+interface OverviewKpis {
   total_runs: number
   failed_runs: number
   failure_rate: number
@@ -64,7 +64,7 @@ export interface OverviewKpis {
   sample_failed_runs?: number | null
 }
 
-export interface OverviewEvaluation {
+interface OverviewEvaluation {
   total: number
   passed: number
   failed: number
@@ -73,13 +73,13 @@ export interface OverviewEvaluation {
   sample_size?: number | null
 }
 
-export interface OverviewApprovalCounts {
+interface OverviewApprovalCounts {
   pending: number
   approved: number
   rejected: number
 }
 
-export interface OverviewAssets {
+interface OverviewAssets {
   approvals?: OverviewApprovalCounts | null
   knowledge_documents?: number | null
   memories?: number | null

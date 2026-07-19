@@ -13,7 +13,6 @@ from api.auth.claims import ADMIN_SCOPE, ActorLike, actor_id, has_scope
 from api.persistence import workflows as workflow_store
 from api.services.workflow_compiler import (
     WorkflowDefinitionError,
-    list_executor_options,
     validate_and_normalize_definition,
 )
 from api.utils.pagination import pagination_meta
@@ -47,10 +46,20 @@ def _normalize_triggers(raw: object | None) -> dict[str, Any]:
     }
 
 
+def _canonical_definition(raw: object, *, context: str) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise WorkflowDefinitionError(f"{context} must be an object")
+    try:
+        return validate_and_normalize_definition(raw)
+    except WorkflowDefinitionError as exc:
+        raise WorkflowDefinitionError(f"{context} is invalid: {exc}") from exc
+
+
 def _row_payload(row: dict[str, Any]) -> dict[str, Any]:
-    definition = row.get("definition")
-    if not isinstance(definition, dict):
-        definition = {"name": row.get("name") or "", "description": "", "steps": []}
+    definition = _canonical_definition(
+        row.get("definition"),
+        context="workflow definition",
+    )
     triggers = _normalize_triggers(row.get("triggers"))
     next_cron_at: float | None = None
     cron_cfg = triggers.get("cron") or {}
@@ -151,9 +160,10 @@ async def _snapshot_version(
                 "version": int(row.get("version") or 1),
                 "name": str(row.get("name") or ""),
                 "description": str(row.get("description") or ""),
-                "definition": row.get("definition")
-                if isinstance(row.get("definition"), dict)
-                else {},
+                "definition": _canonical_definition(
+                    row.get("definition"),
+                    context="workflow version definition",
+                ),
                 "triggers": _normalize_triggers(row.get("triggers")),
                 "created_at": workflow_store.now_ts(),
                 "created_by": created_by,
@@ -291,22 +301,24 @@ async def list_versions_for_actor(
     rows, total = await workflow_store.list_workflow_versions(
         workflow_id, page=page, limit=limit
     )
-    data = [
-        {
-            "id": str(row.get("id") or ""),
-            "workflow_id": workflow_id,
-            "version": int(row.get("version") or 0),
-            "name": str(row.get("name") or ""),
-            "description": str(row.get("description") or ""),
-            "definition": row.get("definition")
-            if isinstance(row.get("definition"), dict)
-            else {},
-            "triggers": _normalize_triggers(row.get("triggers")),
-            "created_at": int(row.get("created_at") or 0),
-            "created_by": str(row.get("created_by") or ""),
-        }
-        for row in rows
-    ]
+    data = []
+    for row in rows:
+        data.append(
+            {
+                "id": str(row.get("id") or ""),
+                "workflow_id": workflow_id,
+                "version": int(row.get("version") or 0),
+                "name": str(row.get("name") or ""),
+                "description": str(row.get("description") or ""),
+                "definition": _canonical_definition(
+                    row.get("definition"),
+                    context="workflow version definition",
+                ),
+                "triggers": _normalize_triggers(row.get("triggers")),
+                "created_at": int(row.get("created_at") or 0),
+                "created_by": str(row.get("created_by") or ""),
+            }
+        )
     return {
         "data": data,
         "meta": pagination_meta(
@@ -329,14 +341,16 @@ async def restore_version_for_actor(
     snap = await workflow_store.get_workflow_version(workflow_id, version)
     if snap is None:
         return None
+    definition = _canonical_definition(
+        snap.get("definition"),
+        context="workflow version definition",
+    )
     return await update_workflow_for_actor(
         actor,
         workflow_id,
         name=str(snap.get("name") or existing["name"]),
         description=str(snap.get("description") or ""),
-        definition=snap.get("definition")
-        if isinstance(snap.get("definition"), dict)
-        else existing["definition"],
+        definition=definition,
         triggers=snap.get("triggers"),
     )
 
@@ -347,10 +361,6 @@ async def delete_workflow_for_actor(actor: ActorLike, workflow_id: str) -> bool:
         return False
     owner = None if has_scope(actor, ADMIN_SCOPE) else actor_id(actor)
     return await workflow_store.delete_workflow(workflow_id, owner_user_id=owner)
-
-
-def executor_catalog() -> list[dict[str, str]]:
-    return list_executor_options()
 
 
 def verify_webhook_secret(row: dict[str, Any], secret: str | None) -> bool:
@@ -368,9 +378,13 @@ def verify_webhook_secret(row: dict[str, Any], secret: str | None) -> bool:
 def get_published_definition(row: dict[str, Any]) -> dict[str, Any] | None:
     """Return published definition only (triggers use this for webhook/cron)."""
     published = row.get("published_definition")
-    if isinstance(published, dict) and published.get("steps") is not None:
-        return published
-    return None
+    if published is None:
+        return None
+    try:
+        return _canonical_definition(published, context="published workflow definition")
+    except WorkflowDefinitionError:
+        logger.exception("published workflow definition is invalid workflow_id={}", row.get("id"))
+        return None
 
 
 async def publish_workflow_for_actor(actor: ActorLike, workflow_id: str) -> dict[str, Any] | None:
@@ -381,10 +395,10 @@ async def publish_workflow_for_actor(actor: ActorLike, workflow_id: str) -> dict
     row = await workflow_store.get_workflow(workflow_id)
     if row is None:
         return None
-    definition = row.get("definition")
-    if not isinstance(definition, dict):
-        raise WorkflowDefinitionError("Workflow definition is invalid")
-    # re-validate draft before publish
+    definition = _canonical_definition(
+        row.get("definition"),
+        context="workflow definition",
+    )
     normalized = validate_and_normalize_definition(
         definition,
         forbid_self_workflow_id=workflow_id,

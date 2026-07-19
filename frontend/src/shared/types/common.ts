@@ -1,7 +1,7 @@
 export type ResourceVisibility = 'private' | 'public'
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'max'
 
-export interface ModelCapabilities {
+interface ModelCapabilities {
   provider: string
   supports_reasoning_effort: boolean
   reasoning_efforts: ReasoningEffort[]

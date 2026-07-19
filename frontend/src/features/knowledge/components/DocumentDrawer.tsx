@@ -57,7 +57,7 @@ export function DocumentDrawer({
       }}
       destroyOnHidden
       title={t('addDocument')}
-      maskClosable={!pending}
+      mask={{ closable: !pending }}
       keyboard={!pending}
     >
       <Tabs

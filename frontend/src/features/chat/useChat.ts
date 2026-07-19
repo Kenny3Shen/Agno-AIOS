@@ -123,11 +123,7 @@ export function useChat() {
   }, [])
 
   useEffect(() => {
-    if (!sessionId) {
-      dispatch({ type: 'reset' })
-      return
-    }
-    if (!history.data) return
+    if (!sessionId || !history.data) return
     // Avoid replacing an in-flight stream with a concurrent history fetch.
     if (state.requesting) return
     dispatch({ type: 'history', messages: history.data })
@@ -246,8 +242,9 @@ export function useChat() {
     // Existing deep-link session: wait for meta (and never send on workflow sessions).
     if (sessionId && (!metaResolved || sessionMetaFailed || isWorkflowSession)) return
     const activeSession = sessionId ?? crypto.randomUUID()
-    if (!sessionId) setSession(activeSession)
     if (!sessionId) {
+      prevSessionIdRef.current = activeSession
+      setSession(activeSession)
       const now = Date.now() / 1_000
       const agentId = state.selectedAgentId || 'security-operations'
       const catalogRow = (agents.data ?? []).find((row) => row.id === agentId)

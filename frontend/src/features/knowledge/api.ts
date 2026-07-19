@@ -1,5 +1,4 @@
 import { jsonInit, requestJson } from '@/shared/api/client'
-import { normalizePaginatedList } from '@/shared/lib/pagination'
 import { buildKnowledgeSearchPayload } from './utils'
 import type {
   AddTextPayload,
@@ -13,35 +12,12 @@ import type {
   UploadDocumentPayload,
 } from './types'
 
-export type GetKnowledgeParams = {
+type GetKnowledgeParams = {
   query?: string
   page?: number
   limit?: number
   sortBy?: 'updated_at' | 'created_at' | 'name' | 'status'
   sortOrder?: 'asc' | 'desc'
-}
-
-const normalizeDocument = (value: unknown): Document | null => {
-  if (!value || typeof value !== 'object') return null
-  const row = value as Record<string, unknown>
-  const id = String(row.id ?? '').trim()
-  if (!id) return null
-  return {
-    id,
-    title: String(row.title ?? ''),
-    source: String(row.source ?? ''),
-    chunks: Number(row.chunks ?? 0) || 0,
-    created_at: String(row.created_at ?? ''),
-    updated_at: row.updated_at != null ? String(row.updated_at) : undefined,
-    status: row.status != null ? String(row.status) : undefined,
-    visibility: row.visibility as Document['visibility'],
-    owner_user_id: row.owner_user_id != null ? String(row.owner_user_id) : undefined,
-    can_manage: row.can_manage === true,
-    metadata:
-      row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
-        ? (row.metadata as Document['metadata'])
-        : undefined,
-  }
 }
 
 export const getKnowledge = async (params: GetKnowledgeParams = {}): Promise<KnowledgeResponse> => {
@@ -54,27 +30,7 @@ export const getKnowledge = async (params: GetKnowledgeParams = {}): Promise<Kno
   search.set('limit', String(limit))
   if (params.sortBy) search.set('sort_by', params.sortBy)
   if (params.sortOrder) search.set('sort_order', params.sortOrder)
-  const raw = await requestJson<unknown>(`/knowledge?${search.toString()}`)
-  const envelope = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
-  const list = normalizePaginatedList(raw, {
-    page,
-    limit,
-    mapItem: normalizeDocument,
-  })
-  const metaRaw = envelope.meta && typeof envelope.meta === 'object' ? (envelope.meta as Record<string, unknown>) : {}
-  return {
-    data: list.data,
-    meta: {
-      ...list.meta,
-      query: metaRaw.query != null ? String(metaRaw.query) : undefined,
-      sort_by: metaRaw.sort_by != null ? String(metaRaw.sort_by) : undefined,
-      sort_order: metaRaw.sort_order != null ? String(metaRaw.sort_order) : undefined,
-    },
-    status:
-      envelope.status && typeof envelope.status === 'object'
-        ? (envelope.status as KnowledgeResponse['status'])
-        : {},
-  }
+  return requestJson<KnowledgeResponse>(`/knowledge?${search.toString()}`)
 }
 
 const appendIngestOptions = (body: FormData, options?: KnowledgeIngestOptions) => {
@@ -130,16 +86,9 @@ export const searchKnowledge = async (
   limit: number,
   searchType?: KnowledgeSearchType,
 ): Promise<SearchResult[]> => {
-  const raw = await requestJson<unknown>(
+  const payload = await requestJson<{ data: SearchResult[] }>(
     '/knowledge/search',
     jsonInit('POST', buildKnowledgeSearchPayload(query, limit, searchType)),
   )
-  const { data } = normalizePaginatedList(raw, {
-    limit,
-    mapItem: (row) => {
-      if (!row || typeof row !== 'object') return null
-      return row as SearchResult
-    },
-  })
-  return data
+  return payload.data
 }

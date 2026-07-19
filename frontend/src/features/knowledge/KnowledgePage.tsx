@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Card, Descriptions, Form, Grid, Input, InputNumber, Select, Space, Tabs, Tag, Typography } from 'antd'
+import { App, Button, Card, Descriptions, Form, Input, InputNumber, Select, Space, Tabs, Tag, Typography } from 'antd'
 import { PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import { Markdown } from '@/shared/ui/Markdown'
 import { PageHeader } from '@/shared/ui/PageHeader'
@@ -74,12 +74,14 @@ function RetrievalResultCard({ result }: { result: SearchResult }) {
   )
 }
 
+function isProcessingDocument(document: Document) {
+  return document.status === 'processing' || document.id.startsWith('processing:')
+}
+
 export function KnowledgePage() {
   const { t } = useTranslation('knowledge')
   const searchTypeOptions = SEARCH_TYPE_OPTIONS.map((value) => ({ value, label: value }))
   const { message } = App.useApp()
-  const screens = Grid.useBreakpoint()
-  const vertical = screens.md === false
   const client = useQueryClient()
   const [filter, setFilter] = useState('')
   const debouncedFilter = useDebouncedValue(filter, 300)
@@ -107,33 +109,29 @@ export function KnowledgePage() {
       }),
   })
   const documents = query.data?.data ?? []
-  const ingestDefaults = useMemo(() => effectiveKnowledgeIngestDefaults(query.data?.status.rag_settings), [query.data?.status.rag_settings])
+  const ingestDefaults = useMemo(
+    () => effectiveKnowledgeIngestDefaults(query.data?.meta.ingest_defaults),
+    [query.data?.meta.ingest_defaults],
+  )
   const selected = documents.find((document) => document.id === selectedId) ?? null
   const refresh = () => client.invalidateQueries({ queryKey: ['knowledge'] })
-  const scheduleIngestRefresh = () => {
-    // Background Docling/vectorize: refresh again shortly so completed rows appear.
-    window.setTimeout(() => {
-      void client.invalidateQueries({ queryKey: ['knowledge'] })
-    }, 2500)
-    window.setTimeout(() => {
-      void client.invalidateQueries({ queryKey: ['knowledge'] })
-    }, 8000)
-  }
 
   const syncUpdatedDocument = async (document: Document, previousId = selectedId, selectDocument = true) => {
+    const processing = isProcessingDocument(document)
+    const visibleDocument = processing && previousId ? { ...document, id: previousId } : document
     const currentKey = ['knowledge', debouncedFilter, page, pageSize, sortBy, sortOrder]
     client.setQueryData<KnowledgeResponse>(currentKey, (current) =>
       current
         ? {
             ...current,
             data: previousId
-              ? current.data.map((item) => (item.id === previousId ? document : item))
-              : [document, ...current.data],
+              ? current.data.map((item) => (item.id === previousId ? visibleDocument : item))
+              : [visibleDocument, ...current.data],
           }
         : current
     )
-    if (selectDocument) setSelectedId(document.id)
-    await refresh()
+    if (selectDocument) setSelectedId(visibleDocument.id)
+    if (!processing) await refresh()
   }
 
   const remove = useMutation({
@@ -188,7 +186,6 @@ export function KnowledgePage() {
                 filter={filter}
                 loading={query.isLoading}
                 selectedId={selectedId}
-                vertical={vertical}
                 onFilterChange={setFilter}
                 onSelect={openMetadata}
                 onUpdate={openUpdate}
@@ -263,10 +260,7 @@ export function KnowledgePage() {
       <DocumentDrawer
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={async (document) => {
-          await syncUpdatedDocument(document, '')
-          scheduleIngestRefresh()
-        }}
+        onCreated={(document) => syncUpdatedDocument(document, '')}
         ingestDefaults={ingestDefaults}
       />
       {updateOpen && selected && (
@@ -274,12 +268,7 @@ export function KnowledgePage() {
           document={selected}
           open
           onClose={() => setUpdateOpen(false)}
-          onUpdated={async (document) => {
-            await syncUpdatedDocument(document, selectedId)
-            if (document.status === 'processing' || document.id.startsWith('processing:')) {
-              scheduleIngestRefresh()
-            }
-          }}
+          onUpdated={(document) => syncUpdatedDocument(document, selectedId)}
           ingestDefaults={ingestDefaults}
         />
       )}

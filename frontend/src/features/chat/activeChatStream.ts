@@ -56,8 +56,3 @@ export function abortActiveChatStream(): { runId: string | null; sessionId: stri
   }
   return { runId, sessionId }
 }
-
-/** Test helper — reset module state between tests. */
-export function __resetActiveChatStreamForTests(): void {
-  active = null
-}

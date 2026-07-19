@@ -3,23 +3,21 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from agno.knowledge.chunking.code import CodeChunking
 from agno.knowledge.chunking.document import DocumentChunking
-from agno.knowledge.chunking.markdown import MarkdownChunking
 from agno.knowledge.chunking.recursive import RecursiveChunking
 from agno.knowledge.chunking.row import RowChunking
 from agno.knowledge.chunking.semantic import SemanticChunking
 from agno.knowledge.embedder import Embedder
+from agno.knowledge.reader.base import Reader
 from agno.knowledge.reader.csv_reader import CSVReader
-from agno.knowledge.reader.docx_reader import DocxReader
 from agno.knowledge.reader.json_reader import JSONReader
 from agno.knowledge.reader.markdown_reader import MarkdownReader
-from agno.knowledge.reader.pdf_reader import PDFReader
 from agno.knowledge.reader.text_reader import TextReader
 
 from api.services.docling_service import knowledge_docling_reader
+from api.services.markdown_chunking import MarkdownHeadingChunking
 
 
 @dataclass(frozen=True)
@@ -65,7 +63,7 @@ class KnowledgeIngestOverrides:
     reader_strategy: str | None = None
 
 
-KnowledgeReader = TextReader | MarkdownReader | CSVReader | JSONReader | PDFReader | DocxReader | Any
+KnowledgeReader = Reader
 
 MARKDOWN_SUFFIXES = (".md", ".markdown", ".mdown", ".mkd")
 CSV_SUFFIXES = (".csv", ".tsv")
@@ -340,7 +338,6 @@ def reader_for_profile(
     config: KnowledgeReaderConfig,
     filename: str | None = None,
 ) -> KnowledgeReader:
-    suffix = Path(filename or "").suffix.lower()
     if profile.strategy == "markdown":
         _validate_overlap(config)
         split_on_headings: bool | int = (
@@ -351,7 +348,7 @@ def reader_for_profile(
         if split_on_headings == 0:
             split_on_headings = False
         return MarkdownReader(
-            chunking_strategy=MarkdownChunking(
+            chunking_strategy=MarkdownHeadingChunking(
                 chunk_size=config.chunk_size,
                 overlap=config.chunk_overlap,
                 split_on_headings=split_on_headings,
@@ -379,48 +376,5 @@ def reader_for_profile(
             )
         )
     if profile.strategy == "document":
-        # Prefer Agno DoclingReader (markdown export) for structured office/PDF/HTML.
-        # Fall back to pypdf/python-docx readers only if Docling is unavailable.
-        try:
-            return knowledge_docling_reader(chunking_strategy=_document_chunking(config))
-        except Exception:
-            if suffix == ".pdf":
-                return PDFReader(chunking_strategy=_document_chunking(config))
-            if suffix == ".docx":
-                return DocxReader(chunking_strategy=_document_chunking(config))
-            return TextReader(chunking_strategy=_document_chunking(config))
+        return knowledge_docling_reader(chunking_strategy=_document_chunking(config))
     return TextReader(chunking_strategy=_semantic_chunking(config))
-
-
-def reader_for_filename(filename: str | None, config: KnowledgeReaderConfig) -> KnowledgeReader:
-    return reader_for_profile(profile_for_filename(filename), config, filename)
-
-
-def pipeline_status(
-    *,
-    search_type: str,
-    vector_score_weight: float,
-    prefix_match: bool,
-    content_language: str,
-    semantic_threshold: float,
-    code_chunk_size: int,
-) -> dict[str, Any]:
-    return {
-        "search_type": search_type,
-        "vector_score_weight": vector_score_weight,
-        "prefix_match": prefix_match,
-        "content_language": content_language,
-        "supported_suffixes": sorted(SUPPORTED_FILE_SUFFIXES),
-        "chunk_profiles": [
-            {
-                "label": profile.label,
-                "strategy": profile.strategy,
-                "reader": profile.reader,
-                "suffixes": list(profile.suffixes),
-                "description": profile.description,
-            }
-            for profile in INGEST_PROFILES
-        ],
-        "semantic_threshold": semantic_threshold,
-        "code_chunk_size": code_chunk_size,
-    }

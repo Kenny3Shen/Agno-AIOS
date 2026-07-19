@@ -21,11 +21,6 @@ def analysis_work_dir() -> Path:
     root.mkdir(parents=True, exist_ok=True)
     return root
 
-
-# Back-compat alias used by older tests/imports.
-_analysis_work_dir = analysis_work_dir
-
-
 def profile_uses_analysis_sandbox(profile: dict[str, Any] | None) -> bool:
     """True when profile mounts File/CSV/Python sandboxed toolkits."""
     if not profile:

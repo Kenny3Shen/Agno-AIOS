@@ -6,7 +6,7 @@ from loguru import logger
 
 from api.auth.models import User
 from api.auth.scopes import require_scope
-from api.services.audit_service import list_audit_events_async
+from api.persistence.audit_logs import list_audit_logs_async
 from api.utils.pagination import pagination_meta
 
 router = APIRouter(prefix="/api/audit", tags=["Audit"])
@@ -29,7 +29,7 @@ async def list_audit_logs(
 ) -> dict[str, Any]:
     """List audit events with Agno-style ``data`` / ``meta`` pagination."""
     try:
-        items, total = await list_audit_events_async(
+        items, total = await list_audit_logs_async(
             page=page,
             limit=limit,
             actor_user_id=actor_user_id,

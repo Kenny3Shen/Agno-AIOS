@@ -69,29 +69,6 @@ def test_approval_rejection_reason_prefers_agno_requirement_note():
 
 
 
-def test_approval_rejection_reason_ignores_legacy_resolution_rejection_reason():
-    run = {
-        "requirements": [],
-        "tools": [],
-        "metadata": {
-            "approval": {
-                "resolution_data": {
-                    "rejection_reason": "legacy only",
-                    "note": "canonical note",
-                }
-            }
-        },
-    }
-    assert approval_rejection_reason(run) == "canonical note"
-
-    legacy_only = {
-        "requirements": [],
-        "tools": [],
-        "metadata": {"approval": {"resolution_data": {"rejection_reason": "legacy only"}}},
-    }
-    assert approval_rejection_reason(legacy_only) == ""
-
-
 @pytest.mark.asyncio
 async def test_list_sessions_async_projects_sorted_archived_session_rows():
     # Rows arrive newest-first from SQL; service keeps order when already_sorted.
@@ -101,7 +78,11 @@ async def test_list_sessions_async_projects_sorted_archived_session_rows():
             "created_at": 3,
             "updated_at": 4,
             "user_id": "u1",
-            "runs": [{"input": "newer preview"}],
+            "runs": [
+                {"input": "first preview"},
+                {"input": "newer preview"},
+                "invalid tail",
+            ],
             "metadata": {"agno_aios_archived": True},
         },
         {
@@ -136,7 +117,7 @@ async def test_list_sessions_async_projects_sorted_archived_session_rows():
     assert [session["session_id"] for session in sessions] == ["newer", "older"]
     assert sessions[0]["preview"] == "newer preview"
     assert sessions[0]["archived"]
-    assert sessions[0]["runs"] == [{"input": "newer preview"}]
+    assert sessions[0]["runs"][-1] == "invalid tail"
     assert not sessions[1]["archived"]
     assert sessions[1]["preview"] == "older preview"
     assert sessions[0].get("session_type") == "agent"
@@ -830,21 +811,6 @@ def test_team_history_reconstructs_members_from_child_runs():
         leader, tool_status="completed", sibling_runs=[leader, child]
     )
     assert thoughts and thoughts[0]["id"] == "member:data-analysis"
-
-
-def test_preview_prefers_latest_run():
-    from api.services.chat_session_service import _preview_from_runs
-
-    assert _preview_from_runs(
-        [
-            {"input": "first turn"},
-            {"input": "latest turn"},
-        ]
-    ) == "latest turn"
-    # Skip non-dict tails
-    assert _preview_from_runs([{"input": "only"}, "bad"]) == "only"
-
-
 @pytest.mark.asyncio
 async def test_team_history_omits_tools_when_thought_chain_disabled(monkeypatch):
     """show_thought_chain=false omits timeline tools + member thoughts (product setting)."""
@@ -893,22 +859,6 @@ async def test_team_history_omits_tools_when_thought_chain_disabled(monkeypatch)
     assert not assistant.get("thought_chain")
     assert assistant.get("content") == "81"
 
-
-
-def test_history_member_content_fallback():
-    from api.services.chat_session_service import _history_member_content_fallback
-
-    run = {
-        "run_id": "L",
-        "content": "",
-        "member_responses": [
-            {"agent_id": "a", "content": "first"},
-            {"agent_id": "b", "content": "last-member"},
-        ],
-    }
-    assert _history_member_content_fallback(run) == "last-member"
-
-
 @pytest.mark.asyncio
 async def test_team_history_merges_member_sources(monkeypatch):
     """History should surface member citations with member name prefix (stream parity)."""
@@ -921,7 +871,7 @@ async def test_team_history_merges_member_sources(monkeypatch):
         "run_id": "team-run-src",
         "team_id": "research-analysis-team",
         "status": "COMPLETED",
-        "content": "综合",
+        "content": "",
         "input": "调研",
         "tools": [],
         "member_responses": [
@@ -975,6 +925,7 @@ async def test_team_history_merges_member_sources(monkeypatch):
 
     messages = await chat_session_service.get_session_messages_async("session-team-src")
     assistant = next(m for m in messages if m.get("role") == "assistant")
+    assert assistant["content"] == "调研摘要"
     sources = assistant.get("sources") or []
     titles = [str(s.get("title") or "") for s in sources]
     assert any("Leader note" in t for t in titles), titles

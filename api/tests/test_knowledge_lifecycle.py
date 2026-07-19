@@ -8,12 +8,8 @@ from unittest.mock import patch
 
 import pytest
 from agno.knowledge.content import FileData
-from fastapi import HTTPException
-from fastapi.routing import APIRoute
 from sqlalchemy.dialects import postgresql
 
-from api.auth.claims import has_scope
-from api.routes import knowledge as knowledge_route
 from api.services import knowledge_service
 from api.services.knowledge_source_service import SOURCE_METADATA_KEY, source_digest
 from api.tests.knowledge_fakes import StrictAsyncKnowledge
@@ -23,26 +19,6 @@ def int_kwarg(values: Mapping[str, object], key: str, default: int) -> int:
     value = values.get(key, default)
     assert isinstance(value, int)
     return value
-
-
-def route_dependency(endpoint_name: str):
-    for route in knowledge_route.router.routes:
-        if isinstance(route, APIRoute) and getattr(route.endpoint, "__name__", "") == endpoint_name:
-            return route.dependant.dependencies[0].call
-    raise AssertionError(f"missing route for {endpoint_name}")
-
-
-def test_rag_settings_route_requires_config_write_scope() -> None:
-    ordinary_user = SimpleNamespace(id="u1", role="user", is_superuser=False)
-    admin = SimpleNamespace(id="admin", role="admin", is_superuser=False)
-    dependency = route_dependency("update_rag_settings")
-
-    assert has_scope(ordinary_user, "knowledge:write")
-    assert not has_scope(ordinary_user, "config:write")
-    with pytest.raises(HTTPException) as exc:
-        dependency(user=ordinary_user)
-    assert exc.value.status_code == 403
-    assert dependency(user=admin) is admin
 
 
 def test_chunk_count_query_scopes_private_vectors_to_the_requested_owner() -> None:
@@ -87,7 +63,7 @@ async def test_search_documents_merges_public_and_owner_private_filters() -> Non
 
     with (
         patch.object(knowledge_service, "_ensure_knowledge_storage_async", noop),
-        patch.object(knowledge_service, "_get_async_knowledge_base_async", get_knowledge_async),
+        patch.object(knowledge_service, "get_async_knowledge_base_async", get_knowledge_async),
         patch.object(knowledge_service, "_hydrate_content_ids_async", hydrate_noop),
     ):
         results = await knowledge_service.get_knowledge_base_lifecycle().search_documents_async(
@@ -388,36 +364,6 @@ async def test_add_uploaded_file_preserves_browser_file_metadata(tmp_path) -> No
     assert stored_sources["content-upload"]["kind"] == "path"
     assert stored_sources["content-upload"]["path"] == str(file_path)
     assert stored_sources["content-upload"]["metadata"] == insert_metadata
-
-
-@pytest.mark.asyncio
-async def test_update_document_visibility_uses_agno_patch_content() -> None:
-    content_row = SimpleNamespace(
-        id="content-visibility",
-        name="Runbook",
-        metadata={"user_id": "u1", "visibility": "private", "source": "manual"},
-        created_at=0,
-    )
-    knowledge = StrictAsyncKnowledge(content_by_id={"content-visibility": content_row})
-
-    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
-        knowledge_service.KnowledgeBaseLifecycleDependencies(
-            get_async_knowledge_base=lambda _search_type=None: knowledge,
-            ensure_contents_storage_async=lambda: None,
-            knowledge_content_by_id_async=lambda _content_id: content_row,
-        )
-    )
-
-    result = await lifecycle.update_document_visibility_async(
-        "content-visibility",
-        "public",
-        SimpleNamespace(id="u1", role="user", is_superuser=False),
-    )
-
-    assert result is not None
-    assert result["visibility"] == "public"
-    assert content_row.metadata["visibility"] == "public"
-    assert knowledge.calls[-1][0] == "apatch_content"
 
 
 @pytest.mark.asyncio
@@ -1295,7 +1241,7 @@ async def test_replace_document_source_cross_type_uses_new_reader_profile() -> N
 
 
 @pytest.mark.asyncio
-async def test_list_documents_uses_contents_db_without_runtime() -> None:
+async def test_list_documents_page_uses_contents_db_without_runtime() -> None:
     content_row = SimpleNamespace(
         id="content-3",
         name="Runbook",
@@ -1322,8 +1268,13 @@ async def test_list_documents_uses_contents_db_without_runtime() -> None:
         )
     )
 
-    documents = await lifecycle.list_documents_async(owner_user_id="u1")
+    documents, total = await lifecycle.list_documents_page_async(
+        owner_user_id="u1",
+        page=1,
+        limit=100,
+    )
 
+    assert total == 1
     assert documents == [
         {
             "id": "content-3",
@@ -1333,7 +1284,6 @@ async def test_list_documents_uses_contents_db_without_runtime() -> None:
             "created_at": "1970-01-01T00:00:00+00:00",
             "updated_at": "1970-01-01T00:00:00+00:00",
             "status": "",
-            "status_message": "",
             "type": "",
             "size": None,
             "visibility": "private",
@@ -1351,8 +1301,7 @@ async def test_list_documents_uses_contents_db_without_runtime() -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_documents_async_pages_beyond_first_window() -> None:
-    """Compatibility full list walks paged reads across multiple content windows."""
+async def test_list_documents_page_owner_filter_returns_later_window() -> None:
     all_rows = [
         SimpleNamespace(id=f"c{i}", name=f"Doc {i}", metadata={"user_id": "u1"}, created_at=i)
         for i in range(1, 202)
@@ -1375,18 +1324,22 @@ async def test_list_documents_async_pages_beyond_first_window() -> None:
         )
     )
 
-    documents = await lifecycle.list_documents_async(owner_user_id="u1")
+    documents, total = await lifecycle.list_documents_page_async(
+        owner_user_id="u1",
+        page=3,
+        limit=100,
+    )
 
-    assert len(documents) == 201
-    assert documents[-1]["id"] == "c201"
-    # Owner-filtered path streams content with fetch_size=200; two windows cover 201 rows.
+    assert total == 201
+    assert [document["id"] for document in documents] == ["c201"]
+    # Owner-filtered path streams source rows with fetch_size=200 to compute the total.
     assert len(calls) >= 2
     assert calls[0]["page"] == 1
     assert calls[0]["limit"] == 200
 
 
 @pytest.mark.asyncio
-async def test_list_documents_treats_completed_markdown_as_ready_when_count_missing() -> None:
+async def test_list_documents_page_treats_completed_markdown_as_ready_when_count_missing() -> None:
     content_row = SimpleNamespace(
         id="content-ready",
         name="Runbook",
@@ -1410,61 +1363,17 @@ async def test_list_documents_treats_completed_markdown_as_ready_when_count_miss
         )
     )
 
-    documents = await lifecycle.list_documents_async(owner_user_id="u1")
+    documents, total = await lifecycle.list_documents_page_async(
+        owner_user_id="u1",
+        page=1,
+        limit=100,
+    )
 
+    assert total == 1
     assert documents[0]["chunks"] == 1
     assert documents[0]["status"] == "completed"
     assert documents[0]["type"] == ".md"
     assert documents[0]["size"] == 256
-
-
-@pytest.mark.asyncio
-async def test_knowledge_status_uses_paged_document_count_without_full_list() -> None:
-    def fail_runtime(_search_type=None):
-        raise AssertionError("status must not load Knowledge runtime")
-
-    calls: list[dict[str, object]] = []
-
-    async def fake_page(*, owner_user_id=None, page=1, limit=100, **_kwargs):
-        calls.append({"owner_user_id": owner_user_id, "page": page, "limit": limit})
-        return [{"id": "should-not-materialize"}], 42
-
-    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
-        knowledge_service.KnowledgeBaseLifecycleDependencies(
-            get_async_knowledge_base=fail_runtime,
-            chunk_count_async=lambda _owner_user_id=None: 9,
-        )
-    )
-    setattr(lifecycle, "list_documents_page_async", fake_page)
-
-    status = await lifecycle.knowledge_status_async(owner_user_id="u1")
-
-    assert calls == [{"owner_user_id": "u1", "page": 1, "limit": 1}]
-    assert status["documents"] == 42
-    assert status["chunks"] == 9
-
-
-@pytest.mark.asyncio
-async def test_knowledge_status_uses_prefetched_documents_without_runtime() -> None:
-    def fail_runtime(_search_type=None):
-        raise AssertionError("status must not load Knowledge runtime")
-
-    lifecycle = knowledge_service.KnowledgeBaseLifecycle(
-        knowledge_service.KnowledgeBaseLifecycleDependencies(
-            get_async_knowledge_base=fail_runtime,
-            chunk_count_async=lambda _owner_user_id=None: 7,
-        )
-    )
-
-    status = await lifecycle.knowledge_status_async(
-        owner_user_id="u1",
-        documents=[{"id": "content-1"}],
-    )
-
-    assert status["documents"] == 1
-    assert status["chunks"] == 7
-    assert status["rag_settings"]["top_k"] == knowledge_service.knowledge_settings().top_k
-    assert "runtime_loaded" in status
 
 
 @pytest.mark.asyncio
@@ -1710,7 +1619,7 @@ async def test_list_documents_page_filters_sorts_and_reports_total() -> None:
 
     assert total == 2
     assert [document["id"] for document in documents] == ["doc-2"]
-    # Injected path streams content rows (not a single unbounded dump via list_documents_async).
+    # Injected path streams content rows instead of materializing a full document list.
     assert content_calls
     assert all(call.get("limit") == 200 for call in content_calls)
 

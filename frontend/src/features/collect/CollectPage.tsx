@@ -710,7 +710,7 @@ export function CollectPage() {
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
                   description={
-                    <Space direction="vertical" size={8}>
+                    <Space orientation="vertical" size={8}>
                       <span>{previewError}</span>
                       <Button size="small" onClick={() => setPreviewReloadToken((n) => n + 1)}>
                         {t('common:retry')}

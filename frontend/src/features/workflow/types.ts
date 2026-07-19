@@ -58,8 +58,7 @@ export type WorkflowDefinitionNode = {
   skills?: string[]
   steps?: WorkflowDefinitionNode[]
   evaluator?: { cel?: string; value?: boolean }
-  then_steps?: WorkflowDefinitionNode[]
-  else_steps?: WorkflowDefinitionNode[]
+  else?: WorkflowDefinitionNode[]
   max_iterations?: number
   end_condition?: { cel?: string; value?: boolean } | null
   selector?: { cel?: string }
@@ -157,7 +156,7 @@ export type WorkflowState = {
   lastApprovalId: string | null
 }
 
-export type WorkflowRunEventType =
+type WorkflowRunEventType =
   | 'workflow.started'
   | 'workflow.completed'
   | 'workflow.failed'

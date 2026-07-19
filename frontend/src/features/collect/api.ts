@@ -1,7 +1,7 @@
 /** Collect (安全情报) client: article library search, parse, crawl SSE. */
 import { ApiError, apiFetch, jsonInit, requestJson } from '@/shared/api/client'
 import { consumeSse } from '@/features/chat/utils'
-import { normalizePaginatedList } from '@/shared/lib/pagination'
+import type { ListPaginationMeta } from '@/shared/lib/pagination'
 
 export interface CollectArticle {
   id: number
@@ -19,7 +19,7 @@ export interface CollectArticle {
   updated_at?: string
 }
 
-export interface CollectSource {
+interface CollectSource {
   domain: string
   has_rule: boolean
   has_articles: boolean
@@ -28,7 +28,12 @@ export interface CollectSource {
   total_count?: number
 }
 
-export interface CollectLibraryStats {
+type CollectListResponse<T> = {
+  data: T[]
+  meta: ListPaginationMeta
+}
+
+interface CollectLibraryStats {
   ok: number
   error: number
   total: number
@@ -54,7 +59,7 @@ export const searchArticles = async (payload: {
 }) => {
   const page = payload.page ?? 1
   const size = payload.size ?? 20
-  const raw = await requestJson<unknown>(
+  return requestJson<CollectListResponse<CollectArticle>>(
     '/url2md/articles/search',
     jsonInit('POST', {
       query: payload.query ?? '',
@@ -64,25 +69,9 @@ export const searchArticles = async (payload: {
       size,
     }),
   )
-  return normalizePaginatedList(raw, {
-    page,
-    limit: size,
-    mapItem: (row) => {
-      if (!row || typeof row !== 'object') return null
-      return row as CollectArticle
-    },
-  })
 }
 
-export const listSources = async () => {
-  const raw = await requestJson<unknown>('/url2md/sources')
-  return normalizePaginatedList(raw, {
-    mapItem: (row) => {
-      if (!row || typeof row !== 'object') return null
-      return row as CollectSource
-    },
-  })
-}
+export const listSources = () => requestJson<CollectListResponse<CollectSource>>('/url2md/sources')
 
 export type CollectCrawlStats = {
   message?: string
@@ -114,13 +103,6 @@ export type CollectCrawlProgress = {
   sources?: number
   code?: number
 }
-
-export const crawlSources = (payload?: {
-  domains?: string[]
-  max_links_per_source?: number
-  max_articles_total?: number
-}) =>
-  requestJson<CollectCrawlStats>('/url2md/crawl', jsonInit('POST', payload ?? {}))
 
 export const crawlSourcesStream = async (
   payload: {

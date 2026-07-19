@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
-import { getApprovals, resolveApproval, resolveSubmissionApproval, resumeApproval } from './api'
+import { getApproval, getApprovals, resolveApproval, resolveSubmissionApproval, resumeApproval } from './api'
 
 const submission = (id: string) => ({
   id,
@@ -25,7 +25,7 @@ describe('getApprovals', () => {
         )
         return HttpResponse.json({
           data: rows,
-          meta: { page, limit, total_count: 25, total_pages: 3 },
+          meta: { page, limit, total_count: 25, total_pages: 3, search_time_ms: 0 },
         })
       }),
     )
@@ -34,6 +34,7 @@ describe('getApprovals', () => {
     expect(first.data.map((item) => item.id)).toEqual(
       Array.from({ length: 10 }, (_, i) => `s${i}`),
     )
+    expect(first.data[0]?.submitted_by).toEqual({ id: 'u1', email: 'a@b.c' })
     expect(first.meta.total_count).toBe(25)
 
     const second = await getApprovals({ status: 'pending', kind: 'upload', page: 2, limit: 10 })
@@ -75,6 +76,33 @@ describe('getApprovals', () => {
     const result = await getApprovals({ status: 'pending', kind: 'all', page: 1, limit: 10 })
     expect(result.data.map((item) => item.id)).toEqual(['u0', 'u1', 'h0', 'h1'])
     expect(result.meta.total_count).toBe(4)
+  })
+
+  it('rejects malformed list rows instead of silently dropping them', async () => {
+    server.use(
+      http.get('/api/approvals', () =>
+        HttpResponse.json({
+          data: [{ status: 'pending' }],
+          meta: { page: 1, limit: 10, total_count: 1, total_pages: 1, search_time_ms: 0 },
+        }),
+      ),
+    )
+
+    await expect(getApprovals({ kind: 'workflow' })).rejects.toThrow('getApprovals: invalid approval payload')
+  })
+})
+
+describe('getApproval', () => {
+  it('returns null only when the detail endpoint returns 404', async () => {
+    server.use(http.get('/api/approvals/missing', () => HttpResponse.json({ detail: 'Approval not found' }, { status: 404 })))
+
+    await expect(getApproval('missing')).resolves.toBeNull()
+  })
+
+  it('rejects malformed successful detail payloads', async () => {
+    server.use(http.get('/api/approvals/bad', () => HttpResponse.json({ status: 'pending' })))
+
+    await expect(getApproval('bad')).rejects.toThrow('getApproval: invalid approval payload')
   })
 })
 

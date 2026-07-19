@@ -8,27 +8,43 @@ export interface Cve {
   github_url: string
   description: string
   source: string
-  create_time: string
+  create_time: string | null
 }
 
-export type CveSearchResponse = {
+type CveSearchResponse = {
   data: Cve[]
   meta: ListPaginationMeta
 }
 
-const normalizeCve = (value: unknown): Cve | null => {
-  if (!value || typeof value !== 'object') return null
+const isPositiveInteger = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value > 0
+
+const parseCve = (value: unknown, context: string): Cve => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${context}: invalid CVE payload`)
+  }
   const row = value as Record<string, unknown>
-  const id = Number(row.id)
-  const cveId = String(row.cve_id ?? '').trim()
-  if (!Number.isFinite(id) || !cveId) return null
+  const id = row.id
+  const cveId = row.cve_id
+  const createTime = row.create_time
+  if (
+    !isPositiveInteger(id) ||
+    typeof cveId !== 'string' ||
+    !cveId.trim() ||
+    typeof row.github_url !== 'string' ||
+    typeof row.description !== 'string' ||
+    typeof row.source !== 'string' ||
+    (createTime !== null && typeof createTime !== 'string')
+  ) {
+    throw new Error(`${context}: invalid CVE payload`)
+  }
   return {
     id,
     cve_id: cveId,
-    github_url: String(row.github_url ?? ''),
-    description: String(row.description ?? ''),
-    source: String(row.source ?? ''),
-    create_time: String(row.create_time ?? ''),
+    github_url: row.github_url,
+    description: row.description,
+    source: row.source,
+    create_time: createTime,
   }
 }
 
@@ -40,9 +56,7 @@ export const searchCves = async (payload: {
 }): Promise<CveSearchResponse> => {
   const raw = await requestJson<unknown>('/cve/search', jsonInit('POST', payload))
   return normalizePaginatedList(raw, {
-    page: payload.page,
-    limit: payload.size,
-    mapItem: normalizeCve,
+    mapItem: (item) => parseCve(item, 'searchCves'),
   })
 }
 

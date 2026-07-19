@@ -20,7 +20,6 @@ from api.persistence.collect_articles import (
 )
 from api.services.collect_crawl_service import (
     configured_source_domains,
-    crawl_and_persist,
     extract_cve_ids,
     parse_and_store_url,
 )
@@ -88,21 +87,6 @@ async def list_sources() -> list[dict[str, Any]]:
             }
         )
     return items
-
-
-async def run_crawl(
-    *,
-    domains: list[str] | None = None,
-    max_links_per_source: int = 20,
-    max_articles_total: int = 80,
-    on_progress: Any | None = None,
-) -> dict[str, Any]:
-    return await crawl_and_persist(
-        domains=domains,
-        max_links_per_source=max_links_per_source,
-        max_articles_total=max_articles_total,
-        on_progress=on_progress,
-    )
 
 
 async def reparse_article(article_id: int) -> dict[str, Any]:

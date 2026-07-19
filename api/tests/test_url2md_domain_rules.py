@@ -236,7 +236,10 @@ def test_get_markdown_text_extracts_pre_and_blockquote():
     code = "SELECT * FROM users WHERE id = 1;\n" * 6
     quote = ("Analyst note that is long enough to keep. " * 4)
     html = f"""
-    <html><head><title>Tech Post</title></head>
+    <html><head>
+      <title>Short tab</title>
+      <meta property="og:title" content="Full Article Title - Site" />
+    </head>
     <body>
       <article>
         <h1>Section heading in body</h1>
@@ -248,28 +251,11 @@ def test_get_markdown_text_extracts_pre_and_blockquote():
     """
     soup = BeautifulSoup(html, "html.parser")
     md = get_markdown_text(soup, "https://unknown-news.example/tech")
-    assert md.startswith("# Tech Post")
+    assert md.startswith("# Full Article Title - Site")
     assert "Section heading in body" in md
     assert "SELECT * FROM users" in md
     assert "```" in md
     assert "Analyst note" in md
-
-
-def test_get_title_prefers_og_title():
-    from bs4 import BeautifulSoup
-    from api.services.url2md_service import _get_title_text
-
-    soup = BeautifulSoup(
-        """
-        <html><head>
-          <title>Short tab</title>
-          <meta property="og:title" content="Full Article Title - Site" />
-        </head><body><h1>Ignored</h1></body></html>
-        """,
-        "html.parser",
-    )
-    assert _get_title_text(soup) == "Full Article Title - Site"
-
 
 def test_playwright_user_data_dir_respects_env(monkeypatch, tmp_path):
     from api.services import url2md_service as svc

@@ -5,7 +5,7 @@ from importlib.metadata import PackageNotFoundError, version as package_version
 from pathlib import Path
 from urllib.parse import quote_plus
 
-from pydantic import AliasChoices, Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Single source: pyproject.toml [project].version (via importlib.metadata after install/uv sync).
@@ -142,17 +142,9 @@ class Settings(BaseSettings):
         default=10,
         validation_alias="TAIS_KNOWLEDGE_RERANK_MIN_CANDIDATES",
     )
-    agno_knowledge_device: str = Field(
-        default="auto",
-        validation_alias="TAIS_KNOWLEDGE_DEVICE",
-    )
     agno_knowledge_search_type: str = Field(
         default="hybrid",
         validation_alias="TAIS_KNOWLEDGE_SEARCH_TYPE",
-    )
-    agno_knowledge_rerank_use_fp16: bool = Field(
-        default=False,
-        validation_alias="TAIS_KNOWLEDGE_RERANK_USE_FP16",
     )
     agno_skills_dir: str | None = Field(default=None, validation_alias="TAIS_SKILLS_DIR")
     agno_skills_config_file: str | None = Field(
@@ -189,13 +181,9 @@ class Settings(BaseSettings):
     mcp_server_url: str = "http://127.0.0.1:8000/mcp/"
     mcp_token: SecretStr = Field(
         default=SecretStr(""),
-        validation_alias=AliasChoices("MCP_TOKEN", "MCP_Token"),
+        validation_alias="MCP_TOKEN",
     )
     feishu_webhook_url: SecretStr = SecretStr("")
-
-    acl_username: str = ""
-    acl_password: SecretStr = SecretStr("")
-    acl_token: SecretStr = Field(default=SecretStr(""), validation_alias="TOKEN")
 
     auth_jwt_secret: SecretStr = SecretStr(
         "change-me-in-production-auth-jwt-secret-32-bytes-min"

@@ -5,7 +5,7 @@ import { copyToClipboard } from '@/shared/lib/clipboard'
 
 type ContentKind = 'empty' | 'json' | 'markdown' | 'text'
 
-export interface FormattedContent {
+interface FormattedContent {
   kind: ContentKind
   value: unknown
   format: string
@@ -25,7 +25,7 @@ const parseJsonText = (value: string): unknown => {
 
 const looksLikeMarkdown = (value: string) => /(^|\n)#{1,6}\s|```|\*\*[^*]+\*\*|(^|\n)\s*[-*]\s+/m.test(value)
 
-export function formatContent(value: unknown): FormattedContent {
+function formatContent(value: unknown): FormattedContent {
   let format = ''
   let content = value
   if (isRecord(value) && ('format' in value || 'text' in value || 'data' in value)) {

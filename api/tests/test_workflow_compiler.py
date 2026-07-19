@@ -2,51 +2,31 @@ import pytest
 
 from api.services.workflow_compiler import (
     WorkflowDefinitionError,
-    list_executor_options,
     validate_and_normalize_definition,
 )
 
 
-def test_executor_catalog_includes_builtin_agents():
-    items = list_executor_options()
-    refs = {item["ref"] for item in items}
-    assert "security-operations" in refs
-    assert "safe-fallback" in refs
-    by_ref = {item["ref"]: item for item in items}
-    assert by_ref["security-operations"]["name"]
-    assert by_ref["security-operations"]["description"]
-    assert by_ref["security-operations"]["category"] == "operations"
-    assert "hitl" in by_ref["security-operations"]["capabilities"]
-    assert by_ref["safe-fallback"]["category"] == "lite"
-    assert by_ref["safe-fallback"]["recommended_for"]
-
-
-def test_validate_linear_definition_normalizes_legacy_fields():
-    normalized = validate_and_normalize_definition(
-        {
-            "name": "IR",
-            "description": "triage then report",
-            "steps": [
-                {
-                    "id": "triage",
-                    "kind": "agent",
-                    "targetId": "security-operations",
-                    "name": "Triage",
-                    "instructions": "classify",
-                }
-            ],
-        }
-    )
-    assert normalized["steps"][0]["executor"] == {
-        "kind": "agent",
-        "ref": "security-operations",
-    }
-    assert normalized["steps"][0]["type"] == "step"
+def agent_executor(executor_ref: str) -> dict[str, str]:
+    return {"kind": "agent", "ref": executor_ref}
 
 
 def test_validate_rejects_empty_steps():
     with pytest.raises(WorkflowDefinitionError, match="non-empty"):
         validate_and_normalize_definition({"name": "x", "steps": []})
+
+
+def test_validate_requires_explicit_node_id():
+    with pytest.raises(WorkflowDefinitionError, match=r"steps\[0\]\.id is required"):
+        validate_and_normalize_definition(
+            {
+                "steps": [
+                    {
+                        "type": "step",
+                        "executor": agent_executor("security-operations"),
+                    }
+                ]
+            }
+        )
 
 
 def test_validate_rejects_unknown_executor():
@@ -56,7 +36,40 @@ def test_validate_rejects_unknown_executor():
                 "steps": [
                     {
                         "id": "1",
-                        "executor": {"kind": "agent", "ref": "not-real"},
+                        "type": "step",
+                        "executor": agent_executor("not-real"),
+                    }
+                ]
+            }
+        )
+
+
+def test_validate_requires_explicit_executor_kind():
+    with pytest.raises(
+        WorkflowDefinitionError,
+        match=r"steps\[0\]\.executor\.kind is required",
+    ):
+        validate_and_normalize_definition(
+            {
+                "steps": [
+                    {
+                        "id": "step-1",
+                        "type": "step",
+                        "executor": {"ref": "security-operations"},
+                    }
+                ]
+            }
+        )
+
+
+def test_validate_requires_explicit_node_type():
+    with pytest.raises(WorkflowDefinitionError, match=r"steps\[0\]\.type is required"):
+        validate_and_normalize_definition(
+            {
+                "steps": [
+                    {
+                        "id": "step-1",
+                        "executor": agent_executor("security-operations"),
                     }
                 ]
             }
@@ -76,13 +89,13 @@ def test_validate_parallel_condition_loop():
                         {
                             "id": "cve",
                             "type": "step",
-                            "executor": {"ref": "security-operations"},
+                            "executor": agent_executor("security-operations"),
                             "name": "CVE",
                         },
                         {
                             "id": "asset",
                             "type": "step",
-                            "executor": {"ref": "safe-fallback"},
+                            "executor": agent_executor("safe-fallback"),
                             "name": "Asset",
                         },
                     ],
@@ -92,18 +105,18 @@ def test_validate_parallel_condition_loop():
                     "type": "condition",
                     "name": "Branch",
                     "evaluator": {"cel": 'input.contains("critical")'},
-                    "then": [
+                    "steps": [
                         {
                             "id": "contain",
                             "type": "step",
-                            "executor": {"ref": "security-operations"},
+                            "executor": agent_executor("security-operations"),
                         }
                     ],
                     "else": [
                         {
                             "id": "report",
                             "type": "step",
-                            "executor": {"ref": "safe-fallback"},
+                            "executor": agent_executor("safe-fallback"),
                         }
                     ],
                 },
@@ -117,7 +130,7 @@ def test_validate_parallel_condition_loop():
                         {
                             "id": "probe",
                             "type": "step",
-                            "executor": {"ref": "safe-fallback"},
+                            "executor": agent_executor("safe-fallback"),
                         }
                     ],
                 },
@@ -140,11 +153,11 @@ def test_validate_rejects_invalid_cel():
                         "id": "branch",
                         "type": "condition",
                         "evaluator": {"cel": "input.!!!!"},
-                        "then": [
+                        "steps": [
                             {
                                 "id": "a",
                                 "type": "step",
-                                "executor": {"ref": "security-operations"},
+                                "executor": agent_executor("security-operations"),
                             }
                         ],
                     }
@@ -165,7 +178,7 @@ def test_validate_rejects_parallel_with_one_child():
                             {
                                 "id": "only",
                                 "type": "step",
-                                "executor": {"ref": "security-operations"},
+                                "executor": agent_executor("security-operations"),
                             }
                         ],
                     }
@@ -186,12 +199,12 @@ def test_validate_rejects_duplicate_ids_across_tree():
                             {
                                 "id": "same",
                                 "type": "step",
-                                "executor": {"ref": "security-operations"},
+                                "executor": agent_executor("security-operations"),
                             },
                             {
                                 "id": "same",
                                 "type": "step",
-                                "executor": {"ref": "safe-fallback"},
+                                "executor": agent_executor("safe-fallback"),
                             },
                         ],
                     }
@@ -208,7 +221,7 @@ def test_validate_rejects_unknown_type():
                     {
                         "id": "r",
                         "type": "unknown_widget",
-                        "executor": {"ref": "security-operations"},
+                        "executor": agent_executor("security-operations"),
                     }
                 ]
             }
@@ -223,7 +236,7 @@ def test_validate_step_requires_confirmation():
                     "id": "gate",
                     "type": "step",
                     "name": "Gate",
-                    "executor": {"ref": "security-operations"},
+                    "executor": agent_executor("security-operations"),
                     "requires_confirmation": True,
                     "confirmation_message": "Proceed?",
                 }
@@ -246,13 +259,13 @@ def test_validate_rejects_confirmation_inside_parallel():
                             {
                                 "id": "a",
                                 "type": "step",
-                                "executor": {"ref": "security-operations"},
+                                "executor": agent_executor("security-operations"),
                                 "requires_confirmation": True,
                             },
                             {
                                 "id": "b",
                                 "type": "step",
-                                "executor": {"ref": "safe-fallback"},
+                                "executor": agent_executor("safe-fallback"),
                             },
                         ],
                     }
@@ -279,7 +292,7 @@ def test_validate_router():
                                 {
                                     "id": "a",
                                     "type": "step",
-                                    "executor": {"ref": "security-operations"},
+                                    "executor": agent_executor("security-operations"),
                                 }
                             ],
                         },
@@ -290,7 +303,7 @@ def test_validate_router():
                                 {
                                     "id": "b",
                                     "type": "step",
-                                    "executor": {"ref": "safe-fallback"},
+                                    "executor": agent_executor("safe-fallback"),
                                 }
                             ],
                         },
@@ -303,6 +316,47 @@ def test_validate_router():
     assert len(normalized["steps"][0]["choices"]) == 2
 
 
+def test_validate_router_requires_explicit_choice_id():
+    with pytest.raises(
+        WorkflowDefinitionError,
+        match=r"steps\[0\]\.choices\[0\]\.id is required",
+    ):
+        validate_and_normalize_definition(
+            {
+                "steps": [
+                    {
+                        "id": "router",
+                        "type": "router",
+                        "selector": {"cel": 'input.contains("x") ? "path_a" : "path_b"'},
+                        "choices": [
+                            {
+                                "name": "path_a",
+                                "steps": [
+                                    {
+                                        "id": "a",
+                                        "type": "step",
+                                        "executor": agent_executor("security-operations"),
+                                    }
+                                ],
+                            },
+                            {
+                                "id": "path_b",
+                                "name": "path_b",
+                                "steps": [
+                                    {
+                                        "id": "b",
+                                        "type": "step",
+                                        "executor": agent_executor("safe-fallback"),
+                                    }
+                                ],
+                            },
+                        ],
+                    }
+                ]
+            }
+        )
+
+
 def test_validate_step_user_input_and_output_review():
     normalized = validate_and_normalize_definition(
         {
@@ -310,7 +364,7 @@ def test_validate_step_user_input_and_output_review():
                 {
                     "id": "u",
                     "type": "step",
-                    "executor": {"ref": "security-operations"},
+                    "executor": agent_executor("security-operations"),
                     "requires_user_input": True,
                     "user_input_message": "Provide IOC",
                     "requires_output_review": True,
@@ -348,7 +402,7 @@ def test_step_skills_normalized_unique():
                 {
                     "id": "s1",
                     "type": "step",
-                    "executor": {"ref": "security-operations"},
+                    "executor": agent_executor("security-operations"),
                     "skills": [" playbook-skill ", "cve-intel-skill", "playbook-skill", ""],
                 }
             ],
@@ -364,7 +418,7 @@ def test_step_without_skills_omits_field():
                 {
                     "id": "s1",
                     "type": "step",
-                    "executor": {"ref": "safe-fallback"},
+                    "executor": agent_executor("safe-fallback"),
                 }
             ],
         }
@@ -381,7 +435,7 @@ def test_collect_workflow_skill_names_nested():
                 {"type": "step", "skills": ["a"]},
                 {
                     "type": "condition",
-                    "then": [{"type": "step", "skills": ["b", "a"]}],
+                    "steps": [{"type": "step", "skills": ["b", "a"]}],
                     "else": [{"type": "step", "skills": ["c"]}],
                 },
             ]
@@ -398,7 +452,7 @@ def test_user_input_schema_normalized():
                 {
                     "id": "u",
                     "type": "step",
-                    "executor": {"ref": "security-operations"},
+                    "executor": agent_executor("security-operations"),
                     "requires_user_input": True,
                     "user_input_schema": [
                         {"name": "severity", "type": "integer", "description": "1-5"},
@@ -422,7 +476,7 @@ def test_user_input_schema_rejects_duplicate_names():
                     {
                         "id": "u",
                         "type": "step",
-                        "executor": {"ref": "security-operations"},
+                        "executor": agent_executor("security-operations"),
                         "requires_user_input": True,
                         "user_input_schema": [
                             {"name": "x", "field_type": "str"},
@@ -448,7 +502,7 @@ def test_forbid_self_workflow_ref_at_normalize():
                     {
                         "id": "leaf",
                         "type": "step",
-                        "executor": {"ref": "safe-fallback"},
+                        "executor": agent_executor("safe-fallback"),
                     },
                 ],
             },
@@ -466,7 +520,7 @@ def test_forbid_self_workflow_ref_nested_condition():
                         "id": "branch",
                         "type": "condition",
                         "evaluator": {"cel": "true"},
-                        "then": [
+                        "steps": [
                             {
                                 "id": "nest",
                                 "type": "workflow_ref",
@@ -477,7 +531,7 @@ def test_forbid_self_workflow_ref_nested_condition():
                             {
                                 "id": "leaf",
                                 "type": "step",
-                                "executor": {"ref": "safe-fallback"},
+                                "executor": agent_executor("safe-fallback"),
                             }
                         ],
                     }
@@ -500,7 +554,7 @@ def test_other_workflow_ref_allowed_with_forbid_id():
                 {
                     "id": "leaf",
                     "type": "step",
-                    "executor": {"ref": "safe-fallback"},
+                    "executor": agent_executor("safe-fallback"),
                 },
             ],
         },
@@ -519,19 +573,19 @@ def test_normalize_step_uses_executor_display_name_when_name_empty_or_ref():
                     "id": "s1",
                     "type": "step",
                     "name": "",
-                    "executor": {"kind": "agent", "ref": "security-operations"},
+                    "executor": agent_executor("security-operations"),
                 },
                 {
                     "id": "s2",
                     "type": "step",
                     "name": "security-operations",
-                    "executor": {"kind": "agent", "ref": "security-operations"},
+                    "executor": agent_executor("security-operations"),
                 },
                 {
                     "id": "s3",
                     "type": "step",
                     "name": "自定义研判",
-                    "executor": {"kind": "agent", "ref": "safe-fallback"},
+                    "executor": agent_executor("safe-fallback"),
                 },
             ],
         }
@@ -540,4 +594,3 @@ def test_normalize_step_uses_executor_display_name_when_name_empty_or_ref():
     assert steps[0]["name"] == "安全运营助手"
     assert steps[1]["name"] == "安全运营助手"
     assert steps[2]["name"] == "自定义研判"
-

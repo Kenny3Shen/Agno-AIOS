@@ -24,13 +24,14 @@ def test_document_projection_compacts_metadata_and_formats_timestamps() -> None:
         created_at=0,
         updated_at=3600,
         status="completed",
-        status_message="",
+        status_message="backend-only detail",
         type=".md",
         size=128,
         metadata={
             "user_id": "u1",
             "source": "/kb/policy.md",
             "chunks": 3,
+            "status_message": "backend-only metadata",
             "custom": "x" * 200,
             "ignored": None,
         },
@@ -42,7 +43,9 @@ def test_document_projection_compacts_metadata_and_formats_timestamps() -> None:
     assert document["chunks"] == 3
     assert document["created_at"] == "1970-01-01T00:00:00+00:00"
     assert document["updated_at"] == "1970-01-01T01:00:00+00:00"
+    assert "status_message" not in document
     assert document["metadata"]["user_id"] == "u1"
+    assert "status_message" not in document["metadata"]
     assert "ignored" not in document["metadata"]
     assert 0 < len(document["metadata"]["custom"]) < 200
 

@@ -344,25 +344,6 @@ async def get_agno_eval_run(
     return result
 
 
-@router.get("/trends")
-async def get_eval_trends(
-    limit: int = Query(default=50, ge=1, le=100),
-    page: int = Query(default=1, ge=1),
-    eval_type: list[EvalType] | None = Query(default=None),
-    agent_id: str | None = None,
-    user: User = Depends(require_scope("evals:read")),
-):
-    """Workbench aggregate over the current eval-run page (not an Agno OS route)."""
-    del user
-    result = await result_service.list_agno_eval_runs(
-        limit=limit,
-        page=page,
-        eval_type=list(eval_type) if eval_type is not None else None,
-        agent_id=agent_id,
-    )
-    return result_service.build_eval_trends(list(result.get("data") or []))
-
-
 @router.get("/failures")
 async def list_eval_failures(
     limit: int = Query(default=50, ge=1, le=100),

@@ -1,9 +1,9 @@
 import type { Page } from '@playwright/test'
 import { expect } from '@playwright/test'
 
-export const AUTH_TOKEN_STORAGE_KEY = 'agno-aios-auth-token'
+const AUTH_TOKEN_STORAGE_KEY = 'agno-aios-auth-token'
 
-export const adminUser = {
+const adminUser = {
   id: 'user-1',
   email: 'admin@example.com',
   role: 'admin',
@@ -211,7 +211,7 @@ export async function mockApis(page: Page, options: MockOptions = {}) {
 }
 
 /** Seed auth token before first navigation (skips login form). */
-export async function seedAuth(page: Page, token = 'e2e-token') {
+async function seedAuth(page: Page, token = 'e2e-token') {
   await page.addInitScript(
     ([key, value]) => {
       window.localStorage.setItem(key, value)

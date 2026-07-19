@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { server } from '@/test/server'
-import { AUTH_TOKEN_STORAGE_KEY } from '@/shared/auth/storage'
+import { setToken } from '@/shared/auth/storage'
 import { searchKnowledge, updateDocumentAction, updateDocumentUpload, uploadDocument } from './api'
 import type { Document } from './types'
 
@@ -17,7 +17,7 @@ const document: Document = {
 
 describe('knowledge document API', () => {
   it('uploads the selected document as authenticated multipart data', async () => {
-    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, 'token')
+    setToken('token')
     server.use(
       http.post('/api/knowledge/documents/upload', async ({ request }) => {
         expect(request.headers.get('authorization')).toBe('Bearer token')

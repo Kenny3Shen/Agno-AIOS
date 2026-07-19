@@ -2,12 +2,12 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
-from fastapi.routing import APIRoute
 from api.auth import claims
 from api.routes import trace
 from api.routes.trace import effective_trace_user_filter
 from api.services import tracing_service
-from api.services.tracing_service import _build_span_tree, get_trace_detail, parse_span_display
+from api.services.tracing_service import get_trace_detail
+from api.tests.route_fakes import route_dependency
 import pytest
 
 
@@ -15,19 +15,12 @@ def actor(user_id: str, role: str = "user"):
     return SimpleNamespace(id=user_id, role=role, is_superuser=False)
 
 
-def route_dependency(endpoint_name: str):
-    for route in trace.router.routes:
-        if isinstance(route, APIRoute) and getattr(route.endpoint, "__name__", "") == endpoint_name:
-            return route.dependant.dependencies[0].call
-    raise AssertionError(f"missing route for {endpoint_name}")
-
-
 def test_trace_routes_enforce_trace_permission(monkeypatch):
     monkeypatch.setitem(claims.ROLE_SCOPES, "guest", set())
 
     for endpoint_name in ("api_list_traces", "api_list_trace_sessions", "api_get_trace"):
         with pytest.raises(HTTPException) as exc:
-            route_dependency(endpoint_name)(user=actor("g1", "guest"))
+            route_dependency(trace.router, endpoint_name)(user=actor("g1", "guest"))
         assert exc.value.status_code == 403
 
 
@@ -157,52 +150,6 @@ async def test_trace_session_list_forces_current_user_and_passes_filters():
 
 
 @pytest.mark.asyncio
-async def test_trace_sessions_scan_fallback_groups_before_paginating():
-    """When SQL grouping fails, fall back to bounded get_traces scan + Python group."""
-
-    class FakeTrace:
-        def __init__(self, **data):
-            self.data = data
-
-        def to_dict(self):
-            return self.data
-
-    traces = [
-        FakeTrace(trace_id="empty", session_id=None, run_id="empty", start_time="2026-02-04T00:00:00Z"),
-        FakeTrace(trace_id="one-a", session_id="one", run_id="run-1", status="OK", start_time="2026-02-03T00:00:00Z"),
-        FakeTrace(trace_id="one-b", session_id="one", run_id="run-1", status="ERROR", start_time="2026-02-05T00:00:00Z"),
-        FakeTrace(trace_id="two", session_id="two", run_id="run-2", status="OK", start_time="2026-02-04T00:00:00Z"),
-    ]
-    captured: dict[str, object] = {}
-
-    async def fake_get_traces(**kwargs):
-        captured.update(kwargs)
-        return traces, len(traces)
-
-    with (
-        patch.object(
-            tracing_service,
-            "_list_trace_sessions_sql",
-            AsyncMock(side_effect=RuntimeError("force fallback")),
-        ),
-        patch.object(tracing_service._trace_db, "get_traces", fake_get_traces),
-    ):
-        result = await tracing_service.list_trace_sessions(
-            run_id="run-1", session_id="one", user_id="u1", status="ERROR", limit=1, page=1
-        )
-    assert result["meta"]["total_count"] == 1
-    assert result["data"][0]["session_id"] == "one"
-    assert result["data"][0]["trace_count"] == 1
-    assert result["data"][0]["run_count"] == 1
-    assert result["data"][0]["status"] == "ERROR"
-    assert captured["user_id"] == "u1"
-    assert captured["run_id"] == "run-1"
-    assert captured["session_id"] == "one"
-    assert captured["status"] == "ERROR"
-    assert captured["limit"] == 200
-
-
-@pytest.mark.asyncio
 async def test_trace_sessions_sql_groups_with_aggregates_and_latest_row():
     """SQL path pages session aggregates and projects latest row fields."""
 
@@ -323,6 +270,27 @@ async def test_trace_sessions_sql_groups_with_aggregates_and_latest_row():
     assert session["name"] == "agent-run"
     assert session["user_id"] == "u1"
     assert fake_session.execute_count == 3
+
+
+@pytest.mark.asyncio
+async def test_trace_sessions_returns_empty_envelope_when_trace_table_is_missing():
+    with patch.object(
+        tracing_service._trace_db,
+        "_get_table",
+        AsyncMock(return_value=None),
+    ):
+        result = await tracing_service.list_trace_sessions(limit=20, page=2)
+
+    assert result == {
+        "data": [],
+        "meta": {
+            "page": 2,
+            "limit": 20,
+            "total_pages": 0,
+            "total_count": 0,
+            "search_time_ms": 0,
+        },
+    }
 
 
 @pytest.mark.asyncio
@@ -459,46 +427,6 @@ async def test_trace_detail_uses_reconciled_terminal_status() -> None:
     assert result["trace"]["status"] == "ERROR"
 
 
-def test_parse_span_display_extracts_agentos_input_output_metadata() -> None:
-    span = {
-        "name": "OpenAIChat.ainvoke_stream",
-        "attributes": {
-            "input.value": '{"messages":[{"role":"user","content":"latest news?"}]}',
-            "output.value": '{"content":"Here are the latest stories."}',
-            "gen_ai.request.model": "gpt-5.2",
-            "gen_ai.usage.prompt_tokens": 31,
-            "gen_ai.usage.completion_tokens": 42,
-        },
-        "events": [
-            {"name": "exception", "attributes": {"exception.message": "tool timeout"}}
-        ],
-    }
-    parsed = parse_span_display(span)
-    assert parsed["input"]["format"] == "json"
-    assert parsed["output"]["format"] == "json"
-    assert parsed["metadata"]["model"] == "gpt-5.2"
-    assert parsed["metadata"]["tokens"]["prompt"] == 31
-    assert parsed["events"]
-
-
-def test_span_tree_is_stable_and_degrades_duplicate_or_invalid_parent_links() -> None:
-    spans = [
-        {"span_id": "child", "parent_span_id": "root", "start_time": "2026-01-01T00:00:02Z"},
-        {"span_id": "root", "start_time": "2026-01-01T00:00:01Z"},
-        {"span_id": "duplicate", "start_time": "2026-01-01T00:00:05Z"},
-        {"span_id": "duplicate", "parent_span_id": "root", "start_time": "2026-01-01T00:00:04Z"},
-        {"span_id": "orphan", "parent_span_id": "missing", "start_time": "2026-01-01T00:00:03Z"},
-        {"span_id": "self", "parent_span_id": "self", "start_time": "2026-01-01T00:00:06Z"},
-        {"span_id": "a", "parent_span_id": "b", "start_time": "2026-01-01T00:00:08Z"},
-        {"span_id": "b", "parent_span_id": "a", "start_time": "2026-01-01T00:00:07Z"},
-    ]
-
-    tree = _build_span_tree(spans)
-    root_ids = [node["span"]["span_id"] for node in tree]
-    assert root_ids == ["root", "orphan", "duplicate", "duplicate", "self", "b", "a"]
-    assert [node["span"]["span_id"] for node in tree[0]["children"]] == ["child"]
-
-
 @pytest.mark.asyncio
 async def test_trace_detail_checks_ownership_before_querying_spans() -> None:
     trace_record = SimpleNamespace(to_dict=lambda: {"trace_id": "trace-1", "user_id": "owner"})
@@ -529,8 +457,31 @@ async def test_trace_detail_requests_all_spans_and_marks_response_complete() -> 
     trace_record = SimpleNamespace(
         to_dict=lambda: {"trace_id": "trace-1", "user_id": "owner", "session_id": "s", "run_id": "r"}
     )
-    span_record = SimpleNamespace(
-        to_dict=lambda: {"span_id": "span-1", "name": "root", "attributes": {}}
+    root_span = SimpleNamespace(
+        to_dict=lambda: {
+            "span_id": "root",
+            "name": "OpenAIChat.ainvoke_stream",
+            "start_time": "2026-01-01T00:00:01Z",
+            "attributes": {
+                "input.value": '{"messages":[{"role":"user","content":"latest news?"}]}',
+                "output.value": '{"content":"Here are the latest stories."}',
+                "gen_ai.request.model": "gpt-5.2",
+                "gen_ai.usage.prompt_tokens": 31,
+                "gen_ai.usage.completion_tokens": 42,
+            },
+            "events": [
+                {"name": "exception", "attributes": {"exception.message": "tool timeout"}}
+            ],
+        }
+    )
+    child_span = SimpleNamespace(
+        to_dict=lambda: {
+            "span_id": "child",
+            "parent_span_id": "root",
+            "name": "child",
+            "start_time": "2026-01-01T00:00:02Z",
+            "attributes": {},
+        }
     )
     captured: dict[str, object] = {}
 
@@ -539,7 +490,7 @@ async def test_trace_detail_requests_all_spans_and_marks_response_complete() -> 
 
     async def fake_get_spans(**kwargs):
         captured.update(kwargs)
-        return [span_record]
+        return [root_span, child_span]
 
     with (
         patch.object(tracing_service._trace_db, "get_trace", fake_get_trace),
@@ -551,11 +502,19 @@ async def test_trace_detail_requests_all_spans_and_marks_response_complete() -> 
     assert captured == {"trace_id": "trace-1", "limit": None}
     assert result is not None
     assert result["spans_complete"] is True
-    assert result["span_count"] == 1
+    assert result["span_count"] == 2
     assert result["spans"][0]["duration"] == "0ms"
     assert "duration_ms" not in result["spans"][0]
     assert "duration_ms" not in result["trace"]
     assert result["trace"]["duration"] == "0ms"
+    parsed = result["spans"][0]["parsed"]
+    assert parsed["input"]["format"] == "json"
+    assert parsed["output"]["format"] == "json"
+    assert parsed["metadata"]["model"] == "gpt-5.2"
+    assert parsed["metadata"]["tokens"]["prompt"] == 31
+    assert parsed["events"]
+    assert result["tree"][0]["span"]["span_id"] == "root"
+    assert result["tree"][0]["children"][0]["span"]["span_id"] == "child"
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,4 @@
-export interface MemoryInputParts {
+interface MemoryInputParts {
   text: string
   context: Record<string, unknown>
 }

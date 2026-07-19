@@ -16,14 +16,6 @@ class AsyncOnce:
         self._lock = asyncio.Lock()
         self._done = False
 
-    @property
-    def done(self) -> bool:
-        return self._done
-
-    def reset(self) -> None:
-        """Test helper: allow the factory to run again."""
-        self._done = False
-
     async def run(self, factory: Callable[[], Awaitable[T | None]]) -> T | None:
         if self._done:
             return None

@@ -99,7 +99,7 @@ export function UpdateDocumentDrawer({
       }}
       destroyOnHidden
       title={t('updateDocument')}
-      maskClosable={!pending}
+      mask={{ closable: !pending }}
       keyboard={!pending}
     >
       <Tabs

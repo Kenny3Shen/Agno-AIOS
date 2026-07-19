@@ -338,41 +338,6 @@ html.dark .shell-menu .ant-menu-item-selected {
   background: var(--tais-surface);
   transition: max-height var(--motion-base) var(--motion-ease);
 }
-.chat-task-panel-collapsed {
-  max-height: 40px;
-}
-.chat-task-panel-toggle {
-  display: flex;
-  width: 100%;
-  min-height: 40px;
-  flex: 0 0 40px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  border: 0;
-  background: transparent;
-  padding: 0 12px;
-  color: var(--tais-muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  text-align: left;
-}
-.chat-task-panel-toggle:hover {
-  background: color-mix(in srgb, var(--tais-blue) 7%, transparent);
-  color: var(--tais-text);
-}
-.chat-task-panel-toggle:focus-visible {
-  outline: 2px solid var(--tais-blue);
-  outline-offset: -2px;
-}
-.chat-task-panel-toggle-label {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 7px;
-}
 .chat-task-panel-content {
   display: flex;
   min-height: 0;
@@ -456,9 +421,6 @@ html.dark .shell-menu .ant-menu-item-selected {
 .shell-drawer-menu {
   min-height: 0;
   flex: 1 1 auto;
-}
-.chat-task-panel-drawer {
-  max-height: min(360px, 45vh);
 }
 .shell-header {
   position: sticky;
@@ -620,26 +582,6 @@ html.dark .shell-menu .ant-menu-item-selected {
   gap: 8px;
   padding: 14px;
 }
-.control-signal {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--tais-muted);
-  font:
-    10px ui-monospace,
-    monospace;
-}
-.control-signal i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--tais-green);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tais-green) 18%, transparent);
-}
-.control-signal b {
-  color: var(--tais-green);
-  font-weight: 700;
-}
 .shell-content {
   min-width: 0;
   height: calc(100vh - 52px);
@@ -678,23 +620,12 @@ html.dark .shell-menu .ant-menu-item-selected {
   margin: 0 0 2px !important;
   font-size: 18px !important;
 }
-.workbench-grid {
-  display: grid;
-  gap: 12px;
-}
-.workbench-two {
-  grid-template-columns: minmax(280px, 0.75fr) minmax(0, 1.25fr);
-}
 .workbench-card {
   border-color: var(--tais-border) !important;
   box-shadow: none !important;
 }
 .workbench-splitter {
   min-height: 0;
-}
-.knowledge-splitter {
-  height: calc(100vh - 202px);
-  min-height: 520px;
 }
 .knowledge-tabs > .ant-tabs-content-holder,
 .knowledge-tabs > .ant-tabs-content-holder > .ant-tabs-content,
@@ -743,20 +674,8 @@ html.dark .shell-menu .ant-menu-item-selected {
 .retrieval-result-content {
   margin-bottom: 10px;
 }
-.skills-splitter {
-  height: calc(100vh - 140px);
-  min-height: 520px;
-}
-.mcp-splitter {
-  height: calc(100vh - 140px);
-  min-height: 520px;
-}
 .memory-toolbar {
   margin-bottom: 12px;
-}
-.memory-splitter {
-  height: calc(100vh - 234px);
-  min-height: 520px;
 }
 .memory-metadata-text {
   margin-bottom: 0 !important;
@@ -814,11 +733,6 @@ html.dark .shell-menu .ant-menu-item-selected {
 }
 .collect-splitter > .ant-splitter-panel {
   min-width: 0;
-}
-.collect-markdown-editor {
-  height: 100% !important;
-  resize: none !important;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 .collect-preview {
   height: 100%;
@@ -1352,53 +1266,7 @@ html.dark .shell-menu .ant-menu-item-selected {
   gap: 8px;
   margin-top: 12px;
 }
-.workflow-layout {
-  display: grid;
-  grid-template-columns: minmax(220px, 0.7fr) minmax(320px, 1.15fr) minmax(240px, 0.8fr);
-  gap: 12px;
-}
-.step-list {
-  display: grid;
-  gap: 6px;
-}
-.step-row {
-  display: grid;
-  width: 100%;
-  grid-template-columns: 24px minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--tais-border);
-  border-radius: 6px;
-  background: var(--tais-surface);
-  padding: 8px;
-  color: var(--tais-text);
-  text-align: left;
-}
-.step-row:hover,
-.step-row.selected {
-  border-color: var(--tais-blue);
-  background: color-mix(in srgb, var(--tais-blue) 8%, var(--tais-surface));
-}
-.step-row div {
-  display: grid;
-  min-width: 0;
-}
-.step-row strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-}
-.step-row small {
-  color: var(--tais-muted);
-  font:
-    10px ui-monospace,
-    monospace;
-}
 @media (max-width: 900px) {
-  .workbench-two {
-    grid-template-columns: 1fr;
-  }
   .shell-sider {
     display: none;
   }
@@ -1408,19 +1276,7 @@ html.dark .shell-menu .ant-menu-item-selected {
     grid-template-columns: 1fr;
   }
 }
-@media (max-width: 1180px) {
-  .workflow-layout {
-    grid-template-columns: 1fr 1fr;
-  }
-  .workflow-layout > :last-child {
-    grid-column: 1 / -1;
-  }
-}
 @media (max-width: 767px) {
-  .knowledge-splitter,
-  .skills-splitter,
-  .mcp-splitter,
-  .memory-splitter,
   .collect-splitter {
     height: 720px;
     min-height: 720px;
@@ -1476,24 +1332,12 @@ html.dark .shell-menu .ant-menu-item-selected {
   }
 }
 @media (max-width: 700px) {
-  .workflow-layout {
-    grid-template-columns: 1fr;
-  }
-  .workflow-layout > :last-child {
-    grid-column: auto;
-  }
   .page {
     padding: 10px;
   }
   .page-header {
     align-items: stretch;
     flex-direction: column;
-  }
-  .step-row {
-    grid-template-columns: 22px minmax(0, 1fr) auto;
-  }
-  .step-row > .ant-tag {
-    display: none;
   }
 }
 /* Motion is limited to short state feedback and can be disabled system-wide. */
@@ -1673,7 +1517,6 @@ html.dark .shell-menu .ant-menu-item-selected {
   }
 }
 .workbench-card,
-.step-row,
 .trace-choice,
 .ant-table-row > td,
 .dashboard-trace-row > td {
@@ -1686,7 +1529,6 @@ html.dark .shell-menu .ant-menu-item-selected {
 .workbench-card:hover {
   box-shadow: 0 3px 10px color-mix(in srgb, var(--tais-text) 5%, transparent) !important;
 }
-.step-row:active,
 .trace-choice:active {
   transform: translateY(1px);
 }
@@ -1856,17 +1698,6 @@ html.dark .workflow-studio {
   color: var(--ant-color-primary, var(--tais-blue));
 }
 
-.workflow-studio__subtitle {
-  font-size: 11px;
-  display: block;
-  max-width: min(360px, 28vw);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--tais-muted);
-  line-height: 1.35;
-}
-
 .workflow-studio__toolbar-main {
   display: flex;
   align-items: center;
@@ -1995,10 +1826,6 @@ html.dark .workflow-studio__page {
   width: 100%;
 }
 
-.workflow-studio__panel--shapes-search {
-  padding-bottom: 6px;
-}
-
 .workflow-palette--icons {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
@@ -2042,30 +1869,6 @@ html.dark .workflow-studio__page {
   padding: 8px 0;
 }
 
-
-.workflow-studio__panel {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--wf-panel-border);
-}
-
-.workflow-studio__panel .ant-collapse {
-  background: transparent;
-}
-
-.workflow-studio__panel .ant-collapse-header {
-  padding-inline: 0 !important;
-  align-items: center !important;
-}
-
-.workflow-studio__panel .ant-collapse-content-box {
-  padding-inline: 0 !important;
-  padding-block-end: 4px !important;
-}
-
-.workflow-studio__panel--grow {
-  flex: 1;
-  overflow: auto;
-}
 
 .workflow-studio__panel-title {
   display: flex;
@@ -2769,13 +2572,6 @@ html.dark .wf-flow-node__badge {
   overflow: hidden;
 }
 
-.workflow-templates__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
-  margin-left: -8px;
-}
-
 html.dark .workflow-templates__item {
   background: var(--tais-surface, #141414);
   border-color: var(--tais-border, rgba(255, 255, 255, 0.12));
@@ -2905,12 +2701,6 @@ button.collect-article-item.is-selected {
   background: var(--ant-color-primary-bg, #e6f4ff);
 }
 
-.workflow-studio__panel.is-definition-locked .workflow-inspector__switch,
-.workflow-studio__panel.is-definition-locked input,
-.workflow-studio__panel.is-definition-locked textarea,
-.workflow-studio__panel.is-definition-locked .ant-select,
-.workflow-studio__panel.is-definition-locked .ant-input-number,
-.workflow-studio__panel.is-definition-locked .ant-btn-dangerous,
 .workflow-studio__tab-pane.is-definition-locked .workflow-inspector__switch,
 .workflow-studio__tab-pane.is-definition-locked input,
 .workflow-studio__tab-pane.is-definition-locked textarea,
@@ -2920,7 +2710,6 @@ button.collect-article-item.is-selected {
   pointer-events: none;
   opacity: 0.72;
 }
-.workflow-studio__panel.is-definition-locked,
 .workflow-studio__tab-pane.is-definition-locked {
   position: relative;
 }
@@ -3260,33 +3049,9 @@ html.dark .workflow-canvas--main .react-flow__background pattern line {
   text-align: left;
 }
 
-/* Sticky section titles inside scrollable Studio rails */
-.workflow-studio__panel--grow {
-  position: relative;
-}
-
-.workflow-studio__panel--grow > .workflow-studio__panel-title {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  margin: -10px -12px 10px;
-  padding: 10px 12px 8px;
-  background: color-mix(in srgb, var(--tais-surface) 92%, transparent);
-  backdrop-filter: blur(6px);
-  border-bottom: 1px solid color-mix(in srgb, var(--tais-border) 70%, transparent);
-}
-
-.workflow-studio__left .workflow-studio__panel--grow > .workflow-studio__panel-title {
-  background: color-mix(in srgb, var(--tais-surface) 90%, var(--tais-muted));
-}
-
 /* Run log list denser like diagram tool event strip */
 .workflow-studio__right .ant-collapse-content-box {
   padding-top: 4px !important;
-}
-
-.workflow-studio__run-log {
-  font-variant-numeric: tabular-nums;
 }
 
 /* Compact templates row (name + save action) */
@@ -3324,9 +3089,6 @@ html.dark .workflow-canvas--main .react-flow__background pattern line {
   padding-inline: 4px !important;
   font-size: 11px !important;
 }
-.workflow-studio__subtitle {
-  display: none;
-}
 .workflow-studio__hint {
   display: none;
 }
@@ -3343,23 +3105,6 @@ html.dark .workflow-canvas--main .react-flow__background pattern line {
   font-size: 11px;
 }
 
-html.dark .shell-footer .shell-identity-role {
-  border-color: color-mix(in srgb, var(--tais-blue) 28%, transparent);
-  background: color-mix(in srgb, var(--tais-blue) 18%, var(--tais-surface));
-  color: color-mix(in srgb, var(--tais-blue) 55%, var(--tais-text));
-}
-html.dark .shell-footer .shell-identity-role--admin {
-  border-color: color-mix(in srgb, #fa8c16 32%, transparent);
-  background: color-mix(in srgb, #fa8c16 18%, var(--tais-surface));
-  color: color-mix(in srgb, #ffc069 55%, var(--tais-text));
-}
-html.dark .shell-footer .shell-identity-badge {
-  background: color-mix(in srgb, var(--tais-muted) 16%, var(--tais-surface));
-}
-html.dark .shell-footer .shell-identity-badge.is-inactive {
-  background: color-mix(in srgb, #ff4d4f 18%, var(--tais-surface));
-  color: #ff7875;
-}
 html.dark .shell-footer .shell-identity-avatar.ant-avatar {
   color: color-mix(in srgb, var(--tais-blue) 45%, #fff);
   background: color-mix(in srgb, var(--tais-blue) 24%, var(--tais-surface));

@@ -2,7 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
-from anyio import Lock, Path as AsyncPath
+from anyio import Lock
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -36,9 +36,9 @@ from api.routes import (
     workflows,
 )
 from api.services.security_run_runtime import recover_security_runs, shutdown_security_runtime
+from api.services.postgres_store import ensure_app_tables_async
 from api.services.workflow_cron import start_workflow_cron_scheduler, stop_workflow_cron_scheduler
 from api.services.tracing_service import setup_agno_tracing
-from api.utils.db import initialize_database
 
 app_settings = get_settings()
 
@@ -59,14 +59,6 @@ JWT_EXCLUDED_ROUTE_PATHS = [
     "/docs/oauth2-redirect",
 ]
 
-
-async def frontend_static_dir() -> str:
-    dist_dir = AsyncPath("frontend/dist")
-    if await dist_dir.exists():
-        return "frontend/dist"
-    return "frontend/dist"
-
-
 class LazyFrontendStaticFiles:
     def __init__(self) -> None:
         self._app: StaticFiles | None = None
@@ -78,7 +70,7 @@ class LazyFrontendStaticFiles:
         async with self._lock:
             if self._app is None:
                 self._app = StaticFiles(
-                    directory=await frontend_static_dir(),
+                    directory="frontend/dist",
                     html=True,
                     check_dir=False,
                 )
@@ -124,8 +116,7 @@ async def lifespan(app: FastAPI):
     except RuntimeError:
         logger.warning("Unable to install asyncio exception handler (no running loop)")
     logger.info("启动 {}", app_settings.app_name)
-    app.state.settings = app_settings
-    await initialize_database()
+    await ensure_app_tables_async()
     setup_agno_tracing()
     await create_auth_tables()
     await bootstrap_admin_user(app_settings)

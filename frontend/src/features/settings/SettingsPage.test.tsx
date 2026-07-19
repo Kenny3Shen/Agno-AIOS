@@ -5,6 +5,7 @@ import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
 import { SettingsPage } from './SettingsPage'
 import type { ModelConfigResponse } from '@/shared/types/common'
+import type { ModelConfigUpdatePayload } from './api'
 
 const admin = { id: 'admin-1', email: 'admin@example.com', role: 'admin', scopes: [], is_active: true }
 const chatSettings = {
@@ -101,11 +102,18 @@ describe('model settings editor', () => {
     expect(((await screen.findByLabelText('显示名称')) as HTMLInputElement).value).toBe('Second model')
   })
 
-  it('shows a simplified connection form without advanced runtime knobs', async () => {
+  it('submits connection fields without hardcoding provider runtime defaults', async () => {
+    let saved: ModelConfigUpdatePayload | undefined
     mockSettings()
+    server.use(
+      http.put('/api/models', async ({ request }) => {
+        saved = (await request.json()) as ModelConfigUpdatePayload
+        return HttpResponse.json(models)
+      })
+    )
     renderWithQuery(<SettingsPage />)
 
-    fireEvent.click(await screen.findByLabelText('编辑 Second model'))
+    fireEvent.click(await screen.findByText('添加模型'))
     expect(await screen.findByLabelText('显示名称')).toBeTruthy()
     expect(await screen.findByLabelText('Model ID')).toBeTruthy()
     expect(await screen.findByLabelText('API Key')).toBeTruthy()
@@ -113,6 +121,35 @@ describe('model settings editor', () => {
     expect(screen.queryByText('请求重试次数')).toBeNull()
     expect(screen.queryByText('API protocol')).toBeNull()
     expect(await screen.findByText(/按供应商最优默认自动配置/)).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('显示名称'), { target: { value: 'Gateway model' } })
+    fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'gateway-model' } })
+    fireEvent.change(screen.getByLabelText('API Key'), { target: { value: 'gateway-key' } })
+    fireEvent.change(screen.getByLabelText('Base URL'), { target: { value: 'https://api.example.com/v1' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存模型' }))
+
+    await waitFor(() => expect(saved).toBeTruthy())
+    const created = saved!.models.find((model) => model.name === 'Gateway model')
+    expect(created).toMatchObject({
+      model_id: 'gateway-model',
+      provider: 'openai-compatible',
+      base_url: 'https://api.example.com/v1',
+      api_key: 'gateway-key',
+      enabled: true,
+      builtin: false,
+    })
+    ;[
+      'api_protocol',
+      'structured_output_mode',
+      'default_reasoning_effort',
+      'parallel_tool_calls',
+      'live_search_enabled',
+      'retries',
+      'delay_between_retries',
+      'exponential_backoff',
+      'http_max_retries',
+      'description',
+    ].forEach((field) => expect(created).not.toHaveProperty(field))
   })
 
   it('deletes a custom model and keeps the active model valid', async () => {

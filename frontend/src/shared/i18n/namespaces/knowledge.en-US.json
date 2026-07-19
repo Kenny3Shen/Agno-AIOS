@@ -127,5 +127,5 @@
   "strategyCsv": "CSV rows",
   "strategyJson": "JSON",
   "strategyDocument": "Document",
-  "ingestQueued": "Ingest queued in the background; the list will refresh shortly"
+  "ingestQueued": "Ingest queued in the background"
 }

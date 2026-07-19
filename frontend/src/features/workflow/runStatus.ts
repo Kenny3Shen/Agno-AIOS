@@ -11,7 +11,7 @@ import type {
 import { findNode } from './utils'
 
 /** Resolve a canvas node id from SSE payload (prefer step_id, fall back to name match). */
-export const resolveNodeId = (
+const resolveNodeId = (
   steps: WorkflowNode[],
   stepId?: string | null,
   stepName?: string | null
@@ -108,19 +108,6 @@ export const applyNodeRunStatusEvent = (
   }
   return map
 }
-
-/** Reduce SSE log items into per-node status map. */
-export const reduceNodeRunStatus = (
-  steps: WorkflowNode[],
-  log: Array<Pick<WorkflowRunLogItem, 'type' | 'stepId' | 'stepName'> | WorkflowRunLogItem>
-): Record<string, WorkflowNodeRunStatus> => {
-  let map: Record<string, WorkflowNodeRunStatus> = {}
-  for (const item of log) {
-    map = applyNodeRunStatusEvent(steps, map, item)
-  }
-  return map
-}
-
 
 export const historyStatusFromEvent = (
   type: string

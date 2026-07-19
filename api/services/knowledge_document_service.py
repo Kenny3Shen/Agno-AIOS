@@ -13,7 +13,6 @@ DOCUMENT_METADATA_KEYS = (
     "owner_user_id",
     "user_id",
     "status",
-    "status_message",
     "title",
     "source",
     "file_path",
@@ -43,6 +42,7 @@ DOCUMENT_METADATA_KEYS = (
     "reader_strategy",
 )
 INTERNAL_METADATA_PREFIXES = ("_",)
+PRIVATE_DOCUMENT_METADATA_KEYS = {"status_message"}
 DOCUMENT_METADATA_MAX_ITEMS = 12
 DOCUMENT_METADATA_VALUE_MAX_LENGTH = 160
 COMPLETED_STATUSES = {"completed", "complete", "ready", "done", "success", "succeeded"}
@@ -63,7 +63,6 @@ class KnowledgeDocumentPayload(TypedDict):
     created_at: str
     updated_at: str
     status: str
-    status_message: str
     type: str
     size: object
     visibility: str
@@ -145,7 +144,7 @@ def document_metadata(metadata: Mapping[str, object]) -> dict[str, str]:
     for key, value in metadata.items():
         if len(compact_metadata) >= DOCUMENT_METADATA_MAX_ITEMS:
             break
-        if key.startswith(INTERNAL_METADATA_PREFIXES):
+        if key.startswith(INTERNAL_METADATA_PREFIXES) or key in PRIVATE_DOCUMENT_METADATA_KEYS:
             continue
         if key not in compact_metadata:
             compact_metadata[key] = compact_metadata_value(value)
@@ -205,7 +204,6 @@ def content_to_document(content: object) -> KnowledgeDocumentPayload:
     created_at_text = format_timestamp(created_at)
     updated_at_text = format_timestamp(updated_at) if updated_at not in (None, "") else created_at_text
     status = content_status(content, metadata)
-    status_message = str(getattr(content, "status_message", "") or metadata.get("status_message") or "")
     content_type = str(getattr(content, "type", "") or metadata.get("file_type") or "")
     size = getattr(content, "size", None) or metadata.get("file_size")
     return {
@@ -216,7 +214,6 @@ def content_to_document(content: object) -> KnowledgeDocumentPayload:
         "created_at": created_at_text,
         "updated_at": updated_at_text,
         "status": status,
-        "status_message": status_message,
         "type": content_type,
         "size": size,
         "visibility": metadata_visibility(metadata),

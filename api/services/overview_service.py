@@ -659,8 +659,16 @@ async def _snapshots(actor: ActorLike) -> dict[str, Any]:
 
     if has_scope(actor, "memories:read"):
         try:
-            raw = await db.get_user_memories(user_id=user_id, limit=1, page=1)
-            result["memories"] = int(raw[1] if isinstance(raw, tuple) else len(raw))
+            _rows, total_memories = typing_cast(
+                tuple[list[dict[str, Any]], int],
+                await db.get_user_memories(
+                    user_id=user_id,
+                    limit=1,
+                    page=1,
+                    deserialize=False,
+                ),
+            )
+            result["memories"] = int(total_memories)
         except Exception:
             logger.exception("overview snapshot failed: memories")
 
@@ -717,9 +725,9 @@ async def _snapshots(actor: ActorLike) -> dict[str, Any]:
 
 async def _audit_summary() -> dict[str, Any] | None:
     try:
-        from api.services.audit_service import list_audit_events_async
+        from api.persistence.audit_logs import list_audit_logs_async
 
-        events, _ = await list_audit_events_async(page=1, limit=10)
+        events, _ = await list_audit_logs_async(page=1, limit=10)
     except Exception:
         logger.exception("overview snapshot failed: audit_summary")
         return None
@@ -843,8 +851,6 @@ async def get_runtime_overview(
                 {
                     **item,
                     **bucket_tokens,
-                    # Kept for existing consumers; new clients should use total_tokens.
-                    "tokens": bucket_tokens["total_tokens"],
                 }
             )
     else:
@@ -869,7 +875,6 @@ async def get_runtime_overview(
                     "p50_duration_ms": _percentile(bucket_durations, 0.5),
                     "p95_duration_ms": _percentile(bucket_durations, 0.95),
                     **bucket_tokens,
-                    "tokens": bucket_tokens["total_tokens"],
                 }
             )
 

@@ -208,9 +208,7 @@ async def run_suite(
     suite_run = await case_store.create_suite_run(suite_id, actor)
     suite_run_id = str(suite_run["id"])
     cases_payload = await case_store.list_cases(suite_id=suite_id)
-    cases = cases_payload.get("data") if isinstance(cases_payload, dict) else cases_payload
-    if not isinstance(cases, list):
-        cases = []
+    cases = cases_payload["data"]
     summary = {"passed": 0, "failed": 0, "errored": 0, "skipped": 0}
 
     for case in cases:

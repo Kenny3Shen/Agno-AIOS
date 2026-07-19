@@ -4,40 +4,53 @@ import type { ModelConfigResponse, ReasoningEffort } from '@/shared/types/common
 import type { ChatRunEvent, ChatSession } from './types'
 import { consumeSse, normalizeMessages } from './utils'
 
-const normalizeSession = (value: unknown): ChatSession | null => {
-  if (!value || typeof value !== 'object') return null
+const SESSION_TYPES = new Set(['agent', 'team', 'workflow'])
+
+const optionalId = (rawValue: unknown) => {
+  const text = rawValue != null ? String(rawValue).trim() : ''
+  return text || null
+}
+
+const parseSession = (value: unknown, context: string): ChatSession => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${context}: invalid session payload`)
+  }
   const row = value as Record<string, unknown>
   const sessionId = String(row.session_id ?? '').trim()
-  if (!sessionId) return null
+  if (!sessionId) throw new Error(`${context}: invalid session payload`)
   const sessionType = row.session_type != null ? String(row.session_type).trim().toLowerCase() : ''
-  const optionalId = (value: unknown) => {
-    const text = value != null ? String(value).trim() : ''
-    return text || null
+  if (!SESSION_TYPES.has(sessionType)) throw new Error(`${context}: invalid session payload`)
+  const preview = typeof row.preview === 'string' ? row.preview.trim() : ''
+  if (!preview) throw new Error(`${context}: invalid session payload`)
+  const createdAt = Number(row.created_at)
+  const updatedAt = Number(row.updated_at)
+  if (!Number.isFinite(createdAt) || !Number.isFinite(updatedAt)) {
+    throw new Error(`${context}: invalid session payload`)
   }
   return {
     session_id: sessionId,
     user_id: row.user_id != null ? String(row.user_id) : null,
-    session_type: sessionType || null,
+    session_type: sessionType,
     workflow_id: optionalId(row.workflow_id),
     agent_id: optionalId(row.agent_id),
     team_id: optionalId(row.team_id),
-    preview: String(row.preview ?? '新对话'),
+    preview,
     title: row.title != null ? String(row.title) : null,
-    created_at: Number(row.created_at ?? 0) || 0,
-    updated_at: Number(row.updated_at ?? 0) || 0,
+    created_at: createdAt,
+    updated_at: updatedAt,
     archived: Boolean(row.archived),
     runs: Array.isArray(row.runs) ? (row.runs as ChatSession['runs']) : undefined,
   }
 }
 
-export type SessionListMeta = ListPaginationMeta
+type SessionListMeta = ListPaginationMeta
 
 export type SessionListResult = {
   data: ChatSession[]
   meta: SessionListMeta
 }
 
-export type ListSessionsOptions = {
+type ListSessionsOptions = {
   includeArchived?: boolean
   /** When true, only archived sessions (server SQL filter). */
   archivedOnly?: boolean
@@ -68,9 +81,7 @@ export const listSessions = async (options: ListSessionsOptions = {}): Promise<S
   search.set('limit', String(limit))
   const payload = await requestJson<unknown>(`/chat/sessions?${search.toString()}`)
   return normalizePaginatedList(payload, {
-    page,
-    limit,
-    mapItem: normalizeSession,
+    mapItem: (item) => parseSession(item, 'listSessions'),
   })
 }
 export const getHistory = async (sessionId: string) =>
@@ -79,7 +90,7 @@ export const getHistory = async (sessionId: string) =>
 export const getSessionMeta = async (sessionId: string): Promise<ChatSession | null> => {
   try {
     const payload = await requestJson<unknown>(`/chat/sessions/${encodeURIComponent(sessionId)}/meta`)
-    return normalizeSession(payload)
+    return parseSession(payload, 'getSessionMeta')
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null
     throw error
@@ -96,7 +107,7 @@ export const renameSession = (sessionId: string, title: string) =>
   requestJson<ChatSession>(`/chat/sessions/${encodeURIComponent(sessionId)}`, jsonInit('PATCH', { title }))
 export const getModels = () => requestJson<ModelConfigResponse>('/models')
 
-export type ChatAgentCatalogItem = {
+type ChatAgentCatalogItem = {
   id: string
   name: string
   role?: string
@@ -111,39 +122,10 @@ export type ChatAgentCatalogItem = {
   mode?: string
 }
 
-export const getChatAgents = async (): Promise<ChatAgentCatalogItem[]> => {
-  const payload = await requestJson<{ data?: unknown } | unknown>('/chat/agents')
-  const rows = Array.isArray(payload)
-    ? payload
-    : payload && typeof payload === 'object' && Array.isArray((payload as { data?: unknown }).data)
-      ? ((payload as { data: unknown[] }).data)
-      : []
-  return rows.flatMap((row) => {
-    if (!row || typeof row !== 'object') return []
-    const r = row as Record<string, unknown>
-    const id = String(r.id ?? '').trim()
-    if (!id) return []
-    const preferRaw = r.prefer_live_search
-    const preferLive =
-      preferRaw === true ||
-      preferRaw === 1 ||
-      preferRaw === '1' ||
-      preferRaw === 'true' ||
-      preferRaw === 'True'
-    return [{
-      id,
-      name: String(r.name ?? id),
-      role: r.role != null ? String(r.role) : undefined,
-      description: r.description != null ? String(r.description) : undefined,
-      category: r.category != null ? String(r.category) : undefined,
-      capabilities: r.capabilities != null ? String(r.capabilities) : undefined,
-      recommended_for: r.recommended_for != null ? String(r.recommended_for) : undefined,
-      kind: r.kind != null ? String(r.kind) : undefined,
-      prefer_live_search: preferLive,
-      mode: r.mode != null ? String(r.mode) : undefined,
-    }]
-  })
-}
+type ChatAgentCatalogResponse = { data: ChatAgentCatalogItem[] }
+
+export const getChatAgents = async (): Promise<ChatAgentCatalogItem[]> =>
+  (await requestJson<ChatAgentCatalogResponse>('/chat/agents')).data
 
 export const cancelRun = (runId: string) =>
   requestJson<{ success?: boolean }>(`/chat/runs/${encodeURIComponent(runId)}/cancel`, jsonInit('POST'))
@@ -301,7 +283,7 @@ const parseEvent = (event: string, data: string): ChatRunEvent | null => {
   }
 }
 
-export type StreamMessagePayload = {
+type StreamMessagePayload = {
   message: string
   session_id: string
   model_id: string | null
@@ -349,9 +331,9 @@ export const streamMessage = async (
   if (!response.ok || !response.body) {
     let detail = `Chat request failed (${response.status})`
     try {
-      const payload: unknown = await response.json()
-      if (payload && typeof payload === 'object') {
-        const record = payload as Record<string, unknown>
+      const errorPayload: unknown = await response.json()
+      if (errorPayload && typeof errorPayload === 'object') {
+        const record = errorPayload as Record<string, unknown>
         if (typeof record.detail === 'string' && record.detail.trim()) detail = record.detail
         else if (typeof record.message === 'string' && record.message.trim()) detail = record.message
       }
@@ -377,4 +359,3 @@ export const streamMessage = async (
   )
   if (!terminal) throw new Error('Chat stream ended before a terminal event')
 }
-

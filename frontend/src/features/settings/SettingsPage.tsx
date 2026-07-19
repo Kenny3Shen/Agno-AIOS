@@ -12,68 +12,17 @@ import {
   listRolePresets,
   saveChatSettings,
   saveModels,
+  SERVER_DEFAULTED_MODEL_FIELDS,
   setUserRole,
   testModel,
   type ChatSettings,
+  type ModelConfigInput,
+  type ModelConfigUpdatePayload,
 } from './api'
 import type { AuthUser } from '@/shared/types/auth'
 import type { ModelConfig, ModelConfigResponse } from '@/shared/types/common'
 import { useTranslation } from 'react-i18next'
 import './settings.css'
-
-/** Optimal runtime knobs from capability profile — not shown in the simple form. */
-const providerDefaults = (provider: ModelConfig['provider']): Partial<ModelConfig> => {
-  if (provider === 'deepseek')
-    return {
-      api_protocol: 'chat-completions',
-      structured_output_mode: 'json',
-      default_reasoning_effort: 'max',
-      base_url: 'https://api.deepseek.com',
-      parallel_tool_calls: null,
-      live_search_enabled: false,
-      retries: 4,
-      delay_between_retries: 1,
-      exponential_backoff: true,
-      http_max_retries: null,
-    }
-  if (provider === 'openai')
-    return {
-      api_protocol: 'responses',
-      structured_output_mode: 'native',
-      default_reasoning_effort: 'high',
-      base_url: '',
-      parallel_tool_calls: null,
-      live_search_enabled: false,
-      retries: 4,
-      delay_between_retries: 1,
-      exponential_backoff: true,
-      http_max_retries: null,
-    }
-  if (provider === 'xai')
-    return {
-      api_protocol: 'chat-completions',
-      structured_output_mode: 'json',
-      default_reasoning_effort: null,
-      base_url: 'https://api.x.ai/v1',
-      parallel_tool_calls: null,
-      live_search_enabled: false,
-      retries: 4,
-      delay_between_retries: 1,
-      exponential_backoff: true,
-      http_max_retries: null,
-    }
-  return {
-    api_protocol: 'chat-completions',
-    structured_output_mode: 'json',
-    default_reasoning_effort: null,
-    parallel_tool_calls: null,
-    live_search_enabled: false,
-    retries: 4,
-    delay_between_retries: 1,
-    exponential_backoff: true,
-    http_max_retries: null,
-  }
-}
 
 const providerOptions = [
   { value: 'deepseek', label: 'DeepSeek' },
@@ -89,6 +38,12 @@ const baseUrlPlaceholder = (provider: ModelConfig['provider']) => {
   return 'https://api.example.com/v1'
 }
 
+const omitProviderManagedFields = (model: ModelConfigInput): ModelConfigInput => {
+  const result = { ...model }
+  SERVER_DEFAULTED_MODEL_FIELDS.forEach((field) => delete result[field])
+  return result
+}
+
 export function SettingsPage() {
   const { t } = useTranslation('settings')
   const { message } = App.useApp()
@@ -97,8 +52,8 @@ export function SettingsPage() {
   const currentUser = useQuery(currentUserQuery())
   const isAdmin = roleOf(currentUser.data) === 'admin'
   const chatSettings = useQuery({ queryKey: ['settings', 'chat'], queryFn: getChatSettings, enabled: isAdmin })
-  const [editing, setEditing] = useState<ModelConfig | null>(null)
-  const [form] = Form.useForm<ModelConfig>()
+  const [editing, setEditing] = useState<ModelConfigInput | null>(null)
+  const [form] = Form.useForm<ModelConfigInput>()
   const [saving, setSaving] = useState(false)
   const [testingId, setTestingId] = useState<string | null>(null)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
@@ -153,10 +108,9 @@ export function SettingsPage() {
     }
   }
 
-  const openEditor = (model: ModelConfig) => {
+  const openEditor = (model: ModelConfigInput) => {
     form.resetFields()
     form.setFieldsValue({
-      ...providerDefaults(model.provider),
       ...model,
       enabled: model.enabled ?? true,
     })
@@ -168,60 +122,32 @@ export function SettingsPage() {
     form.resetFields()
   }
 
-  const persist = async (next: ModelConfigResponse) => {
+  const persist = async (next: ModelConfigUpdatePayload) => {
     await saveModels(next)
     await client.invalidateQueries({ queryKey: ['settings', 'models'] })
   }
 
-  const saveModel = async (model: ModelConfig) => {
-    const current = models.data ?? { active_model_id: model.id, models: [] }
+  const saveModel = async (model: ModelConfigInput) => {
+    const current: ModelConfigResponse = models.data ?? { active_model_id: model.id, models: [] }
     const previous = current.models.find((item) => item.id === model.id)
-    const defaults = providerDefaults(model.provider)
-    // Form only edits connection fields; keep optimal runtime knobs unless already stored.
-    const normalized: ModelConfig = {
-      ...defaults,
+    const normalized: ModelConfigInput = {
       ...previous,
       ...model,
       name: model.name.trim(),
       model_id: model.model_id.trim(),
       base_url: (model.base_url ?? '').trim(),
-      api_protocol: (previous?.api_protocol ?? defaults.api_protocol ?? 'chat-completions') as ModelConfig['api_protocol'],
-      structured_output_mode: (previous?.structured_output_mode ??
-        defaults.structured_output_mode ??
-        'json') as ModelConfig['structured_output_mode'],
-      default_reasoning_effort:
-        previous?.default_reasoning_effort !== undefined
-          ? previous.default_reasoning_effort
-          : (defaults.default_reasoning_effort ?? null),
-      parallel_tool_calls: previous?.parallel_tool_calls ?? defaults.parallel_tool_calls ?? null,
-      live_search_enabled: previous?.live_search_enabled ?? defaults.live_search_enabled ?? false,
-      retries: previous?.retries ?? defaults.retries ?? 4,
-      delay_between_retries: previous?.delay_between_retries ?? defaults.delay_between_retries ?? 1,
-      exponential_backoff: previous?.exponential_backoff ?? defaults.exponential_backoff ?? true,
-      http_max_retries: previous?.http_max_retries ?? defaults.http_max_retries ?? null,
-      description: previous?.description ?? '',
       enabled: model.enabled ?? true,
       builtin: previous?.builtin ?? model.builtin ?? false,
     }
-    // Switching provider: re-apply optimal knobs for the new provider.
-    if (previous && previous.provider !== model.provider) {
-      Object.assign(normalized, defaults, {
-        id: model.id,
-        name: normalized.name,
-        model_id: normalized.model_id,
-        api_key: model.api_key,
-        base_url: normalized.base_url || String(defaults.base_url ?? ''),
-        enabled: normalized.enabled,
-        builtin: normalized.builtin,
-        provider: model.provider,
-      })
-    }
-    const next = current.models.some((item) => item.id === normalized.id)
-      ? current.models.map((item) => (item.id === normalized.id ? normalized : item))
-      : [...current.models, normalized]
+    const submitted = !previous || previous.provider !== model.provider
+      ? omitProviderManagedFields(normalized)
+      : normalized
+    const next: ModelConfigInput[] = current.models.some((item) => item.id === submitted.id)
+      ? current.models.map((item) => (item.id === submitted.id ? submitted : item))
+      : [...current.models, submitted]
     setSaving(true)
     try {
-      await persist({ ...current, models: next })
+      await persist({ active_model_id: current.active_model_id, models: next })
       message.success(t('modelSaved'))
       closeEditor()
     } catch (error) {
@@ -232,26 +158,15 @@ export function SettingsPage() {
   }
 
   const addModel = () => {
-    const defaults = providerDefaults('openai-compatible')
     openEditor({
       id: crypto.randomUUID(),
       name: '',
       model_id: '',
       provider: 'openai-compatible',
-      api_protocol: defaults.api_protocol ?? 'chat-completions',
-      structured_output_mode: defaults.structured_output_mode ?? 'json',
-      default_reasoning_effort: defaults.default_reasoning_effort ?? null,
-      base_url: defaults.base_url ?? '',
+      base_url: '',
       api_key: '',
-      description: '',
       enabled: true,
       builtin: false,
-      parallel_tool_calls: defaults.parallel_tool_calls ?? null,
-      live_search_enabled: defaults.live_search_enabled ?? false,
-      retries: defaults.retries ?? 4,
-      delay_between_retries: defaults.delay_between_retries ?? 1,
-      exponential_backoff: defaults.exponential_backoff ?? true,
-      http_max_retries: defaults.http_max_retries ?? null,
     })
   }
 
@@ -573,41 +488,6 @@ export function SettingsPage() {
             <Form.Item name="id" hidden>
               <Input />
             </Form.Item>
-            <Form.Item name="builtin" hidden valuePropName="checked">
-              <Switch />
-            </Form.Item>
-            {/* Hidden optimal knobs — filled by providerDefaults / save merge */}
-            <Form.Item name="api_protocol" hidden>
-              <Input />
-            </Form.Item>
-            <Form.Item name="structured_output_mode" hidden>
-              <Input />
-            </Form.Item>
-            <Form.Item name="default_reasoning_effort" hidden>
-              <Input />
-            </Form.Item>
-            <Form.Item name="retries" hidden>
-              <Input />
-            </Form.Item>
-            <Form.Item name="delay_between_retries" hidden>
-              <Input />
-            </Form.Item>
-            <Form.Item name="exponential_backoff" hidden valuePropName="checked">
-              <Switch />
-            </Form.Item>
-            <Form.Item name="http_max_retries" hidden>
-              <Input />
-            </Form.Item>
-            <Form.Item name="parallel_tool_calls" hidden>
-              <Input />
-            </Form.Item>
-            <Form.Item name="live_search_enabled" hidden valuePropName="checked">
-              <Switch />
-            </Form.Item>
-            <Form.Item name="description" hidden>
-              <Input />
-            </Form.Item>
-
             <Form.Item name="name" label={t('nameLabel')} rules={[{ required: true, whitespace: true, message: t('nameRequired') }]}>
               <Input placeholder={t('namePlaceholder')} />
             </Form.Item>
@@ -615,11 +495,7 @@ export function SettingsPage() {
               <Select
                 options={providerOptions}
                 onChange={(provider: ModelConfig['provider']) => {
-                  const defaults = providerDefaults(provider)
-                  form.setFieldsValue({
-                    ...defaults,
-                    base_url: defaults.base_url ?? '',
-                  })
+                  form.setFieldsValue({ provider, base_url: '' })
                 }}
               />
             </Form.Item>

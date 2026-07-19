@@ -34,7 +34,7 @@ export const parseUserInputSchema = (raw: unknown): UserInputField[] => {
   })
 }
 
-export const coerceUserInputValue = (
+const coerceUserInputValue = (
   field: UserInputField,
   raw: string,
 ): string | number | boolean => {

@@ -87,9 +87,6 @@ TEAM_PROFILES: dict[str, dict[str, Any]] = {
     },
 }
 
-DEFAULT_TEAM_ID = "research-analysis-team"
-
-
 def team_feature_enabled() -> bool:
     raw = (os.getenv("TAIS_ENABLE_AGNO_TEAM") or "").strip().lower()
     return raw in {"1", "true", "yes", "on"}
@@ -102,16 +99,7 @@ def is_team_id(raw: object | None) -> bool:
 
 def normalize_team_id(raw: object | None) -> str | None:
     value = str(raw or "").strip()
-    if value in TEAM_PROFILES:
-        return value
-    # Friendly aliases
-    if value in {"research-analysis", "research-analysis-team"}:
-        return "research-analysis-team"
-    if value in {"research-route", "research-analysis-route"}:
-        return "research-analysis-route"
-    if value in {"research-broadcast", "research-analysis-broadcast"}:
-        return "research-analysis-broadcast"
-    return None
+    return value if value in TEAM_PROFILES else None
 
 
 def get_team_profile(team_id: object | None) -> dict[str, Any] | None:
@@ -348,15 +336,3 @@ async def build_team(
         [getattr(m, "id", None) for m in member_list],
     )
     return team
-
-
-async def build_team_by_id(
-    team_id: str,
-    *,
-    model_id: str | None = None,
-    **kwargs: Any,
-) -> Team:
-    key = normalize_team_id(team_id)
-    if not key:
-        raise ValueError(f"Unknown team id: {team_id}")
-    return await build_team(key, model_id=model_id, **kwargs)

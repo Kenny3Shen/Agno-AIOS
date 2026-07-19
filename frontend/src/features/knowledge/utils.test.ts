@@ -8,7 +8,6 @@ import {
   inferKnowledgeReaderProfile,
   ingestOptionsFromMetadata,
   knowledgeIngestOptionsEqual,
-  MAX_KNOWLEDGE_FILE_BYTES,
   replacementFileName,
   resolveRetrievalContent,
   validateKnowledgeFile,
@@ -31,7 +30,7 @@ describe('knowledge document updates', () => {
     expect(validateKnowledgeFile({ name: 'guide.pdf', size: 1024 })).toBeNull()
     expect(validateKnowledgeFile({ name: 'payload.exe', size: 1024 })).toBe('unsupported')
     expect(validateKnowledgeFile({ name: 'empty.md', size: 0 })).toBe('empty')
-    expect(validateKnowledgeFile({ name: 'large.md', size: MAX_KNOWLEDGE_FILE_BYTES + 1 })).toBe('too-large')
+    expect(validateKnowledgeFile({ name: 'large.md', size: 50 * 1024 * 1024 + 1 })).toBe('too-large')
   })
 
   it('uses an editable text reader filename when replacing a structured document', () => {

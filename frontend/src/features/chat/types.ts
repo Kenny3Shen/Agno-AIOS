@@ -1,4 +1,4 @@
-import type { JsonRecord, ModelConfig, ReasoningEffort } from '@/shared/types/common'
+import type { JsonRecord, ReasoningEffort } from '@/shared/types/common'
 
 export interface RunMetrics {
   input_tokens?: number | null
@@ -29,7 +29,7 @@ export interface ThoughtStep {
   summary?: string | null
   duration?: number | null
 }
-export interface ChatAttachment {
+interface ChatAttachment {
   name: string
   mime?: string
   kind?: 'image' | 'document' | 'audio' | 'video' | string
@@ -135,6 +135,3 @@ export type ChatAction =
   | { type: 'live-search'; value: boolean }
   | { type: 'enable-tools'; value: boolean }
   | { type: 'agent'; value: string }
-  | { type: 'reset' }
-
-export type { ModelConfig }

@@ -2,7 +2,7 @@ import { requestJson } from '@/shared/api/client'
 import { asRecord } from '@/shared/lib/format'
 import { normalizePaginatedList, type ListPaginationMeta } from '@/shared/lib/pagination'
 
-export interface Suite {
+interface Suite {
   id: string
   name: string
   description?: string
@@ -37,11 +37,11 @@ export interface EvalRun {
   suite_run_id?: string
 }
 
-/** Map Agno-native eval-run rows into UI records. */
-export const normalizeEvalRun = (value: unknown): EvalRun | null => {
+/** Parse canonical Agno eval-run rows for the UI. */
+const parseEvalRun = (value: unknown, context: string): EvalRun => {
   const row = asRecord(value)
   const id = String(row.id ?? '').trim()
-  if (!id) return null
+  if (!id) throw new Error(`${context}: invalid eval run payload`)
   const evalDataRaw = row.eval_data
   const evalData =
     evalDataRaw && typeof evalDataRaw === 'object' && !Array.isArray(evalDataRaw)
@@ -83,32 +83,19 @@ export const normalizeEvalRun = (value: unknown): EvalRun | null => {
 }
 
 export const listSuites = async () => {
-  const raw = await requestJson<unknown>('/agent-evals/suites')
-  const { data } = normalizePaginatedList(raw, {
-    mapItem: (row) => {
-      if (!row || typeof row !== 'object') return null
-      return row as Suite
-    },
-  })
-  return data
+  return (await requestJson<{ data: Suite[] }>('/agent-evals/suites')).data
 }
 
 export const listCases = async (suite = '') => {
-  const raw = await requestJson<unknown>(
+  const payload = await requestJson<{ data: EvalCase[] }>(
     `/agent-evals/cases${suite ? `?suite_id=${encodeURIComponent(suite)}` : ''}`,
   )
-  const { data } = normalizePaginatedList(raw, {
-    mapItem: (row) => {
-      if (!row || typeof row !== 'object') return null
-      return row as EvalCase
-    },
-  })
-  return data
+  return payload.data
 }
 
-export type EvalListMeta = ListPaginationMeta
+type EvalListMeta = ListPaginationMeta
 
-export type EvalListResult = {
+type EvalListResult = {
   data: EvalRun[]
   meta: EvalListMeta
 }
@@ -119,9 +106,7 @@ export const listRuns = async (params: { page?: number; limit?: number } = {}): 
   const search = new URLSearchParams({ page: String(page), limit: String(limit) })
   const payload = await requestJson<unknown>(`/agent-evals/agno-runs?${search}`)
   return normalizePaginatedList(payload, {
-    page,
-    limit,
-    mapItem: normalizeEvalRun,
+    mapItem: (item) => parseEvalRun(item, 'listRuns'),
   })
 }
 
@@ -129,9 +114,7 @@ export const listFailures = async (params: { limit?: number } = {}): Promise<Eva
   const limit = Math.min(100, Math.max(1, params.limit ?? 50))
   const raw = await requestJson<unknown>(`/agent-evals/failures?limit=${limit}`)
   const { data } = normalizePaginatedList(raw, {
-    page: 1,
-    limit,
-    mapItem: normalizeEvalRun,
+    mapItem: (item) => parseEvalRun(item, 'listFailures'),
   })
   return data
 }
@@ -144,4 +127,3 @@ export const runCase = (id: string) =>
 
 export const replay = (id: string) =>
   requestJson(`/agent-evals/case-runs/${encodeURIComponent(id)}/replay`, { method: 'POST' })
-

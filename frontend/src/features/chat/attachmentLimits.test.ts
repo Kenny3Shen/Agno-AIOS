@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   MAX_CHAT_FILES,
-  MAX_CHAT_FILE_BYTES,
   formatAttachmentLimitError,
   validateChatAttachments,
 } from './attachmentLimits'
@@ -21,7 +20,7 @@ describe('validateChatAttachments', () => {
   })
 
   it('rejects oversized file', () => {
-    const big = new File([new Uint8Array(MAX_CHAT_FILE_BYTES + 1)], 'big.bin')
+    const big = new File([new Uint8Array(20 * 1024 * 1024 + 1)], 'big.bin')
     expect(validateChatAttachments([big])).toMatchObject({ code: 'file_too_large', name: 'big.bin' })
   })
 

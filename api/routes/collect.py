@@ -23,11 +23,11 @@ from api.services.collect_service import (
     list_sources,
     reparse_article,
     reparse_failed_articles,
-    run_crawl,
     search_articles,
 )
 from api.services.collect_crawl_service import (
     CollectCrawlAlreadyRunningError,
+    crawl_and_persist,
     extract_cve_ids,
     parse_and_store_url,
 )
@@ -219,7 +219,7 @@ async def crawl_collect_sources(
     if stream:
         return await _crawl_collect_stream(request_ctx, request, user)
     try:
-        stats = await run_crawl(
+        stats = await crawl_and_persist(
             domains=request.domains,
             max_links_per_source=request.max_links_per_source,
             max_articles_total=request.max_articles_total,
@@ -262,7 +262,7 @@ async def _crawl_collect_stream(
 
     async def worker() -> None:
         try:
-            stats = await run_crawl(
+            stats = await crawl_and_persist(
                 domains=request.domains,
                 max_links_per_source=request.max_links_per_source,
                 max_articles_total=request.max_articles_total,

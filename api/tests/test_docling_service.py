@@ -11,6 +11,24 @@ from api.services import chat_media, docling_service, knowledge_ingest_service
 from api.tests.knowledge_fakes import FakeEmbedder
 
 
+def reader_config() -> knowledge_ingest_service.KnowledgeReaderConfig:
+    return knowledge_ingest_service.KnowledgeReaderConfig(
+        embedder=FakeEmbedder(),
+        chunk_size=1200,
+        chunk_overlap=160,
+        markdown_split_on_headings=None,
+        csv_skip_header=False,
+        csv_clean_rows=True,
+        code_chunk_size=1800,
+        code_tokenizer="character",
+        code_include_nodes=False,
+        semantic_threshold=0.52,
+        semantic_similarity_window=None,
+        semantic_min_sentences_per_chunk=None,
+        semantic_min_characters_per_sentence=None,
+    )
+
+
 def test_convert_plain_text_skips_docling() -> None:
     text = docling_service.convert_bytes_to_markdown(
         b"# Hello\n\nWorld",
@@ -47,26 +65,27 @@ def test_append_document_markdown_default_prompt() -> None:
 
 
 def test_structured_profile_uses_docling_reader() -> None:
-    cfg = knowledge_ingest_service.KnowledgeReaderConfig(
-        embedder=FakeEmbedder(),
-        chunk_size=1200,
-        chunk_overlap=160,
-        markdown_split_on_headings=None,
-        csv_skip_header=False,
-        csv_clean_rows=True,
-        code_chunk_size=1800,
-        code_tokenizer="character",
-        code_include_nodes=False,
-        semantic_threshold=0.52,
-        semantic_similarity_window=None,
-        semantic_min_sentences_per_chunk=None,
-        semantic_min_characters_per_sentence=None,
-    )
     profile = knowledge_ingest_service.profile_for_filename("report.pdf")
     assert profile.strategy == "document"
     assert profile.reader == "DoclingReader"
-    reader = knowledge_ingest_service.reader_for_profile(profile, cfg, "report.pdf")
+    reader = knowledge_ingest_service.reader_for_profile(profile, reader_config(), "report.pdf")
     assert reader.__class__.__name__ == "DoclingReader"
+
+
+def test_structured_profile_propagates_docling_initialization_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_docling_reader(**_kwargs: object) -> object:
+        raise RuntimeError("docling unavailable")
+
+    monkeypatch.setattr(knowledge_ingest_service, "knowledge_docling_reader", fail_docling_reader)
+
+    with pytest.raises(RuntimeError, match="docling unavailable"):
+        knowledge_ingest_service.reader_for_profile(
+            knowledge_ingest_service.PROFILE_STRUCTURED,
+            reader_config(),
+            "report.pdf",
+        )
 
 
 def test_chat_document_upload_produces_markdown(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type DragEvent } from 'react'
 import type { ReactNode } from 'react'
 import { Actions, Attachments, Bubble, FileCard, Prompts, Sender, Sources, ThoughtChain } from '@ant-design/x'
 import { Markdown } from '@/shared/ui/Markdown'
@@ -51,6 +51,9 @@ import {
 import './chat.css'
 
 const promptKeys = ['cve', 'exposure', 'runbook'] as const
+
+const attachmentUid = (file: File, index: number) =>
+  `${file.name}-${file.size}-${file.lastModified}-${index}`
 
 
 const reasoningOptions = (model: ModelConfig | null) => {
@@ -474,9 +477,9 @@ function MessageBody({ message, retry, sessionId, requesting = false }: { messag
         </div>
       )}
       {message.status === 'retrying' && message.content ? (
-        <div className="message-run-retrying" role="status" aria-live="polite">
+        <output className="message-run-retrying" aria-live="polite">
           {formatRetryDetail(message.retry, t)}
-        </div>
+        </output>
       ) : null}
       {message.status === 'paused' && (
         <output className="message-run-paused" aria-live="polite">
@@ -612,12 +615,23 @@ export function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const senderShellRef = useRef<HTMLDivElement>(null)
   const workspaceRef = useRef<HTMLDivElement>(null)
-  const attachmentsRef = useRef<{ select: (options?: { accept?: string; multiple?: boolean }) => void } | null>(null)
+  const attachmentsRef = useRef<ComponentRef<typeof Attachments> | null>(null)
   const [openAttachments, setOpenAttachments] = useState(false)
   const [workspaceDragOver, setWorkspaceDragOver] = useState(false)
   const dragDepthRef = useRef(0)
+  const attachmentFilesByUid = useMemo(
+    () =>
+      new Map(
+        (chat.attachments ?? []).map((file, index) => [attachmentUid(file, index), file]),
+      ),
+    [chat.attachments],
+  )
   const cancelRef = useRef(chat.cancel)
   cancelRef.current = chat.cancel
+  const dispatchRef = useRef(chat.dispatch)
+  dispatchRef.current = chat.dispatch
+  const requestingRef = useRef(chat.state.requesting)
+  requestingRef.current = chat.state.requesting
   const [followLatest, setFollowLatest] = useState(true)
   const activeSession = useMemo(
     () =>
@@ -768,10 +782,10 @@ export function ChatPage() {
     )
     if (hardFailure) return
     const timer = window.setTimeout(() => {
-      chat.dispatch({ type: 'clear-error' })
+      dispatchRef.current({ type: 'clear-error' })
     }, 8_000)
     return () => window.clearTimeout(timer)
-  }, [chat.state.error, chat.state.messages, chat.dispatch])
+  }, [chat.state.error, chat.state.messages])
 
   // Esc stops an in-flight run (including model retry backoff).
   // Skip when a modal/drawer owns Escape (e.g. rename session).
@@ -779,20 +793,18 @@ export function ChatPage() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return
       if (event.metaKey || event.ctrlKey || event.altKey) return
-      if (!chat.state.requesting) return
+      if (!requestingRef.current) return
       if (isOverlayEscapeTarget(event.target)) return
       event.preventDefault()
       void cancelRef.current()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [chat.state.requesting])
+  }, [])
 
   // SPA nav + tab close while a run is streaming / retrying.
   const cancelForLeaveRef = useRef(chat.cancel)
   cancelForLeaveRef.current = chat.cancel
-  const requestingRef = useRef(chat.state.requesting)
-  requestingRef.current = chat.state.requesting
   useBlocker({
     disabled: !chat.state.requesting,
     enableBeforeUnload: chat.state.requesting,
@@ -1049,22 +1061,22 @@ export function ChatPage() {
             </div>
           ) : null}
           {showSessionMetaLoading || showWorkflowRedirecting ? (
-            <div className="chat-history-loading" role="status" aria-live="polite">
+            <output className="chat-history-loading" aria-live="polite">
               <Spin size="small" />
               <span>{t('sessionMetaLoading')}</span>
-            </div>
+            </output>
           ) : showHistoryLoading ? (
-            <div className="chat-history-loading" role="status" aria-live="polite">
+            <output className="chat-history-loading" aria-live="polite">
               <Spin size="small" />
               <span>{t('historyLoading')}</span>
-            </div>
+            </output>
           ) : showSessionMetaError ? null : showSessionMissing ? (
-            <div className="chat-history-error chat-session-missing" role="status">
+            <section className="chat-history-error chat-session-missing" aria-label={t('sessionNotFound')}>
               <p className="chat-error__message">{t('sessionNotFound')}</p>
               <Button type="primary" onClick={() => chat.newChat()}>
                 {t('newAnalysis')}
               </Button>
-            </div>
+            </section>
           ) : showHistoryError && !bubbles.length ? null : !bubbles.length ? (
             <div className="chat-welcome">
               <div className="welcome-emblem">
@@ -1112,13 +1124,13 @@ export function ChatPage() {
             />
           ) : null}
           {lastAssistant?.status === 'retrying' && !chat.state.error ? (
-            <div className="chat-retrying" role="status" aria-live="polite">
+            <output className="chat-retrying" aria-live="polite">
               <span className="chat-retrying__message">
                 {formatRetryDetail(lastAssistant.retry, t)}
               </span>
               {/* Stop lives on the sender FAB (Esc) — avoid a second Stop control. */}
               <span className="chat-retrying__hint">{t('stopGeneratingHint')}</span>
-            </div>
+            </output>
           ) : null}
           {chat.state.error && (
             <div className="chat-error" role="alert">
@@ -1199,21 +1211,20 @@ export function ChatPage() {
                 classNames={{ header: 'chat-attachments-header' }}
               >
                 <Attachments
-                  ref={attachmentsRef as never}
+                  ref={attachmentsRef}
                   className="chat-attachments"
                   beforeUpload={() => false}
                   items={(chat.attachments ?? []).map((file, index) => ({
-                    uid: `${file.name}-${file.size}-${file.lastModified}-${index}`,
+                    uid: attachmentUid(file, index),
                     name: file.name,
                     size: file.size,
                     type: file.type,
-                    originFileObj: file as never,
                     status: 'done' as const,
                     description: `${Math.max(1, Math.round(file.size / 1024))} KB`,
                   }))}
                   onChange={({ fileList }) => {
                     const next = fileList
-                      .map((item) => item.originFileObj as File | undefined)
+                      .map((item) => item.originFileObj ?? attachmentFilesByUid.get(item.uid))
                       .filter((file): file is File => file instanceof File)
                     const limitError = validateChatAttachments(next)
                     if (limitError) {

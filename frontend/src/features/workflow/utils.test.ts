@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { reduceNodeRunStatus } from './runStatus'
 import {
   applyAutoLayout,
   buildWorkflowCode,
@@ -10,13 +9,11 @@ import {
   moveNodeAfter,
   moveStep,
   reparentNode,
-  reorderRootsByPositions,
   toDefinition,
   defaultTriggers,
   emptySlotsFor,
   branchHandlesFor,
   reparentTargetFromHandle,
-  pickConnectionHandles,
   validateWorkflowDraft,
   validateWorkflowName,
   fieldForValidationIssue,
@@ -27,7 +24,6 @@ import {
   pasteNodesIntoSelection,
   preserveSelectionAfterReload,
   locateNode,
-  nodeLabel,
   triggerEnableBlocked,
   workflowWebhookCurl,
   workflowWebhookUrl,
@@ -35,6 +31,14 @@ import {
   resolveNodeCanvasSubtitle,
   executorNamesKey,
 } from './utils'
+
+const translateWorkflowSubtitle = (key: string, options?: Record<string, unknown>) => {
+  if (key === 'subtitleAgent') return 'agent'
+  if (key === 'subtitleNested') return 'nested'
+  if (key === 'subtitleMaxIter') return `max ${options?.count ?? 3}`
+  if (key === 'subtitleBranches') return `branches ${options?.count ?? 0}`
+  return key
+}
 import type { WorkflowState } from './types'
 
 const state: WorkflowState = {
@@ -79,13 +83,40 @@ describe('workflow behavior', () => {
     expect(state.steps.map((item) => item.id)).toEqual(['a', 'b'])
   })
 
-  it('serializes empty step name without targetId fallback', () => {
+  it('serializes an empty step name with its selected executor', () => {
     const step = createNode('step')
     step.name = ''
     step.targetId = 'security-operations'
     const definition = toDefinition({ name: 'x', description: '', steps: [step] })
     expect(definition.steps[0]?.name).toBe('')
     expect(definition.steps[0]?.executor).toEqual({ kind: 'agent', ref: 'security-operations' })
+  })
+
+  it('keeps a missing executor empty instead of silently selecting an agent', () => {
+    const step = createNode('step')
+    step.id = 'missing-executor'
+    step.targetId = ''
+    const definition = toDefinition({ name: 'x', description: '', steps: [step] })
+    expect(definition.steps[0]?.executor).toEqual({ kind: 'agent', ref: '' })
+
+    const restored = fromRecord({
+      id: 'wf-missing-executor',
+      name: 'x',
+      description: '',
+      owner_user_id: 'u',
+      definition: {
+        name: 'x',
+        description: '',
+        steps: [{ id: 'missing-executor', type: 'step', name: 'Missing executor' }],
+      },
+      enabled: true,
+      version: 1,
+      created_at: 1,
+      updated_at: 1,
+    })
+    const restoredStep = restored.steps?.[0]
+    expect(restoredStep?.targetId).toBe('')
+    expect(validateWorkflowDraft(restored.steps ?? []).map((issue) => issue.code)).toContain('missing_executor')
   })
 
   it('builds a linear definition for save/run', () => {
@@ -118,12 +149,7 @@ describe('workflow behavior', () => {
     expect(createNode('step').type).toBe('step')
   })
 
-  it('reorders roots by position and connect sequence', () => {
-    const positioned = [
-      { ...state.steps[0]!, position: { x: 0, y: 100 } },
-      { ...state.steps[1]!, position: { x: 0, y: 0 } },
-    ]
-    expect(reorderRootsByPositions(positioned).map((n) => n.id)).toEqual(['b', 'a'])
+  it('moves a root after its connection target', () => {
     expect(moveNodeAfter(state.steps, 'a', 'b').map((n) => n.id)).toEqual(['b', 'a'])
   })
 
@@ -149,11 +175,35 @@ describe('workflow behavior', () => {
       { id: 'c1', type: 'step', targetId: 'security-operations', name: 'A' },
       { id: 'c2', type: 'step', targetId: 'safe-fallback', name: 'B' },
     ]
+    const condition = createNode('condition')
+    condition.id = 'branch'
+    condition.thenSteps = [{ id: 'then', type: 'step', targetId: 'security-operations', name: 'Then' }]
+    condition.elseSteps = [{ id: 'else', type: 'step', targetId: 'safe-fallback', name: 'Else' }]
     const definition = toDefinition({
       name: 'n',
       description: '',
-      steps: [parallel],
+      steps: [parallel, condition],
     })
+    expect(definition.steps[1]?.type).toBe('condition')
+    expect(definition.steps[1]?.steps).toEqual([
+      {
+        id: 'then',
+        type: 'step',
+        name: 'Then',
+        executor: { kind: 'agent', ref: 'security-operations' },
+        instructions: '',
+      },
+    ])
+    expect(definition.steps[1]?.else).toEqual([
+      {
+        id: 'else',
+        type: 'step',
+        name: 'Else',
+        executor: { kind: 'agent', ref: 'safe-fallback' },
+        instructions: '',
+      },
+    ])
+    expect(definition.steps[1]).not.toHaveProperty('then_steps')
     const restored = fromRecord({
       id: 'wf',
       name: 'n',
@@ -169,11 +219,52 @@ describe('workflow behavior', () => {
       updated_at: 1,
     })
     expect(restored.steps?.[0]?.type).toBe('parallel')
+    expect(restored.steps?.[0]?.id).toBe('fanout')
+    expect(restored.steps?.[0]?.steps?.map((node) => node.id)).toEqual(['c1', 'c2'])
     expect(restored.steps?.[0]?.steps).toHaveLength(2)
+    expect(restored.steps?.[1]?.id).toBe('branch')
+    expect(restored.steps?.[1]?.thenSteps?.[0]?.id).toBe('then')
+    expect(restored.steps?.[1]?.elseSteps?.[0]?.id).toBe('else')
+    expect(restored.steps?.[1]?.thenSteps).toHaveLength(1)
+    expect(restored.steps?.[1]?.elseSteps).toHaveLength(1)
     expect(restored.version).toBe(3)
     expect(restored.publishedVersion).toBe(2)
     expect(restored.publishedAt).toBe(1_700_000_000)
     expect(restored.hasPublished).toBe(true)
+  })
+
+  it('preserves canonical router branch IDs when loading a record', () => {
+    const restored = fromRecord({
+      id: 'wf-router',
+      name: 'Router',
+      description: '',
+      owner_user_id: 'u',
+      definition: {
+        name: 'Router',
+        description: '',
+        steps: [
+          {
+            id: 'severity-router',
+            type: 'router',
+            name: 'Route severity',
+            selector: { cel: 'input' },
+            choices: [
+              { id: 'critical', name: 'critical', steps: [] },
+              { id: 'other', name: 'other', steps: [] },
+            ],
+          },
+        ],
+      },
+      enabled: true,
+      version: 1,
+      created_at: 1,
+      updated_at: 1,
+    })
+
+    expect(restored.steps?.[0]).toMatchObject({
+      id: 'severity-router',
+      choices: [{ id: 'critical' }, { id: 'other' }],
+    })
   })
 
   it('blocks trigger enable when unpublished or dirty', () => {
@@ -410,23 +501,6 @@ describe('reparent and auto-layout', () => {
 
 })
 
-describe('run status reduce', () => {
-  it('marks started/completed/paused nodes', () => {
-    const steps = [
-      { id: 'a', type: 'step' as const, name: 'Triage', targetId: 'security-operations' },
-      { id: 'b', type: 'step' as const, name: 'Report', targetId: 'safe-fallback' },
-    ]
-    const map = reduceNodeRunStatus(steps, [
-      { id: '1', type: 'step.started', message: '', stepId: 'a', at: 1 },
-      { id: '2', type: 'step.completed', message: '', stepId: 'a', at: 2 },
-      { id: '3', type: 'step.started', message: '', stepId: 'b', at: 3 },
-      { id: '4', type: 'workflow.paused', message: '', stepId: 'b', approvalId: 'ap1', at: 4 },
-    ])
-    expect(map.a).toBe('ok')
-    expect(map.b).toBe('paused')
-  })
-})
-
 describe('multi-handle branches', () => {
   it('exposes then/else handles for condition', () => {
     const handles = branchHandlesFor(createNode('condition'))
@@ -551,23 +625,6 @@ describe('multi-handle branches', () => {
     const next = layout.edges.find((e) => e.label === 'next')
     expect(next?.sourceHandle).toBe('out')
     expect(next?.targetHandle).toBe('in')
-  })
-
-  it('pickConnectionHandles prefers side ports for rightward targets', () => {
-    const side = pickConnectionHandles({ x: 0, y: 0 }, { x: 280, y: 20 }, 'out')
-    expect(side).toMatchObject({
-      sourceHandle: 'out-right',
-      targetHandle: 'in-left',
-      horizontal: true,
-    })
-    const branch = pickConnectionHandles({ x: 0, y: 0 }, { x: 300, y: 10 }, 'then')
-    expect(branch.sourceHandle).toBe('then-right')
-    const vertical = pickConnectionHandles({ x: 0, y: 0 }, { x: 20, y: 200 }, 'out')
-    expect(vertical).toMatchObject({
-      sourceHandle: 'out',
-      targetHandle: 'in',
-      horizontal: false,
-    })
   })
 
   it('normalizes side handle aliases for reparent', () => {
@@ -721,45 +778,37 @@ describe('fieldForValidationIssue', () => {
   })
 
 describe('resolveNodeCanvasSubtitle', () => {
-  const t = (key: string, options?: Record<string, unknown>) => {
-    if (key === 'subtitleAgent') return 'agent'
-    if (key === 'subtitleNested') return 'nested'
-    if (key === 'subtitleMaxIter') return `max ${options?.count ?? 3}`
-    if (key === 'subtitleBranches') return `branches ${options?.count ?? 0}`
-    return key
-  }
-
   it('maps step targetId to executor display name', () => {
     const step = createNode('step')
     step.targetId = 'security-operations'
     const names = new Map([['security-operations', '安全运营助手']])
-    expect(resolveNodeCanvasSubtitle(step, t, names)).toBe('安全运营助手')
+    expect(resolveNodeCanvasSubtitle(step, translateWorkflowSubtitle, names)).toBe('安全运营助手')
   })
 
   it('falls back to targetId when executor catalog misses the ref', () => {
     const step = createNode('step')
     step.targetId = 'custom-agent'
-    expect(resolveNodeCanvasSubtitle(step, t, {})).toBe('custom-agent')
+    expect(resolveNodeCanvasSubtitle(step, translateWorkflowSubtitle, {})).toBe('custom-agent')
   })
 
   it('uses subtitleAgent when step has no targetId', () => {
     const step = createNode('step')
     step.targetId = ''
-    expect(resolveNodeCanvasSubtitle(step, t, {})).toBe('agent')
+    expect(resolveNodeCanvasSubtitle(step, translateWorkflowSubtitle, {})).toBe('agent')
   })
 
   it('formats control-flow subtitles', () => {
     const condition = createNode('condition')
     condition.evaluatorCel = 'input.score > 0.8'
-    expect(resolveNodeCanvasSubtitle(condition, t, {})).toBe('input.score > 0.8')
+    expect(resolveNodeCanvasSubtitle(condition, translateWorkflowSubtitle, {})).toBe('input.score > 0.8')
 
     const loop = createNode('loop')
     loop.maxIterations = 5
-    expect(resolveNodeCanvasSubtitle(loop, t, {})).toBe('max 5')
+    expect(resolveNodeCanvasSubtitle(loop, translateWorkflowSubtitle, {})).toBe('max 5')
 
     const parallel = createNode('parallel')
     parallel.steps = [createNode('step'), createNode('step')]
-    expect(resolveNodeCanvasSubtitle(parallel, t, {})).toBe('branches 2')
+    expect(resolveNodeCanvasSubtitle(parallel, translateWorkflowSubtitle, {})).toBe('branches 2')
   })
 
   it('executorNamesKey is order-stable', () => {
@@ -1065,18 +1114,6 @@ describe('pasteNodesIntoSelection', () => {
     })
   })
 })
-
-describe('nodeLabel', () => {
-  it('prefers explicit name and avoids raw targetId for empty agent steps', () => {
-    const step = createNode('step')
-    step.targetId = 'security-operations'
-    step.name = ''
-    expect(nodeLabel(step)).toBe('Agent step')
-    step.name = 'Triage'
-    expect(nodeLabel(step)).toBe('Triage')
-  })
-})
-
 
 describe('preserveSelectionAfterReload', () => {
   it('keeps multi-selection when nodes still exist after save reload', () => {

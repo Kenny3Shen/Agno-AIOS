@@ -313,7 +313,7 @@ async def test_memory_update_scopes_ordinary_actor_and_replaces_content():
     now = datetime(2026, 7, 5, tzinfo=UTC)
     with (
         patch.object(memory_service, "get_async_agno_postgres_db", return_value=db),
-        patch.object(memory_service, "_now", return_value=now),
+        patch.object(memory_service, "now_utc", return_value=now),
     ):
         result = await memory_service.update_memory_record(
             actor("owner-1"),
@@ -394,71 +394,8 @@ async def test_list_memories_native_envelope():
 
 
 @pytest.mark.asyncio
-async def test_list_memories_uses_memory_id_only():
-    db = FakeMemoryDb()
-    with patch.object(memory_service, "get_async_agno_postgres_db", return_value=db):
-        payload = await memory_service.list_memories_native(actor("u1"))
-    assert payload["data"][0]["memory_id"] == "mem-1"
-    assert "id" not in payload["data"][0]
-
-
-@pytest.mark.asyncio
-async def test_memory_update_response_uses_memory_id_only():
-    db = FakeMemoryMutationDb()
-    now = datetime(2026, 7, 5, tzinfo=UTC)
-    with (
-        patch.object(memory_service, "get_async_agno_postgres_db", return_value=db),
-        patch.object(memory_service, "_now", return_value=now),
-    ):
-        result = await memory_service.update_memory_record(
-            actor("owner-1"),
-            memory_id="mem-1",
-            memory="Updated memory",
-            topics=["preference"],
-        )
-    assert result["memory_id"] == "mem-1"
-    assert "id" not in result
-
-
-def test_memory_item_requires_memory_id_and_rejects_legacy_aliases():
-    assert memory_service._memory_item({"id": "legacy-1", "memory": "x"}) is None
-    assert memory_service._memory_item({"memory_id": "m1", "content": "from-content"}) == {
-        "memory_id": "m1",
-        "memory": "",
-        "topics": [],
-        "input": "",
-        "user_id": "",
-        "agent_id": "",
-        "team_id": "",
-        "feedback": "",
-        "created_at": memory_service.iso(None),
-        "updated_at": memory_service.iso(None),
-        "status": "stored",
-    }
-    row = memory_service._memory_item(
-        {
-            "memory_id": "m2",
-            "memory": "hello",
-            "topics": ["t1"],
-            "topic": "ignored",
-            "id": "ignored",
-            "memories": "ignored",
-            "content": "ignored",
-            "user_id": "u1",
-        }
-    )
-    assert row is not None
-    assert row["memory_id"] == "m2"
-    assert row["memory"] == "hello"
-    assert row["topics"] == ["t1"]
-    assert row["user_id"] == "u1"
-
-
-
-
-@pytest.mark.asyncio
 async def test_list_memories_admin_unscoped_stats_uses_page_users_only():
-    """Admin all-users list must not dump global memory stats (old limit=500)."""
+    """Admin all-users list resolves stats only for users on the requested page."""
     db = FakeMemoryDb()
     stats_calls: list[dict[str, object]] = []
 

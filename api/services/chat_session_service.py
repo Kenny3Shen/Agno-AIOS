@@ -350,8 +350,6 @@ def _session_type_from_row(row: dict[str, Any]) -> str:
         return "workflow"
     if row.get("team_id"):
         return "team"
-    if row.get("agent_id"):
-        return "agent"
     return "agent"
 
 
@@ -616,7 +614,7 @@ def _history_user_attachments(run: dict[str, Any]) -> list[dict[str, str]]:
             )
             mime = str(raw.get("mime_type") or raw.get("mime") or "").strip()
             items.append({"name": name, "mime": mime, "kind": kind})
-    # Fallback: T.A.I.S may stash attachment meta on runtime metadata in future.
+    # Runtime metadata preserves light attachment cards when Agno history omits media input.
     metadata = coerce_json_value(run.get("metadata") or {})
     if isinstance(metadata, dict):
         context = metadata.get("tais_runtime")

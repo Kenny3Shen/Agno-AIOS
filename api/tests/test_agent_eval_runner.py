@@ -11,7 +11,7 @@ class FakeMcpTools:
     async def __aenter__(self):
         return "mcp-tools"
 
-    async def __aexit__(self, exc_type, exc, tb):
+    async def __aexit__(self, *_args):
         return False
 
 
@@ -139,7 +139,7 @@ async def test_run_case_maps_all_eval_types_to_agno_arun(monkeypatch):
                         arun=AsyncMock(return_value=SimpleNamespace(content="High risk", metrics=None)),
                     )
 
-                async def __aexit__(self, exc_type, exc, tb):
+                async def __aexit__(self, *_args):
                     return False
 
             return Ctx()

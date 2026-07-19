@@ -12,6 +12,7 @@ from pydantic import SecretStr
 
 from api.services import runtime_env, security_run_runtime
 from api.services.chat_run_events import ChatRunEvent
+from api.utils.async_once import AsyncOnce
 
 
 class FakeAgent:
@@ -59,10 +60,17 @@ class PausedEventAgent:
         }
 
 
-class BlockingAgent:
-    async def arun(self, *_args, **_kwargs):
+class BlockingStream:
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
         raise RuntimeError("Your request was blocked.")
-        yield
+
+
+class BlockingAgent:
+    def arun(self, *_args, **_kwargs):
+        return BlockingStream()
 
 
 class FallbackAgent:
@@ -90,8 +98,8 @@ class BlockingRuntime(security_run_runtime.SecurityRunRuntime):
 
 
 @pytest.mark.asyncio
-async def test_runtime_env_loader_runs_dotenv_once() -> None:
-    runtime_env._RUNTIME_ENV_LOADED = False
+async def test_runtime_env_loader_runs_dotenv_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(runtime_env, "_runtime_env_once", AsyncOnce())
     calls: list[dict] = []
 
     with patch.object(
@@ -667,12 +675,11 @@ async def test_stream_retry_backoff_cancel_emits_run_cancelled():
                 from agno.exceptions import ModelProviderError
 
                 raise ModelProviderError("auth_unavailable", status_code=503)
-            if False:  # pragma: no cover
-                yield None
+            for response in ():
+                yield response
 
-        async def _ainvoke_stream_with_retry(self, **kwargs):
-            if False:  # pragma: no cover
-                yield None
+        def _ainvoke_stream_with_retry(self, **kwargs):
+            return self.ainvoke_stream(**kwargs)
 
     model = SlowRetryModel()
 
@@ -770,22 +777,6 @@ async def test_security_run_request_drives_provider_block_fallback():
         ]
     assert chunks[0].event == "content.delta"
     assert chunks[1] == ChatRunEvent("content.delta", {"run_id": "", "delta": "fallback chunk"})
-
-
-
-def test_rejection_confirmation_note_uses_resolution_data():
-    # Legacy resolution_data.rejection_reason is ignored; only note is used.
-    assert (
-        security_run_runtime._rejection_confirmation_note(
-            {"rejection_reason": "证据不足，暂不封禁"}
-        )
-        == "Rejected by administrator"
-    )
-    assert (
-        security_run_runtime._rejection_confirmation_note({"note": "policy"})
-        == "Rejected by administrator: policy"
-    )
-    assert security_run_runtime._rejection_confirmation_note({}) == "Rejected by administrator"
 
 
 
@@ -1193,13 +1184,11 @@ async def test_stream_agent_events_emits_run_retrying_and_clears_partial_content
                 from agno.exceptions import ModelProviderError
 
                 raise ModelProviderError("auth_unavailable", status_code=503)
-            if False:  # pragma: no cover
-                yield None
+            for response in ():
+                yield response
 
-        async def _ainvoke_stream_with_retry(self, **kwargs):
-            # Placeholder replaced by notifier install.
-            if False:  # pragma: no cover
-                yield None
+        def _ainvoke_stream_with_retry(self, **kwargs):
+            return self.ainvoke_stream(**kwargs)
 
     model = RetryingModel()
 
@@ -1275,13 +1264,13 @@ async def test_send_feishu_notify_uses_server_webhook_when_omitted(monkeypatch):
             return {"code": 0}
 
     class _Client:
-        def __init__(self, *a, **k):
+        def __init__(self, *_args, **_kwargs):
             pass
 
         async def __aenter__(self):
             return self
 
-        async def __aexit__(self, *a):
+        async def __aexit__(self, *_args):
             return None
 
         async def post(self, url, headers=None, content=None):
@@ -2086,4 +2075,3 @@ async def test_full_tool_surface_forwards_live_search():
                 ),
             )
     assert models and models[0]["live_search"] is True
-

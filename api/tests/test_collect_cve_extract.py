@@ -1,7 +1,11 @@
 """CVE id extraction for Collect / 安全情报 article cards."""
 
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
 from api.services.collect_crawl_service import extract_cve_ids
-from api.services.collect_service import _with_cve_ids
+from api.services import collect_service
 
 
 def test_extract_cve_ids_dedupes_and_uppercases():
@@ -13,26 +17,30 @@ def test_extract_cve_ids_dedupes_and_uppercases():
     assert ids == ["CVE-2024-1234", "CVE-2021-44228"]
 
 
-def test_with_cve_ids_from_title_without_body():
-    row = _with_cve_ids(
+@pytest.mark.asyncio
+async def test_search_articles_exposes_derived_and_persisted_cve_ids():
+    rows = [
         {
             "title": "Log4Shell CVE-2021-44228 emergency",
             "summary": "patch now",
             "markdown": "",
-        }
-    )
-    assert row is not None
-    assert row["cve_ids"] == ["CVE-2021-44228"]
-
-
-def test_with_cve_ids_keeps_existing():
-    row = _with_cve_ids(
+        },
         {
             "title": "CVE-2020-0001",
             "summary": "",
             "markdown": "",
-            "cve_ids": ["CVE-2019-9999"],
-        }
-    )
-    assert row is not None
-    assert row["cve_ids"] == ["CVE-2019-9999"]
+            "cve_ids": ["cve-2019-9999"],
+        },
+    ]
+    with patch.object(
+        collect_service,
+        "search_collect_articles",
+        AsyncMock(return_value=(rows, len(rows))),
+    ):
+        articles, total = await collect_service.search_articles()
+
+    assert total == 2
+    assert [article["cve_ids"] for article in articles] == [
+        ["CVE-2021-44228"],
+        ["CVE-2019-9999"],
+    ]

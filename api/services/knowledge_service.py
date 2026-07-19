@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import mimetypes
-from importlib.util import find_spec
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from collections.abc import Sequence
 from typing import Any, Callable, Mapping, cast
 
 from agno.knowledge.content import Content
@@ -23,7 +21,6 @@ from loguru import logger
 
 from api.auth.claims import ActorLike
 from api.auth.visibility import can_manage_resource, normalize_visibility
-from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
 from api.persistence.knowledge_sources import (
     delete_knowledge_source_async as _delete_knowledge_source_async,
@@ -32,7 +29,6 @@ from api.persistence.knowledge_sources import (
 )
 from api.services.postgres_store import (
     get_async_knowledge_postgres_db,
-    postgres_label,
     postgres_sqlalchemy_url,
 )
 from api.services.knowledge_document_service import (
@@ -40,7 +36,6 @@ from api.services.knowledge_document_service import (
     KnowledgeSearchResultPayload,
     content_to_document as _content_to_document,
     content_visible_to_owner as _content_visible_to_owner,
-    int_value as _int_value,
     owner_metadata as _owner_metadata,
     result_from_document as _result_from_document,
     safe_metadata as _safe_metadata,
@@ -56,19 +51,13 @@ from api.services.knowledge_ingest_service import (
     KnowledgeReader,
     KnowledgeReaderConfig,
     coerce_ingest_overrides as _coerce_ingest_overrides,
-    profile_for_filename as _profile_for_filename,
     profile_for_filename_or_strategy as _profile_for_filename_or_strategy,
     reader_for_profile as _reader_for_profile,
 )
 from api.services.knowledge_rag_settings_service import (
-    COLD_START_NOTE,
-    current_rag_settings,
     knowledge_settings,
-    model_device,
-    pipeline_status,
     search_type_from_env,
     search_type_from_name,
-    update_runtime_rag_settings as _update_runtime_rag_settings,
 )
 from api.services.knowledge_runtime_service import (
     KnowledgeRuntimeDependencies,
@@ -112,13 +101,6 @@ def _get_reranker() -> SentenceTransformerReranker | None:
     return SentenceTransformerReranker(model=knowledge_settings().rerank_model)
 
 
-def _clear_knowledge_runtime_caches() -> None:
-    get_settings.cache_clear()
-    _get_embedder.cache_clear()
-    _get_reranker.cache_clear()
-    get_async_knowledge_base.cache_clear()
-
-
 def _clean_optional_metadata_text(value: object | None, field: str) -> str | None:
     if value is None:
         return None
@@ -135,13 +117,6 @@ def _safe_metadata_patch(metadata: Mapping[str, object] | None) -> dict[str, obj
         for key, value in _safe_metadata(metadata).items()
         if not key.startswith("_") and key not in blocked_keys
     }
-
-
-def update_runtime_rag_settings(values: Mapping[str, Any]) -> dict[str, Any]:
-    return _update_runtime_rag_settings(
-        values,
-        clear_runtime_caches=_clear_knowledge_runtime_caches,
-    )
 
 
 def _reader_config(
@@ -175,17 +150,6 @@ def _reader_config(
         semantic_min_sentences_per_chunk=options.semantic_min_sentences_per_chunk,
         semantic_min_characters_per_sentence=options.semantic_min_characters_per_sentence,
     )
-
-
-def knowledge_profile_for_filename(filename: str | None) -> KnowledgeIngestProfile:
-    return _profile_for_filename(filename)
-
-
-def knowledge_profile_for_filename_or_strategy(
-    filename: str | None,
-    strategy: str | None,
-) -> KnowledgeIngestProfile:
-    return _profile_for_filename_or_strategy(filename, strategy)
 
 
 def _metadata_ingest_options(overrides: KnowledgeIngestOverrides) -> dict[str, str]:
@@ -243,7 +207,7 @@ def reader_for_filename(
         if isinstance(overrides, KnowledgeIngestOverrides)
         else _coerce_ingest_overrides(overrides)
     )
-    profile = knowledge_profile_for_filename_or_strategy(
+    profile = _profile_for_filename_or_strategy(
         filename,
         ingest_overrides.reader_strategy,
     )
@@ -292,17 +256,9 @@ def get_async_knowledge_base(search_type: SearchType | None = None) -> Knowledge
     )
 
 
-async def _get_async_knowledge_base_async(search_type: SearchType | None = None) -> Knowledge:
+async def get_async_knowledge_base_async(search_type: SearchType | None = None) -> Knowledge:
     async with _knowledge_runtime_async_lock:
         return await asyncio.to_thread(get_async_knowledge_base, search_type)
-
-
-async def get_async_knowledge_base_async(search_type: SearchType | None = None) -> Knowledge:
-    return await _get_async_knowledge_base_async(search_type)
-
-
-def knowledge_runtime_loaded() -> bool:
-    return get_async_knowledge_base.cache_info().currsize > 0
 
 
 async def _ensure_knowledge_contents_storage_async() -> None:
@@ -312,7 +268,7 @@ async def _ensure_knowledge_contents_storage_async() -> None:
 
 
 async def _ensure_knowledge_storage_async() -> None:
-    knowledge = await _get_async_knowledge_base_async()
+    knowledge = await get_async_knowledge_base_async()
     vector_db = cast(Any, knowledge.vector_db)
     await vector_db.async_create()
     await _ensure_knowledge_contents_storage_async()
@@ -485,7 +441,7 @@ async def _hydrate_content_ids_async(documents: list[Document]) -> None:
 
 async def _delete_content_async(knowledge: Any, content_id: str) -> None:
     if knowledge is None:
-        knowledge = await _get_async_knowledge_base_async()
+        knowledge = await get_async_knowledge_base_async()
     await knowledge.aremove_content_by_id(content_id)
 
 
@@ -532,7 +488,7 @@ class KnowledgeBaseLifecycleDependencies:
 
 
 class KnowledgeBaseLifecycle:
-    """Knowledge Document lifecycle, retrieval and status behind one interface."""
+    """Knowledge document lifecycle and retrieval behind one interface."""
 
     def __init__(
         self,
@@ -540,18 +496,13 @@ class KnowledgeBaseLifecycle:
     ) -> None:
         self.dependencies = dependencies or KnowledgeBaseLifecycleDependencies()
 
-    def _async_knowledge(self, search_type: SearchType | None = None) -> Any:
-        if self.dependencies.get_async_knowledge_base is not None:
-            return self.dependencies.get_async_knowledge_base(search_type)
-        return get_async_knowledge_base(search_type)
-
     async def _async_knowledge_async(self, search_type: SearchType | None = None) -> Any:
         if self.dependencies.get_async_knowledge_base is not None:
             result = self.dependencies.get_async_knowledge_base(search_type)
             if hasattr(result, "__await__"):
                 return await result
             return result
-        return await _get_async_knowledge_base_async(search_type)
+        return await get_async_knowledge_base_async(search_type)
 
     async def _ensure_storage_async(self) -> None:
         if self.dependencies.ensure_storage_async is not None:
@@ -687,7 +638,7 @@ class KnowledgeBaseLifecycle:
         base_metadata = _safe_metadata(metadata)
         filename = str(base_metadata.get("file_name") or clean_title)
         ingest_overrides = _coerce_ingest_overrides(ingest_options)
-        profile = knowledge_profile_for_filename_or_strategy(
+        profile = _profile_for_filename_or_strategy(
             filename,
             ingest_overrides.reader_strategy,
         )
@@ -756,7 +707,7 @@ class KnowledgeBaseLifecycle:
         clean_source = (source or str(file_path)).strip() or str(file_path)
         base_metadata = _safe_metadata(metadata)
         ingest_overrides = _coerce_ingest_overrides(ingest_options)
-        profile = knowledge_profile_for_filename_or_strategy(
+        profile = _profile_for_filename_or_strategy(
             file_path.name,
             ingest_overrides.reader_strategy,
         )
@@ -811,33 +762,6 @@ class KnowledgeBaseLifecycle:
                 return document
         raise RuntimeError("知识写入完成但未能读取内容登记记录")
 
-    async def list_documents_async(self, owner_user_id: str | None = None) -> list[KnowledgeDocumentPayload]:
-        """Compatibility full list via paged reads (not a single unbounded dump).
-
-        Prefer ``list_documents_page_async`` for API/UI. Hard-caps at 50 pages × 100
-        (matches ``list_documents_page_async`` max page size).
-        """
-        page_size = 100
-        max_pages = 50
-        documents: list[KnowledgeDocumentPayload] = []
-        for page in range(1, max_pages + 1):
-            batch, total = await self.list_documents_page_async(
-                owner_user_id=owner_user_id,
-                page=page,
-                limit=page_size,
-            )
-            documents.extend(batch)
-            if len(batch) < page_size or len(documents) >= total:
-                break
-        else:
-            logger.warning(
-                "list_documents_async truncated at {} documents (page_size={}, max_pages={})",
-                len(documents),
-                page_size,
-                max_pages,
-            )
-        return documents
-
     async def list_documents_page_async(
         self,
         *,
@@ -866,8 +790,8 @@ class KnowledgeBaseLifecycle:
                 documents.append(document)
             return documents, total
 
-        # Injected/fake contents source: page content rows instead of materializing
-        # every document via list_documents_async (which walks the full corpus).
+        # Injected/fake contents source: page content rows without materializing
+        # every document before slicing the requested window.
         return await self._list_documents_page_from_content_rows_async(
             owner_user_id=owner_user_id,
             query=query,
@@ -904,7 +828,7 @@ class KnowledgeBaseLifecycle:
     ) -> tuple[list[KnowledgeDocumentPayload], int]:
         """Page documents from an injected ``knowledge_content_rows_async``.
 
-        Avoids ``list_documents_async`` full-corpus materialization. Free-text
+        Avoids full-corpus materialization. Free-text
         query requires collecting matches for client-side sort; owner-only and
         unfiltered paths stream content pages and keep only the requested window.
         """
@@ -960,7 +884,7 @@ class KnowledgeBaseLifecycle:
                 if total_count is not None and content_page * fetch_size >= int(total_count):
                     break
                 content_page += 1
-                # Bound free-text scan (same order of magnitude as list_documents_async).
+                # Bound free-text scans even when metadata search is unavailable.
                 if content_page > 50:
                     logger.warning(
                         "knowledge free-text list truncated after {} content pages",
@@ -1136,7 +1060,7 @@ class KnowledgeBaseLifecycle:
                 or getattr(content, "name", "")
             ).strip()
             ingest_overrides = _coerce_ingest_overrides(ingest_options)
-            profile = knowledge_profile_for_filename_or_strategy(
+            profile = _profile_for_filename_or_strategy(
                 filename,
                 ingest_overrides.reader_strategy,
             )
@@ -1245,7 +1169,7 @@ class KnowledgeBaseLifecycle:
             strict=visibility is not None,
         )
         ingest_overrides = _coerce_ingest_overrides(ingest_options)
-        profile = knowledge_profile_for_filename_or_strategy(
+        profile = _profile_for_filename_or_strategy(
             clean_file_name,
             ingest_overrides.reader_strategy,
         )
@@ -1361,7 +1285,7 @@ class KnowledgeBaseLifecycle:
             inherited_metadata.pop(stale_key, None)
         metadata_patch = _safe_metadata(metadata)
         ingest_overrides = _coerce_ingest_overrides(ingest_options)
-        profile = knowledge_profile_for_filename_or_strategy(
+        profile = _profile_for_filename_or_strategy(
             file_path.name,
             ingest_overrides.reader_strategy,
         )
@@ -1409,18 +1333,6 @@ class KnowledgeBaseLifecycle:
             raise RuntimeError("source 新版本写入完成但未能读取内容登记记录")
         document = _content_to_document(refreshed)
         return document
-
-    async def update_document_visibility_async(
-        self,
-        doc_id: str,
-        visibility: str,
-        user: ActorLike,
-    ) -> KnowledgeDocumentPayload | None:
-        return await self.update_document_metadata_async(
-            doc_id,
-            visibility=visibility,
-            user=user,
-        )
 
     async def update_document_metadata_async(
         self,
@@ -1657,65 +1569,8 @@ class KnowledgeBaseLifecycle:
         results.sort(key=lambda item: float(item.get("score") or 0.0), reverse=True)
         return results[:limit]
 
-    async def knowledge_status_async(
-        self,
-        owner_user_id: str | None = None,
-        documents: Sequence[Mapping[str, object]] | None = None,
-        document_count: int | None = None,
-    ) -> dict[str, Any]:
-        docs = documents
-        if docs is None and document_count is None:
-            # Count via paged total; do not materialize every document for status.
-            _page, document_count = await self.list_documents_page_async(
-                owner_user_id=owner_user_id,
-                page=1,
-                limit=1,
-            )
-            docs = []
-        docs = docs or []
-        visible_chunk_count = sum(_int_value(document.get("chunks")) for document in docs)
-        chunk_count = max(await self._chunk_count_async(owner_user_id), visible_chunk_count)
-        settings = knowledge_settings()
-        device = model_device()
-        return {
-            **pipeline_status(),
-            "collection": settings.pgvector_table,
-            "storage": "pgvector",
-            "database": postgres_label(settings.postgres_schema, settings.pgvector_table),
-            "contents_db": postgres_label(settings.postgres_schema, settings.postgres_knowledge_table),
-            "postgres_schema": settings.postgres_schema,
-            "documents": document_count if document_count is not None else len(docs),
-            "chunks": chunk_count,
-            "embedding": settings.embedding_model,
-            "embedding_dimensions": settings.embedding_dimensions,
-            "rerank": settings.rerank_model,
-            "device": device,
-            "rerank_enabled": settings.rerank_enabled,
-            "top_k": settings.top_k,
-            "retrieval_candidates": retrieval_candidate_limit(
-                settings.top_k,
-                rerank_enabled=settings.rerank_enabled,
-                rerank_candidate_multiplier=settings.rerank_candidate_multiplier,
-                rerank_min_candidates=settings.rerank_min_candidates,
-            ),
-            "rerank_candidate_multiplier": settings.rerank_candidate_multiplier,
-            "rerank_min_candidates": settings.rerank_min_candidates,
-            "chunk_size": settings.chunk_size,
-            "chunk_overlap": settings.chunk_overlap,
-            "rag_settings": current_rag_settings(),
-            "cold_start_note": COLD_START_NOTE,
-            "runtime_loaded": knowledge_runtime_loaded(),
-            "torch_runtime_ok": find_spec("torch") is not None,
-        }
-
-
 DEFAULT_KNOWLEDGE_BASE_LIFECYCLE = KnowledgeBaseLifecycle()
 
 
 def get_knowledge_base_lifecycle() -> KnowledgeBaseLifecycle:
     return DEFAULT_KNOWLEDGE_BASE_LIFECYCLE
-
-
-async def update_rag_settings_async(values: Mapping[str, Any]) -> dict[str, Any]:
-    async with _knowledge_runtime_async_lock:
-        return await asyncio.to_thread(update_runtime_rag_settings, values)

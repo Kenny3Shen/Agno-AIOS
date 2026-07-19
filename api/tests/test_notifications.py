@@ -8,6 +8,7 @@ from starlette.requests import Request
 
 from api.auth.models import User
 from api.routes import notifications
+from api.utils.async_once import AsyncOnce
 
 
 @pytest.mark.asyncio
@@ -118,7 +119,7 @@ async def test_notification_stream_replays_rows_in_cursor_order_without_duplicat
 async def test_notifications_ensure_runs_once(monkeypatch) -> None:
     from api.persistence import notifications as store
 
-    store._notifications_ensure_once.reset()
+    monkeypatch.setattr(store, "_notifications_ensure_once", AsyncOnce())
     calls = 0
 
     async def fake_create() -> None:
@@ -129,7 +130,6 @@ async def test_notifications_ensure_runs_once(monkeypatch) -> None:
     await store._ensure()
     await store._ensure()
     assert calls == 1
-    store._notifications_ensure_once.reset()
 
 
 

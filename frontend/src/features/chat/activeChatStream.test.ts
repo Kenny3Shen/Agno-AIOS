@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  __resetActiveChatStreamForTests,
   abortActiveChatStream,
   clearChatStream,
   getActiveChatStream,
@@ -9,7 +8,7 @@ import {
 } from './activeChatStream'
 
 afterEach(() => {
-  __resetActiveChatStreamForTests()
+  abortActiveChatStream()
 })
 
 describe('activeChatStream registry', () => {

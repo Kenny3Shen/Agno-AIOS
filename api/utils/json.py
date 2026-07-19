@@ -7,15 +7,10 @@ from pydantic import TypeAdapter, ValidationError
 JSONDecodeError = ValidationError
 
 _ANY_JSON = TypeAdapter(Any)
-_DICT_JSON = TypeAdapter(dict[str, Any])
 
 
 def loads(data: str | bytes | bytearray) -> Any:
     return _ANY_JSON.validate_json(data)
-
-
-def loads_dict(data: str | bytes | bytearray) -> dict[str, Any]:
-    return _DICT_JSON.validate_json(data)
 
 
 def dumps_bytes(

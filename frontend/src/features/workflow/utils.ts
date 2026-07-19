@@ -163,7 +163,7 @@ export const addChildToNode = (
     return { ...parent, [branch]: [...current, child] }
   })
 
-export type BranchKey = 'steps' | 'thenSteps' | 'elseSteps'
+type BranchKey = 'steps' | 'thenSteps' | 'elseSteps'
 
 export type ReparentTarget =
   | { kind: 'root'; index?: number }
@@ -182,7 +182,7 @@ export type EmptySlot = {
 export const isContainerType = (type: WorkflowNodeType): boolean =>
   type === 'parallel' || type === 'condition' || type === 'loop' || type === 'router'
 
-export const collectNodeIds = (nodes: WorkflowNode[]): string[] => {
+const collectNodeIds = (nodes: WorkflowNode[]): string[] => {
   const ids: string[] = []
   const walk = (list: WorkflowNode[]) => {
     for (const node of list) {
@@ -293,7 +293,7 @@ export const isInsideParallel = (nodes: WorkflowNode[], nodeId: string): boolean
 }
 
 /** Insert a child after the given location index (or append when index is last). */
-export const insertAfterLocation = (
+const insertAfterLocation = (
   nodes: WorkflowNode[],
   location: NodeLocation,
   child: WorkflowNode,
@@ -383,7 +383,7 @@ export const removeNodesInTree = (nodes: WorkflowNode[], ids: string[]): Workflo
 }
 
 /** Extract a node from the tree; returns the node and remaining roots. */
-export const extractNode = (
+const extractNode = (
   nodes: WorkflowNode[],
   id: string
 ): { node: WorkflowNode | null; remaining: WorkflowNode[] } => {
@@ -421,7 +421,7 @@ export const insertChild = (
 
 export type ReparentBlockedReason = 'cycle' | 'hitl_in_parallel' | 'invalid'
 
-export type ReparentOutcome = {
+type ReparentOutcome = {
   steps: WorkflowNode[]
   blocked?: ReparentBlockedReason
 }
@@ -544,14 +544,14 @@ export const NODE_LAYOUT_HEIGHT = 96
  * Strip side aliases so semantic branch ids stay stable.
  * "then-right" → "then", "out-right" → "out", "choice:x-right" stays "choice:x".
  */
-export const normalizeHandleBase = (handle: string | null | undefined): string => {
+const normalizeHandleBase = (handle: string | null | undefined): string => {
   let h = (handle || '').trim()
   if (h.endsWith('-right')) h = h.slice(0, -'-right'.length)
   if (h.endsWith('-left')) h = h.slice(0, -'-left'.length)
   return h
 }
 
-export type PortPoint = { x: number; y: number; width?: number; height?: number }
+type PortPoint = { x: number; y: number; width?: number; height?: number }
 
 /**
  * Pick source/target handles from node geometry.
@@ -559,7 +559,7 @@ export type PortPoint = { x: number; y: number; width?: number; height?: number 
  * - Otherwise use top/bottom. We only render top+left targets and bottom+right sources.
  * - Branch semantics keep the logical id (`then` / `else` / `choice:…`) and only swap the side alias.
  */
-export const pickConnectionHandles = (
+const pickConnectionHandles = (
   source: PortPoint,
   target: PortPoint,
   logicalSourceHandle?: string | null
@@ -592,7 +592,7 @@ export const pickConnectionHandles = (
 }
 
 /** Drag smart-guide snap threshold (px, flow space) — draw.io style. */
-export const SMART_SNAP_THRESHOLD = 8
+const SMART_SNAP_THRESHOLD = 8
 
 export type SmartGuideBox = {
   x: number
@@ -610,7 +610,7 @@ export type SmartGuideLine = {
   end: number
 }
 
-export type SmartSnapResult = {
+type SmartSnapResult = {
   x: number
   y: number
   guides: SmartGuideLine[]
@@ -805,7 +805,7 @@ export const fieldForValidationIssue = (issue: Pick<WorkflowValidationIssue, 'co
 }
 
 /** Internal layout/debug label (canvas display uses i18n + executor names). */
-export const nodeLabel = (node: WorkflowNode): string => {
+const nodeLabel = (node: WorkflowNode): string => {
   if (node.name?.trim()) return node.name.trim()
   switch (node.type) {
     case 'step':
@@ -1173,16 +1173,6 @@ export const applyAutoLayout = (roots: WorkflowNode[]): WorkflowNode[] => {
 }
 
 
-/** Reorder top-level nodes by comparing canvas Y positions. */
-export const reorderRootsByPositions = (nodes: WorkflowNode[]): WorkflowNode[] => {
-  return [...nodes].sort((a, b) => {
-    const ay = a.position?.y ?? 0
-    const by = b.position?.y ?? 0
-    if (ay !== by) return ay - by
-    return (a.position?.x ?? 0) - (b.position?.x ?? 0)
-  })
-}
-
 /** Move node to become sibling after target among root steps (simple restructure). */
 export const moveNodeAfter = (
   nodes: WorkflowNode[],
@@ -1218,8 +1208,8 @@ const toDefinitionNode = (node: WorkflowNode): WorkflowDefinitionNode => {
       type: 'condition',
       name: node.name || '',
       evaluator: { cel: node.evaluatorCel || 'true' },
-      then_steps: (node.thenSteps ?? []).map(toDefinitionNode),
-      else_steps: (node.elseSteps ?? []).map(toDefinitionNode),
+      steps: (node.thenSteps ?? []).map(toDefinitionNode),
+      else: (node.elseSteps ?? []).map(toDefinitionNode),
       ...basePos,
     }
   }
@@ -1261,7 +1251,7 @@ const toDefinitionNode = (node: WorkflowNode): WorkflowDefinitionNode => {
     id: node.id,
     type: 'step',
     name: (node.name || '').trim(),
-    executor: { kind: 'agent', ref: node.targetId || 'security-operations' },
+    executor: { kind: 'agent', ref: node.targetId || '' },
     instructions: node.instructions || '',
     ...basePos,
   }
@@ -1297,7 +1287,7 @@ const fromDefinitionNode = (node: WorkflowDefinitionNode): WorkflowNode => {
   const basePos = position ? { position: { x: position.x, y: position.y } } : {}
   if (node.type === 'parallel') {
     return {
-      id: node.id || crypto.randomUUID(),
+      id: node.id,
       type: 'parallel',
       name: node.name || '',
       steps: (node.steps ?? []).map(fromDefinitionNode),
@@ -1306,18 +1296,18 @@ const fromDefinitionNode = (node: WorkflowDefinitionNode): WorkflowNode => {
   }
   if (node.type === 'condition') {
     return {
-      id: node.id || crypto.randomUUID(),
+      id: node.id,
       type: 'condition',
       name: node.name || '',
       evaluatorCel: node.evaluator?.cel || (node.evaluator?.value === false ? 'false' : 'true'),
-      thenSteps: (node.then_steps ?? []).map(fromDefinitionNode),
-      elseSteps: (node.else_steps ?? []).map(fromDefinitionNode),
+      thenSteps: (node.steps ?? []).map(fromDefinitionNode),
+      elseSteps: (node.else ?? []).map(fromDefinitionNode),
       ...basePos,
     }
   }
   if (node.type === 'loop') {
     return {
-      id: node.id || crypto.randomUUID(),
+      id: node.id,
       type: 'loop',
       name: node.name || '',
       maxIterations: node.max_iterations ?? 3,
@@ -1328,12 +1318,12 @@ const fromDefinitionNode = (node: WorkflowDefinitionNode): WorkflowNode => {
   }
   if (node.type === 'router') {
     return {
-      id: node.id || crypto.randomUUID(),
+      id: node.id,
       type: 'router',
       name: node.name || '',
       selectorCel: node.selector?.cel || '',
       choices: (node.choices ?? []).map((choice) => ({
-        id: choice.id || crypto.randomUUID(),
+        id: choice.id,
         name: choice.name,
         steps: (choice.steps ?? []).map(fromDefinitionNode),
       })),
@@ -1342,7 +1332,7 @@ const fromDefinitionNode = (node: WorkflowDefinitionNode): WorkflowNode => {
   }
   if (node.type === 'workflow_ref') {
     return {
-      id: node.id || crypto.randomUUID(),
+      id: node.id,
       type: 'workflow_ref',
       name: node.name || '',
       workflowId: node.workflow_id || '',
@@ -1350,10 +1340,10 @@ const fromDefinitionNode = (node: WorkflowDefinitionNode): WorkflowNode => {
     }
   }
   return {
-    id: node.id || crypto.randomUUID(),
+    id: node.id,
     type: 'step',
     kind: 'agent',
-    targetId: node.executor?.ref || 'security-operations',
+    targetId: node.executor?.ref || '',
     name: node.name || '',
     instructions: node.instructions || '',
     skills: Array.isArray(node.skills) ? node.skills.map(String).filter(Boolean) : [],
@@ -1463,7 +1453,7 @@ export const triggerEnableBlocked = (state: {
 }
 
 /** Resolve canvas subtitle for a node (executor display name when available). */
-export type CanvasSubtitleT = (key: string, options?: Record<string, unknown>) => string
+type CanvasSubtitleT = (key: string, options?: Record<string, unknown>) => string
 
 export const resolveNodeCanvasSubtitle = (
   node: WorkflowNode,
@@ -1614,8 +1604,8 @@ const emitCodeNode = (node: WorkflowDefinitionNode, indent: string): string => {
     return `${indent}Parallel(\n${children},\n${indent}    name=${JSON.stringify(node.name)},\n${indent})`
   }
   if (node.type === 'condition') {
-    const thenSteps = (node.then_steps ?? []).map((child) => emitCodeNode(child, indent + '    ')).join(',\n')
-    const elseSteps = (node.else_steps ?? []).map((child) => emitCodeNode(child, indent + '    ')).join(',\n')
+    const thenSteps = (node.steps ?? []).map((child) => emitCodeNode(child, indent + '    ')).join(',\n')
+    const elseSteps = (node.else ?? []).map((child) => emitCodeNode(child, indent + '    ')).join(',\n')
     const cel = node.evaluator?.cel ?? 'true'
     return [
       `${indent}Condition(`,
@@ -1667,7 +1657,7 @@ const emitCodeNode = (node: WorkflowDefinitionNode, indent: string): string => {
   return (
     `${indent}Step(name=${JSON.stringify(node.name)}, ` +
     `step_id=${JSON.stringify(node.id)}, ` +
-    `agent=agents[${JSON.stringify(node.executor?.ref ?? 'security-operations')}], ` +
+    `agent=agents[${JSON.stringify(node.executor?.ref ?? '')}], ` +
     `requires_confirmation=${node.requires_confirmation ? 'True' : 'False'})`
   )
 }
@@ -1690,7 +1680,7 @@ export const buildWorkflowCode = (state: WorkflowState) => {
   ].join('\n')
 }
 
-export type MultiSelectAgentSummary = {
+type MultiSelectAgentSummary = {
   agentCount: number
   sharedTargetId: string | undefined
   skillsMixed: boolean
@@ -1742,7 +1732,7 @@ export const summarizeSelectedAgentSteps = (
   }
 }
 
-export type PasteSelectionResult = {
+type PasteSelectionResult = {
   steps: WorkflowNode[]
   /** Clones that could not enter Parallel because of HITL (appended at root). */
   divertedHitlCount: number
@@ -1836,4 +1826,3 @@ export const pasteNodesIntoSelection = (
     multiSelectRootPaste: false,
   }
 }
-

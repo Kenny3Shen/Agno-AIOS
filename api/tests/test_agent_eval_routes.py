@@ -4,21 +4,14 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
-from fastapi.routing import APIRoute
 from pydantic import ValidationError
 
 from api.routes import agent_evals
+from api.tests.route_fakes import route_dependency
 
 
 def actor(role: str = "admin"):
     return SimpleNamespace(id="user-1", email="operator@example.com", role=role, is_superuser=False)
-
-
-def route_dependency(endpoint_name: str):
-    for route in agent_evals.router.routes:
-        if isinstance(route, APIRoute) and getattr(route.endpoint, "__name__", "") == endpoint_name:
-            return route.dependant.dependencies[0].call
-    raise AssertionError(f"missing route for {endpoint_name}")
 
 
 @pytest.mark.asyncio
@@ -41,7 +34,7 @@ async def test_create_suite_route_derives_actor_and_calls_store():
 
 def test_run_case_route_requires_run_permission():
     with pytest.raises(HTTPException) as exc:
-        route_dependency("run_eval_case")(user=actor("user"))
+        route_dependency(agent_evals.router, "run_eval_case")(user=actor("user"))
     assert exc.value.status_code == 403
 
 

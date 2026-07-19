@@ -1,11 +1,8 @@
 /** Memory workbench client (Agno data/meta list, mutate, clear). */
 import { jsonInit, requestJson } from '@/shared/api/client'
-import { asRecord } from '@/shared/lib/format'
-import { normalizePaginatedList, type ListPaginationMeta } from '@/shared/lib/pagination'
+import type { ListPaginationMeta } from '@/shared/lib/pagination'
 
 export interface Memory {
-  /** UI key; always mirrored from API ``memory_id``. */
-  id: string
   memory_id: string
   memory: string
   topics?: string[]
@@ -19,40 +16,13 @@ export interface Memory {
   updated_at?: string
 }
 
-export type MemoryListMeta = ListPaginationMeta
-
-/** Agno-style memory list envelope after row normalize. */
-export type MemoryListResult = {
+/** Agno-style memory list envelope. */
+type MemoryListResult = {
   data: Memory[]
-  meta: MemoryListMeta
+  meta: ListPaginationMeta
 }
 
-/** Map Agno-native memory rows into UI Memory records. */
-export const normalizeMemory = (value: unknown): Memory | null => {
-  const row = asRecord(value)
-  const memoryId = String(row.memory_id ?? '').trim()
-  if (!memoryId) return null
-  const topicsRaw = row.topics
-  const topics = Array.isArray(topicsRaw)
-    ? topicsRaw.map((topic) => String(topic)).filter((topic) => topic.trim().length > 0)
-    : undefined
-  return {
-    id: memoryId,
-    memory_id: memoryId,
-    memory: String(row.memory ?? ''),
-    topics,
-    input: row.input != null ? String(row.input) : undefined,
-    user_id: row.user_id != null ? String(row.user_id) : undefined,
-    agent_id: row.agent_id != null ? String(row.agent_id) : undefined,
-    team_id: row.team_id != null ? String(row.team_id) : undefined,
-    feedback: row.feedback != null ? String(row.feedback) : undefined,
-    status: row.status != null ? String(row.status) : undefined,
-    created_at: row.created_at != null ? String(row.created_at) : undefined,
-    updated_at: row.updated_at != null ? String(row.updated_at) : undefined,
-  }
-}
-
-export type MemoryListParams = {
+type MemoryListParams = {
   search_content?: string
   user_id?: string
   topic?: string
@@ -68,23 +38,18 @@ export const getMemories = async (params: MemoryListParams = {}): Promise<Memory
   if (params.page != null) search.set('page', String(params.page))
   if (params.limit != null) search.set('limit', String(params.limit))
   const query = search.toString()
-  const payload = await requestJson<unknown>(`/memories${query ? `?${query}` : ''}`)
-  return normalizePaginatedList(payload, {
-    page: params.page ?? 1,
-    limit: params.limit ?? 20,
-    mapItem: normalizeMemory,
-  })
+  return requestJson<MemoryListResult>(`/memories${query ? `?${query}` : ''}`)
 }
 
-export const updateMemory = (id: string, memory: string, topics: string[]) =>
-  requestJson(`/memories/${encodeURIComponent(id)}`, jsonInit('PATCH', { memory, topics }))
+export const updateMemory = (memoryId: string, memory: string, topics: string[]) =>
+  requestJson(`/memories/${encodeURIComponent(memoryId)}`, jsonInit('PATCH', { memory, topics }))
 
-export const deleteMemory = (id: string, userId?: string) =>
-  requestJson(`/memories/${encodeURIComponent(id)}${userId ? `?user_id=${encodeURIComponent(userId)}` : ''}`, {
+export const deleteMemory = (memoryId: string, userId?: string) =>
+  requestJson(`/memories/${encodeURIComponent(memoryId)}${userId ? `?user_id=${encodeURIComponent(userId)}` : ''}`, {
     method: 'DELETE',
   })
 
-export type ClearMemoriesParams = {
+type ClearMemoriesParams = {
   user_id?: string
   /** Admin-only: wipe every memory in the store. */
   all_users?: boolean

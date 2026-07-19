@@ -186,11 +186,14 @@ test.describe('chat critical path', () => {
       await page.goto('/#/chat', { waitUntil: 'domcontentloaded' })
       await expect(page.locator('.chat-page, main').first()).toBeVisible({ timeout: 15_000 })
 
-      const input = page.locator('textarea').first()
+      const input = page.getByPlaceholder(/描述你要调查的问题|Describe your/i)
       await expect(input).toBeVisible()
       await input.fill('e2e cancel please')
+      await expect(input).toHaveValue('e2e cancel please')
 
-      await page.getByRole('button', { name: '发送消息' }).click()
+      const send = page.getByRole('button', { name: '发送消息' })
+      await expect(send).toBeEnabled()
+      await send.click()
 
       const stop = page.getByRole('button', { name: '停止生成' })
       await expect(stop).toBeVisible({ timeout: 10_000 })
@@ -255,10 +258,13 @@ test.describe('chat critical path', () => {
       await page.goto('/#/chat', { waitUntil: 'domcontentloaded' })
       await expect(page.locator('.chat-page, main').first()).toBeVisible({ timeout: 15_000 })
 
-      const input = page.locator('textarea').first()
+      const input = page.getByPlaceholder(/描述你要调查的问题|Describe your/i)
       await expect(input).toBeVisible()
       await input.fill('e2e retry then esc')
-      await page.getByRole('button', { name: '发送消息' }).click()
+      await expect(input).toHaveValue('e2e retry then esc')
+      const send = page.getByRole('button', { name: '发送消息' })
+      await expect(send).toBeEnabled()
+      await send.click()
 
       // Retry banner while backoff is in progress; Stop is the sender FAB (Esc).
       await expect(page.getByText(/重试|retry/i).first()).toBeVisible({ timeout: 10_000 })

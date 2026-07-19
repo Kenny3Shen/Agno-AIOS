@@ -13,10 +13,8 @@ export const login = async (email: string, password: string) => {
 
 export const getCurrentUser = () => requestJson<AuthUser>('/auth/users/me')
 
-export const getOAuthProviders = async () => {
-  const data = await requestJson<{ providers?: OAuthProvider[] }>('/auth/oauth/providers')
-  return data.providers ?? []
-}
+export const getOAuthProviders = async () =>
+  (await requestJson<{ providers: OAuthProvider[] }>('/auth/oauth/providers')).providers
 
 export const getOAuthAuthorization = async (provider: OAuthProvider) => {
   const data = await requestJson<{ authorization_url: string }>(`/auth/${encodeURIComponent(provider)}/authorize`)

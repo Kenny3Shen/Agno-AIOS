@@ -1,4 +1,4 @@
-export const AUTH_TOKEN_STORAGE_KEY = 'agno-aios-auth-token'
+const AUTH_TOKEN_STORAGE_KEY = 'agno-aios-auth-token'
 
 export const getToken = () => globalThis.localStorage?.getItem(AUTH_TOKEN_STORAGE_KEY) ?? null
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,6 +14,7 @@ from starlette.requests import Request
 from api.auth.models import User
 from api.routes import knowledge as knowledge_route
 from api.services import knowledge_service
+from api.tests.knowledge_fakes import scheduled_work
 from api.services.knowledge_upload_service import (
     MANAGED_UPLOAD_METADATA_KEY,
     MANAGED_UPLOAD_METADATA_VERSION,
@@ -23,10 +23,6 @@ from api.services.knowledge_upload_service import (
     remove_managed_upload_async,
     store_knowledge_upload_async,
 )
-
-
-def scheduled_work(task: dict[str, object]) -> Callable[[], Awaitable[dict[str, object]]]:
-    return cast(Callable[[], Awaitable[dict[str, object]]], task["work"])
 
 
 def test_json_ingest_options_accept_reader_specific_fields() -> None:
@@ -68,7 +64,6 @@ async def test_update_route_passes_rebuild_metadata_and_ingest_options_to_lifecy
                 "created_at": "",
                 "updated_at": "",
                 "status": "completed",
-                "status_message": "",
                 "type": ".md",
                 "size": 12,
                 "visibility": "private",
@@ -347,7 +342,6 @@ async def test_upload_route_ingests_persisted_path_with_browser_metadata(tmp_pat
                 "created_at": "",
                 "updated_at": "",
                 "status": "completed",
-                "status_message": "",
                 "type": ".md",
                 "size": 12,
                 "visibility": "private",
@@ -521,7 +515,6 @@ async def test_update_upload_route_replaces_selected_document_from_persisted_pat
                 "created_at": "",
                 "updated_at": "",
                 "status": "completed",
-                "status_message": "",
                 "type": ".md",
                 "size": 16,
                 "visibility": "private",

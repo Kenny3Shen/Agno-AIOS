@@ -1,13 +1,10 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
-  RECENT_CONVERSATIONS_STORAGE_KEY,
   defaultOpenNavigationGroupKeys,
   filterNavigationGroups,
   navigationGroupKeyForItemPath,
   navigationGroupMenuKey,
-  readRecentConversationsExpanded,
   withOpenNavigationGroup,
-  writeRecentConversationsExpanded,
   type NavigationGroup,
 } from './utils'
 
@@ -45,19 +42,6 @@ describe('shell navigation groups', () => {
   it('defaults to opening the first two navigation groups', () => {
     expect(defaultOpenNavigationGroupKeys(groups)).toEqual([navigationGroupMenuKey('workspace'), navigationGroupMenuKey('governance')])
     expect(defaultOpenNavigationGroupKeys([])).toEqual([])
-  })
-})
-
-describe('recent conversation preference', () => {
-  it('defaults to expanded and restores an explicit collapsed preference', () => {
-    expect(readRecentConversationsExpanded({ getItem: () => null })).toBe(true)
-    expect(readRecentConversationsExpanded({ getItem: () => 'false' })).toBe(false)
-  })
-
-  it('persists the expanded state under the shell storage key', () => {
-    const setItem = vi.fn<(key: string, value: string) => void>()
-    writeRecentConversationsExpanded(true, { setItem })
-    expect(setItem).toHaveBeenCalledWith(RECENT_CONVERSATIONS_STORAGE_KEY, 'true')
   })
 })
 
@@ -107,4 +91,3 @@ describe('deep-link navigation group expansion', () => {
     expect(withOpenNavigationGroup(open, null)).toEqual(open)
   })
 })
-

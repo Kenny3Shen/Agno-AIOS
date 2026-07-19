@@ -8,26 +8,50 @@ export const auditKeys = {
   list: (query: AuditLogQuery) => [...auditKeys.all, cleanAuditQuery(query)] as const,
 }
 
-const normalizeAuditLog = (value: unknown): AuditLog | null => {
-  if (!value || typeof value !== 'object') return null
+const isAuditId = (value: unknown): value is number | string =>
+  (typeof value === 'number' && Number.isFinite(value)) ||
+  (typeof value === 'string' && Boolean(value.trim()))
+
+const isJsonRecord = (value: unknown): value is AuditLog['metadata'] =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+
+const parseAuditLog = (value: unknown, context: string): AuditLog => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${context}: invalid audit log payload`)
+  }
   const row = value as Record<string, unknown>
-  if (row.id == null) return null
+  const id = row.id
+  const metadata = row.metadata
+  if (
+    !isAuditId(id) ||
+    typeof row.actor_user_id !== 'string' ||
+    typeof row.actor_email !== 'string' ||
+    typeof row.actor_role !== 'string' ||
+    typeof row.action !== 'string' ||
+    typeof row.resource_type !== 'string' ||
+    typeof row.resource_id !== 'string' ||
+    typeof row.status !== 'string' ||
+    typeof row.ip_address !== 'string' ||
+    typeof row.user_agent !== 'string' ||
+    !isJsonRecord(metadata) ||
+    typeof row.created_at !== 'string' ||
+    !row.created_at.trim()
+  ) {
+    throw new Error(`${context}: invalid audit log payload`)
+  }
   return {
-    id: row.id as number | string,
-    actor_user_id: String(row.actor_user_id ?? ''),
-    actor_email: String(row.actor_email ?? ''),
-    actor_role: String(row.actor_role ?? ''),
-    action: String(row.action ?? ''),
-    resource_type: String(row.resource_type ?? ''),
-    resource_id: String(row.resource_id ?? ''),
-    status: String(row.status ?? ''),
-    ip_address: String(row.ip_address ?? ''),
-    user_agent: String(row.user_agent ?? ''),
-    metadata:
-      row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
-        ? (row.metadata as AuditLog['metadata'])
-        : {},
-    created_at: String(row.created_at ?? ''),
+    id,
+    actor_user_id: row.actor_user_id,
+    actor_email: row.actor_email,
+    actor_role: row.actor_role,
+    action: row.action,
+    resource_type: row.resource_type,
+    resource_id: row.resource_id,
+    status: row.status,
+    ip_address: row.ip_address,
+    user_agent: row.user_agent,
+    metadata,
+    created_at: row.created_at,
   }
 }
 
@@ -39,8 +63,6 @@ export async function getAuditLogs(query: AuditLogQuery = {}): Promise<AuditLogR
   const queryString = search.toString()
   const raw = await requestJson<unknown>(`/audit/logs${queryString ? `?${queryString}` : ''}`)
   return normalizePaginatedList(raw, {
-    page: query.page ?? 1,
-    limit: query.limit ?? 20,
-    mapItem: normalizeAuditLog,
+    mapItem: (item) => parseAuditLog(item, 'getAuditLogs'),
   })
 }

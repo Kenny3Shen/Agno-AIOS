@@ -4,25 +4,19 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException, Request
-from fastapi.routing import APIRoute
 
 from api.routes import settings
 from api.auth.models import User
 from api.services import chat_settings_service
-
-
-def _route_dependency(endpoint_name: str):
-    for route in settings.router.routes:
-        if isinstance(route, APIRoute) and getattr(route.endpoint, "__name__", None) == endpoint_name:
-            return route.dependant.dependencies[0].call
-    raise AssertionError(f"missing route {endpoint_name}")
+from api.tests.route_fakes import route_dependency
+from api.utils.ttl_cache import TtlCache
 
 
 def test_chat_settings_routes_require_admin_scope() -> None:
     actor = SimpleNamespace(role="user", is_superuser=False)
     for endpoint in ("read_chat_settings", "patch_chat_settings"):
         with pytest.raises(HTTPException) as exc:
-            _route_dependency(endpoint)(user=actor)
+            route_dependency(settings.router, endpoint)(user=actor)
         assert exc.value.status_code == 403
 
 
@@ -80,10 +74,8 @@ async def test_chat_settings_service_applies_defaults_for_missing_columns() -> N
 
 
 @pytest.fixture(autouse=True)
-def _clear_chat_settings_cache():
-    chat_settings_service._invalidate_chat_settings_cache()
-    yield
-    chat_settings_service._invalidate_chat_settings_cache()
+def _chat_settings_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(chat_settings_service, "_SETTINGS_CACHE", TtlCache(ttl_sec=5.0))
 
 
 @pytest.mark.asyncio
@@ -101,4 +93,3 @@ async def test_get_chat_settings_uses_short_ttl_cache() -> None:
     assert first == second
     assert first["show_raw_reasoning"] is True
     assert get_row.await_count == 1
-

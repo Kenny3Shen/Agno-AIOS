@@ -134,23 +134,15 @@ export function useWorkflow() {
     queryFn: ({ pageParam }) => listWorkflows(pageParam, 100, debouncedLibrarySearch.trim()),
     initialPageParam: 1,
     placeholderData: keepPreviousData,
-    getNextPageParam: (lastPage) => {
-      const page = lastPage.meta.page
-      const limit = Math.max(1, lastPage.meta.limit)
-      const totalPages = lastPage.meta.total_pages
-      const totalCount = lastPage.meta.total_count
-      if (totalPages > 0) return page < totalPages ? page + 1 : undefined
-      if (totalCount > 0) {
-        const loadedApprox = (page - 1) * limit + lastPage.data.length
-        return loadedApprox < totalCount ? page + 1 : undefined
-      }
-      // Fallback when meta totals missing: full page implies another may exist.
-      if (lastPage.data.length >= limit) return page + 1
-      return undefined
-    },
+    getNextPageParam: (lastPage) =>
+      lastPage.meta.page < lastPage.meta.total_pages ? lastPage.meta.page + 1 : undefined,
   })
-  const workflowRecords = workflowsQuery.data?.pages.flatMap((page) => page.data) ?? []
-  const workflowListMeta = workflowsQuery.data?.pages.at(-1)?.meta
+  const workflowPages = workflowsQuery.data?.pages
+  const workflowRecords = useMemo(
+    () => workflowPages?.flatMap((page) => page.data) ?? [],
+    [workflowPages],
+  )
+  const workflowListMeta = workflowPages?.at(-1)?.meta
   const executorsQuery = useQuery({
     queryKey: ['workflows', 'executors'],
     queryFn: listExecutors,
@@ -404,7 +396,7 @@ export function useWorkflow() {
    * Returns how many Parallel-nested steps skipped enabling HITL.
    */
   const updateSelectedSteps = (
-    patch: Partial<Pick<WorkflowNode, 'targetId' | 'skills' | 'requiresConfirmation' | 'requiresUserInput' | 'requiresOutputReview' | 'instructions'>>,
+    changes: Partial<Pick<WorkflowNode, 'targetId' | 'skills' | 'requiresConfirmation' | 'requiresUserInput' | 'requiresOutputReview' | 'instructions'>>,
   ): number => {
     if (rejectIfRunning()) return 0
     // Precompute against current snapshot so toast count is Strict Mode-safe.
@@ -417,9 +409,9 @@ export function useWorkflow() {
     )
     if (!ids.length) return 0
     const hitlPatch =
-      patch.requiresConfirmation === true ||
-      patch.requiresUserInput === true ||
-      patch.requiresOutputReview === true
+      changes.requiresConfirmation === true ||
+      changes.requiresUserInput === true ||
+      changes.requiresOutputReview === true
     let skippedHitl = 0
     if (hitlPatch) {
       for (const id of ids) {
@@ -451,22 +443,22 @@ export function useWorkflow() {
       }, 600)
       let steps = current.steps
       const enablingHitl =
-        patch.requiresConfirmation === true ||
-        patch.requiresUserInput === true ||
-        patch.requiresOutputReview === true
+        changes.requiresConfirmation === true ||
+        changes.requiresUserInput === true ||
+        changes.requiresOutputReview === true
       for (const id of liveIds) {
         const node = findNode(steps, id)
         if (!node || node.type !== 'step') continue
         if (enablingHitl && isInsideParallel(steps, id)) {
           // Skip enabling HITL under Parallel; allow clearing flags.
-          const cleared = { ...patch }
-          if (patch.requiresConfirmation === true) cleared.requiresConfirmation = false
-          if (patch.requiresUserInput === true) cleared.requiresUserInput = false
-          if (patch.requiresOutputReview === true) cleared.requiresOutputReview = false
+          const cleared = { ...changes }
+          if (changes.requiresConfirmation === true) cleared.requiresConfirmation = false
+          if (changes.requiresUserInput === true) cleared.requiresUserInput = false
+          if (changes.requiresOutputReview === true) cleared.requiresOutputReview = false
           steps = updateNodeInTree(steps, id, (item) => ({ ...item, ...cleared }))
           continue
         }
-        steps = updateNodeInTree(steps, id, (item) => ({ ...item, ...patch }))
+        steps = updateNodeInTree(steps, id, (item) => ({ ...item, ...changes }))
       }
       return {
         ...current,
@@ -802,7 +794,7 @@ export function useWorkflow() {
           setState((current) => ({ ...current, loading: false }))
         })
     },
-    [applyRecord, workflowRecords],
+    [applyRecord, t, workflowRecords],
   )
 
   const applyTemplate = (templateId: string) => {

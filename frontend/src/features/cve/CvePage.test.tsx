@@ -19,6 +19,27 @@ const emptySearch = {
   meta: { page: 1, limit: 20, total_pages: 0, total_count: 0, search_time_ms: 0 },
 }
 
+const memberCurrentUserHandler = () =>
+  http.get('/api/auth/users/me', () =>
+    HttpResponse.json({
+      id: 'member-1',
+      email: 'member@example.com',
+      role: 'user',
+      scopes: ['cve:read'],
+    }),
+  )
+
+const adminCurrentUserHandler = () =>
+  http.get('/api/auth/users/me', () =>
+    HttpResponse.json({
+      id: 'admin-1',
+      email: 'admin@example.com',
+      role: 'admin',
+      scopes: ['cve:read', 'admin'],
+      is_superuser: true,
+    }),
+  )
+
 describe('CvePage', () => {
   beforeEach(() => {
     routerMock.searchStr = ''
@@ -28,14 +49,7 @@ describe('CvePage', () => {
     routerMock.searchStr = '?q=CVE-2021-44228'
     let seenQuery = ''
     server.use(
-      http.get('/api/auth/users/me', () =>
-        HttpResponse.json({
-          id: 'member-1',
-          email: 'member@example.com',
-          role: 'user',
-          scopes: ['cve:read'],
-        }),
-      ),
+      memberCurrentUserHandler(),
       http.post('/api/cve/search', async ({ request }) => {
         const payload = (await request.json()) as { query?: string }
         seenQuery = String(payload.query || '')
@@ -54,14 +68,7 @@ describe('CvePage', () => {
 
   it('disables database updates for non-admin users', async () => {
     server.use(
-      http.get('/api/auth/users/me', () =>
-        HttpResponse.json({
-          id: 'member-1',
-          email: 'member@example.com',
-          role: 'user',
-          scopes: ['cve:read'],
-        }),
-      ),
+      memberCurrentUserHandler(),
       http.post('/api/cve/search', () => HttpResponse.json(emptySearch)),
     )
 
@@ -73,15 +80,7 @@ describe('CvePage', () => {
   it('loads recent CVEs on mount and shows update counts for admin', async () => {
     let searchCalls = 0
     server.use(
-      http.get('/api/auth/users/me', () =>
-        HttpResponse.json({
-          id: 'admin-1',
-          email: 'admin@example.com',
-          role: 'admin',
-          scopes: ['cve:read', 'admin'],
-          is_superuser: true,
-        }),
-      ),
+      adminCurrentUserHandler(),
       http.post('/api/cve/search', async () => {
         searchCalls += 1
         return HttpResponse.json({

@@ -4,19 +4,35 @@ import {
   chatReducer,
   consumeSse,
   defaultReasoningEffort,
-  formatSkillLabel,
   formatSkillLabels,
   formatToolLabel,
-  humanizeToolId,
   initialChatState,
   normalizeMessages,
   previousPrompt,
   supportedReasoningEfforts,
-  isLastTurnAutoLean,
   isKnowledgeToggleActive,
   isLiveSearchToggleActive,
 } from './utils'
 import type { Message } from './types'
+
+const translateToolLabel = (key: string) =>
+  ({
+    'tools.hitl_simulate_containment': '模拟隔离资产',
+    'tools.basic_send_feishu_notify': '发送飞书通知',
+    'tools.playbook_list_workflows': '列出剧本',
+    'tools.get_skill_instructions': '读取 Skill 说明',
+  }[key] ?? key)
+
+const translateRetryDetail = (key: string, options?: Record<string, unknown>) => {
+  if (key === 'retryingDetailWithDelay') {
+    return `retry ${options?.attempt}/${options?.max} in ${options?.seconds}s`
+  }
+  if (key === 'retryingDetail') {
+    return `retry ${options?.attempt}/${options?.max}`
+  }
+  if (key === 'establishingRun') return 'starting'
+  return key
+}
 
 describe('chat behavior', () => {
   it('keeps stream chunks in arrival order', async () => {
@@ -95,10 +111,9 @@ describe('chat behavior', () => {
     expect(previousPrompt(messages, 'a')).toBe('inspect')
   })
 
-  it('updates the reasoning effort when changing the model or starting a new chat', () => {
+  it('updates the reasoning effort when changing the model', () => {
     const selected = chatReducer(initialChatState, { type: 'reasoning-effort', value: 'max' })
     expect(chatReducer(selected, { type: 'model', value: 'model-2', reasoningEffort: 'low' }).reasoningEffort).toBe('low')
-    expect(chatReducer(selected, { type: 'reset' }).reasoningEffort).toBeNull()
   })
 
   it('uses only supported explicit reasoning strengths and selects the configured default', () => {
@@ -325,6 +340,10 @@ describe('chat behavior', () => {
         role: 'assistant',
         content: 'pong',
         status: 'completed',
+        attachments: [{ name: 'evidence.pdf', mime: 'application/pdf', kind: 'document' }],
+        sources: [{ title: 'Incident report', url: 'https://example.test/report', snippet: 'summary' }],
+        tools: [{ id: 'lookup', name: 'CVE lookup', status: 'completed' }],
+        thought_chain: [{ id: 'plan', title: 'Plan', status: 'completed' }],
         lean_mode: true,
         enable_tools: true,
         search_knowledge: false,
@@ -361,7 +380,16 @@ describe('chat behavior', () => {
         skill_names: [],
       },
     ])
-    expect(messages[0]).toMatchObject({ leanMode: true, enableTools: true, searchKnowledge: false, skillNames: [] })
+    expect(messages[0]).toMatchObject({
+      leanMode: true,
+      enableTools: true,
+      searchKnowledge: false,
+      skillNames: [],
+      attachments: [{ name: 'evidence.pdf', mime: 'application/pdf', kind: 'document' }],
+      sources: [{ title: 'Incident report', url: 'https://example.test/report', snippet: 'summary' }],
+      tool_steps: [{ id: 'lookup', name: 'CVE lookup', status: 'success' }],
+      thought_chain: [{ id: 'plan', title: 'Plan', status: 'success' }],
+    })
     expect(messages[1]).toMatchObject({ leanMode: false, enableTools: true, searchKnowledge: true, skillNames: ['cve-intel-skill'] })
     expect(messages[2]).toMatchObject({ leanMode: false, enableTools: true, searchKnowledge: true, skillNames: null })
     expect(messages[3]).toMatchObject({ leanMode: false, enableTools: false, searchKnowledge: false, skillNames: [] })
@@ -371,45 +399,28 @@ describe('chat behavior', () => {
 
 describe('formatSkillLabel', () => {
   it('strips -skill and title-cases segments', () => {
-    expect(formatSkillLabel('cve-intel-skill')).toBe('CVE Intel')
-    expect(formatSkillLabel('playbook-skill')).toBe('Playbook')
-    expect(formatSkillLabel('hitl-containment-skill')).toBe('HITL Containment')
-    expect(formatSkillLabel('intranet-ip-skill')).toBe('Intranet IP')
-  })
-
-  it('joins multiple labels', () => {
-    expect(formatSkillLabels(['cve-intel-skill', 'playbook-skill'])).toBe('CVE Intel, Playbook')
+    expect(formatSkillLabels(['cve-intel-skill', 'playbook-skill', 'hitl-containment-skill', 'intranet-ip-skill'])).toBe(
+      'CVE Intel, Playbook, HITL Containment, Intranet IP',
+    )
   })
 })
 
 describe('formatToolLabel', () => {
-  const t = (key: string) =>
-    ({
-      'tools.hitl_simulate_containment': '模拟隔离资产',
-      'tools.basic_send_feishu_notify': '发送飞书通知',
-      'tools.playbook_list_workflows': '列出剧本',
-      'tools.get_skill_instructions': '读取 Skill 说明',
-    }[key] ?? key)
-
   it('maps builtin MCP tools via i18n', () => {
-    expect(formatToolLabel('hitl_simulate_containment', t)).toBe('模拟隔离资产')
-    expect(formatToolLabel('basic_send_feishu_notify', t)).toBe('发送飞书通知')
-    expect(formatToolLabel('playbook_list_workflows', t)).toBe('列出剧本')
-    expect(formatToolLabel('get_skill_instructions', t)).toBe('读取 Skill 说明')
+    expect(formatToolLabel('hitl_simulate_containment', translateToolLabel)).toBe('模拟隔离资产')
+    expect(formatToolLabel('basic_send_feishu_notify', translateToolLabel)).toBe('发送飞书通知')
+    expect(formatToolLabel('playbook_list_workflows', translateToolLabel)).toBe('列出剧本')
+    expect(formatToolLabel('get_skill_instructions', translateToolLabel)).toBe('读取 Skill 说明')
   })
 
   it('humanizes unknown tool ids', () => {
-    expect(humanizeToolId('external_lookup_asset')).toBe('External Lookup Asset')
+    expect(formatToolLabel('external_lookup_asset')).toBe('External Lookup Asset')
     expect(formatToolLabel('hitl_custom_action')).toBe('Custom Action')
   })
 })
 
 describe('toggle helpers', () => {
   it('activates knowledge/live search from explicit preferences when tools are on', () => {
-    expect(isLastTurnAutoLean(true, { leanMode: true, enableTools: true })).toBe(true)
-    expect(isLastTurnAutoLean(true, { leanMode: false, enableTools: true })).toBe(false)
-    expect(isLastTurnAutoLean(false, { leanMode: true, enableTools: true })).toBe(false)
-    // Auto-lean no longer dims manual knowledge / live-search toggles.
     expect(isKnowledgeToggleActive(true, true)).toBe(true)
     expect(isKnowledgeToggleActive(true, false)).toBe(false)
     expect(isLiveSearchToggleActive(true, true, true)).toBe(true)
@@ -419,25 +430,14 @@ describe('toggle helpers', () => {
 })
 
 describe('formatRetryDetail', () => {
-  const t = (key: string, options?: Record<string, unknown>) => {
-    if (key === 'retryingDetailWithDelay') {
-      return `retry ${options?.attempt}/${options?.max} in ${options?.seconds}s`
-    }
-    if (key === 'retryingDetail') {
-      return `retry ${options?.attempt}/${options?.max}`
-    }
-    if (key === 'establishingRun') return 'starting'
-    return key
-  }
-
   it('includes delay when provided', () => {
     expect(
-      formatRetryDetail({ attempt: 1, maxAttempts: 4, delaySeconds: 2.4, message: '503' }, t),
+      formatRetryDetail({ attempt: 1, maxAttempts: 4, delaySeconds: 2.4, message: '503' }, translateRetryDetail),
     ).toBe('retry 1/4 in 2s (503)')
   })
 
   it('omits delay when missing', () => {
-    expect(formatRetryDetail({ attempt: 2, maxAttempts: 4 }, t)).toBe('retry 2/4')
+    expect(formatRetryDetail({ attempt: 2, maxAttempts: 4 }, translateRetryDetail)).toBe('retry 2/4')
   })
 })
 
@@ -693,4 +693,3 @@ describe('formatRetryDetail', () => {
       { id: '2', title: '[数据分析] B', url: 'https://b.example' },
     ])
   })
-

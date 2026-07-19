@@ -3,30 +3,26 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
-from fastapi.routing import APIRoute
 
 from api.routes import workflows
-from api.services.workflow_compiler import WorkflowDefinitionError
+from api.services.workflow_compiler import (
+    WorkflowDefinitionError,
+    validate_and_normalize_definition,
+)
+from api.tests.route_fakes import route_dependency
 
 
 def actor(user_id: str = "u1", role: str = "user"):
     return SimpleNamespace(id=user_id, role=role, is_superuser=False, email="u@example.com")
 
 
-def route_dependency(endpoint_name: str):
-    for route in workflows.router.routes:
-        if isinstance(route, APIRoute) and getattr(route.endpoint, "__name__", "") == endpoint_name:
-            return route.dependant.dependencies[0].call
-    raise AssertionError(f"missing route for {endpoint_name}")
-
-
 def test_list_workflows_allows_user_with_workflows_read():
-    dependency = route_dependency("list_workflows")
+    dependency = route_dependency(workflows.router, "list_workflows")
     assert dependency(user=actor()) is not None
 
 
 def test_run_workflow_rejects_guest():
-    dependency = route_dependency("run_workflow")
+    dependency = route_dependency(workflows.router, "run_workflow")
     with pytest.raises(HTTPException) as exc:
         dependency(user=actor("g1", "guest"))
     assert exc.value.status_code == 403
@@ -103,7 +99,7 @@ async def test_trigger_history_requires_read_and_returns_data():
         patch.object(workflows, "get_workflow_for_actor", AsyncMock(return_value={"id": "wf-1"})),
         patch.object(
             workflows,
-            "list_audit_events_async",
+            "list_audit_logs_async",
             AsyncMock(side_effect=[(request_items, 1), ([], 0)]),
         ),
     ):
@@ -119,20 +115,31 @@ async def test_trigger_history_requires_read_and_returns_data():
 
 
 def test_run_workflow_allows_user_with_workflows_run():
-    dependency = route_dependency("run_workflow")
+    dependency = route_dependency(workflows.router, "run_workflow")
     assert dependency(user=actor()) is not None
 
 
 @pytest.mark.asyncio
 async def test_list_templates_returns_security_playbooks():
     result = await workflows.list_templates(user=actor())
-    assert "data" in result
+    assert result["meta"]["page"] == 1
+    assert result["meta"]["limit"] == len(result["data"])
+    assert result["meta"]["total_count"] == len(result["data"])
     ids = {item["id"] for item in result["data"]}
     assert "ir-triage" in ids
     assert "alert-fanout" in ids
-    # definitions compile-ready
     for item in result["data"]:
-        assert item["definition"]["steps"]
+        assert validate_and_normalize_definition(item["definition"])["steps"]
+
+
+@pytest.mark.asyncio
+async def test_list_executors_returns_data_meta_envelope():
+    result = await workflows.list_executors(user=actor())
+
+    assert result["meta"]["page"] == 1
+    assert result["meta"]["limit"] == len(result["data"])
+    assert result["meta"]["total_count"] == len(result["data"])
+    assert {item["ref"] for item in result["data"]} >= {"security-operations", "safe-fallback"}
 
 
 @pytest.mark.asyncio

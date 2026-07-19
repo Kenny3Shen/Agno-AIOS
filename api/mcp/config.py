@@ -21,7 +21,6 @@ from api.persistence.mcp import (
 )
 from api.services.runtime_paths import CONFIG_DIR
 from api.utils.async_once import AsyncOnce
-from api.utils.json import JSONDecodeError, loads
 
 SERVICE_IDS = ("playbook", "basic", "hitl")
 MCP_CONFIG_FILE = CONFIG_DIR / "mcp" / "mcp_config.json"
@@ -65,7 +64,7 @@ async def _seed_mcp_bootstrap() -> None:
                 "updated_at": now,
             }
         )
-    await _migrate_legacy_file_if_needed()
+    await _retire_legacy_mcp_config_file()
 
 
 async def bootstrap_mcp_config() -> None:
@@ -86,65 +85,14 @@ async def _archive_legacy_mcp_config_file(path: AsyncPath) -> None:
         logger.warning("unable to archive legacy MCP config at {}", path, exc_info=True)
 
 
-async def _migrate_legacy_file_if_needed() -> None:
-    rows = await list_server_rows()
+async def _retire_legacy_mcp_config_file() -> None:
     path = AsyncPath(MCP_CONFIG_FILE)
     if not await path.exists():
         return
-    if any(row["server_type"] == "external" for row in rows):
-        # Externals already live in Postgres; drop leftover one-shot file if present.
-        await _archive_legacy_mcp_config_file(path)
-        return
-    try:
-        raw = loads(await path.read_text(encoding="utf-8"))
-    except (JSONDecodeError, OSError, TypeError, ValueError):
-        logger.warning(
-            "legacy MCP config unreadable at {}; archive leftover and skip",
-            path,
-            exc_info=True,
-        )
-        await _archive_legacy_mcp_config_file(path)
-        return
-    if not isinstance(raw, dict):
-        logger.warning("legacy MCP config at {} is not an object; archive leftover", path)
-        await _archive_legacy_mcp_config_file(path)
-        return
-    entries = raw.get("mcp_servers") if isinstance(raw.get("mcp_servers"), list) else []
-    # No external entries left to import and builtins already seeded → just retire file.
-    if not entries and rows:
-        logger.info("archiving leftover MCP config with no external servers at {}", path)
-        await _archive_legacy_mcp_config_file(path)
-        return
-    now = int(time.time())
-    flags = raw.get("mcp") if isinstance(raw.get("mcp"), dict) else {}
-    by_name = {row["name"]: row for row in rows}
-    for service_id in SERVICE_IDS:
-        row = by_name.get(service_id)
-        if row is not None and service_id in flags:
-            await upsert_server_row({**row, "enabled": bool(flags[service_id]), "updated_at": now})
-    for entry in entries:
-        if not isinstance(entry, dict) or not str(entry.get("name") or "").strip():
-            continue
-        name = str(entry["name"]).strip()
-        try:
-            namespace = normalize_namespace(name)
-        except ValueError:
-            continue
-        await upsert_server_row(
-            {
-                "name": name,
-                "namespace": namespace,
-                "description": str(entry.get("description") or ""),
-                "server_type": "external",
-                "transport": "mcp-config",
-                "enabled": bool(entry.get("enabled", True)),
-                "visibility": str(entry.get("visibility") or "private"),
-                "owner_user_id": str(entry.get("owner_user_id") or ""),
-                "config": entry.get("manifest") if isinstance(entry.get("manifest"), dict) else {},
-                "created_at": now,
-                "updated_at": now,
-            }
-        )
+    logger.warning(
+        "retiring leftover MCP config file at {} (Postgres is source of truth)",
+        path,
+    )
     await _archive_legacy_mcp_config_file(path)
 
 

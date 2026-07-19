@@ -1,8 +1,6 @@
-import os
 from time import perf_counter
 from typing import Any, cast
 
-from anyio import to_thread
 from agno.models.message import Message
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from loguru import logger
@@ -11,8 +9,6 @@ from pydantic import BaseModel
 from api.auth.models import User
 from api.auth.claims import ADMIN_SCOPE
 from api.auth.scopes import require_scope
-from api.config import Settings, get_settings
-from api.dependencies import get_app_settings
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.model_config_service import (
     ModelConfig,
@@ -26,33 +22,6 @@ from api.services.chat_settings_service import get_chat_settings, update_chat_se
 
 router = APIRouter(prefix="/api", tags=["Settings"])
 
-# 可配置的环境变量白名单
-CONFIGURABLE_KEYS = [
-    "MCP_SERVER_URL",
-    "MCP_TOKEN",
-    "FEISHU_WEBHOOK_URL",
-    "NAV_TAGS",
-]
-
-
-def _mask_secret(key: str, value: str) -> str:
-    """对敏感字段做掩码处理，只返回前4位和后4位"""
-    if not value:
-        return ""
-    sensitive = ("KEY", "TOKEN", "SECRET", "PASSWORD")
-    if any(s in key.upper() for s in sensitive) and len(value) > 8:
-        return value[:4] + "*" * (len(value) - 8) + value[-4:]
-    return value
-
-
-class SettingsResponse(BaseModel):
-    settings: dict[str, str]
-
-
-class SettingsUpdate(BaseModel):
-    settings: dict[str, str]
-
-
 class ChatSettingsUpdate(BaseModel):
     show_raw_reasoning: bool | None = None
     show_raw_tool_io: bool | None = None
@@ -65,21 +34,6 @@ class ModelConnectivityTestResponse(BaseModel):
     latency_ms: int | None = None
     message: str
     status_code: int | None = None
-
-
-def _setting_value(settings: Settings, key: str) -> str:
-    runtime_value = os.environ.get(key)
-    if runtime_value is not None:
-        return runtime_value
-    if key == "MCP_SERVER_URL":
-        return settings.mcp_server_url
-    if key == "MCP_TOKEN":
-        return settings.mcp_token.get_secret_value()
-    if key == "FEISHU_WEBHOOK_URL":
-        return settings.feishu_webhook_url.get_secret_value()
-    if key == "NAV_TAGS":
-        return os.environ.get("NAV_TAGS", "{}")
-    return ""
 
 
 async def _resolve_model_secret(model: ModelConfig) -> dict[str, Any]:
@@ -151,19 +105,6 @@ async def run_model_connectivity_test(
     )
 
 
-@router.get("/settings")
-def read_settings(
-    _user: User = Depends(require_scope("config:read")),
-    settings: Settings = Depends(get_app_settings),
-) -> SettingsResponse:
-    """获取当前可配置项（敏感值已脱敏）"""
-    result: dict[str, str] = {}
-    for key in CONFIGURABLE_KEYS:
-        raw = _setting_value(settings, key)
-        result[key] = _mask_secret(key, raw)
-    return SettingsResponse(settings=result)
-
-
 @router.get("/settings/chat")
 async def read_chat_settings(
     _user: User = Depends(require_scope(ADMIN_SCOPE)),
@@ -188,7 +129,6 @@ async def patch_chat_settings(
         **audit_request_context(request),
     )
     return result
-
 
 @router.get("/models")
 async def get_models(_user: User = Depends(require_scope("config:read"))) -> dict:
@@ -236,38 +176,3 @@ async def test_model_connectivity(
         **audit_request_context(request),
     )
     return result
-
-
-@router.put("/settings")
-async def update_settings(
-    request: Request,
-    body: SettingsUpdate,
-    user: User = Depends(require_scope("config:write")),
-) -> SettingsResponse:
-    """更新配置项（运行时生效，写入 os.environ）"""
-    updated: dict[str, str] = {}
-    for key, value in body.settings.items():
-        if key not in CONFIGURABLE_KEYS:
-            continue
-        # 跳过掩码值（用户未修改）
-        if "*" in value:
-            continue
-        os.environ[key] = value
-        get_settings.cache_clear()
-        logger.info("配置已更新: {}", key)
-        updated[key] = _mask_secret(key, value)
-
-    # 返回完整配置
-    result: dict[str, str] = {}
-    active_settings = await to_thread.run_sync(get_settings)
-    for key in CONFIGURABLE_KEYS:
-        raw = _setting_value(active_settings, key)
-        result[key] = _mask_secret(key, raw)
-    await record_audit_event_async(
-        user,
-        action="settings.update",
-        resource_type="settings",
-        metadata={"keys": sorted(updated)},
-        **audit_request_context(request),
-    )
-    return SettingsResponse(settings=result)

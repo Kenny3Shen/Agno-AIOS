@@ -1,20 +1,6 @@
 import { expect, test, type Route } from '@playwright/test'
 import { openAuthed } from './fixtures'
 
-const document = {
-  id: 'doc-e2e-1',
-  title: 'E2E Knowledge Doc',
-  source: 'e2e',
-  chunks: 1,
-  created_at: '2026-07-16T12:00:00Z',
-  updated_at: '2026-07-16T12:00:00Z',
-  status: 'ready',
-  visibility: 'private',
-  owner_user_id: 'user-1',
-  can_manage: true,
-  metadata: {},
-}
-
 const processing = {
   id: 'processing:text:e2e',
   title: 'E2E Knowledge Doc',
@@ -31,14 +17,7 @@ const processing = {
 
 const emptyList = {
   data: [],
-  meta: { page: 1, limit: 12, total_pages: 0, total_count: 0, search_time_ms: 0 },
-  status: { rag_settings: { search_type: 'hybrid' } },
-}
-
-const listed = {
-  data: [document],
-  meta: { page: 1, limit: 12, total_pages: 1, total_count: 1, search_time_ms: 0 },
-  status: { rag_settings: { search_type: 'hybrid' } },
+  meta: { page: 1, limit: 12, total_pages: 0, total_count: 0, search_time_ms: 0, ingest_defaults: { search_type: 'hybrid' } },
 }
 
 async function fulfillJson(route: Route, body: unknown) {
@@ -50,18 +29,14 @@ async function fulfillJson(route: Route, body: unknown) {
 }
 
 test.describe('knowledge critical path', () => {
-  test('text ingest queues background work and lists document after refresh', async ({ page }) => {
+  test('text ingest queues background work without polling', async ({ page }) => {
     let listCalls = 0
     let createPosts = 0
     await openAuthed(page, '/dashboard', {
       handleApi: async ({ method, path, url, route }) => {
         if (path.endsWith('/api/knowledge') && method === 'GET') {
           listCalls += 1
-          await fulfillJson(route, listCalls > 1 ? listed : emptyList)
-          return true
-        }
-        if (path.endsWith('/api/knowledge/status') && method === 'GET') {
-          await fulfillJson(route, { rag_settings: { search_type: 'hybrid' } })
+          await fulfillJson(route, emptyList)
           return true
         }
         if (path.endsWith('/api/knowledge/documents/text') && method === 'POST') {
@@ -95,5 +70,6 @@ test.describe('knowledge critical path', () => {
       page.getByRole('row', { name: /E2E Knowledge Doc/ }).getByRole('cell', { name: 'E2E Knowledge Doc', exact: true }),
     ).toBeVisible({ timeout: 15_000 })
     expect(createPosts).toBe(1)
+    expect(listCalls).toBe(1)
   })
 })

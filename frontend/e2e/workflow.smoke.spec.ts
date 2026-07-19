@@ -39,12 +39,49 @@ const listEnvelope = {
   meta: { page: 1, limit: 50, total_pages: 1, total_count: 1, search_time_ms: 0 },
 }
 
+const staticListMeta = (totalCount: number) => ({
+  page: 1,
+  limit: Math.max(1, totalCount),
+  total_pages: totalCount ? 1 : 0,
+  total_count: totalCount,
+  search_time_ms: 0,
+})
+
+const executorsEnvelope = {
+  data: [
+    {
+      ref: 'security-operations',
+      kind: 'agent',
+      name: 'Security Operations',
+      description: '',
+    },
+  ],
+  meta: staticListMeta(1),
+}
+
+const templatesEnvelope = {
+  data: [],
+  meta: staticListMeta(0),
+}
+
 async function fulfillJson(route: Route, body: unknown) {
   await route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify(body),
   })
+}
+
+async function fulfillWorkflowCatalogRequest(method: string, path: string, route: Route): Promise<boolean> {
+  if (method === 'GET' && path.endsWith('/api/workflows/executors')) {
+    await fulfillJson(route, executorsEnvelope)
+    return true
+  }
+  if (method === 'GET' && path.endsWith('/api/workflows/templates')) {
+    await fulfillJson(route, templatesEnvelope)
+    return true
+  }
+  return false
 }
 
 
@@ -147,21 +184,7 @@ test.describe('workflow critical path', () => {
           await fulfillJson(route, workflow)
           return true
         }
-        if (method === 'GET' && path.endsWith('/api/workflows/executors')) {
-          await fulfillJson(route, {
-            data: [
-              {
-                ref: 'security-operations',
-                kind: 'agent',
-                name: 'Security Operations',
-                description: '',
-              },
-            ],
-          })
-          return true
-        }
-        if (method === 'GET' && path.endsWith('/api/workflows/templates')) {
-          await fulfillJson(route, { data: [] })
+        if (await fulfillWorkflowCatalogRequest(method, path, route)) {
           return true
         }
         if (method === 'GET' && path.endsWith('/api/skills')) {
@@ -205,21 +228,7 @@ test.describe('workflow critical path', () => {
           await fulfillJson(route, workflow)
           return true
         }
-        if (method === 'GET' && path.endsWith('/api/workflows/executors')) {
-          await fulfillJson(route, {
-            data: [
-              {
-                ref: 'security-operations',
-                kind: 'agent',
-                name: 'Security Operations',
-                description: '',
-              },
-            ],
-          })
-          return true
-        }
-        if (method === 'GET' && path.endsWith('/api/workflows/templates')) {
-          await fulfillJson(route, { data: [] })
+        if (await fulfillWorkflowCatalogRequest(method, path, route)) {
           return true
         }
         if (method === 'GET' && path.endsWith('/api/skills')) {
@@ -295,12 +304,12 @@ test.describe('workflow critical path', () => {
     await expect(page.getByRole('heading', { name: '工作流' })).toBeVisible()
     await expect(page.getByPlaceholder('工作流名称')).toHaveValue('E2E Workflow', { timeout: 10_000 })
 
-    // Run panel input + toolbar Run.
+    await page.getByRole('tab', { name: /运行记录|Run log/i }).click()
     const input = page.getByPlaceholder(/运行输入|告警摘要/)
     await expect(input).toBeVisible()
     await input.fill('e2e workflow alert summary')
 
-    await page.getByRole('button', { name: 'play-circle 运行' }).click()
+    await page.getByRole('button', { name: /^(运行|Run)$/i }).click()
 
     // Run log shows terminal + step events from the SSE stream (i18n tags).
     await expect.poll(() => runPosts, { timeout: 5_000 }).toBe(1)
@@ -353,21 +362,7 @@ test.describe('workflow critical path', () => {
           await fulfillJson(route, workflow)
           return true
         }
-        if (method === 'GET' && path.endsWith('/api/workflows/executors')) {
-          await fulfillJson(route, {
-            data: [
-              {
-                ref: 'security-operations',
-                kind: 'agent',
-                name: 'Security Operations',
-                description: '',
-              },
-            ],
-          })
-          return true
-        }
-        if (method === 'GET' && path.endsWith('/api/workflows/templates')) {
-          await fulfillJson(route, { data: [] })
+        if (await fulfillWorkflowCatalogRequest(method, path, route)) {
           return true
         }
         if (method === 'GET' && path.endsWith('/api/skills')) {
@@ -490,10 +485,11 @@ test.describe('workflow critical path', () => {
     await expect(page.getByRole('heading', { name: '工作流' })).toBeVisible()
     await expect(page.getByPlaceholder('工作流名称')).toHaveValue('E2E Workflow', { timeout: 10_000 })
 
+    await page.getByRole('tab', { name: /运行记录|Run log/i }).click()
     const input = page.getByPlaceholder(/运行输入|告警摘要/)
     await expect(input).toBeVisible()
     await input.fill('e2e pause for hitl')
-    await page.getByRole('button', { name: 'play-circle 运行' }).click()
+    await page.getByRole('button', { name: /^(运行|Run)$/i }).click()
 
     await expect.poll(() => runPosts, { timeout: 5_000 }).toBe(1)
     await expect(page.getByText(/等待审批|Paused for approval/i).first()).toBeVisible({
@@ -535,21 +531,7 @@ test.describe('workflow critical path', () => {
             await fulfillJson(route, workflow)
             return true
           }
-          if (method === 'GET' && path.endsWith('/api/workflows/executors')) {
-            await fulfillJson(route, {
-              data: [
-                {
-                  ref: 'security-operations',
-                  kind: 'agent',
-                  name: 'Security Operations',
-                  description: '',
-                },
-              ],
-            })
-            return true
-          }
-          if (method === 'GET' && path.endsWith('/api/workflows/templates')) {
-            await fulfillJson(route, { data: [] })
+          if (await fulfillWorkflowCatalogRequest(method, path, route)) {
             return true
           }
           if (method === 'GET' && path.endsWith('/api/skills')) {
@@ -614,10 +596,11 @@ test.describe('workflow critical path', () => {
       await expect(page.getByRole('heading', { name: '工作流' })).toBeVisible()
       await expect(page.getByPlaceholder('工作流名称')).toHaveValue('E2E Workflow', { timeout: 10_000 })
 
+      await page.getByRole('tab', { name: /运行记录|Run log/i }).click()
       const input = page.getByPlaceholder(/运行输入|告警摘要/)
       await expect(input).toBeVisible()
       await input.fill('e2e workflow stop please')
-      await page.getByRole('button', { name: 'play-circle 运行' }).click()
+      await page.getByRole('button', { name: /^(运行|Run)$/i }).click()
 
       await expect.poll(() => runPosts, { timeout: 5_000 }).toBe(1)
       // Wait until Studio is actually streaming (toolbar Stop only mounts while running).
@@ -677,21 +660,7 @@ test.describe('workflow critical path', () => {
           await fulfillJson(route, current)
           return true
         }
-        if (method === 'GET' && path.endsWith('/api/workflows/executors')) {
-          await fulfillJson(route, {
-            data: [
-              {
-                ref: 'security-operations',
-                kind: 'agent',
-                name: 'Security Operations',
-                description: '',
-              },
-            ],
-          })
-          return true
-        }
-        if (method === 'GET' && path.endsWith('/api/workflows/templates')) {
-          await fulfillJson(route, { data: [] })
+        if (await fulfillWorkflowCatalogRequest(method, path, route)) {
           return true
         }
         if (method === 'GET' && path.endsWith('/api/skills')) {
@@ -753,7 +722,7 @@ test.describe('workflow critical path', () => {
     // Unpublished status should be visible before publish.
     await expect(page.getByText(/未发布|Unpublished/i).first()).toBeVisible()
 
-    await page.getByRole('button', { name: /cloud-upload 发布|Publish/i }).click()
+    await page.getByRole('button', { name: /^(发布|Publish)$/i }).click()
     await expect.poll(() => publishCalls, { timeout: 10_000 }).toBe(1)
     await expect(page.getByText(/已发布|Published/i).first()).toBeVisible({ timeout: 10_000 })
   })
@@ -786,21 +755,7 @@ test.describe('workflow critical path', () => {
           await fulfillJson(route, draft)
           return true
         }
-        if (method === 'GET' && path.endsWith('/api/workflows/executors')) {
-          await fulfillJson(route, {
-            data: [
-              {
-                ref: 'security-operations',
-                kind: 'agent',
-                name: 'Security Operations',
-                description: '',
-              },
-            ],
-          })
-          return true
-        }
-        if (method === 'GET' && path.endsWith('/api/workflows/templates')) {
-          await fulfillJson(route, { data: [] })
+        if (await fulfillWorkflowCatalogRequest(method, path, route)) {
           return true
         }
         if (method === 'GET' && path.endsWith('/api/skills')) {
@@ -855,17 +810,15 @@ test.describe('workflow critical path', () => {
     await expect(page.getByPlaceholder('工作流名称')).toHaveValue('E2E Workflow', { timeout: 10_000 })
     await expect(page.getByText(/未发布|Unpublished/i).first()).toBeVisible()
 
-    // Right panel uses Collapse (not Tabs): expand "定义与触发".
-    const defPanel = page.locator('.ant-collapse-item').filter({ hasText: /定义与触发|Definition/i }).first()
-    await expect(defPanel).toBeVisible({ timeout: 10_000 })
-    if (!(await defPanel.locator('.ant-collapse-content-active').count())) {
-      await defPanel.locator('.ant-collapse-header').click()
-    }
-    const webhookRow = defPanel.locator('.workflow-inspector__switch').filter({
+    await page.getByRole('tab', { name: /运行记录|Run log/i }).click()
+    const definitionToggle = page.getByRole('button', { name: /定义与触发|Definition/i })
+    const webhookRow = page.locator('.workflow-inspector__switch').filter({
       hasText: /Webhook/,
     })
+    if (!(await webhookRow.isVisible())) await definitionToggle.click()
     await expect(webhookRow).toBeVisible({ timeout: 10_000 })
-    await webhookRow.locator('.ant-switch').click()
+    const webhookSwitch = webhookRow.locator('.ant-switch')
+    await webhookSwitch.click()
 
     const dialog = page.getByRole('dialog').filter({ hasText: /需要先发布|Publish required/i })
     await expect(dialog).toBeVisible({ timeout: 10_000 })
@@ -875,7 +828,8 @@ test.describe('workflow critical path', () => {
     // enable was never applied when unpublished.
     await page.keyboard.press('Escape')
     await expect(dialog).toBeHidden({ timeout: 5_000 })
-    await expect(webhookRow.locator('.ant-switch')).not.toHaveClass(/ant-switch-checked/)
+    if (!(await webhookRow.isVisible())) await definitionToggle.click()
+    await expect(webhookSwitch).not.toHaveClass(/ant-switch-checked/)
   })
 
 

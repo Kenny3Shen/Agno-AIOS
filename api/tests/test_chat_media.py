@@ -33,8 +33,6 @@ def test_process_chat_uploads_image_and_pdf():
     assert len(bundle.attachments) == 2
     assert bundle.attachments[0]["kind"] == "image"
     assert bundle.attachments[1]["kind"] == "document"
-    kwargs = chat_media.media_kwargs(bundle)
-    assert "images" in kwargs and "files" in kwargs
 
 
 def test_process_chat_uploads_rejects_empty():
@@ -59,9 +57,3 @@ def test_process_chat_uploads_rejects_too_many(monkeypatch):
         raise AssertionError("expected HTTPException")
     except HTTPException as exc:
         assert exc.status_code == 400
-
-
-def test_media_kwargs_empty():
-    empty = chat_media.ChatMediaBundle()
-    assert empty.empty
-    assert chat_media.media_kwargs(empty) == {}

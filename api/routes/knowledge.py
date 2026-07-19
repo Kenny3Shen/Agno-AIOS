@@ -13,10 +13,8 @@ from api.auth.scopes import require_scope
 from api.auth.visibility import can_manage_resource
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.knowledge_document_service import KnowledgeDocumentPayload
-from api.services.knowledge_service import (
-    get_knowledge_base_lifecycle,
-    update_rag_settings_async,
-)
+from api.services.knowledge_rag_settings_service import current_ingest_defaults
+from api.services.knowledge_service import get_knowledge_base_lifecycle
 from api.utils.pagination import pagination_meta
 from api.services.knowledge_upload_service import (
     KnowledgeUploadTooLargeError,
@@ -138,7 +136,6 @@ def _processing_document_payload(
     """Placeholder row returned while vectorize runs in the background."""
     meta: dict[str, str] = {
         "status": "processing",
-        "status_message": "后台解析与向量化中",
         "title": title,
         "source": source,
     }
@@ -163,7 +160,6 @@ def _processing_document_payload(
             "created_at": "",
             "updated_at": "",
             "status": "processing",
-            "status_message": "后台解析与向量化中",
             "type": file_type or (Path(file_name).suffix.lower() if file_name else ""),
             "size": file_size,
             "visibility": visibility,
@@ -201,14 +197,6 @@ class KnowledgeTextRequest(BaseModel):
     ingest_options: KnowledgeIngestOptionsRequest | None = None
 
 
-class KnowledgeFileRequest(BaseModel):
-    path: str = Field(..., min_length=1)
-    title: str | None = None
-    source: str | None = None
-    visibility: str = "private"
-    ingest_options: KnowledgeIngestOptionsRequest | None = None
-
-
 class KnowledgeDocumentMetadataUpdateRequest(BaseModel):
     title: str | None = None
     source: str | None = None
@@ -231,26 +219,6 @@ class KnowledgeSearchRequest(BaseModel):
         default=None,
         description="vector / keyword / hybrid，默认使用 TAIS_KNOWLEDGE_SEARCH_TYPE",
     )
-
-
-class KnowledgeRagSettingsRequest(BaseModel):
-    embedding_model: str | None = None
-    embedding_dimensions: int | None = Field(default=None, ge=1)
-    rerank_model: str | None = None
-    query_prompt: str | None = None
-    top_k: int | None = Field(default=None, ge=1)
-    chunk_size: int | None = Field(default=None, ge=200)
-    chunk_overlap: int | None = Field(default=None, ge=0)
-    code_chunk_size: int | None = Field(default=None, ge=256)
-    semantic_threshold: float | None = Field(default=None, ge=0, le=1)
-    vector_score_weight: float | None = Field(default=None, ge=0, le=1)
-    content_language: str | None = None
-    prefix_match: bool | None = None
-    rerank_enabled: bool | None = None
-    rerank_candidate_multiplier: int | None = Field(default=None, ge=1)
-    rerank_min_candidates: int | None = Field(default=None, ge=1)
-    device: str | None = None
-    search_type: str | None = None
 
 
 def ingest_options_from_form(
@@ -302,7 +270,7 @@ def ingest_options_from_form(
 
 
 @router.get("")
-async def get_knowledge_status(
+async def list_knowledge(
     query: str = Query(default="", max_length=200),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=100),
@@ -320,13 +288,6 @@ async def get_knowledge_status(
         sort_by=sort_by,
         sort_order=sort_order,
     )
-    document_count = total
-    if query:
-        _, document_count = await knowledge_base.list_documents_page_async(
-            owner_user_id=owner_user_id,
-            page=1,
-            limit=1,
-        )
     return {
         "data": with_manage_flags(page_documents, user),
         "meta": pagination_meta(
@@ -336,11 +297,7 @@ async def get_knowledge_status(
             query=query,
             sort_by=sort_by,
             sort_order=sort_order,
-        ),
-        # Workspace RAG/health snapshot (not list envelope); keep beside data/meta.
-        "status": await knowledge_base.knowledge_status_async(
-            owner_user_id=owner_user_id,
-            document_count=document_count,
+            ingest_defaults=current_ingest_defaults(),
         ),
     }
 
@@ -395,60 +352,6 @@ async def create_text_document(
         visibility=request.visibility,
         file_type=".txt",
         metadata={"input_mode": "text"},
-    )
-
-
-@router.post("/documents/file", response_model=None)
-async def create_file_document(
-    request_ctx: Request,
-    request: KnowledgeFileRequest,
-    user: User = Depends(require_scope("knowledge:write")),
-) -> KnowledgeDocumentResponsePayload:
-    ingest_options = (
-        request.ingest_options.model_dump(exclude_none=True)
-        if request.ingest_options is not None
-        else None
-    )
-    owner = actor_id(user)
-    job_id = f"processing:file:{owner}:{abs(hash(request.path)) % 10**12}"
-    path_name = Path(request.path).name
-    path_stem = Path(request.path).stem
-    clean_title = (request.title or path_stem).strip() or path_stem
-    clean_source = (request.source or request.path).strip() or request.path
-
-    async def _bg_ingest() -> KnowledgeDocumentResponsePayload:
-        result = await get_knowledge_base_lifecycle().add_file_document_async(
-            path=request.path,
-            title=request.title,
-            source=request.source,
-            owner_user_id=owner,
-            visibility=request.visibility,
-            ingest_options=ingest_options,
-        )
-        return cast(KnowledgeDocumentResponsePayload, {**result, "can_manage": True})
-
-    _schedule_knowledge_ingest(
-        task_name=f"knowledge-bg-file:{job_id}",
-        work=_bg_ingest,
-        user=user,
-        audit_action="knowledge.create",
-        audit_resource_id=job_id,
-        audit_metadata={
-            "path": request.path,
-            "source": request.source or request.path,
-            "async_ingest": True,
-        },
-        request_ctx=request_ctx,
-    )
-    return _processing_document_payload(
-        job_id=job_id,
-        title=clean_title,
-        source=clean_source,
-        owner_user_id=owner,
-        visibility=request.visibility,
-        file_name=path_name,
-        file_type=Path(request.path).suffix.lower(),
-        metadata={"input_mode": "path"},
     )
 
 
@@ -824,31 +727,6 @@ async def search_knowledge(
         }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.patch("/settings/rag")
-async def update_rag_settings(
-    request_ctx: Request,
-    request: KnowledgeRagSettingsRequest,
-    user: User = Depends(require_scope("config:write")),
-) -> dict:
-    try:
-        settings = await update_rag_settings_async(request.model_dump(exclude_unset=True))
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    await record_audit_event_async(
-        user,
-        action="knowledge.rag_settings_update",
-        resource_type="knowledge",
-        metadata={"settings": settings},
-        **audit_request_context(request_ctx),
-    )
-    return {
-        "settings": settings,
-        "status": await get_knowledge_base_lifecycle().knowledge_status_async(
-            owner_user_id=effective_knowledge_user_filter(user),
-        ),
-    }
 
 
 @router.delete("")

@@ -127,5 +127,5 @@
   "strategyCsv": "CSV 行",
   "strategyJson": "JSON",
   "strategyDocument": "文档",
-  "ingestQueued": "已提交后台入库，列表稍后刷新"
+  "ingestQueued": "已提交后台入库"
 }

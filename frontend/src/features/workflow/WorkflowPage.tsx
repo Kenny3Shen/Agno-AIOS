@@ -105,6 +105,9 @@ export function WorkflowPage() {
   const formatDate = useFormatDate()
   const routerNav = useRouter()
   const workflow = useWorkflow()
+  const patchMetaRef = useRef(workflow.patchMeta)
+  patchMetaRef.current = workflow.patchMeta
+  const selectWorkflowNode = workflow.select
   const copyWithGuard = () => {
     if (!workflow.copySelected()) {
       message.info(t('copyEmptySelection'))
@@ -264,22 +267,26 @@ export function WorkflowPage() {
     hasScope(currentUser.data, 'workflows:run') ||
     hasScope(currentUser.data, 'workflows:write')
   const canWrite = hasScope(currentUser.data, 'workflows:write')
+  const workflowRunning = workflow.state.running
+  const workflowSaving = workflow.state.saving
+  const workflowLoading = workflow.state.loading
+  const workflowError = workflow.state.error
 
   // Focus run tab when a run starts so operators see live log without hunting panels.
   useEffect(() => {
-    if (workflow.state.running) setRightRailTab('run')
-  }, [workflow.state.running])
+    if (workflowRunning) setRightRailTab('run')
+  }, [workflowRunning])
 
   // Soft banners (e.g. server cancel failed, validation) auto-dismiss; keep hard
   // run failure visible via run-status Alert while a failed duty banner is shown.
   useEffect(() => {
-    if (!workflow.state.error) return
-    if (workflow.state.running || workflow.state.saving) return
+    if (!workflowError) return
+    if (workflowRunning || workflowSaving) return
     const timer = window.setTimeout(() => {
-      workflow.patchMeta({ error: null })
+      patchMetaRef.current({ error: null })
     }, 8_000)
     return () => window.clearTimeout(timer)
-  }, [workflow.state.error, workflow.state.running, workflow.state.saving, workflow.patchMeta])
+  }, [workflowError, workflowRunning, workflowSaving])
 
   // Ctrl/⌘S save from canvas or inspector (not when a modal owns keyboard).
 
@@ -293,7 +300,7 @@ export function WorkflowPage() {
       if (event.defaultPrevented) return
       if (isOverlayEscapeTarget(event.target)) return
       if (!canWriteSaveRef.current) return
-      if (workflow.state.saving || workflow.state.loading) return
+      if (workflowSaving || workflowLoading) return
       event.preventDefault()
       void saveRef.current().then((ok) => {
         if (ok) message.success(t('saveSuccess'))
@@ -301,7 +308,7 @@ export function WorkflowPage() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [workflow.state.saving, workflow.state.loading])
+  }, [workflowSaving, workflowLoading, message, t])
 
 
   const publishStatusLabel = (() => {
@@ -444,7 +451,8 @@ export function WorkflowPage() {
   const stepInsideParallel = Boolean(
     step && isInsideParallel(workflow.state.steps, step.id),
   )
-  const executors = workflow.executorsQuery.data ?? []
+  const executorData = workflow.executorsQuery.data
+  const executors = useMemo(() => executorData ?? [], [executorData])
   const executorNames = useMemo(() => {
     const map = new Map<string, string>()
     for (const item of executors) {
@@ -519,7 +527,7 @@ export function WorkflowPage() {
     (nodeId: string) => {
       setRightRailTab('props')
       focusFieldRef.current = 'name'
-      workflow.select(nodeId)
+      selectWorkflowNode(nodeId)
       // Direct focus (validation effect only runs when issues exist).
       window.setTimeout(() => {
         const panel = inspectorPanelRef.current
@@ -544,7 +552,7 @@ export function WorkflowPage() {
         }
       }, 80)
     },
-    [workflow.select],
+    [selectWorkflowNode],
   )
 
   // Expand run log when a run starts so output is visible without manual open.
@@ -642,9 +650,8 @@ export function WorkflowPage() {
         </div>
         {/* Pure icon toolbar (tooltip labels); handlers unchanged. */}
         <div className="workflow-studio__actions workflow-studio__actions--drawio">
-          <div
+          <section
             className="workflow-studio__action-group"
-            role="group"
             aria-label={t('toolbarGroupFile')}
           >
             <Tooltip title={t('new')} getPopupContainer={studioPopupContainer}>
@@ -655,11 +662,10 @@ export function WorkflowPage() {
                 onClick={workflow.reset}
               />
             </Tooltip>
-          </div>
+          </section>
           <span className="workflow-studio__action-sep" aria-hidden />
-          <div
+          <section
             className="workflow-studio__action-group"
-            role="group"
             aria-label={t('toolbarGroupEdit')}
           >
             <Tooltip title={t('undoHint')} getPopupContainer={studioPopupContainer}>
@@ -678,11 +684,10 @@ export function WorkflowPage() {
                 onClick={workflow.redo}
               />
             </Tooltip>
-          </div>
+          </section>
           <span className="workflow-studio__action-sep" aria-hidden />
-          <div
+          <section
             className="workflow-studio__action-group"
-            role="group"
             aria-label={t('toolbarGroupLayout')}
           >
             <Tooltip title={t('organizeHint')} getPopupContainer={studioPopupContainer}>
@@ -709,11 +714,10 @@ export function WorkflowPage() {
             >
               <Button type="text" icon={<QuestionCircleOutlined />} aria-label={t('keyboardHintsTitle')} />
             </Tooltip>
-          </div>
+          </section>
           <span className="workflow-studio__action-sep" aria-hidden />
-          <div
+          <section
             className="workflow-studio__action-group"
-            role="group"
             aria-label={t('toolbarGroupDeploy')}
           >
             <Tooltip
@@ -757,11 +761,10 @@ export function WorkflowPage() {
                 }}
               />
             </Tooltip>
-          </div>
+          </section>
           <span className="workflow-studio__action-sep" aria-hidden />
-          <div
+          <section
             className="workflow-studio__action-group"
-            role="group"
             aria-label={t('toolbarGroupRun')}
           >
             <Tooltip
@@ -798,7 +801,7 @@ export function WorkflowPage() {
                 />
               </Tooltip>
             ) : null}
-          </div>
+          </section>
         </div>
       </header>
       {workflowListMeta &&
@@ -1004,10 +1007,11 @@ export function WorkflowPage() {
               placeholder={t('loadPlaceholder')}
               value={workflow.state.workflowId ?? undefined}
               allowClear
-              showSearch
-              filterOption={false}
-              searchValue={workflow.librarySearch}
-              onSearch={workflow.setLibrarySearch}
+              showSearch={{
+                filterOption: false,
+                searchValue: workflow.librarySearch,
+                onSearch: workflow.setLibrarySearch,
+              }}
               onClear={() => workflow.setLibrarySearch('')}
               loading={
                 workflow.state.loading ||
@@ -1174,7 +1178,7 @@ export function WorkflowPage() {
                 label: t('inspector'),
                 children: (
                   <div
-                    ref={inspectorPanelRef as never}
+                    ref={inspectorPanelRef}
                     className={`workflow-studio__tab-pane${workflow.state.running ? ' is-definition-locked' : ''}`}
                   >
                     <div className="workflow-studio__tab-pane-body workflow-studio__tab-pane-body--scroll">
@@ -1359,7 +1363,7 @@ export function WorkflowPage() {
                           style={{ width: '100%' }}
                           placeholder={t('multiSelectSkillsPlaceholder')}
                           options={enabledSkillOptions}
-                          optionFilterProp="label"
+                          showSearch={{ optionFilterProp: 'label' }}
                           value={sharedSkills}
                           loading={skillsQuery.isLoading}
                           getPopupContainer={studioPopupContainer}
@@ -1570,7 +1574,7 @@ export function WorkflowPage() {
                       style={{ width: '100%', marginTop: 4 }}
                       placeholder={t('stepSkillsPlaceholder')}
                       options={enabledSkillOptions}
-                      optionFilterProp="label"
+                      showSearch={{ optionFilterProp: 'label' }}
                       value={step.skills ?? []}
                       loading={skillsQuery.isLoading}
                       getPopupContainer={studioPopupContainer}

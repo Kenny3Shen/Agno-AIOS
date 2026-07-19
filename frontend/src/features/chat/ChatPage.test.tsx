@@ -10,6 +10,8 @@ const chat = {
   state: { messages: [], input: '', requesting: false, error: null, selectedModelId: 'long', reasoningEffort: null, searchKnowledge: true, liveSearch: false, enableTools: true },
   sessionId: null as string | null,
   sessions: { data: [] },
+  agents: { data: [] },
+  selectedAgentId: null as string | null,
   activeSessionMeta: undefined as
     | {
         session_id: string
@@ -23,10 +25,10 @@ const chat = {
   sessionMetaLoading: false,
   sessionMetaFailed: false,
   sessionMetaError: null as Error | null,
-  sessionMetaRefetch: vi.fn(),
+  sessionMetaRefetch: vi.fn<() => void>(),
   sessionMissing: false,
   attachments: [] as File[],
-  setAttachments: vi.fn(),
+  setAttachments: vi.fn<(attachments: File[]) => void>(),
   history: {
     data: [] as unknown[],
     isError: false,
@@ -34,7 +36,7 @@ const chat = {
     isPending: false,
     isFetching: false,
     error: null as Error | null,
-    refetch: vi.fn(),
+    refetch: vi.fn<() => void>(),
   },
   models: {
     isLoading: false,
@@ -101,7 +103,12 @@ const chat = {
 
 vi.mock('@tanstack/react-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tanstack/react-router')>()),
-  useRouter: () => ({ history: { push: vi.fn<(path: string) => void>(), replace: vi.fn() } }),
+  useRouter: () => ({
+    history: {
+      push: vi.fn<(path: string) => void>(),
+      replace: vi.fn<(path: string) => void>(),
+    },
+  }),
   useRouterState: ({ select }: { select: (state: { location: { searchStr: string; pathname: string } }) => unknown }) =>
     select({ location: { searchStr: '', pathname: '/chat' } }),
   // useBlocker needs a real RouterProvider; no-op in unit tests.
@@ -110,17 +117,21 @@ vi.mock('@tanstack/react-router', async (importOriginal) => ({
 vi.mock('./ChatTaskPanel', () => ({ ChatTaskPanel: () => null }))
 vi.mock('./useChat', () => ({ useChat: () => chat }))
 const { unarchiveSessionMock } = vi.hoisted(() => ({
-  unarchiveSessionMock: vi.fn(async () => ({ success: true, archived: false })),
+  unarchiveSessionMock: vi.fn<() => Promise<{ success: boolean; archived: boolean }>>(
+    async () => ({ success: true, archived: false }),
+  ),
 }))
 vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
   unarchiveSession: unarchiveSessionMock,
 }))
 
+beforeEach(() => {
+  HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
+})
 
 describe('chat model settings', () => {
   beforeEach(() => {
-    HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
     ;(chat.state as { reasoningEffort: string | null }).reasoningEffort = null
     ;(chat.state as { requesting: boolean }).requesting = false
     chat.dispatch.mockClear()
@@ -173,12 +184,11 @@ describe('chat model settings', () => {
 
 describe('chat stop shortcuts', () => {
   beforeEach(() => {
-    HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
     ;(chat.state as { requesting: boolean }).requesting = false
     chat.cancel.mockClear()
   })
 
-  it('stops generation when Escape is pressed during a request', async () => {
+  it('stops generation when Escape is pressed during a request', () => {
     ;(chat.state as { requesting: boolean }).requesting = true
     renderWithQuery(<ChatPage />)
 
@@ -186,16 +196,14 @@ describe('chat stop shortcuts', () => {
     expect(chat.cancel).toHaveBeenCalledTimes(1)
   })
 
-  it('does not stop when Escape is pressed while idle', async () => {
+  it('does not stop when Escape is pressed while idle', () => {
     ;(chat.state as { requesting: boolean }).requesting = false
     renderWithQuery(<ChatPage />)
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     expect(chat.cancel).not.toHaveBeenCalled()
   })
-})
-
-  it('does not stop when Escape is pressed while a modal is open', async () => {
+  it('does not stop when Escape is pressed while a modal is open', () => {
     ;(chat.state as { requesting: boolean }).requesting = true
     const wrap = document.createElement('div')
     wrap.className = 'ant-modal-wrap'
@@ -208,15 +216,15 @@ describe('chat stop shortcuts', () => {
       wrap.remove()
     }
   })
+})
 
 describe('chat history load failure', () => {
   beforeEach(() => {
-    HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
     chat.sessionId = 'session-err'
     chat.history.isError = true
     chat.history.isFetching = false
     chat.history.error = new Error('history boom')
-    chat.history.refetch = vi.fn()
+    chat.history.refetch = vi.fn<() => void>()
     chat.state.messages = []
     chat.state.requesting = false
   })
@@ -236,7 +244,6 @@ describe('chat history load failure', () => {
 
 describe('chat history loading state', () => {
   beforeEach(() => {
-    HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
     chat.sessionId = 'session-loading'
     chat.history.isError = false
     chat.history.isLoading = true
@@ -257,7 +264,6 @@ describe('chat history loading state', () => {
 
 describe('chat missing session', () => {
   beforeEach(() => {
-    HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
     chat.sessionId = 'gone'
     chat.sessionMissing = true
     chat.sessionMetaLoading = false
@@ -274,7 +280,7 @@ describe('chat missing session', () => {
     const user = setupUser()
     renderWithQuery(<ChatPage />)
     expect(screen.queryByText('从哪里开始调查？')).toBeNull()
-    const status = screen.getByRole('status')
+    const status = screen.getByRole('region', { name: /not found|不存在|无权/i })
     expect(status.textContent || '').toMatch(/not found|不存在|无权/i)
     await user.click(screen.getByRole('button', { name: '新建分析' }))
     expect(chat.newChat).toHaveBeenCalled()
@@ -284,7 +290,6 @@ describe('chat missing session', () => {
 
 describe('chat archived session header', () => {
   beforeEach(() => {
-    HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
     chat.sessionId = 'arch-1'
     chat.sessionMissing = false
     chat.sessionMetaLoading = false
@@ -318,13 +323,12 @@ describe('chat archived session header', () => {
 
 describe('chat session meta load failure', () => {
   beforeEach(() => {
-    HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
     chat.sessionId = 'session-meta-err'
     chat.sessionMissing = false
     chat.sessionMetaLoading = false
     chat.sessionMetaFailed = true
     chat.sessionMetaError = new Error('meta boom')
-    chat.sessionMetaRefetch = vi.fn()
+    chat.sessionMetaRefetch = vi.fn<() => void>()
     chat.history.isError = false
     chat.history.isLoading = false
     chat.history.isPending = false
@@ -348,7 +352,6 @@ describe('chat session meta load failure', () => {
 
 describe('chat session meta loading', () => {
   beforeEach(() => {
-    HTMLElement.prototype.scrollTo = vi.fn<(...args: unknown[]) => void>()
     chat.sessionId = 'session-meta-loading'
     chat.sessionMissing = false
     chat.sessionMetaLoading = true

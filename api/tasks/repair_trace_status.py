@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from typing import Any
+from typing import Any, cast
 
 from loguru import logger
 
@@ -18,9 +18,10 @@ async def _session_error_run_ids() -> set[str]:
     page = 1
     result: set[str] = set()
     while True:
-        raw: Any = await db.get_sessions(limit=200, page=page, deserialize=False)
-        rows = raw[0] if isinstance(raw, tuple) else raw
-        total = int(raw[1] if isinstance(raw, tuple) else len(rows))
+        rows, total = cast(
+            tuple[list[dict[str, Any]], int],
+            await db.get_sessions(limit=200, page=page, deserialize=False),
+        )
         for row in rows:
             runs = coerce_json_value(row.get("runs"))
             if not isinstance(runs, list):

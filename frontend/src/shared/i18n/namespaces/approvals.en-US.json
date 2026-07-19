@@ -21,6 +21,7 @@
   "resumeRetryStarted": "Run resume retry started.",
   "resumeRetryFailed": "Unable to resume the run. Please try again.",
   "resolveFailed": "Unable to resolve the approval. Please try again.",
+  "approvalLoadFailed": "Unable to load this approval. Please try again.",
   "resumeFailed": "Run resume failed",
   "resumeFailedDescription": "The decision was recorded, but the original conversation has not resumed.",
   "approveUserInput": "Provide user input",

@@ -132,9 +132,8 @@ async def skill_references(
     if info is None:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' 不存在")
     result = await list_skill_workflow_references(user, skill_name)
-    items = result.get("data") if isinstance(result, dict) else result
-    items = items if isinstance(items, list) else []
-    truncated = bool(result.get("truncated")) if isinstance(result, dict) else False
+    items = result["data"]
+    truncated = bool(result["truncated"])
     meta = pagination_meta(page=1, limit=max(len(items), 1), total_count=len(items))
     if truncated:
         meta = {**meta, "truncated": True}
